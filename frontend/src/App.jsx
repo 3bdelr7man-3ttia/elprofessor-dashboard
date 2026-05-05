@@ -36,10 +36,10 @@ function useAuth() { return useContext(AuthCtx); }
 // ============================================================
 const fmt = (n) => new Intl.NumberFormat("ar-EG").format(Math.round(n || 0));
 const fmtUSD = (n) => `$${new Intl.NumberFormat("en").format(Math.round(n || 0))}`;
-const catLabels = { tools: "أدوات وبرمجيات", hosting: "استضافة", marketing: "تسويق", travel: "سفر عمل", legal: "قانوني", office: "مكتب", bank_fees: "رسوم بنكية", asset_rent: "إيجار أصول", trainer: "مدربين", affiliate: "أفلييت", influencer: "إنفلونسر", other: "أخرى" };
+const catLabels = { tools: "أدوات وبرمجيات", hosting: "استضافة", marketing: "تسويق", travel: "سفر عمل", legal: "قانوني", office: "مكتب", bank_fees: "رسوم بنكية", asset_rent: "إيجار أصول", trainer: "مدربين", supervisor: "إشراف تدريبي", affiliate: "أفلييت", influencer: "إنفلونسر", other: "أخرى" };
 const srcLabels = { course: "دورة تدريبية", consulting: "استشارة", subscription: "اشتراك", other: "أخرى" };
 const cashKindLabels = { capital_in: "ضخ رأس مال", cash_out: "سحب/صرف من الكاش", adjustment_in: "تسوية إضافة", adjustment_out: "تسوية خصم" };
-const payoutRoleLabels = { trainer: "مدرب", affiliate: "أفلييت", influencer: "إنفلونسر", partner: "شريك", other: "أخرى" };
+const payoutRoleLabels = { trainer: "مدرب", supervisor: "مشرف تدريبي", affiliate: "أفلييت", influencer: "إنفلونسر", partner: "شريك", other: "أخرى" };
 const platLabels = { google_ads: "Google Ads", facebook: "Facebook", instagram: "Instagram", linkedin: "LinkedIn", tiktok: "TikTok", other: "أخرى" };
 const statusLabels = { draft: "مسودة", active: "نشطة", paused: "متوقفة", completed: "منتهية" };
 const recLabels = { continue: "✅ استمر", optimize: "🔧 حسّن", stop: "🛑 أوقف", monitor: "👁 راقب" };
@@ -189,23 +189,23 @@ function OverviewPage() {
   useEffect(() => { api.get("/dashboard").then(setData); }, []);
   if (!data) return <PageLoader />;
 
-  const { financial: f, marketing: m, courses: c, monthly, forecast, alerts, recent, partners } = data;
+  const { financial: f, marketing: m, courses: c, monthly, forecast, alerts, recent, partners, periods } = data;
 
   return (
     <div>
       <h1 style={{ fontSize: 26, fontWeight: 900, color: BRAND.navy, marginBottom: 24 }}>نظرة عامة تنفيذية</h1>
       
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 16, marginBottom: 28 }}>
-        <KPICard icon="💰" label="إيرادات تشغيلية" value={`${fmt(f.total_revenue)} ج.م`} sub={`حركة بنكية خام: ${fmt(f.raw_bank_revenue)} ج.م`} color="#2d8659" />
+        <KPICard icon="💰" label="إيرادات تشغيلية" value={`${fmt(f.total_revenue)} ج.م`} sub={`من الدورات والاستشارات فقط - بدون Cash Flow`} color="#2d8659" />
         <KPICard icon="🏦" label="Cash Flow متاح" value={fmtUSD(f.cash_balance_usd)} sub={`${fmt(f.cash_balance)} ج.م رأس مال تشغيل`} color={BRAND.navy} />
-        <KPICard icon="📤" label="مصروفات تأسيس وتشغيل" value={`${fmt(f.total_expenses)} ج.م`} sub={`مصروفات بنكية خام: ${fmt(f.raw_bank_expenses)} ج.م`} color="#c0392b" />
-        <KPICard icon="📊" label="صافي تشغيلي" value={`${fmt(f.net_profit)} ج.م`} color={f.net_profit >= 0 ? "#2d8659" : "#c0392b"} />
+        <KPICard icon="🏗️" label={`تأسيس قبل ${periods?.cutoff_month || "2026-05"}`} value={`${fmt(f.pre_launch_expenses)} ج.م`} sub={`حركة خام بنكية: ${fmt(f.raw_bank_expenses)} ج.م`} color="#c0392b" />
+        <KPICard icon="📊" label="صافي التشغيل من مايو" value={`${fmt(f.operating_net)} ج.م`} sub={`مصروفات التشغيل: ${fmt(f.operating_expenses)} ج.م`} color={f.operating_net >= 0 ? "#2d8659" : "#c0392b"} />
       </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 16, marginBottom: 28 }}>
         <KPICard icon="🎯" label="Target الشهر القادم" value={`${fmt(f.next_month_target)} ج.م`} sub={f.break_even_month ? `Break-even متوقع: ${f.break_even_month}` : "لم يظهر بعد"} color={BRAND.gold} />
-        <KPICard icon="💼" label="أصول مؤجره للشركة" value={`${fmt(f.total_assets)} ج.م`} sub={`إيجار شهري: ${fmt(f.monthly_asset_rent)} ج.م`} color={BRAND.navy} />
-        <KPICard icon="🤝" label="مستحقات مدربين/أفلييت" value={`${fmt(f.payout_cost)} ج.م`} sub="داخلة ضمن التكاليف" color="#8e44ad" />
+        <KPICard icon="💼" label="أصول مؤجرة للشركة" value={`${fmt(f.total_assets)} ج.م`} sub={`إيجار مايو الفعلي: ${fmt(f.monthly_asset_rent)} ج.م | مرجعي كامل: ${fmt(f.asset_reference_rent)} ج.م`} color={BRAND.navy} />
+        <KPICard icon="🤝" label="مستحقات مدربين/إشراف" value={`${fmt(f.payout_cost)} ج.م`} sub="ضمن تكلفة التشغيل والدورات" color="#8e44ad" />
         <KPICard icon="📢" label="الإنفاق التسويقي" value={fmtUSD(m.total_ad_spend)} sub={`${m.total_leads} عميل محتمل`} color="#e8913a" />
       </div>
 
@@ -341,8 +341,8 @@ function FinancePage() {
         <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 16, marginBottom: 24 }}>
           <KPICard icon="🏦" label="Cash Flow" value={fmtUSD(summary.cashflow?.balance_usd)} sub={`${fmt(summary.cashflow?.balance_egp)} ج.م`} color={BRAND.navy} />
           <KPICard icon="💰" label="إيرادات تشغيلية" value={`${fmt(summary.total_revenue)} ج.م`} color="#2d8659" />
-          <KPICard icon="📤" label="مصروفات تشغيل وتأسيس" value={`${fmt(summary.total_expenses)} ج.م`} color="#c0392b" />
-          <KPICard icon="🤝" label="مستحقات" value={`${fmt(summary.payout_cost)} ج.م`} sub="مدربين / أفلييت" color="#8e44ad" />
+          <KPICard icon="🏗️" label={`تأسيس قبل ${summary.cutoff_month || "2026-05"}`} value={`${fmt(summary.pre_launch?.expenses)} ج.م`} sub={`صافي: ${fmt(summary.pre_launch?.profit)} ج.م`} color="#c0392b" />
+          <KPICard icon="⚙️" label="تشغيل من مايو" value={`${fmt(summary.operating?.expenses)} ج.م`} sub={`صافي التشغيل: ${fmt(summary.operating?.profit)} ج.م`} color="#8e44ad" />
         </div>
       )}
 
@@ -379,12 +379,43 @@ function FinancePage() {
         )}
       </div>
 
+      {summary?.monthly?.length > 0 && (
+        <div style={{ background: "#fff", borderRadius: 12, overflow: "hidden", boxShadow: "0 1px 4px rgba(0,0,0,0.06)", marginBottom: 24 }}>
+          <div style={{ padding: "16px 20px", borderBottom: "1px solid #f0eadb", background: "#fcfbf8" }}>
+            <h3 style={{ margin: 0, color: BRAND.navy, fontSize: 15, fontWeight: 900 }}>التقسيم الشهري الفعلي</h3>
+            <div style={{ marginTop: 6, fontSize: 12, color: "#667085" }}>الفترة قبل {summary.cutoff_month} محسوبة كتأسيس، ومن {summary.cutoff_month} محسوبة كتشغيل.</div>
+          </div>
+          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+            <thead>
+              <tr style={{ background: "#f8fafc" }}>
+                {["الشهر", "المرحلة", "الإيراد", "مصروف مباشر", "مستحقات", "إيجار أصول", "الصافي"].map(h => (
+                  <th key={h} style={{ padding: "12px 14px", textAlign: "right", color: "#667085" }}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {summary.monthly.map(row => (
+                <tr key={row.month} style={{ borderBottom: "1px solid #f3f4f6" }}>
+                  <td style={{ padding: "12px 14px", fontWeight: 900 }}>{row.month}</td>
+                  <td><Badge text={row.period === "pre_launch" ? "تأسيس" : "تشغيل"} color={row.period === "pre_launch" ? "#c0392b" : "#2d8659"} /></td>
+                  <td style={{ color: "#2d8659", fontWeight: 800 }}>{fmt(row.revenue)} ج.م</td>
+                  <td>{fmt(row.direct_expenses)} ج.م</td>
+                  <td>{fmt(row.payouts)} ج.م</td>
+                  <td>{fmt(row.asset_rent)} ج.م</td>
+                  <td style={{ color: row.profit >= 0 ? "#2d8659" : "#c0392b", fontWeight: 900 }}>{fmt(row.profit)} ج.م</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
       <TabBar tabs={[
         { id: "cashflow", label: "Cash Flow" },
         { id: "revenues", label: `الإيرادات (${revenues.length})` },
         { id: "expenses", label: `المصروفات (${expenses.length})` },
         { id: "partners", label: `الشركاء (${partners.length})` },
-        { id: "payouts", label: `مدربين/أفلييت (${payouts.length})` },
+        { id: "payouts", label: `مدربين/إشراف/أفلييت (${payouts.length})` },
         { id: "assets", label: `الأصول (${assets.length})` },
         { id: "forecast", label: "Future targets" }
       ]} active={tab} onChange={setTab} />
@@ -572,7 +603,7 @@ function FinancePage() {
         <Btn onClick={savePartner} color="#5b6abf" style={{ width: "100%", marginTop: 8 }}>حفظ الشريك</Btn>
       </Modal>
 
-      <Modal open={modal === "payout"} onClose={() => setModal(null)} title={form.id ? "تعديل مستحق" : "مستحق مدرب / أفلييت"}>
+      <Modal open={modal === "payout"} onClose={() => setModal(null)} title={form.id ? "تعديل مستحق" : "مستحق مدرب / مشرف / أفلييت"}>
         <Input label="التاريخ" type="date" value={form.date || ""} onChange={e => setForm({ ...form, date: e.target.value })} />
         <Input label="الاسم" value={form.name || ""} onChange={e => setForm({ ...form, name: e.target.value })} />
         <Select label="النوع" value={form.role || "trainer"} onChange={e => setForm({ ...form, role: e.target.value })} options={Object.entries(payoutRoleLabels).map(([value, label]) => ({ value, label }))} />
@@ -800,6 +831,7 @@ function CoursesPage() {
             </div>
             <Badge text={c.status === "active" ? "نشطة" : c.status === "completed" ? "منتهية" : c.status} color={c.status === "active" ? "#2d8659" : "#9ca3af"} />
             {c.trainer_name && <span style={{ fontSize: 13, color: "#6b7280", marginRight: 8 }}>🎓 {c.trainer_name}</span>}
+            {c.linked_payout_cost > 0 && <div style={{ marginTop: 10, fontSize: 12, color: "#8e44ad", fontWeight: 700 }}>إشراف/مستحقات مرتبطة: {fmt(c.linked_payout_cost)} ج.م</div>}
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8, marginTop: 16 }}>
               <div style={{ textAlign: "center" }}><div style={{ fontSize: 11, color: "#9ca3af" }}>طلاب</div><div style={{ fontSize: 18, fontWeight: 700, color: "#5b6abf" }}>{c.students_count}</div></div>
               <div style={{ textAlign: "center" }}><div style={{ fontSize: 11, color: "#9ca3af" }}>إيراد</div><div style={{ fontSize: 18, fontWeight: 700, color: "#2d8659" }}>{fmt(c.total_revenue)}</div></div>

@@ -26,6 +26,8 @@ app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 CORS(app, origins=os.environ.get('CORS_ORIGINS', '*').split(','))
 db = SQLAlchemy(app)
+CUT_OFF_DATE = datetime.date(2026, 5, 1)
+SEED_PREFIX = 'seed:v3'
 
 # ============================================================
 # MODELS
@@ -258,6 +260,82 @@ def cash_total(cash_transactions, rate):
         total += amount if t.kind in ('capital_in', 'adjustment_in') else -amount
     return total
 
+def month_key(date_value):
+    return f'{date_value.year}-{date_value.month:02d}' if date_value else None
+
+def payout_amount(payout, rate):
+    return to_egp(payout.amount_usd, payout.amount_egp, rate) or ((payout.basis_amount_egp or 0) * (payout.percent or 0) / 100)
+
+def period_label(date_value):
+    if not date_value:
+        return 'unknown'
+    return 'pre_launch' if date_value < CUT_OFF_DATE else 'operating'
+
+def monthly_financial_rows(revenues, expenses, payouts, rate):
+    monthly = {}
+    for revenue in revenues:
+        if not revenue.date:
+            continue
+        key = month_key(revenue.date)
+        monthly.setdefault(key, {'month': key, 'revenue': 0, 'expenses': 0, 'direct_expenses': 0, 'payouts': 0, 'asset_rent': 0})
+        monthly[key]['revenue'] += to_egp(revenue.amount_usd, revenue.amount_egp, rate)
+    for expense in expenses:
+        if not expense.date:
+            continue
+        key = month_key(expense.date)
+        monthly.setdefault(key, {'month': key, 'revenue': 0, 'expenses': 0, 'direct_expenses': 0, 'payouts': 0, 'asset_rent': 0})
+        amount = to_egp(expense.amount_usd, expense.amount_egp, rate)
+        monthly[key]['expenses'] += amount
+        monthly[key]['direct_expenses'] += amount
+        if expense.category == 'asset_rent':
+            monthly[key]['asset_rent'] += amount
+    for payout in payouts:
+        if not payout.date:
+            continue
+        key = month_key(payout.date)
+        monthly.setdefault(key, {'month': key, 'revenue': 0, 'expenses': 0, 'direct_expenses': 0, 'payouts': 0, 'asset_rent': 0})
+        amount = payout_amount(payout, rate)
+        monthly[key]['expenses'] += amount
+        monthly[key]['payouts'] += amount
+    rows = []
+    for key, row in sorted(monthly.items()):
+        row['profit'] = row['revenue'] - row['expenses']
+        row['period'] = 'pre_launch' if key < CUT_OFF_DATE.strftime('%Y-%m') else 'operating'
+        rows.append({
+            'month': row['month'],
+            'period': row['period'],
+            'revenue': round(row['revenue']),
+            'expenses': round(row['expenses']),
+            'direct_expenses': round(row['direct_expenses']),
+            'payouts': round(row['payouts']),
+            'asset_rent': round(row['asset_rent']),
+            'profit': round(row['profit']),
+        })
+    return rows
+
+def period_totals(revenues, expenses, payouts, rate, period_name):
+    revenue_total_value = sum(to_egp(r.amount_usd, r.amount_egp, rate) for r in revenues if period_label(r.date) == period_name)
+    direct_expenses = sum(to_egp(e.amount_usd, e.amount_egp, rate) for e in expenses if period_label(e.date) == period_name)
+    payout_expenses = sum(payout_amount(p, rate) for p in payouts if period_label(p.date) == period_name)
+    asset_rent = sum(to_egp(e.amount_usd, e.amount_egp, rate) for e in expenses if period_label(e.date) == period_name and e.category == 'asset_rent')
+    return {
+        'revenue': round(revenue_total_value),
+        'expenses': round(direct_expenses + payout_expenses),
+        'direct_expenses': round(direct_expenses),
+        'payouts': round(payout_expenses),
+        'asset_rent': round(asset_rent),
+        'profit': round(revenue_total_value - direct_expenses - payout_expenses),
+    }
+
+def revenues_for_course(course):
+    linked = list(course.revenues)
+    if linked:
+        return linked
+    title = (course.title or '').strip()
+    if not title:
+        return []
+    return [r for r in Revenue.query.filter_by(source='course').all() if title in (r.description or '')]
+
 def serialize_date(d):
     return d.isoformat() if d else None
 
@@ -337,7 +415,12 @@ def dashboard():
     raw_expenses = get_setting_float('raw_bank_expenses_usd', 0) * rate + get_setting_float('raw_bank_expenses_egp', 0)
     assets = Asset.query.all()
     total_assets = sum(a.value_egp or 0 for a in assets)
-    monthly_asset_rent = sum(a.monthly_rent_egp or 0 for a in assets)
+    asset_reference_rent = sum(a.monthly_rent_egp or 0 for a in assets)
+    monthly_rows = monthly_financial_rows(revenues, expenses, payouts, rate)
+    pre_launch = period_totals(revenues, expenses, payouts, rate, 'pre_launch')
+    operating = period_totals(revenues, expenses, payouts, rate, 'operating')
+    current_month_key = datetime.date.today().strftime('%Y-%m')
+    current_month_row = next((row for row in monthly_rows if row['month'] == current_month_key), None)
     forecasts = ForecastMonth.query.order_by(ForecastMonth.month.asc()).all()
     next_forecast = forecasts[0] if forecasts else None
     break_even_month = None
@@ -373,28 +456,13 @@ def dashboard():
     best_course = None
     if courses:
         def course_profit(c):
-            rev = sum(to_egp(r.amount_usd, r.amount_egp, rate) for r in c.revenues)
+            rev = sum(to_egp(r.amount_usd, r.amount_egp, rate) for r in revenues_for_course(c))
             cost = to_egp(c.cost_usd, c.cost_egp, rate)
             return rev - cost
         best = max(courses, key=course_profit)
         best_course = {'id': best.id, 'title': best.title, 'profit': course_profit(best)}
     
-    # Monthly trend (last 12 months)
-    now = datetime.date.today()
-    monthly = []
-    for i in range(11, -1, -1):
-        m = now.month - i
-        y = now.year
-        while m <= 0:
-            m += 12
-            y -= 1
-        month_revs = [r for r in revenues if r.date and r.date.year == y and r.date.month == m]
-        month_exps = [e for e in expenses if e.date and e.date.year == y and e.date.month == m]
-        monthly.append({
-            'month': f'{y}-{m:02d}',
-            'revenue': round(sum(to_egp(r.amount_usd, r.amount_egp, rate) for r in month_revs)),
-            'expenses': round(sum(to_egp(e.amount_usd, e.amount_egp, rate) for e in month_exps)),
-        })
+    monthly = monthly_rows[-12:]
     
     # Alerts
     alerts = []
@@ -436,9 +504,15 @@ def dashboard():
             'payout_cost': round(payout_cost),
             'runway_months': runway_months,
             'total_assets': round(total_assets),
-            'monthly_asset_rent': round(monthly_asset_rent),
+            'monthly_asset_rent': round(current_month_row['asset_rent']) if current_month_row else 0,
+            'asset_reference_rent': round(asset_reference_rent),
             'break_even_month': break_even_month,
             'next_month_target': round(next_forecast.revenue_egp) if next_forecast else 0,
+            'pre_launch_expenses': pre_launch['expenses'],
+            'operating_expenses': operating['expenses'],
+            'operating_revenue': operating['revenue'],
+            'operating_net': operating['profit'],
+            'pre_launch_net': pre_launch['profit'],
         },
         'marketing': {
             'total_ad_spend': round(total_ad_spend),
@@ -454,6 +528,11 @@ def dashboard():
             'best_course': best_course,
         },
         'monthly': monthly,
+        'periods': {
+            'cutoff_month': CUT_OFF_DATE.strftime('%Y-%m'),
+            'pre_launch': pre_launch,
+            'operating': operating,
+        },
         'forecast': [{
             'month': f.month,
             'revenue': round(f.revenue_egp or 0),
@@ -748,10 +827,17 @@ def delete_campaign(id):
 def list_courses():
     items = Course.query.order_by(Course.created_at.desc()).all()
     rate = get_rate()
+    payouts = Payout.query.filter(Payout.status != 'waived').all()
     result = []
     for c in items:
-        total_revenue = sum(to_egp(r.amount_usd, r.amount_egp, rate) for r in c.revenues)
-        total_cost = to_egp(c.cost_usd, c.cost_egp, rate)
+        course_revenues = revenues_for_course(c)
+        total_revenue = sum(to_egp(r.amount_usd, r.amount_egp, rate) for r in course_revenues)
+        linked_payout_cost = sum(
+            payout_amount(p, rate)
+            for p in payouts
+            if (p.related_to or '').strip() == (c.title or '').strip()
+        )
+        total_cost = to_egp(c.cost_usd, c.cost_egp, rate) + linked_payout_cost
         profit = total_revenue - total_cost
         result.append({
             'id': c.id, 'title': c.title, 'category': c.category,
@@ -761,6 +847,7 @@ def list_courses():
             'students_count': c.students_count,
             'start_date': serialize_date(c.start_date), 'end_date': serialize_date(c.end_date),
             'total_revenue': round(total_revenue), 'total_cost': round(total_cost),
+            'linked_payout_cost': round(linked_payout_cost),
             'profit': round(profit), 'lms_id': c.lms_id, 'notes': c.notes
         })
     return jsonify(result)
@@ -1236,30 +1323,9 @@ def finance_summary():
     expenses = Expense.query.filter_by(is_business=True).all()
     payouts = Payout.query.filter(Payout.status != 'waived').all()
     cash_transactions = CashTransaction.query.order_by(CashTransaction.date.desc()).all()
-    
-    # By month
-    monthly = {}
-    for r in revenues:
-        if r.date:
-            key = f'{r.date.year}-{r.date.month:02d}'
-            if key not in monthly:
-                monthly[key] = {'revenue': 0, 'expenses': 0}
-            monthly[key]['revenue'] += to_egp(r.amount_usd, r.amount_egp, rate)
-    for e in expenses:
-        if e.date:
-            key = f'{e.date.year}-{e.date.month:02d}'
-            if key not in monthly:
-                monthly[key] = {'revenue': 0, 'expenses': 0}
-            monthly[key]['expenses'] += to_egp(e.amount_usd, e.amount_egp, rate)
-    for p in payouts:
-        if p.date:
-            key = f'{p.date.year}-{p.date.month:02d}'
-            if key not in monthly:
-                monthly[key] = {'revenue': 0, 'expenses': 0}
-            monthly[key]['expenses'] += to_egp(p.amount_usd, p.amount_egp, rate) or ((p.basis_amount_egp or 0) * (p.percent or 0) / 100)
-    
-    monthly_list = [{'month': k, 'revenue': round(v['revenue']), 'expenses': round(v['expenses']), 'profit': round(v['revenue'] - v['expenses'])} for k, v in sorted(monthly.items())]
-    
+
+    monthly_list = monthly_financial_rows(revenues, expenses, payouts, rate)
+
     # By category
     cat_totals = {}
     for e in expenses:
@@ -1267,14 +1333,20 @@ def finance_summary():
         cat_totals[c] = cat_totals.get(c, 0) + to_egp(e.amount_usd, e.amount_egp, rate)
     for p in payouts:
         c = p.role or 'payout'
-        cat_totals[c] = cat_totals.get(c, 0) + (to_egp(p.amount_usd, p.amount_egp, rate) or ((p.basis_amount_egp or 0) * (p.percent or 0) / 100))
-    
+        cat_totals[c] = cat_totals.get(c, 0) + payout_amount(p, rate)
+
+    pre_launch = period_totals(revenues, expenses, payouts, rate, 'pre_launch')
+    operating = period_totals(revenues, expenses, payouts, rate, 'operating')
+
     return jsonify({
         'monthly': monthly_list,
         'expense_categories': [{'category': k, 'total': round(v)} for k, v in sorted(cat_totals.items(), key=lambda x: -x[1])],
         'total_revenue': round(sum(to_egp(r.amount_usd, r.amount_egp, rate) for r in revenues)),
         'total_expenses': round(sum(to_egp(e.amount_usd, e.amount_egp, rate) for e in expenses) + payout_total(payouts, rate)),
         'payout_cost': round(payout_total(payouts, rate)),
+        'cutoff_month': CUT_OFF_DATE.strftime('%Y-%m'),
+        'pre_launch': pre_launch,
+        'operating': operating,
         'cashflow': {
             'balance_egp': round(cash_total(cash_transactions, rate)),
             'balance_usd': round(cash_total(cash_transactions, rate) / rate, 2) if rate else 0,
@@ -1298,71 +1370,189 @@ def seed():
         )
         db.session.add(admin)
     
-    # Settings
-    settings = [
-        Setting(key='exchange_rate', value='50'),
-        Setting(key='opening_balance_egp', value='15000'),
-        Setting(key='company_name', value='البروفيسور - ElProfessor'),
-        Setting(key='currency', value='EGP'),
-        Setting(key='raw_bank_revenue_usd', value='4920.18'),
-        Setting(key='raw_bank_revenue_egp', value='1529.39'),
-        Setting(key='raw_bank_expenses_usd', value='4121.94'),
-        Setting(key='raw_bank_expenses_egp', value='0'),
-    ]
-    for s in settings:
-        if not Setting.query.get(s.key):
-            db.session.add(s)
-    
-    # Operating revenues only. Raw bank movement is tracked separately in settings.
-    sample_revenues = [
-        Revenue(date=datetime.date(2026, 5, 1), source='course', description='دورة الذكاء الاصطناعي للمستقبل القانوني - 6 طلاب', amount_egp=15000, client_name='مجموعة طلاب', payment_method='bank_transfer'),
-        Revenue(date=datetime.date(2026, 5, 4), source='consulting', description='تدريب واستشارات قانونية تقنية', amount_usd=500, client_name='استشارات مؤسس', payment_method='wise'),
-    ]
-    if Revenue.query.count() == 0:
-        for r in sample_revenues:
-            db.session.add(r)
-    
-    # Sample expenses (confirmed business expenses)
-    sample_expenses = [
-        Expense(date=datetime.date(2026, 1, 15), category='hosting', description='تأسيس واستضافة وبنية تحتية', amount_usd=1200, paid_by='عبدالرحمن', is_business=True),
-        Expense(date=datetime.date(2026, 2, 15), category='tools', description='اشتراكات AI وأدوات إنتاج', amount_usd=850, paid_by='عبدالرحمن', is_business=True),
-        Expense(date=datetime.date(2026, 3, 15), category='office', description='مساحة عمل وتجهيزات تشغيل', amount_usd=900, paid_by='عبدالرحمن', is_business=True),
-        Expense(date=datetime.date(2026, 4, 15), category='marketing', description='تجارب تسويق ومحتوى وإطلاق', amount_usd=650, paid_by='عبدالرحمن', is_business=True),
-        Expense(date=datetime.date(2026, 5, 1), category='legal', description='تأسيس قانوني وإجراءات واستشارات', amount_usd=521.94, paid_by='عبدالرحمن', is_business=True),
-        Expense(date=datetime.date(2026, 5, 1), category='asset_rent', description='إيجار أصول مؤسس للشركة - شهر مايو', amount_egp=9000, paid_by='الشركة', is_business=True),
-    ]
-    if Expense.query.count() == 0:
-        for e in sample_expenses:
-            db.session.add(e)
+    def upsert_setting(key, value):
+        item = Setting.query.get(key)
+        if item:
+            item.value = str(value)
+        else:
+            db.session.add(Setting(key=key, value=str(value)))
 
-    if Asset.query.count() == 0:
-        asset_rows = [
-            ('MACBook Pro M3', 'computers', 2400, 'من ملف المعدات'),
-            ('Mac mini M4', 'computers', 600, 'تقدير إدارة: حوالي 600$'),
-            ('Workstation desktop', 'computers', 250, 'من ملف المعدات'),
-            ('Screen', 'computers', 55, 'من ملف المعدات'),
-            ('iPhone 16 Pro Max', 'phones', 1199, 'سعر Apple يبدأ من 1199$'),
-            ('Canon camera D600', 'camera', 400, 'من ملف المعدات'),
-            ('Ricoh Theta X', 'camera', 900, 'من ملف المعدات'),
-            ('DJI Osmo Pocket 3', 'camera', 519, 'سعر DJI الرسمي يبدأ من 519$'),
-            ('DJI Mic Mini', 'microphone', 59, 'سعر DJI الرسمي للترانسمتر يبدأ من 59$'),
-            ('Canon lenses bundle', 'lenses', 100, 'Canon lens 67mm + 58mm'),
-            ('Microphones and podcast audio bundle', 'microphone', 610, 'Rode, Marantz, Boya, Zoom P4, headphones'),
-            ('Tripods and stands bundle', 'tripod', 392, 'حوامل، ترايبود، مونوبود، ستاندات'),
-            ('Teleprompter and studio support', 'teleprompter', 70, 'Besview TSZ'),
-            ('Lighting kit', 'lighting', 374, 'Softbox, speedlite, studio lights, ring light, reflector'),
-            ('Cables, chargers, tablet and office bundle', 'hardware', 353, 'كابلات، شواحن، Fire HD، طاولة وكرسي وأدوات'),
-        ]
-        for name, category, usd, notes in asset_rows:
-            value_egp = usd * 50
-            db.session.add(Asset(
-                name=name,
-                category=category,
-                owner='عبدالرحمن',
-                value_egp=value_egp,
-                monthly_rent_egp=round(value_egp * 0.025),
-                notes=notes
+    def upsert_seed_revenue(description, payload):
+        item = Revenue.query.filter_by(description=description).first()
+        if not item:
+            item = Revenue(description=description)
+            db.session.add(item)
+        item.date = payload['date']
+        item.source = payload.get('source', 'other')
+        item.amount_egp = payload.get('amount_egp', 0)
+        item.amount_usd = payload.get('amount_usd', 0)
+        item.client_name = payload.get('client_name', '')
+        item.payment_method = payload.get('payment_method', '')
+        item.notes = payload.get('notes', SEED_PREFIX)
+
+    def sync_seed_expenses(definitions):
+        managed_items = Expense.query.filter(Expense.notes.like(f'{SEED_PREFIX}%')).all()
+        for item in managed_items:
+            db.session.delete(item)
+        legacy_descriptions = {
+            'تأسيس واستضافة وبنية تحتية',
+            'اشتراكات AI وأدوات إنتاج',
+            'مساحة عمل وتجهيزات تشغيل',
+            'تجارب تسويق ومحتوى وإطلاق',
+            'تأسيس قانوني وإجراءات واستشارات',
+            'إيجار أصول مؤسس للشركة - شهر مايو',
+        }
+        for item in Expense.query.filter(Expense.description.in_(legacy_descriptions)).all():
+            db.session.delete(item)
+        for payload in definitions:
+            db.session.add(Expense(
+                date=payload['date'],
+                category=payload['category'],
+                description=payload['description'],
+                amount_egp=payload.get('amount_egp', 0),
+                amount_usd=payload.get('amount_usd', 0),
+                is_business=payload.get('is_business', True),
+                paid_by=payload.get('paid_by', 'عبدالرحمن'),
+                notes=f"{SEED_PREFIX}:{payload.get('seed_key', payload['description'])}"
             ))
+
+    def upsert_asset(name, category, usd, monthly_rent_egp, notes):
+        item = Asset.query.filter_by(name=name).first()
+        if not item:
+            item = Asset(name=name)
+            db.session.add(item)
+        item.category = category
+        item.owner = 'عبدالرحمن'
+        item.value_egp = usd * 50
+        item.monthly_rent_egp = monthly_rent_egp
+        item.status = 'leased_to_company'
+        item.notes = notes
+
+    def upsert_partner(name, role, equity, profit, capital_usd, notes):
+        item = Partner.query.filter_by(name=name).first()
+        if not item:
+            item = Partner(name=name)
+            db.session.add(item)
+        item.role = role
+        item.equity_percent = equity
+        item.profit_share_percent = profit
+        item.capital_usd = capital_usd
+        item.notes = notes
+
+    def upsert_payout(name, related_to, payload):
+        item = Payout.query.filter_by(name=name, related_to=related_to).first()
+        if not item:
+            item = Payout(name=name, related_to=related_to)
+            db.session.add(item)
+        item.date = payload['date']
+        item.role = payload.get('role', 'trainer')
+        item.basis_amount_egp = payload.get('basis_amount_egp', 0)
+        item.percent = payload.get('percent', 0)
+        item.amount_egp = payload.get('amount_egp', 0)
+        item.amount_usd = payload.get('amount_usd', 0)
+        item.status = payload.get('status', 'accrued')
+        item.notes = payload.get('notes', SEED_PREFIX)
+
+    def upsert_course(title, payload):
+        item = Course.query.filter_by(title=title).first()
+        if not item:
+            item = Course(title=title)
+            db.session.add(item)
+        item.category = payload.get('category', '')
+        item.trainer_name = payload.get('trainer_name', '')
+        item.status = payload.get('status', 'active')
+        item.price_egp = payload.get('price_egp', 0)
+        item.price_usd = payload.get('price_usd', 0)
+        item.cost_egp = payload.get('cost_egp', 0)
+        item.cost_usd = payload.get('cost_usd', 0)
+        item.students_count = payload.get('students_count', 0)
+        item.start_date = payload.get('start_date')
+        item.end_date = payload.get('end_date')
+        item.lms_id = payload.get('lms_id', '')
+        item.notes = payload.get('notes', SEED_PREFIX)
+
+    def upsert_forecast(month_value, payload):
+        item = ForecastMonth.query.filter_by(month=month_value).first()
+        if not item:
+            item = ForecastMonth(month=month_value)
+            db.session.add(item)
+        item.revenue_egp = payload['revenue_egp']
+        item.cogs_egp = payload['cogs_egp']
+        item.marketing_egp = payload['marketing_egp']
+        item.payroll_egp = payload['payroll_egp']
+        item.rent_egp = payload['rent_egp']
+        item.other_sga_egp = payload['other_sga_egp']
+        item.target_courses = payload['target_courses']
+        item.target_students = payload['target_students']
+        item.notes = payload.get('notes', '')
+
+    for key, value in [
+        ('exchange_rate', '50'),
+        ('opening_balance_egp', '15000'),
+        ('company_name', 'البروفيسور - ElProfessor'),
+        ('currency', 'EGP'),
+        ('raw_bank_revenue_usd', '4920.18'),
+        ('raw_bank_revenue_egp', '1529.39'),
+        ('raw_bank_expenses_usd', '4121.94'),
+        ('raw_bank_expenses_egp', '0'),
+    ]:
+        upsert_setting(key, value)
+
+    for legacy in Revenue.query.filter_by(description='دورة الذكاء الاصطناعي للمستقبل القانوني - 6 طلاب').all():
+        db.session.delete(legacy)
+
+    upsert_seed_revenue('دورة الذكاء الاصطناعي للقانونيين - الدفعة الأولى (6 طلاب)', {
+        'date': datetime.date(2026, 5, 1),
+        'source': 'course',
+        'amount_egp': 15000,
+        'client_name': 'مجموعة طلاب',
+        'payment_method': 'bank_transfer',
+        'notes': f'{SEED_PREFIX}:course-launch',
+    })
+    upsert_seed_revenue('تدريب واستشارات قانونية تقنية', {
+        'date': datetime.date(2026, 5, 4),
+        'source': 'consulting',
+        'amount_usd': 500,
+        'client_name': 'استشارات مؤسس',
+        'payment_method': 'wise',
+        'notes': f'{SEED_PREFIX}:consulting',
+    })
+
+    sync_seed_expenses([
+        {'seed_key': 'legal_setup', 'date': datetime.date(2024, 4, 22), 'category': 'legal', 'description': 'رسوم فتح بيانات بنكية وتأسيس أولي', 'amount_gbp': 45, 'amount_usd': 45 * 1.25, 'paid_by': 'عبدالرحمن'},
+        {'seed_key': 'domain_hosting', 'date': datetime.date(2026, 1, 10), 'category': 'hosting', 'description': 'استضافة ودومين وبنية تشغيل سنوية', 'amount_usd': 400, 'paid_by': 'عبدالرحمن'},
+        {'seed_key': 'company_setup', 'date': datetime.date(2026, 1, 12), 'category': 'legal', 'description': 'إجراءات تأسيس الشركة والخدمات القانونية', 'amount_usd': 250, 'paid_by': 'عبدالرحمن'},
+        {'seed_key': 'travel_flight', 'date': datetime.date(2025, 1, 9), 'category': 'travel', 'description': 'رحلة عمل ومؤتمر - Flydubai', 'amount_egp': 623.15 * 13.6, 'paid_by': 'عبدالرحمن'},
+        {'seed_key': 'travel_car_rental', 'date': datetime.date(2025, 1, 15), 'category': 'travel', 'description': 'إيجار سيارة أثناء رحلة العمل - دبي', 'amount_egp': 50 * 13.6, 'paid_by': 'عبدالرحمن'},
+        {'seed_key': 'ai_chatgpt', 'date': datetime.date(2025, 2, 10), 'category': 'tools', 'description': 'ChatGPT / OpenAI اشتراك عمل', 'amount_usd': 20, 'paid_by': 'عبدالرحمن'},
+        {'seed_key': 'design_freepik', 'date': datetime.date(2025, 2, 13), 'category': 'tools', 'description': 'Freepik Essential مواد تصميم', 'amount_egp': 6.84 * 55, 'paid_by': 'عبدالرحمن'},
+        {'seed_key': 'ai_consensus', 'date': datetime.date(2025, 3, 6), 'category': 'tools', 'description': 'Consensus AI للبحث والمحتوى', 'amount_usd': 7.19, 'paid_by': 'عبدالرحمن'},
+        {'seed_key': 'office_setup', 'date': datetime.date(2026, 2, 1), 'category': 'office', 'description': 'إيجار وتجهيزات مساحة عمل', 'amount_usd': 370, 'paid_by': 'عبدالرحمن'},
+        {'seed_key': 'software_stack', 'date': datetime.date(2026, 2, 18), 'category': 'tools', 'description': 'FluentCRM + THRIVE وأدوات تشغيل', 'amount_usd': 474, 'paid_by': 'عبدالرحمن'},
+        {'seed_key': 'asset_rent_prelaunch', 'date': datetime.date(2026, 4, 15), 'category': 'asset_rent', 'description': 'استخدام أصول المؤسس خلال مرحلة التأسيس حتى نهاية أبريل', 'amount_egp': 18000, 'paid_by': 'الشركة'},
+        {'seed_key': 'ai_openai_api', 'date': datetime.date(2026, 4, 30), 'category': 'tools', 'description': 'OpenAI API usage', 'amount_usd': 6, 'paid_by': 'عبدالرحمن'},
+        {'seed_key': 'asset_rent_may', 'date': datetime.date(2026, 5, 5), 'category': 'asset_rent', 'description': 'إيجار أصول مؤسس - مايو 2026', 'amount_egp': 3500, 'paid_by': 'الشركة'},
+        {'seed_key': 'internet_may', 'date': datetime.date(2026, 5, 3), 'category': 'office', 'description': 'WE Internet - تشغيل مايو', 'amount_egp': 120, 'paid_by': 'عبدالرحمن'},
+    ])
+
+    for row in [
+        ('MACBook Pro M3', 'computers', 2400, 2200, 'أصل ثابت - إيجار مرجعي عند الاستخدام الشهري الكامل'),
+        ('Mac mini M4', 'computers', 600, 700, 'أصل ثابت - تشغيل دائم'),
+        ('Workstation desktop', 'computers', 250, 250, 'استخدام عند الإنتاج المكتبي'),
+        ('Screen', 'computers', 55, 150, 'شاشة مساعدة للإنتاج'),
+        ('iPhone 16 Pro Max', 'phones', 1199, 900, 'أصل تصوير واتصالات'),
+        ('Canon camera D600', 'camera', 400, 400, 'كاميرا تصوير ثابتة'),
+        ('Ricoh Theta X', 'camera', 900, 650, 'كاميرا 360 عند الحاجة'),
+        ('DJI Osmo Pocket 3', 'camera', 519, 350, 'كاميرا محتوى متحرك'),
+        ('DJI Mic Mini', 'microphone', 59, 100, 'مايك متنقل'),
+        ('Canon lenses bundle', 'lenses', 100, 120, 'عدسات حسب الاستخدام'),
+        ('Microphones and podcast audio bundle', 'microphone', 610, 450, 'عدة صوت وبودكاست'),
+        ('Tripods and stands bundle', 'tripod', 392, 250, 'حوامل واستوديو'),
+        ('Teleprompter and studio support', 'teleprompter', 70, 100, 'معدات تقديم'),
+        ('Lighting kit', 'lighting', 374, 250, 'إضاءة تصوير'),
+        ('Cables, chargers, tablet and office bundle', 'hardware', 353, 180, 'ملحقات تشغيل'),
+    ]:
+        upsert_asset(*row)
 
     if CashTransaction.query.count() == 0:
         db.session.add(CashTransaction(
@@ -1371,53 +1561,65 @@ def seed():
             source='Founders cash reserve',
             description='رصيد Cash Flow حالي - رأس مال تشغيل وليس إيراد',
             amount_usd=1500,
-            notes='Seeded from management note'
+            notes=f'{SEED_PREFIX}:cash-balance'
         ))
 
-    if Partner.query.count() == 0:
-        for p in [
-            ('عبدالرحمن', 'founder', 70.8, 70.8, 4500, 'من Cap Table: Cash/assets contribution. ليست كلها Cash Flow.'),
-            ('منى مصطفى', 'cofounder', 10.8, 10.8, 7500, 'من Cap Table'),
-            ('الشيخ سمير', 'cofounder', 5.5, 5.5, 2000, 'من Cap Table'),
-            ('أبو ضيف', 'cofounder', 6.1, 6.1, 1000, 'من Cap Table'),
-            ('Unallocated / Option Pool', 'pool', 6.8, 6.8, 0, 'النسبة المتبقية غير موزعة في جدول الكاب تيبل'),
-        ]:
-            name, role, equity, profit, capital_usd, notes = p
-            db.session.add(Partner(
-                name=name,
-                role=role,
-                equity_percent=equity,
-                profit_share_percent=profit,
-                capital_usd=capital_usd,
-                notes=notes
-            ))
+    for row in [
+        ('عبدالرحمن', 'founder', 70.8, 70.8, 4500, 'من Cap Table: مساهمة نقدية/أصول، وليست كلها Cash Flow'),
+        ('منى مصطفى', 'cofounder', 10.8, 10.8, 7500, 'من Cap Table'),
+        ('الشيخ سمير', 'cofounder', 5.5, 5.5, 2000, 'من Cap Table'),
+        ('أبو ضيف', 'cofounder', 6.1, 6.1, 1000, 'من Cap Table'),
+        ('Unallocated / Option Pool', 'pool', 6.8, 6.8, 0, 'النسبة المتبقية غير موزعة'),
+    ]:
+        upsert_partner(*row)
 
-    if Payout.query.count() == 0:
-        db.session.add(Payout(
-            date=datetime.date(2026, 5, 5),
-            name='Trainer / Affiliate Pool',
-            role='trainer',
-            related_to='دورة الذكاء الاصطناعي للمستقبل القانوني',
-            basis_amount_egp=15000,
-            percent=20,
-            status='accrued',
-            notes='نسبة افتراضية قابلة للتعديل للمدربين أو الأفلييت'
-        ))
+    upsert_course('دورة الذكاء الاصطناعي للقانونيين', {
+        'category': 'Legal AI',
+        'trainer_name': 'فريق البروفيسور',
+        'status': 'completed',
+        'price_egp': 2500,
+        'students_count': 6,
+        'start_date': datetime.date(2026, 5, 1),
+        'end_date': datetime.date(2026, 5, 7),
+        'lms_id': 'demo-ai-lawyers-01',
+        'notes': f'{SEED_PREFIX}:demo-course',
+    })
 
-    if ForecastMonth.query.count() == 0:
-        start = datetime.date(2026, 5, 1)
-        forecast = [
-            (40000, 9000, 25000, 15000, 9000, 12000, 2, 18),
-            (65000, 14000, 35000, 20000, 9000, 14000, 3, 28),
-            (95000, 19000, 45000, 25000, 9000, 16000, 4, 42),
-            (135000, 27000, 55000, 30000, 9000, 18000, 5, 60),
-            (180000, 36000, 65000, 35000, 9000, 20000, 6, 78),
-            (240000, 48000, 80000, 45000, 9000, 24000, 8, 105),
-        ]
-        for idx, row in enumerate(forecast):
-            m = month_add(start, idx).strftime('%Y-%m')
-            rev, cogs, marketing, payroll, rent, other, courses, students = row
-            db.session.add(ForecastMonth(month=m, revenue_egp=rev, cogs_egp=cogs, marketing_egp=marketing, payroll_egp=payroll, rent_egp=rent, other_sga_egp=other, target_courses=courses, target_students=students))
+    for legacy in Payout.query.filter_by(name='Trainer / Affiliate Pool').all():
+        db.session.delete(legacy)
+
+    upsert_payout('محمد عبد المقصود', 'دورة الذكاء الاصطناعي للقانونيين', {
+        'date': datetime.date(2026, 5, 5),
+        'role': 'supervisor',
+        'basis_amount_egp': 15000,
+        'amount_egp': 2000,
+        'status': 'accrued',
+        'notes': f'{SEED_PREFIX}:training-supervisor',
+    })
+
+    start = datetime.date(2026, 5, 1)
+    forecast = [
+        (40000, 9000, 25000, 9000, 3500, 12000, 2, 18),
+        (65000, 14000, 35000, 12000, 3500, 14000, 3, 28),
+        (95000, 19000, 45000, 14000, 3500, 16000, 4, 42),
+        (135000, 27000, 55000, 16000, 3500, 18000, 5, 60),
+        (180000, 36000, 65000, 18000, 3500, 20000, 6, 78),
+        (240000, 48000, 80000, 22000, 3500, 24000, 8, 105),
+    ]
+    for idx, row in enumerate(forecast):
+        month_value = month_add(start, idx).strftime('%Y-%m')
+        rev, cogs, marketing, payroll, rent, other, courses, students = row
+        upsert_forecast(month_value, {
+            'revenue_egp': rev,
+            'cogs_egp': cogs,
+            'marketing_egp': marketing,
+            'payroll_egp': payroll,
+            'rent_egp': rent,
+            'other_sga_egp': other,
+            'target_courses': courses,
+            'target_students': students,
+            'notes': SEED_PREFIX,
+        })
     
     db.session.commit()
     print("✅ Database seeded successfully")
@@ -1435,9 +1637,9 @@ def health():
 def serve_frontend(path):
     root_dir = os.path.dirname(__file__)
     for static_dir in (
+        os.path.join(root_dir, '..', 'frontend', 'dist'),
         os.path.join(root_dir, 'static'),
         os.path.join(root_dir, 'dist'),
-        os.path.join(root_dir, '..', 'frontend', 'dist'),
     ):
         requested = os.path.join(static_dir, path)
         if path and os.path.exists(requested) and not os.path.isdir(requested):
