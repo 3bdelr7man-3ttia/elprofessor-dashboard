@@ -48,6 +48,32 @@ const platLabels = { google_ads: "Google Ads", facebook: "Facebook", instagram: 
 const statusLabels = { draft: "مسودة", active: "نشطة", paused: "متوقفة", completed: "منتهية" };
 const recLabels = { continue: "✅ استمر", optimize: "🔧 حسّن", stop: "🛑 أوقف", monitor: "👁 راقب" };
 const recColors = { continue: "#2d8659", optimize: "#e8913a", stop: "#c0392b", monitor: "#5b6abf" };
+const userRoleLabels = { admin: "أدمن", viewer: "مشاهدة فقط", training_supervisor: "مشرف تدريبي" };
+const sumBy = (items, picker) => safeArray(items).reduce((sum, item) => sum + (Number(picker(item)) || 0), 0);
+const monthLabel = (month) => {
+  if (!month) return "—";
+  const [year, monthNumber] = String(month).split("-").map(Number);
+  const names = ["يناير", "فبراير", "مارس", "أبريل", "مايو", "يونيو", "يوليو", "أغسطس", "سبتمبر", "أكتوبر", "نوفمبر", "ديسمبر"];
+  return `${names[(monthNumber || 1) - 1]} ${year || ""}`.trim();
+};
+const buildQuarterGroups = (months) => {
+  const rows = safeArray(months);
+  const groups = [];
+  for (let index = 0; index < rows.length; index += 3) {
+    const chunk = rows.slice(index, index + 3);
+    groups.push({
+      id: `q-${index / 3 + 1}`,
+      label: `الربع ${index / 3 + 1}`,
+      months: chunk,
+      totals: {
+        revenue: sumBy(chunk, (item) => item.revenue),
+        expenses: sumBy(chunk, (item) => item.expenses),
+        profit: sumBy(chunk, (item) => item.profit),
+      },
+    });
+  }
+  return groups;
+};
 
 // ============================================================
 // COMPONENTS
@@ -225,7 +251,7 @@ function LoginPage({ onLogin }) {
 function OverviewPage() {
   const [data, setData] = useState(null);
   const load = () => api.get("/dashboard").then(setData);
-  useEffect(load, []);
+  useEffect(() => { load(); }, []);
   if (!data) return <PageLoader />;
   if (data.error || !data.financial) return <PageError message={data.error} onRetry={load} />;
 
@@ -312,6 +338,9 @@ function OverviewPage() {
 // FINANCIAL DASHBOARD
 // ============================================================
 function FinancePage() {
+  const user = useAuth();
+  const isTrainingSupervisor = user?.role === "training_supervisor";
+  const canSeeFoundingData = !isTrainingSupervisor;
   const [tab, setTab] = useState("cashflow");
   const [revenues, setRevenues] = useState([]);
   const [expenses, setExpenses] = useState([]);
@@ -324,6 +353,7 @@ function FinancePage() {
   const [modal, setModal] = useState(null);
   const [form, setForm] = useState({});
   const [selectedMonth, setSelectedMonth] = useState("");
+  const [showPreLaunch, setShowPreLaunch] = useState(false);
 
   const load = useCallback(() => {
     api.get("/revenues").then(data => setRevenues(safeArray(data)));
@@ -337,10 +367,20 @@ function FinancePage() {
   }, []);
   useEffect(load, [load]);
   useEffect(() => {
-    const months = safeArray(summary?.monthly);
+    const months = [
+      ...safeArray(summary?.monthly).filter(item => isTrainingSupervisor ? item.period === "operating" : true),
+      ...safeArray(forecast).filter(item => item?.month).map(item => ({ month: item.month })),
+    ].filter((item, index, array) => item?.month && array.findIndex((candidate) => candidate.month === item.month) === index);
     if (!selectedMonth && months.length) setSelectedMonth(months[months.length - 1].month);
     if (selectedMonth && months.length && !months.find(item => item.month === selectedMonth)) setSelectedMonth(months[months.length - 1].month);
-  }, [summary, selectedMonth]);
+    if (!months.length) setSelectedMonth("");
+  }, [summary, selectedMonth, isTrainingSupervisor, forecast]);
+
+  useEffect(() => {
+    if (isTrainingSupervisor && tab === "cashflow") setTab("expenses");
+    if (isTrainingSupervisor && tab === "partners") setTab("expenses");
+    if (isTrainingSupervisor && tab === "assets") setTab("expenses");
+  }, [isTrainingSupervisor, tab]);
 
   const saveRevenue = async () => {
     if (form.id) await api.put(`/revenues/${form.id}`, form);
@@ -383,40 +423,95 @@ function FinancePage() {
   if (summary?.error) return <PageError message={summary.error} onRetry={load} />;
 
   const rate = Number(summary?.exchange_rate || 50);
+  const monthlyRows = safeArray(summary?.monthly);
+  const preLaunchMonths = monthlyRows.filter(item => item.period === "pre_launch");
+  const operatingMonths = monthlyRows.filter(item => item.period === "operating");
+  const forecastMap = safeObject(safeArray(forecast).reduce((acc, item) => {
+    if (item?.month) acc[item.month] = item;
+    return acc;
+  }, {}));
+  const operatingTimeline = Array.from(new Set([...safeArray(forecast).map(item => item.month), ...operatingMonths.map(item => item.month)]))
+    .filter(Boolean)
+    .sort()
+    .map((month) => {
+      const actual = operatingMonths.find((item) => item.month === month);
+      const plan = forecastMap[month];
+      return {
+        month,
+        period: "operating",
+        revenue: actual?.revenue || 0,
+        expenses: actual?.expenses || 0,
+        direct_expenses: actual?.direct_expenses || 0,
+        payouts: actual?.payouts || 0,
+        asset_rent: actual?.asset_rent || 0,
+        profit: actual?.profit || 0,
+        target_revenue: plan?.revenue_egp || 0,
+        target_expenses: plan?.total_expenses || 0,
+        target_students: plan?.target_students || 0,
+        target_courses: plan?.target_courses || 0,
+        isForecastOnly: !actual,
+      };
+    });
+  const visibleMonths = canSeeFoundingData ? [...preLaunchMonths, ...operatingTimeline] : operatingTimeline;
+  const operatingQuarterGroups = buildQuarterGroups(operatingTimeline);
   const monthRevenues = revenues.filter(item => item.date?.startsWith(selectedMonth));
   const monthExpenses = expenses.filter(item => item.date?.startsWith(selectedMonth));
   const monthPayouts = payouts.filter(item => item.date?.startsWith(selectedMonth));
   const monthCash = safeArray(cashflow?.transactions).filter(item => item.date?.startsWith(selectedMonth));
+  const preLaunchTotals = {
+    revenue: sumBy(preLaunchMonths, item => item.revenue),
+    expenses: sumBy(preLaunchMonths, item => item.expenses),
+    direct_expenses: sumBy(preLaunchMonths, item => item.direct_expenses),
+    payouts: sumBy(preLaunchMonths, item => item.payouts),
+    asset_rent: sumBy(preLaunchMonths, item => item.asset_rent),
+    profit: sumBy(preLaunchMonths, item => item.profit),
+  };
+  const financeTabs = isTrainingSupervisor
+    ? [
+        { id: "expenses", label: `المصروفات (${expenses.length})` },
+        { id: "payouts", label: `المدربين والإشراف (${payouts.length})` },
+        { id: "forecast", label: "الأهداف القادمة" },
+      ]
+    : [
+        { id: "cashflow", label: "Cash Flow" },
+        { id: "revenues", label: `الإيرادات (${revenues.length})` },
+        { id: "expenses", label: `المصروفات (${expenses.length})` },
+        { id: "partners", label: `الشركاء (${partners.length})` },
+        { id: "payouts", label: `مدربين/إشراف/أفلييت (${payouts.length})` },
+        { id: "assets", label: `الأصول (${assets.length})` },
+        { id: "forecast", label: "Future targets" }
+      ];
 
   return (
     <div>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
         <h1 style={{ fontSize: 24, fontWeight: 900, color: BRAND.navy }}>المالية والتوقعات</h1>
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap", justifyContent: "flex-end" }}>
-          <Btn onClick={() => { setForm({ date: new Date().toISOString().split("T")[0], kind: "capital_in", amount_egp: 0, amount_usd: 0 }); setModal("cashflow"); }} color={BRAND.navy}>+ Cash Flow</Btn>
-          <Btn onClick={() => { setForm({ date: new Date().toISOString().split("T")[0], source: "course", amount_egp: 0, amount_usd: 0 }); setModal("revenue"); }} color="#2d8659">+ إيراد جديد</Btn>
+          {!isTrainingSupervisor && <Btn onClick={() => { setForm({ date: new Date().toISOString().split("T")[0], kind: "capital_in", amount_egp: 0, amount_usd: 0 }); setModal("cashflow"); }} color={BRAND.navy}>+ Cash Flow</Btn>}
+          {!isTrainingSupervisor && <Btn onClick={() => { setForm({ date: new Date().toISOString().split("T")[0], source: "course", amount_egp: 0, amount_usd: 0 }); setModal("revenue"); }} color="#2d8659">+ إيراد جديد</Btn>}
           <Btn onClick={() => { setForm({ date: new Date().toISOString().split("T")[0], category: "tools", amount_egp: 0, amount_usd: 0, is_business: true }); setModal("expense"); }} color="#c0392b">+ مصروف جديد</Btn>
-          <Btn onClick={() => { setForm({ name: "", role: "founder", equity_percent: 0, profit_share_percent: 0, capital_egp: 0, capital_usd: 0 }); setModal("partner"); }} color="#5b6abf">+ شريك</Btn>
+          {!isTrainingSupervisor && <Btn onClick={() => { setForm({ name: "", role: "founder", equity_percent: 0, profit_share_percent: 0, capital_egp: 0, capital_usd: 0 }); setModal("partner"); }} color="#5b6abf">+ شريك</Btn>}
           <Btn onClick={() => { setForm({ date: new Date().toISOString().split("T")[0], role: "trainer", status: "accrued", percent: 0, basis_amount_egp: 0, amount_egp: 0, amount_usd: 0 }); setModal("payout"); }} color="#8e44ad">+ مستحق</Btn>
-          <Btn onClick={() => { setForm({ category: "equipment", owner: "عبدالرحمن", value_egp: 0, monthly_rent_egp: 0, status: "leased_to_company" }); setModal("asset"); }} color={BRAND.gold}>+ أصل</Btn>
+          {!isTrainingSupervisor && <Btn onClick={() => { setForm({ category: "equipment", owner: "عبدالرحمن", value_egp: 0, monthly_rent_egp: 0, status: "leased_to_company" }); setModal("asset"); }} color={BRAND.gold}>+ أصل</Btn>}
         </div>
       </div>
 
       {summary && (
         <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 16, marginBottom: 24 }}>
-          <KPICard icon="🏦" label="Cash Flow" value={fmtUSD(summary.cashflow?.balance_usd)} sub={egpLabel(summary.cashflow?.balance_egp)} color={BRAND.navy} />
+          {!isTrainingSupervisor && <KPICard icon="🏦" label="الرصيد المتاح الآن" value={fmtUSD(summary.cashflow?.balance_usd)} sub={`${egpLabel(summary.cashflow?.balance_egp)} من رأس المال المتبقي`} color={BRAND.navy} />}
           <KPICard icon="💰" label="إيرادات تشغيلية" value={usdFromEgp(summary.total_revenue, rate)} sub={egpLabel(summary.total_revenue)} color="#2d8659" />
-          <KPICard icon="🏗️" label={`تأسيس قبل ${summary.cutoff_month || "2026-06"}`} value={usdFromEgp(summary.pre_launch?.expenses, rate)} sub={`${egpLabel(summary.pre_launch?.expenses)} | صافي: ${egpLabel(summary.pre_launch?.profit)}`} color="#c0392b" />
+          {canSeeFoundingData && <KPICard icon="🏗️" label={`تأسيس قبل ${summary.cutoff_month || "2026-06"}`} value={usdFromEgp(summary.pre_launch?.expenses, rate)} sub={`${egpLabel(summary.pre_launch?.expenses)} | صافي: ${egpLabel(summary.pre_launch?.profit)}`} color="#c0392b" />}
           <KPICard icon="⚙️" label="تشغيل من يونيو" value={usdFromEgp(summary.operating?.expenses, rate)} sub={`${egpLabel(summary.operating?.expenses)} | صافي: ${egpLabel(summary.operating?.profit)}`} color="#8e44ad" />
+          {!canSeeFoundingData && <KPICard icon="🎯" label="الهدف القادم" value={usdFromEgp(forecast[0]?.revenue_egp || 0, rate)} sub={forecast[0]?.month ? monthLabel(forecast[0]?.month) : "بدون هدف بعد"} color={BRAND.gold} />}
         </div>
       )}
 
       <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: 20, marginBottom: 24 }}>
-        {summary?.monthly?.length > 0 && (
+        {(operatingTimeline.length > 0 || summary?.monthly?.length > 0) && (
           <div style={{ background: "#fff", borderRadius: 12, padding: 24, boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}>
             <h3 style={{ fontSize: 15, fontWeight: 700, marginBottom: 16 }}>Cash Flow الشهري</h3>
             <ResponsiveContainer width="100%" height={240}>
-              <LineChart data={safeArray(summary.monthly)}>
+              <LineChart data={operatingTimeline.length ? operatingTimeline : safeArray(summary.monthly)}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
                 <XAxis dataKey="month" tick={{ fontSize: 11 }} />
                 <YAxis tick={{ fontSize: 11 }} />
@@ -444,34 +539,80 @@ function FinancePage() {
         )}
       </div>
 
-      {summary?.monthly?.length > 0 && (
+      {visibleMonths.length > 0 && (
         <div style={{ background: "#fff", borderRadius: 12, overflow: "hidden", boxShadow: "0 1px 4px rgba(0,0,0,0.06)", marginBottom: 24 }}>
           <div style={{ padding: "16px 20px", borderBottom: "1px solid #f0eadb", background: "#fcfbf8" }}>
-            <h3 style={{ margin: 0, color: BRAND.navy, fontSize: 15, fontWeight: 900 }}>التقسيم الشهري الفعلي</h3>
-            <div style={{ marginTop: 6, fontSize: 12, color: "#667085" }}>الفترة قبل {summary.cutoff_month} محسوبة كتأسيس، ومن {summary.cutoff_month} محسوبة كتشغيل.</div>
+            <h3 style={{ margin: 0, color: BRAND.navy, fontSize: 15, fontWeight: 900 }}>هيكل التشغيل الشهري</h3>
+            <div style={{ marginTop: 6, fontSize: 12, color: "#667085" }}>من قبل {summary.cutoff_month} كتأسيس مجمّع، ومن {summary.cutoff_month} تبدأ المتابعة الشهرية والربع سنوية.</div>
           </div>
-          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
-            <thead>
-              <tr style={{ background: "#f8fafc" }}>
-                {["الشهر", "المرحلة", "الإيراد", "مصروف مباشر", "مستحقات", "إيجار أصول", "الصافي"].map(h => (
-                  <th key={h} style={{ padding: "12px 14px", textAlign: "right", color: "#667085" }}>{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {safeArray(summary.monthly).map(row => (
-                <tr key={row.month} onClick={() => setSelectedMonth(row.month)} style={{ borderBottom: "1px solid #f3f4f6", cursor: "pointer", background: selectedMonth === row.month ? "#fff8e8" : "#fff" }}>
-                  <td style={{ padding: "12px 14px", fontWeight: 900 }}>{row.month}</td>
-                  <td><Badge text={row.period === "pre_launch" ? "تأسيس" : "تشغيل"} color={row.period === "pre_launch" ? "#c0392b" : "#2d8659"} /></td>
-                  <td style={{ color: "#2d8659", fontWeight: 800 }}>{fmt(row.revenue)} ج.م</td>
-                  <td>{fmt(row.direct_expenses)} ج.م</td>
-                  <td>{fmt(row.payouts)} ج.م</td>
-                  <td>{fmt(row.asset_rent)} ج.م</td>
-                  <td style={{ color: row.profit >= 0 ? "#2d8659" : "#c0392b", fontWeight: 900 }}>{fmt(row.profit)} ج.م</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <div style={{ padding: 18 }}>
+            {canSeeFoundingData && (
+              <div style={{ marginBottom: 18, border: "1px solid #f2d7d5", borderRadius: 12, overflow: "hidden" }}>
+                <button onClick={() => setShowPreLaunch(!showPreLaunch)} style={{ width: "100%", border: 0, background: "#fff7f6", padding: "14px 16px", textAlign: "right", cursor: "pointer" }}>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+                    <div>
+                      <div style={{ fontWeight: 900, color: "#7b241c", fontSize: 14 }}>مرحلة التأسيس قبل {summary.cutoff_month}</div>
+                      <div style={{ marginTop: 4, fontSize: 12, color: "#7d6a65" }}>
+                        {preLaunchMonths.length} شهر | مصروفات {egpLabel(preLaunchTotals.expenses)} | صافي {egpLabel(preLaunchTotals.profit)}
+                      </div>
+                    </div>
+                    <span style={{ color: "#7b241c", fontSize: 18 }}>{showPreLaunch ? "−" : "+"}</span>
+                  </div>
+                </button>
+                {showPreLaunch && (
+                  <div style={{ padding: 14, background: "#fff" }}>
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 12, marginBottom: 14 }}>
+                      <KPICard label="إيراد التأسيس" value={usdFromEgp(preLaunchTotals.revenue, rate)} sub={egpLabel(preLaunchTotals.revenue)} color="#2d8659" />
+                      <KPICard label="مصروف مباشر" value={usdFromEgp(preLaunchTotals.direct_expenses, rate)} sub={egpLabel(preLaunchTotals.direct_expenses)} color="#c0392b" />
+                      <KPICard label="مستحقات" value={usdFromEgp(preLaunchTotals.payouts, rate)} sub={egpLabel(preLaunchTotals.payouts)} color="#8e44ad" />
+                      <KPICard label="إيجار أصول" value={usdFromEgp(preLaunchTotals.asset_rent, rate)} sub={egpLabel(preLaunchTotals.asset_rent)} color={BRAND.navy} />
+                    </div>
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 10 }}>
+                      {preLaunchMonths.map((row) => (
+                        <button key={row.month} onClick={() => setSelectedMonth(row.month)} style={{ border: selectedMonth === row.month ? `2px solid ${BRAND.gold}` : "1px solid #eee", borderRadius: 12, background: selectedMonth === row.month ? "#fff8e8" : "#fff", padding: 14, textAlign: "right", cursor: "pointer" }}>
+                          <div style={{ fontWeight: 900, color: BRAND.navy, fontSize: 13 }}>{monthLabel(row.month)}</div>
+                          <div style={{ fontSize: 12, color: "#667085", marginTop: 6 }}>مصروف {egpLabel(row.expenses)}</div>
+                          <div style={{ fontSize: 12, color: row.profit >= 0 ? "#2d8659" : "#c0392b", marginTop: 4 }}>صافي {egpLabel(row.profit)}</div>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {operatingQuarterGroups.map((group) => (
+              <div key={group.id} style={{ marginBottom: 16 }}>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+                  <div style={{ fontWeight: 900, color: BRAND.navy }}>{group.label}</div>
+                  <div style={{ fontSize: 12, color: "#667085" }}>
+                    إيراد {egpLabel(group.totals.revenue)} | مصروف {egpLabel(group.totals.expenses)} | صافي {egpLabel(group.totals.profit)}
+                  </div>
+                </div>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))", gap: 10 }}>
+                  {group.months.map((row) => (
+                    <button key={row.month} onClick={() => setSelectedMonth(row.month)} style={{ border: selectedMonth === row.month ? `2px solid ${BRAND.gold}` : "1px solid #eee", borderRadius: 12, background: selectedMonth === row.month ? "#fff8e8" : "#fff", padding: 14, textAlign: "right", cursor: "pointer" }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+                        <strong style={{ color: BRAND.navy, fontSize: 13 }}>{monthLabel(row.month)}</strong>
+                        <Badge text={row.isForecastOnly ? "مستهدف" : "تشغيل"} color={row.isForecastOnly ? BRAND.gold : "#2d8659"} />
+                      </div>
+                      <div style={{ fontSize: 12, color: "#667085", lineHeight: 1.9 }}>
+                        <div>إيراد: <strong style={{ color: "#2d8659" }}>{egpLabel(row.revenue)}</strong></div>
+                        <div>مصروف مباشر: <strong>{egpLabel(row.direct_expenses)}</strong></div>
+                        <div>مستحقات: <strong>{egpLabel(row.payouts)}</strong></div>
+                        <div>إيجار أصول: <strong>{egpLabel(row.asset_rent)}</strong></div>
+                        {row.target_revenue > 0 && <div>الهدف: <strong style={{ color: BRAND.navy }}>{egpLabel(row.target_revenue)}</strong></div>}
+                        {row.target_expenses > 0 && <div>مصروف مستهدف: <strong>{egpLabel(row.target_expenses)}</strong></div>}
+                      </div>
+                      <div style={{ marginTop: 8, fontWeight: 900, color: row.profit >= 0 ? "#2d8659" : "#c0392b", fontSize: 13 }}>
+                        {row.isForecastOnly ? `صافي متوقع: ${egpLabel(row.target_revenue - row.target_expenses)}` : `صافي: ${egpLabel(row.profit)}`}
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       )}
 
@@ -508,22 +649,14 @@ function FinancePage() {
         </div>
       )}
 
-      <TabBar tabs={[
-        { id: "cashflow", label: "Cash Flow" },
-        { id: "revenues", label: `الإيرادات (${revenues.length})` },
-        { id: "expenses", label: `المصروفات (${expenses.length})` },
-        { id: "partners", label: `الشركاء (${partners.length})` },
-        { id: "payouts", label: `مدربين/إشراف/أفلييت (${payouts.length})` },
-        { id: "assets", label: `الأصول (${assets.length})` },
-        { id: "forecast", label: "Future targets" }
-      ]} active={tab} onChange={setTab} />
+      <TabBar tabs={financeTabs} active={tab} onChange={setTab} />
 
       {tab === "cashflow" && (
         <div style={{ background: "#fff", borderRadius: 12, overflow: "hidden", boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}>
           <div style={{ padding: 18, background: "#F7F4EB", display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12 }}>
-            <KPICard icon="🏦" label="الرصيد المتاح" value={fmtUSD(cashflow?.balance_usd)} sub={`${fmt(cashflow?.balance_egp)} ج.م`} color={BRAND.navy} />
-            <KPICard icon="➕" label="رأس مال داخل" value={`${fmt(cashflow?.capital_in)} ج.م`} color="#2d8659" />
-            <KPICard icon="➖" label="مصروف من الكاش" value={`${fmt(cashflow?.cash_out)} ج.م`} color="#c0392b" />
+            <KPICard icon="🏦" label="الرصيد المتاح" value={fmtUSD(cashflow?.balance_usd)} sub={`${fmt(cashflow?.balance_egp)} ج.م متبقي للتشغيل`} color={BRAND.navy} />
+            <KPICard icon="➕" label="إجمالي رأس المال المضخوخ" value={`${fmt(cashflow?.capital_in)} ج.م`} sub="كل ما دخل الشركة كرأس مال" color="#2d8659" />
+            <KPICard icon="➖" label="المصروف المسحوب من رأس المال" value={`${fmt(cashflow?.cash_out)} ج.م`} sub="إنفاق تشغيلي أو تأسيسي من الكاش" color="#c0392b" />
           </div>
           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 14 }}>
             <thead><tr style={{ background: "#f8fafc" }}>{["التاريخ", "النوع", "المصدر", "الوصف", "المبلغ", ""].map(h => <th key={h} style={{ padding: "12px 16px", textAlign: "right", color: "#667085" }}>{h}</th>)}</tr></thead>
@@ -739,7 +872,7 @@ function MarketingPage() {
   const [form, setForm] = useState({});
 
   const load = () => api.get("/campaigns").then(data => setCampaigns(safeArray(data)));
-  useEffect(load, []);
+  useEffect(() => { load(); }, []);
 
   const save = async () => {
     if (form.id) await api.put(`/campaigns/${form.id}`, form);
@@ -865,12 +998,16 @@ function MarketingPage() {
 // COURSES SNAPSHOT
 // ============================================================
 function CoursesPage() {
+  const user = useAuth();
+  const isTrainingSupervisor = user?.role === "training_supervisor";
   const [courses, setCourses] = useState([]);
   const [modal, setModal] = useState(false);
   const [form, setForm] = useState({});
 
-  const load = () => api.get("/courses").then(data => setCourses(safeArray(data)));
-  useEffect(load, []);
+  const load = () => {
+    api.get("/courses").then(data => setCourses(safeArray(data)));
+  };
+  useEffect(() => { load(); }, []);
 
   const save = async () => {
     if (form.id) await api.put(`/courses/${form.id}`, form);
@@ -887,7 +1024,7 @@ function CoursesPage() {
     <div>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
         <h1 style={{ fontSize: 24, fontWeight: 700, color: "#0f4c81" }}>الدورات التدريبية</h1>
-        <Btn onClick={() => { setForm({ status: "active" }); setModal(true); }} color="#1abc9c">+ دورة جديدة</Btn>
+        {!isTrainingSupervisor && <Btn onClick={() => { setForm({ status: "active" }); setModal(true); }} color="#1abc9c">+ دورة جديدة</Btn>}
       </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 16, marginBottom: 24 }}>
@@ -918,20 +1055,25 @@ function CoursesPage() {
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))", gap: 16 }}>
         {courses.map(c => (
-          <div key={c.id} style={{ background: "#fff", borderRadius: 12, padding: 20, boxShadow: "0 1px 4px rgba(0,0,0,0.06)", borderTop: `3px solid ${c.profit >= 0 ? "#2d8659" : "#c0392b"}` }}>
+          <div key={c.id} style={{ background: "#fff", borderRadius: 12, padding: 22, boxShadow: "0 1px 4px rgba(0,0,0,0.06)", borderTop: `3px solid ${c.profit >= 0 ? "#2d8659" : "#c0392b"}` }}>
             <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 12 }}>
               <h3 style={{ fontSize: 16, fontWeight: 700, color: "#1f2937" }}>{c.title}</h3>
-              <div>
+              {!isTrainingSupervisor && <div>
                 <button onClick={() => { setForm(c); setModal(true); }} style={{ background: "none", border: "none", cursor: "pointer" }}>✏️</button>
                 <button onClick={async () => { if (confirm("حذف؟")) { await api.del(`/courses/${c.id}`); load(); }}} style={{ background: "none", border: "none", cursor: "pointer" }}>🗑</button>
-              </div>
+              </div>}
             </div>
             <Badge text={c.status === "active" ? "نشطة" : c.status === "completed" ? "منتهية" : c.status} color={c.status === "active" ? "#2d8659" : "#9ca3af"} />
             {c.trainer_name && <span style={{ fontSize: 13, color: "#6b7280", marginRight: 8 }}>🎓 {c.trainer_name}</span>}
-            {(c.linked_payout_cost > 0 || c.linked_expense_cost > 0) && (
-              <div style={{ marginTop: 10, fontSize: 12, color: "#667085", lineHeight: 1.8 }}>
-                {c.linked_expense_cost > 0 && <div>تكلفة تنفيذ مرتبطة: <strong style={{ color: "#c0392b" }}>{fmt(c.linked_expense_cost)} ج.م</strong></div>}
-                {c.linked_payout_cost > 0 && <div>مدرب / إشراف / أفلييت: <strong style={{ color: "#8e44ad" }}>{fmt(c.linked_payout_cost)} ج.م</strong></div>}
+            {((c.linked_expenses || []).length > 0 || (c.linked_payouts || []).length > 0) && (
+              <div style={{ marginTop: 14, background: "#fcfbf8", border: "1px solid #f0eadb", borderRadius: 12, padding: 12, fontSize: 12, color: "#667085", lineHeight: 1.9 }}>
+                <div style={{ fontWeight: 900, color: BRAND.navy, marginBottom: 6 }}>تفاصيل التنفيذ</div>
+                {(c.linked_expenses || []).map((item) => (
+                  <div key={`course-exp-${item.id}`}>{catLabels[item.category] || item.category}: <strong style={{ color: "#c0392b" }}>{fmt(item.total_egp)} ج.م</strong>{item.description ? ` - ${item.description}` : ""}</div>
+                ))}
+                {(c.linked_payouts || []).map((item) => (
+                  <div key={`course-pay-${item.id}`}>{payoutRoleLabels[item.role] || item.role}: <strong style={{ color: "#8e44ad" }}>{item.name}</strong>{item.percent ? ` (${item.percent}%)` : ""} - <strong style={{ color: "#8e44ad" }}>{fmt(item.total_egp)} ج.م</strong></div>
+                ))}
               </div>
             )}
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8, marginTop: 16 }}>
@@ -1150,6 +1292,7 @@ function AIAssistantDock() {
 // SETTINGS PAGE
 // ============================================================
 function SettingsPage() {
+  const user = useAuth();
   const [settings, setSettings] = useState({});
   const [users, setUsers] = useState([]);
   const [newUser, setNewUser] = useState({ role: "viewer" });
@@ -1171,6 +1314,11 @@ function SettingsPage() {
     if (!r.error) { setNewUser({ role: "viewer" }); api.get("/users").then(data => setUsers(safeArray(data))); }
   };
   const rate = Number(settings.exchange_rate || 50);
+  const isAdmin = user?.role === "admin";
+
+  if (!isAdmin) {
+    return <PageError message="هذه الصفحة متاحة للأدمن فقط." onRetry={() => window.location.reload()} />;
+  }
 
   return (
     <div>
@@ -1200,8 +1348,9 @@ function SettingsPage() {
           <Input label="البريد الإلكتروني" value={newUser.email || ""} onChange={e => setNewUser({ ...newUser, email: e.target.value })} />
         </div>
         <Input label="كلمة المرور" type="password" value={newUser.password || ""} onChange={e => setNewUser({ ...newUser, password: e.target.value })} />
+        <Select label="الرول" value={newUser.role || "viewer"} onChange={e => setNewUser({ ...newUser, role: e.target.value })} options={Object.entries(userRoleLabels).map(([value, label]) => ({ value, label }))} />
         <Btn onClick={addUser} color={BRAND.gold} style={{ color: BRAND.navy }}>إضافة مستخدم</Btn>
-        <div style={{ marginTop: 18 }}>{users.map(u => <div key={u.id} style={{ display: "flex", justifyContent: "space-between", borderTop: "1px solid #f3f4f6", padding: "10px 0", fontSize: 13 }}><strong>{u.name}</strong><span>{u.email}</span></div>)}</div>
+        <div style={{ marginTop: 18 }}>{users.map(u => <div key={u.id} style={{ display: "flex", justifyContent: "space-between", borderTop: "1px solid #f3f4f6", padding: "10px 0", fontSize: 13 }}><div><strong>{u.name}</strong><div style={{ color: "#667085", marginTop: 4 }}>{u.email}</div></div><span>{userRoleLabels[u.role] || u.role}</span></div>)}</div>
       </div>
       </div>
     </div>
@@ -1228,6 +1377,11 @@ const navItems = [
 ];
 
 function Layout({ page, setPage, user, onLogout }) {
+  const visibleNavItems = navItems.filter((item) => {
+    if (user?.role === "training_supervisor" && item.id === "settings") return false;
+    return true;
+  });
+
   return (
     <div style={{ display: "flex", minHeight: "100vh", direction: "rtl", fontFamily: "'Cairo', 'Tajawal', sans-serif" }}>
       {/* Sidebar */}
@@ -1237,7 +1391,7 @@ function Layout({ page, setPage, user, onLogout }) {
           <div style={{ fontSize: 11, color: "#B8C0D0", letterSpacing: 1, marginTop: 2 }}>MANAGEMENT DASHBOARD</div>
         </div>
         <nav style={{ flex: 1 }}>
-          {navItems.map(n => (
+          {visibleNavItems.map(n => (
             <button key={n.id} onClick={() => setPage(n.id)} style={{ display: "flex", alignItems: "center", gap: 12, width: "100%", padding: "14px 24px", background: page === n.id ? "rgba(217,179,76,0.14)" : "transparent", border: "none", borderRight: page === n.id ? `3px solid ${BRAND.gold}` : "3px solid transparent", color: page === n.id ? "#fff" : "#B8C0D0", fontSize: 15, fontWeight: page === n.id ? 900 : 700, cursor: "pointer", textAlign: "right", transition: "all 0.15s" }}>
               <span style={{ fontSize: 18 }}>{n.icon}</span>
               {n.label}
@@ -1246,6 +1400,7 @@ function Layout({ page, setPage, user, onLogout }) {
         </nav>
         <div style={{ padding: "16px 24px", borderTop: "1px solid rgba(255,255,255,0.1)" }}>
           <div style={{ fontSize: 13, color: "#94a3b8", marginBottom: 8 }}>👤 {user?.name}</div>
+          <div style={{ fontSize: 12, color: "#D9B34C", marginBottom: 8 }}>{userRoleLabels[user?.role] || user?.role}</div>
           <button onClick={onLogout} style={{ background: "none", border: "none", color: "#ef4444", fontSize: 13, cursor: "pointer", fontWeight: 600 }}>تسجيل الخروج</button>
         </div>
       </div>

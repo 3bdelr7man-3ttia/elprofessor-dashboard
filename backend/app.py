@@ -215,6 +215,18 @@ def token_required(f):
         return f(*args, **kwargs)
     return decorated
 
+def roles_required(*allowed_roles):
+    def decorator(f):
+        @functools.wraps(f)
+        def decorated(*args, **kwargs):
+            if not getattr(g, 'user', None):
+                return jsonify({'error': 'Unauthorized'}), 401
+            if g.user.role not in allowed_roles:
+                return jsonify({'error': 'Forbidden'}), 403
+            return f(*args, **kwargs)
+        return decorated
+    return decorator
+
 # ============================================================
 # HELPER
 # ============================================================
@@ -371,6 +383,7 @@ def me():
 
 @app.route('/api/users', methods=['GET'])
 @token_required
+@roles_required('admin')
 def list_users():
     return jsonify([{
         'id': u.id, 'email': u.email, 'name': u.name, 'role': u.role,
@@ -379,6 +392,7 @@ def list_users():
 
 @app.route('/api/users', methods=['POST'])
 @token_required
+@roles_required('admin')
 def create_user():
     d = request.json or {}
     email = (d.get('email') or '').lower().strip()
@@ -854,6 +868,29 @@ def list_courses():
             if (p.related_to or '').strip() == (c.title or '').strip()
         )
         linked_expense_cost = sum(to_egp(e.amount_usd, e.amount_egp, rate) for e in course_expenses)
+        linked_payouts = [
+            {
+                'id': p.id,
+                'date': serialize_date(p.date),
+                'name': p.name,
+                'role': p.role,
+                'related_to': p.related_to,
+                'percent': p.percent,
+                'total_egp': round(payout_amount(p, rate)),
+            }
+            for p in payouts
+            if (p.related_to or '').strip() == (c.title or '').strip()
+        ]
+        linked_expenses = [
+            {
+                'id': e.id,
+                'date': serialize_date(e.date),
+                'category': e.category,
+                'description': e.description,
+                'total_egp': round(to_egp(e.amount_usd, e.amount_egp, rate)),
+            }
+            for e in course_expenses
+        ]
         total_cost = to_egp(c.cost_usd, c.cost_egp, rate) + linked_payout_cost + linked_expense_cost
         profit = total_revenue - total_cost
         result.append({
@@ -866,6 +903,8 @@ def list_courses():
             'total_revenue': round(total_revenue), 'total_cost': round(total_cost),
             'linked_expense_cost': round(linked_expense_cost),
             'linked_payout_cost': round(linked_payout_cost),
+            'linked_expenses': linked_expenses,
+            'linked_payouts': linked_payouts,
             'profit': round(profit), 'lms_id': c.lms_id, 'notes': c.notes
         })
     return jsonify(result)
@@ -922,6 +961,7 @@ def get_settings():
 
 @app.route('/api/settings', methods=['PUT'])
 @token_required
+@roles_required('admin')
 def update_settings():
     d = request.json or {}
     for k, v in d.items():
