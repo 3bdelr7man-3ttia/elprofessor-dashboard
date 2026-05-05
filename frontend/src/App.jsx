@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, createContext, useContext } from "react";
+import { useState, useEffect, useCallback, createContext, useContext, Component } from "react";
 import { LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from "recharts";
 
 // ============================================================
@@ -39,6 +39,7 @@ const fmtUSD = (n) => `$${new Intl.NumberFormat("en").format(Math.round(n || 0))
 const usdFromEgp = (egp, rate = 50) => fmtUSD((Number(egp || 0)) / (Number(rate || 50) || 50));
 const egpLabel = (egp) => `${fmt(egp)} ج.م`;
 const safeArray = (value) => Array.isArray(value) ? value : [];
+const safeObject = (value) => (value && typeof value === "object" && !Array.isArray(value) ? value : {});
 const catLabels = { tools: "أدوات وبرمجيات", hosting: "استضافة", marketing: "تسويق", travel: "سفر عمل", legal: "قانوني", office: "مكتب", bank_fees: "رسوم بنكية", asset_rent: "إيجار أصول", course_delivery: "قاعة وتنفيذ دورة", trainer: "مدربين", supervisor: "إشراف تدريبي", affiliate: "أفلييت", influencer: "إنفلونسر", other: "أخرى" };
 const srcLabels = { course: "دورة تدريبية", consulting: "استشارة", subscription: "اشتراك", other: "أخرى" };
 const cashKindLabels = { capital_in: "ضخ رأس مال", cash_out: "سحب/صرف من الكاش", adjustment_in: "تسوية إضافة", adjustment_out: "تسوية خصم" };
@@ -143,6 +144,30 @@ function PageError({ message, onRetry }) {
       <Btn onClick={onRetry} color="#c0392b">إعادة المحاولة</Btn>
     </div>
   );
+}
+
+class PageBoundary extends Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false };
+  }
+  static getDerivedStateFromError() {
+    return { hasError: true };
+  }
+  componentDidCatch(error) {
+    console.error("Page crash:", error);
+  }
+  componentDidUpdate(prevProps) {
+    if (prevProps.pageKey !== this.props.pageKey && this.state.hasError) {
+      this.setState({ hasError: false });
+    }
+  }
+  render() {
+    if (this.state.hasError) {
+      return <PageError message="حصل خطأ أثناء فتح الصفحة. تم منع الشاشة البيضاء ويمكنك إعادة المحاولة أو الانتقال لصفحة أخرى." onRetry={() => this.setState({ hasError: false })} />;
+    }
+    return this.props.children;
+  }
 }
 
 function TabBar({ tabs, active, onChange }) {
@@ -713,7 +738,7 @@ function MarketingPage() {
   const [modal, setModal] = useState(false);
   const [form, setForm] = useState({});
 
-  const load = () => api.get("/campaigns").then(setCampaigns);
+  const load = () => api.get("/campaigns").then(data => setCampaigns(safeArray(data)));
   useEffect(load, []);
 
   const save = async () => {
@@ -954,11 +979,12 @@ function AIPage() {
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    api.get("/ai/snapshot").then(setSnapshot);
+    api.get("/ai/snapshot").then(data => setSnapshot(safeObject(data)));
     api.get("/ai/models").then(items => {
-      if (!Array.isArray(items)) return;
-      setModels(items);
-      const firstConfigured = items.find(item => item.configured) || items[0];
+      const safeModels = safeArray(items);
+      if (!safeModels.length) return;
+      setModels(safeModels);
+      const firstConfigured = safeModels.find(item => item.configured) || safeModels[0];
       if (firstConfigured) {
         setProvider(firstConfigured.id);
         setModel(firstConfigured.default_model);
@@ -1081,8 +1107,12 @@ function AIAssistantDock() {
     if (!question.trim()) return;
     setOpen(true); setInput(""); setLoading(true);
     setMessages(prev => [...prev, { role: "user", content: question }]);
-    const data = await api.post("/ai/ask", { question, provider, model });
-    setMessages(prev => [...prev, { role: "assistant", content: data.response || data.error || "لم أتمكن من الإجابة." }]);
+    try {
+      const data = await api.post("/ai/ask", { question, provider, model });
+      setMessages(prev => [...prev, { role: "assistant", content: data.response || data.error || "لم أتمكن من الإجابة." }]);
+    } catch {
+      setMessages(prev => [...prev, { role: "assistant", content: "تعذر الوصول إلى مساعد AI الآن." }]);
+    }
     setLoading(false);
   };
 
@@ -1126,7 +1156,10 @@ function SettingsPage() {
   const [converter, setConverter] = useState({ usd: 1, egp: 50, active: "usd" });
   const [saved, setSaved] = useState(false);
 
-  useEffect(() => { api.get("/settings").then(setSettings); api.get("/users").then(setUsers); }, []);
+  useEffect(() => {
+    api.get("/settings").then(data => setSettings(safeObject(data)));
+    api.get("/users").then(data => setUsers(safeArray(data)));
+  }, []);
 
   const save = async () => {
     await api.put("/settings", settings);
@@ -1135,7 +1168,7 @@ function SettingsPage() {
   };
   const addUser = async () => {
     const r = await api.post("/users", newUser);
-    if (!r.error) { setNewUser({ role: "viewer" }); api.get("/users").then(setUsers); }
+    if (!r.error) { setNewUser({ role: "viewer" }); api.get("/users").then(data => setUsers(safeArray(data))); }
   };
   const rate = Number(settings.exchange_rate || 50);
 
@@ -1219,12 +1252,14 @@ function Layout({ page, setPage, user, onLogout }) {
 
       {/* Main Content */}
       <div style={{ flex: 1, background: BRAND.bg, padding: "28px 32px 96px", overflowY: "auto" }}>
-        {page === "overview" && <OverviewPage />}
-        {page === "finance" && <FinancePage />}
-        {page === "marketing" && <MarketingPage />}
-        {page === "courses" && <CoursesPage />}
-        {page === "ai" && <AIPage />}
-        {page === "settings" && <SettingsPage />}
+        <PageBoundary pageKey={page}>
+          {page === "overview" && <OverviewPage />}
+          {page === "finance" && <FinancePage />}
+          {page === "marketing" && <MarketingPage />}
+          {page === "courses" && <CoursesPage />}
+          {page === "ai" && <AIPage />}
+          {page === "settings" && <SettingsPage />}
+        </PageBoundary>
         <AIAssistantDock />
       </div>
     </div>
