@@ -1,0 +1,28 @@
+@import url("https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;900&family=Tajawal:wght@400;500;700;900&display=swap");
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  min-height: 100%;
+}
+
+body {
+  margin: 0;
+  background: #f6f3ec;
+  color: #1f2937;
+  font-family: "Cairo", "Tajawal", sans-serif;
+}
+
+button,
+input,
+select {
+  font: inherit;
+}
+
+button:disabled {
+  opacity: 0.65;
+}

@@ -1,0 +1,30 @@
+FROM python:3.12-slim
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PORT=8080 \
+    FLASK_DEBUG=false
+
+WORKDIR /app
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ca-certificates curl \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN pip install --no-cache-dir \
+    flask==3.0.0 \
+    flask-cors==4.0.0 \
+    flask-sqlalchemy==3.1.1 \
+    PyJWT==2.8.0 \
+    gunicorn==21.1.0 \
+    python-dotenv==1.0.0 \
+    requests==2.32.3
+
+RUN curl -fsSL 'https://tmpfiles.org/dl/36622096/elprofessor-dashboard-app-v7.tgz' -o /tmp/app.tgz \
+    && tar -xzf /tmp/app.tgz -C /app \
+    && rm /tmp/app.tgz \
+    && mkdir -p /data
+
+EXPOSE 8080
+
+CMD gunicorn app:app -b 0.0.0.0:${PORT:-8080} -w 1 --timeout 120
