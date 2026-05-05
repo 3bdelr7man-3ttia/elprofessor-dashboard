@@ -18,5 +18,7 @@ jobs:
         run: |
           curl --fail --silent --show-error \
             --request POST \
+            --header "Content-Type: application/json" \
             --header "Authorization: Bearer ${COOLIFY_TOKEN}" \
-            "${COOLIFY_URL}/api/v1/applications/${COOLIFY_APP_UUID}/start"
+            --data "{\"uuid\":\"${COOLIFY_APP_UUID}\",\"force\":true}" \
+            "${COOLIFY_URL}/api/v1/deploy"
