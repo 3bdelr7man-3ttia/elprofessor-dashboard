@@ -36,7 +36,10 @@ function useAuth() { return useContext(AuthCtx); }
 // ============================================================
 const fmt = (n) => new Intl.NumberFormat("ar-EG").format(Math.round(n || 0));
 const fmtUSD = (n) => `$${new Intl.NumberFormat("en").format(Math.round(n || 0))}`;
-const catLabels = { tools: "أدوات وبرمجيات", hosting: "استضافة", marketing: "تسويق", travel: "سفر عمل", legal: "قانوني", office: "مكتب", bank_fees: "رسوم بنكية", asset_rent: "إيجار أصول", trainer: "مدربين", supervisor: "إشراف تدريبي", affiliate: "أفلييت", influencer: "إنفلونسر", other: "أخرى" };
+const usdFromEgp = (egp, rate = 50) => fmtUSD((Number(egp || 0)) / (Number(rate || 50) || 50));
+const egpLabel = (egp) => `${fmt(egp)} ج.م`;
+const safeArray = (value) => Array.isArray(value) ? value : [];
+const catLabels = { tools: "أدوات وبرمجيات", hosting: "استضافة", marketing: "تسويق", travel: "سفر عمل", legal: "قانوني", office: "مكتب", bank_fees: "رسوم بنكية", asset_rent: "إيجار أصول", course_delivery: "قاعة وتنفيذ دورة", trainer: "مدربين", supervisor: "إشراف تدريبي", affiliate: "أفلييت", influencer: "إنفلونسر", other: "أخرى" };
 const srcLabels = { course: "دورة تدريبية", consulting: "استشارة", subscription: "اشتراك", other: "أخرى" };
 const cashKindLabels = { capital_in: "ضخ رأس مال", cash_out: "سحب/صرف من الكاش", adjustment_in: "تسوية إضافة", adjustment_out: "تسوية خصم" };
 const payoutRoleLabels = { trainer: "مدرب", supervisor: "مشرف تدريبي", affiliate: "أفلييت", influencer: "إنفلونسر", partner: "شريك", other: "أخرى" };
@@ -132,6 +135,16 @@ function Badge({ text, color = "#0f4c81" }) {
   return <span style={{ display: "inline-block", padding: "3px 10px", borderRadius: 20, fontSize: 12, fontWeight: 600, background: `${color}18`, color }}>{text}</span>;
 }
 
+function PageError({ message, onRetry }) {
+  return (
+    <div style={{ background: "#fff", borderRadius: 14, padding: 28, border: "1px solid #f2d7d5", color: "#7b241c", boxShadow: "0 1px 4px rgba(0,0,0,0.05)" }}>
+      <div style={{ fontSize: 16, fontWeight: 900, marginBottom: 8 }}>تعذر تحميل الصفحة الآن</div>
+      <div style={{ fontSize: 14, lineHeight: 1.8, marginBottom: 14 }}>{message || "حدثت مشكلة مؤقتة أثناء تحميل البيانات."}</div>
+      <Btn onClick={onRetry} color="#c0392b">إعادة المحاولة</Btn>
+    </div>
+  );
+}
+
 function TabBar({ tabs, active, onChange }) {
   return (
     <div style={{ display: "flex", gap: 0, borderBottom: "2px solid #e5e7eb", marginBottom: 24 }}>
@@ -186,33 +199,47 @@ function LoginPage({ onLogin }) {
 // ============================================================
 function OverviewPage() {
   const [data, setData] = useState(null);
-  useEffect(() => { api.get("/dashboard").then(setData); }, []);
+  const load = () => api.get("/dashboard").then(setData);
+  useEffect(load, []);
   if (!data) return <PageLoader />;
+  if (data.error || !data.financial) return <PageError message={data.error} onRetry={load} />;
 
-  const { financial: f, marketing: m, courses: c, monthly, forecast, alerts, recent, partners, periods } = data;
+  const f = data.financial || {};
+  const m = data.marketing || { total_ad_spend: 0, total_leads: 0 };
+  const monthly = data.monthly;
+  const forecast = data.forecast;
+  const alerts = data.alerts;
+  const recent = data.recent;
+  const partners = data.partners;
+  const periods = data.periods;
+  const rate = data.exchange_rate;
+  const monthlyRows = safeArray(monthly);
+  const forecastRows = safeArray(forecast);
+  const recentRows = safeArray(recent);
+  const partnerRows = safeArray(partners);
 
   return (
     <div>
       <h1 style={{ fontSize: 26, fontWeight: 900, color: BRAND.navy, marginBottom: 24 }}>نظرة عامة تنفيذية</h1>
       
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 16, marginBottom: 28 }}>
-        <KPICard icon="💰" label="إيرادات تشغيلية" value={`${fmt(f.total_revenue)} ج.م`} sub={`من الدورات والاستشارات فقط - بدون Cash Flow`} color="#2d8659" />
+        <KPICard icon="💰" label="إيرادات تشغيلية" value={usdFromEgp(f.total_revenue, rate)} sub={`${egpLabel(f.total_revenue)} من الدورات والاستشارات فقط`} color="#2d8659" />
         <KPICard icon="🏦" label="Cash Flow متاح" value={fmtUSD(f.cash_balance_usd)} sub={`${fmt(f.cash_balance)} ج.م رأس مال تشغيل`} color={BRAND.navy} />
-        <KPICard icon="🏗️" label={`تأسيس قبل ${periods?.cutoff_month || "2026-05"}`} value={`${fmt(f.pre_launch_expenses)} ج.م`} sub={`حركة خام بنكية: ${fmt(f.raw_bank_expenses)} ج.م`} color="#c0392b" />
-        <KPICard icon="📊" label="صافي التشغيل من مايو" value={`${fmt(f.operating_net)} ج.م`} sub={`مصروفات التشغيل: ${fmt(f.operating_expenses)} ج.م`} color={f.operating_net >= 0 ? "#2d8659" : "#c0392b"} />
+        <KPICard icon="🏗️" label={`تأسيس قبل ${periods?.cutoff_month || "2026-06"}`} value={usdFromEgp(f.pre_launch_expenses, rate)} sub={`${egpLabel(f.pre_launch_expenses)} | حركة خام: ${egpLabel(f.raw_bank_expenses)}`} color="#c0392b" />
+        <KPICard icon="📊" label="صافي التشغيل من يونيو" value={usdFromEgp(f.operating_net, rate)} sub={`${egpLabel(f.operating_net)} | مصروفات التشغيل: ${egpLabel(f.operating_expenses)}`} color={f.operating_net >= 0 ? "#2d8659" : "#c0392b"} />
       </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 16, marginBottom: 28 }}>
-        <KPICard icon="🎯" label="Target الشهر القادم" value={`${fmt(f.next_month_target)} ج.م`} sub={f.break_even_month ? `Break-even متوقع: ${f.break_even_month}` : "لم يظهر بعد"} color={BRAND.gold} />
-        <KPICard icon="💼" label="أصول مؤجرة للشركة" value={`${fmt(f.total_assets)} ج.م`} sub={`إيجار مايو الفعلي: ${fmt(f.monthly_asset_rent)} ج.م | مرجعي كامل: ${fmt(f.asset_reference_rent)} ج.م`} color={BRAND.navy} />
-        <KPICard icon="🤝" label="مستحقات مدربين/إشراف" value={`${fmt(f.payout_cost)} ج.م`} sub="ضمن تكلفة التشغيل والدورات" color="#8e44ad" />
+        <KPICard icon="🎯" label="Target الشهر القادم" value={usdFromEgp(f.next_month_target, rate)} sub={`${egpLabel(f.next_month_target)}${f.break_even_month ? ` | Break-even: ${f.break_even_month}` : ""}`} color={BRAND.gold} />
+        <KPICard icon="💼" label="القيمة المرجعية لأصول الشركاء" value={usdFromEgp(f.total_assets, rate)} sub={`${egpLabel(f.total_assets)} | إيجار مستخدم هذا الشهر: ${egpLabel(f.monthly_asset_rent)}`} color={BRAND.navy} />
+        <KPICard icon="🤝" label="مستحقات مدربين/إشراف" value={usdFromEgp(f.payout_cost, rate)} sub={`${egpLabel(f.payout_cost)} ضمن تكلفة التشغيل والدورات`} color="#8e44ad" />
         <KPICard icon="📢" label="الإنفاق التسويقي" value={fmtUSD(m.total_ad_spend)} sub={`${m.total_leads} عميل محتمل`} color="#e8913a" />
       </div>
 
-      {alerts.length > 0 && (
+      {safeArray(alerts).length > 0 && (
         <div style={{ background: "#fef3c7", borderRadius: 12, padding: 16, marginBottom: 24, border: "1px solid #f59e0b" }}>
           <div style={{ fontWeight: 700, color: "#92400e", marginBottom: 8 }}>⚠️ تنبيهات</div>
-          {alerts.map((a, i) => <div key={i} style={{ fontSize: 14, color: "#92400e", marginBottom: 4 }}>• {a.message}</div>)}
+          {safeArray(alerts).map((a, i) => <div key={i} style={{ fontSize: 14, color: "#92400e", marginBottom: 4 }}>• {a.message}</div>)}
         </div>
       )}
 
@@ -220,7 +247,7 @@ function OverviewPage() {
         <div style={{ background: "#fff", borderRadius: 12, padding: 24, boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}>
           <h3 style={{ fontSize: 16, fontWeight: 900, color: BRAND.navy, marginBottom: 16 }}>الواقع مقابل المستهدف</h3>
           <ResponsiveContainer width="100%" height={280}>
-            <BarChart data={(forecast?.length ? forecast : monthly).map((x, i) => ({ ...x, actualRevenue: monthly[i]?.revenue || 0, actualExpenses: monthly[i]?.expenses || 0 }))}>
+            <BarChart data={(forecastRows.length ? forecastRows : monthlyRows).map((x, i) => ({ ...x, actualRevenue: monthlyRows[i]?.revenue || 0, actualExpenses: monthlyRows[i]?.expenses || 0 }))}>
               <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
               <XAxis dataKey="month" tick={{ fontSize: 11 }} />
               <YAxis tick={{ fontSize: 11 }} tickFormatter={v => `${(v/1000).toFixed(0)}k`} />
@@ -235,12 +262,12 @@ function OverviewPage() {
 
         <div style={{ background: "#fff", borderRadius: 12, padding: 24, boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}>
           <h3 style={{ fontSize: 16, fontWeight: 700, color: "#374151", marginBottom: 16 }}>آخر العمليات</h3>
-          {partners?.length > 0 && <div style={{ marginBottom: 14, paddingBottom: 12, borderBottom: "1px solid #f3f4f6" }}>
+          {partnerRows.length > 0 && <div style={{ marginBottom: 14, paddingBottom: 12, borderBottom: "1px solid #f3f4f6" }}>
             <div style={{ fontSize: 12, color: "#667085", marginBottom: 8, fontWeight: 800 }}>الشركاء</div>
-            {partners.slice(0, 3).map(p => <div key={p.name} style={{ display: "flex", justifyContent: "space-between", fontSize: 13, padding: "4px 0" }}><strong>{p.name}</strong><span>{p.equity_percent}%</span></div>)}
+            {partnerRows.slice(0, 3).map(p => <div key={p.name} style={{ display: "flex", justifyContent: "space-between", fontSize: 13, padding: "4px 0" }}><strong>{p.name}</strong><span>{p.equity_percent}%</span></div>)}
           </div>}
-          {recent.map((t, i) => (
-            <div key={i} style={{ display: "flex", justifyContent: "space-between", padding: "10px 0", borderBottom: i < recent.length - 1 ? "1px solid #f3f4f6" : "none" }}>
+          {recentRows.map((t, i) => (
+            <div key={i} style={{ display: "flex", justifyContent: "space-between", padding: "10px 0", borderBottom: i < recentRows.length - 1 ? "1px solid #f3f4f6" : "none" }}>
               <div>
                 <div style={{ fontSize: 13, fontWeight: 600, color: "#374151" }}>{t.desc?.substring(0, 35)}</div>
                 <div style={{ fontSize: 11, color: "#9ca3af" }}>{t.date}</div>
@@ -271,18 +298,24 @@ function FinancePage() {
   const [summary, setSummary] = useState(null);
   const [modal, setModal] = useState(null);
   const [form, setForm] = useState({});
+  const [selectedMonth, setSelectedMonth] = useState("");
 
   const load = useCallback(() => {
-    api.get("/revenues").then(setRevenues);
-    api.get("/expenses").then(setExpenses);
-    api.get("/assets").then(setAssets);
-    api.get("/forecast").then(setForecast);
-    api.get("/cashflow").then(setCashflow);
-    api.get("/partners").then(setPartners);
-    api.get("/payouts").then(setPayouts);
+    api.get("/revenues").then(data => setRevenues(safeArray(data)));
+    api.get("/expenses").then(data => setExpenses(safeArray(data)));
+    api.get("/assets").then(data => setAssets(safeArray(data)));
+    api.get("/forecast").then(data => setForecast(safeArray(data)));
+    api.get("/cashflow").then(data => setCashflow(data?.transactions ? data : { transactions: [], balance_usd: 0, balance_egp: 0, capital_in: 0, cash_out: 0 }));
+    api.get("/partners").then(data => setPartners(safeArray(data)));
+    api.get("/payouts").then(data => setPayouts(safeArray(data)));
     api.get("/finance/summary").then(setSummary);
   }, []);
   useEffect(load, [load]);
+  useEffect(() => {
+    const months = safeArray(summary?.monthly);
+    if (!selectedMonth && months.length) setSelectedMonth(months[months.length - 1].month);
+    if (selectedMonth && months.length && !months.find(item => item.month === selectedMonth)) setSelectedMonth(months[months.length - 1].month);
+  }, [summary, selectedMonth]);
 
   const saveRevenue = async () => {
     if (form.id) await api.put(`/revenues/${form.id}`, form);
@@ -322,6 +355,13 @@ function FinancePage() {
     if (!confirm("هل تريد الحذف؟")) return;
     await api.del(`/${type}/${id}`); load();
   };
+  if (summary?.error) return <PageError message={summary.error} onRetry={load} />;
+
+  const rate = Number(summary?.exchange_rate || 50);
+  const monthRevenues = revenues.filter(item => item.date?.startsWith(selectedMonth));
+  const monthExpenses = expenses.filter(item => item.date?.startsWith(selectedMonth));
+  const monthPayouts = payouts.filter(item => item.date?.startsWith(selectedMonth));
+  const monthCash = safeArray(cashflow?.transactions).filter(item => item.date?.startsWith(selectedMonth));
 
   return (
     <div>
@@ -339,10 +379,10 @@ function FinancePage() {
 
       {summary && (
         <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 16, marginBottom: 24 }}>
-          <KPICard icon="🏦" label="Cash Flow" value={fmtUSD(summary.cashflow?.balance_usd)} sub={`${fmt(summary.cashflow?.balance_egp)} ج.م`} color={BRAND.navy} />
-          <KPICard icon="💰" label="إيرادات تشغيلية" value={`${fmt(summary.total_revenue)} ج.م`} color="#2d8659" />
-          <KPICard icon="🏗️" label={`تأسيس قبل ${summary.cutoff_month || "2026-05"}`} value={`${fmt(summary.pre_launch?.expenses)} ج.م`} sub={`صافي: ${fmt(summary.pre_launch?.profit)} ج.م`} color="#c0392b" />
-          <KPICard icon="⚙️" label="تشغيل من مايو" value={`${fmt(summary.operating?.expenses)} ج.م`} sub={`صافي التشغيل: ${fmt(summary.operating?.profit)} ج.م`} color="#8e44ad" />
+          <KPICard icon="🏦" label="Cash Flow" value={fmtUSD(summary.cashflow?.balance_usd)} sub={egpLabel(summary.cashflow?.balance_egp)} color={BRAND.navy} />
+          <KPICard icon="💰" label="إيرادات تشغيلية" value={usdFromEgp(summary.total_revenue, rate)} sub={egpLabel(summary.total_revenue)} color="#2d8659" />
+          <KPICard icon="🏗️" label={`تأسيس قبل ${summary.cutoff_month || "2026-06"}`} value={usdFromEgp(summary.pre_launch?.expenses, rate)} sub={`${egpLabel(summary.pre_launch?.expenses)} | صافي: ${egpLabel(summary.pre_launch?.profit)}`} color="#c0392b" />
+          <KPICard icon="⚙️" label="تشغيل من يونيو" value={usdFromEgp(summary.operating?.expenses, rate)} sub={`${egpLabel(summary.operating?.expenses)} | صافي: ${egpLabel(summary.operating?.profit)}`} color="#8e44ad" />
         </div>
       )}
 
@@ -351,7 +391,7 @@ function FinancePage() {
           <div style={{ background: "#fff", borderRadius: 12, padding: 24, boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}>
             <h3 style={{ fontSize: 15, fontWeight: 700, marginBottom: 16 }}>Cash Flow الشهري</h3>
             <ResponsiveContainer width="100%" height={240}>
-              <LineChart data={summary.monthly}>
+              <LineChart data={safeArray(summary.monthly)}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
                 <XAxis dataKey="month" tick={{ fontSize: 11 }} />
                 <YAxis tick={{ fontSize: 11 }} />
@@ -369,8 +409,8 @@ function FinancePage() {
             <h3 style={{ fontSize: 15, fontWeight: 700, marginBottom: 16 }}>تصنيف المصروفات</h3>
             <ResponsiveContainer width="100%" height={240}>
               <PieChart>
-                <Pie data={summary.expense_categories.map(c => ({ name: catLabels[c.category] || c.category, value: c.total }))} cx="50%" cy="50%" innerRadius={45} outerRadius={82} dataKey="value" label={false}>
-                  {summary.expense_categories.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
+              <Pie data={safeArray(summary.expense_categories).map(c => ({ name: catLabels[c.category] || c.category, value: c.total }))} cx="50%" cy="50%" innerRadius={45} outerRadius={82} dataKey="value" label={false}>
+                  {safeArray(summary.expense_categories).map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
                 </Pie>
                 <Tooltip formatter={v => `${fmt(v)} ج.م`} />
               </PieChart>
@@ -394,8 +434,8 @@ function FinancePage() {
               </tr>
             </thead>
             <tbody>
-              {summary.monthly.map(row => (
-                <tr key={row.month} style={{ borderBottom: "1px solid #f3f4f6" }}>
+              {safeArray(summary.monthly).map(row => (
+                <tr key={row.month} onClick={() => setSelectedMonth(row.month)} style={{ borderBottom: "1px solid #f3f4f6", cursor: "pointer", background: selectedMonth === row.month ? "#fff8e8" : "#fff" }}>
                   <td style={{ padding: "12px 14px", fontWeight: 900 }}>{row.month}</td>
                   <td><Badge text={row.period === "pre_launch" ? "تأسيس" : "تشغيل"} color={row.period === "pre_launch" ? "#c0392b" : "#2d8659"} /></td>
                   <td style={{ color: "#2d8659", fontWeight: 800 }}>{fmt(row.revenue)} ج.م</td>
@@ -407,6 +447,39 @@ function FinancePage() {
               ))}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {selectedMonth && (
+        <div style={{ background: "#fff", borderRadius: 12, overflow: "hidden", boxShadow: "0 1px 4px rgba(0,0,0,0.06)", marginBottom: 24 }}>
+          <div style={{ padding: "16px 20px", borderBottom: "1px solid #f0eadb", background: "#fcfbf8" }}>
+            <h3 style={{ margin: 0, color: BRAND.navy, fontSize: 15, fontWeight: 900 }}>تفاصيل شهر {selectedMonth}</h3>
+            <div style={{ marginTop: 6, fontSize: 12, color: "#667085" }}>اضغط على أي شهر من الجدول لاستخراج إيراداته ومصروفاته وحركاته.</div>
+          </div>
+          <div style={{ padding: 20, display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 14 }}>
+            <KPICard label="إيرادات الشهر" value={usdFromEgp(monthRevenues.reduce((s, x) => s + (x.total_egp || 0), 0), rate)} sub={egpLabel(monthRevenues.reduce((s, x) => s + (x.total_egp || 0), 0))} color="#2d8659" />
+            <KPICard label="مصروفات الشهر" value={usdFromEgp(monthExpenses.reduce((s, x) => s + (x.total_egp || 0), 0), rate)} sub={egpLabel(monthExpenses.reduce((s, x) => s + (x.total_egp || 0), 0))} color="#c0392b" />
+            <KPICard label="مستحقات الشهر" value={usdFromEgp(monthPayouts.reduce((s, x) => s + (x.total_egp || 0), 0), rate)} sub={egpLabel(monthPayouts.reduce((s, x) => s + (x.total_egp || 0), 0))} color="#8e44ad" />
+            <KPICard label="حركة الكاش" value={usdFromEgp(monthCash.reduce((s, x) => s + ((x.kind === "capital_in" || x.kind === "adjustment_in") ? (x.total_egp || 0) : -(x.total_egp || 0)), 0), rate)} sub={egpLabel(monthCash.reduce((s, x) => s + ((x.kind === "capital_in" || x.kind === "adjustment_in") ? (x.total_egp || 0) : -(x.total_egp || 0)), 0))} color={BRAND.navy} />
+          </div>
+          <div style={{ padding: "0 20px 20px", display: "grid", gridTemplateColumns: "1fr 1fr", gap: 18 }}>
+            <div>
+              <h4 style={{ color: BRAND.navy, marginBottom: 10 }}>الإيرادات</h4>
+              {monthRevenues.length ? monthRevenues.map(item => <div key={`rev-${item.id}`} style={{ padding: "10px 0", borderBottom: "1px solid #f3f4f6", fontSize: 13 }}><strong>{item.description}</strong><div style={{ color: "#667085" }}>{item.date}</div><div style={{ color: "#2d8659", fontWeight: 800 }}>{egpLabel(item.total_egp)}</div></div>) : <div style={{ color: "#9ca3af", fontSize: 13 }}>لا توجد إيرادات مسجلة لهذا الشهر.</div>}
+            </div>
+            <div>
+              <h4 style={{ color: BRAND.navy, marginBottom: 10 }}>المصروفات</h4>
+              {monthExpenses.length ? monthExpenses.map(item => <div key={`exp-${item.id}`} style={{ padding: "10px 0", borderBottom: "1px solid #f3f4f6", fontSize: 13 }}><strong>{item.description}</strong><div style={{ color: "#667085" }}>{catLabels[item.category] || item.category}</div><div style={{ color: "#c0392b", fontWeight: 800 }}>{egpLabel(item.total_egp)}</div></div>) : <div style={{ color: "#9ca3af", fontSize: 13 }}>لا توجد مصروفات مسجلة لهذا الشهر.</div>}
+            </div>
+            <div>
+              <h4 style={{ color: BRAND.navy, marginBottom: 10 }}>المستحقات</h4>
+              {monthPayouts.length ? monthPayouts.map(item => <div key={`pay-${item.id}`} style={{ padding: "10px 0", borderBottom: "1px solid #f3f4f6", fontSize: 13 }}><strong>{item.name}</strong><div style={{ color: "#667085" }}>{payoutRoleLabels[item.role] || item.role} • {item.related_to}</div><div style={{ color: "#8e44ad", fontWeight: 800 }}>{egpLabel(item.total_egp)}</div></div>) : <div style={{ color: "#9ca3af", fontSize: 13 }}>لا توجد مستحقات لهذا الشهر.</div>}
+            </div>
+            <div>
+              <h4 style={{ color: BRAND.navy, marginBottom: 10 }}>حركات الكاش</h4>
+              {monthCash.length ? monthCash.map(item => <div key={`cash-${item.id}`} style={{ padding: "10px 0", borderBottom: "1px solid #f3f4f6", fontSize: 13 }}><strong>{cashKindLabels[item.kind] || item.kind}</strong><div style={{ color: "#667085" }}>{item.description}</div><div style={{ color: item.kind === "capital_in" || item.kind === "adjustment_in" ? "#2d8659" : "#c0392b", fontWeight: 800 }}>{egpLabel(item.total_egp)}</div></div>) : <div style={{ color: "#9ca3af", fontSize: 13 }}>لا توجد حركات كاش لهذا الشهر.</div>}
+            </div>
+          </div>
         </div>
       )}
 
@@ -771,7 +844,7 @@ function CoursesPage() {
   const [modal, setModal] = useState(false);
   const [form, setForm] = useState({});
 
-  const load = () => api.get("/courses").then(setCourses);
+  const load = () => api.get("/courses").then(data => setCourses(safeArray(data)));
   useEffect(load, []);
 
   const save = async () => {
@@ -784,7 +857,6 @@ function CoursesPage() {
   const totalRevenue = courses.reduce((s, c) => s + (c.total_revenue || 0), 0);
   const totalCost = courses.reduce((s, c) => s + (c.total_cost || 0), 0);
   const best = courses.length ? courses.reduce((a, b) => (a.profit || 0) > (b.profit || 0) ? a : b) : null;
-  const worst = courses.length ? courses.reduce((a, b) => (a.profit || 0) < (b.profit || 0) ? a : b) : null;
 
   return (
     <div>
@@ -831,7 +903,12 @@ function CoursesPage() {
             </div>
             <Badge text={c.status === "active" ? "نشطة" : c.status === "completed" ? "منتهية" : c.status} color={c.status === "active" ? "#2d8659" : "#9ca3af"} />
             {c.trainer_name && <span style={{ fontSize: 13, color: "#6b7280", marginRight: 8 }}>🎓 {c.trainer_name}</span>}
-            {c.linked_payout_cost > 0 && <div style={{ marginTop: 10, fontSize: 12, color: "#8e44ad", fontWeight: 700 }}>إشراف/مستحقات مرتبطة: {fmt(c.linked_payout_cost)} ج.م</div>}
+            {(c.linked_payout_cost > 0 || c.linked_expense_cost > 0) && (
+              <div style={{ marginTop: 10, fontSize: 12, color: "#667085", lineHeight: 1.8 }}>
+                {c.linked_expense_cost > 0 && <div>تكلفة تنفيذ مرتبطة: <strong style={{ color: "#c0392b" }}>{fmt(c.linked_expense_cost)} ج.م</strong></div>}
+                {c.linked_payout_cost > 0 && <div>مدرب / إشراف / أفلييت: <strong style={{ color: "#8e44ad" }}>{fmt(c.linked_payout_cost)} ج.م</strong></div>}
+              </div>
+            )}
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8, marginTop: 16 }}>
               <div style={{ textAlign: "center" }}><div style={{ fontSize: 11, color: "#9ca3af" }}>طلاب</div><div style={{ fontSize: 18, fontWeight: 700, color: "#5b6abf" }}>{c.students_count}</div></div>
               <div style={{ textAlign: "center" }}><div style={{ fontSize: 11, color: "#9ca3af" }}>إيراد</div><div style={{ fontSize: 18, fontWeight: 700, color: "#2d8659" }}>{fmt(c.total_revenue)}</div></div>

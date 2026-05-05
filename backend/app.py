@@ -26,7 +26,7 @@ app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 CORS(app, origins=os.environ.get('CORS_ORIGINS', '*').split(','))
 db = SQLAlchemy(app)
-CUT_OFF_DATE = datetime.date(2026, 5, 1)
+CUT_OFF_DATE = datetime.date(2026, 6, 1)
 SEED_PREFIX = 'seed:v3'
 
 # ============================================================
@@ -336,6 +336,15 @@ def revenues_for_course(course):
         return []
     return [r for r in Revenue.query.filter_by(source='course').all() if title in (r.description or '')]
 
+def expenses_for_course(course):
+    title = (course.title or '').strip()
+    if not title:
+        return []
+    return [
+        expense for expense in Expense.query.filter_by(is_business=True).all()
+        if title in (expense.description or '') or title in (expense.notes or '')
+    ]
+
 def serialize_date(d):
     return d.isoformat() if d else None
 
@@ -457,7 +466,13 @@ def dashboard():
     if courses:
         def course_profit(c):
             rev = sum(to_egp(r.amount_usd, r.amount_egp, rate) for r in revenues_for_course(c))
-            cost = to_egp(c.cost_usd, c.cost_egp, rate)
+            course_payout_cost = sum(
+                payout_amount(p, rate)
+                for p in payouts
+                if (p.related_to or '').strip() == (c.title or '').strip()
+            )
+            course_expense_cost = sum(to_egp(e.amount_usd, e.amount_egp, rate) for e in expenses_for_course(c))
+            cost = to_egp(c.cost_usd, c.cost_egp, rate) + course_payout_cost + course_expense_cost
             return rev - cost
         best = max(courses, key=course_profit)
         best_course = {'id': best.id, 'title': best.title, 'profit': course_profit(best)}
@@ -831,13 +846,15 @@ def list_courses():
     result = []
     for c in items:
         course_revenues = revenues_for_course(c)
+        course_expenses = expenses_for_course(c)
         total_revenue = sum(to_egp(r.amount_usd, r.amount_egp, rate) for r in course_revenues)
         linked_payout_cost = sum(
             payout_amount(p, rate)
             for p in payouts
             if (p.related_to or '').strip() == (c.title or '').strip()
         )
-        total_cost = to_egp(c.cost_usd, c.cost_egp, rate) + linked_payout_cost
+        linked_expense_cost = sum(to_egp(e.amount_usd, e.amount_egp, rate) for e in course_expenses)
+        total_cost = to_egp(c.cost_usd, c.cost_egp, rate) + linked_payout_cost + linked_expense_cost
         profit = total_revenue - total_cost
         result.append({
             'id': c.id, 'title': c.title, 'category': c.category,
@@ -847,6 +864,7 @@ def list_courses():
             'students_count': c.students_count,
             'start_date': serialize_date(c.start_date), 'end_date': serialize_date(c.end_date),
             'total_revenue': round(total_revenue), 'total_cost': round(total_cost),
+            'linked_expense_cost': round(linked_expense_cost),
             'linked_payout_cost': round(linked_payout_cost),
             'profit': round(profit), 'lms_id': c.lms_id, 'notes': c.notes
         })
@@ -1504,7 +1522,7 @@ def seed():
     upsert_seed_revenue('دورة الذكاء الاصطناعي للقانونيين - الدفعة الأولى (6 طلاب)', {
         'date': datetime.date(2026, 5, 1),
         'source': 'course',
-        'amount_egp': 15000,
+        'amount_egp': 14500,
         'client_name': 'مجموعة طلاب',
         'payment_method': 'bank_transfer',
         'notes': f'{SEED_PREFIX}:course-launch',
@@ -1531,6 +1549,7 @@ def seed():
         {'seed_key': 'software_stack', 'date': datetime.date(2026, 2, 18), 'category': 'tools', 'description': 'FluentCRM + THRIVE وأدوات تشغيل', 'amount_usd': 474, 'paid_by': 'عبدالرحمن'},
         {'seed_key': 'asset_rent_prelaunch', 'date': datetime.date(2026, 4, 15), 'category': 'asset_rent', 'description': 'استخدام أصول المؤسس خلال مرحلة التأسيس حتى نهاية أبريل', 'amount_egp': 18000, 'paid_by': 'الشركة'},
         {'seed_key': 'ai_openai_api', 'date': datetime.date(2026, 4, 30), 'category': 'tools', 'description': 'OpenAI API usage', 'amount_usd': 6, 'paid_by': 'عبدالرحمن'},
+        {'seed_key': 'course_room_may', 'date': datetime.date(2026, 5, 1), 'category': 'course_delivery', 'description': 'إيجار القاعة - دورة الذكاء الاصطناعي للقانونيين', 'amount_egp': 1800, 'paid_by': 'الشركة'},
         {'seed_key': 'asset_rent_may', 'date': datetime.date(2026, 5, 5), 'category': 'asset_rent', 'description': 'إيجار أصول مؤسس - مايو 2026', 'amount_egp': 3500, 'paid_by': 'الشركة'},
         {'seed_key': 'internet_may', 'date': datetime.date(2026, 5, 3), 'category': 'office', 'description': 'WE Internet - تشغيل مايو', 'amount_egp': 120, 'paid_by': 'عبدالرحمن'},
     ])
@@ -1575,7 +1594,7 @@ def seed():
 
     upsert_course('دورة الذكاء الاصطناعي للقانونيين', {
         'category': 'Legal AI',
-        'trainer_name': 'فريق البروفيسور',
+        'trainer_name': 'د. عبد الرحمن',
         'status': 'completed',
         'price_egp': 2500,
         'students_count': 6,
@@ -1591,13 +1610,32 @@ def seed():
     upsert_payout('محمد عبد المقصود', 'دورة الذكاء الاصطناعي للقانونيين', {
         'date': datetime.date(2026, 5, 5),
         'role': 'supervisor',
-        'basis_amount_egp': 15000,
+        'basis_amount_egp': 14500,
         'amount_egp': 2000,
         'status': 'accrued',
         'notes': f'{SEED_PREFIX}:training-supervisor',
     })
 
-    start = datetime.date(2026, 5, 1)
+    upsert_payout('د. جمال معاطي', 'دورة الذكاء الاصطناعي للقانونيين', {
+        'date': datetime.date(2026, 5, 1),
+        'role': 'affiliate',
+        'basis_amount_egp': 14500,
+        'amount_egp': 200,
+        'status': 'accrued',
+        'notes': f'{SEED_PREFIX}:affiliate-course',
+    })
+
+    upsert_payout('د. عبد الرحمن', 'دورة الذكاء الاصطناعي للقانونيين', {
+        'date': datetime.date(2026, 5, 5),
+        'role': 'trainer',
+        'basis_amount_egp': 10500,
+        'percent': 60,
+        'amount_egp': 6300,
+        'status': 'accrued',
+        'notes': f'{SEED_PREFIX}:trainer-share',
+    })
+
+    start = datetime.date(2026, 6, 1)
     forecast = [
         (40000, 9000, 25000, 9000, 3500, 12000, 2, 18),
         (65000, 14000, 35000, 12000, 3500, 14000, 3, 28),
