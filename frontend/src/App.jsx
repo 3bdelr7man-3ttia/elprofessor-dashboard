@@ -420,6 +420,7 @@ function FinancePage() {
     if (!confirm("هل تريد الحذف؟")) return;
     await api.del(`/${type}/${id}`); load();
   };
+  if (!summary) return <PageLoader />;
   if (summary?.error) return <PageError message={summary.error} onRetry={load} />;
 
   const rate = Number(summary?.exchange_rate || 50);
