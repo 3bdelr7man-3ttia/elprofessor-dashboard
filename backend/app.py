@@ -43,6 +43,7 @@ class User(db.Model):
     role = db.Column(db.String(50), default='admin')
     dashboard_role = db.Column(db.String(50), default='admin')
     linked_to_name = db.Column(db.String(255))
+    preferred_currency = db.Column(db.String(10), default='AUTO')
     is_active = db.Column(db.Boolean, default=True)
     created_at = db.Column(db.DateTime, default=datetime.datetime.utcnow)
 
@@ -138,7 +139,7 @@ class Investment(db.Model):
     amount_usd = db.Column(db.Float, default=0)
     profit_percent = db.Column(db.Float, default=20)
     share_pct = db.Column(db.Float, default=0)
-    status = db.Column(db.String(50), default='active')
+    status = db.Column(db.String(50), default='accrued')
     actual_return = db.Column(db.Float, default=0)
     notes = db.Column(db.Text)
     created_at = db.Column(db.DateTime, default=datetime.datetime.utcnow)
@@ -339,8 +340,23 @@ def badge_catalog():
         'ten_courses': {'label': '١٠ دورات', 'icon': 'spark'},
     }
 
+def normalize_name(value):
+    raw = (value or '').strip().lower()
+    for token in ('د.', 'د ', 'dr.', 'dr ', 'mr.', 'mr ', 'أ.', 'استاذ', 'الأستاذ'):
+        raw = raw.replace(token, '')
+    return ' '.join(raw.split())
+
+def names_match(left, right):
+    a = normalize_name(left)
+    b = normalize_name(right)
+    if not a or not b:
+        return False
+    return a == b or a in b or b in a
+
 def investor_display_name(user=None, explicit_name=''):
-    return (explicit_name or user_linked_name(user) if user else explicit_name or '').strip()
+    if explicit_name:
+        return explicit_name.strip()
+    return user_linked_name(user) if user else ''
 
 def sync_opportunity_funding(opportunity):
     if not opportunity:
@@ -392,11 +408,11 @@ def award_wallet_badges(wallet, investments, avg_roi):
 def sync_wallet(wallet):
     items = Investment.query.filter_by(investor_name=wallet.investor_name).all()
     total_invested = sum((item.amount_usd or 0) for item in items)
-    completed_returns = sum((item.actual_return or 0) for item in items if item.status in ('completed', 'loss'))
+    completed_returns = sum((item.actual_return or 0) for item in items if item.status in ('completed', 'loss', 'paid'))
     pending_withdrawals = sum((item.amount or 0) for item in WithdrawalRequest.query.filter_by(wallet_id=wallet.id, status='pending').all())
     completed_withdrawals = sum((item.amount or 0) for item in WithdrawalRequest.query.filter(WithdrawalRequest.wallet_id == wallet.id, WithdrawalRequest.status.in_(['approved', 'completed'])).all())
     avg_roi = 0
-    completed_items = [item for item in items if item.status in ('completed', 'loss') and (item.amount_usd or 0)]
+    completed_items = [item for item in items if item.status in ('completed', 'loss', 'paid') and (item.amount_usd or 0)]
     if completed_items:
         avg_roi = sum((((item.actual_return or 0) - (item.amount_usd or 0)) / (item.amount_usd or 1)) * 100 for item in completed_items) / len(completed_items)
     wallet.total_invested = round(total_invested, 2)
@@ -554,7 +570,7 @@ def serialize_opportunity(item, rate, course_lookup=None):
     expected_return_value = 0
     if course:
         financial = course_financials(course, rate)
-        expected_return_value = round(financial['distribution'].get('investor_pool_egp', 0) / rate)
+        expected_return_value = round(financial['distribution'].get('investor_pool_egp', 0) / rate) if rate else 0
     if not expected_return_value and item.target_amount and item.expected_roi:
         expected_return_value = round((item.target_amount or 0) * (1 + ((item.expected_roi or 0) / 100)), 2)
     return {
@@ -795,7 +811,7 @@ def login():
         'exp': datetime.datetime.utcnow() + datetime.timedelta(days=30)
     }, app.config['SECRET_KEY'], algorithm='HS256')
     dashboard_role = user_dashboard_role(user)
-    return jsonify({'token': token, 'user': {'id': user.id, 'email': user.email, 'name': user.name, 'role': dashboard_role, 'dashboard_role': dashboard_role, 'linked_to_name': user_linked_name(user)}})
+    return jsonify({'token': token, 'user': {'id': user.id, 'email': user.email, 'name': user.name, 'role': dashboard_role, 'dashboard_role': dashboard_role, 'linked_to_name': user_linked_name(user), 'preferred_currency': (user.preferred_currency or 'AUTO')}})
 
 @app.route('/api/auth/register', methods=['POST'])
 def register():
@@ -814,6 +830,7 @@ def register():
         role='viewer',
         dashboard_role='viewer',
         linked_to_name='',
+        preferred_currency='AUTO',
         is_active=True,
     )
     db.session.add(user)
@@ -824,14 +841,14 @@ def register():
 @token_required
 def me():
     dashboard_role = user_dashboard_role(g.user)
-    return jsonify({'id': g.user.id, 'email': g.user.email, 'name': g.user.name, 'role': dashboard_role, 'dashboard_role': dashboard_role, 'linked_to_name': user_linked_name(g.user)})
+    return jsonify({'id': g.user.id, 'email': g.user.email, 'name': g.user.name, 'role': dashboard_role, 'dashboard_role': dashboard_role, 'linked_to_name': user_linked_name(g.user), 'preferred_currency': (g.user.preferred_currency or 'AUTO')})
 
 @app.route('/api/users', methods=['GET'])
 @token_required
 @roles_required('admin')
 def list_users():
     return jsonify([{
-        'id': u.id, 'email': u.email, 'name': u.name, 'role': user_dashboard_role(u), 'dashboard_role': user_dashboard_role(u), 'linked_to_name': user_linked_name(u),
+        'id': u.id, 'email': u.email, 'name': u.name, 'role': user_dashboard_role(u), 'dashboard_role': user_dashboard_role(u), 'linked_to_name': user_linked_name(u), 'preferred_currency': (u.preferred_currency or 'AUTO'),
         'is_active': u.is_active, 'created_at': u.created_at.isoformat() if u.created_at else None
     } for u in User.query.order_by(User.created_at.desc()).all()])
 
@@ -853,6 +870,7 @@ def create_user():
         role=d.get('dashboard_role') or d.get('role') or 'viewer',
         dashboard_role=d.get('dashboard_role') or d.get('role') or 'viewer',
         linked_to_name=d.get('linked_to_name') or '',
+        preferred_currency=(d.get('preferred_currency') or 'AUTO').upper(),
         is_active=True
     )
     db.session.add(user)
@@ -865,13 +883,15 @@ def create_user():
 def update_user(id):
     user = User.query.get_or_404(id)
     d = request.json or {}
-    for key in ['name', 'email', 'role', 'dashboard_role', 'linked_to_name', 'is_active']:
+    for key in ['name', 'email', 'role', 'dashboard_role', 'linked_to_name', 'preferred_currency', 'is_active']:
         if key in d:
             value = d[key]
             if key == 'email' and value:
                 value = value.lower().strip()
             if key in ('role', 'dashboard_role') and not value:
                 value = 'viewer'
+            if key == 'preferred_currency':
+                value = (value or 'AUTO').upper()
             setattr(user, key, value)
     if d.get('password'):
         user.password_hash = generate_password_hash(d['password'], method='pbkdf2:sha256')
@@ -1328,10 +1348,11 @@ def list_courses():
     linked_name = user_linked_name(g.user)
     items = Course.query.order_by(Course.created_at.desc()).all()
     if viewer_role == 'trainer':
-        items = [item for item in items if (item.trainer_name or '').strip() == linked_name or (item.trainer_name or '').strip() == (g.user.name or '').strip()]
+        items = [item for item in items if names_match(item.trainer_name, linked_name) or names_match(item.trainer_name, g.user.name)]
     elif viewer_role == 'investor':
-        course_ids = {item.course_id for item in Investment.query.filter_by(investor_name=linked_name).all()}
-        items = [item for item in items if item.id in course_ids]
+        if request.args.get('scope') != 'marketplace':
+            course_ids = {item.course_id for item in Investment.query.filter_by(investor_name=linked_name).all()}
+            items = [item for item in items if item.id in course_ids]
     rate = get_rate()
     result = []
     for c in items:
@@ -1561,7 +1582,7 @@ def list_payouts():
     viewer_role = user_dashboard_role(g.user)
     linked_name = user_linked_name(g.user)
     if viewer_role == 'trainer':
-        items = [item for item in items if (item.name or '').strip() == linked_name or (item.name or '').strip() == (g.user.name or '').strip()]
+        items = [item for item in items if names_match(item.name, linked_name) or names_match(item.name, g.user.name)]
     return jsonify([{
         'id': p.id, 'date': serialize_date(p.date), 'name': p.name, 'role': p.role,
         'related_to': p.related_to, 'basis_amount_egp': p.basis_amount_egp,
@@ -1616,41 +1637,33 @@ def list_investments():
     viewer_role = user_dashboard_role(g.user)
     linked_name = user_linked_name(g.user)
     if viewer_role == 'investor':
-        items = [item for item in items if (item.investor_name or '').strip() == linked_name or (item.investor_name or '').strip() == (g.user.name or '').strip() or item.investor_user_id == g.user.id]
+        items = [item for item in items if names_match(item.investor_name, linked_name) or names_match(item.investor_name, g.user.name) or item.investor_user_id == g.user.id]
     return jsonify([serialize_investment(item, rate, course_lookup, opportunity_lookup) for item in items])
 
 @app.route('/api/investments', methods=['POST'])
 @token_required
 def create_investment():
     d = request.json or {}
-    opportunity = InvestmentOpportunity.query.get(d.get('opportunity_id')) if d.get('opportunity_id') else None
-    course_id = d.get('course_id') or (opportunity.course_id if opportunity else None)
-    investor_name = d.get('investor_name') or g.user.name
-    investor_user_id = d.get('investor_user_id') or (g.user.id if user_dashboard_role(g.user) == 'investor' else None)
-    if opportunity and opportunity.status == 'invite_only' and user_dashboard_role(g.user) == 'investor':
-        return jsonify({'error': 'هذه الفرصة بطلب فقط'}), 403
     item = Investment(
         opportunity_id=d.get('opportunity_id'),
-        course_id=course_id,
-        investor_name=investor_name,
-        investor_user_id=investor_user_id,
+        course_id=d.get('course_id'),
+        investor_name=d.get('investor_name', ''),
+        investor_user_id=d.get('investor_user_id') or (g.user.id if user_dashboard_role(g.user) in ('investor', 'trainer') else None),
         amount_egp=d.get('amount_egp', 0),
         amount_usd=d.get('amount_usd', 0),
         profit_percent=d.get('profit_percent', 20),
         share_pct=d.get('share_pct', 0),
-        status=d.get('status', 'active'),
+        status=d.get('status', 'accrued'),
         actual_return=d.get('actual_return', 0),
         notes=d.get('notes', ''),
     )
     db.session.add(item)
-    db.session.flush()
-    if opportunity:
-        sync_opportunity_funding(opportunity)
-        if opportunity.target_amount:
-            item.share_pct = round(((item.amount_usd or 0) / opportunity.target_amount) * 100, 2)
-        item.profit_percent = opportunity.investors_pct or item.profit_percent
-    if investor_name:
-        wallet = get_or_create_wallet(investor_name, investor_user_id)
+    if item.opportunity_id:
+        opportunity = InvestmentOpportunity.query.get(item.opportunity_id)
+        if opportunity:
+            sync_opportunity_funding(opportunity)
+    if item.investor_name:
+        wallet = get_or_create_wallet(item.investor_name, item.investor_user_id)
         sync_wallet(wallet)
     db.session.commit()
     return jsonify({'id': item.id, 'message': 'تم إضافة الاستثمار'}), 201
@@ -1660,16 +1673,25 @@ def create_investment():
 def update_investment(id):
     item = Investment.query.get_or_404(id)
     d = request.json or {}
+    previous_name = item.investor_name
+    previous_opportunity_id = item.opportunity_id
     for key in ['opportunity_id', 'course_id', 'investor_name', 'investor_user_id', 'amount_egp', 'amount_usd', 'profit_percent', 'share_pct', 'status', 'actual_return', 'notes']:
         if key in d:
             setattr(item, key, d[key])
-    opportunity = InvestmentOpportunity.query.get(item.opportunity_id) if item.opportunity_id else None
-    if opportunity:
-        sync_opportunity_funding(opportunity)
-        if opportunity.target_amount and (item.amount_usd or 0):
-            item.share_pct = round(((item.amount_usd or 0) / opportunity.target_amount) * 100, 2)
-    wallet = get_or_create_wallet(item.investor_name, item.investor_user_id)
-    sync_wallet(wallet)
+    if previous_opportunity_id:
+        opportunity = InvestmentOpportunity.query.get(previous_opportunity_id)
+        if opportunity:
+            sync_opportunity_funding(opportunity)
+    if item.opportunity_id:
+        opportunity = InvestmentOpportunity.query.get(item.opportunity_id)
+        if opportunity:
+            sync_opportunity_funding(opportunity)
+    if previous_name:
+        wallet = get_or_create_wallet(previous_name)
+        sync_wallet(wallet)
+    if item.investor_name:
+        wallet = get_or_create_wallet(item.investor_name, item.investor_user_id)
+        sync_wallet(wallet)
     db.session.commit()
     return jsonify({'message': 'تم التحديث'})
 
@@ -1677,27 +1699,28 @@ def update_investment(id):
 @token_required
 def delete_investment(id):
     item = Investment.query.get_or_404(id)
-    opportunity = InvestmentOpportunity.query.get(item.opportunity_id) if item.opportunity_id else None
-    wallet = InvestorWallet.query.filter_by(investor_name=item.investor_name).first()
+    deleted_name = item.investor_name
+    deleted_opportunity_id = item.opportunity_id
     db.session.delete(item)
-    if opportunity:
-        db.session.flush()
-        sync_opportunity_funding(opportunity)
-    if wallet:
-        db.session.flush()
+    if deleted_opportunity_id:
+        opportunity = InvestmentOpportunity.query.get(deleted_opportunity_id)
+        if opportunity:
+            sync_opportunity_funding(opportunity)
+    if deleted_name:
+        wallet = get_or_create_wallet(deleted_name)
         sync_wallet(wallet)
     db.session.commit()
     return jsonify({'message': 'تم الحذف'})
 
 @app.route('/api/investments/active', methods=['GET'])
 @token_required
-def active_investments():
+def investment_active():
     rate = get_rate()
     viewer_role = user_dashboard_role(g.user)
     linked_name = user_linked_name(g.user)
     items = Investment.query.filter(Investment.status.in_(['active', 'pending', 'accrued'])).order_by(Investment.created_at.desc()).all()
     if viewer_role == 'investor':
-        items = [item for item in items if (item.investor_name or '').strip() == linked_name or item.investor_user_id == g.user.id]
+        items = [item for item in items if names_match(item.investor_name, linked_name) or names_match(item.investor_name, g.user.name) or item.investor_user_id == g.user.id]
     course_lookup = {course.id: course for course in Course.query.all()}
     opportunity_lookup = {item.id: item for item in InvestmentOpportunity.query.all()}
     return jsonify([serialize_investment(item, rate, course_lookup, opportunity_lookup) for item in items])
@@ -1710,7 +1733,7 @@ def investment_history():
     linked_name = user_linked_name(g.user)
     items = Investment.query.filter(Investment.status.in_(['completed', 'loss', 'paid'])).order_by(Investment.created_at.desc()).all()
     if viewer_role == 'investor':
-        items = [item for item in items if (item.investor_name or '').strip() == linked_name or item.investor_user_id == g.user.id]
+        items = [item for item in items if names_match(item.investor_name, linked_name) or names_match(item.investor_name, g.user.name) or item.investor_user_id == g.user.id]
     course_lookup = {course.id: course for course in Course.query.all()}
     opportunity_lookup = {item.id: item for item in InvestmentOpportunity.query.all()}
     return jsonify([serialize_investment(item, rate, course_lookup, opportunity_lookup) for item in items])
@@ -1784,7 +1807,7 @@ def get_investor_wallet():
     investor_name = request.args.get('investor_name', '').strip() if viewer_role == 'admin' else user_linked_name(g.user)
     if not investor_name:
         return jsonify({'error': 'لا يوجد مستثمر مرتبط بهذا الحساب'}), 400
-    wallet = get_or_create_wallet(investor_name, g.user.id if viewer_role == 'investor' else None)
+    wallet = get_or_create_wallet(investor_name, g.user.id if viewer_role in ('investor', 'trainer') else None)
     payload = sync_wallet(wallet)
     db.session.commit()
     return jsonify(serialize_wallet(payload['wallet'], rate, payload['avg_roi'], payload['pending_withdrawals']))
@@ -1796,7 +1819,7 @@ def request_withdrawal():
     investor_name = user_linked_name(g.user)
     if not investor_name:
         return jsonify({'error': 'هذا الحساب غير مرتبط بمحفظة مستثمر'}), 400
-    wallet = get_or_create_wallet(investor_name, g.user.id)
+    wallet = get_or_create_wallet(investor_name, g.user.id if user_dashboard_role(g.user) in ('investor', 'trainer') else None)
     payload = sync_wallet(wallet)
     d = request.json or {}
     amount = float(d.get('amount') or 0)
@@ -1819,7 +1842,7 @@ def get_investor_badges():
     investor_name = user_linked_name(g.user)
     if not investor_name:
         return jsonify([])
-    wallet = get_or_create_wallet(investor_name, g.user.id if user_dashboard_role(g.user) == 'investor' else None)
+    wallet = get_or_create_wallet(investor_name, g.user.id if user_dashboard_role(g.user) in ('investor', 'trainer') else None)
     payload = sync_wallet(wallet)
     db.session.commit()
     return jsonify(serialize_badges(payload['wallet']))
@@ -1875,7 +1898,6 @@ def update_withdrawal(id):
 @app.route('/api/ai/investment-recommendation', methods=['GET'])
 @token_required
 def ai_investment_recommendation():
-    rate = get_rate()
     opportunities = InvestmentOpportunity.query.order_by(InvestmentOpportunity.created_at.desc()).all()
     course_lookup = {course.id: course for course in Course.query.all()}
     if not opportunities:
@@ -1884,18 +1906,24 @@ def ai_investment_recommendation():
     investor_name = user_linked_name(g.user)
     wallet = None
     avg_roi = 0
-    if viewer_role == 'investor' and investor_name:
+    if viewer_role in ('investor', 'trainer') and investor_name:
         wallet = get_or_create_wallet(investor_name, g.user.id)
         payload = sync_wallet(wallet)
         avg_roi = payload['avg_roi']
-    ranked = sorted(opportunities, key=lambda item: ((item.expected_roi or 0) * 0.6) + (min(100, (sync_opportunity_funding(item) / max(item.target_amount or 1, 1)) * 100) * 0.3) + (15 if item.status == 'hot' else 0), reverse=True)
+    ranked = sorted(
+        opportunities,
+        key=lambda item: ((item.expected_roi or 0) * 0.6) + (min(100, (sync_opportunity_funding(item) / max(item.target_amount or 1, 1)) * 100) * 0.3) + (15 if item.status == 'hot' else 0),
+        reverse=True,
+    )
     top = ranked[0]
     course = course_lookup.get(top.course_id)
     db.session.commit()
     return jsonify({
+        'title': f"اقتراح اليوم: {course.title if course else 'فرصة استثمارية'}",
+        'message': f"هذه الفرصة مناسبة لك بناءً على عائد متوقع {round(top.expected_roi or 0)}% ومستوى تمويل {round(sync_opportunity_funding(top) / max(top.target_amount or 1, 1) * 100)}%. متوسط عائدك الحالي {avg_roi}%.",
         'opportunity_id': top.id,
-        'title': course.title if course else 'فرصة استثمارية',
-        'message': f"هذه الدورة مناسبة الآن لأن التمويل وصل إلى {round((top.current_funded or 0) / max(top.target_amount or 1, 1) * 100)}% والعائد المتوقع {round(top.expected_roi or 0)}%.{f' متوسط أدائك السابق {avg_roi:.1f}%.' if viewer_role == 'investor' else ''}",
+        'course_id': top.course_id,
+        'status': top.status,
     })
 
 @app.route('/api/courses/<int:id>/revenue-split', methods=['GET'])
@@ -2049,17 +2077,17 @@ def generate_ai_snapshot():
     forecasts = ForecastMonth.query.order_by(ForecastMonth.month.asc()).limit(6).all()
 
     if viewer_role == 'trainer':
-        courses = [course for course in courses if (course.trainer_name or '').strip() == linked_name or (course.trainer_name or '').strip() == (g.user.name or '').strip()]
+        courses = [course for course in courses if names_match(course.trainer_name, linked_name) or names_match(course.trainer_name, g.user.name)]
         course_ids = {course.id for course in courses}
         course_titles = {(course.title or '').strip() for course in courses}
         revenues = [item for item in revenues if item.course_id in course_ids or any(title and title in (item.description or '') for title in course_titles)]
-        payouts = [item for item in payouts if (item.name or '').strip() == linked_name or (item.name or '').strip() == (g.user.name or '').strip()]
+        payouts = [item for item in payouts if names_match(item.name, linked_name) or names_match(item.name, g.user.name)]
         expenses = [item for item in expenses if any(title and (title in (item.description or '') or title in (item.notes or '')) for title in course_titles)]
         campaigns = [item for item in campaigns if item.course_id in course_ids]
         cash_transactions = []
         assets = []
     elif viewer_role == 'investor':
-        investments = Investment.query.filter_by(investor_name=linked_name).all()
+        investments = [item for item in Investment.query.all() if names_match(item.investor_name, linked_name) or names_match(item.investor_name, g.user.name)]
         course_ids = {item.course_id for item in investments}
         courses = [course for course in courses if course.id in course_ids]
         course_titles = {(course.title or '').strip() for course in courses}
@@ -2360,45 +2388,6 @@ def seed():
         item.target_students = payload['target_students']
         item.notes = payload.get('notes', '')
 
-    def upsert_opportunity(course_title, payload):
-        course = Course.query.filter_by(title=course_title).first()
-        if not course:
-            return
-        item = InvestmentOpportunity.query.filter_by(course_id=course.id).first()
-        if not item:
-            item = InvestmentOpportunity(course_id=course.id)
-            db.session.add(item)
-        item.target_amount = payload.get('target_amount', 0)
-        item.min_investment = payload.get('min_investment', 200)
-        item.current_funded = payload.get('current_funded', 0)
-        item.expected_roi = payload.get('expected_roi', 0)
-        item.expected_start = payload.get('expected_start')
-        item.expected_end = payload.get('expected_end')
-        item.trainer_pct = payload.get('trainer_pct', 35)
-        item.platform_pct = payload.get('platform_pct', 35)
-        item.investors_pct = payload.get('investors_pct', 30)
-        item.affiliate_pct = payload.get('affiliate_pct', 0)
-        item.status = payload.get('status', 'open')
-        item.video_url = payload.get('video_url', '')
-        item.notes = payload.get('notes', SEED_PREFIX)
-
-    def upsert_investment(seed_key, payload):
-        item = Investment.query.filter_by(notes=seed_key).first()
-        if not item:
-            item = Investment(notes=seed_key)
-            db.session.add(item)
-        item.opportunity_id = payload.get('opportunity_id')
-        item.course_id = payload.get('course_id')
-        item.investor_name = payload.get('investor_name')
-        item.investor_user_id = payload.get('investor_user_id')
-        item.amount_usd = payload.get('amount_usd', 0)
-        item.amount_egp = payload.get('amount_egp', 0)
-        item.profit_percent = payload.get('profit_percent', 0)
-        item.share_pct = payload.get('share_pct', 0)
-        item.status = payload.get('status', 'active')
-        item.actual_return = payload.get('actual_return', 0)
-        item.created_at = payload.get('created_at', item.created_at or datetime.datetime.utcnow())
-
     for key, value in [
         ('exchange_rate', '50'),
         ('opening_balance_egp', '15000'),
@@ -2499,42 +2488,6 @@ def seed():
         'notes': f'{SEED_PREFIX}:demo-course',
     })
 
-    upsert_course('برنامج الصياغة القانونية الذكي', {
-        'category': 'Legal Drafting',
-        'trainer_name': 'أ. منى مصطفى',
-        'status': 'active',
-        'price_egp': 3200,
-        'students_count': 18,
-        'start_date': datetime.date(2026, 6, 15),
-        'end_date': datetime.date(2026, 7, 5),
-        'lms_id': 'smart-drafting-02',
-        'notes': f'{SEED_PREFIX}:market-course',
-    })
-
-    upsert_course('برنامج الامتثال والتحقيقات الداخلية', {
-        'category': 'Compliance',
-        'trainer_name': 'د. عبد الرحمن',
-        'status': 'active',
-        'price_egp': 4200,
-        'students_count': 12,
-        'start_date': datetime.date(2026, 7, 10),
-        'end_date': datetime.date(2026, 7, 28),
-        'lms_id': 'compliance-03',
-        'notes': f'{SEED_PREFIX}:market-course',
-    })
-
-    upsert_course('ورشة التعاقدات الدولية للمحامين', {
-        'category': 'Contracts',
-        'trainer_name': 'أ. محمد أبو ضيف',
-        'status': 'draft',
-        'price_egp': 5200,
-        'students_count': 16,
-        'start_date': datetime.date(2026, 8, 10),
-        'end_date': datetime.date(2026, 8, 30),
-        'lms_id': 'contracts-04',
-        'notes': f'{SEED_PREFIX}:market-course',
-    })
-
     for legacy in Payout.query.filter_by(name='Trainer / Affiliate Pool').all():
         db.session.delete(legacy)
 
@@ -2566,95 +2519,6 @@ def seed():
         'notes': f'{SEED_PREFIX}:trainer-share',
     })
 
-    upsert_opportunity('برنامج الصياغة القانونية الذكي', {
-        'target_amount': 900,
-        'min_investment': 100,
-        'current_funded': 450,
-        'expected_roi': 28,
-        'expected_start': datetime.date(2026, 6, 15),
-        'expected_end': datetime.date(2026, 7, 5),
-        'trainer_pct': 35,
-        'platform_pct': 35,
-        'investors_pct': 30,
-        'affiliate_pct': 0,
-        'status': 'hot',
-        'notes': f'{SEED_PREFIX}:opportunity',
-    })
-    upsert_opportunity('برنامج الامتثال والتحقيقات الداخلية', {
-        'target_amount': 650,
-        'min_investment': 80,
-        'current_funded': 200,
-        'expected_roi': 22,
-        'expected_start': datetime.date(2026, 7, 10),
-        'expected_end': datetime.date(2026, 7, 28),
-        'trainer_pct': 35,
-        'platform_pct': 35,
-        'investors_pct': 30,
-        'affiliate_pct': 0,
-        'status': 'open',
-        'notes': f'{SEED_PREFIX}:opportunity',
-    })
-    upsert_opportunity('ورشة التعاقدات الدولية للمحامين', {
-        'target_amount': 1200,
-        'min_investment': 150,
-        'current_funded': 0,
-        'expected_roi': 32,
-        'expected_start': datetime.date(2026, 8, 10),
-        'expected_end': datetime.date(2026, 8, 30),
-        'trainer_pct': 35,
-        'platform_pct': 35,
-        'investors_pct': 30,
-        'affiliate_pct': 0,
-        'status': 'invite_only',
-        'notes': f'{SEED_PREFIX}:opportunity',
-    })
-
-    investor_email = 'investor@elprofessor.com'
-    investor_user = User.query.filter_by(email=investor_email).first()
-    if not investor_user:
-        investor_user = User(
-            email=investor_email,
-            password_hash=generate_password_hash('investor123', method='pbkdf2:sha256'),
-            name='مستثمر تجريبي',
-            role='investor',
-            dashboard_role='investor',
-            linked_to_name='مستثمر تجريبي',
-            is_active=True,
-        )
-        db.session.add(investor_user)
-        db.session.flush()
-
-    opportunity_map = {item.course_id: item for item in InvestmentOpportunity.query.all()}
-    drafting_course = Course.query.filter_by(title='برنامج الصياغة القانونية الذكي').first()
-    compliance_course = Course.query.filter_by(title='برنامج الامتثال والتحقيقات الداخلية').first()
-    if drafting_course and opportunity_map.get(drafting_course.id):
-        upsert_investment(f'{SEED_PREFIX}:active-investment', {
-            'opportunity_id': opportunity_map[drafting_course.id].id,
-            'course_id': drafting_course.id,
-            'investor_name': 'مستثمر تجريبي',
-            'investor_user_id': investor_user.id,
-            'amount_usd': 180,
-            'amount_egp': 9000,
-            'profit_percent': 30,
-            'share_pct': 20,
-            'status': 'active',
-            'created_at': datetime.datetime.utcnow() - datetime.timedelta(days=12),
-        })
-    if compliance_course and opportunity_map.get(compliance_course.id):
-        upsert_investment(f'{SEED_PREFIX}:completed-investment', {
-            'opportunity_id': opportunity_map[compliance_course.id].id,
-            'course_id': compliance_course.id,
-            'investor_name': 'مستثمر تجريبي',
-            'investor_user_id': investor_user.id,
-            'amount_usd': 120,
-            'amount_egp': 6000,
-            'profit_percent': 30,
-            'share_pct': 18,
-            'status': 'completed',
-            'actual_return': 168,
-            'created_at': datetime.datetime.utcnow() - datetime.timedelta(days=40),
-        })
-
     start = datetime.date(2026, 6, 1)
     forecast = [
         (40000, 9000, 25000, 9000, 3500, 12000, 2, 18),
@@ -2678,11 +2542,6 @@ def seed():
             'target_students': students,
             'notes': SEED_PREFIX,
         })
-
-    for opportunity in InvestmentOpportunity.query.all():
-        sync_opportunity_funding(opportunity)
-    demo_wallet = get_or_create_wallet('مستثمر تجريبي', investor_user.id if investor_user else None)
-    sync_wallet(demo_wallet)
     
     db.session.commit()
     print("✅ Database seeded successfully")
@@ -2698,6 +2557,8 @@ def ensure_runtime_schema():
                 connection.execute(text("UPDATE users SET dashboard_role = role WHERE dashboard_role IS NULL"))
             if 'linked_to_name' not in user_columns:
                 connection.execute(text("ALTER TABLE users ADD COLUMN linked_to_name VARCHAR(255)"))
+            if 'preferred_currency' not in user_columns:
+                connection.execute(text("ALTER TABLE users ADD COLUMN preferred_currency VARCHAR(10) DEFAULT 'AUTO'"))
         if 'campaigns' in existing_tables:
             campaign_columns = {column['name'] for column in inspector.get_columns('campaigns')}
             if 'course_id' not in campaign_columns:
