@@ -6,6 +6,7 @@ import os, json, datetime, hashlib, secrets, functools
 from flask import Flask, request, jsonify, g, send_from_directory
 from flask_cors import CORS
 from flask_sqlalchemy import SQLAlchemy
+from sqlalchemy import inspect, text
 from werkzeug.security import generate_password_hash, check_password_hash
 from dotenv import load_dotenv
 import jwt
@@ -40,6 +41,8 @@ class User(db.Model):
     password_hash = db.Column(db.String(255), nullable=False)
     name = db.Column(db.String(255))
     role = db.Column(db.String(50), default='admin')
+    dashboard_role = db.Column(db.String(50), default='admin')
+    linked_to_name = db.Column(db.String(255))
     is_active = db.Column(db.Boolean, default=True)
     created_at = db.Column(db.DateTime, default=datetime.datetime.utcnow)
 
@@ -88,6 +91,7 @@ class Campaign(db.Model):
     leads = db.Column(db.Integer, default=0)
     conversions = db.Column(db.Integer, default=0)
     revenue_attributed = db.Column(db.Float, default=0)
+    course_id = db.Column(db.Integer, db.ForeignKey('courses.id'), nullable=True)
     target_audience = db.Column(db.Text)
     notes = db.Column(db.Text)
     created_at = db.Column(db.DateTime, default=datetime.datetime.utcnow)
@@ -111,6 +115,29 @@ class Course(db.Model):
     notes = db.Column(db.Text)
     created_at = db.Column(db.DateTime, default=datetime.datetime.utcnow)
     revenues = db.relationship('Revenue', backref='course', lazy=True)
+
+class RevenueSplit(db.Model):
+    __tablename__ = 'revenue_splits'
+    id = db.Column(db.Integer, primary_key=True)
+    course_id = db.Column(db.Integer, db.ForeignKey('courses.id'), unique=True, nullable=False)
+    trainer_percent = db.Column(db.Float, default=35)
+    platform_percent = db.Column(db.Float, default=30)
+    investor_percent = db.Column(db.Float, default=25)
+    affiliate_percent = db.Column(db.Float, default=10)
+    notes = db.Column(db.Text)
+    created_at = db.Column(db.DateTime, default=datetime.datetime.utcnow)
+
+class Investment(db.Model):
+    __tablename__ = 'investments'
+    id = db.Column(db.Integer, primary_key=True)
+    course_id = db.Column(db.Integer, db.ForeignKey('courses.id'), nullable=False)
+    investor_name = db.Column(db.String(255), nullable=False)
+    amount_egp = db.Column(db.Float, default=0)
+    amount_usd = db.Column(db.Float, default=0)
+    profit_percent = db.Column(db.Float, default=20)
+    status = db.Column(db.String(50), default='accrued')
+    notes = db.Column(db.Text)
+    created_at = db.Column(db.DateTime, default=datetime.datetime.utcnow)
 
 class Setting(db.Model):
     __tablename__ = 'settings'
@@ -247,6 +274,12 @@ def to_egp(usd, egp, rate=None):
         rate = get_rate()
     return (egp or 0) + (usd or 0) * rate
 
+def user_dashboard_role(user):
+    return (getattr(user, 'dashboard_role', None) or getattr(user, 'role', None) or 'viewer').strip()
+
+def user_linked_name(user):
+    return (getattr(user, 'linked_to_name', None) or getattr(user, 'name', None) or '').strip()
+
 def month_add(start, offset):
     month = start.month + offset
     year = start.year + (month - 1) // 12
@@ -357,6 +390,140 @@ def expenses_for_course(course):
         if title in (expense.description or '') or title in (expense.notes or '')
     ]
 
+def get_course_split(course_id):
+    split = RevenueSplit.query.filter_by(course_id=course_id).first()
+    if split:
+        return split
+    split = RevenueSplit(course_id=course_id, trainer_percent=35, platform_percent=30, investor_percent=25, affiliate_percent=10)
+    db.session.add(split)
+    db.session.flush()
+    return split
+
+def serialize_split(split):
+    total_percent = round((split.trainer_percent or 0) + (split.platform_percent or 0) + (split.investor_percent or 0) + (split.affiliate_percent or 0), 2)
+    return {
+        'id': split.id,
+        'course_id': split.course_id,
+        'trainer_percent': split.trainer_percent or 0,
+        'platform_percent': split.platform_percent or 0,
+        'investor_percent': split.investor_percent or 0,
+        'affiliate_percent': split.affiliate_percent or 0,
+        'total_percent': total_percent,
+        'valid': abs(total_percent - 100) < 0.001,
+        'notes': split.notes or '',
+    }
+
+def serialize_investment(item, rate, course_lookup=None):
+    invested_egp = to_egp(item.amount_usd, item.amount_egp, rate)
+    course = course_lookup.get(item.course_id) if course_lookup else Course.query.get(item.course_id)
+    payout = 0
+    roi = 0
+    course_profit = 0
+    if course:
+        financial = course_financials(course, rate)
+        course_profit = financial['distribution']['net_distributable_profit']
+        payout = round(course_profit * ((item.profit_percent or 0) / 100))
+        roi = round(((payout - invested_egp) / invested_egp) * 100, 1) if invested_egp else 0
+    return {
+        'id': item.id,
+        'course_id': item.course_id,
+        'course_title': course.title if course else '',
+        'investor_name': item.investor_name,
+        'amount_egp': item.amount_egp,
+        'amount_usd': item.amount_usd,
+        'invested_total_egp': round(invested_egp),
+        'profit_percent': item.profit_percent or 0,
+        'status': item.status,
+        'notes': item.notes or '',
+        'created_at': item.created_at.isoformat() if item.created_at else None,
+        'course_profit_egp': round(course_profit),
+        'due_egp': round(payout),
+        'roi_percent': roi,
+    }
+
+def simulate_distribution(payload, rate):
+    students = float(payload.get('students_count') or 0)
+    price_per_student = float(payload.get('price_per_student') or 0)
+    projected_revenue = float(payload.get('revenue_egp') or 0) or students * price_per_student
+    room_cost = float(payload.get('room_cost_egp') or 0)
+    supervision_cost = float(payload.get('supervision_cost_egp') or 0)
+    ads_cost = float(payload.get('ads_cost_egp') or 0)
+    direct_costs = room_cost + supervision_cost + ads_cost
+    net_profit = max(0, projected_revenue - direct_costs)
+    trainer_percent = float(payload.get('trainer_percent') or 0)
+    platform_percent = float(payload.get('platform_percent') or 0)
+    investor_percent = float(payload.get('investor_percent') or 0)
+    affiliate_percent = float(payload.get('affiliate_percent') or 0)
+    total_percent = trainer_percent + platform_percent + investor_percent + affiliate_percent
+    allocations = {
+        'trainer': round(net_profit * trainer_percent / 100),
+        'platform': round(net_profit * platform_percent / 100),
+        'investor': round(net_profit * investor_percent / 100),
+        'affiliate': round(net_profit * affiliate_percent / 100),
+    }
+    roi_percent = round(((allocations['investor'] - ads_cost) / ads_cost) * 100, 1) if ads_cost else 0
+    return {
+        'inputs': {
+            'projected_revenue_egp': round(projected_revenue),
+            'students_count': round(students),
+            'price_per_student': round(price_per_student),
+            'direct_costs_egp': round(direct_costs),
+        },
+        'distribution': {
+            'trainer_percent': trainer_percent,
+            'platform_percent': platform_percent,
+            'investor_percent': investor_percent,
+            'affiliate_percent': affiliate_percent,
+            'total_percent': round(total_percent, 2),
+            'valid': abs(total_percent - 100) < 0.001,
+            'net_distributable_profit': round(net_profit),
+            'allocations_egp': allocations,
+            'investor_roi_percent': roi_percent,
+            'warning': '' if abs(total_percent - 100) < 0.001 else 'مجموع نسب التوزيع يجب أن يساوي 100%',
+        },
+    }
+
+def course_financials(course, rate):
+    course_revenues = revenues_for_course(course)
+    course_expenses = expenses_for_course(course)
+    payouts = Payout.query.filter(Payout.status != 'waived').all()
+    investments = Investment.query.filter_by(course_id=course.id).all()
+    total_revenue = sum(to_egp(r.amount_usd, r.amount_egp, rate) for r in course_revenues)
+    linked_payouts = [
+        p for p in payouts
+        if (p.related_to or '').strip() == (course.title or '').strip()
+    ]
+    linked_expense_cost = sum(to_egp(e.amount_usd, e.amount_egp, rate) for e in course_expenses)
+    linked_payout_cost = sum(payout_amount(p, rate) for p in linked_payouts)
+    direct_payout_cost = sum(payout_amount(p, rate) for p in linked_payouts if p.role in ('supervisor',))
+    linked_investment_cost = sum(to_egp(i.amount_usd, i.amount_egp, rate) for i in investments)
+    direct_costs = linked_expense_cost + direct_payout_cost + linked_investment_cost
+    split = get_course_split(course.id)
+    distribution = simulate_distribution({
+        'revenue_egp': total_revenue,
+        'room_cost_egp': linked_expense_cost,
+        'supervision_cost_egp': direct_payout_cost,
+        'ads_cost_egp': linked_investment_cost,
+        'trainer_percent': split.trainer_percent,
+        'platform_percent': split.platform_percent,
+        'investor_percent': split.investor_percent,
+        'affiliate_percent': split.affiliate_percent,
+    }, rate)['distribution']
+    return {
+        'total_revenue': round(total_revenue),
+        'linked_expense_cost': round(linked_expense_cost),
+        'linked_payout_cost': round(linked_payout_cost),
+        'linked_investment_cost': round(linked_investment_cost),
+        'total_cost': round(to_egp(course.cost_usd, course.cost_egp, rate) + linked_expense_cost + linked_payout_cost),
+        'profit': round(total_revenue - (to_egp(course.cost_usd, course.cost_egp, rate) + linked_expense_cost + linked_payout_cost)),
+        'direct_costs': round(direct_costs),
+        'distribution': distribution,
+        'split': serialize_split(split),
+        'investments': investments,
+        'linked_payouts_models': linked_payouts,
+        'course_expenses_models': course_expenses,
+    }
+
 def serialize_date(d):
     return d.isoformat() if d else None
 
@@ -374,19 +541,21 @@ def login():
         'user_id': user.id,
         'exp': datetime.datetime.utcnow() + datetime.timedelta(days=30)
     }, app.config['SECRET_KEY'], algorithm='HS256')
-    return jsonify({'token': token, 'user': {'id': user.id, 'email': user.email, 'name': user.name, 'role': user.role}})
+    dashboard_role = user_dashboard_role(user)
+    return jsonify({'token': token, 'user': {'id': user.id, 'email': user.email, 'name': user.name, 'role': dashboard_role, 'dashboard_role': dashboard_role, 'linked_to_name': user_linked_name(user)}})
 
 @app.route('/api/auth/me', methods=['GET'])
 @token_required
 def me():
-    return jsonify({'id': g.user.id, 'email': g.user.email, 'name': g.user.name, 'role': g.user.role})
+    dashboard_role = user_dashboard_role(g.user)
+    return jsonify({'id': g.user.id, 'email': g.user.email, 'name': g.user.name, 'role': dashboard_role, 'dashboard_role': dashboard_role, 'linked_to_name': user_linked_name(g.user)})
 
 @app.route('/api/users', methods=['GET'])
 @token_required
 @roles_required('admin')
 def list_users():
     return jsonify([{
-        'id': u.id, 'email': u.email, 'name': u.name, 'role': u.role,
+        'id': u.id, 'email': u.email, 'name': u.name, 'role': user_dashboard_role(u), 'dashboard_role': user_dashboard_role(u), 'linked_to_name': user_linked_name(u),
         'is_active': u.is_active, 'created_at': u.created_at.isoformat() if u.created_at else None
     } for u in User.query.order_by(User.created_at.desc()).all()])
 
@@ -405,7 +574,9 @@ def create_user():
         email=email,
         password_hash=generate_password_hash(password, method='pbkdf2:sha256'),
         name=d.get('name') or email.split('@')[0],
-        role=d.get('role') or 'viewer',
+        role=d.get('dashboard_role') or d.get('role') or 'viewer',
+        dashboard_role=d.get('dashboard_role') or d.get('role') or 'viewer',
+        linked_to_name=d.get('linked_to_name') or '',
         is_active=True
     )
     db.session.add(user)
@@ -781,6 +952,7 @@ def delete_expense(id):
 @token_required
 def list_campaigns():
     items = Campaign.query.order_by(Campaign.created_at.desc()).all()
+    course_lookup = {c.id: c for c in Course.query.all()}
     result = []
     for c in items:
         cpl = round(c.spent / c.leads, 2) if c.leads else 0
@@ -800,6 +972,8 @@ def list_campaigns():
             'budget': c.budget, 'spent': c.spent, 'currency': c.currency,
             'impressions': c.impressions, 'clicks': c.clicks, 'leads': c.leads,
             'conversions': c.conversions, 'revenue_attributed': c.revenue_attributed,
+            'course_id': c.course_id,
+            'course_title': course_lookup.get(c.course_id).title if c.course_id in course_lookup else '',
             'cpl': cpl, 'cac': cac, 'roas': roas, 'conversion_rate': conv_rate,
             'recommendation': recommendation,
             'target_audience': c.target_audience, 'notes': c.notes
@@ -819,6 +993,7 @@ def create_campaign():
         impressions=d.get('impressions', 0), clicks=d.get('clicks', 0),
         leads=d.get('leads', 0), conversions=d.get('conversions', 0),
         revenue_attributed=d.get('revenue_attributed', 0),
+        course_id=d.get('course_id'),
         target_audience=d.get('target_audience', ''), notes=d.get('notes', '')
     )
     db.session.add(c)
@@ -830,7 +1005,7 @@ def create_campaign():
 def update_campaign(id):
     c = Campaign.query.get_or_404(id)
     d = request.json or {}
-    for k in ['name', 'platform', 'status', 'budget', 'spent', 'currency', 'impressions', 'clicks', 'leads', 'conversions', 'revenue_attributed', 'target_audience', 'notes']:
+    for k in ['name', 'platform', 'status', 'budget', 'spent', 'currency', 'impressions', 'clicks', 'leads', 'conversions', 'revenue_attributed', 'course_id', 'target_audience', 'notes']:
         if k in d:
             setattr(c, k, d[k])
     for dk in ['start_date', 'end_date']:
@@ -854,20 +1029,18 @@ def delete_campaign(id):
 @app.route('/api/courses', methods=['GET'])
 @token_required
 def list_courses():
+    viewer_role = user_dashboard_role(g.user)
+    linked_name = user_linked_name(g.user)
     items = Course.query.order_by(Course.created_at.desc()).all()
+    if viewer_role == 'trainer':
+        items = [item for item in items if (item.trainer_name or '').strip() == linked_name or (item.trainer_name or '').strip() == (g.user.name or '').strip()]
+    elif viewer_role == 'investor':
+        course_ids = {item.course_id for item in Investment.query.filter_by(investor_name=linked_name).all()}
+        items = [item for item in items if item.id in course_ids]
     rate = get_rate()
-    payouts = Payout.query.filter(Payout.status != 'waived').all()
     result = []
     for c in items:
-        course_revenues = revenues_for_course(c)
-        course_expenses = expenses_for_course(c)
-        total_revenue = sum(to_egp(r.amount_usd, r.amount_egp, rate) for r in course_revenues)
-        linked_payout_cost = sum(
-            payout_amount(p, rate)
-            for p in payouts
-            if (p.related_to or '').strip() == (c.title or '').strip()
-        )
-        linked_expense_cost = sum(to_egp(e.amount_usd, e.amount_egp, rate) for e in course_expenses)
+        financial = course_financials(c, rate)
         linked_payouts = [
             {
                 'id': p.id,
@@ -878,8 +1051,7 @@ def list_courses():
                 'percent': p.percent,
                 'total_egp': round(payout_amount(p, rate)),
             }
-            for p in payouts
-            if (p.related_to or '').strip() == (c.title or '').strip()
+            for p in financial['linked_payouts_models']
         ]
         linked_expenses = [
             {
@@ -889,10 +1061,8 @@ def list_courses():
                 'description': e.description,
                 'total_egp': round(to_egp(e.amount_usd, e.amount_egp, rate)),
             }
-            for e in course_expenses
+            for e in financial['course_expenses_models']
         ]
-        total_cost = to_egp(c.cost_usd, c.cost_egp, rate) + linked_payout_cost + linked_expense_cost
-        profit = total_revenue - total_cost
         result.append({
             'id': c.id, 'title': c.title, 'category': c.category,
             'trainer_name': c.trainer_name, 'status': c.status,
@@ -900,12 +1070,17 @@ def list_courses():
             'cost_egp': c.cost_egp, 'cost_usd': c.cost_usd,
             'students_count': c.students_count,
             'start_date': serialize_date(c.start_date), 'end_date': serialize_date(c.end_date),
-            'total_revenue': round(total_revenue), 'total_cost': round(total_cost),
-            'linked_expense_cost': round(linked_expense_cost),
-            'linked_payout_cost': round(linked_payout_cost),
+            'total_revenue': financial['total_revenue'], 'total_cost': financial['total_cost'],
+            'linked_expense_cost': financial['linked_expense_cost'],
+            'linked_payout_cost': financial['linked_payout_cost'],
+            'linked_investment_cost': financial['linked_investment_cost'],
             'linked_expenses': linked_expenses,
             'linked_payouts': linked_payouts,
-            'profit': round(profit), 'lms_id': c.lms_id, 'notes': c.notes
+            'profit': financial['profit'],
+            'revenue_split': financial['split'],
+            'distribution': financial['distribution'],
+            'linked_investments': [serialize_investment(item, rate, {c.id: c}) for item in financial['investments']],
+            'lms_id': c.lms_id, 'notes': c.notes
         })
     return jsonify(result)
 
@@ -1088,6 +1263,10 @@ def delete_partner(id):
 def list_payouts():
     rate = get_rate()
     items = Payout.query.order_by(Payout.date.desc()).all()
+    viewer_role = user_dashboard_role(g.user)
+    linked_name = user_linked_name(g.user)
+    if viewer_role == 'trainer':
+        items = [item for item in items if (item.name or '').strip() == linked_name or (item.name or '').strip() == (g.user.name or '').strip()]
     return jsonify([{
         'id': p.id, 'date': serialize_date(p.date), 'name': p.name, 'role': p.role,
         'related_to': p.related_to, 'basis_amount_egp': p.basis_amount_egp,
@@ -1131,6 +1310,80 @@ def delete_payout(id):
     db.session.delete(p)
     db.session.commit()
     return jsonify({'message': 'تم الحذف'})
+
+@app.route('/api/investments', methods=['GET'])
+@token_required
+def list_investments():
+    rate = get_rate()
+    items = Investment.query.order_by(Investment.created_at.desc()).all()
+    course_lookup = {course.id: course for course in Course.query.all()}
+    viewer_role = user_dashboard_role(g.user)
+    linked_name = user_linked_name(g.user)
+    if viewer_role == 'investor':
+        items = [item for item in items if (item.investor_name or '').strip() == linked_name or (item.investor_name or '').strip() == (g.user.name or '').strip()]
+    return jsonify([serialize_investment(item, rate, course_lookup) for item in items])
+
+@app.route('/api/investments', methods=['POST'])
+@token_required
+def create_investment():
+    d = request.json or {}
+    item = Investment(
+        course_id=d.get('course_id'),
+        investor_name=d.get('investor_name', ''),
+        amount_egp=d.get('amount_egp', 0),
+        amount_usd=d.get('amount_usd', 0),
+        profit_percent=d.get('profit_percent', 20),
+        status=d.get('status', 'accrued'),
+        notes=d.get('notes', ''),
+    )
+    db.session.add(item)
+    db.session.commit()
+    return jsonify({'id': item.id, 'message': 'تم إضافة الاستثمار'}), 201
+
+@app.route('/api/investments/<int:id>', methods=['PUT'])
+@token_required
+def update_investment(id):
+    item = Investment.query.get_or_404(id)
+    d = request.json or {}
+    for key in ['course_id', 'investor_name', 'amount_egp', 'amount_usd', 'profit_percent', 'status', 'notes']:
+        if key in d:
+            setattr(item, key, d[key])
+    db.session.commit()
+    return jsonify({'message': 'تم التحديث'})
+
+@app.route('/api/investments/<int:id>', methods=['DELETE'])
+@token_required
+def delete_investment(id):
+    item = Investment.query.get_or_404(id)
+    db.session.delete(item)
+    db.session.commit()
+    return jsonify({'message': 'تم الحذف'})
+
+@app.route('/api/courses/<int:id>/revenue-split', methods=['GET'])
+@token_required
+def get_revenue_split(id):
+    course = Course.query.get_or_404(id)
+    split = get_course_split(course.id)
+    db.session.commit()
+    return jsonify(serialize_split(split))
+
+@app.route('/api/courses/<int:id>/revenue-split', methods=['PUT'])
+@token_required
+def update_revenue_split(id):
+    course = Course.query.get_or_404(id)
+    split = get_course_split(course.id)
+    d = request.json or {}
+    for key in ['trainer_percent', 'platform_percent', 'investor_percent', 'affiliate_percent', 'notes']:
+        if key in d:
+            setattr(split, key, d[key])
+    db.session.commit()
+    return jsonify(serialize_split(split))
+
+@app.route('/api/calculator/simulate', methods=['POST'])
+@token_required
+def calculator_simulate():
+    payload = request.json or {}
+    return jsonify(simulate_distribution(payload, get_rate()))
 
 # ============================================================
 # AI ASSISTANT
@@ -1245,6 +1498,8 @@ def ai_models():
 def generate_ai_snapshot():
     """Generate a structured data snapshot for AI consumption."""
     rate = get_rate()
+    viewer_role = user_dashboard_role(g.user) if getattr(g, 'user', None) else 'admin'
+    linked_name = user_linked_name(g.user) if getattr(g, 'user', None) else ''
     revenues = Revenue.query.all()
     expenses = Expense.query.filter_by(is_business=True).all()
     payouts = Payout.query.filter(Payout.status != 'waived').all()
@@ -1253,6 +1508,28 @@ def generate_ai_snapshot():
     courses = Course.query.all()
     assets = Asset.query.all()
     forecasts = ForecastMonth.query.order_by(ForecastMonth.month.asc()).limit(6).all()
+
+    if viewer_role == 'trainer':
+        courses = [course for course in courses if (course.trainer_name or '').strip() == linked_name or (course.trainer_name or '').strip() == (g.user.name or '').strip()]
+        course_ids = {course.id for course in courses}
+        course_titles = {(course.title or '').strip() for course in courses}
+        revenues = [item for item in revenues if item.course_id in course_ids or any(title and title in (item.description or '') for title in course_titles)]
+        payouts = [item for item in payouts if (item.name or '').strip() == linked_name or (item.name or '').strip() == (g.user.name or '').strip()]
+        expenses = [item for item in expenses if any(title and (title in (item.description or '') or title in (item.notes or '')) for title in course_titles)]
+        campaigns = [item for item in campaigns if item.course_id in course_ids]
+        cash_transactions = []
+        assets = []
+    elif viewer_role == 'investor':
+        investments = Investment.query.filter_by(investor_name=linked_name).all()
+        course_ids = {item.course_id for item in investments}
+        courses = [course for course in courses if course.id in course_ids]
+        course_titles = {(course.title or '').strip() for course in courses}
+        revenues = [item for item in revenues if item.course_id in course_ids or any(title and title in (item.description or '') for title in course_titles)]
+        payouts = []
+        expenses = [item for item in expenses if any(title and (title in (item.description or '') or title in (item.notes or '')) for title in course_titles)]
+        campaigns = [item for item in campaigns if item.course_id in course_ids]
+        cash_transactions = []
+        assets = []
     
     total_rev = sum(to_egp(r.amount_usd, r.amount_egp, rate) for r in revenues)
     payout_cost = payout_total(payouts, rate)
@@ -1702,6 +1979,22 @@ def seed():
     db.session.commit()
     print("✅ Database seeded successfully")
 
+def ensure_runtime_schema():
+    inspector = inspect(db.engine)
+    existing_tables = set(inspector.get_table_names())
+    with db.engine.begin() as connection:
+        if 'users' in existing_tables:
+            user_columns = {column['name'] for column in inspector.get_columns('users')}
+            if 'dashboard_role' not in user_columns:
+                connection.execute(text("ALTER TABLE users ADD COLUMN dashboard_role VARCHAR(50) DEFAULT 'admin'"))
+                connection.execute(text("UPDATE users SET dashboard_role = role WHERE dashboard_role IS NULL"))
+            if 'linked_to_name' not in user_columns:
+                connection.execute(text("ALTER TABLE users ADD COLUMN linked_to_name VARCHAR(255)"))
+        if 'campaigns' in existing_tables:
+            campaign_columns = {column['name'] for column in inspector.get_columns('campaigns')}
+            if 'course_id' not in campaign_columns:
+                connection.execute(text("ALTER TABLE campaigns ADD COLUMN course_id INTEGER"))
+
 # ============================================================
 # INIT
 # ============================================================
@@ -1729,6 +2022,7 @@ def serve_frontend(path):
 
 with app.app_context():
     db.create_all()
+    ensure_runtime_schema()
     seed()
 
 if __name__ == '__main__':

@@ -48,7 +48,8 @@ const platLabels = { google_ads: "Google Ads", facebook: "Facebook", instagram: 
 const statusLabels = { draft: "مسودة", active: "نشطة", paused: "متوقفة", completed: "منتهية" };
 const recLabels = { continue: "✅ استمر", optimize: "🔧 حسّن", stop: "🛑 أوقف", monitor: "👁 راقب" };
 const recColors = { continue: "#2d8659", optimize: "#e8913a", stop: "#c0392b", monitor: "#5b6abf" };
-const userRoleLabels = { admin: "أدمن", viewer: "مشاهدة فقط", training_supervisor: "مشرف تدريبي" };
+const userRoleLabels = { admin: "أدمن", viewer: "مشاهدة فقط", training_supervisor: "مشرف تدريبي", trainer: "مدرب", investor: "مستثمر/معلن" };
+const investmentStatusLabels = { accrued: "مستحق", paid: "مدفوع", pending: "قيد التسوية" };
 const CUTOFF_MONTH = "2026-06";
 const CUTOFF_DATE = "2026-06-01";
 const sumBy = (items, picker) => safeArray(items).reduce((sum, item) => sum + (Number(picker(item)) || 0), 0);
@@ -66,6 +67,7 @@ const quarterLabel = (month, operatingStart = CUTOFF_MONTH) => {
   return `Q${quarter} ${year}${note}`;
 };
 const isPreLaunchDate = (date) => !!date && date < CUTOFF_DATE;
+const getEffectiveRole = (user) => user?.dashboard_role || user?.role || "viewer";
 const buildQuarterGroups = (months) => {
   const rows = safeArray(months);
   const groups = [];
@@ -259,11 +261,67 @@ function LoginPage({ onLogin }) {
 // EXECUTIVE OVERVIEW
 // ============================================================
 function OverviewPage({ onNavigate }) {
+  const user = useAuth();
+  const effectiveRole = getEffectiveRole(user);
   const [data, setData] = useState(null);
+  const [roleData, setRoleData] = useState({ courses: [], payouts: [], investments: [] });
   const load = () => api.get("/dashboard").then(setData);
-  useEffect(() => { load(); }, []);
-  if (!data) return <PageLoader />;
-  if (data.error || !data.financial) return <PageError message={data.error} onRetry={load} />;
+  const loadRoleData = () => Promise.all([
+    api.get("/courses"),
+    api.get("/payouts"),
+    api.get("/investments"),
+  ]).then(([courses, payouts, investments]) => setRoleData({ courses: safeArray(courses), payouts: safeArray(payouts), investments: safeArray(investments) }));
+  useEffect(() => {
+    if (effectiveRole === "trainer" || effectiveRole === "investor") loadRoleData();
+    else load();
+  }, [effectiveRole]);
+
+  if ((effectiveRole === "trainer" || effectiveRole === "investor") && !roleData) return <PageLoader />;
+  if (effectiveRole !== "trainer" && effectiveRole !== "investor" && !data) return <PageLoader />;
+  if (effectiveRole !== "trainer" && effectiveRole !== "investor" && (data.error || !data.financial)) return <PageError message={data.error} onRetry={load} />;
+
+  if (effectiveRole === "trainer") {
+    const courses = roleData.courses;
+    const payouts = roleData.payouts;
+    const totalStudents = courses.reduce((sum, course) => sum + (course.students_count || 0), 0);
+    const accrued = payouts.reduce((sum, item) => sum + (item.status !== "paid" ? (item.total_egp || 0) : 0), 0);
+    const paid = payouts.reduce((sum, item) => sum + (item.status === "paid" ? (item.total_egp || 0) : 0), 0);
+    return (
+      <div>
+        <h1 style={{ fontSize: 26, fontWeight: 900, color: BRAND.navy, marginBottom: 24 }}>لوحتي</h1>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 16, marginBottom: 24 }}>
+          <KPICard icon="🎓" label="عدد دوراتي" value={courses.length} color="#1abc9c" />
+          <KPICard icon="👨‍🎓" label="إجمالي طلابي" value={totalStudents} color="#5b6abf" />
+          <KPICard icon="💰" label="أرباحي المستحقة" value={usdFromEgp(accrued, 50)} sub={egpLabel(accrued)} color="#8e44ad" />
+          <KPICard icon="✅" label="أرباح مدفوعة" value={usdFromEgp(paid, 50)} sub={egpLabel(paid)} color="#2d8659" />
+        </div>
+        <PageSection title="آخر العمليات المرتبطة بدوراتي">
+          {payouts.length ? payouts.slice(0, 6).map(item => <div key={item.id} style={{ display: "flex", justifyContent: "space-between", padding: "10px 0", borderTop: "1px solid #f3f4f6", fontSize: 13 }}><div><strong>{item.related_to || item.name}</strong><div style={{ color: "#667085", marginTop: 4 }}>{item.date}</div></div><div style={{ fontWeight: 900, color: item.status === "paid" ? "#2d8659" : "#8e44ad" }}>{egpLabel(item.total_egp)}</div></div>) : <EmptyState title="لا توجد مستحقات بعد" text="عند ربطك بدورات ومستحقات ستظهر هنا." />}
+        </PageSection>
+      </div>
+    );
+  }
+
+  if (effectiveRole === "investor") {
+    const investments = roleData.investments;
+    const totalInvested = investments.reduce((sum, item) => sum + (item.invested_total_egp || 0), 0);
+    const totalDue = investments.reduce((sum, item) => sum + (item.due_egp || 0), 0);
+    const avgRoi = investments.length ? investments.reduce((sum, item) => sum + (item.roi_percent || 0), 0) / investments.length : 0;
+    return (
+      <div>
+        <h1 style={{ fontSize: 26, fontWeight: 900, color: BRAND.navy, marginBottom: 24 }}>لوحتي</h1>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 16, marginBottom: 24 }}>
+          <KPICard icon="🏦" label="إجمالي استثماراتي" value={usdFromEgp(totalInvested, 50)} sub={egpLabel(totalInvested)} color={BRAND.navy} />
+          <KPICard icon="💵" label="إجمالي عوائدي" value={usdFromEgp(totalDue, 50)} sub={egpLabel(totalDue)} color="#2d8659" />
+          <KPICard icon="📈" label="ROI" value={`${avgRoi.toFixed(1)}%`} color={BRAND.gold} />
+          <KPICard icon="📚" label="عدد الدورات المشارك فيها" value={new Set(investments.map(item => item.course_id)).size} color="#8e44ad" />
+        </div>
+        <PageSection title="استثماراتي الأخيرة">
+          {investments.length ? investments.slice(0, 6).map(item => <div key={item.id} style={{ display: "flex", justifyContent: "space-between", padding: "10px 0", borderTop: "1px solid #f3f4f6", fontSize: 13 }}><div><strong>{item.course_title}</strong><div style={{ color: "#667085", marginTop: 4 }}>{item.profit_percent}% من أرباح الدورة</div></div><div style={{ textAlign: "left" }}><div style={{ fontWeight: 900, color: "#2d8659" }}>{egpLabel(item.due_egp)}</div><div style={{ color: "#94a3b8", fontSize: 12 }}>{item.roi_percent}% ROI</div></div></div>) : <EmptyState title="لا توجد استثمارات بعد" text="عند إضافة استثمارات مرتبطة بك ستظهر هنا." />}
+        </PageSection>
+      </div>
+    );
+  }
 
   const f = data.financial || {};
   const m = data.marketing || { total_ad_spend: 0, total_leads: 0 };
@@ -1001,15 +1059,21 @@ function FinancePage() {
   const rate = Number(summary?.exchange_rate || 50);
   const operatingMonths = safeArray(summary?.monthly).filter(item => item.period === "operating");
   const quarterRows = buildQuarterGroups(operatingMonths);
-  const monthOptions = operatingMonths.filter(item => item.revenue || item.expenses || item.profit || item.payouts || item.asset_rent);
+  const monthOptions = Array.from(new Set([
+    ...operatingMonths.map(item => item.month),
+    ...revenues.map(item => item.date?.slice(0, 7)),
+    ...expenses.filter(item => item.is_business !== false).map(item => item.date?.slice(0, 7)),
+    ...payouts.map(item => item.date?.slice(0, 7)),
+    ...safeArray(cashflow.transactions).map(item => item.date?.slice(0, 7)),
+  ].filter(Boolean))).sort().reverse();
 
   useEffect(() => {
     if (!monthOptions.length) {
       if (selectedMonth) setSelectedMonth("");
       return;
     }
-    const latestMonth = monthOptions[monthOptions.length - 1].month;
-    if (!selectedMonth || !monthOptions.find(item => item.month === selectedMonth)) setSelectedMonth(latestMonth);
+    const latestMonth = monthOptions[0];
+    if (!selectedMonth || !monthOptions.includes(selectedMonth)) setSelectedMonth(latestMonth);
   }, [selectedMonth, monthOptions]);
 
   if (loading) return <PageLoader />;
@@ -1249,7 +1313,7 @@ function FinancePage() {
       {tab === "monthly" && (
         <PageSection title="عرض شهري" subtitle="نعرض فقط الأشهر التي تحتوي على بيانات فعلية، بدون أشهر مستقبلية فارغة.">
           <div style={{ maxWidth: 280, marginBottom: 18 }}>
-            <Select label="اختر شهرًا" value={selectedMonth} onChange={e => setSelectedMonth(e.target.value)} options={monthOptions.length ? monthOptions.map(item => ({ value: item.month, label: monthLabel(item.month) })) : [{ value: "", label: "لا توجد أشهر متاحة" }]} />
+            <Select label="اختر شهرًا" value={selectedMonth} onChange={e => setSelectedMonth(e.target.value)} options={monthOptions.length ? monthOptions.map(item => ({ value: item, label: monthLabel(item) })) : [{ value: "", label: "لا توجد أشهر متاحة" }]} />
           </div>
           {selectedMonth ? (
             <div>
@@ -1322,6 +1386,8 @@ function FinancePage() {
 function FoundationPage() {
   const { loading, error, revenues, expenses, summary, reload } = useFinanceData();
   const [tab, setTab] = useState("all");
+  const [modal, setModal] = useState(null);
+  const [form, setForm] = useState({ entryType: "expense", date: "2026-05-31" });
 
   if (loading) return <PageLoader />;
   if (error || !summary) return <PageError message={error || "تعذر تحميل مرحلة التأسيس."} onRetry={reload} />;
@@ -1340,6 +1406,19 @@ function FoundationPage() {
     acc[key].value += Number(item.total_egp || 0);
     return acc;
   }, {}));
+
+  const saveEntry = async () => {
+    if (form.entryType === "revenue") {
+      if (form.id) await api.put(`/revenues/${form.id}`, form);
+      else await api.post("/revenues", { ...form, source: form.source || "other" });
+    } else {
+      if (form.id) await api.put(`/expenses/${form.id}`, form);
+      else await api.post("/expenses", { ...form, is_business: true });
+    }
+    setModal(null);
+    setForm({ entryType: "expense", date: "2026-05-31" });
+    reload();
+  };
 
   return (
     <div>
@@ -1370,7 +1449,7 @@ function FoundationPage() {
       </PageSection>
 
       <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1.8fr) minmax(300px, 1fr)", gap: 20 }}>
-        <PageSection title="تفاصيل التأسيس" subtitle="كل البنود قبل يونيو 2026 في جدول واحد." action={<TabBar tabs={[{ id: "all", label: "الكل" }, { id: "expense", label: "مصروفات" }, { id: "revenue", label: "إيرادات" }]} active={tab} onChange={setTab} />}>
+        <PageSection title="تفاصيل التأسيس" subtitle="كل البنود قبل يونيو 2026 في جدول واحد." action={<div style={{ display: "flex", gap: 10, alignItems: "center" }}><TabBar tabs={[{ id: "all", label: "الكل" }, { id: "expense", label: "مصروفات" }, { id: "revenue", label: "إيرادات" }]} active={tab} onChange={setTab} /><Btn color="#c0392b" onClick={() => { setForm({ entryType: tab === "revenue" ? "revenue" : "expense", date: "2026-05-31", amount_egp: 0, amount_usd: 0 }); setModal("entry"); }}>+ بند تأسيسي جديد</Btn></div>}>
           <div style={{ overflowX: "auto" }}>
             <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 14 }}>
               <thead>
@@ -1385,7 +1464,7 @@ function FoundationPage() {
                     <td style={{ padding: "12px 14px" }}>{item.description || item.client_name || "—"}</td>
                     <td style={{ padding: "12px 14px" }}>{item.entryType === "expense" ? (catLabels[item.category] || item.category) : (srcLabels[item.source] || item.source)}</td>
                     <td style={{ padding: "12px 14px" }}>{item.entryType === "expense" ? <Badge text="مصروف" color="#c0392b" /> : <Badge text="إيراد" color="#2d8659" />}</td>
-                    <td style={{ padding: "12px 14px", fontWeight: 900, color: item.entryType === "expense" ? "#c0392b" : "#2d8659" }}>{usdFromEgp(item.amount, rate)}<div style={{ fontSize: 12, color: "#94a3b8" }}>{egpLabel(item.amount)}</div></td>
+                    <td style={{ padding: "12px 14px", fontWeight: 900, color: item.entryType === "expense" ? "#c0392b" : "#2d8659" }}>{usdFromEgp(item.amount, rate)}<div style={{ fontSize: 12, color: "#94a3b8" }}>{egpLabel(item.amount)}</div><div style={{ marginTop: 8, display: "flex", gap: 8 }}><button onClick={() => { setForm({ ...item, entryType: item.entryType, amount_egp: item.amount_egp || item.amount, amount_usd: item.amount_usd || 0 }); setModal("entry"); }} style={{ background: "none", border: "none", cursor: "pointer" }}>✏️</button><button onClick={async () => { if (confirm("حذف؟")) { await api.del(`/${item.entryType === "expense" ? "expenses" : "revenues"}/${item.id}`); reload(); } }} style={{ background: "none", border: "none", cursor: "pointer" }}>🗑</button></div></td>
                   </tr>
                 ))}
               </tbody>
@@ -1408,6 +1487,16 @@ function FoundationPage() {
           )}
         </PageSection>
       </div>
+
+      <Modal open={modal === "entry"} onClose={() => setModal(null)} title={form.id ? "تعديل بند تأسيسي" : "بند تأسيسي جديد"}>
+        <Select label="النوع" value={form.entryType || "expense"} onChange={e => setForm({ ...form, entryType: e.target.value })} options={[{ value: "expense", label: "مصروف" }, { value: "revenue", label: "إيراد" }]} />
+        <Input label="التاريخ" type="date" value={form.date || ""} onChange={e => setForm({ ...form, date: e.target.value })} />
+        {form.entryType === "expense" ? <Select label="الفئة" value={form.category || "tools"} onChange={e => setForm({ ...form, category: e.target.value })} options={Object.entries(catLabels).map(([value, label]) => ({ value, label }))} /> : <Select label="المصدر" value={form.source || "other"} onChange={e => setForm({ ...form, source: e.target.value })} options={Object.entries(srcLabels).map(([value, label]) => ({ value, label }))} />}
+        <Input label="الوصف" value={form.description || ""} onChange={e => setForm({ ...form, description: e.target.value })} />
+        {form.entryType === "revenue" && <Input label="اسم العميل" value={form.client_name || ""} onChange={e => setForm({ ...form, client_name: e.target.value })} />}
+        <CurrencyFields form={form} setForm={setForm} rate={rate} />
+        <Btn onClick={saveEntry} color={form.entryType === "expense" ? "#c0392b" : "#2d8659"} style={{ width: "100%" }}>حفظ البند</Btn>
+      </Modal>
     </div>
   );
 }
@@ -1417,6 +1506,8 @@ function TeamPartnersPage() {
   const isTrainingSupervisor = user?.role === "training_supervisor";
   const { loading, error, partners, payouts, assets, summary, reload } = useFinanceData();
   const [tab, setTab] = useState(isTrainingSupervisor ? "payouts" : "partners");
+  const [modal, setModal] = useState(null);
+  const [form, setForm] = useState({});
 
   if (loading) return <PageLoader />;
   if (error || !summary) return <PageError message={error || "تعذر تحميل بيانات الفريق والشركاء."} onRetry={reload} />;
@@ -1424,6 +1515,27 @@ function TeamPartnersPage() {
   const rate = Number(summary.exchange_rate || 50);
   const partnerPie = partners.map(item => ({ name: item.name, value: Number(item.equity_percent || 0) }));
   const tabs = isTrainingSupervisor ? [{ id: "payouts", label: "المدربين والإشراف" }] : [{ id: "partners", label: "الشركاء" }, { id: "payouts", label: "المدربين والإشراف" }, { id: "assets", label: "الأصول" }];
+
+  const savePartner = async () => {
+    const totalWithoutCurrent = partners.filter(item => item.id !== form.id).reduce((sum, item) => sum + Number(item.equity_percent || 0), 0);
+    if (totalWithoutCurrent + Number(form.equity_percent || 0) > 100) {
+      alert("مجموع نسب الملكية يجب ألا يتجاوز 100%");
+      return;
+    }
+    if (form.id) await api.put(`/partners/${form.id}`, form);
+    else await api.post("/partners", form);
+    setModal(null); setForm({}); reload();
+  };
+  const savePayout = async () => {
+    if (form.id) await api.put(`/payouts/${form.id}`, form);
+    else await api.post("/payouts", form);
+    setModal(null); setForm({}); reload();
+  };
+  const saveAsset = async () => {
+    if (form.id) await api.put(`/assets/${form.id}`, form);
+    else await api.post("/assets", form);
+    setModal(null); setForm({}); reload();
+  };
 
   return (
     <div>
@@ -1436,7 +1548,7 @@ function TeamPartnersPage() {
 
       {tab === "partners" && !isTrainingSupervisor && (
         <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1.8fr) minmax(300px, 1fr)", gap: 20 }}>
-          <PageSection title="جدول الشركاء">
+          <PageSection title="جدول الشركاء" action={<Btn color="#5b6abf" onClick={() => { setForm({ equity_percent: 0, profit_share_percent: 0, capital_egp: 0, capital_usd: 0 }); setModal("partner"); }}>+ شريك جديد</Btn>}>
             <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 14 }}>
               <thead>
                 <tr style={{ background: "#f8fafc" }}>
@@ -1451,7 +1563,7 @@ function TeamPartnersPage() {
                     <td style={{ padding: "12px 14px" }}>{item.equity_percent}%</td>
                     <td style={{ padding: "12px 14px" }}>{item.profit_share_percent}%</td>
                     <td style={{ padding: "12px 14px", fontWeight: 800 }}>{usdFromEgp(item.total_capital_egp, rate)}<div style={{ fontSize: 12, color: "#94a3b8" }}>{egpLabel(item.total_capital_egp)}</div></td>
-                    <td style={{ padding: "12px 14px" }}>{item.notes || "—"}</td>
+                    <td style={{ padding: "12px 14px" }}>{item.notes || "—"}<div style={{ marginTop: 8, display: "flex", gap: 8 }}><button onClick={() => { setForm(item); setModal("partner"); }} style={{ background: "none", border: "none", cursor: "pointer" }}>✏️</button><button onClick={async () => { if (confirm("حذف؟")) { await api.del(`/partners/${item.id}`); reload(); } }} style={{ background: "none", border: "none", cursor: "pointer" }}>🗑</button></div></td>
                   </tr>
                 ))}
               </tbody>
@@ -1476,7 +1588,7 @@ function TeamPartnersPage() {
       )}
 
       {tab === "payouts" && (
-        <PageSection title="المدربين والإشراف والأفلييت" subtitle="هذه البيانات مرتبطة بالدورات والتنفيذ، وليست تفصيلًا شهريًا ثابتًا.">
+        <PageSection title="المدربين والإشراف والأفلييت" subtitle="هذه البيانات مرتبطة بالدورات والتنفيذ، وليست تفصيلًا شهريًا ثابتًا." action={<Btn color="#8e44ad" onClick={() => { setForm({ role: "trainer", status: "accrued", percent: 0, amount_egp: 0, amount_usd: 0, basis_amount_egp: 0, date: new Date().toISOString().split("T")[0] }); setModal("payout"); }}>+ مدرب/مشرف/أفلييت جديد</Btn>}>
           {payouts.length ? (
             <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 14 }}>
               <thead>
@@ -1492,7 +1604,7 @@ function TeamPartnersPage() {
                     <td style={{ padding: "12px 14px" }}>{item.related_to || "—"}</td>
                     <td style={{ padding: "12px 14px" }}>{item.percent}%</td>
                     <td style={{ padding: "12px 14px", fontWeight: 900, color: "#8e44ad" }}>{usdFromEgp(item.total_egp, rate)}<div style={{ fontSize: 12, color: "#94a3b8" }}>{egpLabel(item.total_egp)}</div></td>
-                    <td style={{ padding: "12px 14px" }}>{item.status}</td>
+                    <td style={{ padding: "12px 14px" }}>{item.status}<div style={{ marginTop: 8, display: "flex", gap: 8 }}><button onClick={() => { setForm(item); setModal("payout"); }} style={{ background: "none", border: "none", cursor: "pointer" }}>✏️</button><button onClick={async () => { if (confirm("حذف؟")) { await api.del(`/payouts/${item.id}`); reload(); } }} style={{ background: "none", border: "none", cursor: "pointer" }}>🗑</button></div></td>
                   </tr>
                 ))}
               </tbody>
@@ -1509,7 +1621,7 @@ function TeamPartnersPage() {
             <KPICard label="إجمالي القيمة المرجعية" value={usdFromEgp(sumBy(assets, item => item.value_egp), rate)} sub={egpLabel(sumBy(assets, item => item.value_egp))} color={BRAND.navy} />
             <KPICard label="إجمالي الإيجار الشهري" value={usdFromEgp(sumBy(assets, item => item.monthly_rent_egp), rate)} sub={egpLabel(sumBy(assets, item => item.monthly_rent_egp))} color={BRAND.gold} />
           </div>
-          <PageSection title="الأصول">
+          <PageSection title="الأصول" action={<Btn color={BRAND.gold} onClick={() => { setForm({ value_egp: 0, monthly_rent_egp: 0 }); setModal("asset"); }} style={{ color: BRAND.navy }}>+ أصل جديد</Btn>}>
             {assets.length ? (
               <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 14 }}>
                 <thead>
@@ -1524,7 +1636,7 @@ function TeamPartnersPage() {
                       <td style={{ padding: "12px 14px" }}>{item.owner}</td>
                       <td style={{ padding: "12px 14px", fontWeight: 800 }}>{usdFromEgp(item.value_egp, rate)}<div style={{ fontSize: 12, color: "#94a3b8" }}>{egpLabel(item.value_egp)}</div></td>
                       <td style={{ padding: "12px 14px", fontWeight: 900, color: BRAND.gold }}>{usdFromEgp(item.monthly_rent_egp, rate)}<div style={{ fontSize: 12, color: "#94a3b8" }}>{egpLabel(item.monthly_rent_egp)}</div></td>
-                      <td style={{ padding: "12px 14px" }}>{item.notes || "—"}</td>
+                      <td style={{ padding: "12px 14px" }}>{item.notes || "—"}<div style={{ marginTop: 8, display: "flex", gap: 8 }}><button onClick={() => { setForm(item); setModal("asset"); }} style={{ background: "none", border: "none", cursor: "pointer" }}>✏️</button><button onClick={async () => { if (confirm("حذف؟")) { await api.del(`/assets/${item.id}`); reload(); } }} style={{ background: "none", border: "none", cursor: "pointer" }}>🗑</button></div></td>
                     </tr>
                   ))}
                 </tbody>
@@ -1535,6 +1647,44 @@ function TeamPartnersPage() {
           </PageSection>
         </div>
       )}
+
+      <Modal open={modal === "partner"} onClose={() => setModal(null)} title={form.id ? "تعديل شريك" : "شريك جديد"}>
+        <Input label="اسم الشريك" value={form.name || ""} onChange={e => setForm({ ...form, name: e.target.value })} />
+        <Input label="الدور" value={form.role || ""} onChange={e => setForm({ ...form, role: e.target.value })} />
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+          <Input label="نسبة الملكية %" type="number" value={form.equity_percent || 0} onChange={e => setForm({ ...form, equity_percent: +e.target.value })} />
+          <Input label="نسبة الأرباح %" type="number" value={form.profit_share_percent || 0} onChange={e => setForm({ ...form, profit_share_percent: +e.target.value })} />
+        </div>
+        <CurrencyFields form={form} setForm={setForm} rate={rate} egpKey="capital_egp" usdKey="capital_usd" egpLabel="مساهمة رأس مال (ج.م)" usdLabel="مساهمة رأس مال ($)" />
+        <Input label="ملاحظات" value={form.notes || ""} onChange={e => setForm({ ...form, notes: e.target.value })} />
+        <Btn onClick={savePartner} color="#5b6abf" style={{ width: "100%" }}>حفظ الشريك</Btn>
+      </Modal>
+
+      <Modal open={modal === "payout"} onClose={() => setModal(null)} title={form.id ? "تعديل مستحق" : "مدرب / مشرف / أفلييت"}>
+        <Input label="التاريخ" type="date" value={form.date || ""} onChange={e => setForm({ ...form, date: e.target.value })} />
+        <Input label="الاسم" value={form.name || ""} onChange={e => setForm({ ...form, name: e.target.value })} />
+        <Select label="النوع" value={form.role || "trainer"} onChange={e => setForm({ ...form, role: e.target.value })} options={Object.entries(payoutRoleLabels).map(([value, label]) => ({ value, label }))} />
+        <Input label="مرتبط بدورة" value={form.related_to || ""} onChange={e => setForm({ ...form, related_to: e.target.value })} />
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+          <Input label="النسبة %" type="number" value={form.percent || 0} onChange={e => setForm({ ...form, percent: +e.target.value })} />
+          <Input label="قيمة الأساس" type="number" value={form.basis_amount_egp || 0} onChange={e => setForm({ ...form, basis_amount_egp: +e.target.value })} />
+        </div>
+        <CurrencyFields form={form} setForm={setForm} rate={rate} />
+        <Select label="الحالة" value={form.status || "accrued"} onChange={e => setForm({ ...form, status: e.target.value })} options={[{ value: "accrued", label: "مستحق" }, { value: "paid", label: "مدفوع" }, { value: "waived", label: "متنازل عنه" }]} />
+        <Input label="ملاحظات" value={form.notes || ""} onChange={e => setForm({ ...form, notes: e.target.value })} />
+        <Btn onClick={savePayout} color="#8e44ad" style={{ width: "100%" }}>حفظ</Btn>
+      </Modal>
+
+      <Modal open={modal === "asset"} onClose={() => setModal(null)} title={form.id ? "تعديل أصل" : "أصل جديد"}>
+        <Input label="اسم الأصل" value={form.name || ""} onChange={e => setForm({ ...form, name: e.target.value })} />
+        <Input label="المالك" value={form.owner || ""} onChange={e => setForm({ ...form, owner: e.target.value })} />
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+          <Input label="القيمة (ج.م)" type="number" value={form.value_egp || 0} onChange={e => setForm({ ...form, value_egp: +e.target.value })} />
+          <Input label="الإيجار الشهري (ج.م)" type="number" value={form.monthly_rent_egp || 0} onChange={e => setForm({ ...form, monthly_rent_egp: +e.target.value })} />
+        </div>
+        <Input label="ملاحظات" value={form.notes || ""} onChange={e => setForm({ ...form, notes: e.target.value })} />
+        <Btn onClick={saveAsset} color={BRAND.gold} style={{ width: "100%", color: BRAND.navy }}>حفظ الأصل</Btn>
+      </Modal>
     </div>
   );
 }
@@ -1615,7 +1765,7 @@ function TargetsPage() {
 // ============================================================
 // MARKETING DASHBOARD
 // ============================================================
-function MarketingPage() {
+function LegacyMarketingPage() {
   const [campaigns, setCampaigns] = useState([]);
   const [modal, setModal] = useState(false);
   const [form, setForm] = useState({});
@@ -1743,6 +1893,331 @@ function MarketingPage() {
   );
 }
 
+function MarketingPage() {
+  const [tab, setTab] = useState("campaigns");
+  const [campaigns, setCampaigns] = useState([]);
+  const [courses, setCourses] = useState([]);
+  const [investments, setInvestments] = useState([]);
+  const [campaignModal, setCampaignModal] = useState(false);
+  const [investmentModal, setInvestmentModal] = useState(false);
+  const [calculatorOpen, setCalculatorOpen] = useState(false);
+  const [campaignForm, setCampaignForm] = useState({});
+  const [investmentForm, setInvestmentForm] = useState({});
+  const [calculatorForm, setCalculatorForm] = useState({
+    revenue_egp: 0,
+    students_count: 20,
+    price_per_student: 2500,
+    room_cost_egp: 1800,
+    supervision_cost_egp: 2000,
+    ads_cost_egp: 500 * 50,
+    trainer_percent: 35,
+    platform_percent: 30,
+    investor_percent: 25,
+    affiliate_percent: 10,
+  });
+  const [simulation, setSimulation] = useState(null);
+
+  const load = useCallback(() => {
+    api.get("/campaigns").then(data => setCampaigns(safeArray(data)));
+    api.get("/courses").then(data => setCourses(safeArray(data)));
+    api.get("/investments").then(data => setInvestments(safeArray(data)));
+  }, []);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  useEffect(() => {
+    api.post("/calculator/simulate", calculatorForm).then(data => setSimulation(safeObject(data)));
+  }, [calculatorForm]);
+
+  const saveCampaign = async () => {
+    if (campaignForm.id) await api.put(`/campaigns/${campaignForm.id}`, campaignForm);
+    else await api.post("/campaigns", campaignForm);
+    setCampaignModal(false);
+    setCampaignForm({});
+    load();
+  };
+
+  const saveInvestment = async () => {
+    if (investmentForm.id) await api.put(`/investments/${investmentForm.id}`, investmentForm);
+    else await api.post("/investments", investmentForm);
+    setInvestmentModal(false);
+    setInvestmentForm({});
+    load();
+  };
+
+  const totals = {
+    spent: campaigns.reduce((s, c) => s + (c.spent || 0), 0),
+    leads: campaigns.reduce((s, c) => s + (c.leads || 0), 0),
+    conversions: campaigns.reduce((s, c) => s + (c.conversions || 0), 0),
+    revenue: campaigns.reduce((s, c) => s + (c.revenue_attributed || 0), 0),
+  };
+  totals.cpl = totals.leads ? totals.spent / totals.leads : 0;
+  totals.cac = totals.conversions ? totals.spent / totals.conversions : 0;
+  totals.roas = totals.spent ? totals.revenue / totals.spent : 0;
+  totals.convRate = totals.leads ? (totals.conversions / totals.leads * 100) : 0;
+
+  const investmentTotals = {
+    injected: investments.reduce((sum, item) => sum + (item.invested_total_egp || 0), 0),
+    distributed: investments.reduce((sum, item) => sum + (item.due_egp || 0), 0),
+    active: new Set(investments.filter(item => item.status !== "paid").map(item => item.investor_name)).size,
+    avgRoi: investments.length ? investments.reduce((sum, item) => sum + (item.roi_percent || 0), 0) / investments.length : 0,
+  };
+
+  return (
+    <div>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 18, gap: 12, flexWrap: "wrap" }}>
+        <div>
+          <h1 style={{ fontSize: 24, fontWeight: 900, color: BRAND.navy, margin: 0 }}>التسويق</h1>
+          <div style={{ marginTop: 6, fontSize: 13, color: "#667085" }}>متابعة الحملات وربطها بالدورات، مع نموذج المستثمرين والمعلنين وحاسبة توزيع الأرباح.</div>
+        </div>
+        <div style={{ display: "flex", gap: 10 }}>
+          <Btn onClick={() => { setCampaignForm({ platform: "facebook", status: "active", currency: "USD", start_date: new Date().toISOString().split("T")[0] }); setCampaignModal(true); }} color="#e8913a">+ حملة جديدة</Btn>
+          <Btn onClick={() => { setInvestmentForm({ status: "accrued", profit_percent: 25, amount_usd: 500 }); setInvestmentModal(true); }} color={BRAND.navy}>+ استثمار جديد</Btn>
+        </div>
+      </div>
+
+      <TabBar tabs={[{ id: "campaigns", label: "الحملات" }, { id: "investors", label: "المستثمرين والمعلنين" }]} active={tab} onChange={setTab} />
+
+      {tab === "campaigns" && (
+        <div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 16, marginBottom: 24 }}>
+            <KPICard icon="💸" label="إجمالي الإنفاق" value={fmtUSD(totals.spent)} color="#c0392b" />
+            <KPICard icon="👤" label="Leads" value={totals.leads} sub={`CPL: ${fmtUSD(totals.cpl)}`} color="#e8913a" />
+            <KPICard icon="🎯" label="Conversions" value={totals.conversions} sub={`CAC: ${fmtUSD(totals.cac)}`} color="#2d8659" />
+            <KPICard icon="📈" label="ROAS" value={`${totals.roas.toFixed(1)}x`} sub={`${totals.convRate.toFixed(1)}% تحويل`} color={BRAND.navy} />
+            <KPICard icon="💰" label="إيراد من الحملات" value={fmtUSD(totals.revenue)} color={BRAND.gold} />
+          </div>
+
+          {campaigns.length > 0 && (
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20, marginBottom: 24 }}>
+              <PageSection title="مقارنة الحملات">
+                <ResponsiveContainer width="100%" height={240}>
+                  <BarChart data={campaigns.map(c => ({ name: c.name.substring(0, 15), spent: c.spent, revenue: c.revenue_attributed }))}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                    <XAxis dataKey="name" tick={{ fontSize: 11 }} />
+                    <YAxis tick={{ fontSize: 11 }} />
+                    <Tooltip />
+                    <Bar dataKey="spent" name="إنفاق" fill="#c0392b" radius={[4, 4, 0, 0]} />
+                    <Bar dataKey="revenue" name="إيراد" fill="#2d8659" radius={[4, 4, 0, 0]} />
+                    <Legend />
+                  </BarChart>
+                </ResponsiveContainer>
+              </PageSection>
+              <PageSection title="توزيع الإنفاق بالمنصة">
+                <ResponsiveContainer width="100%" height={240}>
+                  <PieChart>
+                    <Pie data={campaigns.map(c => ({ name: platLabels[c.platform] || c.platform, value: c.spent || 0 }))} cx="50%" cy="50%" outerRadius={80} dataKey="value" label={({ name }) => name}>
+                      {campaigns.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
+                    </Pie>
+                    <Tooltip formatter={v => fmtUSD(v)} />
+                  </PieChart>
+                </ResponsiveContainer>
+              </PageSection>
+            </div>
+          )}
+
+          <PageSection title="الحملات الحالية" subtitle="تمت إضافة عمود الدورة المرتبطة لحساب الأداء لكل دورة بدقة.">
+            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+              <thead><tr style={{ background: "#f8fafc" }}>
+                {["الحملة", "الدورة المرتبطة", "المنصة", "الحالة", "إنفاق", "Leads", "تحويلات", "إيراد", "ROAS", "توصية", ""].map(h => <th key={h} style={{ padding: "12px 14px", textAlign: "right", fontWeight: 600, color: "#6b7280", borderBottom: "1px solid #e5e7eb" }}>{h}</th>)}
+              </tr></thead>
+              <tbody>
+                {campaigns.map(c => (
+                  <tr key={c.id} style={{ borderBottom: "1px solid #f3f4f6" }}>
+                    <td style={{ padding: "12px 14px", fontWeight: 600 }}>{c.name}</td>
+                    <td style={{ padding: "12px 14px" }}>{c.course_title || "غير مرتبطة"}</td>
+                    <td><Badge text={platLabels[c.platform] || c.platform} /></td>
+                    <td><Badge text={statusLabels[c.status] || c.status} color={c.status === "active" ? "#2d8659" : "#9ca3af"} /></td>
+                    <td>{fmtUSD(c.spent)}</td>
+                    <td>{c.leads}</td>
+                    <td>{c.conversions}</td>
+                    <td style={{ color: "#2d8659", fontWeight: 600 }}>{fmtUSD(c.revenue_attributed)}</td>
+                    <td style={{ fontWeight: 700 }}>{c.roas.toFixed(1)}x</td>
+                    <td><span style={{ color: recColors[c.recommendation], fontWeight: 700 }}>{recLabels[c.recommendation]}</span></td>
+                    <td>
+                      <button onClick={() => { setCampaignForm(c); setCampaignModal(true); }} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 14 }}>✏️</button>
+                      <button onClick={async () => { if (confirm("حذف؟")) { await api.del(`/campaigns/${c.id}`); load(); }}} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 14 }}>🗑</button>
+                    </td>
+                  </tr>
+                ))}
+                {campaigns.length === 0 && <tr><td colSpan={11} style={{ padding: 40, textAlign: "center", color: "#9ca3af" }}>لا توجد حملات بعد. أضف أول حملة إعلانية.</td></tr>}
+              </tbody>
+            </table>
+          </PageSection>
+        </div>
+      )}
+
+      {tab === "investors" && (
+        <div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 16, marginBottom: 24 }}>
+            <KPICard icon="🏦" label="إجمالي الاستثمارات المضخوخة" value={usdFromEgp(investmentTotals.injected, 50)} sub={egpLabel(investmentTotals.injected)} color={BRAND.navy} />
+            <KPICard icon="💵" label="إجمالي العوائد الموزعة" value={usdFromEgp(investmentTotals.distributed, 50)} sub={egpLabel(investmentTotals.distributed)} color="#2d8659" />
+            <KPICard icon="🧑‍💼" label="عدد المستثمرين النشطين" value={investmentTotals.active} color="#8e44ad" />
+            <KPICard icon="📈" label="متوسط ROI" value={`${investmentTotals.avgRoi.toFixed(1)}%`} color={BRAND.gold} />
+          </div>
+
+          <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1.4fr) minmax(360px, 1fr)", gap: 20, alignItems: "start" }}>
+            <PageSection title="جدول الاستثمارات" subtitle="كل استثمار مرتبط بدورة ونسبة من صافي أرباحها القابلة للتوزيع.">
+              {investments.length ? (
+                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+                  <thead><tr style={{ background: "#f8fafc" }}>
+                    {["الدورة", "المستثمر", "المبلغ المستثمر", "نسبته", "صافي ربح الدورة", "المستحق له", "ROI", "الحالة", ""].map(h => <th key={h} style={{ padding: "12px 14px", textAlign: "right", color: "#667085", borderBottom: "1px solid #e5e7eb" }}>{h}</th>)}
+                  </tr></thead>
+                  <tbody>
+                    {investments.map(item => (
+                      <tr key={item.id} style={{ borderBottom: "1px solid #f3f4f6" }}>
+                        <td style={{ padding: "12px 14px", fontWeight: 800 }}>{item.course_title || "—"}</td>
+                        <td style={{ padding: "12px 14px" }}>{item.investor_name}</td>
+                        <td style={{ padding: "12px 14px" }}>{usdFromEgp(item.invested_total_egp, 50)}<div style={{ fontSize: 12, color: "#94a3b8" }}>{egpLabel(item.invested_total_egp)}</div></td>
+                        <td style={{ padding: "12px 14px" }}>{item.profit_percent}%</td>
+                        <td style={{ padding: "12px 14px" }}>{usdFromEgp(item.course_profit_egp, 50)}<div style={{ fontSize: 12, color: "#94a3b8" }}>{egpLabel(item.course_profit_egp)}</div></td>
+                        <td style={{ padding: "12px 14px", fontWeight: 900, color: "#2d8659" }}>{usdFromEgp(item.due_egp, 50)}<div style={{ fontSize: 12, color: "#94a3b8" }}>{egpLabel(item.due_egp)}</div></td>
+                        <td style={{ padding: "12px 14px", fontWeight: 800, color: item.roi_percent >= 0 ? "#2d8659" : "#c0392b" }}>{item.roi_percent}%</td>
+                        <td style={{ padding: "12px 14px" }}><Badge text={investmentStatusLabels[item.status] || item.status} color={item.status === "paid" ? "#2d8659" : item.status === "pending" ? "#e8913a" : "#8e44ad"} /></td>
+                        <td style={{ padding: "12px 14px" }}>
+                          <button onClick={() => { setInvestmentForm(item); setInvestmentModal(true); }} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 14 }}>✏️</button>
+                          <button onClick={async () => { if (confirm("حذف؟")) { await api.del(`/investments/${item.id}`); load(); }}} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 14 }}>🗑</button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              ) : (
+                <EmptyState title="لا توجد استثمارات بعد" text="أضف أول استثمار إعلاني مرتبط بدورة." />
+              )}
+            </PageSection>
+
+            <PageSection title="حاسبة محاكاة الاستثمار" subtitle="أدخل الأرقام أو استخدمها كنموذج ثم طبّقها على دورة فعلية." action={<Btn variant="secondary" color={BRAND.navy} onClick={() => setCalculatorOpen(true)}>فتح الحاسبة</Btn>}>
+              {simulation?.distribution ? (
+                <div style={{ display: "grid", gap: 10 }}>
+                  <div style={{ fontSize: 13, color: "#667085" }}>صافي الربح القابل للتوزيع</div>
+                  <div style={{ fontSize: 24, fontWeight: 900, color: BRAND.navy }}>{usdFromEgp(simulation.distribution.net_distributable_profit, 50)}</div>
+                  <div style={{ fontSize: 12, color: "#94a3b8" }}>{egpLabel(simulation.distribution.net_distributable_profit)}</div>
+                  {simulation.distribution.warning && <div style={{ padding: 12, background: "#fff1f2", color: "#b42318", borderRadius: 10, fontSize: 13 }}>{simulation.distribution.warning}</div>}
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                    {[
+                      ["المدرب", simulation.distribution.allocations_egp?.trainer, simulation.distribution.trainer_percent],
+                      ["المنصة", simulation.distribution.allocations_egp?.platform, simulation.distribution.platform_percent],
+                      ["المستثمر", simulation.distribution.allocations_egp?.investor, simulation.distribution.investor_percent],
+                      ["الأفلييت", simulation.distribution.allocations_egp?.affiliate, simulation.distribution.affiliate_percent],
+                    ].map(([label, amount, percent]) => (
+                      <div key={label} style={{ border: "1px solid #edf2f7", borderRadius: 12, padding: 12 }}>
+                        <div style={{ fontSize: 12, color: "#667085" }}>{label}</div>
+                        <div style={{ fontWeight: 900, color: BRAND.navy, marginTop: 4 }}>{usdFromEgp(amount, 50)}</div>
+                        <div style={{ fontSize: 12, color: "#94a3b8" }}>{percent}%</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                <EmptyState title="الحاسبة جاهزة" text="افتح الحاسبة وأدخل القيم لتشاهد التوزيع المتوقع لحظيًا." />
+              )}
+            </PageSection>
+          </div>
+        </div>
+      )}
+
+      <Modal open={campaignModal} onClose={() => setCampaignModal(false)} title={campaignForm.id ? "تعديل حملة" : "حملة جديدة"}>
+        <Input label="اسم الحملة" value={campaignForm.name || ""} onChange={e => setCampaignForm({ ...campaignForm, name: e.target.value })} />
+        <Select label="الدورة المرتبطة" value={campaignForm.course_id || ""} onChange={e => setCampaignForm({ ...campaignForm, course_id: e.target.value ? +e.target.value : null })} options={[{ value: "", label: "بدون ربط" }, ...courses.map(course => ({ value: course.id, label: course.title }))]} />
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+          <Select label="المنصة" value={campaignForm.platform || "facebook"} onChange={e => setCampaignForm({ ...campaignForm, platform: e.target.value })} options={Object.entries(platLabels).map(([v, l]) => ({ value: v, label: l }))} />
+          <Select label="الحالة" value={campaignForm.status || "active"} onChange={e => setCampaignForm({ ...campaignForm, status: e.target.value })} options={Object.entries(statusLabels).map(([v, l]) => ({ value: v, label: l }))} />
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+          <Input label="تاريخ البدء" type="date" value={campaignForm.start_date || ""} onChange={e => setCampaignForm({ ...campaignForm, start_date: e.target.value })} />
+          <Input label="تاريخ النهاية" type="date" value={campaignForm.end_date || ""} onChange={e => setCampaignForm({ ...campaignForm, end_date: e.target.value })} />
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+          <Input label="الميزانية ($)" type="number" value={campaignForm.budget || 0} onChange={e => setCampaignForm({ ...campaignForm, budget: +e.target.value })} />
+          <Input label="المنفق ($)" type="number" value={campaignForm.spent || 0} onChange={e => setCampaignForm({ ...campaignForm, spent: +e.target.value })} />
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
+          <Input label="Impressions" type="number" value={campaignForm.impressions || 0} onChange={e => setCampaignForm({ ...campaignForm, impressions: +e.target.value })} />
+          <Input label="Clicks" type="number" value={campaignForm.clicks || 0} onChange={e => setCampaignForm({ ...campaignForm, clicks: +e.target.value })} />
+          <Input label="Leads" type="number" value={campaignForm.leads || 0} onChange={e => setCampaignForm({ ...campaignForm, leads: +e.target.value })} />
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+          <Input label="تحويلات" type="number" value={campaignForm.conversions || 0} onChange={e => setCampaignForm({ ...campaignForm, conversions: +e.target.value })} />
+          <Input label="إيراد من الحملة ($)" type="number" value={campaignForm.revenue_attributed || 0} onChange={e => setCampaignForm({ ...campaignForm, revenue_attributed: +e.target.value })} />
+        </div>
+        <Input label="الجمهور المستهدف" value={campaignForm.target_audience || ""} onChange={e => setCampaignForm({ ...campaignForm, target_audience: e.target.value })} />
+        <Btn onClick={saveCampaign} color="#e8913a" style={{ width: "100%", marginTop: 8 }}>حفظ الحملة</Btn>
+      </Modal>
+
+      <Modal open={investmentModal} onClose={() => setInvestmentModal(false)} title={investmentForm.id ? "تعديل استثمار" : "استثمار جديد"}>
+        <Select label="الدورة" value={investmentForm.course_id || ""} onChange={e => setInvestmentForm({ ...investmentForm, course_id: +e.target.value })} options={courses.map(course => ({ value: course.id, label: course.title }))} />
+        <Input label="اسم المستثمر" value={investmentForm.investor_name || ""} onChange={e => setInvestmentForm({ ...investmentForm, investor_name: e.target.value })} />
+        <CurrencyFields form={investmentForm} setForm={setInvestmentForm} rate={50} egpLabel="المبلغ المستثمر (ج.م)" usdLabel="المبلغ المستثمر ($)" />
+        <Input label="نسبته من الأرباح %" type="number" value={investmentForm.profit_percent || 0} onChange={e => setInvestmentForm({ ...investmentForm, profit_percent: +e.target.value })} />
+        <Select label="الحالة" value={investmentForm.status || "accrued"} onChange={e => setInvestmentForm({ ...investmentForm, status: e.target.value })} options={Object.entries(investmentStatusLabels).map(([value, label]) => ({ value, label }))} />
+        <Input label="ملاحظات" value={investmentForm.notes || ""} onChange={e => setInvestmentForm({ ...investmentForm, notes: e.target.value })} />
+        <Btn onClick={saveInvestment} color={BRAND.navy} style={{ width: "100%", marginTop: 8 }}>حفظ الاستثمار</Btn>
+      </Modal>
+
+      <Modal open={calculatorOpen} onClose={() => setCalculatorOpen(false)} title="حاسبة محاكاة الاستثمار">
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20 }}>
+          <div>
+            <Input label="إيراد الدورة المتوقع (ج.م)" type="number" value={calculatorForm.revenue_egp || 0} onChange={e => setCalculatorForm({ ...calculatorForm, revenue_egp: +e.target.value })} />
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+              <Input label="عدد الطلاب المتوقع" type="number" value={calculatorForm.students_count || 0} onChange={e => setCalculatorForm({ ...calculatorForm, students_count: +e.target.value })} />
+              <Input label="سعر الاشتراك" type="number" value={calculatorForm.price_per_student || 0} onChange={e => setCalculatorForm({ ...calculatorForm, price_per_student: +e.target.value })} />
+            </div>
+            <Input label="مصاريف القاعة" type="number" value={calculatorForm.room_cost_egp || 0} onChange={e => setCalculatorForm({ ...calculatorForm, room_cost_egp: +e.target.value })} />
+            <Input label="الإشراف التدريبي" type="number" value={calculatorForm.supervision_cost_egp || 0} onChange={e => setCalculatorForm({ ...calculatorForm, supervision_cost_egp: +e.target.value })} />
+            <Input label="مبلغ الإعلانات (المستثمر)" type="number" value={calculatorForm.ads_cost_egp || 0} onChange={e => setCalculatorForm({ ...calculatorForm, ads_cost_egp: +e.target.value })} />
+            {[
+              ["نسبة المدرب", "trainer_percent", 25, 40],
+              ["نسبة المنصة", "platform_percent", 25, 35],
+              ["نسبة المستثمر", "investor_percent", 15, 35],
+              ["نسبة الأفلييت", "affiliate_percent", 0, 10],
+            ].map(([label, key, min, max]) => (
+              <div key={key} style={{ marginBottom: 14 }}>
+                <label style={{ display: "block", fontSize: 13, fontWeight: 700, marginBottom: 6 }}>{label}: {calculatorForm[key]}%</label>
+                <input type="range" min={min} max={max} value={calculatorForm[key]} onChange={e => setCalculatorForm({ ...calculatorForm, [key]: +e.target.value })} style={{ width: "100%" }} />
+              </div>
+            ))}
+          </div>
+          <div>
+            <PageSection title="نتائج المحاكاة" subtitle="تتحدث لحظيًا مع كل تعديل.">
+              {simulation?.distribution ? (
+                <div>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 16 }}>
+                    <KPICard label="إجمالي الإيراد" value={usdFromEgp(simulation.inputs?.projected_revenue_egp, 50)} sub={egpLabel(simulation.inputs?.projected_revenue_egp)} color="#2d8659" />
+                    <KPICard label="إجمالي المصاريف المباشرة" value={usdFromEgp(simulation.inputs?.direct_costs_egp, 50)} sub={egpLabel(simulation.inputs?.direct_costs_egp)} color="#c0392b" />
+                    <KPICard label="صافي الربح القابل للتوزيع" value={usdFromEgp(simulation.distribution?.net_distributable_profit, 50)} sub={egpLabel(simulation.distribution?.net_distributable_profit)} color={BRAND.navy} />
+                    <KPICard label="ROI المستثمر" value={`${simulation.distribution?.investor_roi_percent || 0}%`} color={BRAND.gold} />
+                  </div>
+                  {simulation.distribution?.warning && <div style={{ padding: 12, background: "#fff1f2", color: "#b42318", borderRadius: 10, fontSize: 13, marginBottom: 16 }}>{simulation.distribution.warning}</div>}
+                  <ResponsiveContainer width="100%" height={220}>
+                    <PieChart>
+                      <Pie data={[
+                        { name: "المدرب", value: simulation.distribution.allocations_egp?.trainer || 0 },
+                        { name: "المنصة", value: simulation.distribution.allocations_egp?.platform || 0 },
+                        { name: "المستثمر", value: simulation.distribution.allocations_egp?.investor || 0 },
+                        { name: "الأفلييت", value: simulation.distribution.allocations_egp?.affiliate || 0 },
+                      ]} dataKey="value" cx="50%" cy="50%" outerRadius={78} label>
+                        {[0, 1, 2, 3].map(index => <Cell key={index} fill={COLORS[index]} />)}
+                      </Pie>
+                      <Tooltip formatter={value => egpLabel(value)} />
+                    </PieChart>
+                  </ResponsiveContainer>
+                  <div style={{ display: "flex", gap: 10, marginTop: 12 }}>
+                    <Btn color={BRAND.navy} onClick={() => setCalculatorOpen(false)} style={{ flex: 1 }}>تطبيق على دورة</Btn>
+                    <Btn variant="secondary" color={BRAND.gold} onClick={() => setCalculatorOpen(false)} style={{ flex: 1 }}>حفظ كنموذج</Btn>
+                  </div>
+                </div>
+              ) : <EmptyState title="الحاسبة تعمل" text="أدخل الأرقام على اليمين لتظهر نتائج التوزيع." />}
+            </PageSection>
+          </div>
+        </div>
+      </Modal>
+    </div>
+  );
+}
+
 // ============================================================
 // COURSES SNAPSHOT
 // ============================================================
@@ -1823,6 +2298,34 @@ function CoursesPage() {
                 {(c.linked_payouts || []).map((item) => (
                   <div key={`course-pay-${item.id}`}>{payoutRoleLabels[item.role] || item.role}: <strong style={{ color: "#8e44ad" }}>{item.name}</strong>{item.percent ? ` (${item.percent}%)` : ""} - <strong style={{ color: "#8e44ad" }}>{fmt(item.total_egp)} ج.م</strong></div>
                 ))}
+              </div>
+            )}
+            {c.distribution && (
+              <div style={{ marginTop: 14, border: "1px solid #e8edf3", borderRadius: 12, padding: 12, background: "#fbfcfe" }}>
+                <div style={{ fontWeight: 900, color: BRAND.navy, marginBottom: 8, fontSize: 13 }}>التوزيع المالي</div>
+                <div style={{ display: "grid", gridTemplateColumns: "110px 1fr", gap: 12, alignItems: "center" }}>
+                  <ResponsiveContainer width="100%" height={110}>
+                    <PieChart>
+                      <Pie data={[
+                        { name: "المدرب", value: c.distribution.allocations_egp?.trainer || 0 },
+                        { name: "المنصة", value: c.distribution.allocations_egp?.platform || 0 },
+                        { name: "المستثمر", value: c.distribution.allocations_egp?.investor || 0 },
+                        { name: "الأفلييت", value: c.distribution.allocations_egp?.affiliate || 0 },
+                      ]} dataKey="value" cx="50%" cy="50%" outerRadius={42}>
+                        {[0, 1, 2, 3].map(index => <Cell key={index} fill={COLORS[index]} />)}
+                      </Pie>
+                    </PieChart>
+                  </ResponsiveContainer>
+                  <div style={{ fontSize: 12, color: "#667085", lineHeight: 1.9 }}>
+                    <div>المدرب: <strong>{egpLabel(c.distribution.allocations_egp?.trainer || 0)}</strong></div>
+                    <div>المنصة: <strong>{egpLabel(c.distribution.allocations_egp?.platform || 0)}</strong></div>
+                    <div>المستثمر: <strong>{egpLabel(c.distribution.allocations_egp?.investor || 0)}</strong></div>
+                    <div>الأفلييت: <strong>{egpLabel(c.distribution.allocations_egp?.affiliate || 0)}</strong></div>
+                    <div style={{ marginTop: 6, color: c.revenue_split?.valid ? "#2d8659" : "#c0392b", fontWeight: 800 }}>
+                      {c.revenue_split?.valid ? "التوزيع مكتمل 100%" : `مجموع النسب ${c.revenue_split?.total_percent || 0}%`}
+                    </div>
+                  </div>
+                </div>
               </div>
             )}
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8, marginTop: 16 }}>
@@ -1913,59 +2416,61 @@ function AIPage() {
   };
 
   return (
-    <div>
-      <h1 style={{ fontSize: 24, fontWeight: 700, color: "#0f4c81", marginBottom: 20 }}>🤖 مساعد القرار الذكي</h1>
-
-      <div style={{ background: "#fff", borderRadius: 12, padding: 16, boxShadow: "0 1px 4px rgba(0,0,0,0.06)", marginBottom: 18, display: "grid", gridTemplateColumns: "minmax(180px, 240px) minmax(220px, 320px) 1fr", gap: 12, alignItems: "end" }}>
-        <Select label="مزود الذكاء الاصطناعي" value={provider} onChange={e => {
-          const nextProvider = e.target.value;
-          const next = models.find(item => item.id === nextProvider);
-          setProvider(nextProvider);
-          setModel(next?.default_model || "");
-        }} options={models.map(item => ({ value: item.id, label: `${item.label}${item.configured ? "" : " (غير مفعل)"}` }))} />
-        <Select label="الموديل" value={model} onChange={e => setModel(e.target.value)} options={selectedModels.map(item => ({ value: item, label: item }))} />
-        <div style={{ fontSize: 13, color: selectedProvider?.configured ? "#2d8659" : "#c0392b", paddingBottom: 16, fontWeight: 600 }}>
-          {selectedProvider?.configured ? "جاهز للاستخدام" : "أضف API key في إعدادات السيرفر لتفعيل هذا المزود"}
+    <div style={{ maxWidth: 800, margin: "0 auto" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, marginBottom: 14 }}>
+        <div>
+          <h1 style={{ fontSize: 22, fontWeight: 900, color: BRAND.navy, margin: 0 }}>مساعد القرار الذكي</h1>
+          <div style={{ marginTop: 6, fontSize: 12, color: selectedProvider?.configured ? "#2d8659" : "#c0392b" }}>
+            {selectedProvider?.configured ? "جاهز للاستخدام" : "أضف API key في إعدادات السيرفر لتفعيل هذا المزود"}
+          </div>
+        </div>
+        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          <select value={provider} onChange={e => {
+            const nextProvider = e.target.value;
+            const next = models.find(item => item.id === nextProvider);
+            setProvider(nextProvider);
+            setModel(next?.default_model || "");
+          }} style={{ border: "1px solid #d1d5db", borderRadius: 8, padding: "8px 10px", fontSize: 12, background: "#fff" }}>
+            {models.map(item => <option key={item.id} value={item.id}>{item.label}</option>)}
+          </select>
+          <select value={model} onChange={e => setModel(e.target.value)} style={{ border: "1px solid #d1d5db", borderRadius: 8, padding: "8px 10px", fontSize: 12, background: "#fff", maxWidth: 180 }}>
+            {selectedModels.map(item => <option key={item} value={item}>{item}</option>)}
+          </select>
         </div>
       </div>
 
-      <div style={{ display: "flex", flexWrap: "wrap", gap: 10, marginBottom: 24 }}>
-        {quickActions.map((a, i) => (
-          <button key={i} onClick={() => ask(a.prompt)} disabled={loading} style={{ padding: "10px 18px", borderRadius: 10, border: "2px solid #e5e7eb", background: "#fff", fontSize: 13, fontWeight: 600, cursor: loading ? "not-allowed" : "pointer", color: "#374151", transition: "all 0.2s" }}
-            onMouseEnter={e => { e.target.style.borderColor = "#0f4c81"; e.target.style.background = "#f0f5ff"; }}
-            onMouseLeave={e => { e.target.style.borderColor = "#e5e7eb"; e.target.style.background = "#fff"; }}>
-            {a.label}
-          </button>
-        ))}
-      </div>
-
-      <div style={{ background: "#fff", borderRadius: 16, boxShadow: "0 1px 4px rgba(0,0,0,0.06)", overflow: "hidden" }}>
-        <div style={{ height: 500, overflowY: "auto", padding: 24 }}>
+      <div style={{ background: "#fff", borderRadius: 16, boxShadow: "0 1px 4px rgba(0,0,0,0.06)", overflow: "hidden", border: "1px solid #edf2f7" }}>
+        <div style={{ minHeight: 400, maxHeight: "calc(100vh - 300px)", overflowY: "auto", padding: 22 }}>
           {messages.length === 0 && (
-            <div style={{ textAlign: "center", padding: 60, color: "#9ca3af" }}>
-              <div style={{ fontSize: 48, marginBottom: 16 }}>🤖</div>
-              <div style={{ fontSize: 16, fontWeight: 600 }}>مرحباً! أنا مساعد القرار الذكي</div>
-              <div style={{ fontSize: 14, marginTop: 8 }}>اسألني عن حالة الشركة، حلل البيانات، أو اطلب تقريراً</div>
+            <div style={{ textAlign: "center", padding: "42px 20px", color: "#98a2b3" }}>
+              <div style={{ fontSize: 28, marginBottom: 12 }}>🤖</div>
+              <div style={{ fontSize: 15, fontWeight: 700, color: BRAND.navy }}>جاهز أقرأ الأرقام معك</div>
+              <div style={{ fontSize: 13, marginTop: 8 }}>اسأل عن الأداء، المخاطر، الحملات، أو اطلب تقريرًا مختصرًا.</div>
             </div>
           )}
           {messages.map((m, i) => (
-            <div key={i} style={{ display: "flex", justifyContent: m.role === "user" ? "flex-end" : "flex-start", marginBottom: 16 }}>
-              <div style={{ maxWidth: "80%", padding: "14px 18px", borderRadius: 14, background: m.role === "user" ? "#0f4c81" : "#f3f4f6", color: m.role === "user" ? "#fff" : "#1f2937", fontSize: 14, lineHeight: 1.7, whiteSpace: "pre-wrap" }}>
+            <div key={i} style={{ display: "flex", justifyContent: m.role === "user" ? "flex-end" : "flex-start", marginBottom: 14 }}>
+              <div style={{ maxWidth: "78%", padding: "12px 16px", borderRadius: 16, background: m.role === "user" ? BRAND.navy : "#f4f6f8", color: m.role === "user" ? "#fff" : BRAND.ink, fontSize: 14, lineHeight: 1.8, whiteSpace: "pre-wrap" }}>
                 {m.content}
               </div>
             </div>
           ))}
-          {loading && (
-            <div style={{ display: "flex", justifyContent: "flex-start", marginBottom: 16 }}>
-              <div style={{ padding: "14px 18px", borderRadius: 14, background: "#f3f4f6", color: "#6b7280", fontSize: 14 }}>⏳ جاري التحليل...</div>
-            </div>
-          )}
+          {loading && <div style={{ display: "flex", justifyContent: "flex-start" }}><div style={{ padding: "12px 16px", borderRadius: 16, background: "#f4f6f8", color: "#667085", fontSize: 13 }}>جاري التحليل...</div></div>}
         </div>
 
-        <div style={{ borderTop: "1px solid #e5e7eb", padding: 16, display: "flex", gap: 10 }}>
-          <input value={input} onChange={e => setInput(e.target.value)} onKeyDown={e => e.key === "Enter" && ask()} placeholder="اسأل عن أي شيء يخص الشركة..." disabled={loading}
-            style={{ flex: 1, padding: "12px 16px", borderRadius: 10, border: "1px solid #d1d5db", fontSize: 14 }} />
-          <Btn onClick={() => ask()} disabled={loading || !input.trim()} style={{ padding: "12px 28px" }}>إرسال</Btn>
+        <div style={{ position: "sticky", bottom: 0, background: "#fff", borderTop: "1px solid #e5e7eb", padding: 14 }}>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 10 }}>
+            {quickActions.map((a, i) => (
+              <button key={i} onClick={() => ask(a.prompt)} disabled={loading} style={{ padding: "7px 10px", borderRadius: 999, border: "1px solid #d8dee9", background: "#fafbfd", fontSize: 12, fontWeight: 700, cursor: loading ? "not-allowed" : "pointer", color: BRAND.navy }}>
+                {a.label}
+              </button>
+            ))}
+          </div>
+          <div style={{ display: "flex", gap: 10 }}>
+            <input value={input} onChange={e => setInput(e.target.value)} onKeyDown={e => e.key === "Enter" && ask()} placeholder="اسأل عن أي شيء يخص الشركة..." disabled={loading}
+              style={{ flex: 1, padding: "12px 16px", borderRadius: 12, border: "1px solid #d1d5db", fontSize: 14 }} />
+            <Btn onClick={() => ask()} disabled={loading || !input.trim()} style={{ padding: "12px 20px" }}>إرسال</Btn>
+          </div>
         </div>
       </div>
     </div>
@@ -2037,6 +2542,79 @@ function AIAssistantDock() {
   );
 }
 
+function MyEarningsPage() {
+  const [payouts, setPayouts] = useState([]);
+  useEffect(() => {
+    api.get("/payouts").then(data => setPayouts(safeArray(data)));
+  }, []);
+  const accrued = payouts.reduce((sum, item) => sum + (item.status !== "paid" ? (item.total_egp || 0) : 0), 0);
+  const paid = payouts.reduce((sum, item) => sum + (item.status === "paid" ? (item.total_egp || 0) : 0), 0);
+  return (
+    <div>
+      <h1 style={{ fontSize: 24, fontWeight: 900, color: BRAND.navy, marginBottom: 20 }}>أرباحي</h1>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 16, marginBottom: 20 }}>
+        <KPICard label="إجمالي المستحق" value={usdFromEgp(accrued, 50)} sub={egpLabel(accrued)} color="#8e44ad" />
+        <KPICard label="إجمالي المدفوع" value={usdFromEgp(paid, 50)} sub={egpLabel(paid)} color="#2d8659" />
+        <KPICard label="الرصيد" value={usdFromEgp(accrued - paid, 50)} sub={egpLabel(accrued - paid)} color={BRAND.navy} />
+      </div>
+      <PageSection title="تفصيل الأرباح">
+        {payouts.length ? (
+          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 14 }}>
+            <thead><tr style={{ background: "#f8fafc" }}>
+              {["الدورة", "الشهر", "المستحق", "الحالة", "المتبقي"].map(h => <th key={h} style={{ padding: "12px 14px", textAlign: "right", color: "#667085", borderBottom: "1px solid #e5e7eb" }}>{h}</th>)}
+            </tr></thead>
+            <tbody>
+              {payouts.map(item => (
+                <tr key={item.id} style={{ borderBottom: "1px solid #f3f4f6" }}>
+                  <td style={{ padding: "12px 14px", fontWeight: 800 }}>{item.related_to || "—"}</td>
+                  <td style={{ padding: "12px 14px" }}>{item.date?.slice(0, 7) || "—"}</td>
+                  <td style={{ padding: "12px 14px" }}>{usdFromEgp(item.total_egp, 50)}<div style={{ fontSize: 12, color: "#94a3b8" }}>{egpLabel(item.total_egp)}</div></td>
+                  <td style={{ padding: "12px 14px" }}><Badge text={item.status === "paid" ? "مدفوع" : "مستحق"} color={item.status === "paid" ? "#2d8659" : "#8e44ad"} /></td>
+                  <td style={{ padding: "12px 14px", color: item.status === "paid" ? "#2d8659" : "#c0392b", fontWeight: 900 }}>{item.status === "paid" ? "0" : egpLabel(item.total_egp)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        ) : <EmptyState title="لا توجد أرباح مسجلة" text="عند إضافة مستحقات مرتبطة بك ستظهر هنا." />}
+      </PageSection>
+    </div>
+  );
+}
+
+function InvestorInvestmentsPage() {
+  const [investments, setInvestments] = useState([]);
+  useEffect(() => {
+    api.get("/investments").then(data => setInvestments(safeArray(data)));
+  }, []);
+  return (
+    <div>
+      <h1 style={{ fontSize: 24, fontWeight: 900, color: BRAND.navy, marginBottom: 20 }}>استثماراتي</h1>
+      <PageSection title="الدورات التي أشارك فيها">
+        {investments.length ? (
+          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 14 }}>
+            <thead><tr style={{ background: "#f8fafc" }}>
+              {["الدورة", "المبلغ المستثمر", "نسبتي", "إيراد الدورة", "صافي الربح", "المستحق لي", "الحالة"].map(h => <th key={h} style={{ padding: "12px 14px", textAlign: "right", color: "#667085", borderBottom: "1px solid #e5e7eb" }}>{h}</th>)}
+            </tr></thead>
+            <tbody>
+              {investments.map(item => (
+                <tr key={item.id} style={{ borderBottom: "1px solid #f3f4f6" }}>
+                  <td style={{ padding: "12px 14px", fontWeight: 800 }}>{item.course_title}</td>
+                  <td style={{ padding: "12px 14px" }}>{usdFromEgp(item.invested_total_egp, 50)}<div style={{ fontSize: 12, color: "#94a3b8" }}>{egpLabel(item.invested_total_egp)}</div></td>
+                  <td style={{ padding: "12px 14px" }}>{item.profit_percent}%</td>
+                  <td style={{ padding: "12px 14px" }}>{usdFromEgp(item.course_profit_egp + item.invested_total_egp, 50)}</td>
+                  <td style={{ padding: "12px 14px" }}>{usdFromEgp(item.course_profit_egp, 50)}</td>
+                  <td style={{ padding: "12px 14px", fontWeight: 900, color: "#2d8659" }}>{usdFromEgp(item.due_egp, 50)}</td>
+                  <td style={{ padding: "12px 14px" }}><Badge text={investmentStatusLabels[item.status] || item.status} color={item.status === "paid" ? "#2d8659" : item.status === "pending" ? "#e8913a" : "#8e44ad"} /></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        ) : <EmptyState title="لا توجد استثمارات مسجلة" text="ستظهر هنا كل الدورات المرتبطة باستثماراتك." />}
+      </PageSection>
+    </div>
+  );
+}
+
 // ============================================================
 // SETTINGS PAGE
 // ============================================================
@@ -2044,7 +2622,7 @@ function SettingsPage() {
   const user = useAuth();
   const [settings, setSettings] = useState({});
   const [users, setUsers] = useState([]);
-  const [newUser, setNewUser] = useState({ role: "viewer" });
+  const [newUser, setNewUser] = useState({ role: "viewer", linked_to_name: "" });
   const [converter, setConverter] = useState({ usd: 1, egp: 50, active: "usd" });
   const [saved, setSaved] = useState(false);
 
@@ -2060,7 +2638,7 @@ function SettingsPage() {
   };
   const addUser = async () => {
     const r = await api.post("/users", newUser);
-    if (!r.error) { setNewUser({ role: "viewer" }); api.get("/users").then(data => setUsers(safeArray(data))); }
+    if (!r.error) { setNewUser({ role: "viewer", linked_to_name: "" }); api.get("/users").then(data => setUsers(safeArray(data))); }
   };
   const rate = Number(settings.exchange_rate || 50);
   const isAdmin = user?.role === "admin";
@@ -2098,8 +2676,9 @@ function SettingsPage() {
         </div>
         <Input label="كلمة المرور" type="password" value={newUser.password || ""} onChange={e => setNewUser({ ...newUser, password: e.target.value })} />
         <Select label="الرول" value={newUser.role || "viewer"} onChange={e => setNewUser({ ...newUser, role: e.target.value })} options={Object.entries(userRoleLabels).map(([value, label]) => ({ value, label }))} />
+        <Input label="مرتبط بـ" value={newUser.linked_to_name || ""} onChange={e => setNewUser({ ...newUser, linked_to_name: e.target.value })} placeholder="اسم المدرب أو المستثمر إن وجد" />
         <Btn onClick={addUser} color={BRAND.gold} style={{ color: BRAND.navy }}>إضافة مستخدم</Btn>
-        <div style={{ marginTop: 18 }}>{users.map(u => <div key={u.id} style={{ display: "flex", justifyContent: "space-between", borderTop: "1px solid #f3f4f6", padding: "10px 0", fontSize: 13 }}><div><strong>{u.name}</strong><div style={{ color: "#667085", marginTop: 4 }}>{u.email}</div></div><span>{userRoleLabels[u.role] || u.role}</span></div>)}</div>
+        <div style={{ marginTop: 18 }}>{users.map(u => <div key={u.id} style={{ display: "flex", justifyContent: "space-between", borderTop: "1px solid #f3f4f6", padding: "10px 0", fontSize: 13 }}><div><strong>{u.name}</strong><div style={{ color: "#667085", marginTop: 4 }}>{u.email}</div>{u.linked_to_name && <div style={{ color: "#94a3b8", marginTop: 4 }}>مرتبط بـ: {u.linked_to_name}</div>}</div><span>{userRoleLabels[u.role] || u.role}</span></div>)}</div>
       </div>
       </div>
     </div>
@@ -2129,11 +2708,25 @@ const navItems = [
 ];
 
 function Layout({ page, setPage, user, onLogout }) {
-  const visibleNavItems = navItems.filter((item) => {
-    if (user?.role === "training_supervisor" && item.id === "settings") return false;
-    if (user?.role === "training_supervisor" && item.id === "foundation") return false;
-    return true;
-  });
+  const effectiveRole = getEffectiveRole(user);
+  const visibleNavItems = effectiveRole === "trainer"
+    ? [
+        { id: "overview", label: "لوحتي", icon: "📊" },
+        { id: "courses", label: "دوراتي", icon: "🎓" },
+        { id: "earnings", label: "أرباحي", icon: "💰" },
+        { id: "ai", label: "مساعد AI", icon: "🤖" },
+      ]
+    : effectiveRole === "investor"
+      ? [
+          { id: "overview", label: "لوحتي", icon: "📊" },
+          { id: "investments", label: "استثماراتي", icon: "📢" },
+          { id: "ai", label: "مساعد AI", icon: "🤖" },
+        ]
+      : navItems.filter((item) => {
+          if (effectiveRole === "training_supervisor" && item.id === "settings") return false;
+          if (effectiveRole === "training_supervisor" && item.id === "foundation") return false;
+          return true;
+        });
 
   return (
     <div style={{ display: "flex", minHeight: "100vh", direction: "rtl", fontFamily: "'Cairo', 'Tajawal', sans-serif" }}>
@@ -2165,6 +2758,8 @@ function Layout({ page, setPage, user, onLogout }) {
           {page === "finance" && <FinancePage />}
           {page === "marketing" && <MarketingPage />}
           {page === "courses" && <CoursesPage />}
+          {page === "earnings" && <MyEarningsPage />}
+          {page === "investments" && <InvestorInvestmentsPage />}
           {page === "foundation" && <FoundationPage />}
           {page === "team" && <TeamPartnersPage />}
           {page === "targets" && <TargetsPage />}
