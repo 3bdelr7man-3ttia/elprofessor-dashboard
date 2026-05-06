@@ -86,6 +86,22 @@ const buildQuarterGroups = (months) => {
   }
   return groups;
 };
+const createCalculatorForm = () => ({
+  course_id: "",
+  revenue_egp: "",
+  students_count: 20,
+  price_per_student: 2500,
+  execution_cost_egp: 0,
+  supervision_cost_egp: 2000,
+  total_ads_budget_egp: 500 * 50,
+  investor_contribution_egp: 100 * 50,
+  trainer_percent: 35,
+  platform_percent: 35,
+  investor_percent: 30,
+  affiliate_mode: "percent",
+  affiliate_percent: 0,
+  affiliate_fixed_egp: 0,
+});
 
 // ============================================================
 // COMPONENTS
@@ -101,11 +117,11 @@ function KPICard({ label, value, sub, color = "#0f4c81", icon }) {
   );
 }
 
-function Modal({ open, onClose, title, children }) {
+function Modal({ open, onClose, title, children, maxWidth = 560, width = "90%" }) {
   if (!open) return null;
   return (
     <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center" }} onClick={onClose}>
-      <div style={{ background: "#fff", borderRadius: 16, padding: 32, maxWidth: 560, width: "90%", maxHeight: "85vh", overflow: "auto", boxShadow: "0 20px 60px rgba(0,0,0,0.15)" }} onClick={e => e.stopPropagation()}>
+      <div style={{ background: "#fff", borderRadius: 16, padding: 32, maxWidth, width, maxHeight: "85vh", overflow: "auto", boxShadow: "0 20px 60px rgba(0,0,0,0.15)" }} onClick={e => e.stopPropagation()}>
         <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 24 }}>
           <h2 style={{ fontSize: 20, fontWeight: 700, color: "#0f4c81" }}>{title}</h2>
           <button onClick={onClose} style={{ background: "none", border: "none", fontSize: 22, cursor: "pointer", color: "#9ca3af" }}>✕</button>
@@ -117,10 +133,17 @@ function Modal({ open, onClose, title, children }) {
 }
 
 function Input({ label, ...props }) {
+  const isNumber = props.type === "number";
+  const handleFocus = (e) => {
+    if (isNumber) {
+      requestAnimationFrame(() => e.target.select());
+    }
+    props.onFocus?.(e);
+  };
   return (
     <div style={{ marginBottom: 16 }}>
       <label style={{ display: "block", fontSize: 13, fontWeight: 600, color: "#374151", marginBottom: 6 }}>{label}</label>
-      <input {...props} style={{ width: "100%", padding: "10px 14px", borderRadius: 8, border: "1px solid #d1d5db", fontSize: 14, boxSizing: "border-box", ...props.style }} />
+      <input {...props} onFocus={handleFocus} style={{ width: "100%", padding: "10px 14px", borderRadius: 8, border: "1px solid #d1d5db", fontSize: 14, boxSizing: "border-box", ...props.style }} />
     </div>
   );
 }
@@ -222,19 +245,30 @@ function TabBar({ tabs, active, onChange }) {
 // LOGIN PAGE
 // ============================================================
 function LoginPage({ onLogin }) {
+  const [mode, setMode] = useState("login");
+  const [name, setName] = useState("");
   const [email, setEmail] = useState("admin@elprofessor.com");
   const [pass, setPass] = useState("admin123");
   const [err, setErr] = useState("");
+  const [msg, setMsg] = useState("");
   const [loading, setLoading] = useState(false);
 
   const submit = async () => {
-    setLoading(true); setErr("");
+    setLoading(true); setErr(""); setMsg("");
     try {
-      const r = await api.post("/auth/login", { email, password: pass });
-      if (r.error) { setErr(r.error); setLoading(false); return; }
-      api.token = r.token;
-      localStorage.setItem("token", r.token);
-      onLogin(r.user);
+      if (mode === "login") {
+        const r = await api.post("/auth/login", { email, password: pass });
+        if (r.error) { setErr(r.error); setLoading(false); return; }
+        api.token = r.token;
+        localStorage.setItem("token", r.token);
+        onLogin(r.user);
+      } else {
+        const r = await api.post("/auth/register", { name, email, password: pass });
+        if (r.error) { setErr(r.error); setLoading(false); return; }
+        setMsg(r.message || "تم إنشاء الحساب، وستقوم الإدارة بتحديد دورك.");
+        setMode("login");
+        setName("");
+      }
     } catch (e) { setErr("خطأ في الاتصال بالسيرفر"); }
     setLoading(false);
   };
@@ -246,12 +280,21 @@ function LoginPage({ onLogin }) {
           <div style={{ fontSize: 36, fontWeight: 900, color: BRAND.navy, marginBottom: 4 }}>البروفيسور</div>
           <div style={{ fontSize: 14, color: BRAND.gold, letterSpacing: 1, fontWeight: 800 }}>MANAGEMENT DASHBOARD</div>
         </div>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, background: "#f8fafc", borderRadius: 12, padding: 6, marginBottom: 18 }}>
+          <button onClick={() => { setMode("login"); setErr(""); setMsg(""); }} style={{ border: "none", borderRadius: 10, background: mode === "login" ? BRAND.navy : "transparent", color: mode === "login" ? "#fff" : "#475467", fontWeight: 800, padding: "10px 12px", cursor: "pointer" }}>تسجيل الدخول</button>
+          <button onClick={() => { setMode("register"); setErr(""); setMsg(""); setEmail(""); setPass(""); }} style={{ border: "none", borderRadius: 10, background: mode === "register" ? BRAND.navy : "transparent", color: mode === "register" ? "#fff" : "#475467", fontWeight: 800, padding: "10px 12px", cursor: "pointer" }}>إنشاء حساب</button>
+        </div>
+        {mode === "register" && <Input label="الاسم" value={name} onChange={e => setName(e.target.value)} />}
         <Input label="البريد الإلكتروني" value={email} onChange={e => setEmail(e.target.value)} type="email" />
         <Input label="كلمة المرور" value={pass} onChange={e => setPass(e.target.value)} type="password" onKeyDown={e => e.key === "Enter" && submit()} />
+        {msg && <div style={{ color: "#2d8659", fontSize: 13, marginBottom: 12, lineHeight: 1.7 }}>{msg}</div>}
         {err && <div style={{ color: "#c0392b", fontSize: 13, marginBottom: 12 }}>{err}</div>}
         <Btn onClick={submit} style={{ width: "100%", marginTop: 8, padding: 14, fontSize: 16 }} disabled={loading}>
-          {loading ? "جاري الدخول..." : "تسجيل الدخول"}
+          {loading ? (mode === "login" ? "جاري الدخول..." : "جاري إنشاء الحساب...") : (mode === "login" ? "تسجيل الدخول" : "إنشاء الحساب")}
         </Btn>
+        <div style={{ marginTop: 12, fontSize: 12, color: "#667085", lineHeight: 1.8 }}>
+          {mode === "login" ? "لو الحساب جديد، أنشئه أولًا ثم حدّد دوره من داخل الإعدادات كأدمن." : "بعد إنشاء الحساب، سيظهر للمشرف داخل الإعدادات ليحدد لك الدور المناسب وربطك بالمدرب أو المستثمر إن لزم."}
+        </div>
       </div>
     </div>
   );
@@ -279,6 +322,20 @@ function OverviewPage({ onNavigate }) {
   if ((effectiveRole === "trainer" || effectiveRole === "investor") && !roleData) return <PageLoader />;
   if (effectiveRole !== "trainer" && effectiveRole !== "investor" && !data) return <PageLoader />;
   if (effectiveRole !== "trainer" && effectiveRole !== "investor" && (data.error || !data.financial)) return <PageError message={data.error} onRetry={load} />;
+
+  if (effectiveRole === "viewer") {
+    return (
+      <div>
+        <h1 style={{ fontSize: 26, fontWeight: 900, color: BRAND.navy, marginBottom: 24 }}>بانتظار التفعيل</h1>
+        <PageSection title="تم إنشاء الحساب بنجاح">
+          <div style={{ fontSize: 14, color: "#475467", lineHeight: 1.9 }}>
+            حسابك موجود الآن داخل الداشبورد، والخطوة التالية أن يقوم الأدمن بتحديد الدور المناسب لك من صفحة المستخدمين.
+            بعد تفعيل الدور ستظهر لك الصفحات والبيانات المرتبطة بك تلقائيًا.
+          </div>
+        </PageSection>
+      </div>
+    );
+  }
 
   if (effectiveRole === "trainer") {
     const courses = roleData.courses;
@@ -1903,18 +1960,7 @@ function MarketingPage() {
   const [calculatorOpen, setCalculatorOpen] = useState(false);
   const [campaignForm, setCampaignForm] = useState({});
   const [investmentForm, setInvestmentForm] = useState({});
-  const [calculatorForm, setCalculatorForm] = useState({
-    revenue_egp: 0,
-    students_count: 20,
-    price_per_student: 2500,
-    room_cost_egp: 1800,
-    supervision_cost_egp: 2000,
-    ads_cost_egp: 500 * 50,
-    trainer_percent: 35,
-    platform_percent: 30,
-    investor_percent: 25,
-    affiliate_percent: 10,
-  });
+  const [calculatorForm, setCalculatorForm] = useState(createCalculatorForm);
   const [simulation, setSimulation] = useState(null);
 
   const load = useCallback(() => {
@@ -1940,6 +1986,8 @@ function MarketingPage() {
   };
 
   const saveInvestment = async () => {
+    if (!investmentForm.course_id) return alert("اختر الدورة أولًا.");
+    if (!investmentForm.investor_name) return alert("اكتب اسم المستثمر.");
     if (investmentForm.id) await api.put(`/investments/${investmentForm.id}`, investmentForm);
     else await api.post("/investments", investmentForm);
     setInvestmentModal(false);
@@ -1963,6 +2011,21 @@ function MarketingPage() {
     distributed: investments.reduce((sum, item) => sum + (item.due_egp || 0), 0),
     active: new Set(investments.filter(item => item.status !== "paid").map(item => item.investor_name)).size,
     avgRoi: investments.length ? investments.reduce((sum, item) => sum + (item.roi_percent || 0), 0) / investments.length : 0,
+  };
+  const selectedCalcCourse = courses.find((course) => course.id === Number(calculatorForm.course_id));
+  const applySimulationToInvestment = () => {
+    if (!calculatorForm.course_id) return alert("اختر الدورة أولًا حتى نربط الاستثمار بها.");
+    setInvestmentForm({
+      course_id: calculatorForm.course_id ? Number(calculatorForm.course_id) : "",
+      investor_name: investmentForm.investor_name || "",
+      amount_egp: Number(calculatorForm.investor_contribution_egp || 0),
+      amount_usd: Math.round(Number(calculatorForm.investor_contribution_egp || 0) / 50),
+      profit_percent: Number(calculatorForm.investor_percent || 0),
+      status: "accrued",
+      notes: `من الحاسبة: مساهمة ${egpLabel(calculatorForm.investor_contribution_egp)} من أصل ميزانية إعلان ${egpLabel(calculatorForm.total_ads_budget_egp)}${selectedCalcCourse ? ` لدورة ${selectedCalcCourse.title}` : ""}`,
+    });
+    setCalculatorOpen(false);
+    setInvestmentModal(true);
   };
 
   return (
@@ -2092,16 +2155,26 @@ function MarketingPage() {
             <PageSection title="حاسبة محاكاة الاستثمار" subtitle="أدخل الأرقام أو استخدمها كنموذج ثم طبّقها على دورة فعلية." action={<Btn variant="secondary" color={BRAND.navy} onClick={() => setCalculatorOpen(true)}>فتح الحاسبة</Btn>}>
               {simulation?.distribution ? (
                 <div style={{ display: "grid", gap: 10 }}>
-                  <div style={{ fontSize: 13, color: "#667085" }}>صافي الربح القابل للتوزيع</div>
-                  <div style={{ fontSize: 24, fontWeight: 900, color: BRAND.navy }}>{usdFromEgp(simulation.distribution.net_distributable_profit, 50)}</div>
-                  <div style={{ fontSize: 12, color: "#94a3b8" }}>{egpLabel(simulation.distribution.net_distributable_profit)}</div>
+                  <div style={{ fontSize: 13, color: "#667085" }}>العائد المتوقع على مساهمة هذا المستثمر</div>
+                  <div style={{ fontSize: 24, fontWeight: 900, color: BRAND.navy }}>{usdFromEgp(simulation.distribution.investor_due_egp, 50)}</div>
+                  <div style={{ fontSize: 12, color: "#94a3b8" }}>{egpLabel(simulation.distribution.investor_due_egp)}</div>
                   {simulation.distribution.warning && <div style={{ padding: 12, background: "#fff1f2", color: "#b42318", borderRadius: 10, fontSize: 13 }}>{simulation.distribution.warning}</div>}
                   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                    <div style={{ border: "1px solid #edf2f7", borderRadius: 12, padding: 12 }}>
+                      <div style={{ fontSize: 12, color: "#667085" }}>ميزانية الإعلان الكلية</div>
+                      <div style={{ fontWeight: 900, color: BRAND.navy, marginTop: 4 }}>{usdFromEgp(simulation.inputs?.total_ads_budget_egp, 50)}</div>
+                      <div style={{ fontSize: 12, color: "#94a3b8" }}>{egpLabel(simulation.inputs?.total_ads_budget_egp)}</div>
+                    </div>
+                    <div style={{ border: "1px solid #edf2f7", borderRadius: 12, padding: 12 }}>
+                      <div style={{ fontSize: 12, color: "#667085" }}>مساهمة هذا المستثمر</div>
+                      <div style={{ fontWeight: 900, color: BRAND.navy, marginTop: 4 }}>{usdFromEgp(simulation.inputs?.investor_contribution_egp, 50)}</div>
+                      <div style={{ fontSize: 12, color: "#94a3b8" }}>{simulation.distribution?.investor_share_of_budget_percent || 0}% من ميزانية الإعلان</div>
+                    </div>
                     {[
                       ["المدرب", simulation.distribution.allocations_egp?.trainer, simulation.distribution.trainer_percent],
                       ["المنصة", simulation.distribution.allocations_egp?.platform, simulation.distribution.platform_percent],
-                      ["المستثمر", simulation.distribution.allocations_egp?.investor, simulation.distribution.investor_percent],
-                      ["الأفلييت", simulation.distribution.allocations_egp?.affiliate, simulation.distribution.affiliate_percent],
+                      ["حصة المستثمرين كاملة", simulation.distribution.investor_pool_egp, simulation.distribution.investor_percent],
+                      ["نصيب هذا المستثمر", simulation.distribution.investor_due_egp, simulation.distribution.investor_share_of_budget_percent],
                     ].map(([label, amount, percent]) => (
                       <div key={label} style={{ border: "1px solid #edf2f7", borderRadius: 12, padding: 12 }}>
                         <div style={{ fontSize: 12, color: "#667085" }}>{label}</div>
@@ -2148,37 +2221,60 @@ function MarketingPage() {
       </Modal>
 
       <Modal open={investmentModal} onClose={() => setInvestmentModal(false)} title={investmentForm.id ? "تعديل استثمار" : "استثمار جديد"}>
-        <Select label="الدورة" value={investmentForm.course_id || ""} onChange={e => setInvestmentForm({ ...investmentForm, course_id: +e.target.value })} options={courses.map(course => ({ value: course.id, label: course.title }))} />
+        <Select label="الدورة" value={investmentForm.course_id || ""} onChange={e => setInvestmentForm({ ...investmentForm, course_id: e.target.value ? +e.target.value : "" })} options={[{ value: "", label: "اختر الدورة" }, ...courses.map(course => ({ value: course.id, label: course.title }))]} />
         <Input label="اسم المستثمر" value={investmentForm.investor_name || ""} onChange={e => setInvestmentForm({ ...investmentForm, investor_name: e.target.value })} />
         <CurrencyFields form={investmentForm} setForm={setInvestmentForm} rate={50} egpLabel="المبلغ المستثمر (ج.م)" usdLabel="المبلغ المستثمر ($)" />
-        <Input label="نسبته من الأرباح %" type="number" value={investmentForm.profit_percent || 0} onChange={e => setInvestmentForm({ ...investmentForm, profit_percent: +e.target.value })} />
+        <Input label="حصة المستثمر من الأرباح %" type="number" value={investmentForm.profit_percent || 0} onChange={e => setInvestmentForm({ ...investmentForm, profit_percent: +e.target.value })} />
         <Select label="الحالة" value={investmentForm.status || "accrued"} onChange={e => setInvestmentForm({ ...investmentForm, status: e.target.value })} options={Object.entries(investmentStatusLabels).map(([value, label]) => ({ value, label }))} />
         <Input label="ملاحظات" value={investmentForm.notes || ""} onChange={e => setInvestmentForm({ ...investmentForm, notes: e.target.value })} />
         <Btn onClick={saveInvestment} color={BRAND.navy} style={{ width: "100%", marginTop: 8 }}>حفظ الاستثمار</Btn>
       </Modal>
 
-      <Modal open={calculatorOpen} onClose={() => setCalculatorOpen(false)} title="حاسبة محاكاة الاستثمار">
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20 }}>
+      <Modal open={calculatorOpen} onClose={() => setCalculatorOpen(false)} title="حاسبة محاكاة الاستثمار" maxWidth={1120} width="95%">
+        <div style={{ display: "grid", gridTemplateColumns: "minmax(360px, 1fr) minmax(360px, 1fr)", gap: 20, alignItems: "start" }}>
           <div>
-            <Input label="إيراد الدورة المتوقع (ج.م)" type="number" value={calculatorForm.revenue_egp || 0} onChange={e => setCalculatorForm({ ...calculatorForm, revenue_egp: +e.target.value })} />
+            <Select label="الدورة" value={calculatorForm.course_id || ""} onChange={e => setCalculatorForm({ ...calculatorForm, course_id: e.target.value })} options={[{ value: "", label: "اختر دورة أو اتركها عامة" }, ...courses.map(course => ({ value: course.id, label: course.title }))]} />
+            <Input label="إيراد الدورة المتوقع (ج.م)" type="number" value={calculatorForm.revenue_egp ?? ""} onChange={e => setCalculatorForm({ ...calculatorForm, revenue_egp: e.target.value === "" ? "" : +e.target.value })} placeholder="اتركه فارغًا ليُحسب من الطلاب × سعر الاشتراك" />
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-              <Input label="عدد الطلاب المتوقع" type="number" value={calculatorForm.students_count || 0} onChange={e => setCalculatorForm({ ...calculatorForm, students_count: +e.target.value })} />
-              <Input label="سعر الاشتراك" type="number" value={calculatorForm.price_per_student || 0} onChange={e => setCalculatorForm({ ...calculatorForm, price_per_student: +e.target.value })} />
+              <Input label="عدد الطلاب المتوقع" type="number" value={calculatorForm.students_count ?? 0} onChange={e => setCalculatorForm({ ...calculatorForm, students_count: +e.target.value })} />
+              <Input label="سعر الاشتراك" type="number" value={calculatorForm.price_per_student ?? 0} onChange={e => setCalculatorForm({ ...calculatorForm, price_per_student: +e.target.value })} />
             </div>
-            <Input label="مصاريف القاعة" type="number" value={calculatorForm.room_cost_egp || 0} onChange={e => setCalculatorForm({ ...calculatorForm, room_cost_egp: +e.target.value })} />
-            <Input label="الإشراف التدريبي" type="number" value={calculatorForm.supervision_cost_egp || 0} onChange={e => setCalculatorForm({ ...calculatorForm, supervision_cost_egp: +e.target.value })} />
-            <Input label="مبلغ الإعلانات (المستثمر)" type="number" value={calculatorForm.ads_cost_egp || 0} onChange={e => setCalculatorForm({ ...calculatorForm, ads_cost_egp: +e.target.value })} />
+            <Input label="مصاريف التنفيذ العامة" type="number" value={calculatorForm.execution_cost_egp ?? 0} onChange={e => setCalculatorForm({ ...calculatorForm, execution_cost_egp: +e.target.value })} placeholder="مثل Zoom أو تجهيزات أو قاعة إن وجدت" />
+            <Input label="الإشراف التدريبي" type="number" value={calculatorForm.supervision_cost_egp ?? 0} onChange={e => setCalculatorForm({ ...calculatorForm, supervision_cost_egp: +e.target.value })} />
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+              <Input label="ميزانية الإعلان الكلية للدورة" type="number" value={calculatorForm.total_ads_budget_egp ?? 0} onChange={e => setCalculatorForm({ ...calculatorForm, total_ads_budget_egp: +e.target.value })} />
+              <Input label="مساهمة هذا المستثمر" type="number" value={calculatorForm.investor_contribution_egp ?? 0} onChange={e => setCalculatorForm({ ...calculatorForm, investor_contribution_egp: +e.target.value })} />
+            </div>
+            <div style={{ padding: 14, borderRadius: 12, border: "1px solid #E6D7A8", background: "#F7F4EB", marginBottom: 16, fontSize: 13, color: "#5b6475", lineHeight: 1.8 }}>
+              الفكرة هنا: الدورة تحتاج ميزانية إعلان كاملة، لكن المستثمر الحالي قد يضخ جزءًا منها فقط. الحاسبة ستقدّر نصيبه من حصة المستثمرين بحسب نسبة مساهمته من الميزانية الكلية.
+            </div>
             {[
               ["نسبة المدرب", "trainer_percent", 25, 40],
               ["نسبة المنصة", "platform_percent", 25, 35],
-              ["نسبة المستثمر", "investor_percent", 15, 35],
-              ["نسبة الأفلييت", "affiliate_percent", 0, 10],
+              ["حصة المستثمرين من صافي الربح", "investor_percent", 15, 35],
             ].map(([label, key, min, max]) => (
               <div key={key} style={{ marginBottom: 14 }}>
                 <label style={{ display: "block", fontSize: 13, fontWeight: 700, marginBottom: 6 }}>{label}: {calculatorForm[key]}%</label>
                 <input type="range" min={min} max={max} value={calculatorForm[key]} onChange={e => setCalculatorForm({ ...calculatorForm, [key]: +e.target.value })} style={{ width: "100%" }} />
               </div>
             ))}
+            <Select
+              label="طريقة احتساب الأفلييت"
+              value={calculatorForm.affiliate_mode || "percent"}
+              onChange={e => setCalculatorForm({ ...calculatorForm, affiliate_mode: e.target.value })}
+              options={[
+                { value: "percent", label: "كنسبة من صافي الربح" },
+                { value: "fixed", label: "كمبلغ ثابت" },
+              ]}
+            />
+            {calculatorForm.affiliate_mode === "percent" ? (
+              <div style={{ marginBottom: 14 }}>
+                <label style={{ display: "block", fontSize: 13, fontWeight: 700, marginBottom: 6 }}>نسبة الأفلييت: {calculatorForm.affiliate_percent}%</label>
+                <input type="range" min={0} max={10} value={calculatorForm.affiliate_percent} onChange={e => setCalculatorForm({ ...calculatorForm, affiliate_percent: +e.target.value })} style={{ width: "100%" }} />
+              </div>
+            ) : (
+              <Input label="مبلغ الأفلييت الثابت" type="number" value={calculatorForm.affiliate_fixed_egp ?? 0} onChange={e => setCalculatorForm({ ...calculatorForm, affiliate_fixed_egp: +e.target.value })} />
+            )}
           </div>
           <div>
             <PageSection title="نتائج المحاكاة" subtitle="تتحدث لحظيًا مع كل تعديل.">
@@ -2191,12 +2287,24 @@ function MarketingPage() {
                     <KPICard label="ROI المستثمر" value={`${simulation.distribution?.investor_roi_percent || 0}%`} color={BRAND.gold} />
                   </div>
                   {simulation.distribution?.warning && <div style={{ padding: 12, background: "#fff1f2", color: "#b42318", borderRadius: 10, fontSize: 13, marginBottom: 16 }}>{simulation.distribution.warning}</div>}
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 16 }}>
+                    <div style={{ border: "1px solid #edf2f7", borderRadius: 12, padding: 14 }}>
+                      <div style={{ fontSize: 12, color: "#667085" }}>حصة المستثمرين الكلية</div>
+                      <div style={{ fontSize: 20, fontWeight: 900, color: BRAND.navy, marginTop: 6 }}>{usdFromEgp(simulation.distribution?.investor_pool_egp, 50)}</div>
+                      <div style={{ fontSize: 12, color: "#94a3b8" }}>{simulation.distribution?.investor_percent}% من صافي الربح القابل للتوزيع</div>
+                    </div>
+                    <div style={{ border: "1px solid #edf2f7", borderRadius: 12, padding: 14 }}>
+                      <div style={{ fontSize: 12, color: "#667085" }}>نصيب هذا المستثمر</div>
+                      <div style={{ fontSize: 20, fontWeight: 900, color: "#2d8659", marginTop: 6 }}>{usdFromEgp(simulation.distribution?.investor_due_egp, 50)}</div>
+                      <div style={{ fontSize: 12, color: "#94a3b8" }}>{simulation.distribution?.investor_share_of_budget_percent || 0}% من ميزانية الإعلان</div>
+                    </div>
+                  </div>
                   <ResponsiveContainer width="100%" height={220}>
                     <PieChart>
                       <Pie data={[
                         { name: "المدرب", value: simulation.distribution.allocations_egp?.trainer || 0 },
                         { name: "المنصة", value: simulation.distribution.allocations_egp?.platform || 0 },
-                        { name: "المستثمر", value: simulation.distribution.allocations_egp?.investor || 0 },
+                        { name: "حصة المستثمرين", value: simulation.distribution.allocations_egp?.investor || 0 },
                         { name: "الأفلييت", value: simulation.distribution.allocations_egp?.affiliate || 0 },
                       ]} dataKey="value" cx="50%" cy="50%" outerRadius={78} label>
                         {[0, 1, 2, 3].map(index => <Cell key={index} fill={COLORS[index]} />)}
@@ -2204,9 +2312,32 @@ function MarketingPage() {
                       <Tooltip formatter={value => egpLabel(value)} />
                     </PieChart>
                   </ResponsiveContainer>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginTop: 16 }}>
+                    <div style={{ border: "1px solid #edf2f7", borderRadius: 12, padding: 14 }}>
+                      <div style={{ fontSize: 12, color: "#667085" }}>المدرب</div>
+                      <div style={{ fontWeight: 900, color: BRAND.navy, marginTop: 4 }}>{egpLabel(simulation.distribution.allocations_egp?.trainer || 0)}</div>
+                    </div>
+                    <div style={{ border: "1px solid #edf2f7", borderRadius: 12, padding: 14 }}>
+                      <div style={{ fontSize: 12, color: "#667085" }}>المنصة</div>
+                      <div style={{ fontWeight: 900, color: BRAND.navy, marginTop: 4 }}>{egpLabel(simulation.distribution.allocations_egp?.platform || 0)}</div>
+                    </div>
+                    <div style={{ border: "1px solid #edf2f7", borderRadius: 12, padding: 14 }}>
+                      <div style={{ fontSize: 12, color: "#667085" }}>الأفلييت</div>
+                      <div style={{ fontWeight: 900, color: BRAND.navy, marginTop: 4 }}>{egpLabel(simulation.distribution.allocations_egp?.affiliate || 0)}</div>
+                      <div style={{ fontSize: 12, color: "#94a3b8" }}>
+                        {simulation.distribution?.affiliate_mode === "fixed"
+                          ? "مبلغ ثابت"
+                          : `${simulation.distribution?.affiliate_percent || 0}% من صافي الربح`}
+                      </div>
+                    </div>
+                    <div style={{ border: "1px solid #edf2f7", borderRadius: 12, padding: 14 }}>
+                      <div style={{ fontSize: 12, color: "#667085" }}>الربح المتبقي بعد الأفلييت</div>
+                      <div style={{ fontWeight: 900, color: BRAND.navy, marginTop: 4 }}>{egpLabel(simulation.distribution?.post_affiliate_pool_egp || 0)}</div>
+                    </div>
+                  </div>
                   <div style={{ display: "flex", gap: 10, marginTop: 12 }}>
-                    <Btn color={BRAND.navy} onClick={() => setCalculatorOpen(false)} style={{ flex: 1 }}>تطبيق على دورة</Btn>
-                    <Btn variant="secondary" color={BRAND.gold} onClick={() => setCalculatorOpen(false)} style={{ flex: 1 }}>حفظ كنموذج</Btn>
+                    <Btn color={BRAND.navy} onClick={applySimulationToInvestment} style={{ flex: 1 }}>تطبيق على استثمار جديد</Btn>
+                    <Btn variant="secondary" color={BRAND.gold} onClick={() => setCalculatorForm(createCalculatorForm())} style={{ flex: 1 }}>إعادة ضبط الحاسبة</Btn>
                   </div>
                 </div>
               ) : <EmptyState title="الحاسبة تعمل" text="أدخل الأرقام على اليمين لتظهر نتائج التوزيع." />}
@@ -2636,12 +2767,17 @@ function SettingsPage() {
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
   };
+  const refreshUsers = () => api.get("/users").then(data => setUsers(safeArray(data)));
   const addUser = async () => {
     const r = await api.post("/users", newUser);
-    if (!r.error) { setNewUser({ role: "viewer", linked_to_name: "" }); api.get("/users").then(data => setUsers(safeArray(data))); }
+    if (!r.error) { setNewUser({ role: "viewer", linked_to_name: "" }); refreshUsers(); }
+  };
+  const updateUser = async (editedUser) => {
+    const r = await api.put(`/users/${editedUser.id}`, editedUser);
+    if (!r.error) refreshUsers();
   };
   const rate = Number(settings.exchange_rate || 50);
-  const isAdmin = user?.role === "admin";
+  const isAdmin = getEffectiveRole(user) === "admin";
 
   if (!isAdmin) {
     return <PageError message="هذه الصفحة متاحة للأدمن فقط." onRetry={() => window.location.reload()} />;
@@ -2678,7 +2814,31 @@ function SettingsPage() {
         <Select label="الرول" value={newUser.role || "viewer"} onChange={e => setNewUser({ ...newUser, role: e.target.value })} options={Object.entries(userRoleLabels).map(([value, label]) => ({ value, label }))} />
         <Input label="مرتبط بـ" value={newUser.linked_to_name || ""} onChange={e => setNewUser({ ...newUser, linked_to_name: e.target.value })} placeholder="اسم المدرب أو المستثمر إن وجد" />
         <Btn onClick={addUser} color={BRAND.gold} style={{ color: BRAND.navy }}>إضافة مستخدم</Btn>
-        <div style={{ marginTop: 18 }}>{users.map(u => <div key={u.id} style={{ display: "flex", justifyContent: "space-between", borderTop: "1px solid #f3f4f6", padding: "10px 0", fontSize: 13 }}><div><strong>{u.name}</strong><div style={{ color: "#667085", marginTop: 4 }}>{u.email}</div>{u.linked_to_name && <div style={{ color: "#94a3b8", marginTop: 4 }}>مرتبط بـ: {u.linked_to_name}</div>}</div><span>{userRoleLabels[u.role] || u.role}</span></div>)}</div>
+        <div style={{ marginTop: 12, fontSize: 12, color: "#667085", lineHeight: 1.8 }}>
+          أي شخص يمكنه الآن إنشاء حساب من شاشة الدخول، ثم يظهر هنا مباشرة لتحديد الدور وربطه بالمدرب أو المستثمر المناسب.
+        </div>
+        <div style={{ marginTop: 18, display: "grid", gap: 12 }}>
+          {users.map(u => (
+            <div key={u.id} style={{ borderTop: "1px solid #f3f4f6", paddingTop: 14 }}>
+              <div style={{ display: "grid", gridTemplateColumns: "1.1fr 1.2fr", gap: 12 }}>
+                <Input label="الاسم" value={u.name || ""} onChange={e => setUsers(users.map(item => item.id === u.id ? { ...item, name: e.target.value } : item))} />
+                <Input label="البريد الإلكتروني" value={u.email || ""} onChange={e => setUsers(users.map(item => item.id === u.id ? { ...item, email: e.target.value } : item))} />
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                <Select label="الدور" value={u.role || "viewer"} onChange={e => setUsers(users.map(item => item.id === u.id ? { ...item, role: e.target.value, dashboard_role: e.target.value } : item))} options={Object.entries(userRoleLabels).map(([value, label]) => ({ value, label }))} />
+                <Input label="مرتبط بـ" value={u.linked_to_name || ""} onChange={e => setUsers(users.map(item => item.id === u.id ? { ...item, linked_to_name: e.target.value } : item))} placeholder="اسم المدرب أو المستثمر إن وجد" />
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr auto auto", gap: 12, alignItems: "end" }}>
+                <Input label="تغيير كلمة المرور (اختياري)" type="password" value={u.password || ""} onChange={e => setUsers(users.map(item => item.id === u.id ? { ...item, password: e.target.value } : item))} />
+                <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: "#475467", marginBottom: 16 }}>
+                  <input type="checkbox" checked={u.is_active !== false} onChange={e => setUsers(users.map(item => item.id === u.id ? { ...item, is_active: e.target.checked } : item))} />
+                  نشط
+                </label>
+                <Btn onClick={() => updateUser({ ...u, dashboard_role: u.role })} color={BRAND.navy} style={{ marginBottom: 16 }}>حفظ</Btn>
+              </div>
+            </div>
+          ))}
+        </div>
       </div>
       </div>
     </div>
@@ -2722,6 +2882,10 @@ function Layout({ page, setPage, user, onLogout }) {
           { id: "investments", label: "استثماراتي", icon: "📢" },
           { id: "ai", label: "مساعد AI", icon: "🤖" },
         ]
+      : effectiveRole === "viewer"
+        ? [
+            { id: "overview", label: "بانتظار التفعيل", icon: "⏳" },
+          ]
       : navItems.filter((item) => {
           if (effectiveRole === "training_supervisor" && item.id === "settings") return false;
           if (effectiveRole === "training_supervisor" && item.id === "foundation") return false;

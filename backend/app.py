@@ -445,41 +445,79 @@ def simulate_distribution(payload, rate):
     students = float(payload.get('students_count') or 0)
     price_per_student = float(payload.get('price_per_student') or 0)
     projected_revenue = float(payload.get('revenue_egp') or 0) or students * price_per_student
-    room_cost = float(payload.get('room_cost_egp') or 0)
+    execution_cost = float(payload.get('execution_cost_egp') or payload.get('room_cost_egp') or 0)
     supervision_cost = float(payload.get('supervision_cost_egp') or 0)
-    ads_cost = float(payload.get('ads_cost_egp') or 0)
-    direct_costs = room_cost + supervision_cost + ads_cost
+    ads_cost = float(payload.get('total_ads_budget_egp') or payload.get('ads_cost_egp') or 0)
+    investor_contribution = float(payload.get('investor_contribution_egp') or ads_cost or 0)
+    affiliate_mode = (payload.get('affiliate_mode') or 'percent').strip()
+    affiliate_fixed = float(payload.get('affiliate_fixed_egp') or 0)
+    direct_costs = execution_cost + supervision_cost + ads_cost
     net_profit = max(0, projected_revenue - direct_costs)
     trainer_percent = float(payload.get('trainer_percent') or 0)
     platform_percent = float(payload.get('platform_percent') or 0)
     investor_percent = float(payload.get('investor_percent') or 0)
     affiliate_percent = float(payload.get('affiliate_percent') or 0)
-    total_percent = trainer_percent + platform_percent + investor_percent + affiliate_percent
-    allocations = {
-        'trainer': round(net_profit * trainer_percent / 100),
-        'platform': round(net_profit * platform_percent / 100),
-        'investor': round(net_profit * investor_percent / 100),
-        'affiliate': round(net_profit * affiliate_percent / 100),
-    }
-    roi_percent = round(((allocations['investor'] - ads_cost) / ads_cost) * 100, 1) if ads_cost else 0
+    warnings = []
+    if ads_cost < 0 or investor_contribution < 0:
+        warnings.append('قيم الإعلان والمساهمة يجب أن تكون موجبة')
+    if ads_cost and investor_contribution > ads_cost:
+        warnings.append('مساهمة المستثمر أكبر من ميزانية الإعلان الكلية')
+    if affiliate_mode == 'fixed':
+        total_percent = trainer_percent + platform_percent + investor_percent
+        affiliate_allocation = min(net_profit, max(0, affiliate_fixed))
+        distributable_base = max(0, net_profit - affiliate_allocation)
+        allocations = {
+            'trainer': round(distributable_base * trainer_percent / 100),
+            'platform': round(distributable_base * platform_percent / 100),
+            'investor': round(distributable_base * investor_percent / 100),
+            'affiliate': round(affiliate_allocation),
+        }
+        if affiliate_fixed > net_profit:
+            warnings.append('مبلغ الأفلييت أكبر من صافي الربح المتوقع، فتم تقييده بصافي الربح')
+    else:
+        total_percent = trainer_percent + platform_percent + investor_percent + affiliate_percent
+        distributable_base = net_profit
+        allocations = {
+            'trainer': round(distributable_base * trainer_percent / 100),
+            'platform': round(distributable_base * platform_percent / 100),
+            'investor': round(distributable_base * investor_percent / 100),
+            'affiliate': round(distributable_base * affiliate_percent / 100),
+        }
+    contribution_share = (investor_contribution / ads_cost) if ads_cost else (1 if investor_contribution > 0 else 0)
+    effective_contribution_share = max(0, min(1, contribution_share))
+    investor_due = round((allocations['investor'] or 0) * effective_contribution_share)
+    roi_percent = round(((investor_due - investor_contribution) / investor_contribution) * 100, 1) if investor_contribution else 0
+    valid_total = abs(total_percent - 100) < 0.001
+    if not valid_total:
+        warnings.append('مجموع نسب التوزيع يجب أن يساوي 100%')
     return {
         'inputs': {
             'projected_revenue_egp': round(projected_revenue),
             'students_count': round(students),
             'price_per_student': round(price_per_student),
+            'execution_cost_egp': round(execution_cost),
+            'supervision_cost_egp': round(supervision_cost),
+            'total_ads_budget_egp': round(ads_cost),
+            'investor_contribution_egp': round(investor_contribution),
             'direct_costs_egp': round(direct_costs),
         },
         'distribution': {
+            'affiliate_mode': affiliate_mode,
             'trainer_percent': trainer_percent,
             'platform_percent': platform_percent,
             'investor_percent': investor_percent,
             'affiliate_percent': affiliate_percent,
+            'affiliate_fixed_egp': round(affiliate_fixed),
             'total_percent': round(total_percent, 2),
-            'valid': abs(total_percent - 100) < 0.001,
+            'valid': valid_total,
             'net_distributable_profit': round(net_profit),
+            'post_affiliate_pool_egp': round(distributable_base),
             'allocations_egp': allocations,
+            'investor_pool_egp': round(allocations['investor']),
+            'investor_due_egp': investor_due,
+            'investor_share_of_budget_percent': round(effective_contribution_share * 100, 1),
             'investor_roi_percent': roi_percent,
-            'warning': '' if abs(total_percent - 100) < 0.001 else 'مجموع نسب التوزيع يجب أن يساوي 100%',
+            'warning': ' | '.join(warnings),
         },
     }
 
@@ -544,6 +582,29 @@ def login():
     dashboard_role = user_dashboard_role(user)
     return jsonify({'token': token, 'user': {'id': user.id, 'email': user.email, 'name': user.name, 'role': dashboard_role, 'dashboard_role': dashboard_role, 'linked_to_name': user_linked_name(user)}})
 
+@app.route('/api/auth/register', methods=['POST'])
+def register():
+    data = request.json or {}
+    email = (data.get('email') or '').lower().strip()
+    password = data.get('password') or ''
+    name = (data.get('name') or '').strip()
+    if not email or not password or not name:
+        return jsonify({'error': 'الاسم والبريد وكلمة المرور مطلوبة'}), 400
+    if User.query.filter_by(email=email).first():
+        return jsonify({'error': 'هذا البريد مسجل بالفعل'}), 409
+    user = User(
+        email=email,
+        password_hash=generate_password_hash(password, method='pbkdf2:sha256'),
+        name=name,
+        role='viewer',
+        dashboard_role='viewer',
+        linked_to_name='',
+        is_active=True,
+    )
+    db.session.add(user)
+    db.session.commit()
+    return jsonify({'message': 'تم إنشاء الحساب. يمكن للإدارة الآن ضبط دورك داخل الداشبورد.'}), 201
+
 @app.route('/api/auth/me', methods=['GET'])
 @token_required
 def me():
@@ -582,6 +643,25 @@ def create_user():
     db.session.add(user)
     db.session.commit()
     return jsonify({'id': user.id, 'message': 'تم إضافة المستخدم'}), 201
+
+@app.route('/api/users/<int:id>', methods=['PUT'])
+@token_required
+@roles_required('admin')
+def update_user(id):
+    user = User.query.get_or_404(id)
+    d = request.json or {}
+    for key in ['name', 'email', 'role', 'dashboard_role', 'linked_to_name', 'is_active']:
+        if key in d:
+            value = d[key]
+            if key == 'email' and value:
+                value = value.lower().strip()
+            if key in ('role', 'dashboard_role') and not value:
+                value = 'viewer'
+            setattr(user, key, value)
+    if d.get('password'):
+        user.password_hash = generate_password_hash(d['password'], method='pbkdf2:sha256')
+    db.session.commit()
+    return jsonify({'message': 'تم تحديث المستخدم'})
 
 # ============================================================
 # DASHBOARD / KPIs
