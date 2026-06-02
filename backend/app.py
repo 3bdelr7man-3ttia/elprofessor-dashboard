@@ -843,6 +843,67 @@ def me():
     dashboard_role = user_dashboard_role(g.user)
     return jsonify({'id': g.user.id, 'email': g.user.email, 'name': g.user.name, 'role': dashboard_role, 'dashboard_role': dashboard_role, 'linked_to_name': user_linked_name(g.user), 'preferred_currency': (g.user.preferred_currency or 'AUTO')})
 
+# --- Single sign-on FROM the main platform (one identity reaches the BI brain) ---
+PLATFORM_API_URL = os.environ.get('PLATFORM_API_URL', 'https://api.elprofessor.net').rstrip('/')
+PLATFORM_SSO_AUD = 'elprofessor-dashboard'
+# Platform system role -> this dashboard's role.
+_PLATFORM_ROLE_MAP = {'admin': 'admin', 'staff': 'admin', 'investor': 'investor'}
+
+@app.route('/api/auth/sso', methods=['POST'])
+def sso_login():
+    data = request.json or {}
+    token = (data.get('sso') or data.get('token') or '').strip()
+    if not token:
+        return jsonify({'error': 'رمز الدخول مفقود'}), 400
+
+    # Verify the signed token server-to-server against the platform (same pattern
+    # as the WordPress academy bridge) — no shared secret needed on this side.
+    try:
+        resp = requests.post(f"{PLATFORM_API_URL}/api/lms/sso/verify", json={'token': token}, timeout=12)
+    except Exception:
+        return jsonify({'error': 'تعذر التحقق من تسجيل الدخول'}), 502
+    if resp.status_code != 200:
+        return jsonify({'error': 'رمز الدخول غير صالح أو منتهي'}), 401
+    body = resp.json() if resp.content else {}
+    if body.get('aud') != PLATFORM_SSO_AUD:
+        return jsonify({'error': 'هذا الرمز ليس مخصصًا لهذه اللوحة'}), 401
+
+    platform_user = body.get('user') or {}
+    email = (platform_user.get('email') or '').lower().strip()
+    if not email:
+        return jsonify({'error': 'هوية الدخول غير صالحة'}), 401
+    platform_role = (platform_user.get('role') or '').strip().lower()
+    mapped_role = _PLATFORM_ROLE_MAP.get(platform_role, 'viewer')
+
+    user = User.query.filter_by(email=email).first()
+    if not user:
+        # First arrival via SSO: create a passwordless account (login is via the platform).
+        user = User(
+            email=email,
+            password_hash=generate_password_hash(secrets.token_hex(32), method='pbkdf2:sha256'),
+            name=(platform_user.get('full_name') or email),
+            role=mapped_role,
+            dashboard_role=mapped_role,
+            linked_to_name='',
+            preferred_currency='AUTO',
+            is_active=True,
+        )
+        db.session.add(user)
+    else:
+        # Don't override an explicit dashboard role the admin set here; only fill gaps.
+        if not (getattr(user, 'dashboard_role', None) or '').strip():
+            user.dashboard_role = mapped_role
+        if not user.is_active:
+            user.is_active = True
+    db.session.commit()
+
+    token_out = jwt.encode({
+        'user_id': user.id,
+        'exp': datetime.datetime.utcnow() + datetime.timedelta(days=30)
+    }, app.config['SECRET_KEY'], algorithm='HS256')
+    role_out = user_dashboard_role(user)
+    return jsonify({'token': token_out, 'user': {'id': user.id, 'email': user.email, 'name': user.name, 'role': role_out, 'dashboard_role': role_out, 'linked_to_name': user_linked_name(user), 'preferred_currency': (user.preferred_currency or 'AUTO')}})
+
 @app.route('/api/users', methods=['GET'])
 @token_required
 @roles_required('admin')
