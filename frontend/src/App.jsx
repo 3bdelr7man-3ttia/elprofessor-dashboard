@@ -3605,6 +3605,24 @@ export default function App() {
   const [checking, setChecking] = useState(true);
 
   useEffect(() => {
+    // Single sign-on from the main platform: it redirects here with ?sso=<token>.
+    const params = new URLSearchParams(window.location.search);
+    const ssoToken = params.get("sso");
+    if (ssoToken) {
+      api.post("/auth/sso", { sso: ssoToken }).then(r => {
+        if (r.token) {
+          api.token = r.token;
+          localStorage.setItem("token", r.token);
+          setUser(r.user);
+        }
+        // Strip the token from the URL so it isn't re-used or bookmarked.
+        params.delete("sso");
+        const qs = params.toString();
+        window.history.replaceState({}, "", window.location.pathname + (qs ? `?${qs}` : ""));
+        setChecking(false);
+      }).catch(() => setChecking(false));
+      return;
+    }
     const t = localStorage.getItem("token");
     if (t) {
       api.token = t;
