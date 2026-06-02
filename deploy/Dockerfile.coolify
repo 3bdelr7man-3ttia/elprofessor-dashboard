@@ -1,3 +1,15 @@
+# Coolify build — builds the app straight from the repo source.
+# (Previously this downloaded a one-off tarball from tmpfiles.org, which expires
+#  and made the deploy fail → 503. Now it builds the current code every time.)
+# Build context must be the REPO ROOT.
+
+FROM node:20-slim AS frontend-build
+WORKDIR /app/frontend
+COPY frontend/package*.json ./
+RUN npm ci
+COPY frontend ./
+RUN npm run build
+
 FROM python:3.12-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
@@ -7,24 +19,20 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
+COPY backend/requirements.txt /tmp/requirements.txt
 RUN apt-get update \
     && apt-get install -y --no-install-recommends ca-certificates curl \
-    && rm -rf /var/lib/apt/lists/*
-
-RUN pip install --no-cache-dir \
-    flask==3.0.0 \
-    flask-cors==4.0.0 \
-    flask-sqlalchemy==3.1.1 \
-    PyJWT==2.8.0 \
-    gunicorn==21.1.0 \
-    python-dotenv==1.0.0 \
-    requests==2.32.3
-
-RUN curl -fsSL 'https://tmpfiles.org/dl/36622096/elprofessor-dashboard-app-v7.tgz' -o /tmp/app.tgz \
-    && tar -xzf /tmp/app.tgz -C /app \
-    && rm /tmp/app.tgz \
+    && rm -rf /var/lib/apt/lists/* \
+    && pip install --no-cache-dir -r /tmp/requirements.txt \
     && mkdir -p /data
+
+COPY backend/app.py /app/app.py
+COPY --from=frontend-build /app/frontend/dist /app/dist
 
 EXPOSE 8080
 
-CMD gunicorn app:app -b 0.0.0.0:${PORT:-8080} -w 1 --timeout 120
+# Container health: the app serves /api/health.
+HEALTHCHECK --interval=30s --timeout=10s --retries=3 \
+    CMD curl -fsS "http://127.0.0.1:${PORT:-8080}/api/health" || exit 1
+
+CMD ["sh", "-c", "gunicorn app:app -b 0.0.0.0:${PORT:-8080} -w 1 --timeout 120"]
