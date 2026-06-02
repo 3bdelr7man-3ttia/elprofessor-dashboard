@@ -134,6 +134,30 @@ function KPICard({ label, value, sub, color = "#0f4c81", icon }) {
   );
 }
 
+// Live operational numbers synced FROM the main platform (customers, signups,
+// enrollments, AI usage). Self-contained: silently hides if the sync isn't set up.
+function PlatformMetricsPanel() {
+  const [m, setM] = useState(null);
+  useEffect(() => {
+    let on = true;
+    api.get("/platform-metrics").then(r => { if (on && r && !r.error) setM(r); }).catch(() => {});
+    return () => { on = false; };
+  }, []);
+  if (!m) return null;
+  const c = m.customers || {}, e = m.enrollments || {}, ai = m.ai_usage || {}, co = m.courses || {};
+  return (
+    <div style={{ marginBottom: 28 }}>
+      <h2 style={{ fontSize: 18, fontWeight: 900, color: BRAND.navy, marginBottom: 14 }}>أرقام المنصة (مزامنة مباشرة)</h2>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 16 }}>
+        <KPICard icon="👥" label="إجمالي العملاء" value={c.total ?? 0} sub={`${c.signups_30d ?? 0} تسجيل خلال 30 يوم`} color={BRAND.navy} />
+        <KPICard icon="🆕" label="تسجيلات جديدة اليوم" value={c.signups_today ?? 0} sub={`${c.signups_7d ?? 0} خلال 7 أيام`} color="#2d8659" />
+        <KPICard icon="🎓" label="الاشتراكات بالدورات" value={e.total ?? 0} sub={`${co.total ?? 0} دورة في الكتالوج`} color="#5b6abf" />
+        <KPICard icon="🤖" label="استهلاك أدوات AI" value={ai.requests_total ?? 0} sub={`${ai.document_drafts_total ?? 0} مسودة محرّرة`} color="#8e44ad" />
+      </div>
+    </div>
+  );
+}
+
 function Modal({ open, onClose, title, children, maxWidth = 560, width = "90%" }) {
   if (!open) return null;
   return (
@@ -414,7 +438,9 @@ function OverviewPage({ onNavigate }) {
   return (
     <div>
       <h1 style={{ fontSize: 26, fontWeight: 900, color: BRAND.navy, marginBottom: 24 }}>نظرة عامة تنفيذية</h1>
-      
+
+      <PlatformMetricsPanel />
+
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 16, marginBottom: 28 }}>
         <KPICard icon="💰" label="إيرادات تشغيلية" value={usdFromEgp(f.total_revenue, rate)} sub={`${egpLabel(f.total_revenue)} من الدورات والاستشارات فقط`} color="#2d8659" />
         <KPICard icon="🏦" label="Cash Flow متاح" value={fmtUSD(f.cash_balance_usd)} sub={`${fmt(f.cash_balance)} ج.م رأس مال تشغيل`} color={BRAND.navy} />

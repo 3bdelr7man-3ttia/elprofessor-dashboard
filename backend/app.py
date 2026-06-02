@@ -904,6 +904,28 @@ def sso_login():
     role_out = user_dashboard_role(user)
     return jsonify({'token': token_out, 'user': {'id': user.id, 'email': user.email, 'name': user.name, 'role': role_out, 'dashboard_role': role_out, 'linked_to_name': user_linked_name(user), 'preferred_currency': (user.preferred_currency or 'AUTO')}})
 
+# --- Pull live platform numbers (the "ربط = مزامنة" data sync) ---
+# (PLATFORM_API_URL is defined above with the SSO consumer.)
+PLATFORM_METRICS_SECRET = os.environ.get('METRICS_SECRET', '').strip()
+
+@app.route('/api/platform-metrics', methods=['GET'])
+@token_required
+@roles_required('admin')
+def platform_metrics():
+    if not PLATFORM_METRICS_SECRET:
+        return jsonify({'error': 'لم يتم ضبط مزامنة المنصة بعد'}), 503
+    try:
+        r = requests.get(
+            f"{PLATFORM_API_URL}/api/admin/metrics",
+            headers={'X-ELP-Metrics-Secret': PLATFORM_METRICS_SECRET},
+            timeout=12,
+        )
+    except Exception:
+        return jsonify({'error': 'تعذر الاتصال بالمنصة'}), 502
+    if r.status_code != 200:
+        return jsonify({'error': 'تعذر جلب أرقام المنصة'}), 502
+    return jsonify(r.json() if r.content else {})
+
 @app.route('/api/users', methods=['GET'])
 @token_required
 @roles_required('admin')
