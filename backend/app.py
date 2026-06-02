@@ -926,6 +926,39 @@ def platform_metrics():
         return jsonify({'error': 'تعذر جلب أرقام المنصة'}), 502
     return jsonify(r.json() if r.content else {})
 
+@app.route('/api/investor/wallet', methods=['GET'])
+def investor_wallet_bridge():
+    """Read-only investor wallet by email, for the platform to mirror in its
+    investor portal. Secured by the same platform<->dashboard service secret."""
+    secret = request.headers.get('X-ELP-Metrics-Secret', '')
+    if not PLATFORM_METRICS_SECRET or not secret or not secrets.compare_digest(secret, PLATFORM_METRICS_SECRET):
+        return jsonify({'error': 'unauthorized'}), 401
+    email = (request.args.get('email') or '').lower().strip()
+    if not email:
+        return jsonify({'error': 'email required'}), 400
+
+    user = User.query.filter_by(email=email).first()
+    wallet = None
+    if user:
+        wallet = InvestorWallet.query.filter_by(investor_user_id=user.id).first()
+        if not wallet:
+            name = user_linked_name(user)
+            if name:
+                wallet = InvestorWallet.query.filter_by(investor_name=name).first()
+    if not wallet:
+        return jsonify({'exists': False, 'balance': 0, 'total_invested': 0, 'total_returns': 0, 'level': 'bronze', 'currency': 'USD'})
+
+    sync_wallet(wallet)
+    db.session.commit()
+    return jsonify({
+        'exists': True,
+        'balance': wallet.balance or 0,
+        'total_invested': wallet.total_invested or 0,
+        'total_returns': wallet.total_returns or 0,
+        'level': wallet.level or 'bronze',
+        'currency': 'USD',
+    })
+
 @app.route('/api/users', methods=['GET'])
 @token_required
 @roles_required('admin')
