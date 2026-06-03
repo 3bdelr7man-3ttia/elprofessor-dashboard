@@ -1747,6 +1747,50 @@ def sync_courses_from_lms():
         'total': len(rows), 'created': created, 'updated': updated,
     })
 
+
+# Create a course ON the academy (WordPress/Tutor) from here, tied to its instructor by
+# email. Admin can set any instructor; a trainer creates only under their own email.
+# Created as a draft; once published it flows back via the sync above.
+@app.route('/api/courses/create-lms', methods=['POST'])
+@token_required
+@roles_required('admin', 'trainer')
+def create_lms_course():
+    if not PLATFORM_METRICS_SECRET:
+        return jsonify({'error': 'لم يتم ضبط الربط بعد'}), 503
+    d = request.json or {}
+    if not (d.get('title') or '').strip():
+        return jsonify({'error': 'عنوان الدورة مطلوب'}), 400
+    # A trainer can only create a course under their own (academy) email.
+    if user_dashboard_role(g.user) == 'trainer':
+        instructor_email = (g.user.email or '').strip().lower()
+    else:
+        instructor_email = (d.get('instructor_email') or '').strip().lower()
+    if not instructor_email:
+        return jsonify({'error': 'إيميل المحاضر مطلوب'}), 400
+    payload = {
+        'title': d['title'].strip(),
+        'content': d.get('content', ''),
+        'level': d.get('level', 'beginner'),
+        'price_type': 'paid' if d.get('price_type') == 'paid' else 'free',
+        'duration_hours': int(d.get('duration_hours') or 0),
+        'duration_minutes': int(d.get('duration_minutes') or 0),
+        'instructor_email': instructor_email,
+        'status': 'draft',
+    }
+    try:
+        r = requests.post(
+            f"{PLATFORM_API_URL}/api/bridge/lms-courses",
+            json=payload,
+            headers={'X-ELP-Metrics-Secret': PLATFORM_METRICS_SECRET},
+            timeout=30,
+        )
+    except Exception:
+        return jsonify({'error': 'تعذر الاتصال بالمنصة'}), 502
+    body = r.json() if r.content else {}
+    if r.status_code != 200:
+        return jsonify({'error': body.get('detail') or body.get('error') or 'تعذر إنشاء الدورة على الأكاديمية'}), r.status_code
+    return jsonify({'message': 'تم إنشاء الدورة كمسودة على الأكاديمية', **body})
+
 # ============================================================
 # SETTINGS
 # ============================================================

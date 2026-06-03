@@ -2689,6 +2689,24 @@ function CoursesPage() {
     else alert(r?.error || "تعذرت المزامنة من الأكاديمية");
   };
 
+  // إنشاء دورة على الأكاديمية (WordPress/Tutor) من هنا — أدمن أو مدرب.
+  const isTrainer = effectiveRole === "trainer";
+  const canCreateLms = isAdmin || isTrainer;
+  const [lmsModal, setLmsModal] = useState(false);
+  const [lmsForm, setLmsForm] = useState({});
+  const [creatingLms, setCreatingLms] = useState(false);
+  const submitLms = async () => {
+    if (!(lmsForm.title || "").trim()) return alert("اكتب عنوان الدورة.");
+    if (isAdmin && !(lmsForm.instructor_email || "").trim()) return alert("اكتب إيميل المحاضر (نفس إيميله على الأكاديمية).");
+    setCreatingLms(true);
+    const r = await api.post("/courses/create-lms", lmsForm);
+    setCreatingLms(false);
+    if (r && !r.error) {
+      alert("تم إنشاء الدورة كمسودة على الأكاديمية ✅ بعد مراجعتها ونشرها، اضغط «مزامنة» فتظهر هنا.");
+      setLmsModal(false); setLmsForm({});
+    } else alert(r?.error || "تعذر إنشاء الدورة على الأكاديمية");
+  };
+
   const totalStudents = courses.reduce((s, c) => s + (c.students_count || 0), 0);
   const totalRevenue = courses.reduce((s, c) => s + (c.total_revenue || 0), 0);
   const totalCost = courses.reduce((s, c) => s + (c.total_cost || 0), 0);
@@ -2708,6 +2726,7 @@ function CoursesPage() {
         <h1 style={{ fontSize: 24, fontWeight: 700, color: "#0f4c81" }}>الدورات التدريبية</h1>
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
           {isAdmin && <Btn onClick={syncLms} color="#5b6abf" disabled={syncing}>{syncing ? "⏳ جاري المزامنة..." : "🔄 مزامنة من الأكاديمية"}</Btn>}
+          {canCreateLms && <Btn onClick={() => { setLmsForm({ level: "beginner", price_type: "free" }); setLmsModal(true); }} color="#d4a017" style={{ color: BRAND.navy }}>🎓 أضف دورة على الأكاديمية</Btn>}
           {canManage && <Btn onClick={() => { setForm({ status: "active" }); setModal(true); }} color="#1abc9c">+ دورة جديدة</Btn>}
         </div>
       </div>
@@ -2820,6 +2839,26 @@ function CoursesPage() {
         <Input label="عدد الطلاب" type="number" value={form.students_count || 0} onChange={e => setForm({ ...form, students_count: +e.target.value })} />
         <Select label="الحالة" value={form.status || "active"} onChange={e => setForm({ ...form, status: e.target.value })} options={[{ value: "draft", label: "مسودة" }, { value: "active", label: "نشطة" }, { value: "completed", label: "منتهية" }, { value: "archived", label: "أرشيف" }]} />
         <Btn onClick={save} color="#1abc9c" style={{ width: "100%", marginTop: 8 }}>💾 حفظ</Btn>
+      </Modal>
+
+      <Modal open={lmsModal} onClose={() => setLmsModal(false)} title="🎓 دورة جديدة على الأكاديمية">
+        <div style={{ fontSize: 13, color: "#667085", marginBottom: 12, lineHeight: 1.8 }}>
+          {isTrainer
+            ? "هتتسجل الدورة باسمك كمحاضر (بإيميلك على الأكاديمية)، كمسودة للمراجعة قبل النشر."
+            : "هتتعمل كمسودة على الأكاديمية باسم المحاضر اللي تحدده، وبعد مراجعتها ونشرها تظهر هنا بالمزامنة."}
+        </div>
+        <Input label="عنوان الدورة" value={lmsForm.title || ""} onChange={e => setLmsForm({ ...lmsForm, title: e.target.value })} />
+        {isAdmin && <Input label="إيميل المحاضر (نفس إيميله على الأكاديمية)" value={lmsForm.instructor_email || ""} onChange={e => setLmsForm({ ...lmsForm, instructor_email: e.target.value })} placeholder="trainer@example.com" />}
+        <Input label="وصف مختصر" value={lmsForm.content || ""} onChange={e => setLmsForm({ ...lmsForm, content: e.target.value })} />
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+          <Select label="المستوى" value={lmsForm.level || "beginner"} onChange={e => setLmsForm({ ...lmsForm, level: e.target.value })} options={[{ value: "beginner", label: "مبتدئ" }, { value: "intermediate", label: "متوسط" }, { value: "expert", label: "متقدم" }, { value: "all_levels", label: "كل المستويات" }]} />
+          <Select label="النوع" value={lmsForm.price_type || "free"} onChange={e => setLmsForm({ ...lmsForm, price_type: e.target.value })} options={[{ value: "free", label: "مجانية" }, { value: "paid", label: "مدفوعة" }]} />
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+          <Input label="المدة (ساعات)" type="number" value={lmsForm.duration_hours || 0} onChange={e => setLmsForm({ ...lmsForm, duration_hours: +e.target.value })} />
+          <Input label="المدة (دقائق)" type="number" value={lmsForm.duration_minutes || 0} onChange={e => setLmsForm({ ...lmsForm, duration_minutes: +e.target.value })} />
+        </div>
+        <Btn onClick={submitLms} color="#d4a017" disabled={creatingLms} style={{ width: "100%", marginTop: 8, color: BRAND.navy }}>{creatingLms ? "⏳ جاري الإنشاء..." : "🎓 إنشاء على الأكاديمية"}</Btn>
       </Modal>
       </>)}
     </div>
