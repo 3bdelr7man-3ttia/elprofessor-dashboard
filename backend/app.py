@@ -929,7 +929,7 @@ def platform_metrics():
 # --- The real website users (from the platform) + role control, surfaced here ---
 @app.route('/api/platform-users', methods=['GET'])
 @token_required
-@roles_required('admin')
+@roles_required('admin', 'employee')   # employee = read-only follow-up, no mutations below
 def platform_users_list():
     if not PLATFORM_METRICS_SECRET:
         return jsonify({'error': 'لم يتم ضبط الربط بعد'}), 503
@@ -969,7 +969,7 @@ def platform_users_set_role(user_id):
 
 @app.route('/api/platform-trainer-applications', methods=['GET'])
 @token_required
-@roles_required('admin')
+@roles_required('admin', 'employee')   # employee may VIEW pending applications (follow-up)
 def platform_trainer_apps():
     if not PLATFORM_METRICS_SECRET:
         return jsonify({'error': 'لم يتم ضبط الربط بعد'}), 503
@@ -1026,7 +1026,7 @@ def platform_trainer_decide(application_id, action):
 
 @app.route('/api/platform-program-requests', methods=['GET'])
 @token_required
-@roles_required('admin')
+@roles_required('admin', 'employee')   # employee may VIEW pending program requests (follow-up)
 def platform_program_requests():
     return _platform_proxy(
         'GET',
