@@ -1024,7 +1024,7 @@ def _platform_proxy(method, path, params=None, json_body=None):
 
 @app.route('/api/platform-trainer-applications/<application_id>/<action>', methods=['POST'])
 @token_required
-@roles_required('admin')
+@roles_required('admin', 'employee')
 def platform_trainer_decide(application_id, action):
     if action not in ('approve', 'reject'):
         return jsonify({'error': 'إجراء غير معروف'}), 400
@@ -1049,7 +1049,7 @@ def platform_program_requests():
 
 @app.route('/api/platform-program-requests/<request_id>/<action>', methods=['POST'])
 @token_required
-@roles_required('admin')
+@roles_required('admin', 'employee')
 def platform_program_decide(request_id, action):
     if action not in ('approve', 'reject'):
         return jsonify({'error': 'إجراء غير معروف'}), 400
@@ -1710,7 +1710,7 @@ _LMS_STATUS_MAP = {'publish': 'active', 'draft': 'draft', 'pending': 'draft', 't
 
 @app.route('/api/courses/sync-lms', methods=['POST'])
 @token_required
-@roles_required('admin')
+@roles_required('admin', 'employee')
 def sync_courses_from_lms():
     if not PLATFORM_METRICS_SECRET:
         return jsonify({'error': 'لم يتم ضبط الربط بعد'}), 503
@@ -1768,7 +1768,7 @@ def sync_courses_from_lms():
 # Created as a draft; once published it flows back via the sync above.
 @app.route('/api/courses/create-lms', methods=['POST'])
 @token_required
-@roles_required('admin', 'trainer')
+@roles_required('admin', 'trainer', 'employee')
 def create_lms_course():
     if not PLATFORM_METRICS_SECRET:
         return jsonify({'error': 'لم يتم ضبط الربط بعد'}), 503
@@ -2450,7 +2450,7 @@ def _extract_json_block(text):
 # (title, description, level, duration, outline) to prefill the "create on academy" form.
 @app.route('/api/courses/ai-draft', methods=['POST'])
 @token_required
-@roles_required('admin', 'trainer')
+@roles_required('admin', 'trainer', 'employee')
 def ai_course_draft():
     idea = ((request.json or {}).get('idea') or '').strip()
     if not idea:
