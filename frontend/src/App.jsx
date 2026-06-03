@@ -1295,6 +1295,7 @@ function FinancePage() {
         { id: "expenses", label: "المصروفات" },
         { id: "cashflow", label: "Cash Flow" },
         { id: "monthly", label: "الشهري" },
+        { id: "assets", label: "الأصول" },
       ];
 
   return (
@@ -1314,6 +1315,8 @@ function FinancePage() {
       </div>
 
       <TabBar tabs={tabs} active={tab} onChange={setTab} />
+
+      {tab === "assets" && !isTrainingSupervisor && <AssetsPanel />}
 
       {tab === "summary" && (
         <div>
@@ -1685,20 +1688,89 @@ function FoundationPage() {
   );
 }
 
-function TeamPartnersPage() {
+// الأصول — بند مالي (قيمة + إيجار شهري)، اتنقل لقسم «المالية» كتبويب مستقل.
+function AssetsPanel() {
+  const { loading, error, assets, summary, reload } = useFinanceData();
+  const [modal, setModal] = useState(false);
+  const [form, setForm] = useState({});
+  if (loading) return <PageLoader />;
+  if (error || !summary) return <PageError message={error || "تعذر تحميل الأصول."} onRetry={reload} />;
+  const rate = Number(summary.exchange_rate || 50);
+  const saveAsset = async () => {
+    if (form.id) await api.put(`/assets/${form.id}`, form);
+    else await api.post("/assets", form);
+    setModal(false); setForm({}); reload();
+  };
+  return (
+    <div>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 16, marginBottom: 20 }}>
+        <KPICard label="إجمالي القيمة المرجعية" value={usdFromEgp(sumBy(assets, item => item.value_egp), rate)} sub={egpLabel(sumBy(assets, item => item.value_egp))} color={BRAND.navy} />
+        <KPICard label="إجمالي الإيجار الشهري" value={usdFromEgp(sumBy(assets, item => item.monthly_rent_egp), rate)} sub={egpLabel(sumBy(assets, item => item.monthly_rent_egp))} color={BRAND.gold} />
+      </div>
+      <PageSection title="الأصول" action={<Btn color={BRAND.gold} onClick={() => { setForm({ value_egp: 0, monthly_rent_egp: 0 }); setModal(true); }} style={{ color: BRAND.navy }}>+ أصل جديد</Btn>}>
+        {assets.length ? (
+          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 14 }}>
+            <thead>
+              <tr style={{ background: "#fff8e8" }}>
+                {["الأصل", "المالك", "القيمة", "الإيجار الشهري", "ملاحظات"].map(header => <th key={header} style={{ padding: "12px 14px", textAlign: "right", color: BRAND.navy, borderBottom: "1px solid #e6d7a8" }}>{header}</th>)}
+              </tr>
+            </thead>
+            <tbody>
+              {assets.map((item) => (
+                <tr key={item.id} style={{ borderBottom: "1px solid #f3f4f6" }}>
+                  <td style={{ padding: "12px 14px", fontWeight: 900 }}>{item.name}</td>
+                  <td style={{ padding: "12px 14px" }}>{item.owner}</td>
+                  <td style={{ padding: "12px 14px", fontWeight: 800 }}>{usdFromEgp(item.value_egp, rate)}<div style={{ fontSize: 12, color: "#94a3b8" }}>{egpLabel(item.value_egp)}</div></td>
+                  <td style={{ padding: "12px 14px", fontWeight: 900, color: BRAND.gold }}>{usdFromEgp(item.monthly_rent_egp, rate)}<div style={{ fontSize: 12, color: "#94a3b8" }}>{egpLabel(item.monthly_rent_egp)}</div></td>
+                  <td style={{ padding: "12px 14px" }}>{item.notes || "—"}<div style={{ marginTop: 8, display: "flex", gap: 8 }}><button onClick={() => { setForm(item); setModal(true); }} style={{ background: "none", border: "none", cursor: "pointer" }}>✏️</button><button onClick={async () => { if (confirm("حذف؟")) { await api.del(`/assets/${item.id}`); reload(); } }} style={{ background: "none", border: "none", cursor: "pointer" }}>🗑</button></div></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        ) : (
+          <EmptyState title="لا توجد أصول مسجلة" text="عند تسجيل أصول جديدة ستظهر هنا." />
+        )}
+      </PageSection>
+      <Modal open={modal} onClose={() => setModal(false)} title={form.id ? "تعديل أصل" : "أصل جديد"}>
+        <Input label="اسم الأصل" value={form.name || ""} onChange={e => setForm({ ...form, name: e.target.value })} />
+        <Input label="المالك" value={form.owner || ""} onChange={e => setForm({ ...form, owner: e.target.value })} />
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+          <Input label="القيمة (ج.م)" type="number" value={form.value_egp || 0} onChange={e => setForm({ ...form, value_egp: +e.target.value })} />
+          <Input label="الإيجار الشهري (ج.م)" type="number" value={form.monthly_rent_egp || 0} onChange={e => setForm({ ...form, monthly_rent_egp: +e.target.value })} />
+        </div>
+        <Input label="ملاحظات" value={form.notes || ""} onChange={e => setForm({ ...form, notes: e.target.value })} />
+        <Btn onClick={saveAsset} color={BRAND.gold} style={{ width: "100%", color: BRAND.navy }}>حفظ الأصل</Btn>
+      </Modal>
+    </div>
+  );
+}
+
+// "الفريق والمدربون" (section="team") = المدربون والإشراف (مالي) + روستر المدربين
+// المعتمدين (تشغيلي من المنصة). "الشركاء" (section="partners") = الشركاء لوحدهم.
+function TeamPartnersPage({ section = "team" }) {
   const user = useAuth();
   const isTrainingSupervisor = user?.role === "training_supervisor";
-  const { loading, error, partners, payouts, assets, summary, reload } = useFinanceData();
-  const [tab, setTab] = useState(isTrainingSupervisor ? "payouts" : "partners");
+  const showPartners = section === "partners";
+  const { loading, error, partners, payouts, summary, reload } = useFinanceData();
+  const [roster, setRoster] = useState([]);
+  useEffect(() => {
+    if (!showPartners && !isTrainingSupervisor) api.get("/platform-users").then(r => { if (r && !r.error) setRoster(r.users || []); });
+  }, [showPartners, isTrainingSupervisor]);
+  const tabs = showPartners
+    ? [{ id: "partners", label: "الشركاء" }]
+    : (isTrainingSupervisor
+        ? [{ id: "payouts", label: "المدربون والإشراف" }]
+        : [{ id: "payouts", label: "المدربون والإشراف" }, { id: "trainers", label: "المدربون المعتمدون" }]);
+  const [tab, setTab] = useState(tabs[0].id);
   const [modal, setModal] = useState(null);
   const [form, setForm] = useState({});
 
   if (loading) return <PageLoader />;
-  if (error || !summary) return <PageError message={error || "تعذر تحميل بيانات الفريق والشركاء."} onRetry={reload} />;
+  if (error || !summary) return <PageError message={error || "تعذر تحميل البيانات."} onRetry={reload} />;
 
   const rate = Number(summary.exchange_rate || 50);
   const partnerPie = partners.map(item => ({ name: item.name, value: Number(item.equity_percent || 0) }));
-  const tabs = isTrainingSupervisor ? [{ id: "payouts", label: "المدربين والإشراف" }] : [{ id: "partners", label: "الشركاء" }, { id: "payouts", label: "المدربين والإشراف" }, { id: "assets", label: "الأصول" }];
+  const trainers = roster.filter(u => u.trainer_status === "approved" || u.trainer_status === "pending");
 
   const savePartner = async () => {
     const totalWithoutCurrent = partners.filter(item => item.id !== form.id).reduce((sum, item) => sum + Number(item.equity_percent || 0), 0);
@@ -1715,22 +1787,17 @@ function TeamPartnersPage() {
     else await api.post("/payouts", form);
     setModal(null); setForm({}); reload();
   };
-  const saveAsset = async () => {
-    if (form.id) await api.put(`/assets/${form.id}`, form);
-    else await api.post("/assets", form);
-    setModal(null); setForm({}); reload();
-  };
 
   return (
     <div>
       <div style={{ marginBottom: 18 }}>
-        <h1 style={{ fontSize: 24, fontWeight: 900, color: BRAND.navy, margin: 0 }}>الفريق والشركاء</h1>
-        <div style={{ marginTop: 6, fontSize: 13, color: "#667085" }}>فصلنا بيانات الشركاء والمدربين والأصول عن تفاصيل الأشهر حتى تبقى واضحة وعلى مستوى الشركة.</div>
+        <h1 style={{ fontSize: 24, fontWeight: 900, color: BRAND.navy, margin: 0 }}>{showPartners ? "الشركاء" : "الفريق والمدربون"}</h1>
+        <div style={{ marginTop: 6, fontSize: 13, color: "#667085" }}>{showPartners ? "شركاء الشركة ونِسب الملكية والأرباح ومساهمات رأس المال." : "فريق العمل والمدربون والإشراف — أداؤهم ونِسبهم المالية في مكان واحد لاتخاذ القرار."}</div>
       </div>
 
       <TabBar tabs={tabs} active={tab} onChange={setTab} />
 
-      {tab === "partners" && !isTrainingSupervisor && (
+      {tab === "partners" && showPartners && (
         <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1.8fr) minmax(300px, 1fr)", gap: 20 }}>
           <PageSection title="جدول الشركاء" action={<Btn color="#5b6abf" onClick={() => { setForm({ equity_percent: 0, profit_share_percent: 0, capital_egp: 0, capital_usd: 0 }); setModal("partner"); }}>+ شريك جديد</Btn>}>
             <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 14 }}>
@@ -1799,37 +1866,30 @@ function TeamPartnersPage() {
         </PageSection>
       )}
 
-      {tab === "assets" && !isTrainingSupervisor && (
-        <div>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 16, marginBottom: 20 }}>
-            <KPICard label="إجمالي القيمة المرجعية" value={usdFromEgp(sumBy(assets, item => item.value_egp), rate)} sub={egpLabel(sumBy(assets, item => item.value_egp))} color={BRAND.navy} />
-            <KPICard label="إجمالي الإيجار الشهري" value={usdFromEgp(sumBy(assets, item => item.monthly_rent_egp), rate)} sub={egpLabel(sumBy(assets, item => item.monthly_rent_egp))} color={BRAND.gold} />
-          </div>
-          <PageSection title="الأصول" action={<Btn color={BRAND.gold} onClick={() => { setForm({ value_egp: 0, monthly_rent_egp: 0 }); setModal("asset"); }} style={{ color: BRAND.navy }}>+ أصل جديد</Btn>}>
-            {assets.length ? (
-              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 14 }}>
-                <thead>
-                  <tr style={{ background: "#fff8e8" }}>
-                    {["الأصل", "المالك", "القيمة", "الإيجار الشهري", "ملاحظات"].map(header => <th key={header} style={{ padding: "12px 14px", textAlign: "right", color: BRAND.navy, borderBottom: "1px solid #e6d7a8" }}>{header}</th>)}
+      {tab === "trainers" && (
+        <PageSection title="المدربون المعتمدون" subtitle="روستر المدربين القادم من المنصة (المعتمدون والمعلّقون) — الجانب التشغيلي مقابل النِسب المالية في تبويب «المدربون والإشراف».">
+          {trainers.length ? (
+            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 14 }}>
+              <thead>
+                <tr style={{ background: "#f8fafc" }}>
+                  {["المدرب", "الإيميل", "التليفون", "الحالة"].map(header => <th key={header} style={{ padding: "12px 14px", textAlign: "right", color: "#667085", borderBottom: "1px solid #e5e7eb" }}>{header}</th>)}
+                </tr>
+              </thead>
+              <tbody>
+                {trainers.map((u) => (
+                  <tr key={u.id} style={{ borderBottom: "1px solid #f3f4f6" }}>
+                    <td style={{ padding: "12px 14px", fontWeight: 900 }}>{u.full_name || "—"}</td>
+                    <td style={{ padding: "12px 14px", fontSize: 13, color: "#475467" }}>{u.email}</td>
+                    <td style={{ padding: "12px 14px", fontSize: 13, color: "#475467", direction: "ltr", textAlign: "right" }}>{u.phone || "—"}</td>
+                    <td style={{ padding: "12px 14px" }}><Badge text={u.trainer_status === "approved" ? "معتمد" : "معلّق"} color={u.trainer_status === "approved" ? "#2d8659" : "#e8913a"} /></td>
                   </tr>
-                </thead>
-                <tbody>
-                  {assets.map((item) => (
-                    <tr key={item.id} style={{ borderBottom: "1px solid #f3f4f6" }}>
-                      <td style={{ padding: "12px 14px", fontWeight: 900 }}>{item.name}</td>
-                      <td style={{ padding: "12px 14px" }}>{item.owner}</td>
-                      <td style={{ padding: "12px 14px", fontWeight: 800 }}>{usdFromEgp(item.value_egp, rate)}<div style={{ fontSize: 12, color: "#94a3b8" }}>{egpLabel(item.value_egp)}</div></td>
-                      <td style={{ padding: "12px 14px", fontWeight: 900, color: BRAND.gold }}>{usdFromEgp(item.monthly_rent_egp, rate)}<div style={{ fontSize: 12, color: "#94a3b8" }}>{egpLabel(item.monthly_rent_egp)}</div></td>
-                      <td style={{ padding: "12px 14px" }}>{item.notes || "—"}<div style={{ marginTop: 8, display: "flex", gap: 8 }}><button onClick={() => { setForm(item); setModal("asset"); }} style={{ background: "none", border: "none", cursor: "pointer" }}>✏️</button><button onClick={async () => { if (confirm("حذف؟")) { await api.del(`/assets/${item.id}`); reload(); } }} style={{ background: "none", border: "none", cursor: "pointer" }}>🗑</button></div></td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            ) : (
-              <EmptyState title="لا توجد أصول مسجلة" text="عند تسجيل أصول جديدة ستظهر هنا." />
-            )}
-          </PageSection>
-        </div>
+                ))}
+              </tbody>
+            </table>
+          ) : (
+            <EmptyState title="لا يوجد مدربون بعد" text="المدربون المعتمدون من قسم «الدورات ← طلبات المدربين» سيظهرون هنا." />
+          )}
+        </PageSection>
       )}
 
       <Modal open={modal === "partner"} onClose={() => setModal(null)} title={form.id ? "تعديل شريك" : "شريك جديد"}>
@@ -1857,17 +1917,6 @@ function TeamPartnersPage() {
         <Select label="الحالة" value={form.status || "accrued"} onChange={e => setForm({ ...form, status: e.target.value })} options={[{ value: "accrued", label: "مستحق" }, { value: "paid", label: "مدفوع" }, { value: "waived", label: "متنازل عنه" }]} />
         <Input label="ملاحظات" value={form.notes || ""} onChange={e => setForm({ ...form, notes: e.target.value })} />
         <Btn onClick={savePayout} color="#8e44ad" style={{ width: "100%" }}>حفظ</Btn>
-      </Modal>
-
-      <Modal open={modal === "asset"} onClose={() => setModal(null)} title={form.id ? "تعديل أصل" : "أصل جديد"}>
-        <Input label="اسم الأصل" value={form.name || ""} onChange={e => setForm({ ...form, name: e.target.value })} />
-        <Input label="المالك" value={form.owner || ""} onChange={e => setForm({ ...form, owner: e.target.value })} />
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-          <Input label="القيمة (ج.م)" type="number" value={form.value_egp || 0} onChange={e => setForm({ ...form, value_egp: +e.target.value })} />
-          <Input label="الإيجار الشهري (ج.م)" type="number" value={form.monthly_rent_egp || 0} onChange={e => setForm({ ...form, monthly_rent_egp: +e.target.value })} />
-        </div>
-        <Input label="ملاحظات" value={form.notes || ""} onChange={e => setForm({ ...form, notes: e.target.value })} />
-        <Btn onClick={saveAsset} color={BRAND.gold} style={{ width: "100%", color: BRAND.navy }}>حفظ الأصل</Btn>
       </Modal>
     </div>
   );
@@ -3861,13 +3910,14 @@ function InvestmentPage() {
 
 const navItems = [
   { id: "overview", label: "نظرة عامة", icon: "📊" },
-  { id: "platform-users", label: "مستخدمو المنصة", icon: "🌐" },
-  { id: "finance", label: "المالية", icon: "💰" },
+  { id: "platform-users", label: "المستخدمون", icon: "👥" },
+  { id: "courses", label: "الدورات والتدريب", icon: "📚" },
+  { id: "investors-admin", label: "الاستثمار", icon: "💼" },
   { id: "marketing", label: "التسويق", icon: "📢" },
-  { id: "courses", label: "الدورات", icon: "📚" },
-  { id: "investors-admin", label: "المستثمرون", icon: "💼" },
+  { id: "finance", label: "المالية", icon: "💰" },
+  { id: "partners", label: "الشركاء", icon: "🤝" },
+  { id: "team", label: "الفريق والمدربون", icon: "🧑‍🏫" },
   { id: "foundation", label: "مرحلة التأسيس", icon: "🏗️" },
-  { id: "team", label: "الفريق والشركاء", icon: "👥" },
   { id: "targets", label: "الأهداف والتوقعات", icon: "📈" },
   { id: "ai", label: "مساعد AI", icon: "🤖" },
   { id: "settings", label: "الإعدادات", icon: "⚙️" },
@@ -3894,8 +3944,8 @@ function Layout({ page, setPage, user, onLogout }) {
       : effectiveRole === "employee"
         ? [
             // موظف متابعة: يشوف الناس والطلبات والدورات فقط — بلا أرقام كلية ولا مالية دقيقة.
-            { id: "platform-users", label: "إدارة المنصة", icon: "🌐" },
-            { id: "courses", label: "الدورات", icon: "📚" },
+            { id: "platform-users", label: "المستخدمون", icon: "👥" },
+            { id: "courses", label: "الدورات والتدريب", icon: "📚" },
           ]
       : effectiveRole === "viewer"
         ? [
@@ -3904,8 +3954,9 @@ function Layout({ page, setPage, user, onLogout }) {
       : navItems.filter((item) => {
           if (effectiveRole === "training_supervisor" && item.id === "settings") return false;
           if (effectiveRole === "training_supervisor" && item.id === "foundation") return false;
-          // إدارة المستثمرين شأن مالي — للأدمن فقط، تُخفى عن المشرف التدريبي.
+          // الاستثمار والشركاء شأن مالي/ملكية — للأدمن فقط، تُخفى عن المشرف التدريبي.
           if (effectiveRole === "training_supervisor" && item.id === "investors-admin") return false;
+          if (effectiveRole === "training_supervisor" && item.id === "partners") return false;
           return true;
         });
 
@@ -3969,14 +4020,15 @@ function Layout({ page, setPage, user, onLogout }) {
           {activePage === "overview" && <OverviewPage onNavigate={setPage} />}
           {activePage === "platform-users" && <PlatformUsersPage />}
           {activePage === "finance" && <FinancePage />}
-          {activePage === "marketing" && <MarketingPage />}
+          {activePage === "marketing" && <MarketingPage only="campaigns" />}
           {activePage === "courses" && <CoursesPage />}
-          {activePage === "investors-admin" && <InvestorsAdminPage />}
+          {activePage === "investors-admin" && <InvestmentPage />}
           {activePage === "earnings" && <MyEarningsPage />}
           {activePage === "marketplace" && <InvestorInvestmentsPage initialTab="opportunities" />}
           {activePage === "investments" && <InvestorInvestmentsPage initialTab="active" />}
           {activePage === "foundation" && <FoundationPage />}
-          {activePage === "team" && <TeamPartnersPage />}
+          {activePage === "partners" && <TeamPartnersPage section="partners" />}
+          {activePage === "team" && <TeamPartnersPage section="team" />}
           {activePage === "targets" && <TargetsPage />}
           {activePage === "ai" && <AIPage />}
           {activePage === "settings" && <SettingsPage />}
