@@ -112,7 +112,9 @@ class Course(db.Model):
     students_count = db.Column(db.Integer, default=0)
     start_date = db.Column(db.Date)
     end_date = db.Column(db.Date)
-    lms_id = db.Column(db.String(50))
+    lms_id = db.Column(db.String(50))   # = Tutor course id (tutor_id) for synced courses
+    lms_instructor_email = db.Column(db.String(255))  # academy course instructor — trainer link by email
+    lms_synced = db.Column(db.Boolean, default=False)  # True = mirrored from the academy (WordPress/Tutor)
     notes = db.Column(db.Text)
     created_at = db.Column(db.DateTime, default=datetime.datetime.utcnow)
     revenues = db.relationship('Revenue', backref='course', lazy=True)
@@ -1639,7 +1641,8 @@ def list_courses():
             'revenue_split': financial['split'],
             'distribution': financial['distribution'],
             'linked_investments': [serialize_investment(item, rate, {c.id: c}) for item in financial['investments']],
-            'lms_id': c.lms_id, 'notes': c.notes
+            'lms_id': c.lms_id, 'notes': c.notes,
+            'lms_synced': bool(c.lms_synced), 'lms_instructor_email': c.lms_instructor_email,
         })
     return jsonify(result)
 
@@ -1682,6 +1685,62 @@ def delete_course(id):
     db.session.delete(c)
     db.session.commit()
     return jsonify({'message': 'تم الحذف'})
+
+
+# Pull the REAL courses from the academy (WordPress/Tutor, via the platform bridge) and
+# upsert them into our Course table keyed by lms_id = tutor_id, tied to each course's
+# instructor (by email). Manual financials (price/cost) are preserved on update.
+_LMS_STATUS_MAP = {'publish': 'active', 'draft': 'draft', 'pending': 'draft', 'trash': 'archived', 'private': 'draft'}
+
+
+@app.route('/api/courses/sync-lms', methods=['POST'])
+@token_required
+@roles_required('admin')
+def sync_courses_from_lms():
+    if not PLATFORM_METRICS_SECRET:
+        return jsonify({'error': 'لم يتم ضبط الربط بعد'}), 503
+    try:
+        r = requests.get(
+            f"{PLATFORM_API_URL}/api/bridge/lms-courses",
+            headers={'X-ELP-Metrics-Secret': PLATFORM_METRICS_SECRET},
+            timeout=30,
+        )
+    except Exception:
+        return jsonify({'error': 'تعذر الاتصال بالمنصة'}), 502
+    if r.status_code != 200:
+        body = r.json() if r.content else {}
+        return jsonify({'error': body.get('detail') or 'تعذر جلب الدورات من الأكاديمية'}), r.status_code
+
+    rows = (r.json() or {}).get('courses', [])
+    created = 0
+    updated = 0
+    for row in rows:
+        tutor_id = str(row.get('tutor_id') or '').strip()
+        if not tutor_id:
+            continue
+        status = _LMS_STATUS_MAP.get(str(row.get('post_status') or '').strip().lower(), 'draft')
+        instructor = (row.get('instructor_name') or '').strip()
+        email = (row.get('instructor_email') or '').strip().lower()
+        c = Course.query.filter_by(lms_id=tutor_id).first()
+        if c is None:
+            c = Course(lms_id=tutor_id, price_egp=0, price_usd=0, cost_egp=0, cost_usd=0)
+            db.session.add(c)
+            created += 1
+        else:
+            updated += 1
+        # Academy owns: title, trainer (instructor), student count, status, link.
+        # We keep our manual financials (price/cost) untouched.
+        c.title = (row.get('title') or c.title or '').strip() or 'دورة بدون عنوان'
+        c.trainer_name = instructor or c.trainer_name
+        c.lms_instructor_email = email
+        c.students_count = int(row.get('enrolled_count') or 0)
+        c.status = status
+        c.lms_synced = True
+    db.session.commit()
+    return jsonify({
+        'message': 'تمت المزامنة من الأكاديمية',
+        'total': len(rows), 'created': created, 'updated': updated,
+    })
 
 # ============================================================
 # SETTINGS
@@ -2802,6 +2861,12 @@ def ensure_runtime_schema():
                 connection.execute(text("ALTER TABLE users ADD COLUMN linked_to_name VARCHAR(255)"))
             if 'preferred_currency' not in user_columns:
                 connection.execute(text("ALTER TABLE users ADD COLUMN preferred_currency VARCHAR(10) DEFAULT 'AUTO'"))
+        if 'courses' in existing_tables:
+            course_columns = {column['name'] for column in inspector.get_columns('courses')}
+            if 'lms_instructor_email' not in course_columns:
+                connection.execute(text("ALTER TABLE courses ADD COLUMN lms_instructor_email VARCHAR(255)"))
+            if 'lms_synced' not in course_columns:
+                connection.execute(text("ALTER TABLE courses ADD COLUMN lms_synced BOOLEAN DEFAULT 0"))
         if 'campaigns' in existing_tables:
             campaign_columns = {column['name'] for column in inspector.get_columns('campaigns')}
             if 'course_id' not in campaign_columns:

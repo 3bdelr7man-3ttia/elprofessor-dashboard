@@ -2673,6 +2673,17 @@ function CoursesPage() {
   const statusLabel = (s) => s === "active" ? "نشطة" : s === "completed" ? "منتهية" : s === "paused" ? "موقوفة" : s === "draft" ? "مسودة" : s === "archived" ? "مؤرشفة" : s;
   const statusColor = (s) => s === "active" ? "#2d8659" : s === "paused" ? "#c0392b" : "#9ca3af";
 
+  // مزامنة الدورات الحقيقية من الأكاديمية (WordPress/Tutor) عبر المنصة — للأدمن فقط.
+  const [syncing, setSyncing] = useState(false);
+  const isAdmin = effectiveRole === "admin";
+  const syncLms = async () => {
+    setSyncing(true);
+    const r = await api.post("/courses/sync-lms", {});
+    setSyncing(false);
+    if (r && !r.error) { alert(`تمت المزامنة من الأكاديمية: ${r.total} دورة (${r.created} جديدة، ${r.updated} محدّثة)`); load(); }
+    else alert(r?.error || "تعذرت المزامنة من الأكاديمية");
+  };
+
   const totalStudents = courses.reduce((s, c) => s + (c.students_count || 0), 0);
   const totalRevenue = courses.reduce((s, c) => s + (c.total_revenue || 0), 0);
   const totalCost = courses.reduce((s, c) => s + (c.total_cost || 0), 0);
@@ -2688,9 +2699,12 @@ function CoursesPage() {
       {showRequests && view === "trainers" && <TrainerRequestsPanel />}
       {showRequests && view === "programs" && <ProgramRequestsPanel />}
       {(!showRequests || view === "courses") && (<>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20, gap: 10, flexWrap: "wrap" }}>
         <h1 style={{ fontSize: 24, fontWeight: 700, color: "#0f4c81" }}>الدورات التدريبية</h1>
-        {canManage && <Btn onClick={() => { setForm({ status: "active" }); setModal(true); }} color="#1abc9c">+ دورة جديدة</Btn>}
+        <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+          {isAdmin && <Btn onClick={syncLms} color="#5b6abf" disabled={syncing}>{syncing ? "⏳ جاري المزامنة..." : "🔄 مزامنة من الأكاديمية"}</Btn>}
+          {canManage && <Btn onClick={() => { setForm({ status: "active" }); setModal(true); }} color="#1abc9c">+ دورة جديدة</Btn>}
+        </div>
       </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 16, marginBottom: 24 }}>
@@ -2731,7 +2745,8 @@ function CoursesPage() {
               </div>}
             </div>
             <Badge text={statusLabel(c.status)} color={statusColor(c.status)} />
-            {c.trainer_name && <span style={{ fontSize: 13, color: "#6b7280", marginRight: 8 }}>🎓 {c.trainer_name}</span>}
+            {c.lms_synced && <span title={c.lms_instructor_email || ""} style={{ fontSize: 12, color: "#5b6abf", marginRight: 8, fontWeight: 800 }}>🔗 من الأكاديمية</span>}
+            {c.trainer_name && <span title={c.lms_instructor_email || ""} style={{ fontSize: 13, color: "#6b7280", marginRight: 8 }}>🎓 {c.trainer_name}</span>}
             {((c.linked_expenses || []).length > 0 || (c.linked_payouts || []).length > 0) && (
               <div style={{ marginTop: 14, background: "#fcfbf8", border: "1px solid #f0eadb", borderRadius: 12, padding: 12, fontSize: 12, color: "#667085", lineHeight: 1.9 }}>
                 <div style={{ fontWeight: 900, color: BRAND.navy, marginBottom: 6 }}>تفاصيل التنفيذ</div>
