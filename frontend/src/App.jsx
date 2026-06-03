@@ -3514,8 +3514,78 @@ function PageLoader() {
   </div>;
 }
 
+// Real website registrants (from the platform) + role control + trainer requests.
+function PlatformUsersPage() {
+  const [data, setData] = useState(null);
+  const [apps, setApps] = useState([]);
+  const [q, setQ] = useState("");
+  const [busy, setBusy] = useState("");
+  const reload = () => {
+    api.get(`/platform-users${q ? `?search=${encodeURIComponent(q)}` : ""}`).then(r => { if (r && !r.error) setData(r); });
+    api.get("/platform-trainer-applications?status=pending").then(a => { if (a && !a.error) setApps(a.applications || []); });
+  };
+  useEffect(() => { reload(); /* eslint-disable-next-line */ }, [q]);
+  const setRole = (u, role) => {
+    setBusy(u.id);
+    api.post(`/platform-users/${u.id}/role`, { role }).then(r => { setBusy(""); if (r && !r.error) reload(); else alert(r.error || "تعذر تغيير الدور"); });
+  };
+  const users = (data && data.users) || [];
+  const roleLabel = { admin: "مدير", staff: "موظف", investor: "مستثمر", member: "عضو" };
+  return (
+    <div>
+      <h1 style={{ fontSize: 24, fontWeight: 900, color: BRAND.navy, marginBottom: 8 }}>مستخدمو المنصة</h1>
+      <p style={{ color: "#667085", marginBottom: 20 }}>الأشخاص المسجّلون في الموقع — تحكّم في أدوارهم وراجع طلبات المدربين.</p>
+      <div style={{ display: "flex", gap: 12, marginBottom: 20, flexWrap: "wrap" }}>
+        <KPICard icon="👥" label="إجمالي المسجّلين" value={(data && data.count) || 0} color={BRAND.navy} />
+        <KPICard icon="🎓" label="طلبات مدربين معلّقة" value={apps.length} color="#e8913a" />
+      </div>
+      <input placeholder="ابحث بالاسم أو الإيميل..." value={q} onChange={e => setQ(e.target.value)} style={{ padding: "10px 14px", borderRadius: 10, border: "1px solid #e5e7eb", marginBottom: 16, width: 280, maxWidth: "100%" }} />
+      {apps.length > 0 && (
+        <div style={{ marginBottom: 24, background: "#fff7ed", border: "1px solid #fed7aa", borderRadius: 12, padding: 16 }}>
+          <div style={{ fontWeight: 900, color: "#9a3412", marginBottom: 10 }}>طلبات انضمام مدربين ({apps.length})</div>
+          {apps.map((a, i) => (
+            <div key={i} style={{ display: "flex", justifyContent: "space-between", padding: "6px 0", fontSize: 14 }}>
+              <span>{a.full_name || a.email || "—"}</span>
+              <span style={{ color: "#9a3412" }}>{a.specialty || a.status || "معلّق"}</span>
+            </div>
+          ))}
+        </div>
+      )}
+      <div style={{ background: "#fff", borderRadius: 12, boxShadow: "0 1px 4px rgba(0,0,0,0.06)", overflowX: "auto" }}>
+        <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 560 }}>
+          <thead>
+            <tr style={{ background: "#f8fafc" }}>
+              {["الاسم", "الإيميل", "الحالة", "الدور"].map(h => (
+                <th key={h} style={{ padding: 12, fontSize: 13, color: "#667085", textAlign: "right" }}>{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {users.map(u => (
+              <tr key={u.id} style={{ borderTop: "1px solid #f1f5f9" }}>
+                <td style={{ padding: 12, fontWeight: 700 }}>{u.full_name || "—"}</td>
+                <td style={{ padding: 12, fontSize: 13, color: "#475467" }}>{u.email}</td>
+                <td style={{ padding: 12, fontSize: 12 }}>{u.trainer_status === "approved" ? "مدرب معتمد" : (u.trainer_status === "pending" ? "مدرب معلّق" : "—")}</td>
+                <td style={{ padding: 12 }}>
+                  <select disabled={busy === u.id} value={u.role} onChange={e => setRole(u, e.target.value)} style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid #e5e7eb", cursor: "pointer" }}>
+                    {["member", "investor", "staff", "admin"].map(r => <option key={r} value={r}>{roleLabel[r]}</option>)}
+                  </select>
+                </td>
+              </tr>
+            ))}
+            {users.length === 0 && (
+              <tr><td colSpan={4} style={{ padding: 24, textAlign: "center", color: "#9ca3af" }}>لا يوجد مستخدمون بعد (أو الربط قيد التفعيل).</td></tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
 const navItems = [
   { id: "overview", label: "نظرة عامة", icon: "📊" },
+  { id: "platform-users", label: "مستخدمو المنصة", icon: "🌐" },
   { id: "finance", label: "المالية", icon: "💰" },
   { id: "marketing", label: "التسويق", icon: "📢" },
   { id: "courses", label: "الدورات", icon: "📚" },
@@ -3607,6 +3677,7 @@ function Layout({ page, setPage, user, onLogout }) {
         )}
         <PageBoundary pageKey={page}>
           {page === "overview" && <OverviewPage onNavigate={setPage} />}
+          {page === "platform-users" && <PlatformUsersPage />}
           {page === "finance" && <FinancePage />}
           {page === "marketing" && <MarketingPage />}
           {page === "courses" && <CoursesPage />}
