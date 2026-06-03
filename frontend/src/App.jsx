@@ -2477,6 +2477,115 @@ function MarketingPage() {
 }
 
 // ============================================================
+// TRAINING REQUESTS — trainer applications + program requests.
+// Live under "الدورات" (each its own tab). Self-contained: own fetch
+// + approve/reject. Employee (موظف متابعة) sees them read-only.
+// ============================================================
+function TrainerRequestsPanel() {
+  const readOnly = getEffectiveRole(useAuth()) === "employee";
+  const [apps, setApps] = useState([]);
+  const [busy, setBusy] = useState("");
+  const [notes, setNotes] = useState({});
+  const load = () => api.get("/platform-trainer-applications?status=pending").then(a => { if (a && !a.error) setApps(a.applications || []); });
+  useEffect(() => { load(); }, []);
+  const decide = (app, action) => {
+    setBusy(app.id);
+    api.post(`/platform-trainer-applications/${app.id}/${action}`, { admin_note: notes[app.id] || "" })
+      .then(r => { setBusy(""); if (r && !r.error) load(); else alert(r.error || "تعذر تنفيذ العملية"); });
+  };
+  const noteInput = (id, ph) => (
+    <input value={notes[id] || ""} onChange={e => setNotes(n => ({ ...n, [id]: e.target.value }))} placeholder={ph}
+      style={{ padding: "8px 12px", borderRadius: 8, border: "1px solid #e5e7eb", fontSize: 13, flex: 1, minWidth: 160 }} />
+  );
+  return (
+    <div style={{ display: "grid", gap: 14 }}>
+      {apps.length === 0 && <div style={{ padding: 24, textAlign: "center", color: "#9ca3af", background: "#fff", borderRadius: 12 }}>لا توجد طلبات مدربين معلّقة. ✅</div>}
+      {apps.map(a => (
+        <div key={a.id} style={{ background: "#fff", borderRadius: 12, boxShadow: "0 1px 4px rgba(0,0,0,0.06)", padding: 18, borderRight: "4px solid #e8913a" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
+            <div style={{ fontWeight: 900, color: BRAND.navy, fontSize: 16 }}>{a.user_name || a.full_name || "—"}</div>
+            <div style={{ fontSize: 13, color: "#667085" }}>{a.user_email || a.email || ""}{a.user_phone ? ` · ${a.user_phone}` : ""}</div>
+          </div>
+          {a.headline && <div style={{ marginTop: 6, color: "#475467", fontWeight: 700 }}>{a.headline}</div>}
+          {Array.isArray(a.expertise) && a.expertise.length > 0 && (
+            <div style={{ marginTop: 8, display: "flex", gap: 6, flexWrap: "wrap" }}>
+              {a.expertise.map((x, i) => <span key={i} style={{ background: "#f1f5f9", borderRadius: 999, padding: "3px 10px", fontSize: 12, color: "#475467" }}>{x}</span>)}
+            </div>
+          )}
+          {a.experience_summary && <div style={{ marginTop: 8, fontSize: 13, color: "#667085", whiteSpace: "pre-wrap" }}>{a.experience_summary}</div>}
+          <div style={{ marginTop: 8, display: "flex", gap: 14, flexWrap: "wrap", fontSize: 13 }}>
+            {a.linkedin_url && <a href={a.linkedin_url} target="_blank" rel="noreferrer" style={{ color: "#5b6abf" }}>LinkedIn ↗</a>}
+            {a.portfolio_url && <a href={a.portfolio_url} target="_blank" rel="noreferrer" style={{ color: "#5b6abf" }}>أعماله ↗</a>}
+          </div>
+          {readOnly ? (
+            <div style={{ marginTop: 12, fontSize: 12, color: "#9ca3af" }}>👁️ للمتابعة فقط — الاعتماد من المدير.</div>
+          ) : (
+            <div style={{ marginTop: 14, display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+              {noteInput(a.id, "ملاحظة إدارية (اختياري)")}
+              <button disabled={busy === a.id} onClick={() => decide(a, "approve")} style={{ padding: "9px 18px", borderRadius: 8, border: "none", background: "#2d8659", color: "#fff", fontWeight: 800, cursor: "pointer" }}>اعتماد</button>
+              <button disabled={busy === a.id} onClick={() => decide(a, "reject")} style={{ padding: "9px 18px", borderRadius: 8, border: "1px solid #dc2626", background: "#fff", color: "#dc2626", fontWeight: 800, cursor: "pointer" }}>رفض</button>
+            </div>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function ProgramRequestsPanel() {
+  const readOnly = getEffectiveRole(useAuth()) === "employee";
+  const [reqs, setReqs] = useState([]);
+  const [busy, setBusy] = useState("");
+  const [notes, setNotes] = useState({});
+  const [lms, setLms] = useState({});
+  const load = () => api.get("/platform-program-requests?status=pending").then(a => { if (a && !a.error) setReqs(a.requests || []); });
+  useEffect(() => { load(); }, []);
+  const decide = (req, action) => {
+    setBusy(req.id);
+    const draft = lms[req.id] || {};
+    const payload = action === "approve"
+      ? { admin_note: notes[req.id] || "", lms_entry_url: draft.entry || "", lms_course_ref: draft.ref || "" }
+      : { admin_note: notes[req.id] || "" };
+    api.post(`/platform-program-requests/${req.id}/${action}`, payload)
+      .then(r => { setBusy(""); if (r && !r.error) load(); else alert(r.error || "تعذر تنفيذ العملية"); });
+  };
+  const noteInput = (id, ph) => (
+    <input value={notes[id] || ""} onChange={e => setNotes(n => ({ ...n, [id]: e.target.value }))} placeholder={ph}
+      style={{ padding: "8px 12px", borderRadius: 8, border: "1px solid #e5e7eb", fontSize: 13, flex: 1, minWidth: 160 }} />
+  );
+  return (
+    <div style={{ display: "grid", gap: 14 }}>
+      {reqs.length === 0 && <div style={{ padding: 24, textAlign: "center", color: "#9ca3af", background: "#fff", borderRadius: 12 }}>لا توجد طلبات برامج معلّقة. ✅</div>}
+      {reqs.map(req => (
+        <div key={req.id} style={{ background: "#fff", borderRadius: 12, boxShadow: "0 1px 4px rgba(0,0,0,0.06)", padding: 18, borderRight: "4px solid #5b6abf" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
+            <div style={{ fontWeight: 900, color: BRAND.navy, fontSize: 16 }}>{req.user_name || "—"}</div>
+            <div style={{ fontSize: 13, color: "#667085" }}>{req.user_email || ""}</div>
+          </div>
+          <div style={{ marginTop: 6, color: "#475467" }}>البرنامج: <b>{req.title || req.program_id || "—"}</b></div>
+          {req.notes && <div style={{ marginTop: 6, fontSize: 13, color: "#667085", whiteSpace: "pre-wrap" }}>{req.notes}</div>}
+          {readOnly ? (
+            <div style={{ marginTop: 12, fontSize: 12, color: "#9ca3af" }}>👁️ للمتابعة فقط — الاعتماد والربط من المدير.</div>
+          ) : (
+            <div style={{ marginTop: 12, display: "grid", gap: 8 }}>
+              <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+                <input value={(lms[req.id] || {}).entry || ""} onChange={e => setLms(s => ({ ...s, [req.id]: { ...s[req.id], entry: e.target.value } }))} placeholder="رابط الدخول للدورة (LMS) — يُملأ تلقائيًا لو فاضي" style={{ padding: "8px 12px", borderRadius: 8, border: "1px solid #e5e7eb", fontSize: 13, flex: 2, minWidth: 200 }} />
+                <input value={(lms[req.id] || {}).ref || ""} onChange={e => setLms(s => ({ ...s, [req.id]: { ...s[req.id], ref: e.target.value } }))} placeholder="مرجع الدورة (course ref)" style={{ padding: "8px 12px", borderRadius: 8, border: "1px solid #e5e7eb", fontSize: 13, flex: 1, minWidth: 140 }} />
+              </div>
+              <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+                {noteInput(req.id, "ملاحظة إدارية (اختياري)")}
+                <button disabled={busy === req.id} onClick={() => decide(req, "approve")} style={{ padding: "9px 18px", borderRadius: 8, border: "none", background: "#2d8659", color: "#fff", fontWeight: 800, cursor: "pointer" }}>اعتماد وربط</button>
+                <button disabled={busy === req.id} onClick={() => decide(req, "reject")} style={{ padding: "9px 18px", borderRadius: 8, border: "1px solid #dc2626", background: "#fff", color: "#dc2626", fontWeight: 800, cursor: "pointer" }}>رفض</button>
+              </div>
+            </div>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ============================================================
 // COURSES SNAPSHOT
 // ============================================================
 function CoursesPage() {
@@ -2487,6 +2596,11 @@ function CoursesPage() {
   const [courses, setCourses] = useState([]);
   const [modal, setModal] = useState(false);
   const [form, setForm] = useState({});
+  const [view, setView] = useState("courses");
+  // الدورات بقت مركز التدريب: الدورات + طلبات البرامج + طلبات المدربين.
+  // المدير والموظف بس يشوفوا الطلبات؛ المدرب/المشرف يشوفوا دوراتهم زي ما هي.
+  const effectiveRole = getEffectiveRole(user);
+  const showRequests = effectiveRole === "admin" || effectiveRole === "employee";
 
   const load = () => {
     api.get("/courses").then(data => setCourses(safeArray(data)));
@@ -2515,6 +2629,14 @@ function CoursesPage() {
 
   return (
     <div>
+      {showRequests && (
+        <div style={{ marginBottom: 18 }}>
+          <TabBar tabs={[{ id: "courses", label: "الدورات الحالية" }, { id: "programs", label: `طلبات البرامج` }, { id: "trainers", label: `طلبات المدربين` }]} active={view} onChange={setView} />
+        </div>
+      )}
+      {showRequests && view === "trainers" && <TrainerRequestsPanel />}
+      {showRequests && view === "programs" && <ProgramRequestsPanel />}
+      {(!showRequests || view === "courses") && (<>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
         <h1 style={{ fontSize: 24, fontWeight: 700, color: "#0f4c81" }}>الدورات التدريبية</h1>
         {canManage && <Btn onClick={() => { setForm({ status: "active" }); setModal(true); }} color="#1abc9c">+ دورة جديدة</Btn>}
@@ -2626,6 +2748,7 @@ function CoursesPage() {
         <Select label="الحالة" value={form.status || "active"} onChange={e => setForm({ ...form, status: e.target.value })} options={[{ value: "draft", label: "مسودة" }, { value: "active", label: "نشطة" }, { value: "completed", label: "منتهية" }, { value: "archived", label: "أرشيف" }]} />
         <Btn onClick={save} color="#1abc9c" style={{ width: "100%", marginTop: 8 }}>💾 حفظ</Btn>
       </Modal>
+      </>)}
     </div>
   );
 }
@@ -3529,39 +3652,16 @@ function PageLoader() {
 // Real website registrants (from the platform) + role control + trainer requests.
 function PlatformUsersPage() {
   const readOnly = getEffectiveRole(useAuth()) === "employee";  // موظف متابعة: عرض بلا تنفيذ
-  const [tab, setTab] = useState("people");
   const [data, setData] = useState(null);
-  const [trainerApps, setTrainerApps] = useState([]);
-  const [programReqs, setProgramReqs] = useState([]);
   const [q, setQ] = useState("");
   const [busy, setBusy] = useState("");
-  const [notes, setNotes] = useState({});   // request/app id -> admin note draft
-  const [lms, setLms] = useState({});        // program request id -> { entry, ref }
 
   const loadUsers = () => api.get(`/platform-users${q ? `?search=${encodeURIComponent(q)}` : ""}`).then(r => { if (r && !r.error) setData(r); });
-  const loadTrainers = () => api.get("/platform-trainer-applications?status=pending").then(a => { if (a && !a.error) setTrainerApps(a.applications || []); });
-  const loadPrograms = () => api.get("/platform-program-requests?status=pending").then(a => { if (a && !a.error) setProgramReqs(a.requests || []); });
-
   useEffect(() => { loadUsers(); /* eslint-disable-next-line */ }, [q]);
-  useEffect(() => { loadTrainers(); loadPrograms(); /* eslint-disable-next-line */ }, []);
 
   const setRole = (u, role) => {
     setBusy(u.id);
     api.post(`/platform-users/${u.id}/role`, { role }).then(r => { setBusy(""); if (r && !r.error) loadUsers(); else alert(r.error || "تعذر تغيير الدور"); });
-  };
-  const decideTrainer = (app, action) => {
-    setBusy(app.id);
-    api.post(`/platform-trainer-applications/${app.id}/${action}`, { admin_note: notes[app.id] || "" })
-      .then(r => { setBusy(""); if (r && !r.error) { loadTrainers(); loadUsers(); } else alert(r.error || "تعذر تنفيذ العملية"); });
-  };
-  const decideProgram = (req, action) => {
-    setBusy(req.id);
-    const draft = lms[req.id] || {};
-    const payload = action === "approve"
-      ? { admin_note: notes[req.id] || "", lms_entry_url: draft.entry || "", lms_course_ref: draft.ref || "" }
-      : { admin_note: notes[req.id] || "" };
-    api.post(`/platform-program-requests/${req.id}/${action}`, payload)
-      .then(r => { setBusy(""); if (r && !r.error) loadPrograms(); else alert(r.error || "تعذر تنفيذ العملية"); });
   };
 
   const users = (data && data.users) || [];
@@ -3580,38 +3680,21 @@ function PlatformUsersPage() {
     a.href = url; a.download = "elprofessor-users.csv"; a.click();
     URL.revokeObjectURL(url);
   };
-  const tabs = [
-    { id: "people", label: `الأشخاص (${(data && data.count) || 0})` },
-    { id: "trainers", label: `طلبات المدربين (${trainerApps.length})` },
-    { id: "programs", label: `طلبات البرامج (${programReqs.length})` },
-  ];
-  const tabBtn = (active) => ({
-    padding: "9px 16px", borderRadius: 10, border: "1px solid " + (active ? BRAND.navy : "#e5e7eb"),
-    background: active ? BRAND.navy : "#fff", color: active ? "#fff" : "#475467",
-    fontWeight: 800, fontSize: 14, cursor: "pointer",
-  });
-  const noteInput = (id, ph) => (
-    <input value={notes[id] || ""} onChange={e => setNotes(n => ({ ...n, [id]: e.target.value }))} placeholder={ph}
-      style={{ padding: "8px 12px", borderRadius: 8, border: "1px solid #e5e7eb", fontSize: 13, flex: 1, minWidth: 160 }} />
-  );
+  const approvedTrainers = users.filter(u => u.trainer_status === "approved").length;
+  const investorsCount = users.filter(u => u.role === "investor").length;
 
   return (
     <div>
-      <h1 style={{ fontSize: 24, fontWeight: 900, color: BRAND.navy, marginBottom: 8 }}>إدارة المنصة</h1>
-      <p style={{ color: "#667085", marginBottom: 20 }}>الأشخاص المسجّلون، طلبات المدربين، وطلبات الالتحاق بالبرامج — كلها تُدار من هنا.</p>
+      <h1 style={{ fontSize: 24, fontWeight: 900, color: BRAND.navy, marginBottom: 8 }}>المستخدمون</h1>
+      <p style={{ color: "#667085", marginBottom: 20 }}>كل المسجّلين على المنصة — تحليلهم، أدوارهم، وأرقام تواصلهم للتسويق والمبيعات. (طلبات المدربين والبرامج اتنقلت لقسم «الدورات».)</p>
 
       <div style={{ display: "flex", gap: 12, marginBottom: 20, flexWrap: "wrap" }}>
         <KPICard icon="👥" label="إجمالي المسجّلين" value={(data && data.count) || 0} color={BRAND.navy} />
-        <KPICard icon="🎓" label="طلبات مدربين معلّقة" value={trainerApps.length} color="#e8913a" />
-        <KPICard icon="📚" label="طلبات برامج معلّقة" value={programReqs.length} color="#5b6abf" />
+        <KPICard icon="🎓" label="مدربون معتمدون" value={approvedTrainers} color="#2d8659" />
+        <KPICard icon="💼" label="مستثمرون" value={investorsCount} color="#8e44ad" />
       </div>
 
-      <div style={{ display: "flex", gap: 10, marginBottom: 20, flexWrap: "wrap" }}>
-        {tabs.map(t => <button key={t.id} onClick={() => setTab(t.id)} style={tabBtn(tab === t.id)}>{t.label}</button>)}
-      </div>
-
-      {tab === "people" && (
-        <div>
+      <div>
           <div style={{ display: "flex", gap: 12, marginBottom: 16, flexWrap: "wrap", alignItems: "center" }}>
             <input placeholder="ابحث بالاسم أو الإيميل أو التليفون..." value={q} onChange={e => setQ(e.target.value)} style={{ padding: "10px 14px", borderRadius: 10, border: "1px solid #e5e7eb", width: 320, maxWidth: "100%" }} />
             <button onClick={exportCsv} disabled={users.length === 0} style={{ padding: "10px 18px", borderRadius: 10, border: "1px solid " + BRAND.navy, background: "#fff", color: BRAND.navy, fontWeight: 800, cursor: users.length ? "pointer" : "not-allowed" }}>⬇️ تصدير CSV ({users.length})</button>
@@ -3651,73 +3734,7 @@ function PlatformUsersPage() {
               </tbody>
             </table>
           </div>
-        </div>
-      )}
-
-      {tab === "trainers" && (
-        <div style={{ display: "grid", gap: 14 }}>
-          {trainerApps.length === 0 && <div style={{ padding: 24, textAlign: "center", color: "#9ca3af", background: "#fff", borderRadius: 12 }}>لا توجد طلبات مدربين معلّقة. ✅</div>}
-          {trainerApps.map(a => (
-            <div key={a.id} style={{ background: "#fff", borderRadius: 12, boxShadow: "0 1px 4px rgba(0,0,0,0.06)", padding: 18, borderRight: "4px solid #e8913a" }}>
-              <div style={{ display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
-                <div style={{ fontWeight: 900, color: BRAND.navy, fontSize: 16 }}>{a.user_name || a.full_name || "—"}</div>
-                <div style={{ fontSize: 13, color: "#667085" }}>{a.user_email || a.email || ""}{a.user_phone ? ` · ${a.user_phone}` : ""}</div>
-              </div>
-              {a.headline && <div style={{ marginTop: 6, color: "#475467", fontWeight: 700 }}>{a.headline}</div>}
-              {Array.isArray(a.expertise) && a.expertise.length > 0 && (
-                <div style={{ marginTop: 8, display: "flex", gap: 6, flexWrap: "wrap" }}>
-                  {a.expertise.map((x, i) => <span key={i} style={{ background: "#f1f5f9", borderRadius: 999, padding: "3px 10px", fontSize: 12, color: "#475467" }}>{x}</span>)}
-                </div>
-              )}
-              {a.experience_summary && <div style={{ marginTop: 8, fontSize: 13, color: "#667085", whiteSpace: "pre-wrap" }}>{a.experience_summary}</div>}
-              <div style={{ marginTop: 8, display: "flex", gap: 14, flexWrap: "wrap", fontSize: 13 }}>
-                {a.linkedin_url && <a href={a.linkedin_url} target="_blank" rel="noreferrer" style={{ color: "#5b6abf" }}>LinkedIn ↗</a>}
-                {a.portfolio_url && <a href={a.portfolio_url} target="_blank" rel="noreferrer" style={{ color: "#5b6abf" }}>أعماله ↗</a>}
-              </div>
-              {readOnly ? (
-                <div style={{ marginTop: 12, fontSize: 12, color: "#9ca3af" }}>👁️ للمتابعة فقط — الاعتماد من المدير.</div>
-              ) : (
-                <div style={{ marginTop: 14, display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
-                  {noteInput(a.id, "ملاحظة إدارية (اختياري)")}
-                  <button disabled={busy === a.id} onClick={() => decideTrainer(a, "approve")} style={{ padding: "9px 18px", borderRadius: 8, border: "none", background: "#2d8659", color: "#fff", fontWeight: 800, cursor: "pointer" }}>اعتماد</button>
-                  <button disabled={busy === a.id} onClick={() => decideTrainer(a, "reject")} style={{ padding: "9px 18px", borderRadius: 8, border: "1px solid #dc2626", background: "#fff", color: "#dc2626", fontWeight: 800, cursor: "pointer" }}>رفض</button>
-                </div>
-              )}
-            </div>
-          ))}
-        </div>
-      )}
-
-      {tab === "programs" && (
-        <div style={{ display: "grid", gap: 14 }}>
-          {programReqs.length === 0 && <div style={{ padding: 24, textAlign: "center", color: "#9ca3af", background: "#fff", borderRadius: 12 }}>لا توجد طلبات برامج معلّقة. ✅</div>}
-          {programReqs.map(req => (
-            <div key={req.id} style={{ background: "#fff", borderRadius: 12, boxShadow: "0 1px 4px rgba(0,0,0,0.06)", padding: 18, borderRight: "4px solid #5b6abf" }}>
-              <div style={{ display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
-                <div style={{ fontWeight: 900, color: BRAND.navy, fontSize: 16 }}>{req.user_name || "—"}</div>
-                <div style={{ fontSize: 13, color: "#667085" }}>{req.user_email || ""}</div>
-              </div>
-              <div style={{ marginTop: 6, color: "#475467" }}>البرنامج: <b>{req.title || req.program_id || "—"}</b></div>
-              {req.notes && <div style={{ marginTop: 6, fontSize: 13, color: "#667085", whiteSpace: "pre-wrap" }}>{req.notes}</div>}
-              {readOnly ? (
-                <div style={{ marginTop: 12, fontSize: 12, color: "#9ca3af" }}>👁️ للمتابعة فقط — الاعتماد والربط من المدير.</div>
-              ) : (
-                <div style={{ marginTop: 12, display: "grid", gap: 8 }}>
-                  <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-                    <input value={(lms[req.id] || {}).entry || ""} onChange={e => setLms(s => ({ ...s, [req.id]: { ...s[req.id], entry: e.target.value } }))} placeholder="رابط الدخول للدورة (LMS) — يُملأ تلقائيًا لو فاضي" style={{ padding: "8px 12px", borderRadius: 8, border: "1px solid #e5e7eb", fontSize: 13, flex: 2, minWidth: 200 }} />
-                    <input value={(lms[req.id] || {}).ref || ""} onChange={e => setLms(s => ({ ...s, [req.id]: { ...s[req.id], ref: e.target.value } }))} placeholder="مرجع الدورة (course ref)" style={{ padding: "8px 12px", borderRadius: 8, border: "1px solid #e5e7eb", fontSize: 13, flex: 1, minWidth: 140 }} />
-                  </div>
-                  <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
-                    {noteInput(req.id, "ملاحظة إدارية (اختياري)")}
-                    <button disabled={busy === req.id} onClick={() => decideProgram(req, "approve")} style={{ padding: "9px 18px", borderRadius: 8, border: "none", background: "#2d8659", color: "#fff", fontWeight: 800, cursor: "pointer" }}>اعتماد وربط</button>
-                    <button disabled={busy === req.id} onClick={() => decideProgram(req, "reject")} style={{ padding: "9px 18px", borderRadius: 8, border: "1px solid #dc2626", background: "#fff", color: "#dc2626", fontWeight: 800, cursor: "pointer" }}>رفض</button>
-                  </div>
-                </div>
-              )}
-            </div>
-          ))}
-        </div>
-      )}
+      </div>
     </div>
   );
 }
