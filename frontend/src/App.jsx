@@ -2677,6 +2677,9 @@ function CoursesPage() {
   };
   const statusLabel = (s) => s === "active" ? "نشطة" : s === "completed" ? "منتهية" : s === "paused" ? "موقوفة" : s === "draft" ? "مسودة" : s === "archived" ? "مؤرشفة" : s;
   const statusColor = (s) => s === "active" ? "#2d8659" : s === "paused" ? "#c0392b" : "#9ca3af";
+  // عرض الإيراد الحقيقي من ووكومرس بعملة المتجر.
+  const curSymbol = { GBP: "£", USD: "$", EGP: "ج.م", EUR: "€" };
+  const wooMoney = (v, cur) => `${curSymbol[cur] || (cur ? cur + " " : "")}${fmt(v || 0)}`;
 
   // مزامنة الدورات الحقيقية من الأكاديمية (WordPress/Tutor) عبر المنصة — للأدمن فقط.
   const [syncing, setSyncing] = useState(false);
@@ -2794,6 +2797,11 @@ function CoursesPage() {
             {c.open_for_investment && <span style={{ fontSize: 12, color: "#b45309", marginRight: 8, fontWeight: 800 }}>💵 مفتوحة للاستثمار</span>}
             {c.lms_synced && <span title={c.lms_instructor_email || ""} style={{ fontSize: 12, color: "#5b6abf", marginRight: 8, fontWeight: 800 }}>🔗 من الأكاديمية</span>}
             {c.trainer_name && <span title={c.lms_instructor_email || ""} style={{ fontSize: 13, color: "#6b7280", marginRight: 8 }}>🎓 {c.trainer_name}</span>}
+            {c.lms_synced && c.lms_currency ? (
+              <div style={{ marginTop: 8, fontSize: 12, color: "#2d8659", fontWeight: 800 }}>
+                🛒 إيراد الأكاديمية (حقيقي): {wooMoney(c.lms_revenue, c.lms_currency)} <span style={{ color: "#9ca3af", fontWeight: 600 }}>({c.lms_sales_count || 0} عملية بيع)</span>
+              </div>
+            ) : null}
             {((c.linked_expenses || []).length > 0 || (c.linked_payouts || []).length > 0) && (
               <div style={{ marginTop: 14, background: "#fcfbf8", border: "1px solid #f0eadb", borderRadius: 12, padding: 12, fontSize: 12, color: "#667085", lineHeight: 1.9 }}>
                 <div style={{ fontWeight: 900, color: BRAND.navy, marginBottom: 6 }}>تفاصيل التنفيذ</div>
