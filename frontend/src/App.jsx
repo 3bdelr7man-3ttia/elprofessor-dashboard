@@ -2706,6 +2706,27 @@ function CoursesPage() {
       setLmsModal(false); setLmsForm({});
     } else alert(r?.error || "تعذر إنشاء الدورة على الأكاديمية");
   };
+  // مساعد AI: فكرة بسيطة → عنوان/وصف/مستوى/مدة/محاور تملأ الفورم.
+  const [aiIdea, setAiIdea] = useState("");
+  const [aiBusy, setAiBusy] = useState(false);
+  const aiDraft = async () => {
+    if (!aiIdea.trim()) return alert("اكتب فكرة الدورة الأول.");
+    setAiBusy(true);
+    const r = await api.post("/courses/ai-draft", { idea: aiIdea });
+    setAiBusy(false);
+    if (r && !r.error && r.draft) {
+      const d = r.draft;
+      const outline = Array.isArray(d.outline) && d.outline.length ? "\n\nالمحاور:\n- " + d.outline.join("\n- ") : "";
+      setLmsForm(f => ({
+        ...f,
+        title: d.title || f.title,
+        content: (d.description || "") + outline,
+        level: ["beginner", "intermediate", "expert", "all_levels"].includes(d.level) ? d.level : (f.level || "beginner"),
+        duration_hours: Number(d.duration_hours) || f.duration_hours || 0,
+        duration_minutes: Number(d.duration_minutes) || f.duration_minutes || 0,
+      }));
+    } else alert(r?.error || "تعذر توليد المسودة بالـ AI");
+  };
 
   const totalStudents = courses.reduce((s, c) => s + (c.students_count || 0), 0);
   const totalRevenue = courses.reduce((s, c) => s + (c.total_revenue || 0), 0);
@@ -2726,7 +2747,7 @@ function CoursesPage() {
         <h1 style={{ fontSize: 24, fontWeight: 700, color: "#0f4c81" }}>الدورات التدريبية</h1>
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
           {isAdmin && <Btn onClick={syncLms} color="#5b6abf" disabled={syncing}>{syncing ? "⏳ جاري المزامنة..." : "🔄 مزامنة من الأكاديمية"}</Btn>}
-          {canCreateLms && <Btn onClick={() => { setLmsForm({ level: "beginner", price_type: "free" }); setLmsModal(true); }} color="#d4a017" style={{ color: BRAND.navy }}>🎓 أضف دورة على الأكاديمية</Btn>}
+          {canCreateLms && <Btn onClick={() => { setLmsForm({ level: "beginner", price_type: "free" }); setAiIdea(""); setLmsModal(true); }} color="#d4a017" style={{ color: BRAND.navy }}>🎓 أضف دورة على الأكاديمية</Btn>}
           {canManage && <Btn onClick={() => { setForm({ status: "active" }); setModal(true); }} color="#1abc9c">+ دورة جديدة</Btn>}
         </div>
       </div>
@@ -2846,6 +2867,13 @@ function CoursesPage() {
           {isTrainer
             ? "هتتسجل الدورة باسمك كمحاضر (بإيميلك على الأكاديمية)، كمسودة للمراجعة قبل النشر."
             : "هتتعمل كمسودة على الأكاديمية باسم المحاضر اللي تحدده، وبعد مراجعتها ونشرها تظهر هنا بالمزامنة."}
+        </div>
+        <div style={{ background: "#f7f4eb", border: "1px solid #e6d7a8", borderRadius: 10, padding: 12, marginBottom: 16 }}>
+          <div style={{ fontSize: 13, fontWeight: 800, color: BRAND.navy, marginBottom: 8 }}>✨ مش عارف تبدأ؟ اكتب فكرة وسيب الـ AI يجهّزها</div>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <input value={aiIdea} onChange={e => setAiIdea(e.target.value)} placeholder="مثال: دورة عن العقود التجارية للشركات الناشئة" style={{ flex: 1, minWidth: 200, padding: "9px 12px", borderRadius: 8, border: "1px solid #e5e7eb", fontSize: 13 }} />
+            <Btn onClick={aiDraft} color="#8e44ad" disabled={aiBusy}>{aiBusy ? "⏳ بيجهّز..." : "✨ جهّز بالـ AI"}</Btn>
+          </div>
         </div>
         <Input label="عنوان الدورة" value={lmsForm.title || ""} onChange={e => setLmsForm({ ...lmsForm, title: e.target.value })} />
         {isAdmin && <Input label="إيميل المحاضر (نفس إيميله على الأكاديمية)" value={lmsForm.instructor_email || ""} onChange={e => setLmsForm({ ...lmsForm, instructor_email: e.target.value })} placeholder="trainer@example.com" />}

@@ -2413,6 +2413,61 @@ def answer_with_ai(provider, model, question, snapshot):
 def ai_models():
     return jsonify(ai_models_payload())
 
+
+def _extract_json_block(text):
+    """Pull the first JSON object out of an AI reply (models sometimes wrap it in prose)."""
+    if not text:
+        return None
+    try:
+        return json.loads(text)
+    except Exception:
+        pass
+    start, end = text.find('{'), text.rfind('}')
+    if start != -1 and end != -1 and end > start:
+        try:
+            return json.loads(text[start:end + 1])
+        except Exception:
+            return None
+    return None
+
+
+# AI helper for course creation: trainer/admin types a short idea → AI drafts the course
+# (title, description, level, duration, outline) to prefill the "create on academy" form.
+@app.route('/api/courses/ai-draft', methods=['POST'])
+@token_required
+@roles_required('admin', 'trainer')
+def ai_course_draft():
+    idea = ((request.json or {}).get('idea') or '').strip()
+    if not idea:
+        return jsonify({'error': 'اكتب فكرة الدورة الأول'}), 400
+    provider = next((k for k, c in AI_PROVIDERS.items() if os.environ.get(c['env_key'])), None)
+    if not provider:
+        return jsonify({'error': 'مفيش مفتاح AI متظبط على الخادم (زي ANTHROPIC_API_KEY).'}), 503
+    cfg = AI_PROVIDERS[provider]
+    model = os.environ.get(cfg['model_env'], cfg['default_model'])
+    system_prompt = (
+        'أنت مساعد لإنشاء دورات تدريبية قانونية لمنصة "البروفيسور". المستخدم سيكتب فكرة بسيطة، '
+        'وأنت ترجع JSON فقط بدون أي كلام خارجه، بالشكل التالي:\n'
+        '{"title": "عنوان جذاب ومحدد", "description": "وصف تسويقي مختصر جملتين أو ثلاث", '
+        '"level": "beginner أو intermediate أو expert", "duration_hours": عدد, "duration_minutes": عدد, '
+        '"outline": ["محور 1", "محور 2", "محور 3"]}\n'
+        'اكتب بالعربية الفصحى المبسطة. اجعل المحاور بين 4 و8 محاور عملية.'
+    )
+    try:
+        api_key = os.environ[cfg['env_key']]
+        if provider == 'anthropic':
+            text = call_anthropic(api_key, model, system_prompt, f'فكرة الدورة: {idea}')
+        elif provider == 'openai':
+            text = call_openai_compatible('https://api.openai.com/v1', api_key, model, system_prompt, f'فكرة الدورة: {idea}')
+        else:
+            text = call_openai_compatible('https://api.deepseek.com/v1', api_key, model, system_prompt, f'فكرة الدورة: {idea}')
+    except Exception:
+        return jsonify({'error': 'تعذر توليد المسودة بالـ AI، جرّب تاني'}), 502
+    draft = _extract_json_block(text)
+    if not isinstance(draft, dict) or not draft.get('title'):
+        return jsonify({'error': 'الـ AI رجّع رد غير متوقع، جرّب تاني أو عدّل الفكرة'}), 502
+    return jsonify({'draft': draft})
+
 def generate_ai_snapshot():
     """Generate a structured data snapshot for AI consumption."""
     rate = get_rate()
