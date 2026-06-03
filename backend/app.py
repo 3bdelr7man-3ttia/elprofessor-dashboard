@@ -926,6 +926,66 @@ def platform_metrics():
         return jsonify({'error': 'تعذر جلب أرقام المنصة'}), 502
     return jsonify(r.json() if r.content else {})
 
+# --- The real website users (from the platform) + role control, surfaced here ---
+@app.route('/api/platform-users', methods=['GET'])
+@token_required
+@roles_required('admin')
+def platform_users_list():
+    if not PLATFORM_METRICS_SECRET:
+        return jsonify({'error': 'لم يتم ضبط الربط بعد'}), 503
+    try:
+        r = requests.get(
+            f"{PLATFORM_API_URL}/api/bridge/users",
+            params={'search': (request.args.get('search') or '')[:80], 'limit': 500},
+            headers={'X-ELP-Metrics-Secret': PLATFORM_METRICS_SECRET},
+            timeout=12,
+        )
+    except Exception:
+        return jsonify({'error': 'تعذر الاتصال بالمنصة'}), 502
+    if r.status_code != 200:
+        return jsonify({'error': 'تعذر جلب المستخدمين'}), 502
+    return jsonify(r.json() if r.content else {})
+
+@app.route('/api/platform-users/<user_id>/role', methods=['POST'])
+@token_required
+@roles_required('admin')
+def platform_users_set_role(user_id):
+    if not PLATFORM_METRICS_SECRET:
+        return jsonify({'error': 'لم يتم ضبط الربط بعد'}), 503
+    role = ((request.json or {}).get('role') or '').strip()
+    try:
+        r = requests.post(
+            f"{PLATFORM_API_URL}/api/bridge/users/{user_id}/role",
+            json={'role': role},
+            headers={'X-ELP-Metrics-Secret': PLATFORM_METRICS_SECRET},
+            timeout=12,
+        )
+    except Exception:
+        return jsonify({'error': 'تعذر الاتصال بالمنصة'}), 502
+    if r.status_code != 200:
+        body = r.json() if r.content else {}
+        return jsonify({'error': body.get('detail') or 'تعذر تغيير الدور'}), r.status_code
+    return jsonify(r.json() if r.content else {})
+
+@app.route('/api/platform-trainer-applications', methods=['GET'])
+@token_required
+@roles_required('admin')
+def platform_trainer_apps():
+    if not PLATFORM_METRICS_SECRET:
+        return jsonify({'error': 'لم يتم ضبط الربط بعد'}), 503
+    try:
+        r = requests.get(
+            f"{PLATFORM_API_URL}/api/bridge/trainer-applications",
+            params={'status': request.args.get('status') or 'all'},
+            headers={'X-ELP-Metrics-Secret': PLATFORM_METRICS_SECRET},
+            timeout=12,
+        )
+    except Exception:
+        return jsonify({'error': 'تعذر الاتصال بالمنصة'}), 502
+    if r.status_code != 200:
+        return jsonify({'error': 'تعذر جلب الطلبات'}), 502
+    return jsonify(r.json() if r.content else {})
+
 @app.route('/api/investor/wallet', methods=['GET'])
 def investor_wallet_bridge():
     """Read-only investor wallet by email, for the platform to mirror in its
