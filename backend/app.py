@@ -986,6 +986,73 @@ def platform_trainer_apps():
         return jsonify({'error': 'تعذر جلب الطلبات'}), 502
     return jsonify(r.json() if r.content else {})
 
+
+def _platform_proxy(method, path, params=None, json_body=None):
+    """Proxy an admin action to the main platform via the shared service secret.
+    Same pattern as platform_metrics/platform_users above, factored out because the
+    approval endpoints below all need it. Returns a Flask (json, status) response."""
+    if not PLATFORM_METRICS_SECRET:
+        return jsonify({'error': 'لم يتم ضبط الربط بعد'}), 503
+    try:
+        r = requests.request(
+            method,
+            f"{PLATFORM_API_URL}{path}",
+            params=params,
+            json=json_body,
+            headers={'X-ELP-Metrics-Secret': PLATFORM_METRICS_SECRET},
+            timeout=12,
+        )
+    except Exception:
+        return jsonify({'error': 'تعذر الاتصال بالمنصة'}), 502
+    if r.status_code != 200:
+        body = r.json() if r.content else {}
+        return jsonify({'error': body.get('detail') or 'تعذر تنفيذ العملية'}), r.status_code
+    return jsonify(r.json() if r.content else {})
+
+
+@app.route('/api/platform-trainer-applications/<application_id>/<action>', methods=['POST'])
+@token_required
+@roles_required('admin')
+def platform_trainer_decide(application_id, action):
+    if action not in ('approve', 'reject'):
+        return jsonify({'error': 'إجراء غير معروف'}), 400
+    body = request.json or {}
+    return _platform_proxy(
+        'POST',
+        f"/api/bridge/trainer-applications/{application_id}/{action}",
+        json_body={'admin_note': body.get('admin_note') or ''},
+    )
+
+
+@app.route('/api/platform-program-requests', methods=['GET'])
+@token_required
+@roles_required('admin')
+def platform_program_requests():
+    return _platform_proxy(
+        'GET',
+        '/api/bridge/program-requests',
+        params={'status': request.args.get('status') or 'all'},
+    )
+
+
+@app.route('/api/platform-program-requests/<request_id>/<action>', methods=['POST'])
+@token_required
+@roles_required('admin')
+def platform_program_decide(request_id, action):
+    if action not in ('approve', 'reject'):
+        return jsonify({'error': 'إجراء غير معروف'}), 400
+    body = request.json or {}
+    return _platform_proxy(
+        'POST',
+        f"/api/bridge/program-requests/{request_id}/{action}",
+        json_body={
+            'admin_note': body.get('admin_note') or '',
+            'lms_entry_url': body.get('lms_entry_url') or '',
+            'lms_course_ref': body.get('lms_course_ref') or '',
+        },
+    )
+
+
 @app.route('/api/investor/wallet', methods=['GET'])
 def investor_wallet_bridge():
     """Read-only investor wallet by email, for the platform to mirror in its
