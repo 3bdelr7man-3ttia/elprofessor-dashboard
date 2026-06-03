@@ -2077,8 +2077,10 @@ function LegacyMarketingPage() {
   );
 }
 
-function MarketingPage() {
-  const [tab, setTab] = useState("campaigns");
+// `only` splits this page: "campaigns" → التسويق (الحملات فقط);
+// "investors" → جزء الاستثمار الإعلاني (يُركَّب داخل قسم «الاستثمار»).
+function MarketingPage({ only = null }) {
+  const [tab, setTab] = useState(only || "campaigns");
   const [campaigns, setCampaigns] = useState([]);
   const [courses, setCourses] = useState([]);
   const [investments, setInvestments] = useState([]);
@@ -2159,16 +2161,16 @@ function MarketingPage() {
     <div>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 18, gap: 12, flexWrap: "wrap" }}>
         <div>
-          <h1 style={{ fontSize: 24, fontWeight: 900, color: BRAND.navy, margin: 0 }}>التسويق</h1>
-          <div style={{ marginTop: 6, fontSize: 13, color: "#667085" }}>متابعة الحملات وربطها بالدورات، مع نموذج المستثمرين والمعلنين وحاسبة توزيع الأرباح.</div>
+          <h1 style={{ fontSize: 24, fontWeight: 900, color: BRAND.navy, margin: 0 }}>{only === "investors" ? "الاستثمارات الإعلانية" : "التسويق"}</h1>
+          <div style={{ marginTop: 6, fontSize: 13, color: "#667085" }}>{only === "investors" ? "كل استثمار إعلاني مرتبط بدورة ونسبته من أرباحها، مع حاسبة محاكاة التوزيع." : "متابعة الحملات وربطها بالدورات وقياس أدائها."}</div>
         </div>
         <div style={{ display: "flex", gap: 10 }}>
-          <Btn onClick={() => { setCampaignForm({ platform: "facebook", status: "active", currency: "USD", start_date: new Date().toISOString().split("T")[0] }); setCampaignModal(true); }} color="#e8913a">+ حملة جديدة</Btn>
-          <Btn onClick={() => { setInvestmentForm({ status: "accrued", profit_percent: 25, amount_usd: 500 }); setInvestmentModal(true); }} color={BRAND.navy}>+ استثمار جديد</Btn>
+          {only !== "investors" && <Btn onClick={() => { setCampaignForm({ platform: "facebook", status: "active", currency: "USD", start_date: new Date().toISOString().split("T")[0] }); setCampaignModal(true); }} color="#e8913a">+ حملة جديدة</Btn>}
+          {only !== "campaigns" && <Btn onClick={() => { setInvestmentForm({ status: "accrued", profit_percent: 25, amount_usd: 500 }); setInvestmentModal(true); }} color={BRAND.navy}>+ استثمار جديد</Btn>}
         </div>
       </div>
 
-      <TabBar tabs={[{ id: "campaigns", label: "الحملات" }, { id: "investors", label: "المستثمرين والمعلنين" }]} active={tab} onChange={setTab} />
+      {!only && <TabBar tabs={[{ id: "campaigns", label: "الحملات" }, { id: "investors", label: "المستثمرين والمعلنين" }]} active={tab} onChange={setTab} />}
 
       {tab === "campaigns" && (
         <div>
@@ -3836,6 +3838,23 @@ function InvestorsAdminPage() {
           </tbody>
         </table>
       </div>
+    </div>
+  );
+}
+
+// قسم «الاستثمار» الموحّد: المحافظ والسحب (InvestorsAdminPage) + الاستثمارات
+// الإعلانية وحاسبة التوزيع (المنقولة من التسويق). كله في مكان واحد.
+function InvestmentPage() {
+  const [tab, setTab] = useState("investors");
+  return (
+    <div>
+      <div style={{ marginBottom: 18 }}>
+        <h1 style={{ fontSize: 24, fontWeight: 900, color: BRAND.navy, marginBottom: 6 }}>الاستثمار</h1>
+        <div style={{ fontSize: 13, color: "#667085", marginBottom: 14 }}>المستثمرون ومحافظهم وطلبات السحب، بالإضافة لفرص الاستثمار الإعلاني المرتبطة بالدورات.</div>
+        <TabBar tabs={[{ id: "investors", label: "المستثمرون والمحافظ" }, { id: "ads", label: "الاستثمارات الإعلانية" }]} active={tab} onChange={setTab} />
+      </div>
+      {tab === "investors" && <InvestorsAdminPage />}
+      {tab === "ads" && <MarketingPage only="investors" />}
     </div>
   );
 }
