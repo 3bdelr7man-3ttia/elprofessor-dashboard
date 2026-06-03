@@ -3516,69 +3516,183 @@ function PageLoader() {
 
 // Real website registrants (from the platform) + role control + trainer requests.
 function PlatformUsersPage() {
+  const [tab, setTab] = useState("people");
   const [data, setData] = useState(null);
-  const [apps, setApps] = useState([]);
+  const [trainerApps, setTrainerApps] = useState([]);
+  const [programReqs, setProgramReqs] = useState([]);
   const [q, setQ] = useState("");
   const [busy, setBusy] = useState("");
-  const reload = () => {
-    api.get(`/platform-users${q ? `?search=${encodeURIComponent(q)}` : ""}`).then(r => { if (r && !r.error) setData(r); });
-    api.get("/platform-trainer-applications?status=pending").then(a => { if (a && !a.error) setApps(a.applications || []); });
-  };
-  useEffect(() => { reload(); /* eslint-disable-next-line */ }, [q]);
+  const [notes, setNotes] = useState({});   // request/app id -> admin note draft
+  const [lms, setLms] = useState({});        // program request id -> { entry, ref }
+
+  const loadUsers = () => api.get(`/platform-users${q ? `?search=${encodeURIComponent(q)}` : ""}`).then(r => { if (r && !r.error) setData(r); });
+  const loadTrainers = () => api.get("/platform-trainer-applications?status=pending").then(a => { if (a && !a.error) setTrainerApps(a.applications || []); });
+  const loadPrograms = () => api.get("/platform-program-requests?status=pending").then(a => { if (a && !a.error) setProgramReqs(a.requests || []); });
+
+  useEffect(() => { loadUsers(); /* eslint-disable-next-line */ }, [q]);
+  useEffect(() => { loadTrainers(); loadPrograms(); /* eslint-disable-next-line */ }, []);
+
   const setRole = (u, role) => {
     setBusy(u.id);
-    api.post(`/platform-users/${u.id}/role`, { role }).then(r => { setBusy(""); if (r && !r.error) reload(); else alert(r.error || "تعذر تغيير الدور"); });
+    api.post(`/platform-users/${u.id}/role`, { role }).then(r => { setBusy(""); if (r && !r.error) loadUsers(); else alert(r.error || "تعذر تغيير الدور"); });
   };
+  const decideTrainer = (app, action) => {
+    setBusy(app.id);
+    api.post(`/platform-trainer-applications/${app.id}/${action}`, { admin_note: notes[app.id] || "" })
+      .then(r => { setBusy(""); if (r && !r.error) { loadTrainers(); loadUsers(); } else alert(r.error || "تعذر تنفيذ العملية"); });
+  };
+  const decideProgram = (req, action) => {
+    setBusy(req.id);
+    const draft = lms[req.id] || {};
+    const payload = action === "approve"
+      ? { admin_note: notes[req.id] || "", lms_entry_url: draft.entry || "", lms_course_ref: draft.ref || "" }
+      : { admin_note: notes[req.id] || "" };
+    api.post(`/platform-program-requests/${req.id}/${action}`, payload)
+      .then(r => { setBusy(""); if (r && !r.error) loadPrograms(); else alert(r.error || "تعذر تنفيذ العملية"); });
+  };
+
   const users = (data && data.users) || [];
   const roleLabel = { admin: "مدير", staff: "موظف", investor: "مستثمر", member: "عضو" };
+  const planLabel = { free: "مجانية", pro: "احترافية", premium: "بريميوم" };
+  const exportCsv = () => {
+    const cols = ["الاسم", "الإيميل", "التليفون", "الدور", "الباقة", "حالة المدرب", "تاريخ التسجيل"];
+    const rows = users.map(u => [
+      u.full_name || "", u.email || "", u.phone || "", roleLabel[u.role] || u.role || "",
+      planLabel[u.plan_id] || u.plan_id || "", u.trainer_status || "", (u.created_at || "").slice(0, 10),
+    ]);
+    const esc = (v) => `"${String(v).replace(/"/g, '""')}"`;
+    const csv = "﻿" + [cols, ...rows].map(r => r.map(esc).join(",")).join("\r\n");
+    const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
+    const a = document.createElement("a");
+    a.href = url; a.download = "elprofessor-users.csv"; a.click();
+    URL.revokeObjectURL(url);
+  };
+  const tabs = [
+    { id: "people", label: `الأشخاص (${(data && data.count) || 0})` },
+    { id: "trainers", label: `طلبات المدربين (${trainerApps.length})` },
+    { id: "programs", label: `طلبات البرامج (${programReqs.length})` },
+  ];
+  const tabBtn = (active) => ({
+    padding: "9px 16px", borderRadius: 10, border: "1px solid " + (active ? BRAND.navy : "#e5e7eb"),
+    background: active ? BRAND.navy : "#fff", color: active ? "#fff" : "#475467",
+    fontWeight: 800, fontSize: 14, cursor: "pointer",
+  });
+  const noteInput = (id, ph) => (
+    <input value={notes[id] || ""} onChange={e => setNotes(n => ({ ...n, [id]: e.target.value }))} placeholder={ph}
+      style={{ padding: "8px 12px", borderRadius: 8, border: "1px solid #e5e7eb", fontSize: 13, flex: 1, minWidth: 160 }} />
+  );
+
   return (
     <div>
-      <h1 style={{ fontSize: 24, fontWeight: 900, color: BRAND.navy, marginBottom: 8 }}>مستخدمو المنصة</h1>
-      <p style={{ color: "#667085", marginBottom: 20 }}>الأشخاص المسجّلون في الموقع — تحكّم في أدوارهم وراجع طلبات المدربين.</p>
+      <h1 style={{ fontSize: 24, fontWeight: 900, color: BRAND.navy, marginBottom: 8 }}>إدارة المنصة</h1>
+      <p style={{ color: "#667085", marginBottom: 20 }}>الأشخاص المسجّلون، طلبات المدربين، وطلبات الالتحاق بالبرامج — كلها تُدار من هنا.</p>
+
       <div style={{ display: "flex", gap: 12, marginBottom: 20, flexWrap: "wrap" }}>
         <KPICard icon="👥" label="إجمالي المسجّلين" value={(data && data.count) || 0} color={BRAND.navy} />
-        <KPICard icon="🎓" label="طلبات مدربين معلّقة" value={apps.length} color="#e8913a" />
+        <KPICard icon="🎓" label="طلبات مدربين معلّقة" value={trainerApps.length} color="#e8913a" />
+        <KPICard icon="📚" label="طلبات برامج معلّقة" value={programReqs.length} color="#5b6abf" />
       </div>
-      <input placeholder="ابحث بالاسم أو الإيميل..." value={q} onChange={e => setQ(e.target.value)} style={{ padding: "10px 14px", borderRadius: 10, border: "1px solid #e5e7eb", marginBottom: 16, width: 280, maxWidth: "100%" }} />
-      {apps.length > 0 && (
-        <div style={{ marginBottom: 24, background: "#fff7ed", border: "1px solid #fed7aa", borderRadius: 12, padding: 16 }}>
-          <div style={{ fontWeight: 900, color: "#9a3412", marginBottom: 10 }}>طلبات انضمام مدربين ({apps.length})</div>
-          {apps.map((a, i) => (
-            <div key={i} style={{ display: "flex", justifyContent: "space-between", padding: "6px 0", fontSize: 14 }}>
-              <span>{a.full_name || a.email || "—"}</span>
-              <span style={{ color: "#9a3412" }}>{a.specialty || a.status || "معلّق"}</span>
+
+      <div style={{ display: "flex", gap: 10, marginBottom: 20, flexWrap: "wrap" }}>
+        {tabs.map(t => <button key={t.id} onClick={() => setTab(t.id)} style={tabBtn(tab === t.id)}>{t.label}</button>)}
+      </div>
+
+      {tab === "people" && (
+        <div>
+          <div style={{ display: "flex", gap: 12, marginBottom: 16, flexWrap: "wrap", alignItems: "center" }}>
+            <input placeholder="ابحث بالاسم أو الإيميل أو التليفون..." value={q} onChange={e => setQ(e.target.value)} style={{ padding: "10px 14px", borderRadius: 10, border: "1px solid #e5e7eb", width: 320, maxWidth: "100%" }} />
+            <button onClick={exportCsv} disabled={users.length === 0} style={{ padding: "10px 18px", borderRadius: 10, border: "1px solid " + BRAND.navy, background: "#fff", color: BRAND.navy, fontWeight: 800, cursor: users.length ? "pointer" : "not-allowed" }}>⬇️ تصدير CSV ({users.length})</button>
+          </div>
+          <div style={{ background: "#fff", borderRadius: 12, boxShadow: "0 1px 4px rgba(0,0,0,0.06)", overflowX: "auto" }}>
+            <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 760 }}>
+              <thead>
+                <tr style={{ background: "#f8fafc" }}>
+                  {["الاسم", "الإيميل", "التليفون", "الباقة", "التسجيل", "الحالة", "الدور"].map(h => (
+                    <th key={h} style={{ padding: 12, fontSize: 13, color: "#667085", textAlign: "right" }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {users.map(u => (
+                  <tr key={u.id} style={{ borderTop: "1px solid #f1f5f9" }}>
+                    <td style={{ padding: 12, fontWeight: 700 }}>{u.full_name || "—"}</td>
+                    <td style={{ padding: 12, fontSize: 13, color: "#475467" }}>{u.email}</td>
+                    <td style={{ padding: 12, fontSize: 13, color: "#475467", direction: "ltr", textAlign: "right" }}>{u.phone || "—"}</td>
+                    <td style={{ padding: 12, fontSize: 12 }}>{planLabel[u.plan_id] || u.plan_id || "—"}</td>
+                    <td style={{ padding: 12, fontSize: 12, color: "#667085", direction: "ltr", textAlign: "right" }}>{(u.created_at || "").slice(0, 10) || "—"}</td>
+                    <td style={{ padding: 12, fontSize: 12 }}>{u.trainer_status === "approved" ? "مدرب معتمد" : (u.trainer_status === "pending" ? "مدرب معلّق" : "—")}</td>
+                    <td style={{ padding: 12 }}>
+                      <select disabled={busy === u.id} value={u.role} onChange={e => setRole(u, e.target.value)} style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid #e5e7eb", cursor: "pointer" }}>
+                        {["member", "investor", "staff", "admin"].map(r => <option key={r} value={r}>{roleLabel[r]}</option>)}
+                      </select>
+                    </td>
+                  </tr>
+                ))}
+                {users.length === 0 && (
+                  <tr><td colSpan={7} style={{ padding: 24, textAlign: "center", color: "#9ca3af" }}>لا يوجد مستخدمون بعد (أو الربط قيد التفعيل).</td></tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {tab === "trainers" && (
+        <div style={{ display: "grid", gap: 14 }}>
+          {trainerApps.length === 0 && <div style={{ padding: 24, textAlign: "center", color: "#9ca3af", background: "#fff", borderRadius: 12 }}>لا توجد طلبات مدربين معلّقة. ✅</div>}
+          {trainerApps.map(a => (
+            <div key={a.id} style={{ background: "#fff", borderRadius: 12, boxShadow: "0 1px 4px rgba(0,0,0,0.06)", padding: 18, borderRight: "4px solid #e8913a" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
+                <div style={{ fontWeight: 900, color: BRAND.navy, fontSize: 16 }}>{a.user_name || a.full_name || "—"}</div>
+                <div style={{ fontSize: 13, color: "#667085" }}>{a.user_email || a.email || ""}{a.user_phone ? ` · ${a.user_phone}` : ""}</div>
+              </div>
+              {a.headline && <div style={{ marginTop: 6, color: "#475467", fontWeight: 700 }}>{a.headline}</div>}
+              {Array.isArray(a.expertise) && a.expertise.length > 0 && (
+                <div style={{ marginTop: 8, display: "flex", gap: 6, flexWrap: "wrap" }}>
+                  {a.expertise.map((x, i) => <span key={i} style={{ background: "#f1f5f9", borderRadius: 999, padding: "3px 10px", fontSize: 12, color: "#475467" }}>{x}</span>)}
+                </div>
+              )}
+              {a.experience_summary && <div style={{ marginTop: 8, fontSize: 13, color: "#667085", whiteSpace: "pre-wrap" }}>{a.experience_summary}</div>}
+              <div style={{ marginTop: 8, display: "flex", gap: 14, flexWrap: "wrap", fontSize: 13 }}>
+                {a.linkedin_url && <a href={a.linkedin_url} target="_blank" rel="noreferrer" style={{ color: "#5b6abf" }}>LinkedIn ↗</a>}
+                {a.portfolio_url && <a href={a.portfolio_url} target="_blank" rel="noreferrer" style={{ color: "#5b6abf" }}>أعماله ↗</a>}
+              </div>
+              <div style={{ marginTop: 14, display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+                {noteInput(a.id, "ملاحظة إدارية (اختياري)")}
+                <button disabled={busy === a.id} onClick={() => decideTrainer(a, "approve")} style={{ padding: "9px 18px", borderRadius: 8, border: "none", background: "#2d8659", color: "#fff", fontWeight: 800, cursor: "pointer" }}>اعتماد</button>
+                <button disabled={busy === a.id} onClick={() => decideTrainer(a, "reject")} style={{ padding: "9px 18px", borderRadius: 8, border: "1px solid #dc2626", background: "#fff", color: "#dc2626", fontWeight: 800, cursor: "pointer" }}>رفض</button>
+              </div>
             </div>
           ))}
         </div>
       )}
-      <div style={{ background: "#fff", borderRadius: 12, boxShadow: "0 1px 4px rgba(0,0,0,0.06)", overflowX: "auto" }}>
-        <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 560 }}>
-          <thead>
-            <tr style={{ background: "#f8fafc" }}>
-              {["الاسم", "الإيميل", "الحالة", "الدور"].map(h => (
-                <th key={h} style={{ padding: 12, fontSize: 13, color: "#667085", textAlign: "right" }}>{h}</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {users.map(u => (
-              <tr key={u.id} style={{ borderTop: "1px solid #f1f5f9" }}>
-                <td style={{ padding: 12, fontWeight: 700 }}>{u.full_name || "—"}</td>
-                <td style={{ padding: 12, fontSize: 13, color: "#475467" }}>{u.email}</td>
-                <td style={{ padding: 12, fontSize: 12 }}>{u.trainer_status === "approved" ? "مدرب معتمد" : (u.trainer_status === "pending" ? "مدرب معلّق" : "—")}</td>
-                <td style={{ padding: 12 }}>
-                  <select disabled={busy === u.id} value={u.role} onChange={e => setRole(u, e.target.value)} style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid #e5e7eb", cursor: "pointer" }}>
-                    {["member", "investor", "staff", "admin"].map(r => <option key={r} value={r}>{roleLabel[r]}</option>)}
-                  </select>
-                </td>
-              </tr>
-            ))}
-            {users.length === 0 && (
-              <tr><td colSpan={4} style={{ padding: 24, textAlign: "center", color: "#9ca3af" }}>لا يوجد مستخدمون بعد (أو الربط قيد التفعيل).</td></tr>
-            )}
-          </tbody>
-        </table>
-      </div>
+
+      {tab === "programs" && (
+        <div style={{ display: "grid", gap: 14 }}>
+          {programReqs.length === 0 && <div style={{ padding: 24, textAlign: "center", color: "#9ca3af", background: "#fff", borderRadius: 12 }}>لا توجد طلبات برامج معلّقة. ✅</div>}
+          {programReqs.map(req => (
+            <div key={req.id} style={{ background: "#fff", borderRadius: 12, boxShadow: "0 1px 4px rgba(0,0,0,0.06)", padding: 18, borderRight: "4px solid #5b6abf" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
+                <div style={{ fontWeight: 900, color: BRAND.navy, fontSize: 16 }}>{req.user_name || "—"}</div>
+                <div style={{ fontSize: 13, color: "#667085" }}>{req.user_email || ""}</div>
+              </div>
+              <div style={{ marginTop: 6, color: "#475467" }}>البرنامج: <b>{req.title || req.program_id || "—"}</b></div>
+              {req.notes && <div style={{ marginTop: 6, fontSize: 13, color: "#667085", whiteSpace: "pre-wrap" }}>{req.notes}</div>}
+              <div style={{ marginTop: 12, display: "grid", gap: 8 }}>
+                <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+                  <input value={(lms[req.id] || {}).entry || ""} onChange={e => setLms(s => ({ ...s, [req.id]: { ...s[req.id], entry: e.target.value } }))} placeholder="رابط الدخول للدورة (LMS) — يُملأ تلقائيًا لو فاضي" style={{ padding: "8px 12px", borderRadius: 8, border: "1px solid #e5e7eb", fontSize: 13, flex: 2, minWidth: 200 }} />
+                  <input value={(lms[req.id] || {}).ref || ""} onChange={e => setLms(s => ({ ...s, [req.id]: { ...s[req.id], ref: e.target.value } }))} placeholder="مرجع الدورة (course ref)" style={{ padding: "8px 12px", borderRadius: 8, border: "1px solid #e5e7eb", fontSize: 13, flex: 1, minWidth: 140 }} />
+                </div>
+                <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+                  {noteInput(req.id, "ملاحظة إدارية (اختياري)")}
+                  <button disabled={busy === req.id} onClick={() => decideProgram(req, "approve")} style={{ padding: "9px 18px", borderRadius: 8, border: "none", background: "#2d8659", color: "#fff", fontWeight: 800, cursor: "pointer" }}>اعتماد وربط</button>
+                  <button disabled={busy === req.id} onClick={() => decideProgram(req, "reject")} style={{ padding: "9px 18px", borderRadius: 8, border: "1px solid #dc2626", background: "#fff", color: "#dc2626", fontWeight: 800, cursor: "pointer" }}>رفض</button>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
