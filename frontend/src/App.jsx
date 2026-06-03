@@ -2670,6 +2670,11 @@ function CoursesPage() {
     await api.put(`/courses/${c.id}`, { status: next });
     load();
   };
+  // فتح/قفل الدورة للاستثمار — تظهر/تختفي من ماركت المستثمر.
+  const toggleInvestment = async (c) => {
+    await api.put(`/courses/${c.id}`, { open_for_investment: !c.open_for_investment });
+    load();
+  };
   const statusLabel = (s) => s === "active" ? "نشطة" : s === "completed" ? "منتهية" : s === "paused" ? "موقوفة" : s === "draft" ? "مسودة" : s === "archived" ? "مؤرشفة" : s;
   const statusColor = (s) => s === "active" ? "#2d8659" : s === "paused" ? "#c0392b" : "#9ca3af";
 
@@ -2739,12 +2744,14 @@ function CoursesPage() {
             <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 12 }}>
               <h3 style={{ fontSize: 16, fontWeight: 700, color: "#1f2937" }}>{c.title}</h3>
               {canManage && <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
+                <button onClick={() => toggleInvestment(c)} title={c.open_for_investment ? "اقفل الاستثمار" : "افتح للاستثمار"} style={{ background: c.open_for_investment ? "#fef3c7" : "#f3f4f6", border: "none", borderRadius: 8, padding: "4px 10px", cursor: "pointer", fontSize: 12, fontWeight: 800, color: c.open_for_investment ? "#b45309" : "#6b7280" }}>{c.open_for_investment ? "💵 مقفول" : "💵 افتح"}</button>
                 <button onClick={() => toggleStatus(c)} title={c.status === "active" ? "إيقاف الدورة" : "تشغيل الدورة"} style={{ background: c.status === "active" ? "#fdecea" : "#eaf6ef", border: "none", borderRadius: 8, padding: "4px 10px", cursor: "pointer", fontSize: 12, fontWeight: 800, color: c.status === "active" ? "#c0392b" : "#2d8659" }}>{c.status === "active" ? "⏸ إيقاف" : "▶ تشغيل"}</button>
                 <button onClick={() => { setForm(c); setModal(true); }} style={{ background: "none", border: "none", cursor: "pointer" }}>✏️</button>
                 <button onClick={async () => { if (confirm("حذف؟")) { await api.del(`/courses/${c.id}`); load(); }}} style={{ background: "none", border: "none", cursor: "pointer" }}>🗑</button>
               </div>}
             </div>
             <Badge text={statusLabel(c.status)} color={statusColor(c.status)} />
+            {c.open_for_investment && <span style={{ fontSize: 12, color: "#b45309", marginRight: 8, fontWeight: 800 }}>💵 مفتوحة للاستثمار</span>}
             {c.lms_synced && <span title={c.lms_instructor_email || ""} style={{ fontSize: 12, color: "#5b6abf", marginRight: 8, fontWeight: 800 }}>🔗 من الأكاديمية</span>}
             {c.trainer_name && <span title={c.lms_instructor_email || ""} style={{ fontSize: 13, color: "#6b7280", marginRight: 8 }}>🎓 {c.trainer_name}</span>}
             {((c.linked_expenses || []).length > 0 || (c.linked_payouts || []).length > 0) && (

@@ -115,6 +115,7 @@ class Course(db.Model):
     lms_id = db.Column(db.String(50))   # = Tutor course id (tutor_id) for synced courses
     lms_instructor_email = db.Column(db.String(255))  # academy course instructor — trainer link by email
     lms_synced = db.Column(db.Boolean, default=False)  # True = mirrored from the academy (WordPress/Tutor)
+    open_for_investment = db.Column(db.Boolean, default=False)  # admin opened it → shows in investor marketplace
     notes = db.Column(db.Text)
     created_at = db.Column(db.DateTime, default=datetime.datetime.utcnow)
     revenues = db.relationship('Revenue', backref='course', lazy=True)
@@ -1595,7 +1596,10 @@ def list_courses():
     if viewer_role == 'trainer':
         items = [item for item in items if names_match(item.trainer_name, linked_name) or names_match(item.trainer_name, g.user.name)]
     elif viewer_role == 'investor':
-        if request.args.get('scope') != 'marketplace':
+        if request.args.get('scope') == 'marketplace':
+            # المستثمر يشوف بس الدورات اللي الأدمن فتحها للاستثمار.
+            items = [item for item in items if item.open_for_investment]
+        else:
             course_ids = {item.course_id for item in Investment.query.filter_by(investor_name=linked_name).all()}
             items = [item for item in items if item.id in course_ids]
     rate = get_rate()
@@ -1643,6 +1647,7 @@ def list_courses():
             'linked_investments': [serialize_investment(item, rate, {c.id: c}) for item in financial['investments']],
             'lms_id': c.lms_id, 'notes': c.notes,
             'lms_synced': bool(c.lms_synced), 'lms_instructor_email': c.lms_instructor_email,
+            'open_for_investment': bool(c.open_for_investment),
         })
     return jsonify(result)
 
@@ -1669,7 +1674,7 @@ def create_course():
 def update_course(id):
     c = Course.query.get_or_404(id)
     d = request.json or {}
-    for k in ['title', 'category', 'trainer_name', 'status', 'price_egp', 'price_usd', 'cost_egp', 'cost_usd', 'students_count', 'lms_id', 'notes']:
+    for k in ['title', 'category', 'trainer_name', 'status', 'price_egp', 'price_usd', 'cost_egp', 'cost_usd', 'students_count', 'lms_id', 'notes', 'open_for_investment']:
         if k in d:
             setattr(c, k, d[k])
     for dk in ['start_date', 'end_date']:
@@ -2867,6 +2872,8 @@ def ensure_runtime_schema():
                 connection.execute(text("ALTER TABLE courses ADD COLUMN lms_instructor_email VARCHAR(255)"))
             if 'lms_synced' not in course_columns:
                 connection.execute(text("ALTER TABLE courses ADD COLUMN lms_synced BOOLEAN DEFAULT 0"))
+            if 'open_for_investment' not in course_columns:
+                connection.execute(text("ALTER TABLE courses ADD COLUMN open_for_investment BOOLEAN DEFAULT 0"))
         if 'campaigns' in existing_tables:
             campaign_columns = {column['name'] for column in inspector.get_columns('campaigns')}
             if 'course_id' not in campaign_columns:
