@@ -853,7 +853,8 @@ def me():
 PLATFORM_API_URL = os.environ.get('PLATFORM_API_URL', 'https://api.elprofessor.net').rstrip('/')
 PLATFORM_SSO_AUD = 'elprofessor-dashboard'
 # Platform system role -> this dashboard's role.
-_PLATFORM_ROLE_MAP = {'admin': 'admin', 'staff': 'admin', 'investor': 'investor'}
+# staff = a follow-up employee (limited), NOT a full admin; admin stays admin.
+_PLATFORM_ROLE_MAP = {'admin': 'admin', 'staff': 'employee', 'investor': 'investor'}
 
 @app.route('/api/auth/sso', methods=['POST'])
 def sso_login():
@@ -879,7 +880,12 @@ def sso_login():
     if not email:
         return jsonify({'error': 'هوية الدخول غير صالحة'}), 401
     platform_role = (platform_user.get('role') or '').strip().lower()
+    trainer_status = (platform_user.get('trainer_status') or '').strip().lower()
     mapped_role = _PLATFORM_ROLE_MAP.get(platform_role, 'viewer')
+    # A trainer is an approved STATUS on the platform, not a system role — land them
+    # as a dashboard trainer (unless they already hold a stronger management role).
+    if mapped_role == 'viewer' and trainer_status == 'approved':
+        mapped_role = 'trainer'
 
     user = User.query.filter_by(email=email).first()
     if not user:
