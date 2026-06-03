@@ -116,6 +116,9 @@ class Course(db.Model):
     lms_instructor_email = db.Column(db.String(255))  # academy course instructor — trainer link by email
     lms_synced = db.Column(db.Boolean, default=False)  # True = mirrored from the academy (WordPress/Tutor)
     open_for_investment = db.Column(db.Boolean, default=False)  # admin opened it → shows in investor marketplace
+    lms_sales_count = db.Column(db.Integer, default=0)   # real units sold (WooCommerce)
+    lms_revenue = db.Column(db.Float, default=0)          # real gross revenue (WooCommerce, store currency)
+    lms_currency = db.Column(db.String(8))               # WooCommerce store currency (e.g. GBP)
     notes = db.Column(db.Text)
     created_at = db.Column(db.DateTime, default=datetime.datetime.utcnow)
     revenues = db.relationship('Revenue', backref='course', lazy=True)
@@ -1648,6 +1651,7 @@ def list_courses():
             'lms_id': c.lms_id, 'notes': c.notes,
             'lms_synced': bool(c.lms_synced), 'lms_instructor_email': c.lms_instructor_email,
             'open_for_investment': bool(c.open_for_investment),
+            'lms_sales_count': c.lms_sales_count or 0, 'lms_revenue': c.lms_revenue or 0, 'lms_currency': c.lms_currency or '',
         })
     return jsonify(result)
 
@@ -1741,6 +1745,11 @@ def sync_courses_from_lms():
         c.students_count = int(row.get('enrolled_count') or 0)
         c.status = status
         c.lms_synced = True
+        # Real revenue from WooCommerce (if matched by product name on the platform side).
+        if 'woo_revenue' in row:
+            c.lms_sales_count = int(row.get('woo_sales') or 0)
+            c.lms_revenue = float(row.get('woo_revenue') or 0)
+            c.lms_currency = row.get('woo_currency') or c.lms_currency
     db.session.commit()
     return jsonify({
         'message': 'تمت المزامنة من الأكاديمية',
@@ -2973,6 +2982,12 @@ def ensure_runtime_schema():
                 connection.execute(text("ALTER TABLE courses ADD COLUMN lms_synced BOOLEAN DEFAULT 0"))
             if 'open_for_investment' not in course_columns:
                 connection.execute(text("ALTER TABLE courses ADD COLUMN open_for_investment BOOLEAN DEFAULT 0"))
+            if 'lms_sales_count' not in course_columns:
+                connection.execute(text("ALTER TABLE courses ADD COLUMN lms_sales_count INTEGER DEFAULT 0"))
+            if 'lms_revenue' not in course_columns:
+                connection.execute(text("ALTER TABLE courses ADD COLUMN lms_revenue FLOAT DEFAULT 0"))
+            if 'lms_currency' not in course_columns:
+                connection.execute(text("ALTER TABLE courses ADD COLUMN lms_currency VARCHAR(8)"))
         if 'campaigns' in existing_tables:
             campaign_columns = {column['name'] for column in inspector.get_columns('campaigns')}
             if 'course_id' not in campaign_columns:
