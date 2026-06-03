@@ -48,7 +48,7 @@ const platLabels = { google_ads: "Google Ads", facebook: "Facebook", instagram: 
 const statusLabels = { draft: "مسودة", active: "نشطة", paused: "متوقفة", completed: "منتهية" };
 const recLabels = { continue: "✅ استمر", optimize: "🔧 حسّن", stop: "🛑 أوقف", monitor: "👁 راقب" };
 const recColors = { continue: "#2d8659", optimize: "#e8913a", stop: "#c0392b", monitor: "#5b6abf" };
-const userRoleLabels = { admin: "أدمن", viewer: "مشاهدة فقط", training_supervisor: "مشرف تدريبي", trainer: "مدرب", investor: "مستثمر/معلن" };
+const userRoleLabels = { admin: "أدمن", employee: "موظف (متابعة)", viewer: "مشاهدة فقط", training_supervisor: "مشرف تدريبي", trainer: "مدرب", investor: "مستثمر/معلن" };
 const investmentStatusLabels = { accrued: "مستحق", paid: "مدفوع", pending: "قيد التسوية" };
 const opportunityStatusLabels = { open: "مفتوح للجميع", hot: "طلب عالٍ", invite_only: "بطلب فقط", funded: "مكتمل التمويل", closed: "مغلق" };
 const opportunityStatusColors = { open: "#059669", hot: BRAND.gold, invite_only: "#98A2B3", funded: BRAND.navy, closed: "#98A2B3" };
@@ -2482,6 +2482,8 @@ function MarketingPage() {
 function CoursesPage() {
   const user = useAuth();
   const isTrainingSupervisor = user?.role === "training_supervisor";
+  // المدير فقط يعدّل/يضيف/يوقف؛ الموظف والمشرف التدريبي للعرض والمتابعة.
+  const canManage = !isTrainingSupervisor && getEffectiveRole(user) !== "employee";
   const [courses, setCourses] = useState([]);
   const [modal, setModal] = useState(false);
   const [form, setForm] = useState({});
@@ -2497,6 +2499,15 @@ function CoursesPage() {
     setModal(false); setForm({}); load();
   };
 
+  // تشغيل/إيقاف سريع — "الدورة واقفة ولا لأ" من غير ما تفتح نموذج التعديل.
+  const toggleStatus = async (c) => {
+    const next = c.status === "active" ? "paused" : "active";
+    await api.put(`/courses/${c.id}`, { status: next });
+    load();
+  };
+  const statusLabel = (s) => s === "active" ? "نشطة" : s === "completed" ? "منتهية" : s === "paused" ? "موقوفة" : s === "draft" ? "مسودة" : s === "archived" ? "مؤرشفة" : s;
+  const statusColor = (s) => s === "active" ? "#2d8659" : s === "paused" ? "#c0392b" : "#9ca3af";
+
   const totalStudents = courses.reduce((s, c) => s + (c.students_count || 0), 0);
   const totalRevenue = courses.reduce((s, c) => s + (c.total_revenue || 0), 0);
   const totalCost = courses.reduce((s, c) => s + (c.total_cost || 0), 0);
@@ -2506,7 +2517,7 @@ function CoursesPage() {
     <div>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
         <h1 style={{ fontSize: 24, fontWeight: 700, color: "#0f4c81" }}>الدورات التدريبية</h1>
-        {!isTrainingSupervisor && <Btn onClick={() => { setForm({ status: "active" }); setModal(true); }} color="#1abc9c">+ دورة جديدة</Btn>}
+        {canManage && <Btn onClick={() => { setForm({ status: "active" }); setModal(true); }} color="#1abc9c">+ دورة جديدة</Btn>}
       </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 16, marginBottom: 24 }}>
@@ -2540,12 +2551,13 @@ function CoursesPage() {
           <div key={c.id} style={{ background: "#fff", borderRadius: 12, padding: 22, boxShadow: "0 1px 4px rgba(0,0,0,0.06)", borderTop: `3px solid ${c.profit >= 0 ? "#2d8659" : "#c0392b"}` }}>
             <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 12 }}>
               <h3 style={{ fontSize: 16, fontWeight: 700, color: "#1f2937" }}>{c.title}</h3>
-              {!isTrainingSupervisor && <div>
+              {canManage && <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
+                <button onClick={() => toggleStatus(c)} title={c.status === "active" ? "إيقاف الدورة" : "تشغيل الدورة"} style={{ background: c.status === "active" ? "#fdecea" : "#eaf6ef", border: "none", borderRadius: 8, padding: "4px 10px", cursor: "pointer", fontSize: 12, fontWeight: 800, color: c.status === "active" ? "#c0392b" : "#2d8659" }}>{c.status === "active" ? "⏸ إيقاف" : "▶ تشغيل"}</button>
                 <button onClick={() => { setForm(c); setModal(true); }} style={{ background: "none", border: "none", cursor: "pointer" }}>✏️</button>
                 <button onClick={async () => { if (confirm("حذف؟")) { await api.del(`/courses/${c.id}`); load(); }}} style={{ background: "none", border: "none", cursor: "pointer" }}>🗑</button>
               </div>}
             </div>
-            <Badge text={c.status === "active" ? "نشطة" : c.status === "completed" ? "منتهية" : c.status} color={c.status === "active" ? "#2d8659" : "#9ca3af"} />
+            <Badge text={statusLabel(c.status)} color={statusColor(c.status)} />
             {c.trainer_name && <span style={{ fontSize: 13, color: "#6b7280", marginRight: 8 }}>🎓 {c.trainer_name}</span>}
             {((c.linked_expenses || []).length > 0 || (c.linked_payouts || []).length > 0) && (
               <div style={{ marginTop: 14, background: "#fcfbf8", border: "1px solid #f0eadb", borderRadius: 12, padding: 12, fontSize: 12, color: "#667085", lineHeight: 1.9 }}>
@@ -3516,6 +3528,7 @@ function PageLoader() {
 
 // Real website registrants (from the platform) + role control + trainer requests.
 function PlatformUsersPage() {
+  const readOnly = getEffectiveRole(useAuth()) === "employee";  // موظف متابعة: عرض بلا تنفيذ
   const [tab, setTab] = useState("people");
   const [data, setData] = useState(null);
   const [trainerApps, setTrainerApps] = useState([]);
@@ -3622,9 +3635,13 @@ function PlatformUsersPage() {
                     <td style={{ padding: 12, fontSize: 12, color: "#667085", direction: "ltr", textAlign: "right" }}>{(u.created_at || "").slice(0, 10) || "—"}</td>
                     <td style={{ padding: 12, fontSize: 12 }}>{u.trainer_status === "approved" ? "مدرب معتمد" : (u.trainer_status === "pending" ? "مدرب معلّق" : "—")}</td>
                     <td style={{ padding: 12 }}>
-                      <select disabled={busy === u.id} value={u.role} onChange={e => setRole(u, e.target.value)} style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid #e5e7eb", cursor: "pointer" }}>
-                        {["member", "investor", "staff", "admin"].map(r => <option key={r} value={r}>{roleLabel[r]}</option>)}
-                      </select>
+                      {readOnly ? (
+                        <span style={{ fontSize: 13, color: "#475467" }}>{roleLabel[u.role] || u.role}</span>
+                      ) : (
+                        <select disabled={busy === u.id} value={u.role} onChange={e => setRole(u, e.target.value)} style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid #e5e7eb", cursor: "pointer" }}>
+                          {["member", "investor", "staff", "admin"].map(r => <option key={r} value={r}>{roleLabel[r]}</option>)}
+                        </select>
+                      )}
                     </td>
                   </tr>
                 ))}
@@ -3657,11 +3674,15 @@ function PlatformUsersPage() {
                 {a.linkedin_url && <a href={a.linkedin_url} target="_blank" rel="noreferrer" style={{ color: "#5b6abf" }}>LinkedIn ↗</a>}
                 {a.portfolio_url && <a href={a.portfolio_url} target="_blank" rel="noreferrer" style={{ color: "#5b6abf" }}>أعماله ↗</a>}
               </div>
-              <div style={{ marginTop: 14, display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
-                {noteInput(a.id, "ملاحظة إدارية (اختياري)")}
-                <button disabled={busy === a.id} onClick={() => decideTrainer(a, "approve")} style={{ padding: "9px 18px", borderRadius: 8, border: "none", background: "#2d8659", color: "#fff", fontWeight: 800, cursor: "pointer" }}>اعتماد</button>
-                <button disabled={busy === a.id} onClick={() => decideTrainer(a, "reject")} style={{ padding: "9px 18px", borderRadius: 8, border: "1px solid #dc2626", background: "#fff", color: "#dc2626", fontWeight: 800, cursor: "pointer" }}>رفض</button>
-              </div>
+              {readOnly ? (
+                <div style={{ marginTop: 12, fontSize: 12, color: "#9ca3af" }}>👁️ للمتابعة فقط — الاعتماد من المدير.</div>
+              ) : (
+                <div style={{ marginTop: 14, display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+                  {noteInput(a.id, "ملاحظة إدارية (اختياري)")}
+                  <button disabled={busy === a.id} onClick={() => decideTrainer(a, "approve")} style={{ padding: "9px 18px", borderRadius: 8, border: "none", background: "#2d8659", color: "#fff", fontWeight: 800, cursor: "pointer" }}>اعتماد</button>
+                  <button disabled={busy === a.id} onClick={() => decideTrainer(a, "reject")} style={{ padding: "9px 18px", borderRadius: 8, border: "1px solid #dc2626", background: "#fff", color: "#dc2626", fontWeight: 800, cursor: "pointer" }}>رفض</button>
+                </div>
+              )}
             </div>
           ))}
         </div>
@@ -3678,21 +3699,126 @@ function PlatformUsersPage() {
               </div>
               <div style={{ marginTop: 6, color: "#475467" }}>البرنامج: <b>{req.title || req.program_id || "—"}</b></div>
               {req.notes && <div style={{ marginTop: 6, fontSize: 13, color: "#667085", whiteSpace: "pre-wrap" }}>{req.notes}</div>}
-              <div style={{ marginTop: 12, display: "grid", gap: 8 }}>
-                <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-                  <input value={(lms[req.id] || {}).entry || ""} onChange={e => setLms(s => ({ ...s, [req.id]: { ...s[req.id], entry: e.target.value } }))} placeholder="رابط الدخول للدورة (LMS) — يُملأ تلقائيًا لو فاضي" style={{ padding: "8px 12px", borderRadius: 8, border: "1px solid #e5e7eb", fontSize: 13, flex: 2, minWidth: 200 }} />
-                  <input value={(lms[req.id] || {}).ref || ""} onChange={e => setLms(s => ({ ...s, [req.id]: { ...s[req.id], ref: e.target.value } }))} placeholder="مرجع الدورة (course ref)" style={{ padding: "8px 12px", borderRadius: 8, border: "1px solid #e5e7eb", fontSize: 13, flex: 1, minWidth: 140 }} />
+              {readOnly ? (
+                <div style={{ marginTop: 12, fontSize: 12, color: "#9ca3af" }}>👁️ للمتابعة فقط — الاعتماد والربط من المدير.</div>
+              ) : (
+                <div style={{ marginTop: 12, display: "grid", gap: 8 }}>
+                  <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+                    <input value={(lms[req.id] || {}).entry || ""} onChange={e => setLms(s => ({ ...s, [req.id]: { ...s[req.id], entry: e.target.value } }))} placeholder="رابط الدخول للدورة (LMS) — يُملأ تلقائيًا لو فاضي" style={{ padding: "8px 12px", borderRadius: 8, border: "1px solid #e5e7eb", fontSize: 13, flex: 2, minWidth: 200 }} />
+                    <input value={(lms[req.id] || {}).ref || ""} onChange={e => setLms(s => ({ ...s, [req.id]: { ...s[req.id], ref: e.target.value } }))} placeholder="مرجع الدورة (course ref)" style={{ padding: "8px 12px", borderRadius: 8, border: "1px solid #e5e7eb", fontSize: 13, flex: 1, minWidth: 140 }} />
+                  </div>
+                  <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+                    {noteInput(req.id, "ملاحظة إدارية (اختياري)")}
+                    <button disabled={busy === req.id} onClick={() => decideProgram(req, "approve")} style={{ padding: "9px 18px", borderRadius: 8, border: "none", background: "#2d8659", color: "#fff", fontWeight: 800, cursor: "pointer" }}>اعتماد وربط</button>
+                    <button disabled={busy === req.id} onClick={() => decideProgram(req, "reject")} style={{ padding: "9px 18px", borderRadius: 8, border: "1px solid #dc2626", background: "#fff", color: "#dc2626", fontWeight: 800, cursor: "pointer" }}>رفض</button>
+                  </div>
                 </div>
-                <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
-                  {noteInput(req.id, "ملاحظة إدارية (اختياري)")}
-                  <button disabled={busy === req.id} onClick={() => decideProgram(req, "approve")} style={{ padding: "9px 18px", borderRadius: 8, border: "none", background: "#2d8659", color: "#fff", fontWeight: 800, cursor: "pointer" }}>اعتماد وربط</button>
-                  <button disabled={busy === req.id} onClick={() => decideProgram(req, "reject")} style={{ padding: "9px 18px", borderRadius: 8, border: "1px solid #dc2626", background: "#fff", color: "#dc2626", fontWeight: 800, cursor: "pointer" }}>رفض</button>
-                </div>
-              </div>
+              )}
             </div>
           ))}
         </div>
       )}
+    </div>
+  );
+}
+
+// Admin cockpit for investors: every wallet (balance / invested / returns / level)
+// plus the withdrawal queue to approve → mark paid. Uses the existing admin bridges
+// (/admin/wallets, /admin/withdrawals). Admin-only (nav-gated + backend roles_required).
+function InvestorsAdminPage() {
+  const [wallets, setWallets] = useState([]);
+  const [withdrawals, setWithdrawals] = useState([]);
+  const [busy, setBusy] = useState("");
+
+  const load = () => {
+    api.get("/admin/wallets").then(r => setWallets(safeArray(r)));
+    api.get("/admin/withdrawals").then(r => setWithdrawals(safeArray(r)));
+  };
+  useEffect(() => { load(); }, []);
+
+  const decide = (id, status) => {
+    setBusy(id);
+    api.put(`/admin/withdrawals/${id}`, { status }).then(r => {
+      setBusy("");
+      if (r && !r.error) load(); else alert(r.error || "تعذر تحديث طلب السحب");
+    });
+  };
+
+  const totalBalanceEgp = wallets.reduce((s, w) => s + (w.balance_egp || 0), 0);
+  const totalInvestedEgp = wallets.reduce((s, w) => s + (w.total_invested_egp || 0), 0);
+  const totalReturnsEgp = wallets.reduce((s, w) => s + (w.total_returns_egp || 0), 0);
+  const pending = withdrawals.filter(w => w.status === "pending");
+  const levelLabel = { bronze: "برونزي", silver: "فضي", gold: "ذهبي", platinum: "بلاتيني" };
+  const wStatus = { pending: { t: "معلّق", c: "#e8913a" }, approved: { t: "معتمد (بانتظار الصرف)", c: "#2563eb" }, completed: { t: "تم الصرف", c: "#2d8659" }, rejected: { t: "مرفوض", c: "#9ca3af" } };
+
+  return (
+    <div>
+      <h1 style={{ fontSize: 24, fontWeight: 900, color: BRAND.navy, marginBottom: 8 }}>المستثمرون والمحافظ</h1>
+      <p style={{ color: "#667085", marginBottom: 20 }}>كل محافظ المستثمرين وأرصدتهم وعوائدهم، وطلبات السحب — تُعتمد وتُصرف من هنا.</p>
+
+      <div style={{ display: "flex", gap: 12, marginBottom: 20, flexWrap: "wrap" }}>
+        <KPICard icon="💼" label="عدد المستثمرين" value={wallets.length} color={BRAND.navy} />
+        <KPICard icon="💰" label="إجمالي الأرصدة" value={egpLabel(totalBalanceEgp)} color="#2d8659" />
+        <KPICard icon="📥" label="إجمالي المستثمَر" value={egpLabel(totalInvestedEgp)} color="#5b6abf" />
+        <KPICard icon="📈" label="إجمالي العوائد" value={egpLabel(totalReturnsEgp)} color="#d4a017" />
+        <KPICard icon="⏳" label="طلبات سحب معلّقة" value={pending.length} color={pending.length ? "#c0392b" : "#9ca3af"} />
+      </div>
+
+      <div style={{ background: "#fff", borderRadius: 12, boxShadow: "0 1px 4px rgba(0,0,0,0.06)", padding: 18, marginBottom: 24 }}>
+        <h3 style={{ fontSize: 16, fontWeight: 900, color: BRAND.navy, marginBottom: 14 }}>طلبات السحب</h3>
+        {withdrawals.length === 0 && <div style={{ padding: 18, textAlign: "center", color: "#9ca3af" }}>لا توجد طلبات سحب.</div>}
+        <div style={{ display: "grid", gap: 10 }}>
+          {withdrawals.map(w => {
+            const st = wStatus[w.status] || { t: w.status, c: "#9ca3af" };
+            return (
+              <div key={w.id} className="withdraw-bar" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap", border: "1px solid #eef2f6", borderRadius: 10, padding: "12px 14px", background: w.status === "pending" ? "#fffdf7" : "#fff" }}>
+                <div style={{ minWidth: 180 }}>
+                  <div style={{ fontWeight: 900, color: BRAND.navy }}>{w.investor_name || "—"}</div>
+                  <div style={{ fontSize: 12, color: "#667085", direction: "ltr", textAlign: "right" }}>{(w.requested_at || "").slice(0, 10)}</div>
+                </div>
+                <div style={{ fontWeight: 900, color: "#1f2937" }}>{egpLabel(w.amount_egp)} <span style={{ fontSize: 12, color: "#9ca3af", fontWeight: 700 }}>({fmtUSD(w.amount)})</span></div>
+                <span style={{ background: st.c, color: "#fff", borderRadius: 999, padding: "3px 12px", fontSize: 12, fontWeight: 800 }}>{st.t}</span>
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                  {w.status === "pending" && <>
+                    <button disabled={busy === w.id} onClick={() => decide(w.id, "approved")} style={{ padding: "8px 16px", borderRadius: 8, border: "none", background: "#2563eb", color: "#fff", fontWeight: 800, cursor: "pointer" }}>اعتماد</button>
+                    <button disabled={busy === w.id} onClick={() => decide(w.id, "rejected")} style={{ padding: "8px 16px", borderRadius: 8, border: "1px solid #dc2626", background: "#fff", color: "#dc2626", fontWeight: 800, cursor: "pointer" }}>رفض</button>
+                  </>}
+                  {w.status === "approved" && <button disabled={busy === w.id} onClick={() => decide(w.id, "completed")} style={{ padding: "8px 16px", borderRadius: 8, border: "none", background: "#2d8659", color: "#fff", fontWeight: 800, cursor: "pointer" }}>✓ تم الصرف</button>}
+                  {(w.status === "completed" || w.status === "rejected") && w.processed_at && <span style={{ fontSize: 12, color: "#9ca3af", direction: "ltr" }}>{(w.processed_at || "").slice(0, 10)}</span>}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      <div style={{ background: "#fff", borderRadius: 12, boxShadow: "0 1px 4px rgba(0,0,0,0.06)", overflowX: "auto" }}>
+        <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 820 }}>
+          <thead>
+            <tr style={{ background: "#f8fafc" }}>
+              {["المستثمر", "الرصيد", "إجمالي المستثمَر", "إجمالي العوائد", "متوسط العائد", "المستوى", "طلبات معلّقة"].map(h => (
+                <th key={h} style={{ padding: 12, fontSize: 13, color: "#667085", textAlign: "right" }}>{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {wallets.map(w => (
+              <tr key={w.id} style={{ borderTop: "1px solid #f1f5f9" }}>
+                <td style={{ padding: 12, fontWeight: 800, color: BRAND.navy }}>{w.investor_name}</td>
+                <td style={{ padding: 12, fontWeight: 700, color: "#2d8659" }}>{egpLabel(w.balance_egp)}</td>
+                <td style={{ padding: 12, fontSize: 13 }}>{egpLabel(w.total_invested_egp)}</td>
+                <td style={{ padding: 12, fontSize: 13, color: "#d4a017", fontWeight: 700 }}>{egpLabel(w.total_returns_egp)}</td>
+                <td style={{ padding: 12, fontSize: 13 }}>{w.avg_roi || 0}%</td>
+                <td style={{ padding: 12, fontSize: 12 }}>{levelLabel[w.level] || w.level}</td>
+                <td style={{ padding: 12, fontSize: 13, color: w.pending_requests ? "#c0392b" : "#9ca3af", fontWeight: w.pending_requests ? 800 : 400 }}>{w.pending_requests || 0}</td>
+              </tr>
+            ))}
+            {wallets.length === 0 && (
+              <tr><td colSpan={7} style={{ padding: 24, textAlign: "center", color: "#9ca3af" }}>لا توجد محافظ مستثمرين بعد.</td></tr>
+            )}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }
@@ -3703,6 +3829,7 @@ const navItems = [
   { id: "finance", label: "المالية", icon: "💰" },
   { id: "marketing", label: "التسويق", icon: "📢" },
   { id: "courses", label: "الدورات", icon: "📚" },
+  { id: "investors-admin", label: "المستثمرون", icon: "💼" },
   { id: "foundation", label: "مرحلة التأسيس", icon: "🏗️" },
   { id: "team", label: "الفريق والشركاء", icon: "👥" },
   { id: "targets", label: "الأهداف والتوقعات", icon: "📈" },
@@ -3728,6 +3855,12 @@ function Layout({ page, setPage, user, onLogout }) {
           { id: "investments", label: "استثماراتي", icon: "📋" },
           { id: "ai", label: "مساعد AI", icon: "🤖" },
         ]
+      : effectiveRole === "employee"
+        ? [
+            // موظف متابعة: يشوف الناس والطلبات والدورات فقط — بلا أرقام كلية ولا مالية دقيقة.
+            { id: "platform-users", label: "إدارة المنصة", icon: "🌐" },
+            { id: "courses", label: "الدورات", icon: "📚" },
+          ]
       : effectiveRole === "viewer"
         ? [
             { id: "overview", label: "بانتظار التفعيل", icon: "⏳" },
@@ -3735,8 +3868,15 @@ function Layout({ page, setPage, user, onLogout }) {
       : navItems.filter((item) => {
           if (effectiveRole === "training_supervisor" && item.id === "settings") return false;
           if (effectiveRole === "training_supervisor" && item.id === "foundation") return false;
+          // إدارة المستثمرين شأن مالي — للأدمن فقط، تُخفى عن المشرف التدريبي.
+          if (effectiveRole === "training_supervisor" && item.id === "investors-admin") return false;
           return true;
         });
+
+  // Never render a page outside the current role's allowed tabs (defends against a
+  // stale `page` state or a deep link — e.g. an employee can't land on "overview").
+  const allowedIds = visibleNavItems.map((n) => n.id);
+  const activePage = allowedIds.includes(page) ? page : (visibleNavItems[0]?.id || "overview");
 
   const sidebar = (
     <div style={{ width: isMobile ? "82vw" : 250, maxWidth: 300, background: `linear-gradient(180deg, ${BRAND.navy2}, ${BRAND.navy})`, padding: "24px 0", display: "flex", flexDirection: "column", flexShrink: 0, height: "100%" }}>
@@ -3746,7 +3886,7 @@ function Layout({ page, setPage, user, onLogout }) {
       </div>
       <nav style={{ flex: 1 }}>
         {visibleNavItems.map(n => (
-          <button key={n.id} onClick={() => { setPage(n.id); setSidebarOpen(false); }} style={{ display: "flex", alignItems: "center", gap: 12, width: "100%", padding: "14px 24px", background: page === n.id ? "rgba(217,179,76,0.14)" : "transparent", border: "none", borderRight: page === n.id ? `3px solid ${BRAND.gold}` : "3px solid transparent", color: page === n.id ? "#fff" : "#B8C0D0", fontSize: 15, fontWeight: page === n.id ? 900 : 700, cursor: "pointer", textAlign: "right", transition: "all 0.15s" }}>
+          <button key={n.id} onClick={() => { setPage(n.id); setSidebarOpen(false); }} style={{ display: "flex", alignItems: "center", gap: 12, width: "100%", padding: "14px 24px", background: activePage === n.id ? "rgba(217,179,76,0.14)" : "transparent", border: "none", borderRight: activePage === n.id ? `3px solid ${BRAND.gold}` : "3px solid transparent", color: activePage === n.id ? "#fff" : "#B8C0D0", fontSize: 15, fontWeight: activePage === n.id ? 900 : 700, cursor: "pointer", textAlign: "right", transition: "all 0.15s" }}>
             <span style={{ fontSize: 18 }}>{n.icon}</span>
             {n.label}
           </button>
@@ -3789,20 +3929,21 @@ function Layout({ page, setPage, user, onLogout }) {
             </div>
           </div>
         )}
-        <PageBoundary pageKey={page}>
-          {page === "overview" && <OverviewPage onNavigate={setPage} />}
-          {page === "platform-users" && <PlatformUsersPage />}
-          {page === "finance" && <FinancePage />}
-          {page === "marketing" && <MarketingPage />}
-          {page === "courses" && <CoursesPage />}
-          {page === "earnings" && <MyEarningsPage />}
-          {page === "marketplace" && <InvestorInvestmentsPage initialTab="opportunities" />}
-          {page === "investments" && <InvestorInvestmentsPage initialTab="active" />}
-          {page === "foundation" && <FoundationPage />}
-          {page === "team" && <TeamPartnersPage />}
-          {page === "targets" && <TargetsPage />}
-          {page === "ai" && <AIPage />}
-          {page === "settings" && <SettingsPage />}
+        <PageBoundary pageKey={activePage}>
+          {activePage === "overview" && <OverviewPage onNavigate={setPage} />}
+          {activePage === "platform-users" && <PlatformUsersPage />}
+          {activePage === "finance" && <FinancePage />}
+          {activePage === "marketing" && <MarketingPage />}
+          {activePage === "courses" && <CoursesPage />}
+          {activePage === "investors-admin" && <InvestorsAdminPage />}
+          {activePage === "earnings" && <MyEarningsPage />}
+          {activePage === "marketplace" && <InvestorInvestmentsPage initialTab="opportunities" />}
+          {activePage === "investments" && <InvestorInvestmentsPage initialTab="active" />}
+          {activePage === "foundation" && <FoundationPage />}
+          {activePage === "team" && <TeamPartnersPage />}
+          {activePage === "targets" && <TargetsPage />}
+          {activePage === "ai" && <AIPage />}
+          {activePage === "settings" && <SettingsPage />}
         </PageBoundary>
         <AIAssistantDock />
       </div>
