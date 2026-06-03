@@ -2533,7 +2533,7 @@ function MarketingPage({ only = null }) {
 // + approve/reject. Employee (موظف متابعة) sees them read-only.
 // ============================================================
 function TrainerRequestsPanel() {
-  const readOnly = getEffectiveRole(useAuth()) === "employee";
+  const readOnly = false; // أدمن + موظف العمليات: الاتنين يتابعوا ويوافقوا/يرفضوا
   const [apps, setApps] = useState([]);
   const [busy, setBusy] = useState("");
   const [notes, setNotes] = useState({});
@@ -2584,7 +2584,7 @@ function TrainerRequestsPanel() {
 }
 
 function ProgramRequestsPanel() {
-  const readOnly = getEffectiveRole(useAuth()) === "employee";
+  const readOnly = false; // أدمن + موظف العمليات: الاتنين يتابعوا ويوافقوا/يرفضوا
   const [reqs, setReqs] = useState([]);
   const [busy, setBusy] = useState("");
   const [notes, setNotes] = useState({});
@@ -2642,8 +2642,8 @@ function ProgramRequestsPanel() {
 function CoursesPage() {
   const user = useAuth();
   const isTrainingSupervisor = user?.role === "training_supervisor";
-  // المدير فقط يعدّل/يضيف/يوقف؛ الموظف والمشرف التدريبي للعرض والمتابعة.
-  const canManage = !isTrainingSupervisor && getEffectiveRole(user) !== "employee";
+  // الأدمن وموظف العمليات والمدرب يعدّلوا/يضيفوا/يوقفوا؛ المشرف التدريبي للعرض فقط.
+  const canManage = !isTrainingSupervisor;
   const [courses, setCourses] = useState([]);
   const [modal, setModal] = useState(false);
   const [form, setForm] = useState({});
@@ -2692,9 +2692,9 @@ function CoursesPage() {
     else alert(r?.error || "تعذرت المزامنة من الأكاديمية");
   };
 
-  // إنشاء دورة على الأكاديمية (WordPress/Tutor) من هنا — أدمن أو مدرب.
+  // إنشاء دورة على الأكاديمية (WordPress/Tutor) من هنا — أدمن أو مدرب أو موظف العمليات.
   const isTrainer = effectiveRole === "trainer";
-  const canCreateLms = isAdmin || isTrainer;
+  const canCreateLms = isAdmin || isTrainer || effectiveRole === "employee";
   const [lmsModal, setLmsModal] = useState(false);
   const [lmsForm, setLmsForm] = useState({});
   const [creatingLms, setCreatingLms] = useState(false);
@@ -4040,9 +4040,11 @@ function Layout({ page, setPage, user, onLogout }) {
         ]
       : effectiveRole === "employee"
         ? [
-            // موظف متابعة: يشوف الناس والطلبات والدورات فقط — بلا أرقام كلية ولا مالية دقيقة.
+            // موظف عمليات: الناس + الطلبات + الدورات (رفع/تعديل + فلوس كل دورة) + التسويق.
+            // بلا التأسيس/الشركاء/الاستثمار/الإعدادات ولا الإجماليات المالية الكلية.
             { id: "platform-users", label: "المستخدمون", icon: "👥" },
             { id: "courses", label: "الدورات والتدريب", icon: "📚" },
+            { id: "marketing", label: "التسويق", icon: "📢" },
           ]
       : effectiveRole === "viewer"
         ? [
