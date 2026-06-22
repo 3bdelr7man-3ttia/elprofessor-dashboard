@@ -5,8 +5,23 @@ import { LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, Cart
 // CONFIG & API
 // ============================================================
 const API = import.meta.env.VITE_API_URL || "/api";
-const BRAND = { navy: "#1A2B4A", navy2: "#101B2F", gold: "#D9B34C", amber: "#F2A93B", bg: "#F6F3EC", ink: "#172033" };
-const COLORS = [BRAND.gold, BRAND.navy, "#2d8659", "#c0392b", "#8e44ad", "#1abc9c", BRAND.amber, "#5b6abf"];
+// New visual identity ("Cloud Design"): Navy + Crimson + Gold + Teal. Every inline
+// style in this monolith references BRAND, so remapping it here reskins the whole app.
+const BRAND = {
+  navy: "#1A2B4A", navy2: "#0F172A", gold: "#C8870E", bg: "#F4F6F9", ink: "#1F2937",
+  // legacy alias: `amber` was the old warm accent — map it to the new gold so old refs stay on-brand.
+  amber: "#C8870E",
+  // semantic identity tokens (mirror styles.css :root).
+  human: "#9E2B4E", human2: "#D6537A", humanBg: "#F9EEF2",
+  ai: "#0E8E9B", aiBg: "#E6F4F5",
+  agree: "#1C9A5B", agreeBg: "#EAF6EF",
+  goldBg: "#FBF3E2",
+  conflict: "#D9663B", conflictBg: "#FBF0EB",
+  memory: "#6E59C7", memoryBg: "#EFECF9",
+  rail: "#16243f", line: "#E7EBF1", surface: "#FFFFFF",
+  muted: "#8A93A6", ink2: "#4B5563",
+};
+const COLORS = [BRAND.navy, BRAND.human, BRAND.ai, BRAND.agree, BRAND.gold, BRAND.memory, BRAND.conflict, BRAND.human2];
 
 const api = {
   token: null,
@@ -124,12 +139,28 @@ function useIsMobile(breakpoint = 960) {
 // COMPONENTS
 // ============================================================
 
-function KPICard({ label, value, sub, color = "#0f4c81", icon }) {
+// Soft tint for a given accent: use a known semantic *-bg when the color matches a
+// brand token, otherwise blend the accent at ~14% over white (hex8 alpha).
+function softTint(color) {
+  const map = {
+    [BRAND.navy]: "#E8ECF3", [BRAND.human]: BRAND.humanBg, [BRAND.human2]: BRAND.humanBg,
+    [BRAND.ai]: BRAND.aiBg, [BRAND.agree]: BRAND.agreeBg, [BRAND.gold]: BRAND.goldBg,
+    [BRAND.conflict]: BRAND.conflictBg, [BRAND.memory]: BRAND.memoryBg,
+  };
+  return map[color] || `${color}1F`;
+}
+
+function KPICard({ label, value, sub, color = BRAND.navy, icon }) {
   return (
-    <div style={{ background: "#fff", borderRadius: 12, padding: "20px 24px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)", borderRight: `4px solid ${color}`, minWidth: 0 }}>
-      <div style={{ fontSize: 13, color: "#667085", marginBottom: 6, fontWeight: 700 }}>{icon} {label}</div>
-      <div style={{ fontSize: 26, fontWeight: 900, color, lineHeight: 1.2, fontFeatureSettings: '"tnum"' }}>{value}</div>
-      {sub && <div style={{ fontSize: 12, color: "#9ca3af", marginTop: 4 }}>{sub}</div>}
+    <div style={{ background: BRAND.surface, border: `1px solid ${BRAND.line}`, borderRadius: 14, padding: "15px 17px", position: "relative", overflow: "hidden", minWidth: 0, transition: "box-shadow .15s, border-color .15s" }}>
+      {/* accent bar on the inline-end (RTL: left) edge */}
+      <div style={{ position: "absolute", top: 0, insetInlineEnd: 0, width: 4, height: "100%", background: color }} />
+      <div style={{ display: "flex", alignItems: "center", gap: 8, color: BRAND.ink2, fontSize: 12.5, fontWeight: 700 }}>
+        {icon && <span style={{ width: 30, height: 30, borderRadius: 8, display: "grid", placeItems: "center", flex: "none", background: softTint(color), color, fontSize: 16 }}>{icon}</span>}
+        <span>{label}</span>
+      </div>
+      <div style={{ fontFamily: "'Cairo', sans-serif", fontSize: 26, fontWeight: 900, color, lineHeight: 1, marginTop: 7, fontFeatureSettings: '"tnum"' }}>{value}</div>
+      {sub && <div style={{ fontSize: 11, color: BRAND.muted, fontWeight: 600, marginTop: 3 }}>{sub}</div>}
     </div>
   );
 }
@@ -161,13 +192,13 @@ function PlatformMetricsPanel() {
 function Modal({ open, onClose, title, children, maxWidth = 560, width = "90%" }) {
   if (!open) return null;
   return (
-    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center" }} onClick={onClose}>
-      <div style={{ background: "#fff", borderRadius: 16, padding: 32, maxWidth, width, maxHeight: "85vh", overflow: "auto", boxShadow: "0 20px 60px rgba(0,0,0,0.15)" }} onClick={e => e.stopPropagation()}>
-        <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 24 }}>
-          <h2 style={{ fontSize: 20, fontWeight: 700, color: "#0f4c81" }}>{title}</h2>
-          <button onClick={onClose} style={{ background: "none", border: "none", fontSize: 22, cursor: "pointer", color: "#9ca3af" }}>✕</button>
+    <div style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,.52)", zIndex: 1000, display: "grid", placeItems: "center", padding: 20 }} onClick={onClose}>
+      <div style={{ background: BRAND.surface, borderRadius: 16, maxWidth, width, maxHeight: "85vh", overflow: "hidden", boxShadow: "0 24px 64px rgba(0,0,0,.34)", display: "flex", flexDirection: "column" }} onClick={e => e.stopPropagation()}>
+        <div style={{ background: BRAND.navy, color: "#fff", padding: "15px 22px", display: "flex", justifyContent: "space-between", alignItems: "center", flex: "none" }}>
+          <h2 style={{ fontFamily: "'Cairo', sans-serif", fontSize: 16, fontWeight: 800, margin: 0 }}>{title}</h2>
+          <button onClick={onClose} style={{ background: "rgba(255,255,255,.15)", border: "none", color: "#fff", width: 28, height: 28, borderRadius: 8, cursor: "pointer", fontSize: 15, lineHeight: 1 }}>✕</button>
         </div>
-        {children}
+        <div style={{ padding: "20px 22px", overflow: "auto" }}>{children}</div>
       </div>
     </div>
   );
@@ -182,18 +213,18 @@ function Input({ label, ...props }) {
     props.onFocus?.(e);
   };
   return (
-    <div style={{ marginBottom: 16 }}>
-      <label style={{ display: "block", fontSize: 13, fontWeight: 600, color: "#374151", marginBottom: 6 }}>{label}</label>
-      <input {...props} onFocus={handleFocus} style={{ width: "100%", padding: "10px 14px", borderRadius: 8, border: "1px solid #d1d5db", fontSize: 14, boxSizing: "border-box", ...props.style }} />
+    <div style={{ marginBottom: 13 }}>
+      <label style={{ display: "block", fontSize: 11.5, fontWeight: 800, color: BRAND.muted, marginBottom: 5 }}>{label}</label>
+      <input {...props} onFocus={handleFocus} style={{ width: "100%", padding: "10px 13px", borderRadius: 10, border: `1px solid ${BRAND.line}`, fontSize: 13, boxSizing: "border-box", background: BRAND.surface, color: BRAND.ink, ...props.style }} />
     </div>
   );
 }
 
 function Select({ label, options, ...props }) {
   return (
-    <div style={{ marginBottom: 16 }}>
-      <label style={{ display: "block", fontSize: 13, fontWeight: 600, color: "#374151", marginBottom: 6 }}>{label}</label>
-      <select {...props} style={{ width: "100%", padding: "10px 14px", borderRadius: 8, border: "1px solid #d1d5db", fontSize: 14, boxSizing: "border-box", background: "#fff" }}>
+    <div style={{ marginBottom: 13 }}>
+      <label style={{ display: "block", fontSize: 11.5, fontWeight: 800, color: BRAND.muted, marginBottom: 5 }}>{label}</label>
+      <select {...props} style={{ width: "100%", padding: "10px 13px", borderRadius: 10, border: `1px solid ${BRAND.line}`, fontSize: 13, boxSizing: "border-box", background: BRAND.surface, color: BRAND.ink }}>
         {options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
       </select>
     </div>
@@ -227,23 +258,36 @@ function CurrencyFields({ form, setForm, rate = 50, egpKey = "amount_egp", usdKe
   );
 }
 
-function Btn({ children, color = "#0f4c81", variant = "primary", ...props }) {
-  const bg = variant === "primary" ? color : "transparent";
-  const fg = variant === "primary" ? "#fff" : color;
-  const border = variant === "primary" ? "none" : `2px solid ${color}`;
-  return <button {...props} style={{ padding: "10px 24px", borderRadius: 8, background: bg, color: fg, border, fontSize: 14, fontWeight: 600, cursor: "pointer", ...props.style }}>{children}</button>;
+function Btn({ children, color = BRAND.agree, variant = "primary", ...props }) {
+  // New identity: radius 10, weight 800, gap 7. Named variants override the `color` accent.
+  let bg, fg, border = "none";
+  if (variant === "human") { bg = BRAND.human; fg = "#fff"; }
+  else if (variant === "warn") { bg = BRAND.conflictBg; fg = BRAND.conflict; border = "1px solid #E9C9BB"; }
+  else if (variant === "ghost" || variant === "outline" || variant === "secondary") {
+    // soft, neutral surface with the accent kept in the text/border for affordance
+    bg = "#F1F4F8"; fg = color; border = `1px solid ${BRAND.line}`;
+  } else { // primary
+    bg = color; fg = "#fff";
+  }
+  return <button {...props} style={{ padding: "10px 18px", borderRadius: 10, background: bg, color: fg, border, fontSize: 13, fontWeight: 800, cursor: "pointer", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 7, ...props.style }}>{children}</button>;
 }
 
-function Badge({ text, color = "#0f4c81" }) {
-  return <span style={{ display: "inline-block", padding: "3px 10px", borderRadius: 20, fontSize: 12, fontWeight: 600, background: `${color}18`, color }}>{text}</span>;
+function Badge({ text, color = BRAND.navy }) {
+  // pill: color-on-tint with a leading dot, per the mockup's status pills.
+  return (
+    <span style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "4px 11px", borderRadius: 999, fontSize: 11.5, fontWeight: 800, background: softTint(color), color }}>
+      <span style={{ width: 7, height: 7, borderRadius: "50%", background: color }} />
+      {text}
+    </span>
+  );
 }
 
 function PageError({ message, onRetry }) {
   return (
-    <div style={{ background: "#fff", borderRadius: 14, padding: 28, border: "1px solid #f2d7d5", color: "#7b241c", boxShadow: "0 1px 4px rgba(0,0,0,0.05)" }}>
-      <div style={{ fontSize: 16, fontWeight: 900, marginBottom: 8 }}>تعذر تحميل الصفحة الآن</div>
-      <div style={{ fontSize: 14, lineHeight: 1.8, marginBottom: 14 }}>{message || "حدثت مشكلة مؤقتة أثناء تحميل البيانات."}</div>
-      <Btn onClick={onRetry} color="#c0392b">إعادة المحاولة</Btn>
+    <div style={{ background: BRAND.surface, borderRadius: 14, padding: 28, border: `1px solid ${BRAND.line}`, borderInlineStart: `4px solid ${BRAND.conflict}`, color: BRAND.ink, boxShadow: "0 6px 16px rgba(26,43,74,.08)" }}>
+      <div style={{ fontFamily: "'Cairo', sans-serif", fontSize: 16, fontWeight: 800, marginBottom: 8, color: BRAND.navy }}>تعذر تحميل الصفحة الآن</div>
+      <div style={{ fontSize: 13.5, lineHeight: 1.8, marginBottom: 14, color: BRAND.ink2 }}>{message || "حدثت مشكلة مؤقتة أثناء تحميل البيانات."}</div>
+      <Btn onClick={onRetry} variant="human">إعادة المحاولة</Btn>
     </div>
   );
 }
@@ -273,11 +317,15 @@ class PageBoundary extends Component {
 }
 
 function TabBar({ tabs, active, onChange }) {
+  // segmented track per the mockup: surface-2 pill rail, active = white + navy + soft shadow.
   return (
-    <div style={{ display: "flex", gap: 0, borderBottom: "2px solid #e5e7eb", marginBottom: 24, overflowX: "auto", flexWrap: "wrap" }}>
-      {tabs.map(t => (
-        <button key={t.id} onClick={() => onChange(t.id)} style={{ padding: "12px 24px", background: "none", border: "none", borderBottom: active === t.id ? "3px solid #0f4c81" : "3px solid transparent", color: active === t.id ? "#0f4c81" : "#6b7280", fontWeight: active === t.id ? 700 : 500, fontSize: 15, cursor: "pointer", marginBottom: -2, whiteSpace: "nowrap" }}>{t.label}</button>
-      ))}
+    <div style={{ display: "inline-flex", gap: 4, background: "#F1F4F8", border: `1px solid ${BRAND.line}`, borderRadius: 11, padding: 4, marginBottom: 16, maxWidth: "100%", overflowX: "auto" }}>
+      {tabs.map(t => {
+        const on = active === t.id;
+        return (
+          <button key={t.id} onClick={() => onChange(t.id)} style={{ padding: "7px 15px", background: on ? BRAND.surface : "transparent", border: "none", borderRadius: 8, color: on ? BRAND.navy : BRAND.ink2, fontWeight: on ? 800 : 700, fontSize: 12.5, cursor: "pointer", whiteSpace: "nowrap", boxShadow: on ? "0 1px 3px rgba(0,0,0,.08)" : "none" }}>{t.label}</button>
+        );
+      })}
     </div>
   );
 }
@@ -315,25 +363,28 @@ function LoginPage({ onLogin }) {
   };
 
   return (
-    <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: BRAND.bg, padding: 24 }}>
-      <div style={{ background: "#fff", borderRadius: 20, padding: "48px 40px", width: 380, boxShadow: "0 20px 60px rgba(16,27,47,0.12)", border: "1px solid #E6D7A8" }}>
-        <div style={{ textAlign: "center", marginBottom: 36 }}>
-          <div style={{ fontSize: 36, fontWeight: 900, color: BRAND.navy, marginBottom: 4 }}>البروفيسور</div>
-          <div style={{ fontSize: 14, color: BRAND.gold, letterSpacing: 1, fontWeight: 800 }}>MANAGEMENT DASHBOARD</div>
+    <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: `linear-gradient(180deg, ${BRAND.rail}, ${BRAND.navy2})`, padding: 24, direction: "rtl" }}>
+      <div style={{ background: BRAND.surface, borderRadius: 20, padding: "44px 40px", width: 380, boxShadow: "0 24px 64px rgba(0,0,0,.34)", border: `1px solid ${BRAND.line}` }}>
+        <div style={{ textAlign: "center", marginBottom: 32 }}>
+          <div style={{ width: 56, height: 56, borderRadius: 16, margin: "0 auto 14px", background: "linear-gradient(135deg, #9E2B4E 0%, #7d2240 100%)", display: "grid", placeItems: "center", boxShadow: "0 4px 12px rgba(158,43,78,.35)" }}>
+            <span style={{ width: 34, height: 34, display: "grid", placeItems: "center" }}><BrandMark /></span>
+          </div>
+          <div style={{ fontFamily: "'Aref Ruqaa', serif", fontSize: 30, fontWeight: 700, color: BRAND.navy, marginBottom: 2 }}>البروفيسور</div>
+          <div style={{ fontSize: 12, color: BRAND.muted, letterSpacing: .5, fontWeight: 700 }}>غرفة التحكم · MANAGEMENT DASHBOARD</div>
         </div>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, background: "#f8fafc", borderRadius: 12, padding: 6, marginBottom: 18 }}>
-          <button onClick={() => { setMode("login"); setErr(""); setMsg(""); }} style={{ border: "none", borderRadius: 10, background: mode === "login" ? BRAND.navy : "transparent", color: mode === "login" ? "#fff" : "#475467", fontWeight: 800, padding: "10px 12px", cursor: "pointer" }}>تسجيل الدخول</button>
-          <button onClick={() => { setMode("register"); setErr(""); setMsg(""); setEmail(""); setPass(""); }} style={{ border: "none", borderRadius: 10, background: mode === "register" ? BRAND.navy : "transparent", color: mode === "register" ? "#fff" : "#475467", fontWeight: 800, padding: "10px 12px", cursor: "pointer" }}>إنشاء حساب</button>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 4, background: "#F1F4F8", border: `1px solid ${BRAND.line}`, borderRadius: 11, padding: 4, marginBottom: 18 }}>
+          <button onClick={() => { setMode("login"); setErr(""); setMsg(""); }} style={{ border: "none", borderRadius: 8, background: mode === "login" ? BRAND.navy : "transparent", color: mode === "login" ? "#fff" : BRAND.ink2, fontWeight: 800, padding: "9px 12px", cursor: "pointer", fontSize: 13 }}>تسجيل الدخول</button>
+          <button onClick={() => { setMode("register"); setErr(""); setMsg(""); setEmail(""); setPass(""); }} style={{ border: "none", borderRadius: 8, background: mode === "register" ? BRAND.navy : "transparent", color: mode === "register" ? "#fff" : BRAND.ink2, fontWeight: 800, padding: "9px 12px", cursor: "pointer", fontSize: 13 }}>إنشاء حساب</button>
         </div>
         {mode === "register" && <Input label="الاسم" value={name} onChange={e => setName(e.target.value)} />}
         <Input label="البريد الإلكتروني" value={email} onChange={e => setEmail(e.target.value)} type="email" />
         <Input label="كلمة المرور" value={pass} onChange={e => setPass(e.target.value)} type="password" onKeyDown={e => e.key === "Enter" && submit()} />
-        {msg && <div style={{ color: "#2d8659", fontSize: 13, marginBottom: 12, lineHeight: 1.7 }}>{msg}</div>}
-        {err && <div style={{ color: "#c0392b", fontSize: 13, marginBottom: 12 }}>{err}</div>}
-        <Btn onClick={submit} style={{ width: "100%", marginTop: 8, padding: 14, fontSize: 16 }} disabled={loading}>
+        {msg && <div style={{ color: BRAND.agree, fontSize: 13, marginBottom: 12, lineHeight: 1.7 }}>{msg}</div>}
+        {err && <div style={{ color: BRAND.conflict, fontSize: 13, marginBottom: 12 }}>{err}</div>}
+        <Btn onClick={submit} variant="human" style={{ width: "100%", marginTop: 8, padding: 13, fontSize: 15 }} disabled={loading}>
           {loading ? (mode === "login" ? "جاري الدخول..." : "جاري إنشاء الحساب...") : (mode === "login" ? "تسجيل الدخول" : "إنشاء الحساب")}
         </Btn>
-        <div style={{ marginTop: 12, fontSize: 12, color: "#667085", lineHeight: 1.8 }}>
+        <div style={{ marginTop: 12, fontSize: 12, color: BRAND.muted, lineHeight: 1.8 }}>
           {mode === "login" ? "لو الحساب جديد، أنشئه أولًا ثم حدّد دوره من داخل الإعدادات كأدمن." : "بعد إنشاء الحساب، سيظهر للمشرف داخل الإعدادات ليحدد لك الدور المناسب وربطك بالمدرب أو المستثمر إن لزم."}
         </div>
       </div>
@@ -559,26 +610,27 @@ function useFinanceData() {
 }
 
 function PageSection({ title, subtitle, action, children }) {
+  // panel: white, 1px line, radius 14; header bar in surface-2 with Cairo 800 navy title.
   return (
-    <div style={{ background: "#fff", borderRadius: 16, padding: 22, boxShadow: "0 1px 4px rgba(0,0,0,0.06)", marginBottom: 20 }}>
+    <div style={{ background: BRAND.surface, border: `1px solid ${BRAND.line}`, borderRadius: 14, overflow: "hidden", marginBottom: 20 }}>
       {(title || action) && (
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12, marginBottom: 18 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12, padding: "13px 18px", borderBottom: `1px solid ${BRAND.line}`, background: "#F1F4F8" }}>
           <div>
-            {title && <h3 style={{ margin: 0, color: BRAND.navy, fontSize: 17, fontWeight: 900 }}>{title}</h3>}
-            {subtitle && <div style={{ marginTop: 6, fontSize: 12, color: "#667085", lineHeight: 1.7 }}>{subtitle}</div>}
+            {title && <h3 style={{ margin: 0, color: BRAND.navy, fontSize: 14.5, fontWeight: 800, fontFamily: "'Cairo', sans-serif" }}>{title}</h3>}
+            {subtitle && <div style={{ marginTop: 5, fontSize: 11.5, color: BRAND.muted, lineHeight: 1.7, fontWeight: 600 }}>{subtitle}</div>}
           </div>
           {action}
         </div>
       )}
-      {children}
+      <div style={{ padding: 18 }}>{children}</div>
     </div>
   );
 }
 
 function EmptyState({ title, text }) {
   return (
-    <div style={{ border: "1px dashed #d8dee9", borderRadius: 14, padding: 28, textAlign: "center", color: "#667085", background: "#fafbfd" }}>
-      <div style={{ fontWeight: 900, color: BRAND.navy, marginBottom: 6 }}>{title}</div>
+    <div style={{ border: `1px dashed ${BRAND.line}`, borderRadius: 14, padding: 28, textAlign: "center", color: BRAND.muted, background: "#F1F4F8" }}>
+      <div style={{ fontFamily: "'Cairo', sans-serif", fontWeight: 800, color: BRAND.navy, marginBottom: 6 }}>{title}</div>
       <div style={{ fontSize: 13 }}>{text}</div>
     </div>
   );
@@ -602,7 +654,7 @@ function StatusPill({ text, color = BRAND.navy, subtle = false }) {
   );
 }
 
-function ProgressBar({ value = 0, color = `linear-gradient(90deg, ${BRAND.gold}, ${BRAND.amber})`, track = "#edf2f7" }) {
+function ProgressBar({ value = 0, color = BRAND.gold, track = "#F1F4F8" }) {
   return (
     <div style={{ width: "100%", height: 10, borderRadius: 999, background: track, overflow: "hidden" }}>
       <div style={{ width: `${Math.max(0, Math.min(100, Number(value || 0)))}%`, height: "100%", borderRadius: 999, background: color, transition: "width .2s ease" }} />
@@ -612,7 +664,7 @@ function ProgressBar({ value = 0, color = `linear-gradient(90deg, ${BRAND.gold},
 
 function WalletHero({ title, balanceEgp, investedEgp, returnsEgp, avgRoi, rate, preference, badgeText = "نشط", accent = BRAND.gold, onWithdraw, footerNote }) {
   return (
-    <div style={{ borderRadius: 22, padding: 24, color: "#fff", background: "linear-gradient(135deg, #1a2b4a 0%, #0f4c81 60%, #1565a3 100%)", boxShadow: "0 16px 50px rgba(16,27,47,.18)", marginBottom: 20 }}>
+    <div style={{ borderRadius: 22, padding: 24, color: "#fff", background: "linear-gradient(135deg, #16243f 0%, #1A2B4A 55%, #22375C 100%)", boxShadow: "0 16px 50px rgba(16,27,47,.22)", marginBottom: 20 }}>
       <div style={{ display: "flex", justifyContent: "space-between", gap: 16, alignItems: "flex-start", flexWrap: "wrap" }}>
         <div>
           <div style={{ fontSize: 13, color: "rgba(255,255,255,.78)", marginBottom: 8 }}>{title}</div>
@@ -4161,12 +4213,13 @@ function ContentPage() {
 // ============================================================
 // ESCROW & DISPUTES — الضمان والنزاعات
 // ============================================================
+// New semantic tokens: held=gold, in-review=human, released/auto=agree, refunded=muted, dispute/late=conflict.
 const ESCROW_STATUS = {
-  held: { t: "محجوز", c: "#e8913a" },
-  confirm: { t: "بانتظار تأكيد", c: "#5b6abf" },
-  released: { t: "حُرِّر", c: "#2d8659" },
-  refunded: { t: "مُسترَد", c: "#98A2B3" },
-  dispute: { t: "نزاع", c: "#c0392b" },
+  held: { t: "محجوز", c: BRAND.gold },
+  confirm: { t: "بانتظار تأكيد", c: BRAND.human },
+  released: { t: "حُرِّر", c: BRAND.agree },
+  refunded: { t: "مُسترَد", c: BRAND.muted },
+  dispute: { t: "نزاع", c: BRAND.conflict },
 };
 
 function escrowMoney(n, currency = "EGP") {
@@ -4175,15 +4228,15 @@ function escrowMoney(n, currency = "EGP") {
 }
 
 function CountdownLabel({ seconds, status }) {
-  if (status === "dispute") return <span style={{ color: "#c0392b", fontWeight: 800 }}>مجمّد — نزاع مفتوح</span>;
-  if (status === "released") return <span style={{ color: "#2d8659", fontWeight: 800 }}>تم التحرير</span>;
-  if (status === "refunded") return <span style={{ color: "#98A2B3", fontWeight: 800 }}>تم الاسترداد</span>;
-  if (seconds == null) return <span style={{ color: "#667085" }}>—</span>;
-  if (seconds <= 0) return <span style={{ color: "#e8913a", fontWeight: 800 }}>انتهت المهلة — جاهز للتحرير التلقائي</span>;
+  if (status === "dispute") return <span style={{ color: BRAND.conflict, fontWeight: 800 }}>مجمّد — نزاع مفتوح</span>;
+  if (status === "released") return <span style={{ color: BRAND.agree, fontWeight: 800 }}>تم التحرير</span>;
+  if (status === "refunded") return <span style={{ color: BRAND.muted, fontWeight: 800 }}>تم الاسترداد</span>;
+  if (seconds == null) return <span style={{ color: BRAND.ink2 }}>—</span>;
+  if (seconds <= 0) return <span style={{ color: BRAND.gold, fontWeight: 800 }}>انتهت المهلة — جاهز للتحرير التلقائي</span>;
   const h = Math.floor(seconds / 3600);
   const m = Math.floor((seconds % 3600) / 60);
   const label = h >= 24 ? `باقٍ ${Math.floor(h / 24)} يوم و${h % 24} س` : `باقٍ ${h}س ${m}د — تحرير تلقائي`;
-  return <span style={{ color: h < 6 ? "#e8913a" : "#475467", fontWeight: 700 }}>{label}</span>;
+  return <span style={{ color: h < 6 ? BRAND.conflict : BRAND.ink2, fontWeight: 700 }}>{label}</span>;
 }
 
 function EscrowPage({ user }) {
@@ -4263,45 +4316,40 @@ function EscrowPage({ user }) {
   return (
     <div>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 12, marginBottom: 8 }}>
-        <h1 style={{ fontSize: 24, fontWeight: 900, color: BRAND.navy }}>🛡️ الضمان والنزاعات</h1>
-        {!readOnly && <Btn onClick={onAutoRelease} color={BRAND.navy} variant="outline">تشغيل التحرير التلقائي</Btn>}
+        <h1 style={{ fontFamily: "'Aref Ruqaa', serif", fontSize: 23, fontWeight: 700, color: BRAND.navy }}>🛡️ الضمان والنزاعات</h1>
+        {!readOnly && <Btn onClick={onAutoRelease} color={BRAND.navy} variant="ghost">تشغيل التحرير التلقائي</Btn>}
       </div>
-      <div style={{ display: "flex", gap: 10, padding: "12px 16px", background: "#fff6e9", border: "1px solid #f0d9b5", borderRadius: 10, color: "#7a5a1e", fontSize: 13, lineHeight: 1.8, marginBottom: 20 }}>
+      <div style={{ display: "flex", gap: 11, padding: "12px 15px", background: BRAND.surface, border: `1px solid ${BRAND.line}`, borderInlineStart: `4px solid ${BRAND.gold}`, borderRadius: 11, color: BRAND.ink2, fontSize: 12.3, lineHeight: 1.6, marginBottom: 20 }}>
         <span>🛡️</span>
-        <div><b>سياسة الضمان:</b> تحرير تلقائي للخبير بعد <b>٧٢ ساعة</b> إن لم يعترض الطالب · العمولة (<b>١٥٪</b>) تُقتطع <b>عند التحرير</b> لا عند التحصيل · فصل النزاع خلال <b>٣ أيام عمل</b>.{readOnly && " — أنت في وضع المتابعة (قراءة فقط)."}</div>
+        <div><b style={{ color: BRAND.navy }}>سياسة الضمان:</b> تحرير تلقائي للخبير بعد <b style={{ color: BRAND.navy }}>٧٢ ساعة</b> إن لم يعترض الطالب · العمولة (<b style={{ color: BRAND.navy }}>١٥٪</b>) تُقتطع <b style={{ color: BRAND.navy }}>عند التحرير</b> لا عند التحصيل · فصل النزاع خلال <b style={{ color: BRAND.navy }}>٣ أيام عمل</b>.{readOnly && " — أنت في وضع المتابعة (قراءة فقط)."}</div>
       </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))", gap: 16, marginBottom: 24 }}>
-        <KPICard icon="🛡️" label="محجوز حاليًا" value={escrowMoney(m.held_sum || 0)} sub={`عبر ${m.held_count || 0} جلسة نشطة`} color="#e8913a" />
-        <KPICard icon="⏳" label="بانتظار تحرير" value={escrowMoney(m.awaiting_release_sum || 0)} sub={`${m.awaiting_release_count || 0} انتهت مهلتها`} color="#5b6abf" />
-        <KPICard icon="✅" label="حُرِّر" value={escrowMoney(m.released_sum || 0)} sub={`عمولة ${escrowMoney(m.released_commission_sum || 0)} · ${m.released_count || 0} جلسة`} color="#2d8659" />
-        <KPICard icon="⚖️" label="نزاعات مفتوحة" value={m.disputes_count || 0} sub={`${escrowMoney(m.disputes_frozen_sum || 0)} مجمّدة`} color="#c0392b" />
+        <KPICard icon="🛡️" label="محجوز حاليًا" value={escrowMoney(m.held_sum || 0)} sub={`عبر ${m.held_count || 0} جلسة نشطة`} color={BRAND.gold} />
+        <KPICard icon="⏳" label="بانتظار تحرير" value={escrowMoney(m.awaiting_release_sum || 0)} sub={`${m.awaiting_release_count || 0} انتهت مهلتها`} color={BRAND.human} />
+        <KPICard icon="✅" label="حُرِّر" value={escrowMoney(m.released_sum || 0)} sub={`عمولة ${escrowMoney(m.released_commission_sum || 0)} · ${m.released_count || 0} جلسة`} color={BRAND.agree} />
+        <KPICard icon="⚖️" label="نزاعات مفتوحة" value={m.disputes_count || 0} sub={`${escrowMoney(m.disputes_frozen_sum || 0)} مجمّدة`} color={BRAND.conflict} />
       </div>
 
-      <div style={{ display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap" }}>
-        {tabs.map(t => (
-          <button key={t.id} onClick={() => { setTab(t.id); setSelected(null); setSelectedDispute(null); }}
-            style={{ padding: "8px 16px", borderRadius: 20, border: tab === t.id ? `2px solid ${BRAND.navy}` : "1px solid #e5e7eb", background: tab === t.id ? BRAND.navy : "#fff", color: tab === t.id ? "#fff" : "#475467", fontWeight: 700, cursor: "pointer", fontSize: 13 }}>{t.label}</button>
-        ))}
-      </div>
+      <TabBar tabs={tabs} active={tab} onChange={(id) => { setTab(id); setSelected(null); setSelectedDispute(null); }} />
 
       {/* SESSIONS TAB */}
       {tab === "sessions" && (
-        <div style={{ background: "#fff", borderRadius: 12, boxShadow: "0 1px 4px rgba(0,0,0,0.06)", overflowX: "auto" }}>
+        <div style={{ background: BRAND.surface, border: `1px solid ${BRAND.line}`, borderRadius: 14, overflowX: "auto" }}>
           <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 760 }}>
-            <thead><tr style={{ background: "#f8fafc" }}>{["المرجع", "الطالب ← الخبير", "المبلغ", "المؤقّت", "الحالة", ""].map(h => <th key={h} style={{ padding: 12, fontSize: 13, color: "#667085", textAlign: "right" }}>{h}</th>)}</tr></thead>
+            <thead><tr style={{ background: "#F1F4F8" }}>{["المرجع", "الطالب ← الخبير", "المبلغ", "المؤقّت", "الحالة", ""].map(h => <th key={h} style={{ padding: 12, fontSize: 12.5, color: BRAND.muted, fontWeight: 800, textAlign: "right" }}>{h}</th>)}</tr></thead>
             <tbody>
               {activeSessions.map(s => (
-                <tr key={s.id} style={{ borderTop: "1px solid #f1f5f9", cursor: "pointer" }} onClick={() => setSelected(s)}>
+                <tr key={s.id} style={{ borderTop: `1px solid ${BRAND.line}`, cursor: "pointer" }} onClick={() => setSelected(s)}>
                   <td style={{ padding: 12, fontWeight: 800, color: BRAND.navy, direction: "ltr", textAlign: "right" }}>{s.id}</td>
-                  <td style={{ padding: 12, fontSize: 13 }}>{s.student_name || s.student_email} <span style={{ color: "#9ca3af" }}>←</span> {s.expert_name || s.expert_email}</td>
-                  <td style={{ padding: 12, fontWeight: 800 }}>{escrowMoney(s.amount, s.currency)}</td>
+                  <td style={{ padding: 12, fontSize: 13 }}>{s.student_name || s.student_email} <span style={{ color: BRAND.muted }}>←</span> {s.expert_name || s.expert_email}</td>
+                  <td style={{ padding: 12, fontWeight: 800, fontFamily: "'Cairo', sans-serif", color: BRAND.navy }}>{escrowMoney(s.amount, s.currency)}</td>
                   <td style={{ padding: 12, fontSize: 12 }}><CountdownLabel seconds={s.release_seconds_remaining} status={s.status} /></td>
                   <td style={{ padding: 12 }}><Badge text={ESCROW_STATUS[s.status]?.t || s.status} color={ESCROW_STATUS[s.status]?.c} /></td>
-                  <td style={{ padding: 12 }}><button onClick={(e) => { e.stopPropagation(); setSelected(s); }} style={{ background: "none", border: "1px solid " + BRAND.navy, color: BRAND.navy, borderRadius: 8, padding: "4px 12px", cursor: "pointer", fontSize: 12, fontWeight: 800 }}>تفاصيل</button></td>
+                  <td style={{ padding: 12 }}><button onClick={(e) => { e.stopPropagation(); setSelected(s); }} style={{ background: "#F1F4F8", border: `1px solid ${BRAND.line}`, color: BRAND.navy, borderRadius: 8, padding: "5px 13px", cursor: "pointer", fontSize: 12, fontWeight: 800 }}>تفاصيل</button></td>
                 </tr>
               ))}
-              {activeSessions.length === 0 && <tr><td colSpan={6} style={{ padding: 24, textAlign: "center", color: "#9ca3af" }}>لا توجد جلسات محجوزة حاليًا.</td></tr>}
+              {activeSessions.length === 0 && <tr><td colSpan={6} style={{ padding: 24, textAlign: "center", color: BRAND.muted }}>لا توجد جلسات محجوزة حاليًا.</td></tr>}
             </tbody>
           </table>
         </div>
@@ -4314,19 +4362,19 @@ function EscrowPage({ user }) {
           {disputes.map(d => {
             const s = sessionById(d.session_id);
             return (
-              <div key={d.id} style={{ background: "#fff", borderRadius: 12, padding: 18, boxShadow: "0 1px 4px rgba(0,0,0,0.06)", borderRight: `4px solid ${d.decision ? "#2d8659" : "#c0392b"}` }}>
+              <div key={d.id} style={{ background: BRAND.surface, border: `1px solid ${BRAND.line}`, borderRadius: 14, padding: 18, borderInlineStart: `4px solid ${d.decision ? BRAND.agree : BRAND.conflict}` }}>
                 <div style={{ display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
                   <div>
-                    <div style={{ fontWeight: 900, color: BRAND.navy, direction: "ltr", textAlign: "right" }}>{d.id} <span style={{ color: "#9ca3af", fontWeight: 600 }}>· {d.session_id}</span></div>
-                    <div style={{ fontSize: 13, color: "#475467", marginTop: 4 }}>المُحتج: <b>{d.party === "student" ? "الطالب" : "الخبير"}</b> · مجمّد <b>{escrowMoney(d.amount_frozen, s?.currency)}</b></div>
-                    {d.reason && <div style={{ fontSize: 13, color: "#667085", marginTop: 4 }}>السبب: {d.reason}</div>}
+                    <div style={{ fontWeight: 900, color: BRAND.navy, direction: "ltr", textAlign: "right" }}>{d.id} <span style={{ color: BRAND.muted, fontWeight: 600 }}>· {d.session_id}</span></div>
+                    <div style={{ fontSize: 13, color: BRAND.ink2, marginTop: 4 }}>المُحتج: <b>{d.party === "student" ? "الطالب" : "الخبير"}</b> · مجمّد <b>{escrowMoney(d.amount_frozen, s?.currency)}</b></div>
+                    {d.reason && <div style={{ fontSize: 13, color: BRAND.muted, marginTop: 4 }}>السبب: {d.reason}</div>}
                   </div>
                   <div style={{ textAlign: "left" }}>
                     {d.decision
-                      ? <Badge text={`فُصل: ${d.decision === "student" ? "للطالب" : d.decision === "expert" ? "للخبير" : `تقسيم ${d.split_pct}%`}`} color="#2d8659" />
+                      ? <Badge text={`فُصل: ${d.decision === "student" ? "للطالب" : d.decision === "expert" ? "للخبير" : `تقسيم ${d.split_pct}%`}`} color={BRAND.agree} />
                       : <>
-                          <div style={{ fontSize: 12, color: "#c0392b", marginBottom: 6 }}>المهلة: {(d.decision_sla || "").slice(0, 10) || "—"}</div>
-                          {!readOnly && <Btn onClick={() => { setSelectedDispute(d); setSplitPct(50); }} color="#c0392b">افصل النزاع</Btn>}
+                          <div style={{ fontSize: 12, color: BRAND.conflict, marginBottom: 6 }}>المهلة: {(d.decision_sla || "").slice(0, 10) || "—"}</div>
+                          {!readOnly && <Btn onClick={() => { setSelectedDispute(d); setSplitPct(50); }} variant="human">افصل النزاع</Btn>}
                         </>}
                   </div>
                 </div>
@@ -4338,22 +4386,22 @@ function EscrowPage({ user }) {
 
       {/* RELEASED TAB */}
       {tab === "released" && (
-        <div style={{ background: "#fff", borderRadius: 12, boxShadow: "0 1px 4px rgba(0,0,0,0.06)", overflowX: "auto" }}>
+        <div style={{ background: BRAND.surface, border: `1px solid ${BRAND.line}`, borderRadius: 14, overflowX: "auto" }}>
           <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 720 }}>
-            <thead><tr style={{ background: "#f8fafc" }}>{["المرجع", "الطالب ← الخبير", "المبلغ", "صافي للخبير", "عمولة 15%", "الحالة", "التاريخ"].map(h => <th key={h} style={{ padding: 12, fontSize: 13, color: "#667085", textAlign: "right" }}>{h}</th>)}</tr></thead>
+            <thead><tr style={{ background: "#F1F4F8" }}>{["المرجع", "الطالب ← الخبير", "المبلغ", "صافي للخبير", "عمولة 15%", "الحالة", "التاريخ"].map(h => <th key={h} style={{ padding: 12, fontSize: 12.5, color: BRAND.muted, fontWeight: 800, textAlign: "right" }}>{h}</th>)}</tr></thead>
             <tbody>
               {releasedSessions.map(s => (
-                <tr key={s.id} style={{ borderTop: "1px solid #f1f5f9" }}>
+                <tr key={s.id} style={{ borderTop: `1px solid ${BRAND.line}` }}>
                   <td style={{ padding: 12, fontWeight: 800, color: BRAND.navy, direction: "ltr", textAlign: "right" }}>{s.id}</td>
                   <td style={{ padding: 12, fontSize: 13 }}>{s.student_name || "—"} ← {s.expert_name || "—"}</td>
                   <td style={{ padding: 12, fontWeight: 700 }}>{escrowMoney(s.amount, s.currency)}</td>
-                  <td style={{ padding: 12, color: "#2d8659", fontWeight: 700 }}>{s.status === "released" ? escrowMoney(s.net, s.currency) : "—"}</td>
+                  <td style={{ padding: 12, color: BRAND.agree, fontWeight: 700 }}>{s.status === "released" ? escrowMoney(s.net, s.currency) : "—"}</td>
                   <td style={{ padding: 12, color: BRAND.gold, fontWeight: 700 }}>{s.status === "released" ? escrowMoney(s.commission, s.currency) : "—"}</td>
                   <td style={{ padding: 12 }}><Badge text={ESCROW_STATUS[s.status]?.t || s.status} color={ESCROW_STATUS[s.status]?.c} /></td>
-                  <td style={{ padding: 12, fontSize: 12, color: "#667085", direction: "ltr", textAlign: "right" }}>{(s.released_at || s.held_at || "").slice(0, 10) || "—"}</td>
+                  <td style={{ padding: 12, fontSize: 12, color: BRAND.muted, direction: "ltr", textAlign: "right" }}>{(s.released_at || s.held_at || "").slice(0, 10) || "—"}</td>
                 </tr>
               ))}
-              {releasedSessions.length === 0 && <tr><td colSpan={7} style={{ padding: 24, textAlign: "center", color: "#9ca3af" }}>لا توجد جلسات محرّرة بعد.</td></tr>}
+              {releasedSessions.length === 0 && <tr><td colSpan={7} style={{ padding: 24, textAlign: "center", color: BRAND.muted }}>لا توجد جلسات محرّرة بعد.</td></tr>}
             </tbody>
           </table>
         </div>
@@ -4363,35 +4411,35 @@ function EscrowPage({ user }) {
       <Modal open={!!selected} onClose={() => setSelected(null)} title={`جلسة بضمان · ${selected?.id || ""}`} maxWidth={560}>
         {selected && (
           <div>
-            <div style={{ fontSize: 16, fontWeight: 800, color: BRAND.navy, marginBottom: 16 }}>{selected.student_name || selected.student_email} ← {selected.expert_name || selected.expert_email}</div>
-            <div style={{ background: "#f8fafc", borderRadius: 12, padding: 18, marginBottom: 16 }}>
-              <div style={{ fontSize: 12, color: "#9ca3af", marginBottom: 4 }}>المبلغ المحجوز</div>
-              <div style={{ fontSize: 30, fontWeight: 900, color: BRAND.navy, marginBottom: 14 }}>{escrowMoney(selected.amount, selected.currency)}</div>
+            <div style={{ fontFamily: "'Cairo', sans-serif", fontSize: 16, fontWeight: 800, color: BRAND.navy, marginBottom: 16 }}>{selected.student_name || selected.student_email} ← {selected.expert_name || selected.expert_email}</div>
+            <div style={{ background: "#F1F4F8", borderRadius: 12, padding: 18, marginBottom: 16 }}>
+              <div style={{ fontSize: 12, color: BRAND.muted, marginBottom: 4 }}>المبلغ المحجوز</div>
+              <div style={{ fontFamily: "'Cairo', sans-serif", fontSize: 30, fontWeight: 900, color: BRAND.navy, marginBottom: 14 }}>{escrowMoney(selected.amount, selected.currency)}</div>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-                <div style={{ background: "#ecfdf3", borderRadius: 8, padding: "10px 14px" }}>
-                  <div style={{ fontSize: 12, color: "#2d8659" }}>صافي للخبير</div>
-                  <div style={{ fontSize: 18, fontWeight: 900, color: "#2d8659" }}>{escrowMoney(selected.net, selected.currency)}</div>
+                <div style={{ background: BRAND.agreeBg, borderRadius: 9, padding: "10px 14px" }}>
+                  <div style={{ fontSize: 12, color: BRAND.agree }}>صافي للخبير</div>
+                  <div style={{ fontFamily: "'Cairo', sans-serif", fontSize: 18, fontWeight: 900, color: BRAND.agree }}>{escrowMoney(selected.net, selected.currency)}</div>
                 </div>
-                <div style={{ background: "#fef6e7", borderRadius: 8, padding: "10px 14px" }}>
-                  <div style={{ fontSize: 12, color: "#b8860b" }}>عمولة {Math.round((selected.commission_rate || 0.15) * 100)}%</div>
-                  <div style={{ fontSize: 18, fontWeight: 900, color: BRAND.gold }}>{escrowMoney(selected.commission, selected.currency)}</div>
+                <div style={{ background: BRAND.goldBg, borderRadius: 9, padding: "10px 14px" }}>
+                  <div style={{ fontSize: 12, color: BRAND.gold }}>عمولة {Math.round((selected.commission_rate || 0.15) * 100)}%</div>
+                  <div style={{ fontFamily: "'Cairo', sans-serif", fontSize: 18, fontWeight: 900, color: BRAND.gold }}>{escrowMoney(selected.commission, selected.currency)}</div>
                 </div>
               </div>
-              <div style={{ fontSize: 11, color: "#9ca3af", marginTop: 10 }}>العمولة تُقتطع عند التحرير فقط — لا عند الحجز.</div>
+              <div style={{ fontSize: 11, color: BRAND.muted, marginTop: 10 }}>العمولة تُقتطع عند التحرير فقط — لا عند الحجز.</div>
             </div>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 16, fontSize: 13 }}>
-              <div><div style={{ color: "#9ca3af", fontSize: 12 }}>المرجع</div><div style={{ fontWeight: 700 }}>{selected.ref || "—"}</div></div>
-              <div><div style={{ color: "#9ca3af", fontSize: 12 }}>المؤقّت</div><div style={{ fontWeight: 700 }}><CountdownLabel seconds={selected.release_seconds_remaining} status={selected.status} /></div></div>
+              <div><div style={{ color: BRAND.muted, fontSize: 12 }}>المرجع</div><div style={{ fontWeight: 700 }}>{selected.ref || "—"}</div></div>
+              <div><div style={{ color: BRAND.muted, fontSize: 12 }}>المؤقّت</div><div style={{ fontWeight: 700 }}><CountdownLabel seconds={selected.release_seconds_remaining} status={selected.status} /></div></div>
             </div>
             {selected.status === "dispute" ? (
-              <div style={{ padding: "12px 14px", borderRadius: 8, background: "#fdeeec", color: "#c0392b", fontWeight: 700, fontSize: 13 }}>⚖️ هذه الجلسة عليها نزاع مفتوح — يُدار من تبويب «النزاعات بخط زمني».</div>
+              <div style={{ padding: "12px 14px", borderRadius: 9, background: BRAND.conflictBg, color: BRAND.conflict, fontWeight: 700, fontSize: 13 }}>⚖️ هذه الجلسة عليها نزاع مفتوح — يُدار من تبويب «النزاعات بخط زمني».</div>
             ) : readOnly ? (
-              <div style={{ padding: "12px 14px", borderRadius: 8, background: "#f3f4f6", color: "#667085", fontWeight: 700, fontSize: 13 }}>وضع المتابعة (قراءة فقط) — الإجراءات للأدمن فقط.</div>
+              <div style={{ padding: "12px 14px", borderRadius: 9, background: "#F1F4F8", color: BRAND.muted, fontWeight: 700, fontSize: 13 }}>وضع المتابعة (قراءة فقط) — الإجراءات للأدمن فقط.</div>
             ) : (
               <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-                <Btn onClick={() => onRelease(selected)} color="#2d8659" disabled={busy}>✅ حرّر للخبير</Btn>
-                <Btn onClick={() => onRefund(selected)} color="#e8913a" variant="outline" disabled={busy}>↩ استرداد للطالب</Btn>
-                <Btn onClick={() => onDispute(selected)} color="#c0392b" variant="outline" disabled={busy}>⚖️ فتح نزاع</Btn>
+                <Btn onClick={() => onRelease(selected)} variant="primary" disabled={busy}>✅ حرّر للخبير</Btn>
+                <Btn onClick={() => onRefund(selected)} color={BRAND.gold} variant="ghost" disabled={busy}>↩ استرداد للطالب</Btn>
+                <Btn onClick={() => onDispute(selected)} variant="warn" disabled={busy}>⚖️ فتح نزاع</Btn>
               </div>
             )}
           </div>
@@ -4404,16 +4452,16 @@ function EscrowPage({ user }) {
           const s = sessionById(selectedDispute.session_id);
           return (
             <div>
-              <div style={{ fontSize: 14, color: "#475467", marginBottom: 16 }}>الجلسة <b>{selectedDispute.session_id}</b> · مجمّد <b>{escrowMoney(selectedDispute.amount_frozen, s?.currency)}</b> · المُحتج: <b>{selectedDispute.party === "student" ? "الطالب" : "الخبير"}</b></div>
-              <div style={{ background: "#f8fafc", borderRadius: 10, padding: 14, marginBottom: 16 }}>
-                <label style={{ fontSize: 13, fontWeight: 700, color: "#374151" }}>نسبة الخبير عند التقسيم (٪)</label>
-                <input type="number" min={0} max={100} value={splitPct} onChange={e => setSplitPct(e.target.value)} style={{ width: "100%", marginTop: 8, padding: "10px 14px", borderRadius: 8, border: "1px solid #d1d5db", fontSize: 14, boxSizing: "border-box" }} />
-                <div style={{ fontSize: 12, color: "#9ca3af", marginTop: 6 }}>تُحتسب العمولة على حصة الخبير فقط، والباقي يُسترد للطالب.</div>
+              <div style={{ fontSize: 14, color: BRAND.ink2, marginBottom: 16 }}>الجلسة <b>{selectedDispute.session_id}</b> · مجمّد <b>{escrowMoney(selectedDispute.amount_frozen, s?.currency)}</b> · المُحتج: <b>{selectedDispute.party === "student" ? "الطالب" : "الخبير"}</b></div>
+              <div style={{ background: "#F1F4F8", borderRadius: 10, padding: 14, marginBottom: 16 }}>
+                <label style={{ fontSize: 11.5, fontWeight: 800, color: BRAND.muted }}>نسبة الخبير عند التقسيم (٪)</label>
+                <input type="number" min={0} max={100} value={splitPct} onChange={e => setSplitPct(e.target.value)} style={{ width: "100%", marginTop: 8, padding: "10px 13px", borderRadius: 10, border: `1px solid ${BRAND.line}`, fontSize: 13, boxSizing: "border-box", background: BRAND.surface }} />
+                <div style={{ fontSize: 12, color: BRAND.muted, marginTop: 6 }}>تُحتسب العمولة على حصة الخبير فقط، والباقي يُسترد للطالب.</div>
               </div>
               <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-                <Btn onClick={() => resolveDispute("student")} color="#e8913a" disabled={busy}>↩ لصالح الطالب (استرداد)</Btn>
-                <Btn onClick={() => resolveDispute("expert")} color="#2d8659" disabled={busy}>✅ لصالح الخبير (تحرير)</Btn>
-                <Btn onClick={() => resolveDispute("split")} color={BRAND.navy} variant="outline" disabled={busy}>⚖️ تقسيم</Btn>
+                <Btn onClick={() => resolveDispute("student")} color={BRAND.gold} variant="ghost" disabled={busy}>↩ لصالح الطالب (استرداد)</Btn>
+                <Btn onClick={() => resolveDispute("expert")} variant="primary" disabled={busy}>✅ لصالح الخبير (تحرير)</Btn>
+                <Btn onClick={() => resolveDispute("split")} color={BRAND.navy} variant="ghost" disabled={busy}>⚖️ تقسيم</Btn>
               </div>
             </div>
           );
@@ -4546,23 +4594,34 @@ function MessagesPage() {
   );
 }
 
+// `group` mirrors the canonical mockup's three rail sections.
 const navItems = [
-  { id: "overview", label: "نظرة عامة", icon: "📊" },
-  { id: "platform-users", label: "المستخدمون", icon: "👥" },
-  { id: "courses", label: "الدورات والتدريب", icon: "📚" },
-  { id: "escrow", label: "الضمان والنزاعات", icon: "🛡️" },
-  { id: "investors-admin", label: "الاستثمار", icon: "💼" },
-  { id: "marketing", label: "التسويق", icon: "📢" },
-  { id: "content", label: "المحتوى والمدونة", icon: "📝" },
-  { id: "messages", label: "الرسائل", icon: "✉️" },
-  { id: "finance", label: "المالية", icon: "💰" },
-  { id: "partners", label: "الشركاء", icon: "🤝" },
-  { id: "team", label: "الفريق والمدربون", icon: "🧑‍🏫" },
-  { id: "foundation", label: "مرحلة التأسيس", icon: "🏗️" },
-  { id: "targets", label: "الأهداف والتوقعات", icon: "📈" },
-  { id: "ai", label: "مساعد AI", icon: "🤖" },
-  { id: "settings", label: "الإعدادات", icon: "⚙️" },
+  { id: "overview", label: "نظرة عامة", icon: "📊", group: "الوارد والإدارة" },
+  { id: "platform-users", label: "المستخدمون", icon: "👥", group: "الوارد والإدارة" },
+  { id: "courses", label: "الدورات والتدريب", icon: "📚", group: "الوارد والإدارة" },
+  { id: "escrow", label: "الضمان والنزاعات", icon: "🛡️", group: "الوارد والإدارة" },
+  { id: "messages", label: "الرسائل", icon: "✉️", group: "الوارد والإدارة" },
+  { id: "content", label: "المحتوى والمدونة", icon: "📝", group: "الوارد والإدارة" },
+  { id: "finance", label: "المالية", icon: "💰", group: "المال والنمو" },
+  { id: "investors-admin", label: "الاستثمار", icon: "💼", group: "المال والنمو" },
+  { id: "marketing", label: "التسويق", icon: "📢", group: "المال والنمو" },
+  { id: "targets", label: "الأهداف والتوقعات", icon: "📈", group: "المال والنمو" },
+  { id: "partners", label: "الشركاء", icon: "🤝", group: "الشركة والذكاء" },
+  { id: "team", label: "الفريق والمدربون", icon: "🧑‍🏫", group: "الشركة والذكاء" },
+  { id: "foundation", label: "مرحلة التأسيس", icon: "🏗️", group: "الشركة والذكاء" },
+  { id: "ai", label: "مساعد AI", icon: "🤖", group: "الشركة والذكاء" },
+  { id: "settings", label: "الإعدادات", icon: "⚙️", group: "الشركة والذكاء" },
 ];
+
+// crimson brand mark — pixel-traced official «البروفيسور» glyph (copied from the mockup).
+function BrandMark() {
+  return (
+    <svg viewBox="0 0 798 588" style={{ width: "60%", height: "60%" }} aria-hidden="true">
+      <path fill="#fff" d="M389 50 Q389 0 439 0 L672 0 Q762 0 762 90 L762 347 L675 347 L675 353 L572 353 L572 588 L496 588 L496 493 L462 493 L462 588 L386 588 L386 493 L302 493 L302 588 L228 588 L228 493 L201 493 L201 588 L104 588 L104 335 L76 335 L76 409 L0 409 L0 351 L40 351 L40 182 L108 182 L108 106 L389 106 Z" />
+      <path fill="#fff" d="M675 337 L762 337 L762 421 L798 421 L798 492 L675 492 Z" />
+    </svg>
+  );
+}
 
 function Layout({ page, setPage, user, onLogout }) {
   const effectiveRole = getEffectiveRole(user);
@@ -4611,79 +4670,101 @@ function Layout({ page, setPage, user, onLogout }) {
   const allowedIds = visibleNavItems.map((n) => n.id);
   const activePage = allowedIds.includes(page) ? page : (visibleNavItems[0]?.id || "overview");
 
-  const sidebar = (
-    <div style={{ width: isMobile ? "82vw" : 250, maxWidth: 300, background: `linear-gradient(180deg, ${BRAND.navy2}, ${BRAND.navy})`, padding: "24px 0", display: "flex", flexDirection: "column", flexShrink: 0, height: "100%" }}>
-      <div style={{ padding: "0 24px", marginBottom: 36 }}>
-        <div style={{ fontSize: 24, fontWeight: 900, color: BRAND.gold }}>البروفيسور</div>
-        <div style={{ fontSize: 11, color: "#B8C0D0", letterSpacing: 1, marginTop: 2 }}>MANAGEMENT DASHBOARD</div>
+  const activeItem = visibleNavItems.find((n) => n.id === activePage);
+  const pageTitle = activeItem?.label || "البروفيسور";
+  const roleLabel = userRoleLabels[user?.role] || user?.role || "";
+  const initial = (currentUserName(user) || user?.name || "ع").trim().charAt(0) || "ع";
+
+  // Group nav items by their `group` (admin has groups; other roles fall under one bucket).
+  const groups = [];
+  visibleNavItems.forEach((n) => {
+    const g = n.group || "";
+    const last = groups[groups.length - 1];
+    if (last && last.name === g) last.items.push(n);
+    else groups.push({ name: g, items: [n] });
+  });
+
+  const rail = (
+    <aside className={`elp-rail${isMobile && sidebarOpen ? " is-open" : ""}`} style={{ height: "100%" }}>
+      <div className="elp-rail__brand">
+        <div className="elp-rail__mark"><BrandMark /></div>
+        <div className="elp-rail__title">
+          <h1>البروفيسور</h1>
+          <span>غرفة التحكم</span>
+        </div>
       </div>
-      <nav style={{ flex: 1 }}>
-        {visibleNavItems.map(n => (
-          <button key={n.id} onClick={() => { setPage(n.id); setSidebarOpen(false); }} style={{ display: "flex", alignItems: "center", gap: 12, width: "100%", padding: "14px 24px", background: activePage === n.id ? "rgba(217,179,76,0.14)" : "transparent", border: "none", borderRight: activePage === n.id ? `3px solid ${BRAND.gold}` : "3px solid transparent", color: activePage === n.id ? "#fff" : "#B8C0D0", fontSize: 15, fontWeight: activePage === n.id ? 900 : 700, cursor: "pointer", textAlign: "right", transition: "all 0.15s" }}>
-            <span style={{ fontSize: 18 }}>{n.icon}</span>
-            {n.label}
-          </button>
+      <div className="elp-rail__nav">
+        {groups.map((g, gi) => (
+          <div key={g.name || gi}>
+            {g.name && <div className="elp-rail__grp">{g.name}</div>}
+            <nav className="elp-nav">
+              {g.items.map((n) => (
+                <button key={n.id} className={`elp-nav__item${activePage === n.id ? " is-on" : ""}`} onClick={() => { setPage(n.id); setSidebarOpen(false); }}>
+                  <span className="elp-nav__ic">{n.icon}</span>
+                  <span>{n.label}</span>
+                </button>
+              ))}
+            </nav>
+          </div>
         ))}
-      </nav>
-      <div style={{ padding: "16px 24px", borderTop: "1px solid rgba(255,255,255,0.1)" }}>
-        <div style={{ fontSize: 13, color: "#94a3b8", marginBottom: 8 }}>👤 {user?.name}</div>
-        <div style={{ fontSize: 12, color: "#D9B34C", marginBottom: 8 }}>{userRoleLabels[user?.role] || user?.role}</div>
-        <button onClick={onLogout} style={{ background: "none", border: "none", color: "#ef4444", fontSize: 13, cursor: "pointer", fontWeight: 600 }}>تسجيل الخروج</button>
       </div>
-    </div>
+      <div className="elp-rail__me">
+        <div className="elp-rail__av">{initial}</div>
+        <div style={{ minWidth: 0 }}>
+          <div className="elp-rail__nm">{currentUserName(user) || user?.name || "—"}</div>
+          <div className="elp-rail__rl">{roleLabel}</div>
+          <button className="elp-rail__logout" onClick={onLogout}>تسجيل الخروج</button>
+        </div>
+      </div>
+    </aside>
   );
 
   return (
-    <div style={{ display: "flex", minHeight: "100vh", direction: "rtl", fontFamily: "'IBM Plex Sans Arabic', 'Cairo', 'Tajawal', sans-serif" }}>
-      <style>{`
-        @media (max-width: 980px) {
-          .wallet-stats { grid-template-columns: 1fr !important; }
-          .card-meta { grid-template-columns: 1fr !important; }
-          .withdraw-bar { flex-direction: column !important; align-items: stretch !important; }
-        }
-      `}</style>
-      {!isMobile && sidebar}
-      {isMobile && sidebarOpen && (
-        <div onClick={() => setSidebarOpen(false)} style={{ position: "fixed", inset: 0, background: "rgba(16,27,47,.45)", zIndex: 1000 }}>
-          <div onClick={(e) => e.stopPropagation()} style={{ height: "100%", boxShadow: "0 24px 70px rgba(16,27,47,.28)" }}>
-            {sidebar}
-          </div>
-        </div>
+    <div className="elp-app" style={{ direction: "rtl" }}>
+      {!isMobile && rail}
+      {isMobile && (
+        <>
+          {rail}
+          <div className={`elp-railscrim${sidebarOpen ? " is-on" : ""}`} onClick={() => setSidebarOpen(false)} />
+        </>
       )}
 
-      {/* Main Content */}
-      <div style={{ flex: 1, background: BRAND.bg, padding: isMobile ? "16px 14px 96px" : "28px 32px 96px", overflowY: "auto" }}>
-        {isMobile && (
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16, background: "#fff", borderRadius: 16, padding: "12px 14px", border: "1px solid #e6ecf2" }}>
-            <button onClick={() => setSidebarOpen(true)} style={{ minWidth: 44, minHeight: 44, borderRadius: 12, border: "1px solid #d0d5dd", background: "#fff", fontSize: 20, cursor: "pointer" }}>☰</button>
-            <div style={{ textAlign: "left" }}>
-              <div style={{ fontWeight: 900, color: BRAND.navy }}>البروفيسور</div>
-              <div style={{ fontSize: 12, color: "#667085" }}>{userRoleLabels[user?.role] || user?.role}</div>
-            </div>
-          </div>
-        )}
-        <PageBoundary pageKey={activePage}>
-          {activePage === "overview" && <OverviewPage onNavigate={setPage} />}
-          {activePage === "platform-users" && <PlatformUsersPage />}
-          {activePage === "finance" && <FinancePage />}
-          {activePage === "marketing" && <MarketingPage only="campaigns" />}
-          {activePage === "content" && <ContentPage />}
-          {activePage === "messages" && <MessagesPage />}
-          {activePage === "courses" && <CoursesPage />}
-          {activePage === "escrow" && <EscrowPage user={user} />}
-          {activePage === "investors-admin" && <InvestmentPage />}
-          {activePage === "earnings" && <MyEarningsPage />}
-          {activePage === "marketplace" && <InvestorInvestmentsPage initialTab="opportunities" />}
-          {activePage === "investments" && <InvestorInvestmentsPage initialTab="active" />}
-          {activePage === "foundation" && <FoundationPage />}
-          {activePage === "partners" && <TeamPartnersPage section="partners" />}
-          {activePage === "team" && <TeamPartnersPage section="team" />}
-          {activePage === "targets" && <TargetsPage />}
-          {activePage === "ai" && <AIPage />}
-          {activePage === "settings" && <SettingsPage />}
-        </PageBoundary>
-        <AIAssistantDock />
-      </div>
+      <main className="elp-main">
+        <header className="elp-topbar">
+          {isMobile && (
+            <button className="elp-menu-btn" style={{ display: "grid" }} aria-label="القائمة" onClick={() => setSidebarOpen(true)}>☰</button>
+          )}
+          <div className="elp-topbar__title"><h2>{pageTitle}</h2></div>
+          <button className="elp-tbtn" title="الإشعارات" style={{ marginInlineStart: "auto" }}>
+            <svg className="elp-icon" viewBox="0 0 24 24"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" /><path d="M13.7 21a2 2 0 0 1-3.4 0" /></svg>
+            <span className="elp-tbtn__dot" />
+          </button>
+        </header>
+
+        <div className="elp-content">
+          <PageBoundary pageKey={activePage}>
+            {activePage === "overview" && <OverviewPage onNavigate={setPage} />}
+            {activePage === "platform-users" && <PlatformUsersPage />}
+            {activePage === "finance" && <FinancePage />}
+            {activePage === "marketing" && <MarketingPage only="campaigns" />}
+            {activePage === "content" && <ContentPage />}
+            {activePage === "messages" && <MessagesPage />}
+            {activePage === "courses" && <CoursesPage />}
+            {activePage === "escrow" && <EscrowPage user={user} />}
+            {activePage === "investors-admin" && <InvestmentPage />}
+            {activePage === "earnings" && <MyEarningsPage />}
+            {activePage === "marketplace" && <InvestorInvestmentsPage initialTab="opportunities" />}
+            {activePage === "investments" && <InvestorInvestmentsPage initialTab="active" />}
+            {activePage === "foundation" && <FoundationPage />}
+            {activePage === "partners" && <TeamPartnersPage section="partners" />}
+            {activePage === "team" && <TeamPartnersPage section="team" />}
+            {activePage === "targets" && <TargetsPage />}
+            {activePage === "ai" && <AIPage />}
+            {activePage === "settings" && <SettingsPage />}
+          </PageBoundary>
+          <AIAssistantDock />
+        </div>
+      </main>
     </div>
   );
 }
