@@ -2,7 +2,7 @@
 ElProfessor Management Dashboard - Backend API
 Flask + SQLAlchemy + SQLite (upgradeable to MySQL/PostgreSQL)
 """
-import os, json, datetime, hashlib, secrets, functools
+import os, json, datetime, hashlib, secrets, functools, logging
 from flask import Flask, request, jsonify, g, send_from_directory
 from flask_cors import CORS
 from flask_sqlalchemy import SQLAlchemy
@@ -14,18 +14,47 @@ import requests
 
 load_dotenv()
 
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger('elprofessor.dashboard')
+
 # ============================================================
 # CONFIG
 # ============================================================
 app = Flask(__name__)
-app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', secrets.token_hex(32))
+_secret_key = os.environ.get('SECRET_KEY')
+if not _secret_key:
+    logger.warning(
+        "SECRET_KEY is not set — generating an ephemeral key. "
+        "This INVALIDATES all issued JWTs on restart; SET SECRET_KEY in production."
+    )
+    _secret_key = secrets.token_hex(32)
+app.config['SECRET_KEY'] = _secret_key
 database_url = os.environ.get('DATABASE_URL', 'sqlite:///elprofessor.db')
 if database_url.startswith('postgres://'):
     database_url = database_url.replace('postgres://', 'postgresql://', 1)
 app.config['SQLALCHEMY_DATABASE_URI'] = database_url
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
-CORS(app, origins=os.environ.get('CORS_ORIGINS', '*').split(','))
+# CORS allow-list. Default to the dashboard + brand origins; override via CORS_ORIGINS
+# (comma-separated). A literal '*' is honoured but discouraged with credentials.
+_DEFAULT_CORS_ORIGINS = [
+    'https://dashboard.elprofessor.net',
+    'https://elprofessor.net',
+    'https://www.elprofessor.net',
+    'https://api.elprofessor.net',
+]
+_cors_env = (os.environ.get('CORS_ORIGINS') or '').strip()
+if _cors_env:
+    CORS_ORIGINS = [o.strip() for o in _cors_env.split(',') if o.strip()]
+else:
+    CORS_ORIGINS = list(_DEFAULT_CORS_ORIGINS)
+CORS(
+    app,
+    origins=CORS_ORIGINS,
+    supports_credentials=True,
+    allow_headers=['Content-Type', 'Authorization', 'X-ELP-Metrics-Secret'],
+    methods=['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+)
 db = SQLAlchemy(app)
 CUT_OFF_DATE = datetime.date(2026, 6, 1)
 SEED_PREFIX = 'seed:v3'
@@ -277,6 +306,35 @@ class Payout(db.Model):
     notes = db.Column(db.Text)
     created_at = db.Column(db.DateTime, default=datetime.datetime.utcnow)
 
+class Article(db.Model):
+    __tablename__ = 'articles'
+    id = db.Column(db.Integer, primary_key=True)
+    title = db.Column(db.String(500), nullable=False)
+    excerpt = db.Column(db.Text)
+    cat = db.Column(db.String(120))         # category
+    kicker = db.Column(db.String(255))
+    date = db.Column(db.String(40))         # display date (free-form, as authored)
+    by = db.Column(db.String(255))          # author byline
+    tone = db.Column(db.String(80))
+    video = db.Column(db.Text)              # optional video URL
+    body = db.Column(db.Text)               # JSON-encoded list[str] of paragraphs
+    status = db.Column(db.String(20), default='draft')  # draft | published
+    published_at = db.Column(db.DateTime, nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.datetime.utcnow)
+
+class Message(db.Model):
+    __tablename__ = 'messages'
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(255), nullable=False)
+    email = db.Column(db.String(255), nullable=False)
+    phone = db.Column(db.String(80))
+    topic = db.Column(db.String(255))
+    body = db.Column(db.Text, nullable=False)
+    status = db.Column(db.String(20), default='new')    # new | replied
+    reply_body = db.Column(db.Text)
+    replied_at = db.Column(db.DateTime, nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.datetime.utcnow)
+
 # ============================================================
 # AUTH MIDDLEWARE
 # ============================================================
@@ -314,6 +372,30 @@ def roles_required(*allowed_roles):
 # ============================================================
 # HELPER
 # ============================================================
+
+def _is_admin_user(user):
+    if not user:
+        return False
+    return 'admin' in {
+        (getattr(user, 'role', None) or '').strip().lower(),
+        (getattr(user, 'dashboard_role', None) or '').strip().lower(),
+    }
+
+def active_admin_count(exclude_id=None):
+    """Count active local dashboard admins, optionally excluding one user id."""
+    count = 0
+    for u in User.query.filter_by(is_active=True).all():
+        if exclude_id is not None and u.id == exclude_id:
+            continue
+        if _is_admin_user(u):
+            count += 1
+    return count
+
+def is_last_admin(user):
+    """True if `user` is an active admin and the ONLY remaining active admin."""
+    if not _is_admin_user(user) or not getattr(user, 'is_active', False):
+        return False
+    return active_admin_count(exclude_id=user.id) == 0
 
 def get_rate():
     s = Setting.query.get('exchange_rate')
@@ -964,7 +1046,19 @@ def platform_users_list():
 def platform_users_set_role(user_id):
     if not PLATFORM_METRICS_SECRET:
         return jsonify({'error': 'لم يتم ضبط الربط بعد'}), 503
-    role = ((request.json or {}).get('role') or '').strip()
+    body = request.json or {}
+    role = (body.get('role') or '').strip()
+
+    # LAST-ADMIN protection: if this role change demotes the platform user that maps
+    # (by email) to the only remaining active local dashboard admin, refuse it.
+    target_email = (body.get('email') or '').lower().strip()
+    if role and role.lower() != 'admin' and target_email:
+        local = User.query.filter_by(email=target_email).first()
+        if local and is_last_admin(local):
+            return jsonify({
+                'error': 'لا يمكن تنزيل دور المدير الوحيد المتبقي. أضف مديرًا آخر أولًا.'
+            }), 409
+
     try:
         r = requests.post(
             f"{PLATFORM_API_URL}/api/bridge/users/{user_id}/role",
@@ -1138,6 +1232,24 @@ def create_user():
 def update_user(id):
     user = User.query.get_or_404(id)
     d = request.json or {}
+
+    # LAST-ADMIN protection: never let the only remaining active admin be
+    # demoted, deactivated, or have their email changed (they'd lock everyone out).
+    if is_last_admin(user):
+        demotes = False
+        for rk in ('role', 'dashboard_role'):
+            if rk in d and (str(d.get(rk) or '').strip().lower() != 'admin'):
+                demotes = True
+        deactivates = ('is_active' in d) and (not d.get('is_active'))
+        changes_email = (
+            'email' in d
+            and (str(d.get('email') or '').lower().strip() != (user.email or '').lower().strip())
+        )
+        if demotes or deactivates or changes_email:
+            return jsonify({
+                'error': 'لا يمكن تعديل المدير الوحيد المتبقي (الدور/التفعيل/البريد). أضف مديرًا آخر أولًا.'
+            }), 409
+
     for key in ['name', 'email', 'role', 'dashboard_role', 'linked_to_name', 'preferred_currency', 'is_active']:
         if key in d:
             value = d[key]
@@ -2165,7 +2277,7 @@ def delete_investment_opportunity(id):
     db.session.commit()
     return jsonify({'message': 'تم حذف فرصة الاستثمار'})
 
-@app.route('/api/investor/wallet', methods=['GET'])
+@app.route('/api/me/investor-wallet', methods=['GET'])
 @token_required
 def get_investor_wallet():
     rate = get_rate()
@@ -2684,14 +2796,29 @@ def finance_summary():
 def seed():
     """Seed initial data"""
     admin_email = os.environ.get('ADMIN_EMAIL', 'admin@elprofessor.com').lower().strip()
-    if not User.query.filter_by(email=admin_email).first():
-        admin = User(
-            email=admin_email,
-            password_hash=generate_password_hash(os.environ.get('ADMIN_PASSWORD', 'admin123'), method='pbkdf2:sha256'),
-            name=os.environ.get('ADMIN_NAME', 'عبدالرحمن'),
-            role='admin'
-        )
-        db.session.add(admin)
+    admin_password = os.environ.get('ADMIN_PASSWORD')
+    existing_admin = User.query.filter_by(email=admin_email).first()
+    if not existing_admin:
+        if admin_password:
+            # First boot with a configured password → create the admin.
+            admin = User(
+                email=admin_email,
+                password_hash=generate_password_hash(admin_password, method='pbkdf2:sha256'),
+                name=os.environ.get('ADMIN_NAME', 'عبدالرحمن'),
+                role='admin'
+            )
+            db.session.add(admin)
+        else:
+            # No password configured → do NOT seed a default-password admin.
+            logger.warning(
+                "ADMIN_PASSWORD is not set and no admin (%s) exists — skipping admin seed. "
+                "Set ADMIN_PASSWORD and redeploy to provision the admin account.",
+                admin_email,
+            )
+    elif admin_password:
+        # Admin exists and a password is configured → rotate it to match the env
+        # (rotating ADMIN_PASSWORD + redeploy rotates the live password).
+        existing_admin.password_hash = generate_password_hash(admin_password, method='pbkdf2:sha256')
     
     def upsert_setting(key, value):
         item = Setting.query.get(key)
@@ -3012,6 +3139,208 @@ def ensure_runtime_schema():
 # ============================================================
 # INIT
 # ============================================================
+
+# ============================================================
+# CMS / CONTENT + MESSAGES (public site feed + admin authoring)
+# ============================================================
+
+def _article_body_list(article):
+    raw = getattr(article, 'body', None)
+    if not raw:
+        return []
+    try:
+        data = json.loads(raw)
+        if isinstance(data, list):
+            return [str(x) for x in data]
+        return [str(data)]
+    except (ValueError, TypeError):
+        # Legacy/plain text → split into paragraphs.
+        return [p for p in str(raw).split('\n\n') if p.strip()]
+
+def serialize_article(article):
+    return {
+        'id': article.id,
+        'title': article.title,
+        'excerpt': article.excerpt or '',
+        'cat': article.cat or '',
+        'kicker': article.kicker or '',
+        'date': article.date or '',
+        'by': article.by or '',
+        'tone': article.tone or None,
+        'video': article.video or None,
+        'body': _article_body_list(article),
+        'status': article.status or 'draft',
+        'published_at': article.published_at.isoformat() if article.published_at else None,
+    }
+
+def _apply_article_fields(article, d):
+    if 'title' in d:
+        article.title = (d.get('title') or '').strip()
+    for key in ('excerpt', 'cat', 'kicker', 'date', 'by', 'tone', 'video'):
+        if key in d:
+            setattr(article, key, d.get(key))
+    if 'body' in d:
+        body = d.get('body')
+        if isinstance(body, str):
+            body = [p for p in body.split('\n\n') if p.strip()]
+        if not isinstance(body, list):
+            body = []
+        article.body = json.dumps([str(x) for x in body], ensure_ascii=False)
+
+def _no_store(resp):
+    resp.headers['Cache-Control'] = 'no-store'
+    resp.headers['Pragma'] = 'no-cache'
+    return resp
+
+@app.route('/api/content/articles', methods=['GET'])
+def public_articles_feed():
+    """PUBLIC: published articles feed for the marketing site. No auth, no cache."""
+    status = (request.args.get('status') or 'published').strip().lower()
+    query = Article.query
+    if status == 'published':
+        query = query.filter_by(status='published')
+    elif status:
+        query = query.filter_by(status=status)
+    items = query.order_by(
+        Article.published_at.desc().nullslast(),
+        Article.created_at.desc(),
+    ).all()
+    resp = jsonify({'source': 'dashboard', 'articles': [serialize_article(a) for a in items]})
+    return _no_store(resp)
+
+@app.route('/api/content/articles/all', methods=['GET'])
+@token_required
+@roles_required('admin')
+def admin_articles_all():
+    items = Article.query.order_by(
+        Article.created_at.desc()
+    ).all()
+    return jsonify({'source': 'dashboard', 'articles': [serialize_article(a) for a in items]})
+
+@app.route('/api/content/articles', methods=['POST'])
+@token_required
+@roles_required('admin')
+def admin_article_create():
+    d = request.json or {}
+    if not (d.get('title') or '').strip():
+        return jsonify({'error': 'العنوان مطلوب'}), 400
+    article = Article(title=(d.get('title') or '').strip(), status='draft')
+    _apply_article_fields(article, d)
+    article.status = 'draft'  # always created as a draft
+    db.session.add(article)
+    db.session.commit()
+    return jsonify(serialize_article(article)), 201
+
+@app.route('/api/content/articles/<int:id>', methods=['PUT'])
+@token_required
+@roles_required('admin')
+def admin_article_update(id):
+    article = Article.query.get_or_404(id)
+    d = request.json or {}
+    _apply_article_fields(article, d)
+    if 'status' in d and (d.get('status') in ('draft', 'published')):
+        article.status = d['status']
+        if article.status == 'published' and not article.published_at:
+            article.published_at = datetime.datetime.utcnow()
+    db.session.commit()
+    return jsonify(serialize_article(article))
+
+@app.route('/api/content/articles/<int:id>', methods=['DELETE'])
+@token_required
+@roles_required('admin')
+def admin_article_delete(id):
+    article = Article.query.get_or_404(id)
+    db.session.delete(article)
+    db.session.commit()
+    return jsonify({'ok': True})
+
+@app.route('/api/content/articles/<int:id>/publish', methods=['POST'])
+@token_required
+@roles_required('admin')
+def admin_article_publish(id):
+    article = Article.query.get_or_404(id)
+    article.status = 'published'
+    article.published_at = datetime.datetime.utcnow()
+    db.session.commit()
+    return jsonify(serialize_article(article))
+
+def serialize_message(m):
+    return {
+        'id': m.id,
+        'name': m.name,
+        'email': m.email,
+        'phone': m.phone or '',
+        'topic': m.topic or '',
+        'body': m.body,
+        'status': m.status or 'new',
+        'created_at': m.created_at.isoformat() if m.created_at else None,
+    }
+
+@app.route('/api/messages', methods=['POST'])
+def public_message_create():
+    """PUBLIC: contact-form submissions from the marketing site. No auth."""
+    d = request.json or {}
+    # Honeypot: bots fill hidden fields. Pretend success, store nothing.
+    if (d.get('website') or d.get('hp') or '').strip():
+        return jsonify({'ok': True})
+    name = (d.get('name') or '').strip()
+    email = (d.get('email') or '').strip().lower()
+    body = (d.get('body') or '').strip()
+    if not name or not email or not body:
+        return jsonify({'error': 'الاسم والبريد والرسالة مطلوبة'}), 400
+    if '@' not in email or len(email) > 255:
+        return jsonify({'error': 'بريد إلكتروني غير صالح'}), 400
+    # Length cap (light spam guard).
+    if len(name) > 255 or len(body) > 5000:
+        return jsonify({'error': 'المحتوى طويل جدًا'}), 400
+    msg = Message(
+        name=name[:255],
+        email=email[:255],
+        phone=(d.get('phone') or '').strip()[:80] or None,
+        topic=(d.get('topic') or '').strip()[:255] or None,
+        body=body,
+        status='new',
+    )
+    db.session.add(msg)
+    db.session.commit()
+    return jsonify({'ok': True})
+
+@app.route('/api/messages', methods=['GET'])
+@token_required
+@roles_required('admin')
+def admin_messages_list():
+    status = (request.args.get('status') or '').strip().lower()
+    query = Message.query
+    if status in ('new', 'replied'):
+        query = query.filter_by(status=status)
+    items = query.order_by(Message.created_at.desc()).all()
+    return jsonify([serialize_message(m) for m in items])
+
+@app.route('/api/messages/<int:id>/reply', methods=['POST'])
+@token_required
+@roles_required('admin')
+def admin_message_reply(id):
+    msg = Message.query.get_or_404(id)
+    d = request.json or {}
+    reply = (d.get('body') or '').strip()
+    if not reply:
+        return jsonify({'error': 'نص الرد مطلوب'}), 400
+    msg.reply_body = reply
+    msg.status = 'replied'
+    msg.replied_at = datetime.datetime.utcnow()
+    db.session.commit()
+    # Email delivery is a stub for now — log the intent.
+    logger.info("Message reply to %s (id=%s) recorded; email delivery stubbed.", msg.email, msg.id)
+    return jsonify({'ok': True})
+
+@app.route('/api/messages/<int:id>', methods=['DELETE'])
+@token_required
+@roles_required('admin')
+def admin_message_delete(id):
+    msg = Message.query.get_or_404(id)
+    db.session.delete(msg)
+    db.session.commit()
+    return jsonify({'ok': True})
 
 @app.route('/api/health', methods=['GET'])
 def health():

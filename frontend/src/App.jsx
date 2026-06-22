@@ -4005,12 +4005,290 @@ function InvestmentPage() {
   );
 }
 
+// ============================================================
+// CONTENT / BLOG (CMS) — admin-only
+// Article = {id,title,excerpt,cat,kicker,date,by,tone?,video?,body:[str],status,published_at}
+// ============================================================
+const emptyArticleForm = () => ({
+  title: "", excerpt: "", cat: "", kicker: "", by: "", tone: "", video: "", bodyText: "",
+});
+// body is stored as string[] (paragraphs split on blank lines); the form edits a single textarea.
+const bodyToText = (body) => safeArray(body).join("\n\n");
+const textToBody = (text) => String(text || "").split(/\n\s*\n/).map(p => p.trim()).filter(Boolean);
+
+function ContentPage() {
+  const [articles, setArticles] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [err, setErr] = useState("");
+  const [modal, setModal] = useState(false);
+  const [form, setForm] = useState(emptyArticleForm());
+  const [busy, setBusy] = useState(false);
+
+  const load = useCallback(() => {
+    setLoading(true);
+    api.get("/content/articles/all").then(r => {
+      if (r && r.error) { setErr(r.error); setArticles([]); }
+      else { setErr(""); setArticles(safeArray(r?.articles ?? r)); }
+      setLoading(false);
+    }).catch(() => { setErr("تعذر تحميل المقالات"); setLoading(false); });
+  }, []);
+  useEffect(() => { load(); }, [load]);
+
+  const openNew = () => { setForm(emptyArticleForm()); setModal(true); };
+  const openEdit = (a) => {
+    setForm({
+      id: a.id, title: a.title || "", excerpt: a.excerpt || "", cat: a.cat || "",
+      kicker: a.kicker || "", by: a.by || "", tone: a.tone || "", video: a.video || "",
+      bodyText: bodyToText(a.body),
+    });
+    setModal(true);
+  };
+
+  const save = async () => {
+    if (!form.title.trim()) { alert("العنوان مطلوب"); return; }
+    setBusy(true);
+    const payload = {
+      title: form.title, excerpt: form.excerpt, cat: form.cat, kicker: form.kicker,
+      by: form.by, tone: form.tone, video: form.video, body: textToBody(form.bodyText),
+    };
+    const r = form.id ? await api.put(`/content/articles/${form.id}`, payload) : await api.post("/content/articles", payload);
+    setBusy(false);
+    if (r && r.error) { alert(r.error); return; }
+    setModal(false); setForm(emptyArticleForm()); load();
+  };
+
+  const publish = async (a) => {
+    const r = await api.post(`/content/articles/${a.id}/publish`, {});
+    if (r && r.error) { alert(r.error); return; }
+    load();
+  };
+  const remove = async (a) => {
+    if (!confirm(`حذف المقال «${a.title || ""}»؟`)) return;
+    const r = await api.del(`/content/articles/${a.id}`);
+    if (r && r.error) { alert(r.error); return; }
+    load();
+  };
+
+  const drafts = articles.filter(a => a.status !== "published");
+  const published = articles.filter(a => a.status === "published");
+
+  if (loading) return <PageLoader />;
+  if (err) return <PageError message={err} onRetry={load} />;
+
+  return (
+    <div>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 12, marginBottom: 8 }}>
+        <h1 style={{ fontSize: 24, fontWeight: 900, color: BRAND.navy }}>المحتوى والمدونة</h1>
+        <Btn onClick={openNew} color={BRAND.gold}>+ مقال جديد</Btn>
+      </div>
+      <p style={{ color: "#667085", marginBottom: 20 }}>اكتب وحرّر مقالات المدونة، ثم انشرها لتظهر على elprofessor.net. المسودّات لا تظهر للزوّار حتى تنشرها.</p>
+
+      <div style={{ display: "flex", gap: 12, marginBottom: 20, flexWrap: "wrap" }}>
+        <KPICard icon="📝" label="مسودّات" value={drafts.length} color="#e8913a" />
+        <KPICard icon="✅" label="منشورة" value={published.length} color="#2d8659" />
+        <KPICard icon="📰" label="إجمالي المقالات" value={articles.length} color={BRAND.navy} />
+      </div>
+
+      <div style={{ background: "#fff", borderRadius: 12, boxShadow: "0 1px 4px rgba(0,0,0,0.06)", overflowX: "auto" }}>
+        <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 720 }}>
+          <thead>
+            <tr style={{ background: "#f8fafc" }}>
+              {["العنوان", "التصنيف", "الكاتب", "الحالة", "التاريخ", "إجراءات"].map(h => (
+                <th key={h} style={{ padding: 12, fontSize: 13, color: "#667085", textAlign: "right" }}>{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {articles.map(a => (
+              <tr key={a.id} style={{ borderTop: "1px solid #f1f5f9" }}>
+                <td style={{ padding: 12, fontWeight: 700, maxWidth: 320 }}>
+                  {a.title || "—"}
+                  {a.excerpt && <div style={{ fontSize: 12, color: "#9ca3af", fontWeight: 400, marginTop: 2 }}>{a.excerpt}</div>}
+                </td>
+                <td style={{ padding: 12, fontSize: 13, color: "#475467" }}>{a.cat || "—"}</td>
+                <td style={{ padding: 12, fontSize: 13, color: "#475467" }}>{a.by || "—"}</td>
+                <td style={{ padding: 12 }}>
+                  {a.status === "published"
+                    ? <Badge text="منشور" color="#2d8659" />
+                    : <Badge text="مسودة" color="#e8913a" />}
+                </td>
+                <td style={{ padding: 12, fontSize: 12, color: "#667085", direction: "ltr", textAlign: "right" }}>{(a.published_at || a.date || "").slice(0, 10) || "—"}</td>
+                <td style={{ padding: 12 }}>
+                  <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                    <button title="تعديل" onClick={() => openEdit(a)} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 16 }}>✏️</button>
+                    {a.status !== "published" && (
+                      <button title="نشر" onClick={() => publish(a)} style={{ background: "none", border: "1px solid #2d8659", color: "#2d8659", borderRadius: 8, padding: "4px 10px", cursor: "pointer", fontSize: 12, fontWeight: 800 }}>نشر</button>
+                    )}
+                    <button title="حذف" onClick={() => remove(a)} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 16 }}>🗑</button>
+                  </div>
+                </td>
+              </tr>
+            ))}
+            {articles.length === 0 && (
+              <tr><td colSpan={6} style={{ padding: 24, textAlign: "center", color: "#9ca3af" }}>لا توجد مقالات بعد. ابدأ بإضافة أول مقال.</td></tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      <Modal open={modal} onClose={() => setModal(false)} title={form.id ? "تعديل مقال" : "مقال جديد"} maxWidth={680}>
+        <Input label="العنوان" value={form.title} onChange={e => setForm({ ...form, title: e.target.value })} />
+        <Input label="مقتطف (Excerpt)" value={form.excerpt} onChange={e => setForm({ ...form, excerpt: e.target.value })} />
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+          <Input label="التصنيف (cat)" value={form.cat} onChange={e => setForm({ ...form, cat: e.target.value })} />
+          <Input label="العنوان الفرعي (kicker)" value={form.kicker} onChange={e => setForm({ ...form, kicker: e.target.value })} />
+          <Input label="الكاتب (by)" value={form.by} onChange={e => setForm({ ...form, by: e.target.value })} />
+          <Input label="النبرة (tone) — اختياري" value={form.tone} onChange={e => setForm({ ...form, tone: e.target.value })} />
+        </div>
+        <Input label="رابط فيديو (video) — اختياري" value={form.video} onChange={e => setForm({ ...form, video: e.target.value })} style={{ direction: "ltr", textAlign: "left" }} />
+        <div style={{ marginBottom: 16 }}>
+          <label style={{ display: "block", fontSize: 13, fontWeight: 600, color: "#374151", marginBottom: 6 }}>نص المقال — افصل بين الفقرات بسطر فارغ</label>
+          <textarea value={form.bodyText} onChange={e => setForm({ ...form, bodyText: e.target.value })} rows={10} style={{ width: "100%", padding: "10px 14px", borderRadius: 8, border: "1px solid #d1d5db", fontSize: 14, boxSizing: "border-box", fontFamily: "inherit", lineHeight: 1.8, resize: "vertical" }} />
+        </div>
+        <div style={{ display: "flex", gap: 12, justifyContent: "flex-start" }}>
+          <Btn onClick={save} color={BRAND.navy} disabled={busy}>{busy ? "جارٍ الحفظ..." : (form.id ? "حفظ التعديلات" : "حفظ كمسودة")}</Btn>
+          <Btn onClick={() => setModal(false)} color="#9ca3af" variant="outline">إلغاء</Btn>
+        </div>
+      </Modal>
+    </div>
+  );
+}
+
+// ============================================================
+// MESSAGES (contact form inbox) — admin-only
+// Message = {id,name,email,phone?,topic?,body,status:'new'|'replied',created_at}
+// ============================================================
+function MessagesPage() {
+  const [status, setStatus] = useState("");
+  const [messages, setMessages] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [err, setErr] = useState("");
+  const [selected, setSelected] = useState(null);
+  const [replyText, setReplyText] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  const load = useCallback(() => {
+    setLoading(true);
+    const q = status ? `?status=${status}` : "";
+    api.get(`/messages${q}`).then(r => {
+      if (r && r.error) { setErr(r.error); setMessages([]); }
+      else { setErr(""); setMessages(safeArray(r?.messages ?? r)); }
+      setLoading(false);
+    }).catch(() => { setErr("تعذر تحميل الرسائل"); setLoading(false); });
+  }, [status]);
+  useEffect(() => { load(); }, [load]);
+
+  const newCount = messages.filter(m => m.status === "new").length;
+
+  const open = (m) => { setSelected(m); setReplyText(""); };
+  const sendReply = async () => {
+    if (!replyText.trim()) { alert("اكتب نص الرد"); return; }
+    setBusy(true);
+    const r = await api.post(`/messages/${selected.id}/reply`, { body: replyText });
+    setBusy(false);
+    if (r && r.error) { alert(r.error); return; }
+    setSelected(null); setReplyText(""); load();
+  };
+  const remove = async (m) => {
+    if (!confirm(`حذف رسالة «${m.name || ""}»؟`)) return;
+    const r = await api.del(`/messages/${m.id}`);
+    if (r && r.error) { alert(r.error); return; }
+    if (selected && selected.id === m.id) setSelected(null);
+    load();
+  };
+
+  if (loading) return <PageLoader />;
+  if (err) return <PageError message={err} onRetry={load} />;
+
+  return (
+    <div>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 12, marginBottom: 8 }}>
+        <h1 style={{ fontSize: 24, fontWeight: 900, color: BRAND.navy }}>الرسائل</h1>
+        {newCount > 0 && <Badge text={`${newCount} جديدة`} color="#c0392b" />}
+      </div>
+      <p style={{ color: "#667085", marginBottom: 20 }}>رسائل نموذج التواصل القادمة من elprofessor.net — اقرأها، ردّ عليها، أو احذفها.</p>
+
+      <div style={{ display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap" }}>
+        {[{ id: "", label: "الكل" }, { id: "new", label: "جديدة" }, { id: "replied", label: "تم الرد" }].map(t => (
+          <button key={t.id} onClick={() => setStatus(t.id)} style={{ padding: "8px 16px", borderRadius: 20, border: status === t.id ? `2px solid ${BRAND.navy}` : "1px solid #e5e7eb", background: status === t.id ? BRAND.navy : "#fff", color: status === t.id ? "#fff" : "#475467", fontWeight: 700, cursor: "pointer", fontSize: 13 }}>{t.label}</button>
+        ))}
+      </div>
+
+      <div style={{ background: "#fff", borderRadius: 12, boxShadow: "0 1px 4px rgba(0,0,0,0.06)", overflowX: "auto" }}>
+        <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 720 }}>
+          <thead>
+            <tr style={{ background: "#f8fafc" }}>
+              {["الاسم", "الإيميل", "الموضوع", "الحالة", "التاريخ", "إجراءات"].map(h => (
+                <th key={h} style={{ padding: 12, fontSize: 13, color: "#667085", textAlign: "right" }}>{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {messages.map(m => (
+              <tr key={m.id} style={{ borderTop: "1px solid #f1f5f9", background: m.status === "new" ? "#fffaf3" : "#fff" }}>
+                <td style={{ padding: 12, fontWeight: 700 }}>{m.name || "—"}</td>
+                <td style={{ padding: 12, fontSize: 13, color: "#475467", direction: "ltr", textAlign: "right" }}>{m.email}</td>
+                <td style={{ padding: 12, fontSize: 13, color: "#475467" }}>{m.topic || "—"}</td>
+                <td style={{ padding: 12 }}>
+                  {m.status === "replied" ? <Badge text="تم الرد" color="#2d8659" /> : <Badge text="جديدة" color="#c0392b" />}
+                </td>
+                <td style={{ padding: 12, fontSize: 12, color: "#667085", direction: "ltr", textAlign: "right" }}>{(m.created_at || "").slice(0, 16).replace("T", " ") || "—"}</td>
+                <td style={{ padding: 12 }}>
+                  <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                    <button title="عرض / رد" onClick={() => open(m)} style={{ background: "none", border: "1px solid " + BRAND.navy, color: BRAND.navy, borderRadius: 8, padding: "4px 10px", cursor: "pointer", fontSize: 12, fontWeight: 800 }}>عرض</button>
+                    <button title="حذف" onClick={() => remove(m)} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 16 }}>🗑</button>
+                  </div>
+                </td>
+              </tr>
+            ))}
+            {messages.length === 0 && (
+              <tr><td colSpan={6} style={{ padding: 24, textAlign: "center", color: "#9ca3af" }}>لا توجد رسائل في هذا التصنيف.</td></tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      <Modal open={!!selected} onClose={() => setSelected(null)} title="رسالة تواصل" maxWidth={620}>
+        {selected && (
+          <div>
+            <div style={{ background: "#f8fafc", borderRadius: 10, padding: 16, marginBottom: 16 }}>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 12 }}>
+                <div><div style={{ fontSize: 12, color: "#9ca3af" }}>الاسم</div><div style={{ fontWeight: 700 }}>{selected.name || "—"}</div></div>
+                <div><div style={{ fontSize: 12, color: "#9ca3af" }}>الإيميل</div><div style={{ fontWeight: 700, direction: "ltr", textAlign: "right" }}>{selected.email || "—"}</div></div>
+                <div><div style={{ fontSize: 12, color: "#9ca3af" }}>التليفون</div><div style={{ fontWeight: 700, direction: "ltr", textAlign: "right" }}>{selected.phone || "—"}</div></div>
+                <div><div style={{ fontSize: 12, color: "#9ca3af" }}>الموضوع</div><div style={{ fontWeight: 700 }}>{selected.topic || "—"}</div></div>
+              </div>
+              <div style={{ fontSize: 12, color: "#9ca3af", marginBottom: 4 }}>الرسالة</div>
+              <div style={{ fontSize: 14, lineHeight: 1.9, color: BRAND.ink, whiteSpace: "pre-wrap" }}>{selected.body || "—"}</div>
+            </div>
+            {selected.status === "replied" ? (
+              <div style={{ padding: "10px 14px", borderRadius: 8, background: "#ecfdf3", color: "#2d8659", fontWeight: 700, fontSize: 13, marginBottom: 12 }}>✅ تم الرد على هذه الرسالة.</div>
+            ) : (
+              <div style={{ marginBottom: 12 }}>
+                <label style={{ display: "block", fontSize: 13, fontWeight: 600, color: "#374151", marginBottom: 6 }}>نص الرد</label>
+                <textarea value={replyText} onChange={e => setReplyText(e.target.value)} rows={5} style={{ width: "100%", padding: "10px 14px", borderRadius: 8, border: "1px solid #d1d5db", fontSize: 14, boxSizing: "border-box", fontFamily: "inherit", lineHeight: 1.8, resize: "vertical" }} />
+              </div>
+            )}
+            <div style={{ display: "flex", gap: 12 }}>
+              {selected.status !== "replied" && <Btn onClick={sendReply} color={BRAND.navy} disabled={busy}>{busy ? "جارٍ الإرسال..." : "إرسال الرد"}</Btn>}
+              <Btn onClick={() => remove(selected)} color="#c0392b" variant="outline">حذف الرسالة</Btn>
+              <Btn onClick={() => setSelected(null)} color="#9ca3af" variant="outline">إغلاق</Btn>
+            </div>
+          </div>
+        )}
+      </Modal>
+    </div>
+  );
+}
+
 const navItems = [
   { id: "overview", label: "نظرة عامة", icon: "📊" },
   { id: "platform-users", label: "المستخدمون", icon: "👥" },
   { id: "courses", label: "الدورات والتدريب", icon: "📚" },
   { id: "investors-admin", label: "الاستثمار", icon: "💼" },
   { id: "marketing", label: "التسويق", icon: "📢" },
+  { id: "content", label: "المحتوى والمدونة", icon: "📝" },
+  { id: "messages", label: "الرسائل", icon: "✉️" },
   { id: "finance", label: "المالية", icon: "💰" },
   { id: "partners", label: "الشركاء", icon: "🤝" },
   { id: "team", label: "الفريق والمدربون", icon: "🧑‍🏫" },
@@ -4051,6 +4329,8 @@ function Layout({ page, setPage, user, onLogout }) {
             { id: "overview", label: "بانتظار التفعيل", icon: "⏳" },
           ]
       : navItems.filter((item) => {
+          // المحتوى والمدونة + الرسائل: للأدمن فقط.
+          if (effectiveRole !== "admin" && (item.id === "content" || item.id === "messages")) return false;
           if (effectiveRole === "training_supervisor" && item.id === "settings") return false;
           if (effectiveRole === "training_supervisor" && item.id === "foundation") return false;
           // الاستثمار والشركاء شأن مالي/ملكية — للأدمن فقط، تُخفى عن المشرف التدريبي.
@@ -4120,6 +4400,8 @@ function Layout({ page, setPage, user, onLogout }) {
           {activePage === "platform-users" && <PlatformUsersPage />}
           {activePage === "finance" && <FinancePage />}
           {activePage === "marketing" && <MarketingPage only="campaigns" />}
+          {activePage === "content" && <ContentPage />}
+          {activePage === "messages" && <MessagesPage />}
           {activePage === "courses" && <CoursesPage />}
           {activePage === "investors-admin" && <InvestmentPage />}
           {activePage === "earnings" && <MyEarningsPage />}
