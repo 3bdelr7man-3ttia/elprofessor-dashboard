@@ -7,6 +7,7 @@ from flask import Flask, request, jsonify, g, send_from_directory
 from flask_cors import CORS
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy import inspect, text
+from sqlalchemy.exc import IntegrityError
 from werkzeug.security import generate_password_hash, check_password_hash
 from dotenv import load_dotenv
 import jwt
@@ -333,6 +334,52 @@ class Message(db.Model):
     status = db.Column(db.String(20), default='new')    # new | replied
     reply_body = db.Column(db.Text)
     replied_at = db.Column(db.DateTime, nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.datetime.utcnow)
+
+class EscrowSession(db.Model):
+    """Money held in escrow for a paid platform service (consultation/course).
+    Commission (default 15%) is deducted AT RELEASE, never at hold.
+    net = amount*(1-commission_rate); commission = amount*commission_rate."""
+    __tablename__ = 'escrow_sessions'
+    id = db.Column(db.String(20), primary_key=True)   # 'ESC-0001'
+    student_name = db.Column(db.String(255))
+    student_email = db.Column(db.String(255))
+    expert_name = db.Column(db.String(255))
+    expert_email = db.Column(db.String(255))
+    amount = db.Column(db.Float, default=0)
+    currency = db.Column(db.String(8), default='EGP')
+    status = db.Column(db.String(20), default='held')  # held|confirm|released|refunded|dispute
+    held_at = db.Column(db.DateTime, default=datetime.datetime.utcnow)
+    release_at = db.Column(db.DateTime)                # held_at + 72h
+    released_at = db.Column(db.DateTime, nullable=True)
+    commission_rate = db.Column(db.Float, default=0.15)
+    revenue_id = db.Column(db.Integer, db.ForeignKey('revenues.id'), nullable=True, unique=True)  # idempotency guard (nullable-unique: DB-enforced single commission row)
+    ref = db.Column(db.String(255))                   # course/consultation ref
+    source = db.Column(db.String(50), default='platform')
+    notes = db.Column(db.Text)
+    created_at = db.Column(db.DateTime, default=datetime.datetime.utcnow)
+
+    @property
+    def commission(self):
+        return round((self.amount or 0) * (self.commission_rate or 0), 2)
+
+    @property
+    def net(self):
+        return round((self.amount or 0) * (1 - (self.commission_rate or 0)), 2)
+
+class Dispute(db.Model):
+    __tablename__ = 'disputes'
+    id = db.Column(db.String(20), primary_key=True)   # 'DSP-0001'
+    session_id = db.Column(db.String(20), db.ForeignKey('escrow_sessions.id'), nullable=False)
+    party = db.Column(db.String(20))                  # student|expert
+    reason = db.Column(db.Text)
+    stage = db.Column(db.String(20), default='open')  # open|review|decision
+    amount_frozen = db.Column(db.Float, default=0)
+    opened_at = db.Column(db.DateTime, default=datetime.datetime.utcnow)
+    decision_sla = db.Column(db.DateTime)             # opened_at + 3 business days
+    decision = db.Column(db.String(20), nullable=True)  # null|student|expert|split
+    split_pct = db.Column(db.Float, nullable=True)
+    resolved_at = db.Column(db.DateTime, nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.datetime.utcnow)
 
 # ============================================================
@@ -3341,6 +3388,392 @@ def admin_message_delete(id):
     db.session.delete(msg)
     db.session.commit()
     return jsonify({'ok': True})
+
+# ============================================================
+# ESCROW & DISPUTES  (the founder's #1 money gap)
+# ------------------------------------------------------------
+# Money flow rules (server-authoritative):
+#   * commission (15% default) is deducted AT RELEASE, never at hold.
+#   * release is idempotent — a session can be released exactly once and
+#     records exactly one commission Revenue row (guarded by revenue_id).
+#   * status transitions are validated (no release of refunded, no double-dispute).
+#   * employee = read-only (enforced server-side via roles_required, not just UI).
+# ============================================================
+
+ESCROW_HOLD_HOURS = 72
+ESCROW_COMMISSION_CATEGORY = 'عمولة ضمان'
+_ESCROW_RELEASABLE = {'held', 'confirm'}   # 'dispute' becomes releasable only after a resolution
+_ESCROW_TERMINAL = {'released', 'refunded'}
+# The Revenue ledger only has amount_egp/amount_usd columns, so any other currency
+# would silently book commission as 0. Only accept currencies the ledger can represent.
+ESCROW_SUPPORTED_CURRENCIES = {'EGP', 'USD'}
+
+def _next_seq_id(model, prefix):
+    """Generate the next zero-padded id like 'ESC-0001' for a string-PK model."""
+    last = model.query.order_by(model.id.desc()).first()
+    n = 0
+    if last and isinstance(last.id, str) and '-' in last.id:
+        try:
+            n = int(last.id.split('-')[-1])
+        except (ValueError, IndexError):
+            n = model.query.count()
+    return f'{prefix}-{n + 1:04d}'
+
+def _add_business_days(start, days):
+    d = start
+    added = 0
+    while added < days:
+        d = d + datetime.timedelta(days=1)
+        if d.weekday() < 5:   # Mon-Fri (0-4); Egypt's weekend is Fri/Sat but Mon-Fri is a safe SLA proxy
+            added += 1
+    return d
+
+def _escrow_metrics_authorized():
+    """Accept EITHER an admin JWT OR the shared platform metrics secret.
+    Used by /escrow/hold so the platform bridge can open a hold server-to-server."""
+    secret = request.headers.get('X-ELP-Metrics-Secret', '')
+    if PLATFORM_METRICS_SECRET and secret and secrets.compare_digest(secret, PLATFORM_METRICS_SECRET):
+        return True
+    token = request.headers.get('Authorization', '').replace('Bearer ', '')
+    if not token:
+        return False
+    try:
+        data = jwt.decode(token, app.config['SECRET_KEY'], algorithms=['HS256'])
+        user = User.query.get(data['user_id'])
+        return bool(user and user.is_active and _is_admin_user(user))
+    except Exception:
+        return False
+
+def serialize_escrow(e, now=None):
+    now = now or datetime.datetime.utcnow()
+    remaining = None
+    if e.release_at and e.status in ('held', 'confirm'):
+        remaining = int((e.release_at - now).total_seconds())
+    return {
+        'id': e.id,
+        'student_name': e.student_name, 'student_email': e.student_email,
+        'expert_name': e.expert_name, 'expert_email': e.expert_email,
+        'amount': round(e.amount or 0, 2), 'currency': e.currency,
+        'commission_rate': e.commission_rate,
+        'commission': e.commission, 'net': e.net,
+        'status': e.status,
+        'held_at': e.held_at.isoformat() if e.held_at else None,
+        'release_at': e.release_at.isoformat() if e.release_at else None,
+        'released_at': e.released_at.isoformat() if e.released_at else None,
+        'release_seconds_remaining': remaining,
+        'ref': e.ref, 'source': e.source, 'notes': e.notes,
+    }
+
+def serialize_dispute(d):
+    return {
+        'id': d.id, 'session_id': d.session_id, 'party': d.party,
+        'reason': d.reason, 'stage': d.stage, 'amount_frozen': round(d.amount_frozen or 0, 2),
+        'opened_at': d.opened_at.isoformat() if d.opened_at else None,
+        'decision_sla': d.decision_sla.isoformat() if d.decision_sla else None,
+        'decision': d.decision, 'split_pct': d.split_pct,
+        'resolved_at': d.resolved_at.isoformat() if d.resolved_at else None,
+    }
+
+def _open_dispute_for(session_id):
+    return Dispute.query.filter(
+        Dispute.session_id == session_id,
+        Dispute.decision.is_(None),
+    ).first()
+
+def _lock_escrow_session(sid):
+    """Fetch an escrow session, taking a row lock when the dialect supports it.
+    with_for_update is a no-op on SQLite (ignored), which is fine for the tests."""
+    return EscrowSession.query.with_for_update().get(sid)
+
+def _record_commission_revenue(session):
+    """Record exactly one commission Revenue row for a released session.
+    Idempotent: if the session already points at a revenue row, do nothing.
+    The UNIQUE constraint on revenue_id makes this safe under concurrent releases —
+    a racing insert raises IntegrityError, which we treat as already-recorded success."""
+    if session.revenue_id:
+        return Revenue.query.get(session.revenue_id)
+    amount = session.commission
+    rev = Revenue(
+        date=datetime.date.today(),
+        source='escrow_commission',
+        description=f'عمولة ضمان {int((session.commission_rate or 0) * 100)}% — جلسة {session.id}',
+        amount_egp=amount if (session.currency or 'EGP').upper() == 'EGP' else 0,
+        amount_usd=amount if (session.currency or 'EGP').upper() == 'USD' else 0,
+        client_name=session.student_name,
+        payment_method='escrow',
+        notes=f'{ESCROW_COMMISSION_CATEGORY} · {session.ref or ""} · صافي للخبير {session.net}',
+    )
+    db.session.add(rev)
+    try:
+        db.session.flush()
+    except IntegrityError:
+        # A concurrent release already booked the commission (revenue_id UNIQUE).
+        # Roll back our duplicate and return the row that won the race.
+        db.session.rollback()
+        winner = EscrowSession.query.get(session.id)
+        return Revenue.query.get(winner.revenue_id) if winner and winner.revenue_id else None
+    session.revenue_id = rev.id
+    return rev
+
+@app.route('/api/escrow/hold', methods=['POST'])
+def escrow_hold():
+    # Admin JWT OR platform bridge secret (employees may NOT create holds).
+    if not _escrow_metrics_authorized():
+        return jsonify({'error': 'غير مصرح'}), 403
+    d = request.json or {}
+    try:
+        amount = round(float(d.get('amount') or 0), 2)
+    except (TypeError, ValueError):
+        amount = 0
+    if amount <= 0:
+        return jsonify({'error': 'المبلغ مطلوب ويجب أن يكون أكبر من صفر'}), 400
+    if not (d.get('expert_email') or d.get('expert_name')):
+        return jsonify({'error': 'بيانات الخبير مطلوبة'}), 400
+    currency = (d.get('currency') or 'EGP').strip().upper()[:8]
+    if currency not in ESCROW_SUPPORTED_CURRENCIES:
+        return jsonify({'error': f'العملة غير مدعومة — المسموح: {", ".join(sorted(ESCROW_SUPPORTED_CURRENCIES))} فقط (دفتر الإيرادات لا يمثّل غيرها)'}), 400
+    now = datetime.datetime.utcnow()
+    rate = d.get('commission_rate')
+    try:
+        rate = float(rate) if rate is not None else 0.15
+    except (TypeError, ValueError):
+        rate = 0.15
+    rate = min(max(rate, 0.0), 1.0)
+    session = EscrowSession(
+        id=_next_seq_id(EscrowSession, 'ESC'),
+        student_name=(d.get('student_name') or '').strip(),
+        student_email=(d.get('student_email') or '').strip().lower(),
+        expert_name=(d.get('expert_name') or '').strip(),
+        expert_email=(d.get('expert_email') or '').strip().lower(),
+        amount=amount,
+        currency=currency,
+        status='held',
+        held_at=now,
+        release_at=now + datetime.timedelta(hours=ESCROW_HOLD_HOURS),
+        commission_rate=rate,
+        ref=(d.get('ref') or '').strip(),
+        source=(d.get('source') or 'platform').strip(),
+    )
+    db.session.add(session)
+    db.session.commit()
+    return jsonify({'message': 'تم حجز المبلغ في الضمان', 'session': serialize_escrow(session)}), 201
+
+@app.route('/api/escrow/<sid>/release', methods=['POST'])
+@token_required
+@roles_required('admin')
+def escrow_release(sid):
+    session = _lock_escrow_session(sid)   # row lock (Postgres) so concurrent releases can't double-book
+    if session is None:
+        return jsonify({'error': 'الجلسة غير موجودة'}), 404
+    if session.status in _ESCROW_TERMINAL:
+        return jsonify({'error': 'هذه الجلسة محسومة بالفعل ولا يمكن تحريرها مرة أخرى'}), 409
+    # Only from held/confirm, or a dispute that already has a resolution recorded.
+    if session.status == 'dispute' and _open_dispute_for(session.id):
+        return jsonify({'error': 'لا يمكن التحرير وعليها نزاع مفتوح — افصل النزاع أولًا'}), 409
+    if session.status not in _ESCROW_RELEASABLE and session.status != 'dispute':
+        return jsonify({'error': 'حالة غير صالحة للتحرير'}), 409
+    rev = _record_commission_revenue(session)   # idempotent (IntegrityError-safe)
+    session.status = 'released'
+    session.released_at = datetime.datetime.utcnow()
+    db.session.commit()
+    return jsonify({
+        'message': f'تم تحرير {session.net} للخبير (عمولة {session.commission})',
+        'session': serialize_escrow(session), 'revenue_id': rev.id if rev else None,
+    })
+
+@app.route('/api/escrow/<sid>/refund', methods=['POST'])
+@token_required
+@roles_required('admin')
+def escrow_refund(sid):
+    session = EscrowSession.query.get_or_404(sid)
+    if session.status in _ESCROW_TERMINAL:
+        return jsonify({'error': 'هذه الجلسة محسومة بالفعل'}), 409
+    if session.status == 'dispute' and _open_dispute_for(session.id):
+        return jsonify({'error': 'عليها نزاع مفتوح — افصل النزاع أولًا'}), 409
+    session.status = 'refunded'   # full refund to student — NO commission recorded
+    db.session.commit()
+    return jsonify({'message': f'تم استرداد {round(session.amount or 0, 2)} للطالب', 'session': serialize_escrow(session)})
+
+@app.route('/api/escrow/<sid>/dispute', methods=['POST'])
+@token_required
+@roles_required('admin')
+def escrow_dispute(sid):
+    session = EscrowSession.query.get_or_404(sid)
+    if session.status in _ESCROW_TERMINAL:
+        return jsonify({'error': 'لا يمكن فتح نزاع على جلسة محسومة'}), 409
+    if session.status == 'dispute' or _open_dispute_for(session.id):
+        return jsonify({'error': 'يوجد نزاع مفتوح بالفعل على هذه الجلسة'}), 409
+    d = request.json or {}
+    party = (d.get('party') or '').strip().lower()
+    if party not in ('student', 'expert'):
+        return jsonify({'error': 'الطرف المُحتج (student/expert) مطلوب'}), 400
+    now = datetime.datetime.utcnow()
+    dispute = Dispute(
+        id=_next_seq_id(Dispute, 'DSP'),
+        session_id=session.id,
+        party=party,
+        reason=(d.get('reason') or '').strip(),
+        stage='open',
+        amount_frozen=round(session.amount or 0, 2),
+        opened_at=now,
+        decision_sla=_add_business_days(now, 3),
+    )
+    session.status = 'dispute'   # freeze
+    db.session.add(dispute)
+    db.session.commit()
+    return jsonify({'message': 'تم تجميد المبلغ وفتح نزاع', 'dispute': serialize_dispute(dispute), 'session': serialize_escrow(session)}), 201
+
+@app.route('/api/dispute/<did>/resolve', methods=['POST'])
+@token_required
+@roles_required('admin')
+def dispute_resolve(did):
+    dispute = Dispute.query.get_or_404(did)
+    if dispute.decision:
+        return jsonify({'error': 'تم فصل هذا النزاع بالفعل'}), 409
+    session = _lock_escrow_session(dispute.session_id)   # row lock (Postgres) on the commission path
+    if not session:
+        return jsonify({'error': 'الجلسة غير موجودة'}), 404
+    if session.status in _ESCROW_TERMINAL:
+        return jsonify({'error': 'الجلسة محسومة بالفعل'}), 409
+    d = request.json or {}
+    decision = (d.get('decision') or '').strip().lower()
+    if decision not in ('student', 'expert', 'split'):
+        return jsonify({'error': 'القرار يجب أن يكون student أو expert أو split'}), 400
+
+    result = {}
+    if decision == 'student':
+        # Full refund to the student — no commission.
+        session.status = 'refunded'
+        dispute.split_pct = None
+        result['refunded'] = round(session.amount or 0, 2)
+    elif decision == 'expert':
+        # Release in the expert's favour — commission IS taken (idempotent).
+        rev = _record_commission_revenue(session)
+        session.status = 'released'
+        session.released_at = datetime.datetime.utcnow()
+        dispute.split_pct = None
+        result['released_net'] = session.net
+        result['commission'] = session.commission
+        result['revenue_id'] = rev.id if rev else None
+    else:  # split
+        try:
+            split_pct = float(d.get('split_pct'))
+        except (TypeError, ValueError):
+            return jsonify({'error': 'نسبة التقسيم (split_pct) مطلوبة للتقسيم'}), 400
+        if not (0 <= split_pct <= 100):
+            return jsonify({'error': 'نسبة التقسيم يجب أن تكون بين 0 و 100'}), 400
+        # split_pct = share that goes to the EXPERT (post-commission on that share);
+        # the remainder is refunded to the student. Commission only on the expert share.
+        amount = round(session.amount or 0, 2)
+        expert_gross = round(amount * split_pct / 100, 2)
+        commission = round(expert_gross * (session.commission_rate or 0), 2)
+        # Record commission revenue on the partial expert share (idempotent).
+        if commission > 0 and not session.revenue_id:
+            rev = Revenue(
+                date=datetime.date.today(), source='escrow_commission',
+                description=f'عمولة ضمان (تقسيم {split_pct}%) — جلسة {session.id}',
+                amount_egp=commission if (session.currency or 'EGP').upper() == 'EGP' else 0,
+                amount_usd=commission if (session.currency or 'EGP').upper() == 'USD' else 0,
+                client_name=session.student_name, payment_method='escrow',
+                notes=f'{ESCROW_COMMISSION_CATEGORY} · تقسيم · للخبير {round(expert_gross - commission, 2)}',
+            )
+            db.session.add(rev)
+            try:
+                db.session.flush()
+            except IntegrityError:
+                # Concurrent resolve already booked this commission (revenue_id UNIQUE) — treat as idempotent.
+                db.session.rollback()
+                session = EscrowSession.query.get(dispute.session_id)
+                return jsonify({'message': 'تم فصل النزاع مسبقًا', 'decision': decision,
+                                'result': {'revenue_id': session.revenue_id if session else None},
+                                'session': serialize_escrow(session) if session else None}), 200
+            session.revenue_id = rev.id
+            result['revenue_id'] = rev.id
+        # A 0% expert share is effectively a full refund to the student (no commission).
+        if expert_gross == 0:
+            session.status = 'refunded'
+        else:
+            session.status = 'released'
+        session.released_at = datetime.datetime.utcnow()
+        dispute.split_pct = split_pct
+        result['expert_net'] = round(expert_gross - commission, 2)
+        result['student_refund'] = round(amount - expert_gross, 2)
+        result['commission'] = commission
+
+    dispute.decision = decision
+    dispute.stage = 'decision'
+    dispute.resolved_at = datetime.datetime.utcnow()
+    db.session.commit()
+    return jsonify({'message': 'تم فصل النزاع', 'decision': decision, 'result': result,
+                    'dispute': serialize_dispute(dispute), 'session': serialize_escrow(session)})
+
+@app.route('/api/escrow/process-auto-releases', methods=['POST'])
+@token_required
+@roles_required('admin')
+def escrow_process_auto_releases():
+    """Lazy/manual trigger (no cron): release every session past its release_at that is
+    still in held/confirm and has no open dispute."""
+    now = datetime.datetime.utcnow()
+    due = EscrowSession.query.filter(
+        EscrowSession.status.in_(['held', 'confirm']),
+        EscrowSession.release_at <= now,
+    ).all()
+    released = []
+    for due_session in due:
+        if _open_dispute_for(due_session.id):
+            continue
+        session = _lock_escrow_session(due_session.id)   # row lock (Postgres) on the commission path
+        if session is None or session.status not in ('held', 'confirm'):
+            continue
+        _record_commission_revenue(session)
+        session.status = 'released'
+        session.released_at = now
+        released.append(session.id)
+    db.session.commit()
+    return jsonify({'message': f'تم التحرير التلقائي لـ {len(released)} جلسة', 'released': released, 'count': len(released)})
+
+@app.route('/api/escrow', methods=['GET'])
+@token_required
+@roles_required('admin', 'employee')
+def escrow_list():
+    status = (request.args.get('status') or '').strip()
+    q = EscrowSession.query
+    if status:
+        q = q.filter(EscrowSession.status == status)
+    items = q.order_by(EscrowSession.held_at.desc()).all()
+    now = datetime.datetime.utcnow()
+    return jsonify([serialize_escrow(e, now) for e in items])
+
+@app.route('/api/disputes', methods=['GET'])
+@token_required
+@roles_required('admin', 'employee')
+def disputes_list():
+    items = Dispute.query.order_by(Dispute.opened_at.desc()).all()
+    return jsonify([serialize_dispute(d) for d in items])
+
+@app.route('/api/escrow/metrics', methods=['GET'])
+@token_required
+@roles_required('admin', 'employee')
+def escrow_metrics():
+    now = datetime.datetime.utcnow()
+    all_sessions = EscrowSession.query.all()
+    held = [e for e in all_sessions if e.status in ('held', 'confirm')]
+    released = [e for e in all_sessions if e.status == 'released']
+    refunded = [e for e in all_sessions if e.status == 'refunded']
+    awaiting = [e for e in held if e.release_at and e.release_at <= now and not _open_dispute_for(e.id)]
+    open_disputes = Dispute.query.filter(Dispute.decision.is_(None)).all()
+    return jsonify({
+        'held_count': len(held),
+        'held_sum': round(sum(e.amount or 0 for e in held), 2),
+        'awaiting_release_count': len(awaiting),
+        'awaiting_release_sum': round(sum(e.amount or 0 for e in awaiting), 2),
+        'released_count': len(released),
+        'released_sum': round(sum(e.amount or 0 for e in released), 2),
+        'released_commission_sum': round(sum(e.commission for e in released), 2),
+        'refunded_count': len(refunded),
+        'disputes_count': len(open_disputes),
+        'disputes_frozen_sum': round(sum(d.amount_frozen or 0 for d in open_disputes), 2),
+    })
 
 @app.route('/api/health', methods=['GET'])
 def health():
