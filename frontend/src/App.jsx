@@ -4158,6 +4158,271 @@ function ContentPage() {
 // MESSAGES (contact form inbox) — admin-only
 // Message = {id,name,email,phone?,topic?,body,status:'new'|'replied',created_at}
 // ============================================================
+// ============================================================
+// ESCROW & DISPUTES — الضمان والنزاعات
+// ============================================================
+const ESCROW_STATUS = {
+  held: { t: "محجوز", c: "#e8913a" },
+  confirm: { t: "بانتظار تأكيد", c: "#5b6abf" },
+  released: { t: "حُرِّر", c: "#2d8659" },
+  refunded: { t: "مُسترَد", c: "#98A2B3" },
+  dispute: { t: "نزاع", c: "#c0392b" },
+};
+
+function escrowMoney(n, currency = "EGP") {
+  const unit = currency === "USD" ? "$" : currency === "EGP" ? "ج" : currency;
+  return currency === "USD" ? `${unit}${fmt(n)}` : `${fmt(n)} ${unit}`;
+}
+
+function CountdownLabel({ seconds, status }) {
+  if (status === "dispute") return <span style={{ color: "#c0392b", fontWeight: 800 }}>مجمّد — نزاع مفتوح</span>;
+  if (status === "released") return <span style={{ color: "#2d8659", fontWeight: 800 }}>تم التحرير</span>;
+  if (status === "refunded") return <span style={{ color: "#98A2B3", fontWeight: 800 }}>تم الاسترداد</span>;
+  if (seconds == null) return <span style={{ color: "#667085" }}>—</span>;
+  if (seconds <= 0) return <span style={{ color: "#e8913a", fontWeight: 800 }}>انتهت المهلة — جاهز للتحرير التلقائي</span>;
+  const h = Math.floor(seconds / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  const label = h >= 24 ? `باقٍ ${Math.floor(h / 24)} يوم و${h % 24} س` : `باقٍ ${h}س ${m}د — تحرير تلقائي`;
+  return <span style={{ color: h < 6 ? "#e8913a" : "#475467", fontWeight: 700 }}>{label}</span>;
+}
+
+function EscrowPage({ user }) {
+  const role = getEffectiveRole(user);
+  const readOnly = role !== "admin"; // employee = متابعة فقط (الكتابة محمية على السيرفر أيضًا)
+  const [tab, setTab] = useState("sessions"); // sessions | disputes | released
+  const [sessions, setSessions] = useState([]);
+  const [disputes, setDisputes] = useState([]);
+  const [metrics, setMetrics] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [err, setErr] = useState("");
+  const [selected, setSelected] = useState(null);      // selected escrow session
+  const [selectedDispute, setSelectedDispute] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [splitPct, setSplitPct] = useState(50);
+
+  const load = useCallback(() => {
+    setLoading(true);
+    Promise.all([
+      api.get("/escrow"),
+      api.get("/disputes"),
+      api.get("/escrow/metrics"),
+    ]).then(([s, d, m]) => {
+      if (s && s.error) { setErr(s.error); }
+      else { setErr(""); setSessions(safeArray(s)); setDisputes(safeArray(d)); setMetrics(safeObject(m)); }
+      setLoading(false);
+    }).catch(() => { setErr("تعذر تحميل بيانات الضمان"); setLoading(false); });
+  }, []);
+  useEffect(() => { load(); }, [load]);
+
+  const act = async (path, body) => {
+    setBusy(true);
+    const r = await api.post(path, body || {});
+    setBusy(false);
+    if (r && r.error) { alert(r.error); return false; }
+    setSelected(null); setSelectedDispute(null);
+    load();
+    return true;
+  };
+
+  const onRelease = (s) => { if (confirm(`تحرير ${s.net} للخبير «${s.expert_name || s.expert_email}»؟ (عمولة ${s.commission})`)) act(`/escrow/${s.id}/release`); };
+  const onRefund = (s) => { if (confirm(`استرداد كامل المبلغ ${s.amount} للطالب «${s.student_name || s.student_email}»؟`)) act(`/escrow/${s.id}/refund`); };
+  const onDispute = (s) => {
+    const reason = prompt("سبب النزاع (اختياري):", "");
+    if (reason === null) return;
+    const party = confirm("اضغط «موافق» إذا كان المُحتج هو الطالب، أو «إلغاء» إذا كان الخبير.") ? "student" : "expert";
+    act(`/escrow/${s.id}/dispute`, { party, reason });
+  };
+  const resolveDispute = (decision) => {
+    const body = { decision };
+    if (decision === "split") body.split_pct = Number(splitPct) || 0;
+    act(`/dispute/${selectedDispute.id}/resolve`, body);
+  };
+  const onAutoRelease = async () => {
+    if (!confirm("تشغيل التحرير التلقائي لكل الجلسات المنتهية مهلتها بلا نزاع؟")) return;
+    const r = await api.post("/escrow/process-auto-releases", {});
+    if (r && r.error) { alert(r.error); return; }
+    alert(r.message || `تم تحرير ${r.count || 0} جلسة`);
+    load();
+  };
+
+  if (loading) return <PageLoader />;
+  if (err) return <PageError message={err} onRetry={load} />;
+
+  const m = metrics || {};
+  const activeSessions = sessions.filter(s => s.status === "held" || s.status === "confirm");
+  const releasedSessions = sessions.filter(s => s.status === "released" || s.status === "refunded");
+  const openDisputes = disputes.filter(d => !d.decision);
+  const sessionById = (id) => sessions.find(s => s.id === id);
+
+  const tabs = [
+    { id: "sessions", label: `الجلسات في الضمان (${activeSessions.length})` },
+    { id: "disputes", label: `النزاعات بخط زمني (${openDisputes.length})` },
+    { id: "released", label: `المُحرَّر مؤخرًا (${releasedSessions.length})` },
+  ];
+
+  return (
+    <div>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 12, marginBottom: 8 }}>
+        <h1 style={{ fontSize: 24, fontWeight: 900, color: BRAND.navy }}>🛡️ الضمان والنزاعات</h1>
+        {!readOnly && <Btn onClick={onAutoRelease} color={BRAND.navy} variant="outline">تشغيل التحرير التلقائي</Btn>}
+      </div>
+      <div style={{ display: "flex", gap: 10, padding: "12px 16px", background: "#fff6e9", border: "1px solid #f0d9b5", borderRadius: 10, color: "#7a5a1e", fontSize: 13, lineHeight: 1.8, marginBottom: 20 }}>
+        <span>🛡️</span>
+        <div><b>سياسة الضمان:</b> تحرير تلقائي للخبير بعد <b>٧٢ ساعة</b> إن لم يعترض الطالب · العمولة (<b>١٥٪</b>) تُقتطع <b>عند التحرير</b> لا عند التحصيل · فصل النزاع خلال <b>٣ أيام عمل</b>.{readOnly && " — أنت في وضع المتابعة (قراءة فقط)."}</div>
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))", gap: 16, marginBottom: 24 }}>
+        <KPICard icon="🛡️" label="محجوز حاليًا" value={escrowMoney(m.held_sum || 0)} sub={`عبر ${m.held_count || 0} جلسة نشطة`} color="#e8913a" />
+        <KPICard icon="⏳" label="بانتظار تحرير" value={escrowMoney(m.awaiting_release_sum || 0)} sub={`${m.awaiting_release_count || 0} انتهت مهلتها`} color="#5b6abf" />
+        <KPICard icon="✅" label="حُرِّر" value={escrowMoney(m.released_sum || 0)} sub={`عمولة ${escrowMoney(m.released_commission_sum || 0)} · ${m.released_count || 0} جلسة`} color="#2d8659" />
+        <KPICard icon="⚖️" label="نزاعات مفتوحة" value={m.disputes_count || 0} sub={`${escrowMoney(m.disputes_frozen_sum || 0)} مجمّدة`} color="#c0392b" />
+      </div>
+
+      <div style={{ display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap" }}>
+        {tabs.map(t => (
+          <button key={t.id} onClick={() => { setTab(t.id); setSelected(null); setSelectedDispute(null); }}
+            style={{ padding: "8px 16px", borderRadius: 20, border: tab === t.id ? `2px solid ${BRAND.navy}` : "1px solid #e5e7eb", background: tab === t.id ? BRAND.navy : "#fff", color: tab === t.id ? "#fff" : "#475467", fontWeight: 700, cursor: "pointer", fontSize: 13 }}>{t.label}</button>
+        ))}
+      </div>
+
+      {/* SESSIONS TAB */}
+      {tab === "sessions" && (
+        <div style={{ background: "#fff", borderRadius: 12, boxShadow: "0 1px 4px rgba(0,0,0,0.06)", overflowX: "auto" }}>
+          <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 760 }}>
+            <thead><tr style={{ background: "#f8fafc" }}>{["المرجع", "الطالب ← الخبير", "المبلغ", "المؤقّت", "الحالة", ""].map(h => <th key={h} style={{ padding: 12, fontSize: 13, color: "#667085", textAlign: "right" }}>{h}</th>)}</tr></thead>
+            <tbody>
+              {activeSessions.map(s => (
+                <tr key={s.id} style={{ borderTop: "1px solid #f1f5f9", cursor: "pointer" }} onClick={() => setSelected(s)}>
+                  <td style={{ padding: 12, fontWeight: 800, color: BRAND.navy, direction: "ltr", textAlign: "right" }}>{s.id}</td>
+                  <td style={{ padding: 12, fontSize: 13 }}>{s.student_name || s.student_email} <span style={{ color: "#9ca3af" }}>←</span> {s.expert_name || s.expert_email}</td>
+                  <td style={{ padding: 12, fontWeight: 800 }}>{escrowMoney(s.amount, s.currency)}</td>
+                  <td style={{ padding: 12, fontSize: 12 }}><CountdownLabel seconds={s.release_seconds_remaining} status={s.status} /></td>
+                  <td style={{ padding: 12 }}><Badge text={ESCROW_STATUS[s.status]?.t || s.status} color={ESCROW_STATUS[s.status]?.c} /></td>
+                  <td style={{ padding: 12 }}><button onClick={(e) => { e.stopPropagation(); setSelected(s); }} style={{ background: "none", border: "1px solid " + BRAND.navy, color: BRAND.navy, borderRadius: 8, padding: "4px 12px", cursor: "pointer", fontSize: 12, fontWeight: 800 }}>تفاصيل</button></td>
+                </tr>
+              ))}
+              {activeSessions.length === 0 && <tr><td colSpan={6} style={{ padding: 24, textAlign: "center", color: "#9ca3af" }}>لا توجد جلسات محجوزة حاليًا.</td></tr>}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {/* DISPUTES TAB — timeline */}
+      {tab === "disputes" && (
+        <div style={{ display: "grid", gap: 14 }}>
+          {disputes.length === 0 && <EmptyState title="لا نزاعات" text="لا توجد نزاعات على جلسات الضمان حتى الآن." />}
+          {disputes.map(d => {
+            const s = sessionById(d.session_id);
+            return (
+              <div key={d.id} style={{ background: "#fff", borderRadius: 12, padding: 18, boxShadow: "0 1px 4px rgba(0,0,0,0.06)", borderRight: `4px solid ${d.decision ? "#2d8659" : "#c0392b"}` }}>
+                <div style={{ display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
+                  <div>
+                    <div style={{ fontWeight: 900, color: BRAND.navy, direction: "ltr", textAlign: "right" }}>{d.id} <span style={{ color: "#9ca3af", fontWeight: 600 }}>· {d.session_id}</span></div>
+                    <div style={{ fontSize: 13, color: "#475467", marginTop: 4 }}>المُحتج: <b>{d.party === "student" ? "الطالب" : "الخبير"}</b> · مجمّد <b>{escrowMoney(d.amount_frozen, s?.currency)}</b></div>
+                    {d.reason && <div style={{ fontSize: 13, color: "#667085", marginTop: 4 }}>السبب: {d.reason}</div>}
+                  </div>
+                  <div style={{ textAlign: "left" }}>
+                    {d.decision
+                      ? <Badge text={`فُصل: ${d.decision === "student" ? "للطالب" : d.decision === "expert" ? "للخبير" : `تقسيم ${d.split_pct}%`}`} color="#2d8659" />
+                      : <>
+                          <div style={{ fontSize: 12, color: "#c0392b", marginBottom: 6 }}>المهلة: {(d.decision_sla || "").slice(0, 10) || "—"}</div>
+                          {!readOnly && <Btn onClick={() => { setSelectedDispute(d); setSplitPct(50); }} color="#c0392b">افصل النزاع</Btn>}
+                        </>}
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* RELEASED TAB */}
+      {tab === "released" && (
+        <div style={{ background: "#fff", borderRadius: 12, boxShadow: "0 1px 4px rgba(0,0,0,0.06)", overflowX: "auto" }}>
+          <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 720 }}>
+            <thead><tr style={{ background: "#f8fafc" }}>{["المرجع", "الطالب ← الخبير", "المبلغ", "صافي للخبير", "عمولة 15%", "الحالة", "التاريخ"].map(h => <th key={h} style={{ padding: 12, fontSize: 13, color: "#667085", textAlign: "right" }}>{h}</th>)}</tr></thead>
+            <tbody>
+              {releasedSessions.map(s => (
+                <tr key={s.id} style={{ borderTop: "1px solid #f1f5f9" }}>
+                  <td style={{ padding: 12, fontWeight: 800, color: BRAND.navy, direction: "ltr", textAlign: "right" }}>{s.id}</td>
+                  <td style={{ padding: 12, fontSize: 13 }}>{s.student_name || "—"} ← {s.expert_name || "—"}</td>
+                  <td style={{ padding: 12, fontWeight: 700 }}>{escrowMoney(s.amount, s.currency)}</td>
+                  <td style={{ padding: 12, color: "#2d8659", fontWeight: 700 }}>{s.status === "released" ? escrowMoney(s.net, s.currency) : "—"}</td>
+                  <td style={{ padding: 12, color: BRAND.gold, fontWeight: 700 }}>{s.status === "released" ? escrowMoney(s.commission, s.currency) : "—"}</td>
+                  <td style={{ padding: 12 }}><Badge text={ESCROW_STATUS[s.status]?.t || s.status} color={ESCROW_STATUS[s.status]?.c} /></td>
+                  <td style={{ padding: 12, fontSize: 12, color: "#667085", direction: "ltr", textAlign: "right" }}>{(s.released_at || s.held_at || "").slice(0, 10) || "—"}</td>
+                </tr>
+              ))}
+              {releasedSessions.length === 0 && <tr><td colSpan={7} style={{ padding: 24, textAlign: "center", color: "#9ca3af" }}>لا توجد جلسات محرّرة بعد.</td></tr>}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {/* SESSION DRAWER */}
+      <Modal open={!!selected} onClose={() => setSelected(null)} title={`جلسة بضمان · ${selected?.id || ""}`} maxWidth={560}>
+        {selected && (
+          <div>
+            <div style={{ fontSize: 16, fontWeight: 800, color: BRAND.navy, marginBottom: 16 }}>{selected.student_name || selected.student_email} ← {selected.expert_name || selected.expert_email}</div>
+            <div style={{ background: "#f8fafc", borderRadius: 12, padding: 18, marginBottom: 16 }}>
+              <div style={{ fontSize: 12, color: "#9ca3af", marginBottom: 4 }}>المبلغ المحجوز</div>
+              <div style={{ fontSize: 30, fontWeight: 900, color: BRAND.navy, marginBottom: 14 }}>{escrowMoney(selected.amount, selected.currency)}</div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                <div style={{ background: "#ecfdf3", borderRadius: 8, padding: "10px 14px" }}>
+                  <div style={{ fontSize: 12, color: "#2d8659" }}>صافي للخبير</div>
+                  <div style={{ fontSize: 18, fontWeight: 900, color: "#2d8659" }}>{escrowMoney(selected.net, selected.currency)}</div>
+                </div>
+                <div style={{ background: "#fef6e7", borderRadius: 8, padding: "10px 14px" }}>
+                  <div style={{ fontSize: 12, color: "#b8860b" }}>عمولة {Math.round((selected.commission_rate || 0.15) * 100)}%</div>
+                  <div style={{ fontSize: 18, fontWeight: 900, color: BRAND.gold }}>{escrowMoney(selected.commission, selected.currency)}</div>
+                </div>
+              </div>
+              <div style={{ fontSize: 11, color: "#9ca3af", marginTop: 10 }}>العمولة تُقتطع عند التحرير فقط — لا عند الحجز.</div>
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 16, fontSize: 13 }}>
+              <div><div style={{ color: "#9ca3af", fontSize: 12 }}>المرجع</div><div style={{ fontWeight: 700 }}>{selected.ref || "—"}</div></div>
+              <div><div style={{ color: "#9ca3af", fontSize: 12 }}>المؤقّت</div><div style={{ fontWeight: 700 }}><CountdownLabel seconds={selected.release_seconds_remaining} status={selected.status} /></div></div>
+            </div>
+            {selected.status === "dispute" ? (
+              <div style={{ padding: "12px 14px", borderRadius: 8, background: "#fdeeec", color: "#c0392b", fontWeight: 700, fontSize: 13 }}>⚖️ هذه الجلسة عليها نزاع مفتوح — يُدار من تبويب «النزاعات بخط زمني».</div>
+            ) : readOnly ? (
+              <div style={{ padding: "12px 14px", borderRadius: 8, background: "#f3f4f6", color: "#667085", fontWeight: 700, fontSize: 13 }}>وضع المتابعة (قراءة فقط) — الإجراءات للأدمن فقط.</div>
+            ) : (
+              <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+                <Btn onClick={() => onRelease(selected)} color="#2d8659" disabled={busy}>✅ حرّر للخبير</Btn>
+                <Btn onClick={() => onRefund(selected)} color="#e8913a" variant="outline" disabled={busy}>↩ استرداد للطالب</Btn>
+                <Btn onClick={() => onDispute(selected)} color="#c0392b" variant="outline" disabled={busy}>⚖️ فتح نزاع</Btn>
+              </div>
+            )}
+          </div>
+        )}
+      </Modal>
+
+      {/* DISPUTE RESOLVE DRAWER */}
+      <Modal open={!!selectedDispute} onClose={() => setSelectedDispute(null)} title={`فصل نزاع · ${selectedDispute?.id || ""}`} maxWidth={520}>
+        {selectedDispute && (() => {
+          const s = sessionById(selectedDispute.session_id);
+          return (
+            <div>
+              <div style={{ fontSize: 14, color: "#475467", marginBottom: 16 }}>الجلسة <b>{selectedDispute.session_id}</b> · مجمّد <b>{escrowMoney(selectedDispute.amount_frozen, s?.currency)}</b> · المُحتج: <b>{selectedDispute.party === "student" ? "الطالب" : "الخبير"}</b></div>
+              <div style={{ background: "#f8fafc", borderRadius: 10, padding: 14, marginBottom: 16 }}>
+                <label style={{ fontSize: 13, fontWeight: 700, color: "#374151" }}>نسبة الخبير عند التقسيم (٪)</label>
+                <input type="number" min={0} max={100} value={splitPct} onChange={e => setSplitPct(e.target.value)} style={{ width: "100%", marginTop: 8, padding: "10px 14px", borderRadius: 8, border: "1px solid #d1d5db", fontSize: 14, boxSizing: "border-box" }} />
+                <div style={{ fontSize: 12, color: "#9ca3af", marginTop: 6 }}>تُحتسب العمولة على حصة الخبير فقط، والباقي يُسترد للطالب.</div>
+              </div>
+              <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+                <Btn onClick={() => resolveDispute("student")} color="#e8913a" disabled={busy}>↩ لصالح الطالب (استرداد)</Btn>
+                <Btn onClick={() => resolveDispute("expert")} color="#2d8659" disabled={busy}>✅ لصالح الخبير (تحرير)</Btn>
+                <Btn onClick={() => resolveDispute("split")} color={BRAND.navy} variant="outline" disabled={busy}>⚖️ تقسيم</Btn>
+              </div>
+            </div>
+          );
+        })()}
+      </Modal>
+    </div>
+  );
+}
+
 function MessagesPage() {
   const [status, setStatus] = useState("");
   const [messages, setMessages] = useState([]);
@@ -4285,6 +4550,7 @@ const navItems = [
   { id: "overview", label: "نظرة عامة", icon: "📊" },
   { id: "platform-users", label: "المستخدمون", icon: "👥" },
   { id: "courses", label: "الدورات والتدريب", icon: "📚" },
+  { id: "escrow", label: "الضمان والنزاعات", icon: "🛡️" },
   { id: "investors-admin", label: "الاستثمار", icon: "💼" },
   { id: "marketing", label: "التسويق", icon: "📢" },
   { id: "content", label: "المحتوى والمدونة", icon: "📝" },
@@ -4322,6 +4588,7 @@ function Layout({ page, setPage, user, onLogout }) {
             // بلا التأسيس/الشركاء/الاستثمار/الإعدادات ولا الإجماليات المالية الكلية.
             { id: "platform-users", label: "المستخدمون", icon: "👥" },
             { id: "courses", label: "الدورات والتدريب", icon: "📚" },
+            { id: "escrow", label: "الضمان والنزاعات", icon: "🛡️" },
             { id: "marketing", label: "التسويق", icon: "📢" },
           ]
       : effectiveRole === "viewer"
@@ -4403,6 +4670,7 @@ function Layout({ page, setPage, user, onLogout }) {
           {activePage === "content" && <ContentPage />}
           {activePage === "messages" && <MessagesPage />}
           {activePage === "courses" && <CoursesPage />}
+          {activePage === "escrow" && <EscrowPage user={user} />}
           {activePage === "investors-admin" && <InvestmentPage />}
           {activePage === "earnings" && <MyEarningsPage />}
           {activePage === "marketplace" && <InvestorInvestmentsPage initialTab="opportunities" />}
