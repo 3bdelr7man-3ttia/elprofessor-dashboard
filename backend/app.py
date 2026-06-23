@@ -22,10 +22,29 @@ logger = logging.getLogger('elprofessor.dashboard')
 # CONFIG
 # ============================================================
 app = Flask(__name__)
+
+# Are we running in production? (any of these signals)
+_flask_env = (os.environ.get('FLASK_ENV') or '').strip().lower()
+_app_env = (os.environ.get('ENV') or os.environ.get('APP_ENV') or '').strip().lower()
+IS_PRODUCTION = (
+    _flask_env == 'production'
+    or _app_env == 'production'
+    or (os.environ.get('PROD') or '').strip().lower() in ('1', 'true', 'yes')
+)
+
 _secret_key = os.environ.get('SECRET_KEY')
 if not _secret_key:
+    if IS_PRODUCTION:
+        # In production a missing SECRET_KEY is fatal: an ephemeral key would
+        # silently invalidate every issued JWT on each redeploy (logs everyone out)
+        # and makes sessions forgeable across instances. Fail fast instead.
+        raise RuntimeError(
+            "SECRET_KEY is not set in production. Set a strong, stable SECRET_KEY "
+            "env var (e.g. `python -c 'import secrets;print(secrets.token_hex(32))'`) "
+            "before starting the dashboard backend."
+        )
     logger.warning(
-        "SECRET_KEY is not set — generating an ephemeral key. "
+        "SECRET_KEY is not set — generating an ephemeral key (dev only). "
         "This INVALIDATES all issued JWTs on restart; SET SECRET_KEY in production."
     )
     _secret_key = secrets.token_hex(32)
@@ -89,6 +108,7 @@ class Revenue(db.Model):
     course_id = db.Column(db.Integer, db.ForeignKey('courses.id'), nullable=True)
     campaign_id = db.Column(db.Integer, db.ForeignKey('campaigns.id'), nullable=True)
     payment_method = db.Column(db.String(50))  # bank_transfer, cash, stripe, wise
+    payment_id = db.Column(db.String(255), unique=True, nullable=True)  # idempotency key for platform finance-events (re-delivery safe)
     notes = db.Column(db.Text)
     created_at = db.Column(db.DateTime, default=datetime.datetime.utcnow)
 
@@ -958,19 +978,24 @@ def register():
         return jsonify({'error': 'الاسم والبريد وكلمة المرور مطلوبة'}), 400
     if User.query.filter_by(email=email).first():
         return jsonify({'error': 'هذا البريد مسجل بالفعل'}), 409
+    # Public self-registration must NOT mint a usable account. The new user is
+    # created PENDING + INACTIVE with the lowest role: token_required rejects
+    # inactive users, so they get ZERO data access until an admin activates them
+    # and assigns a real role. (A self-registered 'viewer' previously read the
+    # full company P&L + cap-table — this closes that hole.)
     user = User(
         email=email,
         password_hash=generate_password_hash(password, method='pbkdf2:sha256'),
         name=name,
-        role='viewer',
-        dashboard_role='viewer',
+        role='pending',
+        dashboard_role='pending',
         linked_to_name='',
         preferred_currency='AUTO',
-        is_active=True,
+        is_active=False,
     )
     db.session.add(user)
     db.session.commit()
-    return jsonify({'message': 'تم إنشاء الحساب. يمكن للإدارة الآن ضبط دورك داخل الداشبورد.'}), 201
+    return jsonify({'message': 'تم استلام طلبك. الحساب قيد المراجعة — ستتمكن من الدخول بعد موافقة الإدارة.'}), 201
 
 @app.route('/api/auth/me', methods=['GET'])
 @token_required
@@ -1239,6 +1264,157 @@ def investor_wallet_bridge():
         'currency': 'USD',
     })
 
+
+def _metrics_secret_ok():
+    """True iff the request carries the shared platform<->dashboard service secret.
+    Mirrors the verification used by the other bridge endpoints (investor_wallet_bridge)."""
+    secret = request.headers.get('X-ELP-Metrics-Secret', '')
+    return bool(
+        PLATFORM_METRICS_SECRET
+        and secret
+        and secrets.compare_digest(secret, PLATFORM_METRICS_SECRET)
+    )
+
+
+@app.route('/api/metrics/finance-event', methods=['POST'])
+def metrics_finance_event():
+    """LINKAGE RECEIVER — the platform POSTs each real money event here so the
+    dashboard ledger reflects live sales (and escrow transitions) instead of the
+    405 that previously swallowed them silently.
+
+    Auth: shared service secret (X-ELP-Metrics-Secret) — NOT a user JWT.
+
+    Body: { payment_id, amount, currency, kind, source, occurred_at, meta? }
+      kind = 'sale'|'course'|'consulting'|'subscription'|... → idempotent Revenue row.
+      kind = 'escrow_hold'  → mirror an EscrowSession in 'held' (read-mirror only).
+      kind = 'escrow_release'|'escrow_refund'|'escrow_dispute' → reflect the status
+              transition on the mirrored EscrowSession. No real money is moved here.
+
+    Idempotency: Revenue.payment_id is unique → re-delivery never double-counts.
+    Escrow mirroring is keyed by payment_id (stored in EscrowSession.ref)."""
+    if not _metrics_secret_ok():
+        return jsonify({'error': 'unauthorized'}), 401
+
+    d = request.json or {}
+    payment_id = (str(d.get('payment_id') or '')).strip()
+    if not payment_id:
+        return jsonify({'error': 'payment_id required'}), 400
+    try:
+        amount = round(float(d.get('amount') or 0), 2)
+    except (TypeError, ValueError):
+        amount = 0.0
+    currency = (d.get('currency') or 'EGP').strip().upper()[:8]
+    kind = (d.get('kind') or 'sale').strip().lower()
+    source = (d.get('source') or 'platform').strip()[:100]
+    meta = d.get('meta') or {}
+
+    # occurred_at → a date for the ledger (fall back to today on bad input).
+    occurred_raw = (d.get('occurred_at') or '').strip()
+    occurred_date = datetime.date.today()
+    if occurred_raw:
+        try:
+            occurred_date = datetime.datetime.fromisoformat(
+                occurred_raw.replace('Z', '+00:00')
+            ).date()
+        except (ValueError, TypeError):
+            try:
+                occurred_date = datetime.date.fromisoformat(occurred_raw[:10])
+            except (ValueError, TypeError):
+                occurred_date = datetime.date.today()
+
+    # ---- ESCROW transition events: mirror only (no money movement here) ----
+    if kind.startswith('escrow'):
+        # Mirror keyed by payment_id (stored in .ref) so re-delivery is idempotent.
+        session = EscrowSession.query.filter_by(ref=payment_id).first()
+        now = datetime.datetime.utcnow()
+        if kind == 'escrow_hold':
+            if not session:
+                session = EscrowSession(
+                    id=_next_seq_id(EscrowSession, 'ESC'),
+                    student_name=(meta.get('student_name') or '').strip(),
+                    student_email=(meta.get('student_email') or '').strip().lower(),
+                    expert_name=(meta.get('expert_name') or '').strip(),
+                    expert_email=(meta.get('expert_email') or '').strip().lower(),
+                    amount=amount,
+                    currency=currency if currency in ESCROW_SUPPORTED_CURRENCIES else 'EGP',
+                    status='held',
+                    held_at=now,
+                    release_at=now + datetime.timedelta(hours=ESCROW_HOLD_HOURS),
+                    ref=payment_id,
+                    source=source or 'platform',
+                    notes='mirror:platform-escrow',
+                )
+                db.session.add(session)
+        elif session:
+            status_map = {
+                'escrow_release': 'released',
+                'escrow_refund': 'refunded',
+                'escrow_dispute': 'dispute',
+                'escrow_confirm': 'confirm',
+            }
+            new_status = status_map.get(kind)
+            if new_status:
+                session.status = new_status
+                if new_status == 'released' and not session.released_at:
+                    session.released_at = now
+        db.session.commit()
+        return jsonify({'ok': True, 'mirrored': 'escrow',
+                        'session': serialize_escrow(session) if session else None}), 200
+
+    # ---- Normal money-in event → idempotent Revenue row ----
+    existing = Revenue.query.filter_by(payment_id=payment_id).first()
+    if existing:
+        # Already recorded — re-delivery is a no-op (do NOT double-count).
+        return jsonify({'ok': True, 'revenue_id': existing.id, 'duplicate': True}), 200
+
+    rev = Revenue(
+        date=occurred_date,
+        source=kind if kind else 'sale',
+        description=(meta.get('description') or f'Platform {kind} {payment_id}')[:1000],
+        amount_egp=amount if currency == 'EGP' else 0,
+        amount_usd=amount if currency == 'USD' else 0,
+        client_name=(meta.get('client_name') or meta.get('buyer_email') or '')[:255],
+        payment_method=(meta.get('payment_method') or source or 'platform')[:50],
+        payment_id=payment_id,
+        notes=f'bridge:finance-event:{source}',
+    )
+    db.session.add(rev)
+    try:
+        db.session.commit()
+    except IntegrityError:
+        # Concurrent re-delivery raced us on the unique payment_id → fetch & no-op.
+        db.session.rollback()
+        existing = Revenue.query.filter_by(payment_id=payment_id).first()
+        return jsonify({'ok': True, 'revenue_id': existing.id if existing else None,
+                        'duplicate': True}), 200
+    return jsonify({'ok': True, 'revenue_id': rev.id}), 200
+
+
+@app.route('/api/bridge/escrow', methods=['GET'])
+def bridge_escrow():
+    """ESCROW read-mirror — lets the platform (service secret) OR an admin (JWT)
+    read the dashboard's escrow ledger. READ ONLY; never moves money."""
+    authorized = _metrics_secret_ok()
+    if not authorized:
+        token = request.headers.get('Authorization', '').replace('Bearer ', '')
+        if token:
+            try:
+                data = jwt.decode(token, app.config['SECRET_KEY'], algorithms=['HS256'])
+                u = User.query.get(data['user_id'])
+                authorized = bool(u and u.is_active and _is_admin_user(u))
+            except Exception:
+                authorized = False
+    if not authorized:
+        return jsonify({'error': 'unauthorized'}), 401
+
+    status = (request.args.get('status') or '').strip()
+    q = EscrowSession.query
+    if status:
+        q = q.filter(EscrowSession.status == status)
+    items = q.order_by(EscrowSession.held_at.desc()).all()
+    now = datetime.datetime.utcnow()
+    return jsonify([serialize_escrow(e, now) for e in items])
+
 @app.route('/api/users', methods=['GET'])
 @token_required
 @roles_required('admin')
@@ -1318,6 +1494,7 @@ def update_user(id):
 
 @app.route('/api/dashboard', methods=['GET'])
 @token_required
+@roles_required('admin', 'employee')
 def dashboard():
     rate = get_rate()
     
@@ -1486,6 +1663,7 @@ def dashboard():
 
 @app.route('/api/revenues', methods=['GET'])
 @token_required
+@roles_required('admin', 'employee')
 def list_revenues():
     items = Revenue.query.order_by(Revenue.date.desc()).all()
     rate = get_rate()
@@ -1499,6 +1677,7 @@ def list_revenues():
 
 @app.route('/api/revenues', methods=['POST'])
 @token_required
+@roles_required('admin')
 def create_revenue():
     d = request.json or {}
     r = Revenue(
@@ -1519,6 +1698,7 @@ def create_revenue():
 
 @app.route('/api/revenues/<int:id>', methods=['PUT'])
 @token_required
+@roles_required('admin')
 def update_revenue(id):
     r = Revenue.query.get_or_404(id)
     d = request.json or {}
@@ -1532,6 +1712,7 @@ def update_revenue(id):
 
 @app.route('/api/revenues/<int:id>', methods=['DELETE'])
 @token_required
+@roles_required('admin')
 def delete_revenue(id):
     r = Revenue.query.get_or_404(id)
     db.session.delete(r)
@@ -1544,6 +1725,7 @@ def delete_revenue(id):
 
 @app.route('/api/expenses', methods=['GET'])
 @token_required
+@roles_required('admin', 'employee')
 def list_expenses():
     items = Expense.query.order_by(Expense.date.desc()).all()
     rate = get_rate()
@@ -1556,6 +1738,7 @@ def list_expenses():
 
 @app.route('/api/assets', methods=['GET'])
 @token_required
+@roles_required('admin', 'employee')
 def list_assets():
     items = Asset.query.order_by(Asset.category.asc(), Asset.value_egp.desc()).all()
     return jsonify([{
@@ -1566,6 +1749,7 @@ def list_assets():
 
 @app.route('/api/assets', methods=['POST'])
 @token_required
+@roles_required('admin')
 def create_asset():
     d = request.json or {}
     a = Asset(
@@ -1580,6 +1764,7 @@ def create_asset():
 
 @app.route('/api/assets/<int:id>', methods=['PUT'])
 @token_required
+@roles_required('admin')
 def update_asset(id):
     a = Asset.query.get_or_404(id)
     d = request.json or {}
@@ -1591,6 +1776,7 @@ def update_asset(id):
 
 @app.route('/api/assets/<int:id>', methods=['DELETE'])
 @token_required
+@roles_required('admin')
 def delete_asset(id):
     a = Asset.query.get_or_404(id)
     db.session.delete(a)
@@ -1623,6 +1809,7 @@ def update_forecast(id):
 
 @app.route('/api/expenses', methods=['POST'])
 @token_required
+@roles_required('admin')
 def create_expense():
     d = request.json or {}
     e = Expense(
@@ -1654,6 +1841,7 @@ def create_expense():
 
 @app.route('/api/expenses/<int:id>', methods=['PUT'])
 @token_required
+@roles_required('admin')
 def update_expense(id):
     e = Expense.query.get_or_404(id)
     d = request.json or {}
@@ -1667,6 +1855,7 @@ def update_expense(id):
 
 @app.route('/api/expenses/<int:id>', methods=['DELETE'])
 @token_required
+@roles_required('admin')
 def delete_expense(id):
     e = Expense.query.get_or_404(id)
     db.session.delete(e)
@@ -2114,6 +2303,7 @@ def update_packages():
 
 @app.route('/api/cashflow', methods=['GET'])
 @token_required
+@roles_required('admin', 'employee')
 def list_cashflow():
     rate = get_rate()
     items = CashTransaction.query.order_by(CashTransaction.date.desc(), CashTransaction.id.desc()).all()
@@ -2132,6 +2322,7 @@ def list_cashflow():
 
 @app.route('/api/cashflow', methods=['POST'])
 @token_required
+@roles_required('admin')
 def create_cashflow():
     d = request.json or {}
     t = CashTransaction(
@@ -2150,6 +2341,7 @@ def create_cashflow():
 
 @app.route('/api/cashflow/<int:id>', methods=['PUT'])
 @token_required
+@roles_required('admin')
 def update_cashflow(id):
     t = CashTransaction.query.get_or_404(id)
     d = request.json or {}
@@ -2163,6 +2355,7 @@ def update_cashflow(id):
 
 @app.route('/api/cashflow/<int:id>', methods=['DELETE'])
 @token_required
+@roles_required('admin')
 def delete_cashflow(id):
     t = CashTransaction.query.get_or_404(id)
     db.session.delete(t)
@@ -2171,6 +2364,7 @@ def delete_cashflow(id):
 
 @app.route('/api/partners', methods=['GET'])
 @token_required
+@roles_required('admin', 'employee')
 def list_partners():
     rate = get_rate()
     items = Partner.query.order_by(Partner.equity_percent.desc()).all()
@@ -2184,6 +2378,7 @@ def list_partners():
 
 @app.route('/api/partners', methods=['POST'])
 @token_required
+@roles_required('admin')
 def create_partner():
     d = request.json or {}
     p = Partner(
@@ -2199,6 +2394,7 @@ def create_partner():
 
 @app.route('/api/partners/<int:id>', methods=['PUT'])
 @token_required
+@roles_required('admin')
 def update_partner(id):
     p = Partner.query.get_or_404(id)
     d = request.json or {}
@@ -2210,6 +2406,7 @@ def update_partner(id):
 
 @app.route('/api/partners/<int:id>', methods=['DELETE'])
 @token_required
+@roles_required('admin')
 def delete_partner(id):
     p = Partner.query.get_or_404(id)
     db.session.delete(p)
@@ -2218,6 +2415,10 @@ def delete_partner(id):
 
 @app.route('/api/payouts', methods=['GET'])
 @token_required
+# NOTE: intentionally NOT locked to admin/employee — this GET is role-scoped:
+# trainers/investors only see rows matching their own linked name (see filter below).
+# Locking it would break the trainer home dashboard. Company-wide totals live in
+# /api/dashboard + /api/finance/summary, which ARE admin/employee-gated.
 def list_payouts():
     rate = get_rate()
     items = Payout.query.order_by(Payout.date.desc()).all()
@@ -2235,6 +2436,7 @@ def list_payouts():
 
 @app.route('/api/payouts', methods=['POST'])
 @token_required
+@roles_required('admin')
 def create_payout():
     d = request.json or {}
     p = Payout(
@@ -2250,6 +2452,7 @@ def create_payout():
 
 @app.route('/api/payouts/<int:id>', methods=['PUT'])
 @token_required
+@roles_required('admin')
 def update_payout(id):
     p = Payout.query.get_or_404(id)
     d = request.json or {}
@@ -2263,6 +2466,7 @@ def update_payout(id):
 
 @app.route('/api/payouts/<int:id>', methods=['DELETE'])
 @token_required
+@roles_required('admin')
 def delete_payout(id):
     p = Payout.query.get_or_404(id)
     db.session.delete(p)
@@ -2271,6 +2475,8 @@ def delete_payout(id):
 
 @app.route('/api/investments', methods=['GET'])
 @token_required
+# NOT locked: role-scoped — investors only see their OWN investments (filter below).
+# Admins/employees see all. Locking would break the investor home dashboard.
 def list_investments():
     rate = get_rate()
     items = Investment.query.order_by(Investment.created_at.desc()).all()
@@ -2284,6 +2490,7 @@ def list_investments():
 
 @app.route('/api/investments', methods=['POST'])
 @token_required
+@roles_required('admin')
 def create_investment():
     d = request.json or {}
     item = Investment(
@@ -2312,6 +2519,7 @@ def create_investment():
 
 @app.route('/api/investments/<int:id>', methods=['PUT'])
 @token_required
+@roles_required('admin')
 def update_investment(id):
     item = Investment.query.get_or_404(id)
     d = request.json or {}
@@ -2339,6 +2547,7 @@ def update_investment(id):
 
 @app.route('/api/investments/<int:id>', methods=['DELETE'])
 @token_required
+@roles_required('admin')
 def delete_investment(id):
     item = Investment.query.get_or_404(id)
     deleted_name = item.investor_name
@@ -2701,6 +2910,7 @@ def answer_with_ai(provider, model, question, snapshot):
 
 @app.route('/api/ai/models', methods=['GET'])
 @token_required
+@roles_required('admin', 'employee')
 def ai_models():
     return jsonify(ai_models_payload())
 
@@ -2868,11 +3078,13 @@ def generate_ai_snapshot():
 
 @app.route('/api/ai/snapshot', methods=['GET'])
 @token_required
+@roles_required('admin', 'employee')
 def ai_snapshot():
     return jsonify(generate_ai_snapshot())
 
 @app.route('/api/ai/ask', methods=['POST'])
 @token_required
+@roles_required('admin')
 def ai_ask():
     """Proxy to the selected AI model. Expects {question, provider, model}."""
     d = request.json or {}
@@ -2899,6 +3111,7 @@ def ai_ask():
 
 @app.route('/api/ai/log', methods=['POST'])
 @token_required
+@roles_required('admin')
 def ai_log_response():
     """Log AI response for audit"""
     d = request.json or {}
@@ -2916,6 +3129,7 @@ def ai_log_response():
 
 @app.route('/api/finance/summary', methods=['GET'])
 @token_required
+@roles_required('admin', 'employee')
 def finance_summary():
     rate = get_rate()
     revenues = Revenue.query.all()
@@ -2983,7 +3197,18 @@ def seed():
         # Admin exists and a password is configured → rotate it to match the env
         # (rotating ADMIN_PASSWORD + redeploy rotates the live password).
         existing_admin.password_hash = generate_password_hash(admin_password, method='pbkdf2:sha256')
-    
+
+    db.session.commit()
+    print("✅ Admin/user initialization complete")
+
+
+def seed_demo():
+    """Seed DEMO/business data (founder's sample financials, cap-table, payouts,
+    forecasts, assets, investments — all tagged notes LIKE 'seed:v3%').
+
+    Runs ONLY when SEED_DEMO_DATA == 'true'. This is OFF by default so production
+    boots do NOT re-inject fake financials/ownership on every redeploy.
+    """
     def upsert_setting(key, value):
         item = Setting.query.get(key)
         if item:
@@ -3256,7 +3481,7 @@ def seed():
         })
     
     db.session.commit()
-    print("✅ Database seeded successfully")
+    print("✅ Demo data seeded successfully")
 
 def ensure_runtime_schema():
     inspector = inspect(db.engine)
@@ -3285,6 +3510,27 @@ def ensure_runtime_schema():
                 connection.execute(text("ALTER TABLE courses ADD COLUMN lms_revenue FLOAT DEFAULT 0"))
             if 'lms_currency' not in course_columns:
                 connection.execute(text("ALTER TABLE courses ADD COLUMN lms_currency VARCHAR(8)"))
+        if 'revenues' in existing_tables:
+            revenue_columns = {column['name'] for column in inspector.get_columns('revenues')}
+            if 'payment_id' not in revenue_columns:
+                connection.execute(text("ALTER TABLE revenues ADD COLUMN payment_id VARCHAR(255)"))
+                # Partial unique index: enforce idempotency on bridge payment_ids
+                # while leaving manually-entered revenues (NULL payment_id) unconstrained.
+                try:
+                    connection.execute(text(
+                        "CREATE UNIQUE INDEX IF NOT EXISTS ux_revenues_payment_id "
+                        "ON revenues (payment_id) WHERE payment_id IS NOT NULL"
+                    ))
+                except Exception:
+                    # Dialects without partial-index support: fall back to a plain
+                    # unique index (NULLs are distinct in SQLite/Postgres, so OK).
+                    try:
+                        connection.execute(text(
+                            "CREATE UNIQUE INDEX IF NOT EXISTS ux_revenues_payment_id "
+                            "ON revenues (payment_id)"
+                        ))
+                    except Exception:
+                        pass
         if 'campaigns' in existing_tables:
             campaign_columns = {column['name'] for column in inspector.get_columns('campaigns')}
             if 'course_id' not in campaign_columns:
@@ -3916,7 +4162,11 @@ def serve_frontend(path):
 with app.app_context():
     db.create_all()
     ensure_runtime_schema()
-    seed()
+    seed()  # admin/user init only — always safe
+    if (os.environ.get('SEED_DEMO_DATA') or '').strip().lower() == 'true':
+        seed_demo()  # founder's sample financials — OFF by default in production
+    else:
+        logger.info("SEED_DEMO_DATA != 'true' — skipping demo data seed.")
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
