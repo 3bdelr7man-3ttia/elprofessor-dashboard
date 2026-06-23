@@ -1,11 +1,8 @@
-FROM node:20-slim AS frontend-build
-
-WORKDIR /app/frontend
-COPY frontend/package*.json ./
-RUN npm ci
-COPY frontend ./
-RUN npm run build
-
+# Dashboard = Flask (API at /api/*) serving the NEW cloud-design frontend from /app/dist.
+# We drop the old React build and serve the cloud design (dashboard-cloud/) as the frontend,
+# so dashboard.elprofessor.net shows the new design AND keeps the Flask backend alive (the
+# site's CMS/contact + SSO + the upcoming data-wiring all need /api/*). Design-first: the
+# new design ships with its built-in data for now; real-data wiring is the next phase.
 FROM python:3.12-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
@@ -23,7 +20,8 @@ RUN apt-get update \
     && mkdir -p /data
 
 COPY backend/app.py /app/app.py
-COPY --from=frontend-build /app/frontend/dist /app/dist
+# The new cloud-design dashboard becomes the served frontend (Flask serves /app/dist).
+COPY dashboard-cloud/index.html dashboard-cloud/site-content.js dashboard-cloud/Dashboard-Outputs.html dashboard-cloud/Dashboard-State.html /app/dist/
 
 EXPOSE 8080
 
