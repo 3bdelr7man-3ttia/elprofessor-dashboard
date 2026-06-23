@@ -261,7 +261,7 @@ body{font-family:'IBM Plex Sans Arabic',sans-serif;background:var(--bg);color:va
       <div class="ttl"><h2 id="pageTitle">الوارد من المنصة</h2></div>
       <div class="roleseg"><button class="on" data-r="admin">أدمن</button><button data-r="employee">موظف</button></div>
       <div class="search"><svg class="icon" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg><input placeholder="ابحث…" id="q"></div>
-      <button class="tbtn" id="bellBtn" title="الإشعارات"><svg class="icon" viewBox="0 0 24 24"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg><span class="cbadge" id="bellCount">3</span></button>
+      <button class="tbtn" id="bellBtn" title="الإشعارات"><svg class="icon" viewBox="0 0 24 24"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg><span class="cbadge" id="bellCount" style="display:none"></span></button>
       <div class="notifpanel" id="notifPanel" style="display:none"></div>
     </header>
     <div class="robanner" id="roBanner" style="display:none"></div>
@@ -1153,23 +1153,43 @@ function packageModal(idx){
     if(live){var next=PKS.filter(function(_,i){return i!==idx;}).map(function(p){return Object.assign({},p);});closeModal();pkPersist(next);return;}
     PACKAGES.splice(idx,1);closeModal();viewPackages(document.getElementById('view'));notify('حُذفت الباقة');};
 }
-let notifCount=3;
-const NOTIFS=[
-  {msg:'طلب توثيق جديد من «أحمد سامي»',time:'منذ ٥ د',read:false},
-  {msg:'جلسة بضمان بانتظار التحرير',time:'منذ ٢٠ د',read:false},
-  {msg:'نزاع عاجل على جلسة استشارة',time:'منذ ساعة',read:false}
-];
+// الإشعارات: أحداث حقيقية مُجمّعة من الخادم عبر EP.data.notifications (GET /api/notifications).
+// كل عنصر: {id,title,detail,kind,route,time,read}. نُلحق محليًّا إشعارات الأفعال الفورية (notify)
+// أعلى القائمة كي تظهر مباشرة دون انتظار جولة جلب جديدة.
+var NOTIFS=[]; // إشعارات محلية مؤقتة (من أفعال المستخدم) — تُدمج فوق الحيّة
+function notifAll(){var live=(window.EP&&EP.data&&EP.data.notifications)?EP.data.notifications:[];return NOTIFS.concat(live);}
+function notifUnread(){return notifAll().filter(function(n){return !n.read;}).length;}
+function notifBadge(){var b=document.getElementById('bellCount');if(!b)return;var u=notifUnread();b.textContent=u?u.toLocaleString('ar-EG'):'';b.style.display=u?'':'none';}
 function renderNotifPanel(){
   var p=document.getElementById('notifPanel');if(!p)return;
-  var unread=NOTIFS.filter(function(n){return !n.read;}).length;
-  p.innerHTML='<div class="np-h"><h4>الإشعارات'+(unread?' ('+unread+')':'')+'</h4><button id="npAll">تعليم الكل كمقروء</button></div>'+
-    (NOTIFS.length?NOTIFS.map(function(n){return '<div class="np-row '+(n.read?'read':'unread')+'"><span class="nd"></span><div><div class="ntx">'+n.msg+'</div><div class="ntm">'+n.time+'</div></div></div>';}).join(''):'<div class="np-empty">لا إشعارات</div>');
-  p.querySelector('#npAll').onclick=function(){NOTIFS.forEach(function(n){n.read=true;});notifCount=0;var b=document.getElementById('bellCount');if(b){b.textContent='0';b.style.display='none';}renderNotifPanel();};
+  // ابدأ التحميل الحيّ مرة واحدة (idle) وأعد الرسم عند الجهوز.
+  if(window.EP&&EP.ensure)EP.ensure('notifications',renderNotifPanel);
+  var Nst=(window.EP&&EP.state&&EP.state.notifications)||'idle';
+  var list=notifAll();
+  var unread=notifUnread();
+  var body;
+  if(Nst==='loading'&&!list.length){
+    body='<div class="np-empty">…جارٍ التحميل</div>';
+  } else if(Nst==='error'&&!list.length){
+    body='<div class="np-empty">تعذّر جلب الإشعارات. <b style="cursor:pointer;text-decoration:underline" id="npRetry">إعادة المحاولة</b></div>';
+  } else if(!list.length){
+    body='<div class="np-empty">لا إشعارات جديدة</div>';
+  } else {
+    body=list.map(function(n,i){var rt=n.route&&MODULES[n.route]?(' data-go="'+n.route+'"'):'';var cur=n.route&&MODULES[n.route]?';cursor:pointer':'';
+      return '<div class="np-row '+(n.read?'read':'unread')+'"'+rt+' data-ni="'+i+'" style="'+cur+'"><span class="nd"></span><div><div class="ntx">'+(n.title||'إشعار')+'</div>'+(n.detail?'<div class="ntx" style="font-weight:400;color:var(--ink-2);font-size:11.5px">'+n.detail+'</div>':'')+'<div class="ntm">'+(n.time||'')+'</div></div></div>';
+    }).join('');
+  }
+  p.innerHTML='<div class="np-h"><h4>الإشعارات'+(unread?' ('+unread.toLocaleString('ar-EG')+')':'')+'</h4><button id="npAll">تعليم الكل كمقروء</button></div>'+body;
+  var allBtn=p.querySelector('#npAll');if(allBtn)allBtn.onclick=function(){NOTIFS.forEach(function(n){n.read=true;});if(window.EP&&EP.data&&EP.data.notifications)EP.data.notifications.forEach(function(n){n.read=true;});notifBadge();renderNotifPanel();};
+  var rb=p.querySelector('#npRetry');if(rb)rb.onclick=function(){if(window.EP&&EP.reload)EP.reload('notifications',renderNotifPanel);};
+  // نقر صف -> علّمه مقروءًا + انتقل لوحدته (route) إن وُجدت.
+  p.querySelectorAll('.np-row[data-ni]').forEach(function(r){r.onclick=function(){var n=list[+r.dataset.ni];if(n)n.read=true;var go2=r.dataset.go;if(go2&&MODULES[go2]&&typeof go==='function'){p.style.display='none';go(go2);}notifBadge();renderNotifPanel();};});
+  notifBadge();
 }
+// إشعار فوري لفعل المستخدم: toast + إلحاق محلي أعلى القائمة (حتى تظهر فورًا).
 function notify(msg){
-  notifCount++;NOTIFS.unshift({msg:msg,time:'الآن',read:false});
-  const b=document.getElementById('bellCount');if(b){b.textContent=notifCount;b.style.display='';}
-  renderNotifPanel();toast('📩 '+msg);
+  NOTIFS.unshift({title:msg,detail:'',time:'الآن',read:false});
+  notifBadge();renderNotifPanel();toast('📩 '+msg);
 }
 function openModal(title,bodyHtml){const s=document.createElement('div');s.className='scrim';s.id='epModal';s.innerHTML=`<div class="modal"><div class="mh"><span>${title}</span><button data-x>✕</button></div><div class="mb">${bodyHtml}</div></div>`;document.body.appendChild(s);s.querySelector('[data-x]').onclick=closeModal;s.onclick=e=>{if(e.target===s)closeModal();};return s;}
 function closeModal(){const m=document.getElementById('epModal');if(m)m.remove();}
@@ -1853,13 +1873,9 @@ function fndStatusModal(edit,idx){
 
 /* ===== TARGETS ===== */
 const TARGETS=[{m:'يوليو',actual:30,target:35},{m:'أغسطس',actual:0,target:42},{m:'سبتمبر',actual:0,target:50},{m:'أكتوبر',actual:0,target:60}];
-const GOALS=[
-  {title:'الوصول إلى ١٠٠ مستخدم نشط',cat:'نمو',current:59,target:100,unit:'مستخدم',owner:'التسويق',due:'سبتمبر',status:'on'},
-  {title:'صافي ربح ربع سنوي ١٢٧ ألف',cat:'مالي',current:30,target:127,unit:'ألف ج',owner:'الإدارة',due:'أكتوبر',status:'on'},
-  {title:'نشر ٢٠ دورة معتمدة',cat:'محتوى',current:8,target:20,unit:'دورة',owner:'الدورات',due:'أغسطس',status:'behind'},
-  {title:'اعتماد ١٥ مدرّبًا',cat:'تشغيل',current:6,target:15,unit:'مدرّب',owner:'الفريق',due:'سبتمبر',status:'on'},
-  {title:'تأسيس الكيان القانوني',cat:'تأسيس',current:1,target:1,unit:'',owner:'الإدارة',due:'يوليو',status:'done'}
-];
+// لا أهداف تصميمية — الأهداف تُشتق حيًّا من /api/dashboard (انظر loader targets)
+// أو تبقى فارغة (إضافة يدويّة)، ويرشد مستشار الـ AI بأهداف مقترحة من الأداء الحقيقي.
+const GOALS=[];
 const GSTAT={on:{t:'على المسار',cls:'s-auto'},behind:{t:'متأخّر',cls:'s-late'},done:{t:'مكتمل',cls:'s-human'}};
 // مصادر الأهداف الحيّة (مع سقوط آمن للبيانات التصميمية لو الخادم غير متاح أو لا توقّعات).
 function tgBars(){return (window.EP&&EP.data.targets&&EP.data.targets.bars.length)?EP.data.targets.bars:TARGETS;}
@@ -1885,6 +1901,7 @@ function viewTargets(v){
       <div class="kpi k-4"><div class="top"><span class="ic">${svg('clock')}</span>متأخّرة</div><b>${money(behind)}</b><div class="sub">تحتاج تدخّلًا</div></div>
       <div class="kpi k-2"><div class="top"><span class="ic">${svg('wallet')}</span>المحقّق ماليًّا</div><b>${qPct}٪</b><div class="sub">${liveBars?'فعلي ÷ هدف التوقّعات':'من هدف الربع'}</div></div>
     </div>
+    <section class="panel" style="margin-bottom:16px"><div class="ph"><h3>مستشار الأهداف الذكي</h3><span class="hint" style="margin-inline-start:auto">مبنيّ على أداء المنصة الحقيقي</span></div><div id="goalsAdvisor" style="padding:16px 18px"></div></section>
     <section class="panel" style="margin-bottom:16px"><div class="ph"><h3>أهداف الشركة ومتابعتها</h3><span class="n">${GLS.length}</span>${liveGoals?'<span class="hint" style="margin-inline-start:auto">مشتقّة من الأرقام الحيّة</span>':'<button class="btn btn-human" id="goalAdd" style="flex:none;min-width:auto;padding:6px 13px;font-size:12px;margin-inline-start:auto">+ هدف</button>'}</div><div id="goalRows"></div></section>
     <section class="panel"><div class="ph"><h3>التوقّعات المالية الشهرية</h3>${liveBars?'<span class="hint" style="margin-inline-start:auto">حيّ — هدف ÷ فعلي (بالألف ج)</span>':'<button class="btn btn-ghost" id="tgAdd" style="flex:none;min-width:auto;padding:6px 13px;font-size:12px;margin-inline-start:auto">+ شهر</button>'}</div>
       ${BARS.length?`<div style="display:flex;gap:18px;align-items:flex-end;padding:22px 24px 10px">${bars}</div>
@@ -1892,6 +1909,50 @@ function viewTargets(v){
   if(!liveBars){var tga=document.getElementById('tgAdd');if(tga)tga.onclick=function(){targetModal(null);};v.querySelectorAll('.tgbar').forEach(r=>r.onclick=()=>targetModal(+r.dataset.i));}
   if(!liveGoals){var ga=document.getElementById('goalAdd');if(ga)ga.onclick=function(){goalModal(null);};}
   renderGoals(liveGoals);
+  renderGoalsAdvisor();
+}
+// مستشار الأهداف بالـ AI: يحمّل GET /api/ai/goals-advisor (عبر EP loader) ويعرض
+// العنوان + رؤى + أهداف مقترحة. حالات تحميل/خطأ/فراغ مدعومة.
+function renderGoalsAdvisor(){
+  var el=document.getElementById('goalsAdvisor');if(!el)return;
+  if(window.EP&&EP.ensure)EP.ensure('goalsAdvisor',renderGoalsAdvisor);
+  var Ast=(window.EP&&EP.state&&EP.state.goalsAdvisor)||'idle';
+  var A=(window.EP&&EP.data&&EP.data.goalsAdvisor)||null;
+  if(!window.EP){el.innerHTML='<div class="empty" style="text-align:center;color:var(--muted)">'+svg('sparkles','ic')+'<p>المستشار الذكي متاح بعد الاتصال بالخادم.</p></div>';return;}
+  if(Ast==='loading'&&!A){el.innerHTML='<div class="note-ai">'+svg('sparkles','ic')+'<div>…يحلّل المستشار أداء المنصة ليقترح أهدافًا.</div></div>';return;}
+  if(Ast==='error'&&!A){el.innerHTML='<div class="note-ai" style="background:var(--conflict-bg);border-color:#E9C9BB;color:var(--conflict)">'+svg('scale','ic')+'<div>تعذّر جلب توصيات المستشار. <b style="cursor:pointer;text-decoration:underline" onclick="EP.reload(\'goalsAdvisor\',renderGoalsAdvisor)">إعادة المحاولة</b></div></div>';return;}
+  if(!A||(!A.headline&&!(A.insights||[]).length&&!(A.suggested||[]).length)){el.innerHTML='<div class="empty" style="text-align:center;color:var(--muted)">'+svg('sparkles','ic')+'<p>لا توصيات بعد — تتكوّن مع تراكم أداء المنصة.</p></div>';return;}
+  var html='';
+  if(A.headline)html+='<div class="note-ai">'+svg('sparkles','ic')+'<div><b>'+A.headline+'</b></div></div>';
+  if((A.insights||[]).length){
+    html+='<div style="display:flex;flex-direction:column;gap:8px;margin-bottom:'+((A.suggested||[]).length?'14px':'0')+'">';
+    A.insights.forEach(function(ins){var t=(typeof ins==='string')?ins:(ins&&(ins.text||ins.title||ins.detail)||'');if(!t)return;
+      html+='<div style="display:flex;gap:9px;align-items:flex-start;font-size:12.5px;color:var(--ink-2);line-height:1.6"><span style="color:var(--ai);flex:none;margin-top:2px;width:16px;height:16px">'+svg('trend')+'</span><div>'+t+'</div></div>';});
+    html+='</div>';
+  }
+  if((A.suggested||[]).length){
+    html+='<div style="font-size:11.5px;font-weight:700;color:var(--muted);margin-bottom:8px">أهداف مقترحة</div>';
+    A.suggested.forEach(function(g,i){
+      var title=(typeof g==='string')?g:(g&&(g.title||g.text)||'هدف مقترح');
+      var meta=[];
+      if(g&&g.target!=null)meta.push('المستهدف '+money(+g.target||0)+(g.unit?' '+g.unit:''));
+      if(g&&g.due)meta.push('الموعد '+g.due);
+      if(g&&g.rationale)meta.push(g.rationale);
+      var canAdd=(typeof g==='object'&&g);
+      html+='<div style="display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid var(--line);border-radius:9px;margin-bottom:8px;background:var(--surface-2)">'+
+        '<span class="dest" style="background:var(--gold-bg);color:#9a6a08;font-size:10.5px">'+((g&&g.cat)||'مقترح')+'</span>'+
+        '<div style="flex:1"><div style="font-weight:700;font-size:13px;color:var(--ink)">'+title+'</div>'+(meta.length?'<div style="font-size:11px;color:var(--muted);margin-top:3px">'+meta.join(' · ')+'</div>':'')+'</div>'+
+        (canAdd?'<button class="btn btn-human gadv-add" data-i="'+i+'" style="flex:none;min-width:auto;padding:5px 11px;font-size:11.5px">+ تبنّي</button>':'')+'</div>';
+    });
+  }
+  el.innerHTML=html;
+  // «تبنّي» هدفًا مقترحًا -> يفتح نموذج الهدف مملوءًا مسبقًا (يُضاف للأهداف اليدوية).
+  el.querySelectorAll('.gadv-add').forEach(function(b){b.onclick=function(){var g=A.suggested[+b.dataset.i]||{};goalModalFrom(g);};});
+}
+// يفتح نموذج هدف مملوءًا بقيم اقتراح المستشار.
+function goalModalFrom(g){
+  GOALS.push({title:g.title||g.text||'هدف مقترح',cat:g.cat||'عام',owner:g.owner||'الإدارة',current:+g.current||0,target:+g.target||1,unit:g.unit||'',due:g.due||'—',status:g.status||'on'});
+  goalModal(GOALS.length-1);
 }
 function renderGoals(liveGoals){
   var el=document.getElementById('goalRows');if(!el)return;el.innerHTML='';
