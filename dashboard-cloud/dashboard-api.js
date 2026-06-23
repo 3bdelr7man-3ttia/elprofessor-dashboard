@@ -73,8 +73,10 @@
   var EP = {
     authed: false,
     user: null,
+    role: null, // الدور الحقيقي بعد الدخول (يضبطه applyAccount من /auth/me)
     data: { dashboard: null, metrics: null, users: null, content: null, finance: null, messages: null, inbox: null,
-            escrow: null, investment: null, marketing: null, partners: null, courses: null, settings: null },
+            escrow: null, investment: null, marketing: null, partners: null, courses: null, settings: null,
+            t_data: null, i_data: null },
     state: {}, // 'idle' | 'loading' | 'ready' | 'error'
     _started: {}, // منع التحميل المزدوج
     api: api, get: get, post: post,
@@ -118,6 +120,11 @@
     if (!iso) return false;
     var t = Date.parse(iso); if (isNaN(t)) return false;
     return (Date.now() - t) < 7 * 24 * 3600e3;
+  }
+  function within30(iso) {
+    if (!iso) return false;
+    var t = Date.parse(iso); if (isNaN(t)) return false;
+    return (Date.now() - t) < 30 * 24 * 3600e3;
   }
   function arDate(iso) {
     if (!iso) return "—";
@@ -410,6 +417,85 @@
     settings: function () {
       return get("/settings").then(function (s) { EP.data.settings = s || {}; });
     },
+
+    // لوحة المدرّب: /api/courses (مفلترة للمدرّب من الـ backend بحسب JWT)
+    // + /api/payouts (مفلترة لاستحقاقات المدرّب) -> دوراتي + أرباحي (مستحق/مدفوع).
+    t_data: function () {
+      var data = { courses: [], payouts: [], students: 0, accrued: 0, paid: 0, escrow: 0, month: 0, rate: 0 };
+      var jobs = [];
+      jobs.push(get("/courses").then(function (r) {
+        var list = Array.isArray(r) ? r : [];
+        data.courses = list.map(function (c) {
+          var split = c.revenue_split || {};
+          return {
+            id: c.id, title: c.title || "دورة", enrolled: c.students_count || 0,
+            // «دافع» تقديري: عدد المسجّلين في دورة مدفوعة (لا يوجد عدّاد دفع منفصل في الجسر).
+            paid: (c.price_egp || c.price_usd) ? (c.students_count || 0) : 0,
+            from: (c.price_egp ? (money(c.price_egp) + " ج") : (c.price_usd ? ("$" + c.price_usd) : "مجانية")),
+            status: c.status, rate: Math.round(split.trainer_percent || 0),
+            total_revenue: c.total_revenue || 0, cid: c.id, raw: c,
+          };
+        });
+        data.students = data.courses.reduce(function (s, c) { return s + (c.enrolled || 0); }, 0);
+        // أعلى نسبة مدرّب عبر دوراته = «نسبتي» المعروضة.
+        data.rate = data.courses.reduce(function (m, c) { return Math.max(m, c.rate || 0); }, 0);
+      }));
+      jobs.push(get("/payouts").then(function (r) {
+        var list = Array.isArray(r) ? r : [];
+        data.payouts = list.map(function (p) {
+          return {
+            id: p.id, related_to: p.related_to || "", role: p.role || "",
+            total_egp: Math.round(p.total_egp || 0), status: p.status || "accrued",
+            date: p.date, raw: p,
+          };
+        });
+        data.payouts.forEach(function (p) {
+          if (p.status === "paid") data.paid += p.total_egp;
+          else if (p.status === "accrued" || p.status === "pending") data.accrued += p.total_egp;
+          if (p.status === "escrow" || p.status === "held") data.escrow += p.total_egp;
+          if (within30(p.date)) data.month += p.total_egp;
+        });
+      }));
+      return Promise.all(jobs).then(function () { EP.data.t_data = data; });
+    },
+
+    // لوحة المستثمر: المحفظة + البادجات + الاستثمارات (نشطة/تاريخ) + الماركت.
+    // /api/me/investor-wallet · /api/investor/badges · /api/investments/active
+    // · /api/investments/history · /api/investment-opportunities
+    i_data: function () {
+      var data = { wallet: null, badges: [], active: [], history: [], opps: [] };
+      var jobs = [];
+      jobs.push(get("/me/investor-wallet").then(function (w) { data.wallet = w || null; }).catch(function () { data.wallet = null; }));
+      jobs.push(get("/investor/badges").then(function (b) { data.badges = Array.isArray(b) ? b : []; }).catch(function () { data.badges = []; }));
+      jobs.push(get("/investments/active").then(function (r) {
+        data.active = (Array.isArray(r) ? r : []).map(function (it) {
+          return {
+            id: it.id, title: it.course_title || (it.opportunity && it.opportunity.course_title) || "استثمار",
+            amount: Math.round(it.invested_total_egp || 0), roi: (it.roi_percent != null ? it.roi_percent + "٪" : "—"),
+            status: it.status, raw: it,
+          };
+        });
+      }).catch(function () { data.active = []; }));
+      jobs.push(get("/investments/history").then(function (r) {
+        data.history = (Array.isArray(r) ? r : []).map(function (it) {
+          return {
+            id: it.id, title: it.course_title || "استثمار",
+            amount: Math.round(it.invested_total_egp || 0), roi: (it.roi_percent != null ? it.roi_percent + "٪" : "—"),
+            status: it.status, raw: it,
+          };
+        });
+      }).catch(function () { data.history = []; }));
+      jobs.push(get("/investment-opportunities").then(function (r) {
+        data.opps = (Array.isArray(r) ? r : []).map(function (o) {
+          return {
+            title: o.course_title || ("فرصة #" + o.id), target: Math.round(o.target_amount || 0),
+            raised: Math.round(o.current_funded || 0), roi: (o.expected_roi != null ? o.expected_roi + "٪" : "—"),
+            min: Math.round(o.min_investment || 0), oid: o.id, raw: o,
+          };
+        });
+      }).catch(function () { data.opps = []; }));
+      return Promise.all(jobs).then(function () { EP.data.i_data = data; });
+    },
   };
 
   // وصف مهلة التحرير لجلسة ضمان (نص عربي قريب من التصميم).
@@ -587,6 +673,15 @@
       .then(function () { note(status === "approved" ? "تم اعتماد السحب" : "تم رفض السحب"); EP.reload("investment", after); })
       .catch(function (e) { quietToast((e && e.message) || "تعذّر تحديث طلب السحب"); if (after) after(); });
   };
+  // طلب سحب من محفظة المستثمر/المدرّب نفسه: POST /investor/withdraw {amount,currency}
+  // المبلغ بالجنيه من الشاشة؛ نرسله بعملة EGP والـ backend يحوّله. يعيد تحميل لوحة المستثمر.
+  EP.investorWithdraw = function (amountEgp, after) {
+    var amt = Number(amountEgp || 0);
+    if (!amt || amt <= 0) { quietToast("لا يوجد رصيد قابل للسحب"); if (after) after(); return; }
+    post("/investor/withdraw", { amount: amt, currency: "EGP" })
+      .then(function (r) { note((r && r.message) || "تم إرسال طلب السحب"); EP.reload("i_data", after); })
+      .catch(function (e) { quietToast((e && e.message) || "تعذّر إرسال طلب السحب"); if (after) after(); });
+  };
 
   // ---- الدورات ----
   EP.createCourse = function (d, after) {
@@ -675,6 +770,9 @@
   // اعرض اسم/دور المستخدم في تذييل القائمة + زر الخروج.
   function applyAccount(user) {
     if (!user) return;
+    // الدور الحقيقي للمستخدم (admin/employee/trainer/investor/viewer) كما رجع من /auth/me
+    // أو /auth/login. الواجهة (EP_BOOT) تستخدمه لاختيار اللوحة المناسبة وحَجب الإداري.
+    EP.role = (user.role || user.dashboard_role || "viewer");
     var nm = document.getElementById("meName");
     var rl = document.getElementById("meRole");
     var av = document.getElementById("meAv");
@@ -687,7 +785,9 @@
   function logout() {
     clearToken();
     EP.authed = false; EP.user = null;
-    EP.data = { dashboard: null, metrics: null, users: null, content: null, finance: null, messages: null, inbox: null };
+    EP.data = { dashboard: null, metrics: null, users: null, content: null, finance: null, messages: null, inbox: null,
+                escrow: null, investment: null, marketing: null, partners: null, courses: null, settings: null,
+                t_data: null, i_data: null };
     EP.state = {};
     window.location.reload();
   }

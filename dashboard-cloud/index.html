@@ -359,7 +359,12 @@ const money=n=>n.toLocaleString('ar-EG');
 
 let current='inbox', selected=null, activeFilter='all', escTab='sessions', finTab='summary', usersFilter='all', courseTab='courses', invTab='investors', mktTab='campaigns', contentTab='pending';
 let role='admin';
-const ROLE_NAV={employee:['users','courses']};
+const ROLE_NAV={
+  employee:['users','courses'],
+  trainer:['t_home','t_courses','t_earnings','ai'],
+  investor:['i_home','i_market','i_invest','ai'],
+  viewer:['v_pending']
+};
 
 function itemHTML(id,m){
   const on=id===current?' on':'';const al=m.alert?' alert':'';
@@ -2010,67 +2015,127 @@ function drawMarket(){
 /* ===== TRAINER / INVESTOR / VIEWER PORTALS ===== */
 const TR_COURSES=[{title:'صياغة العقود الاحترافية',enrolled:28,paid:21,from:'١٥٠ ج'},{title:'أساسيات القانون التجاري',enrolled:12,paid:0,from:'١٠٠ ج'}];
 const TR_EARN={total:18400,month:4200,escrow:1200,withdrawable:12000,rate:38};
+// مصادر بيانات المدرّب: حيّة من EP.data.t_data إن وُجدت، وإلا البيانات التصميمية.
+function trData(){return (window.EP&&EP.data.t_data)?EP.data.t_data:null;}
+function trCourses(){var d=trData();return d?d.courses:TR_COURSES;}
+function trEarn(){var d=trData();if(!d)return TR_EARN;return {total:(d.accrued+d.paid),month:d.month,escrow:d.escrow,withdrawable:d.accrued,rate:d.rate};}
 function viewTHome(v){
-  const enr=TR_COURSES.reduce((s,c)=>s+c.enrolled,0);
+  if(window.EP){EP.ensure('t_data',()=>viewTHome(v));}
+  const st=(window.EP&&EP.state.t_data)||'idle';
+  const live=!!trData();
+  const C=trCourses(),E=trEarn();
+  const enr=live?trData().students:C.reduce((s,c)=>s+c.enrolled,0);
   v.innerHTML=`
     <div class="kpis">
-      <div class="kpi k-1"><div class="top"><span class="ic">${svg('book')}</span>دوراتي</div><b>${money(TR_COURSES.length)}</b><div class="sub">منشورة</div></div>
-      <div class="kpi k-3"><div class="top"><span class="ic">${svg('users')}</span>مسجّلون</div><b>${money(enr)}</b><div class="sub">عبر دوراتي</div></div>
-      <div class="kpi k-2"><div class="top"><span class="ic">${svg('wallet')}</span>أرباح الشهر</div><b>${money(TR_EARN.month)} <small style="font-size:13px">ج</small></b><div class="sub">بعد العمولة</div></div>
-      <div class="kpi k-4"><div class="top"><span class="ic">${svg('trend')}</span>نسبتي</div><b>${TR_EARN.rate}٪</b><div class="sub">ترتفع بالأداء</div></div>
+      <div class="kpi k-1"><div class="top"><span class="ic">${svg('book')}</span>دوراتي</div><b>${st==='loading'&&!live?'…':money(C.length)}</b><div class="sub">${live?'مرتبطة بحسابك':'منشورة'}</div></div>
+      <div class="kpi k-3"><div class="top"><span class="ic">${svg('users')}</span>مسجّلون</div><b>${st==='loading'&&!live?'…':money(enr)}</b><div class="sub">عبر دوراتي</div></div>
+      <div class="kpi k-2"><div class="top"><span class="ic">${svg('wallet')}</span>أرباح الشهر</div><b>${st==='loading'&&!live?'…':money(E.month)} <small style="font-size:13px">ج</small></b><div class="sub">آخر ٣٠ يومًا</div></div>
+      <div class="kpi k-4"><div class="top"><span class="ic">${svg('trend')}</span>نسبتي</div><b>${E.rate}٪</b><div class="sub">ترتفع بالأداء</div></div>
     </div>
+    ${st==='error'&&!live?`<div class="policy" style="border-inline-start-color:var(--conflict);background:var(--conflict-bg)">${svg('shield','ic')}<div>تعذّر تحميل بيانات لوحتك — عرض مؤقت بالبيانات التصميمية. <a href="#" data-retry style="color:var(--navy);font-weight:800">إعادة المحاولة</a></div></div>`:''}
     <section class="panel"><div class="ph"><h3>برامجي السريعة</h3></div><div style="padding:16px;display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px">
       <button class="btn btn-ghost" data-go="t_courses">إدارة دوراتي</button>
       <button class="btn btn-ghost" data-go="t_earnings">أرباحي والسحب</button>
       <button class="btn btn-ghost" data-go="ai">مساعد AI</button>
     </div></section>`;
   v.querySelectorAll('[data-go]').forEach(b=>b.onclick=()=>go(b.dataset.go));
+  var rt=v.querySelector('[data-retry]');if(rt)rt.onclick=(e)=>{e.preventDefault();EP.reload('t_data',()=>viewTHome(v));};
 }
 function viewTCourses(v){
-  v.innerHTML=`
-    <section class="panel"><div class="ph"><h3>دوراتي</h3><span class="n">${TR_COURSES.length}</span></div><div>${TR_COURSES.map(c=>`<div class="row esc-row" style="grid-template-columns:1.8fr 1fr 1fr 110px;cursor:default"><div class="c c1"><div class="src-ic" style="background:var(--memory-bg);color:var(--memory)">${svg('book')}</div><div><div class="parties">${c.title}</div><div class="from">تبدأ من ${c.from}</div></div></div><div class="c"><div class="from"><b style="color:var(--ink)">${c.enrolled}</b> مسجّل</div></div><div class="c"><div class="from"><b style="color:var(--agree)">${c.paid}</b> دافع</div></div><div class="c"><span class="status ${c.paid?'s-auto':'s-wait'}"><span class="d"></span>${c.paid?'نشطة':'تجمع نصاب'}</span></div></div>`).join('')}</div></section>`;
+  if(window.EP){EP.ensure('t_data',()=>viewTCourses(v));}
+  const st=(window.EP&&EP.state.t_data)||'idle';
+  const live=!!trData();
+  const C=trCourses();
+  let body;
+  if(st==='loading'&&!live){body=`<div class="empty">${svg('book','ic')}<p>جارٍ تحميل دوراتك…</p></div>`;}
+  else if(st==='error'&&!live){body=`<div class="empty">${svg('shield','ic')}<p>تعذّر تحميل دوراتك. <a href="#" data-retry style="color:var(--navy);font-weight:800">إعادة المحاولة</a></p></div>`;}
+  else if(!C.length){body=`<div class="empty">${svg('book','ic')}<p>لا توجد دورات مرتبطة بحسابك بعد. اطلب من الإدارة ربط دوراتك بصفتك.</p></div>`;}
+  else {body=C.map(c=>{var statusCls=(c.status==='active'||c.paid)?'s-auto':'s-wait';var statusTxt=(c.status==='active')?'نشطة':(c.paid?'نشطة':'تجمع نصاب');return `<div class="row esc-row" style="grid-template-columns:1.8fr 1fr 1fr 110px;cursor:default"><div class="c c1"><div class="src-ic" style="background:var(--memory-bg);color:var(--memory)">${svg('book')}</div><div><div class="parties">${c.title}</div><div class="from">تبدأ من ${c.from}</div></div></div><div class="c"><div class="from"><b style="color:var(--ink)">${c.enrolled}</b> مسجّل</div></div><div class="c"><div class="from"><b style="color:var(--agree)">${c.paid}</b> دافع</div></div><div class="c"><span class="status ${statusCls}"><span class="d"></span>${statusTxt}</span></div></div>`;}).join('');}
+  v.innerHTML=`<section class="panel"><div class="ph"><h3>دوراتي</h3><span class="n">${C.length}</span></div><div>${body}</div></section>`;
+  var rt=v.querySelector('[data-retry]');if(rt)rt.onclick=(e)=>{e.preventDefault();EP.reload('t_data',()=>viewTCourses(v));};
 }
 function viewTEarnings(v){
-  const E=TR_EARN;
+  if(window.EP){EP.ensure('t_data',()=>viewTEarnings(v));}
+  const st=(window.EP&&EP.state.t_data)||'idle';
+  const live=!!trData();
+  const E=trEarn();
+  const wd=Math.round(E.withdrawable||0);
   v.innerHTML=`
+    ${st==='error'&&!live?`<div class="policy" style="border-inline-start-color:var(--conflict);background:var(--conflict-bg)">${svg('shield','ic')}<div>تعذّر تحميل أرباحك — عرض مؤقت بالبيانات التصميمية. <a href="#" data-retry style="color:var(--navy);font-weight:800">إعادة المحاولة</a></div></div>`:''}
     <div class="kpis">
-      <div class="kpi k-3"><div class="top"><span class="ic">${svg('wallet')}</span>إجمالي أرباحي</div><b>${money(E.total)} <small style="font-size:13px">ج</small></b><div class="sub">حتى اليوم</div></div>
-      <div class="kpi k-1"><div class="top"><span class="ic">${svg('trend')}</span>هذا الشهر</div><b>${money(E.month)} <small style="font-size:13px">ج</small></b><div class="sub">بعد العمولة</div></div>
-      <div class="kpi k-2"><div class="top"><span class="ic">${svg('shield')}</span>في الضمان</div><b>${money(E.escrow)} <small style="font-size:13px">ج</small></b><div class="sub">تُحرّر بعد الجلسة</div></div>
-      <div class="kpi k-4"><div class="top"><span class="ic">${svg('check')}</span>قابل للسحب</div><b>${money(E.withdrawable)} <small style="font-size:13px">ج</small></b><div class="sub">متاح الآن</div></div>
+      <div class="kpi k-3"><div class="top"><span class="ic">${svg('wallet')}</span>إجمالي أرباحي</div><b>${st==='loading'&&!live?'…':money(Math.round(E.total))} <small style="font-size:13px">ج</small></b><div class="sub">مستحق + مدفوع</div></div>
+      <div class="kpi k-1"><div class="top"><span class="ic">${svg('trend')}</span>هذا الشهر</div><b>${st==='loading'&&!live?'…':money(Math.round(E.month))} <small style="font-size:13px">ج</small></b><div class="sub">آخر ٣٠ يومًا</div></div>
+      <div class="kpi k-2"><div class="top"><span class="ic">${svg('shield')}</span>في الضمان</div><b>${money(Math.round(E.escrow))} <small style="font-size:13px">ج</small></b><div class="sub">تُحرّر بعد الجلسة</div></div>
+      <div class="kpi k-4"><div class="top"><span class="ic">${svg('check')}</span>مستحق (لم يُدفع)</div><b>${st==='loading'&&!live?'…':money(wd)} <small style="font-size:13px">ج</small></b><div class="sub">${live?'بانتظار صرف الإدارة':'متاح الآن'}</div></div>
     </div>
     <section class="panel"><div class="ph"><h3>السحب والنسبة</h3></div><div style="padding:18px">
-      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap"><button class="btn btn-human" style="flex:none" data-a="wd">${svg('wallet')}اسحب ${money(E.withdrawable)} ج</button><span style="font-size:12.5px;color:var(--ink-2)">نسبتك الحالية <b style="color:var(--navy)">${E.rate}٪</b> — ترتفع إلى ٥٠٪ بعد ١٠ دورات ناجحة.</span></div>
-      <div class="note-ai" style="margin-top:14px">${svg('sparkles','ic')}<div>شارك في تمويل تسويق دورتك (للمدعوين) لرفع التسجيلات.</div></div>
+      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap"><button class="btn btn-human" style="flex:none" data-a="wd">${svg('wallet')}اطلب صرف ${money(wd)} ج</button><span style="font-size:12.5px;color:var(--ink-2)">نسبتك الحالية <b style="color:var(--navy)">${E.rate}٪</b> — ترتفع إلى ٥٠٪ بعد ١٠ دورات ناجحة.</span></div>
+      <div class="note-ai" style="margin-top:14px">${svg('sparkles','ic')}<div>المستحقات تُصرَف من الإدارة بعد إقفال الدورة. شارك في تمويل تسويق دورتك (للمدعوين) لرفع التسجيلات.</div></div>
     </div></section>`;
-  v.querySelector('[data-a="wd"]').onclick=()=>toast('تم إرسال طلب السحب — تنفيذ خلال ١–٥ أيام');
+  v.querySelector('[data-a="wd"]').onclick=()=>toast(wd>0?'تم تسجيل طلب الصرف — تراجعه الإدارة وتنفّذه خلال ١–٥ أيام':'لا يوجد مستحق قابل للصرف حاليًا');
+  var rt=v.querySelector('[data-retry]');if(rt)rt.onclick=(e)=>{e.preventDefault();EP.reload('t_data',()=>viewTEarnings(v));};
 }
 const INV_ME={balance:12000,invested:25000,returns:3200,level:'فضي'};
 const INV_MY=[{title:'تمويل دورة الذكاء للمحامين',amount:15000,roi:'١٨٪',status:'نشط'},{title:'حملة تسويق الدبلومة',amount:10000,roi:'١٢٪',status:'نشط'}];
+// مصادر بيانات المستثمر: حيّة من EP.data.i_data إن وُجدت، وإلا البيانات التصميمية.
+function ivData(){return (window.EP&&EP.data.i_data)?EP.data.i_data:null;}
+const INV_LEVELS={bronze:'برونزي',silver:'فضي',gold:'ذهبي',platinum:'بلاتيني'};
+function ivMe(){var d=ivData();if(!d||!d.wallet)return INV_ME;var w=d.wallet;return {balance:Math.round(w.balance_egp||0),invested:Math.round(w.total_invested_egp||0),returns:Math.round(w.total_returns_egp||0),level:INV_LEVELS[w.level]||w.level||'برونزي'};}
+function ivMy(){var d=ivData();return d?d.active:INV_MY;}
+function ivOppsHome(){var d=ivData();return d?d.opps:INVOPPS;}
 function viewIHome(v){
+  if(window.EP){EP.ensure('i_data',()=>viewIHome(v));}
+  const st=(window.EP&&EP.state.i_data)||'idle';
+  const live=!!(ivData()&&ivData().wallet);
+  const M=ivMe();
   v.innerHTML=`
+    ${st==='error'&&!live?`<div class="policy" style="border-inline-start-color:var(--conflict);background:var(--conflict-bg)">${svg('shield','ic')}<div>تعذّر تحميل محفظتك — عرض مؤقت بالبيانات التصميمية. <a href="#" data-retry style="color:var(--navy);font-weight:800">إعادة المحاولة</a></div></div>`:''}
     <div class="kpis">
-      <div class="kpi k-1"><div class="top"><span class="ic">${svg('brief')}</span>رصيد المحفظة</div><b>${money(INV_ME.balance)} <small style="font-size:13px">ج</small></b><div class="sub">متاح</div></div>
-      <div class="kpi k-3"><div class="top"><span class="ic">${svg('wallet')}</span>مُستثمَر</div><b>${money(INV_ME.invested)} <small style="font-size:13px">ج</small></b><div class="sub">رأس مالي</div></div>
-      <div class="kpi k-2"><div class="top"><span class="ic">${svg('trend')}</span>عوائدي</div><b>${money(INV_ME.returns)} <small style="font-size:13px">ج</small></b><div class="sub">حتى اليوم</div></div>
-      <div class="kpi k-4"><div class="top"><span class="ic">${svg('check')}</span>المستوى</div><b>${INV_ME.level}</b><div class="sub">بادج العضوية</div></div>
+      <div class="kpi k-1"><div class="top"><span class="ic">${svg('brief')}</span>رصيد المحفظة</div><b>${st==='loading'&&!live?'…':money(M.balance)} <small style="font-size:13px">ج</small></b><div class="sub">متاح للسحب</div></div>
+      <div class="kpi k-3"><div class="top"><span class="ic">${svg('wallet')}</span>مُستثمَر</div><b>${st==='loading'&&!live?'…':money(M.invested)} <small style="font-size:13px">ج</small></b><div class="sub">رأس مالي</div></div>
+      <div class="kpi k-2"><div class="top"><span class="ic">${svg('trend')}</span>عوائدي</div><b>${st==='loading'&&!live?'…':money(M.returns)} <small style="font-size:13px">ج</small></b><div class="sub">حتى اليوم</div></div>
+      <div class="kpi k-4"><div class="top"><span class="ic">${svg('check')}</span>المستوى</div><b>${M.level}</b><div class="sub">بادج العضوية</div></div>
     </div>
     <section class="panel"><div class="ph"><h3>سريع</h3></div><div style="padding:16px;display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px">
       <button class="btn btn-ghost" data-go="i_market">ماركت الاستثمار</button><button class="btn btn-ghost" data-go="i_invest">استثماراتي</button><button class="btn btn-ghost" data-go="ai">مساعد AI</button>
     </div></section>`;
   v.querySelectorAll('[data-go]').forEach(b=>b.onclick=()=>go(b.dataset.go));
+  var rt=v.querySelector('[data-retry]');if(rt)rt.onclick=(e)=>{e.preventDefault();EP.reload('i_data',()=>viewIHome(v));};
 }
 function viewIMarket(v){
-  v.innerHTML=`
-    <section class="panel"><div class="ph"><h3>فرص متاحة</h3><span class="n">${INVOPPS.length}</span></div><div>${INVOPPS.map((o,idx)=>{const pct=Math.round(o.raised/o.target*100);return `<div class="row esc-row" data-o="${idx}" style="grid-template-columns:1.6fr 1fr 110px 120px"><div class="c c1"><div class="src-ic" style="background:var(--gold-bg);color:var(--gold)">${svg('trend')}</div><div><div class="parties">${o.title}</div><div class="from">${money(o.raised)}/${money(o.target)} ج · ${pct}٪</div></div></div><div class="c"><div style="height:8px;background:var(--surface-2);border-radius:4px;overflow:hidden;margin-top:2px"><div style="height:100%;width:${pct}%;background:var(--gold);border-radius:4px"></div></div></div><div class="c"><span class="status s-wait"><span class="d"></span>${o.roi}</span></div><div class="c"><button class="btn btn-human" style="padding:7px 12px;min-width:auto;font-size:12px" data-inv="${idx}">استثمر</button></div></div>`;}).join('')}</div></section>`;
+  if(window.EP){EP.ensure('i_data',()=>viewIMarket(v));}
+  const st=(window.EP&&EP.state.i_data)||'idle';
+  const live=!!ivData();
+  const O=ivOppsHome();
+  let body;
+  if(st==='loading'&&!live){body=`<div class="empty">${svg('trend','ic')}<p>جارٍ تحميل فرص الاستثمار…</p></div>`;}
+  else if(st==='error'&&!live){body=`<div class="empty">${svg('shield','ic')}<p>تعذّر تحميل الفرص. <a href="#" data-retry style="color:var(--navy);font-weight:800">إعادة المحاولة</a></p></div>`;}
+  else if(!O.length){body=`<div class="empty">${svg('trend','ic')}<p>لا توجد فرص استثمار مفتوحة حاليًا. تابعنا — تُضاف فرص جديدة باستمرار.</p></div>`;}
+  else {body=O.map((o,idx)=>{const pct=o.target?Math.round(o.raised/o.target*100):0;return `<div class="row esc-row" data-o="${idx}" style="grid-template-columns:1.6fr 1fr 110px 120px"><div class="c c1"><div class="src-ic" style="background:var(--gold-bg);color:var(--gold)">${svg('trend')}</div><div><div class="parties">${o.title}</div><div class="from">${money(o.raised)}/${money(o.target)} ج · ${pct}٪</div></div></div><div class="c"><div style="height:8px;background:var(--surface-2);border-radius:4px;overflow:hidden;margin-top:2px"><div style="height:100%;width:${pct}%;background:var(--gold);border-radius:4px"></div></div></div><div class="c"><span class="status s-wait"><span class="d"></span>${o.roi}</span></div><div class="c"><button class="btn btn-human" style="padding:7px 12px;min-width:auto;font-size:12px" data-inv="${idx}">استثمر</button></div></div>`;}).join('');}
+  v.innerHTML=`<section class="panel"><div class="ph"><h3>فرص متاحة</h3><span class="n">${O.length}</span></div><div>${body}</div></section>`;
   v.querySelectorAll('[data-inv]').forEach(b=>b.onclick=(e)=>{e.stopPropagation();toast('تم تسجيل اهتمامك بالاستثمار — سيتواصل الفريق');});
+  var rt=v.querySelector('[data-retry]');if(rt)rt.onclick=(e)=>{e.preventDefault();EP.reload('i_data',()=>viewIMarket(v));};
 }
 function viewIInvest(v){
-  v.innerHTML=`
-    <section class="panel"><div class="ph"><h3>استثماراتي</h3><span class="n">${INV_MY.length}</span></div><div>${INV_MY.map(x=>`<div class="row esc-row" style="grid-template-columns:1.8fr 1fr 1fr 110px;cursor:default"><div class="c c1"><div class="src-ic" style="background:var(--memory-bg);color:var(--memory)">${svg('trend')}</div><div><div class="parties">${x.title}</div></div></div><div class="c"><div class="amt">${money(x.amount)} <small>ج</small></div></div><div class="c"><div class="from">عائد <b style="color:var(--gold)">${x.roi}</b></div></div><div class="c"><span class="status s-auto"><span class="d"></span>${x.status}</span></div></div>`).join('')}</div></section>`;
+  if(window.EP){EP.ensure('i_data',()=>viewIInvest(v));}
+  const st=(window.EP&&EP.state.i_data)||'idle';
+  const live=!!ivData();
+  const X=ivMy();
+  const STMAP={active:'نشط',pending:'بانتظار',accrued:'قيد الاحتساب',completed:'مكتمل',paid:'مدفوع',loss:'خسارة'};
+  let body;
+  if(st==='loading'&&!live){body=`<div class="empty">${svg('trend','ic')}<p>جارٍ تحميل استثماراتك…</p></div>`;}
+  else if(st==='error'&&!live){body=`<div class="empty">${svg('shield','ic')}<p>تعذّر تحميل استثماراتك. <a href="#" data-retry style="color:var(--navy);font-weight:800">إعادة المحاولة</a></p></div>`;}
+  else if(!X.length){body=`<div class="empty">${svg('trend','ic')}<p>لا توجد استثمارات نشطة بعد. تصفّح «ماركت الاستثمار» للبدء.</p></div>`;}
+  else {body=X.map(x=>{var stt=STMAP[x.status]||x.status||'نشط';return `<div class="row esc-row" style="grid-template-columns:1.8fr 1fr 1fr 110px;cursor:default"><div class="c c1"><div class="src-ic" style="background:var(--memory-bg);color:var(--memory)">${svg('trend')}</div><div><div class="parties">${x.title}</div></div></div><div class="c"><div class="amt">${money(x.amount)} <small>ج</small></div></div><div class="c"><div class="from">عائد <b style="color:var(--gold)">${x.roi}</b></div></div><div class="c"><span class="status s-auto"><span class="d"></span>${stt}</span></div></div>`;}).join('');}
+  v.innerHTML=`<section class="panel"><div class="ph"><h3>استثماراتي</h3><span class="n">${X.length}</span></div><div>${body}</div></section>`;
+  var rt=v.querySelector('[data-retry]');if(rt)rt.onclick=(e)=>{e.preventDefault();EP.reload('i_data',()=>viewIInvest(v));};
 }
 function viewViewer(v){
-  v.innerHTML=`<div class="placeholder" style="margin-top:30px"><div class="pic" style="background:var(--surface-2);color:var(--muted)">${svg('clock').replace('width="20" height="20"','width="28" height="28"')}</div><h3>حسابك بانتظار التفعيل</h3><p>تم تسجيلك بنجاح. يراجع الأدمن طلبك ويحدّد دورك (مدرّب / مستثمر / موظف) لتظهر لوحتك المناسبة.</p><span class="soon">بانتظار اعتماد الإدارة</span></div>`;
+  // الحالة الحقيقية: المستخدم مسجَّل بدور viewer (من /auth/me) — بانتظار اعتماد الإدارة.
+  var u=(window.EP&&EP.user)||null;
+  var who=u?(u.name||u.email||''):'';
+  var ident=who?`<div style="margin:10px auto 0;max-width:340px;background:var(--surface-2);border:1px solid var(--line);border-radius:10px;padding:10px 14px;font-size:12.5px;color:var(--ink-2)">حسابك: <b style="color:var(--ink)">${who}</b>${u&&u.email&&u.email!==who?` <span style="direction:ltr;color:var(--muted)">${u.email}</span>`:''}</div>`:'';
+  v.innerHTML=`<div class="placeholder" style="margin-top:30px"><div class="pic" style="background:var(--surface-2);color:var(--muted)">${svg('clock').replace('width="20" height="20"','width="28" height="28"')}</div><h3>حسابك بانتظار التفعيل</h3><p>تم تسجيلك بنجاح. يراجع الأدمن طلبك ويحدّد دورك (مدرّب / مستثمر / موظف) لتظهر لوحتك المناسبة.</p>${ident}<span class="soon">بانتظار اعتماد الإدارة</span></div>`;
 }
 
 /* ===== CLUBS ===== */
@@ -2231,7 +2296,18 @@ function setRole(r){
 }
 document.querySelectorAll('.roleseg button').forEach(b=>b.onclick=()=>setRole(b.dataset.r));
 // Expose the boot so the auth layer can run it only after a valid login.
-window.EP_BOOT=function(){renderNav();renderView();renderNotifPanel();};
+// الدور الحقيقي للمستخدم (من /auth/me) يحكم أي لوحة تظهر: أدمن = كل شيء؛
+// موظف = قراءة فقط (مستخدمون/دورات)؛ مدرّب/مستثمر = لوحته الشخصية؛ غير ذلك = بانتظار التفعيل.
+window.EP_BOOT=function(){
+  var r=(window.EP&&EP.role)?EP.role:null;
+  if(r){
+    if(!ROLE_NAV[r]&&r!=='admin')r='viewer'; // أي دور غير معروف يهبط على شاشة الانتظار
+    setRole(r); // setRole يتكفّل بالـ nav + البانر + قراءة-فقط + شاشة الهبوط ثم يعيد الرسم
+    renderNotifPanel();
+    return;
+  }
+  renderNav();renderView();renderNotifPanel();
+};
 if(!window.EP||!window.EP.requireAuth){ // no auth layer present → boot directly (safe fallback)
   window.EP_BOOT();
 }
