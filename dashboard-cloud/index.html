@@ -1084,37 +1084,51 @@ const GEO_COUNTRIES=[['EG','مصر','ج.م'],['SA','السعودية','ر.س'],[
 var geoCountry='EG';
 function pkgCur(cc){for(var i=0;i<GEO_COUNTRIES.length;i++){if(GEO_COUNTRIES[i][0]===cc)return GEO_COUNTRIES[i][2];}return 'ج.م';}
 function pkgPrice(p,cc){var pr=p.prices||{};return pr[cc]!=null?pr[cc]:(pr.default!=null?pr.default:0);}
+// بيانات تصميمية احتياطية (fallback) عند تعذّر جلب /api/packages.
 const PACKAGES=[
   {name:'الباقة المجانية',cycle:'مجانية',prices:{EG:0,SA:0,AE:0,KW:0,QA:0,default:0},features:['تصفّح الكتالوج','المحاضرة الأولى مجانًا','مقالات المدونة'],active:true},
   {name:'باقة الأدوات',cycle:'شهري',prices:{EG:199,SA:39,AE:39,KW:3,QA:39,default:15},features:['المحرر القانوني الذكي','قوالب ومكتبة أحكام','إملاء وتدقيق'],active:true},
   {name:'باقة برو',cycle:'شهري',prices:{EG:399,SA:79,AE:79,KW:6,QA:79,default:29},features:['كل أدوات الباقة','استشارة شهرية بخصم','أولوية الدعم','شهادات معتمدة'],active:true},
   {name:'باقة الشركات',cycle:'شهري',prices:{EG:1500,SA:300,AE:300,KW:22,QA:300,default:99},features:['حتى ١٠ مستخدمين','تدريب مخصّص','حساب مدير','فوترة B2B'],active:false}
 ];
+// مصدر العرض: الباقات الحيّة من الخادم إن توفّرت، وإلا البيانات التصميمية.
+function pkPackages(){return (window.EP&&EP.data.packages)?EP.data.packages.packages:PACKAGES;}
 function viewPackages(v){
-  var active=PACKAGES.filter(function(p){return p.active;}).length;
+  if(window.EP){EP.ensure('packages',()=>viewPackages(v));}
+  var Pstr=(window.EP&&EP.state.packages)||'idle';
+  var live=!!(window.EP&&EP.data.packages);
+  var PKS=pkPackages();
+  var active=PKS.filter(function(p){return p.active;}).length;
   var cur=pkgCur(geoCountry);
-  var maxP=Math.max.apply(null,PACKAGES.map(function(p){return pkgPrice(p,geoCountry);}));
+  var maxP=PKS.length?Math.max.apply(null,PKS.map(function(p){return pkgPrice(p,geoCountry);})):0;
   v.innerHTML=`
     <div class="policy" style="border-inline-start-color:var(--gold)">${svg('wallet','ic')}<div><b>تسعير جغرافي تلقائي:</b> الزائر في كل بلد يرى سعر بلده مباشرة (geo-IP). المبدّل أدناه <b>محاكاة</b> لمعاينة ما يراه الزائر من كل بلد.</div></div>
+    ${Pstr==='error'?`<div class="policy" style="border-inline-start-color:var(--conflict);background:var(--conflict-bg);color:var(--conflict)">${svg('scale','ic')}<div>تعذّر جلب الباقات من الخادم — تُعرض بيانات تصميمية. <b style="cursor:pointer;text-decoration:underline" onclick="EP.reload('packages',()=>viewPackages(document.getElementById('view')))">إعادة المحاولة</b></div></div>`:''}
+    ${Pstr==='loading'?`<div class="policy" style="border-inline-start-color:var(--gold)">${svg('wallet','ic')}<div>…جارٍ تحميل الباقات والأسعار من الخادم</div></div>`:''}
     <div class="filterbar" id="geoBar"><span class="lbl">معاينة بلد الزائر:</span></div>
     <div class="kpis">
-      <div class="kpi k-3"><div class="top"><span class="ic">${svg('wallet')}</span>باقات نشطة</div><b>${money(active)}</b><div class="sub">من ${PACKAGES.length}</div></div>
+      <div class="kpi k-3"><div class="top"><span class="ic">${svg('wallet')}</span>باقات نشطة</div><b>${money(active)}</b><div class="sub">من ${PKS.length}</div></div>
       <div class="kpi k-1"><div class="top"><span class="ic">${svg('trend')}</span>أعلى باقة</div><b>${money(maxP)} <small style="font-size:13px">${cur}</small></b><div class="sub">حسب بلد الزائر</div></div>
       <div class="kpi k-2"><div class="top"><span class="ic">${svg('users')}</span>تظهر في</div><b>المنصة + الموقع</b><div class="sub">سعر بلد الزائر</div></div>
       <div class="kpi k-4"><div class="top"><span class="ic">${svg('check')}</span>الأسعار/بلد</div><b>${GEO_COUNTRIES.length} مناطق</b><div class="sub">EG·SA·AE·KW·QA·دولي</div></div>
     </div>
-    <section class="panel"><div class="ph"><h3>الباقات</h3><span class="n">${PACKAGES.length}</span><button class="btn btn-human" id="pkAdd" style="flex:none;min-width:auto;padding:6px 13px;font-size:12px;margin-inline-start:auto">+ باقة</button></div>
+    <section class="panel"><div class="ph"><h3>الباقات</h3><span class="n">${PKS.length}</span><button class="btn btn-human" id="pkAdd" style="flex:none;min-width:auto;padding:6px 13px;font-size:12px;margin-inline-start:auto">+ باقة</button></div>
       <div style="padding:16px;display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:14px" id="pkGrid"></div></section>`;
   var gb=document.getElementById('geoBar');
   GEO_COUNTRIES.forEach(function(c){gb.insertAdjacentHTML('beforeend','<div class="chip'+(geoCountry===c[0]?' on':'')+'" data-cc="'+c[0]+'">'+c[1]+'</div>');});
   gb.querySelectorAll('.chip').forEach(function(c){c.onclick=function(){geoCountry=c.dataset.cc;viewPackages(v);};});
   var g=document.getElementById('pkGrid');
-  PACKAGES.forEach(function(p,i){var pr=pkgPrice(p,geoCountry);var priceHtml=(pr>0?money(pr)+' <small style="font-size:12px;color:var(--muted)">'+cur+'/'+p.cycle+'</small>':'مجانية');g.insertAdjacentHTML('beforeend','<div class="pkcard" data-i="'+i+'" style="border:1px solid var(--line);border-radius:14px;padding:16px;cursor:pointer;'+(p.active?'':'opacity:.6')+'"><div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px"><div style="font-family:Cairo;font-weight:800;font-size:15px;color:var(--navy)">'+p.name+'</div><span class="status '+(p.active?'s-auto':'')+'" style="'+(p.active?'':'background:var(--surface-2);color:var(--muted)')+';font-size:10px"><span class="d" style="'+(p.active?'':'background:var(--muted)')+'"></span>'+(p.active?'نشطة':'موقوفة')+'</span></div><div style="font-family:Cairo;font-weight:900;font-size:24px;color:var(--human)">'+priceHtml+'</div><div style="margin-top:10px;display:grid;gap:6px">'+p.features.map(function(f){return '<div style="display:flex;gap:7px;align-items:flex-start;font-size:12px;color:var(--ink-2)"><span style="width:6px;height:6px;border-radius:50%;background:var(--agree);margin-top:6px;flex:none"></span><span>'+f+'</span></div>';}).join('')+'</div></div>');});
+  if(!PKS.length){g.innerHTML='<div style="padding:40px;text-align:center;color:var(--muted);grid-column:1/-1">لا باقات بعد — أضف أول باقة.</div>';}
+  PKS.forEach(function(p,i){var pr=pkgPrice(p,geoCountry);var priceHtml=(pr>0?money(pr)+' <small style="font-size:12px;color:var(--muted)">'+cur+'/'+p.cycle+'</small>':'مجانية');g.insertAdjacentHTML('beforeend','<div class="pkcard" data-i="'+i+'" style="border:1px solid var(--line);border-radius:14px;padding:16px;cursor:pointer;'+(p.active?'':'opacity:.6')+'"><div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px"><div style="font-family:Cairo;font-weight:800;font-size:15px;color:var(--navy)">'+p.name+'</div><span class="status '+(p.active?'s-auto':'')+'" style="'+(p.active?'':'background:var(--surface-2);color:var(--muted)')+';font-size:10px"><span class="d" style="'+(p.active?'':'background:var(--muted)')+'"></span>'+(p.active?'نشطة':'موقوفة')+'</span></div><div style="font-family:Cairo;font-weight:900;font-size:24px;color:var(--human)">'+priceHtml+'</div><div style="margin-top:10px;display:grid;gap:6px">'+(p.features||[]).map(function(f){return '<div style="display:flex;gap:7px;align-items:flex-start;font-size:12px;color:var(--ink-2)"><span style="width:6px;height:6px;border-radius:50%;background:var(--agree);margin-top:6px;flex:none"></span><span>'+f+'</span></div>';}).join('')+'</div></div>');});
   document.getElementById('pkAdd').onclick=function(){packageModal(null);};
   g.querySelectorAll('.pkcard').forEach(function(c){c.onclick=function(){packageModal(+c.dataset.i);};});
 }
+// يبني نسخة محدّثة من القائمة الحيّة بعد تعديل/إضافة/حذف باقة، ثم يحفظها عبر PUT ويعيد الجلب.
+function pkPersist(nextList){viewPackages(document.getElementById('view'));EP.savePackages(nextList,function(){viewPackages(document.getElementById('view'));});}
 function packageModal(idx){
-  var edit=(idx!=null&&idx>=0)?PACKAGES[idx]:null,e=edit||{},pr=e.prices||{};
+  var PKS=pkPackages();
+  var live=!!(window.EP&&EP.data.packages);
+  var edit=(idx!=null&&idx>=0)?PKS[idx]:null,e=edit||{},pr=e.prices||{};
   var priceFields=GEO_COUNTRIES.map(function(c){return '<div class="fld" style="margin-bottom:8px"><label>'+c[1]+' ('+c[2]+')</label><input id="pk_'+c[0]+'" type="number" value="'+(pr[c[0]]!=null?pr[c[0]]:'')+'"></div>';}).join('');
   var s=openModal(edit?'تعديل باقة':'إضافة باقة',
     '<div class="fld"><label>اسم الباقة</label><input id="pk_n" value="'+(e.name||'')+'"></div>'+
@@ -1124,8 +1138,12 @@ function packageModal(idx){
     '<label class="tg"><input type="checkbox" id="pk_a" '+(e.active!==false?'checked':'')+'> باقة نشطة (تظهر للعميل)</label>'+
     '<div class="acts" style="margin-top:14px"><button class="btn btn-primary" id="pk_s">'+svg('check')+(edit?'حفظ':'أضف')+'</button>'+(edit?'<button class="btn btn-warn" id="pk_d">حذف</button>':'')+'<button class="btn btn-ghost" id="pk_x">إلغاء</button></div>');
   s.querySelector('#pk_x').onclick=closeModal;
-  s.querySelector('#pk_s').onclick=function(){var prices={};GEO_COUNTRIES.forEach(function(c){prices[c[0]]=+s.querySelector('#pk_'+c[0]).value||0;});var d={name:s.querySelector('#pk_n').value.trim()||'باقة',cycle:s.querySelector('#pk_c').value.trim()||'شهري',prices:prices,features:s.querySelector('#pk_f').value.split('\n').map(function(x){return x.trim();}).filter(Boolean),active:s.querySelector('#pk_a').checked};if(edit){Object.assign(edit,d);}else{PACKAGES.push(d);}closeModal();viewPackages(document.getElementById('view'));notify(edit?'حُدّثت الباقة':'أُضيفت باقة «'+d.name+'»');};
-  var pd=s.querySelector('#pk_d');if(pd)pd.onclick=function(){PACKAGES.splice(idx,1);closeModal();viewPackages(document.getElementById('view'));notify('حُذفت الباقة');};
+  s.querySelector('#pk_s').onclick=function(){var prices={};GEO_COUNTRIES.forEach(function(c){prices[c[0]]=+s.querySelector('#pk_'+c[0]).value||0;});var d={name:s.querySelector('#pk_n').value.trim()||'باقة',cycle:s.querySelector('#pk_c').value.trim()||'شهري',prices:prices,features:s.querySelector('#pk_f').value.split('\n').map(function(x){return x.trim();}).filter(Boolean),active:s.querySelector('#pk_a').checked};
+    if(live){var next=PKS.map(function(p){return Object.assign({},p);});if(edit){next[idx]=Object.assign({},edit,d);}else{next.push(d);}closeModal();pkPersist(next);return;}
+    if(edit){Object.assign(edit,d);}else{PACKAGES.push(d);}closeModal();viewPackages(document.getElementById('view'));notify(edit?'حُدّثت الباقة':'أُضيفت باقة «'+d.name+'»');};
+  var pd=s.querySelector('#pk_d');if(pd)pd.onclick=function(){
+    if(live){var next=PKS.filter(function(_,i){return i!==idx;}).map(function(p){return Object.assign({},p);});closeModal();pkPersist(next);return;}
+    PACKAGES.splice(idx,1);closeModal();viewPackages(document.getElementById('view'));notify('حُذفت الباقة');};
 }
 let notifCount=3;
 const NOTIFS=[

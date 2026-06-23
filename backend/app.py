@@ -1992,6 +1992,123 @@ def update_settings():
     return jsonify({'message': 'تم التحديث'})
 
 # ============================================================
+# PACKAGES / GEO-PRICING (الباقات والأسعار)
+# ============================================================
+# مصدر الحقيقة القابل للتعديل لأسعار الباقات حسب بلد الزائر (EG/SA/AE/KW/QA/default).
+# يُخزَّن كـ JSON واحد في جدول settings (نفس نمط /api/settings: مفتاح/قيمة نصية).
+# المنصّة نفسها تحمل خرائط أسعار في الكود؛ هذه النقطة هي المخزن الذي يديره الأدمن.
+
+PACKAGES_SETTING_KEY = 'packages_config'
+PACKAGE_COUNTRIES = ['EG', 'SA', 'AE', 'KW', 'QA', 'default']
+PACKAGE_COUNTRY_CURRENCY = {
+    'EG': 'ج.م', 'SA': 'ر.س', 'AE': 'د.إ', 'KW': 'د.ك', 'QA': 'ر.ق', 'default': '$',
+}
+
+def default_packages():
+    """الباقات الافتراضية (الخطط المعروفة: مجانية/أدوات/برو/شركات) — تُزرع عند أول تشغيل."""
+    return [
+        {
+            'id': 'free', 'name': 'الباقة المجانية', 'cycle': 'مجانية', 'active': True,
+            'features': ['تصفّح الكتالوج', 'المحاضرة الأولى مجانًا', 'مقالات المدونة'],
+            'prices': {'EG': 0, 'SA': 0, 'AE': 0, 'KW': 0, 'QA': 0, 'default': 0},
+            'currency_per_country': dict(PACKAGE_COUNTRY_CURRENCY),
+        },
+        {
+            'id': 'ai_plus', 'name': 'باقة الأدوات', 'cycle': 'شهري', 'active': True,
+            'features': ['المحرر القانوني الذكي', 'قوالب ومكتبة أحكام', 'إملاء وتدقيق'],
+            'prices': {'EG': 199, 'SA': 39, 'AE': 39, 'KW': 3, 'QA': 39, 'default': 15},
+            'currency_per_country': dict(PACKAGE_COUNTRY_CURRENCY),
+        },
+        {
+            'id': 'training', 'name': 'باقة برو', 'cycle': 'شهري', 'active': True,
+            'features': ['كل أدوات الباقة', 'استشارة شهرية بخصم', 'أولوية الدعم', 'شهادات معتمدة'],
+            'prices': {'EG': 399, 'SA': 79, 'AE': 79, 'KW': 6, 'QA': 79, 'default': 29},
+            'currency_per_country': dict(PACKAGE_COUNTRY_CURRENCY),
+        },
+        {
+            'id': 'hybrid', 'name': 'باقة الشركات', 'cycle': 'شهري', 'active': False,
+            'features': ['حتى ١٠ مستخدمين', 'تدريب مخصّص', 'حساب مدير', 'فوترة B2B'],
+            'prices': {'EG': 1500, 'SA': 300, 'AE': 300, 'KW': 22, 'QA': 300, 'default': 99},
+            'currency_per_country': dict(PACKAGE_COUNTRY_CURRENCY),
+        },
+    ]
+
+def _normalize_package(p):
+    """يُعيد باقة منظَّمة بحقول ثابتة وأسعار/عملات لكل بلد معروف."""
+    p = p or {}
+    prices_in = p.get('prices') or {}
+    cur_in = p.get('currency_per_country') or {}
+    prices, currency = {}, {}
+    for cc in PACKAGE_COUNTRIES:
+        try:
+            prices[cc] = float(prices_in.get(cc, 0) or 0)
+        except (TypeError, ValueError):
+            prices[cc] = 0
+        currency[cc] = str(cur_in.get(cc) or PACKAGE_COUNTRY_CURRENCY[cc])
+    features = p.get('features') or []
+    if not isinstance(features, list):
+        features = [str(features)]
+    return {
+        'id': str(p.get('id') or '').strip() or secrets.token_hex(4),
+        'name': str(p.get('name') or 'باقة').strip() or 'باقة',
+        'cycle': str(p.get('cycle') or 'شهري').strip() or 'شهري',
+        'active': bool(p.get('active', True)),
+        'features': [str(f) for f in features],
+        'prices': prices,
+        'currency_per_country': currency,
+    }
+
+def _load_packages():
+    """يقرأ تهيئة الباقات من settings؛ يزرع الافتراضي عند الفراغ (نفس نمط get_setting_*)."""
+    s = Setting.query.get(PACKAGES_SETTING_KEY)
+    if s and s.value:
+        try:
+            parsed = json.loads(s.value)
+            if isinstance(parsed, list) and parsed:
+                return [_normalize_package(p) for p in parsed]
+        except (TypeError, ValueError):
+            pass
+    # زرع الافتراضي على أول تشغيل وحفظه ليصبح مصدر الحقيقة القابل للتعديل.
+    pkgs = default_packages()
+    seed = Setting.query.get(PACKAGES_SETTING_KEY)
+    payload = json.dumps(pkgs, ensure_ascii=False)
+    if seed:
+        seed.value = payload
+        seed.updated_at = datetime.datetime.utcnow()
+    else:
+        db.session.add(Setting(key=PACKAGES_SETTING_KEY, value=payload))
+    db.session.commit()
+    return pkgs
+
+@app.route('/api/packages', methods=['GET'])
+@token_required
+def get_packages():
+    return jsonify({
+        'packages': _load_packages(),
+        'countries': PACKAGE_COUNTRIES,
+        'currency_per_country': PACKAGE_COUNTRY_CURRENCY,
+    })
+
+@app.route('/api/packages', methods=['PUT'])
+@token_required
+@roles_required('admin')
+def update_packages():
+    d = request.json or {}
+    incoming = d.get('packages') if isinstance(d, dict) else d
+    if not isinstance(incoming, list):
+        return jsonify({'error': 'packages must be a list'}), 400
+    pkgs = [_normalize_package(p) for p in incoming]
+    payload = json.dumps(pkgs, ensure_ascii=False)
+    s = Setting.query.get(PACKAGES_SETTING_KEY)
+    if s:
+        s.value = payload
+        s.updated_at = datetime.datetime.utcnow()
+    else:
+        db.session.add(Setting(key=PACKAGES_SETTING_KEY, value=payload))
+    db.session.commit()
+    return jsonify({'message': 'تم تحديث الباقات', 'packages': pkgs})
+
+# ============================================================
 # CASH FLOW / PARTNERS / PAYOUTS
 # ============================================================
 
