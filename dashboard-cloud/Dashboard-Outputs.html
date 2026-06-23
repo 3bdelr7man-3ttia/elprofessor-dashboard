@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>حصر مخرجات المنصة للداش بورد | البروفيسور</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800;900&family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=Aref+Ruqaa:wght@700&display=swap');
+:root{
+  --navy:#1A2B4A; --navy-2:#0F172A; --human:#9E2B4E; --human-bg:#F9EEF2; --human-soft:#FBF4F6;
+  --ai:#0E8E9B; --ai-bg:#E6F4F5; --agree:#1C9A5B; --agree-bg:#EAF6EF; --conflict:#D9663B; --conflict-bg:#FBF0EB;
+  --memory:#6E59C7; --memory-bg:#EFECF9; --gold:#C8870E; --gold-bg:#FBF3E2;
+  --ink:#1F2937; --ink-2:#4B5563; --muted:#8A93A6; --line:#E5E9F0;
+  --bg:#F6F7F9; --surface:#FFFFFF; --surface-2:#F1F3F7;
+  --r:14px; --r-sm:9px;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'IBM Plex Sans Arabic',sans-serif;background:var(--bg);color:var(--ink);line-height:1.85;font-size:14.5px}
+.wrap{max-width:1200px;margin:0 auto;padding:30px 22px 90px}
+header.top{background:linear-gradient(135deg,var(--navy) 0%,var(--navy-2) 100%);color:#fff;border-radius:18px;padding:30px 32px;margin-bottom:18px;position:relative;overflow:hidden}
+header.top::after{content:"";position:absolute;inset:0 0 0 auto;width:5px;background:var(--human)}
+header.top h1{font-family:'Aref Ruqaa',serif;font-size:34px;font-weight:700;line-height:1.7;display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+header.top .tag{font-family:'IBM Plex Sans Arabic';font-size:12.5px;font-weight:700;background:var(--human);border-radius:999px;padding:4px 13px}
+header.top p{color:rgba(255,255,255,.84);font-size:14.5px;max-width:980px;margin-top:8px}
+header.top p b{color:#fff}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin:18px 0 8px}
+.kpi{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:14px 18px}
+.kpi b{font-family:Cairo;font-size:26px;font-weight:900;display:block;line-height:1.2}
+.kpi span{font-size:12.5px;color:var(--ink-2);font-weight:600}
+.kpi.tot b{color:var(--navy)} .kpi.ai b{color:var(--ai)} .kpi.human b{color:var(--human)} .kpi.hybrid b{color:var(--memory)} .kpi.live b{color:var(--agree)}
+.intro{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin:16px 0 6px}
+@media(max-width:760px){.intro{grid-template-columns:1fr}}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:18px 20px}
+.card h2{font-family:Cairo;font-size:16px;font-weight:800;color:var(--navy);margin-bottom:8px;display:flex;align-items:center;gap:8px}
+.card.flow{background:var(--human-soft);border-color:var(--human-bg)} .card.flow h2{color:var(--human)}
+.card p{font-size:13.5px;color:var(--ink-2)}
+.legend-row{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
+.chip{font-size:11.5px;font-weight:800;border-radius:999px;padding:3px 11px;display:inline-flex;align-items:center;gap:5px}
+.chip.ai{background:var(--ai-bg);color:var(--ai)} .chip.human{background:var(--human-bg);color:var(--human)} .chip.hybrid{background:var(--memory-bg);color:var(--memory)}
+.chip.live{background:var(--agree-bg);color:var(--agree)} .chip.partial{background:var(--gold-bg);color:var(--gold)} .chip.backend{background:var(--surface-2);color:var(--ink-2)}
+.dot{width:8px;height:8px;border-radius:50%;display:inline-block}
+.dot.ai{background:var(--ai)} .dot.human{background:var(--human)} .dot.hybrid{background:var(--memory)}
+.toolbar{display:flex;gap:8px;flex-wrap:wrap;margin:22px 0 16px;align-items:center;position:sticky;top:0;z-index:5;background:var(--bg);padding:10px 0}
+.tb{border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:7px 15px;font:inherit;font-size:13px;font-weight:700;color:var(--ink-2);cursor:pointer}
+.tb:hover{background:var(--surface-2)} .tb.on{background:var(--navy);border-color:var(--navy);color:#fff}
+.tb.ai.on{background:var(--ai);border-color:var(--ai)} .tb.human.on{background:var(--human);border-color:var(--human)} .tb.hybrid.on{background:var(--memory);border-color:var(--memory)}
+.tb.live.on{background:var(--agree);border-color:var(--agree)} .tb.partial.on{background:var(--gold);border-color:var(--gold)} .tb.backend.on{background:var(--ink-2);border-color:var(--ink-2)}
+.search{flex:1;min-width:180px;display:flex;align-items:center;gap:8px;background:var(--surface);border:1px solid var(--line);border-radius:999px;padding:6px 15px}
+.search input{border:0;outline:0;font:inherit;font-size:13.5px;flex:1;background:transparent;color:var(--ink)}
+.dom{margin-bottom:14px;background:var(--surface);border:1px solid var(--line);border-radius:var(--r);overflow:hidden}
+.dom-h{padding:15px 20px;display:flex;align-items:center;gap:13px;cursor:pointer;user-select:none}
+.dom-h:hover{background:var(--surface-2)}
+.dom-h .ic{width:42px;height:42px;border-radius:11px;background:var(--navy);color:#fff;display:grid;place-items:center;flex:none;font-size:19px;font-family:Cairo;font-weight:900}
+.dom-h .tx{flex:1}
+.dom-h h3{font-family:Cairo;font-size:18px;font-weight:900;color:var(--navy)}
+.dom-h .sub{font-size:12.5px;color:var(--ink-2);margin-top:1px}
+.dom-h .n{flex:none;font-size:11.5px;font-weight:800;border-radius:999px;padding:3px 10px;background:var(--surface-2);color:var(--ink-2)}
+.dom-h .chev{flex:none;color:var(--muted);transition:transform .25s;font-size:18px;margin-inline-start:4px}
+.dom.open .chev{transform:rotate(90deg)}
+.dom-body{display:none;border-top:1px solid var(--line)}
+.dom.open .dom-body{display:block}
+.row{display:grid;grid-template-columns:1.7fr 1fr 150px 150px;gap:0;border-bottom:1px solid var(--line)}
+.row:last-child{border-bottom:none}
+.row.head{background:var(--surface-2);font-size:11px;font-weight:800;color:var(--muted)}
+.row.head>div{padding:9px 16px}
+.cell{padding:13px 16px;border-inline-start:1px solid var(--line);font-size:13px}
+.cell:first-child{border-inline-start:none}
+.row .out{font-weight:700;color:var(--ink);display:block;margin-bottom:3px;font-size:13.5px}
+.row .out .badge{font-size:10px;font-weight:800;border-radius:5px;padding:1px 6px;margin-inline-start:5px;vertical-align:middle}
+.row .out .badge.new{background:var(--human);color:#fff}
+.row .desc{font-size:12px;color:var(--ink-2);line-height:1.7}
+.row .src{font-size:11.5px;color:var(--ink-2);line-height:1.7}
+.row .src code{font-family:'IBM Plex Sans Arabic',monospace;background:var(--surface-2);border-radius:5px;padding:1px 6px;font-size:11px;color:var(--navy);font-weight:700;direction:ltr;display:inline-block}
+.row .proc{font-weight:800;font-size:12px;display:flex;align-items:center;gap:6px}
+.row .proc.ai{color:var(--ai)} .row .proc.human{color:var(--human)} .row .proc.hybrid{color:var(--memory)}
+.row .proc small{display:block;font-weight:600;color:var(--ink-2);font-size:11px;margin-top:2px}
+.row .sla{font-size:11.5px;color:var(--ink-2);line-height:1.65}
+.row .sla b{color:var(--gold);font-weight:800}
+.row .uist{font-size:11px;font-weight:800;border-radius:999px;padding:2px 9px;white-space:nowrap}
+.row .uist.live{background:var(--agree-bg);color:var(--agree)} .row .uist.partial{background:var(--gold-bg);color:var(--gold)} .row .uist.backend{background:var(--surface-2);color:var(--ink-2)}
+@media(max-width:880px){
+  .row{grid-template-columns:1fr 1fr}
+  .row.head{display:none}
+  .cell{border-inline-start:none;border-top:1px solid var(--line)}
+  .cell:nth-child(1),.cell:nth-child(2){border-top:none}
+}
+.note{background:var(--human-soft);border:1px solid var(--human-bg);border-radius:var(--r);padding:18px 22px;margin:22px 0}
+.note h2{font-family:Cairo;font-size:16px;font-weight:800;color:var(--human);margin-bottom:6px}
+.note ul{list-style:none;display:grid;gap:8px;margin-top:6px}
+.note li{position:relative;padding-right:20px;font-size:13.5px;color:var(--ink)}
+.note li::before{content:"";position:absolute;right:0;top:9px;width:8px;height:8px;border-radius:50%;background:var(--human)}
+.note li b{font-family:Cairo;color:var(--navy)}
+.empty-hint{padding:30px;text-align:center;color:var(--muted);font-size:13.5px;display:none}
+footer.ft{margin-top:34px;font-size:12.5px;color:var(--muted);text-align:center;line-height:2}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top" data-screen-label="حصر مخرجات الداش بورد">
+    <h1>حصر مخرجات المنصة للداش بورد <span class="tag">تحضير المرحلة ٢</span></h1>
+    <p>كل <b>مخرَج</b> تطلقه الواجهة (المرحلة ١) ويجب أن تستقبله وتُديره <b>الداش بورد الخارجية</b> (المرحلة ٢): مصدره في الكود، القناة/المخزن الذي يُسجَّل فيه الآن، <b>نوع المعالجة</b> المطلوبة (يُنجزها الذكاء مباشرةً · تحتاج عاملًا بشريًّا · هجين)، السياسة/المهلة المرتبطة من <code style="direction:ltr;background:rgba(255,255,255,.12);padding:1px 6px;border-radius:5px">EP_POLICY</code>، وحالته في الواجهة. هذا مرجع المطابقة عند وصول الداش بورد الأصلية.</p>
+  </header>
+
+  <div class="kpis">
+    <div class="kpi tot"><b id="k-tot">—</b><span>إجمالي المخرجات</span></div>
+    <div class="kpi ai"><b id="k-ai">—</b><span>يؤتمتها الذكاء</span></div>
+    <div class="kpi hybrid"><b id="k-hybrid">—</b><span>هجين (ذكاء+بشري)</span></div>
+    <div class="kpi human"><b id="k-human">—</b><span>تحتاج عاملًا بشريًّا</span></div>
+    <div class="kpi live"><b id="k-live">—</b><span>الواجهة جاهزة وتُطلقه</span></div>
+  </div>
+
+  <div class="intro">
+    <div class="card flow">
+      <h2>كيف تقرأ هذا الحصر</h2>
+      <p>كل صف = مخرَج واحد. القناة الحالية هي مخزن في الذاكرة (<code style="direction:ltr">epStore / epBilling / epMemory / epCourses…</code>) — في المرحلة ٢ يصير نداءً للـAPI على الباك-إند، والداش بورد تقرأ نفس البنية. السياسات كلها من مصدر واحد قابل للتعديل: <code style="direction:ltr">EP_POLICY</code> في <code style="direction:ltr">Policies.jsx</code> — الداش بورد تفرضها بلا تكرار.</p>
+      <div class="legend-row">
+        <span class="chip ai"><span class="dot ai"></span> ذكاء يُنجزه مباشرة</span>
+        <span class="chip hybrid"><span class="dot hybrid"></span> هجين: ذكاء يفرز ← بشري يعتمد</span>
+        <span class="chip human"><span class="dot human"></span> عامل بشري</span>
+      </div>
+    </div>
+    <div class="card">
+      <h2>حالة الواجهة (المرحلة ١)</h2>
+      <p>تصنيف جاهزية كل مخرَج على الفرونت-إند الآن — قبل ربط الباك-إند:</p>
+      <div class="legend-row">
+        <span class="chip live">جاهزة — الواجهة تُطلق المخرَج وتسجّله فعليًّا (محاكاة)</span>
+        <span class="chip partial">جزئية — الواجهة موجودة، تحتاج ربط/حقولًا إضافية</span>
+        <span class="chip backend">باك-إند — تظهر في الواجهة لكن التنفيذ مرحلة ٢/٣</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="toolbar">
+    <div class="search"><span>🔎</span><input id="q" placeholder="ابحث في المخرجات (توثيق، ضمان، سحب، دورة…)"></div>
+    <button class="tb on" data-f="all">الكل</button>
+    <button class="tb ai" data-f="ai">ذكاء</button>
+    <button class="tb hybrid" data-f="hybrid">هجين</button>
+    <button class="tb human" data-f="human">بشري</button>
+    <button class="tb live" data-f="live">جاهز</button>
+    <button class="tb partial" data-f="partial">جزئي</button>
+    <button class="tb backend" data-f="backend">باك-إند</button>
+    <button class="tb" data-f="open">افتح الكل</button>
+    <button class="tb" data-f="close">اطوِ الكل</button>
+  </div>
+
+  <div id="list"></div>
+  <div class="empty-hint" id="empty">لا مخرجات مطابقة لهذا الفلتر.</div>
+
+  <div class="note">
+    <h2>قواعد عامة محسومة — تنطبق على كل مخرَج في الداش بورد</h2>
+    <ul>
+      <li><b>مصدر حقيقة واحد:</b> كل المهل والشرائح في <code style="direction:ltr">EP_POLICY</code> — الداش بورد تقرأها لا تعيد تعريفها.</li>
+      <li><b>كل مهلة تُولّد تنبيهين استباقيين + تصعيدًا تلقائيًّا عند انتهائها</b> (مثال: مهلة رد المدرّب ٢٤س ← تنبيه عند ١٢ و٢٢ ← إلغاء واسترداد تلقائي).</li>
+      <li><b>الذكاء يفرز أولًا:</b> أي مخرَج «هجين» يمرّ بفحص ذكاء (مطابقة/تدقيق/كشف احتيال) ثم يصل العامل البشري بقرار جاهز لا بصفحة بيضاء.</li>
+      <li><b>السرّية:</b> هوية الموثَّقين محفوظة لدى البروفيسور — الداش بورد ترى البيانات الحقيقية، والطرف الآخر يرى القناع فقط.</li>
+      <li><b>لا ذكاء متنكّر:</b> «خبير بروف (AI)» معلن بشارة دائمًا — الداش بورد لا تسمح بأي حساب AI يظهر كبشري.</li>
+      <li><b>المال يتبع مصدره:</b> العمولة تُقتطع عند تحرير الضمان لا عند التحصيل، وعملة الأفليت تتبع بلد المُحال.</li>
+    </ul>
+  </div>
+
+  <footer class="ft">
+    v2/Dashboard-Outputs.html — حصر مخرجات المنصة للداش بورد (تحضير المرحلة ٢)<br>
+    المصادر مُستخرَجة من كود الواجهة الفعلي · القناة الحالية = مخزن في الذاكرة، يصير API على الباك-إند لاحقًا · السياسات من EP_POLICY
+  </footer>
+</div>
+
+<script>
+// كل مجال = مجموعة مخرجات. كل مخرَج: {out, badge?, desc, src, store, proc:'ai'|'human'|'hybrid', procNote, sla, ui:'live'|'partial'|'backend'}
+const PROC_LABEL = { ai:'ذكاء — مباشر', human:'عامل بشري', hybrid:'هجين' };
+const UI_LABEL = { live:'جاهز', partial:'جزئي', backend:'باك-إند' };
+
+const DOMAINS = [
+  { id:'verify', n:'١', title:'التوثيق والصفة', sub:'هوية حقيقية + إثبات الصفة الذي يضبط التسعير العادل', items:[
+    { out:'طلب توثيق هوية + إثبات صفة', desc:'صفة (محامٍ/خبير/أستاذ/طالب/خريج/مؤثر/شركة) + اسم سرّي + رابط عام + رقم قيد/سجل. يمنح القناع ويفعّل فئة التسعير.', src:'VerifyGate.jsx · VG_ROLES', store:'حدث توثيق → onVerify', proc:'hybrid', procNote:'الذكاء يطابق الاسم والرابط العام تلقائيًّا؛ الحالات الملتبسة تُصعَّد للبشري', sla:'مراجعة <b>٤٨س</b> · صلاحية <b>١٢ شهرًا</b> · إشعار تجديد قبل <b>٣٠ يومًا</b>', ui:'live' },
+    { out:'رفض التوثيق + إعادة تقديم', desc:'أسباب الرفض المحتملة (بيانات ناقصة/رابط غير عام) + مسار تعديل وإعادة إرسال.', src:'VerifyGate.jsx (step 4)', store:'حالة محلية + إشعار', proc:'hybrid', procNote:'قرار الرفض من الذكاء أو مراجِع بشري؛ الداش تسجّل السبب', sla:'إعادة الرفع متاحة فورًا', ui:'live' },
+    { out:'تجديد/انتهاء صلاحية التوثيق', desc:'تنبيه قبل ٣٠ يومًا من انتهاء صلاحية إثبات الصفة، وإعادة التحقق.', src:'EP_POLICY.verify', store:'مجدوَل (مرحلة ٢)', proc:'ai', procNote:'الذكاء يطلق التنبيه ويعيد الفحص آليًّا', sla:'إشعار قبل <b>٣٠ يومًا</b>', ui:'backend' },
+  ]},
+  { id:'market', n:'٢', title:'السوق والطلبات', sub:'طلبات/عروض يُطابقها الذكاء — العمود الفقري للسوق', items:[
+    { out:'طلب سوق (request)', desc:'طلب يطرحه مستخدم؛ الذكاء يطابقه مع الطرف المناسب داخل السوق.', src:'CreateFlow.jsx · Market.jsx', store:'epStore (section=market)', proc:'ai', procNote:'مطابقة آلية بالتخصص والبلد؛ تظهر في «طلباتي» قيد المراجعة', sla:'موافقة الإدارة <b>٢٤س</b> · صلاحية الطلب <b>٣٠ يومًا</b> ثم أرشفة', ui:'live' },
+    { out:'رأي خبير على طلب (memo)', desc:'خبير يقدّم رأيه على طلب مطروح؛ ينتظر اختيار صاحب الطلب.', src:'Market.jsx (act memo)', store:'epStore + epMemory', proc:'human', procNote:'صاحب الطلب يختار؛ الداش تتابع التطابق والاختيار', sla:'ضمن صلاحية الطلب', ui:'live' },
+    { out:'انضمام لطلب تدريبي + اكتمال النصاب', desc:'مستخدمون ينضمون لطلب تدريب جماعي؛ عند النصاب يتحوّل تلقائيًّا لدورة جاهزة للدفع.', src:'Market.jsx (act join)', store:'epStore + epMemory', proc:'ai', procNote:'الذكاء يحسب النصاب ويحوّل الطلب لدورة ويخطر الأطراف', sla:'مهلة اكتمال النصاب <b>١٤ يومًا</b> ثم تأجيل/إلغاء', ui:'live' },
+    { out:'طلب استشارة من خبير (عرض السوق)', desc:'طلب استشارة فردية عبر السوق — يبدأ بدفع بضمان وانتظار قبول الخبير.', src:'Market.jsx (offer)', store:'epStore + epMemory + ضمان', proc:'hybrid', procNote:'الذكاء يرشّح؛ الخبير يقبل؛ الداش تدير الضمان', sla:'إن لم يبدأ الخبير خلال <b>٤٨س</b> = استرداد تلقائي', ui:'live' },
+    { out:'طرح موضوع للنقاش (topic)', desc:'موضوع يُطرح للخبراء، ثم يحوّله الذكاء لمقالة مرجعية مدموجة.', src:'CreateFlow.jsx · Topics.jsx', store:'epStore (section=topics)', proc:'ai', procNote:'الذكاء يجمع الآراء ويصوغ المقالة؛ مراجعة محتوى عند الحاجة', sla:'موافقة الإدارة <b>٢٤س</b>', ui:'live' },
+  ]},
+  { id:'experts', n:'٣', title:'الاستشارات والضمان', sub:'جلسات الخبراء + حجز الأموال في الضمان + النزاعات', items:[
+    { out:'جلسة استشارة بدفع بضمان (held)', desc:'يدفع الطالب، ويحتفظ البروفيسور بالمبلغ حتى تأكيد إتمام الخدمة.', src:'Experts.jsx (escrow=held)', store:'ضمان + epBilling', proc:'human', procNote:'الخبير يقدّم الخدمة؛ الداش تحجز المبلغ وتتابع التأكيد', sla:'تحرير تلقائي بعد <b>٧٢س</b> إن لم يؤكّد الطالب · تنبيه عند ٢٤ و٦٠', ui:'live' },
+    { out:'تحرير الضمان للخبير (released)', desc:'تأكيد إتمام الخدمة ← صرف المبلغ للخبير بعد اقتطاع العمولة.', src:'Experts.jsx (escrow=released)', store:'ضمان → محفظة الخبير', proc:'ai', procNote:'صرف آلي عند التأكيد أو انتهاء المهلة؛ العمولة تُقتطع هنا', sla:'العمولة عند التحرير لا عند التحصيل', ui:'live' },
+    { out:'نزاع/شكوى على جلسة (DSP)', desc:'فتح شكوى بمسار تتبّع (مفتوحة ← مراجعة ← قرار) + تجميد المبلغ.', src:'Refunds.jsx · Experts.jsx', store:'epMemory + رقم DSP', proc:'human', procNote:'مراجِع بشري يفصل في النزاع؛ الذكاء يجمع الأدلة', sla:'أول رد <b>٢٤س</b> · قرار خلال <b>٣ أيام عمل</b> · نافذة فتح النزاع <b>٤٨س</b>', ui:'live' },
+    { out:'غلبة على «خبير بروف (AI)»', desc:'مستخدم يقدّم سندًا أقوى من رأي الذكاء ← تُسجَّل غلبة + نقاط.', src:'Experts.jsx (AiSession)', store:'epGlory + epPoints', proc:'hybrid', procNote:'الذكاء يقبل مبدئيًّا؛ مراجعة بشرية للسند قبل اعتماد الغلبة', sla:'—', ui:'live' },
+  ]},
+  { id:'courses', n:'٤', title:'الدورات والتدريب والجدولة', sub:'رفع الدورات · الاشتراك · جدولة الجلسات وربط Zoom', items:[
+    { out:'طلب رفع دورة (course)', desc:'مدرّب/خبير يرفع دورة تُراجَع وتُعتمَد ويُضبط تسعيرها العادل.', src:'CreateFlow.jsx (course)', store:'epStore (section=courses)', proc:'hybrid', procNote:'الذكاء يراجع المحتوى والتسعير؛ اعتماد بشري نهائي', sla:'مراجعة واعتماد (الداش)', ui:'live' },
+    { out:'اشتراك/دفع دورة', desc:'اشتراك يضيف الدورة لـ«دوراتي» ويسجّل عملية الدفع.', src:'Courses.jsx · Market.jsx (onPaid)', store:'epCourses + epBilling', proc:'ai', procNote:'تفعيل وصول آلي عند تأكيد الدفع', sla:'انسحاب باسترداد كامل قبل البدء بـ<b>٤٨س</b> · لا استرداد بعد <b>٥٠٪</b> حضور', ui:'live' },
+    { out:'جدولة دورة (بالذكاء/يدوي) + ربط Zoom', desc:'توزيع جلسات الدورة على إتاحة المدرّب؛ المحاضرة ١ مجانًا ثم الدفع للاستكمال.', src:'Schedule.jsx (SchCourse)', store:'إتاحة + جدول + Zoom', proc:'ai', procNote:'الذكاء يوزّع المواعيد؛ ربط Zoom الفعلي مرحلة ٢', sla:'تسجيل تسجيلات الجلسة متاح <b>٧ أيام</b>', ui:'partial' },
+    { out:'طلب حجز موعد مدرّب', desc:'طلب يصل المدرّب؛ يؤكّد أو يعتذر (يفرّق عن الإلغاء: استرداد كامل + أولوية).', src:'Schedule.jsx (SchRequests)', store:'requests + epMemory', proc:'human', procNote:'المدرّب يقرّر؛ الداش تطلق التذكيرات والإلغاء التلقائي', sla:'مهلة الرد <b>٢٤س</b> ثم إلغاء واسترداد · تنبيه ١٢ و٢٢ · تذكيرات ٢٤/١/٠', ui:'live' },
+    { out:'إتاحة المدرّب (فترات أسبوعية)', desc:'المدرّب يحدّد فتراته المتاحة؛ أساس التوزيع والحجز.', src:'Schedule.jsx (SchAvail)', store:'avail (محلي)', proc:'ai', procNote:'الذكاء يستخدمها للجدولة والمطابقة', sla:'—', ui:'live' },
+    { out:'انضمام كمدرّب («درّب معنا»)', desc:'طلب الانضمام للتدريب: الصفة + التوثيق + النسبة (٢٥→٥٠٪).', src:'TrainWithUs.jsx', store:'يربط VerifyGate + CreateFlow', proc:'human', procNote:'اعتماد بشري للصفة وتحديد النسبة', sla:'يمرّ ببوابة التوثيق أولًا', ui:'live' },
+  ]},
+  { id:'jobs', n:'٥', title:'الوظائف', sub:'سوق ثنائي: مكاتب تطرح ↔ كفاءات تعرض (بيتا)', items:[
+    { out:'طرح وظيفة (job)', desc:'مكتب/شركة تطرح شاغرًا دائمًا أو مهمة freelance.', src:'CreateFlow.jsx · Jobs.jsx', store:'epStore (section=jobs)', proc:'hybrid', procNote:'الذكاء يفرز ويطابق المرشّحين؛ اعتماد إدراج', sla:'صلاحية الإعلان <b>٣٠ يومًا</b>', ui:'live' },
+    { out:'إعلان تفرّغ (talent)', desc:'كفاءة تعرض نفسها للعمل (دائم/freelance).', src:'CreateFlow.jsx (talent)', store:'epStore (section=jobs)', proc:'ai', procNote:'الذكاء يطابقها مع الشواغر', sla:'صلاحية <b>٣٠ يومًا</b>', ui:'live' },
+    { out:'تقديم على وظيفة (application)', desc:'يُرفق الملف المعتمد ويُرسل للجهة؛ يظهر في «تقديماتي».', src:'Jobs.jsx (apply)', store:'mine (محلي)', proc:'human', procNote:'الجهة تراجع المتقدّمين؛ الداش تنقل الملف المقنّع', sla:'ضمن صلاحية الإعلان', ui:'partial' },
+    { out:'تواصل مع كفاءة (contact)', desc:'جهة توظيف تتواصل مع كفاءة متاحة.', src:'Jobs.jsx (contact)', store:'mine (محلي)', proc:'human', procNote:'وساطة عبر البروفيسور لحفظ الهوية', sla:'—', ui:'partial' },
+  ]},
+  { id:'marketing', n:'٦', title:'التسويق', sub:'خدمات «بواسطة البروفيسور» + تمويل تسويق الدورات (بيتا)', items:[
+    { out:'طلب/خدمة تسويقية (service)', desc:'طلب خدمة تسويق قانوني أو تعاون مع مؤثرين — يصل لفريق البروفيسور.', src:'CreateFlow.jsx · Marketing.jsx', store:'epStore (section=marketing)', proc:'human', procNote:'فريق التسويق ينفّذ؛ الذكاء يصنّف الطلب ويوجّهه', sla:'موافقة الإدارة <b>٢٤س</b>', ui:'live' },
+    { out:'مشاركة المدرّب في تمويل تسويق دورته', desc:'مدرّب مدعو يشارك في تمويل حملة دورته (للمدعوين فقط).', src:'TrainerPanel.jsx', store:'محلي (محاكاة)', proc:'human', procNote:'اتفاق تمويل يُدار من الداش', sla:'—', ui:'partial' },
+  ]},
+  { id:'clubs', n:'٧', title:'النوادي', sub:'اقتراح وإدارة النوادي + عضويتها (بيتا)', items:[
+    { out:'اقتراح نادٍ (club)', desc:'يُطرح للتصويت؛ عند النصاب يُنشأ تحت إشراف المنصة.', src:'CreateFlow.jsx (club)', store:'epStore (section=clubs)', proc:'hybrid', procNote:'الذكاء يجمع التصويت؛ إشراف بشري على الإنشاء', sla:'عند بلوغ النصاب', ui:'live' },
+    { out:'طلب انضمام لنادٍ خاص', desc:'طلب يُراجَع قبل قبول العضوية في النوادي المغلقة.', src:'Clubs.jsx (join private)', store:'epMemory + حالة طلب', proc:'human', procNote:'مشرف النادي يقبل؛ الداش تتابع المهلة', sla:'مراجعة العضوية <b>٤٨س</b>', ui:'live' },
+    { out:'انضمام لنادٍ مفتوح', desc:'انضمام فوري + نقاط؛ يصبح عضوًا على الحائط.', src:'Clubs.jsx (join open)', store:'epMemory + epPoints', proc:'ai', procNote:'تفعيل آلي للعضوية', sla:'—', ui:'live' },
+  ]},
+  { id:'wallet', n:'٨', title:'المحفظة والمدفوعات والفوترة', sub:'كل حركة مالية — أعلى أولوية تشغيلية للداش بورد', items:[
+    { out:'دفع بالبطاقة (gateway)', desc:'دفع لحظي بالبطاقة؛ ينتج عملية مؤكّدة أو فاشلة.', src:'Wallet.jsx · PayModal', store:'epBilling (paid/failed)', proc:'ai', procNote:'تأكيد آلي عبر البوابة؛ الفشل يعرض إعادة/تغيير وسيلة', sla:'استرداد البطاقة للمصدر <b>٥–١٠ أيام</b>', ui:'live' },
+    { out:'إيداع بتحويل يدوي (إيصال)', desc:'فودافون كاش/إنستاباي/STC Pay/آيبان + رفع لقطة الإيصال للمراجعة.', src:'Wallet.jsx (submitManual)', store:'epBilling (review) + epMemory', proc:'human', procNote:'مراجِع بشري يطابق الإيصال ويؤكّد الرصيد', sla:'مراجعة التحويل اليدوي <b>٢٤س</b> · إعادة رفع إيصال مرفوض <b>٤٨س</b>', ui:'live' },
+    { out:'طلب سحب (تحويل صادر)', desc:'مبلغ ≥٥٠٠ + وجهة تحويل (إنستاباي/فودافون/بنكي حسب البلد) + مراحل تنفيذ.', src:'Wallet.jsx (doWithdraw)', store:'epBilling + epMemory', proc:'human', procNote:'مراجعة ثم تحويل بشري؛ الداش تحدّث المراحل', sla:'مراجعة <b>٢٤س</b> ثم تحويل <b>١–٥ أيام</b>', ui:'live' },
+    { out:'فاتورة ضريبية (PDF) + بيانات ضريبية', desc:'فاتورة لكل عملية مؤكّدة + بيانات ضريبية (إلزامية B2B).', src:'Wallet.jsx (dlInvoice) · Settings', store:'epBilling', proc:'ai', procNote:'توليد فاتورة آلي؛ الداش تخزّن السجل الضريبي', sla:'—', ui:'partial' },
+    { out:'عمولة أفليت (إحالة)', desc:'عمولة بمصدر المُحال؛ تنضج قبل السحب لمنع الاحتيال.', src:'Wallet.jsx (إحالة)', store:'epBilling + رصيد', proc:'ai', procNote:'الذكاء يحسب ويكشف الاحتيال؛ ضوابط أعمق مرحلة ٢', sla:'نضج العمولة <b>١٤ يومًا</b> · العملة تتبع بلد المُحال', ui:'partial' },
+    { out:'النقاط (إيصال لكل نقطة)', desc:'كل نشاط يكسب نقاطًا تُستبدل بمنافع داخلية — لا تتحول لنقود.', src:'Store.jsx (epPoints/epPtLog)', store:'epPoints + epPtLog', proc:'ai', procNote:'احتساب آلي بالكامل؛ سقوف تضخّم مرحلة لاحقة', sla:'منافع داخل المنصة فقط', ui:'live' },
+  ]},
+  { id:'editor', n:'٩', title:'المحرر القانوني', sub:'إنتاج المستندات + طلبات المراجعة + الأدوات الذكية', items:[
+    { out:'طلب مراجعة خبير لمستند', desc:'إرسال مستند من المحرر لخبير مختار، أو طرحه في السوق.', src:'LegalEditor.jsx', store:'epStore (section=market)', proc:'hybrid', procNote:'الذكاء يرشّح الخبير؛ الخبير يراجع', sla:'يتبع سياسة السوق', ui:'live' },
+    { out:'رفع مستند / ربط Drive (RAG)', desc:'رفع ملفات لإثراء المساعد بسياق المستخدم.', src:'LegalEditor.jsx (FileUpload)', store:'رفع (محاكاة)', proc:'ai', procNote:'فهرسة RAG على الباك-إند', sla:'فحص حجم/نوع/شبكة في الواجهة', ui:'backend' },
+    { out:'إملاء صوتي → تفريغ', desc:'تسجيل صوتي يتحوّل لنص داخل المستند.', src:'LegalEditor.jsx (mic)', store:'محاكاة كتابة', proc:'ai', procNote:'تفريغ فعلي على الباك-إند', sla:'—', ui:'backend' },
+    { out:'بحث المكتبة القانونية (أحكام/سند)', desc:'بحث في الأحكام وإدراج اقتباس موثّق بمرجع مرقّم.', src:'LegalEditor.jsx (EP_RULINGS)', store:'بيانات محلية', proc:'ai', procNote:'مصدر بيانات قانوني حقيقي مرحلة ٢', sla:'—', ui:'partial' },
+  ]},
+  { id:'content', n:'١٠', title:'المحتوى والمواضيع', sub:'الآراء + المقالات المدموجة + SEO', items:[
+    { out:'مشاركة رأي في موضوع', desc:'رأي بهوية مقنّعة يدخل ضمن المقالة المدموجة بالذكاء.', src:'Topics.jsx (addOpinion)', store:'epMemory + epPoints', proc:'ai', procNote:'الذكاء يدمج الآراء؛ مراجعة محتوى عند الإبلاغ', sla:'—', ui:'live' },
+    { out:'صفحات المواضيع/المقالات (SEO)', desc:'تصيير صفحات قابلة للأرشفة — أقوى رافعة نمو.', src:'Topics.jsx', store:'SSR/SSG (مرحلة ٢/٣)', proc:'ai', procNote:'الذكاء ينتج المقال؛ التصيير على الخادم', sla:'—', ui:'backend' },
+  ]},
+  { id:'account', n:'١١', title:'الحساب والأمان والدعم', sub:'الملف · إعدادات الأمان · القنوات · تذاكر الدعم', items:[
+    { out:'تعديل/إرسال ملف الخبير للمراجعة', desc:'تحديث التخصصات والتسعير وتفعيل الظهور كخبير.', src:'Settings.jsx', store:'إشعار + مراجعة', proc:'hybrid', procNote:'الذكاء يفحص؛ اعتماد بشري للتفعيل', sla:'إشعار خلال ٢٤س', ui:'live' },
+    { out:'إجراءات أمان الحساب', desc:'2FA · تغيير كلمة المرور · إنهاء الجلسات · تصدير البيانات · حذف الحساب.', src:'Settings.jsx', store:'توست (محاكاة)', proc:'ai', procNote:'تنفيذ آلي بالكامل على الباك-إند', sla:'مهلة سماح حذف الحساب <b>٣٠ يومًا</b>', ui:'partial' },
+    { out:'تفضيلات الإشعارات وقنوات البريد/واتساب', desc:'مصفوفة ٧ أنواع × ٤ قنوات (داخل المنصة/بريد/واتساب/Push).', src:'Settings.jsx (NotifyPrefs)', store:'تفضيلات (محلي)', proc:'ai', procNote:'الداش تحترمها عند إطلاق كل إشعار', sla:'—', ui:'partial' },
+    { out:'تذكرة دعم', desc:'رسالة للدعم من مركز المساعدة/الإعدادات.', src:'Help.jsx · Settings.jsx', store:'إشعار (محاكاة)', proc:'human', procNote:'فريق الدعم يرد؛ الذكاء يصنّف ويقترح', sla:'—', ui:'partial' },
+  ]},
+  { id:'notify', n:'١٢', title:'الإشعارات والاتصال (ذاكرة)', sub:'كل مخرَج يولّد إشعارًا — الداش تطلقه عبر القنوات', items:[
+    { out:'إشعار/تنبيه على كل حدث (epMemory)', desc:'مصدر واحد يغذّي جرس الإشعارات + بريفينج «بروف» + مركز الإشعارات.', src:'Memory.jsx · Notifications.jsx', store:'epMemory (localStorage)', proc:'ai', procNote:'توليد وتوجيه آلي؛ تصنيف (تصرّف/فاتك/كمّل)', sla:'تنبيهان استباقيان لكل مهلة', ui:'live' },
+    { out:'إطلاق القنوات (Push/بريد/واتساب)', desc:'تسليم الإشعار فعليًّا عبر القناة المختارة.', src:'تفضيلات NotifyPrefs', store:'مزوّد خارجي (مرحلة ٢)', proc:'ai', procNote:'إرسال آلي حسب تفضيلات المستخدم', sla:'—', ui:'backend' },
+    { out:'الملخّص الأسبوعي بالبريد', desc:'تجميع نشاط الأسبوع وإرساله دوريًّا.', src:'قالب بريد (Settings)', store:'مجدوَل (مرحلة ٢)', proc:'ai', procNote:'توليد وإرسال آلي', sla:'أسبوعي', ui:'backend' },
+  ]},
+];
+
+const ICONS_TXT = DOMAINS; // alias
+const list = document.getElementById('list');
+DOMAINS.forEach((d, di) => {
+  const dom = document.createElement('section');
+  dom.className = 'dom' + (di < 4 ? ' open' : '');
+  dom.dataset.dom = d.id;
+  let rows = '<div class="row head"><div>المخرَج</div><div>المصدر · القناة الحالية</div><div>معالجة الداش بورد</div><div>السياسة · حالة الواجهة</div></div>';
+  d.items.forEach(it => {
+    rows += `<div class="row" data-proc="${it.proc}" data-ui="${it.ui}" data-txt="${(it.out + ' ' + it.desc + ' ' + it.src + ' ' + d.title).replace(/"/g,'')}">
+      <div class="cell"><span class="out">${it.out}${it.badge ? `<span class="badge ${it.badge}">${it.badge==='new'?'جديد':it.badge}</span>` : ''}</span><span class="desc">${it.desc}</span></div>
+      <div class="cell"><span class="src">${it.src}<br><code>${it.store}</code></span></div>
+      <div class="cell"><span class="proc ${it.proc}"><span class="dot ${it.proc}"></span> ${PROC_LABEL[it.proc]}</span><span class="proc ${it.proc}"><small>${it.procNote}</small></span></div>
+      <div class="cell"><div class="sla">${it.sla}</div><div style="margin-top:7px"><span class="uist ${it.ui}">${UI_LABEL[it.ui]}</span></div></div>
+    </div>`;
+  });
+  dom.innerHTML = `<div class="dom-h"><div class="ic">${d.n}</div><div class="tx"><h3>${d.title}</h3><div class="sub">${d.sub}</div></div><span class="n">${d.items.length} مخرجات</span><span class="chev">›</span></div><div class="dom-body">${rows}</div>`;
+  list.appendChild(dom);
+});
+
+// KPIs
+const all = DOMAINS.flatMap(d => d.items);
+document.getElementById('k-tot').textContent = all.length.toLocaleString('ar-EG');
+document.getElementById('k-ai').textContent = all.filter(i => i.proc==='ai').length.toLocaleString('ar-EG');
+document.getElementById('k-hybrid').textContent = all.filter(i => i.proc==='hybrid').length.toLocaleString('ar-EG');
+document.getElementById('k-human').textContent = all.filter(i => i.proc==='human').length.toLocaleString('ar-EG');
+document.getElementById('k-live').textContent = all.filter(i => i.ui==='live').length.toLocaleString('ar-EG');
+
+// header toggle
+list.addEventListener('click', e => {
+  const h = e.target.closest('.dom-h'); if (h) h.parentElement.classList.toggle('open');
+});
+
+// filters + search
+let activeFilter = 'all';
+const q = document.getElementById('q');
+function applyFilter() {
+  const term = (q.value || '').trim();
+  let anyVisible = false;
+  document.querySelectorAll('.dom').forEach(dom => {
+    let domVisible = false;
+    dom.querySelectorAll('.row:not(.head)').forEach(r => {
+      const okF = activeFilter==='all' || r.dataset.proc===activeFilter || r.dataset.ui===activeFilter;
+      const okQ = !term || (r.dataset.txt || '').includes(term);
+      const show = okF && okQ;
+      r.style.display = show ? '' : 'none';
+      if (show) { domVisible = true; anyVisible = true; }
+    });
+    dom.style.display = domVisible ? '' : 'none';
+    if (domVisible && (term || (activeFilter!=='all'))) dom.classList.add('open');
+  });
+  document.getElementById('empty').style.display = anyVisible ? 'none' : 'block';
+}
+document.querySelectorAll('.tb[data-f]').forEach(b => b.addEventListener('click', () => {
+  const f = b.dataset.f;
+  if (f === 'open') { document.querySelectorAll('.dom').forEach(d => d.classList.add('open')); return; }
+  if (f === 'close') { document.querySelectorAll('.dom').forEach(d => d.classList.remove('open')); return; }
+  document.querySelectorAll('.tb[data-f]:not([data-f=open]):not([data-f=close])').forEach(x => x.classList.remove('on'));
+  b.classList.add('on');
+  activeFilter = f;
+  applyFilter();
+}));
+q.addEventListener('input', applyFilter);
+</script>
+</body>
+</html>
