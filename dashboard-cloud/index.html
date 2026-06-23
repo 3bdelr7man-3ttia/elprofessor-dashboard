@@ -1723,23 +1723,34 @@ function partnerModal(idx){
 
 /* ===== TEAM ===== */
 const TEAM_MEMBERS=[{name:'عبدالرحمن عطية',role:'أدمن · إدارة عامة'},{name:'سمير حسن',role:'موظف متابعة (operator)'}];
+// مصادر الفريق الحيّة (مع سقوط آمن للبيانات التصميمية لو الخادم غير متاح).
+function tmAdmins(){return (window.EP&&EP.data.team&&EP.data.team.admins.length)?EP.data.team.admins:TEAM_MEMBERS;}
+function tmTrainers(){return (window.EP&&EP.data.team)?EP.data.team.trainers:USERS.filter(u=>u.trainer==='approved');}
+function tmFounders(){return (window.EP&&EP.data.team&&EP.data.team.founders)?EP.data.team.founders:((window.EP&&EP.data.partners)?ptPartners().filter(p=>p.name!=='غير موزّع').length:4);}
 function viewTeam(v){
-  const trainers=USERS.filter(u=>u.trainer==='approved');
-  const teamRows=TEAM_MEMBERS.map((x,i)=>`<div class="trow" data-i="${i}" style="display:flex;align-items:center;gap:12px;padding:12px 16px;border-bottom:1px solid var(--line);cursor:pointer"><div class="src-ic" style="background:var(--navy);color:#fff">${svg('users')}</div><div style="flex:1"><div style="font-weight:700;font-size:13.5px">${x.name}</div><div style="font-size:11.5px;color:var(--muted)">${x.role}</div></div></div>`).join('');
+  if(window.EP){EP.ensure('team',()=>viewTeam(v));}
+  const Tst=(window.EP&&EP.state.team)||'idle';
+  const live=!!(window.EP&&EP.data.team);
+  const admins=tmAdmins(), trainers=tmTrainers(), founders=tmFounders();
+  // الإضافة/التعديل اليدوي يبقى على المصفوفة التصميمية فقط (لا يوجد POST لأعضاء الفريق الإداري).
+  const teamRows=admins.map((x,i)=>`<div class="trow" ${live?'':`data-i="${i}"`} style="display:flex;align-items:center;gap:12px;padding:12px 16px;border-bottom:1px solid var(--line)${live?'':';cursor:pointer'}"><div class="src-ic" style="background:var(--navy);color:#fff">${svg('users')}</div><div style="flex:1"><div style="font-weight:700;font-size:13.5px">${x.name}</div><div style="font-size:11.5px;color:var(--muted)">${x.role}</div></div></div>`).join('');
   const trainerRows=trainers.length?trainers.map(x=>`<div style="display:flex;align-items:center;gap:12px;padding:12px 16px;border-bottom:1px solid var(--line)"><div class="src-ic" style="background:var(--ai-bg);color:var(--ai)">${svg('cap')}</div><div style="flex:1"><div style="font-weight:700;font-size:13.5px">${x.name}</div><div style="font-size:11.5px;color:var(--muted)">${x.spec||'مدرّب معتمد'}</div></div></div>`).join(''):'<div style="padding:30px;text-align:center;color:var(--muted)">لا مدرّبين بعد</div>';
   v.innerHTML=`
+    ${Tst==='error'&&!live?`<div class="policy" style="border-inline-start-color:var(--conflict);background:var(--conflict-bg);color:var(--conflict)">${svg('scale','ic')}<div>تعذّر جلب الفريق من المنصة — تُعرض بيانات تصميمية. <b style="cursor:pointer;text-decoration:underline" onclick="EP.reload('team',()=>viewTeam(document.getElementById('view')))">إعادة المحاولة</b></div></div>`:''}
     <div class="kpis">
-      <div class="kpi k-1"><div class="top"><span class="ic">${svg('users')}</span>أعضاء الفريق</div><b>${money(TEAM_MEMBERS.length)}</b><div class="sub">أدمن + موظفون</div></div>
-      <div class="kpi k-2"><div class="top"><span class="ic">${svg('cap')}</span>مدرّبون معتمدون</div><b>${money(trainers.length)}</b><div class="sub">عبر التدريب</div></div>
+      <div class="kpi k-1"><div class="top"><span class="ic">${svg('users')}</span>أعضاء الفريق</div><b>${Tst==='loading'&&!live?'…':money(admins.length)}</b><div class="sub">${live?'من المنصة الحيّة':'أدمن + موظفون'}</div></div>
+      <div class="kpi k-2"><div class="top"><span class="ic">${svg('cap')}</span>مدرّبون معتمدون</div><b>${Tst==='loading'&&!live?'…':money(trainers.length)}</b><div class="sub">عبر التدريب</div></div>
       <div class="kpi k-3"><div class="top"><span class="ic">${svg('robot')}</span>نموذج التشغيل</div><b>أتمتة + فريق صغير</b><div class="sub">الذكاء ينجز ويصعّد</div></div>
-      <div class="kpi k-4"><div class="top"><span class="ic">${svg('brief')}</span>المؤسسون</div><b>٤</b><div class="sub">شركاء</div></div>
+      <div class="kpi k-4"><div class="top"><span class="ic">${svg('brief')}</span>المؤسسون</div><b>${money(founders)}</b><div class="sub">شركاء</div></div>
     </div>
     <div class="inboxwrap" style="grid-template-columns:1fr 1fr">
-      <section class="panel"><div class="ph"><h3>الفريق الإداري</h3><button class="btn btn-human" id="tmAdd" style="flex:none;min-width:auto;padding:6px 13px;font-size:12px;margin-inline-start:auto">+ عضو</button></div><div id="tmRows">${teamRows}</div></section>
+      <section class="panel"><div class="ph"><h3>الفريق الإداري</h3>${live?'<span class="hint">من المنصة (قراءة)</span>':'<button class="btn btn-human" id="tmAdd" style="flex:none;min-width:auto;padding:6px 13px;font-size:12px;margin-inline-start:auto">+ عضو</button>'}</div><div id="tmRows">${teamRows}</div></section>
       <section class="panel"><div class="ph"><h3>المدرّبون المعتمدون</h3><span class="hint">من المستخدمين (قراءة)</span></div><div>${trainerRows}</div></section>
     </div>`;
-  document.getElementById('tmAdd').onclick=function(){teamModal(null);};
-  v.querySelectorAll('.trow').forEach(r=>{r.onmouseenter=()=>r.style.background='var(--surface-2)';r.onmouseleave=()=>r.style.background='';r.onclick=()=>teamModal(+r.dataset.i);});
+  if(!live){
+    var addBtn=document.getElementById('tmAdd');if(addBtn)addBtn.onclick=function(){teamModal(null);};
+    v.querySelectorAll('.trow').forEach(r=>{r.onmouseenter=()=>r.style.background='var(--surface-2)';r.onmouseleave=()=>r.style.background='';r.onclick=()=>teamModal(+r.dataset.i);});
+  }
 }
 function teamModal(idx){
   var edit=(idx!=null&&idx>=0)?TEAM_MEMBERS[idx]:null,e=edit||{};
@@ -1773,40 +1784,71 @@ const FND_STATUS=[
   {name:'الحساب البنكي للشركة',state:'مفتوح'},
   {name:'عقد الشركاء',state:'موقّع'}
 ];
+// مصادر التأسيس الحيّة (مع سقوط آمن للبيانات التصميمية لكل تبويب على حدة).
+// الأصول/الأدوات من /api/assets؛ رأس المال من /api/partners؛ حالة الكيان تبقى تصميمية (لا مصدر حقيقي).
+function fndAssetsArr(){return (window.EP&&EP.data.foundation&&EP.data.foundation.assets.length)?EP.data.foundation.assets:FND_ASSETS;}
+function fndToolsArr(){return (window.EP&&EP.data.foundation&&EP.data.foundation.tools.length)?EP.data.foundation.tools:FND_TOOLS;}
+function fndCapitalArr(){return (window.EP&&EP.data.foundation&&EP.data.foundation.capital.length)?EP.data.foundation.capital:FND_CAPITAL;}
+function fndStatusArr(){return FND_STATUS;} // حالة الكيان القانوني: تصميمية دائمًا
 function viewFoundation(v){
-  var cap=FND_CAPITAL.reduce((s,x)=>s+x.amount,0),monthly=FND_TOOLS.reduce((s,x)=>s+x.cost,0),assetsVal=FND_ASSETS.reduce((s,x)=>s+x.value*x.qty,0);
+  if(window.EP){EP.ensure('foundation',()=>viewFoundation(v));}
+  var Fst=(window.EP&&EP.state.foundation)||'idle';
+  var live=!!(window.EP&&EP.data.foundation);
+  var K=live?EP.data.foundation.kpi:null;
+  var A=fndAssetsArr(),T=fndToolsArr(),C=fndCapitalArr(),S=fndStatusArr();
+  // رأس المال: من الخادم (ضخّ رأس المال أو إجمالي رؤوس أموال الشركاء) وإلا مجموع البنود التصميمية.
+  var capServer=K&&(K.capital||0)>0?K.capital:0;
+  var capPartners=C.reduce((s,x)=>s+(x.amount||0),0);
+  var cap=capServer||capPartners||FND_CAPITAL.reduce((s,x)=>s+x.amount,0);
+  var monthly=K&&(K.monthly||0)>0?K.monthly:T.reduce((s,x)=>s+(x.cost||0),0);
+  var monthlyCcy=(K&&(K.monthly||0)>0)?' ج':''; // إيجار الأصول الشهري يُحتسب بالجنيه؛ الأدوات التصميمية بالدولار
+  var assetsVal=K&&(K.assetsVal||0)>0?K.assetsVal:A.reduce((s,x)=>s+(x.value||0)*(x.qty||1),0);
+  var assetsCcy=(K&&(K.assetsVal||0)>0)?' ج':'';
+  var founders=(window.EP&&EP.data.foundation&&typeof tmFounders==='function')?tmFounders():4;
   v.innerHTML=`
+    ${Fst==='error'&&!live?`<div class="policy" style="border-inline-start-color:var(--conflict);background:var(--conflict-bg);color:var(--conflict)">${svg('scale','ic')}<div>تعذّر جلب بيانات التأسيس من الخادم — تُعرض بيانات تصميمية. <b style="cursor:pointer;text-decoration:underline" onclick="EP.reload('foundation',()=>viewFoundation(document.getElementById('view')))">إعادة المحاولة</b></div></div>`:''}
     <div class="kpis">
-      <div class="kpi k-3"><div class="top"><span class="ic">${svg('wallet')}</span>رأس المال</div><b>${money(cap)} <small style="font-size:13px">ج</small></b><div class="sub">مستثمَر + تشغيلي</div></div>
-      <div class="kpi k-4"><div class="top"><span class="ic">${svg('trend')}</span>مصروف شهري (أدوات)</div><b>$${money(monthly)}</b><div class="sub">${FND_TOOLS.length} اشتراكات</div></div>
-      <div class="kpi k-1"><div class="top"><span class="ic">${svg('build')}</span>قيمة الأصول</div><b>$${money(assetsVal)}</b><div class="sub">${FND_ASSETS.length} بنود معدات</div></div>
-      <div class="kpi k-2"><div class="top"><span class="ic">${svg('hands')}</span>المؤسسون</div><b>٤</b><div class="sub">شركاء</div></div>
+      <div class="kpi k-3"><div class="top"><span class="ic">${svg('wallet')}</span>رأس المال</div><b>${Fst==='loading'&&!live?'…':money(cap)} <small style="font-size:13px">ج</small></b><div class="sub">${live?'حيّ — ضخّ رأس المال':'مستثمَر + تشغيلي'}</div></div>
+      <div class="kpi k-4"><div class="top"><span class="ic">${svg('trend')}</span>مصروف شهري ثابت</div><b>${monthlyCcy?money(monthly):'$'+money(monthly)}${monthlyCcy?'<small style="font-size:13px">'+monthlyCcy+'</small>':''}</b><div class="sub">${live?'إيجار/اشتراكات شهرية':T.length+' اشتراكات'}</div></div>
+      <div class="kpi k-1"><div class="top"><span class="ic">${svg('build')}</span>قيمة الأصول</div><b>${assetsCcy?money(assetsVal):'$'+money(assetsVal)}${assetsCcy?'<small style="font-size:13px">'+assetsCcy+'</small>':''}</b><div class="sub">${A.length} بنود معدات</div></div>
+      <div class="kpi k-2"><div class="top"><span class="ic">${svg('hands')}</span>المؤسسون</div><b>${money(founders)}</b><div class="sub">شركاء</div></div>
     </div>
     <div class="tabbar" id="fTabs">
-      <div class="tab${foundationTab==='assets'?' on':''}" data-t="assets">الأصول والمعدات (${FND_ASSETS.length})</div>
-      <div class="tab${foundationTab==='tools'?' on':''}" data-t="tools">الأدوات والاشتراكات (${FND_TOOLS.length})</div>
-      <div class="tab${foundationTab==='capital'?' on':''}" data-t="capital">رأس المال (${FND_CAPITAL.length})</div>
-      <div class="tab${foundationTab==='status'?' on':''}" data-t="status">حالة الكيان (${FND_STATUS.length})</div>
+      <div class="tab${foundationTab==='assets'?' on':''}" data-t="assets">الأصول والمعدات (${A.length})</div>
+      <div class="tab${foundationTab==='tools'?' on':''}" data-t="tools">الأدوات والاشتراكات (${T.length})</div>
+      <div class="tab${foundationTab==='capital'?' on':''}" data-t="capital">رأس المال (${C.length})</div>
+      <div class="tab${foundationTab==='status'?' on':''}" data-t="status">حالة الكيان (${S.length})</div>
     </div>
-    <section class="panel"><div class="ph"><h3 id="fH"></h3><span class="n" id="fN"></span><button class="btn btn-human" id="fAdd" style="flex:none;min-width:auto;padding:6px 13px;font-size:12px;margin-inline-start:auto">+ <span id="fAddLbl">معدة</span></button></div><div id="fRows"></div></section>`;
+    <section class="panel"><div class="ph"><h3 id="fH"></h3><span class="n" id="fN"></span>${live?'<span class="hint" id="fLiveHint" style="margin-inline-start:auto"></span>':'<button class="btn btn-human" id="fAdd" style="flex:none;min-width:auto;padding:6px 13px;font-size:12px;margin-inline-start:auto">+ <span id="fAddLbl">معدة</span></button>'}</div><div id="fRows"></div></section>`;
   v.querySelectorAll('#fTabs .tab').forEach(t=>t.onclick=()=>{foundationTab=t.dataset.t;viewFoundation(v);});
-  document.getElementById('fAddLbl').textContent=(foundationTab==='tools'?'أداة/اشتراك':foundationTab==='capital'?'بند رأس مال':foundationTab==='status'?'بند حالة':'معدة/أصل');
-  document.getElementById('fAdd').onclick=()=>{foundationTab==='tools'?fndToolModal():foundationTab==='capital'?fndCapitalModal():foundationTab==='status'?fndStatusModal():fndAssetModal();};
-  renderFoundation();
+  if(!live){
+    document.getElementById('fAddLbl').textContent=(foundationTab==='tools'?'أداة/اشتراك':foundationTab==='capital'?'بند رأس مال':foundationTab==='status'?'بند حالة':'معدة/أصل');
+    document.getElementById('fAdd').onclick=()=>{foundationTab==='tools'?fndToolModal():foundationTab==='capital'?fndCapitalModal():foundationTab==='status'?fndStatusModal():fndAssetModal();};
+  } else {
+    var lh=document.getElementById('fLiveHint');
+    if(lh)lh.textContent=foundationTab==='status'?'حالة الكيان (تصميمية)':(foundationTab==='capital'?'من الشركاء (قراءة)':'من الأصول (قراءة)');
+  }
+  renderFoundation(live);
 }
 function wireFnd(open){document.querySelectorAll('#fRows .fnd').forEach(function(r){r.onmouseenter=function(){r.style.background='var(--surface-2)';};r.onmouseleave=function(){r.style.background='';};r.onclick=function(){open(+r.dataset.i);};});}
-function renderFoundation(){
+function fndEmpty(txt){return '<div class="empty" style="padding:34px;text-align:center;color:var(--muted)">'+svg('inbox','ic')+'<p>'+txt+'</p></div>';}
+// live=true => صفوف قراءة فقط (مرآة من الخادم، بلا تعديل/حذف يدوي). status دائمًا تصميمي قابل للتعديل.
+function renderFoundation(live){
   var el=document.getElementById('fRows'),h=document.getElementById('fH'),n=document.getElementById('fN');el.innerHTML='';
-  if(foundationTab==='assets'){h.textContent='الأصول والمعدات';n.textContent=FND_ASSETS.length;
-    FND_ASSETS.forEach(function(a,i){el.insertAdjacentHTML('beforeend','<div class="row esc-row fnd" data-i="'+i+'" style="grid-template-columns:1.7fr 1fr 1fr 110px"><div class="c c1"><div class="src-ic" style="background:var(--surface-2);color:var(--navy)">'+svg('build')+'</div><div><div class="parties">'+a.name+'</div><div class="from">'+a.note+'</div></div></div><div class="c"><div class="from">العدد <b style="color:var(--ink)">'+a.qty+'</b></div></div><div class="c"><div class="amt">$'+money(a.value*a.qty)+'</div></div><div class="c"><span class="status s-auto"><span class="d"></span>مسجّل</span></div></div>');});
-    wireFnd(function(i){fndAssetModal(FND_ASSETS[i],i);});
-  } else if(foundationTab==='tools'){h.textContent='الأدوات والاشتراكات';n.textContent=FND_TOOLS.length;
-    FND_TOOLS.forEach(function(a,i){el.insertAdjacentHTML('beforeend','<div class="row esc-row fnd" data-i="'+i+'" style="grid-template-columns:2fr 1fr 110px"><div class="c c1"><div class="src-ic" style="background:var(--ai-bg);color:var(--ai)">'+svg('gear')+'</div><div><div class="parties">'+a.name+'</div><div class="from">'+a.cycle+'</div></div></div><div class="c"><div class="amt">$'+money(a.cost)+'</div></div><div class="c"><span class="status s-auto"><span class="d"></span>نشط</span></div></div>');});
-    wireFnd(function(i){fndToolModal(FND_TOOLS[i],i);});
-  } else if(foundationTab==='capital'){h.textContent='رأس المال والتمويل';n.textContent=FND_CAPITAL.length;
-    FND_CAPITAL.forEach(function(a,i){el.insertAdjacentHTML('beforeend','<div class="row esc-row fnd" data-i="'+i+'" style="grid-template-columns:2fr 1fr 110px"><div class="c c1"><div class="src-ic" style="background:var(--agree-bg);color:var(--agree)">'+svg('wallet')+'</div><div><div class="parties">'+a.name+'</div><div class="from">'+a.note+'</div></div></div><div class="c"><div class="amt">'+money(a.amount)+' <small>ج</small></div></div><div class="c"><span class="status s-auto"><span class="d"></span>مدفوع</span></div></div>');});
-    wireFnd(function(i){fndCapitalModal(FND_CAPITAL[i],i);});
+  if(foundationTab==='assets'){var A=fndAssetsArr();var liveA=!!(window.EP&&EP.data.foundation&&EP.data.foundation.assets.length);h.textContent='الأصول والمعدات';n.textContent=A.length;
+    if(!A.length){el.innerHTML=fndEmpty('لا أصول مسجّلة بعد');return;}
+    A.forEach(function(a,i){var ccy=liveA?'':'$';el.insertAdjacentHTML('beforeend','<div class="row esc-row'+(liveA?'':' fnd')+'" data-i="'+i+'" style="grid-template-columns:1.7fr 1fr 1fr 110px"><div class="c c1"><div class="src-ic" style="background:var(--surface-2);color:var(--navy)">'+svg('build')+'</div><div><div class="parties">'+a.name+'</div><div class="from">'+(a.note||'—')+'</div></div></div><div class="c"><div class="from">العدد <b style="color:var(--ink)">'+(a.qty||1)+'</b></div></div><div class="c"><div class="amt">'+ccy+money((a.value||0)*(a.qty||1))+(liveA?' <small>ج</small>':'')+'</div></div><div class="c"><span class="status s-auto"><span class="d"></span>مسجّل</span></div></div>');});
+    if(!liveA)wireFnd(function(i){fndAssetModal(FND_ASSETS[i],i);});
+  } else if(foundationTab==='tools'){var T=fndToolsArr();var liveT=!!(window.EP&&EP.data.foundation&&EP.data.foundation.tools.length);h.textContent='الأدوات والاشتراكات';n.textContent=T.length;
+    if(!T.length){el.innerHTML=fndEmpty('لا أدوات/اشتراكات مسجّلة بعد');return;}
+    T.forEach(function(a,i){var ccy=liveT?'':'$';el.insertAdjacentHTML('beforeend','<div class="row esc-row'+(liveT?'':' fnd')+'" data-i="'+i+'" style="grid-template-columns:2fr 1fr 110px"><div class="c c1"><div class="src-ic" style="background:var(--ai-bg);color:var(--ai)">'+svg('gear')+'</div><div><div class="parties">'+a.name+'</div><div class="from">'+(a.cycle||'شهري')+'</div></div></div><div class="c"><div class="amt">'+ccy+money(a.cost||0)+(liveT?' <small>ج</small>':'')+'</div></div><div class="c"><span class="status s-auto"><span class="d"></span>نشط</span></div></div>');});
+    if(!liveT)wireFnd(function(i){fndToolModal(FND_TOOLS[i],i);});
+  } else if(foundationTab==='capital'){var C=fndCapitalArr();var liveC=!!(window.EP&&EP.data.foundation&&EP.data.foundation.capital.length);h.textContent='رأس المال والتمويل';n.textContent=C.length;
+    if(!C.length){el.innerHTML=fndEmpty('لا بنود رأس مال مسجّلة بعد');return;}
+    C.forEach(function(a,i){el.insertAdjacentHTML('beforeend','<div class="row esc-row'+(liveC?'':' fnd')+'" data-i="'+i+'" style="grid-template-columns:2fr 1fr 110px"><div class="c c1"><div class="src-ic" style="background:var(--agree-bg);color:var(--agree)">'+svg('wallet')+'</div><div><div class="parties">'+a.name+'</div><div class="from">'+(a.note||'—')+'</div></div></div><div class="c"><div class="amt">'+money(a.amount||0)+' <small>ج</small></div></div><div class="c"><span class="status s-auto"><span class="d"></span>'+(liveC?'مساهمة شريك':'مدفوع')+'</span></div></div>');});
+    if(!liveC)wireFnd(function(i){fndCapitalModal(FND_CAPITAL[i],i);});
   } else {h.textContent='حالة الكيان القانوني';n.textContent=FND_STATUS.length;
+    // حالة الكيان القانوني تظل تصميمية وقابلة للتعديل اليدوي (لا يوجد مصدر API لها).
     FND_STATUS.forEach(function(a,i){el.insertAdjacentHTML('beforeend','<div class="row esc-row fnd" data-i="'+i+'" style="grid-template-columns:2fr 130px"><div class="c c1"><div class="src-ic" style="background:var(--memory-bg);color:var(--memory)">'+svg('shield')+'</div><div><div class="parties">'+a.name+'</div></div></div><div class="c"><span class="status s-auto"><span class="d"></span>'+a.state+'</span></div></div>');});
     wireFnd(function(i){fndStatusModal(FND_STATUS[i],i);});
   }
@@ -1855,37 +1897,50 @@ const GOALS=[
   {title:'تأسيس الكيان القانوني',cat:'تأسيس',current:1,target:1,unit:'',owner:'الإدارة',due:'يوليو',status:'done'}
 ];
 const GSTAT={on:{t:'على المسار',cls:'s-auto'},behind:{t:'متأخّر',cls:'s-late'},done:{t:'مكتمل',cls:'s-human'}};
+// مصادر الأهداف الحيّة (مع سقوط آمن للبيانات التصميمية لو الخادم غير متاح أو لا توقّعات).
+function tgBars(){return (window.EP&&EP.data.targets&&EP.data.targets.bars.length)?EP.data.targets.bars:TARGETS;}
+function tgGoals(){return (window.EP&&EP.data.targets&&EP.data.targets.goals.length)?EP.data.targets.goals:GOALS;}
 function viewTargets(v){
-  const mx=Math.max(...TARGETS.map(t=>t.target),1);
-  const sumT=TARGETS.reduce((s,t)=>s+t.target,0),sumA=TARGETS.reduce((s,t)=>s+t.actual,0);
-  const onTrack=GOALS.filter(g=>g.status==='on').length,behind=GOALS.filter(g=>g.status==='behind').length,done=GOALS.filter(g=>g.status==='done').length;
-  const bars=TARGETS.map((t,i)=>`<div class="tgbar" data-i="${i}" style="flex:1;display:flex;flex-direction:column;align-items:center;gap:6px;cursor:pointer" title="اضغط للتعديل"><div style="display:flex;gap:5px;align-items:flex-end;height:130px"><div style="width:18px;background:var(--agree);border-radius:5px 5px 0 0;height:${t.actual/mx*130}px"></div><div style="width:18px;background:var(--gold);border-radius:5px 5px 0 0;height:${t.target/mx*130}px"></div></div><div style="font-size:12px;font-weight:700;color:var(--ink-2)">${t.m}</div></div>`).join('');
+  if(window.EP){EP.ensure('targets',()=>viewTargets(v));}
+  const Tst=(window.EP&&EP.state.targets)||'idle';
+  const liveBars=!!(window.EP&&EP.data.targets&&EP.data.targets.bars.length);
+  const liveGoals=!!(window.EP&&EP.data.targets&&EP.data.targets.goals.length);
+  const live=liveBars||liveGoals;
+  const BARS=tgBars(), GLS=tgGoals();
+  const mx=Math.max(...BARS.map(t=>t.target),1);
+  const sumT=BARS.reduce((s,t)=>s+t.target,0),sumA=BARS.reduce((s,t)=>s+t.actual,0);
+  const onTrack=GLS.filter(g=>g.status==='on').length,behind=GLS.filter(g=>g.status==='behind').length,done=GLS.filter(g=>g.status==='done').length;
+  // النسبة المحقّقة ماليًّا: من الخادم إن وُجدت، وإلا تُحتسب من البارات.
+  const qPct=(window.EP&&EP.data.targets&&EP.data.targets.quarterPct!=null)?EP.data.targets.quarterPct:(sumT?Math.round(sumA/sumT*100):0);
+  const bars=BARS.map((t,i)=>`<div class="tgbar" ${liveBars?'':`data-i="${i}"`} style="flex:1;display:flex;flex-direction:column;align-items:center;gap:6px${liveBars?'':';cursor:pointer'}" ${liveBars?'':'title="اضغط للتعديل"'}><div style="display:flex;gap:5px;align-items:flex-end;height:130px"><div style="width:18px;background:var(--agree);border-radius:5px 5px 0 0;height:${(t.actual||0)/mx*130}px" title="فعلي ${money(t.actual||0)}${liveBars?' ألف':''}"></div><div style="width:18px;background:var(--gold);border-radius:5px 5px 0 0;height:${(t.target||0)/mx*130}px" title="هدف ${money(t.target||0)}${liveBars?' ألف':''}"></div></div><div style="font-size:12px;font-weight:700;color:var(--ink-2)">${t.m}</div></div>`).join('');
   v.innerHTML=`
+    ${Tst==='error'&&!live?`<div class="policy" style="border-inline-start-color:var(--conflict);background:var(--conflict-bg);color:var(--conflict)">${svg('scale','ic')}<div>تعذّر جلب الأهداف والتوقّعات من الخادم — تُعرض بيانات تصميمية. <b style="cursor:pointer;text-decoration:underline" onclick="EP.reload('targets',()=>viewTargets(document.getElementById('view')))">إعادة المحاولة</b></div></div>`:''}
     <div class="kpis">
-      <div class="kpi k-3"><div class="top"><span class="ic">${svg('trend')}</span>أهداف نشطة</div><b>${money(GOALS.length-done)}</b><div class="sub">${done} مكتمل</div></div>
+      <div class="kpi k-3"><div class="top"><span class="ic">${svg('trend')}</span>أهداف نشطة</div><b>${Tst==='loading'&&!live?'…':money(GLS.length-done)}</b><div class="sub">${done} مكتمل</div></div>
       <div class="kpi k-1"><div class="top"><span class="ic">${svg('check')}</span>على المسار</div><b>${money(onTrack)}</b><div class="sub">تسير حسب الخطة</div></div>
       <div class="kpi k-4"><div class="top"><span class="ic">${svg('clock')}</span>متأخّرة</div><b>${money(behind)}</b><div class="sub">تحتاج تدخّلًا</div></div>
-      <div class="kpi k-2"><div class="top"><span class="ic">${svg('wallet')}</span>المحقّق ماليًّا</div><b>${sumT?Math.round(sumA/sumT*100):0}٪</b><div class="sub">من هدف الربع</div></div>
+      <div class="kpi k-2"><div class="top"><span class="ic">${svg('wallet')}</span>المحقّق ماليًّا</div><b>${qPct}٪</b><div class="sub">${liveBars?'فعلي ÷ هدف التوقّعات':'من هدف الربع'}</div></div>
     </div>
-    <section class="panel" style="margin-bottom:16px"><div class="ph"><h3>أهداف الشركة ومتابعتها</h3><span class="n">${GOALS.length}</span><button class="btn btn-human" id="goalAdd" style="flex:none;min-width:auto;padding:6px 13px;font-size:12px;margin-inline-start:auto">+ هدف</button></div><div id="goalRows"></div></section>
-    <section class="panel"><div class="ph"><h3>التوقّعات المالية الشهرية</h3><button class="btn btn-ghost" id="tgAdd" style="flex:none;min-width:auto;padding:6px 13px;font-size:12px;margin-inline-start:auto">+ شهر</button></div>
-      <div style="display:flex;gap:18px;align-items:flex-end;padding:22px 24px 10px">${bars}</div>
-      <div style="display:flex;gap:16px;padding:0 24px 18px;font-size:12px;color:var(--ink-2)"><span style="display:flex;align-items:center;gap:6px"><span style="width:11px;height:11px;border-radius:3px;background:var(--agree)"></span>فعلي</span><span style="display:flex;align-items:center;gap:6px"><span style="width:11px;height:11px;border-radius:3px;background:var(--gold)"></span>هدف</span></div></section>`;
-  document.getElementById('tgAdd').onclick=function(){targetModal(null);};
-  document.getElementById('goalAdd').onclick=function(){goalModal(null);};
-  v.querySelectorAll('.tgbar').forEach(r=>r.onclick=()=>targetModal(+r.dataset.i));
-  renderGoals();
+    <section class="panel" style="margin-bottom:16px"><div class="ph"><h3>أهداف الشركة ومتابعتها</h3><span class="n">${GLS.length}</span>${liveGoals?'<span class="hint" style="margin-inline-start:auto">مشتقّة من الأرقام الحيّة</span>':'<button class="btn btn-human" id="goalAdd" style="flex:none;min-width:auto;padding:6px 13px;font-size:12px;margin-inline-start:auto">+ هدف</button>'}</div><div id="goalRows"></div></section>
+    <section class="panel"><div class="ph"><h3>التوقّعات المالية الشهرية</h3>${liveBars?'<span class="hint" style="margin-inline-start:auto">حيّ — هدف ÷ فعلي (بالألف ج)</span>':'<button class="btn btn-ghost" id="tgAdd" style="flex:none;min-width:auto;padding:6px 13px;font-size:12px;margin-inline-start:auto">+ شهر</button>'}</div>
+      ${BARS.length?`<div style="display:flex;gap:18px;align-items:flex-end;padding:22px 24px 10px">${bars}</div>
+      <div style="display:flex;gap:16px;padding:0 24px 18px;font-size:12px;color:var(--ink-2)"><span style="display:flex;align-items:center;gap:6px"><span style="width:11px;height:11px;border-radius:3px;background:var(--agree)"></span>فعلي</span><span style="display:flex;align-items:center;gap:6px"><span style="width:11px;height:11px;border-radius:3px;background:var(--gold)"></span>هدف</span></div>`:'<div class="empty" style="padding:34px;text-align:center;color:var(--muted)">'+svg('trend','ic')+'<p>لا توقّعات مالية مسجّلة بعد</p></div>'}</section>`;
+  if(!liveBars){var tga=document.getElementById('tgAdd');if(tga)tga.onclick=function(){targetModal(null);};v.querySelectorAll('.tgbar').forEach(r=>r.onclick=()=>targetModal(+r.dataset.i));}
+  if(!liveGoals){var ga=document.getElementById('goalAdd');if(ga)ga.onclick=function(){goalModal(null);};}
+  renderGoals(liveGoals);
 }
-function renderGoals(){
+function renderGoals(liveGoals){
   var el=document.getElementById('goalRows');if(!el)return;el.innerHTML='';
-  GOALS.forEach(function(g,i){var st=GSTAT[g.status];var pct=Math.min(100,Math.round(g.current/(g.target||1)*100));var barC=g.status==='behind'?'var(--conflict)':g.status==='done'?'var(--human)':'var(--agree)';
-    el.insertAdjacentHTML('beforeend','<div class="grow" data-i="'+i+'" style="padding:13px 16px;border-bottom:1px solid var(--line);cursor:pointer">'+
+  var GLS=tgGoals();
+  if(!GLS.length){el.innerHTML='<div class="empty" style="padding:34px;text-align:center;color:var(--muted)">'+svg('check','ic')+'<p>لا أهداف مسجّلة بعد</p></div>';return;}
+  GLS.forEach(function(g,i){var st=GSTAT[g.status]||GSTAT.on;var pct=Math.min(100,Math.round(g.current/(g.target||1)*100));var barC=g.status==='behind'?'var(--conflict)':g.status==='done'?'var(--human)':'var(--agree)';
+    el.insertAdjacentHTML('beforeend','<div class="grow" '+(liveGoals?'':'data-i="'+i+'"')+' style="padding:13px 16px;border-bottom:1px solid var(--line)'+(liveGoals?'':';cursor:pointer')+'">'+
       '<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px"><span class="dest" style="background:var(--surface-2);color:var(--ink-2);font-size:10.5px">'+g.cat+'</span><div style="flex:1;font-weight:700;font-size:13.5px;color:var(--ink)">'+g.title+'</div><span class="status '+st.cls+'" style="font-size:10.5px"><span class="d"></span>'+st.t+'</span></div>'+
       '<div style="display:flex;align-items:center;gap:12px"><div style="flex:1;height:8px;background:var(--surface-2);border-radius:4px;overflow:hidden"><div style="height:100%;width:'+pct+'%;background:'+barC+';border-radius:4px"></div></div>'+
       '<div style="font-size:12px;font-weight:700;color:var(--navy);white-space:nowrap">'+g.current+' / '+g.target+' '+g.unit+'</div></div>'+
       '<div style="font-size:11px;color:var(--muted);margin-top:6px">المسؤول: '+g.owner+' · الموعد: '+g.due+' · '+pct+'٪</div></div>');
   });
-  el.querySelectorAll('.grow').forEach(function(r){r.onmouseenter=function(){r.style.background='var(--surface-2)';};r.onmouseleave=function(){r.style.background='';};r.onclick=function(){goalModal(+r.dataset.i);};});
+  if(!liveGoals)el.querySelectorAll('.grow').forEach(function(r){r.onmouseenter=function(){r.style.background='var(--surface-2)';};r.onmouseleave=function(){r.style.background='';};r.onclick=function(){goalModal(+r.dataset.i);};});
 }
 function goalModal(idx){
   var edit=(idx!=null&&idx>=0)?GOALS[idx]:null,e=edit||{};

@@ -76,7 +76,7 @@
     role: null, // الدور الحقيقي بعد الدخول (يضبطه applyAccount من /auth/me)
     data: { dashboard: null, metrics: null, users: null, content: null, finance: null, messages: null, inbox: null,
             escrow: null, investment: null, marketing: null, partners: null, courses: null, settings: null,
-            packages: null, t_data: null, i_data: null },
+            packages: null, t_data: null, i_data: null, targets: null, foundation: null, team: null },
     state: {}, // 'idle' | 'loading' | 'ready' | 'error'
     _started: {}, // منع التحميل المزدوج
     api: api, get: get, post: post,
@@ -132,6 +132,18 @@
       var d = new Date(iso);
       return new Intl.DateTimeFormat("ar-EG", { day: "numeric", month: "long" }).format(d);
     } catch (e) { return (iso || "").slice(0, 10); }
+  }
+  // اسم الشهر العربي المختصر من مفتاح "YYYY-MM" أو تاريخ ISO (للأهداف/التوقّعات).
+  var AR_MONTHS = ["يناير", "فبراير", "مارس", "أبريل", "مايو", "يونيو", "يوليو", "أغسطس", "سبتمبر", "أكتوبر", "نوفمبر", "ديسمبر"];
+  function arMonthShort(key) {
+    if (!key) return "—";
+    var m = /^(\d{4})-(\d{2})/.exec(String(key));
+    if (m) { var idx = parseInt(m[2], 10) - 1; return AR_MONTHS[idx] || key; }
+    try {
+      var d = new Date(key);
+      if (!isNaN(d.getTime())) return AR_MONTHS[d.getMonth()] || key;
+    } catch (e) {}
+    return String(key);
   }
 
   // ---- المحمّلات لكل شاشة ----
@@ -437,6 +449,156 @@
           currency_per_country: (r && r.currency_per_country) || {},
         };
       });
+    },
+
+    // الأهداف والتوقعات: /api/dashboard (financial + monthly + forecast).
+    // البارات الشهرية = هدف (إيراد متوقّع) مقابل فعلي (إيراد مُسجّل) — كلاهما بالألف ج.
+    // الأهداف العامة (GOALS) تُشتق من أرقام حقيقية قابلة للمطابقة فقط، وما لا مصدر له
+    // يبقى على مصفوفة التصميم (في الواجهة).
+    targets: function () {
+      return get("/dashboard").then(function (d) {
+        EP.data.dashboard = d; // نشارك نفس الكاش مع شاشة النظرة العامة
+        var fin = (d && d.financial) || {};
+        var forecast = Array.isArray(d && d.forecast) ? d.forecast : [];
+        var monthly = Array.isArray(d && d.monthly) ? d.monthly : [];
+        // مفتاح الشهر -> إيراد فعلي بالألف
+        var actualByMonth = {};
+        monthly.forEach(function (m) {
+          if (m && m.month) actualByMonth[m.month] = Math.round((m.revenue || 0) / 1000);
+        });
+        // بارات: من التوقّعات (forecast) — الهدف = الإيراد المتوقّع/1000، الفعلي = المُسجّل/1000.
+        // نأخذ آخر/أقرب 4-6 شهور توقّع لها قيمة هدف موجبة.
+        var bars = forecast
+          .filter(function (f) { return (f.revenue || 0) > 0; })
+          .slice(-6)
+          .map(function (f) {
+            return {
+              m: arMonthShort(f.month),
+              target: Math.round((f.revenue || 0) / 1000),
+              actual: actualByMonth[f.month] || 0,
+            };
+          });
+        // أهداف عامة مشتقة من أرقام حقيقية قابلة للمطابقة بأمانة.
+        var goals = [];
+        var crs = (d && d.courses) || {};
+        var nextTarget = fin.next_month_target || 0;
+        var nextForecast = forecast.find(function (f) { return (f.revenue || 0) > 0; }) || null;
+        if (nextTarget > 0) {
+          // هدف مالي: الإيراد الشهري الحالي مقابل هدف الشهر القادم (بالألف ج).
+          var curMonthRev = monthly.length ? Math.round((monthly[monthly.length - 1].revenue || 0) / 1000) : 0;
+          goals.push({
+            title: "هدف إيراد الشهر القادم", cat: "مالي", owner: "الإدارة",
+            current: curMonthRev, target: Math.round(nextTarget / 1000), unit: "ألف ج",
+            due: arMonthShort((nextForecast && nextForecast.month) || ""),
+            status: curMonthRev >= Math.round(nextTarget / 1000) ? "done" : (curMonthRev >= Math.round(nextTarget / 1000) * 0.6 ? "on" : "behind"),
+          });
+        }
+        if (nextForecast && nextForecast.target_students != null && nextForecast.target_students > 0) {
+          goals.push({
+            title: "الوصول لعدد الطلاب المستهدف", cat: "نمو", owner: "التسويق",
+            current: crs.total_students || 0, target: nextForecast.target_students, unit: "طالب",
+            due: arMonthShort(nextForecast.month),
+            status: (crs.total_students || 0) >= nextForecast.target_students ? "done" : ((crs.total_students || 0) >= nextForecast.target_students * 0.6 ? "on" : "behind"),
+          });
+        }
+        if (nextForecast && nextForecast.target_courses != null && nextForecast.target_courses > 0) {
+          goals.push({
+            title: "نشر عدد الدورات المستهدف", cat: "محتوى", owner: "الدورات",
+            current: crs.total_courses || 0, target: nextForecast.target_courses, unit: "دورة",
+            due: arMonthShort(nextForecast.month),
+            status: (crs.total_courses || 0) >= nextForecast.target_courses ? "done" : ((crs.total_courses || 0) >= nextForecast.target_courses * 0.6 ? "on" : "behind"),
+          });
+        }
+        // نقطة التعادل (إن توفّرت) كهدف تشغيلي حقيقي.
+        if (fin.break_even_month) {
+          goals.push({
+            title: "بلوغ نقطة التعادل", cat: "مالي", owner: "الإدارة",
+            current: (fin.net_profit || 0) >= 0 ? 1 : 0, target: 1, unit: "",
+            due: arMonthShort(fin.break_even_month),
+            status: (fin.net_profit || 0) >= 0 ? "done" : "on",
+          });
+        }
+        EP.data.targets = {
+          bars: bars,            // فارغة؟ الواجهة تسقط لمصفوفة TARGETS التصميمية
+          goals: goals,          // فارغة؟ الواجهة تسقط لمصفوفة GOALS التصميمية
+          quarterPct: (function () {
+            var st = bars.reduce(function (s, b) { return s + b.target; }, 0);
+            var sa = bars.reduce(function (s, b) { return s + b.actual; }, 0);
+            return st ? Math.round(sa / st * 100) : null;
+          })(),
+          raw: { financial: fin, forecast: forecast },
+        };
+      });
+    },
+
+    // مرحلة التأسيس: /api/dashboard (فترتا ما قبل الإطلاق/التشغيل + المالية) + /api/assets
+    // + /api/partners (لرأس المال) + /api/expenses (مصروفات فترة التأسيس).
+    // الأصول والاشتراكات من /assets؛ رأس المال من الشركاء؛ حالة الكيان تبقى تصميمية.
+    foundation: function () {
+      var data = { assets: [], tools: [], capital: [], status: null, kpi: {} };
+      var jobs = [];
+      jobs.push(get("/dashboard").then(function (d) {
+        EP.data.dashboard = d;
+        var fin = (d && d.financial) || {};
+        var periods = (d && d.periods) || {};
+        var pre = periods.pre_launch || {};
+        var op = periods.operating || {};
+        // رأس المال = ضخّ رأس المال النقدي (capital_in) إن وُجد.
+        data.kpi.capital = Math.round(fin.capital_in || 0);
+        data.kpi.assetsVal = Math.round(fin.total_assets || 0);
+        // مصروف شهري مرجعي: إيجار الأصول الشهري (أقرب تمثيل حقيقي للمصروف الثابت).
+        data.kpi.monthly = Math.round(fin.monthly_asset_rent || fin.asset_reference_rent || 0);
+        data.kpi.preLaunchExpenses = Math.round(pre.expenses || fin.pre_launch_expenses || 0);
+        data.kpi.operatingNet = Math.round(op.profit != null ? op.profit : (fin.operating_net || 0));
+      }));
+      jobs.push(get("/assets").then(function (r) {
+        var list = Array.isArray(r) ? r : [];
+        // تبويب «الأصول» = المعدات؛ تبويب «الأدوات» = الاشتراكات (لها إيجار/تكلفة شهرية).
+        list.forEach(function (a) {
+          var monthly = a.monthly_rent_egp || 0;
+          if (monthly > 0 && (a.category === "subscription" || a.category === "software" || a.category === "tool")) {
+            data.tools.push({ name: a.name || "أداة", cost: Math.round(monthly), cycle: "شهري", aid: a.id, raw: a });
+          } else {
+            data.assets.push({ name: a.name || "أصل", value: Math.round(a.value_egp || 0), qty: 1, note: a.notes || a.category || "—", aid: a.id, raw: a });
+          }
+        });
+      }).catch(function () {}));
+      jobs.push(get("/partners").then(function (r) {
+        var list = Array.isArray(r) ? r : [];
+        data.capital = list
+          .filter(function (p) { return (p.total_capital_egp || p.capital_egp || 0) > 0; })
+          .map(function (p) {
+            return { name: p.name || "شريك", amount: Math.round(p.total_capital_egp || p.capital_egp || 0), note: p.role || "رأس مال شريك", pid: p.id, raw: p };
+          });
+      }).catch(function () {}));
+      return Promise.all(jobs).then(function () { EP.data.foundation = data; });
+    },
+
+    // الفريق والمدرّبون: /api/platform-users (الفريق الإداري + المدرّبون) + /api/partners (المؤسسون).
+    // يعتمد على نفس تطبيع USERS؛ نضمن تحميل users هنا ثم نشتق صفوف الفريق.
+    team: function () {
+      var data = { admins: [], trainers: [], founders: 0 };
+      var jobs = [];
+      jobs.push(get("/platform-users").then(function (r) {
+        var list = (r && r.users) || [];
+        var roleAr = { admin: "أدمن · تحكم كامل", staff: "موظف متابعة (operator)", employee: "موظف متابعة (operator)" };
+        list.forEach(function (u) {
+          var nm = u.full_name || u.name || u.email || "—";
+          var ts = (u.trainer_status || "none");
+          if (u.role === "admin" || u.role === "staff" || u.role === "employee") {
+            data.admins.push({ name: nm, role: roleAr[u.role] || u.role, email: u.email || "" });
+          }
+          if (ts === "approved") {
+            data.trainers.push({ name: nm, spec: u.headline || u.specialty || "مدرّب معتمد", email: u.email || "" });
+          }
+        });
+      }));
+      // المؤسسون = الشركاء أصحاب الحصص (cap table).
+      jobs.push(get("/partners").then(function (r) {
+        var list = Array.isArray(r) ? r : [];
+        data.founders = list.filter(function (p) { return (p.equity_percent || 0) > 0 && p.name !== "غير موزّع"; }).length;
+      }).catch(function () { data.founders = 0; }));
+      return Promise.all(jobs).then(function () { EP.data.team = data; });
     },
 
     // لوحة المدرّب: /api/courses (مفلترة للمدرّب من الـ backend بحسب JWT)
@@ -816,7 +978,7 @@
     EP.authed = false; EP.user = null;
     EP.data = { dashboard: null, metrics: null, users: null, content: null, finance: null, messages: null, inbox: null,
                 escrow: null, investment: null, marketing: null, partners: null, courses: null, settings: null,
-                t_data: null, i_data: null };
+                packages: null, t_data: null, i_data: null, targets: null, foundation: null, team: null };
     EP.state = {};
     window.location.reload();
   }
