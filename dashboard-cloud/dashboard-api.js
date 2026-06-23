@@ -76,7 +76,7 @@
     role: null, // الدور الحقيقي بعد الدخول (يضبطه applyAccount من /auth/me)
     data: { dashboard: null, metrics: null, users: null, content: null, finance: null, messages: null, inbox: null,
             escrow: null, investment: null, marketing: null, partners: null, courses: null, settings: null,
-            t_data: null, i_data: null },
+            packages: null, t_data: null, i_data: null },
     state: {}, // 'idle' | 'loading' | 'ready' | 'error'
     _started: {}, // منع التحميل المزدوج
     api: api, get: get, post: post,
@@ -418,6 +418,27 @@
       return get("/settings").then(function (s) { EP.data.settings = s || {}; });
     },
 
+    // الباقات والأسعار: /api/packages -> {packages:[...], countries, currency_per_country}
+    packages: function () {
+      return get("/packages").then(function (r) {
+        var list = (r && r.packages) || [];
+        EP.data.packages = {
+          packages: list.map(function (p) {
+            return {
+              id: p.id, name: p.name || "باقة", cycle: p.cycle || "شهري",
+              active: p.active !== false,
+              features: Array.isArray(p.features) ? p.features : [],
+              prices: p.prices || {},
+              currency_per_country: p.currency_per_country || {},
+              raw: p,
+            };
+          }),
+          countries: (r && r.countries) || [],
+          currency_per_country: (r && r.currency_per_country) || {},
+        };
+      });
+    },
+
     // لوحة المدرّب: /api/courses (مفلترة للمدرّب من الـ backend بحسب JWT)
     // + /api/payouts (مفلترة لاستحقاقات المدرّب) -> دوراتي + أرباحي (مستحق/مدفوع).
     t_data: function () {
@@ -650,6 +671,14 @@
     api("/partners/" + id, { method: "DELETE" })
       .then(function () { note("حُذف الشريك"); EP.reload("partners", after); })
       .catch(function (e) { quietToast((e && e.message) || "تعذّر الحذف"); if (after) after(); });
+  };
+
+  // ---- الباقات والأسعار ----
+  // يحفظ تهيئة الباقات كاملةً (PUT) ثم يعيد التحميل لتعكس الشاشة مصدر الحقيقة.
+  EP.savePackages = function (list, after) {
+    api("/packages", { method: "PUT", body: { packages: list || [] } })
+      .then(function () { note("حُفظت الباقات والأسعار"); EP.reload("packages", after); })
+      .catch(function (e) { quietToast((e && e.message) || "تعذّر حفظ الباقات"); if (after) after(); });
   };
 
   // ---- الاستثمار ----
