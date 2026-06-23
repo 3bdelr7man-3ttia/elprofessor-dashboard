@@ -274,11 +274,8 @@
       );
       return Promise.all(jobs).then(function () {
         EP.data.inbox = realRows;
-        // ادمج الصفوف الحقيقية في مقدمة الوارد التصميمي (مرة واحدة).
-        if (Array.isArray(window.INBOX)) {
-          var base = window.INBOX.filter(function (x) { return !x.apiKind; });
-          window.INBOX = realRows.concat(base);
-        }
+        // الوارد = الصفوف الحقيقية فقط (لا دمج لأي بيانات تصميمية).
+        window.INBOX = realRows;
       });
     },
 
