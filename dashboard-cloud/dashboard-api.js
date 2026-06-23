@@ -73,7 +73,8 @@
   var EP = {
     authed: false,
     user: null,
-    data: { dashboard: null, metrics: null, users: null, content: null, finance: null, messages: null, inbox: null },
+    data: { dashboard: null, metrics: null, users: null, content: null, finance: null, messages: null, inbox: null,
+            escrow: null, investment: null, marketing: null, partners: null, courses: null, settings: null },
     state: {}, // 'idle' | 'loading' | 'ready' | 'error'
     _started: {}, // منع التحميل المزدوج
     api: api, get: get, post: post,
@@ -105,6 +106,12 @@
       if (rerender) try { rerender(); } catch (e) {}
     });
   };
+
+  // تنسيق رقمي عربي آمن (السكربت الداخلي يعرّف money أيضًا؛ هذا احتياط لو سبق التحميل).
+  function money(n) {
+    if (typeof window.money === "function") { try { return window.money(n); } catch (e) {} }
+    try { return Number(n || 0).toLocaleString("ar-EG"); } catch (e) { return String(n || 0); }
+  }
 
   // مساعد تاريخ: هل خلال آخر 7 أيام؟
   function within7(iso) {
@@ -255,7 +262,167 @@
         }
       });
     },
+
+    // الضمان والنزاعات: /api/escrow + /api/disputes + /api/escrow/metrics
+    escrow: function () {
+      var data = { sessions: [], disputes: [], released: [], metrics: null };
+      var jobs = [];
+      jobs.push(get("/escrow").then(function (r) {
+        var list = Array.isArray(r) ? r : ((r && r.sessions) || []);
+        // طبّع لشكل شاشة الضمان: held/confirm/dispute في «الجلسات»؛ released في «المُحرَّر».
+        list.forEach(function (e) {
+          var row = {
+            id: e.id,
+            student: e.student_name || e.student_email || "—",
+            expert: e.expert_name || e.expert_email || "—",
+            amount: e.amount || 0,
+            currency: e.currency || "EGP",
+            held: arDate(e.held_at),
+            release: escReleaseLabel(e),
+            status: e.status,
+            commission: e.commission, net: e.net,
+            sid: e.id, raw: e,
+          };
+          if (e.status === "released") {
+            data.released.push({ id: e.id, expert: row.expert, amount: e.amount || 0, when: arDate(e.released_at), commission: e.commission, net: e.net });
+          } else if (e.status === "refunded") {
+            // المسترد لا يظهر في الجلسات النشطة ولا في المُحرَّر — نتجاهله بهدوء.
+          } else {
+            data.sessions.push(row);
+          }
+        });
+      }));
+      jobs.push(get("/disputes").then(function (r) {
+        var list = Array.isArray(r) ? r : ((r && r.disputes) || []);
+        // نأخذ النزاعات غير المفصولة فقط (decision == null) للعرض كـ«مفتوحة».
+        list.filter(function (d) { return !d.decision; }).forEach(function (d) {
+          data.disputes.push({
+            id: d.id, session: d.session_id, party: d.party === "expert" ? "الخبير" : "الطالب",
+            expert: "", reason: d.reason || "—", stage: d.stage || "open",
+            amount: d.amount_frozen || 0, opened: arDate(d.opened_at),
+            sla: d.decision_sla ? ("القرار قبل " + arDate(d.decision_sla)) : "—",
+            warn: d.decision_sla ? (Date.parse(d.decision_sla) < Date.now()) : false,
+            did: d.id, raw: d,
+          });
+        });
+      }));
+      jobs.push(get("/escrow/metrics").then(function (m) { data.metrics = m; }).catch(function () { data.metrics = null; }));
+      return Promise.all(jobs).then(function () { EP.data.escrow = data; });
+    },
+
+    // الاستثمار: /api/investments + /api/investment-opportunities + /api/admin/withdrawals
+    investment: function () {
+      var data = { investors: [], opps: [], wd: [] };
+      var jobs = [];
+      jobs.push(get("/investments").then(function (r) {
+        var list = Array.isArray(r) ? r : [];
+        // اجمع حسب المستثمر لبناء صف «محفظة» واحد لكل اسم.
+        var byName = {};
+        list.forEach(function (it) {
+          var nm = it.investor_name || "—";
+          if (!byName[nm]) byName[nm] = { name: nm, balance: 0, invested: 0, returns: 0, level: "—", uid: it.investor_user_id };
+          byName[nm].invested += Math.round(it.invested_total_egp || 0);
+          byName[nm].returns += Math.round(it.due_egp || 0);
+        });
+        data.investors = Object.keys(byName).map(function (k) { return byName[k]; });
+        data.raw = list;
+      }));
+      jobs.push(get("/investment-opportunities").then(function (r) {
+        var list = Array.isArray(r) ? r : [];
+        data.opps = list.map(function (o) {
+          return {
+            title: o.course_title || ("فرصة #" + o.id), target: Math.round(o.target_amount || 0),
+            raised: Math.round(o.current_funded || 0), roi: (o.expected_roi != null ? o.expected_roi + "٪" : "—"),
+            oid: o.id, raw: o,
+          };
+        });
+      }));
+      // السحوبات للأدمن فقط — نتجاهل فشلها (403) بهدوء.
+      jobs.push(get("/admin/withdrawals").then(function (r) {
+        var list = Array.isArray(r) ? r : [];
+        data.wd = list.filter(function (w) { return w.status === "pending"; }).map(function (w) {
+          return { who: w.investor_name || "—", amount: Math.round(w.amount_egp || w.amount || 0), status: w.status, when: arDate(w.requested_at), wid: w.id, raw: w };
+        });
+      }).catch(function () { data.wd = []; }));
+      return Promise.all(jobs).then(function () { EP.data.investment = data; });
+    },
+
+    // التسويق: /api/campaigns
+    marketing: function () {
+      return get("/campaigns").then(function (r) {
+        var list = Array.isArray(r) ? r : [];
+        EP.data.marketing = {
+          campaigns: list.map(function (c) {
+            return {
+              id: c.id, name: c.name || "حملة", platform: c.platform || "منصة",
+              spent: Math.round(c.spent || 0), leads: c.leads || 0,
+              cac: Math.round(c.cac || 0), status: c.status === "active" ? "active" : "paused",
+              budget: Math.round(c.budget || 0), impressions: c.impressions || 0, clicks: c.clicks || 0,
+              conversions: c.conversions || 0, revenue: Math.round(c.revenue_attributed || 0),
+              course_id: c.course_id, audience: c.target_audience || "", cid: c.id, raw: c,
+            };
+          }),
+        };
+      });
+    },
+
+    // الشركاء: /api/partners (+ payouts متاحة لو احتجناها لاحقًا)
+    partners: function () {
+      return get("/partners").then(function (r) {
+        var list = Array.isArray(r) ? r : [];
+        var colors = ["var(--human)", "var(--ai)", "var(--gold)", "var(--memory)", "var(--agree)", "var(--navy)"];
+        EP.data.partners = {
+          partners: list.map(function (p, i) {
+            return {
+              id: p.id, name: p.name || "شريك", role: p.role || "شريك",
+              equity: p.equity_percent || 0, invested: Math.round(p.total_capital_egp || p.capital_egp || 0),
+              c: colors[i % colors.length], pid: p.id, raw: p,
+            };
+          }),
+        };
+      });
+    },
+
+    // الدورات: /api/courses
+    courses: function () {
+      return get("/courses").then(function (r) {
+        var list = Array.isArray(r) ? r : [];
+        EP.data.courses = {
+          courses: list.map(function (c) {
+            var split = c.revenue_split || {};
+            var trainerPct = Math.round(split.trainer_percent || 0);
+            return {
+              id: c.id, title: c.title || "دورة", inst: c.trainer_name || "—",
+              enrolled: c.students_count || 0,
+              price: (c.price_egp || c.price_usd) ? "مدفوعة" : "مجانية",
+              from: (c.price_egp ? (money(c.price_egp) + " ج") : (c.price_usd ? ("$" + c.price_usd) : "مجانية")),
+              priceNum: c.price_egp || 0, rate: trainerPct,
+              owner: (c.trainer_name && trainerPct) ? "trainer" : "platform",
+              status: c.status === "active" ? "published" : (c.status === "draft" ? "draft" : "published"),
+              lms_synced: !!c.lms_synced, total_revenue: c.total_revenue || 0, cid: c.id, raw: c,
+            };
+          }),
+        };
+      });
+    },
+
+    // الإعدادات: /api/settings -> {key:value}
+    settings: function () {
+      return get("/settings").then(function (s) { EP.data.settings = s || {}; });
+    },
   };
+
+  // وصف مهلة التحرير لجلسة ضمان (نص عربي قريب من التصميم).
+  function escReleaseLabel(e) {
+    if (e.status === "dispute") return "مجمّد — نزاع مفتوح";
+    if (e.status === "released") return "حُرِّر " + arDate(e.released_at);
+    if (e.status === "refunded") return "مسترد للطالب";
+    var secs = e.release_seconds_remaining;
+    if (secs == null) return "بانتظار تأكيد الطالب";
+    if (secs <= 0) return "حان وقت التحرير التلقائي";
+    var hrs = Math.round(secs / 3600);
+    return "باقٍ " + hrs + "س — تحرير تلقائي";
+  }
 
   // ============================================================
   // إجراءات الكتابة (تُستدعى من معالجات الواجهة الموجودة)
@@ -323,6 +490,131 @@
     api("/messages/" + m.id, { method: "DELETE" })
       .then(function () { note("حُذفت الرسالة"); EP.reload("messages", after); })
       .catch(function (e) { quietToast((e && e.message) || "تعذّر الحذف"); if (after) after(); });
+  };
+
+  // ---- الضمان والنزاعات ----
+  EP.escrowRelease = function (sid, after) {
+    post("/escrow/" + sid + "/release", {})
+      .then(function (r) { note((r && r.message) || "تم التحرير للخبير"); EP.reload("escrow", after); })
+      .catch(function (e) { quietToast((e && e.message) || "تعذّر التحرير"); if (after) after(); });
+  };
+  EP.escrowRefund = function (sid, after) {
+    post("/escrow/" + sid + "/refund", {})
+      .then(function (r) { note((r && r.message) || "تم الاسترداد للطالب"); EP.reload("escrow", after); })
+      .catch(function (e) { quietToast((e && e.message) || "تعذّر الاسترداد"); if (after) after(); });
+  };
+  EP.escrowOpenDispute = function (sid, after) {
+    var party = window.prompt("الطرف المُحتج؟ اكتب student أو expert:", "student");
+    if (party == null) { if (after) after(); return; }
+    party = String(party).trim().toLowerCase();
+    if (party !== "student" && party !== "expert") { quietToast("الطرف يجب أن يكون student أو expert"); if (after) after(); return; }
+    var reason = window.prompt("سبب النزاع (اختياري):", "") || "";
+    post("/escrow/" + sid + "/dispute", { party: party, reason: reason })
+      .then(function (r) { note((r && r.message) || "فُتح نزاع وجُمّد المبلغ"); EP.reload("escrow", after); })
+      .catch(function (e) { quietToast((e && e.message) || "تعذّر فتح النزاع"); if (after) after(); });
+  };
+  EP.disputeResolve = function (did, decision, after) {
+    var body = { decision: decision };
+    if (decision === "split") {
+      var pct = window.prompt("نسبة حصة الخبير من المبلغ (0-100):", "50");
+      if (pct == null) { if (after) after(); return; }
+      var n = parseFloat(pct);
+      if (isNaN(n) || n < 0 || n > 100) { quietToast("النسبة يجب أن تكون بين 0 و 100"); if (after) after(); return; }
+      body.split_pct = n;
+    }
+    post("/dispute/" + did + "/resolve", body)
+      .then(function (r) { note((r && r.message) || "تم فصل النزاع"); EP.reload("escrow", after); })
+      .catch(function (e) { quietToast((e && e.message) || "تعذّر فصل النزاع"); if (after) after(); });
+  };
+  EP.escrowProcessAuto = function (after) {
+    post("/escrow/process-auto-releases", {})
+      .then(function (r) { note((r && r.message) || "تم التحرير التلقائي"); EP.reload("escrow", after); })
+      .catch(function (e) { quietToast((e && e.message) || "تعذّر التحرير التلقائي"); if (after) after(); });
+  };
+
+  // ---- التسويق (حملات) ----
+  EP.createCampaign = function (d, after) {
+    post("/campaigns", d)
+      .then(function () { note("أُنشئت حملة «" + (d.name || "") + "»"); EP.reload("marketing", after); })
+      .catch(function (e) { quietToast((e && e.message) || "تعذّر إنشاء الحملة"); if (after) after(); });
+  };
+  EP.updateCampaign = function (id, d, after) {
+    api("/campaigns/" + id, { method: "PUT", body: d })
+      .then(function () { note("حُدّثت الحملة"); EP.reload("marketing", after); })
+      .catch(function (e) { quietToast((e && e.message) || "تعذّر التحديث"); if (after) after(); });
+  };
+  EP.deleteCampaign = function (id, after) {
+    api("/campaigns/" + id, { method: "DELETE" })
+      .then(function () { note("حُذفت الحملة"); EP.reload("marketing", after); })
+      .catch(function (e) { quietToast((e && e.message) || "تعذّر الحذف"); if (after) after(); });
+  };
+
+  // ---- الشركاء ----
+  EP.createPartner = function (d, after) {
+    post("/partners", d)
+      .then(function () { note("أُضيف الشريك «" + (d.name || "") + "»"); EP.reload("partners", after); })
+      .catch(function (e) { quietToast((e && e.message) || "تعذّر إضافة الشريك"); if (after) after(); });
+  };
+  EP.updatePartner = function (id, d, after) {
+    api("/partners/" + id, { method: "PUT", body: d })
+      .then(function () { note("حُدّث الشريك"); EP.reload("partners", after); })
+      .catch(function (e) { quietToast((e && e.message) || "تعذّر التحديث"); if (after) after(); });
+  };
+  EP.deletePartner = function (id, after) {
+    api("/partners/" + id, { method: "DELETE" })
+      .then(function () { note("حُذف الشريك"); EP.reload("partners", after); })
+      .catch(function (e) { quietToast((e && e.message) || "تعذّر الحذف"); if (after) after(); });
+  };
+
+  // ---- الاستثمار ----
+  EP.createOpportunity = function (d, after) {
+    post("/investment-opportunities", d)
+      .then(function () { note("أُضيفت فرصة استثمار"); EP.reload("investment", after); })
+      .catch(function (e) { quietToast((e && e.message) || "تعذّر إضافة الفرصة"); if (after) after(); });
+  };
+  EP.updateOpportunity = function (id, d, after) {
+    api("/investment-opportunities/" + id, { method: "PUT", body: d })
+      .then(function () { note("حُدّثت الفرصة"); EP.reload("investment", after); })
+      .catch(function (e) { quietToast((e && e.message) || "تعذّر التحديث"); if (after) after(); });
+  };
+  EP.deleteOpportunity = function (id, after) {
+    api("/investment-opportunities/" + id, { method: "DELETE" })
+      .then(function () { note("حُذفت الفرصة"); EP.reload("investment", after); })
+      .catch(function (e) { quietToast((e && e.message) || "تعذّر الحذف"); if (after) after(); });
+  };
+  EP.decideWithdrawal = function (id, status, after) {
+    api("/admin/withdrawals/" + id, { method: "PUT", body: { status: status } })
+      .then(function () { note(status === "approved" ? "تم اعتماد السحب" : "تم رفض السحب"); EP.reload("investment", after); })
+      .catch(function (e) { quietToast((e && e.message) || "تعذّر تحديث طلب السحب"); if (after) after(); });
+  };
+
+  // ---- الدورات ----
+  EP.createCourse = function (d, after) {
+    post("/courses", d)
+      .then(function () { note("أُضيفت دورة «" + (d.title || "") + "»"); EP.reload("courses", after); })
+      .catch(function (e) { quietToast((e && e.message) || "تعذّر إنشاء الدورة"); if (after) after(); });
+  };
+  EP.updateCourse = function (id, d, after) {
+    api("/courses/" + id, { method: "PUT", body: d })
+      .then(function () { note("حُدّثت الدورة"); EP.reload("courses", after); })
+      .catch(function (e) { quietToast((e && e.message) || "تعذّر التحديث"); if (after) after(); });
+  };
+  EP.syncCoursesLms = function (after) {
+    post("/courses/sync-lms", {})
+      .then(function (r) { note((r && r.message) || "تمت المزامنة من الأكاديمية"); EP.reload("courses", after); })
+      .catch(function (e) { quietToast((e && e.message) || "تعذّرت المزامنة"); if (after) after(); });
+  };
+  EP.createLmsCourse = function (d, after) {
+    post("/courses/create-lms", d)
+      .then(function (r) { note((r && r.message) || "أُنشئت الدورة على الأكاديمية"); EP.reload("courses", after); })
+      .catch(function (e) { quietToast((e && e.message) || "تعذّر إنشاء الدورة"); if (after) after(); });
+  };
+
+  // ---- الإعدادات ----
+  EP.saveSettings = function (d, after) {
+    api("/settings", { method: "PUT", body: d })
+      .then(function () { note("تم حفظ الإعدادات"); EP.reload("settings", after); })
+      .catch(function (e) { quietToast((e && e.message) || "تعذّر حفظ الإعدادات"); if (after) after(); });
   };
 
   // ============================================================
