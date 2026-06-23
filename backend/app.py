@@ -3509,108 +3509,123 @@ def seed():
     db.session.commit()
     print("✅ Admin/user initialization complete")
 
-    restore_real_business_data()
+    # NOTE: restore_real_business_data() was REMOVED — the partners' amounts and
+    # foundation assets it seeded were fabricated/wrong (founder confirmed). Real
+    # business data must now be entered manually via the admin endpoints. The data
+    # MODELS (Partner/Asset/Expense/CashTransaction/…) remain intact for that.
 
 
-def restore_real_business_data():
-    """Restore the founder's REAL records that were wrongly deleted as 'demo' in the
-    last cleanup. These are REAL, persistent, editable rows — NOT demo data.
+def reset_business_data():
+    """ENV-GATED full reset of business/test data. Runs ONLY when RESET_BUSINESS_DATA
+    is truthy; otherwise a no-op.
 
-    Idempotent by design: each table/group is only populated when it is EMPTY (or the
-    specific real marker rows are absent). We NEVER re-inject once rows exist, so the
-    founder can freely edit/delete them afterwards without them reappearing on reboot.
+    WIPES (all rows): Partner, Asset, Expense, Revenue, CashTransaction, Payout,
+    EscrowSession, Dispute, Message, WithdrawalRequest, Investment,
+    InvestmentOpportunity, InvestorWallet, InvestorBadge, RevenueSplit, Campaign,
+    Course, AILog — plus any leftover 'seed:v3%'/'real:v1%' tagged rows.
+
+    KEEPS: User (but deletes every non-admin user and re-seeds the admin fresh from
+    ADMIN_EMAIL/ADMIN_PASSWORD so login still works); Setting (packages_config /
+    packages and all other settings); ForecastMonth (الأهداف والتوقعات — forecast +
+    goals/targets data).
     """
-    # --- Cap table (partners) — only when the table is empty ---
-    if Partner.query.count() == 0:
-        real_partners = [
-            # name, role, equity %, invested (USD)
-            ('عبدالرحمن عطية', 'مؤسس · رئيس', 70.8, 11000),
-            ('مصطفى', 'شريك · تقني', 10.8, 1700),
-            ('أبوضيف', 'شريك', 6.1, 1000),
-            ('سمير', 'شريك', 5.5, 900),
-            ('غير موزّع', 'احتياطي', 6.8, 0),
-        ]
-        for name, role, equity, invested_usd in real_partners:
-            db.session.add(Partner(
-                name=name,
-                role=role,
-                equity_percent=equity,
-                profit_share_percent=equity,
-                capital_usd=invested_usd,
-                capital_egp=0,
-                notes=f'{REAL_PREFIX}:cap-table',
-            ))
+    flag = (os.environ.get('RESET_BUSINESS_DATA') or '').strip().lower()
+    if flag not in ('1', 'true', 'yes', 'on'):
+        logger.info("RESET_BUSINESS_DATA not set — skipping business data reset.")
+        return
 
-    # --- Fixed assets — only when the table is empty ---
-    if Asset.query.count() == 0:
-        real_assets = [
-            # name, value (USD), qty, category-note
-            ('لابتوب MacBook Pro', 2200, 1, 'تطوير'),
-            ('شاشات عرض', 600, 2, 'مكتب'),
-            ('كاميرا + ميكروفون', 900, 1, 'تصوير الدورات'),
-            ('سيرفر فيديو (اشتراك سنوي)', 1200, 1, 'بثّ الدورات'),
-            ('أثاث ومعدات مكتبية', 1342, 1, 'المقر'),
-        ]
-        for name, value_usd, qty, note in real_assets:
-            label = name if qty == 1 else f'{name} ×{qty}'
-            db.session.add(Asset(
-                name=label,
-                category=note,
-                owner='الشركة',
-                value_egp=round(value_usd * qty * 50, 2),  # store EGP at the 50 base rate used elsewhere
-                monthly_rent_egp=0,
-                status='owned',
-                notes=f'{REAL_PREFIX}:asset|usd={value_usd}|qty={qty}',
-            ))
+    logger.warning("RESET_BUSINESS_DATA is on — wiping business/test data.")
+    summary = {}
 
-    # --- Tools / subscriptions (monthly) — recurring operating expenses.
-    # The dashboard foundation/finance views read Expense rows; we represent each
-    # subscription as a REAL monthly Expense in category 'اشتراك'. Guarded so we
-    # only add a given subscription if no real-tagged row for it already exists. ---
-    today = datetime.date.today()
-    real_tools = [
-        # description, monthly amount (USD), key
-        ('Anthropic Claude API (شهري)', 120, 'anthropic'),
-        ('استضافة Hostinger + Coolify (شهري)', 75, 'hosting'),
-        ('أدوات تصميم واشتراكات (شهري)', 30, 'design'),
+    # --- Delete dependent/child rows first to respect FKs, then parents. ---
+    wipe_models = [
+        # children / leaf tables first
+        ('disputes', Dispute),
+        ('escrow_sessions', EscrowSession),
+        ('investor_badges', InvestorBadge),
+        ('withdrawal_requests', WithdrawalRequest),
+        ('investments', Investment),
+        ('investor_wallets', InvestorWallet),
+        ('investment_opportunities', InvestmentOpportunity),
+        ('revenue_splits', RevenueSplit),
+        ('payouts', Payout),
+        ('cash_transactions', CashTransaction),
+        ('expenses', Expense),
+        ('revenues', Revenue),       # depends on courses/campaigns → delete before them
+        ('messages', Message),
+        ('campaigns', Campaign),
+        ('courses', Course),
+        ('partners', Partner),
+        ('assets', Asset),
+        ('ai_logs', AILog),
     ]
-    for desc, amount_usd, key in real_tools:
-        marker = f'{REAL_PREFIX}:tool:{key}'
-        if not Expense.query.filter_by(notes=marker).first():
-            db.session.add(Expense(
-                date=today,
-                category='اشتراك',
-                description=desc,
-                amount_usd=amount_usd,
-                amount_egp=0,
-                is_business=True,
-                paid_by='الشركة',
-                notes=marker,
-            ))
-
-    # --- Capital — REAL money put in by the partners + operating reserve.
-    # The dashboard cash-flow / capital figures read CashTransaction rows
-    # (kind='capital_in'). Guarded by per-marker existence so it never doubles. ---
-    real_capital = [
-        # source, description, amount (USD), key
-        ('الشركاء', 'رأس المال المستثمر (مدفوع من الشركاء)', 15000, 'invested'),
-        ('احتياطي تشغيلي', 'تمويل تشغيلي (احتياطي)', 5000, 'operating-reserve'),
-    ]
-    for source, desc, amount_usd, key in real_capital:
-        marker = f'{REAL_PREFIX}:capital:{key}'
-        if not CashTransaction.query.filter_by(notes=marker).first():
-            db.session.add(CashTransaction(
-                date=today,
-                kind='capital_in',
-                source=source,
-                description=desc,
-                amount_usd=amount_usd,
-                amount_egp=0,
-                notes=marker,
-            ))
-
+    for table_name, model in wipe_models:
+        try:
+            n = model.query.delete()
+        except Exception:
+            n = 0
+        summary[table_name] = n
     db.session.commit()
-    print("✅ Real business data restore check complete (idempotent)")
+
+    # --- Sweep any leftover seed:v3% / real:v1% tagged rows across tables that have
+    # a `notes` column (defensive — most are already gone above). ---
+    tagged_removed = 0
+    for model in (Partner, Asset, Expense, Revenue, CashTransaction, Payout,
+                  Campaign, Course, Investment, InvestmentOpportunity, RevenueSplit):
+        if not hasattr(model, 'notes'):
+            continue
+        for prefix in (f'{SEED_PREFIX}%', f'{REAL_PREFIX}%'):
+            try:
+                tagged_removed += model.query.filter(model.notes.like(prefix)).delete(
+                    synchronize_session=False
+                )
+            except Exception:
+                pass
+    if tagged_removed:
+        db.session.commit()
+    summary['tagged_seed_real_rows_swept'] = tagged_removed
+
+    # --- Users: delete every NON-admin user, KEEP the table, re-seed admin fresh. ---
+    admin_email = os.environ.get('ADMIN_EMAIL', 'admin@elprofessor.com').lower().strip()
+    admin_password = os.environ.get('ADMIN_PASSWORD')
+    non_admin_deleted = 0
+    for u in User.query.all():
+        if (u.email or '').lower().strip() == admin_email:
+            continue
+        db.session.delete(u)
+        non_admin_deleted += 1
+    db.session.commit()
+    summary['non_admin_users_deleted'] = non_admin_deleted
+
+    existing_admin = User.query.filter_by(email=admin_email).first()
+    if admin_password:
+        if existing_admin:
+            existing_admin.password_hash = generate_password_hash(
+                admin_password, method='pbkdf2:sha256')
+            existing_admin.role = 'admin'
+            existing_admin.is_active = True
+            summary['admin'] = f'reset password for {admin_email}'
+        else:
+            db.session.add(User(
+                email=admin_email,
+                password_hash=generate_password_hash(admin_password, method='pbkdf2:sha256'),
+                name=os.environ.get('ADMIN_NAME', 'عبدالرحمن'),
+                role='admin',
+            ))
+            summary['admin'] = f'created fresh admin {admin_email}'
+        db.session.commit()
+    else:
+        summary['admin'] = 'ADMIN_PASSWORD not set — admin left unchanged'
+        logger.warning(
+            "RESET_BUSINESS_DATA on but ADMIN_PASSWORD unset — admin password NOT reset.")
+
+    kept = {
+        'users': 'KEPT table; non-admins deleted; admin re-seeded from env',
+        'settings': f'KEPT (incl. {PACKAGES_SETTING_KEY}/packages)',
+        'forecast_months': 'KEPT (الأهداف والتوقعات — forecast + goals/targets)',
+    }
+    logger.warning("RESET_BUSINESS_DATA complete. Wiped: %s | Kept: %s", summary, kept)
+    print(f"✅ RESET_BUSINESS_DATA complete. Wiped={summary} Kept={kept}")
 
 
 def seed_demo():
@@ -4574,6 +4589,7 @@ with app.app_context():
     db.create_all()
     ensure_runtime_schema()
     seed()  # admin/user init only — always safe
+    reset_business_data()  # ENV-GATED full wipe (RESET_BUSINESS_DATA) — no-op when unset
     if (os.environ.get('SEED_DEMO_DATA') or '').strip().lower() == 'true':
         seed_demo()  # founder's sample financials — OFF by default in production
     else:

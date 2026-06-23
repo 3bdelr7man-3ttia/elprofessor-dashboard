@@ -18,9 +18,6 @@
 html,body{height:100%}
 body{font-family:'IBM Plex Sans Arabic',sans-serif;background:var(--bg);color:var(--ink);font-size:14px;line-height:1.7;overflow:hidden}
 .app{display:flex;height:100vh;width:100%}
-.roleseg{display:flex;gap:3px;background:var(--surface-2);border:1px solid var(--line);border-radius:9px;padding:3px;margin-inline-start:14px}
-.roleseg button{border:0;background:transparent;font:inherit;font-size:12px;font-weight:800;color:var(--ink-2);border-radius:7px;padding:6px 12px;cursor:pointer}
-.roleseg button.on{background:var(--navy);color:#fff}
 .robanner{background:var(--gold-bg);border-bottom:1px solid #EAD9A8;color:#9a6a08;font-size:12.5px;font-weight:800;padding:9px 24px;display:flex;align-items:center;gap:6px}
 .robanner .ro-extra{color:var(--ink-2);font-weight:600}
 .app.ro .acts{display:none!important}
@@ -216,7 +213,7 @@ body{font-family:'IBM Plex Sans Arabic',sans-serif;background:var(--bg);color:va
 .uedit-x{background:rgba(0,0,0,.06);border:0;width:26px;height:26px;border-radius:7px;cursor:pointer;color:var(--ink-2);font-size:13px}
 .uedit-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:4px}
 .uedit .lab{font-size:11px;font-weight:800;color:var(--muted);margin-bottom:4px}
-@media(max-width:760px){.row.inbox-row,.row.esc-row{grid-template-columns:1fr}.rail{position:fixed;inset:0 0 0 auto;z-index:60;transform:translateX(100%);transition:transform .25s;box-shadow:-8px 0 30px rgba(0,0,0,.3)}.rail.open{transform:translateX(0)}.menu-btn{display:grid}.topbar{padding:0 14px;gap:10px}.topbar .search{display:none}.topbar .roleseg{display:none}.content{padding:14px 14px 40px}.kpis{grid-template-columns:1fr 1fr}.inboxwrap{grid-template-columns:1fr}.tabbar{overflow-x:auto;max-width:100%}}
+@media(max-width:760px){.row.inbox-row,.row.esc-row{grid-template-columns:1fr}.rail{position:fixed;inset:0 0 0 auto;z-index:60;transform:translateX(100%);transition:transform .25s;box-shadow:-8px 0 30px rgba(0,0,0,.3)}.rail.open{transform:translateX(0)}.menu-btn{display:grid}.topbar{padding:0 14px;gap:10px}.topbar .search{display:none}.content{padding:14px 14px 40px}.kpis{grid-template-columns:1fr 1fr}.inboxwrap{grid-template-columns:1fr}.tabbar{overflow-x:auto;max-width:100%}}
 .menu-btn{display:none;width:38px;height:38px;border-radius:10px;border:1px solid var(--line);background:var(--surface);place-items:center;color:var(--ink-2);cursor:pointer;flex:none}
 .railscrim{display:none;position:fixed;inset:0;background:rgba(15,23,42,.5);z-index:55}
 .railscrim.on{display:block}
@@ -259,7 +256,6 @@ body{font-family:'IBM Plex Sans Arabic',sans-serif;background:var(--bg);color:va
     <header class="topbar">
       <button class="menu-btn" id="menuBtn" aria-label="القائمة"><svg class="icon" viewBox="0 0 24 24"><path d="M3 6h18M3 12h18M3 18h18"/></svg></button>
       <div class="ttl"><h2 id="pageTitle">الوارد من المنصة</h2></div>
-      <div class="roleseg"><button class="on" data-r="admin">أدمن</button><button data-r="employee">موظف</button></div>
       <div class="search"><svg class="icon" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg><input placeholder="ابحث…" id="q"></div>
       <button class="tbtn" id="bellBtn" title="الإشعارات"><svg class="icon" viewBox="0 0 24 24"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg><span class="cbadge" id="bellCount" style="display:none"></span></button>
       <div class="notifpanel" id="notifPanel" style="display:none"></div>
@@ -903,8 +899,13 @@ function addUserModal(edit){
   s.querySelector('#u_s').onclick=function(){
     var nm=s.querySelector('#u_n').value.trim()||'مستخدم جديد';
     var data={name:nm,email:s.querySelector('#u_e').value.trim()||'user@mail.com',phone:s.querySelector('#u_p').value.trim()||'—',role:s.querySelector('#u_r').value,plan:s.querySelector('#u_pl').value.trim()||'مجانية',trainer:s.querySelector('#u_tr').checked?'approved':'none',verified:edit?e.verified:'pending',joined:edit?e.joined:'الآن'};
-    if(edit){Object.assign(edit,data);}else{USERS.push(Object.assign({id:'u'+(USERS.length+1)},data));}
-    closeModal();renderUsers();notify(edit?'حُدّثت بيانات '+nm:'أُضيف المستخدم '+nm);
+    var addLocal=function(){USERS.push(Object.assign({id:'u'+(USERS.length+1)},data));renderUsers();};
+    if(edit){Object.assign(edit,data);closeModal();renderUsers();notify('حُدّثت بيانات '+nm);return;}
+    // إضافة شخص جديد + إسناد دوره. عند اتصال الجسر الحيّ نكتب للـ API (POST /platform-users)؛
+    // غير ذلك (بيانات تصميمية) نضيف محليًا. الدور دائمًا يُختار هنا من قائمة الأدوار.
+    closeModal();
+    if(window.EP&&EP.createUser&&EP.data.users){EP.createUser(data,addLocal,function(){});}
+    else{addLocal();notify('أُضيف المستخدم '+nm);}
   };
 }
 
@@ -2382,10 +2383,12 @@ const ROLE_MSG={
   investor:'💼 لوحة المستثمر — <span class="ro-extra">محفظتك واستثماراتك الشخصية (mirror من الداش بورد).</span>',
   viewer:'⏳ حساب بانتظار التفعيل — <span class="ro-extra">يحدّد الأدمن دورك لتظهر لوحتك المناسبة.</span>'
 };
+// applyRole: محرّك الصلاحيات — يحدّد أي لوحة/موديولات تظهر حسب الدور الحقيقي
+// للحساب القادم من /auth/me (admin/employee/trainer/investor/viewer). ليس مبدّلًا
+// يدويًا: لا يوجد زر تبديل في الواجهة؛ يُستدعى مرّة واحدة عند الإقلاع بدور الحساب.
 function setRole(r){
   role=r;
   document.querySelector('.app').classList.toggle('ro',r==='employee'||r==='viewer');
-  document.querySelectorAll('.roleseg button').forEach(b=>b.classList.toggle('on',b.dataset.r===r));
   const banner=document.getElementById('roBanner');
   if(r==='admin'){banner.style.display='none';}
   else{banner.style.display='flex';banner.innerHTML=ROLE_MSG[r];}
@@ -2393,7 +2396,7 @@ function setRole(r){
   document.getElementById('pageTitle').textContent=MODULES[current].label;
   renderNav();renderView();
 }
-document.querySelectorAll('.roleseg button').forEach(b=>b.onclick=()=>setRole(b.dataset.r));
+// لا يوجد مبدّل أدوار مرئي: الدور يُشتق من الحساب (setRole يُستدعى من EP_BOOT فقط).
 // Expose the boot so the auth layer can run it only after a valid login.
 // الدور الحقيقي للمستخدم (من /auth/me) يحكم أي لوحة تظهر: أدمن = كل شيء؛
 // موظف = قراءة فقط (مستخدمون/دورات)؛ مدرّب/مستثمر = لوحته الشخصية؛ غير ذلك = بانتظار التفعيل.

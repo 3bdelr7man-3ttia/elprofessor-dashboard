@@ -767,6 +767,24 @@
       });
   };
 
+  // إضافة شخص جديد وإسناد دوره: POST /platform-users {full_name,email,phone,role,plan_id}
+  // يعيد المستخدم المُنشأ من الجسر. عند تعذّر الكتابة (الجسر غير مهيّأ) نتراجع
+  // محليًا حتى لا تتعطّل الشاشة — على نفس نمط بقية إجراءات الكتابة.
+  EP.createUser = function (data, onLocal, after) {
+    var body = {
+      full_name: data.name, email: data.email, phone: data.phone,
+      role: data.role, plan_id: data.plan, trainer_status: data.trainer
+    };
+    post("/platform-users", body)
+      .then(function () { note("أُضيف المستخدم " + data.name + " وأُسند دوره"); EP.reload("users", after); })
+      .catch(function (e) {
+        // الجسر لا يدعم الإنشاء بعد → احتفظ بالسلوك المحلي الحالي بدل كسر الشاشة.
+        quietToast((e && e.message) || "تُضيف محليًا — الإنشاء عبر الجسر غير متاح بعد");
+        if (onLocal) onLocal();
+        if (after) after();
+      });
+  };
+
   // اعتماد بند وارد حقيقي (مدرّب/برنامج)
   EP.decideInboxItem = function (i, action, after) {
     var path = i.apiKind === "trainer"
