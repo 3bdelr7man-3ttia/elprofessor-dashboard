@@ -76,7 +76,8 @@
     role: null, // الدور الحقيقي بعد الدخول (يضبطه applyAccount من /auth/me)
     data: { dashboard: null, metrics: null, users: null, content: null, finance: null, messages: null, inbox: null,
             escrow: null, investment: null, marketing: null, partners: null, courses: null, settings: null,
-            packages: null, t_data: null, i_data: null, targets: null, foundation: null, team: null },
+            packages: null, t_data: null, i_data: null, targets: null, foundation: null, team: null,
+            notifications: null, goalsAdvisor: null },
     state: {}, // 'idle' | 'loading' | 'ready' | 'error'
     _started: {}, // منع التحميل المزدوج
     api: api, get: get, post: post,
@@ -125,6 +126,23 @@
     if (!iso) return false;
     var t = Date.parse(iso); if (isNaN(t)) return false;
     return (Date.now() - t) < 30 * 24 * 3600e3;
+  }
+  // وقت نسبي عربي مختصر (للإشعارات): "الآن" / "منذ ٥ د" / "منذ ٣ س" / "منذ يومين" / تاريخ.
+  function relTime(iso) {
+    if (!iso) return "";
+    var t = Date.parse(iso); if (isNaN(t)) return "";
+    var diff = Date.now() - t;
+    if (diff < 0) diff = 0;
+    var mins = Math.floor(diff / 60000);
+    if (mins < 1) return "الآن";
+    if (mins < 60) return "منذ " + mins.toLocaleString("ar-EG") + " د";
+    var hrs = Math.floor(mins / 60);
+    if (hrs < 24) return "منذ " + hrs.toLocaleString("ar-EG") + " س";
+    var days = Math.floor(hrs / 24);
+    if (days === 1) return "منذ يوم";
+    if (days === 2) return "منذ يومين";
+    if (days < 7) return "منذ " + days.toLocaleString("ar-EG") + " أيام";
+    return arDate(iso);
   }
   function arDate(iso) {
     if (!iso) return "—";
@@ -598,6 +616,49 @@
       return Promise.all(jobs).then(function () { EP.data.team = data; });
     },
 
+    // الإشعارات: /api/notifications -> [ {id,title,detail,kind,route,when,unread} ]
+    // أحداث حقيقية مُجمّعة من الخادم (طلبات معلّقة/نزاعات/تحرير ضمان…). نطبّعها لشكل اللوحة.
+    notifications: function () {
+      // طبّع route الخادم (قد يأتي بشرطة بادئة أو باسم مرادف) لمفتاح وحدة داش بورد فعلي
+      // حتى يعمل النقر للانتقال (renderNotifPanel يتحقّق من MODULES[route]).
+      var ROUTE_ALIAS = { messages: "messages", investors: "investment", investment: "investment",
+        approvals: "inbox", inbox: "inbox", people: "users", users: "users", courses: "courses",
+        finance: "finance", escrow: "escrow", partners: "partners", content: "content", overview: "overview" };
+      function normRoute(rt) {
+        var k = String(rt || "").replace(/^\/+/, "").split(/[\/?#]/)[0].trim().toLowerCase();
+        return ROUTE_ALIAS[k] || k;
+      }
+      return get("/notifications").then(function (r) {
+        var list = Array.isArray(r) ? r : ((r && r.notifications) || []);
+        EP.data.notifications = list.map(function (n) {
+          var title = n.title || n.detail || "إشعار";
+          return {
+            id: n.id,
+            title: title,
+            detail: n.detail || "",
+            kind: n.kind || "",
+            route: normRoute(n.route),     // وحدة الداش بورد التي يفتحها النقر (مطبّعة)
+            when: n.when || n.created_at || "",
+            time: relTime(n.when || n.created_at),
+            read: n.unread === false,      // unread=true => غير مقروء
+          };
+        });
+      });
+    },
+
+    // مستشار الأهداف بالذكاء الاصطناعي: GET /api/ai/goals-advisor
+    // -> {headline, insights:[...], suggested_targets:[...]} مبنيّ على أداء المنصة الحقيقي.
+    goalsAdvisor: function () {
+      return get("/ai/goals-advisor").then(function (r) {
+        r = r || {};
+        EP.data.goalsAdvisor = {
+          headline: r.headline || "",
+          insights: Array.isArray(r.insights) ? r.insights : [],
+          suggested: Array.isArray(r.suggested_targets) ? r.suggested_targets : [],
+        };
+      });
+    },
+
     // لوحة المدرّب: /api/courses (مفلترة للمدرّب من الـ backend بحسب JWT)
     // + /api/payouts (مفلترة لاستحقاقات المدرّب) -> دوراتي + أرباحي (مستحق/مدفوع).
     t_data: function () {
@@ -975,7 +1036,8 @@
     EP.authed = false; EP.user = null;
     EP.data = { dashboard: null, metrics: null, users: null, content: null, finance: null, messages: null, inbox: null,
                 escrow: null, investment: null, marketing: null, partners: null, courses: null, settings: null,
-                packages: null, t_data: null, i_data: null, targets: null, foundation: null, team: null };
+                packages: null, t_data: null, i_data: null, targets: null, foundation: null, team: null,
+                notifications: null, goalsAdvisor: null };
     EP.state = {};
     window.location.reload();
   }

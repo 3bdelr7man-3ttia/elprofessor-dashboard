@@ -78,6 +78,10 @@ CORS(
 db = SQLAlchemy(app)
 CUT_OFF_DATE = datetime.date(2026, 6, 1)
 SEED_PREFIX = 'seed:v3'
+# REAL (not demo) founder records — restored into seed() idempotently. Tagged so
+# they are distinguishable from demo rows but, unlike demo rows, are NEVER deleted
+# or re-injected on boot once present (they are real, editable, persistent data).
+REAL_PREFIX = 'real:v1'
 
 # ============================================================
 # MODELS
@@ -3168,6 +3172,310 @@ def finance_summary():
     })
 
 # ============================================================
+# NOTIFICATIONS — real pending events that drive the dashboard bell.
+# Aggregates ONLY live events from real tables / the platform bridge.
+# Returns [] (empty) when nothing is pending. No hardcoded/fake items.
+# ============================================================
+
+def _bridge_get(path, params=None):
+    """Best-effort GET against the platform bridge. Returns parsed JSON or None on
+    any failure (no secret configured, network error, non-200). Never raises —
+    notifications must degrade gracefully when the bridge is unreachable."""
+    if not PLATFORM_METRICS_SECRET:
+        return None
+    try:
+        r = requests.get(
+            f"{PLATFORM_API_URL}{path}",
+            params=params or {},
+            headers={'X-ELP-Metrics-Secret': PLATFORM_METRICS_SECRET},
+            timeout=8,
+        )
+    except Exception:
+        return None
+    if r.status_code != 200:
+        return None
+    try:
+        return r.json() if r.content else None
+    except Exception:
+        return None
+
+
+def _bridge_list(payload, *keys):
+    """Pull a list out of a bridge payload that may be a bare list or a dict
+    wrapping the list under one of `keys` (e.g. 'applications', 'items', 'users')."""
+    if isinstance(payload, list):
+        return payload
+    if isinstance(payload, dict):
+        for k in keys:
+            v = payload.get(k)
+            if isinstance(v, list):
+                return v
+    return []
+
+
+@app.route('/api/notifications', methods=['GET'])
+@token_required
+@roles_required('admin', 'employee')
+def notifications():
+    """Aggregate REAL pending events into a notification list + unread count.
+    Each item: {id, title, detail, kind, route, when, unread}.
+    Computed live from real tables (and the platform bridge); [] when nothing pending."""
+    items = []
+
+    # 1) Unreplied contact messages (local table — always available).
+    for m in (Message.query.filter_by(status='new')
+              .order_by(Message.created_at.desc()).limit(20).all()):
+        items.append({
+            'id': f'message:{m.id}',
+            'title': 'رسالة جديدة من نموذج التواصل',
+            'detail': f'{m.name or "زائر"}: {(m.topic or m.body or "")[:80]}',
+            'kind': 'message',
+            'route': '/messages',
+            'when': m.created_at.isoformat() if m.created_at else None,
+            'unread': True,
+        })
+
+    # 2) Pending investor withdrawal requests (local table).
+    for w in (WithdrawalRequest.query.filter_by(status='pending')
+              .order_by(WithdrawalRequest.requested_at.desc()).limit(20).all()):
+        wallet = InvestorWallet.query.get(w.wallet_id)
+        items.append({
+            'id': f'withdrawal:{w.id}',
+            'title': 'طلب سحب بانتظار المراجعة',
+            'detail': f'{(wallet.investor_name if wallet else "مستثمر")} — {round(w.amount or 0, 2)} USD',
+            'kind': 'withdrawal',
+            'route': '/investors',
+            'when': w.requested_at.isoformat() if w.requested_at else None,
+            'unread': True,
+        })
+
+    # 3) Pending trainer applications (platform bridge — best effort).
+    trainer_payload = _bridge_get('/api/bridge/trainer-applications', {'status': 'pending'})
+    for app_item in _bridge_list(trainer_payload, 'applications', 'items', 'data'):
+        if not isinstance(app_item, dict):
+            continue
+        status = (app_item.get('status') or 'pending').strip().lower()
+        if status not in ('', 'pending'):
+            continue
+        aid = app_item.get('id') or app_item.get('application_id') or app_item.get('_id')
+        who = app_item.get('name') or app_item.get('full_name') or app_item.get('email') or 'متقدّم'
+        items.append({
+            'id': f'trainer-app:{aid}',
+            'title': 'طلب انضمام مدرب جديد',
+            'detail': f'{who} بانتظار الموافقة',
+            'kind': 'trainer_application',
+            'route': '/approvals',
+            'when': app_item.get('created_at') or app_item.get('submitted_at'),
+            'unread': True,
+        })
+
+    # 4) Pending program / course requests (platform bridge — best effort).
+    program_payload = _bridge_get('/api/bridge/program-requests', {'status': 'pending'})
+    for req in _bridge_list(program_payload, 'requests', 'items', 'data'):
+        if not isinstance(req, dict):
+            continue
+        status = (req.get('status') or 'pending').strip().lower()
+        if status not in ('', 'pending'):
+            continue
+        rid = req.get('id') or req.get('request_id') or req.get('_id')
+        title = req.get('title') or req.get('program') or req.get('course') or 'برنامج'
+        who = req.get('requester') or req.get('name') or req.get('email') or ''
+        detail = f'{title}{(" — " + who) if who else ""}'.strip()
+        items.append({
+            'id': f'program-req:{rid}',
+            'title': 'طلب برنامج / دورة بانتظار المراجعة',
+            'detail': detail,
+            'kind': 'program_request',
+            'route': '/approvals',
+            'when': req.get('created_at') or req.get('requested_at'),
+            'unread': True,
+        })
+
+    # 5) Recent platform signups (informational — best effort).
+    users_payload = _bridge_get('/api/bridge/users', {'limit': 5, 'sort': 'recent'})
+    for u in _bridge_list(users_payload, 'users', 'items', 'data')[:5]:
+        if not isinstance(u, dict):
+            continue
+        uid = u.get('id') or u.get('user_id') or u.get('_id') or u.get('email')
+        who = u.get('name') or u.get('full_name') or u.get('email') or 'مستخدم جديد'
+        items.append({
+            'id': f'signup:{uid}',
+            'title': 'تسجيل جديد على المنصة',
+            'detail': f'{who} أنشأ حسابًا',
+            'kind': 'signup',
+            'route': '/people',
+            'when': u.get('created_at') or u.get('joined_at'),
+            'unread': False,  # informational, not an action item
+        })
+
+    # Newest first; rows without a timestamp sink to the bottom.
+    items.sort(key=lambda x: x.get('when') or '', reverse=True)
+    unread = sum(1 for it in items if it.get('unread'))
+    return jsonify({'count': unread, 'total': len(items), 'items': items})
+
+
+# ============================================================
+# GOALS AI ADVISOR — grounded guidance for next-period targets.
+# Reads the SAME real numbers /api/dashboard exposes (revenue, students,
+# courses, growth, finance). Uses the configured AI provider if available;
+# otherwise a deterministic, data-driven heuristic. Never fabricated.
+# ============================================================
+
+def _goals_real_metrics():
+    """Collect the real performance numbers used by /api/dashboard, plus
+    month-over-month growth, into a compact dict for the advisor."""
+    rate = get_rate()
+    revenues = Revenue.query.all()
+    expenses = Expense.query.filter_by(is_business=True).all()
+    payouts = Payout.query.filter(Payout.status != 'waived').all()
+    courses = Course.query.all()
+
+    total_revenue = sum(to_egp(r.amount_usd, r.amount_egp, rate) for r in revenues)
+    total_expenses = sum(to_egp(e.amount_usd, e.amount_egp, rate) for e in expenses) + payout_total(payouts, rate)
+    net_profit = total_revenue - total_expenses
+    total_students = sum(c.students_count or 0 for c in courses)
+    active_courses = sum(1 for c in courses if (c.status or '') in ('active', 'completed'))
+
+    # Month-over-month revenue from the same monthly rows the dashboard uses.
+    monthly_rows = monthly_financial_rows(revenues, expenses, payouts, rate)
+    months = [r for r in monthly_rows if r.get('month')]
+    last_rev = months[-1]['revenue'] if months else 0
+    prev_rev = months[-2]['revenue'] if len(months) >= 2 else 0
+    if prev_rev > 0:
+        growth_pct = round((last_rev - prev_rev) / prev_rev * 100, 1)
+    elif last_rev > 0:
+        growth_pct = 100.0
+    else:
+        growth_pct = 0.0
+
+    return {
+        'total_revenue_egp': round(total_revenue),
+        'total_expenses_egp': round(total_expenses),
+        'net_profit_egp': round(net_profit),
+        'total_students': total_students,
+        'total_courses': len(courses),
+        'active_courses': active_courses,
+        'last_month_revenue_egp': round(last_rev),
+        'prev_month_revenue_egp': round(prev_rev),
+        'revenue_growth_pct': growth_pct,
+        'exchange_rate': rate,
+    }
+
+
+def _goals_heuristic(m):
+    """Deterministic, data-grounded advisor when no AI key is configured.
+    Every number is derived from the real metrics in `m`."""
+    growth = m['revenue_growth_pct']
+    base_rev = m['last_month_revenue_egp'] or m['total_revenue_egp']
+
+    insights = []
+    if m['total_revenue_egp'] == 0:
+        insights.append('لا توجد إيرادات مسجّلة بعد — الهدف الأول هو إغلاق أول عملية بيع وتسجيلها في الإيرادات.')
+    if m['net_profit_egp'] < 0:
+        insights.append(f'صافي الربح سالب حاليًا ({m["net_profit_egp"]:,} ج.م) — راقب المصروفات الثابتة والاشتراكات الشهرية.')
+    if growth < 0:
+        insights.append(f'إيراد الشهر الأخير انخفض بنسبة {abs(growth)}% عن الشهر السابق — راجع قنوات التسويق والتحويل.')
+    elif growth > 0:
+        insights.append(f'الإيراد ينمو بنسبة {growth}% شهريًا — حافظ على الزخم وزِد الطاقة الاستيعابية للدورات.')
+    if m['total_courses'] > 0 and m['total_students'] / max(1, m['total_courses']) < 10:
+        insights.append('متوسط عدد الطلاب لكل دورة منخفض — ركّز على ملء الدورات الحالية قبل إطلاق دورات جديدة.')
+    if not insights:
+        insights.append('الأرقام مستقرة — استهدف نموًا تدريجيًا بنسبة 20% في الإيراد والطلاب للشهر القادم.')
+
+    # Targets: grow declining/flat metrics by 20%, sustain healthy growth.
+    rev_factor = 1.2 if growth >= 0 else 1.1  # gentler push when declining
+    rev_target = round(base_rev * rev_factor) if base_rev else round(m['total_expenses_egp'] * 1.1)
+    student_target = max(m['total_students'] + 5, round(m['total_students'] * 1.2)) if m['total_students'] else 10
+    course_target = max(m['active_courses'] + 1, round(m['active_courses'] * 1.2)) if m['active_courses'] else 1
+
+    suggested_targets = [
+        {
+            'label': 'إيراد الشهر القادم (ج.م)',
+            'current': base_rev,
+            'target': rev_target,
+            'rationale': f'استهداف نمو {"20%" if growth >= 0 else "10%"} بناءً على إيراد آخر شهر مُسجَّل.'
+                          if base_rev else 'تغطية المصروفات الحالية + هامش 10% كنقطة تعادل أولى.',
+        },
+        {
+            'label': 'إجمالي الطلاب',
+            'current': m['total_students'],
+            'target': student_target,
+            'rationale': 'زيادة 20% أو +5 طلاب على الأقل لتوسيع القاعدة الطلابية.',
+        },
+        {
+            'label': 'الدورات النشطة',
+            'current': m['active_courses'],
+            'target': course_target,
+            'rationale': 'إطلاق دورة إضافية مع الحفاظ على امتلاء الدورات الحالية.',
+        },
+    ]
+
+    if growth >= 0:
+        headline = f'الأداء إيجابي — استهدف إيراد {rev_target:,} ج.م الشهر القادم'
+    else:
+        headline = f'الإيراد يتراجع — هدف تعافٍ متحفّظ عند {rev_target:,} ج.م'
+
+    return {
+        'headline': headline,
+        'insights': insights,
+        'suggested_targets': suggested_targets,
+        'source': 'heuristic',
+        'metrics': m,
+    }
+
+
+@app.route('/api/ai/goals-advisor', methods=['GET'])
+@token_required
+@roles_required('admin', 'employee')
+def ai_goals_advisor():
+    """AI guidance for next-period targets, grounded in REAL platform numbers.
+    Shape: { headline, insights:[...], suggested_targets:[{label,current,target,rationale}],
+             source:'ai'|'heuristic', metrics:{...} }."""
+    m = _goals_real_metrics()
+    heuristic = _goals_heuristic(m)  # deterministic baseline + safe fallback
+
+    provider = next((k for k, c in AI_PROVIDERS.items() if os.environ.get(c['env_key'])), None)
+    if not provider:
+        return jsonify(heuristic)
+
+    cfg = AI_PROVIDERS[provider]
+    model = os.environ.get(cfg['model_env'], cfg['default_model'])
+    system_prompt = (
+        'أنت مستشار نمو لشركة "البروفيسور" (منصة تعليم قانوني مصرية). '
+        'ستحصل على أرقام أداء حقيقية. حلّلها واقترح أهدافًا واقعية للشهر القادم. '
+        'استخدم الأرقام الفعلية فقط ولا تختلق بيانات. أعد JSON فقط بدون أي نص خارجه بالشكل:\n'
+        '{"headline": "جملة موجزة", "insights": ["ملاحظة 1", "ملاحظة 2"], '
+        '"suggested_targets": [{"label": "اسم المؤشر", "current": رقم, "target": رقم, "rationale": "السبب"}]}\n'
+        'اجعل الأهداف مبنية على الأرقام (مثلًا نمو ~20% للمؤشرات الصحية، تعافٍ متحفّظ للمتراجعة).'
+    )
+    user_content = (
+        'الأرقام الحقيقية الحالية:\n'
+        + json.dumps(m, ensure_ascii=False, indent=2)
+        + '\n\nاقترح الأهداف بناءً على هذه الأرقام فقط.'
+    )
+    try:
+        api_key = os.environ[cfg['env_key']]
+        if provider == 'anthropic':
+            text = call_anthropic(api_key, model, system_prompt, user_content)
+        elif provider == 'openai':
+            text = call_openai_compatible('https://api.openai.com/v1', api_key, model, system_prompt, user_content)
+        else:
+            text = call_openai_compatible('https://api.deepseek.com/v1', api_key, model, system_prompt, user_content)
+    except Exception:
+        return jsonify(heuristic)  # AI unreachable → grounded heuristic
+
+    parsed = _extract_json_block(text)
+    if not isinstance(parsed, dict) or not parsed.get('suggested_targets'):
+        return jsonify(heuristic)  # unexpected reply → grounded heuristic
+
+    # Always attach the real metrics + mark the source so the client knows it's grounded.
+    parsed.setdefault('headline', heuristic['headline'])
+    parsed.setdefault('insights', heuristic['insights'])
+    parsed['source'] = 'ai'
+    parsed['metrics'] = m
+    return jsonify(parsed)
+
+# ============================================================
 # SEED DATA
 # ============================================================
 
@@ -3200,6 +3508,109 @@ def seed():
 
     db.session.commit()
     print("✅ Admin/user initialization complete")
+
+    restore_real_business_data()
+
+
+def restore_real_business_data():
+    """Restore the founder's REAL records that were wrongly deleted as 'demo' in the
+    last cleanup. These are REAL, persistent, editable rows — NOT demo data.
+
+    Idempotent by design: each table/group is only populated when it is EMPTY (or the
+    specific real marker rows are absent). We NEVER re-inject once rows exist, so the
+    founder can freely edit/delete them afterwards without them reappearing on reboot.
+    """
+    # --- Cap table (partners) — only when the table is empty ---
+    if Partner.query.count() == 0:
+        real_partners = [
+            # name, role, equity %, invested (USD)
+            ('عبدالرحمن عطية', 'مؤسس · رئيس', 70.8, 11000),
+            ('مصطفى', 'شريك · تقني', 10.8, 1700),
+            ('أبوضيف', 'شريك', 6.1, 1000),
+            ('سمير', 'شريك', 5.5, 900),
+            ('غير موزّع', 'احتياطي', 6.8, 0),
+        ]
+        for name, role, equity, invested_usd in real_partners:
+            db.session.add(Partner(
+                name=name,
+                role=role,
+                equity_percent=equity,
+                profit_share_percent=equity,
+                capital_usd=invested_usd,
+                capital_egp=0,
+                notes=f'{REAL_PREFIX}:cap-table',
+            ))
+
+    # --- Fixed assets — only when the table is empty ---
+    if Asset.query.count() == 0:
+        real_assets = [
+            # name, value (USD), qty, category-note
+            ('لابتوب MacBook Pro', 2200, 1, 'تطوير'),
+            ('شاشات عرض', 600, 2, 'مكتب'),
+            ('كاميرا + ميكروفون', 900, 1, 'تصوير الدورات'),
+            ('سيرفر فيديو (اشتراك سنوي)', 1200, 1, 'بثّ الدورات'),
+            ('أثاث ومعدات مكتبية', 1342, 1, 'المقر'),
+        ]
+        for name, value_usd, qty, note in real_assets:
+            label = name if qty == 1 else f'{name} ×{qty}'
+            db.session.add(Asset(
+                name=label,
+                category=note,
+                owner='الشركة',
+                value_egp=round(value_usd * qty * 50, 2),  # store EGP at the 50 base rate used elsewhere
+                monthly_rent_egp=0,
+                status='owned',
+                notes=f'{REAL_PREFIX}:asset|usd={value_usd}|qty={qty}',
+            ))
+
+    # --- Tools / subscriptions (monthly) — recurring operating expenses.
+    # The dashboard foundation/finance views read Expense rows; we represent each
+    # subscription as a REAL monthly Expense in category 'اشتراك'. Guarded so we
+    # only add a given subscription if no real-tagged row for it already exists. ---
+    today = datetime.date.today()
+    real_tools = [
+        # description, monthly amount (USD), key
+        ('Anthropic Claude API (شهري)', 120, 'anthropic'),
+        ('استضافة Hostinger + Coolify (شهري)', 75, 'hosting'),
+        ('أدوات تصميم واشتراكات (شهري)', 30, 'design'),
+    ]
+    for desc, amount_usd, key in real_tools:
+        marker = f'{REAL_PREFIX}:tool:{key}'
+        if not Expense.query.filter_by(notes=marker).first():
+            db.session.add(Expense(
+                date=today,
+                category='اشتراك',
+                description=desc,
+                amount_usd=amount_usd,
+                amount_egp=0,
+                is_business=True,
+                paid_by='الشركة',
+                notes=marker,
+            ))
+
+    # --- Capital — REAL money put in by the partners + operating reserve.
+    # The dashboard cash-flow / capital figures read CashTransaction rows
+    # (kind='capital_in'). Guarded by per-marker existence so it never doubles. ---
+    real_capital = [
+        # source, description, amount (USD), key
+        ('الشركاء', 'رأس المال المستثمر (مدفوع من الشركاء)', 15000, 'invested'),
+        ('احتياطي تشغيلي', 'تمويل تشغيلي (احتياطي)', 5000, 'operating-reserve'),
+    ]
+    for source, desc, amount_usd, key in real_capital:
+        marker = f'{REAL_PREFIX}:capital:{key}'
+        if not CashTransaction.query.filter_by(notes=marker).first():
+            db.session.add(CashTransaction(
+                date=today,
+                kind='capital_in',
+                source=source,
+                description=desc,
+                amount_usd=amount_usd,
+                amount_egp=0,
+                notes=marker,
+            ))
+
+    db.session.commit()
+    print("✅ Real business data restore check complete (idempotent)")
 
 
 def seed_demo():
