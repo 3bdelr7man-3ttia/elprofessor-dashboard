@@ -220,6 +220,23 @@ body{font-family:'IBM Plex Sans Arabic',sans-serif;background:var(--bg);color:va
 .menu-btn{display:none;width:38px;height:38px;border-radius:10px;border:1px solid var(--line);background:var(--surface);place-items:center;color:var(--ink-2);cursor:pointer;flex:none}
 .railscrim{display:none;position:fixed;inset:0;background:rgba(15,23,42,.5);z-index:55}
 .railscrim.on{display:block}
+/* ===== AUTH / LOGIN OVERLAY (added by dashboard-api wiring) ===== */
+.ep-login{position:fixed;inset:0;z-index:200;display:grid;place-items:center;padding:22px;background:radial-gradient(1200px 600px at 70% -10%,rgba(158,43,78,.20),transparent 60%),linear-gradient(160deg,var(--rail) 0%,var(--navy-2) 100%)}
+.ep-login .card{background:var(--surface);width:100%;max-width:392px;border-radius:18px;overflow:hidden;box-shadow:0 30px 80px rgba(0,0,0,.45);animation:tin .25s ease}
+.ep-login .hd{background:linear-gradient(135deg,var(--navy) 0%,var(--navy-3) 100%);color:#fff;padding:26px 26px 22px;display:flex;align-items:center;gap:13px}
+.ep-login .hd .mk{width:46px;height:46px;border-radius:13px;background:linear-gradient(135deg,var(--human) 0%,#7d2240 100%);display:grid;place-items:center;flex:none;box-shadow:0 6px 16px rgba(158,43,78,.4)}
+.ep-login .hd h1{font-family:'Aref Ruqaa',serif;font-size:23px;font-weight:700;line-height:1.25}
+.ep-login .hd span{font-size:11.5px;color:rgba(255,255,255,.6);font-weight:600}
+.ep-login .bd{padding:24px 26px 26px}
+.ep-login .bd .lab{font-size:12px;font-weight:800;color:var(--ink-2);margin:0 0 6px}
+.ep-login .bd input{width:100%;border:1.5px solid var(--line);border-radius:11px;padding:12px 13px;font:inherit;font-size:14px;background:var(--surface-2);margin-bottom:14px;transition:border-color .15s,background .15s}
+.ep-login .bd input:focus{outline:none;border-color:var(--human);background:#fff}
+.ep-login .bd .sub{width:100%;border:0;border-radius:12px;padding:13px;font:inherit;font-weight:800;font-size:14.5px;color:#fff;background:var(--human);cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;transition:filter .15s}
+.ep-login .bd .sub:hover{filter:brightness(.94)} .ep-login .bd .sub:disabled{opacity:.6;cursor:default}
+.ep-login .bd .err{background:var(--conflict-bg);border:1px solid #E9C9BB;color:var(--conflict);border-radius:10px;padding:9px 12px;font-size:12.5px;font-weight:700;margin-bottom:14px;display:none}
+.ep-login .bd .err.show{display:block}
+.ep-login .bd .ttl{font-family:Cairo;font-weight:800;font-size:17px;color:var(--navy);margin-bottom:4px}
+.ep-login .bd .hint{font-size:12px;color:var(--muted);margin-bottom:18px}
 </style>
 </head>
 <body>
@@ -234,7 +251,7 @@ body{font-family:'IBM Plex Sans Arabic',sans-serif;background:var(--bg);color:va
       <div class="grp">المال والنمو</div><nav class="nav" id="nav-money"></nav>
       <div class="grp">الشركة والذكاء</div><nav class="nav" id="nav-co"></nav>
     </div>
-    <div class="me"><div class="av">ع</div><div><div class="nm">عبدالرحمن</div><div class="rl">أدمن — تحكم كامل</div></div></div>
+    <div class="me"><div class="av" id="meAv">ع</div><div style="flex:1;min-width:0"><div class="nm" id="meName">عبدالرحمن</div><div class="rl" id="meRole">أدمن — تحكم كامل</div></div><button id="logoutBtn" title="تسجيل الخروج" aria-label="تسجيل الخروج" style="background:rgba(255,255,255,.08);border:0;color:rgba(255,255,255,.7);width:32px;height:32px;border-radius:9px;cursor:pointer;flex:none;display:grid;place-items:center"><svg class="icon" viewBox="0 0 24 24" style="width:17px;height:17px"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="m16 17 5-5-5-5"/><path d="M21 12H9"/></svg></button></div>
   </aside>
 
   <div class="railscrim" id="railscrim"></div>
@@ -254,6 +271,7 @@ body{font-family:'IBM Plex Sans Arabic',sans-serif;background:var(--bg);color:va
 <div class="toasts" id="toasts"></div>
 
 <script src="site-content.js"></script>
+<script src="dashboard-api.js"></script>
 <script>
 const ICONS={
   grid:'<path d="M3 3h7v7H3zM14 3h7v7h-7zM14 14h7v7h-7zM3 14h7v7H3z"/>',
@@ -308,7 +326,7 @@ const MODULES={
   i_invest:{label:'استثماراتي',ic:'trend',c:'var(--memory)',bg:'var(--memory-bg)',grp:'role'},
   v_pending:{label:'بانتظار التفعيل',ic:'clock',c:'var(--muted)',bg:'var(--surface-2)',grp:'role'}
 };
-const INBOX=[
+var INBOX=[
   {out:'طلب توثيق صفة «محامٍ»',from:'التوثيق',src:'shield',dest:'users',triage:'human',sla:'٤٨س',slaWarn:false,note:'الذكاء طابق الاسم والرابط العام ورقم القيد مبدئيًّا — حوّلها لموظف للاعتماد النهائي.',ref:'VG-2271',who:'أحمد سامي'},
   {out:'جلسة استشارة بدفع بضمان',from:'الخبراء',src:'shield',dest:'escrow',triage:'wait',sla:'٧٢س',slaWarn:false,note:'المبلغ محجوز في الضمان. ينتظر تأكيد إتمام الخدمة أو انتهاء المهلة للتحرير التلقائي.',ref:'ESC-0489',who:'م. خليلي ← خبير عقاري'},
   {out:'نزاع على جلسة استشارة',from:'الضمان',src:'shield',dest:'escrow',triage:'late',sla:'متأخّر ٣س',slaWarn:true,note:'المبلغ مجمّد. النزاع تخطّى مهلة الرد الأولى — يحتاج فصل بشري عاجل.',ref:'DSP-0212',who:'باسم دويكات'},
@@ -404,6 +422,7 @@ function renderView(){
 
 /* ===== INBOX VIEW ===== */
 function viewInbox(v){
+  if(window.EP){EP.ensure('inbox',()=>viewInbox(v));}
   v.innerHTML=`
     <div class="kpis" id="kpis"></div>
     <div class="filterbar" id="filters"><span class="lbl">التوجيه:</span></div>
@@ -451,7 +470,10 @@ function drawInbox(){
     <div class="field"><div class="lab">الطرف</div><div class="val">${i.who}</div></div>
     <div class="field"><div class="lab">المهلة</div><div class="val" style="${i.slaWarn?'color:var(--conflict)':''}">${i.sla}</div></div>
     <div class="acts">${i.triage==='auto'?`<button class="btn btn-primary" data-a="open">${svg('check')}عُولجت — عرض</button>`:`<button class="btn btn-human" data-a="approve">${svg('check')}اعتمد وحوّل للموديول</button>`}<button class="btn btn-ghost" data-a="goto">فتح ${m.label}</button></div></div>`;
-  el.querySelectorAll('[data-a]').forEach(b=>b.onclick=()=>{if(b.dataset.a==='goto')go(i.dest);else toast(b.dataset.a==='approve'?'تم الاعتماد ← '+m.label:'عرض في '+m.label);});
+  el.querySelectorAll('[data-a]').forEach(b=>b.onclick=()=>{
+    if(b.dataset.a==='goto'){go(i.dest);return;}
+    if(b.dataset.a==='approve'&&i.apiKind&&window.EP){EP.decideInboxItem(i,'approve',()=>{selected=null;viewInbox(document.getElementById('view'));});return;}
+    toast(b.dataset.a==='approve'?'تم الاعتماد ← '+m.label:'عرض في '+m.label);});
 }
 
 /* ===== ESCROW VIEW ===== */
@@ -566,15 +588,21 @@ const WITHDRAWALS=[
   {who:'خبير عقاري',amount:1640,dest:'حساب بنكي',status:'done',when:'أمس'}
 ];
 const WSTATUS={pending:{cls:'s-human',t:'بانتظار اعتماد'},done:{cls:'s-auto',t:'نُفِّذ'}};
-const FMONTHLY=[{m:'مارس',i:18,o:6},{m:'أبريل',i:31,o:8},{m:'مايو',i:22,o:7},{m:'يونيو',i:28,o:9}];
+var FMONTHLY=[{m:'مارس',i:18,o:6},{m:'أبريل',i:31,o:8},{m:'مايو',i:22,o:7},{m:'يونيو',i:28,o:9}];
 
 function viewFinance(v){
+  if(window.EP){EP.ensure('finance',()=>viewFinance(v));}
+  const F=(window.EP&&EP.data.finance)||null, Fst=(window.EP&&EP.state.finance)||'idle';
   const pendW=WITHDRAWALS.filter(w=>w.status==='pending').reduce((s,w)=>s+w.amount,0);
+  const kRev = F ? money(F.total_revenue)+' <small style="font-size:13px">ج</small>' : (Fst==='loading'?'…':'٢٤٧٬٥٣٨ <small style="font-size:13px">ج</small>');
+  const kExp = F ? money(F.total_expenses)+' <small style="font-size:13px">ج</small>' : (Fst==='loading'?'…':'٣٢٬٩٧٠ <small style="font-size:13px">ج</small>');
+  const kNet = F ? (((F.total_revenue-F.total_expenses)>=0?'+':'')+money(F.total_revenue-F.total_expenses)+' <small style="font-size:13px">ج</small>') : (Fst==='loading'?'…':'+٢١٤٬٥٦٨ <small style="font-size:13px">ج</small>');
   v.innerHTML=`
+    ${Fst==='error'?`<div class="policy" style="border-inline-start-color:var(--conflict);background:var(--conflict-bg);color:var(--conflict)">${svg('scale','ic')}<div>تعذّر جلب المالية من الخادم — تُعرض أرقام تصميمية. <b style="cursor:pointer;text-decoration:underline" onclick="EP.reload('finance',()=>viewFinance(document.getElementById('view')))">إعادة المحاولة</b></div></div>`:''}
     <div class="kpis">
-      <div class="kpi k-3"><div class="top"><span class="ic">${svg('wallet')}</span>إجمالي الإيرادات</div><b>٢٤٧٬٥٣٨ <small style="font-size:13px">ج</small></b><div class="sub">حتى اليوم</div></div>
-      <div class="kpi k-4"><div class="top"><span class="ic">${svg('trend')}</span>إجمالي المصروفات</div><b>٣٢٬٩٧٠ <small style="font-size:13px">ج</small></b><div class="sub">أعمال + شخصي مفصول</div></div>
-      <div class="kpi k-1"><div class="top"><span class="ic">${svg('grid')}</span>صافي الربح</div><b>+٢١٤٬٥٦٨ <small style="font-size:13px">ج</small></b><div class="sub">إيرادات − مصروفات</div></div>
+      <div class="kpi k-3"><div class="top"><span class="ic">${svg('wallet')}</span>إجمالي الإيرادات</div><b>${kRev}</b><div class="sub">${F?'حيّ من المالية':'حتى اليوم'}</div></div>
+      <div class="kpi k-4"><div class="top"><span class="ic">${svg('trend')}</span>إجمالي المصروفات</div><b>${kExp}</b><div class="sub">أعمال + شخصي مفصول</div></div>
+      <div class="kpi k-1"><div class="top"><span class="ic">${svg('grid')}</span>صافي الربح</div><b>${kNet}</b><div class="sub">إيرادات − مصروفات</div></div>
       <div class="kpi k-2"><div class="top"><span class="ic">${svg('clock')}</span>سحوبات بانتظار</div><b>${money(pendW)} <small style="font-size:13px">ج</small></b><div class="sub">${WITHDRAWALS.filter(w=>w.status==='pending').length} طلبات للاعتماد</div></div>
     </div>
     <div class="tabbar" id="finTabs">
@@ -699,7 +727,7 @@ function drawFin(){
 /* ===== USERS VIEW ===== */
 const ROLE={admin:{t:'أدمن',c:'var(--human)',bg:'var(--human-bg)'},staff:{t:'موظف',c:'var(--navy)',bg:'var(--surface-2)'},member:{t:'عضو',c:'var(--ai)',bg:'var(--ai-bg)'},investor:{t:'مستثمر',c:'var(--memory)',bg:'var(--memory-bg)'}};
 const ROLES_LIST=['admin','staff','member','investor'];
-const USERS=[
+var USERS=[
   {id:'u1',name:'أحمد سامي',email:'ahmed.sami@mail.com',phone:'٠١٠٢٢٢٣٣٤٤',role:'member',trainer:'pending',plan:'مجانية',joined:'٢١ يونيو',verified:'pending'},
   {id:'u2',name:'د. ليلى منصور',email:'laila.m@mail.com',phone:'٠١١٥٥٦٦٧٧٨',role:'member',trainer:'approved',plan:'باقة الأدوات',joined:'١٨ يونيو',verified:'verified'},
   {id:'u3',name:'عمر أبو مدين',email:'omar.am@mail.com',phone:'٠١٠٩٩٨٨٧٧٦',role:'investor',trainer:'none',plan:'مجانية',joined:'١٥ يونيو',verified:'verified'},
@@ -710,21 +738,24 @@ const USERS=[
 const VERIFY={verified:{t:'موثّق',cls:'s-auto'},pending:{t:'بانتظار توثيق',cls:'s-wait'},none:{t:'غير موثّق',cls:''}};
 
 function viewUsers(v){
-  const total=59, last7=6, verified=USERS.filter(u=>u.verified==='verified').length, trainers=USERS.filter(u=>u.trainer==='approved').length;
+  if(window.EP){EP.ensure('users',()=>viewUsers(v));}
+  const Ust=(window.EP&&EP.state.users)||'idle';
+  const total=USERS.length, last7=USERS.filter(u=>u.last7).length, verified=USERS.filter(u=>u.verified==='verified').length, trainers=USERS.filter(u=>u.trainer==='approved').length;
   v.innerHTML=`
+    ${Ust==='error'?`<div class="policy" style="border-inline-start-color:var(--conflict);background:var(--conflict-bg);color:var(--conflict)">${svg('scale','ic')}<div>تعذّر جلب المستخدمين من المنصة — تُعرض بيانات تصميمية. <b style="cursor:pointer;text-decoration:underline" onclick="EP.reload('users',()=>viewUsers(document.getElementById('view')))">إعادة المحاولة</b></div></div>`:''}
     <div class="kpis">
-      <div class="kpi k-1"><div class="top"><span class="ic">${svg('users')}</span>إجمالي المستخدمين</div><b>${money(total)}</b><div class="sub">من الموقع + الجدد</div></div>
+      <div class="kpi k-1"><div class="top"><span class="ic">${svg('users')}</span>إجمالي المستخدمين</div><b>${Ust==='loading'?'…':money(total)}</b><div class="sub">${(window.EP&&EP.data.users)?'من المنصة الحيّة':'من الموقع + الجدد'}</div></div>
       <div class="kpi k-3"><div class="top"><span class="ic">${svg('trend')}</span>تسجيلات آخر ٧ أيام</div><b>${money(last7)}</b><div class="sub">يصبّون من المنصة</div></div>
       <div class="kpi k-2"><div class="top"><span class="ic">${svg('shield')}</span>موثّقون</div><b>${money(verified)}<small style="font-size:13px"> ظاهرون</small></b><div class="sub">صفة محقّقة</div></div>
       <div class="kpi k-4"><div class="top"><span class="ic">${svg('cap')}</span>مدرّبون معتمدون</div><b>${money(trainers)}</b><div class="sub">عبر طلبات التدريب</div></div>
     </div>
     <div class="filterbar" id="uFilters"><span class="lbl">الدور:</span></div>
     <div class="inboxwrap">
-      <section class="panel"><div class="ph"><h3>المستخدمون</h3><span class="n" id="uN">0</span><button class="btn btn-human" id="uAdd" style="flex:none;min-width:auto;padding:6px 13px;font-size:12px;margin-inline-start:auto">+ إضافة مستخدم</button></div><div id="uRows"></div></section>
+      <section class="panel"><div class="ph"><h3>المستخدمون</h3><span class="n" id="uN">0</span><button class="btn btn-human" id="uAdd" style="flex:none;min-width:auto;padding:6px 13px;font-size:12px;margin-inline-start:auto">+ إضافة مستخدم</button></div><div id="uRows">${Ust==='loading'?'<div style="padding:40px;text-align:center;color:var(--muted)">…جارٍ التحميل</div>':''}</div></section>
       <aside class="drawer" id="drawer"></aside>
     </div>`;
   document.getElementById('uAdd').onclick=function(){addUserModal();};
-  renderUsers();
+  if(Ust!=='loading')renderUsers();
 }
 function renderUsers(){
   const fe=document.getElementById('uFilters');
@@ -775,7 +806,9 @@ function drawUser(){
       <button class="btn btn-warn" data-a="del" style="flex:none;min-width:auto;padding:7px 12px;font-size:12px">حذف</button>
     </div></div>`;
   inline.querySelector('.uedit-x').onclick=()=>{selected=null;renderUsers();};
-  inline.querySelectorAll('.urole').forEach(b=>b.onclick=()=>{const rid=b.dataset.r;if(rid===u.role)return;if(lastAdmin&&rid!=='admin'){toast('ممنوع: لا يمكن إزالة آخر أدمن');return;}u.role=rid;renderUsers();toast('تم تغيير دور '+u.name+' إلى «'+ROLE[rid].t+'»');});
+  inline.querySelectorAll('.urole').forEach(b=>b.onclick=()=>{const rid=b.dataset.r;if(rid===u.role)return;if(lastAdmin&&rid!=='admin'){toast('ممنوع: لا يمكن إزالة آخر أدمن');return;}
+    if(window.EP&&EP.data.users&&u.platform){const prev=u.role;u.role=rid;renderUsers();EP.setUserRole(u,rid,prev,()=>renderUsers());return;}
+    u.role=rid;renderUsers();toast('تم تغيير دور '+u.name+' إلى «'+ROLE[rid].t+'»');});
   inline.querySelectorAll('[data-a]').forEach(b=>b.onclick=()=>{const a=b.dataset.a;
     if(a==='train'){u.trainer='approved';renderUsers();notify('اعتُمد '+u.name+' كمدرّب');}
     else if(a==='untrain'){u.trainer='none';renderUsers();toast('أُلغي اعتماد '+u.name+' كمدرّب');}
@@ -832,16 +865,28 @@ function addUserModal(edit){
 
 /* ===== OVERVIEW VIEW ===== */
 function viewOverview(v){
+  if(window.EP){EP.ensure('dashboard',()=>viewOverview(v));}
+  const D=(window.EP&&EP.data.dashboard)||null, Dst=(window.EP&&EP.state.dashboard)||'idle';
   const act=INBOX.filter(i=>i.triage==='human'||i.triage==='late');
   const cards=[['users','المستخدمون',MODULES.users],['escrow','الضمان والنزاعات',MODULES.escrow],['finance','المالية',MODULES.finance],['courses','الدورات والتدريب',MODULES.courses],['marketing','التسويق',MODULES.marketing],['content','المحتوى والمدونة',MODULES.content]];
+  // Real KPIs from /api/dashboard when loaded; otherwise design defaults.
+  const fin=D?D.financial:null, crs=D?D.courses:null;
+  const M=(window.EP&&EP.data.metrics)||null; // /api/platform-metrics (admin) — live platform user count
+  const kUsers = M&&(M.total_users!=null) ? money(M.total_users) : (crs?money(crs.total_students||0):'٥٩');
+  const kUsersSub = M ? 'من المنصة الحيّة' : (Dst==='loading'?'…':'تقدير تصميمي');
+  const kProfit = fin ? (fin.net_profit>=0?'+':'')+money(fin.net_profit)+' <small style="font-size:13px">ج</small>' : (Dst==='loading'?'…':'+٢١٤٬٥٦٨ <small style="font-size:13px">ج</small>');
+  const monthlySeries = (D&&Array.isArray(D.monthly)&&D.monthly.length)
+    ? D.monthly.slice(-6).map(m=>({m:(m.month||'').slice(5),v:Math.round((m.revenue||0)/1000)}))
+    : FMONTHLY.map(m=>({m:m.m,v:m.i}));
   v.innerHTML=`
+    ${Dst==='error'?`<div class="policy" style="border-inline-start-color:var(--conflict);background:var(--conflict-bg);color:var(--conflict)">${svg('scale','ic')}<div>تعذّر جلب أرقام المالية من الخادم — تُعرض أرقام تصميمية مؤقتًا. <b style="cursor:pointer;text-decoration:underline" onclick="EP.reload('dashboard',()=>viewOverview(document.getElementById('view')))">إعادة المحاولة</b></div></div>`:''}
     <div class="kpis">
-      <div class="kpi k-1"><div class="top"><span class="ic">${svg('users')}</span>مستخدمو المنصة</div><b>٥٩</b><div class="sub">+٦ هذا الأسبوع</div></div>
-      <div class="kpi k-3"><div class="top"><span class="ic">${svg('wallet')}</span>صافي الربح</div><b>+٢١٤٬٥٦٨ <small style="font-size:13px">ج</small></b><div class="sub">حتى اليوم</div></div>
+      <div class="kpi k-1"><div class="top"><span class="ic">${svg('users')}</span>مستخدمو المنصة</div><b>${kUsers}</b><div class="sub">${kUsersSub}</div></div>
+      <div class="kpi k-3"><div class="top"><span class="ic">${svg('wallet')}</span>صافي الربح</div><b>${kProfit}</b><div class="sub">${fin?'إيرادات − مصروفات':'حتى اليوم'}</div></div>
       <div class="kpi k-2"><div class="top"><span class="ic">${svg('shield')}</span>محجوز في الضمان</div><b>٤٬١٥٠ <small style="font-size:13px">ج</small></b><div class="sub">عبر ٤ جلسات</div></div>
       <div class="kpi k-4"><div class="top"><span class="ic">${svg('inbox')}</span>وارد يحتاج تصرّفك</div><b>${money(act.length)}</b><div class="sub">${act.filter(i=>i.triage==='late').length} عاجل</div></div>
     </div>
-    <section class="panel" style="margin-bottom:16px"><div class="ph"><h3>نمو الإيرادات الشهري</h3><span class="hint">بالألف ج</span></div><div style="padding:18px 24px">${svgLine(FMONTHLY.map(m=>({m:m.m,v:m.i})),'#1C9A5B')}</div></section>
+    <section class="panel" style="margin-bottom:16px"><div class="ph"><h3>نمو الإيرادات الشهري</h3><span class="hint">بالألف ج${D?' · حيّ':''}</span></div><div style="padding:18px 24px">${svgLine(monthlySeries,'#1C9A5B')}</div></section>
     <div style="display:grid;grid-template-columns:1.4fr 1fr;gap:16px;align-items:start" class="ov-grid">
       <section class="panel"><div class="ph"><h3>أهم الوارد — يحتاج تصرّفك</h3><span class="n">${act.length}</span><span class="hint">اضغط لفتح موديوله</span></div><div id="ovRows"></div></section>
       <section class="panel"><div class="ph"><h3>الموديولات</h3><span class="hint">مدخل سريع</span></div><div id="ovMods" style="padding:12px;display:grid;grid-template-columns:1fr 1fr;gap:10px"></div></section>
@@ -1284,15 +1329,19 @@ function addAdvertiserModal(edit){
 
 /* ===== CONTENT / BLOG VIEW ===== */
 const SITE_ARTS=(window.SITE_CONTENT&&window.SITE_CONTENT.articles)||[];
-const TOPICS=[
+var TOPICS=[
   {title:'المسؤولية التقصيرية في القانون المدني',by:'الذكاء + خبير مدني',status:'pending',views:0,date:'اليوم'},
   {title:'دليل تأسيس شركة الشخص الواحد',by:'الذكاء + خبيرة شركات',status:'pending',views:0,date:'أمس'}
 ].concat(SITE_ARTS.map(function(a,i){return {title:a.title,by:a.by,status:'published',views:[1240,860,1530][i]||900,date:a.date,onsite:true};}));
 function viewContent(v){
+  if(window.EP){EP.ensure('content',()=>viewContent(v));}
+  const Cst=(window.EP&&EP.state.content)||'idle';
   const pend=TOPICS.filter(t=>t.status==='pending').length,pub=TOPICS.filter(t=>t.status==='published').length,views=TOPICS.reduce((s,t)=>s+t.views,0);
   v.innerHTML=`
     <div class="policy" style="border-inline-start-color:var(--memory)">${svg('doc','ic')}<div><b>تدفّق المدونة:</b> موضوع (ذكاء + خبير) ← صياغة مقال ← <b>اعتماد إداري</b> ← نشر تلقائي على <span style="direction:ltr">elprofessor.net</span>.</div></div>
-    <div class="policy" style="border-inline-start-color:var(--agree);background:var(--agree-bg)">${svg('check','ic')}<div><b>متصل بالموقع:</b> ما يُعتمد هنا يُنشر مباشرة على <span style="direction:ltr">elprofessor.net</span> من <b>مصدر محتوى واحد</b> — لا إدخال مكرّر. <b>${(window.SITE_CONTENT&&window.SITE_CONTENT.articles.length)||0}</b> مقالات منشورة الآن على الموقع.</div></div>
+    <div class="policy" style="border-inline-start-color:var(--agree);background:var(--agree-bg)">${svg('check','ic')}<div><b>متصل بالموقع:</b> ما يُعتمد هنا يُنشر مباشرة على <span style="direction:ltr">elprofessor.net</span> من <b>مصدر محتوى واحد</b> — لا إدخال مكرّر. <b>${pub}</b> مقالات منشورة الآن على الموقع.</div></div>
+    ${Cst==='error'?`<div class="policy" style="border-inline-start-color:var(--conflict);background:var(--conflict-bg);color:var(--conflict)">${svg('scale','ic')}<div>تعذّر جلب المقالات من الخادم — تُعرض بيانات تصميمية. <b style="cursor:pointer;text-decoration:underline" onclick="EP.reload('content',()=>viewContent(document.getElementById('view')))">إعادة المحاولة</b></div></div>`:''}
+    ${Cst==='loading'?`<div class="policy" style="border-inline-start-color:var(--memory)">${svg('doc','ic')}<div>…جارٍ تحميل المقالات من الخادم</div></div>`:''}
     <div class="kpis">
       <div class="kpi k-2"><div class="top"><span class="ic">${svg('doc')}</span>بانتظار الاعتماد</div><b>${money(pend)}</b><div class="sub">مقالات جاهزة</div></div>
       <div class="kpi k-3"><div class="top"><span class="ic">${svg('check')}</span>منشورة</div><b>${money(pub)}</b><div class="sub">على الموقع</div></div>
@@ -1338,9 +1387,13 @@ function drawContent(){
       :`<div class="acts"><button class="btn btn-primary" data-a="pub">${svg('check')}اعتمد وانشر على الموقع</button><button class="btn btn-ghost" data-a="edit">تعديل</button><button class="btn btn-warn" data-a="reject">رفض</button></div>`}
     </div>`;
   el.querySelectorAll('[data-a]').forEach(b=>b.onclick=()=>{const a=b.dataset.a;
-    if(a==='pub'){t.status='published';pushToSite(t);selected=null;viewContent(document.getElementById('view'));notify('نُشر «'+t.title+'» على الموقع — elprofessor.net');}
+    if(a==='pub'){
+      if(window.EP&&EP.data.content&&t.aid){EP.publishArticle(t,()=>{selected=null;viewContent(document.getElementById('view'));});return;}
+      t.status='published';pushToSite(t);selected=null;viewContent(document.getElementById('view'));notify('نُشر «'+t.title+'» على الموقع — elprofessor.net');}
     else if(a==='edit'){createArticleModal(t);}
-    else if(a==='unpub'){t.status='pending';selected=null;viewContent(document.getElementById('view'));notify('أُلغي نشر «'+t.title+'»');}
+    else if(a==='unpub'){
+      if(window.EP&&EP.data.content&&t.aid){EP.unpublishArticle(t,()=>{selected=null;viewContent(document.getElementById('view'));});return;}
+      t.status='pending';selected=null;viewContent(document.getElementById('view'));notify('أُلغي نشر «'+t.title+'»');}
     else if(a==='reject'){toast('تم رفض المقال');}
     else toast('فتح المقال على الموقع');});
 }
@@ -1392,8 +1445,13 @@ function createArticleModal(edit){
   s.querySelector('#a_img').onclick=function(){toast('تم اختيار الصورة (محاكاة)');};
   s.querySelector('#a_x').onclick=closeModal;
   function gather(){return {t:s.querySelector('#a_t').value.trim()||'مقال بلا عنوان',cat:s.querySelector('#a_cat').value.trim()||'قانوني',k:s.querySelector('#a_k').value.trim()||'مقال',ex:s.querySelector('#a_ex').value.trim(),by:s.querySelector('#a_by').value.trim()||'الإدارة'};}
-  s.querySelector('#a_save').onclick=function(){var g=gather();if(edit){edit.title=g.t;edit.cat=g.cat;edit.kicker=g.k;edit.excerpt=g.ex;edit.by=g.by;}else{TOPICS.push({title:g.t,by:g.by,status:'pending',views:0,date:'الآن',cat:g.cat,kicker:g.k,excerpt:g.ex});}closeModal();viewContent(document.getElementById('view'));notify(edit?'حُدّث «'+g.t+'»':'أنشأت مقال «'+g.t+'» — جاهز للاعتماد');};
-  var pb=s.querySelector('#a_pub');if(pb)pb.onclick=function(){var g=gather();var t={title:g.t,by:g.by,status:'published',views:0,date:'الآن',cat:g.cat,kicker:g.k,excerpt:g.ex};TOPICS.push(t);pushToSite(t);closeModal();viewContent(document.getElementById('view'));notify('نُشر «'+g.t+'» على الموقع — elprofessor.net');};
+  s.querySelector('#a_save').onclick=function(){var g=gather();
+    if(window.EP&&EP.data.content&&!edit){EP.createArticle(g,false,function(){closeModal();viewContent(document.getElementById('view'));});return;}
+    if(window.EP&&EP.data.content&&edit&&edit.aid){EP.updateArticle(edit,g,function(){closeModal();viewContent(document.getElementById('view'));});return;}
+    if(edit){edit.title=g.t;edit.cat=g.cat;edit.kicker=g.k;edit.excerpt=g.ex;edit.by=g.by;}else{TOPICS.push({title:g.t,by:g.by,status:'pending',views:0,date:'الآن',cat:g.cat,kicker:g.k,excerpt:g.ex});}closeModal();viewContent(document.getElementById('view'));notify(edit?'حُدّث «'+g.t+'»':'أنشأت مقال «'+g.t+'» — جاهز للاعتماد');};
+  var pb=s.querySelector('#a_pub');if(pb)pb.onclick=function(){var g=gather();
+    if(window.EP&&EP.data.content){EP.createArticle(g,true,function(){closeModal();viewContent(document.getElementById('view'));});return;}
+    var t={title:g.t,by:g.by,status:'published',views:0,date:'الآن',cat:g.cat,kicker:g.k,excerpt:g.ex};TOPICS.push(t);pushToSite(t);closeModal();viewContent(document.getElementById('view'));notify('نُشر «'+g.t+'» على الموقع — elprofessor.net');};
 }
 function editNewsModal(edit){
   var s=openModal(edit?'تعديل خبر':'خبر جديد للموقع','<div class="fld"><label>عنوان الخبر</label><input id="n_t" value="'+((edit&&edit.title)||'')+'" placeholder="عنوان الخبر"></div><div class="acts"><button class="btn btn-human" id="n_pub">'+svg('check')+'نشر على الموقع</button><button class="btn btn-ghost" id="n_x">إلغاء</button></div>');
@@ -1952,7 +2010,9 @@ function loadMsgs(){
 }
 function timeAgo(ts){var d=Math.floor((Date.now()-ts)/3600e3);if(d<1)return 'منذ أقل من ساعة';if(d<24)return 'منذ '+d+' ساعة';return 'منذ '+Math.floor(d/24)+' يوم';}
 function viewMessages(v){
-  var msgs=loadMsgs();
+  if(window.EP){EP.ensure('messages',()=>viewMessages(v));}
+  var Mst=(window.EP&&EP.state.messages)||'idle';
+  var msgs=(window.EP&&EP.data.messages)?EP.data.messages:loadMsgs();
   var nw=msgs.filter(function(m){return m.status==='new';}).length;
   v.innerHTML=`
     <div class="policy" style="border-inline-start-color:var(--ai);background:var(--ai-bg)">${svg('inbox','ic')}<div><b>من الموقع ← غرفة العمليات:</b> كل رسالة من <span style="direction:ltr">elprofessor.net/#contact</span> تظهر هنا فورًا. مصدر واحد، لا بريد ضائع.</div></div>
@@ -1989,9 +2049,13 @@ function drawMsg(msgs){
     '<div class="field"><div class="lab">الرسالة</div><div class="val" style="background:var(--surface-2);border-radius:9px;padding:11px 13px;font-weight:500">'+m.body+'</div></div>'+
     '<div class="acts">'+(m.status==='new'?'<button class="btn btn-primary" data-a="reply">'+svg('check')+'تم الرد</button>':'')+'<button class="btn btn-ghost" data-a="email">رد بالبريد</button><button class="btn btn-warn" data-a="del">حذف</button></div></div>';
   el.querySelectorAll('[data-a]').forEach(function(b){b.onclick=function(){var a=b.dataset.a;
-    if(a==='reply'){m.status='replied';persistMsg(m);viewMessages(document.getElementById('view'));notify('تم تعليم رسالة «'+m.name+'» كمردود عليها');}
+    if(a==='reply'){
+      if(window.EP&&EP.data.messages&&m.id!=null){EP.replyMessage(m,function(){selected=null;viewMessages(document.getElementById('view'));});return;}
+      m.status='replied';persistMsg(m);viewMessages(document.getElementById('view'));notify('تم تعليم رسالة «'+m.name+'» كمردود عليها');}
     else if(a==='email'){toast('فتح الرد بالبريد على '+m.email);}
-    else if(a==='del'){deleteMsg(m);selected=null;viewMessages(document.getElementById('view'));notify('حُذفت الرسالة');}
+    else if(a==='del'){
+      if(window.EP&&EP.data.messages&&m.id!=null){EP.deleteMessage(m,function(){selected=null;viewMessages(document.getElementById('view'));});return;}
+      deleteMsg(m);selected=null;viewMessages(document.getElementById('view'));notify('حُذفت الرسالة');}
   };});
 }
 function persistMsg(m){try{var k='elp_contact_messages';var arr=JSON.parse(localStorage.getItem(k)||'[]');for(var i=0;i<arr.length;i++){if(arr[i].at===m.at){arr[i].status=m.status;}}localStorage.setItem(k,JSON.stringify(arr));}catch(e){}}
@@ -2026,8 +2090,11 @@ function setRole(r){
   renderNav();renderView();
 }
 document.querySelectorAll('.roleseg button').forEach(b=>b.onclick=()=>setRole(b.dataset.r));
-renderNav();renderView();
-renderNotifPanel();
+// Expose the boot so the auth layer can run it only after a valid login.
+window.EP_BOOT=function(){renderNav();renderView();renderNotifPanel();};
+if(!window.EP||!window.EP.requireAuth){ // no auth layer present → boot directly (safe fallback)
+  window.EP_BOOT();
+}
 (function(){var bb=document.getElementById('bellBtn'),np=document.getElementById('notifPanel');if(bb&&np){bb.onclick=function(e){e.stopPropagation();np.style.display=np.style.display==='none'?'block':'none';};document.addEventListener('click',function(e){if(np.style.display==='block'&&!np.contains(e.target)&&e.target!==bb&&!bb.contains(e.target))np.style.display='none';});}})();
 document.getElementById('q').addEventListener('input',()=>{if(current==='inbox')renderInbox();});
 (function(){var mb=document.getElementById('menuBtn'),rl=document.querySelector('.rail'),sc=document.getElementById('railscrim');if(mb&&rl&&sc){mb.onclick=function(){rl.classList.toggle('open');sc.classList.toggle('on');};sc.onclick=function(){rl.classList.remove('open');sc.classList.remove('on');};rl.addEventListener('click',function(e){if(e.target.closest('.nav .item')){rl.classList.remove('open');sc.classList.remove('on');}});}})();

@@ -21,7 +21,7 @@ RUN apt-get update \
 
 COPY backend/app.py /app/app.py
 # The new cloud-design dashboard becomes the served frontend (Flask serves /app/dist).
-COPY dashboard-cloud/index.html dashboard-cloud/site-content.js dashboard-cloud/Dashboard-Outputs.html dashboard-cloud/Dashboard-State.html /app/dist/
+COPY dashboard-cloud/index.html dashboard-cloud/dashboard-api.js dashboard-cloud/site-content.js dashboard-cloud/Dashboard-Outputs.html dashboard-cloud/Dashboard-State.html /app/dist/
 
 EXPOSE 8080
 
