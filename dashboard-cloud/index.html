@@ -308,6 +308,7 @@ const MODULES={
   marketing:{label:'التسويق',ic:'mega',c:'var(--human)',bg:'var(--human-bg)',grp:'money'},
   partners:{label:'الشركاء',ic:'hands',c:'var(--navy)',bg:'var(--surface-2)',grp:'money'},
   content:{label:'المحتوى والمدونة',ic:'doc',c:'var(--memory)',bg:'var(--memory-bg)',grp:'money'},
+  topics:{label:'المواضيع',ic:'sparkles',c:'var(--gold)',bg:'var(--gold-bg)',grp:'money'},
   tutorials:{label:'الدليل',ic:'book',c:'var(--ai)',bg:'var(--ai-bg)',grp:'money'},
   packages:{label:'الباقات والأسعار',ic:'wallet',c:'var(--gold)',bg:'var(--gold-bg)',grp:'money'},
   team:{label:'الفريق والمدربون',ic:'cap',c:'var(--ai)',bg:'var(--ai-bg)',grp:'co'},
@@ -348,7 +349,7 @@ const money=n=>n.toLocaleString('ar-EG');
 let current='inbox', selected=null, activeFilter='all', escTab='sessions', finTab='summary', usersFilter='all', courseTab='courses', invTab='investors', mktTab='campaigns', contentTab='pending';
 let role='admin';
 const ROLE_NAV={
-  employee:['users','courses','tutorials'],
+  employee:['users','courses','topics','tutorials'],
   trainer:['t_home','t_courses','t_earnings','ai'],
   investor:['i_home','i_market','i_invest','ai'],
   viewer:['v_pending']
@@ -398,6 +399,7 @@ function renderView(){
   if(current==='clubs')return viewClubs(v);
   if(current==='messages')return viewMessages(v);
   if(current==='content')return viewContent(v);
+  if(current==='topics')return viewTopics(v);
   if(current==='tutorials')return viewTutorials(v);
   if(current==='ai')return viewAI(v);
   if(current==='partners')return viewPartners(v);
@@ -1607,6 +1609,87 @@ function editPageModal(p){
   s.querySelector('#pg_s').onclick=function(){p.name=s.querySelector('#pg_t').value.trim()||p.name;p.updated='الآن';closeModal();viewContent(document.getElementById('view'));notify('حُدّثت صفحة «'+p.name+'» على الموقع');};
 }
 function createPageModal(){PAGES.push({name:'صفحة جديدة',path:'/new',updated:'الآن'});editPageModal(PAGES[PAGES.length-1]);}
+
+/* ===== «المواضيع» (Topics): بحث/مسودّة ← مراجعة مسودّة الذكاء ← نشر للوحة العامة. ===== */
+// تُجلب حيّة من /api/platform-topics عبر طبقة EP (window.PTOPICS) — بما فيها المسودّات.
+// الورك فلو: «موضوع جديد» يبحث ويُنشئ مسودّة بمسوّدة ذكاء (ai_answer) ← تُراجَع ← «نشر».
+var PTOPICS=[];
+function topEsc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+function viewTopics(v){
+  if(window.EP){EP.ensure('platformTopics',()=>viewTopics(v));}
+  const Tst=(window.EP&&EP.state.platformTopics)||'idle';
+  const pub=PTOPICS.filter(t=>t.status==='published').length,draft=PTOPICS.length-pub,withAI=PTOPICS.filter(t=>t.ai_answer).length;
+  v.innerHTML=`
+    <div class="policy" style="border-inline-start-color:var(--gold)">${svg('sparkles','ic')}<div><b>المواضيع:</b> ابحث موضوعًا (عنوان + سؤال + تخصص) فيُنشئ الذكاء <b>مسوّدة</b> ← راجعها ← اضغط <b>نشر</b> لتظهر على اللوحة العامة في المنصة.</div></div>
+    <div class="policy" style="border-inline-start-color:var(--agree);background:var(--agree-bg)">${svg('check','ic')}<div><b>متصل بالمنصة:</b> الورك فلو = بحث/مسودّة ← مراجعة مسودّة الذكاء ← نشر. <b>${pub}</b> موضوعًا منشورًا الآن.</div></div>
+    ${Tst==='error'?`<div class="policy" style="border-inline-start-color:var(--conflict);background:var(--conflict-bg);color:var(--conflict)">${svg('scale','ic')}<div>تعذّر جلب المواضيع من المنصة. <b style="cursor:pointer;text-decoration:underline" onclick="EP.reload('platformTopics',()=>viewTopics(document.getElementById('view')))">إعادة المحاولة</b></div></div>`:''}
+    ${Tst==='loading'?`<div class="policy" style="border-inline-start-color:var(--gold)">${svg('sparkles','ic')}<div>…جارٍ تحميل المواضيع من المنصة</div></div>`:''}
+    <div class="kpis">
+      <div class="kpi k-3"><div class="top"><span class="ic">${svg('check')}</span>منشورة</div><b>${money(pub)}</b><div class="sub">على اللوحة العامة</div></div>
+      <div class="kpi k-2"><div class="top"><span class="ic">${svg('doc')}</span>مسودّات</div><b>${money(draft)}</b><div class="sub">قيد المراجعة</div></div>
+      <div class="kpi k-1"><div class="top"><span class="ic">${svg('sparkles')}</span>بمسوّدة ذكاء</div><b>${money(withAI)}</b><div class="sub">من ${money(PTOPICS.length)}</div></div>
+    </div>
+    <div class="inboxwrap"><section class="panel"><div class="ph"><h3>المواضيع</h3><span class="n">${PTOPICS.length}</span><button class="btn btn-human" id="topAdd" style="flex:none;min-width:auto;padding:6px 13px;font-size:12px;margin-inline-start:auto">+ موضوع جديد (بحث)</button></div><div id="topRows"></div></section></div>`;
+  var ab=document.getElementById('topAdd');if(ab)ab.onclick=()=>topCreateModal();
+  renderTopics();
+}
+function renderTopics(){
+  const el=document.getElementById('topRows');if(!el)return;el.innerHTML='';
+  const items=PTOPICS.slice();
+  if(!items.length){el.innerHTML='<div style="padding:40px;text-align:center;color:var(--muted)">لا مواضيع بعد — اضغط «+ موضوع جديد (بحث)» لبدء بحث ومسوّدة ذكاء.</div>';return;}
+  items.forEach((t)=>el.insertAdjacentHTML('beforeend',`<div class="row esc-row" style="grid-template-columns:2fr 1fr 1fr 200px">
+    <div class="c c1"><div class="src-ic" style="background:var(--gold-bg);color:var(--gold)">${svg('sparkles')}</div><div><div class="parties">${topEsc(t.title)}</div><div class="from">${topEsc(t.specialty)||'—'} · ${t.ai_answer?'<b style="color:var(--ink)">مسوّدة ذكاء ✓</b>':'بلا مسوّدة'}</div></div></div>
+    <div class="c"><div class="from">${t.date||'—'}</div></div>
+    <div class="c"><span class="status ${t.status==='published'?'s-auto':'s-wait'}"><span class="d"></span>${t.status==='published'?'منشور':'مسودّة'}</span></div>
+    <div class="c" style="gap:6px">${t.status==='published'?'':`<button class="btn btn-primary" data-pub="${t.id}" style="padding:5px 11px;font-size:12px">نشر</button>`}<button class="btn btn-ghost" data-view="${t.id}" style="padding:5px 11px;font-size:12px">مراجعة</button><button class="btn btn-warn" data-del="${t.id}" style="padding:5px 11px;font-size:12px">حذف</button></div></div>`));
+  el.querySelectorAll('[data-view]').forEach(b=>b.onclick=()=>{var t=PTOPICS.find(x=>x.id===b.dataset.view);if(t)topReviewModal(t);});
+  el.querySelectorAll('[data-pub]').forEach(b=>b.onclick=()=>{var t=PTOPICS.find(x=>x.id===b.dataset.pub);if(!t)return;
+    if(!confirm('نشر «'+t.title+'» على اللوحة العامة؟'))return;
+    if(window.EP){EP.publishTopic(t,()=>viewTopics(document.getElementById('view')));}});
+  el.querySelectorAll('[data-del]').forEach(b=>b.onclick=()=>{var t=PTOPICS.find(x=>x.id===b.dataset.del);if(!t)return;
+    if(!confirm('حذف موضوع «'+t.title+'»؟'))return;
+    if(window.EP){EP.deleteTopic(t,()=>viewTopics(document.getElementById('view')));}});
+}
+// الخطوة ١: بحث/مسودّة — عنوان + سؤال + تخصص ← الذكاء يُنشئ مسوّدة.
+function topCreateModal(){
+  var s=openModal('موضوع جديد — بحث ومسوّدة ذكاء',
+    '<div class="note-ai" style="margin-bottom:12px">'+svg('sparkles','ic')+'<div>اكتب العنوان والسؤال والتخصص ← يبحث الذكاء ويُنشئ <b>مسوّدة</b> (لا تُنشر تلقائيًا). راجعها بعدها ثم انشرها.</div></div>'+
+    '<div class="fld"><label>العنوان</label><input id="tp_t" placeholder="مثال: حقوق العامل عند الفصل التعسّفي"></div>'+
+    '<div class="fld"><label>السؤال (يبحثه الذكاء)</label><textarea id="tp_q" style="min-height:110px" placeholder="اكتب السؤال القانوني بوضوح ليبحثه الذكاء ويصيغ المسوّدة…"></textarea></div>'+
+    '<div class="fld"><label>التخصص</label><input id="tp_sp" placeholder="مثال: قانون عمل / عقاري / جنائي"></div>'+
+    '<div class="acts" style="margin-top:6px"><button class="btn btn-primary" id="tp_save">'+svg('sparkles')+'ابحث وأنشئ مسوّدة</button><button class="btn btn-ghost" id="tp_x">إلغاء</button></div>');
+  s.querySelector('#tp_x').onclick=closeModal;
+  s.querySelector('#tp_save').onclick=function(){
+    var g={title:s.querySelector('#tp_t').value.trim(),question:s.querySelector('#tp_q').value.trim(),specialty:s.querySelector('#tp_sp').value.trim()};
+    if(!g.title){toast('العنوان مطلوب');return;}
+    if(!g.question){toast('السؤال مطلوب');return;}
+    if(!window.EP){toast('غير متصل بالمنصة');return;}
+    EP.createTopic(g,function(){closeModal();viewTopics(document.getElementById('view'));});
+  };
+}
+// الخطوة ٢: مراجعة مسوّدة الذكاء — عرض ai_answer + تعديل + نشر.
+function topReviewModal(t){
+  var pubBtn=t.status==='published'?'':'<button class="btn btn-primary" id="tp_pub">'+svg('check')+'نشر على اللوحة</button>';
+  var s=openModal('مراجعة الموضوع — '+(t.status==='published'?'منشور':'مسودّة'),
+    '<div class="fld"><label>العنوان</label><input id="tpr_t" value="'+topEsc(t.title)+'"></div>'+
+    '<div class="row2"><div class="fld"><label>التخصص</label><input id="tpr_sp" value="'+topEsc(t.specialty)+'"></div><div class="fld"><label>الحالة</label><input value="'+(t.status==='published'?'منشور':'مسودّة')+'" disabled></div></div>'+
+    '<div class="fld"><label>السؤال</label><textarea id="tpr_q" style="min-height:70px">'+topEsc(t.question)+'</textarea></div>'+
+    '<div class="note-ai" style="margin:4px 0 8px">'+svg('sparkles','ic')+'<div>مسوّدة الذكاء — راجعها وعدّلها قبل النشر:</div></div>'+
+    '<div class="fld"><label>مسوّدة الذكاء (ai_answer)</label><textarea id="tpr_ai" style="min-height:180px" placeholder="(لم يُنشئ الذكاء مسوّدة بعد)">'+topEsc(t.ai_answer)+'</textarea></div>'+
+    '<div class="acts" style="margin-top:6px"><button class="btn btn-human" id="tpr_save">'+svg('check')+'حفظ التعديلات</button>'+pubBtn+'<button class="btn btn-ghost" id="tpr_x">إغلاق</button></div>');
+  s.querySelector('#tpr_x').onclick=closeModal;
+  s.querySelector('#tpr_save').onclick=function(){
+    var g={title:s.querySelector('#tpr_t').value.trim(),specialty:s.querySelector('#tpr_sp').value.trim(),question:s.querySelector('#tpr_q').value.trim(),ai_answer:s.querySelector('#tpr_ai').value};
+    if(!g.title){toast('العنوان مطلوب');return;}
+    if(!window.EP){toast('غير متصل بالمنصة');return;}
+    EP.updateTopic(t.id,g,function(){closeModal();viewTopics(document.getElementById('view'));});
+  };
+  var pb=s.querySelector('#tp_pub');if(pb)pb.onclick=function(){
+    if(!window.EP){toast('غير متصل بالمنصة');return;}
+    if(!confirm('نشر «'+t.title+'» على اللوحة العامة؟'))return;
+    EP.publishTopic(t,function(){closeModal();viewTopics(document.getElementById('view'));});
+  };
+}
 
 /* ===== «الدليل» (Tutorials): يُدار هنا، يُعرض على المنصة. ===== */
 // تُجلب حيّة من /api/tutorials عبر طبقة EP (window.TUTORIALS). يرفع الفريق

@@ -77,7 +77,7 @@
     data: { dashboard: null, metrics: null, users: null, content: null, finance: null, messages: null, inbox: null,
             escrow: null, investment: null, marketing: null, partners: null, courses: null, settings: null,
             packages: null, t_data: null, i_data: null, targets: null, foundation: null, team: null,
-            notifications: null, goalsAdvisor: null, tutorials: null },
+            notifications: null, goalsAdvisor: null, tutorials: null, platformTopics: null },
     state: {}, // 'idle' | 'loading' | 'ready' | 'error'
     _started: {}, // منع التحميل المزدوج
     api: api, get: get, post: post,
@@ -244,6 +244,28 @@
             body: t.body || "",
             video_url: t.video_url || "",
             is_published: !!t.is_published,
+          };
+        });
+      });
+    },
+
+    // المواضيع: /api/platform-topics -> [ {id,title,question,specialty,ai_answer,status,...} ]
+    // الورك فلو: بحث/مسودّة (إنشاء) -> مراجعة مسودّة الذكاء -> نشر للوحة العامة.
+    // الـ proxy السرّي يجلب المسودّات أيضًا.
+    platformTopics: function () {
+      return get("/platform-topics").then(function (r) {
+        var list = Array.isArray(r) ? r : ((r && r.topics) || []);
+        EP.data.platformTopics = { raw: list };
+        window.PTOPICS = list.map(function (t) {
+          var st = t.status || (t.is_published || t.published ? "published" : "draft");
+          return {
+            id: t.id,
+            title: t.title || "",
+            question: t.question || "",
+            specialty: t.specialty || "",
+            ai_answer: t.ai_answer || t.aiAnswer || "",
+            status: st === "published" ? "published" : "draft",
+            date: arDate(t.created_at || t.published_at),
           };
         });
       });
@@ -855,6 +877,29 @@
   EP.deleteTutorial = function (t, after) {
     api("/tutorials/" + t.id, { method: "DELETE" })
       .then(function () { note("حُذف القسم «" + t.title + "»"); EP.reload("tutorials", after); })
+      .catch(function (e) { quietToast((e && e.message) || "تعذّر الحذف"); if (after) after(); });
+  };
+
+  // المواضيع: بحث/مسودّة (إنشاء) -> مراجعة مسودّة الذكاء -> نشر/تعديل/حذف.
+  // كلها تمرّ عبر الـ proxy السرّي (لا سرّ في المتصفح).
+  EP.createTopic = function (g, after) {
+    post("/platform-topics", g)
+      .then(function () { note("جارٍ بحث «" + g.title + "» — أُنشئت مسودّة بمسوّدة الذكاء"); EP.reload("platformTopics", after); })
+      .catch(function (e) { quietToast((e && e.message) || "تعذّر إنشاء الموضوع"); if (after) after(); });
+  };
+  EP.publishTopic = function (t, after) {
+    post("/platform-topics/" + t.id + "/publish", {})
+      .then(function () { note("نُشر «" + t.title + "» على اللوحة العامة"); EP.reload("platformTopics", after); })
+      .catch(function (e) { quietToast((e && e.message) || "تعذّر النشر"); if (after) after(); });
+  };
+  EP.updateTopic = function (id, g, after) {
+    api("/platform-topics/" + id, { method: "PUT", body: g })
+      .then(function () { note("حُدّث الموضوع «" + (g.title || "") + "»"); EP.reload("platformTopics", after); })
+      .catch(function (e) { quietToast((e && e.message) || "تعذّر التحديث"); if (after) after(); });
+  };
+  EP.deleteTopic = function (t, after) {
+    api("/platform-topics/" + t.id, { method: "DELETE" })
+      .then(function () { note("حُذف الموضوع «" + t.title + "»"); EP.reload("platformTopics", after); })
       .catch(function (e) { quietToast((e && e.message) || "تعذّر الحذف"); if (after) after(); });
   };
 
