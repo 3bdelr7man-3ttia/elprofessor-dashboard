@@ -309,6 +309,7 @@ const MODULES={
   partners:{label:'الشركاء',ic:'hands',c:'var(--navy)',bg:'var(--surface-2)',grp:'money'},
   content:{label:'المحتوى والمدونة',ic:'doc',c:'var(--memory)',bg:'var(--memory-bg)',grp:'money'},
   topics:{label:'المواضيع',ic:'sparkles',c:'var(--gold)',bg:'var(--gold-bg)',grp:'money'},
+  news:{label:'الأخبار',ic:'mega',c:'var(--human)',bg:'var(--human-bg)',grp:'money'},
   tutorials:{label:'الدليل',ic:'book',c:'var(--ai)',bg:'var(--ai-bg)',grp:'money'},
   packages:{label:'الباقات والأسعار',ic:'wallet',c:'var(--gold)',bg:'var(--gold-bg)',grp:'money'},
   team:{label:'الفريق والمدربون',ic:'cap',c:'var(--ai)',bg:'var(--ai-bg)',grp:'co'},
@@ -349,7 +350,7 @@ const money=n=>n.toLocaleString('ar-EG');
 let current='inbox', selected=null, activeFilter='all', escTab='sessions', finTab='summary', usersFilter='all', courseTab='courses', invTab='investors', mktTab='campaigns', contentTab='pending';
 let role='admin';
 const ROLE_NAV={
-  employee:['users','courses','topics','tutorials'],
+  employee:['users','courses','topics','news','tutorials'],
   trainer:['t_home','t_courses','t_earnings','ai'],
   investor:['i_home','i_market','i_invest','ai'],
   viewer:['v_pending']
@@ -400,6 +401,7 @@ function renderView(){
   if(current==='messages')return viewMessages(v);
   if(current==='content')return viewContent(v);
   if(current==='topics')return viewTopics(v);
+  if(current==='news')return viewNews(v);
   if(current==='tutorials')return viewTutorials(v);
   if(current==='ai')return viewAI(v);
   if(current==='partners')return viewPartners(v);
@@ -1688,6 +1690,113 @@ function topReviewModal(t){
     if(!window.EP){toast('غير متصل بالمنصة');return;}
     if(!confirm('نشر «'+t.title+'» على اللوحة العامة؟'))return;
     EP.publishTopic(t,function(){closeModal();viewTopics(document.getElementById('view'));});
+  };
+}
+
+/* ===== «الأخبار» (News): أخبار قانونية منتقاة بصوتنا ← مراجعة ← نشر. ===== */
+// تُجلب حيّة من /api/platform-news عبر طبقة EP (window.PNEWS) — مرتّبة بالأحدث،
+// بما فيها المسودّات. الفريق يراجع الملخّص بصوتنا، يرى رابط (روابط) المصدر،
+// ينشر/يحذف، أو «حوّل لموضوع». كما يحرّر مصادر الأخبار (RSS لكل دولة + كلمات الأندية).
+var PNEWS=[];
+var PNEWS_SOURCES={feeds:[],club_keywords:{}};
+function nwsEsc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+function nwsSrcChips(t){
+  if(!t.sources||!t.sources.length)return '<span style="color:var(--muted)">بلا مصدر</span>';
+  return t.sources.map(function(s){return '<a href="'+nwsEsc(s.url)+'" target="_blank" rel="noopener" style="color:var(--ai);text-decoration:underline;display:inline-block;max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;vertical-align:bottom">'+nwsEsc(s.title||s.url)+'</a>';}).join(' · ');
+}
+function viewNews(v){
+  if(window.EP){EP.ensure('platformNews',()=>viewNews(v));EP.ensure('platformNewsSources',()=>viewNews(v));}
+  const Tst=(window.EP&&EP.state.platformNews)||'idle';
+  const pub=PNEWS.filter(t=>t.status==='published').length,draft=PNEWS.length-pub,withSrc=PNEWS.filter(t=>t.sources&&t.sources.length).length;
+  v.innerHTML=`
+    <div class="policy" style="border-inline-start-color:var(--human)">${svg('mega','ic')}<div><b>الأخبار:</b> أخبار قانونية منتقاة من المصادر، مُلخّصة <b>بصوتنا</b> ← راجع الملخّص والمصدر ← اضغط <b>نشر</b> لتظهر للمستخدمين. أو <b>«حوّل لموضوع»</b> لتحويلها لموضوع نقاش.</div></div>
+    <div class="policy" style="border-inline-start-color:var(--agree);background:var(--agree-bg)">${svg('check','ic')}<div><b>متصل بالمنصة:</b> الأخبار المنشورة تظهر مباشرة على المنصة مرتّبة بالأحدث. <b>${pub}</b> خبرًا منشورًا الآن.</div></div>
+    ${Tst==='error'?`<div class="policy" style="border-inline-start-color:var(--conflict);background:var(--conflict-bg);color:var(--conflict)">${svg('scale','ic')}<div>تعذّر جلب الأخبار من المنصة. <b style="cursor:pointer;text-decoration:underline" onclick="EP.reload('platformNews',()=>viewNews(document.getElementById('view')))">إعادة المحاولة</b></div></div>`:''}
+    ${Tst==='loading'?`<div class="policy" style="border-inline-start-color:var(--human)">${svg('mega','ic')}<div>…جارٍ تحميل الأخبار من المنصة</div></div>`:''}
+    <div class="kpis">
+      <div class="kpi k-3"><div class="top"><span class="ic">${svg('check')}</span>منشورة</div><b>${money(pub)}</b><div class="sub">ظاهرة للمستخدمين</div></div>
+      <div class="kpi k-2"><div class="top"><span class="ic">${svg('doc')}</span>مسودّات</div><b>${money(draft)}</b><div class="sub">قيد المراجعة</div></div>
+      <div class="kpi k-1"><div class="top"><span class="ic">${svg('mega')}</span>بمصدر موثّق</div><b>${money(withSrc)}</b><div class="sub">من ${money(PNEWS.length)}</div></div>
+    </div>
+    <div class="inboxwrap"><section class="panel"><div class="ph"><h3>الأخبار</h3><span class="n">${PNEWS.length}</span><button class="btn btn-ghost" id="nwsSrcBtn" style="flex:none;min-width:auto;padding:6px 13px;font-size:12px;margin-inline-start:auto">${svg('gear')}مصادر الأخبار</button><button class="btn btn-human" id="nwsAdd" style="flex:none;min-width:auto;padding:6px 13px;font-size:12px">+ خبر جديد</button></div><div id="nwsRows"></div></section></div>`;
+  var ab=document.getElementById('nwsAdd');if(ab)ab.onclick=()=>nwsModal(null);
+  var sb=document.getElementById('nwsSrcBtn');if(sb)sb.onclick=()=>nwsSourcesModal();
+  renderNews();
+}
+function renderNews(){
+  const el=document.getElementById('nwsRows');if(!el)return;el.innerHTML='';
+  const items=PNEWS.slice();   // مرتّبة بالأحدث من طبقة EP
+  if(!items.length){el.innerHTML='<div style="padding:40px;text-align:center;color:var(--muted)">لا أخبار بعد — اضغط «+ خبر جديد» أو اضبط «مصادر الأخبار».</div>';return;}
+  items.forEach((t)=>el.insertAdjacentHTML('beforeend',`<div class="row esc-row" style="grid-template-columns:2.2fr 1.4fr 1fr 235px">
+    <div class="c c1"><div class="src-ic" style="background:var(--human-bg);color:var(--human)">${svg('mega')}</div><div><div class="parties">${nwsEsc(t.title)}</div><div class="from" style="max-width:340px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${nwsEsc(t.summary)||'<i>بلا ملخّص بصوتنا</i>'}</div><div class="from" style="margin-top:2px">${svg('store','ic')} ${nwsSrcChips(t)}</div></div></div>
+    <div class="c"><div class="from">${nwsEsc(t.country)||'—'}${t.specialty?' · '+nwsEsc(t.specialty):''}</div><div class="from" style="opacity:.7">${t.date||'—'}</div></div>
+    <div class="c"><span class="status ${t.status==='published'?'s-auto':'s-wait'}"><span class="d"></span>${t.status==='published'?'منشور':'مسودّة'}</span></div>
+    <div class="c" style="gap:6px;flex-wrap:wrap"><button class="btn btn-primary" data-derive="${t.id}" style="padding:5px 9px;font-size:12px">حوّل لموضوع</button><button class="btn btn-ghost" data-edit="${t.id}" style="padding:5px 9px;font-size:12px">تعديل</button><button class="btn btn-warn" data-del="${t.id}" style="padding:5px 9px;font-size:12px">حذف</button></div></div>`));
+  el.querySelectorAll('[data-edit]').forEach(b=>b.onclick=()=>{var t=PNEWS.find(x=>x.id===b.dataset.edit);if(t)nwsModal(t);});
+  el.querySelectorAll('[data-derive]').forEach(b=>b.onclick=()=>{var t=PNEWS.find(x=>x.id===b.dataset.derive);if(!t)return;
+    if(!confirm('تحويل خبر «'+t.title+'» إلى موضوع نقاش؟'))return;
+    if(window.EP){EP.deriveTopicFromNews(t,()=>viewNews(document.getElementById('view')));}});
+  el.querySelectorAll('[data-del]').forEach(b=>b.onclick=()=>{var t=PNEWS.find(x=>x.id===b.dataset.del);if(!t)return;
+    if(!confirm('حذف خبر «'+t.title+'»؟'))return;
+    if(window.EP){EP.deleteNews(t,()=>viewNews(document.getElementById('view')));}});
+}
+// إنشاء/تعديل خبر — عنوان + ملخّص بصوتنا + دولة + تخصص + روابط مصادر (سطر لكل رابط) + نشر.
+function nwsModal(edit){
+  var e=edit||{};
+  var srcText=(e.sources||[]).map(function(s){return s.url+(s.title&&s.title!==s.url?' | '+s.title:'');}).join('\n');
+  var s=openModal(edit?'تعديل خبر':'خبر جديد',
+    '<div class="note-ai" style="margin-bottom:12px">'+svg('mega','ic')+'<div>اكتب الخبر بصوت البروفيسور، وأرفق <b>رابط المصدر</b> (سطر لكل مصدر — رابط ثم <code>|</code> ثم اسم اختياري). لن يُنشر حتى تفعّل «منشور».</div></div>'+
+    '<div class="fld"><label>العنوان</label><input id="nw_t" value="'+nwsEsc(e.title||'')+'" placeholder="مثال: تعديل جديد على قانون العمل المصري"></div>'+
+    '<div class="fld"><label>الملخّص (بصوتنا — يظهر للمستخدم)</label><textarea id="nw_sum" style="min-height:130px" placeholder="لخّص الخبر بصوت البروفيسور: ماذا تغيّر، ومن يهمّه، والأثر العملي…">'+nwsEsc(e.summary||'')+'</textarea></div>'+
+    '<div class="row2"><div class="fld"><label>الدولة</label><input id="nw_cty" value="'+nwsEsc(e.country||'')+'" placeholder="مصر / السعودية / الإمارات…"></div><div class="fld"><label>التخصص</label><input id="nw_sp" value="'+nwsEsc(e.specialty||'')+'" placeholder="قانون عمل / عقاري / جنائي"></div></div>'+
+    '<div class="fld"><label>روابط المصادر (سطر لكل مصدر: الرابط | الاسم)</label><textarea id="nw_src" style="min-height:80px;direction:ltr;text-align:left" placeholder="https://example.com/news | جريدة رسمية">'+nwsEsc(srcText)+'</textarea></div>'+
+    '<div class="fld"><label style="display:flex;align-items:center;gap:8px;cursor:pointer"><input id="nw_pub" type="checkbox"'+(e.status==='published'?' checked':'')+' style="width:auto"> منشور (ظاهر للمستخدمين على المنصة)</label></div>'+
+    '<div class="acts" style="margin-top:6px"><button class="btn btn-primary" id="nw_save">'+svg('check')+(edit?'حفظ التعديلات':'إنشاء الخبر')+'</button><button class="btn btn-ghost" id="nw_x">إلغاء</button></div>');
+  s.querySelector('#nw_x').onclick=closeModal;
+  s.querySelector('#nw_save').onclick=function(){
+    var sources=s.querySelector('#nw_src').value.split('\n').map(function(ln){
+      ln=ln.trim();if(!ln)return null;var parts=ln.split('|');var url=(parts[0]||'').trim();var title=(parts[1]||'').trim();
+      if(!url)return null;return {url:url,title:title||url};
+    }).filter(Boolean);
+    var g={
+      title:s.querySelector('#nw_t').value.trim(),
+      summary:s.querySelector('#nw_sum').value.trim(),
+      country:s.querySelector('#nw_cty').value.trim(),
+      specialty:s.querySelector('#nw_sp').value.trim(),
+      sources:sources,
+      is_published:s.querySelector('#nw_pub').checked,
+    };
+    if(!g.title){toast('العنوان مطلوب');return;}
+    if(!window.EP){toast('غير متصل بالمنصة');return;}
+    if(edit&&edit.id){EP.updateNews(edit.id,g,function(){closeModal();viewNews(document.getElementById('view'));});}
+    else{EP.createNews(g,function(){closeModal();viewNews(document.getElementById('view'));});}
+  };
+}
+// «مصادر الأخبار»: قائمة RSS لكل دولة + كلمات مفتاحية لكل نادٍ — مربوطة بـ /api/platform-news-sources.
+function nwsSourcesModal(){
+  var src=(window.EP&&EP.data&&EP.data.platformNewsSources)||PNEWS_SOURCES||{feeds:[],club_keywords:{}};
+  var feedsText=(src.feeds||[]).map(function(f){return (f.country||'')+' | '+(f.url||'');}).join('\n');
+  var ckObj=src.club_keywords||{};
+  var ckText=Object.keys(ckObj).map(function(club){var kw=ckObj[club];return club+' : '+(Array.isArray(kw)?kw.join('، '):kw);}).join('\n');
+  var s=openModal('مصادر الأخبار — RSS لكل دولة + كلمات الأندية',
+    '<div class="note-ai" style="margin-bottom:12px">'+svg('gear','ic')+'<div>اضبط مصادر السحب (RSS) لكل دولة، وكلمات كل نادٍ التي تُصنّف الأخبار. تُحفظ على المنصة فورًا.</div></div>'+
+    '<div class="fld"><label>مصادر RSS (سطر لكل مصدر: الدولة | رابط الـ RSS)</label><textarea id="ns_feeds" style="min-height:140px;direction:ltr;text-align:left" placeholder="مصر | https://example.com/feed.xml&#10;السعودية | https://news.example.sa/rss">'+nwsEsc(feedsText)+'</textarea></div>'+
+    '<div class="fld"><label>كلمات الأندية (سطر لكل نادٍ: اسم النادي : كلمة، كلمة، كلمة)</label><textarea id="ns_ck" style="min-height:130px" placeholder="نادي العمل : فصل، أجور، تأمينات&#10;نادي العقاري : إيجار، تسجيل، ملكية">'+nwsEsc(ckText)+'</textarea></div>'+
+    '<div class="acts" style="margin-top:6px"><button class="btn btn-primary" id="ns_save">'+svg('check')+'حفظ المصادر</button><button class="btn btn-ghost" id="ns_x">إلغاء</button></div>');
+  s.querySelector('#ns_x').onclick=closeModal;
+  s.querySelector('#ns_save').onclick=function(){
+    var feeds=s.querySelector('#ns_feeds').value.split('\n').map(function(ln){
+      ln=ln.trim();if(!ln)return null;var parts=ln.split('|');var country=(parts[0]||'').trim();var url=(parts[1]||'').trim();
+      if(!url)return null;return {country:country,url:url};
+    }).filter(Boolean);
+    var club_keywords={};
+    s.querySelector('#ns_ck').value.split('\n').forEach(function(ln){
+      ln=ln.trim();if(!ln)return;var idx=ln.indexOf(':');if(idx<0)return;
+      var club=ln.slice(0,idx).trim();var kw=ln.slice(idx+1).split(/[،,]/).map(function(k){return k.trim();}).filter(Boolean);
+      if(club)club_keywords[club]=kw;
+    });
+    if(!window.EP){toast('غير متصل بالمنصة');return;}
+    EP.saveNewsSources({feeds:feeds,club_keywords:club_keywords},function(){closeModal();viewNews(document.getElementById('view'));});
   };
 }
 

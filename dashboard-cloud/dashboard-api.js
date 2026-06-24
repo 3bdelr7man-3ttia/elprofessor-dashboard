@@ -271,6 +271,58 @@
       });
     },
 
+    // الأخبار: /api/platform-news -> [ {id,title,summary,country,specialty,sources:[{title,url}],status,...} ]
+    // أخبار قانونية منتقاة بصوتنا -> مراجعة الملخّص -> نشر. مرتّبة بالأحدث.
+    // الـ proxy السرّي يجلب المسودّات أيضًا.
+    platformNews: function () {
+      return get("/platform-news").then(function (r) {
+        var list = Array.isArray(r) ? r : ((r && r.news) || []);
+        EP.data.platformNews = { raw: list };
+        window.PNEWS = list.map(function (n) {
+          var st = n.status || (n.is_published || n.published ? "published" : "draft");
+          // platform shape: source_name + source_url (primary) + extra_sources:[{name,url}].
+          // Build a unified sources:[{title,url}] list for the UI (fallback to legacy fields).
+          var src = [];
+          if (n.source_url) src.push({ title: n.source_name || n.source_url, url: n.source_url });
+          (n.extra_sources || []).forEach(function (s) {
+            if (s && s.url) src.push({ title: s.name || s.title || s.url, url: s.url });
+          });
+          if (!src.length) {
+            var legacy = n.sources || n.source_links || [];
+            if (!Array.isArray(legacy)) legacy = legacy ? [legacy] : [];
+            src = legacy.map(function (s) {
+              if (typeof s === "string") return { title: s, url: s };
+              return { title: s.title || s.name || s.url || "", url: s.url || s.link || "" };
+            }).filter(function (s) { return s.url; });
+          }
+          var at = n.published_at || n.created_at || n.date;
+          return {
+            id: n.id,
+            title: n.title || "",
+            summary: n.summary || n.our_voice || "",
+            country: n.country || "",
+            specialty: n.specialty || "",
+            sources: src,
+            status: st === "published" ? "published" : "draft",
+            date: arDate(at),
+            at: at ? (Date.parse(at) || 0) : 0,
+          };
+        }).sort(function (a, b) { return b.at - a.at; });   // ORDERED BY DATE (newest first)
+      });
+    },
+
+    // مصادر الأخبار: /api/platform-news-sources -> {feeds:[{country,url}], club_keywords:{club:[...]}}
+    platformNewsSources: function () {
+      return get("/platform-news-sources").then(function (r) {
+        var s = r || {};
+        EP.data.platformNewsSources = {
+          feeds: Array.isArray(s.feeds) ? s.feeds : [],
+          club_keywords: s.club_keywords || {},
+        };
+        window.PNEWS_SOURCES = EP.data.platformNewsSources;
+      });
+    },
+
     // المالية: /api/finance/summary -> {total_revenue,total_expenses,monthly:[...]}
     finance: function () {
       return get("/finance/summary").then(function (s) {
@@ -901,6 +953,33 @@
     api("/platform-topics/" + t.id, { method: "DELETE" })
       .then(function () { note("حُذف الموضوع «" + t.title + "»"); EP.reload("platformTopics", after); })
       .catch(function (e) { quietToast((e && e.message) || "تعذّر الحذف"); if (after) after(); });
+  };
+
+  // الأخبار: إنشاء/تعديل/حذف/نشر + «حوّل لموضوع» — كلها عبر الـ proxy السرّي.
+  EP.createNews = function (g, after) {
+    post("/platform-news", g)
+      .then(function () { note("أُضيف خبر «" + (g.title || "") + "»"); EP.reload("platformNews", after); })
+      .catch(function (e) { quietToast((e && e.message) || "تعذّر إضافة الخبر"); if (after) after(); });
+  };
+  EP.updateNews = function (id, g, after) {
+    api("/platform-news/" + id, { method: "PUT", body: g })
+      .then(function () { note("حُدّث الخبر «" + (g.title || "") + "»"); EP.reload("platformNews", after); })
+      .catch(function (e) { quietToast((e && e.message) || "تعذّر التحديث"); if (after) after(); });
+  };
+  EP.deleteNews = function (t, after) {
+    api("/platform-news/" + t.id, { method: "DELETE" })
+      .then(function () { note("حُذف الخبر «" + t.title + "»"); EP.reload("platformNews", after); })
+      .catch(function (e) { quietToast((e && e.message) || "تعذّر الحذف"); if (after) after(); });
+  };
+  EP.deriveTopicFromNews = function (t, after) {
+    post("/platform-news/" + t.id + "/derive-topic", {})
+      .then(function () { note("حُوِّل «" + t.title + "» إلى موضوع — راجعه في «المواضيع»"); EP.reload("platformNews", after); })
+      .catch(function (e) { quietToast((e && e.message) || "تعذّر التحويل لموضوع"); if (after) after(); });
+  };
+  EP.saveNewsSources = function (g, after) {
+    api("/platform-news-sources", { method: "PUT", body: g })
+      .then(function () { note("حُفظت مصادر الأخبار وكلمات الأندية"); EP.reload("platformNewsSources", after); })
+      .catch(function (e) { quietToast((e && e.message) || "تعذّر حفظ المصادر"); if (after) after(); });
   };
 
   // الرسائل: رد (يحتاج نص) + حذف

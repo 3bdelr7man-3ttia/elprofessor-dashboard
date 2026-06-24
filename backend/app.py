@@ -1348,6 +1348,105 @@ def platform_topics_delete(topic_id):
     return _platform_proxy('DELETE', f"/api/bridge/topics/{topic_id}")
 
 
+# --- «الأخبار» (News): curated legal-news feed -> review our-voice summary -> publish.
+# Mirrors the topics/tutorials proxies above. Reads + writes both go through the
+# SECRET bridge (so the dashboard sees drafts too). The METRICS_SECRET is sent
+# server-side ONLY — the browser never sees it. Plus per-country RSS sources +
+# per-club keywords curation via /api/bridge/news-sources.
+@app.route('/api/platform-news', methods=['GET'])
+@token_required
+@roles_required('admin', 'employee')   # employee may VIEW news (incl drafts)
+def platform_news_list():
+    return _platform_proxy('GET', '/api/bridge/news')
+
+
+# Map the dashboard UI's `sources:[{name|title,url}]` list to the platform news contract
+# (source_name + source_url for the primary, extra_sources for the rest).
+def _split_news_sources(raw):
+    items = []
+    for s in (raw or []):
+        if not isinstance(s, dict):
+            continue
+        name = (s.get('name') or s.get('title') or '').strip()
+        url = (s.get('url') or '').strip()
+        if url:
+            items.append({'name': name, 'url': url})
+    primary = items[0] if items else {'name': '', 'url': ''}
+    return primary.get('name', ''), primary.get('url', ''), items[1:]
+
+
+@app.route('/api/platform-news', methods=['POST'])
+@token_required
+@roles_required('admin', 'employee')
+def platform_news_create():
+    body = request.json or {}
+    name, url, extra = _split_news_sources(body.get('sources'))
+    return _platform_proxy('POST', '/api/bridge/news', json_body={
+        'title': (body.get('title') or '').strip(),
+        'summary': (body.get('summary') or '').strip(),
+        'body': (body.get('body') or '').strip(),
+        'country': (body.get('country') or '').strip(),
+        'specialty': (body.get('specialty') or '').strip(),
+        'source_name': name,
+        'source_url': url,
+        'extra_sources': extra,
+        # news auto-publishes by default; honor an explicit is_published=false (draft)
+        'publish': bool(body.get('is_published', True)),
+    })
+
+
+@app.route('/api/platform-news/<news_id>', methods=['PUT'])
+@token_required
+@roles_required('admin', 'employee')
+def platform_news_update(news_id):
+    body = request.json or {}
+    payload = {}
+    for key in ('title', 'summary', 'body', 'country', 'specialty'):
+        if key in body:
+            payload[key] = body.get(key)
+    if 'sources' in body:
+        name, url, extra = _split_news_sources(body.get('sources'))
+        payload['source_name'] = name
+        payload['source_url'] = url
+        payload['extra_sources'] = extra
+    if 'is_published' in body:
+        payload['status'] = 'published' if bool(body.get('is_published')) else 'draft'
+    return _platform_proxy('PUT', f"/api/bridge/news/{news_id}", json_body=payload)
+
+
+@app.route('/api/platform-news/<news_id>', methods=['DELETE'])
+@token_required
+@roles_required('admin', 'employee')
+def platform_news_delete(news_id):
+    return _platform_proxy('DELETE', f"/api/bridge/news/{news_id}")
+
+
+@app.route('/api/platform-news/<news_id>/derive-topic', methods=['POST'])
+@token_required
+@roles_required('admin', 'employee')   # «حوّل لموضوع»: spin a news item into a Topic
+def platform_news_derive_topic(news_id):
+    return _platform_proxy('POST', f"/api/bridge/news/{news_id}/derive-topic")
+
+
+@app.route('/api/platform-news-sources', methods=['GET'])
+@token_required
+@roles_required('admin', 'employee')
+def platform_news_sources_get():
+    return _platform_proxy('GET', '/api/bridge/news-sources')
+
+
+@app.route('/api/platform-news-sources', methods=['PUT'])
+@token_required
+@roles_required('admin', 'employee')
+def platform_news_sources_update():
+    body = request.json or {}
+    payload = {}
+    for key in ('feeds', 'club_keywords'):
+        if key in body:
+            payload[key] = body.get(key)
+    return _platform_proxy('PUT', '/api/bridge/news-sources', json_body=payload)
+
+
 @app.route('/api/investor/wallet', methods=['GET'])
 def investor_wallet_bridge():
     """Read-only investor wallet by email, for the platform to mirror in its
