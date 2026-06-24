@@ -707,6 +707,33 @@ function svgDonut(segs){
   var legend=segs.map(function(x){return '<div style="display:flex;align-items:center;gap:7px;font-size:12px;margin-bottom:7px"><span style="width:11px;height:11px;border-radius:3px;background:'+x.color+'"></span><span style="flex:1;color:#4B5563">'+x.label+'</span><b style="color:#1A2B4A">'+Math.round(x.val/total*100)+'٪</b></div>';}).join('');
   return '<div style="display:flex;align-items:center;gap:16px"><svg viewBox="0 0 '+(2*R)+' '+(2*R)+'" style="width:128px;height:128px;flex:none">'+rings+'<circle cx="'+R+'" cy="'+R+'" r="'+(r-10)+'" fill="#FFFFFF"/></svg><div style="flex:1">'+legend+'</div></div>';
 }
+// رسم أعمدة عمودية نظيف يلائم الحاوية، يُظهر الأرقام (قيمة فوق كل عمود + اسم الشهر تحته)،
+// ويتعامل بلطف مع الحالة شبه الفارغة (نقطة واحدة أو كل القيم صفر) برسالة «لا بيانات كافية».
+// data: [{m:'05', v:12}, ...]  ·  unit: لاحقة القيمة (مثلاً 'ك' للألف) اختيارية
+function svgBars(data,color,unit){
+  data=(data||[]).filter(function(d){return d&&d.m!=null;});
+  var nonZero=data.filter(function(d){return (d.v||0)>0;}).length;
+  // حالة شبه فارغة: لا بيانات، أو نقطة واحدة فقط، أو كل القيم صفر.
+  if(data.length<2||nonZero===0){
+    return '<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;min-height:150px;text-align:center;color:var(--muted)">'+
+      svg('trend','ic')+
+      '<div style="font-family:Cairo;font-weight:700;font-size:14px;color:var(--ink-2)">لا بيانات كافية لعرض النمو</div>'+
+      '<div style="font-size:12px">تظهر الأعمدة تلقائيًا بمجرّد تسجيل إيرادات على مدى شهرين أو أكثر.</div>'+
+      '</div>';
+  }
+  var max=Math.max.apply(null,data.map(function(d){return d.v||0;}).concat([1]));
+  unit=unit||'';
+  var bars=data.map(function(d){
+    var v=d.v||0;
+    var hpct=Math.max(v/max*100,v>0?4:0); // حد أدنى لارتفاع العمود حتى يبقى مرئيًا
+    return '<div style="flex:1;min-width:0;display:flex;flex-direction:column;align-items:center;gap:6px">'+
+      '<div style="font-size:11.5px;font-weight:800;color:var(--navy);white-space:nowrap">'+money(v)+unit+'</div>'+
+      '<div style="width:100%;display:flex;justify-content:center"><div style="width:60%;max-width:34px;height:'+hpct+'%;min-height:'+(v>0?6:1)+'px;background:'+color+';border-radius:6px 6px 0 0"></div></div>'+
+      '<div style="font-size:11.5px;font-weight:700;color:var(--ink-2);white-space:nowrap">'+d.m+'</div>'+
+      '</div>';
+  }).join('');
+  return '<div style="display:flex;gap:10px;align-items:flex-end;height:170px;padding-top:8px">'+bars+'</div>';
+}
 function renderFin(){
   const body=document.getElementById('finBody'),h=document.getElementById('finH'),n=document.getElementById('finN'),hint=document.getElementById('finHint');
   body.innerHTML='';
@@ -931,9 +958,11 @@ function viewOverview(v){
   const kUsers = M&&(M.total_users!=null) ? money(M.total_users) : (crs?money(crs.total_students||0):'٥٩');
   const kUsersSub = M ? 'من المنصة الحيّة' : (Dst==='loading'?'…':'تقدير تصميمي');
   const kProfit = fin ? (fin.net_profit>=0?'+':'')+money(fin.net_profit)+' <small style="font-size:13px">ج</small>' : (Dst==='loading'?'…':'+٢١٤٬٥٦٨ <small style="font-size:13px">ج</small>');
+  // سلسلة شهرية من بيانات الخادم الحقيقية فقط — بلا أرقام تصميمية وهمية.
+  // عند غياب البيانات (أو حالة شبه فارغة) يتكفّل svgBars بعرض «لا بيانات كافية لعرض النمو».
   const monthlySeries = (D&&Array.isArray(D.monthly)&&D.monthly.length)
     ? D.monthly.slice(-6).map(m=>({m:(m.month||'').slice(5),v:Math.round((m.revenue||0)/1000)}))
-    : FMONTHLY.map(m=>({m:m.m,v:m.i}));
+    : [];
   v.innerHTML=`
     ${Dst==='error'?`<div class="policy" style="border-inline-start-color:var(--conflict);background:var(--conflict-bg);color:var(--conflict)">${svg('scale','ic')}<div>تعذّر جلب أرقام المالية من الخادم — تُعرض أرقام تصميمية مؤقتًا. <b style="cursor:pointer;text-decoration:underline" onclick="EP.reload('dashboard',()=>viewOverview(document.getElementById('view')))">إعادة المحاولة</b></div></div>`:''}
     <div class="kpis">
@@ -942,7 +971,7 @@ function viewOverview(v){
       <div class="kpi k-2"><div class="top"><span class="ic">${svg('shield')}</span>محجوز في الضمان</div><b>${escHeld!=null?money(escHeld)+' <small style="font-size:13px">ج</small>':'—'}</b><div class="sub">${escCount!=null?('عبر '+money(escCount)+' جلسات'):'لا بيانات'}</div></div>
       <div class="kpi k-4"><div class="top"><span class="ic">${svg('inbox')}</span>وارد يحتاج تصرّفك</div><b>${money(act.length)}</b><div class="sub">${act.filter(i=>i.triage==='late').length} عاجل</div></div>
     </div>
-    <section class="panel" style="margin-bottom:16px"><div class="ph"><h3>نمو الإيرادات الشهري</h3><span class="hint">بالألف ج${D?' · حيّ':''}</span></div><div style="padding:18px 24px">${svgLine(monthlySeries,'#1C9A5B')}</div></section>
+    <section class="panel" style="margin-bottom:16px"><div class="ph"><h3>نمو الإيرادات الشهري</h3><span class="hint">بالألف ج${D?' · حيّ':''}</span></div><div style="padding:16px 24px 12px">${svgBars(monthlySeries,'var(--agree)','ك')}</div></section>
     <div style="display:grid;grid-template-columns:1.4fr 1fr;gap:16px;align-items:start" class="ov-grid">
       <section class="panel"><div class="ph"><h3>أهم الوارد — يحتاج تصرّفك</h3><span class="n">${act.length}</span><span class="hint">اضغط لفتح موديوله</span></div><div id="ovRows"></div></section>
       <section class="panel"><div class="ph"><h3>الموديولات</h3><span class="hint">مدخل سريع</span></div><div id="ovMods" style="padding:12px;display:grid;grid-template-columns:1fr 1fr;gap:10px"></div></section>
@@ -2336,12 +2365,9 @@ function roleModal(edit,idx){
 }
 
 /* ===== MARKET ===== */
-const MKTREQ=[
-  {title:'طلب استشارة عقارية عاجلة',by:'م. خليلي',type:'استشارة',status:'matching',note:'الذكاء يطابق ٣ خبراء عقاريين متاحين بالبلد.'},
-  {title:'برنامج تدريبي — المرافعات العملية',by:'مجموعة طلاب (١٢)',type:'تدريب جماعي',status:'quorum',note:'النصاب ١٢/١٥ — قريب من الاكتمال ليتحوّل لدورة.'},
-  {title:'رأي خبير على عقد شراكة',by:'مكتب الرشيد',type:'رأي قانوني',status:'open',note:'مطروح للخبراء — بانتظار تقديم الآراء.'},
-  {title:'استشارة ملكية فكرية',by:'عمر أبو مدين',type:'استشارة',status:'matched',note:'تمّت المطابقة مع خبيرة IP — انتقلت للضمان.'}
-];
+// طلبات السوق: لا واجهة خلفية بعد — العدد الحقيقي على المنصة = 0.
+// أُفرغت المصفوفة التصميمية حتى لا تظهر «٤ طلبات نشطة» وهمية؛ تُعبّأ حيّة عند توفّر API.
+const MKTREQ=(window.EP&&Array.isArray(EP.data.market))?EP.data.market:[];
 const MSTATUS={matching:{t:'قيد المطابقة',cls:'s-wait'},quorum:{t:'يتجمّع النصاب',cls:'s-human'},open:{t:'مطروح',cls:'s-wait'},matched:{t:'تمّت المطابقة',cls:'s-auto'}};
 function viewMarket(v){
   v.innerHTML=`
@@ -2353,6 +2379,7 @@ function viewMarket(v){
     </div>
     <div class="inboxwrap"><section class="panel"><div class="ph"><h3>طلبات السوق</h3><span class="n">${MKTREQ.length}</span><span class="hint">اضغط طلبًا لرؤية المطابقة</span></div><div id="mqRows"></div></section><aside class="drawer" id="drawer"></aside></div>`;
   const el=document.getElementById('mqRows');
+  if(!MKTREQ.length)el.innerHTML='<div style="padding:40px;text-align:center;color:var(--muted)">لا طلبات نشطة في السوق حاليًا.</div>';
   MKTREQ.forEach((r,idx)=>{const st=MSTATUS[r.status];el.insertAdjacentHTML('beforeend',`<div class="row esc-row${selected===idx?' sel':''}" data-i="${idx}" style="grid-template-columns:1.8fr 1fr 150px">
     <div class="c c1"><div class="src-ic" style="background:var(--gold-bg);color:var(--gold)">${svg('store')}</div><div><div class="parties">${r.title}</div><div class="from">${r.by} · ${r.type}</div></div></div>
     <div class="c"><div class="from">${r.type}</div></div>
