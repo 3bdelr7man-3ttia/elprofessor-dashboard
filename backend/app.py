@@ -1235,6 +1235,68 @@ def platform_program_decide(request_id, action):
     )
 
 
+# --- «الدليل» (Tutorials): proxy to the platform guide so the team manages it here ---
+# Read goes to the PUBLIC platform endpoint (with the secret + include_unpublished so the
+# dashboard sees drafts too); writes go to the SECRET bridge. The METRICS_SECRET is sent
+# server-side ONLY — the browser never sees it.
+@app.route('/api/tutorials', methods=['GET'])
+@token_required
+@roles_required('admin', 'employee')   # employee may VIEW the guide (read-only)
+def tutorials_list():
+    if not PLATFORM_METRICS_SECRET:
+        return jsonify({'error': 'لم يتم ضبط الربط بعد'}), 503
+    try:
+        r = requests.get(
+            f"{PLATFORM_API_URL}/api/tutorials",
+            params={'include_unpublished': 'true'},
+            headers={'X-ELP-Metrics-Secret': PLATFORM_METRICS_SECRET},
+            timeout=12,
+        )
+    except Exception:
+        return jsonify({'error': 'تعذر الاتصال بالمنصة'}), 502
+    if r.status_code != 200:
+        return jsonify({'error': 'تعذر جلب الدليل'}), 502
+    return jsonify(r.json() if r.content else [])
+
+
+@app.route('/api/tutorials', methods=['POST'])
+@token_required
+@roles_required('admin')
+def tutorials_create():
+    body = request.json or {}
+    return _platform_proxy('POST', '/api/bridge/tutorials', json_body={
+        'title': (body.get('title') or '').strip(),
+        'section': (body.get('section') or '').strip(),
+        'body': body.get('body') or '',
+        'video_url': (body.get('video_url') or '').strip(),
+        'order': int(body.get('order') or 0),
+        'is_published': bool(body.get('is_published', True)),
+    })
+
+
+@app.route('/api/tutorials/<tutorial_id>', methods=['PUT'])
+@token_required
+@roles_required('admin')
+def tutorials_update(tutorial_id):
+    body = request.json or {}
+    payload = {}
+    for key in ('title', 'section', 'body', 'video_url'):
+        if key in body:
+            payload[key] = body.get(key)
+    if 'order' in body:
+        payload['order'] = int(body.get('order') or 0)
+    if 'is_published' in body:
+        payload['is_published'] = bool(body.get('is_published'))
+    return _platform_proxy('PUT', f"/api/bridge/tutorials/{tutorial_id}", json_body=payload)
+
+
+@app.route('/api/tutorials/<tutorial_id>', methods=['DELETE'])
+@token_required
+@roles_required('admin')
+def tutorials_delete(tutorial_id):
+    return _platform_proxy('DELETE', f"/api/bridge/tutorials/{tutorial_id}")
+
+
 @app.route('/api/investor/wallet', methods=['GET'])
 def investor_wallet_bridge():
     """Read-only investor wallet by email, for the platform to mirror in its

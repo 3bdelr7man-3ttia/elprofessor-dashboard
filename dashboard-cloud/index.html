@@ -308,6 +308,7 @@ const MODULES={
   marketing:{label:'التسويق',ic:'mega',c:'var(--human)',bg:'var(--human-bg)',grp:'money'},
   partners:{label:'الشركاء',ic:'hands',c:'var(--navy)',bg:'var(--surface-2)',grp:'money'},
   content:{label:'المحتوى والمدونة',ic:'doc',c:'var(--memory)',bg:'var(--memory-bg)',grp:'money'},
+  tutorials:{label:'الدليل',ic:'book',c:'var(--ai)',bg:'var(--ai-bg)',grp:'money'},
   packages:{label:'الباقات والأسعار',ic:'wallet',c:'var(--gold)',bg:'var(--gold-bg)',grp:'money'},
   team:{label:'الفريق والمدربون',ic:'cap',c:'var(--ai)',bg:'var(--ai-bg)',grp:'co'},
   foundation:{label:'مرحلة التأسيس',ic:'build',c:'var(--muted)',bg:'var(--surface-2)',grp:'co'},
@@ -347,7 +348,7 @@ const money=n=>n.toLocaleString('ar-EG');
 let current='inbox', selected=null, activeFilter='all', escTab='sessions', finTab='summary', usersFilter='all', courseTab='courses', invTab='investors', mktTab='campaigns', contentTab='pending';
 let role='admin';
 const ROLE_NAV={
-  employee:['users','courses'],
+  employee:['users','courses','tutorials'],
   trainer:['t_home','t_courses','t_earnings','ai'],
   investor:['i_home','i_market','i_invest','ai'],
   viewer:['v_pending']
@@ -397,6 +398,7 @@ function renderView(){
   if(current==='clubs')return viewClubs(v);
   if(current==='messages')return viewMessages(v);
   if(current==='content')return viewContent(v);
+  if(current==='tutorials')return viewTutorials(v);
   if(current==='ai')return viewAI(v);
   if(current==='partners')return viewPartners(v);
   if(current==='team')return viewTeam(v);
@@ -1605,6 +1607,69 @@ function editPageModal(p){
   s.querySelector('#pg_s').onclick=function(){p.name=s.querySelector('#pg_t').value.trim()||p.name;p.updated='الآن';closeModal();viewContent(document.getElementById('view'));notify('حُدّثت صفحة «'+p.name+'» على الموقع');};
 }
 function createPageModal(){PAGES.push({name:'صفحة جديدة',path:'/new',updated:'الآن'});editPageModal(PAGES[PAGES.length-1]);}
+
+/* ===== «الدليل» (Tutorials): يُدار هنا، يُعرض على المنصة. ===== */
+// تُجلب حيّة من /api/tutorials عبر طبقة EP (window.TUTORIALS). يرفع الفريق
+// النصوص + روابط الفيديو + ترتيب الأقسام + النشر — وكلها تُرسل للمنصة عبر الجسر السرّي.
+var TUTORIALS=[];
+function tutEsc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+function viewTutorials(v){
+  if(window.EP){EP.ensure('tutorials',()=>viewTutorials(v));}
+  const Tst=(window.EP&&EP.state.tutorials)||'idle';
+  const pub=TUTORIALS.filter(t=>t.is_published).length,draft=TUTORIALS.length-pub,withVid=TUTORIALS.filter(t=>t.video_url).length;
+  v.innerHTML=`
+    <div class="policy" style="border-inline-start-color:var(--ai)">${svg('book','ic')}<div><b>الدليل:</b> دليل استخدام المنصة — يُدار من هنا ويُعرض للمستخدمين على المنصة. كل قسم نصّ مبدئيًا؛ أضف <b>رابط فيديو</b> ليُعرض مدمجًا.</div></div>
+    <div class="policy" style="border-inline-start-color:var(--agree);background:var(--agree-bg)">${svg('check','ic')}<div><b>متصل بالمنصة:</b> ما يُنشر هنا يظهر مباشرة في «الدليل» على المنصة من <b>مصدر واحد</b>. <b>${pub}</b> قسمًا منشورًا الآن.</div></div>
+    ${Tst==='error'?`<div class="policy" style="border-inline-start-color:var(--conflict);background:var(--conflict-bg);color:var(--conflict)">${svg('scale','ic')}<div>تعذّر جلب الدليل من المنصة. <b style="cursor:pointer;text-decoration:underline" onclick="EP.reload('tutorials',()=>viewTutorials(document.getElementById('view')))">إعادة المحاولة</b></div></div>`:''}
+    ${Tst==='loading'?`<div class="policy" style="border-inline-start-color:var(--ai)">${svg('book','ic')}<div>…جارٍ تحميل الدليل من المنصة</div></div>`:''}
+    <div class="kpis">
+      <div class="kpi k-3"><div class="top"><span class="ic">${svg('check')}</span>منشورة</div><b>${money(pub)}</b><div class="sub">ظاهرة للمستخدمين</div></div>
+      <div class="kpi k-2"><div class="top"><span class="ic">${svg('doc')}</span>مسودّات</div><b>${money(draft)}</b><div class="sub">غير منشورة</div></div>
+      <div class="kpi k-1"><div class="top"><span class="ic">${svg('book')}</span>أقسام بفيديو</div><b>${money(withVid)}</b><div class="sub">من ${money(TUTORIALS.length)}</div></div>
+    </div>
+    <div class="inboxwrap"><section class="panel"><div class="ph"><h3>أقسام الدليل</h3><span class="n">${TUTORIALS.length}</span><button class="btn btn-human" id="tutAdd" style="flex:none;min-width:auto;padding:6px 13px;font-size:12px;margin-inline-start:auto">+ قسم جديد</button></div><div id="tutRows"></div></section></div>`;
+  var ab=document.getElementById('tutAdd');if(ab)ab.onclick=()=>tutModal(null);
+  renderTutorials();
+}
+function renderTutorials(){
+  const el=document.getElementById('tutRows');if(!el)return;el.innerHTML='';
+  const items=TUTORIALS.slice().sort((a,b)=>(a.order||0)-(b.order||0));
+  if(!items.length){el.innerHTML='<div style="padding:40px;text-align:center;color:var(--muted)">لا أقسام في الدليل بعد — اضغط «+ قسم جديد».</div>';return;}
+  items.forEach((t)=>el.insertAdjacentHTML('beforeend',`<div class="row esc-row" style="grid-template-columns:2fr 1fr 1fr 150px">
+    <div class="c c1"><div class="src-ic" style="background:var(--ai-bg);color:var(--ai)">${svg('book')}</div><div><div class="parties">${tutEsc(t.title)}</div><div class="from">${tutEsc(t.section)||'—'} · ترتيب ${money(t.order||0)}</div></div></div>
+    <div class="c"><div class="from">${t.video_url?'<b style="color:var(--ink)">فيديو ✓</b>':'نصّ فقط'}</div></div>
+    <div class="c"><span class="status ${t.is_published?'s-auto':'s-wait'}"><span class="d"></span>${t.is_published?'منشور':'مسودّة'}</span></div>
+    <div class="c" style="gap:6px"><button class="btn btn-ghost" data-edit="${t.id}" style="padding:5px 11px;font-size:12px">تعديل</button><button class="btn btn-warn" data-del="${t.id}" style="padding:5px 11px;font-size:12px">حذف</button></div></div>`));
+  el.querySelectorAll('[data-edit]').forEach(b=>b.onclick=()=>{var t=TUTORIALS.find(x=>x.id===b.dataset.edit);if(t)tutModal(t);});
+  el.querySelectorAll('[data-del]').forEach(b=>b.onclick=()=>{var t=TUTORIALS.find(x=>x.id===b.dataset.del);if(!t)return;
+    if(!confirm('حذف قسم «'+t.title+'» من الدليل؟'))return;
+    if(window.EP){EP.deleteTutorial(t,()=>viewTutorials(document.getElementById('view')));}});
+}
+function tutModal(edit){
+  var e=edit||{};
+  var s=openModal(edit?'تعديل قسم في الدليل':'قسم جديد في الدليل',
+    '<div class="fld"><label>العنوان</label><input id="tu_t" value="'+tutEsc(e.title||'')+'" placeholder="مثال: إزاي تبدأ — أول سؤال للمساعد"></div>'+
+    '<div class="row2"><div class="fld"><label>القسم / التصنيف</label><input id="tu_sec" value="'+tutEsc(e.section||'')+'" placeholder="ابدأ من هنا"></div><div class="fld"><label>الترتيب</label><input id="tu_ord" type="number" value="'+(e.order!=null?e.order:'')+'" placeholder="1"></div></div>'+
+    '<div class="fld"><label>النص (يظهر للمستخدم)</label><textarea id="tu_body" style="min-height:140px" placeholder="فقرة واضحة تشرح هذا القسم… (افصل الفقرات بسطر فارغ)">'+tutEsc(e.body||'')+'</textarea></div>'+
+    '<div class="fld"><label>رابط الفيديو (اختياري — يوتيوب)</label><input id="tu_vid" value="'+tutEsc(e.video_url||'')+'" placeholder="https://www.youtube.com/watch?v=… (يُضمَّن تلقائيًا)" style="direction:ltr;text-align:left"></div>'+
+    '<div class="fld"><label style="display:flex;align-items:center;gap:8px;cursor:pointer"><input id="tu_pub" type="checkbox"'+(e.is_published!==false?' checked':'')+' style="width:auto"> منشور (ظاهر للمستخدمين على المنصة)</label></div>'+
+    '<div class="acts" style="margin-top:6px"><button class="btn btn-primary" id="tu_save">'+svg('check')+(edit?'حفظ التعديلات':'إنشاء القسم')+'</button><button class="btn btn-ghost" id="tu_x">إلغاء</button></div>');
+  s.querySelector('#tu_x').onclick=closeModal;
+  s.querySelector('#tu_save').onclick=function(){
+    var g={
+      title:s.querySelector('#tu_t').value.trim(),
+      section:s.querySelector('#tu_sec').value.trim(),
+      order:parseInt(s.querySelector('#tu_ord').value,10)||0,
+      body:s.querySelector('#tu_body').value,
+      video_url:s.querySelector('#tu_vid').value.trim(),
+      is_published:s.querySelector('#tu_pub').checked,
+    };
+    if(!g.title){toast('العنوان مطلوب');return;}
+    if(!window.EP){toast('غير متصل بالمنصة');return;}
+    if(edit&&edit.id){EP.updateTutorial(edit.id,g,function(){closeModal();viewTutorials(document.getElementById('view'));});}
+    else{EP.createTutorial(g,function(){closeModal();viewTutorials(document.getElementById('view'));});}
+  };
+}
 
 /* ===== AI ASSISTANT ===== */
 function viewAI(v){

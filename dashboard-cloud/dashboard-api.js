@@ -77,7 +77,7 @@
     data: { dashboard: null, metrics: null, users: null, content: null, finance: null, messages: null, inbox: null,
             escrow: null, investment: null, marketing: null, partners: null, courses: null, settings: null,
             packages: null, t_data: null, i_data: null, targets: null, foundation: null, team: null,
-            notifications: null, goalsAdvisor: null },
+            notifications: null, goalsAdvisor: null, tutorials: null },
     state: {}, // 'idle' | 'loading' | 'ready' | 'error'
     _started: {}, // منع التحميل المزدوج
     api: api, get: get, post: post,
@@ -224,6 +224,26 @@
             cat: a.cat || "قانوني",
             kicker: a.kicker || "مقال",
             excerpt: a.excerpt || "",
+          };
+        });
+      });
+    },
+
+    // الدليل: /api/tutorials -> [ {id,title,section,order,body,video_url,is_published,...} ]
+    // الداش بورد تطلب المسودّات أيضًا (الـ proxy يمرّر include_unpublished).
+    tutorials: function () {
+      return get("/tutorials").then(function (r) {
+        var list = Array.isArray(r) ? r : (r && r.tutorials) || [];
+        EP.data.tutorials = { raw: list };
+        window.TUTORIALS = list.map(function (t) {
+          return {
+            id: t.id,
+            title: t.title || "",
+            section: t.section || "",
+            order: t.order || 0,
+            body: t.body || "",
+            video_url: t.video_url || "",
+            is_published: !!t.is_published,
           };
         });
       });
@@ -819,6 +839,23 @@
     api("/content/articles/" + t.aid, { method: "PUT", body: { status: "draft" } })
       .then(function () { note("أُلغي نشر «" + t.title + "»"); EP.reload("content", after); })
       .catch(function (e) { quietToast((e && e.message) || "تعذّر إلغاء النشر"); if (after) after(); });
+  };
+
+  // الدليل: إنشاء/تعديل/حذف قسم — تمرّ عبر الـ proxy السرّي (لا سرّ في المتصفح).
+  EP.createTutorial = function (g, after) {
+    post("/tutorials", g)
+      .then(function () { note("أُضيف قسم «" + g.title + "» للدليل"); EP.reload("tutorials", after); })
+      .catch(function (e) { quietToast((e && e.message) || "تعذّر إضافة القسم"); if (after) after(); });
+  };
+  EP.updateTutorial = function (id, g, after) {
+    api("/tutorials/" + id, { method: "PUT", body: g })
+      .then(function () { note("حُدّث القسم «" + g.title + "»"); EP.reload("tutorials", after); })
+      .catch(function (e) { quietToast((e && e.message) || "تعذّر التحديث"); if (after) after(); });
+  };
+  EP.deleteTutorial = function (t, after) {
+    api("/tutorials/" + t.id, { method: "DELETE" })
+      .then(function () { note("حُذف القسم «" + t.title + "»"); EP.reload("tutorials", after); })
+      .catch(function (e) { quietToast((e && e.message) || "تعذّر الحذف"); if (after) after(); });
   };
 
   // الرسائل: رد (يحتاج نص) + حذف
