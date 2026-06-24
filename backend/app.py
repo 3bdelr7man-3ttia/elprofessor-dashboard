@@ -1297,6 +1297,57 @@ def tutorials_delete(tutorial_id):
     return _platform_proxy('DELETE', f"/api/bridge/tutorials/{tutorial_id}")
 
 
+# --- «المواضيع» (Topics): research/draft -> review AI draft -> publish ----------
+# Mirrors the tutorials proxy above. The team researches a topic here (create =
+# DRAFT + AI draft), reviews the returned ai_answer, then publishes it to the
+# public board. Reads go through the SECRET bridge (lists drafts too); writes go
+# to the SECRET bridge as well. METRICS_SECRET is sent server-side ONLY — the
+# browser never sees it.
+@app.route('/api/platform-topics', methods=['GET'])
+@token_required
+@roles_required('admin', 'employee')   # employee may VIEW topics (incl drafts)
+def platform_topics_list():
+    return _platform_proxy('GET', '/api/bridge/topics')
+
+
+@app.route('/api/platform-topics', methods=['POST'])
+@token_required
+@roles_required('admin', 'employee')   # research/draft a new topic
+def platform_topics_create():
+    body = request.json or {}
+    return _platform_proxy('POST', '/api/bridge/topics', json_body={
+        'title': (body.get('title') or '').strip(),
+        'question': (body.get('question') or '').strip(),
+        'specialty': (body.get('specialty') or '').strip(),
+    })
+
+
+@app.route('/api/platform-topics/<topic_id>/publish', methods=['POST'])
+@token_required
+@roles_required('admin', 'employee')
+def platform_topics_publish(topic_id):
+    return _platform_proxy('POST', f"/api/bridge/topics/{topic_id}/publish")
+
+
+@app.route('/api/platform-topics/<topic_id>', methods=['PUT'])
+@token_required
+@roles_required('admin', 'employee')
+def platform_topics_update(topic_id):
+    body = request.json or {}
+    payload = {}
+    for key in ('title', 'question', 'specialty', 'ai_answer'):
+        if key in body:
+            payload[key] = body.get(key)
+    return _platform_proxy('PUT', f"/api/bridge/topics/{topic_id}", json_body=payload)
+
+
+@app.route('/api/platform-topics/<topic_id>', methods=['DELETE'])
+@token_required
+@roles_required('admin', 'employee')
+def platform_topics_delete(topic_id):
+    return _platform_proxy('DELETE', f"/api/bridge/topics/{topic_id}")
+
+
 @app.route('/api/investor/wallet', methods=['GET'])
 def investor_wallet_bridge():
     """Read-only investor wallet by email, for the platform to mirror in its
