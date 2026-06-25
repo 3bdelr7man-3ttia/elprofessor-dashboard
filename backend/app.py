@@ -1116,6 +1116,26 @@ def platform_users_list():
         return jsonify({'error': 'تعذر جلب المستخدمين'}), 502
     return jsonify(r.json() if r.content else {})
 
+@app.route('/api/platform-chat-insights', methods=['GET'])
+@token_required
+@roles_required('admin', 'employee')
+def platform_chat_insights():
+    """Demand analysis from the platform chat (proxied via the METRICS_SECRET bridge)."""
+    if not PLATFORM_METRICS_SECRET:
+        return jsonify({'error': 'لم يتم ضبط الربط بعد'}), 503
+    try:
+        r = requests.get(
+            f"{PLATFORM_API_URL}/api/bridge/chat-insights",
+            params={'limit': 3000},
+            headers={'X-ELP-Metrics-Secret': PLATFORM_METRICS_SECRET},
+            timeout=15,
+        )
+    except Exception:
+        return jsonify({'error': 'تعذر الاتصال بالمنصة'}), 502
+    if r.status_code != 200:
+        return jsonify({'error': 'تعذر جلب التحليل'}), 502
+    return jsonify(r.json() if r.content else {})
+
 @app.route('/api/platform-users/<user_id>/role', methods=['POST'])
 @token_required
 @roles_required('admin')

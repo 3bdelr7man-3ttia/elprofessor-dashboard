@@ -180,6 +180,13 @@
       return Promise.all(jobs);
     },
 
+    // تحليل الطلب من الشات: /api/platform-chat-insights (via the METRICS_SECRET bridge)
+    analysis: function () {
+      return get("/platform-chat-insights").then(function (r) {
+        EP.data.analysis = r || {};
+      });
+    },
+
     // المستخدمون: /api/platform-users -> {users:[...], count}
     users: function () {
       return get("/platform-users").then(function (r) {
