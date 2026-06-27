@@ -1237,12 +1237,18 @@ def _platform_create_course(c):
             headers={'X-ELP-Metrics-Secret': PLATFORM_METRICS_SECRET},
             timeout=12,
         )
-        if r.status_code == 200 and r.content:
-            data = r.json()
-            return {'id': data.get('id'), 'slug': data.get('slug')}
-    except Exception:
-        pass
-    return None
+    except Exception as exc:
+        app.logger.warning("platform course mirror failed (network): %s", exc)
+        return None
+    if r.status_code != 200:
+        app.logger.warning("platform course mirror failed: HTTP %s — %s", r.status_code, (r.text or '')[:200])
+        return None
+    try:
+        data = r.json()
+    except ValueError:
+        app.logger.warning("platform course mirror: non-JSON 200 response — %s", (r.text or '')[:200])
+        return None
+    return {'id': data.get('id'), 'slug': data.get('slug')}
 
 
 @app.route('/api/platform-trainer-applications/<application_id>/<action>', methods=['POST'])
@@ -2335,6 +2341,7 @@ def list_courses():
 
 @app.route('/api/courses', methods=['POST'])
 @token_required
+@roles_required('admin', 'employee')   # creating a course auto-mirrors to the platform → staff only
 def create_course():
     d = request.json or {}
     c = Course(
@@ -2348,16 +2355,18 @@ def create_course():
         lms_id=d.get('lms_id', ''), notes=d.get('notes', '')
     )
     db.session.add(c)
-    db.session.commit()
+    # flush() assigns the autoincrement id (needed as dashboard_course_id) WITHOUT committing, so the
+    # course + its platform link persist in ONE atomic commit below — no half-mirrored state on error.
+    db.session.flush()
     # Mirror it onto the platform so it actually appears on app.elprofessor.net (not just here),
-    # unless the caller opts out. Failure is non-fatal — the dashboard record is already saved.
+    # unless the caller opts out. Failure is non-fatal — the dashboard record still saves.
     linked = None
     if d.get('publish_to_platform', True):
         linked = _platform_create_course(c)
         if linked:
             c.platform_course_id = linked.get('id')
             c.platform_course_slug = linked.get('slug')
-            db.session.commit()
+    db.session.commit()
     return jsonify({
         'id': c.id,
         'platform_course_id': c.platform_course_id,
