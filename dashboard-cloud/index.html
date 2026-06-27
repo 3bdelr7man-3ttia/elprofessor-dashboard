@@ -814,7 +814,7 @@ var USERS=[
 const VERIFY={verified:{t:'موثّق',cls:'s-auto'},pending:{t:'بانتظار توثيق',cls:'s-wait'},none:{t:'غير موثّق',cls:''}};
 
 // قسم تحليل الطلب — مين بيسأل عن إيه (من الشات)، نسبة محتاجي الخبير، التحويل للدفع.
-const SEG_LABEL={individual:'أفراد',employee:'موظفون',government:'حكومي',student:'طلاب',lawyer:'محامون',trainer:'مدرّبون',company:'شركات',researcher:'باحثون',prosecutor:'وكلاء نيابة',unknown:'غير محدد'};
+const SEG_LABEL={individual:'أفراد',employee:'موظفون',government:'حكومي',student:'طلاب',lawyer:'محامون',senior:'محامٍ خبير',prof:'أستاذ جامعة',trainer:'مدرّبون',company:'شركات',firm:'شركة محاماة',grad:'خريج جديد',influencer:'مؤثر/رائد أعمال',researcher:'باحثون',prosecutor:'وكلاء نيابة',unknown:'غير محدد'};
 function viewAnalysis(v){
   if(window.EP){EP.ensure('analysis',()=>viewAnalysis(v));}
   const st=(window.EP&&EP.state.analysis)||'idle';
@@ -1046,12 +1046,16 @@ function csTrainers(){
   }
   return [];
 }
+// عروض الأسعار (اعرض سعرك) — بانتظار قرارك (اعتماد/رفض/عرض مقابل).
+function csOffers(){return (window.EP&&EP.data.course_offers&&Array.isArray(EP.data.course_offers.offers))?EP.data.course_offers.offers:[];}
+// الدورات الأصلية (native) — لتفعيل/إيقاف المزايدة لكل دورة.
+function csPlatformCourses(){return (window.EP&&EP.data.platform_courses&&Array.isArray(EP.data.platform_courses.courses))?EP.data.platform_courses.courses:[];}
 function viewCourses(v){
-  if(window.EP){EP.ensure('courses',()=>viewCourses(v));EP.ensure('inbox',()=>viewCourses(v));}
+  if(window.EP){EP.ensure('courses',()=>viewCourses(v));EP.ensure('inbox',()=>viewCourses(v));EP.ensure('course_offers',()=>viewCourses(v));EP.ensure('platform_courses',()=>viewCourses(v));}
   const Cstr=(window.EP&&EP.state.courses)||'idle';
   const live=!!(window.EP&&EP.data.courses);
   const CRS=csCourses();
-  const PRG=csPrograms(), TRQ=csTrainers();
+  const PRG=csPrograms(), TRQ=csTrainers(), OFR=csOffers();
   // التسعير معطّل (لا واجهة خلفية) — اقفل عليه إن كان نشطًا.
   if(courseTab==='pricing')courseTab='courses';
   const pub=CRS.filter(c=>c.status==='published').length, enr=CRS.reduce((s,c)=>s+(c.enrolled||0),0);
@@ -1069,6 +1073,7 @@ function viewCourses(v){
       <div class="tab${courseTab==='courses'?' on':''}" data-t="courses">الكتالوج (${CRS.length})</div>
       <div class="tab${courseTab==='programs'?' on':''}" data-t="programs">طلبات البرامج (${PRG.length})</div>
       <div class="tab${courseTab==='trainers'?' on':''}" data-t="trainers">طلبات المدربين (${TRQ.length})</div>
+      <div class="tab${courseTab==='offers'?' on':''}" data-t="offers">عروض الأسعار (${OFR.length})</div>
     </div>
     <div class="inboxwrap">
       <section class="panel"><div class="ph"><h3 id="cH">الكتالوج</h3><span class="n" id="cN">0</span>${(live&&courseTab==='courses')?`<button class="btn btn-ghost" id="cSync" style="flex:none;min-width:auto;padding:6px 12px;font-size:12px;margin-inline-start:auto">مزامنة من الأكاديمية</button><button class="btn btn-human" id="cCreate" style="flex:none;min-width:auto;padding:6px 12px;font-size:12px">+ إنشاء دورة</button>`:`<button class="btn btn-human" id="cCreate" style="flex:none;min-width:auto;padding:6px 13px;font-size:12px;margin-inline-start:auto">+ إنشاء دورة من الإدارة</button>`}</div><div id="cRows"></div></section>
@@ -1097,13 +1102,28 @@ function renderCourses(){
       <div class="c"><div class="from">طلب من المنصة</div></div>
       <div class="c"><span class="status s-wait"><span class="d"></span>بانتظار الاعتماد</span></div></div>`);});
     el.querySelectorAll('.row').forEach(x=>x.onclick=()=>{selected='p'+x.dataset.p;renderCourses();drawCourse();});
-  } else {const TRQ=csTrainers();h.textContent='طلبات المدربين';document.getElementById('cN').textContent=TRQ.length;
+  } else if(courseTab==='trainers'){const TRQ=csTrainers();h.textContent='طلبات المدربين';document.getElementById('cN').textContent=TRQ.length;
     if(!TRQ.length)el.innerHTML='<div style="padding:40px;text-align:center;color:var(--muted)">لا طلبات مدربين</div>';
     TRQ.forEach((t,idx)=>el.insertAdjacentHTML('beforeend',`<div class="row esc-row${selected==='t'+idx?' sel':''}" data-t="${idx}" style="grid-template-columns:1.7fr 1.2fr 130px">
       <div class="c c1"><div class="src-ic" style="background:var(--ai-bg);color:var(--ai)">${svg('cap')}</div><div><div class="parties">${t.name}</div><div class="from">${t.spec} · ${t.ref}</div></div></div>
       <div class="c"><div class="from">عبر «درّب معنا»</div></div>
       <div class="c"><span class="status s-wait"><span class="d"></span>بانتظار</span></div></div>`));
     el.querySelectorAll('.row').forEach(x=>x.onclick=()=>{selected='t'+x.dataset.t;renderCourses();drawCourse();});
+  } else {const OFR=csOffers();const PCR=csPlatformCourses();h.textContent='عروض الأسعار';document.getElementById('cN').textContent=OFR.length;
+    // قسم علوي: تفعيل/إيقاف المزايدة «اعرض سعرك» لكل دورة أصلية.
+    var pcr=PCR.filter(function(c){return c.is_active;});
+    var toggles='<div style="padding:12px 16px;border-bottom:1px solid var(--border);background:var(--surface-2)"><div style="font-weight:800;font-size:13px;margin-bottom:8px;display:flex;align-items:center;gap:7px">'+svg('wallet')+'تفعيل «اعرض سعرك» على الدورات</div>'+
+      (pcr.length?pcr.map(function(c){var on=!!c.bid_enabled;var pr=(c.price_amount!=null)?(money(c.price_amount)+' '+(c.price_currency||'')):'—';return '<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px dashed var(--line)"><div style="flex:1"><div style="font-weight:700;font-size:12.8px">'+c.title+'</div><div style="font-size:11px;color:var(--muted)">'+pr+' · '+(c.type||'')+'</div></div><button class="btn '+(on?'btn-primary':'btn-ghost')+' pcbid" data-id="'+c.id+'" data-on="'+(on?1:0)+'" style="flex:none;min-width:auto;padding:6px 13px;font-size:12px">'+(on?'مُفعّلة ✓':'فعّل المزايدة')+'</button></div>';}).join(''):'<div style="color:var(--muted);font-size:12px;padding:6px 0">لا دورات أصلية بعد.</div>')+
+      '</div>';
+    el.innerHTML=toggles;
+    if(!OFR.length)el.insertAdjacentHTML('beforeend','<div style="padding:30px;text-align:center;color:var(--muted)">لا عروض أسعار بانتظار القرار.</div>');
+    OFR.forEach((o,idx)=>el.insertAdjacentHTML('beforeend',`<div class="row esc-row${selected==='o'+idx?' sel':''}" data-o="${idx}" style="grid-template-columns:1.6fr 1fr 1fr 110px">
+      <div class="c c1"><div class="src-ic" style="background:var(--gold-bg);color:var(--gold)">${svg('wallet')}</div><div><div class="parties">${o.course}</div><div class="from">${o.buyer} · ${SEG_LABEL[o.segment]||o.segment}</div></div></div>
+      <div class="c"><div class="from">عرضه <b style="color:var(--navy)">${money(o.offered)} ${o.currency}</b></div></div>
+      <div class="c"><div class="from">العادل <b style="color:var(--gold)">${money(o.list)}</b> · الحد ${money(o.floor)}</div></div>
+      <div class="c"><span class="status s-wait"><span class="d"></span>بانتظار</span></div></div>`));
+    el.querySelectorAll('.pcbid').forEach(function(b){b.onclick=function(){var id=b.dataset.id;var turnOn=b.dataset.on!=='1';if(window.EP&&id){EP.setCourseBid(id,turnOn,function(){viewCourses(document.getElementById('view'));});}};});
+    el.querySelectorAll('.row').forEach(x=>x.onclick=()=>{selected='o'+x.dataset.o;renderCourses();drawCourse();});
   }
   drawCourse();
 }
@@ -1122,13 +1142,25 @@ function drawCourse(){
     <div class="field"><div class="lab">المتقدّم</div><div class="val">${p.by}</div></div>
     <div class="field"><div class="lab">المرجع</div><div class="val">${p.ref}</div></div>
     <div class="acts"><button class="btn btn-primary" data-a="approve">${svg('check')}اعتمد وحوّله دورة</button><button class="btn btn-warn" data-a="reject">رفض</button></div></div>`;}
-  else {const tr=csTrainers()[i];if(!tr){el.innerHTML='';return;}el.innerHTML=`<div class="dh"><div class="k">طلب مدرّب · من «درّب معنا»</div><h3>${tr.name}</h3></div><div class="db">
+  else if(t==='t'){const tr=csTrainers()[i];if(!tr){el.innerHTML='';return;}el.innerHTML=`<div class="dh"><div class="k">طلب مدرّب · من «درّب معنا»</div><h3>${tr.name}</h3></div><div class="db">
     <div class="route"><span class="step">المنصة · درّب معنا</span><span class="arrow">←</span><span class="step" style="color:var(--ai);font-weight:800">المستخدمون/التدريب</span></div>
     <div class="field"><div class="lab">التخصص</div><div class="val">${tr.spec}</div></div>
     <div class="field"><div class="lab">المرجع</div><div class="val">${tr.ref}</div></div>
     <div class="field"><div class="lab">نسبة الإيراد</div><div class="val">تُحدّد عند الاعتماد (٢٥ → ٥٠٪)</div></div>
     <div class="acts"><button class="btn btn-primary" data-a="approve">${svg('check')}اعتمد كمدرّب</button><button class="btn btn-warn" data-a="reject">رفض</button></div></div>`;}
+  else {const o=csOffers()[i];if(!o){el.innerHTML='';return;}el.innerHTML=`<div class="dh"><div class="k">عرض سعر · «اعرض سعرك»</div><h3>${o.course}</h3></div><div class="db">
+    <div class="note-ai">${svg('sparkles','ic')}<div>المشتري عرض سعرًا أقل من السعر العادل. اعتمده، ارفضه، أو اعرض رقمًا مقابلًا (لا يقل عن الحد الأدنى ${money(o.floor)} ${o.currency}).</div></div>
+    <div class="field"><div class="lab">المشتري · الصفة</div><div class="val">${o.buyer} · ${SEG_LABEL[o.segment]||o.segment}</div></div>
+    <div class="field"><div class="lab">السعر العادل (حسب بلده وصفته)</div><div class="val">${money(o.list)} ${o.currency}</div></div>
+    <div class="field"><div class="lab">عرض المشتري · الحد الأدنى</div><div class="val"><b style="color:var(--navy)">${money(o.offered)}</b> · لا يقل عن ${money(o.floor)} ${o.currency}</div></div>
+    <div class="fld" style="margin:8px 0"><label>عرض مقابل (اختياري)</label><input id="ofr_amt" type="number" min="${o.floor}" placeholder="مثال: ${money(Math.round((o.offered+o.list)/2))}" style="direction:ltr;text-align:right"></div>
+    <div class="acts"><button class="btn btn-primary" data-a="approve">${svg('check')}اعتمد عرضه (${money(o.offered)})</button><button class="btn btn-human" data-a="counter">أرسل العرض المقابل</button><button class="btn btn-warn" data-a="reject">رفض</button></div></div>`;}
   el.querySelectorAll('[data-a]').forEach(b=>b.onclick=()=>{const a=b.dataset.a;
+    // عروض الأسعار (اعرض سعرك): اعتماد/رفض/عرض مقابل عبر الجسر.
+    if(selected[0]==='o'&&window.EP){var of=csOffers()[+selected.slice(1)];if(of&&of.id){
+      if(a==='counter'){var amtEl=document.getElementById('ofr_amt');var amt=amtEl&&amtEl.value?Number(amtEl.value):null;if(!amt||amt<of.floor){toast('اكتب مبلغًا لا يقل عن '+money(of.floor)+' '+of.currency);return;}EP.decideCourseOffer(of.id,'counter',amt,()=>{selected=null;viewCourses(document.getElementById('view'));});return;}
+      if(a==='approve'||a==='reject'){EP.decideCourseOffer(of.id,a,null,()=>{selected=null;viewCourses(document.getElementById('view'));});return;}
+    }}
     // اعتماد/رفض طلبات البرامج والمدربين عبر الـ API الحقيقي (apiId من الوارد).
     if((a==='approve'||a==='reject')&&window.EP&&selected){
       var kind=selected[0]==='p'?'program':'trainer';
