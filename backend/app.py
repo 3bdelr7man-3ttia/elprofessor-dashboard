@@ -173,6 +173,8 @@ class Course(db.Model):
     lms_sales_count = db.Column(db.Integer, default=0)   # real units sold (WooCommerce)
     lms_revenue = db.Column(db.Float, default=0)          # real gross revenue (WooCommerce, store currency)
     lms_currency = db.Column(db.String(8))               # WooCommerce store currency (e.g. GBP)
+    platform_course_id = db.Column(db.String(50))        # native platform (Mongo) course id — set when published to the platform
+    platform_course_slug = db.Column(db.String(200))     # native platform course slug (app.elprofessor.net link)
     notes = db.Column(db.Text)
     created_at = db.Column(db.DateTime, default=datetime.datetime.utcnow)
     revenues = db.relationship('Revenue', backref='course', lazy=True)
@@ -1210,6 +1212,43 @@ def _platform_proxy(method, path, params=None, json_body=None):
         body = r.json() if r.content else {}
         return jsonify({'error': body.get('detail') or 'تعذر تنفيذ العملية'}), r.status_code
     return jsonify(r.json() if r.content else {})
+
+
+def _platform_create_course(c):
+    """Mirror a dashboard Course onto the platform as a NATIVE course (so it shows on
+    app.elprofessor.net, not just the dashboard ledger). Returns {id, slug} or None on failure."""
+    if not PLATFORM_METRICS_SECRET:
+        return None
+    ctype = 'recorded_paid' if (c.price_egp or 0) > 0 else 'recorded_free'
+    payload = {
+        'title': c.title,
+        'type': ctype,
+        'trainer_name': c.trainer_name or '',
+        'category': c.category or '',
+        'price_egp': c.price_egp or 0,
+        'price_usd': c.price_usd or 0,
+        'is_active': True,
+        'dashboard_course_id': c.id,
+    }
+    try:
+        r = requests.post(
+            f"{PLATFORM_API_URL}/api/bridge/courses",
+            json=payload,
+            headers={'X-ELP-Metrics-Secret': PLATFORM_METRICS_SECRET},
+            timeout=12,
+        )
+    except Exception as exc:
+        app.logger.warning("platform course mirror failed (network): %s", exc)
+        return None
+    if r.status_code != 200:
+        app.logger.warning("platform course mirror failed: HTTP %s — %s", r.status_code, (r.text or '')[:200])
+        return None
+    try:
+        data = r.json()
+    except ValueError:
+        app.logger.warning("platform course mirror: non-JSON 200 response — %s", (r.text or '')[:200])
+        return None
+    return {'id': data.get('id'), 'slug': data.get('slug')}
 
 
 @app.route('/api/platform-trainer-applications/<application_id>/<action>', methods=['POST'])
@@ -2293,6 +2332,7 @@ def list_courses():
             'distribution': financial['distribution'],
             'linked_investments': [serialize_investment(item, rate, {c.id: c}) for item in financial['investments']],
             'lms_id': c.lms_id, 'notes': c.notes,
+            'platform_course_id': c.platform_course_id, 'platform_course_slug': c.platform_course_slug,
             'lms_synced': bool(c.lms_synced), 'lms_instructor_email': c.lms_instructor_email,
             'open_for_investment': bool(c.open_for_investment),
             'lms_sales_count': c.lms_sales_count or 0, 'lms_revenue': c.lms_revenue or 0, 'lms_currency': c.lms_currency or '',
@@ -2301,6 +2341,7 @@ def list_courses():
 
 @app.route('/api/courses', methods=['POST'])
 @token_required
+@roles_required('admin', 'employee')   # creating a course auto-mirrors to the platform → staff only
 def create_course():
     d = request.json or {}
     c = Course(
@@ -2314,8 +2355,46 @@ def create_course():
         lms_id=d.get('lms_id', ''), notes=d.get('notes', '')
     )
     db.session.add(c)
+    # flush() assigns the autoincrement id (needed as dashboard_course_id) WITHOUT committing, so the
+    # course + its platform link persist in ONE atomic commit below — no half-mirrored state on error.
+    db.session.flush()
+    # Mirror it onto the platform so it actually appears on app.elprofessor.net (not just here),
+    # unless the caller opts out. Failure is non-fatal — the dashboard record still saves.
+    linked = None
+    if d.get('publish_to_platform', True):
+        linked = _platform_create_course(c)
+        if linked:
+            c.platform_course_id = linked.get('id')
+            c.platform_course_slug = linked.get('slug')
     db.session.commit()
-    return jsonify({'id': c.id, 'message': 'تم إضافة الدورة'}), 201
+    return jsonify({
+        'id': c.id,
+        'platform_course_id': c.platform_course_id,
+        'platform_course_slug': c.platform_course_slug,
+        'platform_published': bool(linked),
+        'message': 'تم إضافة الدورة' + (' ونشرها على المنصة' if linked else ''),
+    }), 201
+
+
+@app.route('/api/courses/<int:id>/publish-platform', methods=['POST'])
+@token_required
+@roles_required('admin', 'employee')
+def publish_course_to_platform(id):
+    """Push an EXISTING dashboard course onto the platform as a native course (for courses created
+    before the auto-mirror, or whose first mirror attempt failed)."""
+    c = Course.query.get_or_404(id)
+    if c.platform_course_id:
+        return jsonify({'ok': True, 'already': True,
+                        'platform_course_id': c.platform_course_id,
+                        'platform_course_slug': c.platform_course_slug})
+    linked = _platform_create_course(c)
+    if not linked:
+        return jsonify({'error': 'تعذّر النشر على المنصة — تأكد من الربط (METRICS_SECRET)'}), 502
+    c.platform_course_id = linked.get('id')
+    c.platform_course_slug = linked.get('slug')
+    db.session.commit()
+    return jsonify({'ok': True, 'platform_course_id': c.platform_course_id,
+                    'platform_course_slug': c.platform_course_slug})
 
 @app.route('/api/courses/<int:id>', methods=['PUT'])
 @token_required
@@ -4296,6 +4375,10 @@ def ensure_runtime_schema():
                 connection.execute(text("ALTER TABLE courses ADD COLUMN lms_revenue FLOAT DEFAULT 0"))
             if 'lms_currency' not in course_columns:
                 connection.execute(text("ALTER TABLE courses ADD COLUMN lms_currency VARCHAR(8)"))
+            if 'platform_course_id' not in course_columns:
+                connection.execute(text("ALTER TABLE courses ADD COLUMN platform_course_id VARCHAR(50)"))
+            if 'platform_course_slug' not in course_columns:
+                connection.execute(text("ALTER TABLE courses ADD COLUMN platform_course_slug VARCHAR(200)"))
         if 'revenues' in existing_tables:
             revenue_columns = {column['name'] for column in inspector.get_columns('revenues')}
             if 'payment_id' not in revenue_columns:
