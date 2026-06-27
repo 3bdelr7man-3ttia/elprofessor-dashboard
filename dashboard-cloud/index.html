@@ -1136,7 +1136,8 @@ function drawCourse(){
     <div class="field"><div class="lab">المحاضر</div><div class="val">${c.inst}</div></div>
     <div class="field"><div class="lab">المسجّلون · السعر</div><div class="val">${c.enrolled} مسجّل · ${c.price} (تبدأ من ${c.from})</div></div>
     <div class="field"><div class="lab">الحالة</div><div class="val"><span class="status ${CSTATUS[c.status].cls}" style="${CSTATUS[c.status].cls?'':'background:var(--surface-2);color:var(--muted)'}"><span class="d" style="${CSTATUS[c.status].cls?'':'background:var(--muted)'}"></span>${CSTATUS[c.status].t}</span></div></div>
-    <div class="acts">${c.status==='draft'?`<button class="btn btn-primary" data-a="pub">${svg('check')}نشر الدورة</button>`:`<button class="btn btn-ghost" data-a="edit">تعديل</button>`}<button class="btn btn-human" data-a="video" style="flex:none;min-width:auto;padding:7px 11px;font-size:12px">الفيديوهات والسيرفر</button><button class="btn btn-ghost" data-a="sched">جدولة</button></div></div>`;}
+    <div class="field"><div class="lab">على المنصة</div><div class="val">${c.on_platform?`<span class="status s-auto"><span class="d"></span>ظاهرة على app.elprofessor.net</span>`:`<span class="status s-late"><span class="d"></span>مش ظاهرة على المنصة بعد</span>`}</div></div>
+    <div class="acts">${c.on_platform?'':`<button class="btn btn-primary" data-a="pubplatform">${svg('check')}انشر على المنصة</button>`}${c.status==='draft'?`<button class="btn btn-ghost" data-a="pub">نشر داخليًا</button>`:`<button class="btn btn-ghost" data-a="edit">تعديل</button>`}<button class="btn btn-human" data-a="video" style="flex:none;min-width:auto;padding:7px 11px;font-size:12px">الفيديوهات والسيرفر</button><button class="btn btn-ghost" data-a="sched">جدولة</button></div></div>`;}
   else if(t==='p'){const p=csPrograms()[i];if(!p){el.innerHTML='';return;}el.innerHTML=`<div class="dh"><div class="k">طلب برنامج · من المنصة</div><h3>${p.title}</h3></div><div class="db">
     <div class="route"><span class="step">المنصة · السوق</span><span class="arrow">←</span><span class="step" style="color:var(--memory);font-weight:800">الدورات والتدريب</span></div>
     <div class="field"><div class="lab">المتقدّم</div><div class="val">${p.by}</div></div>
@@ -1168,6 +1169,7 @@ function drawCourse(){
       var item=src[+selected.slice(1)];
       if(item&&item.apiId){EP.decideInboxItem({apiKind:kind,apiId:item.apiId},a==='approve'?'approve':'reject',()=>{selected=null;EP.reload('inbox',()=>viewCourses(document.getElementById('view')));});return;}
     }
+    if(a==='pubplatform'&&window.EP){var cp=csCourses()[+selected.slice(1)];if(cp&&cp.cid){EP.publishCourseToPlatform(cp.cid,()=>{viewCourses(document.getElementById('view'));});return;}}
     if(a==='video'){courseVideoModal(csCourses()[+selected.slice(1)]);}
     else if(a==='pub'&&window.EP&&EP.data.courses){var cc=csCourses()[+selected.slice(1)];if(cc&&cc.cid){EP.updateCourse(cc.cid,{status:'active'},()=>{selected=null;viewCourses(document.getElementById('view'));});return;}toast('تم نشر الدورة');}
     else toast(a==='pub'?'تم نشر الدورة':a==='sched'?'فتح الجدولة':a==='edit'?'فتح التعديل':'تم');});
@@ -1296,6 +1298,7 @@ function notify(msg){
 function openModal(title,bodyHtml){const s=document.createElement('div');s.className='scrim';s.id='epModal';s.innerHTML=`<div class="modal"><div class="mh"><span>${title}</span><button data-x>✕</button></div><div class="mb">${bodyHtml}</div></div>`;document.body.appendChild(s);s.querySelector('[data-x]').onclick=closeModal;s.onclick=e=>{if(e.target===s)closeModal();};return s;}
 function closeModal(){const m=document.getElementById('epModal');if(m)m.remove();}
 function createCourseModal(){const s=openModal('إنشاء دورة من الإدارة',`
+  <div class="note-ai" style="margin-bottom:12px">${svg('sparkles','ic')}<div>هتتنشر تلقائيًا على المنصة (app.elprofessor.net) كدورة native وتظهر للطلاب فورًا — تقدر تضيف الفيديوهات والتفاصيل بعدها.</div></div>
   <div class="fld"><label>عنوان الدورة</label><input id="m_title" placeholder="مثال: مدخل قانون العمل"></div>
   <div class="fld"><label>المحاضر / الجهة</label><input id="m_inst" placeholder="اسم المحاضر أو «فريق البروفيسور»"></div>
   <div class="row2"><div class="fld"><label>السعر يبدأ من (ج)</label><input id="m_price" type="number" placeholder="150"></div>

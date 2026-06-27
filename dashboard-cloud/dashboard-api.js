@@ -534,7 +534,8 @@
               priceNum: c.price_egp || 0, rate: trainerPct,
               owner: (c.trainer_name && trainerPct) ? "trainer" : "platform",
               status: c.status === "active" ? "published" : (c.status === "draft" ? "draft" : "published"),
-              lms_synced: !!c.lms_synced, total_revenue: c.total_revenue || 0, cid: c.id, raw: c,
+              lms_synced: !!c.lms_synced, total_revenue: c.total_revenue || 0, cid: c.id,
+              on_platform: !!c.platform_course_id, platform_slug: c.platform_course_slug || "", raw: c,
             };
           }),
         };
@@ -1180,6 +1181,12 @@
     api("/courses/" + id, { method: "PUT", body: d })
       .then(function () { note("حُدّثت الدورة"); EP.reload("courses", after); })
       .catch(function (e) { quietToast((e && e.message) || "تعذّر التحديث"); if (after) after(); });
+  };
+  // نشر دورة موجودة على المنصة (app.elprofessor.net) كدورة native — للدورات اللي اتعملت قبل الربط.
+  EP.publishCourseToPlatform = function (id, after) {
+    post("/courses/" + id + "/publish-platform", {})
+      .then(function (r) { note(r && r.already ? "الدورة منشورة على المنصة بالفعل" : "نُشرت الدورة على المنصة ✓"); EP.reload("courses", after); })
+      .catch(function (e) { quietToast((e && e.message) || "تعذّر النشر على المنصة"); if (after) after(); });
   };
   EP.syncCoursesLms = function (after) {
     post("/courses/sync-lms", {})
