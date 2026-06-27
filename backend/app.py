@@ -1255,6 +1255,36 @@ def platform_program_decide(request_id, action):
     )
 
 
+# --- «عروض الأسعار» (Course price bids): a buyer proposed a price for a bid-enabled course;
+# the founder approves / rejects / counters it here. Proxied to the platform via METRICS_SECRET. ---
+@app.route('/api/platform-course-offers', methods=['GET'])
+@token_required
+@roles_required('admin', 'employee')
+def platform_course_offers():
+    return _platform_proxy(
+        'GET',
+        '/api/bridge/course-offers',
+        params={'status': request.args.get('status') or 'pending'},
+    )
+
+
+@app.route('/api/platform-course-offers/<offer_id>/decide', methods=['POST'])
+@token_required
+@roles_required('admin', 'employee')
+def platform_course_offer_decide(offer_id):
+    body = request.json or {}
+    decision = (body.get('decision') or '').strip()
+    if decision not in ('approve', 'reject', 'counter'):
+        return jsonify({'error': 'القرار لازم يكون approve أو reject أو counter'}), 400
+    json_body = {'decision': decision}
+    if body.get('amount') is not None:
+        try:
+            json_body['amount'] = float(body.get('amount'))
+        except (TypeError, ValueError):
+            return jsonify({'error': 'مبلغ غير صالح'}), 400
+    return _platform_proxy('POST', f"/api/bridge/course-offers/{offer_id}/decide", json_body=json_body)
+
+
 # --- «الدليل» (Tutorials): proxy to the platform guide so the team manages it here ---
 # Read goes to the PUBLIC platform endpoint (with the secret + include_unpublished so the
 # dashboard sees drafts too); writes go to the SECRET bridge. The METRICS_SECRET is sent
