@@ -564,6 +564,13 @@
       }).catch(function () { EP.data.course_offers = { offers: [] }; });
     },
 
+    // الدورات الأصلية (native) + إعداد المزايدة لكل دورة: /api/platform-courses -> {courses:[...]}
+    platform_courses: function () {
+      return get("/platform-courses").then(function (r) {
+        EP.data.platform_courses = { courses: (r && r.courses) || [] };
+      }).catch(function () { EP.data.platform_courses = { courses: [] }; });
+    },
+
     // الإعدادات: /api/settings -> {key:value}
     settings: function () {
       return get("/settings").then(function (s) { EP.data.settings = s || {}; });
@@ -929,6 +936,16 @@
         EP.reload("course_offers", after);
       })
       .catch(function (e) { quietToast((e && e.message) || "تعذّر تنفيذ العملية"); if (after) after(); });
+  };
+
+  // تفعيل/إيقاف المزايدة «اعرض سعرك» على دورة أصلية (native) عبر الجسر.
+  EP.setCourseBid = function (courseId, enabled, after) {
+    api("/platform-courses/" + encodeURIComponent(courseId) + "/bid", { method: "PUT", body: { bid_enabled: !!enabled } })
+      .then(function () {
+        note(enabled ? "فُعّلت المزايدة على الدورة ✓" : "أُوقفت المزايدة على الدورة");
+        EP.reload("platform_courses", after);
+      })
+      .catch(function (e) { quietToast((e && e.message) || "تعذّر تحديث المزايدة"); if (after) after(); });
   };
 
   // المحتوى: إنشاء/نشر/تعديل

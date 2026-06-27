@@ -1285,6 +1285,30 @@ def platform_course_offer_decide(offer_id):
     return _platform_proxy('POST', f"/api/bridge/course-offers/{offer_id}/decide", json_body=json_body)
 
 
+# --- Native platform courses + their bid settings («اعرض سعرك» on/off per course). The dashboard's
+# own «الكتالوج» is a separate legacy LMS-synced store; these target the REAL native courses. ---
+@app.route('/api/platform-courses', methods=['GET'])
+@token_required
+@roles_required('admin', 'employee')
+def platform_courses_list():
+    return _platform_proxy('GET', '/api/bridge/courses')
+
+
+@app.route('/api/platform-courses/<course_id>/bid', methods=['PUT'])
+@token_required
+@roles_required('admin', 'employee')
+def platform_course_set_bid(course_id):
+    body = request.json or {}
+    json_body = {}
+    if 'bid_enabled' in body:
+        json_body['bid_enabled'] = bool(body.get('bid_enabled'))
+    if body.get('segment_pricing_mode') in ('discount_only', 'full'):
+        json_body['segment_pricing_mode'] = body.get('segment_pricing_mode')
+    if not json_body:
+        return jsonify({'error': 'لا يوجد تغيير صالح'}), 400
+    return _platform_proxy('PUT', f"/api/bridge/courses/{course_id}", json_body=json_body)
+
+
 # --- «الدليل» (Tutorials): proxy to the platform guide so the team manages it here ---
 # Read goes to the PUBLIC platform endpoint (with the secret + include_unpublished so the
 # dashboard sees drafts too); writes go to the SECRET bridge. The METRICS_SECRET is sent
