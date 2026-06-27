@@ -2505,14 +2505,54 @@ def _load_packages():
     db.session.commit()
     return pkgs
 
+# The dashboard «الباقات والأسعار» now CONTROLS the live platform plans via the METRICS_SECRET
+# bridge. The platform stores price as {country:{amount,currency}}; the dashboard UI uses a flat
+# {COUNTRY: amount} with currency implied per country — so we transform both ways.
+_PKG_CC_CURRENCY = {'EG': 'EGP', 'SA': 'SAR', 'AE': 'AED', 'KW': 'KWD', 'QA': 'QAR', 'default': 'USD'}
+
+
+def _platform_plan_to_pkg(p):
+    prices = {}
+    for cc, v in (p.get('prices') or {}).items():
+        key = 'default' if cc == 'default' else cc.upper()
+        prices[key] = (v or {}).get('amount', 0)
+    return {
+        'id': p.get('id'),
+        'name': p.get('name', ''),
+        'cycle': 'مجانية' if p.get('is_free') else 'شهري',
+        'active': p.get('active', True),
+        'features': p.get('features', []),
+        'prices': prices,
+    }
+
+
 @app.route('/api/packages', methods=['GET'])
 @token_required
 def get_packages():
+    # Prefer the LIVE platform plans (via the bridge); fall back to the local copy if the bridge
+    # isn't reachable so the screen never goes blank.
+    if PLATFORM_METRICS_SECRET:
+        try:
+            r = requests.get(
+                f"{PLATFORM_API_URL}/api/bridge/plans",
+                headers={'X-ELP-Metrics-Secret': PLATFORM_METRICS_SECRET}, timeout=15,
+            )
+            if r.status_code == 200 and r.content:
+                plans = (r.json() or {}).get('plans', [])
+                return jsonify({
+                    'packages': [_platform_plan_to_pkg(p) for p in plans],
+                    'countries': PACKAGE_COUNTRIES,
+                    'currency_per_country': PACKAGE_COUNTRY_CURRENCY,
+                    'source': 'platform',
+                })
+        except Exception:
+            pass
     return jsonify({
         'packages': _load_packages(),
         'countries': PACKAGE_COUNTRIES,
         'currency_per_country': PACKAGE_COUNTRY_CURRENCY,
     })
+
 
 @app.route('/api/packages', methods=['PUT'])
 @token_required
@@ -2522,6 +2562,40 @@ def update_packages():
     incoming = d.get('packages') if isinstance(d, dict) else d
     if not isinstance(incoming, list):
         return jsonify({'error': 'packages must be a list'}), 400
+
+    # Push edits to the platform for plans it actually defines (free/pro). Each plan is updated
+    # individually via the bridge PUT.
+    synced = []
+    if PLATFORM_METRICS_SECRET:
+        for p in incoming:
+            pid = str(p.get('id') or '').strip().lower()
+            if pid not in ('free', 'pro'):
+                continue  # extra dashboard-only packages stay local (platform has no slot for them)
+            prices = {}
+            for cc, amt in (p.get('prices') or {}).items():
+                key = 'default' if str(cc) == 'default' else str(cc).lower()
+                cur = _PKG_CC_CURRENCY.get('default' if str(cc) == 'default' else str(cc).upper())
+                try:
+                    amtf = float(amt)
+                except (TypeError, ValueError):
+                    continue
+                if cur and amtf > 0:
+                    prices[key] = {'amount': amtf, 'currency': cur}
+            body = {
+                'plan_id': pid, 'prices': prices, 'active': bool(p.get('active', True)),
+                'name': p.get('name'), 'features': p.get('features'),
+            }
+            try:
+                rr = requests.put(
+                    f"{PLATFORM_API_URL}/api/bridge/plans", json=body,
+                    headers={'X-ELP-Metrics-Secret': PLATFORM_METRICS_SECRET}, timeout=15,
+                )
+                if rr.status_code == 200:
+                    synced.append(pid)
+            except Exception:
+                pass
+
+    # Keep a local copy too (the dashboard supports extra local-only packages).
     pkgs = [_normalize_package(p) for p in incoming]
     payload = json.dumps(pkgs, ensure_ascii=False)
     s = Setting.query.get(PACKAGES_SETTING_KEY)
@@ -2531,7 +2605,7 @@ def update_packages():
     else:
         db.session.add(Setting(key=PACKAGES_SETTING_KEY, value=payload))
     db.session.commit()
-    return jsonify({'message': 'تم تحديث الباقات', 'packages': pkgs})
+    return jsonify({'message': 'تم تحديث الباقات', 'synced_to_platform': synced, 'packages': pkgs})
 
 # ============================================================
 # CASH FLOW / PARTNERS / PAYOUTS
