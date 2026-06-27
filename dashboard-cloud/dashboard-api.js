@@ -1182,6 +1182,12 @@
       .then(function () { note("حُدّثت الدورة"); EP.reload("courses", after); })
       .catch(function (e) { quietToast((e && e.message) || "تعذّر التحديث"); if (after) after(); });
   };
+  // حذف الدورة من الداش + من المنصة (الباك-إند بيحذف الـ native المربوطة كمان).
+  EP.deleteCourse = function (id, after) {
+    api("/courses/" + id, { method: "DELETE" })
+      .then(function () { note("اتحذفت الدورة"); EP.reload("courses", after); })
+      .catch(function (e) { quietToast((e && e.message) || "تعذّر الحذف"); if (after) after(); });
+  };
   // نشر دورة موجودة على المنصة (app.elprofessor.net) كدورة native — للدورات اللي اتعملت قبل الربط.
   EP.publishCourseToPlatform = function (id, after) {
     post("/courses/" + id + "/publish-platform", {})

@@ -1251,6 +1251,43 @@ def _platform_create_course(c):
     return {'id': data.get('id'), 'slug': data.get('slug')}
 
 
+def _platform_update_course(platform_id, fields):
+    """Push edits to a linked native course. Returns True on success (best-effort, non-fatal)."""
+    if not (PLATFORM_METRICS_SECRET and platform_id and fields):
+        return False
+    try:
+        r = requests.put(
+            f"{PLATFORM_API_URL}/api/bridge/courses/{platform_id}",
+            json=fields,
+            headers={'X-ELP-Metrics-Secret': PLATFORM_METRICS_SECRET},
+            timeout=12,
+        )
+        if r.status_code == 200:
+            return True
+        app.logger.warning("platform course edit failed: HTTP %s — %s", r.status_code, (r.text or '')[:200])
+    except Exception as exc:
+        app.logger.warning("platform course edit failed (network): %s", exc)
+    return False
+
+
+def _platform_delete_course(platform_id):
+    """Soft-delete a linked native course (best-effort, non-fatal). Returns True on success."""
+    if not (PLATFORM_METRICS_SECRET and platform_id):
+        return False
+    try:
+        r = requests.delete(
+            f"{PLATFORM_API_URL}/api/bridge/courses/{platform_id}",
+            headers={'X-ELP-Metrics-Secret': PLATFORM_METRICS_SECRET},
+            timeout=12,
+        )
+        if r.status_code == 200:
+            return True
+        app.logger.warning("platform course delete failed: HTTP %s — %s", r.status_code, (r.text or '')[:200])
+    except Exception as exc:
+        app.logger.warning("platform course delete failed (network): %s", exc)
+    return False
+
+
 @app.route('/api/platform-trainer-applications/<application_id>/<action>', methods=['POST'])
 @token_required
 @roles_required('admin', 'employee')
@@ -1346,6 +1383,39 @@ def platform_course_set_bid(course_id):
     if not json_body:
         return jsonify({'error': 'لا يوجد تغيير صالح'}), 400
     return _platform_proxy('PUT', f"/api/bridge/courses/{course_id}", json_body=json_body)
+
+
+@app.route('/api/platform-courses/<course_id>', methods=['PUT'])
+@token_required
+@roles_required('admin', 'employee')
+def platform_course_edit(course_id):
+    """Full edit of a native course from the dashboard (title/desc/price/instructor/level/active)."""
+    body = request.json or {}
+    json_body = {}
+    for key in ('title', 'short_description', 'description', 'instructor_name', 'level', 'category'):
+        if isinstance(body.get(key), str):
+            json_body[key] = body.get(key)
+    if 'is_active' in body:
+        json_body['is_active'] = bool(body.get('is_active'))
+    if 'bid_enabled' in body:
+        json_body['bid_enabled'] = bool(body.get('bid_enabled'))
+    for key in ('price_egp', 'price_usd'):
+        if body.get(key) is not None:
+            try:
+                json_body[key] = float(body.get(key))
+            except (TypeError, ValueError):
+                return jsonify({'error': 'سعر غير صالح'}), 400
+    if not json_body:
+        return jsonify({'error': 'لا يوجد تغيير صالح'}), 400
+    return _platform_proxy('PUT', f"/api/bridge/courses/{course_id}", json_body=json_body)
+
+
+@app.route('/api/platform-courses/<course_id>', methods=['DELETE'])
+@token_required
+@roles_required('admin', 'employee')
+def platform_course_delete(course_id):
+    """Delete a native course from the dashboard (soft-delete → disappears from the platform)."""
+    return _platform_proxy('DELETE', f"/api/bridge/courses/{course_id}")
 
 
 # --- «الدليل» (Tutorials): proxy to the platform guide so the team manages it here ---
@@ -2398,6 +2468,7 @@ def publish_course_to_platform(id):
 
 @app.route('/api/courses/<int:id>', methods=['PUT'])
 @token_required
+@roles_required('admin', 'employee')   # edits mirror to the native platform course → staff only
 def update_course(id):
     c = Course.query.get_or_404(id)
     d = request.json or {}
@@ -2408,12 +2479,34 @@ def update_course(id):
         if dk in d and d[dk]:
             setattr(c, dk, datetime.date.fromisoformat(d[dk]))
     db.session.commit()
-    return jsonify({'message': 'تم التحديث'})
+    # Mirror the core edits to the linked native course so the platform stays in sync.
+    native = None
+    if c.platform_course_id:
+        fields = {}
+        if 'title' in d:
+            fields['title'] = c.title
+        if 'trainer_name' in d:
+            fields['instructor_name'] = c.trainer_name or ''
+        if 'category' in d:
+            fields['category'] = c.category or ''
+        if 'price_egp' in d:
+            fields['price_egp'] = c.price_egp or 0
+        if 'price_usd' in d:
+            fields['price_usd'] = c.price_usd or 0
+        if 'status' in d:
+            fields['is_active'] = (c.status == 'active')
+        native = _platform_update_course(c.platform_course_id, fields) if fields else None
+    return jsonify({'message': 'تم التحديث', 'platform_synced': bool(native)})
 
 @app.route('/api/courses/<int:id>', methods=['DELETE'])
 @token_required
+@roles_required('admin', 'employee')   # also deletes the native platform course → staff only
 def delete_course(id):
     c = Course.query.get_or_404(id)
+    # Soft-delete the linked native course first (so it disappears from the platform), then drop
+    # the local row. Native delete is best-effort — a link failure must not block the local delete.
+    if c.platform_course_id:
+        _platform_delete_course(c.platform_course_id)
     db.session.delete(c)
     db.session.commit()
     return jsonify({'message': 'تم الحذف'})
