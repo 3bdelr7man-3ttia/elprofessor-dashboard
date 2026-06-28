@@ -1210,6 +1210,13 @@
       .then(function () { note("أُضيفت دورة «" + (d.title || "") + "»"); EP.reload("courses", after); })
       .catch(function (e) { quietToast((e && e.message) || "تعذّر إنشاء الدورة"); if (after) after(); });
   };
+  // «أنشئ الدورة بـ Titch» — يولّد منهجًا (دروس + أسئلة) من ملخّص/مادة ويعمل دورة native.
+  EP.generateCourse = function (body, after) {
+    note("Titch بيحضّر المنهج… ممكن ياخد ثواني");
+    post("/platform-courses/generate", body)
+      .then(function (r) { note("اتعملت دورة بمنهج Titch (" + ((r && r.lesson_count) || 0) + " دروس) ✓"); EP.reload("platform_courses", function () { EP.reload("courses", after); }); })
+      .catch(function (e) { quietToast((e && e.message) || "تعذّر التوليد"); if (after) after(); });
+  };
   EP.updateCourse = function (id, d, after) {
     api("/courses/" + id, { method: "PUT", body: d })
       .then(function () { note("حُدّثت الدورة"); EP.reload("courses", after); })

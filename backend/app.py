@@ -1461,6 +1461,29 @@ def platform_schedules():
     return _platform_proxy('GET', '/api/bridge/schedules')
 
 
+@app.route('/api/platform-courses/generate', methods=['POST'])
+@token_required
+@roles_required('admin', 'employee')
+def platform_course_generate():
+    """«أنشئ الدورة بـ Titch» — generate a native course curriculum from a brief/material."""
+    body = request.json or {}
+    json_body = {
+        'title': (body.get('title') or '').strip(),
+        'material': body.get('material') or '',
+        'mission': body.get('mission') or '',
+        'type': body.get('type') or 'recorded_paid',
+        'instructor_name': (body.get('instructor_name') or '').strip(),
+    }
+    if not json_body['title']:
+        return jsonify({'error': 'العنوان مطلوب'}), 400
+    if body.get('price_egp') is not None:
+        try:
+            json_body['price_egp'] = float(body.get('price_egp'))
+        except (TypeError, ValueError):
+            return jsonify({'error': 'سعر غير صالح'}), 400
+    return _platform_proxy('POST', '/api/bridge/courses/generate', json_body=json_body)
+
+
 @app.route('/api/platform-knowledge', methods=['GET'])
 @token_required
 @roles_required('admin', 'employee')
