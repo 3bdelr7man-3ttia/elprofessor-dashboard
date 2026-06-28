@@ -348,6 +348,8 @@ const RELEASED=[
 ];
 const COMMISSION=0.15;
 const money=n=>n.toLocaleString('ar-EG');
+// HTML-escape for safe interpolation into innerHTML (global — used by drawers/modals/views).
+function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];});}
 
 let current='inbox', selected=null, activeFilter='all', escTab='sessions', finTab='summary', usersFilter='all', courseTab='courses', invTab='investors', mktTab='campaigns', contentTab='pending';
 let role='admin';
@@ -1245,8 +1247,8 @@ function viewKnowledge(v){
     '<section class="panel"><div class="ph"><h3>عناصر السوق</h3><span class="n">'+KN.length+'</span></div><div id="knRows"></div></section>';
   var el=document.getElementById('knRows');
   if(!KN.length){el.innerHTML='<div style="padding:40px;text-align:center;color:var(--muted)">لا عناصر بعد — لما حد يرفع كتاب/بحث هيظهر هنا.</div>';return;}
-  KN.forEach(function(k,idx){var sale=k.rights==='owned_for_sale';var pr=(k.price_amount!=null)?(money(k.price_amount)+' '+(k.price_currency||'')):'—';var st=k.is_active?['s-auto','ظاهر']:['s-late','مخفي'];
-    el.insertAdjacentHTML('beforeend','<div class="row esc-row" data-k="'+idx+'" style="grid-template-columns:1.7fr 1fr 1fr 1fr 160px"><div class="c c1"><div class="src-ic" style="background:var(--memory-bg);color:var(--memory)">'+svg('book')+'</div><div><div class="parties">'+esc(k.title)+'</div><div class="from">'+(KN_TYPE[k.type]||k.type)+' · '+esc(k.owner_name||k.owner_email||'—')+'</div></div></div>'+
+  KN.forEach(function(k,idx){var sale=k.rights==='owned_for_sale';var pr=(k.price_amount!=null)?(money(k.price_amount)+' '+esc(k.price_currency||'')):'—';var st=k.is_active?['s-auto','ظاهر']:['s-late','مخفي'];
+    el.insertAdjacentHTML('beforeend','<div class="row esc-row" data-k="'+idx+'" style="grid-template-columns:1.7fr 1fr 1fr 1fr 160px"><div class="c c1"><div class="src-ic" style="background:var(--memory-bg);color:var(--memory)">'+svg('book')+'</div><div><div class="parties">'+esc(k.title)+'</div><div class="from">'+(KN_TYPE[k.type]||esc(k.type))+' · '+esc(k.owner_name||k.owner_email||'—')+'</div></div></div>'+
       '<div class="c"><div class="from">'+(sale?'<b style="color:var(--gold)">للبيع</b>':'<b style="color:var(--ai)">تغذية عامة</b>')+'</div></div>'+
       '<div class="c"><div class="from">'+(sale?('سعر <b style="color:var(--navy)">'+pr+'</b>'):'—')+'</div></div>'+
       '<div class="c"><div class="from"><b style="color:var(--ink)">'+(k.total_acquired||0)+'</b> اقتناء</div></div>'+
