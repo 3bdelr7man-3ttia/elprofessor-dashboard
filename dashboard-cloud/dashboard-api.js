@@ -981,6 +981,15 @@
       })
       .catch(function (e) { quietToast((e && e.message) || "تعذّر تحديث المزايدة"); if (after) after(); });
   };
+  // نشر/إخفاء دورة منصّة (is_active) — هي دي اللي بتخلّي الدورة تظهر للطلاب على app.elprofessor.net.
+  EP.setPlatformCourseActive = function (courseId, active, after) {
+    api("/platform-courses/" + encodeURIComponent(courseId), { method: "PUT", body: { is_active: !!active } })
+      .then(function () {
+        note(active ? "اتنشرت الدورة على المنصة — ظاهرة للطلاب ✓" : "اتوقفت الدورة عن الظهور للطلاب");
+        EP.reload("platform_courses", after);
+      })
+      .catch(function (e) { quietToast((e && e.message) || "تعذّر تحديث حالة الدورة"); if (after) after(); });
+  };
 
   // المحتوى: إنشاء/نشر/تعديل
   EP.createArticle = function (g, publish, after) {
