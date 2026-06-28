@@ -1050,8 +1050,10 @@ function csTrainers(){
 function csOffers(){return (window.EP&&EP.data.course_offers&&Array.isArray(EP.data.course_offers.offers))?EP.data.course_offers.offers:[];}
 // الدورات الأصلية (native) — لتفعيل/إيقاف المزايدة لكل دورة.
 function csPlatformCourses(){return (window.EP&&EP.data.platform_courses&&Array.isArray(EP.data.platform_courses.courses))?EP.data.platform_courses.courses:[];}
+// مواعيد الدورات الحية — للمراجعة والتثبيت.
+function csSchedules(){return (window.EP&&EP.data.schedules&&Array.isArray(EP.data.schedules.rows))?EP.data.schedules.rows:[];}
 function viewCourses(v){
-  if(window.EP){EP.ensure('courses',()=>viewCourses(v));EP.ensure('inbox',()=>viewCourses(v));EP.ensure('course_offers',()=>viewCourses(v));EP.ensure('platform_courses',()=>viewCourses(v));}
+  if(window.EP){EP.ensure('courses',()=>viewCourses(v));EP.ensure('inbox',()=>viewCourses(v));EP.ensure('course_offers',()=>viewCourses(v));EP.ensure('platform_courses',()=>viewCourses(v));EP.ensure('schedules',()=>viewCourses(v));}
   const Cstr=(window.EP&&EP.state.courses)||'idle';
   const live=!!(window.EP&&EP.data.courses);
   const CRS=csCourses();
@@ -1074,6 +1076,7 @@ function viewCourses(v){
       <div class="tab${courseTab==='programs'?' on':''}" data-t="programs">طلبات البرامج (${PRG.length})</div>
       <div class="tab${courseTab==='trainers'?' on':''}" data-t="trainers">طلبات المدربين (${TRQ.length})</div>
       <div class="tab${courseTab==='offers'?' on':''}" data-t="offers">عروض الأسعار (${OFR.length})</div>
+      <div class="tab${courseTab==='schedules'?' on':''}" data-t="schedules">مواعيد الحيّة (${csSchedules().length})</div>
     </div>
     <div class="inboxwrap">
       <section class="panel"><div class="ph"><h3 id="cH">الكتالوج</h3><span class="n" id="cN">0</span>${(live&&courseTab==='courses')?`<button class="btn btn-ghost" id="cSync" style="flex:none;min-width:auto;padding:6px 12px;font-size:12px;margin-inline-start:auto">مزامنة من الأكاديمية</button><button class="btn btn-human" id="cCreate" style="flex:none;min-width:auto;padding:6px 12px;font-size:12px">+ إنشاء دورة</button>`:`<button class="btn btn-human" id="cCreate" style="flex:none;min-width:auto;padding:6px 13px;font-size:12px;margin-inline-start:auto">+ إنشاء دورة من الإدارة</button>`}</div><div id="cRows"></div></section>
@@ -1109,6 +1112,10 @@ function renderCourses(){
       <div class="c"><div class="from">عبر «درّب معنا»</div></div>
       <div class="c"><span class="status s-wait"><span class="d"></span>بانتظار</span></div></div>`));
     el.querySelectorAll('.row').forEach(x=>x.onclick=()=>{selected='t'+x.dataset.t;renderCourses();drawCourse();});
+  } else if(courseTab==='schedules'){const SCH=csSchedules();h.textContent='مواعيد الدورات الحيّة';document.getElementById('cN').textContent=SCH.length;
+    if(!SCH.length)el.innerHTML='<div style="padding:40px;text-align:center;color:var(--muted)">لا دورات حيّة بمواعيد بعد.</div>';
+    SCH.forEach(function(s,idx){var seats=s.max_seats?(money(s.booked_count||0)+'/'+money(s.max_seats)):'—';var st=s.confirmed?['s-auto','مثبّت']:['s-wait','بانتظار التثبيت'];el.insertAdjacentHTML('beforeend','<div class="row esc-row'+(selected==='s'+idx?' sel':'')+'" data-s="'+idx+'" style="grid-template-columns:1.7fr 1fr 1fr 120px"><div class="c c1"><div class="src-ic" style="background:var(--memory-bg);color:var(--memory)">'+svg('cap')+'</div><div><div class="parties">'+esc(s.title)+'</div><div class="from">'+esc(s.instructor_name||'—')+'</div></div></div><div class="c"><div class="from">'+esc(s.start_date||'بدون موعد')+'</div></div><div class="c"><div class="from">مقاعد <b style="color:var(--navy)">'+seats+'</b>'+(s.zoom_link?' · <b style="color:var(--agree)">Zoom ✓</b>':' · <b style="color:var(--conflict)">بلا Zoom</b>')+'</div></div><div class="c"><span class="status '+st[0]+'"><span class="d"></span>'+st[1]+'</span></div></div>');});
+    el.querySelectorAll('.row').forEach(x=>x.onclick=()=>{selected='s'+x.dataset.s;renderCourses();drawCourse();});
   } else {const OFR=csOffers();const PCR=csPlatformCourses();h.textContent='عروض الأسعار';document.getElementById('cN').textContent=OFR.length;
     // قسم علوي: تفعيل/إيقاف المزايدة «اعرض سعرك» لكل دورة أصلية.
     var pcr=PCR.filter(function(c){return c.is_active;});
@@ -1149,14 +1156,27 @@ function drawCourse(){
     <div class="field"><div class="lab">المرجع</div><div class="val">${tr.ref}</div></div>
     <div class="field"><div class="lab">نسبة الإيراد</div><div class="val">تُحدّد عند الاعتماد (٢٥ → ٥٠٪)</div></div>
     <div class="acts"><button class="btn btn-primary" data-a="approve">${svg('check')}اعتمد كمدرّب</button><button class="btn btn-warn" data-a="reject">رفض</button></div></div>`;}
-  else {const o=csOffers()[i];if(!o){el.innerHTML='';return;}el.innerHTML=`<div class="dh"><div class="k">عرض سعر · «اعرض سعرك»</div><h3>${o.course}</h3></div><div class="db">
+  else if(t==='o'){const o=csOffers()[i];if(!o){el.innerHTML='';return;}el.innerHTML=`<div class="dh"><div class="k">عرض سعر · «اعرض سعرك»</div><h3>${o.course}</h3></div><div class="db">
     <div class="note-ai">${svg('sparkles','ic')}<div>المشتري عرض سعرًا أقل من السعر العادل. اعتمده، ارفضه، أو اعرض رقمًا مقابلًا (لا يقل عن الحد الأدنى ${money(o.floor)} ${o.currency}).</div></div>
     <div class="field"><div class="lab">المشتري · الصفة</div><div class="val">${o.buyer} · ${SEG_LABEL[o.segment]||o.segment}</div></div>
     <div class="field"><div class="lab">السعر العادل (حسب بلده وصفته)</div><div class="val">${money(o.list)} ${o.currency}</div></div>
     <div class="field"><div class="lab">عرض المشتري · الحد الأدنى</div><div class="val"><b style="color:var(--navy)">${money(o.offered)}</b> · لا يقل عن ${money(o.floor)} ${o.currency}</div></div>
     <div class="fld" style="margin:8px 0"><label>عرض مقابل (اختياري)</label><input id="ofr_amt" type="number" min="${o.floor}" placeholder="مثال: ${money(Math.round((o.offered+o.list)/2))}" style="direction:ltr;text-align:right"></div>
     <div class="acts"><button class="btn btn-primary" data-a="approve">${svg('check')}اعتمد عرضه (${money(o.offered)})</button><button class="btn btn-human" data-a="counter">أرسل العرض المقابل</button><button class="btn btn-warn" data-a="reject">رفض</button></div></div>`;}
+  else {const sc=csSchedules()[i];if(!sc){el.innerHTML='';return;}el.innerHTML=`<div class="dh"><div class="k">موعد دورة حيّة</div><h3>${esc(sc.title)}</h3></div><div class="db">
+    <div class="note-ai">${svg('sparkles','ic')}<div>راجِع موعد المدرّب وثبّته، وحطّ رابط Zoom وعدد المقاعد. التثبيت بيأكّد الموعد للطلاب.</div></div>
+    <div class="field"><div class="lab">المدرّب</div><div class="val">${esc(sc.instructor_name||'—')}</div></div>
+    <div class="field"><div class="lab">المقاعد</div><div class="val">${money(sc.booked_count||0)}${sc.max_seats?(' / '+money(sc.max_seats)):''}${sc.quorum_met?' · <b style="color:var(--agree)">اكتمل</b>':''}</div></div>
+    <div class="fld" style="margin:6px 0"><label>رابط Zoom</label><input id="sc_zoom" value="${esc(sc.zoom_link||'')}" placeholder="https://zoom.us/j/..." style="direction:ltr;text-align:right"></div>
+    <div class="row2"><div class="fld"><label>بداية الموعد</label><input id="sc_start" value="${esc(sc.start_date||'')}" placeholder="2026-05-15T15:00:00Z" style="direction:ltr;text-align:right"></div>
+    <div class="fld"><label>عدد المقاعد</label><input id="sc_seats" type="number" value="${sc.max_seats||0}"></div></div>
+    <div class="acts"><button class="btn btn-primary" data-a="confirmsched">${svg('check')}${sc.confirmed?'حفظ':'حفظ وتثبيت'}</button><button class="btn btn-ghost" data-a="savesched">حفظ بدون تثبيت</button></div></div>`;}
   el.querySelectorAll('[data-a]').forEach(b=>b.onclick=()=>{const a=b.dataset.a;
+    // مواعيد الدورات الحيّة: حفظ/تثبيت عبر الجسر.
+    if(selected[0]==='s'&&(a==='confirmsched'||a==='savesched')&&window.EP){var sr=csSchedules()[+selected.slice(1)];if(sr&&sr.id){
+      var body={zoom_link:(document.getElementById('sc_zoom').value||'').trim(),start_date:(document.getElementById('sc_start').value||'').trim(),max_seats:+document.getElementById('sc_seats').value||0,confirmed:a==='confirmsched'};
+      EP.updateSchedule(sr.id,body,function(){selected=null;viewCourses(document.getElementById('view'));});return;
+    }}
     // عروض الأسعار (اعرض سعرك): اعتماد/رفض/عرض مقابل عبر الجسر.
     if(selected[0]==='o'&&window.EP){var of=csOffers()[+selected.slice(1)];if(of&&of.id){
       if(a==='counter'){var amtEl=document.getElementById('ofr_amt');var amt=amtEl&&amtEl.value?Number(amtEl.value):null;if(!amt||amt<of.floor){toast('اكتب مبلغًا لا يقل عن '+money(of.floor)+' '+of.currency);return;}EP.decideCourseOffer(of.id,'counter',amt,()=>{selected=null;viewCourses(document.getElementById('view'));});return;}
@@ -1177,19 +1197,34 @@ function drawCourse(){
     else toast(a==='pub'?'تم نشر الدورة':a==='sched'?'فتح الجدولة':a==='edit'?'فتح التعديل':'تم');});
 }
 function courseVideoModal(c){
-  if(c.server==null)c.server='';
-  if(!c.lectures)c.lectures=[{t:'المحاضرة ١ — مقدمة',st:'uploaded',link:'https://video.elprofessor.net/'+c.title.length+'-1'},{t:'المحاضرة ٢',st:'pending',link:''},{t:'المحاضرة ٣',st:'pending',link:''}];
-  var up=c.lectures.filter(function(l){return l.st==='uploaded';}).length;
-  var rows=c.lectures.map(function(l,i){return '<div style="display:flex;align-items:center;gap:9px;padding:9px 0;border-bottom:1px solid var(--line)"><div style="flex:1"><div style="font-weight:700;font-size:12.8px">'+l.t+'</div><div style="font-size:11px;color:var(--muted);direction:ltr;text-align:right">'+(l.link||'—')+'</div></div>'+(l.st==='uploaded'?'<span class="status s-auto" style="font-size:10.5px"><span class="d"></span>مرفوع</span>':'<button class="btn btn-human vup" data-i="'+i+'" style="flex:none;min-width:auto;padding:5px 10px;font-size:11px">ارفع للسيرفر</button>')+'</div>';}).join('');
-  var s=openModal('فيديوهات الدورة — '+c.title,
-    '<div class="note-ai" style="margin-bottom:12px">'+svg('sparkles','ic')+'<div>الفيديوهات تأتي من المدرّب ← <b>نرفعها لسيرفر الفيديو الخارجي</b> ← نلصق الرابط هنا فيُبثّ داخل صفحة الدورة في المنصة (لا تُخزّن على المنصة).</div></div>'+
-    '<div class="fld"><label>رابط الدورة على سيرفر الفيديو</label><input id="cv_srv" value="'+c.server+'" placeholder="https://video.elprofessor.net/course/..." style="direction:ltr;text-align:right"></div>'+
-    '<div class="fld"><label>المحاضرات ('+up+'/'+c.lectures.length+' مرفوعة)</label><div>'+rows+'</div></div>'+
-    '<div class="acts" style="margin-top:6px"><button class="btn btn-human" id="cv_add">+ محاضرة</button><button class="btn btn-primary" id="cv_save">'+svg('check')+'حفظ ونشر للبثّ</button><button class="btn btn-ghost" id="cv_x">إغلاق</button></div>');
-  s.querySelectorAll('.vup').forEach(function(b){b.onclick=function(){var l=c.lectures[+b.dataset.i];l.st='uploaded';l.link='https://video.elprofessor.net/'+c.title.length+'-'+(+b.dataset.i+1);c.server=s.querySelector('#cv_srv').value;closeModal();courseVideoModal(c);notify('رُفعت «'+l.t+'» لسيرفر الفيديو');};});
-  s.querySelector('#cv_add').onclick=function(){c.server=s.querySelector('#cv_srv').value;c.lectures.push({t:'المحاضرة '+(c.lectures.length+1),st:'pending',link:''});closeModal();courseVideoModal(c);};
-  s.querySelector('#cv_x').onclick=closeModal;
-  s.querySelector('#cv_save').onclick=function(){c.server=s.querySelector('#cv_srv').value;closeModal();notify('حُفظ بثّ «'+c.title+'» — جاهز للعرض في المنصة');};
+  // المحاضرات تُرفع بروابط Google Drive (مشاركة) أو YouTube → تُبثّ داخل صفحة الدورة على المنصة.
+  if(!c.platform_id){
+    var sp=openModal('حلقات الدورة — '+esc(c.title),
+      '<div class="note-ai" style="margin-bottom:12px">'+svg('sparkles','ic')+'<div>لازم تنشر الدورة على المنصة الأول، وبعدين تضيف الحلقات.</div></div>'+
+      '<div class="acts"><button class="btn btn-primary" id="vp_pub">'+svg('check')+'انشر على المنصة</button><button class="btn btn-ghost" id="vp_x">إغلاق</button></div>');
+    sp.querySelector('#vp_x').onclick=closeModal;
+    sp.querySelector('#vp_pub').onclick=function(){closeModal();if(window.EP&&c.cid)EP.publishCourseToPlatform(c.cid,function(){viewCourses(document.getElementById('view'));});};
+    return;
+  }
+  if(!window.EP){return;}
+  EP.loadCourseVideos(c.platform_id).then(function(d){
+    var vids=(d&&d.videos)||[];
+    var rows=vids.length?vids.map(function(v){return '<div style="display:flex;align-items:center;gap:9px;padding:9px 0;border-bottom:1px solid var(--line)"><div style="flex:1"><div style="font-weight:700;font-size:12.8px">'+esc(v.title||'حلقة')+(v.is_preview?' <span class="status s-auto" style="font-size:9.5px"><span class="d"></span>معاينة</span>':'')+'</div><div style="font-size:11px;color:var(--muted);direction:ltr;text-align:right">'+esc(v.video_url||v.youtube_url||'—')+'</div></div><button class="btn btn-warn vdel" data-id="'+esc(v.id)+'" style="flex:none;min-width:auto;padding:5px 10px;font-size:11px">حذف</button></div>';}).join(''):'<div style="color:var(--muted);font-size:12px;padding:8px 0">مفيش حلقات بعد — ضيف أول حلقة. (الدورة المدفوعة من غير حلقات بتتباع بنص السعر)</div>';
+    var s=openModal('حلقات الدورة — '+esc(c.title),
+      '<div class="note-ai" style="margin-bottom:12px">'+svg('sparkles','ic')+'<div>الصق رابط <b>Google Drive (مشاركة)</b> أو <b>YouTube</b> لكل حلقة — هيتبثّ جوّه صفحة الدورة في المنصة.</div></div>'+
+      '<div class="fld"><label>الحلقات الحالية</label><div>'+rows+'</div></div>'+
+      '<div class="fld" style="margin-top:10px"><label>عنوان الحلقة الجديدة</label><input id="cv_t" placeholder="مثال: الحلقة ١ — مقدمة"></div>'+
+      '<div class="fld"><label>رابط الفيديو (Drive أو YouTube)</label><input id="cv_l" placeholder="https://drive.google.com/file/d/.../view" style="direction:ltr;text-align:right"></div>'+
+      '<label class="tg" style="margin:6px 0"><input type="checkbox" id="cv_p"> معاينة مجانية (متاحة قبل الشراء)</label>'+
+      '<div class="acts" style="margin-top:6px"><button class="btn btn-primary" id="cv_add">'+svg('check')+'إضافة حلقة</button><button class="btn btn-ghost" id="cv_x">إغلاق</button></div>');
+    s.querySelectorAll('.vdel').forEach(function(b){b.onclick=function(){if(confirm('حذف الحلقة؟'))EP.deleteCourseVideo(c.platform_id,b.dataset.id,function(){closeModal();courseVideoModal(c);});};});
+    s.querySelector('#cv_x').onclick=closeModal;
+    s.querySelector('#cv_add').onclick=function(){
+      var link=s.querySelector('#cv_l').value.trim();var title=s.querySelector('#cv_t').value.trim()||'حلقة';
+      if(!link){toast('الصق رابط الفيديو الأول');return;}
+      EP.addCourseVideo(c.platform_id,{title:title,video_url:link,is_preview:s.querySelector('#cv_p').checked},function(){closeModal();courseVideoModal(c);}).catch(function(){});
+    };
+  }).catch(function(e){toast((e&&e.message)||'تعذّر تحميل الحلقات');});
 }
 // ===== GEO-PRICING: السعر يُكتشف تلقائيًّا من بلد الزائر (IP/location) بلا اختيار يدوي =====
 // الإنتاج: backend GET /pricing?pkg= يقرأ geo-IP ويُرجع سعر بلد الزائر مباشرة عند فتح الصفحة.

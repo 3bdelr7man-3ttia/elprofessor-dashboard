@@ -1418,6 +1418,71 @@ def platform_course_delete(course_id):
     return _platform_proxy('DELETE', f"/api/bridge/courses/{course_id}")
 
 
+@app.route('/api/platform-courses/<course_id>/detail', methods=['GET'])
+@token_required
+@roles_required('admin', 'employee')
+def platform_course_detail(course_id):
+    """A native course + its episodes (for the dashboard video manager)."""
+    return _platform_proxy('GET', f"/api/bridge/courses/{course_id}/detail")
+
+
+@app.route('/api/platform-courses/<course_id>/videos', methods=['POST'])
+@token_required
+@roles_required('admin', 'employee')
+def platform_course_add_video(course_id):
+    """Add an episode (Drive/YouTube link) to a native course."""
+    body = request.json or {}
+    json_body = {
+        'title': (body.get('title') or '').strip(),
+        'video_url': (body.get('video_url') or '').strip(),
+        'youtube_url': (body.get('youtube_url') or '').strip(),
+        'is_preview': bool(body.get('is_preview')),
+    }
+    if body.get('duration_seconds') is not None:
+        try:
+            json_body['duration_seconds'] = int(body.get('duration_seconds'))
+        except (TypeError, ValueError):
+            pass
+    return _platform_proxy('POST', f"/api/bridge/courses/{course_id}/videos", json_body=json_body)
+
+
+@app.route('/api/platform-courses/<course_id>/videos/<video_id>', methods=['DELETE'])
+@token_required
+@roles_required('admin', 'employee')
+def platform_course_delete_video(course_id, video_id):
+    return _platform_proxy('DELETE', f"/api/bridge/courses/{course_id}/videos/{video_id}")
+
+
+@app.route('/api/platform-schedules', methods=['GET'])
+@token_required
+@roles_required('admin', 'employee')
+def platform_schedules():
+    """Live courses + schedules to review/confirm trainer appointments."""
+    return _platform_proxy('GET', '/api/bridge/schedules')
+
+
+@app.route('/api/platform-courses/<course_id>/schedule', methods=['PUT'])
+@token_required
+@roles_required('admin', 'employee')
+def platform_course_schedule(course_id):
+    """Confirm/edit a live course's schedule (zoom/dates/seats) from the dashboard."""
+    body = request.json or {}
+    json_body = {}
+    for key in ('zoom_link', 'start_date', 'end_date', 'timezone', 'registration_deadline'):
+        if isinstance(body.get(key), str):
+            json_body[key] = body.get(key).strip()
+    if body.get('max_seats') is not None:
+        try:
+            json_body['max_seats'] = int(body.get('max_seats'))
+        except (TypeError, ValueError):
+            return jsonify({'error': 'عدد المقاعد غير صالح'}), 400
+    if 'confirmed' in body:
+        json_body['confirmed'] = bool(body.get('confirmed'))
+    if not json_body:
+        return jsonify({'error': 'لا يوجد تغيير صالح'}), 400
+    return _platform_proxy('PUT', f"/api/bridge/courses/{course_id}/schedule", json_body=json_body)
+
+
 # --- «الدليل» (Tutorials): proxy to the platform guide so the team manages it here ---
 # Read goes to the PUBLIC platform endpoint (with the secret + include_unpublished so the
 # dashboard sees drafts too); writes go to the SECRET bridge. The METRICS_SECRET is sent

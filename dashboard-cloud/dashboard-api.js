@@ -535,7 +535,7 @@
               owner: (c.trainer_name && trainerPct) ? "trainer" : "platform",
               status: c.status === "active" ? "published" : (c.status === "draft" ? "draft" : "published"),
               lms_synced: !!c.lms_synced, total_revenue: c.total_revenue || 0, cid: c.id,
-              on_platform: !!c.platform_course_id, platform_slug: c.platform_course_slug || "", raw: c,
+              on_platform: !!c.platform_course_id, platform_id: c.platform_course_id || "", platform_slug: c.platform_course_slug || "", raw: c,
             };
           }),
         };
@@ -570,6 +570,13 @@
       return get("/platform-courses").then(function (r) {
         EP.data.platform_courses = { courses: (r && r.courses) || [] };
       }).catch(function () { EP.data.platform_courses = { courses: [] }; });
+    },
+
+    // مواعيد الدورات الحية للمراجعة/التثبيت: /api/platform-schedules -> {schedules:[...]}
+    schedules: function () {
+      return get("/platform-schedules").then(function (r) {
+        EP.data.schedules = { rows: (r && r.schedules) || [] };
+      }).catch(function () { EP.data.schedules = { rows: [] }; });
     },
 
     // الإعدادات: /api/settings -> {key:value}
@@ -939,6 +946,12 @@
       .catch(function (e) { quietToast((e && e.message) || "تعذّر تنفيذ العملية"); if (after) after(); });
   };
 
+  // تثبيت/تعديل موعد دورة حية (zoom/تواريخ/مقاعد).
+  EP.updateSchedule = function (courseId, body, after) {
+    api("/platform-courses/" + encodeURIComponent(courseId) + "/schedule", { method: "PUT", body: body })
+      .then(function () { note(body.confirmed ? "اتثبّت الموعد ✓" : "اتحدّث الموعد"); EP.reload("schedules", after); })
+      .catch(function (e) { quietToast((e && e.message) || "تعذّر تحديث الموعد"); if (after) after(); });
+  };
   // تفعيل/إيقاف المزايدة «اعرض سعرك» على دورة أصلية (native) عبر الجسر.
   EP.setCourseBid = function (courseId, enabled, after) {
     api("/platform-courses/" + encodeURIComponent(courseId) + "/bid", { method: "PUT", body: { bid_enabled: !!enabled } })
@@ -1187,6 +1200,20 @@
     api("/courses/" + id, { method: "DELETE" })
       .then(function () { note("اتحذفت الدورة"); EP.reload("courses", after); })
       .catch(function (e) { quietToast((e && e.message) || "تعذّر الحذف"); if (after) after(); });
+  };
+  // إدارة حلقات الدورة الـ native (رفع بروابط Drive/YouTube).
+  EP.loadCourseVideos = function (platformId) {
+    return get("/platform-courses/" + encodeURIComponent(platformId) + "/detail");
+  };
+  EP.addCourseVideo = function (platformId, body, after) {
+    return post("/platform-courses/" + encodeURIComponent(platformId) + "/videos", body)
+      .then(function (r) { note("اتضافت الحلقة ✓"); if (after) after(r); return r; })
+      .catch(function (e) { quietToast((e && e.message) || "تعذّر إضافة الحلقة"); throw e; });
+  };
+  EP.deleteCourseVideo = function (platformId, videoId, after) {
+    return api("/platform-courses/" + encodeURIComponent(platformId) + "/videos/" + encodeURIComponent(videoId), { method: "DELETE" })
+      .then(function () { note("اتحذفت الحلقة"); if (after) after(); })
+      .catch(function (e) { quietToast((e && e.message) || "تعذّر حذف الحلقة"); });
   };
   // نشر دورة موجودة على المنصة (app.elprofessor.net) كدورة native — للدورات اللي اتعملت قبل الربط.
   EP.publishCourseToPlatform = function (id, after) {
