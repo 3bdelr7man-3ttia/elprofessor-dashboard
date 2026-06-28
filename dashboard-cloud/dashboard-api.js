@@ -581,6 +581,13 @@
       }).catch(function () { EP.data.schedules = { rows: [] }; });
     },
 
+    // سوق المعرفة: /api/platform-knowledge -> {items:[...]}
+    knowledge: function () {
+      return get("/platform-knowledge").then(function (r) {
+        EP.data.knowledge = { items: (r && r.items) || [] };
+      }).catch(function () { EP.data.knowledge = { items: [] }; });
+    },
+
     // الإعدادات: /api/settings -> {key:value}
     settings: function () {
       return get("/settings").then(function (s) { EP.data.settings = s || {}; });
@@ -948,6 +955,17 @@
       .catch(function (e) { quietToast((e && e.message) || "تعذّر تنفيذ العملية"); if (after) after(); });
   };
 
+  // سوق المعرفة: تعديل/حذف عنصر.
+  EP.updateKnowledge = function (itemId, body, after) {
+    api("/platform-knowledge/" + encodeURIComponent(itemId), { method: "PUT", body: body })
+      .then(function () { note("اتحدّث العنصر"); EP.reload("knowledge", after); })
+      .catch(function (e) { quietToast((e && e.message) || "تعذّر التحديث"); if (after) after(); });
+  };
+  EP.deleteKnowledge = function (itemId, after) {
+    api("/platform-knowledge/" + encodeURIComponent(itemId), { method: "DELETE" })
+      .then(function () { note("اتشال العنصر من السوق"); EP.reload("knowledge", after); })
+      .catch(function (e) { quietToast((e && e.message) || "تعذّر الحذف"); if (after) after(); });
+  };
   // تثبيت/تعديل موعد دورة حية (zoom/تواريخ/مقاعد).
   EP.updateSchedule = function (courseId, body, after) {
     api("/platform-courses/" + encodeURIComponent(courseId) + "/schedule", { method: "PUT", body: body })

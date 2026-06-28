@@ -313,6 +313,7 @@ const MODULES={
   news:{label:'الأخبار',ic:'mega',c:'var(--human)',bg:'var(--human-bg)',grp:'money'},
   tutorials:{label:'الدليل',ic:'book',c:'var(--ai)',bg:'var(--ai-bg)',grp:'money'},
   packages:{label:'الباقات والأسعار',ic:'wallet',c:'var(--gold)',bg:'var(--gold-bg)',grp:'money'},
+  knowledge:{label:'سوق المعرفة',ic:'book',c:'var(--memory)',bg:'var(--memory-bg)',grp:'money'},
   team:{label:'الفريق والمدربون',ic:'cap',c:'var(--ai)',bg:'var(--ai-bg)',grp:'co'},
   foundation:{label:'مرحلة التأسيس',ic:'build',c:'var(--muted)',bg:'var(--surface-2)',grp:'co'},
   targets:{label:'الأهداف والتوقعات',ic:'trend',c:'var(--gold)',bg:'var(--gold-bg)',grp:'co'},
@@ -399,6 +400,7 @@ function renderView(){
   if(current==='investment')return viewInvestment(v);
   if(current==='marketing')return viewMarketing(v);
   if(current==='packages')return viewPackages(v);
+  if(current==='knowledge')return viewKnowledge(v);
   if(current==='clubs')return viewClubs(v);
   if(current==='messages')return viewMessages(v);
   if(current==='content')return viewContent(v);
@@ -1226,6 +1228,45 @@ function courseVideoModal(c){
       EP.addCourseVideo(c.platform_id,{title:title,video_url:link,is_preview:s.querySelector('#cv_p').checked},function(){closeModal();courseVideoModal(c);}).catch(function(){});
     };
   }).catch(function(e){toast((e&&e.message)||'تعذّر تحميل الحلقات');});
+}
+// ===== سوق المعرفة =====
+function csKnowledge(){return (window.EP&&EP.data.knowledge&&Array.isArray(EP.data.knowledge.items))?EP.data.knowledge.items:[];}
+var KN_TYPE={book:'كتاب',memo:'مذكّرة',thesis:'رسالة',dissertation:'أطروحة',research:'بحث',law:'قانون',other:'أخرى'};
+function viewKnowledge(v){
+  if(window.EP)EP.ensure('knowledge',function(){viewKnowledge(v);});
+  var KN=csKnowledge();
+  var forSale=KN.filter(function(k){return k.rights==='owned_for_sale';}).length;
+  var feed=KN.filter(function(k){return k.rights==='public_domain_feed';}).length;
+  var acq=KN.reduce(function(s,k){return s+(k.total_acquired||0);},0);
+  v.innerHTML='<div class="policy" style="border-inline-start-color:var(--memory)">'+svg('book','ic')+'<div><b>سوق المعرفة:</b> كتب ومذكرات ورسائل وأبحاث يبيعها أصحابها (لازم يملكوها)؛ المشتري يستفيد ولا يعيد البيع. القوانين/الملكية العامة «للتغذية العامة» فقط. الزرّان «علّمني» و«غذِّ بها الذكاء» للمستخدم في المنصة.</div></div>'+
+    '<div class="kpis"><div class="kpi k-1"><div class="top"><span class="ic">'+svg('book')+'</span>للبيع</div><b>'+money(forSale)+'</b><div class="sub">عناصر مملوكة</div></div>'+
+    '<div class="kpi k-3"><div class="top"><span class="ic">'+svg('scale')+'</span>للتغذية العامة</div><b>'+money(feed)+'</b><div class="sub">قوانين/ملكية عامة</div></div>'+
+    '<div class="kpi k-2"><div class="top"><span class="ic">'+svg('users')+'</span>اقتناءات</div><b>'+money(acq)+'</b><div class="sub">إجمالي</div></div></div>'+
+    '<section class="panel"><div class="ph"><h3>عناصر السوق</h3><span class="n">'+KN.length+'</span></div><div id="knRows"></div></section>';
+  var el=document.getElementById('knRows');
+  if(!KN.length){el.innerHTML='<div style="padding:40px;text-align:center;color:var(--muted)">لا عناصر بعد — لما حد يرفع كتاب/بحث هيظهر هنا.</div>';return;}
+  KN.forEach(function(k,idx){var sale=k.rights==='owned_for_sale';var pr=(k.price_amount!=null)?(money(k.price_amount)+' '+(k.price_currency||'')):'—';var st=k.is_active?['s-auto','ظاهر']:['s-late','مخفي'];
+    el.insertAdjacentHTML('beforeend','<div class="row esc-row" data-k="'+idx+'" style="grid-template-columns:1.7fr 1fr 1fr 1fr 160px"><div class="c c1"><div class="src-ic" style="background:var(--memory-bg);color:var(--memory)">'+svg('book')+'</div><div><div class="parties">'+esc(k.title)+'</div><div class="from">'+(KN_TYPE[k.type]||k.type)+' · '+esc(k.owner_name||k.owner_email||'—')+'</div></div></div>'+
+      '<div class="c"><div class="from">'+(sale?'<b style="color:var(--gold)">للبيع</b>':'<b style="color:var(--ai)">تغذية عامة</b>')+'</div></div>'+
+      '<div class="c"><div class="from">'+(sale?('سعر <b style="color:var(--navy)">'+pr+'</b>'):'—')+'</div></div>'+
+      '<div class="c"><div class="from"><b style="color:var(--ink)">'+(k.total_acquired||0)+'</b> اقتناء</div></div>'+
+      '<div class="c" style="gap:6px"><span class="status '+st[0]+'"><span class="d"></span>'+st[1]+'</span><button class="btn btn-ghost knedit" data-i="'+idx+'" style="flex:none;min-width:auto;padding:4px 9px;font-size:11px">تعديل</button><button class="btn btn-warn kndel" data-id="'+esc(k.id)+'" style="flex:none;min-width:auto;padding:4px 9px;font-size:11px">حذف</button></div></div>');
+  });
+  el.querySelectorAll('.knedit').forEach(function(b){b.onclick=function(){knowledgeEditModal(KN[+b.dataset.i]);};});
+  el.querySelectorAll('.kndel').forEach(function(b){b.onclick=function(){if(confirm('تشيل العنصر من السوق؟')&&window.EP)EP.deleteKnowledge(b.dataset.id,function(){viewKnowledge(document.getElementById('view'));});};});
+}
+function knowledgeEditModal(k){
+  if(!k)return;var sale=k.rights==='owned_for_sale';
+  var s=openModal('تعديل — '+esc(k.title),
+    '<div class="fld"><label>العنوان</label><input id="kn_t" value="'+esc(k.title)+'"></div>'+
+    (sale?'<div class="fld"><label>السعر (ج)</label><input id="kn_p" type="number" value="'+(k.price_amount||0)+'"></div>':'')+
+    '<label class="tg" style="margin:8px 0"><input type="checkbox" id="kn_a" '+(k.is_active?'checked':'')+'> ظاهر في السوق</label>'+
+    (sale?'<label class="tg" style="margin-bottom:8px"><input type="checkbox" id="kn_b" '+(k.bid_enabled?'checked':'')+'> مفعّل المزايدة «اعرض سعرك»</label>':'')+
+    '<div class="acts"><button class="btn btn-primary" id="kn_s">'+svg('check')+'حفظ</button><button class="btn btn-ghost" id="kn_x">إلغاء</button></div>');
+  s.querySelector('#kn_x').onclick=closeModal;
+  s.querySelector('#kn_s').onclick=function(){var body={title:s.querySelector('#kn_t').value.trim()||k.title,is_active:s.querySelector('#kn_a').checked};
+    if(sale){body.price_egp=+s.querySelector('#kn_p').value||0;body.bid_enabled=s.querySelector('#kn_b').checked;}
+    if(window.EP)EP.updateKnowledge(k.id,body,function(){closeModal();viewKnowledge(document.getElementById('view'));});};
 }
 // ===== GEO-PRICING: السعر يُكتشف تلقائيًّا من بلد الزائر (IP/location) بلا اختيار يدوي =====
 // الإنتاج: backend GET /pricing?pkg= يقرأ geo-IP ويُرجع سعر بلد الزائر مباشرة عند فتح الصفحة.

@@ -1461,6 +1461,45 @@ def platform_schedules():
     return _platform_proxy('GET', '/api/bridge/schedules')
 
 
+@app.route('/api/platform-knowledge', methods=['GET'])
+@token_required
+@roles_required('admin', 'employee')
+def platform_knowledge_list():
+    """Knowledge-marketplace items (سوق المعرفة) for review/edit/remove."""
+    return _platform_proxy('GET', '/api/bridge/knowledge',
+                           params={'rights': request.args.get('rights') or ''})
+
+
+@app.route('/api/platform-knowledge/<item_id>', methods=['PUT'])
+@token_required
+@roles_required('admin', 'employee')
+def platform_knowledge_edit(item_id):
+    body = request.json or {}
+    json_body = {}
+    for key in ('title', 'description'):
+        if isinstance(body.get(key), str):
+            json_body[key] = body.get(key)
+    if 'is_active' in body:
+        json_body['is_active'] = bool(body.get('is_active'))
+    if 'bid_enabled' in body:
+        json_body['bid_enabled'] = bool(body.get('bid_enabled'))
+    if body.get('price_egp') is not None:
+        try:
+            json_body['price_egp'] = float(body.get('price_egp'))
+        except (TypeError, ValueError):
+            return jsonify({'error': 'سعر غير صالح'}), 400
+    if not json_body:
+        return jsonify({'error': 'لا يوجد تغيير صالح'}), 400
+    return _platform_proxy('PUT', f"/api/bridge/knowledge/{item_id}", json_body=json_body)
+
+
+@app.route('/api/platform-knowledge/<item_id>', methods=['DELETE'])
+@token_required
+@roles_required('admin', 'employee')
+def platform_knowledge_delete(item_id):
+    return _platform_proxy('DELETE', f"/api/bridge/knowledge/{item_id}")
+
+
 @app.route('/api/platform-courses/<course_id>/schedule', methods=['PUT'])
 @token_required
 @roles_required('admin', 'employee')
