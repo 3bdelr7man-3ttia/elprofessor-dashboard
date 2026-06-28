@@ -556,6 +556,8 @@
               currency: o.currency || "EGP",
               base: o.base_amount, list: o.situational_amount,
               floor: o.floor_amount, offered: o.offered_amount,
+              reason: o.message || "",
+              higher: (o.offered_amount != null && o.situational_amount != null && o.offered_amount >= o.situational_amount),
               status: o.status || "pending",
               at: o.created_at ? (Date.parse(o.created_at) || Date.now()) : Date.now(),
               raw: o,

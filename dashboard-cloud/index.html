@@ -1160,7 +1160,8 @@ function drawCourse(){
     <div class="note-ai">${svg('sparkles','ic')}<div>المشتري عرض سعرًا أقل من السعر العادل. اعتمده، ارفضه، أو اعرض رقمًا مقابلًا (لا يقل عن الحد الأدنى ${money(o.floor)} ${o.currency}).</div></div>
     <div class="field"><div class="lab">المشتري · الصفة</div><div class="val">${o.buyer} · ${SEG_LABEL[o.segment]||o.segment}</div></div>
     <div class="field"><div class="lab">السعر العادل (حسب بلده وصفته)</div><div class="val">${money(o.list)} ${o.currency}</div></div>
-    <div class="field"><div class="lab">عرض المشتري · الحد الأدنى</div><div class="val"><b style="color:var(--navy)">${money(o.offered)}</b> · لا يقل عن ${money(o.floor)} ${o.currency}</div></div>
+    <div class="field"><div class="lab">عرض المشتري · الحد الأدنى</div><div class="val"><b style="color:var(--navy)">${money(o.offered)}</b> ${o.higher?'<span class="status s-auto" style="font-size:9.5px"><span class="d"></span>أعلى من السعر</span>':''} · لا يقل عن ${money(o.floor)} ${o.currency}</div></div>
+    <div class="field"><div class="lab">سبب السعر الأقل</div><div class="val" style="line-height:1.6">${o.reason?esc(o.reason):'<span style="color:var(--muted)">— بدون سبب —</span>'}</div></div>
     <div class="fld" style="margin:8px 0"><label>عرض مقابل (اختياري)</label><input id="ofr_amt" type="number" min="${o.floor}" placeholder="مثال: ${money(Math.round((o.offered+o.list)/2))}" style="direction:ltr;text-align:right"></div>
     <div class="acts"><button class="btn btn-primary" data-a="approve">${svg('check')}اعتمد عرضه (${money(o.offered)})</button><button class="btn btn-human" data-a="counter">أرسل العرض المقابل</button><button class="btn btn-warn" data-a="reject">رفض</button></div></div>`;}
   else {const sc=csSchedules()[i];if(!sc){el.innerHTML='';return;}el.innerHTML=`<div class="dh"><div class="k">موعد دورة حيّة</div><h3>${esc(sc.title)}</h3></div><div class="db">
