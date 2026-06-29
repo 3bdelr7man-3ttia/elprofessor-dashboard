@@ -2,7 +2,8 @@
 ElProfessor Management Dashboard - Backend API
 Flask + SQLAlchemy + SQLite (upgradeable to MySQL/PostgreSQL)
 """
-import os, json, datetime, hashlib, secrets, functools, logging
+import os, json, datetime, hashlib, secrets, functools, logging, time
+from collections import deque
 from flask import Flask, request, jsonify, g, send_from_directory
 from flask_cors import CORS
 from flask_sqlalchemy import SQLAlchemy
@@ -76,6 +77,40 @@ CORS(
     methods=['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
 )
 db = SQLAlchemy(app)
+
+
+# ---- baseline security headers on every response (clickjacking / MIME-sniff / TLS-downgrade) ----
+@app.after_request
+def _security_headers(resp):
+    resp.headers.setdefault('X-Content-Type-Options', 'nosniff')
+    resp.headers.setdefault('X-Frame-Options', 'DENY')
+    resp.headers.setdefault('Referrer-Policy', 'strict-origin-when-cross-origin')
+    if IS_PRODUCTION:
+        resp.headers.setdefault('Strict-Transport-Security', 'max-age=31536000; includeSubDomains')
+    return resp
+
+
+# ---- tiny in-memory per-IP rate limiter (the admin dashboard is single-process + low-traffic;
+# this blunts credential-stuffing on the auth endpoints the platform already protects) ----
+_RATE_BUCKETS = {}
+
+
+def _client_ip():
+    xff = request.headers.get('CF-Connecting-IP') or request.headers.get('X-Forwarded-For', '')
+    return (xff.split(',')[0].strip() if xff else request.remote_addr) or 'unknown'
+
+
+def _rate_ok(key, limit, window_sec):
+    now = time.time()
+    dq = _RATE_BUCKETS.setdefault(key, deque())
+    while dq and dq[0] <= now - window_sec:
+        dq.popleft()
+    if len(dq) >= limit:
+        return False
+    dq.append(now)
+    return True
+
+
 CUT_OFF_DATE = datetime.date(2026, 6, 1)
 SEED_PREFIX = 'seed:v3'
 # REAL (not demo) founder records — restored into seed() idempotently. Tagged so
@@ -963,9 +998,15 @@ def serialize_date(d):
 
 @app.route('/api/auth/login', methods=['POST'])
 def login():
+    if not _rate_ok('login:' + _client_ip(), 10, 300):
+        return jsonify({'error': 'محاولات كتير — استنى شوية وجرّب تاني'}), 429
     data = request.json or {}
-    user = User.query.filter_by(email=data.get('email', '').lower().strip()).first()
-    if not user or not check_password_hash(user.password_hash, data.get('password', '')):
+    email = (data.get('email') or '').lower().strip()
+    password = data.get('password') or ''
+    if not email or len(email) > 255 or len(password) > 256:
+        return jsonify({'error': 'Invalid credentials'}), 401
+    user = User.query.filter_by(email=email).first()
+    if not user or not check_password_hash(user.password_hash, password):
         return jsonify({'error': 'Invalid credentials'}), 401
     token = jwt.encode({
         'user_id': user.id,
@@ -976,12 +1017,16 @@ def login():
 
 @app.route('/api/auth/register', methods=['POST'])
 def register():
+    if not _rate_ok('register:' + _client_ip(), 5, 3600):
+        return jsonify({'error': 'محاولات كتير — استنى شوية وجرّب تاني'}), 429
     data = request.json or {}
     email = (data.get('email') or '').lower().strip()
     password = data.get('password') or ''
     name = (data.get('name') or '').strip()
     if not email or not password or not name:
         return jsonify({'error': 'الاسم والبريد وكلمة المرور مطلوبة'}), 400
+    if len(email) > 255 or len(password) > 256 or len(name) > 120 or '@' not in email:
+        return jsonify({'error': 'بيانات غير صالحة'}), 400
     if User.query.filter_by(email=email).first():
         return jsonify({'error': 'هذا البريد مسجل بالفعل'}), 409
     # Public self-registration must NOT mint a usable account. The new user is
