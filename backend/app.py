@@ -4812,6 +4812,135 @@ def _no_store(resp):
     resp.headers['Pragma'] = 'no-cache'
     return resp
 
+# ——— AI content sync: pull platform-generated article drafts → the blog (this SQLite feed the
+# marketing site reads). Feature explainers publish straight away; news/legal analyses stay DRAFT
+# for the founder to approve. The platform is just the generator; THIS is the single blog store. ———
+_AR_MONTHS = ['يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو',
+              'يوليو', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر', 'ديسمبر']
+_AR_DIGITS = str.maketrans('0123456789', '٠١٢٣٤٥٦٧٨٩')
+_ART_CAT_LABEL = {'feature': 'عن المنصة', 'news': 'تحليل قانوني', 'law': 'قانوني',
+                  'guide': 'دليل', 'regulation': 'تشريعات', 'other': 'مقال'}
+
+
+def _ar_date_today():
+    n = datetime.datetime.utcnow()
+    return f"{n.day} {_AR_MONTHS[n.month - 1]} {n.year}".translate(_AR_DIGITS)
+
+
+def _ar_date_from(ts):
+    """Format an ISO timestamp (the platform's real created/published date) as an Arabic date."""
+    if ts:
+        try:
+            dt = datetime.datetime.fromisoformat(str(ts).replace('Z', '+00:00'))
+            return f"{dt.day} {_AR_MONTHS[dt.month - 1]} {dt.year}".translate(_AR_DIGITS)
+        except Exception:
+            pass
+    return _ar_date_today()
+
+
+def _strip_inline_md(s):
+    import re
+    s = re.sub(r'\*\*(.+?)\*\*', r'\1', s)
+    s = re.sub(r'__(.+?)__', r'\1', s)
+    s = re.sub(r'\*(.+?)\*', r'\1', s)
+    s = re.sub(r'`(.+?)`', r'\1', s)
+    return s.strip()
+
+
+def _md_to_blocks(md):
+    """Convert the platform's markdown article body → the marketing site's body format: a list of
+    blocks where a heading is '## ...' (rendered <h2>) and everything else is a paragraph."""
+    import re
+    blocks = []
+    for raw in (md or '').split('\n\n'):
+        b = raw.strip()
+        if not b:
+            continue
+        m = re.match(r'^#{1,6}\s+(.*)$', b)
+        if m:
+            blocks.append('## ' + _strip_inline_md(m.group(1)))
+        else:
+            blocks.append(_strip_inline_md(' '.join(ln.strip() for ln in b.split('\n'))))
+    return blocks
+
+
+def _delete_platform_article(aid):
+    if not aid or not PLATFORM_METRICS_SECRET:
+        return
+    try:
+        requests.delete(f"{PLATFORM_API_URL}/api/bridge/articles/{aid}",
+                        headers={'X-ELP-Metrics-Secret': PLATFORM_METRICS_SECRET}, timeout=10)
+    except Exception:
+        pass
+
+
+def _sync_platform_articles():
+    """Import platform-generated article drafts into the blog. Returns (dict, status)."""
+    if not PLATFORM_METRICS_SECRET:
+        return {'error': 'الربط بالمنصة غير مضبوط'}, 503
+    try:
+        # ONLY unapproved DRAFTS — never pull (and then delete) the platform's own published articles.
+        r = requests.get(f"{PLATFORM_API_URL}/api/bridge/articles",
+                         headers={'X-ELP-Metrics-Secret': PLATFORM_METRICS_SECRET},
+                         params={'status': 'draft'}, timeout=12)
+        arts = (r.json() or {}).get('articles', []) if r.status_code == 200 else []
+    except Exception:
+        return {'error': 'تعذّر الاتصال بالمنصة'}, 502
+    imported = published = drafts = 0
+    for a in arts:
+        title = (a.get('title') or '').strip()
+        if not title:
+            continue
+        # already in the blog? skip — but do NOT delete the platform copy (a genuinely-different
+        # article that happens to share a title must never be silently destroyed).
+        if Article.query.filter_by(title=title).first():
+            continue
+        cat = a.get('category') or 'other'
+        is_feature = (cat == 'feature')
+        is_published = is_feature or (a.get('status') == 'published')  # honor platform status as a floor
+        art = Article(
+            title=title[:500],
+            excerpt=(a.get('excerpt') or '')[:1000],
+            cat=_ART_CAT_LABEL.get(cat, 'قانوني'),
+            kicker='عن المنصة' if is_feature else 'تحليل قانوني',
+            by=a.get('author') or 'فريق البروفيسور',
+            date=_ar_date_from(a.get('published_at') or a.get('created_at')),
+            body=json.dumps(_md_to_blocks(a.get('body') or ''), ensure_ascii=False),
+            status='published' if is_published else 'draft',
+        )
+        if is_published:
+            art.published_at = datetime.datetime.utcnow()
+        db.session.add(art)
+        db.session.commit()
+        imported += 1
+        if is_published:
+            published += 1
+        else:
+            drafts += 1
+        _delete_platform_article(a.get('id'))  # only AFTER a successful import
+    return {'ok': True, 'imported': imported, 'published': published, 'drafts': drafts}, 200
+
+
+@app.route('/api/content/sync-from-platform', methods=['POST'])
+@token_required
+@roles_required('admin')
+def content_sync_from_platform():
+    """Admin button: pull any platform-generated drafts into the blog now."""
+    body, status = _sync_platform_articles()
+    return jsonify(body), status
+
+
+@app.route('/api/content/sync-cron', methods=['POST'])
+def content_sync_cron():
+    """n8n (secret-gated): after a daily generation run, flush platform drafts into the blog so
+    feature articles auto-publish to elprofessor.net without anyone opening the dashboard."""
+    secret = request.headers.get('X-ELP-Metrics-Secret', '')
+    if not (PLATFORM_METRICS_SECRET and secret and secrets.compare_digest(secret, PLATFORM_METRICS_SECRET)):
+        return jsonify({'error': 'unauthorized'}), 401
+    body, status = _sync_platform_articles()
+    return jsonify(body), status
+
+
 @app.route('/api/content/articles', methods=['GET'])
 def public_articles_feed():
     """PUBLIC: published articles feed for the marketing site. No auth, no cache."""

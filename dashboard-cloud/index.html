@@ -308,8 +308,7 @@ const MODULES={
   investment:{label:'الاستثمار',ic:'brief',c:'var(--gold)',bg:'var(--gold-bg)',grp:'money'},
   marketing:{label:'التسويق',ic:'mega',c:'var(--human)',bg:'var(--human-bg)',grp:'money'},
   partners:{label:'الشركاء',ic:'hands',c:'var(--navy)',bg:'var(--surface-2)',grp:'money'},
-  content:{label:'مقالات الموقع (المدونة)',ic:'doc',c:'var(--memory)',bg:'var(--memory-bg)',grp:'money'},
-  articles_auto:{label:'مقالات المنصة (آلي)',ic:'sparkles',c:'var(--ai)',bg:'var(--ai-bg)',grp:'money'},
+  content:{label:'المدونة (الموقع)',ic:'doc',c:'var(--memory)',bg:'var(--memory-bg)',grp:'money'},
   topics:{label:'المواضيع',ic:'sparkles',c:'var(--gold)',bg:'var(--gold-bg)',grp:'money'},
   news:{label:'الأخبار',ic:'mega',c:'var(--human)',bg:'var(--human-bg)',grp:'money'},
   tutorials:{label:'الدليل',ic:'book',c:'var(--ai)',bg:'var(--ai-bg)',grp:'money'},
@@ -407,7 +406,6 @@ function renderView(){
   if(current==='clubs')return viewClubs(v);
   if(current==='messages')return viewMessages(v);
   if(current==='content')return viewContent(v);
-  if(current==='articles_auto')return viewArticlesAuto(v);
   if(current==='topics')return viewTopics(v);
   if(current==='news')return viewNews(v);
   if(current==='tutorials')return viewTutorials(v);
@@ -1777,10 +1775,16 @@ function viewContent(v){
       <div class="tab${contentTab==='pending'?' on':''}" data-t="pending">بانتظار الاعتماد (${pend})</div>
       <div class="tab${contentTab==='published'?' on':''}" data-t="published">منشورة (${pub})</div>
     </div>
-    <div class="inboxwrap"><section class="panel"><div class="ph"><h3 id="ctH"></h3><span class="n" id="ctN"></span><button class="btn btn-human" id="ctCreate" style="flex:none;min-width:auto;padding:6px 13px;font-size:12px;margin-inline-start:auto">+ <span id="ctCreateLbl">مقال جديد</span></button></div><div id="ctRows"></div></section><aside class="drawer" id="drawer"></aside></div>`;
+    <div class="inboxwrap"><section class="panel"><div class="ph"><h3 id="ctH"></h3><span class="n" id="ctN"></span><div style="margin-inline-start:auto;display:flex;gap:8px"><button class="btn btn-primary" id="ctGen" style="flex:none;min-width:auto;padding:6px 13px;font-size:12px">${svg('sparkles')} ولّد بالذكاء</button><button class="btn btn-ghost" id="ctSync" style="flex:none;min-width:auto;padding:6px 11px;font-size:12px">${svg('check')} جلب</button><button class="btn btn-human" id="ctCreate" style="flex:none;min-width:auto;padding:6px 13px;font-size:12px">+ <span id="ctCreateLbl">مقال جديد</span></button></div></div><div id="ctRows"></div></section><aside class="drawer" id="drawer"></aside></div>`;
   v.querySelectorAll('#ctTabs .tab').forEach(t=>t.onclick=()=>{contentTab=t.dataset.t;selected=null;viewContent(v);});
   document.getElementById('ctCreateLbl').textContent=(contentTab==='news'?'خبر جديد':contentTab==='media'?'رفع صورة':contentTab==='pages'?'صفحة جديدة':'مقال جديد');
   document.getElementById('ctCreate').onclick=()=>{contentTab==='news'?createNewsModal():contentTab==='media'?uploadMediaModal():contentTab==='pages'?createPageModal():createArticleModal();};
+  var gb=document.getElementById('ctGen');if(gb)gb.onclick=()=>{
+    if(!window.EP){toast('غير متصل بالمنصة');return;}
+    if(!confirm('تشغيل توليد المقالات بالذكاء؟ (شرح المنصة يُنشر تلقائيًّا، وتحليلات الأخبار تيجي مسودّات لاعتمادك)'))return;
+    gb.disabled=true;EP.runDailyContent(()=>viewContent(document.getElementById('view')));
+  };
+  var sb=document.getElementById('ctSync');if(sb)sb.onclick=()=>{ if(window.EP)EP.syncContent(()=>viewContent(document.getElementById('view'))); };
   renderContent();
 }
 function renderContent(){
@@ -1801,9 +1805,18 @@ function drawContent(){
   const el=document.getElementById('drawer');if(!el)return;
   if(selected===null){el.innerHTML=`<div class="empty">${svg('doc','ic')}<p>اختر مقالًا لمعاينته واعتماده ونشره.</p></div>`;return;}
   const t=TOPICS[selected];const pub=t.status==='published';
-  el.innerHTML=`<div class="dh"><div class="k">مقال مدونة · ${pub?'منشور':'بانتظار اعتماد'}</div><h3>${t.title}</h3></div><div class="db">
-    <div class="route"><span class="step">المنصة · موضوع (ذكاء+خبير)</span><span class="arrow">←</span><span class="step" style="color:var(--memory);font-weight:800">المحتوى</span><span class="arrow">←</span><span class="step" style="color:var(--gold);font-weight:800">الموقع</span></div>
-    <div class="note-ai">${svg('sparkles','ic')}<div>${t.by} — صاغ الذكاء المقال من رأي الخبير. راجِع قبل النشر التلقائي على موقع الشركة.</div></div>
+  // pull the FULL article (incl body) from the raw feed so the founder can READ the draft before approving
+  var _raw=((window.EP&&EP.data.content&&EP.data.content.raw)||[]).filter(function(a){return a.id===t.aid;})[0]||{};
+  var _body=Array.isArray(_raw.body)?_raw.body:[];
+  var _bodyHtml=_body.length
+    ? _body.map(function(b){b=String(b);return b.indexOf('## ')===0?'<h4 style="margin:14px 0 6px;font-size:15px;font-weight:800;color:var(--ink)">'+esc(b.slice(3))+'</h4>':'<p style="margin:0 0 10px;line-height:1.9;color:var(--ink-2);font-size:13.5px">'+esc(b)+'</p>';}).join('')
+    : '<div style="color:var(--muted);font-size:13px">(لا يوجد نص لعرضه)</div>';
+  el.innerHTML=`<div class="dh"><div class="k">مقال مدونة · ${pub?'منشور':'بانتظار اعتماد'}</div><h3>${esc(t.title)}</h3></div><div class="db">
+    <div class="route"><span class="step">المنصة · توليد بالذكاء</span><span class="arrow">←</span><span class="step" style="color:var(--memory);font-weight:800">المدونة</span><span class="arrow">←</span><span class="step" style="color:var(--gold);font-weight:800">elprofessor.net</span></div>
+    <div class="note-ai">${svg('sparkles','ic')}<div>${esc(t.by)} — راجِع المقال كامل تحت قبل الاعتماد.</div></div>
+    ${_raw.excerpt?`<div class="field"><div class="lab">المقدّمة</div><div class="val" style="font-weight:600">${esc(_raw.excerpt)}</div></div>`:''}
+    <div class="lab" style="margin:10px 0 4px">نص المقال</div>
+    <div style="background:var(--surface-2,#f7f7f9);border:1px solid var(--line,#e6e6ee);border-radius:10px;padding:12px 14px;max-height:300px;overflow:auto;margin-bottom:10px">${_bodyHtml}</div>
     <div class="field"><div class="lab">الحالة</div><div class="val"><span class="status ${pub?'s-auto':'s-wait'}"><span class="d"></span>${pub?'منشور على الموقع':'بانتظار الاعتماد'}</span></div></div>
     ${pub?`<div class="field"><div class="lab">المشاهدات</div><div class="val">${money(t.views)}</div></div><div class="acts"><button class="btn btn-ghost" data-a="site">عرض على الموقع</button><button class="btn btn-ghost" data-a="unpub">إلغاء النشر</button></div>`
       :`<div class="acts"><button class="btn btn-primary" data-a="pub">${svg('check')}اعتمد وانشر على الموقع</button><button class="btn btn-ghost" data-a="edit">تعديل</button><button class="btn btn-warn" data-a="reject">رفض</button></div>`}

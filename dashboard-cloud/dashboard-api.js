@@ -1092,38 +1092,33 @@
       .catch(function (e) { quietToast((e && e.message) || "تعذّر الحذف"); if (after) after(); });
   };
 
-  // أتمتة المقالات — تشغيل يومي + اعتماد/سحب/حذف مقالات «المقالات» على المنصة.
-  EP.runDailyContent = function (opts, after) {
-    post("/platform-articles/daily-run", opts || {})
+  // «ولّد بالذكاء»: trigger a generation run on the platform, then poll-sync the new drafts into the
+  // blog (this SQLite, which feeds elprofessor.net). Features publish; news/legal come in as drafts.
+  EP.runDailyContent = function (after) {
+    post("/platform-articles/daily-run", { articles: 3, topics: 2, publish: false })
       .then(function (r) {
-        if (r && r.already_running) { note("فيه توليد شغّال بالفعل — استنّاه يخلّص الأول."); if (after) after(); return; }
-        // generation runs in the background on the platform (slow AI calls); drafts trickle in over
-        // a few minutes — poll the list ~6× (every 30s) so they appear without a manual refresh.
-        note("بدأ التوليد في الخلفية — ممكن ياخد دقائق؛ هنحدّث تلقائيًّا (أو اضغط تحديث).");
+        if (r && r.already_running) { note("فيه توليد شغّال بالفعل — استنّاه."); if (after) after(); return; }
+        note("بدأ التوليد بالذكاء — المقالات هتظهر خلال دقائق وتتسحب للمدونة تلقائيًّا.");
         if (after) after();
         var tries = 0;
         var iv = setInterval(function () {
-          // stop after ~3 min, or the moment the admin navigates away (the run button is gone)
-          if (++tries > 6 || !document.getElementById("artRun")) { clearInterval(iv); return; }
-          EP.reload("platformArticles", function () { if (document.getElementById("artRun") && after) after(); });
+          if (++tries > 6 || !document.getElementById("ctRows")) { clearInterval(iv); return; } // ~3 min / left view
+          post("/content/sync-from-platform", {})                         // flush whatever finished into the blog
+            .then(function () { EP.reload("content", function () { if (document.getElementById("ctRows") && after) after(); }); })
+            .catch(function () {});
         }, 30000);
       })
       .catch(function (e) { quietToast((e && e.message) || "تعذّر التشغيل"); if (after) after(); });
   };
-  EP.publishArticleP = function (a, after) {
-    post("/platform-articles/" + a.id + "/publish", {})
-      .then(function () { note("نُشر «" + a.title + "» في المقالات"); EP.reload("platformArticles", after); })
-      .catch(function (e) { quietToast((e && e.message) || "تعذّر النشر"); if (after) after(); });
-  };
-  EP.unpublishArticleP = function (a, after) {
-    post("/platform-articles/" + a.id + "/unpublish", {})
-      .then(function () { note("أُلغي نشر «" + a.title + "»"); EP.reload("platformArticles", after); })
-      .catch(function (e) { quietToast((e && e.message) || "تعذّر الإلغاء"); if (after) after(); });
-  };
-  EP.deleteArticleP = function (a, after) {
-    api("/platform-articles/" + a.id, { method: "DELETE" })
-      .then(function () { note("حُذف «" + a.title + "»"); EP.reload("platformArticles", after); })
-      .catch(function (e) { quietToast((e && e.message) || "تعذّر الحذف"); if (after) after(); });
+  // «جلب»: pull any already-generated platform drafts into the blog right now.
+  EP.syncContent = function (after) {
+    post("/content/sync-from-platform", {})
+      .then(function (r) {
+        var n = (r && r.imported) || 0;
+        note(n ? ("اتسحب " + n + " مقال من الذكاء للمدونة") : "مفيش مقالات جديدة من الذكاء دلوقتي");
+        EP.reload("content", after);
+      })
+      .catch(function (e) { quietToast((e && e.message) || "تعذّر الجلب"); if (after) after(); });
   };
 
   // الأخبار: إنشاء/تعديل/حذف/نشر + «حوّل لموضوع» — كلها عبر الـ proxy السرّي.
