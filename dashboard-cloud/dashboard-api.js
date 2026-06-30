@@ -981,6 +981,15 @@
       })
       .catch(function (e) { quietToast((e && e.message) || "تعذّر تحديث المزايدة"); if (after) after(); });
   };
+  // اعتماد/رفض دورة «بانتظار الاعتماد» (كتاب اتحوّل دورة) — الاعتماد ينشرها للطلاب.
+  EP.approvePlatformCourse = function (courseId, approve, after) {
+    api("/platform-courses/" + encodeURIComponent(courseId) + (approve ? "/approve" : "/reject"), { method: "POST", body: {} })
+      .then(function () {
+        note(approve ? "اتعمدت الدورة وظهرت للطلاب ✓" : "اترفضت الدورة");
+        EP.reload("platform_courses", after);
+      })
+      .catch(function (e) { quietToast((e && e.message) || "تعذّر تحديث الاعتماد"); if (after) after(); });
+  };
   // نشر/إخفاء دورة منصّة (is_active) — هي دي اللي بتخلّي الدورة تظهر للطلاب على app.elprofessor.net.
   EP.setPlatformCourseActive = function (courseId, active, after) {
     api("/platform-courses/" + encodeURIComponent(courseId), { method: "PUT", body: { is_active: !!active } })

@@ -1415,6 +1415,21 @@ def platform_courses_list():
     return _platform_proxy('GET', '/api/bridge/courses')
 
 
+@app.route('/api/platform-courses/<course_id>/approve', methods=['POST'])
+@token_required
+@roles_required('admin', 'employee')
+def platform_course_approve(course_id):
+    """اعتماد دورة «بانتظار الاعتماد» (مثلاً كتاب اتحوّل دورة) → تروح live في «الدورات»."""
+    return _platform_proxy('POST', f"/api/bridge/courses/{course_id}/approve")
+
+
+@app.route('/api/platform-courses/<course_id>/reject', methods=['POST'])
+@token_required
+@roles_required('admin', 'employee')
+def platform_course_reject(course_id):
+    return _platform_proxy('POST', f"/api/bridge/courses/{course_id}/reject")
+
+
 @app.route('/api/platform-courses/<course_id>/bid', methods=['PUT'])
 @token_required
 @roles_required('admin', 'employee')

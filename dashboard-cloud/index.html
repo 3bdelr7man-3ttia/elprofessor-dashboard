@@ -1172,8 +1172,9 @@ function drawCourse(){
     <div class="field"><div class="lab">الدروس</div><div class="val">${money(c.lesson_count||0)} درس${c.source==='titch'?' · منهج Titch':''}</div></div>
     ${c.created_at?`<div class="field"><div class="lab">أُنشئت</div><div class="val" style="direction:ltr;text-align:right">${esc(String(c.created_at).slice(0,10))}</div></div>`:''}
     ${c.short_description?`<div class="field"><div class="lab">الوصف</div><div class="val" style="line-height:1.6">${esc(c.short_description)}</div></div>`:''}
+    ${c.approval_status==='pending'?`<div class="note-ai" style="margin:8px 0;background:rgba(212,175,55,.1);border-color:rgba(212,175,55,.4)">${svg('sparkles','ic')}<div>دورة بانتظار اعتمادك (اتحوّلت من كتاب عبر Titch). اعتمدها تظهر للطلاب في «الدورات».</div></div>`:''}
     <div class="acts">
-      <button class="btn ${c.is_active?'btn-warn':'btn-primary'}" data-a="pctoggle">${svg('check')}${c.is_active?'إيقاف عن المنصة':'نشر على المنصة'}</button>
+      ${c.approval_status==='pending'?`<button class="btn btn-primary" data-a="pcapprove">${svg('check')}اعتمد وانشر</button><button class="btn btn-warn" data-a="pcreject">ارفض</button>`:`<button class="btn ${c.is_active?'btn-warn':'btn-primary'}" data-a="pctoggle">${svg('check')}${c.is_active?'إيقاف عن المنصة':'نشر على المنصة'}</button>`}
       ${(c.is_active&&c.type!=='recorded_free')?`<button class="btn ${c.bid_enabled?'btn-primary':'btn-ghost'}" data-a="pcbidtoggle" style="flex:none;min-width:auto;padding:7px 11px;font-size:12px">${c.bid_enabled?'مزايدة مُفعّلة ✓':'فعّل المزايدة'}</button>`:''}
       <button class="btn btn-human" data-a="pcvideo" style="flex:none;min-width:auto;padding:7px 11px;font-size:12px">الفيديوهات</button>
     </div></div>`;}
@@ -1214,6 +1215,8 @@ function drawCourse(){
   el.querySelectorAll('[data-a]').forEach(b=>b.onclick=()=>{const a=b.dataset.a;
     // دورة على المنصة: نشر/إيقاف + تفعيل المزايدة + إدارة الفيديوهات عبر الجسر.
     if(selected[0]==='P'&&window.EP){var pc=csPlatformCourses()[+selected.slice(1)];if(pc&&pc.id){
+      if(a==='pcapprove'){EP.approvePlatformCourse(pc.id,true,function(){viewCourses(document.getElementById('view'));});return;}
+      if(a==='pcreject'){if(confirm('متأكد ترفض الدورة دي؟')){EP.approvePlatformCourse(pc.id,false,function(){viewCourses(document.getElementById('view'));});}return;}
       if(a==='pctoggle'){EP.setPlatformCourseActive(pc.id,!pc.is_active,function(){viewCourses(document.getElementById('view'));});return;}
       if(a==='pcbidtoggle'){EP.setCourseBid(pc.id,!pc.bid_enabled,function(){viewCourses(document.getElementById('view'));});return;}
       if(a==='pcvideo'){courseVideoModal({platform_id:pc.id,title:pc.title});return;}
