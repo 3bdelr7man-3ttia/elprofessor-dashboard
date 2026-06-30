@@ -1736,6 +1736,49 @@ def platform_topics_delete(topic_id):
     return _platform_proxy('DELETE', f"/api/bridge/topics/{topic_id}")
 
 
+# --- «أتمتة المقالات» (Articles automation): one daily AI run fills «المقالات» on the platform
+# with DRAFTS (1 platform explainer + a few news-derived analyses) that the founder approves here.
+@app.route('/api/platform-articles', methods=['GET'])
+@token_required
+@roles_required('admin', 'employee')   # employee may VIEW article drafts
+def platform_articles_list():
+    status = (request.args.get('status') or '').strip()
+    return _platform_proxy('GET', '/api/bridge/articles', params={'status': status} if status else None)
+
+
+@app.route('/api/platform-articles/daily-run', methods=['POST'])
+@token_required
+@roles_required('admin')               # only admin triggers a generation run
+def platform_articles_daily_run():
+    body = request.json or {}
+    return _platform_proxy('POST', '/api/bridge/content/daily-run', json_body={
+        'articles': int(body.get('articles') or 3),
+        'topics': int(body.get('topics') or 2),
+        'publish': bool(body.get('publish') or False),
+    })
+
+
+@app.route('/api/platform-articles/<article_id>/publish', methods=['POST'])
+@token_required
+@roles_required('admin')
+def platform_articles_publish(article_id):
+    return _platform_proxy('POST', f"/api/bridge/articles/{article_id}/publish")
+
+
+@app.route('/api/platform-articles/<article_id>/unpublish', methods=['POST'])
+@token_required
+@roles_required('admin')
+def platform_articles_unpublish(article_id):
+    return _platform_proxy('POST', f"/api/bridge/articles/{article_id}/unpublish")
+
+
+@app.route('/api/platform-articles/<article_id>', methods=['DELETE'])
+@token_required
+@roles_required('admin')
+def platform_articles_delete(article_id):
+    return _platform_proxy('DELETE', f"/api/bridge/articles/{article_id}")
+
+
 # --- «الأخبار» (News): curated legal-news feed -> review our-voice summary -> publish.
 # Mirrors the topics/tutorials proxies above. Reads + writes both go through the
 # SECRET bridge (so the dashboard sees drafts too). The METRICS_SECRET is sent
