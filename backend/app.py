@@ -1415,6 +1415,24 @@ def platform_courses_list():
     return _platform_proxy('GET', '/api/bridge/courses')
 
 
+@app.route('/api/platform-library/ingest-folder', methods=['POST'])
+@token_required
+@roles_required('admin', 'employee')
+def platform_library_ingest_folder():
+    """استيراد مكتبة قانونية من فولدر Google Drive إلى كوربوس الـRAG (صيغ/مذكرات/قوانين)."""
+    body = request.json or {}
+    fid = (body.get('folder_id') or '').strip()
+    if not fid:
+        return jsonify({'error': 'folder_id مطلوب'}), 400
+    json_body = {
+        'folder_id': fid,
+        'category': (body.get('category') or 'memo_template').strip(),
+        'country': (body.get('country') or 'egypt').strip(),
+        'max_files': int(body.get('max_files') or 30),
+    }
+    return _platform_proxy('POST', '/api/bridge/library/ingest-drive-folder', json_body=json_body)
+
+
 @app.route('/api/platform-courses/<course_id>/approve', methods=['POST'])
 @token_required
 @roles_required('admin', 'employee')

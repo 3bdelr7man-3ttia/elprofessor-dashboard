@@ -981,6 +981,13 @@
       })
       .catch(function (e) { quietToast((e && e.message) || "تعذّر تحديث المزايدة"); if (after) after(); });
   };
+  // استيراد مكتبة قانونية من فولدر Google Drive إلى كوربوس الـRAG (صيغ/مذكرات/قوانين).
+  EP.ingestDriveLibrary = function (folderId, category, after) {
+    note("بنستورد من Drive… ممكن ياخد دقيقة");
+    api("/platform-library/ingest-folder", { method: "POST", body: { folder_id: folderId, category: category || "memo_template", max_files: 40 } })
+      .then(function (r) { note("اتستورد " + ((r && r.ingested) || 0) + " مستند من " + ((r && r.found) || 0) + " ✓"); if (after) after(r); })
+      .catch(function (e) { quietToast((e && e.message) || "تعذّر الاستيراد من Drive"); if (after) after(); });
+  };
   // اعتماد/رفض دورة «بانتظار الاعتماد» (كتاب اتحوّل دورة) — الاعتماد ينشرها للطلاب.
   EP.approvePlatformCourse = function (courseId, approve, after) {
     api("/platform-courses/" + encodeURIComponent(courseId) + (approve ? "/approve" : "/reject"), { method: "POST", body: {} })
