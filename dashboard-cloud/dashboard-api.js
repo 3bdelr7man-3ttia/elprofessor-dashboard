@@ -278,6 +278,25 @@
       });
     },
 
+    // أتمتة المقالات: /api/platform-articles -> [ {id,title,category,excerpt,status,created_at,...} ]
+    // التشغيل اليومي يولّد مسودّات (شرح منصة + تحليلات من الأخبار) ← اعتمدها لتظهر في «المقالات».
+    platformArticles: function () {
+      return get("/platform-articles").then(function (r) {
+        var list = (r && r.articles) || (Array.isArray(r) ? r : []);
+        EP.data.platformArticles = { raw: list };
+        window.PARTS = list.map(function (a) {
+          return {
+            id: a.id,
+            title: a.title || "",
+            category: a.category || "other",
+            excerpt: a.excerpt || "",
+            status: a.status === "published" ? "published" : "draft",
+            date: arDate(a.created_at || a.published_at),
+          };
+        });
+      });
+    },
+
     // الأخبار: /api/platform-news -> [ {id,title,summary,country,specialty,sources:[{title,url}],status,...} ]
     // أخبار قانونية منتقاة بصوتنا -> مراجعة الملخّص -> نشر. مرتّبة بالأحدث.
     // الـ proxy السرّي يجلب المسودّات أيضًا.
@@ -1070,6 +1089,40 @@
   EP.deleteTopic = function (t, after) {
     api("/platform-topics/" + t.id, { method: "DELETE" })
       .then(function () { note("حُذف الموضوع «" + t.title + "»"); EP.reload("platformTopics", after); })
+      .catch(function (e) { quietToast((e && e.message) || "تعذّر الحذف"); if (after) after(); });
+  };
+
+  // أتمتة المقالات — تشغيل يومي + اعتماد/سحب/حذف مقالات «المقالات» على المنصة.
+  EP.runDailyContent = function (opts, after) {
+    post("/platform-articles/daily-run", opts || {})
+      .then(function (r) {
+        if (r && r.already_running) { note("فيه توليد شغّال بالفعل — استنّاه يخلّص الأول."); if (after) after(); return; }
+        // generation runs in the background on the platform (slow AI calls); drafts trickle in over
+        // a few minutes — poll the list ~6× (every 30s) so they appear without a manual refresh.
+        note("بدأ التوليد في الخلفية — ممكن ياخد دقائق؛ هنحدّث تلقائيًّا (أو اضغط تحديث).");
+        if (after) after();
+        var tries = 0;
+        var iv = setInterval(function () {
+          // stop after ~3 min, or the moment the admin navigates away (the run button is gone)
+          if (++tries > 6 || !document.getElementById("artRun")) { clearInterval(iv); return; }
+          EP.reload("platformArticles", function () { if (document.getElementById("artRun") && after) after(); });
+        }, 30000);
+      })
+      .catch(function (e) { quietToast((e && e.message) || "تعذّر التشغيل"); if (after) after(); });
+  };
+  EP.publishArticleP = function (a, after) {
+    post("/platform-articles/" + a.id + "/publish", {})
+      .then(function () { note("نُشر «" + a.title + "» في المقالات"); EP.reload("platformArticles", after); })
+      .catch(function (e) { quietToast((e && e.message) || "تعذّر النشر"); if (after) after(); });
+  };
+  EP.unpublishArticleP = function (a, after) {
+    post("/platform-articles/" + a.id + "/unpublish", {})
+      .then(function () { note("أُلغي نشر «" + a.title + "»"); EP.reload("platformArticles", after); })
+      .catch(function (e) { quietToast((e && e.message) || "تعذّر الإلغاء"); if (after) after(); });
+  };
+  EP.deleteArticleP = function (a, after) {
+    api("/platform-articles/" + a.id, { method: "DELETE" })
+      .then(function () { note("حُذف «" + a.title + "»"); EP.reload("platformArticles", after); })
       .catch(function (e) { quietToast((e && e.message) || "تعذّر الحذف"); if (after) after(); });
   };
 
