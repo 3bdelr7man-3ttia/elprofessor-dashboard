@@ -77,7 +77,7 @@
     data: { dashboard: null, metrics: null, users: null, content: null, finance: null, messages: null, inbox: null,
             escrow: null, investment: null, marketing: null, partners: null, courses: null, settings: null,
             packages: null, t_data: null, i_data: null, targets: null, foundation: null, team: null,
-            notifications: null, goalsAdvisor: null, tutorials: null, platformTopics: null },
+            notifications: null, goalsAdvisor: null, tutorials: null, platformTopics: null, experts: null },
     state: {}, // 'idle' | 'loading' | 'ready' | 'error'
     _started: {}, // منع التحميل المزدوج
     api: api, get: get, post: post,
@@ -208,6 +208,9 @@
             role: roleMap[u.role] || "member",
             trainer: ts === "approved" ? "approved" : (ts === "pending" ? "pending" : "none"),
             plan: planLabel[u.plan_id] || u.plan_id || "—",
+            plan_id: u.plan_id || "",       // المعرّف الخام للباقة (يفعّل تحكّم إسناد الباقة في الدرج)
+            segment: u.segment || "",       // التصنيف التلقائي من الشات (محامي/طالب/شركة… أو "" لو لم يتحدّث)
+            tags: Array.isArray(u.tags) ? u.tags : [],   // تاجات يدوية يضبطها الأدمن (تصنيف يدوي)
             joined: arDate(u.created_at),
             last7: within7(u.created_at),
             // لا يوجد حقل توثيق مستقل في الجسر — نعتبر الأدمن/الموظف/المدرّب «موثّق».
@@ -608,6 +611,32 @@
       }).catch(function () { EP.data.program_request_stats = { stats: [], count: 0 }; });
     },
 
+    // الخبراء والمدربون (D5): /api/platform-experts -> {experts:[...], count}
+    // خبير == مدرّب معتمد (نفس الشخص، صفتان). نمرّر الحقول كما هي من الجسر
+    // (rating/presence + referral_count + courses_count/students_count).
+    experts: function () {
+      return get("/platform-experts").then(function (r) {
+        var list = (r && r.experts) || [];
+        EP.data.experts = { count: (r && r.count != null) ? r.count : list.length, raw: list };
+        window.EXPERTS = list.map(function (e) {
+          return {
+            email: e.email || "",
+            name: e.full_name || e.email || "—",
+            expertise: Array.isArray(e.expertise) ? e.expertise : [],
+            bio: e.bio || "",
+            trainer_status: e.trainer_status || "approved",
+            rating_avg: (e.rating_avg != null) ? e.rating_avg : null,
+            rating_count: e.rating_count || 0,
+            online: !!e.online,
+            last_seen_at: e.last_seen_at || null,
+            referral_count: e.referral_count || 0,
+            courses_count: e.courses_count || 0,
+            students_count: e.students_count || 0,
+          };
+        });
+      });
+    },
+
     // سوق المعرفة: /api/platform-knowledge -> {items:[...]}
     knowledge: function () {
       return get("/platform-knowledge").then(function (r) {
@@ -940,6 +969,26 @@
         quietToast((e && e.message) || "تعذّر تغيير الدور");
         if (after) after();
       });
+  };
+
+  // إسناد باقة لمستخدم منصة (D3): POST /platform-users/<id>/plan {plan_id}
+  // المنصة تتحقّق من plan_id مقابل كتالوج الباقات (422 «باقة غير معروفة» لو مجهول).
+  EP.setUserPlan = function (u, planId, prev, after) {
+    post("/platform-users/" + u.id + "/plan", { plan_id: planId })
+      .then(function () { note("اتغيّرت باقة " + u.name); EP.reload("users", after); })
+      .catch(function (e) {
+        if (prev !== undefined) u.plan_id = prev; // تراجع بصري
+        quietToast((e && e.message) || "تعذّر تغيير الباقة");
+        if (after) after();
+      });
+  };
+
+  // حفظ تاجات يدوية لمستخدم منصة (D3): POST /platform-users/<id>/tags {tags:[...]}
+  // تصنيف يدوي بجانب segment التلقائي من الشات (لا يمسّه). الفراغات تُحذف والقائمة تُقصّ على 20 في المنصة.
+  EP.setUserTags = function (u, tags, after) {
+    post("/platform-users/" + u.id + "/tags", { tags: Array.isArray(tags) ? tags : [] })
+      .then(function () { note("اتحدّثت تاجات " + u.name); EP.reload("users", after); })
+      .catch(function (e) { quietToast((e && e.message) || "تعذّر حفظ التاجات"); if (after) after(); });
   };
 
   // إضافة شخص جديد وإسناد دوره: POST /platform-users {full_name,email,phone,role,plan_id}

@@ -314,13 +314,11 @@ const MODULES={
   investment:{label:'الاستثمار',ic:'brief',c:'var(--gold)',bg:'var(--gold-bg)',grp:'money'},
   marketing:{label:'التسويق',ic:'mega',c:'var(--human)',bg:'var(--human-bg)',grp:'money'},
   partners:{label:'الشركاء',ic:'hands',c:'var(--navy)',bg:'var(--surface-2)',grp:'money'},
-  content:{label:'المدونة (الموقع)',ic:'doc',c:'var(--memory)',bg:'var(--memory-bg)',grp:'money'},
   topics:{label:'المواضيع',ic:'sparkles',c:'var(--gold)',bg:'var(--gold-bg)',grp:'money'},
-  news:{label:'الأخبار',ic:'mega',c:'var(--human)',bg:'var(--human-bg)',grp:'money'},
   tutorials:{label:'الدليل',ic:'book',c:'var(--ai)',bg:'var(--ai-bg)',grp:'money'},
   packages:{label:'الباقات والأسعار',ic:'wallet',c:'var(--gold)',bg:'var(--gold-bg)',grp:'money'},
   knowledge:{label:'سوق المعرفة',ic:'book',c:'var(--memory)',bg:'var(--memory-bg)',grp:'money'},
-  team:{label:'الفريق والمدربون',ic:'cap',c:'var(--ai)',bg:'var(--ai-bg)',grp:'co'},
+  team:{label:'الخبراء والمدربون',ic:'cap',c:'var(--ai)',bg:'var(--ai-bg)',grp:'co'},
   foundation:{label:'مرحلة التأسيس',ic:'build',c:'var(--muted)',bg:'var(--surface-2)',grp:'co'},
   targets:{label:'الأهداف والتوقعات',ic:'trend',c:'var(--gold)',bg:'var(--gold-bg)',grp:'co'},
   ai:{label:'مساعد AI',ic:'robot',c:'var(--ai)',bg:'var(--ai-bg)',grp:'co',soon:true},
@@ -358,9 +356,10 @@ const money=n=>n.toLocaleString('ar-EG');
 function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];});}
 
 let current='inbox', selected=null, activeFilter='all', escTab='sessions', finTab='summary', usersFilter='all', courseTab='platform', invTab='investors', mktTab='campaigns', contentTab='pending';
+let usersTag='all', teamTab='experts', topicsTab='board', pendingUserFocus=null;
 let role='admin';
 const ROLE_NAV={
-  employee:['users','courses','topics','news','tutorials'],
+  employee:['users','courses','topics','tutorials'],
   trainer:['t_home','t_courses','t_earnings','ai'],
   investor:['i_home','i_market','i_invest','ai'],
   viewer:['v_pending']
@@ -389,7 +388,7 @@ function renderNav(){
   }
   document.querySelectorAll('.nav .item').forEach(it=>it.onclick=()=>go(it.dataset.mod));
 }
-function go(mod){current=mod;selected=null;activeFilter='all';escTab='sessions';finTab='summary';usersFilter='all';courseTab='platform';invTab='investors';mktTab='campaigns';contentTab='pending';anFilters={seg:'all',country:'all',cat:'all',ne:'all',time:'all'};
+function go(mod){current=mod;selected=null;activeFilter='all';escTab='sessions';finTab='summary';usersFilter='all';usersTag='all';teamTab='experts';topicsTab='board';courseTab='platform';invTab='investors';mktTab='campaigns';contentTab='pending';anFilters={seg:'all',country:'all',cat:'all',ne:'all',time:'all'};
   document.getElementById('pageTitle').textContent=MODULES[mod].label;
   document.querySelectorAll('.nav .item').forEach(x=>x.classList.toggle('on',x.dataset.mod===mod));
   renderView();
@@ -411,9 +410,13 @@ function renderView(){
   if(current==='knowledge')return viewKnowledge(v);
   if(current==='clubs')return viewClubs(v);
   if(current==='messages')return viewMessages(v);
-  if(current==='content')return viewContent(v);
-  if(current==='topics')return viewTopics(v);
-  if(current==='news')return viewNews(v);
+  if(current==='topics'){
+    // «المواضيع» = موديول واحد بأربعة تبويبات (مواضيع / أخبار / مقالات آلية / مدونة الموقع).
+    if(topicsTab==='news')return viewNews(v);
+    if(topicsTab==='auto')return viewArticlesAuto(v);
+    if(topicsTab==='blog')return viewContent(v);
+    return viewTopics(v);
+  }
   if(current==='tutorials')return viewTutorials(v);
   if(current==='ai')return viewAI(v);
   if(current==='partners')return viewPartners(v);
@@ -918,7 +921,7 @@ function viewAnalysis(v){
 }
 
 function viewUsers(v){
-  if(window.EP){EP.ensure('users',()=>viewUsers(v));}
+  if(window.EP){EP.ensure('users',()=>viewUsers(v));EP.ensure('packages',()=>viewUsers(v));}
   const Ust=(window.EP&&EP.state.users)||'idle';
   const total=USERS.length, last7=USERS.filter(u=>u.last7).length, verified=USERS.filter(u=>u.verified==='verified').length, trainers=USERS.filter(u=>u.trainer==='approved').length;
   v.innerHTML=`
@@ -930,6 +933,7 @@ function viewUsers(v){
       <div class="kpi k-4"><div class="top"><span class="ic">${svg('cap')}</span>مدرّبون معتمدون</div><b>${money(trainers)}</b><div class="sub">عبر طلبات التدريب</div></div>
     </div>
     <div class="filterbar" id="uFilters"><span class="lbl">الدور:</span></div>
+    <div class="filterbar" id="uTagFilters"><span class="lbl">التصنيف (تاج):</span></div>
     <div class="inboxwrap">
       <section class="panel"><div class="ph"><h3>المستخدمون</h3><span class="n" id="uN">0</span><button class="btn btn-human" id="uAdd" style="flex:none;min-width:auto;padding:6px 13px;font-size:12px;margin-inline-start:auto">+ إضافة مستخدم</button></div><div id="uRows">${Ust==='loading'?'<div style="padding:40px;text-align:center;color:var(--muted)">…جارٍ التحميل</div>':''}</div></section>
       <aside class="drawer" id="drawer"></aside>
@@ -938,6 +942,8 @@ function viewUsers(v){
   if(Ust!=='loading')renderUsers();
 }
 function renderUsers(){
+  // تركيز على مستخدم قادم من شاشة أخرى (D5 «اعرض الحساب») بالبريد — يفتح محرّره مباشرة.
+  if(pendingUserFocus){var _fi=USERS.findIndex(x=>(x.email||'').toLowerCase()===String(pendingUserFocus).toLowerCase());if(_fi>-1)selected=_fi;pendingUserFocus=null;}
   const fe=document.getElementById('uFilters');
   fe.querySelectorAll('.chip').forEach(c=>c.remove());
   const mk=(f,label,color)=>`<div class="chip${usersFilter===f?' on':''}" data-f="${f}">${color?`<span class="dotc" style="background:${color}"></span>`:''}${label}</div>`;
@@ -945,14 +951,33 @@ function renderUsers(){
   ROLES_LIST.forEach(r=>fe.insertAdjacentHTML('beforeend',mk(r,ROLE[r].t,ROLE[r].c)));
   fe.insertAdjacentHTML('beforeend',mk('trainer','مدرّبون','var(--gold)'));
   fe.querySelectorAll('.chip').forEach(c=>c.onclick=()=>{usersFilter=c.dataset.f;selected=null;renderUsers();});
+  // شريط «التصنيف (تاج)»: يجمع تصنيف الشات التلقائي (segment) + التاجات اليدوية للتصفية —
+  // هذا يجيب على «فين المدرب/المحامي/الخبير»: يظهرون كتاجات/صفات قابلة للتصفية.
+  const te=document.getElementById('uTagFilters');
+  if(te){
+    te.querySelectorAll('.chip,.utaghint').forEach(c=>c.remove());
+    const segCodes=[],segSeen={},tagVals=[],tagSeen={};
+    USERS.forEach(u=>{if(u.segment&&!segSeen[u.segment]){segSeen[u.segment]=1;segCodes.push(u.segment);}(u.tags||[]).forEach(t=>{if(t&&!tagSeen[t]){tagSeen[t]=1;tagVals.push(t);}});});
+    const mkt=(val,label,gold)=>`<div class="chip${usersTag===val?' on':''}" data-t="${esc(val)}">${gold?'<span class="dotc" style="background:var(--gold)"></span>':''}${esc(label)}</div>`;
+    te.insertAdjacentHTML('beforeend',mkt('all','الكل'));
+    segCodes.forEach(c=>te.insertAdjacentHTML('beforeend',mkt('seg:'+c,SEG_LABEL[c]||c)));
+    tagVals.forEach(t=>te.insertAdjacentHTML('beforeend',mkt('tag:'+t,t,true)));
+    if(!segCodes.length&&!tagVals.length)te.insertAdjacentHTML('beforeend','<span class="from utaghint" style="color:var(--muted)">لا تصنيفات بعد — تظهر تلقائيًّا من الشات أو بإضافة تاج يدوي في المحرّر.</span>');
+    te.querySelectorAll('.chip').forEach(c=>c.onclick=()=>{usersTag=c.dataset.t;selected=null;renderUsers();});
+  }
   const el=document.getElementById('uRows');el.innerHTML='';
-  const items=USERS.filter(u=>usersFilter==='all'||u.role===usersFilter||(usersFilter==='trainer'&&u.trainer!=='none'));
+  const matchTag=u=>{if(usersTag==='all')return true;if(usersTag.indexOf('seg:')===0)return u.segment===usersTag.slice(4);if(usersTag.indexOf('tag:')===0)return (u.tags||[]).indexOf(usersTag.slice(4))>-1;return true;};
+  const items=USERS.filter(u=>(usersFilter==='all'||u.role===usersFilter||(usersFilter==='trainer'&&u.trainer!=='none'))&&matchTag(u));
   document.getElementById('uN').textContent=items.length;
+  const segPS='display:inline-block;padding:2px 7px;border-radius:6px;font-size:10.5px;font-weight:700;background:var(--ai-bg);color:var(--ai)';
+  const tagPS='display:inline-block;padding:2px 7px;border-radius:6px;font-size:10.5px;font-weight:700;background:var(--gold-bg);color:var(--gold);border:1px solid #EAD9A8';
   items.forEach(u=>{const r=ROLE[u.role],vf=VERIFY[u.verified],ui=USERS.indexOf(u);
     const trainerBadge=u.trainer==='approved'?'<span class="status s-auto" style="margin-inline-start:6px"><span class="d"></span>مدرّب</span>':u.trainer==='pending'?'<span class="status s-wait" style="margin-inline-start:6px"><span class="d"></span>طلب مدرّب</span>':'';
-    el.insertAdjacentHTML('beforeend',`<div class="row esc-row${selected===ui?' sel':''}" data-i="${ui}" style="grid-template-columns:1.7fr 130px 1fr 120px">
-      <div class="c c1"><div class="src-ic" style="background:${r.bg};color:${r.c}">${svg('users')}</div><div><div class="parties">${u.name}${trainerBadge}</div><div class="from">${u.email}</div></div></div>
+    const clsPills=(u.segment?`<span style="${segPS}">${SEG_LABEL[u.segment]||esc(u.segment)}</span>`:'')+(u.tags||[]).map(t=>`<span style="${tagPS}">${esc(t)}</span>`).join('');
+    el.insertAdjacentHTML('beforeend',`<div class="row esc-row${selected===ui?' sel':''}" data-i="${ui}" style="grid-template-columns:1.7fr 120px 1.2fr 1fr 110px">
+      <div class="c c1"><div class="src-ic" style="background:${r.bg};color:${r.c}">${svg('users')}</div><div><div class="parties">${esc(u.name)}${trainerBadge}</div><div class="from">${esc(u.email)}</div></div></div>
       <div class="c"><span class="dest" style="background:${r.bg};color:${r.c}">${r.t}</span></div>
+      <div class="c"><div style="display:flex;flex-wrap:wrap;gap:4px">${clsPills||'<span class="from" style="color:var(--muted)">—</span>'}</div></div>
       <div class="c"><span class="status ${vf.cls}" style="${vf.cls?'':'background:var(--surface-2);color:var(--muted)'}"><span class="d" style="${vf.cls?'':'background:var(--muted)'}"></span>${vf.t}</span><div class="from" style="margin-top:4px">${u.plan}</div></div>
       <div class="c"><div class="from">${u.joined}</div></div>
     </div>`);
@@ -971,14 +996,32 @@ function drawUser(){
   const adminsCount=USERS.filter(x=>x.role==='admin').length;
   const lastAdmin=u.role==='admin'&&adminsCount<=1;
   const roleBtns=ROLES_LIST.map(rid=>`<button class="urole${rid===u.role?' on':''}" data-r="${rid}" style="border:1px solid ${rid===u.role?ROLE[rid].c:'var(--line)'};background:${rid===u.role?ROLE[rid].bg:'var(--surface)'};color:${rid===u.role?ROLE[rid].c:'var(--ink-2)'};border-radius:9px;padding:7px 12px;font:inherit;font-size:12px;font-weight:800;cursor:pointer">${ROLE[rid].t}</button>`).join('');
+  // تحكّم إسناد الباقة + التاجات اليدوية يظهر لمستخدمي المنصة الحقيقيين فقط (يُكتب عبر الجسر).
+  const canWrite=!!(window.EP&&EP.data.users&&u.platform);
+  const pkgs=(window.EP&&EP.data.packages&&EP.data.packages.packages)||[];
+  const planCtl=(canWrite&&pkgs.length)?`
+    <div class="lab" style="margin-top:10px">الباقة <span style="color:var(--muted);font-weight:600">— تُكتب عبر الجسر</span></div>
+    <div style="display:flex;gap:8px;align-items:center;margin-top:5px">
+      <select class="uplan" style="flex:1;border:1px solid var(--line);border-radius:9px;padding:7px 10px;font:inherit;font-size:12.5px">${pkgs.map(p=>`<option value="${esc(p.id)}"${p.id===u.plan_id?' selected':''}>${esc(p.name)}</option>`).join('')}</select>
+      <button class="btn btn-primary uplan-save" style="flex:none;min-width:auto;padding:7px 12px;font-size:12px">حفظ الباقة</button>
+    </div>
+    <div class="uplan-promo" style="display:inline-flex;align-items:center;gap:5px;margin-top:8px;font-size:12px;color:var(--gold);cursor:pointer;font-weight:700">${svg('wallet')} إدارة الأسعار والخصومات في «الباقات» ←</div>`:'';
+  const tagsCtl=canWrite?`
+    <div class="lab" style="margin-top:12px">تاجات يدوية <span style="color:var(--muted);font-weight:600">— تصنيف تكتبه أنت بجانب تصنيف الشات</span></div>
+    <div style="display:flex;gap:8px;align-items:center;margin-top:5px">
+      <input class="utags" value="${esc((u.tags||[]).join('، '))}" placeholder="محامي عمالي، عميل مميز…" style="flex:1;border:1px solid var(--line);border-radius:9px;padding:7px 10px;font:inherit;font-size:12.5px">
+      <button class="btn btn-ghost utags-save" style="flex:none;min-width:auto;padding:7px 12px;font-size:12px">حفظ التاجات</button>
+    </div>
+    ${u.segment?`<div style="margin-top:6px;font-size:11.5px;color:var(--muted)">تصنيف الشات التلقائي: <b style="color:var(--ink-2)">${SEG_LABEL[u.segment]||esc(u.segment)}</b> <span style="opacity:.7">(لا يُعدَّل يدويًّا)</span></div>`:''}`:'';
   inline.innerHTML=`<div class="uedit-in">
-    <div class="uedit-h"><div><b>${u.name}</b> <span style="color:var(--muted);font-size:12px">· ${u.email} · ${u.phone}</span></div><button class="uedit-x" title="إغلاق">✕</button></div>
+    <div class="uedit-h"><div><b>${esc(u.name)}</b> <span style="color:var(--muted);font-size:12px">· ${esc(u.email)} · ${esc(u.phone)}</span></div><button class="uedit-x" title="إغلاق">✕</button></div>
     <div class="uedit-grid">
       <div><div class="lab">التوثيق</div><span class="status ${vf.cls}" style="${vf.cls?'':'background:var(--surface-2);color:var(--muted)'}"><span class="d" style="${vf.cls?'':'background:var(--muted)'}"></span>${vf.t}</span></div>
       <div><div class="lab">الباقة · التدريب</div><div class="val" style="font-size:12.5px">${u.plan} · ${u.trainer==='approved'?'مدرّب معتمد':u.trainer==='pending'?'طلب قيد المراجعة':'—'}</div></div>
     </div>
     <div class="lab" style="margin-top:6px">الدور <span style="color:var(--muted);font-weight:600">— يُكتب عبر الجسر</span></div>
     <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:5px">${roleBtns}</div>
+    ${planCtl}${tagsCtl}
     ${lastAdmin?`<div class="note-ai" style="background:var(--gold-bg);border-color:#EAD9A8;color:#9a6a08;margin-top:10px">${svg('shield','ic')}<div>هذا آخر أدمن — لا يمكن تنزيل دوره أو حذفه.</div></div>`:''}
     <div class="acts" style="margin-top:10px">
       ${u.trainer==='approved'?`<button class="btn btn-warn" data-a="untrain" style="flex:none;min-width:auto;padding:7px 12px;font-size:12px">إلغاء اعتماد المدرّب</button>`:`<button class="btn btn-primary" data-a="train" style="flex:none;min-width:auto;padding:7px 12px;font-size:12px">${svg('check')}اعتمد كمدرّب</button>`}
@@ -986,6 +1029,13 @@ function drawUser(){
       <button class="btn btn-warn" data-a="del" style="flex:none;min-width:auto;padding:7px 12px;font-size:12px">حذف</button>
     </div></div>`;
   inline.querySelector('.uedit-x').onclick=()=>{selected=null;renderUsers();};
+  // إسناد الباقة (يُكتب عبر الجسر) + رابط أمين لإدارة الأسعار/الخصومات (لا كوبون وهميّ).
+  var planSel=inline.querySelector('.uplan'),planSave=inline.querySelector('.uplan-save');
+  if(planSave)planSave.onclick=()=>{var pid=planSel.value;if(pid===u.plan_id){toast('نفس الباقة الحالية');return;}var prev=u.plan_id;u.plan_id=pid;EP.setUserPlan(u,pid,prev,()=>renderUsers());};
+  var promo=inline.querySelector('.uplan-promo');if(promo)promo.onclick=()=>go('packages');
+  // تاجات يدوية (تصنيف يكتبه الأدمن) — تُحفظ عبر الجسر بجانب تصنيف الشات التلقائي.
+  var tagsSave=inline.querySelector('.utags-save');
+  if(tagsSave)tagsSave.onclick=()=>{var raw=(inline.querySelector('.utags').value||'');var arr=raw.split(/[،,]/).map(x=>x.trim()).filter(Boolean).slice(0,20);EP.setUserTags(u,arr,()=>renderUsers());};
   inline.querySelectorAll('.urole').forEach(b=>b.onclick=()=>{const rid=b.dataset.r;if(rid===u.role)return;if(lastAdmin&&rid!=='admin'){toast('ممنوع: لا يمكن إزالة آخر أدمن');return;}
     if(window.EP&&EP.data.users&&u.platform){const prev=u.role;u.role=rid;renderUsers();EP.setUserRole(u,rid,prev,()=>renderUsers());return;}
     u.role=rid;renderUsers();toast('تم تغيير دور '+u.name+' إلى «'+ROLE[rid].t+'»');});
@@ -1028,7 +1078,7 @@ function viewOverview(v){
   const escM=(window.EP&&EP.data.escrow&&EP.data.escrow.metrics)||null;
   const escHeld=escM?Math.round(escM.held_sum||0):null;
   const escCount=escM?(escM.held_count||0):null;
-  const cards=[['users','المستخدمون',MODULES.users],['escrow','الضمان والنزاعات',MODULES.escrow],['finance','المالية',MODULES.finance],['courses','الدورات والتدريب',MODULES.courses],['marketing','التسويق',MODULES.marketing],['content','المحتوى والمدونة',MODULES.content]];
+  const cards=[['users','المستخدمون',MODULES.users],['escrow','الضمان والنزاعات',MODULES.escrow],['finance','المالية',MODULES.finance],['courses','الدورات والتدريب',MODULES.courses],['marketing','التسويق',MODULES.marketing],['topics','المواضيع والمدونة',MODULES.topics]];
   // Real KPIs from /api/dashboard when loaded; otherwise design defaults.
   const fin=D?D.financial:null, crs=D?D.courses:null;
   const M=(window.EP&&EP.data.metrics)||null; // /api/platform-metrics (admin) — live platform user count
@@ -1905,7 +1955,20 @@ function addAdvertiserModal(edit){
   s.querySelector('#ad_s').onclick=function(){var data={name:s.querySelector('#ad_n').value.trim()||'ممول',type:s.querySelector('#ad_t').value.trim()||'مموّل',amount:+s.querySelector('#ad_a').value||0};if(edit){Object.assign(edit,data);}else{ADVERTISERS.push(data);}closeModal();viewMarketing(document.getElementById('view'));notify(edit?'حُدّث الممول':'أُضيف الممول «'+data.name+'»');};
 }
 
-/* ===== CONTENT / BLOG VIEW ===== */
+/* ===== «المواضيع» — موديول واحد يوحّد خطّ الإنتاج (D6) =====
+   فكرة → (خبر) → موضوع → نقاش → مقالة → مدونة (SEO، بموافقة) → (سلسلة).
+   أربعة تبويبات تتشارك شريطًا واحدًا؛ كل تبويب يعيد رسم نفسه فيُعيد الشريط.
+   - مواضيع: لوحة النقاش (viewTopics) + زر «اعمل مقال» يمرّر مسوّدة الذكاء للمدونة.
+   - الأخبار: منتقاة بصوتنا (viewNews) + «حوّل لموضوع» (موجود).
+   - مقالات آلية: تيار المميّزات التلقائي (viewArticlesAuto).
+   - مدونة الموقع: CMS الموقع (viewContent) → «اعتمد وانشر (SEO)». */
+function topicsTabbar(active){
+  var tabs=[['board','المواضيع'],['news','الأخبار'],['auto','مقالات آلية'],['blog','مدونة الموقع']];
+  return '<div class="tabbar" id="topicsTabs">'+tabs.map(function(t){return '<div class="tab'+(active===t[0]?' on':'')+'" data-tt="'+t[0]+'">'+t[1]+'</div>';}).join('')+'</div>';
+}
+function wireTopicsTabs(){var tb=document.getElementById('topicsTabs');if(tb)tb.querySelectorAll('.tab').forEach(function(t){t.onclick=function(){topicsTab=t.dataset.tt;selected=null;renderView();};});}
+
+/* ===== CONTENT / BLOG VIEW (تبويب «مدونة الموقع») ===== */
 const SITE_ARTS=(window.SITE_CONTENT&&window.SITE_CONTENT.articles)||[];
 // المواضيع/المقالات: تُجلب حيّة من /api/content/articles عبر طبقة EP (window.TOPICS).
 var TOPICS=[];
@@ -1916,6 +1979,7 @@ function viewContent(v){
   const Cst=(window.EP&&EP.state.content)||'idle';
   const pend=TOPICS.filter(t=>t.status==='pending').length,pub=TOPICS.filter(t=>t.status==='published').length;
   v.innerHTML=`
+    ${topicsTabbar('blog')}
     <div class="policy" style="border-inline-start-color:var(--memory)">${svg('doc','ic')}<div><b>تدفّق المدونة:</b> موضوع (ذكاء + خبير) ← صياغة مقال ← <b>اعتماد إداري</b> ← نشر تلقائي على <span style="direction:ltr">elprofessor.net</span>.</div></div>
     <div class="policy" style="border-inline-start-color:var(--agree);background:var(--agree-bg)">${svg('check','ic')}<div><b>متصل بالموقع:</b> ما يُعتمد هنا يُنشر مباشرة على <span style="direction:ltr">elprofessor.net</span> من <b>مصدر محتوى واحد</b> — لا إدخال مكرّر. <b>${pub}</b> مقالات منشورة الآن على الموقع.</div></div>
     ${Cst==='error'?`<div class="policy" style="border-inline-start-color:var(--conflict);background:var(--conflict-bg);color:var(--conflict)">${svg('scale','ic')}<div>تعذّر جلب المقالات من الخادم — تُعرض بيانات تصميمية. <b style="cursor:pointer;text-decoration:underline" onclick="EP.reload('content',()=>viewContent(document.getElementById('view')))">إعادة المحاولة</b></div></div>`:''}
@@ -1930,9 +1994,10 @@ function viewContent(v){
       <div class="tab${contentTab==='published'?' on':''}" data-t="published">منشورة (${pub})</div>
     </div>
     <div class="inboxwrap"><section class="panel"><div class="ph"><h3 id="ctH"></h3><span class="n" id="ctN"></span><div style="margin-inline-start:auto;display:flex;gap:8px"><button class="btn btn-primary" id="ctGen" style="flex:none;min-width:auto;padding:6px 13px;font-size:12px">${svg('sparkles')} ولّد بالذكاء</button><button class="btn btn-ghost" id="ctSync" style="flex:none;min-width:auto;padding:6px 11px;font-size:12px">${svg('check')} جلب</button><button class="btn btn-human" id="ctCreate" style="flex:none;min-width:auto;padding:6px 13px;font-size:12px">+ <span id="ctCreateLbl">مقال جديد</span></button></div></div><div id="ctRows"></div></section><aside class="drawer" id="drawer"></aside></div>`;
+  wireTopicsTabs();
   v.querySelectorAll('#ctTabs .tab').forEach(t=>t.onclick=()=>{contentTab=t.dataset.t;selected=null;viewContent(v);});
-  document.getElementById('ctCreateLbl').textContent=(contentTab==='news'?'خبر جديد':contentTab==='media'?'رفع صورة':contentTab==='pages'?'صفحة جديدة':'مقال جديد');
-  document.getElementById('ctCreate').onclick=()=>{contentTab==='news'?createNewsModal():contentTab==='media'?uploadMediaModal():contentTab==='pages'?createPageModal():createArticleModal();};
+  document.getElementById('ctCreateLbl').textContent='مقال جديد';
+  document.getElementById('ctCreate').onclick=()=>{createArticleModal();};
   var gb=document.getElementById('ctGen');if(gb)gb.onclick=()=>{
     if(!window.EP){toast('غير متصل بالمنصة');return;}
     if(!confirm('تشغيل توليد المقالات بالذكاء؟ (شرح المنصة يُنشر تلقائيًّا، وتحليلات الأخبار تيجي مسودّات لاعتمادك)'))return;
@@ -1943,7 +2008,6 @@ function viewContent(v){
 }
 function renderContent(){
   const el=document.getElementById('ctRows'),h=document.getElementById('ctH');el.innerHTML='';
-  if(contentTab==='news'||contentTab==='media'||contentTab==='pages'){return renderContentOther(el,h);}
   const items=TOPICS.map((t,idx)=>({t,idx})).filter(o=>o.t.status===contentTab);
   h.textContent=contentTab==='pending'?'بانتظار الاعتماد':'منشورة على الموقع';
   document.getElementById('ctN').textContent=items.length;
@@ -1973,7 +2037,7 @@ function drawContent(){
     <div style="background:var(--surface-2,#f7f7f9);border:1px solid var(--line,#e6e6ee);border-radius:10px;padding:12px 14px;max-height:300px;overflow:auto;margin-bottom:10px">${_bodyHtml}</div>
     <div class="field"><div class="lab">الحالة</div><div class="val"><span class="status ${pub?'s-auto':'s-wait'}"><span class="d"></span>${pub?'منشور على الموقع':'بانتظار الاعتماد'}</span></div></div>
     ${pub?`<div class="acts"><button class="btn btn-ghost" data-a="site">عرض على الموقع</button><button class="btn btn-ghost" data-a="unpub">إلغاء النشر</button></div>`
-      :`<div class="acts"><button class="btn btn-primary" data-a="pub">${svg('check')}اعتمد وانشر على الموقع</button><button class="btn btn-ghost" data-a="edit">تعديل</button><button class="btn btn-warn" data-a="reject">رفض</button></div>`}
+      :`<div class="acts"><button class="btn btn-primary" data-a="pub">${svg('check')}اعتمد وانشر (SEO)</button><button class="btn btn-ghost" data-a="edit">تعديل</button><button class="btn btn-warn" data-a="reject">رفض</button></div>`}
     </div>`;
   el.querySelectorAll('[data-a]').forEach(b=>b.onclick=()=>{const a=b.dataset.a;
     if(a==='pub'){
@@ -1990,29 +2054,14 @@ function drawContent(){
     else toast('فتح المقال على الموقع');});
 }
 
-/* ===== CMS DATA + HELPERS (المحتوى → الموقع) ===== */
-// أخبار/صفحات/صور الموقع: تبويبات معطّلة بلا واجهة خلفية — لا بيانات تصميمية.
-const NEWS=[];
-const PAGES=[];
-const MEDIA=[];
+/* ===== CMS HELPERS (المحتوى → الموقع) ===== */
+// تبويبات الأخبار/الصور/الصفحات القديمة أُزيلت (بلا واجهة خلفية). المدونة الآن تبويب واحد
+// «مدونة الموقع» داخل «المواضيع». دفع المقال المنشور إلى تغذية الموقع عند غياب الجسر الحيّ:
 function pushToSite(t){
   if(!window.SITE_CONTENT)window.SITE_CONTENT={source:'الداش بورد · موديول المحتوى',articles:[]};
   var arts=window.SITE_CONTENT.articles,tones=['t1','t2','t3'];
   if(!arts.some(function(a){return a.title===t.title;}))
     arts.push({id:'TOP-'+(800+arts.length),tone:tones[arts.length%3],cat:t.cat||'قانوني',kicker:t.kicker||'مقال',date:t.date||'الآن',title:t.title,excerpt:t.excerpt||'',by:t.by,status:'published'});
-}
-function renderContentOther(el,h){
-  var n=document.getElementById('ctN');
-  if(contentTab==='news'){h.textContent='الأخبار';n.textContent=NEWS.length;
-    NEWS.forEach(function(x,i){el.insertAdjacentHTML('beforeend','<div class="row esc-row" data-n="'+i+'" style="grid-template-columns:1.9fr 1fr 130px"><div class="c c1"><div class="src-ic" style="background:var(--gold-bg);color:var(--gold)">'+svg('mega')+'</div><div><div class="parties">'+x.title+'</div><div class="from">'+x.date+'</div></div></div><div class="c"><div class="from">خبر للموقع</div></div><div class="c"><span class="status '+(x.status==='published'?'s-auto':'s-wait')+'"><span class="d"></span>'+(x.status==='published'?'منشور':'مسودّة')+'</span></div></div>');});
-    el.querySelectorAll('.row').forEach(function(r){r.onclick=function(){editNewsModal(NEWS[+r.dataset.n]);};});
-  } else if(contentTab==='media'){h.textContent='مكتبة صور الموقع';n.textContent=MEDIA.length;
-    el.innerHTML='<div style="padding:16px;display:grid;grid-template-columns:repeat(3,1fr);gap:12px">'+MEDIA.map(function(m){return '<div style="border:1px solid var(--line);border-radius:12px;overflow:hidden"><div style="height:92px;background:linear-gradient(135deg,var(--surface-2),var(--line));display:grid;place-items:center;color:var(--muted)">'+svg('doc')+'</div><div style="padding:9px 11px"><div style="font-weight:700;font-size:12.5px;direction:ltr;text-align:right">'+m.name+'</div><div style="font-size:11px;color:var(--muted)">'+m.tag+' · '+m.size+'</div></div></div>';}).join('')+'</div>';
-  } else {h.textContent='صفحات الموقع';n.textContent=PAGES.length;
-    PAGES.forEach(function(p,i){el.insertAdjacentHTML('beforeend','<div class="row esc-row" data-p="'+i+'" style="grid-template-columns:1.9fr 1fr 130px"><div class="c c1"><div class="src-ic" style="background:var(--ai-bg);color:var(--ai)">'+svg('doc')+'</div><div><div class="parties">'+p.name+'</div><div class="from" style="direction:ltr;text-align:right">elprofessor.net'+p.path+'</div></div></div><div class="c"><div class="from">آخر تحديث '+p.updated+'</div></div><div class="c"><span class="status s-auto"><span class="d"></span>منشورة</span></div></div>');});
-    el.querySelectorAll('.row').forEach(function(r){r.onclick=function(){editPageModal(PAGES[+r.dataset.p]);};});
-  }
-  var dr=document.getElementById('drawer');if(dr)dr.innerHTML='<div class="empty">'+svg('doc','ic')+'<p>اضغط «+» للإضافة، أو بندًا لتعديله — كل تغيير يُنشر على الموقع.</p></div>';
 }
 function createArticleModal(edit){
   var e=edit||{};
@@ -2038,23 +2087,6 @@ function createArticleModal(edit){
     if(window.EP&&EP.data.content){EP.createArticle(g,true,function(){closeModal();viewContent(document.getElementById('view'));});return;}
     var t={title:g.t,by:g.by,status:'published',views:0,date:'الآن',cat:g.cat,kicker:g.k,excerpt:g.ex};TOPICS.push(t);pushToSite(t);closeModal();viewContent(document.getElementById('view'));notify('نُشر «'+g.t+'» على الموقع — elprofessor.net');};
 }
-function editNewsModal(edit){
-  var s=openModal(edit?'تعديل خبر':'خبر جديد للموقع','<div class="fld"><label>عنوان الخبر</label><input id="n_t" value="'+((edit&&edit.title)||'')+'" placeholder="عنوان الخبر"></div><div class="acts"><button class="btn btn-human" id="n_pub">'+svg('check')+'نشر على الموقع</button><button class="btn btn-ghost" id="n_x">إلغاء</button></div>');
-  s.querySelector('#n_x').onclick=closeModal;
-  s.querySelector('#n_pub').onclick=function(){var v=s.querySelector('#n_t').value.trim()||'خبر';if(edit){edit.title=v;edit.status='published';}else{NEWS.unshift({title:v,date:'الآن',status:'published'});}closeModal();viewContent(document.getElementById('view'));notify('نُشر الخبر «'+v+'» على الموقع');};
-}
-function createNewsModal(){editNewsModal(null);}
-function uploadMediaModal(){
-  // لا يوجد تخزين ملفات بعد — لا نُنشئ سجلّات صور وهمية. أضِف رابط صورة خارجيًّا من محرّر المقال.
-  var s=openModal('رفع صور الموقع','<div class="policy" style="border-inline-start-color:var(--memory)">'+svg('inbox','ic')+'<div><b>قريبًا:</b> رفع الصور للمكتبة يحتاج تخزين ملفات لم يُفعَّل بعد. في الوقت الحالي أضِف <b>رابط صورة خارجي</b> (https://...) من داخل محرّر المقال في خانة «صورة المقال».</div></div><div class="acts"><button class="btn btn-ghost" id="md_x">حسنًا</button></div>');
-  s.querySelector('#md_x').onclick=closeModal;
-}
-function editPageModal(p){
-  var s=openModal('تعديل صفحة — '+p.name,'<div class="fld"><label>عنوان الصفحة</label><input id="pg_t" value="'+p.name+'"></div><div class="fld"><label>المحتوى</label><textarea id="pg_b" style="min-height:120px">قسم تعريفي عن '+p.name+' على موقع البروفيسور.</textarea></div><div class="acts"><button class="btn btn-primary" id="pg_s">'+svg('check')+'حفظ وانشر على الموقع</button><button class="btn btn-ghost" id="pg_x">إلغاء</button></div>');
-  s.querySelector('#pg_x').onclick=closeModal;
-  s.querySelector('#pg_s').onclick=function(){p.name=s.querySelector('#pg_t').value.trim()||p.name;p.updated='الآن';closeModal();viewContent(document.getElementById('view'));notify('حُدّثت صفحة «'+p.name+'» على الموقع');};
-}
-function createPageModal(){PAGES.push({name:'صفحة جديدة',path:'/new',updated:'الآن'});editPageModal(PAGES[PAGES.length-1]);}
 
 /* ===== «المواضيع» (Topics): بحث/مسودّة ← مراجعة مسودّة الذكاء ← نشر للوحة العامة. ===== */
 // تُجلب حيّة من /api/platform-topics عبر طبقة EP (window.PTOPICS) — بما فيها المسودّات.
@@ -2070,6 +2102,7 @@ function viewArticlesAuto(v){
   const Ast=(window.EP&&EP.state.platformArticles)||'idle';
   const pub=PARTS.filter(a=>a.status==='published').length,draft=PARTS.length-pub;
   v.innerHTML=`
+    ${topicsTabbar('auto')}
     <div class="policy" style="border-inline-start-color:var(--ai)">${svg('sparkles','ic')}<div><b>أتمتة المقالات:</b> اضغط <b>«شغّل التوليد اليومي»</b> فيُنشئ الذكاء مقالات (شرح للمنصة + تحليلات من آخر الأخبار القانونية) <b>كمسودّات</b> ← راجعها ← <b>اعتمد وانشر</b> لتظهر في «المقالات» على المنصة لكل المستخدمين.</div></div>
     <div class="policy" style="border-inline-start-color:var(--agree);background:var(--agree-bg)">${svg('check','ic')}<div><b>يومي تلقائيًّا:</b> اربط n8n على <code>POST /api/bridge/content/daily-run</code> (مرة في اليوم) أو شغّله يدويًّا من هنا. <b>${money(pub)}</b> مقالًا منشورًا الآن.</div></div>
     ${Ast==='error'?`<div class="policy" style="border-inline-start-color:var(--conflict);background:var(--conflict-bg);color:var(--conflict)">${svg('scale','ic')}<div>تعذّر جلب المقالات من المنصة. <b style="cursor:pointer;text-decoration:underline" onclick="EP.reload('platformArticles',()=>viewArticlesAuto(document.getElementById('view')))">إعادة المحاولة</b></div></div>`:''}
@@ -2080,6 +2113,7 @@ function viewArticlesAuto(v){
       <div class="kpi k-1"><div class="top"><span class="ic">${svg('sparkles')}</span>الإجمالي</div><b>${money(PARTS.length)}</b><div class="sub">مقال</div></div>
     </div>
     <div class="inboxwrap"><section class="panel"><div class="ph"><h3>المقالات</h3><span class="n">${PARTS.length}</span><button class="btn btn-primary" id="artRun" style="flex:none;min-width:auto;padding:6px 13px;font-size:12px;margin-inline-start:auto">${svg('sparkles')} شغّل التوليد اليومي</button></div><div id="artRows"></div></section></div>`;
+  wireTopicsTabs();
   var rb=document.getElementById('artRun');if(rb)rb.onclick=()=>{
     if(!window.EP){toast('غير متصل بالمنصة');return;}
     if(!confirm('تشغيل التوليد اليومي الآن؟ (٣ مقالات + موضوعان كمسودّات للمراجعة)'))return;
@@ -2110,6 +2144,7 @@ function viewTopics(v){
   const Tst=(window.EP&&EP.state.platformTopics)||'idle';
   const pub=PTOPICS.filter(t=>t.status==='published').length,draft=PTOPICS.length-pub,withAI=PTOPICS.filter(t=>t.ai_answer).length;
   v.innerHTML=`
+    ${topicsTabbar('board')}
     <div class="policy" style="border-inline-start-color:var(--gold)">${svg('sparkles','ic')}<div><b>المواضيع:</b> ابحث موضوعًا (عنوان + سؤال + تخصص) فيُنشئ الذكاء <b>مسوّدة</b> ← راجعها ← اضغط <b>نشر</b> لتظهر على اللوحة العامة في المنصة.</div></div>
     <div class="policy" style="border-inline-start-color:var(--agree);background:var(--agree-bg)">${svg('check','ic')}<div><b>متصل بالمنصة:</b> الورك فلو = بحث/مسودّة ← مراجعة مسودّة الذكاء ← نشر. <b>${pub}</b> موضوعًا منشورًا الآن.</div></div>
     ${Tst==='error'?`<div class="policy" style="border-inline-start-color:var(--conflict);background:var(--conflict-bg);color:var(--conflict)">${svg('scale','ic')}<div>تعذّر جلب المواضيع من المنصة. <b style="cursor:pointer;text-decoration:underline" onclick="EP.reload('platformTopics',()=>viewTopics(document.getElementById('view')))">إعادة المحاولة</b></div></div>`:''}
@@ -2120,6 +2155,7 @@ function viewTopics(v){
       <div class="kpi k-1"><div class="top"><span class="ic">${svg('sparkles')}</span>بمسوّدة ذكاء</div><b>${money(withAI)}</b><div class="sub">من ${money(PTOPICS.length)}</div></div>
     </div>
     <div class="inboxwrap"><section class="panel"><div class="ph"><h3>المواضيع</h3><span class="n">${PTOPICS.length}</span><button class="btn btn-human" id="topAdd" style="flex:none;min-width:auto;padding:6px 13px;font-size:12px;margin-inline-start:auto">+ موضوع جديد (بحث)</button></div><div id="topRows"></div></section></div>`;
+  wireTopicsTabs();
   var ab=document.getElementById('topAdd');if(ab)ab.onclick=()=>topCreateModal();
   renderTopics();
 }
@@ -2127,18 +2163,28 @@ function renderTopics(){
   const el=document.getElementById('topRows');if(!el)return;el.innerHTML='';
   const items=PTOPICS.slice();
   if(!items.length){el.innerHTML='<div style="padding:40px;text-align:center;color:var(--muted)">لا مواضيع بعد — اضغط «+ موضوع جديد (بحث)» لبدء بحث ومسوّدة ذكاء.</div>';return;}
-  items.forEach((t)=>el.insertAdjacentHTML('beforeend',`<div class="row esc-row" style="grid-template-columns:2fr 1fr 1fr 200px">
+  items.forEach((t)=>el.insertAdjacentHTML('beforeend',`<div class="row esc-row" style="grid-template-columns:2fr 1fr 1fr 300px">
     <div class="c c1"><div class="src-ic" style="background:var(--gold-bg);color:var(--gold)">${svg('sparkles')}</div><div><div class="parties">${topEsc(t.title)}</div><div class="from">${topEsc(t.specialty)||'—'} · ${t.ai_answer?'<b style="color:var(--ink)">مسوّدة ذكاء ✓</b>':'بلا مسوّدة'}</div></div></div>
     <div class="c"><div class="from">${t.date||'—'}</div></div>
     <div class="c"><span class="status ${t.status==='published'?'s-auto':'s-wait'}"><span class="d"></span>${t.status==='published'?'منشور':'مسودّة'}</span></div>
-    <div class="c" style="gap:6px">${t.status==='published'?'':`<button class="btn btn-primary" data-pub="${t.id}" style="padding:5px 11px;font-size:12px">نشر</button>`}<button class="btn btn-ghost" data-view="${t.id}" style="padding:5px 11px;font-size:12px">مراجعة</button><button class="btn btn-warn" data-del="${t.id}" style="padding:5px 11px;font-size:12px">حذف</button></div></div>`));
+    <div class="c" style="gap:6px">${t.status==='published'?'':`<button class="btn btn-primary" data-pub="${t.id}" style="padding:5px 11px;font-size:12px">نشر</button>`}<button class="btn btn-ghost" data-view="${t.id}" style="padding:5px 11px;font-size:12px">مراجعة</button>${t.ai_answer?`<button class="btn btn-human" data-article="${t.id}" style="padding:5px 11px;font-size:12px">اعمل مقال</button>`:''}<button class="btn btn-warn" data-del="${t.id}" style="padding:5px 11px;font-size:12px">حذف</button></div></div>`));
   el.querySelectorAll('[data-view]').forEach(b=>b.onclick=()=>{var t=PTOPICS.find(x=>x.id===b.dataset.view);if(t)topReviewModal(t);});
+  el.querySelectorAll('[data-article]').forEach(b=>b.onclick=()=>{var t=PTOPICS.find(x=>x.id===b.dataset.article);if(t)topMakeArticle(t);});
   el.querySelectorAll('[data-pub]').forEach(b=>b.onclick=()=>{var t=PTOPICS.find(x=>x.id===b.dataset.pub);if(!t)return;
     if(!confirm('نشر «'+t.title+'» على اللوحة العامة؟'))return;
     if(window.EP){EP.publishTopic(t,()=>viewTopics(document.getElementById('view')));}});
   el.querySelectorAll('[data-del]').forEach(b=>b.onclick=()=>{var t=PTOPICS.find(x=>x.id===b.dataset.del);if(!t)return;
     if(!confirm('حذف موضوع «'+t.title+'»؟'))return;
     if(window.EP){EP.deleteTopic(t,()=>viewTopics(document.getElementById('view')));}});
+}
+// خطوة العبور: موضوع (بمسوّدة ذكاء) ← مقال مسودّة في «مدونة الموقع» (يُصاغ بجسم = مسوّدة الذكاء)
+// ← يُراجَع هناك ثم «اعتمد وانشر (SEO)». يكمل خطّ الإنتاج بضغطة واحدة.
+function topMakeArticle(t){
+  if(!t.ai_answer){toast('لا توجد مسوّدة ذكاء لهذا الموضوع بعد');return;}
+  if(!window.EP){toast('غير متصل بالمنصة');return;}
+  if(!confirm('تحويل «'+t.title+'» إلى مقال مسودّة في «مدونة الموقع»؟'))return;
+  var g={t:t.title,cat:t.specialty||'قانوني',k:'موضوع',ex:'',by:'موضوع + رأي خبير',body:t.ai_answer,img:''};
+  EP.createArticle(g,false,function(){topicsTab='blog';selected=null;renderView();});
 }
 // الخطوة ١: بحث/مسودّة — عنوان + سؤال + تخصص ← الذكاء يُنشئ مسوّدة.
 function topCreateModal(){
@@ -2197,6 +2243,7 @@ function viewNews(v){
   const Tst=(window.EP&&EP.state.platformNews)||'idle';
   const pub=PNEWS.filter(t=>t.status==='published').length,draft=PNEWS.length-pub,withSrc=PNEWS.filter(t=>t.sources&&t.sources.length).length;
   v.innerHTML=`
+    ${topicsTabbar('news')}
     <div class="policy" style="border-inline-start-color:var(--human)">${svg('mega','ic')}<div><b>الأخبار:</b> أخبار قانونية منتقاة من المصادر، مُلخّصة <b>بصوتنا</b> ← راجع الملخّص والمصدر ← اضغط <b>نشر</b> لتظهر للمستخدمين. أو <b>«حوّل لموضوع»</b> لتحويلها لموضوع نقاش.</div></div>
     <div class="policy" style="border-inline-start-color:var(--agree);background:var(--agree-bg)">${svg('check','ic')}<div><b>متصل بالمنصة:</b> الأخبار المنشورة تظهر مباشرة على المنصة مرتّبة بالأحدث. <b>${pub}</b> خبرًا منشورًا الآن.</div></div>
     ${Tst==='error'?`<div class="policy" style="border-inline-start-color:var(--conflict);background:var(--conflict-bg);color:var(--conflict)">${svg('scale','ic')}<div>تعذّر جلب الأخبار من المنصة. <b style="cursor:pointer;text-decoration:underline" onclick="EP.reload('platformNews',()=>viewNews(document.getElementById('view')))">إعادة المحاولة</b></div></div>`:''}
@@ -2207,6 +2254,7 @@ function viewNews(v){
       <div class="kpi k-1"><div class="top"><span class="ic">${svg('mega')}</span>بمصدر موثّق</div><b>${money(withSrc)}</b><div class="sub">من ${money(PNEWS.length)}</div></div>
     </div>
     <div class="inboxwrap"><section class="panel"><div class="ph"><h3>الأخبار</h3><span class="n">${PNEWS.length}</span><button class="btn btn-ghost" id="nwsSrcBtn" style="flex:none;min-width:auto;padding:6px 13px;font-size:12px;margin-inline-start:auto">${svg('gear')}مصادر الأخبار</button><button class="btn btn-human" id="nwsAdd" style="flex:none;min-width:auto;padding:6px 13px;font-size:12px">+ خبر جديد</button></div><div id="nwsRows"></div></section></div>`;
+  wireTopicsTabs();
   var ab=document.getElementById('nwsAdd');if(ab)ab.onclick=()=>nwsModal(null);
   var sb=document.getElementById('nwsSrcBtn');if(sb)sb.onclick=()=>nwsSourcesModal();
   renderNews();
@@ -2470,36 +2518,105 @@ function partnerModal(idx){
     PARTNERS.splice(idx,1);closeModal();viewPartners(document.getElementById('view'));notify('حُذف الشريك «'+e.name+'»');};
 }
 
-/* ===== TEAM ===== */
-// الفريق: لا أسماء تصميمية — تُجلب حيّة من /api/platform-users أو تبقى فارغة.
+/* ===== EXPERTS & TRAINERS (D5) ===== */
+// الفريق الإداري: يُشتقّ حيًّا من /api/platform-users (أدمن/موظف). الخبراء/المدربون: من
+// /api/platform-experts (خبير == مدرّب معتمد — نفس الشخص بصفتين). لا أسماء تصميمية.
 const TEAM_MEMBERS=[];
-function tmAdmins(){return (window.EP&&EP.data.team)?EP.data.team.admins:TEAM_MEMBERS;}
-function tmTrainers(){return (window.EP&&EP.data.team)?EP.data.team.trainers:[];}
-function tmFounders(){return (window.EP&&EP.data.team&&EP.data.team.founders)?EP.data.team.founders:((window.EP&&EP.data.partners)?ptPartners().filter(p=>p.name!=='غير موزّع').length:0);}
-function viewTeam(v){
-  if(window.EP){EP.ensure('team',()=>viewTeam(v));}
-  const Tst=(window.EP&&EP.state.team)||'idle';
-  const live=!!(window.EP&&EP.data.team);
-  const admins=tmAdmins(), trainers=tmTrainers(), founders=tmFounders();
-  // الإضافة/التعديل اليدوي يبقى على المصفوفة التصميمية فقط (لا يوجد POST لأعضاء الفريق الإداري).
-  const teamRows=admins.length?admins.map((x,i)=>`<div class="trow" ${live?'':`data-i="${i}"`} style="display:flex;align-items:center;gap:12px;padding:12px 16px;border-bottom:1px solid var(--line)${live?'':';cursor:pointer'}"><div class="src-ic" style="background:var(--navy);color:#fff">${svg('users')}</div><div style="flex:1"><div style="font-weight:700;font-size:13.5px">${x.name}</div><div style="font-size:11.5px;color:var(--muted)">${x.role}</div></div></div>`).join(''):'<div style="padding:30px;text-align:center;color:var(--muted)">لا أعضاء فريق بعد</div>';
-  const trainerRows=trainers.length?trainers.map(x=>`<div style="display:flex;align-items:center;gap:12px;padding:12px 16px;border-bottom:1px solid var(--line)"><div class="src-ic" style="background:var(--ai-bg);color:var(--ai)">${svg('cap')}</div><div style="flex:1"><div style="font-weight:700;font-size:13.5px">${x.name}</div><div style="font-size:11.5px;color:var(--muted)">${x.spec||'مدرّب معتمد'}</div></div></div>`).join(''):'<div style="padding:30px;text-align:center;color:var(--muted)">لا مدرّبين بعد</div>';
-  v.innerHTML=`
-    ${Tst==='error'&&!live?`<div class="policy" style="border-inline-start-color:var(--conflict);background:var(--conflict-bg);color:var(--conflict)">${svg('scale','ic')}<div>تعذّر جلب الفريق من المنصة — تُعرض بيانات تصميمية. <b style="cursor:pointer;text-decoration:underline" onclick="EP.reload('team',()=>viewTeam(document.getElementById('view')))">إعادة المحاولة</b></div></div>`:''}
-    <div class="kpis">
-      <div class="kpi k-1"><div class="top"><span class="ic">${svg('users')}</span>أعضاء الفريق</div><b>${Tst==='loading'&&!live?'…':money(admins.length)}</b><div class="sub">${live?'من المنصة الحيّة':'أدمن + موظفون'}</div></div>
-      <div class="kpi k-2"><div class="top"><span class="ic">${svg('cap')}</span>مدرّبون معتمدون</div><b>${Tst==='loading'&&!live?'…':money(trainers.length)}</b><div class="sub">عبر التدريب</div></div>
-      <div class="kpi k-3"><div class="top"><span class="ic">${svg('robot')}</span>نموذج التشغيل</div><b>أتمتة + فريق صغير</b><div class="sub">الذكاء ينجز ويصعّد</div></div>
-      <div class="kpi k-4"><div class="top"><span class="ic">${svg('brief')}</span>المؤسسون</div><b>${money(founders)}</b><div class="sub">شركاء</div></div>
+var teamSelEmail=null;
+// عدد المؤسسين — يستخدمه «مرحلة التأسيس» أيضًا (يبقى مشتقًّا من الشركاء).
+function tmFounders(){return (window.EP&&EP.data.partners)?ptPartners().filter(p=>p.name!=='غير موزّع').length:0;}
+// الفريق الإداري من المستخدمين الحقيقيين (أدمن/موظف)؛ وإلا المصفوفة التصميمية (فارغة).
+function teamAdmins(){var us=(window.USERS||[]);if(us.length)return us.filter(u=>u.role==='admin'||u.role==='staff').map(u=>({name:u.name,role:u.role==='admin'?'أدمن':'موظف',email:u.email}));return TEAM_MEMBERS;}
+function focusUser(email){pendingUserFocus=email;go('users');}
+function drawExpert(email){
+  var el=document.getElementById('drawer');if(!el)return;
+  var e=(window.EXPERTS||[]).find(function(x){return x.email===email;});
+  if(!e){el.innerHTML='<div class="empty">'+svg('cap','ic')+'<p>اختر خبيرًا لعرض تفاصيله وحسابه.</p></div>';return;}
+  el.innerHTML=`<div class="dh"><div class="k">خبير · مدرّب معتمد${e.online?' · <span style="color:var(--agree);font-weight:800">متصل الآن</span>':''}</div><h3>${esc(e.name)}</h3></div><div class="db">
+    ${e.bio?`<div class="field"><div class="lab">نبذة</div><div class="val" style="line-height:1.7">${esc(e.bio)}</div></div>`:''}
+    <div class="field"><div class="lab">التخصصات</div><div class="val">${e.expertise.length?e.expertise.map(esc).join('، '):'—'}</div></div>
+    <div class="uedit-grid" style="margin-top:6px">
+      <div><div class="lab">التقييم</div><div class="val">${e.rating_avg!=null?e.rating_avg.toFixed(1)+' <small style="color:var(--muted)">('+money(e.rating_count)+')</small>':'لا تقييم'}</div></div>
+      <div><div class="lab">الإحالات (استشارات)</div><div class="val">${money(e.referral_count||0)}</div></div>
+      <div><div class="lab">الدورات</div><div class="val">${money(e.courses_count||0)}</div></div>
+      <div><div class="lab">الطلاب</div><div class="val">${money(e.students_count||0)}</div></div>
     </div>
-    <div class="inboxwrap" style="grid-template-columns:1fr 1fr">
-      <section class="panel"><div class="ph"><h3>الفريق الإداري</h3>${live?'<span class="hint">من المنصة (قراءة)</span>':'<button class="btn btn-human" id="tmAdd" style="flex:none;min-width:auto;padding:6px 13px;font-size:12px;margin-inline-start:auto">+ عضو</button>'}</div><div id="tmRows">${teamRows}</div></section>
-      <section class="panel"><div class="ph"><h3>المدرّبون المعتمدون</h3><span class="hint">من المستخدمين (قراءة)</span></div><div>${trainerRows}</div></section>
+    <div class="field"><div class="lab">الحالة</div><div class="val">${e.online?'<span style="color:var(--agree);font-weight:800">متصل الآن</span>':'غير متصل'}</div></div>
+    <div class="acts" style="margin-top:10px"><button class="btn btn-primary" id="expAcct">${svg('users')}اعرض الحساب</button></div>
+  </div>`;
+  var b=document.getElementById('expAcct');if(b)b.onclick=function(){focusUser(e.email);};
+}
+function viewTeam(v){
+  if(window.EP){EP.ensure('experts',()=>viewTeam(v));EP.ensure('users',()=>viewTeam(v));EP.ensure('inbox',()=>viewTeam(v));}
+  const Est=(window.EP&&EP.state.experts)||'idle';
+  const experts=(window.EXPERTS||[]);
+  const admins=teamAdmins();
+  const pendingTrainers=((window.EP&&EP.data.inbox)||[]).filter(i=>i.apiKind==='trainer');
+  const online=experts.filter(e=>e.online).length;
+  const withCourses=experts.filter(e=>(e.courses_count||0)>0).length;
+  const topRef=experts.slice().sort((a,b)=>(b.referral_count||0)-(a.referral_count||0))[0];
+  const topRefLbl=(topRef&&(topRef.referral_count||0)>0)?topRef.name:'—';
+  const topRefSub=(topRef&&(topRef.referral_count||0)>0)?(money(topRef.referral_count)+' إحالة'):'لا إحالات بعد';
+  const loadK=Est==='loading'&&!experts.length?'…':undefined;
+  const rowHover='onmouseenter="this.style.background=\'var(--surface-2)\'" onmouseleave="this.style.background=\'\'"';
+  // صفّ خبير (يُستخدم في تبويبَي «الخبراء» و«المدربون»): إحالات/تقييم أو دورات/طلاب.
+  const expRow=(e,metric)=>`<div class="trow exp-row" data-email="${esc(e.email)}" ${rowHover} style="display:flex;align-items:center;gap:12px;padding:12px 16px;border-bottom:1px solid var(--line);cursor:pointer">
+    <div class="src-ic" style="background:var(--ai-bg);color:var(--ai);position:relative">${svg(metric==='courses'?'book':'cap')}${e.online?'<span style="position:absolute;bottom:-2px;inset-inline-start:-2px;width:9px;height:9px;border-radius:50%;background:var(--agree);border:2px solid var(--surface)"></span>':''}</div>
+    <div style="flex:1"><div style="font-weight:700;font-size:13.5px">${esc(e.name)}</div><div style="font-size:11.5px;color:var(--muted)">${e.expertise.length?e.expertise.map(esc).join('، '):'بلا تخصص محدّد'}</div></div>
+    ${metric==='courses'
+      ?`<div style="text-align:center;min-width:64px"><div style="font-weight:800;font-size:13px;color:var(--memory)">${money(e.courses_count||0)}</div><div style="font-size:10.5px;color:var(--muted)">دورات</div></div>
+        <div style="text-align:center;min-width:64px"><div style="font-weight:800;font-size:13px;color:var(--navy)">${money(e.students_count||0)}</div><div style="font-size:10.5px;color:var(--muted)">طلاب</div></div>`
+      :`<div style="text-align:center;min-width:64px"><div style="font-weight:800;font-size:13px;color:var(--gold)">${e.rating_avg!=null?e.rating_avg.toFixed(1):'—'}</div><div style="font-size:10.5px;color:var(--muted)">${e.rating_count?money(e.rating_count)+' تقييم':'تقييم'}</div></div>
+        <div style="text-align:center;min-width:64px"><div style="font-weight:800;font-size:13px;color:var(--human)">${money(e.referral_count||0)}</div><div style="font-size:10.5px;color:var(--muted)">إحالات</div></div>`}
+  </div>`;
+  v.innerHTML=`
+    ${Est==='error'?`<div class="policy" style="border-inline-start-color:var(--conflict);background:var(--conflict-bg);color:var(--conflict)">${svg('scale','ic')}<div>تعذّر جلب الخبراء من المنصة. <b style="cursor:pointer;text-decoration:underline" onclick="EP.reload('experts',()=>viewTeam(document.getElementById('view')))">إعادة المحاولة</b></div></div>`:''}
+    <div class="kpis">
+      <div class="kpi k-1"><div class="top"><span class="ic">${svg('cap')}</span>عدد الخبراء</div><b>${loadK||money(experts.length)}</b><div class="sub">مدرّبون معتمدون (خبراء)</div></div>
+      <div class="kpi k-2"><div class="top"><span class="ic">${svg('shield')}</span>أكثر خبير إحالات</div><b style="font-size:16px">${loadK||esc(topRefLbl)}</b><div class="sub">${topRefSub}</div></div>
+      <div class="kpi k-4"><div class="top"><span class="ic">${svg('book')}</span>مدرّبون بدورات</div><b>${loadK||money(withCourses)}</b><div class="sub">يقدّمون دورات فعلًا</div></div>
+      <div class="kpi k-3"><div class="top"><span class="ic">${svg('trend')}</span>متصلون الآن</div><b>${loadK||money(online)}</b><div class="sub">حاضرون للاستشارة</div></div>
+    </div>
+    <div class="tabbar" id="teamTabs">
+      <div class="tab${teamTab==='experts'?' on':''}" data-t="experts">الخبراء (${money(experts.length)})</div>
+      <div class="tab${teamTab==='trainers'?' on':''}" data-t="trainers">المدربون (${money(experts.length)}${pendingTrainers.length?' · '+money(pendingTrainers.length)+' بانتظار':''})</div>
+      <div class="tab${teamTab==='admins'?' on':''}" data-t="admins">الفريق الإداري (${money(admins.length)})</div>
+    </div>
+    <div class="inboxwrap">
+      <section class="panel"><div class="ph"><h3 id="tmH"></h3><span class="n" id="tmN">0</span><span class="hint" id="tmHint" style="margin-inline-start:auto"></span></div><div id="tmMain">${Est==='loading'&&!experts.length?'<div style="padding:40px;text-align:center;color:var(--muted)">…جارٍ التحميل</div>':''}</div></section>
+      <aside class="drawer" id="drawer"></aside>
     </div>`;
-  if(!live){
+  document.getElementById('teamTabs').querySelectorAll('.tab').forEach(t=>t.onclick=()=>{teamTab=t.dataset.t;teamSelEmail=null;viewTeam(v);});
+  const mh=document.getElementById('tmH'),mm=document.getElementById('tmMain'),mn=document.getElementById('tmN'),hint=document.getElementById('tmHint');
+  if(Est==='loading'&&!experts.length){mh.textContent='الخبراء';return;}
+  if(teamTab==='experts'){
+    mh.textContent='دليل الخبراء';mn.textContent=experts.length;hint.textContent='إحالات وتقييمات — اضغط للتفاصيل';
+    mm.innerHTML=experts.length?experts.map(e=>expRow(e,'refs')).join(''):'<div style="padding:40px;text-align:center;color:var(--muted)">لا خبراء بعد — يظهر الخبير عند اعتماد مدرّب.</div>';
+    mm.querySelectorAll('.exp-row').forEach(r=>r.onclick=()=>{teamSelEmail=r.dataset.email;drawExpert(teamSelEmail);mm.querySelectorAll('.exp-row').forEach(x=>x.classList.toggle('sel',x===r));});
+  } else if(teamTab==='trainers'){
+    mh.textContent='المدربون';mn.textContent=experts.length;hint.textContent='دورات وطلاب + طلبات الانضمام';
+    const pendHtml=pendingTrainers.length?`<div style="padding:9px 16px;background:var(--human-bg);font-size:11.5px;font-weight:800;color:var(--human)">طلبات انضمام كمدرّب (${money(pendingTrainers.length)})</div>`+pendingTrainers.map((i,idx)=>`<div style="display:flex;align-items:center;gap:12px;padding:12px 16px;border-bottom:1px solid var(--line)">
+        <div class="src-ic" style="background:var(--human-bg);color:var(--human)">${svg('cap')}</div>
+        <div style="flex:1"><div style="font-weight:700;font-size:13.5px">${esc(i.who||'—')}</div><div style="font-size:11.5px;color:var(--muted)">${esc(i.note||'طلب انضمام كمدرّب')}</div></div>
+        <div style="display:flex;gap:6px"><button class="btn btn-primary tr-appr" data-idx="${idx}" style="flex:none;min-width:auto;padding:6px 12px;font-size:12px">اعتمد</button><button class="btn btn-warn tr-rej" data-idx="${idx}" style="flex:none;min-width:auto;padding:6px 12px;font-size:12px">رفض</button></div>
+      </div>`).join(''):'';
+    const apprHtml=experts.length?(pendingTrainers.length?'<div style="padding:9px 16px;background:var(--surface-2);font-size:11.5px;font-weight:800;color:var(--muted)">مدرّبون معتمدون</div>':'')+experts.map(e=>expRow(e,'courses')).join(''):(pendingTrainers.length?'':'<div style="padding:40px;text-align:center;color:var(--muted)">لا مدرّبين معتمدين بعد.</div>');
+    mm.innerHTML=pendHtml+apprHtml;
+    mm.querySelectorAll('.exp-row').forEach(r=>r.onclick=()=>{teamSelEmail=r.dataset.email;drawExpert(teamSelEmail);mm.querySelectorAll('.exp-row').forEach(x=>x.classList.toggle('sel',x===r));});
+    mm.querySelectorAll('.tr-appr').forEach(b=>b.onclick=()=>{var i=pendingTrainers[+b.dataset.idx];if(!i||!window.EP)return;if(!confirm('اعتماد «'+(i.who||'')+'» كمدرّب معتمد؟'))return;EP.decideInboxItem(i,'approve',()=>viewTeam(document.getElementById('view')));});
+    mm.querySelectorAll('.tr-rej').forEach(b=>b.onclick=()=>{var i=pendingTrainers[+b.dataset.idx];if(!i||!window.EP)return;if(!confirm('رفض طلب «'+(i.who||'')+'»؟'))return;EP.decideInboxItem(i,'reject',()=>viewTeam(document.getElementById('view')));});
+  } else {
+    mh.textContent='الفريق الإداري';mn.textContent=admins.length;
+    const liveAdmins=(window.USERS||[]).length>0;
+    hint.textContent=liveAdmins?'من المنصة (قراءة)':'';
+    mm.innerHTML=admins.length?admins.map((x,i)=>`<div class="trow adm-row" ${liveAdmins?`data-email="${esc(x.email||'')}"`:`data-i="${i}"`} ${rowHover} style="display:flex;align-items:center;gap:12px;padding:12px 16px;border-bottom:1px solid var(--line)${(liveAdmins&&x.email)||!liveAdmins?';cursor:pointer':''}"><div class="src-ic" style="background:var(--navy);color:#fff">${svg('users')}</div><div style="flex:1"><div style="font-weight:700;font-size:13.5px">${esc(x.name)}</div><div style="font-size:11.5px;color:var(--muted)">${esc(x.role)}${x.email?' · '+esc(x.email):''}</div></div>${(liveAdmins&&x.email)?'<span style="font-size:11.5px;color:var(--ai);font-weight:700">اعرض الحساب ←</span>':''}</div>`).join('')+(liveAdmins?'':'<div style="padding:12px 16px"><button class="btn btn-human" id="tmAdd" style="flex:none;min-width:auto;padding:6px 13px;font-size:12px">+ عضو</button></div>'):(liveAdmins?'<div style="padding:40px;text-align:center;color:var(--muted)">لا أدمن/موظفين بعد.</div>':'<div style="padding:12px 16px"><button class="btn btn-human" id="tmAdd" style="flex:none;min-width:auto;padding:6px 13px;font-size:12px">+ عضو</button></div>');
     var addBtn=document.getElementById('tmAdd');if(addBtn)addBtn.onclick=function(){teamModal(null);};
-    v.querySelectorAll('.trow').forEach(r=>{r.onmouseenter=()=>r.style.background='var(--surface-2)';r.onmouseleave=()=>r.style.background='';r.onclick=()=>teamModal(+r.dataset.i);});
+    if(liveAdmins){mm.querySelectorAll('.adm-row').forEach(r=>r.onclick=()=>{if(r.dataset.email)focusUser(r.dataset.email);});}
+    else{mm.querySelectorAll('.adm-row').forEach(r=>r.onclick=()=>teamModal(+r.dataset.i));}
+    document.getElementById('drawer').innerHTML='<div class="empty">'+svg('users','ic')+'<p>الفريق الإداري (أدمن/موظفون) من المنصة. اضغط عضوًا لعرض حسابه في «المستخدمون».</p></div>';
+    return;
   }
+  drawExpert(teamSelEmail);
 }
 function teamModal(idx){
   var edit=(idx!=null&&idx>=0)?TEAM_MEMBERS[idx]:null,e=edit||{};
