@@ -2,7 +2,7 @@
 ElProfessor Management Dashboard - Backend API
 Flask + SQLAlchemy + SQLite (upgradeable to MySQL/PostgreSQL)
 """
-import os, json, datetime, hashlib, secrets, functools, logging, time
+import os, json, datetime, hashlib, secrets, functools, logging, time, re, html
 from collections import deque
 from flask import Flask, request, jsonify, g, send_from_directory
 from flask_cors import CORS
@@ -379,6 +379,7 @@ class Article(db.Model):
     by = db.Column(db.String(255))          # author byline
     tone = db.Column(db.String(80))
     video = db.Column(db.Text)              # optional video URL
+    image_url = db.Column(db.Text)          # optional external cover image URL (http/https)
     body = db.Column(db.Text)               # JSON-encoded list[str] of paragraphs
     status = db.Column(db.String(20), default='draft')  # draft | published
     published_at = db.Column(db.DateTime, nullable=True)
@@ -4702,6 +4703,13 @@ def ensure_runtime_schema():
                 connection.execute(text("ALTER TABLE users ADD COLUMN linked_to_name VARCHAR(255)"))
             if 'preferred_currency' not in user_columns:
                 connection.execute(text("ALTER TABLE users ADD COLUMN preferred_currency VARCHAR(10) DEFAULT 'AUTO'"))
+        if 'articles' in existing_tables:
+            article_columns = {column['name'] for column in inspector.get_columns('articles')}
+            if 'image_url' not in article_columns:
+                try:
+                    connection.execute(text("ALTER TABLE articles ADD COLUMN image_url TEXT"))
+                except Exception:
+                    pass
         if 'courses' in existing_tables:
             course_columns = {column['name'] for column in inspector.get_columns('courses')}
             if 'lms_instructor_email' not in course_columns:
@@ -4788,6 +4796,7 @@ def serialize_article(article):
         'by': article.by or '',
         'tone': article.tone or None,
         'video': article.video or None,
+        'image_url': article.image_url or None,
         'body': _article_body_list(article),
         'status': article.status or 'draft',
         'published_at': article.published_at.isoformat() if article.published_at else None,
@@ -4799,6 +4808,13 @@ def _apply_article_fields(article, d):
     for key in ('excerpt', 'cat', 'kicker', 'date', 'by', 'tone', 'video'):
         if key in d:
             setattr(article, key, d.get(key))
+    if 'image_url' in d:
+        url = (d.get('image_url') or '').strip()
+        if not url:
+            article.image_url = None
+        elif len(url) <= 2000 and re.match(r'^https?://', url, re.IGNORECASE):
+            article.image_url = url
+        # else: silently ignore an invalid/oversized URL (keep existing value)
     if 'body' in d:
         body = d.get('body')
         if isinstance(body, str):
@@ -4839,11 +4855,13 @@ def _ar_date_from(ts):
 
 
 def _strip_inline_md(s):
-    import re
     s = re.sub(r'\*\*(.+?)\*\*', r'\1', s)
     s = re.sub(r'__(.+?)__', r'\1', s)
     s = re.sub(r'\*(.+?)\*', r'\1', s)
     s = re.sub(r'`(.+?)`', r'\1', s)
+    # Neutralize any HTML the LLM emitted so <script>/<img onerror=…> can never
+    # reach the marketing site (these blocks are rendered as raw HTML there).
+    s = html.escape(s)
     return s.strip()
 
 
@@ -4897,7 +4915,9 @@ def _sync_platform_articles():
             continue
         cat = a.get('category') or 'other'
         is_feature = (cat == 'feature')
-        is_published = is_feature or (a.get('status') == 'published')  # honor platform status as a floor
+        # Land ALL auto-generated articles as DRAFT pending human review — never
+        # auto-publish LLM output (even 'feature' explainers) to the live site.
+        is_published = (a.get('status') == 'published')
         art = Article(
             title=title[:500],
             excerpt=(a.get('excerpt') or '')[:1000],
@@ -4943,13 +4963,10 @@ def content_sync_cron():
 
 @app.route('/api/content/articles', methods=['GET'])
 def public_articles_feed():
-    """PUBLIC: published articles feed for the marketing site. No auth, no cache."""
-    status = (request.args.get('status') or 'published').strip().lower()
-    query = Article.query
-    if status == 'published':
-        query = query.filter_by(status='published')
-    elif status:
-        query = query.filter_by(status=status)
+    """PUBLIC: published articles feed for the marketing site. No auth, no cache.
+    Hard-pinned to published — an arbitrary ?status param must NOT leak drafts.
+    Admins read every status via the gated /api/content/articles/all."""
+    query = Article.query.filter_by(status='published')
     items = query.order_by(
         Article.published_at.desc().nullslast(),
         Article.created_at.desc(),

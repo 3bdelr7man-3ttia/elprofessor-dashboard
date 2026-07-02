@@ -226,7 +226,6 @@
             title: a.title || "بلا عنوان",
             by: a.by || "الإدارة",
             status: a.status === "published" ? "published" : "pending",
-            views: 0,
             date: a.date || arDate(a.published_at),
             cat: a.cat || "قانوني",
             kicker: a.kicker || "مقال",
@@ -1028,7 +1027,7 @@
 
   // المحتوى: إنشاء/نشر/تعديل
   EP.createArticle = function (g, publish, after) {
-    post("/content/articles", { title: g.t, cat: g.cat, kicker: g.k, excerpt: g.ex, by: g.by })
+    post("/content/articles", { title: g.t, cat: g.cat, kicker: g.k, excerpt: g.ex, by: g.by, body: g.body, image_url: g.img })
       .then(function (a) {
         if (publish && a && a.id) return post("/content/articles/" + a.id + "/publish", {});
         return a;
@@ -1037,7 +1036,7 @@
       .catch(function (e) { quietToast((e && e.message) || "تعذّر حفظ المقال"); if (after) after(); });
   };
   EP.updateArticle = function (t, g, after) {
-    api("/content/articles/" + t.aid, { method: "PUT", body: { title: g.t, cat: g.cat, kicker: g.k, excerpt: g.ex, by: g.by } })
+    api("/content/articles/" + t.aid, { method: "PUT", body: { title: g.t, cat: g.cat, kicker: g.k, excerpt: g.ex, by: g.by, body: g.body, image_url: g.img } })
       .then(function () { note("حُدّث «" + g.t + "»"); EP.reload("content", after); })
       .catch(function (e) { quietToast((e && e.message) || "تعذّر التحديث"); if (after) after(); });
   };
@@ -1050,6 +1049,11 @@
     api("/content/articles/" + t.aid, { method: "PUT", body: { status: "draft" } })
       .then(function () { note("أُلغي نشر «" + t.title + "»"); EP.reload("content", after); })
       .catch(function (e) { quietToast((e && e.message) || "تعذّر إلغاء النشر"); if (after) after(); });
+  };
+  EP.rejectArticle = function (t, after) {
+    api("/content/articles/" + t.aid, { method: "DELETE" })
+      .then(function () { note("رُفض المقال «" + t.title + "» وحُذف"); EP.reload("content", after); })
+      .catch(function (e) { quietToast((e && e.message) || "تعذّر رفض المقال"); if (after) after(); });
   };
 
   // الدليل: إنشاء/تعديل/حذف قسم — تمرّ عبر الـ proxy السرّي (لا سرّ في المتصفح).

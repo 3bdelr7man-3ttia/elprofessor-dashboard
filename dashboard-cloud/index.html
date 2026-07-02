@@ -1759,7 +1759,7 @@ function viewContent(v){
   // تبويبات الأخبار/الصور/الصفحات معطّلة (لا واجهة خلفية) — اقتصر على المقالات.
   if(contentTab!=='pending'&&contentTab!=='published')contentTab='pending';
   const Cst=(window.EP&&EP.state.content)||'idle';
-  const pend=TOPICS.filter(t=>t.status==='pending').length,pub=TOPICS.filter(t=>t.status==='published').length,views=TOPICS.reduce((s,t)=>s+t.views,0);
+  const pend=TOPICS.filter(t=>t.status==='pending').length,pub=TOPICS.filter(t=>t.status==='published').length;
   v.innerHTML=`
     <div class="policy" style="border-inline-start-color:var(--memory)">${svg('doc','ic')}<div><b>تدفّق المدونة:</b> موضوع (ذكاء + خبير) ← صياغة مقال ← <b>اعتماد إداري</b> ← نشر تلقائي على <span style="direction:ltr">elprofessor.net</span>.</div></div>
     <div class="policy" style="border-inline-start-color:var(--agree);background:var(--agree-bg)">${svg('check','ic')}<div><b>متصل بالموقع:</b> ما يُعتمد هنا يُنشر مباشرة على <span style="direction:ltr">elprofessor.net</span> من <b>مصدر محتوى واحد</b> — لا إدخال مكرّر. <b>${pub}</b> مقالات منشورة الآن على الموقع.</div></div>
@@ -1768,7 +1768,6 @@ function viewContent(v){
     <div class="kpis">
       <div class="kpi k-2"><div class="top"><span class="ic">${svg('doc')}</span>بانتظار الاعتماد</div><b>${money(pend)}</b><div class="sub">مقالات جاهزة</div></div>
       <div class="kpi k-3"><div class="top"><span class="ic">${svg('check')}</span>منشورة</div><b>${money(pub)}</b><div class="sub">على الموقع</div></div>
-      <div class="kpi k-1"><div class="top"><span class="ic">${svg('users')}</span>إجمالي المشاهدات</div><b>${money(views)}</b><div class="sub">هذا الشهر</div></div>
       <div class="kpi k-4"><div class="top"><span class="ic">${svg('robot')}</span>مصدر المحتوى</div><b>ذكاء + خبير</b><div class="sub">تلقائي</div></div>
     </div>
     <div class="tabbar" id="ctTabs">
@@ -1795,7 +1794,7 @@ function renderContent(){
   document.getElementById('ctN').textContent=items.length;
   items.forEach(({t,idx})=>el.insertAdjacentHTML('beforeend',`<div class="row esc-row${selected===idx?' sel':''}" data-i="${idx}" style="grid-template-columns:1.9fr 1fr 130px">
     <div class="c c1"><div class="src-ic" style="background:var(--memory-bg);color:var(--memory)">${svg('doc')}</div><div><div class="parties">${t.title}</div><div class="from">${t.by} · ${t.date}</div></div></div>
-    <div class="c"><div class="from">${t.status==='published'?'<b style="color:var(--ink)">'+money(t.views)+'</b> مشاهدة':'مقال جاهز'}</div></div>
+    <div class="c"><div class="from">${t.status==='published'?'منشور على الموقع':'مقال جاهز'}</div></div>
     <div class="c"><span class="status ${t.status==='published'?'s-auto':'s-wait'}"><span class="d"></span>${t.status==='published'?'منشور':'بانتظار'}</span></div></div>`));
   if(!items.length)el.innerHTML='<div style="padding:40px;text-align:center;color:var(--muted)">لا مقالات في هذا التبويب.</div>';
   el.querySelectorAll('.row').forEach(r=>r.onclick=()=>{selected=+r.dataset.i;renderContent();drawContent();});
@@ -1818,7 +1817,7 @@ function drawContent(){
     <div class="lab" style="margin:10px 0 4px">نص المقال</div>
     <div style="background:var(--surface-2,#f7f7f9);border:1px solid var(--line,#e6e6ee);border-radius:10px;padding:12px 14px;max-height:300px;overflow:auto;margin-bottom:10px">${_bodyHtml}</div>
     <div class="field"><div class="lab">الحالة</div><div class="val"><span class="status ${pub?'s-auto':'s-wait'}"><span class="d"></span>${pub?'منشور على الموقع':'بانتظار الاعتماد'}</span></div></div>
-    ${pub?`<div class="field"><div class="lab">المشاهدات</div><div class="val">${money(t.views)}</div></div><div class="acts"><button class="btn btn-ghost" data-a="site">عرض على الموقع</button><button class="btn btn-ghost" data-a="unpub">إلغاء النشر</button></div>`
+    ${pub?`<div class="acts"><button class="btn btn-ghost" data-a="site">عرض على الموقع</button><button class="btn btn-ghost" data-a="unpub">إلغاء النشر</button></div>`
       :`<div class="acts"><button class="btn btn-primary" data-a="pub">${svg('check')}اعتمد وانشر على الموقع</button><button class="btn btn-ghost" data-a="edit">تعديل</button><button class="btn btn-warn" data-a="reject">رفض</button></div>`}
     </div>`;
   el.querySelectorAll('[data-a]').forEach(b=>b.onclick=()=>{const a=b.dataset.a;
@@ -1829,7 +1828,10 @@ function drawContent(){
     else if(a==='unpub'){
       if(window.EP&&EP.data.content&&t.aid){EP.unpublishArticle(t,()=>{selected=null;viewContent(document.getElementById('view'));});return;}
       t.status='pending';selected=null;viewContent(document.getElementById('view'));notify('أُلغي نشر «'+t.title+'»');}
-    else if(a==='reject'){toast('تم رفض المقال');}
+    else if(a==='reject'){
+      if(!confirm('رفض هذا المقال وحذفه نهائيًّا؟'))return;
+      if(window.EP&&EP.data.content&&t.aid){EP.rejectArticle(t,()=>{selected=null;viewContent(document.getElementById('view'));});return;}
+      var _i=TOPICS.indexOf(t);if(_i>-1)TOPICS.splice(_i,1);selected=null;viewContent(document.getElementById('view'));notify('رُفض المقال «'+t.title+'»');}
     else toast('فتح المقال على الموقع');});
 }
 
@@ -1859,16 +1861,20 @@ function renderContentOther(el,h){
 }
 function createArticleModal(edit){
   var e=edit||{};
+  // نص المقال والصورة يأتيان من التغذية الخام (raw) لأن كائن TOPICS لا يحملهما
+  var _raw=(edit&&window.EP&&EP.data.content&&EP.data.content.raw||[]).filter(function(a){return a.id===edit.aid;})[0]||{};
+  var _bodyText=Array.isArray(_raw.body)?_raw.body.join('\n\n'):'';
+  var _imgUrl=_raw.image_url||'';
   var s=openModal(edit?'تعديل مقال':'إنشاء مقال للموقع',
     '<div class="fld"><label>العنوان</label><input id="a_t" value="'+(e.title||'')+'" placeholder="عنوان المقال"></div>'+
     '<div class="row2"><div class="fld"><label>التصنيف</label><input id="a_cat" value="'+(e.cat||'')+'" placeholder="قانون الشركات"></div><div class="fld"><label>الوسم</label><input id="a_k" value="'+(e.kicker||'')+'" placeholder="تشريعات"></div></div>'+
     '<div class="fld"><label>المقتطف</label><textarea id="a_ex" placeholder="ملخص قصير يظهر في بطاقة المدونة">'+(e.excerpt||'')+'</textarea></div>'+
+    '<div class="fld"><label>نص المقال</label><textarea id="a_body" style="min-height:160px" placeholder="افصل بين الفقرات بسطر فارغ">'+topEsc(_bodyText)+'</textarea></div>'+
     '<div class="fld"><label>المصدر</label><input id="a_by" value="'+(e.by||'الذكاء + رأي خبير')+'"></div>'+
-    '<div class="fld"><label>صورة المقال</label><div id="a_img" style="border:1.5px dashed var(--line);border-radius:10px;padding:16px;text-align:center;color:var(--muted);font-size:12.5px;cursor:pointer">'+svg('inbox','ic')+' اسحب صورة أو اضغط — تُنشر على الموقع</div></div>'+
+    '<div class="fld"><label>صورة المقال</label><input id="a_imgurl" value="'+topEsc(_imgUrl)+'" placeholder="رابط صورة المقال (https://...)" style="direction:ltr;text-align:left"></div>'+
     '<div class="acts" style="margin-top:6px"><button class="btn btn-primary" id="a_save">'+svg('check')+(edit?'حفظ':'أنشئ كمسودّة')+'</button>'+(edit?'':'<button class="btn btn-human" id="a_pub">أنشئ وانشر فورًا</button>')+'<button class="btn btn-ghost" id="a_x">إلغاء</button></div>');
-  s.querySelector('#a_img').onclick=function(){toast('تم اختيار الصورة (محاكاة)');};
   s.querySelector('#a_x').onclick=closeModal;
-  function gather(){return {t:s.querySelector('#a_t').value.trim()||'مقال بلا عنوان',cat:s.querySelector('#a_cat').value.trim()||'قانوني',k:s.querySelector('#a_k').value.trim()||'مقال',ex:s.querySelector('#a_ex').value.trim(),by:s.querySelector('#a_by').value.trim()||'الإدارة'};}
+  function gather(){return {t:s.querySelector('#a_t').value.trim()||'مقال بلا عنوان',cat:s.querySelector('#a_cat').value.trim()||'قانوني',k:s.querySelector('#a_k').value.trim()||'مقال',ex:s.querySelector('#a_ex').value.trim(),by:s.querySelector('#a_by').value.trim()||'الإدارة',body:s.querySelector('#a_body').value.trim(),img:s.querySelector('#a_imgurl').value.trim()};}
   s.querySelector('#a_save').onclick=function(){var g=gather();
     if(window.EP&&EP.data.content&&!edit){EP.createArticle(g,false,function(){closeModal();viewContent(document.getElementById('view'));});return;}
     if(window.EP&&EP.data.content&&edit&&edit.aid){EP.updateArticle(edit,g,function(){closeModal();viewContent(document.getElementById('view'));});return;}
@@ -1884,9 +1890,9 @@ function editNewsModal(edit){
 }
 function createNewsModal(){editNewsModal(null);}
 function uploadMediaModal(){
-  var s=openModal('رفع صورة للموقع','<div class="row2"><div class="fld"><label>اسم الملف</label><input id="md_n" placeholder="hero.jpg"></div><div class="fld"><label>الوسم</label><input id="md_t" placeholder="هيرو / مدونة"></div></div><div class="fld"><div style="border:1.5px dashed var(--line);border-radius:10px;padding:22px;text-align:center;color:var(--muted);font-size:13px">'+svg('inbox','ic')+' اسحب الصورة هنا أو اضغط</div></div><div class="acts"><button class="btn btn-primary" id="md_s">'+svg('check')+'رفع للمكتبة</button><button class="btn btn-ghost" id="md_x">إلغاء</button></div>');
+  // لا يوجد تخزين ملفات بعد — لا نُنشئ سجلّات صور وهمية. أضِف رابط صورة خارجيًّا من محرّر المقال.
+  var s=openModal('رفع صور الموقع','<div class="policy" style="border-inline-start-color:var(--memory)">'+svg('inbox','ic')+'<div><b>قريبًا:</b> رفع الصور للمكتبة يحتاج تخزين ملفات لم يُفعَّل بعد. في الوقت الحالي أضِف <b>رابط صورة خارجي</b> (https://...) من داخل محرّر المقال في خانة «صورة المقال».</div></div><div class="acts"><button class="btn btn-ghost" id="md_x">حسنًا</button></div>');
   s.querySelector('#md_x').onclick=closeModal;
-  s.querySelector('#md_s').onclick=function(){var nm=s.querySelector('#md_n').value.trim()||'image.jpg';MEDIA.unshift({name:nm,tag:s.querySelector('#md_t').value.trim()||'عام',size:'٢٠٠ ك.ب'});closeModal();viewContent(document.getElementById('view'));notify('رُفعت «'+nm+'» لمكتبة صور الموقع');};
 }
 function editPageModal(p){
   var s=openModal('تعديل صفحة — '+p.name,'<div class="fld"><label>عنوان الصفحة</label><input id="pg_t" value="'+p.name+'"></div><div class="fld"><label>المحتوى</label><textarea id="pg_b" style="min-height:120px">قسم تعريفي عن '+p.name+' على موقع البروفيسور.</textarea></div><div class="acts"><button class="btn btn-primary" id="pg_s">'+svg('check')+'حفظ وانشر على الموقع</button><button class="btn btn-ghost" id="pg_x">إلغاء</button></div>');
