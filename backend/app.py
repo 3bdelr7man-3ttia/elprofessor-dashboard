@@ -1184,6 +1184,20 @@ def platform_chat_insights():
         return jsonify({'error': 'تعذر جلب التحليل'}), 502
     return jsonify(r.json() if r.content else {})
 
+@app.route('/api/platform-chat-insights/classify', methods=['POST'])
+@token_required
+@roles_required('admin', 'employee')
+def platform_chat_insights_classify():
+    """Trigger the platform's AI demand-classifier over un-classified chat_insights docs
+    (idempotent — only touches docs missing a category). Powers the «حدّث التصنيف» button
+    in «تحليل الطلب» and the n8n daily schedule. Returns {classified, remaining} (never 5xx)."""
+    try:
+        limit = int(request.args.get('limit') or 50)
+    except (TypeError, ValueError):
+        limit = 50
+    limit = max(1, min(200, limit))
+    return _platform_proxy('POST', '/api/bridge/chat-insights/classify', params={'limit': limit})
+
 @app.route('/api/platform-users/<user_id>/role', methods=['POST'])
 @token_required
 @roles_required('admin')
@@ -1359,6 +1373,16 @@ def platform_program_requests():
     )
 
 
+@app.route('/api/platform-program-requests/stats', methods=['GET'])
+@token_required
+@roles_required('admin', 'employee')
+def platform_program_requests_stats():
+    """Aggregated course-demand for the D4 «أكثر الدورات طلبًا» panel:
+    {stats:[{title,count}], count}. (`/stats` is a static segment so it never collides
+    with the two-segment `/<request_id>/<action>` decide route below.)"""
+    return _platform_proxy('GET', '/api/bridge/program-requests/stats')
+
+
 @app.route('/api/platform-program-requests/<request_id>/<action>', methods=['POST'])
 @token_required
 @roles_required('admin', 'employee')
@@ -1509,7 +1533,8 @@ def platform_course_detail(course_id):
 @token_required
 @roles_required('admin', 'employee')
 def platform_course_add_video(course_id):
-    """Add an episode (Drive/YouTube link) to a native course."""
+    """Add an episode (Drive/YouTube link) to a native course, optionally inside a
+    curriculum section (section_title/section_order group the lecture in the tree)."""
     body = request.json or {}
     json_body = {
         'title': (body.get('title') or '').strip(),
@@ -1517,6 +1542,13 @@ def platform_course_add_video(course_id):
         'youtube_url': (body.get('youtube_url') or '').strip(),
         'is_preview': bool(body.get('is_preview')),
     }
+    if isinstance(body.get('section_title'), str):
+        json_body['section_title'] = body.get('section_title').strip()
+    if body.get('section_order') is not None:
+        try:
+            json_body['section_order'] = int(body.get('section_order'))
+        except (TypeError, ValueError):
+            pass
     if body.get('duration_seconds') is not None:
         try:
             json_body['duration_seconds'] = int(body.get('duration_seconds'))
@@ -1530,6 +1562,46 @@ def platform_course_add_video(course_id):
 @roles_required('admin', 'employee')
 def platform_course_delete_video(course_id, video_id):
     return _platform_proxy('DELETE', f"/api/bridge/courses/{course_id}/videos/{video_id}")
+
+
+@app.route('/api/platform-courses/<course_id>/sections', methods=['POST'])
+@token_required
+@roles_required('admin', 'employee')
+def platform_course_add_section(course_id):
+    """Create/rename/assign a curriculum section (groups lectures) on a native course.
+    from_title → rename+reorder that section; video_ids → stamp section onto those lectures;
+    neither → a logical placeholder that materializes when a lecture is added with this title."""
+    body = request.json or {}
+    json_body = {'title': (body.get('title') or '').strip()}
+    if not json_body['title']:
+        return jsonify({'error': 'عنوان القسم مطلوب'}), 400
+    try:
+        json_body['order'] = int(body.get('order') or 0)
+    except (TypeError, ValueError):
+        json_body['order'] = 0
+    if isinstance(body.get('from_title'), str):
+        json_body['from_title'] = body.get('from_title')
+    if isinstance(body.get('video_ids'), list):
+        json_body['video_ids'] = [str(x) for x in body.get('video_ids')]
+    return _platform_proxy('POST', f"/api/bridge/courses/{course_id}/sections", json_body=json_body)
+
+
+@app.route('/api/platform-courses/<course_id>/lessons/<lesson_id>/questions', methods=['POST'])
+@token_required
+@roles_required('admin', 'employee')
+def platform_course_lesson_questions(course_id, lesson_id):
+    """Add/replace the quiz of a Titch curriculum lesson («علّمني»). Body:
+    {questions:[{question,options,answer_index}], mode:'replace'|'append'}."""
+    body = request.json or {}
+    questions = body.get('questions')
+    if not isinstance(questions, list) or not questions:
+        return jsonify({'error': 'الأسئلة مطلوبة'}), 400
+    mode = body.get('mode') if body.get('mode') in ('replace', 'append') else 'replace'
+    return _platform_proxy(
+        'POST',
+        f"/api/bridge/courses/{course_id}/lessons/{lesson_id}/questions",
+        json_body={'questions': questions, 'mode': mode},
+    )
 
 
 @app.route('/api/platform-schedules', methods=['GET'])

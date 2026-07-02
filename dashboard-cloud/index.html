@@ -94,6 +94,12 @@ body{font-family:'IBM Plex Sans Arabic',sans-serif;background:var(--bg);color:va
 /* inbox / tables */
 .inboxwrap{display:grid;grid-template-columns:1fr 332px;gap:16px;align-items:start}
 @media(max-width:1180px){.inboxwrap{grid-template-columns:1fr}}
+.an-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;align-items:start;margin-bottom:16px}
+@media(max-width:1180px){.an-grid{grid-template-columns:1fr}}
+.an-sel{font:inherit;font-size:12px;font-weight:700;border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:5px 11px;color:var(--ink-2);cursor:pointer}
+.an-bar{margin:9px 0}
+.an-bar.clk{cursor:pointer;border-radius:7px;padding:2px 4px;margin-inline:-4px;transition:background .12s}
+.an-bar.clk:hover{background:var(--surface-2)}
 .panel{background:var(--surface);border:1px solid var(--line);border-radius:14px;overflow:hidden}
 .panel .ph{display:flex;align-items:center;gap:10px;padding:13px 18px;border-bottom:1px solid var(--line);background:var(--surface-2)}
 .panel .ph h3{font-family:Cairo;font-size:14.5px;font-weight:800;color:var(--navy)}
@@ -383,7 +389,7 @@ function renderNav(){
   }
   document.querySelectorAll('.nav .item').forEach(it=>it.onclick=()=>go(it.dataset.mod));
 }
-function go(mod){current=mod;selected=null;activeFilter='all';escTab='sessions';finTab='summary';usersFilter='all';courseTab='platform';invTab='investors';mktTab='campaigns';contentTab='pending';
+function go(mod){current=mod;selected=null;activeFilter='all';escTab='sessions';finTab='summary';usersFilter='all';courseTab='platform';invTab='investors';mktTab='campaigns';contentTab='pending';anFilters={seg:'all',country:'all',cat:'all',ne:'all',time:'all'};
   document.getElementById('pageTitle').textContent=MODULES[mod].label;
   document.querySelectorAll('.nav .item').forEach(x=>x.classList.toggle('on',x.dataset.mod===mod));
   renderView();
@@ -817,20 +823,51 @@ var USERS=[
 ];
 const VERIFY={verified:{t:'موثّق',cls:'s-auto'},pending:{t:'بانتظار توثيق',cls:'s-wait'},none:{t:'غير موثّق',cls:''}};
 
-// قسم تحليل الطلب — مين بيسأل عن إيه (من الشات)، نسبة محتاجي الخبير، التحويل للدفع.
+// قسم تحليل الطلب — مين بيسأل عن إيه (من الشات)، من أي دولة، تصنيف الذكاء، والخدمات المطلوبة اللي مش مقدّمينها.
 const SEG_LABEL={individual:'أفراد',employee:'موظفون',government:'حكومي',student:'طلاب',lawyer:'محامون',senior:'محامٍ خبير',prof:'أستاذ جامعة',trainer:'مدرّبون',company:'شركات',firm:'شركة محاماة',grad:'خريج جديد',influencer:'مؤثر/رائد أعمال',researcher:'باحثون',prosecutor:'وكلاء نيابة',unknown:'غير محدد'};
+const COUNTRY_LABEL={egypt:'مصر',saudi:'السعودية',uae:'الإمارات',qatar:'قطر',other:'دول أخرى',unknown:'غير محدد'};
+// حالة تصفية «تحليل الطلب» — تصفّي قائمة «أحدث الأسئلة» (لكل صفّ حقوله من الجسر). اللوحات
+// المجمّعة تظل على كامل البيانات (مبيّن في تلميحها) لأن التجميع يتم في المنصة على كل الأرشيف.
+var anFilters={seg:'all',country:'all',cat:'all',ne:'all',time:'all'};
 function viewAnalysis(v){
   if(window.EP){EP.ensure('analysis',()=>viewAnalysis(v));}
   const st=(window.EP&&EP.state.analysis)||'idle';
   const d=(window.EP&&EP.data.analysis)||{};
   const esc=s=>String(s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+  const arr=x=>Array.isArray(x)?x:[];
   const total=d.total||0, ne=d.needs_expert||0, ner=Math.round((d.needs_expert_rate||0)*100);
   const anon=d.anonymous||0, authed=d.authed||0;
-  const seg=Array.isArray(d.by_segment)?d.by_segment:[];
+  const seg=arr(d.by_segment), country=arr(d.by_country), cat=arr(d.by_category), sub=arr(d.by_subcategory), intent=arr(d.by_intent), unmet=arr(d.unmet);
   const eo=d.expert_opinions||{requested:0,paid:0,conversion_rate:0};
   const eoPct=Math.round((eo.conversion_rate||0)*100);
-  const recent=Array.isArray(d.recent_questions)?d.recent_questions:[];
-  const segMax=Math.max(1,...seg.map(s=>s.count||0));
+  const recent=arr(d.recent_questions);
+  const classified=d.classified||0, unclassified=d.unclassified||0;
+  const activeCountries=country.filter(c=>c.country&&c.country!=='unknown'&&(c.count||0)>0).length;
+  const loading='<div style="padding:30px;text-align:center;color:var(--muted)">…جارٍ التحميل</div>';
+  // بار مجمّع (اختياريًّا قابل للتنقيب: الضغط يصفّي «أحدث الأسئلة» على قيمته).
+  const anBars=(items,keyField,labelFn,accent,drillKey)=>{
+    if(!items.length)return '<div class="empty">لا بيانات بعد.</div>';
+    const max=Math.max(1,...items.map(x=>x.count||0));
+    return items.map(x=>{const val=x[keyField];const w=Math.round(((x.count||0)/max)*100);
+      const da=drillKey?`class="an-bar clk" data-drill="${drillKey}" data-val="${esc(String(val==null?'':val))}"`:'class="an-bar"';
+      return `<div ${da}><div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:4px"><span style="font-weight:700">${esc(labelFn(val))}</span><span style="color:var(--muted)">${money(x.count||0)}</span></div><div style="height:9px;border-radius:6px;background:var(--surface-2)"><div style="height:100%;width:${w}%;border-radius:6px;background:${accent}"></div></div></div>`;}).join('');
+  };
+  const anWithin=(iso,days)=>{if(!iso)return false;const t=Date.parse(iso);return !isNaN(t)&&(Date.now()-t)<=days*86400000;};
+  // تصفية «أحدث الأسئلة» فقط (لكل صفّ حقوله من الجسر) — اللوحات المجمّعة تبقى على كامل الأرشيف.
+  const fq=recent.filter(r=>{
+    if(anFilters.seg!=='all'&&(r.segment||'')!==anFilters.seg)return false;
+    if(anFilters.country!=='all'&&(r.country||'unknown')!==anFilters.country)return false;
+    if(anFilters.cat!=='all'&&(r.category||'')!==anFilters.cat)return false;
+    if(anFilters.ne==='yes'&&!r.needs_expert)return false;
+    if(anFilters.ne==='no'&&r.needs_expert)return false;
+    if(anFilters.time!=='all'&&!anWithin(r.created_at,anFilters.time==='7'?7:30))return false;
+    return true;
+  });
+  const anyFilter=['seg','country','cat','ne','time'].some(k=>anFilters[k]!=='all');
+  const chip=(dim,val,label)=>`<div class="chip${anFilters[dim]===val?' on':''}" data-dim="${dim}" data-val="${val}">${label}</div>`;
+  const sel=(dim,allLabel,items,valField,labelFn)=>`<select class="an-sel" data-dim="${dim}"><option value="all">${allLabel}</option>${items.map(x=>{const vv=String(x[valField]);return `<option value="${esc(vv)}"${anFilters[dim]===vv?' selected':''}>${esc(labelFn(x[valField]))}</option>`;}).join('')}</select>`;
+  const emptyClassify=`<div class="empty">${unclassified?'لسه مفيش تصنيف بالذكاء — اضغط «حدّث التصنيف» فوق.':'لا بيانات بعد.'}</div>`;
+  const subHtml=sub.length?`<div style="margin-top:12px;padding-top:10px;border-top:1px dashed var(--line)"><div style="font-size:11px;font-weight:800;color:var(--muted);margin-bottom:7px">أكثر الفئات الفرعية</div><div style="display:flex;flex-wrap:wrap;gap:6px">${sub.slice(0,10).map(x=>`<span class="chip" style="cursor:default">${esc(x.subcategory||'—')} <b style="color:var(--navy)">${money(x.count||0)}</b></span>`).join('')}</div></div>`:'';
   v.innerHTML=`
     ${st==='error'?`<div class="policy" style="border-inline-start-color:var(--conflict);background:var(--conflict-bg);color:var(--conflict)">${svg('scale','ic')}<div>تعذّر جلب التحليل من المنصة — تأكد من ضبط الربط (METRICS_SECRET). <b style="cursor:pointer;text-decoration:underline" onclick="EP.reload('analysis',()=>viewAnalysis(document.getElementById('view')))">إعادة المحاولة</b></div></div>`:''}
     <div class="kpis">
@@ -838,15 +875,46 @@ function viewAnalysis(v){
       <div class="kpi k-2"><div class="top"><span class="ic">${svg('shield')}</span>محتاجين رأي خبير</div><b>${money(ne)} <small style="font-size:13px">${ner}%</small></b><div class="sub">وصلوا لموقف يستاهل خبير</div></div>
       <div class="kpi k-3"><div class="top"><span class="ic">${svg('users')}</span>مسجّلون / زوّار</div><b>${money(authed)} <small style="font-size:13px">/ ${money(anon)}</small></b><div class="sub">حساب مقابل مجهول</div></div>
       <div class="kpi k-4"><div class="top"><span class="ic">${svg('wallet')}</span>تحويل «رأي خبير»</div><b>${money(eo.paid)}<small style="font-size:13px">/${money(eo.requested)}</small> <small style="font-size:13px">${eoPct}%</small></b><div class="sub">دفعوا مقابل طلبوا</div></div>
+      <div class="kpi k-1"><div class="top"><span class="ic">${svg('scale')}</span>دول نشطة</div><b>${st==='loading'?'…':money(activeCountries)}</b><div class="sub">بلاد بتسأل فعليًّا</div></div>
     </div>
-    <div class="inboxwrap">
-      <section class="panel"><div class="ph"><h3>الطلب حسب الشريحة</h3><span class="n">${seg.length}</span><span class="hint">مين بيسأل أكتر — نبني الخدمات على ده</span></div>
-        <div style="padding:14px 16px">${st==='loading'?'<div style="padding:30px;text-align:center;color:var(--muted)">…جارٍ التحميل</div>':(seg.length?seg.map(s=>{const w=Math.round((s.count/segMax)*100);return `<div style="margin:9px 0"><div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:4px"><span style="font-weight:700">${SEG_LABEL[s.segment]||s.segment}</span><span style="color:var(--muted)">${money(s.count)}</span></div><div style="height:9px;border-radius:6px;background:var(--surface-2)"><div style="height:100%;width:${w}%;border-radius:6px;background:var(--gold)"></div></div></div>`;}).join(''):'<div class="empty">لا بيانات بعد — أول ما الناس تسأل في الشات هتظهر هنا.</div>')}</div>
-      </section>
-      <section class="panel"><div class="ph"><h3>أحدث الأسئلة</h3><span class="n">${recent.length}</span><span class="hint">حيّة من الشات</span></div>
-        <div style="max-height:520px;overflow:auto">${recent.length?recent.map(r=>`<div style="padding:11px 16px;border-bottom:1px solid var(--border)"><div style="font-size:13.5px;color:var(--ink);line-height:1.5">${esc(r.question)}</div><div style="margin-top:5px;font-size:11.5px;color:var(--muted)">${SEG_LABEL[r.segment]||r.segment||'—'}${r.needs_expert?' · <span style="color:var(--human)">يحتاج خبير</span>':''}</div></div>`).join(''):'<div class="empty">لا أسئلة بعد.</div>'}</div>
-      </section>
-    </div>`;
+    ${st==='loading'?'':`<div class="policy" style="align-items:center;border-inline-start-color:var(--gold)">${svg('sparkles','ic')}<div style="flex:1"><b>التصنيف بالذكاء:</b> مصنّف ${money(classified)} سؤال · غير مصنّف ${money(unclassified)}. ${unclassified?'شغّل التصنيف عشان الفئات والنية والخدمات الناقصة تتحدّث.':'كل الأسئلة متصنّفة.'}</div><button class="btn btn-primary" id="anClassify" style="flex:none;min-width:auto;padding:7px 13px;font-size:12px">${svg('sparkles')}حدّث التصنيف</button></div>`}
+    <div class="filterbar" id="anFilterbar"><span class="lbl">تصفية أحدث الأسئلة:</span>
+      ${sel('seg','كل الشرائح',seg,'segment',x=>SEG_LABEL[x]||x)}
+      ${sel('country','كل الدول',country,'country',x=>COUNTRY_LABEL[x]||x)}
+      ${cat.length?sel('cat','كل الفئات',cat,'category',x=>x):''}
+      ${chip('ne','all','الكل')}${chip('ne','yes','محتاجين خبير')}${chip('ne','no','مش محتاجين')}
+      ${chip('time','all','كل الوقت')}${chip('time','7','آخر ٧ أيام')}${chip('time','30','آخر ٣٠ يوم')}
+      ${anyFilter?'<div class="chip" id="anReset" style="border-color:var(--conflict);color:var(--conflict)">مسح التصفية ✕</div>':''}
+    </div>
+    <div class="an-grid">
+      <section class="panel"><div class="ph"><h3>الطلب حسب الشريحة</h3><span class="n">${seg.length}</span><span class="hint">على كل البيانات · اضغط للتنقيب</span></div>
+        <div style="padding:14px 16px">${st==='loading'?loading:anBars(seg,'segment',x=>SEG_LABEL[x]||x||'—','var(--gold)','seg')}</div></section>
+      <section class="panel"><div class="ph"><h3>الطلب حسب الدولة</h3><span class="n">${country.length}</span><span class="hint">مين جاي منين · اضغط للتنقيب</span></div>
+        <div style="padding:14px 16px">${st==='loading'?loading:anBars(country,'country',x=>COUNTRY_LABEL[x]||x||'غير محدد','var(--ai)','country')}</div></section>
+    </div>
+    <div class="an-grid">
+      <section class="panel"><div class="ph"><h3>التصنيف بالذكاء (الفئات القانونية)</h3><span class="n">${cat.length}</span><span class="hint">اضغط الفئة لتصفية الأسئلة</span></div>
+        <div style="padding:14px 16px">${st==='loading'?loading:(cat.length?anBars(cat,'category',x=>x||'—','var(--memory)','cat')+subHtml:emptyClassify)}</div></section>
+      <section class="panel"><div class="ph"><h3>الطلب حسب النية</h3><span class="n">${intent.length}</span><span class="hint">عايزين إيه (صياغة/مراجعة/دورة…)</span></div>
+        <div style="padding:14px 16px">${st==='loading'?loading:(intent.length?anBars(intent,'intent',x=>x||'—','var(--agree)',null):emptyClassify)}</div></section>
+    </div>
+    <section class="panel" style="margin-bottom:16px"><div class="ph"><h3>خدمات مطلوبة لا نقدّمها</h3><span class="n">${unmet.length}</span><span class="hint">طلب متكرّر لا نقدّم له خدمة — فرصة</span></div>
+      <div id="anUnmet" style="padding:6px 0">${st==='loading'?loading:(unmet.length?unmet.map(u=>`<div class="policy anUnmetRow" style="cursor:pointer;border-inline-start-color:var(--gold);margin:10px 14px">${svg('sparkles','ic')}<div style="flex:1"><b>${esc(u.label)}</b> — طلب متكرّر مش بنقدّم له خدمة (${money(u.count||0)} مرة).<div style="margin-top:4px;color:var(--muted);font-size:11.5px">مثال: ${esc(u.sample_question||'—')}</div></div><span style="flex:none;color:var(--gold);font-weight:800;font-size:12px">أنشئ خدمة ←</span></div>`).join(''):`<div class="empty" style="padding:26px">${unclassified?'شغّل «حدّث التصنيف» الأول عشان نكتشف الطلب الناقص.':'لا خدمات ناقصة مكتشفة بعد — أول ما الذكاء يلاقي طلبًا متكرّرًا مش بنقدّمه هيظهر هنا كفرصة.'}</div>`)}</div>
+    </section>
+    <section class="panel"><div class="ph"><h3>أحدث الأسئلة</h3><span class="n">${fq.length}</span><span class="hint">${anyFilter?('مصفّاة من '+money(recent.length)):'حيّة من الشات'}</span></div>
+      <div id="anRecent" style="max-height:520px;overflow:auto">${st==='loading'?loading:(fq.length?fq.map(r=>`<div style="padding:11px 16px;border-bottom:1px solid var(--border)"><div style="font-size:13.5px;color:var(--ink);line-height:1.5">${esc(r.question)}</div><div style="margin-top:5px;font-size:11.5px;color:var(--muted)">${SEG_LABEL[r.segment]||r.segment||'—'} · ${COUNTRY_LABEL[r.country]||r.country||'غير محدد'}${r.category?' · <span style="color:var(--navy)">'+esc(r.category)+'</span>':''}${r.intent?' · '+esc(r.intent):''}${r.needs_expert?' · <span style="color:var(--human)">يحتاج خبير</span>':''}</div></div>`).join(''):`<div class="empty">${recent.length?'لا أسئلة مطابقة للتصفية.':'لا أسئلة بعد.'}</div>`)}</div>
+    </section>`;
+  // ربط عناصر التحكّم بعد الرسم.
+  const fb=document.getElementById('anFilterbar');
+  if(fb){
+    fb.querySelectorAll('.an-sel').forEach(s=>{s.onchange=()=>{anFilters[s.dataset.dim]=s.value;viewAnalysis(v);};});
+    fb.querySelectorAll('.chip[data-dim]').forEach(c=>{c.onclick=()=>{anFilters[c.dataset.dim]=c.dataset.val;viewAnalysis(v);};});
+    const rs=document.getElementById('anReset');if(rs)rs.onclick=()=>{anFilters={seg:'all',country:'all',cat:'all',ne:'all',time:'all'};viewAnalysis(v);};
+  }
+  v.querySelectorAll('.an-bar.clk').forEach(b=>{b.onclick=()=>{const dim=b.dataset.drill,val=b.dataset.val;anFilters[dim]=(anFilters[dim]===val?'all':val);viewAnalysis(v);const rc=document.getElementById('anRecent');if(rc)rc.scrollIntoView({behavior:'smooth',block:'center'});};});
+  v.querySelectorAll('.anUnmetRow').forEach(r=>{r.onclick=()=>go('courses');});
+  const cb=document.getElementById('anClassify');
+  if(cb)cb.onclick=()=>{if(window.EP&&EP.runDemandClassify){cb.disabled=true;cb.style.opacity='.6';EP.runDemandClassify(()=>viewAnalysis(v));}else{toast('التصنيف متاح من البيانات الحيّة فقط');}};
 }
 
 function viewUsers(v){
@@ -924,35 +992,6 @@ function drawUser(){
   inline.querySelectorAll('[data-a]').forEach(b=>b.onclick=()=>{const a=b.dataset.a;
     if(a==='train'){u.trainer='approved';renderUsers();notify('اعتُمد '+u.name+' كمدرّب');}
     else if(a==='untrain'){u.trainer='none';renderUsers();toast('أُلغي اعتماد '+u.name+' كمدرّب');}
-    else if(a==='edit'){addUserModal(u);}
-    else if(a==='del'){if(lastAdmin){toast('ممنوع: لا يمكن حذف آخر أدمن');return;}USERS.splice(selected,1);selected=null;renderUsers();notify('حُذف المستخدم '+u.name);}
-  });
-}
-function drawUserOld(){
-  const el=document.getElementById('drawer');if(!el)return;
-  if(selected===null){el.innerHTML=`<div class="empty">${svg('users','ic')}<p>اختر مستخدمًا لتغيير دوره أو رؤية توثيقه وباقته.</p></div>`;return;}
-  const u=USERS[selected],r=ROLE[u.role],vf=VERIFY[u.verified];
-  const adminsCount=USERS.filter(x=>x.role==='admin').length;
-  const lastAdmin=u.role==='admin'&&adminsCount<=1;
-  const roleBtns=ROLES_LIST.map(rid=>`<button class="urole${rid===u.role?' on':''}" data-r="${rid}" style="border:1px solid ${rid===u.role?ROLE[rid].c:'var(--line)'};background:${rid===u.role?ROLE[rid].bg:'var(--surface)'};color:${rid===u.role?ROLE[rid].c:'var(--ink-2)'};border-radius:9px;padding:7px 12px;font:inherit;font-size:12px;font-weight:800;cursor:pointer">${ROLE[rid].t}</button>`).join('');
-  el.innerHTML=`<div class="dh"><div class="k">مستخدم · من المنصة</div><h3>${u.name}</h3></div><div class="db">
-    <div class="route"><span class="step">المنصة · تسجيل</span><span class="arrow">←</span><span class="step" style="color:${MODULES.users.c};font-weight:800">المستخدمون</span></div>
-    <div class="field"><div class="lab">البريد · الهاتف</div><div class="val" style="font-size:12.5px">${u.email}<br>${u.phone}</div></div>
-    <div class="field"><div class="lab">التوثيق</div><div class="val"><span class="status ${vf.cls}" style="${vf.cls?'':'background:var(--surface-2);color:var(--muted)'}"><span class="d" style="${vf.cls?'':'background:var(--muted)'}"></span>${vf.t}</span></div></div>
-    <div class="field"><div class="lab">الباقة · حالة التدريب</div><div class="val">${u.plan} · ${u.trainer==='approved'?'مدرّب معتمد':u.trainer==='pending'?'طلب مدرّب قيد المراجعة':'—'}</div></div>
-    <div class="field"><div class="lab">الدور في المنصة <span style="color:var(--muted);font-weight:600">— يُكتب عبر الجسر</span></div><div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:5px">${roleBtns}</div></div>
-    ${lastAdmin?`<div class="note-ai" style="background:var(--gold-bg);border-color:#EAD9A8;color:#9a6a08">${svg('shield','ic')}<div>هذا آخر أدمن — لا يمكن تنزيل دوره أو حذفه (حماية «آخر أدمن»).</div></div>`:''}
-    <div class="field"><div class="lab">التدريب</div><div style="margin-top:5px">${u.trainer==='approved'?`<button class="btn btn-warn" data-a="untrain" style="flex:none;min-width:auto;padding:7px 12px;font-size:12px">إلغاء اعتماد المدرّب</button>`:`<button class="btn btn-primary" data-a="train" style="flex:none;min-width:auto;padding:7px 12px;font-size:12px">${svg('check')}اعتمد كمدرّب</button>`}</div></div>
-    <div class="acts"><button class="btn btn-ghost" data-a="edit">تعديل البيانات</button><button class="btn btn-warn" data-a="del">حذف المستخدم</button></div></div>`;
-  el.querySelectorAll('.urole').forEach(b=>b.onclick=()=>{
-    const rid=b.dataset.r;
-    if(rid===u.role)return;
-    if(lastAdmin&&rid!=='admin'){toast('ممنوع: لا يمكن إزالة آخر أدمن');return;}
-    u.role=rid;renderUsers();drawUser();toast('تم تغيير دور '+u.name+' إلى «'+ROLE[rid].t+'»');
-  });
-  el.querySelectorAll('[data-a]').forEach(b=>b.onclick=()=>{const a=b.dataset.a;
-    if(a==='train'){u.trainer='approved';renderUsers();drawUser();notify('اعتُمد '+u.name+' كمدرّب');}
-    else if(a==='untrain'){u.trainer='none';renderUsers();drawUser();toast('أُلغي اعتماد '+u.name+' كمدرّب');}
     else if(a==='edit'){addUserModal(u);}
     else if(a==='del'){if(lastAdmin){toast('ممنوع: لا يمكن حذف آخر أدمن');return;}USERS.splice(selected,1);selected=null;renderUsers();notify('حُذف المستخدم '+u.name);}
   });
@@ -1057,13 +1096,14 @@ function csPlatformCourses(){return (window.EP&&EP.data.platform_courses&&Array.
 // مواعيد الدورات الحية — للمراجعة والتثبيت.
 function csSchedules(){return (window.EP&&EP.data.schedules&&Array.isArray(EP.data.schedules.rows))?EP.data.schedules.rows:[];}
 function viewCourses(v){
-  if(window.EP){EP.ensure('courses',()=>viewCourses(v));EP.ensure('inbox',()=>viewCourses(v));EP.ensure('course_offers',()=>viewCourses(v));EP.ensure('platform_courses',()=>viewCourses(v));EP.ensure('schedules',()=>viewCourses(v));}
+  if(window.EP){EP.ensure('courses',()=>viewCourses(v));EP.ensure('inbox',()=>viewCourses(v));EP.ensure('course_offers',()=>viewCourses(v));EP.ensure('platform_courses',()=>viewCourses(v));EP.ensure('schedules',()=>viewCourses(v));
+    // «الطلب على الدورات»: إحصاءات الطلب + طلبات «عايز دورة» من الشات — تُحمَّل عند فتح التبويب فقط.
+    if(courseTab==='demand'){EP.ensure('program_request_stats',()=>viewCourses(v));EP.ensure('analysis',()=>viewCourses(v));}}
   const Cstr=(window.EP&&EP.state.courses)||'idle';
   const live=!!(window.EP&&EP.data.courses);
   const CRS=csCourses();
   const PRG=csPrograms(), TRQ=csTrainers(), OFR=csOffers();
-  // التسعير معطّل (لا واجهة خلفية) — اقفل عليه إن كان نشطًا.
-  if(courseTab==='pricing')courseTab='courses';
+  const PRS=(window.EP&&EP.data.program_request_stats)||{stats:[],count:0};
   const PCRS=csPlatformCourses();
   const pcPub=PCRS.filter(c=>c.is_active).length, pcEnr=PCRS.reduce((s,c)=>s+(c.total_enrolled||0),0);
   v.innerHTML=`
@@ -1077,15 +1117,16 @@ function viewCourses(v){
       <div class="kpi k-4"><div class="top"><span class="ic">${svg('shield')}</span>طلبات مدربين</div><b>${money(TRQ.length)}</b><div class="sub">بانتظار الاعتماد</div></div>
     </div>
     <div class="tabbar" id="cTabs">
-      <div class="tab${courseTab==='platform'?' on':''}" data-t="platform">الدورات على المنصة (${PCRS.length})</div>
-      <div class="tab${courseTab==='courses'?' on':''}" data-t="courses">دورات الإدارة (${CRS.length})</div>
+      <div class="tab${courseTab==='platform'?' on':''}" data-t="platform">الكتالوج (على المنصة) (${PCRS.length})</div>
+      <div class="tab${courseTab==='courses'?' on':''}" data-t="courses">سجل الإدارة (${CRS.length})</div>
+      <div class="tab${courseTab==='demand'?' on':''}" data-t="demand">الطلب على الدورات${PRS.count?' ('+money(PRS.count)+')':''}</div>
       <div class="tab${courseTab==='programs'?' on':''}" data-t="programs">طلبات البرامج (${PRG.length})</div>
       <div class="tab${courseTab==='trainers'?' on':''}" data-t="trainers">طلبات المدربين (${TRQ.length})</div>
       <div class="tab${courseTab==='offers'?' on':''}" data-t="offers">عروض الأسعار (${OFR.length})</div>
       <div class="tab${courseTab==='schedules'?' on':''}" data-t="schedules">مواعيد الحيّة (${csSchedules().length})</div>
     </div>
     <div class="inboxwrap">
-      <section class="panel"><div class="ph"><h3 id="cH">الدورات على المنصة</h3><span class="n" id="cN">0</span>${(live&&courseTab==='courses')?`<button class="btn btn-ghost" id="cSync" style="flex:none;min-width:auto;padding:6px 12px;font-size:12px;margin-inline-start:auto">مزامنة من الأكاديمية</button><button class="btn btn-human" id="cCreate" style="flex:none;min-width:auto;padding:6px 12px;font-size:12px">+ إنشاء دورة</button>`:(courseTab==='courses'?`<button class="btn btn-human" id="cCreate" style="flex:none;min-width:auto;padding:6px 13px;font-size:12px;margin-inline-start:auto">+ إنشاء دورة من الإدارة</button>`:'')}</div><div id="cRows"></div></section>
+      <section class="panel"><div class="ph"><h3 id="cH">الكتالوج (على المنصة)</h3><span class="n" id="cN">0</span>${(live&&courseTab==='courses')?`<button class="btn btn-ghost" id="cSync" style="flex:none;min-width:auto;padding:6px 12px;font-size:12px;margin-inline-start:auto">مزامنة من الأكاديمية</button><button class="btn btn-human" id="cCreate" style="flex:none;min-width:auto;padding:6px 12px;font-size:12px">+ إنشاء دورة</button>`:(courseTab==='courses'?`<button class="btn btn-human" id="cCreate" style="flex:none;min-width:auto;padding:6px 13px;font-size:12px;margin-inline-start:auto">+ إنشاء دورة من الإدارة</button>`:'')}</div><div id="cRows"></div></section>
       <aside class="drawer" id="drawer"></aside>
     </div>`;
   v.querySelectorAll('#cTabs .tab').forEach(t=>t.onclick=()=>{courseTab=t.dataset.t;selected=null;viewCourses(v);});
@@ -1103,22 +1144,21 @@ const PC_TYPE={recorded_paid:'مسجّلة مدفوعة',recorded_free:'مسجّ
 const PC_SOURCE={titch:'🪄 Titch',dashboard:'من الإدارة',native:'أصلية'};
 function renderCourses(){
   const el=document.getElementById('cRows'),h=document.getElementById('cH');el.innerHTML='';
-  if(courseTab==='platform'){const PCRS=csPlatformCourses();h.textContent='الدورات على المنصة';document.getElementById('cN').textContent=PCRS.length;
+  if(courseTab==='platform'){const PCRS=csPlatformCourses();h.textContent='الكتالوج (على المنصة)';document.getElementById('cN').textContent=PCRS.length;
     var loadingP=(window.EP&&EP.state.platform_courses==='loading');
-    // لوحة استيراد المكتبة القانونية من Google Drive إلى كوربوس الـRAG (للمحرّر).
-    el.innerHTML='<details style="border-bottom:1px solid var(--border)"><summary style="cursor:pointer;padding:11px 14px;font-weight:800;color:var(--navy);list-style:none;display:flex;align-items:center;gap:8px">'+svg('book','ic')+'استيراد مكتبة قانونية من Google Drive (للذكاء/المحرّر)</summary><div style="padding:12px 14px;display:grid;gap:8px"><div style="font-size:11.5px;color:var(--muted)">اربط حساب Drive الأول مرة واحدة من المنصة، وبعدين الصق Folder ID واختار النوع واستورد. كل استيراد بياخد لحد ٤٠ ملف نصّي من الفولدر (الكتب الممسوحة صور بتتخطى — محتاجة OCR لاحقًا).</div><input id="drvFolder" placeholder="Folder ID (من رابط الفولدر)" style="padding:9px 11px;border:1px solid var(--line);border-radius:8px;direction:ltr;text-align:left"><select id="drvCat" style="padding:9px 11px;border:1px solid var(--line);border-radius:8px"><option value="memo_template">صيغ/نماذج (memo_template)</option><option value="law">قوانين/تشريعات (law)</option><option value="ruling">أحكام (ruling)</option><option value="custom">أخرى</option></select><button class="btn btn-primary" id="drvGo" style="flex:none">'+svg('check')+'استورد من Drive</button></div></details>';
-    if(!PCRS.length){el.insertAdjacentHTML('beforeend','<div style="padding:40px;text-align:center;color:var(--muted)">'+(loadingP?'…جارٍ تحميل دورات المنصة':'لا توجد دورات على المنصة بعد. أي دورة تتعمل (إدارة أو Titch) هتظهر هنا فورًا بحالتها.')+'</div>');var dg0=document.getElementById('drvGo');if(dg0)dg0.onclick=function(){var f=(document.getElementById('drvFolder').value||'').trim();if(!f){toast('الصق Folder ID');return;}var cat=document.getElementById('drvCat').value;dg0.disabled=true;EP.ingestDriveLibrary(f,cat,function(){dg0.disabled=false;});};return;}
-    el.insertAdjacentHTML('beforeend','<div style="padding:9px 14px;font-size:11.5px;color:var(--muted);border-bottom:1px solid var(--border)">كل دورة موجودة على المنصة — منشورة كانت أو مسودة — بحالتها وطريقة تشغيلها. «نشر» يخلّيها تظهر للطلاب على app.elprofessor.net.</div>');
+    // (استيراد مكتبة Drive اتنقل لـ«سوق المعرفة» — مكانه الصح كمعرفة/RAG مش دورة.)
+    if(!PCRS.length){el.innerHTML='<div style="padding:40px;text-align:center;color:var(--muted)">'+(loadingP?'…جارٍ تحميل دورات المنصة':'لا توجد دورات على المنصة بعد. أي دورة تتعمل (إدارة أو Titch) هتظهر هنا فورًا بحالتها.')+'</div>';return;}
+    el.innerHTML='<div style="padding:9px 14px;font-size:11.5px;color:var(--muted);border-bottom:1px solid var(--border)">كل دورة موجودة على المنصة — منشورة كانت أو مسودة — بحالتها وطريقة تشغيلها. «نشر» يخلّيها تظهر للطلاب على app.elprofessor.net.</div>';
     PCRS.forEach(function(c,idx){var st=pcStatus(c);var pr=(c.price_amount!=null&&c.price_amount>0)?(money(c.price_amount)+' '+esc(c.price_currency||'')):(c.type==='recorded_free'?'مجانية':'—');
       var lessons=(c.lesson_count||0);var typ=PC_TYPE[c.type]||esc(c.type||'');var src=PC_SOURCE[c.source]||esc(c.source||'');
       var meta=esc(c.instructor_name||'—')+' · '+typ+' · '+pr+' · '+money(c.total_enrolled||0)+' مسجّل · '+money(lessons)+' درس · '+src;
       el.insertAdjacentHTML('beforeend','<div class="row esc-row'+(selected==='P'+idx?' sel':'')+'" data-pc="'+idx+'" style="grid-template-columns:1.9fr 1.5fr 130px"><div class="c c1"><div class="src-ic" style="background:var(--memory-bg);color:var(--memory)">'+svg('book')+'</div><div><div class="parties">'+esc(c.title||'—')+(c.bid_enabled?' <span class="status s-auto" style="font-size:9px;margin-inline-start:4px"><span class="d"></span>مزايدة</span>':'')+'</div><div class="from">'+meta+'</div></div></div><div class="c"><div class="from" style="font-size:11px;color:var(--muted)">'+esc(c.short_description||'')+'</div></div><div class="c"><span class="status '+st[0]+'"><span class="d"></span>'+st[1]+'</span></div></div>');});
-    var dgN=document.getElementById('drvGo');if(dgN)dgN.onclick=function(){var f=(document.getElementById('drvFolder').value||'').trim();if(!f){toast('الصق Folder ID');return;}var cat=document.getElementById('drvCat').value;dgN.disabled=true;EP.ingestDriveLibrary(f,cat,function(){dgN.disabled=false;});};
     el.querySelectorAll('.row').forEach(function(x){x.onclick=function(){selected='P'+x.dataset.pc;renderCourses();drawCourse();};});
     return;
   }
-  if(courseTab==='courses'){const CRS=csCourses();h.textContent='دورات الإدارة';document.getElementById('cN').textContent=CRS.length;
-    if(!CRS.length)el.innerHTML='<div style="padding:40px;text-align:center;color:var(--muted)">لا دورات إدارة بعد.</div>';
+  if(courseTab==='demand'){renderCourseDemand(el,h);return;}
+  if(courseTab==='courses'){const CRS=csCourses();h.textContent='سجل الإدارة';document.getElementById('cN').textContent=CRS.length;
+    if(!CRS.length)el.innerHTML='<div style="padding:40px;text-align:center;color:var(--muted)">لا دورات في سجل الإدارة بعد.</div>';
     CRS.forEach((c,idx)=>{const st=CSTATUS[c.status]||{cls:'',t:c.status};var rev=(c.total_revenue!=null&&(window.EP&&EP.data.courses))?c.total_revenue:(c.enrolled*(c.priceNum||0));var ours=c.owner==='platform'?100:(100-c.rate);var ownerBadge=c.owner==='platform'?'<span class="status s-human" style="font-size:9.5px;margin-inline-start:6px"><span class="d"></span>المنصة</span>':'<span class="status" style="font-size:9.5px;margin-inline-start:6px;background:var(--memory-bg);color:var(--memory)"><span class="d" style="background:var(--memory)"></span>مدرّب</span>';el.insertAdjacentHTML('beforeend',`<div class="row esc-row${selected==='c'+idx?' sel':''}" data-c="${idx}" style="grid-template-columns:1.7fr .8fr 1fr 1.15fr 100px">
       <div class="c c1"><div class="src-ic" style="background:var(--memory-bg);color:var(--memory)">${svg('book')}</div><div><div class="parties">${c.title}${ownerBadge}</div><div class="from">${c.inst}</div></div></div>
       <div class="c"><div class="from"><b style="color:var(--ink)">${c.enrolled}</b> مسجّل</div></div>
@@ -1144,23 +1184,46 @@ function renderCourses(){
     if(!SCH.length)el.innerHTML='<div style="padding:40px;text-align:center;color:var(--muted)">لا دورات حيّة بمواعيد بعد.</div>';
     SCH.forEach(function(s,idx){var seats=s.max_seats?(money(s.booked_count||0)+'/'+money(s.max_seats)):'—';var st=s.confirmed?['s-auto','مثبّت']:['s-wait','بانتظار التثبيت'];el.insertAdjacentHTML('beforeend','<div class="row esc-row'+(selected==='s'+idx?' sel':'')+'" data-s="'+idx+'" style="grid-template-columns:1.7fr 1fr 1fr 120px"><div class="c c1"><div class="src-ic" style="background:var(--memory-bg);color:var(--memory)">'+svg('cap')+'</div><div><div class="parties">'+esc(s.title)+'</div><div class="from">'+esc(s.instructor_name||'—')+'</div></div></div><div class="c"><div class="from">'+esc(s.start_date||'بدون موعد')+'</div></div><div class="c"><div class="from">مقاعد <b style="color:var(--navy)">'+seats+'</b>'+(s.zoom_link?' · <b style="color:var(--agree)">Zoom ✓</b>':' · <b style="color:var(--conflict)">بلا Zoom</b>')+'</div></div><div class="c"><span class="status '+st[0]+'"><span class="d"></span>'+st[1]+'</span></div></div>');});
     el.querySelectorAll('.row').forEach(x=>x.onclick=()=>{selected='s'+x.dataset.s;renderCourses();drawCourse();});
-  } else {const OFR=csOffers();const PCR=csPlatformCourses();h.textContent='عروض الأسعار';document.getElementById('cN').textContent=OFR.length;
-    // قسم علوي: تفعيل/إيقاف المزايدة «اعرض سعرك» لكل دورة أصلية.
-    var pcr=PCR.filter(function(c){return c.is_active;});
-    var toggles='<div style="padding:12px 16px;border-bottom:1px solid var(--border);background:var(--surface-2)"><div style="font-weight:800;font-size:13px;margin-bottom:8px;display:flex;align-items:center;gap:7px">'+svg('wallet')+'تفعيل «اعرض سعرك» على الدورات</div>'+
-      (pcr.length?pcr.map(function(c){var on=!!c.bid_enabled;var pr=(c.price_amount!=null)?(money(c.price_amount)+' '+esc(c.price_currency||'')):'—';return '<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px dashed var(--line)"><div style="flex:1"><div style="font-weight:700;font-size:12.8px">'+esc(c.title||'')+'</div><div style="font-size:11px;color:var(--muted)">'+pr+' · '+esc(c.type||'')+'</div></div><button class="btn '+(on?'btn-primary':'btn-ghost')+' pcbid" data-id="'+esc(c.id||'')+'" data-on="'+(on?1:0)+'" style="flex:none;min-width:auto;padding:6px 13px;font-size:12px">'+(on?'مُفعّلة ✓':'فعّل المزايدة')+'</button></div>';}).join(''):'<div style="color:var(--muted);font-size:12px;padding:6px 0">لا دورات أصلية بعد.</div>')+
-      '</div>';
-    el.innerHTML=toggles;
+  } else {const OFR=csOffers();h.textContent='عروض الأسعار';document.getElementById('cN').textContent=OFR.length;
+    // تفعيل «اعرض سعرك» صار من دِرَج كل دورة في «الكتالوج» (زر واحد لا يتكرّر). هنا القرار فقط.
+    el.innerHTML='<div style="padding:9px 14px;font-size:11.5px;color:var(--muted);border-bottom:1px solid var(--border)">عروض المشترين على الدورات المفعَّلة للمزايدة — اعتمِد/ارفض/اعرض مقابلًا. (تفعيل المزايدة لكل دورة من دِرَج الدورة في «الكتالوج».)</div>';
     if(!OFR.length)el.insertAdjacentHTML('beforeend','<div style="padding:30px;text-align:center;color:var(--muted)">لا عروض أسعار بانتظار القرار.</div>');
     OFR.forEach((o,idx)=>el.insertAdjacentHTML('beforeend',`<div class="row esc-row${selected==='o'+idx?' sel':''}" data-o="${idx}" style="grid-template-columns:1.6fr 1fr 1fr 110px">
       <div class="c c1"><div class="src-ic" style="background:var(--gold-bg);color:var(--gold)">${svg('wallet')}</div><div><div class="parties">${o.course}</div><div class="from">${o.buyer} · ${SEG_LABEL[o.segment]||o.segment}</div></div></div>
       <div class="c"><div class="from">عرضه <b style="color:var(--navy)">${money(o.offered)} ${o.currency}</b></div></div>
       <div class="c"><div class="from">العادل <b style="color:var(--gold)">${money(o.list)}</b> · الحد ${money(o.floor)}</div></div>
       <div class="c"><span class="status s-wait"><span class="d"></span>بانتظار</span></div></div>`));
-    el.querySelectorAll('.pcbid').forEach(function(b){b.onclick=function(){var id=b.dataset.id;var turnOn=b.dataset.on!=='1';if(window.EP&&id){EP.setCourseBid(id,turnOn,function(){viewCourses(document.getElementById('view'));});}};});
     el.querySelectorAll('.row').forEach(x=>x.onclick=()=>{selected='o'+x.dataset.o;renderCourses();drawCourse();});
   }
   drawCourse();
+}
+// «الطلب على الدورات» (D4): أكثر الدورات طلبًا (من program_requests) + «عايز دورة» (من الشات) بزر إنشاء.
+function renderCourseDemand(el,h){
+  h.textContent='الطلب على الدورات';
+  var PRS=(window.EP&&EP.data.program_request_stats)||{stats:[],count:0};
+  var stats=Array.isArray(PRS.stats)?PRS.stats:[];
+  var pStat=(window.EP&&EP.state&&EP.state.program_request_stats)||'idle';
+  document.getElementById('cN').textContent=stats.length;
+  var dr=document.getElementById('drawer');if(dr)dr.innerHTML='<div class="empty">'+svg('book','ic')+'<p>لوحة الطلب: أكثر الدورات طلبًا + طلبات «عايز دورة» من الشات — واحدة بضغطة تبقى دورة.</p></div>';
+  // 1) أكثر الدورات طلبًا — من طلبات البرامج الحقيقية.
+  var maxC=Math.max(1,...stats.map(function(s){return s.count||0;}));
+  var topHtml=pStat==='loading'?'<div style="padding:24px;text-align:center;color:var(--muted)">…جارٍ التحميل</div>'
+    :(stats.length?stats.map(function(s){var w=Math.round(((s.count||0)/maxC)*100);return '<div class="an-bar"><div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:4px"><span style="font-weight:700">'+esc(s.title||'غير محدد')+'</span><span style="color:var(--muted)">'+money(s.count||0)+' طلب</span></div><div style="height:9px;border-radius:6px;background:var(--surface-2)"><div style="height:100%;width:'+w+'%;border-radius:6px;background:var(--memory)"></div></div></div>';}).join('')
+      :'<div class="empty" style="padding:24px">لا طلبات على دورات بعد — أول ما حد يطلب برنامجًا من المنصة هيتجمّع هنا.</div>');
+  // 2) «عايز دورة» — أسئلة الشات نيتها «دورة» مجمّعة بالفئة (من عيّنة أحدث الأسئلة).
+  var d=(window.EP&&EP.data.analysis)||{};
+  var recent=Array.isArray(d.recent_questions)?d.recent_questions:[];
+  var wantMap={};
+  recent.forEach(function(r){if(r&&r.intent==='دورة'){var k=r.category||'غير مصنّف';if(!wantMap[k])wantMap[k]={cat:k,count:0,sample:r.question||''};wantMap[k].count++;}});
+  var wants=Object.keys(wantMap).map(function(k){return wantMap[k];}).sort(function(a,b){return b.count-a.count;});
+  var aStat=(window.EP&&EP.state&&EP.state.analysis)||'idle';
+  var wantHtml=aStat==='loading'?'<div style="padding:24px;text-align:center;color:var(--muted)">…جارٍ التحميل</div>'
+    :(wants.length?wants.map(function(w){return '<div class="policy" style="border-inline-start-color:var(--gold);margin:10px 0">'+svg('sparkles','ic')+'<div style="flex:1"><b>'+esc(w.cat)+'</b> — '+money(w.count)+' طلب «عايز دورة» في العيّنة.<div style="margin-top:4px;color:var(--muted);font-size:11.5px">مثال: '+esc(w.sample||'—')+'</div></div><button class="btn btn-primary cdMake" data-cat="'+esc(w.cat)+'" style="flex:none;min-width:auto;padding:7px 12px;font-size:12px">'+svg('check')+'أنشئ دورة</button></div>';}).join('')
+      :'<div class="empty" style="padding:24px">لا طلبات «عايز دورة» في عيّنة الشات — تظهر لما يتصنّف طلب نيته «دورة» (شغّل «حدّث التصنيف» في «تحليل الطلب»).</div>');
+  el.innerHTML='<div style="padding:14px 16px"><div style="font-family:Cairo;font-weight:800;font-size:13.5px;color:var(--navy);margin-bottom:6px">أكثر الدورات طلبًا</div><div style="font-size:11.5px;color:var(--muted);margin-bottom:10px">من طلبات البرامج الحقيقية مجمّعة بالعنوان.</div>'+topHtml+
+    '<div style="height:1px;background:var(--border);margin:18px 0"></div>'+
+    '<div style="font-family:Cairo;font-weight:800;font-size:13.5px;color:var(--navy);margin-bottom:6px">عايز دورة (من الشات)</div><div style="font-size:11.5px;color:var(--muted);margin-bottom:10px">أسئلة الشات اللي نيتها «دورة» مجمّعة بالفئة القانونية — من عيّنة أحدث الأسئلة. أنشئ دورة تسدّ الطلب بضغطة.</div>'+wantHtml+'</div>';
+  el.querySelectorAll('.cdMake').forEach(function(b){b.onclick=function(){createCourseModal(b.dataset.cat?('دورة في '+b.dataset.cat):'');};});
 }
 function drawCourse(){
   const el=document.getElementById('drawer');if(!el)return;
@@ -1173,21 +1236,24 @@ function drawCourse(){
     <div class="field"><div class="lab">النوع · السعر</div><div class="val">${PC_TYPE[c.type]||esc(c.type||'')} · ${pr}</div></div>
     <div class="field"><div class="lab">المحاضر · المسجّلون</div><div class="val">${esc(c.instructor_name||'—')} · ${money(c.total_enrolled||0)} مسجّل</div></div>
     <div class="field"><div class="lab">الدروس</div><div class="val">${money(c.lesson_count||0)} درس${c.source==='titch'?' · منهج Titch':''}</div></div>
+    <div class="field"><div class="lab">المنهج (الأقسام والمحاضرات)</div><div id="pcTree" class="val" style="line-height:1.7"><span style="color:var(--muted)">…جارٍ التحميل</span></div></div>
     ${c.created_at?`<div class="field"><div class="lab">أُنشئت</div><div class="val" style="direction:ltr;text-align:right">${esc(String(c.created_at).slice(0,10))}</div></div>`:''}
     ${c.short_description?`<div class="field"><div class="lab">الوصف</div><div class="val" style="line-height:1.6">${esc(c.short_description)}</div></div>`:''}
     ${c.approval_status==='pending'?`<div class="note-ai" style="margin:8px 0;background:rgba(212,175,55,.1);border-color:rgba(212,175,55,.4)">${svg('sparkles','ic')}<div>دورة بانتظار اعتمادك (اتحوّلت من كتاب عبر Titch). اعتمدها تظهر للطلاب في «الدورات».</div></div>`:''}
     <div class="acts">
       ${c.approval_status==='pending'?`<button class="btn btn-primary" data-a="pcapprove">${svg('check')}اعتمد وانشر</button><button class="btn btn-warn" data-a="pcreject">ارفض</button>`:`<button class="btn ${c.is_active?'btn-warn':'btn-primary'}" data-a="pctoggle">${svg('check')}${c.is_active?'إيقاف عن المنصة':'نشر على المنصة'}</button>`}
       ${(c.is_active&&c.type!=='recorded_free')?`<button class="btn ${c.bid_enabled?'btn-primary':'btn-ghost'}" data-a="pcbidtoggle" style="flex:none;min-width:auto;padding:7px 11px;font-size:12px">${c.bid_enabled?'مزايدة مُفعّلة ✓':'فعّل المزايدة'}</button>`:''}
-      <button class="btn btn-human" data-a="pcvideo" style="flex:none;min-width:auto;padding:7px 11px;font-size:12px">الفيديوهات</button>
-    </div></div>`;}
+      <button class="btn btn-human" data-a="pcvideo" style="flex:none;min-width:auto;padding:7px 11px;font-size:12px">المنهج والمحاضرات</button>
+    </div></div>`;
+    if(window.EP&&c.id){EP.loadCourseVideos(c.id).then(function(dt){if(selected!=='P'+i)return;var box=document.getElementById('pcTree');if(box)box.innerHTML=pcTreeHtml(dt);}).catch(function(){var box=document.getElementById('pcTree');if(box)box.innerHTML='<span style="color:var(--muted)">تعذّر تحميل المنهج</span>';});}
+  }
   else if(t==='c'){const c=csCourses()[i];if(!c){el.innerHTML='';return;}el.innerHTML=`<div class="dh"><div class="k">دورة · native في المنصة</div><h3>${c.title}</h3></div><div class="db">
     <div class="note-ai">${svg('sparkles','ic')}<div>دورة native — الفيديو على السيرفر الخارجي. الجدولة والاشتراك والتقدّم داخل المنصة.</div></div>
     <div class="field"><div class="lab">المحاضر</div><div class="val">${c.inst}</div></div>
     <div class="field"><div class="lab">المسجّلون · السعر</div><div class="val">${c.enrolled} مسجّل · ${c.price} (تبدأ من ${c.from})</div></div>
     <div class="field"><div class="lab">الحالة</div><div class="val"><span class="status ${CSTATUS[c.status].cls}" style="${CSTATUS[c.status].cls?'':'background:var(--surface-2);color:var(--muted)'}"><span class="d" style="${CSTATUS[c.status].cls?'':'background:var(--muted)'}"></span>${CSTATUS[c.status].t}</span></div></div>
     <div class="field"><div class="lab">على المنصة</div><div class="val">${c.on_platform?`<span class="status s-auto"><span class="d"></span>ظاهرة على app.elprofessor.net</span>`:`<span class="status s-late"><span class="d"></span>مش ظاهرة على المنصة بعد</span>`}</div></div>
-    <div class="acts">${c.on_platform?'':`<button class="btn btn-primary" data-a="pubplatform">${svg('check')}انشر على المنصة</button>`}<button class="btn btn-ghost" data-a="editc">${svg('check')}تعديل</button><button class="btn btn-human" data-a="video" style="flex:none;min-width:auto;padding:7px 11px;font-size:12px">الفيديوهات والسيرفر</button><button class="btn btn-warn" data-a="delc">حذف</button></div></div>`;}
+    <div class="acts">${c.on_platform?'':`<button class="btn btn-primary" data-a="pubplatform">${svg('check')}انشر على المنصة</button>`}<button class="btn btn-ghost" data-a="editc">${svg('check')}تعديل</button><button class="btn btn-human" data-a="video" style="flex:none;min-width:auto;padding:7px 11px;font-size:12px">المنهج والمحاضرات</button><button class="btn btn-warn" data-a="delc">حذف</button></div></div>`;}
   else if(t==='p'){const p=csPrograms()[i];if(!p){el.innerHTML='';return;}el.innerHTML=`<div class="dh"><div class="k">طلب برنامج · من المنصة</div><h3>${p.title}</h3></div><div class="db">
     <div class="route"><span class="step">المنصة · السوق</span><span class="arrow">←</span><span class="step" style="color:var(--memory);font-weight:800">الدورات والتدريب</span></div>
     <div class="field"><div class="lab">المتقدّم</div><div class="val">${p.by}</div></div>
@@ -1222,7 +1288,7 @@ function drawCourse(){
       if(a==='pcreject'){if(confirm('متأكد ترفض الدورة دي؟')){EP.approvePlatformCourse(pc.id,false,function(){viewCourses(document.getElementById('view'));});}return;}
       if(a==='pctoggle'){EP.setPlatformCourseActive(pc.id,!pc.is_active,function(){viewCourses(document.getElementById('view'));});return;}
       if(a==='pcbidtoggle'){EP.setCourseBid(pc.id,!pc.bid_enabled,function(){viewCourses(document.getElementById('view'));});return;}
-      if(a==='pcvideo'){courseVideoModal({platform_id:pc.id,title:pc.title});return;}
+      if(a==='pcvideo'){courseCurriculumModal({platform_id:pc.id,title:pc.title});return;}
     }}
     // مواعيد الدورات الحيّة: حفظ/تثبيت عبر الجسر.
     if(selected[0]==='s'&&(a==='confirmsched'||a==='savesched')&&window.EP){var sr=csSchedules()[+selected.slice(1)];if(sr&&sr.id){
@@ -1244,39 +1310,122 @@ function drawCourse(){
     if(a==='pubplatform'&&window.EP){var cp=csCourses()[+selected.slice(1)];if(cp&&cp.cid){EP.publishCourseToPlatform(cp.cid,()=>{viewCourses(document.getElementById('view'));});return;}}
     if(a==='editc'){editCourseModal(csCourses()[+selected.slice(1)]);return;}
     if(a==='delc'){var cd=csCourses()[+selected.slice(1)];if(cd&&cd.cid&&window.EP){if(confirm('متأكد تحذف «'+cd.title+'»؟ هتختفي من المنصة كمان.')){EP.deleteCourse(cd.cid,function(){selected=null;viewCourses(document.getElementById('view'));});}return;}}
-    if(a==='video'){courseVideoModal(csCourses()[+selected.slice(1)]);}
+    if(a==='video'){courseCurriculumModal(csCourses()[+selected.slice(1)]);}
     else if(a==='pub'&&window.EP&&EP.data.courses){var cc=csCourses()[+selected.slice(1)];if(cc&&cc.cid){EP.updateCourse(cc.cid,{status:'active'},()=>{selected=null;viewCourses(document.getElementById('view'));});return;}toast('تم نشر الدورة');}
     else toast(a==='pub'?'تم نشر الدورة':a==='sched'?'فتح الجدولة':a==='edit'?'فتح التعديل':'تم');});
 }
-function courseVideoModal(c){
-  // المحاضرات تُرفع بروابط Google Drive (مشاركة) أو YouTube → تُبثّ داخل صفحة الدورة على المنصة.
+// شجرة المنهج للقراءة فقط (تُعرض في دِرَج الدورة): أقسام ← محاضرات + دروس Titch وكويزها.
+function pcTreeHtml(dt){
+  dt=dt||{};
+  var sections=Array.isArray(dt.sections)?dt.sections:[];
+  var lessons=Array.isArray(dt.lessons)?dt.lessons:[];
+  var videos=Array.isArray(dt.videos)?dt.videos:[];
+  if(!sections.length&&!videos.length&&!lessons.length)return '<span style="color:var(--muted)">لا محاضرات ولا دروس بعد — افتح «المنهج والمحاضرات» لإضافتها.</span>';
+  var html='';
+  if(sections.length){
+    html+=sections.map(function(sec){var lls=Array.isArray(sec.lessons)?sec.lessons:[];var title=sec.title?esc(sec.title):'بدون قسم';
+      return '<div style="margin:6px 0"><div style="font-weight:800;font-size:12.5px;color:var(--navy)">'+title+' <span style="color:var(--muted);font-weight:600">('+money(lls.length)+' محاضرة)</span></div>'+
+        (lls.length?'<ul style="margin:4px 0 0;padding-inline-start:18px;font-size:12px;color:var(--ink-2)">'+lls.map(function(v){return '<li>'+esc(v.title||'محاضرة')+(v.is_preview?' <span style="color:var(--agree)">· معاينة</span>':'')+'</li>';}).join('')+'</ul>':'')+'</div>';}).join('');
+  } else if(videos.length){
+    html+='<ul style="margin:4px 0 0;padding-inline-start:18px;font-size:12px;color:var(--ink-2)">'+videos.map(function(v){return '<li>'+esc(v.title||'محاضرة')+'</li>';}).join('')+'</ul>';
+  }
+  if(lessons.length){
+    html+='<div style="margin-top:8px;font-weight:800;font-size:12.5px;color:var(--navy)">دروس Titch «علّمني» ('+money(lessons.length)+')</div><ul style="margin:4px 0 0;padding-inline-start:18px;font-size:12px;color:var(--ink-2)">'+lessons.map(function(l){var q=Array.isArray(l.quiz)?l.quiz.length:0;return '<li>'+esc(l.title||'درس')+' <span style="color:var(--muted)">· '+money(q)+' سؤال</span></li>';}).join('')+'</ul>';
+  }
+  return html;
+}
+// باني المنهج (D4): أقسام ← محاضرات (روابط Drive/YouTube) + أسئلة دروس Titch «علّمني».
+function courseCurriculumModal(c){
   if(!c.platform_id){
-    var sp=openModal('حلقات الدورة — '+esc(c.title),
-      '<div class="note-ai" style="margin-bottom:12px">'+svg('sparkles','ic')+'<div>لازم تنشر الدورة على المنصة الأول، وبعدين تضيف الحلقات.</div></div>'+
+    var sp=openModal('منهج الدورة — '+esc(c.title),
+      '<div class="note-ai" style="margin-bottom:12px">'+svg('sparkles','ic')+'<div>لازم تنشر الدورة على المنصة الأول، وبعدين تضيف الأقسام والمحاضرات.</div></div>'+
       '<div class="acts"><button class="btn btn-primary" id="vp_pub">'+svg('check')+'انشر على المنصة</button><button class="btn btn-ghost" id="vp_x">إغلاق</button></div>');
     sp.querySelector('#vp_x').onclick=closeModal;
     sp.querySelector('#vp_pub').onclick=function(){closeModal();if(window.EP&&c.cid)EP.publishCourseToPlatform(c.cid,function(){viewCourses(document.getElementById('view'));});};
     return;
   }
   if(!window.EP){return;}
-  EP.loadCourseVideos(c.platform_id).then(function(d){
-    var vids=(d&&d.videos)||[];
-    var rows=vids.length?vids.map(function(v){return '<div style="display:flex;align-items:center;gap:9px;padding:9px 0;border-bottom:1px solid var(--line)"><div style="flex:1"><div style="font-weight:700;font-size:12.8px">'+esc(v.title||'حلقة')+(v.is_preview?' <span class="status s-auto" style="font-size:9.5px"><span class="d"></span>معاينة</span>':'')+'</div><div style="font-size:11px;color:var(--muted);direction:ltr;text-align:right">'+esc(v.video_url||v.youtube_url||'—')+'</div></div><button class="btn btn-warn vdel" data-id="'+esc(v.id)+'" style="flex:none;min-width:auto;padding:5px 10px;font-size:11px">حذف</button></div>';}).join(''):'<div style="color:var(--muted);font-size:12px;padding:8px 0">مفيش حلقات بعد — ضيف أول حلقة. (الدورة المدفوعة من غير حلقات بتتباع بنص السعر)</div>';
-    var s=openModal('حلقات الدورة — '+esc(c.title),
-      '<div class="note-ai" style="margin-bottom:12px">'+svg('sparkles','ic')+'<div>الصق رابط <b>Google Drive (مشاركة)</b> أو <b>YouTube</b> لكل حلقة — هيتبثّ جوّه صفحة الدورة في المنصة.</div></div>'+
-      '<div class="fld"><label>الحلقات الحالية</label><div>'+rows+'</div></div>'+
-      '<div class="fld" style="margin-top:10px"><label>عنوان الحلقة الجديدة</label><input id="cv_t" placeholder="مثال: الحلقة ١ — مقدمة"></div>'+
-      '<div class="fld"><label>رابط الفيديو (Drive أو YouTube)</label><input id="cv_l" placeholder="https://drive.google.com/file/d/.../view" style="direction:ltr;text-align:right"></div>'+
-      '<label class="tg" style="margin:6px 0"><input type="checkbox" id="cv_p"> معاينة مجانية (متاحة قبل الشراء)</label>'+
-      '<div class="acts" style="margin-top:6px"><button class="btn btn-primary" id="cv_add">'+svg('check')+'إضافة حلقة</button><button class="btn btn-ghost" id="cv_x">إغلاق</button></div>');
-    s.querySelectorAll('.vdel').forEach(function(b){b.onclick=function(){if(confirm('حذف الحلقة؟'))EP.deleteCourseVideo(c.platform_id,b.dataset.id,function(){closeModal();courseVideoModal(c);});};});
-    s.querySelector('#cv_x').onclick=closeModal;
+  var pid=c.platform_id;
+  var reopen=function(){closeModal();courseCurriculumModal(c);};
+  EP.loadCourseVideos(pid).then(function(d){
+    d=d||{};
+    var sections=Array.isArray(d.sections)?d.sections:[];
+    var lessons=Array.isArray(d.lessons)?d.lessons:[];
+    // بطاقة كل قسم: عنوانه + ترتيبه + تعديل + محاضراته + حذف كل محاضرة.
+    var secCards=sections.length?sections.map(function(sec){var lls=Array.isArray(sec.lessons)?sec.lessons:[];var named=!!sec.title;var title=named?esc(sec.title):'بدون قسم';
+      var lecRows=lls.length?lls.map(function(v){return '<div style="display:flex;align-items:center;gap:9px;padding:7px 0;border-top:1px dashed var(--line)"><div style="flex:1"><div style="font-weight:700;font-size:12.5px">'+esc(v.title||'محاضرة')+(v.is_preview?' <span class="status s-auto" style="font-size:9.5px"><span class="d"></span>معاينة</span>':'')+'</div><div style="font-size:11px;color:var(--muted);direction:ltr;text-align:right">'+esc(v.video_url||v.youtube_url||'—')+'</div></div><button class="btn btn-warn vdel" data-id="'+esc(v.id)+'" style="flex:none;min-width:auto;padding:5px 10px;font-size:11px">حذف</button></div>';}).join(''):'<div style="color:var(--muted);font-size:11.5px;padding:6px 0">لا محاضرات في القسم بعد.</div>';
+      return '<div style="border:1px solid var(--line);border-radius:10px;padding:10px;margin-bottom:10px"><div style="display:flex;align-items:center;gap:8px"><div style="flex:1;font-weight:800;font-size:13px;color:var(--navy)">'+title+' <span style="color:var(--muted);font-weight:600;font-size:11px">· ترتيب '+money(sec.order||0)+' · '+money(lls.length)+' محاضرة</span></div>'+
+        (named?'<button class="btn btn-ghost secEdit" data-t="'+esc(sec.title)+'" data-o="'+(sec.order||0)+'" style="flex:none;min-width:auto;padding:4px 10px;font-size:11px">تعديل القسم</button>':'')+'</div>'+
+        (named?'<div class="secEditForm" data-for="'+esc(sec.title)+'" style="display:none;gap:6px;margin-top:8px"><div class="row2"><div class="fld"><label>اسم القسم</label><input class="seT" value="'+esc(sec.title)+'"></div><div class="fld"><label>الترتيب</label><input class="seO" type="number" value="'+(sec.order||0)+'"></div></div><button class="btn btn-primary seSave" data-orig="'+esc(sec.title)+'" style="flex:none;min-width:auto;padding:6px 12px;font-size:12px">'+svg('check')+'حفظ التعديل</button></div>':'')+
+        lecRows+'</div>';}).join(''):'<div style="color:var(--muted);font-size:12px;padding:8px 0">مفيش أقسام ولا محاضرات بعد — ضيف أول محاضرة تحت (اختَر «قسم جديد» لو حابب تجمّعها).</div>';
+    // قائمة اختيار القسم لإضافة محاضرة.
+    var secOpts='<option value="">بدون قسم</option>'+sections.filter(function(x){return x.title;}).map(function(x){return '<option value="'+esc(x.title)+'" data-order="'+(x.order||0)+'">'+esc(x.title)+'</option>';}).join('')+'<option value="__new__">+ قسم جديد…</option>';
+    // دروس Titch وكويزها (أسئلة «علّمني»).
+    var lessonRows=lessons.length?lessons.map(function(l){var q=Array.isArray(l.quiz)?l.quiz.length:0;return '<div style="display:flex;align-items:center;gap:9px;padding:8px 0;border-top:1px dashed var(--line)"><div style="flex:1"><div style="font-weight:700;font-size:12.5px">'+esc(l.title||'درس')+'</div><div style="font-size:11px;color:var(--muted)">'+money(q)+' سؤال'+(l.objective?' · '+esc(l.objective):'')+'</div></div><button class="btn btn-human lqEdit" data-id="'+esc(l.id)+'" style="flex:none;min-width:auto;padding:5px 11px;font-size:11px">إدارة الأسئلة</button></div>';}).join(''):'<div style="color:var(--muted);font-size:11.5px;padding:6px 0">لا دروس Titch في الدورة — لإضافة أسئلة «علّمني» أنشئ دورة بمنهج Titch من «+ إنشاء دورة».</div>';
+    var s=openModal('منهج الدورة — '+esc(c.title),
+      '<div class="note-ai" style="margin-bottom:12px">'+svg('sparkles','ic')+'<div>نظّم الدورة في <b>أقسام</b>، وكل قسم فيه <b>محاضرات</b> (رابط Google Drive مشاركة أو YouTube). ولو الدورة بمنهج Titch تقدر تحرّر <b>أسئلة «علّمني»</b> لكل درس.</div></div>'+
+      '<div class="fld"><label>الأقسام والمحاضرات</label><div id="secWrap">'+secCards+'</div></div>'+
+      '<div style="border:1px dashed var(--gold);border-radius:10px;padding:11px;margin-top:8px"><div style="font-weight:800;font-size:12.5px;color:var(--navy);margin-bottom:8px">+ إضافة محاضرة</div>'+
+        '<div class="fld"><label>القسم</label><select id="cv_sec">'+secOpts+'</select></div>'+
+        '<div class="row2" id="cv_newsecwrap" style="display:none"><div class="fld"><label>اسم القسم الجديد</label><input id="cv_secnew" placeholder="مثال: الوحدة الأولى"></div><div class="fld"><label>ترتيب القسم</label><input id="cv_secorder" type="number" value="0"></div></div>'+
+        '<div class="fld"><label>عنوان المحاضرة</label><input id="cv_t" placeholder="مثال: المحاضرة ١ — مقدمة"></div>'+
+        '<div class="fld"><label>رابط الفيديو (Drive أو YouTube)</label><input id="cv_l" placeholder="https://drive.google.com/file/d/.../view" style="direction:ltr;text-align:right"></div>'+
+        '<label class="tg" style="margin:6px 0"><input type="checkbox" id="cv_p"> معاينة مجانية (متاحة قبل الشراء)</label>'+
+        '<button class="btn btn-primary" id="cv_add" style="width:100%">'+svg('check')+'إضافة المحاضرة</button></div>'+
+      '<div class="fld" style="margin-top:14px"><label>دروس Titch «علّمني» وأسئلتها</label><div>'+lessonRows+'</div></div>'+
+      '<div class="acts" style="margin-top:12px"><button class="btn btn-ghost" id="cv_x">إغلاق</button></div>');
+    // حذف محاضرة.
+    s.querySelectorAll('.vdel').forEach(function(b){b.onclick=function(){if(confirm('حذف المحاضرة؟'))EP.deleteCourseVideo(pid,b.dataset.id,reopen);};});
+    // إظهار/إخفاء نموذج تعديل القسم.
+    s.querySelectorAll('.secEdit').forEach(function(b){b.onclick=function(){var f=s.querySelector('.secEditForm[data-for="'+b.dataset.t.replace(/"/g,'\\"')+'"]');if(f)f.style.display=(f.style.display==='none'?'grid':'none');};});
+    s.querySelectorAll('.seSave').forEach(function(b){b.onclick=function(){var card=b.closest('.secEditForm');var nt=(card.querySelector('.seT').value||'').trim();var no=+card.querySelector('.seO').value||0;if(!nt){toast('اكتب اسم القسم');return;}EP.addSection(pid,{title:nt,order:no,from_title:b.dataset.orig},reopen).catch(function(){});};});
+    // إظهار حقول القسم الجديد عند اختياره.
+    var secSel=s.querySelector('#cv_sec');
+    secSel.onchange=function(){s.querySelector('#cv_newsecwrap').style.display=(secSel.value==='__new__')?'grid':'none';};
+    // إضافة محاضرة (تُنشئ القسم تلقائيًّا لو جديد).
     s.querySelector('#cv_add').onclick=function(){
-      var link=s.querySelector('#cv_l').value.trim();var title=s.querySelector('#cv_t').value.trim()||'حلقة';
+      var link=(s.querySelector('#cv_l').value||'').trim();var title=(s.querySelector('#cv_t').value||'').trim()||'محاضرة';
       if(!link){toast('الصق رابط الفيديو الأول');return;}
-      EP.addCourseVideo(c.platform_id,{title:title,video_url:link,is_preview:s.querySelector('#cv_p').checked},function(){closeModal();courseVideoModal(c);}).catch(function(){});
+      var secTitle='',secOrder=0;
+      if(secSel.value==='__new__'){secTitle=(s.querySelector('#cv_secnew').value||'').trim();secOrder=+s.querySelector('#cv_secorder').value||0;if(!secTitle){toast('اكتب اسم القسم الجديد');return;}}
+      else if(secSel.value){secTitle=secSel.value;var opt=secSel.options[secSel.selectedIndex];secOrder=opt?(+opt.getAttribute('data-order')||0):0;}
+      EP.addCourseVideo(pid,{title:title,video_url:link,is_preview:s.querySelector('#cv_p').checked,section_title:secTitle,section_order:secOrder},reopen).catch(function(){});
     };
-  }).catch(function(e){toast((e&&e.message)||'تعذّر تحميل الحلقات');});
+    // إدارة أسئلة درس Titch.
+    s.querySelectorAll('.lqEdit').forEach(function(b){b.onclick=function(){var lid=b.dataset.id;var lesson=lessons.filter(function(x){return String(x.id)===String(lid);})[0];if(lesson)lessonQuizModal(c,lesson);};});
+    s.querySelector('#cv_x').onclick=closeModal;
+  }).catch(function(e){toast((e&&e.message)||'تعذّر تحميل المنهج');});
+}
+// محرّر أسئلة درس Titch «علّمني» (استبدال كامل عند الحفظ).
+var _qBlkSeq=0;
+function qBlockHtml(q){
+  q=q||{};var bid=++_qBlkSeq;var opts=Array.isArray(q.options)?q.options.slice(0,6):[];while(opts.length<2)opts.push('');
+  var ansIdx=(typeof q.answer_index==='number')?q.answer_index:0;
+  var optRows=opts.map(function(o,oi){return '<div style="display:flex;align-items:center;gap:6px"><input type="radio" name="ans_'+bid+'" class="qAns" value="'+oi+'"'+(oi===ansIdx?' checked':'')+'><input class="qOpt" value="'+esc(o)+'" placeholder="خيار '+(oi+1)+'" style="flex:1"></div>';}).join('');
+  return '<div class="qBlk" style="border:1px solid var(--line);border-radius:9px;padding:10px;margin-bottom:8px"><input class="qText" value="'+esc(q.question||'')+'" placeholder="نص السؤال" style="font-weight:700"><div class="qOpts" style="display:grid;gap:5px;margin-top:7px">'+optRows+'</div><div style="text-align:left;margin-top:6px"><button class="btn btn-warn qDel" style="flex:none;min-width:auto;padding:4px 10px;font-size:11px">حذف السؤال</button></div></div>';
+}
+function lessonQuizModal(c,lesson){
+  var pid=c.platform_id;var quiz=Array.isArray(lesson.quiz)?lesson.quiz:[];
+  var s=openModal('أسئلة الدرس — '+esc(lesson.title||'درس'),
+    '<div class="note-ai" style="margin-bottom:12px">'+svg('sparkles','ic')+'<div>حرّر أسئلة «علّمني» لهذا الدرس (كل سؤال + خياراته + الإجابة الصحيحة). الحفظ <b>يستبدل</b> كل أسئلة الدرس.</div></div>'+
+    '<div id="qWrap">'+(quiz.length?quiz.map(function(q){return qBlockHtml(q);}).join(''):qBlockHtml(null))+'</div>'+
+    '<button class="btn btn-ghost" id="q_add" style="width:100%;margin-bottom:10px">+ سؤال</button>'+
+    '<div class="acts"><button class="btn btn-primary" id="q_save">'+svg('check')+'حفظ الأسئلة</button><button class="btn btn-ghost" id="q_back">رجوع للمنهج</button></div>');
+  var wireDel=function(){s.querySelectorAll('.qDel').forEach(function(b){b.onclick=function(){var blk=b.closest('.qBlk');if(s.querySelectorAll('.qBlk').length<=1){toast('لازم سؤال واحد على الأقل');return;}blk.remove();};});};
+  wireDel();
+  s.querySelector('#q_add').onclick=function(){s.querySelector('#qWrap').insertAdjacentHTML('beforeend',qBlockHtml(null));wireDel();};
+  s.querySelector('#q_back').onclick=function(){closeModal();courseCurriculumModal(c);};
+  s.querySelector('#q_save').onclick=function(){
+    var questions=[];
+    s.querySelectorAll('.qBlk').forEach(function(blk){
+      var qt=(blk.querySelector('.qText').value||'').trim();if(!qt)return;
+      var options=Array.prototype.map.call(blk.querySelectorAll('.qOpt'),function(i){return (i.value||'').trim();});
+      var ansEl=blk.querySelector('.qAns:checked');var ai=ansEl?+ansEl.value:0;
+      questions.push({question:qt,options:options,answer_index:ai});
+    });
+    if(!questions.length){toast('اكتب سؤالًا واحدًا على الأقل بنص');return;}
+    EP.addLessonQuestions(pid,lesson.id,{questions:questions,mode:'replace'},function(){closeModal();courseCurriculumModal(c);}).catch(function(){});
+  };
 }
 // ===== سوق المعرفة =====
 function csKnowledge(){return (window.EP&&EP.data.knowledge&&Array.isArray(EP.data.knowledge.items))?EP.data.knowledge.items:[];}
@@ -1291,7 +1440,10 @@ function viewKnowledge(v){
     '<div class="kpis"><div class="kpi k-1"><div class="top"><span class="ic">'+svg('book')+'</span>للبيع</div><b>'+money(forSale)+'</b><div class="sub">عناصر مملوكة</div></div>'+
     '<div class="kpi k-3"><div class="top"><span class="ic">'+svg('scale')+'</span>للتغذية العامة</div><b>'+money(feed)+'</b><div class="sub">قوانين/ملكية عامة</div></div>'+
     '<div class="kpi k-2"><div class="top"><span class="ic">'+svg('users')+'</span>اقتناءات</div><b>'+money(acq)+'</b><div class="sub">إجمالي</div></div></div>'+
+    // استيراد مكتبة Drive للـRAG — مكانه هنا (معرفة تُغذّي الذكاء/المحرّر) لا في الدورات.
+    '<details class="panel" style="margin-bottom:16px"><summary style="cursor:pointer;padding:13px 18px;font-family:Cairo;font-weight:800;color:var(--navy);list-style:none;display:flex;align-items:center;gap:8px;background:var(--surface-2)">'+svg('book','ic')+'استيراد مكتبة قانونية من Google Drive (تُغذّي الذكاء والمحرّر)</summary><div style="padding:14px 16px;display:grid;gap:8px"><div style="font-size:11.5px;color:var(--muted)">اربط حساب Drive أول مرة من المنصة، وبعدين الصق Folder ID واختار النوع واستورد. كل استيراد بياخد لحد ٤٠ ملف نصّي من الفولدر (الكتب الممسوحة صور بتتخطى — محتاجة OCR لاحقًا).</div><input id="drvFolder" placeholder="Folder ID (من رابط الفولدر)" style="padding:9px 11px;border:1px solid var(--line);border-radius:8px;direction:ltr;text-align:left"><select id="drvCat" style="padding:9px 11px;border:1px solid var(--line);border-radius:8px"><option value="memo_template">صيغ/نماذج (memo_template)</option><option value="law">قوانين/تشريعات (law)</option><option value="ruling">أحكام (ruling)</option><option value="custom">أخرى</option></select><button class="btn btn-primary" id="drvGo" style="flex:none">'+svg('check')+'استورد من Drive</button></div></details>'+
     '<section class="panel"><div class="ph"><h3>عناصر السوق</h3><span class="n">'+KN.length+'</span></div><div id="knRows"></div></section>';
+  var dg=document.getElementById('drvGo');if(dg)dg.onclick=function(){var f=(document.getElementById('drvFolder').value||'').trim();if(!f){toast('الصق Folder ID');return;}var cat=document.getElementById('drvCat').value;dg.disabled=true;EP.ingestDriveLibrary(f,cat,function(){dg.disabled=false;});};
   var el=document.getElementById('knRows');
   if(!KN.length){el.innerHTML='<div style="padding:40px;text-align:center;color:var(--muted)">لا عناصر بعد — لما حد يرفع كتاب/بحث هيظهر هنا.</div>';return;}
   KN.forEach(function(k,idx){var sale=k.rights==='owned_for_sale';var pr=(k.price_amount!=null)?(money(k.price_amount)+' '+esc(k.price_currency||'')):'—';var st=k.is_active?['s-auto','ظاهر']:['s-late','مخفي'];
@@ -1425,9 +1577,12 @@ function notify(msg){
 }
 function openModal(title,bodyHtml){const s=document.createElement('div');s.className='scrim';s.id='epModal';s.innerHTML=`<div class="modal"><div class="mh"><span>${title}</span><button data-x>✕</button></div><div class="mb">${bodyHtml}</div></div>`;document.body.appendChild(s);s.querySelector('[data-x]').onclick=closeModal;s.onclick=e=>{if(e.target===s)closeModal();};return s;}
 function closeModal(){const m=document.getElementById('epModal');if(m)m.remove();}
-function createCourseModal(){const s=openModal('إنشاء دورة من الإدارة',`
+function createCourseModal(presetTitle){
+  // presetTitle: عنوان مبدئي (مثلاً من «عايز دورة»)؛ نتجاهل كائن الحدث عند الاستدعاء كـ onclick.
+  var preset=(typeof presetTitle==='string')?presetTitle:'';
+  const s=openModal('إنشاء دورة من الإدارة',`
   <div class="note-ai" style="margin-bottom:12px">${svg('sparkles','ic')}<div>هتتنشر تلقائيًا على المنصة (app.elprofessor.net) كدورة native وتظهر للطلاب فورًا — تقدر تضيف الفيديوهات والتفاصيل بعدها.</div></div>
-  <div class="fld"><label>عنوان الدورة</label><input id="m_title" placeholder="مثال: مدخل قانون العمل"></div>
+  <div class="fld"><label>عنوان الدورة</label><input id="m_title" value="${esc(preset)}" placeholder="مثال: مدخل قانون العمل"></div>
   <div class="fld"><label>المحاضر / الجهة</label><input id="m_inst" placeholder="اسم المحاضر أو «فريق البروفيسور»"></div>
   <div class="row2"><div class="fld"><label>السعر يبدأ من (ج)</label><input id="m_price" type="number" placeholder="150"></div>
   <div class="fld"><label>النوع</label><select id="m_type"><option value="مدفوعة">مدفوعة</option><option value="مجانية">مجانية</option></select></div></div>
@@ -2463,8 +2618,10 @@ function fndStatusModal(edit,idx){
 }
 
 /* ===== TARGETS ===== */
-const TARGETS=[{m:'يوليو',actual:30,target:35},{m:'أغسطس',actual:0,target:42},{m:'سبتمبر',actual:0,target:50},{m:'أكتوبر',actual:0,target:60}];
-// لا أهداف تصميمية — الأهداف تُشتق حيًّا من /api/dashboard (انظر loader targets)
+// لا توقّعات تصميمية وهمية — البارات الشهرية و«المحقّق ماليًّا» تُشتق حيًّا من /api/dashboard
+// (انظر loader targets)؛ وإلا يبقى القسم فارغًا بحالة empty صريحة أو يُضيف الأدمن شهورًا يدويًّا.
+const TARGETS=[];
+// الأهداف تُشتق حيًّا من /api/dashboard (انظر loader targets)
 // أو تبقى فارغة (إضافة يدويّة)، ويرشد مستشار الـ AI بأهداف مقترحة من الأداء الحقيقي.
 const GOALS=[];
 const GSTAT={on:{t:'على المسار',cls:'s-auto'},behind:{t:'متأخّر',cls:'s-late'},done:{t:'مكتمل',cls:'s-human'}};

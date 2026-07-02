@@ -180,7 +180,9 @@
       return Promise.all(jobs);
     },
 
-    // تحليل الطلب من الشات: /api/platform-chat-insights (via the METRICS_SECRET bridge)
+    // تحليل الطلب من الشات: /api/platform-chat-insights (via the METRICS_SECRET bridge).
+    // نخزّن الاستجابة كاملة كما هي، فتمرّ الحقول الجديدة (by_country / by_category /
+    // by_subcategory / by_intent / unmet / classified / unclassified) للـ viewAnalysis بلا تحويل.
     analysis: function () {
       return get("/platform-chat-insights").then(function (r) {
         EP.data.analysis = r || {};
@@ -599,6 +601,13 @@
       }).catch(function () { EP.data.schedules = { rows: [] }; });
     },
 
+    // أكثر الدورات طلبًا (D4): /api/platform-program-requests/stats -> {stats:[{title,count}], count}
+    program_request_stats: function () {
+      return get("/platform-program-requests/stats").then(function (r) {
+        EP.data.program_request_stats = { stats: (r && r.stats) || [], count: (r && r.count) || 0 };
+      }).catch(function () { EP.data.program_request_stats = { stats: [], count: 0 }; });
+    },
+
     // سوق المعرفة: /api/platform-knowledge -> {items:[...]}
     knowledge: function () {
       return get("/platform-knowledge").then(function (r) {
@@ -961,6 +970,22 @@
       .catch(function (e) { quietToast((e && e.message) || "تعذّر تنفيذ العملية"); if (after) after(); });
   };
 
+  // تحليل الطلب (D2): شغّل مصنّف الأسئلة بالذكاء على رسائل الشات غير المصنّفة.
+  // الجسر لا يرمي خطأ عند فشل النموذج — يرجّع {classified:0, remaining, error}؛ نعالج الحالتين.
+  EP.runDemandClassify = function (after) {
+    note("بنصنّف الأسئلة بالذكاء… ممكن ياخد ثواني");
+    post("/platform-chat-insights/classify?limit=100", {})
+      .then(function (r) {
+        if (r && r.error) { quietToast("تعذّر التصنيف الآن — جرّب بعد شوية"); }
+        else {
+          var c = (r && r.classified) || 0, rem = (r && r.remaining);
+          note("اتصنّف " + c + " سؤال" + (rem ? " · باقي " + rem : "") + " ✓");
+        }
+        EP.reload("analysis", after);
+      })
+      .catch(function (e) { quietToast((e && e.message) || "تعذّر التصنيف"); if (after) after(); });
+  };
+
   // عروض الأسعار (اعرض سعرك): اعتماد / رفض / عرض مقابل (counter).
   EP.decideCourseOffer = function (offerId, decision, amount, after) {
     var body = { decision: decision };
@@ -1318,6 +1343,21 @@
     return api("/platform-courses/" + encodeURIComponent(platformId) + "/videos/" + encodeURIComponent(videoId), { method: "DELETE" })
       .then(function () { note("اتحذفت الحلقة"); if (after) after(); })
       .catch(function (e) { quietToast((e && e.message) || "تعذّر حذف الحلقة"); });
+  };
+  // منهج الدورة (D4): إنشاء/إعادة تسمية/إسناد قسم (يجمّع المحاضرات في شجرة).
+  // body: {title, order, from_title?, video_ids?} — بلا from_title/video_ids = قسم منطقي
+  // يتجسّد لما تتضاف أول محاضرة بنفس عنوان القسم عبر addCourseVideo.
+  EP.addSection = function (platformId, body, after) {
+    return post("/platform-courses/" + encodeURIComponent(platformId) + "/sections", body)
+      .then(function (r) { note("اتحفظ القسم ✓"); if (after) after(r); return r; })
+      .catch(function (e) { quietToast((e && e.message) || "تعذّر حفظ القسم"); throw e; });
+  };
+  // أسئلة درس Titch «علّمني» (D4): استبدال/إضافة كويز درس (نفس شكل ما يقرأه المنهج للمتعلّم).
+  // body: {questions:[{question,options,answer_index}], mode:'replace'|'append'}.
+  EP.addLessonQuestions = function (platformId, lessonId, body, after) {
+    return post("/platform-courses/" + encodeURIComponent(platformId) + "/lessons/" + encodeURIComponent(lessonId) + "/questions", body)
+      .then(function (r) { note("اتحفظت الأسئلة (" + ((r && r.count) || 0) + ") ✓"); if (after) after(r); return r; })
+      .catch(function (e) { quietToast((e && e.message) || "تعذّر حفظ الأسئلة"); throw e; });
   };
   // نشر دورة موجودة على المنصة (app.elprofessor.net) كدورة native — للدورات اللي اتعملت قبل الربط.
   EP.publishCourseToPlatform = function (id, after) {
