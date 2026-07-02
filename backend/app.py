@@ -301,6 +301,30 @@ class AILog(db.Model):
     response = db.Column(db.Text)
     created_at = db.Column(db.DateTime, default=datetime.datetime.utcnow)
 
+class AuditLog(db.Model):
+    """Append-only trail of dashboard mutations (F5). One row per key admin action
+    (role/plan change, article publish/reject, course changes, settings, add-admin…).
+    Powers D9 «سجل العمليات» and feeds the D7 automation-spotter agent."""
+    __tablename__ = 'audit_logs'
+    id = db.Column(db.Integer, primary_key=True)
+    actor_email = db.Column(db.String(255))          # who did it (g.user.email) or 'system'
+    action = db.Column(db.String(120))               # dotted verb, e.g. 'user.role_change'
+    target = db.Column(db.String(255))               # affected entity id/ref (free-form)
+    meta_json = db.Column(db.Text)                    # JSON blob of extra context (optional)
+    created_at = db.Column(db.DateTime, default=datetime.datetime.utcnow)
+
+class AgentReport(db.Model):
+    """Latest report written by an AI-team agent (D7). Persisted so the view renders
+    cheaply and reports are auditable. One agent may have many rows over time; the
+    view reads the most recent per agent."""
+    __tablename__ = 'agent_reports'
+    id = db.Column(db.Integer, primary_key=True)
+    agent = db.Column(db.String(60), nullable=False)  # articles / sales / master / …
+    summary = db.Column(db.Text)                       # 2-3 sentence narrative
+    bullets_json = db.Column(db.Text)                  # JSON list[str] of findings
+    actions_json = db.Column(db.Text)                  # JSON list[str] of suggested actions
+    created_at = db.Column(db.DateTime, default=datetime.datetime.utcnow)
+
 class Asset(db.Model):
     __tablename__ = 'assets'
     id = db.Column(db.Integer, primary_key=True)
@@ -478,6 +502,52 @@ def roles_required(*allowed_roles):
         return decorated
     return decorator
 
+# --- Persisted per-role module permissions (D9). The admin edits a map
+# {dashboard_role: {"modules": [...]}} stored in the `settings` table (key
+# ROLE_PERMISSIONS_KEY). It gates which MODULES a non-admin role may reach — the
+# SAME map the frontend nav reads, so UI and API agree. Backward-compatible:
+# admin always bypasses, and a role with NO entry is left permissive (nothing
+# changes for existing deployments until the admin sets restrictions). ---
+ROLE_PERMISSIONS_KEY = 'role_permissions'
+
+def _role_permissions():
+    s = Setting.query.get(ROLE_PERMISSIONS_KEY)
+    if not s or not s.value:
+        return {}
+    try:
+        data = json.loads(s.value)
+        return data if isinstance(data, dict) else {}
+    except Exception:
+        return {}
+
+def role_allows_module(role, module):
+    """True if `role` may access `module`. admin → always; a role absent from the
+    persisted map → permissive (no restriction configured yet)."""
+    role = (role or '').strip().lower()
+    if role == 'admin':
+        return True
+    entry = _role_permissions().get(role)
+    if not entry:
+        return True
+    mods = entry.get('modules') if isinstance(entry, dict) else entry
+    if not isinstance(mods, list):
+        return True
+    return module in mods
+
+def module_required(module):
+    """Gate a route by the persisted role→module map (D9). Layered ON TOP of
+    roles_required — the coarse role allowlist still applies first."""
+    def decorator(f):
+        @functools.wraps(f)
+        def decorated(*args, **kwargs):
+            if not getattr(g, 'user', None):
+                return jsonify({'error': 'Unauthorized'}), 401
+            if not role_allows_module(user_dashboard_role(g.user), module):
+                return jsonify({'error': 'هذا القسم غير متاح لدورك'}), 403
+            return f(*args, **kwargs)
+        return decorated
+    return decorator
+
 # ============================================================
 # HELPER
 # ============================================================
@@ -505,6 +575,36 @@ def is_last_admin(user):
     if not _is_admin_user(user) or not getattr(user, 'is_active', False):
         return False
     return active_admin_count(exclude_id=user.id) == 0
+
+def _audit(action, target='', meta=None, actor=None):
+    """Append one AuditLog row for a mutation (F5). Best-effort — an audit-write
+    failure must NEVER break the caller's request, so it swallows exceptions and
+    rolls back only the audit row. Actor defaults to the authenticated user."""
+    try:
+        actor_email = actor or (getattr(g, 'user', None) and getattr(g.user, 'email', None)) or 'system'
+        row = AuditLog(
+            actor_email=str(actor_email)[:255],
+            action=str(action or '')[:120],
+            target=str(target if target is not None else '')[:255],
+            meta_json=(json.dumps(meta, ensure_ascii=False)[:4000] if meta is not None else None),
+        )
+        db.session.add(row)
+        db.session.commit()
+    except Exception:
+        try:
+            db.session.rollback()
+        except Exception:
+            pass
+
+def _resp_ok(resp):
+    """True when a Flask view return value carries a 2xx status. Handles both a bare
+    Response (status 200 by default) and a (body, status) tuple (our proxy error shape)."""
+    try:
+        if isinstance(resp, tuple):
+            return 200 <= int(resp[1]) < 300
+        return 200 <= int(getattr(resp, 'status_code', 200)) < 300
+    except Exception:
+        return False
 
 def get_rate():
     s = Setting.query.get('exchange_rate')
@@ -1014,6 +1114,7 @@ def login():
         'exp': datetime.datetime.utcnow() + datetime.timedelta(days=30)
     }, app.config['SECRET_KEY'], algorithm='HS256')
     dashboard_role = user_dashboard_role(user)
+    _audit('auth.login', target=user.id, meta={'role': dashboard_role}, actor=user.email)
     return jsonify({'token': token, 'user': {'id': user.id, 'email': user.email, 'name': user.name, 'role': dashboard_role, 'dashboard_role': dashboard_role, 'linked_to_name': user_linked_name(user), 'preferred_currency': (user.preferred_currency or 'AUTO')}})
 
 @app.route('/api/auth/register', methods=['POST'])
@@ -1148,6 +1249,7 @@ def platform_metrics():
 @app.route('/api/platform-users', methods=['GET'])
 @token_required
 @roles_required('admin', 'employee')   # employee = read-only follow-up, no mutations below
+@module_required('users')              # D9: admin can revoke per-role module access
 def platform_users_list():
     if not PLATFORM_METRICS_SECRET:
         return jsonify({'error': 'لم يتم ضبط الربط بعد'}), 503
@@ -1229,6 +1331,7 @@ def platform_users_set_role(user_id):
     if r.status_code != 200:
         body = r.json() if r.content else {}
         return jsonify({'error': body.get('detail') or 'تعذر تغيير الدور'}), r.status_code
+    _audit('user.role_change', target=user_id, meta={'role': role, 'email': target_email})
     return jsonify(r.json() if r.content else {})
 
 @app.route('/api/platform-users/<user_id>/plan', methods=['POST'])
@@ -1240,7 +1343,10 @@ def platform_users_set_plan(user_id):
     on an unknown id, 404 when the user is missing) and returns the updated user summary."""
     body = request.json or {}
     plan_id = (body.get('plan_id') or '').strip()
-    return _platform_proxy('POST', f"/api/bridge/users/{user_id}/plan", json_body={'plan_id': plan_id})
+    resp = _platform_proxy('POST', f"/api/bridge/users/{user_id}/plan", json_body={'plan_id': plan_id})
+    if _resp_ok(resp):
+        _audit('user.plan_assign', target=user_id, meta={'plan_id': plan_id})
+    return resp
 
 @app.route('/api/platform-users/<user_id>/tags', methods=['POST'])
 @token_required
@@ -1281,6 +1387,25 @@ def platform_trainer_apps():
     if r.status_code != 200:
         return jsonify({'error': 'تعذر جلب الطلبات'}), 502
     return jsonify(r.json() if r.content else {})
+
+
+@app.route('/api/platform-leads', methods=['GET'])
+@token_required
+@roles_required('admin', 'employee')
+def platform_leads():
+    """Chat hand-off leads captured on the platform (D1 overview inbox enrichment).
+    Thin proxy to the platform bridge; returns 502/503 when the bridge is cold or the
+    platform hasn't shipped this endpoint yet — the loader degrades silently."""
+    return _platform_proxy('GET', '/api/bridge/leads', params={'status': request.args.get('status') or 'new'})
+
+
+@app.route('/api/platform-messages', methods=['GET'])
+@token_required
+@roles_required('admin', 'employee')
+def platform_messages():
+    """Chat hand-off messages captured on the platform (D1 overview inbox enrichment).
+    Thin proxy to the platform bridge; degrades silently when unavailable."""
+    return _platform_proxy('GET', '/api/bridge/messages', params={'status': request.args.get('status') or 'new'})
 
 
 def _platform_proxy(method, path, params=None, json_body=None):
@@ -1495,14 +1620,20 @@ def platform_library_ingest_folder():
 @roles_required('admin', 'employee')
 def platform_course_approve(course_id):
     """اعتماد دورة «بانتظار الاعتماد» (مثلاً كتاب اتحوّل دورة) → تروح live في «الدورات»."""
-    return _platform_proxy('POST', f"/api/bridge/courses/{course_id}/approve")
+    resp = _platform_proxy('POST', f"/api/bridge/courses/{course_id}/approve")
+    if _resp_ok(resp):
+        _audit('course.approve', target=course_id)
+    return resp
 
 
 @app.route('/api/platform-courses/<course_id>/reject', methods=['POST'])
 @token_required
 @roles_required('admin', 'employee')
 def platform_course_reject(course_id):
-    return _platform_proxy('POST', f"/api/bridge/courses/{course_id}/reject")
+    resp = _platform_proxy('POST', f"/api/bridge/courses/{course_id}/reject")
+    if _resp_ok(resp):
+        _audit('course.reject', target=course_id)
+    return resp
 
 
 @app.route('/api/platform-courses/<course_id>/bid', methods=['PUT'])
@@ -1735,6 +1866,7 @@ def platform_course_schedule(course_id):
 @app.route('/api/tutorials', methods=['GET'])
 @token_required
 @roles_required('admin', 'employee')   # employee may VIEW the guide (read-only)
+@module_required('tutorials')          # D9: admin can revoke per-role module access
 def tutorials_list():
     if not PLATFORM_METRICS_SECRET:
         return jsonify({'error': 'لم يتم ضبط الربط بعد'}), 503
@@ -1799,6 +1931,7 @@ def tutorials_delete(tutorial_id):
 @app.route('/api/platform-topics', methods=['GET'])
 @token_required
 @roles_required('admin', 'employee')   # employee may VIEW topics (incl drafts)
+@module_required('topics')             # D9: admin can revoke per-role module access
 def platform_topics_list():
     return _platform_proxy('GET', '/api/bridge/topics')
 
@@ -2199,6 +2332,7 @@ def create_user():
     )
     db.session.add(user)
     db.session.commit()
+    _audit('admin.add_user', target=user.id, meta={'email': user.email, 'role': user.dashboard_role})
     return jsonify({'id': user.id, 'message': 'تم إضافة المستخدم'}), 201
 
 @app.route('/api/users/<int:id>', methods=['PUT'])
@@ -2238,7 +2372,77 @@ def update_user(id):
     if d.get('password'):
         user.password_hash = generate_password_hash(d['password'], method='pbkdf2:sha256')
     db.session.commit()
+    _audit('admin.update_user', target=user.id, meta={
+        'email': user.email,
+        'fields': [k for k in d.keys() if k != 'password'],
+        'password_changed': bool(d.get('password')),
+    })
     return jsonify({'message': 'تم تحديث المستخدم'})
+
+# ============================================================
+# AUDIT LOG (F5) — recent dashboard mutations, admin-only
+# ============================================================
+
+@app.route('/api/audit', methods=['GET'])
+@token_required
+@roles_required('admin')
+def list_audit():
+    """Recent audit rows (D9 «سجل العمليات»). Bounded: newest-first, capped at 500."""
+    try:
+        limit = int(request.args.get('limit') or 100)
+    except (TypeError, ValueError):
+        limit = 100
+    limit = max(1, min(500, limit))
+    action = (request.args.get('action') or '').strip()
+    q = AuditLog.query
+    if action:
+        q = q.filter(AuditLog.action == action)
+    rows = q.order_by(AuditLog.created_at.desc()).limit(limit).all()
+    def _meta(r):
+        if not r.meta_json:
+            return None
+        try:
+            return json.loads(r.meta_json)
+        except Exception:
+            return None
+    return jsonify([{
+        'id': r.id,
+        'actor_email': r.actor_email,
+        'action': r.action,
+        'target': r.target,
+        'meta': _meta(r),
+        'created_at': r.created_at.isoformat() if r.created_at else None,
+    } for r in rows])
+
+
+@app.route('/api/usage', methods=['GET'])
+@token_required
+@roles_required('admin')
+def usage_stats():
+    """Usage panel for D9 Settings: AI calls (AILog), logins + actions/day (AuditLog).
+    All figures are real counts — no estimates."""
+    now = datetime.datetime.utcnow()
+    since_7d = now - datetime.timedelta(days=7)
+    ai_total = AILog.query.count()
+    ai_errors = AILog.query.filter(AILog.response.like('ERROR:%')).count()
+    audit_total = AuditLog.query.count()
+    logins_7d = AuditLog.query.filter(AuditLog.action == 'auth.login', AuditLog.created_at >= since_7d).count()
+    actions_7d = AuditLog.query.filter(AuditLog.created_at >= since_7d).count()
+    # actions per day for the last 7 days (from AuditLog)
+    recent = AuditLog.query.filter(AuditLog.created_at >= since_7d).all()
+    by_day = {}
+    for r in recent:
+        if r.created_at:
+            key = r.created_at.date().isoformat()
+            by_day[key] = by_day.get(key, 0) + 1
+    return jsonify({
+        'ai_calls': ai_total,
+        'ai_errors': ai_errors,
+        'audit_total': audit_total,
+        'logins_7d': logins_7d,
+        'actions_7d': actions_7d,
+        'by_day': [{'day': k, 'count': v} for k, v in sorted(by_day.items())],
+    })
 
 # ============================================================
 # DASHBOARD / KPIs
@@ -2698,6 +2902,7 @@ def delete_campaign(id):
 
 @app.route('/api/courses', methods=['GET'])
 @token_required
+@module_required('courses')            # D9: admin can revoke per-role module access
 def list_courses():
     viewer_role = user_dashboard_role(g.user)
     linked_name = user_linked_name(g.user)
@@ -2790,6 +2995,7 @@ def create_course():
             c.platform_course_id = linked.get('id')
             c.platform_course_slug = linked.get('slug')
     db.session.commit()
+    _audit('course.create', target=c.id, meta={'title': c.title, 'platform_published': bool(linked)})
     return jsonify({
         'id': c.id,
         'platform_course_id': c.platform_course_id,
@@ -2849,6 +3055,7 @@ def update_course(id):
         if 'status' in d:
             fields['is_active'] = (c.status == 'active')
         native = _platform_update_course(c.platform_course_id, fields) if fields else None
+    _audit('course.update', target=c.id, meta={'fields': [k for k in d.keys()]})
     return jsonify({'message': 'تم التحديث', 'platform_synced': bool(native)})
 
 @app.route('/api/courses/<int:id>', methods=['DELETE'])
@@ -2860,8 +3067,10 @@ def delete_course(id):
     # the local row. Native delete is best-effort — a link failure must not block the local delete.
     if c.platform_course_id:
         _platform_delete_course(c.platform_course_id)
+    _title = c.title
     db.session.delete(c)
     db.session.commit()
+    _audit('course.delete', target=id, meta={'title': _title})
     return jsonify({'message': 'تم الحذف'})
 
 
@@ -2993,6 +3202,7 @@ def update_settings():
             s = Setting(key=k, value=str(v))
             db.session.add(s)
     db.session.commit()
+    _audit('settings.update', target='settings', meta={'keys': list(d.keys())})
     return jsonify({'message': 'تم التحديث'})
 
 # ============================================================
@@ -4361,6 +4571,294 @@ def ai_goals_advisor():
     return jsonify(parsed)
 
 # ============================================================
+# AI TEAM (D7) — one agent per business function + a master aggregator.
+# Each agent = one server-side LLM call (reuses the /api/ai plumbing above) over a
+# real data bundle. Reports persist in AgentReport so the view renders cheaply.
+# Modes: on-demand (buttons) now; n8n can POST /api/ai/agents/run?agent=all daily.
+# The platform-chat hand-off (P15) reaches these agents through the shared
+# chat_insights (demand) + Message (contact) tables — Incoming/Sales read them.
+# ============================================================
+
+# Ordered registry — id → Arabic label + persona (LLM role) + one-line description.
+AI_AGENTS = [
+    {'id': 'articles',   'label': 'المقالات والمحتوى', 'persona': 'محرر محتوى ومسؤول تحرير',
+     'desc': 'المسودّات المطلوب اعتمادها وفجوات التغطية.'},
+    {'id': 'automation', 'label': 'رصد الأتمتة', 'persona': 'مهندس أتمتة عمليات',
+     'desc': 'العمليات المتكرّرة في سجل العمليات المرشّحة للأتمتة (n8n).'},
+    {'id': 'sales',      'label': 'المبيعات', 'persona': 'مدير مبيعات',
+     'desc': 'العملاء المحتملون، الصفقات المتعثّرة، والخطوة التالية.'},
+    {'id': 'marketing',  'label': 'التسويق', 'persona': 'مدير تسويق',
+     'desc': 'أي شريحة/دولة نستهدف بناءً على الطلب والحملات.'},
+    {'id': 'platform',   'label': 'إدارة المنصة', 'persona': 'مدير منصة',
+     'desc': 'الشذوذ، الاعتمادات المعلّقة، وصحة المنصة.'},
+    {'id': 'topics',     'label': 'المواضيع', 'persona': 'مسؤول تحرير المواضيع',
+     'desc': 'المواضيع/السلاسل التالية للكتابة من الطلب الحقيقي.'},
+    {'id': 'incoming',   'label': 'تحليل الوارد', 'persona': 'محلل بيانات الطلب',
+     'desc': 'رايحين فين / جايين منين / عايزين إيه — من الشات.'},
+    {'id': 'dev',        'label': 'التطوير', 'persona': 'مسؤول هندسة',
+     'desc': 'الأعطال، الدين التقني، وصحة الأنظمة.'},
+    {'id': 'finance',    'label': 'المالية', 'persona': 'مدير مالي',
+     'desc': 'التدفّق النقدي، التوقّع، والمخاطر.'},
+    {'id': 'master',     'label': 'الصورة الكاملة (Master)', 'persona': 'كبير المستشارين',
+     'desc': 'تجميع كل التقارير في صورة واحدة + أهم ٣ إجراءات.'},
+]
+AI_AGENT_IDS = [a['id'] for a in AI_AGENTS]
+AI_AGENT_MAP = {a['id']: a for a in AI_AGENTS}
+
+
+def _agent_action_counts(limit=800):
+    """Aggregate recent AuditLog rows for the automation-spotter agent."""
+    rows = AuditLog.query.order_by(AuditLog.created_at.desc()).limit(limit).all()
+    by_action, by_actor = {}, {}
+    for r in rows:
+        by_action[r.action] = by_action.get(r.action, 0) + 1
+        by_actor[r.actor_email] = by_actor.get(r.actor_email, 0) + 1
+    return {
+        'total': len(rows),
+        'by_action': sorted([{'action': k, 'count': v} for k, v in by_action.items()], key=lambda x: -x['count']),
+        'by_actor': sorted([{'actor': k, 'count': v} for k, v in by_actor.items()], key=lambda x: -x['count'])[:10],
+    }
+
+
+def _agent_bundle(agent):
+    """Build the real data bundle handed to an agent's LLM call. Best-effort — every
+    source degrades to None/0 instead of raising, so an agent still runs offline."""
+    b = {}
+    # Shared chat-demand insights (P15 hand-off) — used by several agents.
+    if agent in ('sales', 'marketing', 'topics', 'incoming'):
+        ci = _bridge_get('/api/bridge/chat-insights', {'limit': 1500}) or {}
+        keys = ('total', 'by_segment', 'by_country', 'by_category', 'by_subcategory',
+                'by_intent', 'needs_expert', 'anonymous', 'authed', 'unmet',
+                'expert_opinions', 'recent')
+        demand = {k: ci.get(k) for k in keys if k in ci}
+        if isinstance(demand.get('recent'), list):
+            demand['recent'] = demand['recent'][:20]   # cap prompt size
+        b['demand'] = demand
+    if agent == 'articles':
+        b['articles'] = {
+            'total': Article.query.count(),
+            'published': Article.query.filter_by(status='published').count(),
+            'drafts': Article.query.filter_by(status='draft').count(),
+            'recent': [{'title': a.title, 'status': a.status, 'cat': a.cat}
+                       for a in Article.query.order_by(Article.created_at.desc()).limit(15).all()],
+        }
+        b['topics_board'] = _bridge_get('/api/bridge/topics') or None
+    if agent == 'automation':
+        b['audit'] = _agent_action_counts()
+    if agent == 'sales':
+        b['courses'] = {
+            'total': Course.query.count(),
+            'paid': Course.query.filter((Course.price_egp > 0) | (Course.price_usd > 0)).count(),
+            'total_students': int(sum((c.students_count or 0) for c in Course.query.all())),
+        }
+        b['new_messages'] = Message.query.filter_by(status='new').count()
+    if agent == 'marketing':
+        try:
+            b['marketing'] = generate_ai_snapshot().get('marketing')
+        except Exception:
+            b['marketing'] = None
+    if agent == 'platform':
+        b['metrics'] = _bridge_get('/api/admin/metrics') or None
+        b['courses'] = {
+            'dashboard_count': Course.query.count(),
+            'active': Course.query.filter_by(status='active').count(),
+        }
+        b['pending'] = {
+            'trainer_apps': (_bridge_get('/api/bridge/trainer-applications', {'status': 'pending'}) or {}).get('count'),
+            'program_requests': (_bridge_get('/api/bridge/program-requests', {'status': 'pending'}) or {}).get('count'),
+            'open_disputes': Dispute.query.filter(Dispute.decision.is_(None)).count(),
+            'new_messages': Message.query.filter_by(status='new').count(),
+        }
+    if agent == 'incoming':
+        b['new_messages'] = Message.query.filter_by(status='new').count()
+    if agent == 'dev':
+        b['health'] = {
+            'platform_linked': bool(PLATFORM_METRICS_SECRET),
+            'platform_reachable': (_bridge_get('/api/admin/metrics') is not None),
+            'ai_configured': bool(next((k for k, c in AI_PROVIDERS.items() if os.environ.get(c['env_key'])), None)),
+            'ai_errors_recent': AILog.query.filter(AILog.response.like('ERROR:%')).count(),
+            'open_disputes': Dispute.query.filter(Dispute.decision.is_(None)).count(),
+        }
+    if agent == 'finance':
+        try:
+            snap = generate_ai_snapshot()
+            b['financials'] = snap.get('financials')
+            b['cashflow'] = snap.get('cashflow')
+            b['forecast'] = snap.get('forecast')
+        except Exception:
+            b['financials'] = None
+    return b
+
+
+def _master_bundle():
+    """Master reads the latest report of every other agent (not raw data)."""
+    reports = {}
+    for aid in AI_AGENT_IDS:
+        if aid == 'master':
+            continue
+        row = _latest_agent_report(aid)
+        if row:
+            reports[aid] = {
+                'label': AI_AGENT_MAP[aid]['label'],
+                'summary': row.summary,
+                'actions': _json_list(row.actions_json),
+            }
+    return {'reports': reports}
+
+
+def _json_list(raw):
+    try:
+        val = json.loads(raw) if raw else []
+        return [str(x) for x in val] if isinstance(val, list) else []
+    except Exception:
+        return []
+
+
+def _latest_agent_report(agent):
+    return (AgentReport.query.filter_by(agent=agent)
+            .order_by(AgentReport.created_at.desc()).first())
+
+
+def _bundle_highlights(bundle):
+    """Flatten a bundle into honest numeric bullets — used only for the data-only
+    fallback so a report NEVER fabricates a narrative when the AI is unavailable."""
+    out = []
+    def walk(prefix, val, depth):
+        if depth > 2 or len(out) >= 12:
+            return
+        if isinstance(val, dict):
+            for k, v in val.items():
+                walk((prefix + ' · ' if prefix else '') + str(k), v, depth + 1)
+        elif isinstance(val, list):
+            out.append(f"{prefix}: {len(val)} عنصر")
+        elif isinstance(val, bool):
+            out.append(f"{prefix}: {'نعم' if val else 'لا'}")
+        elif isinstance(val, (int, float)):
+            out.append(f"{prefix}: {val}")
+    walk('', bundle, 0)
+    return out[:12]
+
+
+def _agent_llm(persona, bundle):
+    """One LLM call for an agent. Returns the raw text or None when no key is set."""
+    provider = next((k for k, c in AI_PROVIDERS.items() if os.environ.get(c['env_key'])), None)
+    if not provider:
+        return None
+    cfg = AI_PROVIDERS[provider]
+    model = os.environ.get(cfg['model_env'], cfg['default_model'])
+    system_prompt = (
+        f'أنت {persona} ضمن فريق ذكاء اصطناعي يدير شركة "البروفيسور" (منصة تعليم قانوني '
+        'مصرية). ستحصل على بيانات حقيقية عن الشركة. حلّلها بإيجاز شديد باللغة العربية. '
+        'استخدم الأرقام الفعلية فقط ولا تختلق أي بيانات غير موجودة. أعد JSON فقط بدون أي '
+        'نص خارجه بالشكل:\n'
+        '{"summary": "جملتان موجزتان عن الوضع", '
+        '"bullets": ["ملاحظة مبنية على رقم", "..."], '
+        '"actions": ["إجراء عملي مقترح", "..."]}\n'
+        'اجعل bullets بين 2 و5، و actions بين 1 و3.'
+    )
+    user_content = 'البيانات الحقيقية:\n' + json.dumps(bundle, ensure_ascii=False, indent=2)
+    api_key = os.environ[cfg['env_key']]
+    if provider == 'anthropic':
+        return call_anthropic(api_key, model, system_prompt, user_content)
+    if provider == 'openai':
+        return call_openai_compatible('https://api.openai.com/v1', api_key, model, system_prompt, user_content)
+    return call_openai_compatible('https://api.deepseek.com/v1', api_key, model, system_prompt, user_content)
+
+
+def _run_agent(agent):
+    """Build the bundle, call the LLM, persist an AgentReport, return the serialized report.
+    On any AI failure it persists an HONEST data-only report (source='data') — never a
+    fabricated narrative."""
+    meta = AI_AGENT_MAP.get(agent)
+    if not meta:
+        return None
+    bundle = _master_bundle() if agent == 'master' else _agent_bundle(agent)
+    summary, bullets, actions, source = '', [], [], 'data'
+    try:
+        text = _agent_llm(meta['persona'], bundle)
+    except Exception:
+        text = None
+    parsed = _extract_json_block(text) if text else None
+    if isinstance(parsed, dict) and (parsed.get('summary') or parsed.get('bullets')):
+        summary = str(parsed.get('summary') or '')[:2000]
+        bullets = [str(x)[:400] for x in (parsed.get('bullets') or []) if str(x).strip()][:8]
+        actions = [str(x)[:400] for x in (parsed.get('actions') or []) if str(x).strip()][:5]
+        source = 'ai'
+    else:
+        # Honest fallback — real numbers, no invented analysis.
+        summary = ('تعذّر توليد تحليل بالذكاء الآن (المفتاح غير مهيّأ أو الخدمة غير متاحة). '
+                   'هذه أرقام حقيقية بلا تحليل نصّي.')
+        bullets = _bundle_highlights(bundle) or ['لا توجد بيانات كافية بعد لهذا الوكيل.']
+        actions = []
+        source = 'data'
+    row = AgentReport(
+        agent=agent,
+        summary=summary,
+        bullets_json=json.dumps(bullets, ensure_ascii=False),
+        actions_json=json.dumps(actions, ensure_ascii=False),
+    )
+    db.session.add(row)
+    db.session.commit()
+    return _serialize_report(agent, row, source=source)
+
+
+def _serialize_report(agent, row, source=None):
+    meta = AI_AGENT_MAP.get(agent, {})
+    base = {
+        'agent': agent,
+        'label': meta.get('label', agent),
+        'desc': meta.get('desc', ''),
+        'summary': None,
+        'bullets': [],
+        'actions': [],
+        'created_at': None,
+        'source': source,
+    }
+    if row:
+        base.update({
+            'summary': row.summary,
+            'bullets': _json_list(row.bullets_json),
+            'actions': _json_list(row.actions_json),
+            'created_at': row.created_at.isoformat() if row.created_at else None,
+        })
+    return base
+
+
+@app.route('/api/ai/agents', methods=['GET'])
+@token_required
+@roles_required('admin')
+def ai_agents_list():
+    """Latest report per agent (D7). Renders cheap from persisted AgentReport rows;
+    agents with no report yet come back with null summary so the card still shows."""
+    return jsonify({
+        'agents': [_serialize_report(a['id'], _latest_agent_report(a['id'])) for a in AI_AGENTS],
+        'ai_configured': bool(next((k for k, c in AI_PROVIDERS.items() if os.environ.get(c['env_key'])), None)),
+    })
+
+
+@app.route('/api/ai/agents/run', methods=['POST'])
+@token_required
+@roles_required('admin')
+def ai_agents_run():
+    """Regenerate one agent (?agent=sales), all agents (?agent=all → each + master),
+    or the master aggregator (?agent=master). Persists fresh reports and returns them."""
+    agent = (request.args.get('agent') or (request.json or {}).get('agent') or 'all').strip().lower()
+    if agent == 'all':
+        results = []
+        for aid in AI_AGENT_IDS:
+            if aid == 'master':
+                continue
+            results.append(_run_agent(aid))
+        results.append(_run_agent('master'))   # master last — aggregates the fresh set
+        _audit('ai.agents_run', target='all', meta={'count': len(results)})
+        return jsonify({'agents': [r for r in results if r]})
+    if agent not in AI_AGENT_MAP:
+        return jsonify({'error': 'وكيل غير معروف'}), 400
+    report = _run_agent(agent)
+    _audit('ai.agent_run', target=agent)
+    return jsonify({'agents': [report] if report else []})
+
+# ============================================================
 # SEED DATA
 # ============================================================
 
@@ -5120,8 +5618,10 @@ def admin_article_update(id):
 @roles_required('admin')
 def admin_article_delete(id):
     article = Article.query.get_or_404(id)
+    _title = article.title
     db.session.delete(article)
     db.session.commit()
+    _audit('article.reject_delete', target=id, meta={'title': _title})
     return jsonify({'ok': True})
 
 @app.route('/api/content/articles/<int:id>/publish', methods=['POST'])
@@ -5132,6 +5632,7 @@ def admin_article_publish(id):
     article.status = 'published'
     article.published_at = datetime.datetime.utcnow()
     db.session.commit()
+    _audit('article.publish', target=id, meta={'title': article.title})
     return jsonify(serialize_article(article))
 
 def serialize_message(m):

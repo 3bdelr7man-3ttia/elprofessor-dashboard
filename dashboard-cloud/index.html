@@ -321,7 +321,7 @@ const MODULES={
   team:{label:'الخبراء والمدربون',ic:'cap',c:'var(--ai)',bg:'var(--ai-bg)',grp:'co'},
   foundation:{label:'مرحلة التأسيس',ic:'build',c:'var(--muted)',bg:'var(--surface-2)',grp:'co'},
   targets:{label:'الأهداف والتوقعات',ic:'trend',c:'var(--gold)',bg:'var(--gold-bg)',grp:'co'},
-  ai:{label:'مساعد AI',ic:'robot',c:'var(--ai)',bg:'var(--ai-bg)',grp:'co',soon:true},
+  ai:{label:'الفريق (AI Team)',ic:'robot',c:'var(--ai)',bg:'var(--ai-bg)',grp:'co'},
   settings:{label:'الإعدادات',ic:'gear',c:'var(--muted)',bg:'var(--surface-2)',grp:'co'},
   t_home:{label:'لوحتي',ic:'grid',c:'var(--navy)',bg:'var(--surface-2)',grp:'role'},
   t_courses:{label:'دوراتي',ic:'book',c:'var(--memory)',bg:'var(--memory-bg)',grp:'role'},
@@ -360,8 +360,8 @@ let usersTag='all', teamTab='experts', topicsTab='board', pendingUserFocus=null;
 let role='admin';
 const ROLE_NAV={
   employee:['users','courses','topics','tutorials'],
-  trainer:['t_home','t_courses','t_earnings','ai'],
-  investor:['i_home','i_market','i_invest','ai'],
+  trainer:['t_home','t_courses','t_earnings'],
+  investor:['i_home','i_market','i_invest'],
   viewer:['v_pending']
 };
 
@@ -383,10 +383,22 @@ function renderNav(){
     });
   } else {
     labels.forEach(g=>g.style.display='none');
+    // خريطة الصلاحيات المحفوظة (D9) تُقيّد قائمة الموديولات للدور غير-الأدمن.
+    if(window.EP&&EP.authed)EP.ensure('settings',renderNav);
     const el=document.getElementById('nav-main');
-    ROLE_NAV[role].forEach(id=>{const m=MODULES[id];if(m)el.insertAdjacentHTML('beforeend',itemHTML(id,m));});
+    roleNavFor(role).forEach(id=>{const m=MODULES[id];if(m)el.insertAdjacentHTML('beforeend',itemHTML(id,m));});
   }
   document.querySelectorAll('.nav .item').forEach(it=>it.onclick=()=>go(it.dataset.mod));
+}
+// قائمة موديولات الدور غير-الأدمن = الأساس (ROLE_NAV) مُقاطَعًا بخريطة الصلاحيات
+// المحفوظة role_permissions (إن ضبطها الأدمن). غياب إدخال للدور = بلا تقييد (متوافق رجعيًّا).
+function roleNavFor(r){
+  var base=ROLE_NAV[r]||[];
+  var perms=(window.EP&&EP.data.settings&&EP.data.settings.role_permissions);
+  if(perms){try{var p=(typeof perms==='string')?JSON.parse(perms):perms;var entry=p&&p[r];var mods=entry&&(entry.modules||entry);
+    if(Array.isArray(mods))return base.filter(function(id){return mods.indexOf(id)>-1;});
+  }catch(e){}}
+  return base;
 }
 function go(mod){current=mod;selected=null;activeFilter='all';escTab='sessions';finTab='summary';usersFilter='all';usersTag='all';teamTab='experts';topicsTab='board';courseTab='platform';invTab='investors';mktTab='campaigns';contentTab='pending';anFilters={seg:'all',country:'all',cat:'all',ne:'all',time:'all'};
   document.getElementById('pageTitle').textContent=MODULES[mod].label;
@@ -471,7 +483,7 @@ function renderInbox(){
   document.getElementById('inboxN').textContent=items.length;
   items.forEach(i=>{const m=MODULES[i.dest],tr=TRI[i.triage],ri=INBOX.indexOf(i);
     el.insertAdjacentHTML('beforeend',`<div class="row inbox-row${selected===ri?' sel':''}" data-i="${ri}">
-      <div class="c c1"><div class="src-ic">${svg(i.src)}</div><div><div class="out">${i.out}</div><div class="from">من سطح: <b>${i.from}</b> · ${i.who}</div></div></div>
+      <div class="c c1"><div class="src-ic">${svg(i.src)}</div><div><div class="out">${esc(i.out)}</div><div class="from">من سطح: <b>${esc(i.from)}</b> · ${esc(i.who)}</div></div></div>
       <div class="c"><div class="destwrap"><span class="arrow">←</span><span class="dest" style="background:${m.bg};color:${m.c}">${svg(m.ic)}${m.label}</span></div></div>
       <div class="c"><span class="triage ${tr.cls}"><span class="d"></span>${tr.t}</span><div class="sla${i.slaWarn?' warn':''}">${svg('clock')}${i.sla}</div></div>
     </div>`);});
@@ -483,12 +495,12 @@ function drawInbox(){
   const el=document.getElementById('drawer');if(!el)return;
   if(selected===null){el.innerHTML=`<div class="empty">${svg('inbox','ic')}<p>اختر بندًا من الوارد لرؤية مساره الكامل والإجراء.</p></div>`;return;}
   const i=INBOX[selected],m=MODULES[i.dest],tr=TRI[i.triage];
-  el.innerHTML=`<div class="dh"><div class="k">بند وارد · ${i.ref}</div><h3>${i.out}</h3></div><div class="db">
-    <div class="route"><span class="step">المنصة · ${i.from}</span><span class="arrow">←</span><span class="step" style="color:${m.c};font-weight:800">${m.label}</span></div>
-    <div class="note-ai">${svg('sparkles','ic')}<div>${i.note}</div></div>
+  el.innerHTML=`<div class="dh"><div class="k">بند وارد · ${esc(i.ref)}</div><h3>${esc(i.out)}</h3></div><div class="db">
+    <div class="route"><span class="step">المنصة · ${esc(i.from)}</span><span class="arrow">←</span><span class="step" style="color:${m.c};font-weight:800">${m.label}</span></div>
+    <div class="note-ai">${svg('sparkles','ic')}<div>${esc(i.note)}</div></div>
     <div class="field"><div class="lab">يُدار في موديول</div><div class="val" style="color:${m.c}">${m.label}</div></div>
     <div class="field"><div class="lab">حالة الفرز</div><div class="val"><span class="triage ${tr.cls}"><span class="d"></span>${tr.t}</span></div></div>
-    <div class="field"><div class="lab">الطرف</div><div class="val">${i.who}</div></div>
+    <div class="field"><div class="lab">الطرف</div><div class="val">${esc(i.who)}</div></div>
     <div class="field"><div class="lab">المهلة</div><div class="val" style="${i.slaWarn?'color:var(--conflict)':''}">${i.sla}</div></div>
     <div class="acts">${i.triage==='auto'?`<button class="btn btn-primary" data-a="open">${svg('check')}عُولجت — عرض</button>`:`<button class="btn btn-human" data-a="approve">${svg('check')}اعتمد وحوّل للموديول</button>`}<button class="btn btn-ghost" data-a="goto">فتح ${m.label}</button></div></div>`;
   el.querySelectorAll('[data-a]').forEach(b=>b.onclick=()=>{
@@ -1105,7 +1117,7 @@ function viewOverview(v){
     </div>`;
   const re=document.getElementById('ovRows');
   act.forEach(i=>{const m=MODULES[i.dest],tr=TRI[i.triage];re.insertAdjacentHTML('beforeend',`<div class="row" data-d="${i.dest}" style="grid-template-columns:1fr 150px;cursor:pointer">
-    <div class="c c1"><div class="src-ic">${svg(i.src)}</div><div><div class="out">${i.out}</div><div class="from">← ${m.label} · ${i.who}</div></div></div>
+    <div class="c c1"><div class="src-ic">${svg(i.src)}</div><div><div class="out">${esc(i.out)}</div><div class="from">← ${m.label} · ${esc(i.who)}</div></div></div>
     <div class="c"><span class="triage ${tr.cls}"><span class="d"></span>${tr.t}</span></div></div>`);});
   if(!act.length)re.innerHTML='<div style="padding:36px;text-align:center;color:var(--muted)">لا وارد يحتاج تصرّفك</div>';
   re.querySelectorAll('.row').forEach(r=>r.onclick=()=>go(r.dataset.d));
@@ -2400,54 +2412,75 @@ function tutModal(edit){
 }
 
 /* ===== AI ASSISTANT ===== */
+/* ===== «الفريق (AI Team)» — D7 =====
+   فريق وكلاء ذكاء اصطناعي، وكيل لكل وظيفة عمل، كلٌّ يكتب تقريره من بيانات حقيقية،
+   ووكيل «ماستر» يجمّعها في صورة واحدة + أهم ٣ إجراءات. التشغيل عند الطلب (أزرار)
+   الآن؛ ويمكن لـ n8n استدعاء POST /api/ai/agents/run?agent=all يوميًّا لاحقًا.
+   المصدر: /api/ai/agents (أحدث تقرير لكل وكيل، مخزَّن في SQLite AgentReport). */
+const AI_TEAM_IC={articles:'doc',automation:'gear',sales:'wallet',marketing:'mega',platform:'grid',topics:'sparkles',incoming:'trend',dev:'shield',finance:'wallet',master:'robot'};
+function aiWhen(iso){if(!iso)return'—';try{return new Intl.DateTimeFormat('ar-EG',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'}).format(new Date(iso));}catch(e){return String(iso).slice(0,16);}}
+function aiAgentsData(){return (window.EP&&EP.data.aiAgents)||{agents:[],ai_configured:false};}
 function viewAI(v){
-  // لا ردود تجريبية بأرقام/أسماء وهمية — المساعد الذكي غير مفعّل بعد.
-  const soonMsg='المساعد الذكي غير مفعّل بعد — قريبًا.';
-  const responses={snapshot:soonMsg,fin:soonMsg,audit:soonMsg,decide:soonMsg,unpaid:soonMsg};
-  const quick=[['snapshot','تلخيص حالة الشركة'],['fin','تحليل مالي للشهر'],['audit','كشف الأخطاء والتكرارات'],['decide','اقتراح قرارات إدارية'],['unpaid','المسجّلون غير الدافعين']];
+  if(window.EP){EP.ensure('aiAgents',()=>viewAI(v));}
+  const st=(window.EP&&EP.state.aiAgents)||'idle';
+  const D=aiAgentsData();
+  const agents=D.agents||[];
+  const master=agents.find(a=>a.agent==='master')||null;
+  const team=agents.filter(a=>a.agent!=='master');
+  const ran=agents.filter(a=>a&&a.created_at).length;
+  const busy=(window.EP&&EP.state.aiAgents==='loading');
   v.innerHTML=`
-    <div style="display:grid;grid-template-columns:1fr 290px;gap:16px;align-items:start" class="ov-grid">
-      <section class="panel"><div class="ph"><h3>مساعد البروفيسور الذكي</h3><span class="badge-soon">قريبًا</span></div>
-        <div id="aiChat" style="padding:18px;min-height:300px;max-height:46vh;overflow-y:auto;display:flex;flex-direction:column;gap:11px"></div>
-        <div style="border-top:1px solid var(--line);padding:12px 16px;display:flex;gap:8px"><input id="aiInput" placeholder="اسأل عن حالة الشركة…" style="flex:1;border:1px solid var(--line);border-radius:10px;padding:10px 13px;font:inherit;font-size:13px;outline:0"><button class="btn btn-human" style="flex:none;min-width:auto;padding:10px 16px" id="aiSend">${svg('sparkles')}اسأل</button></div>
-      </section>
-      <aside class="panel"><div class="ph"><h3>أوامر سريعة</h3></div><div id="aiQuick" style="padding:12px;display:flex;flex-direction:column;gap:8px"></div></aside>
+    <div class="policy" style="border-inline-start-color:var(--ai);background:var(--ai-bg)">${svg('robot','ic')}<div><b>الفريق (AI Team):</b> وكيل ذكاء لكل وظيفة (مقالات · مبيعات · تسويق · مالية · تحليل الوارد · رصد الأتمتة …) يقرأ بياناتك الحقيقية ويكتب تقريرًا. الـ<b>ماستر</b> يجمّعهم في صورة واحدة. اضغط «شغّل» على أي وكيل أو «حدّث الصورة الكاملة».</div></div>
+    ${!D.ai_configured?`<div class="policy" style="border-inline-start-color:var(--gold);background:var(--gold-bg)">${svg('sparkles','ic')}<div><b>مفتاح الذكاء غير مهيّأ على الخادم:</b> التقارير هتتولّد بالأرقام الحقيقية <b>بدون تحليل نصّي</b>. اضبط <code>ANTHROPIC_API_KEY</code> (أو OPENAI/DEEPSEEK) لتفعيل التحليل الكامل.</div></div>`:''}
+    ${st==='error'?`<div class="policy" style="border-inline-start-color:var(--conflict);background:var(--conflict-bg);color:var(--conflict)">${svg('scale','ic')}<div>تعذّر جلب تقارير الفريق من الخادم. <b style="cursor:pointer;text-decoration:underline" onclick="EP.reload('aiAgents',()=>viewAI(document.getElementById('view')))">إعادة المحاولة</b></div></div>`:''}
+    <div class="kpis">
+      <div class="kpi k-1"><div class="top"><span class="ic">${svg('robot')}</span>وكلاء الفريق</div><b>${money(team.length)}</b><div class="sub">وظيفة عمل</div></div>
+      <div class="kpi k-3"><div class="top"><span class="ic">${svg('check')}</span>تقارير جاهزة</div><b>${money(ran)}</b><div class="sub">من ${money(agents.length)} وكيل</div></div>
+      <div class="kpi k-2"><div class="top"><span class="ic">${svg('robot')}</span>الماستر</div><b>${master&&master.created_at?'محدّث':'—'}</b><div class="sub">${master&&master.created_at?aiWhen(master.created_at):'لم يُشغّل بعد'}</div></div>
+      <div class="kpi k-4"><div class="top"><span class="ic">${svg('sparkles')}</span>التحليل</div><b>${D.ai_configured?'مفعّل':'أرقام فقط'}</b><div class="sub">${D.ai_configured?'LLM على الخادم':'بلا مفتاح AI'}</div></div>
     </div>
-    <section class="panel" style="margin-top:16px"><div class="ph"><h3>سجلّ قرارات الذكاء — غرفة العمليات</h3><span class="hint">كل قرار آليّ يظهر · عدّله أو اعتمده أو اتركه تلقائيًّا</span></div>
-      <div id="aiToggles" style="display:flex;flex-wrap:wrap;gap:8px;padding:14px 16px;border-bottom:1px solid var(--line)"></div>
-      <div id="aiDecRows"></div></section>`;
-  renderAIDecisions();
-  const qe=document.getElementById('aiQuick');
-  quick.forEach(([k,l])=>qe.insertAdjacentHTML('beforeend',`<button class="aiq" data-k="${k}" style="text-align:right;border:1px solid var(--line);background:var(--surface);border-radius:10px;padding:10px 12px;font:inherit;font-size:12.5px;font-weight:700;color:var(--ink);cursor:pointer;display:flex;align-items:center;gap:8px">${svg('sparkles')}<span>${l}</span></button>`));
-  const bubble=(who,txt)=>{const c=document.getElementById('aiChat');const me=who==='me';c.insertAdjacentHTML('beforeend',`<div style="align-self:${me?'flex-start':'flex-end'};max-width:82%;background:${me?'var(--navy)':'var(--ai-bg)'};color:${me?'#fff':'var(--ink)'};border:${me?'0':'1px solid #CDE8EA'};border-radius:12px;padding:10px 14px;font-size:13px;line-height:1.75">${txt}</div>`);c.scrollTop=c.scrollHeight;};
-  bubble('ai','أهلًا 👋 اسألني عن حالة الشركة، أو اضغط أمرًا سريعًا من اليمين.');
-  qe.querySelectorAll('.aiq').forEach(b=>b.onclick=()=>{bubble('me',b.textContent.trim());setTimeout(()=>bubble('ai',responses[b.dataset.k]),280);});
-  const send=()=>{const i=document.getElementById('aiInput');if(!i.value.trim())return;bubble('me',i.value.trim());i.value='';setTimeout(()=>bubble('ai','المساعد الذكي غير مفعّل بعد — قريبًا.'),300);};
-  document.getElementById('aiSend').onclick=send;
-  document.getElementById('aiInput').addEventListener('keydown',e=>{if(e.key==='Enter')send();});
+    <section class="panel" style="margin-bottom:16px;border:1px solid var(--ai)"><div class="ph"><h3>${svg('robot')} الصورة الكاملة — Master</h3><span class="hint">يجمّع تقارير كل الوكلاء + أهم ٣ إجراءات</span>
+      <button class="btn btn-human" id="aiMasterRun" ${busy?'disabled':''} style="flex:none;min-width:auto;padding:7px 14px;font-size:12px;margin-inline-start:auto">${svg('sparkles')}حدّث الصورة الكاملة</button></div>
+      <div id="aiMasterBody" style="padding:16px 18px"></div></section>
+    <section class="panel"><div class="ph"><h3>وكلاء الفريق</h3><span class="n">${team.length}</span>
+      <button class="btn btn-ghost" id="aiRunAll" ${busy?'disabled':''} style="flex:none;min-width:auto;padding:6px 13px;font-size:12px;margin-inline-start:auto">${svg('robot')}شغّل الكل</button></div>
+      <div id="aiTeamGrid" style="padding:14px;display:grid;grid-template-columns:1fr 1fr;gap:12px"></div></section>`;
+  // الماستر
+  const mb=document.getElementById('aiMasterBody');
+  if(master&&master.created_at){
+    mb.innerHTML=`<div style="font-size:13.5px;line-height:1.8;color:var(--ink)">${esc(master.summary||'')||'<i>بلا ملخّص</i>'}</div>
+      ${(master.actions&&master.actions.length)?`<div style="margin-top:12px"><div style="font-size:12px;font-weight:800;color:var(--muted);margin-bottom:6px">أهم الإجراءات:</div>${master.actions.map(a=>`<div style="display:flex;gap:8px;align-items:flex-start;padding:6px 0;font-size:13px"><span style="color:var(--gold);flex:none">${svg('check')}</span><span>${esc(a)}</span></div>`).join('')}</div>`:''}
+      <div style="margin-top:10px;font-size:11.5px;color:var(--muted)">آخر تحديث: ${aiWhen(master.created_at)}</div>`;
+  } else {
+    mb.innerHTML=`<div style="padding:20px;text-align:center;color:var(--muted)">${busy?'…جارٍ التشغيل':'اضغط «حدّث الصورة الكاملة» بعد تشغيل الوكلاء ليجمّع الماستر تقاريرهم.'}</div>`;
+  }
+  var mr=document.getElementById('aiMasterRun');if(mr)mr.onclick=function(){if(window.EP)EP.runAgents('master',()=>viewAI(document.getElementById('view')));};
+  var ra=document.getElementById('aiRunAll');if(ra)ra.onclick=function(){if(window.EP)EP.runAgents('all',()=>viewAI(document.getElementById('view')));};
+  // شبكة الوكلاء
+  const g=document.getElementById('aiTeamGrid');
+  team.forEach(a=>{const rep=a&&a.created_at;
+    g.insertAdjacentHTML('beforeend',`<div style="border:1px solid var(--line);border-radius:12px;padding:13px;display:flex;flex-direction:column;gap:8px;background:var(--surface)">
+      <div style="display:flex;align-items:center;gap:9px"><div class="src-ic" style="background:var(--ai-bg);color:var(--ai)">${svg(AI_TEAM_IC[a.agent]||'robot')}</div><div style="flex:1"><div style="font-family:Cairo;font-weight:800;font-size:13.5px;color:var(--navy)">${esc(a.label)}</div><div style="font-size:11px;color:var(--muted)">${esc(a.desc||'')}</div></div></div>
+      <div style="font-size:12.5px;line-height:1.7;color:var(--ink-2);min-height:38px">${rep?esc((a.summary||'').slice(0,160))+((a.summary||'').length>160?'…':''):'<span style="color:var(--muted)">لم يُشغّل بعد</span>'}</div>
+      <div style="display:flex;gap:6px;align-items:center;margin-top:auto"><button class="btn btn-human aiRun" data-ag="${a.agent}" style="flex:none;min-width:auto;padding:5px 11px;font-size:11.5px">${svg('sparkles')}شغّل</button>${rep?`<button class="btn btn-ghost aiDet" data-ag="${a.agent}" style="flex:none;min-width:auto;padding:5px 11px;font-size:11.5px">التفاصيل</button><span style="font-size:10.5px;color:var(--muted);margin-inline-start:auto">${aiWhen(a.created_at)}</span>`:''}</div>
+    </div>`);});
+  g.querySelectorAll('.aiRun').forEach(b=>b.onclick=()=>{if(window.EP)EP.runAgents(b.dataset.ag,()=>viewAI(document.getElementById('view')));});
+  g.querySelectorAll('.aiDet').forEach(b=>b.onclick=()=>aiReportDrawer(b.dataset.ag));
 }
-const AI_AUTO={};
-// سجلّ قرارات الذكاء: لا يوجد تكامل ذكاء فعلي بعد — فارغ (لا بيانات وهمية).
-const AI_DECISIONS=[];
-function renderAIDecisions(){
-  var tg=document.getElementById('aiToggles');if(!tg)return;
-  tg.innerHTML='<span style="font-size:11.5px;font-weight:800;color:var(--muted);align-self:center">يعمل تلقائيًّا في:</span>';
-  Object.keys(AI_AUTO).forEach(function(k){tg.insertAdjacentHTML('beforeend','<button class="aitg chip'+(AI_AUTO[k]?' on':'')+'" data-k="'+k+'">'+k+'</button>');});
-  tg.querySelectorAll('.aitg').forEach(function(b){b.onclick=function(){AI_AUTO[b.dataset.k]=!AI_AUTO[b.dataset.k];renderAIDecisions();toast('قرارات «'+b.dataset.k+'» '+(AI_AUTO[b.dataset.k]?'تلقائية':'تتطلّب موافقتك'));};});
-  var el=document.getElementById('aiDecRows');el.innerHTML='';
-  AI_DECISIONS.forEach(function(d,i){var badge=d.status==='auto'?['s-auto','عُولج آليًّا']:d.status==='over'?['s-human','عُدّل بشريًّا']:['s-wait','بانتظار قرارك'];var wait=d.status==='wait';
-    el.insertAdjacentHTML('beforeend','<div style="border-bottom:1px solid var(--line)"><div class="row esc-row" style="grid-template-columns:1.8fr 1fr 150px;border:none"><div class="c c1"><div class="src-ic" style="background:var(--agree-bg);color:var(--agree)">'+svg('sparkles')+'</div><div><div class="parties">'+d.action+'</div><div class="from">'+d.type+' · '+d.id+' · لأن: '+d.reason+'</div></div></div><div class="c"><span class="dest" style="background:var(--surface-2);color:var(--ink-2)">'+d.mod+'</span></div><div class="c"><span class="status '+badge[0]+'"><span class="d"></span>'+badge[1]+'</span></div></div><div style="display:flex;gap:6px;padding:0 16px 10px"><button class="btn btn-ghost aidec" data-a="edit" data-i="'+i+'" style="flex:none;min-width:auto;padding:5px 11px;font-size:11.5px">عدّل قراره</button>'+(wait?'<button class="btn btn-primary aidec" data-a="ok" data-i="'+i+'" style="flex:none;min-width:auto;padding:5px 11px;font-size:11.5px">اعتمد</button><button class="btn btn-ghost aidec" data-a="auto" data-i="'+i+'" style="flex:none;min-width:auto;padding:5px 11px;font-size:11.5px">اتركه تلقائيًّا</button>':'')+'</div></div>');
-  });
-  el.querySelectorAll('.aidec').forEach(function(b){b.onclick=function(){var d=AI_DECISIONS[+b.dataset.i],a=b.dataset.a;
-    if(a==='edit'){aiDecisionEdit(d);}
-    else if(a==='ok'){d.status='auto';renderAIDecisions();notify('اعتمدت قرار الذكاء في «'+d.type+'»');}
-    else if(a==='auto'){d.status='auto';renderAIDecisions();notify('تُرك «'+d.type+'» للذكاء تلقائيًّا');}
-  };});
-}
-function aiDecisionEdit(d){
-  var s=openModal('تعديل قرار الذكاء — '+d.type,'<div class="note-ai" style="margin-bottom:12px">'+svg('sparkles','ic')+'<div>الذكاء قرّر: <b>'+d.action+'</b><br>السبب: '+d.reason+'</div></div><div class="fld"><label>قرارك البديل</label><textarea id="ad_t" style="min-height:80px">'+d.action+'</textarea></div><div class="acts"><button class="btn btn-human" id="ad_s">'+svg('check')+'تجاوز قرار الذكاء</button><button class="btn btn-ghost" id="ad_x">إلغاء</button></div>');
-  s.querySelector('#ad_x').onclick=closeModal;
-  s.querySelector('#ad_s').onclick=function(){d.action=s.querySelector('#ad_t').value.trim()||d.action;d.status='over';closeModal();renderAIDecisions();notify('تجاوزت قرار الذكاء في «'+d.type+'» بقرار بشري');};
+// درج تقرير وكيل: الملخّص + النقاط + الإجراءات المقترحة (يقرأ من EP.data.aiAgents).
+function aiReportDrawer(agentId){
+  const a=(aiAgentsData().agents||[]).find(x=>x.agent===agentId);
+  if(!a)return;
+  const bullets=(a.bullets&&a.bullets.length)?a.bullets.map(x=>`<div style="display:flex;gap:8px;align-items:flex-start;padding:6px 0;font-size:13px;border-bottom:1px solid var(--line)"><span style="color:var(--ai);flex:none">${svg('check')}</span><span>${esc(x)}</span></div>`).join(''):'<div style="color:var(--muted);font-size:12.5px;padding:6px 0">لا نقاط.</div>';
+  const actions=(a.actions&&a.actions.length)?a.actions.map(x=>`<div style="display:flex;gap:8px;align-items:flex-start;padding:6px 0;font-size:13px"><span style="color:var(--gold);flex:none">${svg('sparkles')}</span><span>${esc(x)}</span></div>`).join(''):'<div style="color:var(--muted);font-size:12.5px;padding:6px 0">لا إجراءات مقترحة.</div>';
+  const s=openModal('تقرير: '+esc(a.label),
+    '<div class="note-ai" style="margin-bottom:12px">'+svg('robot','ic')+'<div>'+(esc(a.summary||'')||'<i>بلا ملخّص</i>')+'</div></div>'+
+    '<div style="font-size:12px;font-weight:800;color:var(--muted);margin:4px 0 4px">النقاط</div>'+bullets+
+    '<div style="font-size:12px;font-weight:800;color:var(--muted);margin:14px 0 4px">الإجراءات المقترحة</div>'+actions+
+    '<div style="margin-top:10px;font-size:11.5px;color:var(--muted)">آخر تحديث: '+aiWhen(a.created_at)+'</div>'+
+    '<div class="acts" style="margin-top:12px"><button class="btn btn-human" id="air_run">'+svg('sparkles')+'شغّل من جديد</button><button class="btn btn-ghost" id="air_x">إغلاق</button></div>');
+  s.querySelector('#air_x').onclick=closeModal;
+  s.querySelector('#air_run').onclick=function(){if(window.EP)EP.runAgents(agentId,function(){closeModal();viewAI(document.getElementById('view'));});};
 }
 
 /* ===== PARTNERS (Cap Table) ===== */
@@ -2855,8 +2888,17 @@ function targetModal(idx){
 }
 
 /* ===== SETTINGS ===== */
+// المستخدمون الإداريون (الأدمن/الموظفون) الحقيقيون في الداش بورد + خريطة الصلاحيات.
+const DASH_ROLE_LABEL={admin:'أدمن — تحكم كامل',employee:'موظف متابعة',viewer:'بانتظار التفعيل',trainer:'مدرّب',investor:'مستثمر'};
+// الموديولات القابلة للتقييد لدور «موظف» (نفس ما يظهر في ROLE_NAV.employee ويُطبَّق على الخادم عبر module_required).
+const EMPLOYEE_MODULES=['users','courses','topics','tutorials'];
+function rolePermsMap(){
+  var raw=(window.EP&&EP.data.settings&&EP.data.settings.role_permissions);
+  if(!raw)return{};
+  try{return (typeof raw==='string')?(JSON.parse(raw)||{}):raw;}catch(e){return{};}
+}
 function viewSettings(v){
-  if(window.EP){EP.ensure('settings',()=>viewSettings(v));}
+  if(window.EP){EP.ensure('settings',()=>viewSettings(v));EP.ensure('dashUsers',()=>viewSettings(v));EP.ensure('usage',()=>viewSettings(v));EP.ensure('aiModels',()=>viewSettings(v));}
   const Sst=(window.EP&&EP.state.settings)||'idle';
   const S=(window.EP&&EP.data.settings)||null;
   const fxVal=(S&&S.exchange_rate!=null)?S.exchange_rate:50;
@@ -2864,6 +2906,8 @@ function viewSettings(v){
   const coDomain=(S&&S.company_domain)||'dashboard.elprofessor.net';
   const fiscal=(S&&S.fiscal_year_start)||'تبدأ ١ يناير';
   const repDay=(S&&S.monthly_report_day)||'١';
+  const models=(window.EP&&EP.data.aiModels)||[];
+  const U=(window.EP&&EP.data.usage)||null;
   v.innerHTML=`
     ${Sst==='error'?`<div class="policy" style="border-inline-start-color:var(--conflict);background:var(--conflict-bg);color:var(--conflict)">${svg('scale','ic')}<div>تعذّر جلب الإعدادات من الخادم — تُعرض قيم تصميمية. <b style="cursor:pointer;text-decoration:underline" onclick="EP.reload('settings',()=>viewSettings(document.getElementById('view')))">إعادة المحاولة</b></div></div>`:''}
     <div class="inboxwrap" style="grid-template-columns:1fr 1fr;align-items:start">
@@ -2873,29 +2917,37 @@ function viewSettings(v){
         <div style="font-size:12px;font-weight:800;color:var(--muted);margin:16px 0 8px">البلدان والعملات المفعّلة</div>
         <div style="display:flex;flex-wrap:wrap;gap:7px">${['🇪🇬 مصر — ج.م','🇸🇦 السعودية — ر.س','🇶🇦 قطر — ر.ق','🇦🇪 الإمارات — د.إ','🌍 دولي — $'].map(c=>`<span class="chip on" style="cursor:default">${c}</span>`).join('')}</div>
       </div></section>
-      <section class="panel"><div class="ph"><h3>مزوّدو الذكاء</h3></div><div style="padding:8px 6px">
-        ${[['Anthropic Claude','sk-ant-•••• ٤٢','var(--agree)'],['OpenAI','sk-•••• ١٧','var(--agree)'],['DeepSeek','غير مهيّأ','var(--muted)']].map(([n,k,c])=>`<div style="display:flex;align-items:center;gap:11px;padding:11px 14px;border-bottom:1px solid var(--line)"><div class="src-ic" style="background:var(--ai-bg);color:var(--ai)">${svg('robot')}</div><div style="flex:1"><div style="font-weight:700;font-size:13px">${n}</div><div style="font-size:11.5px;color:var(--muted);direction:ltr;text-align:right">${k}</div></div><span style="width:9px;height:9px;border-radius:50%;background:${c}"></span></div>`).join('')}
-        <div style="padding:12px 14px"><button class="btn btn-ghost" style="width:100%" data-a="key">إدارة المفاتيح</button></div>
+      <section class="panel"><div class="ph"><h3>مزوّدو الذكاء</h3><span class="hint">الحالة الحقيقية من الخادم</span></div><div style="padding:8px 6px">
+        ${models.length?models.map(m=>`<div style="display:flex;align-items:center;gap:11px;padding:11px 14px;border-bottom:1px solid var(--line)"><div class="src-ic" style="background:var(--ai-bg);color:var(--ai)">${svg('robot')}</div><div style="flex:1"><div style="font-weight:700;font-size:13px">${esc(m.label||m.id)}</div><div style="font-size:11.5px;color:var(--muted);direction:ltr;text-align:right">${m.configured?esc(m.default_model||''):'المفتاح غير مهيّأ'}</div></div><span style="font-size:11px;font-weight:800;color:${m.configured?'var(--agree)':'var(--muted)'}">${m.configured?'مهيّأ ✓':'غير مهيّأ'}</span></div>`).join(''):'<div style="padding:20px;text-align:center;color:var(--muted)">…جارٍ جلب حالة المزوّدين</div>'}
+        <div style="padding:10px 14px;font-size:11.5px;color:var(--muted)">المفاتيح تُضبط كمتغيّرات بيئة على الخادم (ANTHROPIC_API_KEY / OPENAI_API_KEY / DEEPSEEK_API_KEY) — لا تُدار من المتصفح لأمانها.</div>
       </div></section>
       <section class="panel"><div class="ph"><h3>بيانات الشركة</h3></div><div style="padding:14px 18px">
         ${(window.EP&&EP.data.settings)?`
-          <div class="fld"><label>الاسم</label><input id="set_co" value="${coName}"></div>
-          <div style="display:flex;justify-content:space-between;padding:9px 0;border-bottom:1px solid var(--line);font-size:13px"><span style="color:var(--muted);font-weight:700">الدومين</span><span style="font-weight:600;direction:ltr">${coDomain}</span></div>
-          <div class="fld"><label>السنة المالية</label><input id="set_fy" value="${fiscal}"></div>
-          <div class="fld"><label>يوم التقرير الشهري</label><input id="set_rd" value="${repDay}"></div>
+          <div class="fld"><label>الاسم</label><input id="set_co" value="${esc(coName)}"></div>
+          <div style="display:flex;justify-content:space-between;padding:9px 0;border-bottom:1px solid var(--line);font-size:13px"><span style="color:var(--muted);font-weight:700">الدومين</span><span style="font-weight:600;direction:ltr">${esc(coDomain)}</span></div>
+          <div class="fld"><label>السنة المالية</label><input id="set_fy" value="${esc(fiscal)}"></div>
+          <div class="fld"><label>يوم التقرير الشهري</label><input id="set_rd" value="${esc(repDay)}"></div>
           <div class="acts" style="margin-top:10px"><button class="btn btn-human" style="min-width:auto;padding:8px 16px" data-a="cosave">${svg('check')}حفظ بيانات الشركة</button></div>
-        `:[['الاسم',coName],['الدومين',coDomain],['السنة المالية',fiscal],['يوم التقرير الشهري',repDay]].map(([k,vv])=>`<div style="display:flex;justify-content:space-between;padding:9px 0;border-bottom:1px solid var(--line);font-size:13px"><span style="color:var(--muted);font-weight:700">${k}</span><span style="font-weight:600">${vv}</span></div>`).join('')}
+        `:[['الاسم',coName],['الدومين',coDomain],['السنة المالية',fiscal],['يوم التقرير الشهري',repDay]].map(([k,vv])=>`<div style="display:flex;justify-content:space-between;padding:9px 0;border-bottom:1px solid var(--line);font-size:13px"><span style="color:var(--muted);font-weight:700">${k}</span><span style="font-weight:600">${esc(vv)}</span></div>`).join('')}
       </div></section>
-      <section class="panel"><div class="ph"><h3>الأمان</h3></div><div style="padding:14px 18px;display:flex;flex-direction:column;gap:9px">
-        <button class="btn btn-ghost" style="width:100%" data-a="2fa">تفعيل المصادقة الثنائية</button>
-        <button class="btn btn-ghost" style="width:100%" data-a="log">سجلّ العمليات (Audit Log)</button>
-        <button class="btn btn-ghost" style="width:100%" data-a="backup">نسخة احتياطية الآن</button>
+      <section class="panel"><div class="ph"><h3>الأمان والسجل</h3></div><div style="padding:14px 18px;display:flex;flex-direction:column;gap:9px">
+        <button class="btn btn-primary" style="width:100%" data-a="log">${svg('doc')}سجلّ العمليات (Audit Log)</button>
+        <button class="btn btn-ghost" style="width:100%;opacity:.7;cursor:default" data-a="2fa" title="غير مفعّل بعد">تفعيل المصادقة الثنائية <span class="badge-soon">قريبًا</span></button>
+        <button class="btn btn-ghost" style="width:100%;opacity:.7;cursor:default" data-a="backup" title="غير مفعّل بعد">نسخة احتياطية الآن <span class="badge-soon">قريبًا</span></button>
       </div></section>
     </div>
-    <section class="panel" style="margin-top:16px"><div class="ph"><h3>الأدوار والصلاحيات</h3><span class="hint">بوابة تسجيل واحدة (المنصة) → نحدّد الدور والنطاق من هنا</span></div>
-      <div id="rolesBody" style="padding:6px 0"></div>
-      <div style="padding:12px 16px"><button class="btn btn-human" id="roleAdd" style="min-width:auto;padding:7px 14px;font-size:12px">+ دور وظيفي</button></div>
-    </section>`;
+    <section class="panel" style="margin-top:16px"><div class="ph"><h3>الاستخدام</h3><span class="hint">أرقام حقيقية — آخر ٧ أيام</span></div>
+      <div class="kpis" style="margin:0;padding:14px 16px">
+        <div class="kpi k-1"><div class="top"><span class="ic">${svg('robot')}</span>نداءات الذكاء</div><b>${U?money(U.ai_calls||0):'—'}</b><div class="sub">${U?('أخطاء: '+money(U.ai_errors||0)):'…'}</div></div>
+        <div class="kpi k-3"><div class="top"><span class="ic">${svg('users')}</span>دخول (٧ أيام)</div><b>${U?money(U.logins_7d||0):'—'}</b><div class="sub">تسجيلات دخول</div></div>
+        <div class="kpi k-2"><div class="top"><span class="ic">${svg('trend')}</span>إجراءات (٧ أيام)</div><b>${U?money(U.actions_7d||0):'—'}</b><div class="sub">من سجل العمليات</div></div>
+        <div class="kpi k-4"><div class="top"><span class="ic">${svg('doc')}</span>إجمالي السجل</div><b>${U?money(U.audit_total||0):'—'}</b><div class="sub">عملية مسجّلة</div></div>
+      </div></section>
+    <section class="panel" style="margin-top:16px"><div class="ph"><h3>الفريق الإداري (أدمن/موظفون)</h3><span class="hint">حسابات غرفة العمليات الحقيقية</span>
+      <button class="btn btn-human" id="adminAdd" style="flex:none;min-width:auto;padding:7px 14px;font-size:12px;margin-inline-start:auto">+ مدير/موظف</button></div>
+      <div id="dashUsersBody" style="padding:6px 0"></div></section>
+    <section class="panel" style="margin-top:16px"><div class="ph"><h3>صلاحيات الأدوار</h3><span class="hint">أي الأقسام يشوفها كل دور — يُطبَّق على الواجهة والخادم</span></div>
+      <div id="rolePermsBody" style="padding:12px 16px"></div></section>`;
   v.querySelectorAll('[data-a]').forEach(b=>b.onclick=()=>{const a=b.dataset.a;
     if(a==='fx'){var fx=document.getElementById('fxInput');var val=fx?parseFloat(fx.value):NaN;
       if(window.EP&&EP.data.settings){if(isNaN(val)||val<=0){toast('أدخل سعر صرف صالحًا');return;}EP.saveSettings({exchange_rate:val},()=>viewSettings(document.getElementById('view')));return;}
@@ -2906,40 +2958,112 @@ function viewSettings(v){
         EP.saveSettings(body,()=>viewSettings(document.getElementById('view')));return;
       }
       toast('تم حفظ بيانات الشركة');return;}
-    toast(a==='key'?'فتح إدارة المفاتيح':a==='2fa'?'تم تفعيل 2FA':a==='log'?'فتح سجلّ العمليات':a==='backup'?'جارٍ إنشاء نسخة احتياطية':'تم');});
-  document.getElementById('roleAdd').onclick=function(){roleModal(null);};
-  renderRoles();
+    if(a==='log'){auditModal();return;}
+    // 2FA/النسخ الاحتياطي: غير مفعّلة — بلا نجاح وهمي.
+    if(a==='2fa'||a==='backup'){toast('قريبًا — غير مفعّلة بعد');return;}
+  });
+  var aa=document.getElementById('adminAdd');if(aa)aa.onclick=function(){addAdminModal(null);};
+  renderDashUsers();
+  renderRolePerms();
 }
-const ROLES_DEF=[
-  {name:'أدمن',scope:'كل الموديولات',perm:'تحكم كامل',sys:true},
-  {name:'موظف متابعة',scope:'المستخدمون · الدورات',perm:'قراءة فقط'},
-  {name:'مبيعات (Sales)',scope:'المستخدمون · الرسائل',perm:'متابعة + تواصل'},
-  {name:'تسويق (Marketing)',scope:'التسويق · المحتوى',perm:'إنشاء حملات + نشر'},
-  {name:'إيميل ماركتنج',scope:'المحتوى · الرسائل',perm:'صياغة وإرسال'}
-];
-function renderRoles(){
-  var el=document.getElementById('rolesBody');if(!el)return;el.innerHTML='';
-  ROLES_DEF.forEach(function(r,i){el.insertAdjacentHTML('beforeend',
-    '<div class="row" data-i="'+i+'" style="grid-template-columns:1fr 1.3fr 1fr 90px;cursor:'+(r.sys?'default':'pointer')+'">'+
-    '<div class="c c1"><div class="src-ic" style="background:var(--navy);color:#fff">'+svg('users')+'</div><div><div class="parties">'+r.name+'</div></div></div>'+
-    '<div class="c"><div class="from">النطاق: '+r.scope+'</div></div>'+
-    '<div class="c"><div class="from">'+r.perm+'</div></div>'+
-    '<div class="c"><span class="status '+(r.sys?'s-auto':'s-human')+'"><span class="d"></span>'+(r.sys?'نظام':'مخصّص')+'</span></div></div>');});
-  el.querySelectorAll('.row').forEach(function(rw){var r=ROLES_DEF[+rw.dataset.i];if(!r.sys)rw.onclick=function(){roleModal(r,+rw.dataset.i);};});
+// قائمة الأدمن/الموظفين الحقيقيين من SQLite (/api/users). إيقاف/تعديل محميّان بآخر-مدير على الخادم.
+function renderDashUsers(){
+  var el=document.getElementById('dashUsersBody');if(!el)return;el.innerHTML='';
+  var list=(window.EP&&Array.isArray(EP.data.dashUsers))?EP.data.dashUsers:null;
+  if(list===null){el.innerHTML='<div style="padding:24px;text-align:center;color:var(--muted)">…جارٍ التحميل</div>';return;}
+  var admins=list.filter(function(u){return u.is_active&&(u.dashboard_role==='admin'||u.role==='admin');});
+  if(!list.length){el.innerHTML='<div style="padding:24px;text-align:center;color:var(--muted)">لا حسابات إدارية بعد. اضغط «+ مدير/موظف».</div>';return;}
+  list.forEach(function(u){
+    var rl=u.dashboard_role||u.role||'viewer';
+    var isAdmin=(rl==='admin');
+    var lastAdmin=isAdmin&&u.is_active&&admins.length<=1;
+    el.insertAdjacentHTML('beforeend',
+      '<div class="row" style="grid-template-columns:1.4fr 1fr 130px 200px">'+
+      '<div class="c c1"><div class="src-ic" style="background:var(--navy);color:#fff">'+svg('users')+'</div><div><div class="parties">'+esc(u.name||u.email||'—')+'</div><div class="from" style="direction:ltr;text-align:right">'+esc(u.email||'')+'</div></div></div>'+
+      '<div class="c"><div class="from">'+(DASH_ROLE_LABEL[rl]||esc(rl))+'</div></div>'+
+      '<div class="c"><span class="status '+(u.is_active?'s-auto':'s-late')+'"><span class="d"></span>'+(u.is_active?'مفعّل':'موقوف')+'</span></div>'+
+      '<div class="c" style="gap:6px;flex-wrap:wrap"><button class="btn btn-ghost" data-edit="'+u.id+'" style="padding:5px 10px;font-size:11.5px">تعديل</button>'+
+        (lastAdmin?'<span style="font-size:10.5px;color:var(--muted)">آخر مدير — محميّ</span>':'<button class="btn '+(u.is_active?'btn-warn':'btn-primary')+'" data-toggle="'+u.id+'" data-act="'+(u.is_active?'0':'1')+'" style="padding:5px 10px;font-size:11.5px">'+(u.is_active?'إيقاف':'تفعيل')+'</button>')+
+      '</div></div>');
+  });
+  el.querySelectorAll('[data-edit]').forEach(function(b){b.onclick=function(){var u=list.find(function(x){return String(x.id)===b.dataset.edit;});if(u)addAdminModal(u);};});
+  el.querySelectorAll('[data-toggle]').forEach(function(b){b.onclick=function(){var u=list.find(function(x){return String(x.id)===b.dataset.toggle;});if(!u)return;
+    var on=b.dataset.act==='1';
+    if(!confirm((on?'تفعيل':'إيقاف')+' حساب «'+(u.name||u.email)+'»؟'))return;
+    if(window.EP)EP.updateDashUser(u.id,{is_active:on},function(){viewSettings(document.getElementById('view'));});
+  };});
 }
-function roleModal(edit,idx){
+// إضافة/تعديل مدير أو موظف حقيقي (SQLite User). بريد + كلمة مرور مؤقتة + دور.
+function addAdminModal(edit){
   var e=edit||{};
-  var mods=['المستخدمون','الدورات','الضمان','السوق','المالية','الاستثمار','التسويق','المحتوى','الرسائل','الفريق'];
-  var checked=(e.scope||'').split(' · ');
-  var boxes=mods.map(function(m){return '<label class="tg" style="margin-bottom:6px"><input type="checkbox" value="'+m+'"'+(checked.indexOf(m)>-1?' checked':'')+'> '+m+'</label>';}).join('');
-  var s=openModal(edit?'تعديل دور':'دور وظيفي جديد',
-    '<div class="fld"><label>اسم الدور</label><input id="ro_n" value="'+(e.name||'')+'" placeholder="مثال: مبيعات الخليج"></div>'+
-    '<div class="fld"><label>حدود الإجراء</label><select id="ro_p"><option'+(e.perm==='قراءة فقط'?' selected':'')+'>قراءة فقط</option><option'+(e.perm==='متابعة + تواصل'?' selected':'')+'>متابعة + تواصل</option><option'+(/إنشاء|نشر|صياغة/.test(e.perm||'')?' selected':'')+'>إنشاء + نشر</option><option'+(e.perm==='اعتماد'?' selected':'')+'>اعتماد</option></select></div>'+
-    '<div class="fld"><label>نطاق الظهور (الموديولات)</label><div style="display:grid;grid-template-columns:1fr 1fr;gap:2px 10px">'+boxes+'</div></div>'+
-    '<div class="acts" style="margin-top:12px"><button class="btn btn-primary" id="ro_s">'+svg('check')+(edit?'حفظ':'أضف الدور')+'</button>'+(edit?'<button class="btn btn-warn" id="ro_d">حذف</button>':'')+'<button class="btn btn-ghost" id="ro_x">إلغاء</button></div>');
-  s.querySelector('#ro_x').onclick=closeModal;
-  s.querySelector('#ro_s').onclick=function(){var sc=[...s.querySelectorAll('input[type=checkbox]:checked')].map(function(c){return c.value;}).join(' · ')||'—';var d={name:s.querySelector('#ro_n').value.trim()||'دور',scope:sc,perm:s.querySelector('#ro_p').value};if(edit){Object.assign(edit,d);}else{ROLES_DEF.push(d);}closeModal();viewSettings(document.getElementById('view'));notify(edit?'حُدّث الدور':'أُضيف دور «'+d.name+'»');};
-  var rd=s.querySelector('#ro_d');if(rd)rd.onclick=function(){ROLES_DEF.splice(idx,1);closeModal();viewSettings(document.getElementById('view'));notify('حُذف الدور');};
+  var isEdit=!!(edit&&edit.id);
+  var curRole=e.dashboard_role||e.role||'employee';
+  var roleOpts=[['admin','مدير (تحكم كامل)'],['employee','موظف متابعة']].map(function(r){return '<option value="'+r[0]+'"'+(curRole===r[0]?' selected':'')+'>'+r[1]+'</option>';}).join('');
+  var s=openModal(isEdit?'تعديل حساب إداري':'إضافة مدير/موظف',
+    '<div class="note-ai" style="margin-bottom:12px">'+svg('users','ic')+'<div>'+(isEdit?'عدّل الدور أو أعد ضبط كلمة المرور. تنزيل دور آخر مدير أو إيقافه محميّ على الخادم.':'ينشئ حسابًا حقيقيًّا في غرفة العمليات ببريد وكلمة مرور مؤقتة — يقدر يغيّرها بعد الدخول.')+'</div></div>'+
+    '<div class="fld"><label>الاسم</label><input id="ad_n" value="'+esc(e.name||'')+'" placeholder="اسم الموظف"></div>'+
+    '<div class="fld"><label>البريد الإلكتروني</label><input id="ad_e" type="email" dir="ltr" value="'+esc(e.email||'')+'"'+(isEdit?' disabled':'')+' placeholder="staff@elprofessor.net"></div>'+
+    '<div class="fld"><label>الدور</label><select id="ad_r">'+roleOpts+'</select></div>'+
+    '<div class="fld"><label>'+(isEdit?'كلمة مرور جديدة (اختياري)':'كلمة مرور مؤقتة')+'</label><input id="ad_p" type="text" dir="ltr" placeholder="'+(isEdit?'اتركها فارغة لعدم التغيير':'٨ أحرف على الأقل')+'"></div>'+
+    '<div class="acts" style="margin-top:12px"><button class="btn btn-primary" id="ad_s">'+svg('check')+(isEdit?'حفظ':'إضافة الحساب')+'</button><button class="btn btn-ghost" id="ad_x">إلغاء</button></div>');
+  s.querySelector('#ad_x').onclick=closeModal;
+  s.querySelector('#ad_s').onclick=function(){
+    var name=s.querySelector('#ad_n').value.trim();
+    var email=s.querySelector('#ad_e').value.trim().toLowerCase();
+    var roleSel=s.querySelector('#ad_r').value;
+    var pass=s.querySelector('#ad_p').value;
+    if(!window.EP){toast('غير متصل بالخادم');return;}
+    if(isEdit){
+      var body={name:name,role:roleSel,dashboard_role:roleSel};
+      if(pass){if(pass.length<8){toast('كلمة المرور ٨ أحرف على الأقل');return;}body.password=pass;}
+      EP.updateDashUser(edit.id,body,function(){closeModal();viewSettings(document.getElementById('view'));});
+    } else {
+      if(!name){toast('الاسم مطلوب');return;}
+      if(!email||email.indexOf('@')<0){toast('بريد إلكتروني صالح مطلوب');return;}
+      if(!pass||pass.length<8){toast('كلمة مرور مؤقتة ٨ أحرف على الأقل');return;}
+      EP.createDashUser({name:name,email:email,password:pass,role:roleSel},function(){closeModal();viewSettings(document.getElementById('view'));});
+    }
+  };
+}
+// محرّر صلاحيات دور «موظف»: أي الأقسام يشوفها. يُحفظ كـ role_permissions في الإعدادات
+// (JSON) ويُطبَّق فعليًّا على الواجهة (roleNavFor) والخادم (module_required).
+function renderRolePerms(){
+  var el=document.getElementById('rolePermsBody');if(!el)return;
+  var map=rolePermsMap();
+  var entry=map.employee&&(map.employee.modules||map.employee);
+  var allowed=Array.isArray(entry)?entry:EMPLOYEE_MODULES.slice(); // غياب إدخال = كل الأقسام (متوافق رجعيًّا)
+  var boxes=EMPLOYEE_MODULES.map(function(id){var m=MODULES[id]||{label:id};
+    return '<label class="tg" style="margin-bottom:6px"><input type="checkbox" class="rpm" value="'+id+'"'+(allowed.indexOf(id)>-1?' checked':'')+'> '+esc(m.label)+'</label>';}).join('');
+  el.innerHTML=
+    '<div style="font-size:12.5px;color:var(--ink-2);margin-bottom:10px"><b>دور «موظف متابعة»</b> — حدّد الأقسام المسموح له بها (الأدمن دائمًا كامل الصلاحية):</div>'+
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:2px 14px;max-width:420px">'+boxes+'</div>'+
+    '<div class="acts" style="margin-top:12px"><button class="btn btn-human" id="rpm_save" style="min-width:auto;padding:8px 16px">'+svg('check')+'حفظ الصلاحيات</button></div>';
+  el.querySelector('#rpm_save').onclick=function(){
+    if(!(window.EP&&EP.data.settings)){toast('غير متصل بالخادم');return;}
+    var mods=[].slice.call(el.querySelectorAll('.rpm:checked')).map(function(c){return c.value;});
+    var newMap=rolePermsMap();newMap.employee={modules:mods};
+    EP.saveSettings({role_permissions:JSON.stringify(newMap)},function(){viewSettings(document.getElementById('view'));renderNav();});
+  };
+}
+// سجلّ العمليات (Audit) — يفتح مودال بأحدث العمليات الحقيقية من /api/audit (F5).
+const AUDIT_LABEL={'user.role_change':'تغيير دور مستخدم','user.plan_assign':'إسناد باقة','course.create':'إنشاء دورة','course.update':'تعديل دورة','course.delete':'حذف دورة','course.approve':'اعتماد دورة','course.reject':'رفض دورة','article.publish':'نشر مقال','article.reject_delete':'رفض/حذف مقال','settings.update':'تعديل الإعدادات','admin.add_user':'إضافة حساب إداري','admin.update_user':'تعديل حساب إداري','auth.login':'تسجيل دخول','ai.agent_run':'تشغيل وكيل ذكاء','ai.agents_run':'تشغيل كل الوكلاء'};
+function auditWhen(iso){if(!iso)return'—';try{return new Intl.DateTimeFormat('ar-EG',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'}).format(new Date(iso));}catch(e){return String(iso).slice(0,16);}}
+function auditModal(){
+  var s=openModal('سجلّ العمليات (Audit Log)',
+    '<div class="note-ai" style="margin-bottom:12px">'+svg('doc','ic')+'<div>أحدث العمليات على غرفة العمليات — من فعلها ومتى. سجلّ حقيقي غير قابل للتعديل.</div></div>'+
+    '<div id="auditRows" style="max-height:52vh;overflow:auto"><div style="padding:24px;text-align:center;color:var(--muted)">…جارٍ التحميل</div></div>'+
+    '<div class="acts" style="margin-top:12px"><button class="btn btn-ghost" id="au_x">إغلاق</button></div>');
+  s.querySelector('#au_x').onclick=closeModal;
+  var render=function(){
+    var el=s.querySelector('#auditRows');if(!el)return;
+    var rows=(window.EP&&Array.isArray(EP.data.audit))?EP.data.audit:null;
+    if(rows===null){el.innerHTML='<div style="padding:24px;text-align:center;color:var(--muted)">…جارٍ التحميل</div>';return;}
+    if(!rows.length){el.innerHTML='<div style="padding:24px;text-align:center;color:var(--muted)">لا عمليات مسجّلة بعد.</div>';return;}
+    el.innerHTML=rows.map(function(r){var lbl=AUDIT_LABEL[r.action]||r.action;
+      return '<div style="padding:10px 6px;border-bottom:1px solid var(--line)"><div style="display:flex;justify-content:space-between;gap:8px;font-size:13px"><b>'+esc(lbl)+'</b><span style="color:var(--muted);font-size:11.5px;white-space:nowrap">'+auditWhen(r.created_at)+'</span></div><div style="font-size:11.5px;color:var(--muted);margin-top:3px;direction:ltr;text-align:right">'+esc(r.actor_email||'')+(r.target?(' · '+esc(String(r.target))):'')+'</div></div>';
+    }).join('');
+  };
+  if(window.EP)EP.reload('audit',render);else render();
 }
 
 /* ===== MARKET ===== */
