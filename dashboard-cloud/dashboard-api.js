@@ -77,7 +77,8 @@
     data: { dashboard: null, metrics: null, users: null, content: null, finance: null, messages: null, inbox: null,
             escrow: null, investment: null, marketing: null, partners: null, courses: null, settings: null,
             packages: null, t_data: null, i_data: null, targets: null, foundation: null, team: null,
-            notifications: null, goalsAdvisor: null, tutorials: null, platformTopics: null, experts: null },
+            notifications: null, goalsAdvisor: null, tutorials: null, platformTopics: null, experts: null,
+            aiAgents: null, dashUsers: null, audit: null, usage: null },
     state: {}, // 'idle' | 'loading' | 'ready' | 'error'
     _started: {}, // منع التحميل المزدوج
     api: api, get: get, post: post,
@@ -382,10 +383,13 @@
       });
     },
 
-    // الوارد: نضخّ فيه طلبات المدربين + طلبات البرامج الحقيقية (مع approve/reject).
+    // الوارد: نضخّ فيه طلبات المدربين + طلبات البرامج + تسليمات الشات (رسائل جديدة + عملاء محتملون)
+    // — كل ما يحتاج تصرّفًا في مكان واحد (D1). صفوف الرسائل/العملاء «عرض فقط» (viewOnly): تفتح
+    // موديولها بدل زر اعتماد وهمي. مصادر الشات best-effort: تفشل بهدوء لو الجسر بارد/غير مهيّأ.
     inbox: function () {
       var jobs = [];
       var realRows = [];
+      function shortNote(s) { s = String(s || "").trim(); return s.length > 90 ? s.slice(0, 90) + "…" : s; }
       jobs.push(
         get("/platform-trainer-applications?status=pending").then(function (a) {
           var apps = (a && a.applications) || [];
@@ -410,6 +414,48 @@
               note: "البرنامج: " + (rq.title || rq.program_id || "—") + " — اعتمد واربط الدورة.",
               ref: "PRG-" + rq.id, who: rq.user_name || rq.user_email || "—",
               apiKind: "program", apiId: rq.id,
+            });
+          });
+        }).catch(function () {})
+      );
+      // تسليمات الشات (P15): رسائل تواصل جديدة تُكتب محليًّا في «الرسائل» ← تظهر في الوارد كذلك.
+      jobs.push(
+        get("/messages?status=new").then(function (a) {
+          var msgs = Array.isArray(a) ? a : ((a && a.messages) || []);
+          msgs.slice(0, 25).forEach(function (m) {
+            realRows.push({
+              out: "رسالة تواصل جديدة", from: "الشات/الموقع", src: "inbox", dest: "messages",
+              triage: "human", sla: "بانتظار الرد", slaWarn: false, viewOnly: true,
+              note: (m.name ? m.name + ": " : "") + shortNote(m.body || m.topic),
+              ref: "MSG-" + m.id, who: m.name || m.email || "—",
+            });
+          });
+        }).catch(function () {})
+      );
+      // عملاء محتملون من الشات (best-effort — الجسر قد لا يوفّره بعد).
+      jobs.push(
+        get("/platform-leads?status=new").then(function (a) {
+          var leads = (a && (a.leads || a.items)) || (Array.isArray(a) ? a : []);
+          (leads || []).slice(0, 25).forEach(function (l) {
+            realRows.push({
+              out: "عميل محتمل جديد", from: "الشات", src: "users", dest: "users",
+              triage: "human", sla: "متابعة", slaWarn: false, viewOnly: true,
+              note: shortNote(l.need || l.topic || l.summary || "عميل محتمل من محادثة الشات"),
+              ref: "LEAD-" + (l.id || l._id || "?"), who: l.name || l.full_name || l.email || "—",
+            });
+          });
+        }).catch(function () {})
+      );
+      // رسائل مُسلَّمة من الشات على المنصة (best-effort).
+      jobs.push(
+        get("/platform-messages?status=new").then(function (a) {
+          var pms = (a && (a.messages || a.items)) || (Array.isArray(a) ? a : []);
+          (pms || []).slice(0, 25).forEach(function (m) {
+            realRows.push({
+              out: "رسالة من المنصة", from: "الشات", src: "inbox", dest: "messages",
+              triage: "human", sla: "بانتظار الرد", slaWarn: false, viewOnly: true,
+              note: shortNote(m.body || m.text || m.summary || m.topic),
+              ref: "PMSG-" + (m.id || m._id || "?"), who: m.name || m.user_name || m.email || "—",
             });
           });
         }).catch(function () {})
@@ -647,6 +693,39 @@
     // الإعدادات: /api/settings -> {key:value}
     settings: function () {
       return get("/settings").then(function (s) { EP.data.settings = s || {}; });
+    },
+
+    // الفريق (AI Team) — D7: /api/ai/agents -> {agents:[{agent,label,desc,summary,bullets,actions,created_at,source}], ai_configured}
+    aiAgents: function () {
+      return get("/ai/agents").then(function (r) {
+        EP.data.aiAgents = { agents: (r && r.agents) || [], ai_configured: !!(r && r.ai_configured) };
+      });
+    },
+
+    // مستخدمو الداش بورد (SQLite) — D9: /api/users -> [{id,email,name,role,dashboard_role,is_active,...}]
+    // هؤلاء هم الأدمن/الموظفون الحقيقيون في غرفة العمليات (مش مستخدمي المنصة).
+    dashUsers: function () {
+      return get("/users").then(function (r) {
+        EP.data.dashUsers = Array.isArray(r) ? r : [];
+      });
+    },
+
+    // سجل العمليات (Audit) — D9/F5: /api/audit -> [{id,actor_email,action,target,meta,created_at}]
+    audit: function () {
+      return get("/audit?limit=120").then(function (r) {
+        EP.data.audit = Array.isArray(r) ? r : [];
+      });
+    },
+
+    // لوحة الاستخدام — D9: /api/usage -> {ai_calls,ai_errors,audit_total,logins_7d,actions_7d,by_day}
+    usage: function () {
+      return get("/usage").then(function (r) { EP.data.usage = r || {}; });
+    },
+
+    // مزوّدو الذكاء (حالة حقيقية) — D9: /api/ai/models -> [{id,label,configured,default_model}]
+    aiModels: function () {
+      return get("/ai/models").then(function (r) { EP.data.aiModels = Array.isArray(r) ? r : []; })
+        .catch(function () { EP.data.aiModels = []; });
     },
 
     // الباقات والأسعار: /api/packages -> {packages:[...], countries, currency_per_country}
@@ -1432,6 +1511,35 @@
       .catch(function (e) { quietToast((e && e.message) || "تعذّر حفظ الإعدادات"); if (after) after(); });
   };
 
+  // ---- الفريق (AI Team) — D7 ----
+  // شغّل وكيلًا واحدًا (agent=sales…) أو الكل (all → كل الوكلاء + الماستر) أو الماستر فقط.
+  // كل وكيل = نداء LLM واحد على الخادم على بياناته الحقيقية، ويُخزَّن تقريره ليُعرض بسرعة.
+  EP.runAgents = function (agent, after) {
+    var label = agent === "all" ? "كل الوكلاء" : (agent === "master" ? "الصورة الكاملة" : "الوكيل");
+    note("بنشغّل " + label + "… ممكن ياخد ثواني");
+    post("/ai/agents/run?agent=" + encodeURIComponent(agent || "all"), {})
+      .then(function (r) {
+        var n = (r && r.agents && r.agents.length) || 0;
+        note("اتحدّث " + n + " تقرير ✓");
+        EP.reload("aiAgents", after);
+      })
+      .catch(function (e) { quietToast((e && e.message) || "تعذّر تشغيل الوكلاء"); if (after) after(); });
+  };
+
+  // ---- مستخدمو الداش بورد (الأدمن/الموظفون) — D9 (SQLite User) ----
+  // إضافة مدير/موظف حقيقي (بريد + كلمة مرور مؤقتة + دور). POST /api/users.
+  EP.createDashUser = function (d, after) {
+    post("/users", { email: d.email, password: d.password, name: d.name, dashboard_role: d.role })
+      .then(function () { note("أُضيف «" + (d.name || d.email) + "» كـ" + (d.role || "مستخدم")); EP.reload("dashUsers", after); })
+      .catch(function (e) { quietToast((e && e.message) || "تعذّر إضافة المستخدم"); if (after) after(); });
+  };
+  // تعديل دور/تفعيل مستخدم داش بورد (تنزيل الدور/الإيقاف محميّان بآخر-مدير في الخادم). PUT /api/users/<id>.
+  EP.updateDashUser = function (id, d, after) {
+    api("/users/" + id, { method: "PUT", body: d })
+      .then(function () { note("اتحدّث المستخدم"); EP.reload("dashUsers", after); })
+      .catch(function (e) { quietToast((e && e.message) || "تعذّر التحديث"); if (after) after(); });
+  };
+
   // ============================================================
   // شاشة الدخول (overlay على هوية البروفيسور)
   // ============================================================
@@ -1508,7 +1616,7 @@
     EP.data = { dashboard: null, metrics: null, users: null, content: null, finance: null, messages: null, inbox: null,
                 escrow: null, investment: null, marketing: null, partners: null, courses: null, settings: null,
                 packages: null, t_data: null, i_data: null, targets: null, foundation: null, team: null,
-                notifications: null, goalsAdvisor: null };
+                notifications: null, goalsAdvisor: null, aiAgents: null, dashUsers: null, audit: null, usage: null };
     EP.state = {};
     window.location.reload();
   }
