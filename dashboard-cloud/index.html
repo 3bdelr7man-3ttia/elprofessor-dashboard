@@ -483,7 +483,7 @@ function renderInbox(){
   document.getElementById('inboxN').textContent=items.length;
   items.forEach(i=>{const m=MODULES[i.dest],tr=TRI[i.triage],ri=INBOX.indexOf(i);
     el.insertAdjacentHTML('beforeend',`<div class="row inbox-row${selected===ri?' sel':''}" data-i="${ri}">
-      <div class="c c1"><div class="src-ic">${svg(i.src)}</div><div><div class="out">${i.out}</div><div class="from">من سطح: <b>${i.from}</b> · ${i.who}</div></div></div>
+      <div class="c c1"><div class="src-ic">${svg(i.src)}</div><div><div class="out">${esc(i.out)}</div><div class="from">من سطح: <b>${esc(i.from)}</b> · ${esc(i.who)}</div></div></div>
       <div class="c"><div class="destwrap"><span class="arrow">←</span><span class="dest" style="background:${m.bg};color:${m.c}">${svg(m.ic)}${m.label}</span></div></div>
       <div class="c"><span class="triage ${tr.cls}"><span class="d"></span>${tr.t}</span><div class="sla${i.slaWarn?' warn':''}">${svg('clock')}${i.sla}</div></div>
     </div>`);});
@@ -495,12 +495,12 @@ function drawInbox(){
   const el=document.getElementById('drawer');if(!el)return;
   if(selected===null){el.innerHTML=`<div class="empty">${svg('inbox','ic')}<p>اختر بندًا من الوارد لرؤية مساره الكامل والإجراء.</p></div>`;return;}
   const i=INBOX[selected],m=MODULES[i.dest],tr=TRI[i.triage];
-  el.innerHTML=`<div class="dh"><div class="k">بند وارد · ${i.ref}</div><h3>${i.out}</h3></div><div class="db">
-    <div class="route"><span class="step">المنصة · ${i.from}</span><span class="arrow">←</span><span class="step" style="color:${m.c};font-weight:800">${m.label}</span></div>
-    <div class="note-ai">${svg('sparkles','ic')}<div>${i.note}</div></div>
+  el.innerHTML=`<div class="dh"><div class="k">بند وارد · ${esc(i.ref)}</div><h3>${esc(i.out)}</h3></div><div class="db">
+    <div class="route"><span class="step">المنصة · ${esc(i.from)}</span><span class="arrow">←</span><span class="step" style="color:${m.c};font-weight:800">${m.label}</span></div>
+    <div class="note-ai">${svg('sparkles','ic')}<div>${esc(i.note)}</div></div>
     <div class="field"><div class="lab">يُدار في موديول</div><div class="val" style="color:${m.c}">${m.label}</div></div>
     <div class="field"><div class="lab">حالة الفرز</div><div class="val"><span class="triage ${tr.cls}"><span class="d"></span>${tr.t}</span></div></div>
-    <div class="field"><div class="lab">الطرف</div><div class="val">${i.who}</div></div>
+    <div class="field"><div class="lab">الطرف</div><div class="val">${esc(i.who)}</div></div>
     <div class="field"><div class="lab">المهلة</div><div class="val" style="${i.slaWarn?'color:var(--conflict)':''}">${i.sla}</div></div>
     <div class="acts">${i.triage==='auto'?`<button class="btn btn-primary" data-a="open">${svg('check')}عُولجت — عرض</button>`:`<button class="btn btn-human" data-a="approve">${svg('check')}اعتمد وحوّل للموديول</button>`}<button class="btn btn-ghost" data-a="goto">فتح ${m.label}</button></div></div>`;
   el.querySelectorAll('[data-a]').forEach(b=>b.onclick=()=>{
@@ -1117,7 +1117,7 @@ function viewOverview(v){
     </div>`;
   const re=document.getElementById('ovRows');
   act.forEach(i=>{const m=MODULES[i.dest],tr=TRI[i.triage];re.insertAdjacentHTML('beforeend',`<div class="row" data-d="${i.dest}" style="grid-template-columns:1fr 150px;cursor:pointer">
-    <div class="c c1"><div class="src-ic">${svg(i.src)}</div><div><div class="out">${i.out}</div><div class="from">← ${m.label} · ${i.who}</div></div></div>
+    <div class="c c1"><div class="src-ic">${svg(i.src)}</div><div><div class="out">${esc(i.out)}</div><div class="from">← ${m.label} · ${esc(i.who)}</div></div></div>
     <div class="c"><span class="triage ${tr.cls}"><span class="d"></span>${tr.t}</span></div></div>`);});
   if(!act.length)re.innerHTML='<div style="padding:36px;text-align:center;color:var(--muted)">لا وارد يحتاج تصرّفك</div>';
   re.querySelectorAll('.row').forEach(r=>r.onclick=()=>go(r.dataset.d));
