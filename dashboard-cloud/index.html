@@ -975,7 +975,7 @@ function renderUsers(){
     const trainerBadge=u.trainer==='approved'?'<span class="status s-auto" style="margin-inline-start:6px"><span class="d"></span>مدرّب</span>':u.trainer==='pending'?'<span class="status s-wait" style="margin-inline-start:6px"><span class="d"></span>طلب مدرّب</span>':'';
     const clsPills=(u.segment?`<span style="${segPS}">${SEG_LABEL[u.segment]||esc(u.segment)}</span>`:'')+(u.tags||[]).map(t=>`<span style="${tagPS}">${esc(t)}</span>`).join('');
     el.insertAdjacentHTML('beforeend',`<div class="row esc-row${selected===ui?' sel':''}" data-i="${ui}" style="grid-template-columns:1.7fr 120px 1.2fr 1fr 110px">
-      <div class="c c1"><div class="src-ic" style="background:${r.bg};color:${r.c}">${svg('users')}</div><div><div class="parties">${u.name}${trainerBadge}</div><div class="from">${u.email}</div></div></div>
+      <div class="c c1"><div class="src-ic" style="background:${r.bg};color:${r.c}">${svg('users')}</div><div><div class="parties">${esc(u.name)}${trainerBadge}</div><div class="from">${esc(u.email)}</div></div></div>
       <div class="c"><span class="dest" style="background:${r.bg};color:${r.c}">${r.t}</span></div>
       <div class="c"><div style="display:flex;flex-wrap:wrap;gap:4px">${clsPills||'<span class="from" style="color:var(--muted)">—</span>'}</div></div>
       <div class="c"><span class="status ${vf.cls}" style="${vf.cls?'':'background:var(--surface-2);color:var(--muted)'}"><span class="d" style="${vf.cls?'':'background:var(--muted)'}"></span>${vf.t}</span><div class="from" style="margin-top:4px">${u.plan}</div></div>
@@ -1014,7 +1014,7 @@ function drawUser(){
     </div>
     ${u.segment?`<div style="margin-top:6px;font-size:11.5px;color:var(--muted)">تصنيف الشات التلقائي: <b style="color:var(--ink-2)">${SEG_LABEL[u.segment]||esc(u.segment)}</b> <span style="opacity:.7">(لا يُعدَّل يدويًّا)</span></div>`:''}`:'';
   inline.innerHTML=`<div class="uedit-in">
-    <div class="uedit-h"><div><b>${u.name}</b> <span style="color:var(--muted);font-size:12px">· ${u.email} · ${u.phone}</span></div><button class="uedit-x" title="إغلاق">✕</button></div>
+    <div class="uedit-h"><div><b>${esc(u.name)}</b> <span style="color:var(--muted);font-size:12px">· ${esc(u.email)} · ${esc(u.phone)}</span></div><button class="uedit-x" title="إغلاق">✕</button></div>
     <div class="uedit-grid">
       <div><div class="lab">التوثيق</div><span class="status ${vf.cls}" style="${vf.cls?'':'background:var(--surface-2);color:var(--muted)'}"><span class="d" style="${vf.cls?'':'background:var(--muted)'}"></span>${vf.t}</span></div>
       <div><div class="lab">الباقة · التدريب</div><div class="val" style="font-size:12.5px">${u.plan} · ${u.trainer==='approved'?'مدرّب معتمد':u.trainer==='pending'?'طلب قيد المراجعة':'—'}</div></div>
