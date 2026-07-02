@@ -1231,6 +1231,38 @@ def platform_users_set_role(user_id):
         return jsonify({'error': body.get('detail') or 'تعذر تغيير الدور'}), r.status_code
     return jsonify(r.json() if r.content else {})
 
+@app.route('/api/platform-users/<user_id>/plan', methods=['POST'])
+@token_required
+@roles_required('admin')
+def platform_users_set_plan(user_id):
+    """Assign a subscription plan to a platform user from the D3 «الباقة» control.
+    The platform validates plan_id against the real plan catalog (422 «باقة غير معروفة»
+    on an unknown id, 404 when the user is missing) and returns the updated user summary."""
+    body = request.json or {}
+    plan_id = (body.get('plan_id') or '').strip()
+    return _platform_proxy('POST', f"/api/bridge/users/{user_id}/plan", json_body={'plan_id': plan_id})
+
+@app.route('/api/platform-users/<user_id>/tags', methods=['POST'])
+@token_required
+@roles_required('admin')
+def platform_users_set_tags(user_id):
+    """Persist the manual tag override on a platform user (D3). Blanks are dropped, values
+    trimmed and capped at 20 on the platform side; the chat-derived `segment` is never touched.
+    Returns the updated user summary (tags reflect the write)."""
+    body = request.json or {}
+    raw = body.get('tags')
+    tags = [str(t).strip() for t in raw if str(t).strip()][:20] if isinstance(raw, list) else []
+    return _platform_proxy('POST', f"/api/bridge/users/{user_id}/tags", json_body={'tags': tags})
+
+@app.route('/api/platform-experts', methods=['GET'])
+@token_required
+@roles_required('admin', 'employee')   # employee = read-only directory (no mutations)
+def platform_experts():
+    """Experts & trainers directory for the D5 «الخبراء والمدربون» module. Reads the platform's
+    experts.py projection (rating + presence) joined with referral / course / student counts.
+    An expert == an approved trainer (same person, two hats)."""
+    return _platform_proxy('GET', '/api/bridge/experts')
+
 @app.route('/api/platform-trainer-applications', methods=['GET'])
 @token_required
 @roles_required('admin', 'employee')   # employee may VIEW pending applications (follow-up)
