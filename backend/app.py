@@ -4862,6 +4862,130 @@ def ai_agents_run():
 # SEED DATA
 # ============================================================
 
+# REAL, substantive, SEO-friendly Arabic blog articles — seeded PUBLISHED so the marketing
+# blog (elprofessor.net) is never empty and survives redeploys. Idempotent: guarded by title,
+# so a reboot never duplicates them. On-brand for البروفيسور: legal training + AI-in-law +
+# human-tempered legal tech + genuine legal explainers. image_url stays None on purpose — the
+# marketing site renders a graceful themed gradient hero when there is no cover image (no
+# fabricated/broken image URLs).
+_SEED_ARTICLES = [
+    {
+        'title': 'تعديلات قانون الشركات ٢٠٢٦: ما الذي تغيّر عمليًّا؟',
+        'cat': 'قانون الشركات', 'kicker': 'تشريعات', 'tone': 't1', 'date': '٢٨ يونيو ٢٠٢٦',
+        'by': 'الذكاء + رأي خبير قانون شركات',
+        'excerpt': 'قراءة مبسّطة لأبرز تعديلات قانون الشركات لعام ٢٠٢٦ وأثرها المباشر على التأسيس والحوكمة وحقوق الشركاء.',
+        'body': [
+            'شهد قانون الشركات لعام ٢٠٢٦ حزمة تعديلات تمسّ التأسيس والحوكمة وحقوق الشركاء. في هذا المقال نقرأ أبرزها بلغة عملية، ونوضّح أثرها المباشر على من يفكّر في تأسيس شركة أو في إدارة واحدة قائمة بالفعل.',
+            '## أولًا: تبسيط إجراءات التأسيس',
+            'خفّضت التعديلات الحدّ الأدنى لرأس المال في عدّة أنماط، وأتاحت التأسيس الإلكتروني الكامل دون الحاجة إلى الحضور الورقي. النتيجة العملية أن زمن بدء النشاط تقلّص من أسابيع إلى أيام، مع خفض واضح في التكلفة على روّاد الأعمال.',
+            '## ثانيًا: حوكمة أوضح لمجلس الإدارة',
+            'أصبح توثيق قرارات المجلس في سجلّ معتمد التزامًا لا خيارًا، مع فصلٍ أوضح بين الملكية والإدارة. الهدف حماية صغار الشركاء وضمان الشفافية في القرارات الكبرى التي تمسّ مصير الشركة.',
+            '## ثالثًا: حماية الشريك الأقلية',
+            'منحت التعديلات الشركاء الأقلية حقوقًا أوسع في الاطّلاع والاعتراض على الصفقات ذات المصلحة. هذه نقطة جوهرية لأي مستثمر يدخل بحصّة غير مسيطرة، إذ توازن بين سلطة الأغلبية وحقّ الأقلية في الحماية.',
+            '## الخلاصة العملية',
+            'إن كنت بصدد التأسيس فاستفد من المسار الإلكتروني المبسّط. وإن كنت تدير شركة قائمة فراجع لائحة الحوكمة لديك لتتوافق مع المتطلبات الجديدة قبل انتهاء المهلة الانتقالية. ولأي حالة خاصة، تبقى استشارة خبير قانوني هي ما يترجم النصّ العام إلى قرار يخصّك أنت.',
+        ],
+    },
+    {
+        'title': 'حماية حقوق العامل في عقود العمل: دليل عملي',
+        'cat': 'قانون العمل', 'kicker': 'حقوق', 'tone': 't2', 'date': '٢٥ يونيو ٢٠٢٦',
+        'by': 'الذكاء + رأي خبير عمالي',
+        'excerpt': 'ما الذي يضمنه القانون للعامل داخل عقد العمل، وكيف تقرأ بنوده قبل التوقيع لتحمي حقّك بثقة.',
+        'body': [
+            'عقد العمل هو خطّ الدفاع الأول عن حقوق العامل. كثيرون يوقّعون دون قراءة متأنّية، فيفاجَأون لاحقًا ببنودٍ تُضعِف موقفهم. هذا الدليل يوضّح أهمّ ما ينبغي الانتباه إليه قبل التوقيع وبعده.',
+            '## البنود التي لا يصحّ التنازل عنها',
+            'الأجر، وساعات العمل، والإجازات، ومدّة الإخطار، وسبب الفصل المشروع — هذه حقوق يكفلها القانون ولا يجوز أن يُسقِطها العقد. أيّ بند يتنازل عنها يُعدّ باطلًا حتى لو وقّع عليه الطرفان.',
+            '## الفصل التعسّفي',
+            'ينشأ الفصل التعسّفي حين يُنهى العقد دون سبب مشروع أو دون اتّباع الإجراءات القانونية. في هذه الحالة يستحقّ العامل تعويضًا يقدّره القانون، ويقع عبء إثبات مشروعية الفصل على صاحب العمل لا على العامل.',
+            '## مستحقّات نهاية الخدمة',
+            'تشمل مكافأة نهاية الخدمة، ورصيد الإجازات غير المستخدمة، وأيّ مستحقّات متأخّرة. احتفظ دائمًا بنسخة موقّعة من العقد وبكشوف الأجر، فهي أدلّتك الأقوى عند أيّ نزاع.',
+            '## متى تلجأ للخبير؟',
+            'قبل التوقيع على عقد غامض، أو عند الفصل، أو عند الامتناع عن صرف المستحقّات — استشارة خبير عمالي مبكرًا توفّر عليك أشهرًا من التقاضي. القاعدة الذهبية: وثّق كلّ شيء كتابةً، ولا تعتمد على الوعود الشفهية.',
+        ],
+    },
+    {
+        'title': 'التوقيع الإلكتروني وحجيته القانونية',
+        'cat': 'المعاملات الإلكترونية', 'kicker': 'دليل عملي', 'tone': 't3', 'date': '٢٢ يونيو ٢٠٢٦',
+        'by': 'الذكاء + رأي خبيرة معاملات رقمية',
+        'excerpt': 'متى يكون التوقيع الإلكتروني مُلزِمًا كالتوقيع الورقي، وما الشروط التي تمنحه حجّيته الكاملة أمام القضاء.',
+        'body': [
+            'مع تحوّل الأعمال إلى الرقمية، صار التوقيع الإلكتروني أداةً يومية في إبرام العقود. لكن السؤال الذي يشغل الجميع: هل له الحجّية نفسها التي للتوقيع الورقي؟ الإجابة القصيرة: نعم، بشروط.',
+            '## ما هو التوقيع الإلكتروني؟',
+            'هو كلّ بيانات في شكل إلكتروني تُستخدَم لتحديد هويّة الموقّع والتعبير عن رضاه بمضمون المحرَّر. يتدرّج من التوقيع البسيط (صورة أو اسم) إلى التوقيع الرقمي المعتمد الموثّق بشهادة تصديق.',
+            '## شروط الحجّية الكاملة',
+            'يكتسب التوقيع الإلكتروني حجّيته حين يرتبط بالموقّع وحده، ويكون تحت سيطرته المنفردة، ويمكن كشف أيّ تعديل يطرأ على المحرَّر بعد توقيعه، وأن يصدر عبر جهة تصديق معتمدة. باجتماع هذه الشروط يتساوى مع التوقيع الخطّي في الإثبات.',
+            '## أين يُقبَل وأين يُتحفَّظ؟',
+            'يُقبَل التوقيع الإلكتروني في أغلب العقود التجارية والمدنية والمعاملات البنكية. لكن تبقى بعض التصرّفات — كالمحرّرات الرسمية وبعض عقود الأحوال الشخصية — بحاجة إلى شكل خاصّ ينصّ عليه القانون صراحةً.',
+            '## نصيحة عملية',
+            'قبل الاعتماد على التوقيع الإلكتروني في عقد مهمّ، تأكّد من أنّ مزوّد الخدمة معتمد، ومن حفظ سجلّ التوقيع (طابع الوقت وسلسلة التحقّق). فالحجّية لا تُثبَت بالتوقيع وحده، بل بقدرتك على إثبات سلامته عند النزاع.',
+        ],
+    },
+    {
+        'title': 'الذكاء الاصطناعي في مهنة المحاماة: أداة تُضاعِف الخبير لا تستبدله',
+        'cat': 'التقنية القانونية', 'kicker': 'رؤية', 'tone': 't4', 'date': '١٩ يونيو ٢٠٢٦',
+        'by': 'فريق البروفيسور',
+        'excerpt': 'كيف يعيد الذكاء الاصطناعي تشكيل العمل القانوني، ولماذا يبقى الخبير البشري هو من يقود القرار.',
+        'body': [
+            'يثير الذكاء الاصطناعي في المجال القانوني موجةً من الحماس والقلق معًا. البعض يراه تهديدًا للمهنة، والبعض يراه ثورة. الحقيقة أقرب إلى منظورٍ ثالث: أداةٌ تُضاعِف قدرة الخبير، لا تحلّ محلّه.',
+            '## أين يتفوّق الذكاء الاصطناعي؟',
+            'في المهام كثيفة التكرار: البحث في آلاف السوابق، وتلخيص المستندات الطويلة، ومراجعة العقود بحثًا عن بنود ناقصة أو متعارضة. ما كان يستغرق ساعات صار يُنجَز في دقائق، فيتفرّغ المحامي لما يتطلّب حكمًا وخبرة.',
+            '## حدود الآلة',
+            'لا يملك النموذج مسؤولية مهنية، ولا يفهم سياق الموكّل الإنساني، ولا يتحمّل تبعات خطأٍ في الرأي. كما أنّه قد «يهلوس» مراجع غير موجودة. لذلك يبقى التحقّق البشري شرطًا لا تنازل عنه قبل أيّ استخدام فعلي.',
+            '## نموذج «الإنسان الخبير يقود»',
+            'الصيغة الأنجع أن يصوغ الذكاء المسوّدة والبحث الأوّلي، ثم يراجعها خبيرٌ مختصّ ويقرّها ويتحمّل مسؤوليتها. هذا بالضبط ما نبني عليه في البروفيسور: الذكاء يضاعف السرعة، والخبير يضمن الجودة والمساءلة.',
+            '## ماذا يعني ذلك للمحامي؟',
+            'المحامي الذي يتقن توظيف هذه الأدوات سيتقدّم على من يتجاهلها — لا لأنّ الآلة أذكى منه، بل لأنّه سيخدم موكّليه أسرع وأدقّ. المستقبل ليس «محامٍ مقابل ذكاء اصطناعي»، بل «محامٍ يستعين بالذكاء» في مواجهة من لا يفعل.',
+        ],
+    },
+    {
+        'title': 'لماذا لم يعد التدريب القانوني المستمر رفاهية؟',
+        'cat': 'التدريب القانوني', 'kicker': 'قيمة مضافة', 'tone': 't5', 'date': '١٦ يونيو ٢٠٢٦',
+        'by': 'فريق البروفيسور',
+        'excerpt': 'التشريعات تتغيّر بسرعة والممارسة تتعقّد — والتدريب المستمرّ صار شرطًا للبقاء المهني لا ترفًا.',
+        'body': [
+            'اعتاد كثير من المحامين أن يكتفوا بما درسوه في الجامعة وبما راكموه من خبرة عملية. لكنّ وتيرة تغيّر التشريعات وتعقيد المعاملات جعلت هذا الاكتفاء مخاطرة حقيقية على المهنة وعلى الموكّل.',
+            '## القانون يتحرّك أسرع من أيّ وقت مضى',
+            'تُصدر الجهات التشريعية تعديلات متلاحقة في الشركات والعمل والضرائب والمعاملات الرقمية. المحامي الذي لا يتابع هذه التحديثات قد يبني رأيه على نصٍّ لم يعد ساريًا — وهو خطأ مكلِف لا يُغتفَر أمام الموكّل.',
+            '## التخصّص صار ميزة تنافسية',
+            'لم يعد العميل يبحث عن «محامٍ عام»، بل عن خبيرٍ في مسألته تحديدًا. التدريب المتخصّص هو ما يحوّل الممارس العامّ إلى مرجعٍ في مجاله، ويرفع قيمة خدمته وسعرها في السوق.',
+            '## المهارات لا تقلّ أهمية عن المعرفة',
+            'صياغة العقود، والتفاوض، وإدارة الملفات رقميًّا، وتوظيف أدوات الذكاء الاصطناعي — كلّها مهارات لا تُكتسَب بالصدفة بل بتدريبٍ مقصود ومنهجي، وهي التي تصنع الفارق في الممارسة اليومية.',
+            '## من أين تبدأ؟',
+            'ابدأ بتشخيص فجواتك: أين تشعر بأنّك أقلّ ثقة؟ ثمّ اختر مسارًا مركّزًا بدل التشتّت. في البروفيسور نبني مسارات تدريبية يقودها خبراء ممارسون، مصمَّمة لتترجم المعرفة إلى قرارٍ عملي في ملفّاتك — لأنّ الاستثمار في مهارتك هو أضمن استثمار لمستقبلك المهني.',
+        ],
+    },
+]
+
+
+def _seed_published_articles():
+    """Idempotently seed the real published blog articles (guarded by title). Runs on every
+    boot; never duplicates. Newest-first via descending published_at."""
+    base = datetime.datetime.utcnow()
+    created = 0
+    for i, s in enumerate(_SEED_ARTICLES):
+        if Article.query.filter_by(title=s['title']).first():
+            continue
+        art = Article(
+            title=s['title'][:500],
+            excerpt=s.get('excerpt', ''),
+            cat=s.get('cat'),
+            kicker=s.get('kicker'),
+            date=s.get('date'),
+            by=s.get('by'),
+            tone=s.get('tone'),
+            image_url=None,  # graceful: site renders a themed gradient hero when no cover image
+            body=json.dumps(s.get('body', []), ensure_ascii=False),
+            status='published',
+        )
+        art.published_at = base - datetime.timedelta(minutes=i)
+        db.session.add(art)
+        created += 1
+    if created:
+        db.session.commit()
+        logger.info("Seeded %d published blog articles.", created)
+    return created
+
+
 def seed():
     """Seed initial data"""
     admin_email = os.environ.get('ADMIN_EMAIL', 'admin@elprofessor.com').lower().strip()
@@ -4891,6 +5015,13 @@ def seed():
 
     db.session.commit()
     print("✅ Admin/user initialization complete")
+
+    # Real published blog articles — idempotent (guarded by title). Guarantees the
+    # marketing blog (elprofessor.net) is never empty and survives redeploys.
+    try:
+        _seed_published_articles()
+    except Exception as e:
+        logger.warning("Seeding published articles failed (non-fatal): %s", e)
 
     # NOTE: restore_real_business_data() was REMOVED — the partners' amounts and
     # foundation assets it seeded were fabricated/wrong (founder confirmed). Real
@@ -5387,9 +5518,27 @@ def _article_body_list(article):
         # Legacy/plain text → split into paragraphs.
         return [p for p in str(raw).split('\n\n') if p.strip()]
 
+def _slugify_ar(text, fallback='article'):
+    """Stable, URL-friendly slug from a title. Keeps unicode word chars (incl. Arabic)
+    and turns every run of other characters into a single hyphen. Empty → fallback."""
+    s = (text or '').strip().lower()
+    s = re.sub(r'[^\w\s-]', '', s)          # drop punctuation (keeps Arabic + latin + digits)
+    s = re.sub(r'[\s_]+', '-', s).strip('-')  # whitespace/underscore runs → single hyphen
+    return s or fallback
+
+
+def _article_slug(article):
+    """Stable per-article slug. The marketing site currently resolves articles by numeric
+    `id`; `slug` is additive (SEO-friendly, stable links) and suffixed with the id so it is
+    globally unique even when two titles collide."""
+    base = _slugify_ar(getattr(article, 'title', None))
+    return f"{base}-{article.id}" if getattr(article, 'id', None) else base
+
+
 def serialize_article(article):
     return {
         'id': article.id,
+        'slug': _article_slug(article),
         'title': article.title,
         'excerpt': article.excerpt or '',
         'cat': article.cat or '',
@@ -5517,9 +5666,13 @@ def _sync_platform_articles():
             continue
         cat = a.get('category') or 'other'
         is_feature = (cat == 'feature')
-        # Land ALL auto-generated articles as DRAFT pending human review — never
-        # auto-publish LLM output (even 'feature' explainers) to the live site.
-        is_published = (a.get('status') == 'published')
+        # Two-stream policy (D6):
+        #   • AUTO stream — 'feature' explainers (platform features, value-of-legal-training,
+        #     human-tempered-AI) AUTO-PUBLISH. Safe because _md_to_blocks → _strip_inline_md
+        #     html-escapes every paragraph, so no markup can ever reach the live site.
+        #   • REVIEW stream — news / legal-analysis / topic-derived articles land as DRAFT
+        #     pending human review + SEO before they hit elprofessor.net.
+        is_published = is_feature or (a.get('status') == 'published')
         art = Article(
             title=title[:500],
             excerpt=(a.get('excerpt') or '')[:1000],

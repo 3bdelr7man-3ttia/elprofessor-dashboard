@@ -1278,6 +1278,25 @@
       .catch(function (e) { quietToast((e && e.message) || "تعذّر الجلب"); if (after) after(); });
   };
 
+  // «مقالات آلية» (تبويب الأتمتة): اعتماد/إلغاء/حذف مقال على المنصّة نفسها (app.elprofessor.net)
+  // عبر بروكسي سرّي — /api/platform-articles/{id}/publish|unpublish و DELETE. (مقالات المميّزات
+  // تُنشَر تلقائيًّا للمدونة عبر المزامنة؛ هذا التبويب يتحكّم في ظهورها على «المقالات» بالمنصّة.)
+  EP.publishArticleP = function (a, after) {
+    post("/platform-articles/" + encodeURIComponent(a.id) + "/publish", {})
+      .then(function () { note("اعتُمد ونُشر «" + a.title + "» على المنصّة"); EP.reload("platformArticles", after); })
+      .catch(function (e) { quietToast((e && e.message) || "تعذّر النشر"); if (after) after(); });
+  };
+  EP.unpublishArticleP = function (a, after) {
+    post("/platform-articles/" + encodeURIComponent(a.id) + "/unpublish", {})
+      .then(function () { note("أُلغي نشر «" + a.title + "»"); EP.reload("platformArticles", after); })
+      .catch(function (e) { quietToast((e && e.message) || "تعذّر إلغاء النشر"); if (after) after(); });
+  };
+  EP.deleteArticleP = function (a, after) {
+    api("/platform-articles/" + encodeURIComponent(a.id), { method: "DELETE" })
+      .then(function () { note("حُذف المقال «" + a.title + "»"); EP.reload("platformArticles", after); })
+      .catch(function (e) { quietToast((e && e.message) || "تعذّر الحذف"); if (after) after(); });
+  };
+
   // الأخبار: إنشاء/تعديل/حذف/نشر + «حوّل لموضوع» — كلها عبر الـ proxy السرّي.
   EP.createNews = function (g, after) {
     post("/platform-news", g)

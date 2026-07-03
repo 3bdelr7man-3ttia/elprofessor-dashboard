@@ -1981,8 +1981,8 @@ function topicsTabbar(active){
 function wireTopicsTabs(){var tb=document.getElementById('topicsTabs');if(tb)tb.querySelectorAll('.tab').forEach(function(t){t.onclick=function(){topicsTab=t.dataset.tt;selected=null;renderView();};});}
 
 /* ===== CONTENT / BLOG VIEW (تبويب «مدونة الموقع») ===== */
-const SITE_ARTS=(window.SITE_CONTENT&&window.SITE_CONTENT.articles)||[];
 // المواضيع/المقالات: تُجلب حيّة من /api/content/articles عبر طبقة EP (window.TOPICS).
+// لا مصدر تصميمي — إن فشل الجلب تبقى القائمة فارغة وتظهر لافتة «أعد المحاولة».
 var TOPICS=[];
 function viewContent(v){
   if(window.EP){EP.ensure('content',()=>viewContent(v));}
@@ -1994,7 +1994,7 @@ function viewContent(v){
     ${topicsTabbar('blog')}
     <div class="policy" style="border-inline-start-color:var(--memory)">${svg('doc','ic')}<div><b>تدفّق المدونة:</b> موضوع (ذكاء + خبير) ← صياغة مقال ← <b>اعتماد إداري</b> ← نشر تلقائي على <span style="direction:ltr">elprofessor.net</span>.</div></div>
     <div class="policy" style="border-inline-start-color:var(--agree);background:var(--agree-bg)">${svg('check','ic')}<div><b>متصل بالموقع:</b> ما يُعتمد هنا يُنشر مباشرة على <span style="direction:ltr">elprofessor.net</span> من <b>مصدر محتوى واحد</b> — لا إدخال مكرّر. <b>${pub}</b> مقالات منشورة الآن على الموقع.</div></div>
-    ${Cst==='error'?`<div class="policy" style="border-inline-start-color:var(--conflict);background:var(--conflict-bg);color:var(--conflict)">${svg('scale','ic')}<div>تعذّر جلب المقالات من الخادم — تُعرض بيانات تصميمية. <b style="cursor:pointer;text-decoration:underline" onclick="EP.reload('content',()=>viewContent(document.getElementById('view')))">إعادة المحاولة</b></div></div>`:''}
+    ${Cst==='error'?`<div class="policy" style="border-inline-start-color:var(--conflict);background:var(--conflict-bg);color:var(--conflict)">${svg('scale','ic')}<div>تعذّر جلب المقالات من الخادم. <b style="cursor:pointer;text-decoration:underline" onclick="EP.reload('content',()=>viewContent(document.getElementById('view')))">إعادة المحاولة</b></div></div>`:''}
     ${Cst==='loading'?`<div class="policy" style="border-inline-start-color:var(--memory)">${svg('doc','ic')}<div>…جارٍ تحميل المقالات من الخادم</div></div>`:''}
     <div class="kpis">
       <div class="kpi k-2"><div class="top"><span class="ic">${svg('doc')}</span>بانتظار الاعتماد</div><b>${money(pend)}</b><div class="sub">مقالات جاهزة</div></div>
@@ -2053,28 +2053,25 @@ function drawContent(){
     </div>`;
   el.querySelectorAll('[data-a]').forEach(b=>b.onclick=()=>{const a=b.dataset.a;
     if(a==='pub'){
-      if(window.EP&&EP.data.content&&t.aid){EP.publishArticle(t,()=>{selected=null;viewContent(document.getElementById('view'));});return;}
-      t.status='published';pushToSite(t);selected=null;viewContent(document.getElementById('view'));notify('نُشر «'+t.title+'» على الموقع — elprofessor.net');}
+      if(!window.EP||!t.aid){toast('غير متصل بالخادم — تعذّر النشر');return;}
+      EP.publishArticle(t,()=>{selected=null;viewContent(document.getElementById('view'));});}
     else if(a==='edit'){createArticleModal(t);}
     else if(a==='unpub'){
-      if(window.EP&&EP.data.content&&t.aid){EP.unpublishArticle(t,()=>{selected=null;viewContent(document.getElementById('view'));});return;}
-      t.status='pending';selected=null;viewContent(document.getElementById('view'));notify('أُلغي نشر «'+t.title+'»');}
+      if(!window.EP||!t.aid){toast('غير متصل بالخادم — تعذّر إلغاء النشر');return;}
+      EP.unpublishArticle(t,()=>{selected=null;viewContent(document.getElementById('view'));});}
     else if(a==='reject'){
       if(!confirm('رفض هذا المقال وحذفه نهائيًّا؟'))return;
-      if(window.EP&&EP.data.content&&t.aid){EP.rejectArticle(t,()=>{selected=null;viewContent(document.getElementById('view'));});return;}
-      var _i=TOPICS.indexOf(t);if(_i>-1)TOPICS.splice(_i,1);selected=null;viewContent(document.getElementById('view'));notify('رُفض المقال «'+t.title+'»');}
+      if(!window.EP||!t.aid){toast('غير متصل بالخادم — تعذّر الرفض');return;}
+      EP.rejectArticle(t,()=>{selected=null;viewContent(document.getElementById('view'));});}
+    else if(a==='site'){if(t.aid)window.open('https://elprofessor.net/article.html?id='+encodeURIComponent(t.aid),'_blank','noopener');else toast('انشر المقال أولًا ليظهر على الموقع');}
     else toast('فتح المقال على الموقع');});
 }
 
-/* ===== CMS HELPERS (المحتوى → الموقع) ===== */
-// تبويبات الأخبار/الصور/الصفحات القديمة أُزيلت (بلا واجهة خلفية). المدونة الآن تبويب واحد
-// «مدونة الموقع» داخل «المواضيع». دفع المقال المنشور إلى تغذية الموقع عند غياب الجسر الحيّ:
-function pushToSite(t){
-  if(!window.SITE_CONTENT)window.SITE_CONTENT={source:'الداش بورد · موديول المحتوى',articles:[]};
-  var arts=window.SITE_CONTENT.articles,tones=['t1','t2','t3'];
-  if(!arts.some(function(a){return a.title===t.title;}))
-    arts.push({id:'TOP-'+(800+arts.length),tone:tones[arts.length%3],cat:t.cat||'قانوني',kicker:t.kicker||'مقال',date:t.date||'الآن',title:t.title,excerpt:t.excerpt||'',by:t.by,status:'published'});
-}
+/* ===== CMS HELPERS (المحتوى → الموقع) =====
+   تبويبات الأخبار/الصور/الصفحات القديمة أُزيلت (بلا واجهة خلفية). المدونة الآن تبويب واحد
+   «مدونة الموقع» داخل «المواضيع». مصدر واحد فقط للنشر: الـ API الحقيقي
+   (POST /api/content/articles + …/publish) الذي يغذّي elprofessor.net مباشرةً — لا دفع
+   محلّي مزيّف ولا بيانات تصميمية. ما يُعتمد هنا يظهر على الموقع من نفس المصدر. */
 function createArticleModal(edit){
   var e=edit||{};
   // نص المقال والصورة يأتيان من التغذية الخام (raw) لأن كائن TOPICS لا يحملهما
@@ -2092,12 +2089,12 @@ function createArticleModal(edit){
   s.querySelector('#a_x').onclick=closeModal;
   function gather(){return {t:s.querySelector('#a_t').value.trim()||'مقال بلا عنوان',cat:s.querySelector('#a_cat').value.trim()||'قانوني',k:s.querySelector('#a_k').value.trim()||'مقال',ex:s.querySelector('#a_ex').value.trim(),by:s.querySelector('#a_by').value.trim()||'الإدارة',body:s.querySelector('#a_body').value.trim(),img:s.querySelector('#a_imgurl').value.trim()};}
   s.querySelector('#a_save').onclick=function(){var g=gather();
-    if(window.EP&&EP.data.content&&!edit){EP.createArticle(g,false,function(){closeModal();viewContent(document.getElementById('view'));});return;}
-    if(window.EP&&EP.data.content&&edit&&edit.aid){EP.updateArticle(edit,g,function(){closeModal();viewContent(document.getElementById('view'));});return;}
-    if(edit){edit.title=g.t;edit.cat=g.cat;edit.kicker=g.k;edit.excerpt=g.ex;edit.by=g.by;}else{TOPICS.push({title:g.t,by:g.by,status:'pending',views:0,date:'الآن',cat:g.cat,kicker:g.k,excerpt:g.ex});}closeModal();viewContent(document.getElementById('view'));notify(edit?'حُدّث «'+g.t+'»':'أنشأت مقال «'+g.t+'» — جاهز للاعتماد');};
+    if(!window.EP){toast('غير متصل بالخادم — تعذّر حفظ المقال');return;}
+    if(edit&&edit.aid){EP.updateArticle(edit,g,function(){closeModal();viewContent(document.getElementById('view'));});return;}
+    EP.createArticle(g,false,function(){closeModal();viewContent(document.getElementById('view'));});};
   var pb=s.querySelector('#a_pub');if(pb)pb.onclick=function(){var g=gather();
-    if(window.EP&&EP.data.content){EP.createArticle(g,true,function(){closeModal();viewContent(document.getElementById('view'));});return;}
-    var t={title:g.t,by:g.by,status:'published',views:0,date:'الآن',cat:g.cat,kicker:g.k,excerpt:g.ex};TOPICS.push(t);pushToSite(t);closeModal();viewContent(document.getElementById('view'));notify('نُشر «'+g.t+'» على الموقع — elprofessor.net');};
+    if(!window.EP){toast('غير متصل بالخادم — تعذّر النشر');return;}
+    EP.createArticle(g,true,function(){closeModal();viewContent(document.getElementById('view'));});};
 }
 
 /* ===== «المواضيع» (Topics): بحث/مسودّة ← مراجعة مسودّة الذكاء ← نشر للوحة العامة. ===== */
@@ -2115,8 +2112,8 @@ function viewArticlesAuto(v){
   const pub=PARTS.filter(a=>a.status==='published').length,draft=PARTS.length-pub;
   v.innerHTML=`
     ${topicsTabbar('auto')}
-    <div class="policy" style="border-inline-start-color:var(--ai)">${svg('sparkles','ic')}<div><b>أتمتة المقالات:</b> اضغط <b>«شغّل التوليد اليومي»</b> فيُنشئ الذكاء مقالات (شرح للمنصة + تحليلات من آخر الأخبار القانونية) <b>كمسودّات</b> ← راجعها ← <b>اعتمد وانشر</b> لتظهر في «المقالات» على المنصة لكل المستخدمين.</div></div>
-    <div class="policy" style="border-inline-start-color:var(--agree);background:var(--agree-bg)">${svg('check','ic')}<div><b>يومي تلقائيًّا:</b> اربط n8n على <code>POST /api/bridge/content/daily-run</code> (مرة في اليوم) أو شغّله يدويًّا من هنا. <b>${money(pub)}</b> مقالًا منشورًا الآن.</div></div>
+    <div class="policy" style="border-inline-start-color:var(--ai)">${svg('sparkles','ic')}<div><b>تيّاران للمقالات:</b> <b>(١) آلي</b> — مقالات <b>شرح المنصة</b> والقيمة والذكاء الممزوج برأي الخبير <b>تُنشَر تلقائيًّا</b> على المدونة (آمنة: النصّ يُنقّى من أي HTML قبل النشر). <b>(٢) بمراجعة</b> — تحليلات الأخبار والمواضيع المقترحة تأتي <b>مسودّات</b> ← راجعها ← <b>اعتمد وانشر</b>.</div></div>
+    <div class="policy" style="border-inline-start-color:var(--gold);background:var(--gold-bg)">${svg('robot','ic')}<div><b>وكيل المقالات (AI Team):</b> يقترح مواضيع للاعتماد ويتحسّن بمرور الوقت — يعمل <b>عند الطلب</b> من قسم «الفريق (AI Team)»، لا باستقلالية كاملة. شغّل التوليد يدويًّا من هنا أو اربط n8n على <code>POST /api/bridge/content/daily-run</code> يوميًّا. <b>${money(pub)}</b> مقالًا منشورًا الآن.</div></div>
     ${Ast==='error'?`<div class="policy" style="border-inline-start-color:var(--conflict);background:var(--conflict-bg);color:var(--conflict)">${svg('scale','ic')}<div>تعذّر جلب المقالات من المنصة. <b style="cursor:pointer;text-decoration:underline" onclick="EP.reload('platformArticles',()=>viewArticlesAuto(document.getElementById('view')))">إعادة المحاولة</b></div></div>`:''}
     ${Ast==='loading'?`<div class="policy" style="border-inline-start-color:var(--ai)">${svg('sparkles','ic')}<div>…جارٍ التحميل من المنصة</div></div>`:''}
     <div class="kpis">
