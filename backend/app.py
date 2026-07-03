@@ -405,6 +405,9 @@ class Article(db.Model):
     video = db.Column(db.Text)              # optional video URL
     image_url = db.Column(db.Text)          # optional external cover image URL (http/https)
     body = db.Column(db.Text)               # JSON-encoded list[str] of paragraphs
+    meta_description = db.Column(db.Text)   # SEO <meta name=description> (from the platform generator)
+    keywords = db.Column(db.Text)           # JSON-encoded list[str] of focus keywords
+    faq = db.Column(db.Text)                # JSON-encoded list[{q,a}] → FAQPage JSON-LD (AEO)
     status = db.Column(db.String(20), default='draft')  # draft | published
     published_at = db.Column(db.DateTime, nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.datetime.utcnow)
@@ -4908,6 +4911,20 @@ def _json_list(raw):
         return []
 
 
+def _json_faq(raw):
+    """Parse a stored JSON faq → [{q,a}] (for FAQPage JSON-LD). Never raises."""
+    try:
+        val = json.loads(raw) if raw else []
+    except Exception:
+        return []
+    out = []
+    if isinstance(val, list):
+        for it in val:
+            if isinstance(it, dict) and it.get('q') and it.get('a'):
+                out.append({'q': str(it['q']), 'a': str(it['a'])})
+    return out[:8]
+
+
 def _latest_agent_report(agent):
     return (AgentReport.query.filter_by(agent=agent)
             .order_by(AgentReport.created_at.desc()).first())
@@ -5663,6 +5680,12 @@ def ensure_runtime_schema():
                     connection.execute(text("ALTER TABLE articles ADD COLUMN image_url TEXT"))
                 except Exception:
                     pass
+            for _seo_col in ('meta_description', 'keywords', 'faq'):
+                if _seo_col not in article_columns:
+                    try:
+                        connection.execute(text(f"ALTER TABLE articles ADD COLUMN {_seo_col} TEXT"))
+                    except Exception:
+                        pass
         if 'courses' in existing_tables:
             course_columns = {column['name'] for column in inspector.get_columns('courses')}
             if 'lms_instructor_email' not in course_columns:
@@ -5769,6 +5792,9 @@ def serialize_article(article):
         'video': article.video or None,
         'image_url': article.image_url or None,
         'body': _article_body_list(article),
+        'meta_description': article.meta_description or article.excerpt or '',
+        'keywords': _json_list(article.keywords),
+        'faq': _json_faq(article.faq),
         'status': article.status or 'draft',
         'published_at': article.published_at.isoformat() if article.published_at else None,
     }
@@ -5908,6 +5934,10 @@ def _sync_platform_articles():
             by=a.get('author') or 'فريق البروفيسور',
             date=_ar_date_from(a.get('published_at') or a.get('created_at')),
             body=json.dumps(_md_to_blocks(a.get('body') or ''), ensure_ascii=False),
+            meta_description=(a.get('meta_description') or a.get('excerpt') or '')[:400],
+            keywords=json.dumps([str(k) for k in (a.get('keywords') or [])][:12], ensure_ascii=False),
+            faq=json.dumps([f for f in (a.get('faq') or []) if isinstance(f, dict) and f.get('q') and f.get('a')][:8],
+                           ensure_ascii=False),
             status='published' if is_published else 'draft',
         )
         if is_published:
