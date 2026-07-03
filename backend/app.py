@@ -1941,11 +1941,17 @@ def platform_topics_list():
 @roles_required('admin', 'employee')   # research/draft a new topic
 def platform_topics_create():
     body = request.json or {}
-    return _platform_proxy('POST', '/api/bridge/topics', json_body={
+    payload = {
         'title': (body.get('title') or '').strip(),
         'question': (body.get('question') or '').strip(),
         'specialty': (body.get('specialty') or '').strip(),
-    })
+    }
+    # Optional source label (news|expert|idea|human) — only forward a valid value so the
+    # bridge never 400s on a stray string; it defaults to 'human' when omitted.
+    src = (body.get('source') or '').strip()
+    if src in ('news', 'expert', 'idea', 'human'):
+        payload['source'] = src
+    return _platform_proxy('POST', '/api/bridge/topics', json_body=payload)
 
 
 @app.route('/api/platform-topics/<topic_id>/publish', methods=['POST'])
@@ -1961,7 +1967,10 @@ def platform_topics_publish(topic_id):
 def platform_topics_update(topic_id):
     body = request.json or {}
     payload = {}
-    for key in ('title', 'question', 'specialty', 'ai_answer'):
+    # source/status/merged_article added so the dashboard can label the source, route a
+    # topic between the internal sections (draft/open/merged/published), and store a
+    # merged article. The bridge validates source & status against its own enums.
+    for key in ('title', 'question', 'specialty', 'ai_answer', 'source', 'status', 'merged_article'):
         if key in body:
             payload[key] = body.get(key)
     return _platform_proxy('PUT', f"/api/bridge/topics/{topic_id}", json_body=payload)
@@ -1972,6 +1981,22 @@ def platform_topics_update(topic_id):
 @roles_required('admin', 'employee')
 def platform_topics_delete(topic_id):
     return _platform_proxy('DELETE', f"/api/bridge/topics/{topic_id}")
+
+
+# --- «لوحة تحليل AI» for the Topics module: top topics by engagement, counts by
+# category/source, and the categories most in demand (from chat). Reads the platform's
+# real aggregation via the SECRET bridge — no fabricated numbers here.
+@app.route('/api/platform-topics-analysis', methods=['GET'])
+@token_required
+@roles_required('admin', 'employee')   # employee may VIEW the analysis panel
+@module_required('topics')             # D9: admin can revoke per-role module access
+def platform_topics_analysis():
+    try:
+        limit = int(request.args.get('limit') or 10)
+    except (TypeError, ValueError):
+        limit = 10
+    limit = max(1, min(50, limit))
+    return _platform_proxy('GET', '/api/bridge/topics/analysis', params={'limit': limit})
 
 
 # --- «أتمتة المقالات» (Articles automation): one daily AI run fills «المقالات» on the platform

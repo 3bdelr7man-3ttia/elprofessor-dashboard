@@ -77,7 +77,7 @@
     data: { dashboard: null, metrics: null, users: null, content: null, finance: null, messages: null, inbox: null,
             escrow: null, investment: null, marketing: null, partners: null, courses: null, settings: null,
             packages: null, t_data: null, i_data: null, targets: null, foundation: null, team: null,
-            notifications: null, goalsAdvisor: null, tutorials: null, platformTopics: null, experts: null,
+            notifications: null, goalsAdvisor: null, tutorials: null, platformTopics: null, platformTopicsAnalysis: null, experts: null,
             aiAgents: null, dashUsers: null, audit: null, usage: null },
     state: {}, // 'idle' | 'loading' | 'ready' | 'error'
     _started: {}, // منع التحميل المزدوج
@@ -261,25 +261,54 @@
       });
     },
 
-    // المواضيع: /api/platform-topics -> [ {id,title,question,specialty,ai_answer,status,...} ]
-    // الورك فلو: بحث/مسودّة (إنشاء) -> مراجعة مسودّة الذكاء -> نشر للوحة العامة.
-    // الـ proxy السرّي يجلب المسودّات أيضًا.
+    // المواضيع: /api/platform-topics -> LIST rows (see bridge contract). Each carries
+    // source(news|expert|idea|human) + category(==specialty) + country + engagement +
+    // status(draft|open|merged|published) + author_email (RAW, management view).
+    // الورك فلو: مصدر (خبر/خبير/فكرة/بشري) -> قسم داخلي (منشورة/واردة/قيد العمل/أفكار) -> مقال.
+    // الـ proxy السرّي يجلب المسودّات أيضًا. نحافظ على الحالة الخام (لا نطبّقها لـ draft/published فقط).
     platformTopics: function () {
       return get("/platform-topics").then(function (r) {
         var list = Array.isArray(r) ? r : ((r && r.topics) || []);
         EP.data.platformTopics = { raw: list };
+        var VALID_STATUS = { draft: 1, open: 1, merged: 1, published: 1 };
+        var VALID_SOURCE = { news: 1, expert: 1, idea: 1, human: 1 };
         window.PTOPICS = list.map(function (t) {
           var st = t.status || (t.is_published || t.published ? "published" : "draft");
+          if (!VALID_STATUS[st]) st = "draft";
+          var src = t.source || "human";
+          if (!VALID_SOURCE[src]) src = "human";
+          var eng = t.engagement || {};
+          var cat = t.category || t.specialty || "";
+          var at = t.updated_at || t.created_at || t.published_at;
           return {
             id: t.id,
             title: t.title || "",
             question: t.question || "",
-            specialty: t.specialty || "",
+            summary: t.summary || "",
+            specialty: cat,
+            category: cat,
+            country: t.country || "",
+            source: src,
             ai_answer: t.ai_answer || t.aiAnswer || "",
-            status: st === "published" ? "published" : "draft",
+            merged_article: t.merged_article || "",
+            author_email: t.author_email || "",
+            comments: (eng.comments != null ? eng.comments : 0) | 0,
+            reactions: (eng.reactions != null ? eng.reactions : 0) | 0,
+            engagement: { comments: (eng.comments != null ? eng.comments : 0) | 0, reactions: (eng.reactions != null ? eng.reactions : 0) | 0 },
+            status: st,                      // REAL status (backward-compatible: checks for ==='published' still hold)
             date: arDate(t.created_at || t.published_at),
+            at: at ? (Date.parse(at) || 0) : 0,
           };
-        });
+        }).sort(function (a, b) { return b.at - a.at; });   // newest first (matches bridge cap-50 order)
+      });
+    },
+
+    // لوحة تحليل AI للمواضيع: /api/platform-topics-analysis -> {total_topics,total_comments,
+    // top_topics[],by_category[],by_source[],categories_in_demand[],engagement_note}. أرقام حقيقية.
+    platformTopicsAnalysis: function () {
+      return get("/platform-topics-analysis").then(function (r) {
+        EP.data.platformTopicsAnalysis = r || {};
+        window.PTOPICS_ANALYSIS = r || {};
       });
     },
 
@@ -1635,7 +1664,8 @@
     EP.data = { dashboard: null, metrics: null, users: null, content: null, finance: null, messages: null, inbox: null,
                 escrow: null, investment: null, marketing: null, partners: null, courses: null, settings: null,
                 packages: null, t_data: null, i_data: null, targets: null, foundation: null, team: null,
-                notifications: null, goalsAdvisor: null, aiAgents: null, dashUsers: null, audit: null, usage: null };
+                notifications: null, goalsAdvisor: null, tutorials: null, platformTopics: null, platformTopicsAnalysis: null,
+                aiAgents: null, dashUsers: null, audit: null, usage: null };
     EP.state = {};
     window.location.reload();
   }

@@ -356,7 +356,7 @@ const money=n=>n.toLocaleString('ar-EG');
 function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];});}
 
 let current='inbox', selected=null, activeFilter='all', escTab='sessions', finTab='summary', usersFilter='all', courseTab='platform', invTab='investors', mktTab='campaigns', contentTab='pending';
-let usersTag='all', teamTab='experts', topicsTab='board', pendingUserFocus=null;
+let usersTag='all', teamTab='experts', topicsTab='board', topicsCat='all', pendingUserFocus=null;
 let role='admin';
 const ROLE_NAV={
   employee:['users','courses','topics','tutorials'],
@@ -400,7 +400,7 @@ function roleNavFor(r){
   }catch(e){}}
   return base;
 }
-function go(mod){current=mod;selected=null;activeFilter='all';escTab='sessions';finTab='summary';usersFilter='all';usersTag='all';teamTab='experts';topicsTab='board';courseTab='platform';invTab='investors';mktTab='campaigns';contentTab='pending';anFilters={seg:'all',country:'all',cat:'all',ne:'all',time:'all'};
+function go(mod){current=mod;selected=null;activeFilter='all';escTab='sessions';finTab='summary';usersFilter='all';usersTag='all';teamTab='experts';topicsTab='board';topicsCat='all';courseTab='platform';invTab='investors';mktTab='campaigns';contentTab='pending';anFilters={seg:'all',country:'all',cat:'all',ne:'all',time:'all'};
   document.getElementById('pageTitle').textContent=MODULES[mod].label;
   document.querySelectorAll('.nav .item').forEach(x=>x.classList.toggle('on',x.dataset.mod===mod));
   renderView();
@@ -423,11 +423,14 @@ function renderView(){
   if(current==='clubs')return viewClubs(v);
   if(current==='messages')return viewMessages(v);
   if(current==='topics'){
-    // «المواضيع» = موديول واحد بأربعة تبويبات (مواضيع / أخبار / مقالات آلية / مدونة الموقع).
+    // «المواضيع» = موديول واحد بستة تبويبات داخلية:
+    //   المنشورة / واردة / قيد العمل (الوكيل) / أفكار للاعتماد  → viewTopics (تُفلتر بالتبويب النشط)
+    //   الأخبار → viewNews · المقالات → viewContent (مسودّات مدونة → اعتماد → نشر مباشر)
+    //   auto = تيار مقالات المنصة الآلي (يُفتح من داخل «المقالات») · blog = اسم قديم لـ articles.
     if(topicsTab==='news')return viewNews(v);
     if(topicsTab==='auto')return viewArticlesAuto(v);
-    if(topicsTab==='blog')return viewContent(v);
-    return viewTopics(v);
+    if(topicsTab==='articles'||topicsTab==='blog')return viewContent(v);
+    return viewTopics(v);   // board | incoming | working | ideas
   }
   if(current==='tutorials')return viewTutorials(v);
   if(current==='ai')return viewAI(v);
@@ -1967,39 +1970,119 @@ function addAdvertiserModal(edit){
   s.querySelector('#ad_s').onclick=function(){var data={name:s.querySelector('#ad_n').value.trim()||'ممول',type:s.querySelector('#ad_t').value.trim()||'مموّل',amount:+s.querySelector('#ad_a').value||0};if(edit){Object.assign(edit,data);}else{ADVERTISERS.push(data);}closeModal();viewMarketing(document.getElementById('view'));notify(edit?'حُدّث الممول':'أُضيف الممول «'+data.name+'»');};
 }
 
-/* ===== «المواضيع» — موديول واحد يوحّد خطّ الإنتاج (D6) =====
-   فكرة → (خبر) → موضوع → نقاش → مقالة → مدونة (SEO، بموافقة) → (سلسلة).
-   أربعة تبويبات تتشارك شريطًا واحدًا؛ كل تبويب يعيد رسم نفسه فيُعيد الشريط.
-   - مواضيع: لوحة النقاش (viewTopics) + زر «اعمل مقال» يمرّر مسوّدة الذكاء للمدونة.
-   - الأخبار: منتقاة بصوتنا (viewNews) + «حوّل لموضوع» (موجود).
-   - مقالات آلية: تيار المميّزات التلقائي (viewArticlesAuto).
-   - مدونة الموقع: CMS الموقع (viewContent) → «اعتمد وانشر (SEO)». */
+/* ===== «المواضيع» — موديول واحد يوحّد خطّ الإنتاج (D6, re-architect) =====
+   فكرة → (خبر) → موضوع → نقاش → مقال → مدونة (SEO، بموافقة).
+   ستة تبويبات داخلية تتشارك شريطًا واحدًا + «لوحة تحليل AI» + «فلتر بالفئة»:
+   - المنشورة: مواضيع حيّة على بورد المنصة (badge مصدر + فئة + تفاعل + «اعمل مقال»).
+   - واردة: طلبات من خبراء/الخارج — اعتماد/توجيه.
+   - قيد العمل (الوكيل): مواضيع الوكيل شغّال عليها (merged).
+   - أفكار للاعتماد: مسودّات (وكيل/بشري) — اعتماد/رفض.
+   - الأخبار: منتقاة بصوتنا (viewNews) + «حوّل لموضوع».
+   - المقالات: مسودّات المدونة (viewContent) → افتح → «اعتمد وانشر» مباشرة على elprofessor.net. */
 function topicsTabbar(active){
-  var tabs=[['board','المواضيع'],['news','الأخبار'],['auto','مقالات آلية'],['blog','مدونة الموقع']];
-  return '<div class="tabbar" id="topicsTabs">'+tabs.map(function(t){return '<div class="tab'+(active===t[0]?' on':'')+'" data-tt="'+t[0]+'">'+t[1]+'</div>';}).join('')+'</div>';
+  // auto = تيار مقالات المنصة الآلي، يُبرز «المقالات».
+  var hi=(active==='auto'||active==='blog')?'articles':active;
+  var tabs=[['board','المنشورة'],['incoming','واردة'],['working','قيد العمل (الوكيل)'],['ideas','أفكار للاعتماد'],['news','الأخبار'],['articles','المقالات']];
+  return '<div class="tabbar" id="topicsTabs">'+tabs.map(function(t){return '<div class="tab'+(hi===t[0]?' on':'')+'" data-tt="'+t[0]+'">'+t[1]+'</div>';}).join('')+'</div>';
 }
-function wireTopicsTabs(){var tb=document.getElementById('topicsTabs');if(tb)tb.querySelectorAll('.tab').forEach(function(t){t.onclick=function(){topicsTab=t.dataset.tt;selected=null;renderView();};});}
+function wireTopicsTabs(){var tb=document.getElementById('topicsTabs');if(tb)tb.querySelectorAll('.tab').forEach(function(t){t.onclick=function(){topicsTab=t.dataset.tt;selected=null;topicsCat='all';renderView();};});}
+
+/* ===== المواضيع: مساعدات مشتركة (مصدر / فلتر تبويب / فئة / لوحة تحليل AI) ===== */
+// ألوان وأسماء المصدر — تظهر كـ badge على كل موضوع (المصدر لازم يبان واضح).
+var TOPIC_SRC={
+  news:  {label:'خبر',   bg:'var(--ai-bg)',    fg:'var(--ai)',     ic:'mega'},
+  expert:{label:'خبير',  bg:'var(--human-bg)', fg:'var(--human)',  ic:'hands'},
+  idea:  {label:'فكرة',  bg:'var(--gold-bg)',  fg:'var(--gold)',   ic:'sparkles'},
+  human: {label:'بشري',  bg:'var(--memory-bg)',fg:'var(--memory)', ic:'doc'}
+};
+function topSrcBadge(src){var m=TOPIC_SRC[src]||TOPIC_SRC.human;return '<span class="chip" style="padding:2px 9px;font-size:11px;cursor:default;background:'+m.bg+';color:'+m.fg+';border-color:transparent;font-weight:800">'+svg(m.ic,'ic')+m.label+'</span>';}
+function topStatusAr(st){return st==='published'?'منشور':st==='open'?'على البورد':st==='merged'?'قيد العمل':'مسودّة';}
+// إسناد كل موضوع لتبويب داخلي واحد بالضبط اعتمادًا على (source + status) الحقيقيَّين:
+//   المنشورة = published|open · واردة = خبير غير منشور · قيد العمل = merged · أفكار = مسودّة غير خبير.
+function topicTabOf(t){
+  var st=t.status||'draft', src=t.source||'human';
+  if(st==='published'||st==='open')return 'board';
+  if(st==='merged')return 'working';
+  if(src==='expert')return 'incoming';
+  return 'ideas';
+}
+function topicTabCounts(){var c={board:0,incoming:0,working:0,ideas:0};(PTOPICS||[]).forEach(function(t){var k=topicTabOf(t);if(c[k]!=null)c[k]++;});return c;}
+// المواضيع بعد تطبيق التبويب + فلتر الفئة النشط.
+function topicsForActiveTab(){
+  var tab=(topicsTab==='board'||topicsTab==='incoming'||topicsTab==='working'||topicsTab==='ideas')?topicsTab:'board';
+  return (PTOPICS||[]).filter(function(t){
+    if(topicTabOf(t)!==tab)return false;
+    if(topicsCat!=='all'&&(t.category||'')!==topicsCat)return false;
+    return true;
+  });
+}
+// شرائح فلتر الفئة — قيمة المحامي: فلتر واحد يجمع كل مواضيع المجال. مبنيّة من الفئات الحقيقية.
+function topicCatChips(){
+  var seen={},cats=[];
+  (PTOPICS||[]).forEach(function(t){var c=t.category||'';if(c&&!seen[c]){seen[c]=1;cats.push(c);}});
+  var an=(window.PTOPICS_ANALYSIS&&PTOPICS_ANALYSIS.by_category)||[];
+  an.forEach(function(x){var c=x.category||'';if(c&&c!=='غير مصنّف'&&!seen[c]){seen[c]=1;cats.push(c);}});
+  cats.sort();
+  var chips='<span class="chip'+(topicsCat==='all'?' on':'')+'" data-cat="all">كل الفئات</span>';
+  chips+=cats.map(function(c){return '<span class="chip'+(topicsCat===c?' on':'')+'" data-cat="'+esc(c)+'">'+esc(c)+'</span>';}).join('');
+  if(!cats.length)return '';
+  return '<div class="tfilter" style="display:flex;flex-wrap:wrap;gap:7px;margin:2px 0 14px;align-items:center"><span style="font-size:12px;font-weight:800;color:var(--muted);margin-inline-end:2px">'+svg('scale','ic')+' فلتر الفئة:</span>'+chips+'</div>';
+}
+function wireTopicCatChips(v){(v||document).querySelectorAll('.tfilter .chip').forEach(function(c){c.onclick=function(){topicsCat=c.dataset.cat;renderView();};});}
+
+/* لوحة تحليل AI — أرقام حقيقية من /api/platform-topics-analysis (bridge topics/analysis).
+   حالة فارغة أمينة عند تعذّر الجلب أو غياب البيانات — لا أرقام مُفبركة. */
+function topicsAIAnalysisPanel(){
+  if(window.EP){EP.ensure('platformTopicsAnalysis',()=>renderView());}
+  var st=(window.EP&&EP.state.platformTopicsAnalysis)||'idle';
+  var A=(window.PTOPICS_ANALYSIS)||{};
+  var head='<section class="panel" style="margin-bottom:16px;border:1px solid var(--ai)"><div class="ph"><h3>'+svg('robot')+' لوحة تحليل AI — المواضيع</h3><span class="hint">أعلى تفاعلًا · الفئات · الأكثر طلبًا (حيّ من المنصة)</span><button class="btn btn-ghost" id="taRefresh" style="flex:none;min-width:auto;padding:6px 12px;font-size:12px;margin-inline-start:auto">'+svg('sparkles')+'حدّث</button></div><div style="padding:14px 16px">';
+  var foot='</div></section>';
+  if(st==='error')return head+'<div class="policy" style="margin:0;border-inline-start-color:var(--conflict);background:var(--conflict-bg);color:var(--conflict)">'+svg('scale','ic')+'<div>تعذّر جلب التحليل من المنصة. <b style="cursor:pointer;text-decoration:underline" onclick="EP.reload(\'platformTopicsAnalysis\',()=>renderView())">إعادة المحاولة</b></div></div>'+foot;
+  if(st==='loading'||(st==='idle'&&!A.total_topics))return head+'<div style="padding:14px;text-align:center;color:var(--muted)">…جارٍ تحميل التحليل</div>'+foot;
+  var tot=A.total_topics||0, com=A.total_comments||0;
+  if(!tot)return head+'<div style="padding:14px;text-align:center;color:var(--muted)">لا مواضيع كافية للتحليل بعد — كل الأرقام صفر. أنشئ مواضيع أو حوّل أخبارًا لمواضيع لتبدأ القياس.</div>'+foot;
+  var top=(A.top_topics||[]).slice(0,5);
+  var topHtml=top.length?top.map(function(t){var e=t.engagement||{};return '<div style="display:flex;align-items:center;gap:9px;padding:7px 0;border-bottom:1px solid var(--line)"><span style="flex:1;font-size:13px;font-weight:700;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(t.title||'—')+'</span>'+topSrcBadge(t.source)+(t.category?'<span class="chip" style="padding:2px 8px;font-size:10.5px;cursor:default">'+esc(t.category)+'</span>':'')+'<span style="font-size:12px;color:var(--muted);flex:none">'+svg('doc','ic')+' '+money((e.comments||0))+'</span></div>';}).join(''):'<div style="color:var(--muted);font-size:12.5px">لا تفاعل مقيس بعد.</div>';
+  var byCat=(A.by_category||[]).slice(0,8);
+  var maxCat=byCat.reduce(function(m,x){return Math.max(m,x.count||0);},0)||1;
+  var catHtml=byCat.length?byCat.map(function(x){var w=Math.round((x.count||0)/maxCat*100);return '<div style="display:flex;align-items:center;gap:8px;padding:4px 0;font-size:12.5px"><span style="width:120px;flex:none;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(x.category||'غير مصنّف')+'</span><div style="flex:1;height:9px;background:var(--surface-2);border-radius:6px;overflow:hidden"><div style="width:'+w+'%;height:100%;background:var(--ai)"></div></div><b style="width:34px;text-align:left;flex:none">'+money(x.count||0)+'</b></div>';}).join(''):'<div style="color:var(--muted);font-size:12.5px">لا فئات بعد.</div>';
+  var demand=(A.categories_in_demand||[]).slice(0,6);
+  var demandHtml=demand.length?demand.map(function(x){return '<span class="chip" style="padding:3px 11px;font-size:11.5px;cursor:default;background:var(--gold-bg);color:var(--gold);border-color:transparent">'+svg('trend','ic')+esc(x.category||'—')+' · '+money(x.count||0)+'</span>';}).join(' '):'<span style="color:var(--muted);font-size:12.5px">لا بيانات طلب من الشات بعد.</span>';
+  var body=''+
+    '<div class="kpis" style="margin-bottom:12px"><div class="kpi k-1"><div class="top"><span class="ic">'+svg('sparkles')+'</span>مواضيع محلَّلة</div><b>'+money(tot)+'</b><div class="sub">الإجمالي</div></div>'+
+    '<div class="kpi k-3"><div class="top"><span class="ic">'+svg('doc')+'</span>إجمالي التعليقات</div><b>'+money(com)+'</b><div class="sub">مقياس التفاعل</div></div></div>'+
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">'+
+      '<div><div style="font-size:12px;font-weight:800;color:var(--muted);margin-bottom:4px">'+svg('trend','ic')+' أعلى المواضيع تفاعلًا</div>'+topHtml+'</div>'+
+      '<div><div style="font-size:12px;font-weight:800;color:var(--muted);margin-bottom:4px">'+svg('grid','ic')+' حسب الفئة</div>'+catHtml+'</div>'+
+    '</div>'+
+    '<div style="margin-top:12px"><div style="font-size:12px;font-weight:800;color:var(--muted);margin-bottom:6px">'+svg('trend','ic')+' الفئات الأكثر طلبًا (من الشات)</div>'+demandHtml+'</div>'+
+    (A.engagement_note?'<div class="note-ai" style="margin-top:12px">'+svg('robot','ic')+'<div>'+esc(A.engagement_note)+'</div></div>':'');
+  return head+body+foot;
+}
+function wireTopicsAIPanel(v){var b=(v||document).querySelector('#taRefresh');if(b)b.onclick=function(){if(window.EP)EP.reload('platformTopicsAnalysis',()=>renderView());};}
 
 /* ===== CONTENT / BLOG VIEW (تبويب «مدونة الموقع») ===== */
 // المواضيع/المقالات: تُجلب حيّة من /api/content/articles عبر طبقة EP (window.TOPICS).
 // لا مصدر تصميمي — إن فشل الجلب تبقى القائمة فارغة وتظهر لافتة «أعد المحاولة».
 var TOPICS=[];
 function viewContent(v){
-  if(window.EP){EP.ensure('content',()=>viewContent(v));}
+  if(window.EP){EP.ensure('content',()=>viewContent(v));EP.ensure('platformArticles',()=>viewContent(v));}
   // تبويبات الأخبار/الصور/الصفحات معطّلة (لا واجهة خلفية) — اقتصر على المقالات.
   if(contentTab!=='pending'&&contentTab!=='published')contentTab='pending';
   const Cst=(window.EP&&EP.state.content)||'idle';
   const pend=TOPICS.filter(t=>t.status==='pending').length,pub=TOPICS.filter(t=>t.status==='published').length;
+  const autoPub=(window.PARTS||[]).filter(a=>a.status==='published').length,autoDraft=(window.PARTS||[]).length-autoPub;
   v.innerHTML=`
-    ${topicsTabbar('blog')}
-    <div class="policy" style="border-inline-start-color:var(--memory)">${svg('doc','ic')}<div><b>تدفّق المدونة:</b> موضوع (ذكاء + خبير) ← صياغة مقال ← <b>اعتماد إداري</b> ← نشر تلقائي على <span style="direction:ltr">elprofessor.net</span>.</div></div>
-    <div class="policy" style="border-inline-start-color:var(--agree);background:var(--agree-bg)">${svg('check','ic')}<div><b>متصل بالموقع:</b> ما يُعتمد هنا يُنشر مباشرة على <span style="direction:ltr">elprofessor.net</span> من <b>مصدر محتوى واحد</b> — لا إدخال مكرّر. <b>${pub}</b> مقالات منشورة الآن على الموقع.</div></div>
+    ${topicsTabbar('articles')}
+    <div class="policy" style="border-inline-start-color:var(--memory)">${svg('doc','ic')}<div><b>المقالات — طبقة SEO/المدونة:</b> مسودّة (من موضوع/خبر/فكرة) ← <b>افتحها لتقرأ النصّ كامل</b> ← <b>اعتمد وانشر</b> فتظهر مباشرة على <span style="direction:ltr">elprofessor.net</span> وتنتقل لقائمة «المنشورة».</div></div>
+    <div class="policy" style="border-inline-start-color:var(--ai);background:var(--ai-bg)">${svg('sparkles','ic')}<div><b>تيّاران:</b> <b>(١) آلي</b> — مقالات شرح المنصة/القيمة تُنشَر تلقائيًّا. <b>(٢) بمراجعة</b> — تحليلات الأخبار والمواضيع تأتي <b>مسودّات</b> هنا للاعتماد. <b>حالة الورك فلو:</b> ${Cst==='loading'?'…جارٍ الجلب':'يعمل — '+money(pend)+' بانتظار المراجعة، '+money(pub)+' منشورة على الموقع'}. تيار المنصة الآلي: <b>${money(autoPub)}</b> منشور / <b>${money(autoDraft)}</b> مسودّة — <b style="cursor:pointer;text-decoration:underline" id="ctAutoLink">افتح تيار المنصة الآلي</b>.</div></div>
     ${Cst==='error'?`<div class="policy" style="border-inline-start-color:var(--conflict);background:var(--conflict-bg);color:var(--conflict)">${svg('scale','ic')}<div>تعذّر جلب المقالات من الخادم. <b style="cursor:pointer;text-decoration:underline" onclick="EP.reload('content',()=>viewContent(document.getElementById('view')))">إعادة المحاولة</b></div></div>`:''}
     ${Cst==='loading'?`<div class="policy" style="border-inline-start-color:var(--memory)">${svg('doc','ic')}<div>…جارٍ تحميل المقالات من الخادم</div></div>`:''}
     <div class="kpis">
-      <div class="kpi k-2"><div class="top"><span class="ic">${svg('doc')}</span>بانتظار الاعتماد</div><b>${money(pend)}</b><div class="sub">مقالات جاهزة</div></div>
-      <div class="kpi k-3"><div class="top"><span class="ic">${svg('check')}</span>منشورة</div><b>${money(pub)}</b><div class="sub">على الموقع</div></div>
-      <div class="kpi k-4"><div class="top"><span class="ic">${svg('robot')}</span>مصدر المحتوى</div><b>ذكاء + خبير</b><div class="sub">تلقائي</div></div>
+      <div class="kpi k-2"><div class="top"><span class="ic">${svg('doc')}</span>بانتظار الاعتماد</div><b>${money(pend)}</b><div class="sub">مسودّات جاهزة للمراجعة</div></div>
+      <div class="kpi k-3"><div class="top"><span class="ic">${svg('check')}</span>منشورة على المدونة</div><b>${money(pub)}</b><div class="sub">على الموقع</div></div>
+      <div class="kpi k-4"><div class="top"><span class="ic">${svg('robot')}</span>تيار المنصة الآلي</div><b>${money(autoPub)}</b><div class="sub">${money(autoDraft)} مسودّة</div></div>
     </div>
     <div class="tabbar" id="ctTabs">
       <div class="tab${contentTab==='pending'?' on':''}" data-t="pending">بانتظار الاعتماد (${pend})</div>
@@ -2016,6 +2099,7 @@ function viewContent(v){
     gb.disabled=true;EP.runDailyContent(()=>viewContent(document.getElementById('view')));
   };
   var sb=document.getElementById('ctSync');if(sb)sb.onclick=()=>{ if(window.EP)EP.syncContent(()=>viewContent(document.getElementById('view'))); };
+  var al=document.getElementById('ctAutoLink');if(al)al.onclick=()=>{topicsTab='auto';selected=null;renderView();};
   renderContent();
 }
 function renderContent(){
@@ -2111,8 +2195,9 @@ function viewArticlesAuto(v){
   const Ast=(window.EP&&EP.state.platformArticles)||'idle';
   const pub=PARTS.filter(a=>a.status==='published').length,draft=PARTS.length-pub;
   v.innerHTML=`
-    ${topicsTabbar('auto')}
-    <div class="policy" style="border-inline-start-color:var(--ai)">${svg('sparkles','ic')}<div><b>تيّاران للمقالات:</b> <b>(١) آلي</b> — مقالات <b>شرح المنصة</b> والقيمة والذكاء الممزوج برأي الخبير <b>تُنشَر تلقائيًّا</b> على المدونة (آمنة: النصّ يُنقّى من أي HTML قبل النشر). <b>(٢) بمراجعة</b> — تحليلات الأخبار والمواضيع المقترحة تأتي <b>مسودّات</b> ← راجعها ← <b>اعتمد وانشر</b>.</div></div>
+    ${topicsTabbar('articles')}
+    <div class="policy" style="border-inline-start-color:var(--memory)">${svg('doc','ic')}<div><b>تيار المنصة الآلي</b> (مقالات app.elprofessor.net). <b style="cursor:pointer;text-decoration:underline" id="artBack">→ رجوع لمقالات المدونة (elprofessor.net)</b></div></div>
+    <div class="policy" style="border-inline-start-color:var(--ai)">${svg('sparkles','ic')}<div><b>تيّاران للمقالات:</b> <b>(١) آلي</b> — مقالات <b>شرح المنصة</b> والقيمة والذكاء الممزوج برأي الخبير <b>تُنشَر تلقائيًّا</b> على المدونة (آمنة: النصّ يُنقّى من أي HTML قبل النشر). <b>(٢) بمراجعة</b> — تحليلات الأخبار والمواضيع المقترحة تأتي <b>مسودّات</b> ← اضغط الصفّ لفتح النصّ كامل ← <b>اعتمد وانشر</b>.</div></div>
     <div class="policy" style="border-inline-start-color:var(--gold);background:var(--gold-bg)">${svg('robot','ic')}<div><b>وكيل المقالات (AI Team):</b> يقترح مواضيع للاعتماد ويتحسّن بمرور الوقت — يعمل <b>عند الطلب</b> من قسم «الفريق (AI Team)»، لا باستقلالية كاملة. شغّل التوليد يدويًّا من هنا أو اربط n8n على <code>POST /api/bridge/content/daily-run</code> يوميًّا. <b>${money(pub)}</b> مقالًا منشورًا الآن.</div></div>
     ${Ast==='error'?`<div class="policy" style="border-inline-start-color:var(--conflict);background:var(--conflict-bg);color:var(--conflict)">${svg('scale','ic')}<div>تعذّر جلب المقالات من المنصة. <b style="cursor:pointer;text-decoration:underline" onclick="EP.reload('platformArticles',()=>viewArticlesAuto(document.getElementById('view')))">إعادة المحاولة</b></div></div>`:''}
     ${Ast==='loading'?`<div class="policy" style="border-inline-start-color:var(--ai)">${svg('sparkles','ic')}<div>…جارٍ التحميل من المنصة</div></div>`:''}
@@ -2123,6 +2208,7 @@ function viewArticlesAuto(v){
     </div>
     <div class="inboxwrap"><section class="panel"><div class="ph"><h3>المقالات</h3><span class="n">${PARTS.length}</span><button class="btn btn-primary" id="artRun" style="flex:none;min-width:auto;padding:6px 13px;font-size:12px;margin-inline-start:auto">${svg('sparkles')} شغّل التوليد اليومي</button></div><div id="artRows"></div></section></div>`;
   wireTopicsTabs();
+  var bk=document.getElementById('artBack');if(bk)bk.onclick=()=>{topicsTab='articles';selected=null;renderView();};
   var rb=document.getElementById('artRun');if(rb)rb.onclick=()=>{
     if(!window.EP){toast('غير متصل بالمنصة');return;}
     if(!confirm('تشغيل التوليد اليومي الآن؟ (٣ مقالات + موضوعان كمسودّات للمراجعة)'))return;
@@ -2131,108 +2217,184 @@ function viewArticlesAuto(v){
   };
   renderArticlesAuto();
 }
+// درج/نافذة مقال آلي: تفتح النصّ كامل (من التغذية الخام) قبل الاعتماد — إصلاح «المسودّة مش بتفتح».
+function artDetailModal(a){
+  var raw=((window.EP&&EP.data.platformArticles&&EP.data.platformArticles.raw)||[]).filter(function(x){return x.id===a.id;})[0]||{};
+  var body=raw.body;
+  var bodyHtml;
+  if(Array.isArray(body)){bodyHtml=body.length?body.map(function(b){b=String(b);return b.indexOf('## ')===0?'<h4 style="margin:14px 0 6px;font-size:15px;font-weight:800;color:var(--ink)">'+aEsc(b.slice(3))+'</h4>':'<p style="margin:0 0 10px;line-height:1.9;color:var(--ink-2);font-size:13.5px">'+aEsc(b)+'</p>';}).join(''):'';}
+  else if(typeof body==='string'&&body){bodyHtml='<p style="margin:0 0 10px;line-height:1.9;color:var(--ink-2);font-size:13.5px;white-space:pre-wrap">'+aEsc(body)+'</p>';}
+  else{bodyHtml='<div style="color:var(--muted);font-size:13px">(لا يوجد نصّ لعرضه — مقتطف فقط)</div>';}
+  var pub=a.status==='published';
+  var actions=pub
+    ?'<button class="btn btn-ghost" id="ad_unpub">إلغاء النشر</button>'
+    :'<button class="btn btn-primary" id="ad_pub">'+svg('check')+'اعتمد وانشر</button>';
+  var s=openModal('مقال آلي — '+(pub?'منشور':'مسودّة'),
+    '<div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:10px"><span class="chip" style="padding:2px 9px;font-size:11px;cursor:default;background:var(--ai-bg);color:var(--ai);border-color:transparent;font-weight:800">'+svg('sparkles','ic')+'آلي</span><span class="chip" style="padding:2px 9px;font-size:11px;cursor:default">'+aEsc(ART_CAT[a.category]||a.category)+'</span><span class="status '+(pub?'s-auto':'s-wait')+'"><span class="d"></span>'+(pub?'منشور':'مسودّة')+'</span></div>'+
+    '<div class="dh" style="padding:0 0 8px"><h3>'+aEsc(a.title)+'</h3></div>'+
+    (raw.excerpt||a.excerpt?'<div class="fld"><label>المقدّمة</label><div class="val" style="font-weight:600">'+aEsc(raw.excerpt||a.excerpt)+'</div></div>':'')+
+    '<div class="lab" style="margin:10px 0 4px">نص المقال</div><div style="background:var(--surface-2,#f7f7f9);border:1px solid var(--line,#e6e6ee);border-radius:10px;padding:12px 14px;max-height:320px;overflow:auto;margin-bottom:10px">'+bodyHtml+'</div>'+
+    '<div class="acts" style="margin-top:6px">'+actions+'<button class="btn btn-warn" id="ad_del">حذف</button><button class="btn btn-ghost" id="ad_x">إغلاق</button></div>');
+  s.querySelector('#ad_x').onclick=closeModal;
+  var pb=s.querySelector('#ad_pub');if(pb)pb.onclick=function(){if(window.EP)EP.publishArticleP(a,function(){closeModal();viewArticlesAuto(document.getElementById('view'));});};
+  var ub=s.querySelector('#ad_unpub');if(ub)ub.onclick=function(){if(window.EP)EP.unpublishArticleP(a,function(){closeModal();viewArticlesAuto(document.getElementById('view'));});};
+  s.querySelector('#ad_del').onclick=function(){if(!confirm('حذف «'+a.title+'»؟'))return;if(window.EP)EP.deleteArticleP(a,function(){closeModal();viewArticlesAuto(document.getElementById('view'));});};
+}
 function renderArticlesAuto(){
   const el=document.getElementById('artRows');if(!el)return;el.innerHTML='';
   const items=PARTS.slice();
   if(!items.length){el.innerHTML='<div style="padding:40px;text-align:center;color:var(--muted)">لا مقالات بعد — اضغط «شغّل التوليد اليومي» لتوليد أول دفعة مسودّات بالذكاء.</div>';return;}
-  items.forEach((a)=>el.insertAdjacentHTML('beforeend',`<div class="row esc-row" style="grid-template-columns:2.2fr 1fr 1fr 220px">
+  items.forEach((a)=>el.insertAdjacentHTML('beforeend',`<div class="row esc-row" data-row="${a.id}" style="grid-template-columns:2.2fr 1fr 1fr 220px;cursor:pointer">
     <div class="c c1"><div class="src-ic" style="background:var(--ai-bg);color:var(--ai)">${svg('sparkles')}</div><div><div class="parties">${aEsc(a.title)}</div><div class="from">${aEsc(a.excerpt)||'—'}</div></div></div>
     <div class="c"><div class="from">${ART_CAT[a.category]||a.category} · ${a.date||'—'}</div></div>
     <div class="c"><span class="status ${a.status==='published'?'s-auto':'s-wait'}"><span class="d"></span>${a.status==='published'?'منشور':'مسودّة'}</span></div>
     <div class="c" style="gap:6px">${a.status==='published'?`<button class="btn btn-ghost" data-unpub="${a.id}" style="padding:5px 11px;font-size:12px">إلغاء النشر</button>`:`<button class="btn btn-primary" data-pub="${a.id}" style="padding:5px 11px;font-size:12px">اعتمد وانشر</button>`}<button class="btn btn-warn" data-del="${a.id}" style="padding:5px 11px;font-size:12px">حذف</button></div></div>`));
-  el.querySelectorAll('[data-pub]').forEach(b=>b.onclick=()=>{var a=PARTS.find(x=>x.id===b.dataset.pub);if(!a||!window.EP)return;
+  el.querySelectorAll('.row[data-row]').forEach(r=>r.onclick=()=>{var a=PARTS.find(x=>x.id===r.dataset.row);if(a)artDetailModal(a);});
+  el.querySelectorAll('[data-pub]').forEach(b=>b.onclick=(ev)=>{ev.stopPropagation();var a=PARTS.find(x=>x.id===b.dataset.pub);if(!a||!window.EP)return;
     EP.publishArticleP(a,()=>viewArticlesAuto(document.getElementById('view')));});
-  el.querySelectorAll('[data-unpub]').forEach(b=>b.onclick=()=>{var a=PARTS.find(x=>x.id===b.dataset.unpub);if(!a||!window.EP)return;
+  el.querySelectorAll('[data-unpub]').forEach(b=>b.onclick=(ev)=>{ev.stopPropagation();var a=PARTS.find(x=>x.id===b.dataset.unpub);if(!a||!window.EP)return;
     EP.unpublishArticleP(a,()=>viewArticlesAuto(document.getElementById('view')));});
-  el.querySelectorAll('[data-del]').forEach(b=>b.onclick=()=>{var a=PARTS.find(x=>x.id===b.dataset.del);if(!a||!window.EP)return;
+  el.querySelectorAll('[data-del]').forEach(b=>b.onclick=(ev)=>{ev.stopPropagation();var a=PARTS.find(x=>x.id===b.dataset.del);if(!a||!window.EP)return;
     if(!confirm('حذف «'+a.title+'»؟'))return;
     EP.deleteArticleP(a,()=>viewArticlesAuto(document.getElementById('view')));});
 }
+// بيانات كل تبويب موضوعات داخلي (عنوان + شرح الورك فلو + حالة فارغة).
+var TOPIC_TAB_META={
+  board:   {t:'المنشورة',           note:'مواضيع حيّة على بورد المنصة — الناس تناقش وتعلّق. لكل موضوع <b>مصدره</b> و<b>فئته</b> و<b>تفاعله</b>. حوّل الأقوى إلى <b>مقال SEO</b> للمدونة.', empty:'لا مواضيع منشورة على البورد بعد.'},
+  incoming:{t:'واردة',              note:'طلبات من <b>خبراء/الخارج</b> — راجعها ثم <b>اعتمد</b> لتصعد للبورد، أو <b>وجّهها للوكيل</b> ليشتغل عليها.', empty:'لا مواضيع واردة الآن.'},
+  working: {t:'قيد العمل (الوكيل)',  note:'مواضيع <b>الوكيل الذكي شغّال عليها</b> (دمج آراء/صياغة). راجع الناتج ثم <b>انشر</b> على البورد عند الجهوز.', empty:'لا مواضيع قيد عمل الوكيل الآن.'},
+  ideas:   {t:'أفكار للاعتماد',      note:'مسودّات مقترحة (الوكيل أو بشري). <b>اعتمد</b> الفكرة لتصعد للبورد، أو <b>ارفض</b>.', empty:'لا أفكار بانتظار الاعتماد — اضغط «+ فكرة/موضوع» لإضافة واحدة.'}
+};
 function viewTopics(v){
   if(window.EP){EP.ensure('platformTopics',()=>viewTopics(v));}
+  const tab=(topicsTab==='incoming'||topicsTab==='working'||topicsTab==='ideas')?topicsTab:'board';
+  const meta=TOPIC_TAB_META[tab];
   const Tst=(window.EP&&EP.state.platformTopics)||'idle';
-  const pub=PTOPICS.filter(t=>t.status==='published').length,draft=PTOPICS.length-pub,withAI=PTOPICS.filter(t=>t.ai_answer).length;
+  const C=topicTabCounts();
+  const totCom=(PTOPICS||[]).reduce((s,t)=>s+(t.comments||0),0);
   v.innerHTML=`
-    ${topicsTabbar('board')}
-    <div class="policy" style="border-inline-start-color:var(--gold)">${svg('sparkles','ic')}<div><b>المواضيع:</b> ابحث موضوعًا (عنوان + سؤال + تخصص) فيُنشئ الذكاء <b>مسوّدة</b> ← راجعها ← اضغط <b>نشر</b> لتظهر على اللوحة العامة في المنصة.</div></div>
-    <div class="policy" style="border-inline-start-color:var(--agree);background:var(--agree-bg)">${svg('check','ic')}<div><b>متصل بالمنصة:</b> الورك فلو = بحث/مسودّة ← مراجعة مسودّة الذكاء ← نشر. <b>${pub}</b> موضوعًا منشورًا الآن.</div></div>
+    ${topicsTabbar(tab)}
+    ${topicsAIAnalysisPanel()}
+    <div class="policy" style="border-inline-start-color:var(--gold)">${svg('sparkles','ic')}<div><b>${meta.t}:</b> ${meta.note}</div></div>
     ${Tst==='error'?`<div class="policy" style="border-inline-start-color:var(--conflict);background:var(--conflict-bg);color:var(--conflict)">${svg('scale','ic')}<div>تعذّر جلب المواضيع من المنصة. <b style="cursor:pointer;text-decoration:underline" onclick="EP.reload('platformTopics',()=>viewTopics(document.getElementById('view')))">إعادة المحاولة</b></div></div>`:''}
     ${Tst==='loading'?`<div class="policy" style="border-inline-start-color:var(--gold)">${svg('sparkles','ic')}<div>…جارٍ تحميل المواضيع من المنصة</div></div>`:''}
     <div class="kpis">
-      <div class="kpi k-3"><div class="top"><span class="ic">${svg('check')}</span>منشورة</div><b>${money(pub)}</b><div class="sub">على اللوحة العامة</div></div>
-      <div class="kpi k-2"><div class="top"><span class="ic">${svg('doc')}</span>مسودّات</div><b>${money(draft)}</b><div class="sub">قيد المراجعة</div></div>
-      <div class="kpi k-1"><div class="top"><span class="ic">${svg('sparkles')}</span>بمسوّدة ذكاء</div><b>${money(withAI)}</b><div class="sub">من ${money(PTOPICS.length)}</div></div>
+      <div class="kpi ${tab==='board'?'k-3':'k-1'}"><div class="top"><span class="ic">${svg('check')}</span>المنشورة</div><b>${money(C.board)}</b><div class="sub">على البورد</div></div>
+      <div class="kpi ${tab==='incoming'?'k-3':'k-2'}"><div class="top"><span class="ic">${svg('mega')}</span>واردة</div><b>${money(C.incoming)}</b><div class="sub">من الخبراء</div></div>
+      <div class="kpi ${tab==='working'?'k-3':'k-4'}"><div class="top"><span class="ic">${svg('robot')}</span>قيد العمل</div><b>${money(C.working)}</b><div class="sub">الوكيل</div></div>
+      <div class="kpi ${tab==='ideas'?'k-3':'k-1'}"><div class="top"><span class="ic">${svg('sparkles')}</span>أفكار</div><b>${money(C.ideas)}</b><div class="sub">للاعتماد</div></div>
     </div>
-    <div class="inboxwrap"><section class="panel"><div class="ph"><h3>المواضيع</h3><span class="n">${PTOPICS.length}</span><button class="btn btn-human" id="topAdd" style="flex:none;min-width:auto;padding:6px 13px;font-size:12px;margin-inline-start:auto">+ موضوع جديد (بحث)</button></div><div id="topRows"></div></section></div>`;
+    ${topicCatChips()}
+    <div class="inboxwrap"><section class="panel"><div class="ph"><h3>${meta.t}</h3><span class="n" id="topN">0</span><button class="btn btn-human" id="topAdd" style="flex:none;min-width:auto;padding:6px 13px;font-size:12px;margin-inline-start:auto">+ ${tab==='ideas'?'فكرة/موضوع':'موضوع جديد (بحث)'}</button></div><div id="topRows"></div></section></div>`;
   wireTopicsTabs();
-  var ab=document.getElementById('topAdd');if(ab)ab.onclick=()=>topCreateModal();
+  wireTopicsAIPanel(v);
+  wireTopicCatChips(v);
+  var ab=document.getElementById('topAdd');if(ab)ab.onclick=()=>topCreateModal(tab==='ideas'?'idea':(tab==='incoming'?'expert':'human'));
   renderTopics();
+}
+// أزرار كل صف حسب التبويب — كلها إجراءات حقيقية (PUT/DELETE/publish عبر الجسر السرّي).
+function topRowActions(t){
+  var del='<button class="btn btn-warn" data-del="'+t.id+'" style="padding:5px 10px;font-size:12px">حذف</button>';
+  var art=t.ai_answer?'<button class="btn btn-human" data-article="'+t.id+'" style="padding:5px 10px;font-size:12px">اعمل مقال</button>':'';
+  var tab=topicTabOf(t);
+  if(tab==='board')   return art+del;
+  if(tab==='working') return '<button class="btn btn-primary" data-pub="'+t.id+'" style="padding:5px 10px;font-size:12px">نشر</button>'+art+del;
+  if(tab==='incoming')return '<button class="btn btn-primary" data-approve="'+t.id+'" style="padding:5px 10px;font-size:12px">اعتمد</button><button class="btn btn-ghost" data-route="'+t.id+'" style="padding:5px 10px;font-size:12px">للوكيل</button>'+del;
+  return '<button class="btn btn-primary" data-approve="'+t.id+'" style="padding:5px 10px;font-size:12px">اعتمد</button><button class="btn btn-warn" data-reject="'+t.id+'" style="padding:5px 10px;font-size:12px">ارفض</button>';   // ideas
 }
 function renderTopics(){
   const el=document.getElementById('topRows');if(!el)return;el.innerHTML='';
-  const items=PTOPICS.slice();
-  if(!items.length){el.innerHTML='<div style="padding:40px;text-align:center;color:var(--muted)">لا مواضيع بعد — اضغط «+ موضوع جديد (بحث)» لبدء بحث ومسوّدة ذكاء.</div>';return;}
-  items.forEach((t)=>el.insertAdjacentHTML('beforeend',`<div class="row esc-row" style="grid-template-columns:2fr 1fr 1fr 300px">
-    <div class="c c1"><div class="src-ic" style="background:var(--gold-bg);color:var(--gold)">${svg('sparkles')}</div><div><div class="parties">${topEsc(t.title)}</div><div class="from">${topEsc(t.specialty)||'—'} · ${t.ai_answer?'<b style="color:var(--ink)">مسوّدة ذكاء ✓</b>':'بلا مسوّدة'}</div></div></div>
-    <div class="c"><div class="from">${t.date||'—'}</div></div>
-    <div class="c"><span class="status ${t.status==='published'?'s-auto':'s-wait'}"><span class="d"></span>${t.status==='published'?'منشور':'مسودّة'}</span></div>
-    <div class="c" style="gap:6px">${t.status==='published'?'':`<button class="btn btn-primary" data-pub="${t.id}" style="padding:5px 11px;font-size:12px">نشر</button>`}<button class="btn btn-ghost" data-view="${t.id}" style="padding:5px 11px;font-size:12px">مراجعة</button>${t.ai_answer?`<button class="btn btn-human" data-article="${t.id}" style="padding:5px 11px;font-size:12px">اعمل مقال</button>`:''}<button class="btn btn-warn" data-del="${t.id}" style="padding:5px 11px;font-size:12px">حذف</button></div></div>`));
-  el.querySelectorAll('[data-view]').forEach(b=>b.onclick=()=>{var t=PTOPICS.find(x=>x.id===b.dataset.view);if(t)topReviewModal(t);});
-  el.querySelectorAll('[data-article]').forEach(b=>b.onclick=()=>{var t=PTOPICS.find(x=>x.id===b.dataset.article);if(t)topMakeArticle(t);});
-  el.querySelectorAll('[data-pub]').forEach(b=>b.onclick=()=>{var t=PTOPICS.find(x=>x.id===b.dataset.pub);if(!t)return;
-    if(!confirm('نشر «'+t.title+'» على اللوحة العامة؟'))return;
+  const items=topicsForActiveTab();
+  var nEl=document.getElementById('topN');if(nEl)nEl.textContent=items.length;
+  const tab=(topicsTab==='incoming'||topicsTab==='working'||topicsTab==='ideas')?topicsTab:'board';
+  if(!items.length){el.innerHTML='<div style="padding:40px;text-align:center;color:var(--muted)">'+(topicsCat!=='all'?'لا مواضيع في هذه الفئة داخل هذا التبويب.':TOPIC_TAB_META[tab].empty)+'</div>';return;}
+  items.forEach((t)=>{var m=TOPIC_SRC[t.source]||TOPIC_SRC.human;el.insertAdjacentHTML('beforeend',`<div class="row esc-row" data-row="${t.id}" style="grid-template-columns:2fr 1.3fr 0.9fr 250px;cursor:pointer">
+    <div class="c c1"><div class="src-ic" style="background:${m.bg};color:${m.fg}">${svg(m.ic)}</div><div><div class="parties">${topEsc(t.title)}</div><div class="from" style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">${topSrcBadge(t.source)}${t.category?'<span class="chip" style="padding:1px 8px;font-size:10.5px;cursor:default">'+topEsc(t.category)+'</span>':''}${t.ai_answer?'<b style="color:var(--ink);font-size:11.5px">مسوّدة ذكاء ✓</b>':''}</div></div></div>
+    <div class="c"><div class="from">${t.country?topEsc(t.country)+' · ':''}${svg('doc','ic')} ${money(t.comments||0)} تعليق</div><div class="from" style="opacity:.7">${t.date||'—'}</div></div>
+    <div class="c"><span class="status ${(t.status==='published'||t.status==='open')?'s-auto':'s-wait'}"><span class="d"></span>${topStatusAr(t.status)}</span></div>
+    <div class="c" style="gap:6px;flex-wrap:wrap">${topRowActions(t)}</div></div>`);});
+  // فتح المراجعة بالنقر على الصف كامل (إصلاح: الصف كان لا يفتح شيئًا) — الأزرار توقف الانتشار.
+  el.querySelectorAll('.row[data-row]').forEach(r=>r.onclick=()=>{var t=PTOPICS.find(x=>x.id===r.dataset.row);if(t)topReviewModal(t);});
+  el.querySelectorAll('[data-article]').forEach(b=>b.onclick=(ev)=>{ev.stopPropagation();var t=PTOPICS.find(x=>x.id===b.dataset.article);if(t)topMakeArticle(t);});
+  el.querySelectorAll('[data-pub]').forEach(b=>b.onclick=(ev)=>{ev.stopPropagation();var t=PTOPICS.find(x=>x.id===b.dataset.pub);if(!t)return;
+    if(!confirm('نشر «'+t.title+'» على بورد المنصة؟'))return;
     if(window.EP){EP.publishTopic(t,()=>viewTopics(document.getElementById('view')));}});
-  el.querySelectorAll('[data-del]').forEach(b=>b.onclick=()=>{var t=PTOPICS.find(x=>x.id===b.dataset.del);if(!t)return;
+  el.querySelectorAll('[data-approve]').forEach(b=>b.onclick=(ev)=>{ev.stopPropagation();var t=PTOPICS.find(x=>x.id===b.dataset.approve);if(!t)return;
+    if(!confirm('اعتماد «'+t.title+'» ورفعه إلى بورد المنصة؟'))return;
+    if(window.EP){EP.updateTopic(t.id,{title:t.title,status:'open'},()=>viewTopics(document.getElementById('view')));}});
+  el.querySelectorAll('[data-route]').forEach(b=>b.onclick=(ev)=>{ev.stopPropagation();var t=PTOPICS.find(x=>x.id===b.dataset.route);if(!t)return;
+    if(!confirm('توجيه «'+t.title+'» إلى الوكيل الذكي ليشتغل عليه؟'))return;
+    if(window.EP){EP.updateTopic(t.id,{title:t.title,status:'merged'},()=>viewTopics(document.getElementById('view')));}});
+  el.querySelectorAll('[data-reject]').forEach(b=>b.onclick=(ev)=>{ev.stopPropagation();var t=PTOPICS.find(x=>x.id===b.dataset.reject);if(!t)return;
+    if(!confirm('رفض «'+t.title+'» وحذفه؟'))return;
+    if(window.EP){EP.deleteTopic(t,()=>viewTopics(document.getElementById('view')));}});
+  el.querySelectorAll('[data-del]').forEach(b=>b.onclick=(ev)=>{ev.stopPropagation();var t=PTOPICS.find(x=>x.id===b.dataset.del);if(!t)return;
     if(!confirm('حذف موضوع «'+t.title+'»؟'))return;
     if(window.EP){EP.deleteTopic(t,()=>viewTopics(document.getElementById('view')));}});
 }
-// خطوة العبور: موضوع (بمسوّدة ذكاء) ← مقال مسودّة في «مدونة الموقع» (يُصاغ بجسم = مسوّدة الذكاء)
-// ← يُراجَع هناك ثم «اعتمد وانشر (SEO)». يكمل خطّ الإنتاج بضغطة واحدة.
+// خطوة العبور: موضوع (بمسوّدة ذكاء) ← مقال مسودّة في «المقالات» (يُصاغ بجسم = مسوّدة الذكاء)
+// ← يُراجَع هناك (يُفتح كامل النصّ) ثم «اعتمد وانشر» مباشرة على elprofessor.net. يكمل خطّ الإنتاج بضغطة.
 function topMakeArticle(t){
   if(!t.ai_answer){toast('لا توجد مسوّدة ذكاء لهذا الموضوع بعد');return;}
   if(!window.EP){toast('غير متصل بالمنصة');return;}
-  if(!confirm('تحويل «'+t.title+'» إلى مقال مسودّة في «مدونة الموقع»؟'))return;
-  var g={t:t.title,cat:t.specialty||'قانوني',k:'موضوع',ex:'',by:'موضوع + رأي خبير',body:t.ai_answer,img:''};
-  EP.createArticle(g,false,function(){topicsTab='blog';selected=null;renderView();});
+  if(!confirm('تحويل «'+t.title+'» إلى مقال مسودّة في «المقالات»؟ (تفتحه هناك وتراجعه ثم «اعتمد وانشر»)'))return;
+  var g={t:t.title,cat:t.category||t.specialty||'قانوني',k:'موضوع',ex:(t.summary||'').slice(0,180),by:'موضوع + رأي خبير',body:t.ai_answer,img:''};
+  EP.createArticle(g,false,function(){topicsTab='articles';selected=null;renderView();});
 }
-// الخطوة ١: بحث/مسودّة — عنوان + سؤال + تخصص ← الذكاء يُنشئ مسوّدة.
-function topCreateModal(){
+// الخطوة ١: بحث/مسودّة — عنوان + سؤال + فئة + مصدر ← الذكاء يُنشئ مسوّدة.
+function topCreateModal(defSrc){
+  var srcOpts=['human','idea','expert','news'].map(function(k){var m=TOPIC_SRC[k];return '<option value="'+k+'"'+((defSrc||'human')===k?' selected':'')+'>'+m.label+'</option>';}).join('');
   var s=openModal('موضوع جديد — بحث ومسوّدة ذكاء',
-    '<div class="note-ai" style="margin-bottom:12px">'+svg('sparkles','ic')+'<div>اكتب العنوان والسؤال والتخصص ← يبحث الذكاء ويُنشئ <b>مسوّدة</b> (لا تُنشر تلقائيًا). راجعها بعدها ثم انشرها.</div></div>'+
+    '<div class="note-ai" style="margin-bottom:12px">'+svg('sparkles','ic')+'<div>اكتب العنوان والسؤال والفئة والمصدر ← يبحث الذكاء ويُنشئ <b>مسوّدة</b> (لا تُنشر تلقائيًا). يظهر الموضوع في التبويب المناسب حسب مصدره وحالته.</div></div>'+
     '<div class="fld"><label>العنوان</label><input id="tp_t" placeholder="مثال: حقوق العامل عند الفصل التعسّفي"></div>'+
     '<div class="fld"><label>السؤال (يبحثه الذكاء)</label><textarea id="tp_q" style="min-height:110px" placeholder="اكتب السؤال القانوني بوضوح ليبحثه الذكاء ويصيغ المسوّدة…"></textarea></div>'+
-    '<div class="fld"><label>التخصص</label><input id="tp_sp" placeholder="مثال: قانون عمل / عقاري / جنائي"></div>'+
+    '<div class="row2"><div class="fld"><label>الفئة (المجال القانوني)</label><input id="tp_sp" placeholder="مثال: قانون عمل / عقاري / جنائي"></div><div class="fld"><label>المصدر</label><select id="tp_src">'+srcOpts+'</select></div></div>'+
     '<div class="acts" style="margin-top:6px"><button class="btn btn-primary" id="tp_save">'+svg('sparkles')+'ابحث وأنشئ مسوّدة</button><button class="btn btn-ghost" id="tp_x">إلغاء</button></div>');
   s.querySelector('#tp_x').onclick=closeModal;
   s.querySelector('#tp_save').onclick=function(){
-    var g={title:s.querySelector('#tp_t').value.trim(),question:s.querySelector('#tp_q').value.trim(),specialty:s.querySelector('#tp_sp').value.trim()};
+    var g={title:s.querySelector('#tp_t').value.trim(),question:s.querySelector('#tp_q').value.trim(),specialty:s.querySelector('#tp_sp').value.trim(),source:s.querySelector('#tp_src').value};
     if(!g.title){toast('العنوان مطلوب');return;}
     if(!g.question){toast('السؤال مطلوب');return;}
     if(!window.EP){toast('غير متصل بالمنصة');return;}
     EP.createTopic(g,function(){closeModal();viewTopics(document.getElementById('view'));});
   };
 }
-// الخطوة ٢: مراجعة مسوّدة الذكاء — عرض ai_answer + تعديل + نشر.
+// الخطوة ٢: مراجعة الموضوع — عرض كامل (مصدر/فئة/دولة/تفاعل/الكاتب) + تعديل + توجيه الحالة + نشر + اعمل مقال.
 function topReviewModal(t){
-  var pubBtn=t.status==='published'?'':'<button class="btn btn-primary" id="tp_pub">'+svg('check')+'نشر على اللوحة</button>';
-  var s=openModal('مراجعة الموضوع — '+(t.status==='published'?'منشور':'مسودّة'),
+  var eng=t.engagement||{comments:0,reactions:0};
+  var statusOpts=['draft','open','merged','published'].map(function(k){return '<option value="'+k+'"'+(t.status===k?' selected':'')+'>'+topStatusAr(k)+'</option>';}).join('');
+  var srcOpts=['human','idea','expert','news'].map(function(k){var m=TOPIC_SRC[k];return '<option value="'+k+'"'+(t.source===k?' selected':'')+'>'+m.label+'</option>';}).join('');
+  var meta='<div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:12px">'+topSrcBadge(t.source)+(t.category?'<span class="chip" style="padding:2px 9px;font-size:11px;cursor:default">'+topEsc(t.category)+'</span>':'')+(t.country?'<span class="chip" style="padding:2px 9px;font-size:11px;cursor:default">'+topEsc(t.country)+'</span>':'')+'<span style="font-size:12px;color:var(--muted)">'+svg('doc','ic')+' '+money(eng.comments||0)+' تعليق</span>'+(t.author_email?'<span style="font-size:11.5px;color:var(--muted);direction:ltr">'+topEsc(t.author_email)+'</span>':'')+'</div>';
+  var mergedFld=t.merged_article?('<div class="fld"><label>المقال الممزوج (merged_article)</label><textarea id="tpr_mg" style="min-height:120px">'+topEsc(t.merged_article)+'</textarea></div>'):'';
+  var pubBtn=t.status==='published'?'':'<button class="btn btn-primary" id="tp_pub">'+svg('check')+'نشر على البورد</button>';
+  var artBtn=t.ai_answer?'<button class="btn btn-human" id="tpr_art">'+svg('doc')+'اعمل مقال</button>':'';
+  var s=openModal('مراجعة الموضوع — '+topStatusAr(t.status),
+    meta+
     '<div class="fld"><label>العنوان</label><input id="tpr_t" value="'+topEsc(t.title)+'"></div>'+
-    '<div class="row2"><div class="fld"><label>التخصص</label><input id="tpr_sp" value="'+topEsc(t.specialty)+'"></div><div class="fld"><label>الحالة</label><input value="'+(t.status==='published'?'منشور':'مسودّة')+'" disabled></div></div>'+
+    '<div class="row2"><div class="fld"><label>الفئة</label><input id="tpr_sp" value="'+topEsc(t.category||t.specialty)+'"></div><div class="fld"><label>المصدر</label><select id="tpr_src">'+srcOpts+'</select></div></div>'+
+    '<div class="fld"><label>الحالة / التوجيه</label><select id="tpr_st">'+statusOpts+'</select></div>'+
     '<div class="fld"><label>السؤال</label><textarea id="tpr_q" style="min-height:70px">'+topEsc(t.question)+'</textarea></div>'+
     '<div class="note-ai" style="margin:4px 0 8px">'+svg('sparkles','ic')+'<div>مسوّدة الذكاء — راجعها وعدّلها قبل النشر:</div></div>'+
-    '<div class="fld"><label>مسوّدة الذكاء (ai_answer)</label><textarea id="tpr_ai" style="min-height:180px" placeholder="(لم يُنشئ الذكاء مسوّدة بعد)">'+topEsc(t.ai_answer)+'</textarea></div>'+
-    '<div class="acts" style="margin-top:6px"><button class="btn btn-human" id="tpr_save">'+svg('check')+'حفظ التعديلات</button>'+pubBtn+'<button class="btn btn-ghost" id="tpr_x">إغلاق</button></div>');
+    '<div class="fld"><label>مسوّدة الذكاء (ai_answer)</label><textarea id="tpr_ai" style="min-height:170px" placeholder="(لم يُنشئ الذكاء مسوّدة بعد)">'+topEsc(t.ai_answer)+'</textarea></div>'+
+    mergedFld+
+    '<div class="acts" style="margin-top:6px"><button class="btn btn-human" id="tpr_save">'+svg('check')+'حفظ التعديلات</button>'+pubBtn+artBtn+'<button class="btn btn-warn" id="tpr_del">حذف</button><button class="btn btn-ghost" id="tpr_x">إغلاق</button></div>');
   s.querySelector('#tpr_x').onclick=closeModal;
   s.querySelector('#tpr_save').onclick=function(){
-    var g={title:s.querySelector('#tpr_t').value.trim(),specialty:s.querySelector('#tpr_sp').value.trim(),question:s.querySelector('#tpr_q').value.trim(),ai_answer:s.querySelector('#tpr_ai').value};
+    var g={title:s.querySelector('#tpr_t').value.trim(),specialty:s.querySelector('#tpr_sp').value.trim(),question:s.querySelector('#tpr_q').value.trim(),ai_answer:s.querySelector('#tpr_ai').value,source:s.querySelector('#tpr_src').value,status:s.querySelector('#tpr_st').value};
+    var mg=s.querySelector('#tpr_mg');if(mg)g.merged_article=mg.value;
     if(!g.title){toast('العنوان مطلوب');return;}
     if(!window.EP){toast('غير متصل بالمنصة');return;}
     EP.updateTopic(t.id,g,function(){closeModal();viewTopics(document.getElementById('view'));});
   };
   var pb=s.querySelector('#tp_pub');if(pb)pb.onclick=function(){
     if(!window.EP){toast('غير متصل بالمنصة');return;}
-    if(!confirm('نشر «'+t.title+'» على اللوحة العامة؟'))return;
+    if(!confirm('نشر «'+t.title+'» على بورد المنصة؟'))return;
     EP.publishTopic(t,function(){closeModal();viewTopics(document.getElementById('view'));});
+  };
+  var ar=s.querySelector('#tpr_art');if(ar)ar.onclick=function(){closeModal();topMakeArticle(t);};
+  var dl=s.querySelector('#tpr_del');if(dl)dl.onclick=function(){
+    if(!confirm('حذف موضوع «'+t.title+'»؟'))return;
+    if(window.EP){EP.deleteTopic(t,function(){closeModal();viewTopics(document.getElementById('view'));});}
   };
 }
 
@@ -2273,8 +2435,8 @@ function renderNews(){
   const items=PNEWS.slice();   // مرتّبة بالأحدث من طبقة EP
   if(!items.length){el.innerHTML='<div style="padding:40px;text-align:center;color:var(--muted)">لا أخبار بعد — اضغط «+ خبر جديد» أو اضبط «مصادر الأخبار».</div>';return;}
   items.forEach((t)=>el.insertAdjacentHTML('beforeend',`<div class="row esc-row" style="grid-template-columns:2.2fr 1.4fr 1fr 235px">
-    <div class="c c1"><div class="src-ic" style="background:var(--human-bg);color:var(--human)">${svg('mega')}</div><div><div class="parties">${nwsEsc(t.title)}</div><div class="from" style="max-width:340px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${nwsEsc(t.summary)||'<i>بلا ملخّص بصوتنا</i>'}</div><div class="from" style="margin-top:2px">${svg('store','ic')} ${nwsSrcChips(t)}</div></div></div>
-    <div class="c"><div class="from">${nwsEsc(t.country)||'—'}${t.specialty?' · '+nwsEsc(t.specialty):''}</div><div class="from" style="opacity:.7">${t.date||'—'}</div></div>
+    <div class="c c1"><div class="src-ic" style="background:var(--ai-bg);color:var(--ai)">${svg('mega')}</div><div><div class="parties">${nwsEsc(t.title)}</div><div class="from" style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">${topSrcBadge('news')}${t.specialty?'<span class="chip" style="padding:1px 8px;font-size:10.5px;cursor:default">'+nwsEsc(t.specialty)+'</span>':''}</div><div class="from" style="max-width:340px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${nwsEsc(t.summary)||'<i>بلا ملخّص بصوتنا</i>'}</div><div class="from" style="margin-top:2px">${svg('store','ic')} ${nwsSrcChips(t)}</div></div></div>
+    <div class="c"><div class="from">${nwsEsc(t.country)||'—'}</div><div class="from" style="opacity:.7">${t.date||'—'}</div></div>
     <div class="c"><span class="status ${t.status==='published'?'s-auto':'s-wait'}"><span class="d"></span>${t.status==='published'?'منشور':'مسودّة'}</span></div>
     <div class="c" style="gap:6px;flex-wrap:wrap"><button class="btn btn-primary" data-derive="${t.id}" style="padding:5px 9px;font-size:12px">حوّل لموضوع</button><button class="btn btn-ghost" data-edit="${t.id}" style="padding:5px 9px;font-size:12px">تعديل</button><button class="btn btn-warn" data-del="${t.id}" style="padding:5px 9px;font-size:12px">حذف</button></div></div>`));
   el.querySelectorAll('[data-edit]').forEach(b=>b.onclick=()=>{var t=PNEWS.find(x=>x.id===b.dataset.edit);if(t)nwsModal(t);});
