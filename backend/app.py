@@ -5556,9 +5556,16 @@ def serialize_article(article):
 def _apply_article_fields(article, d):
     if 'title' in d:
         article.title = (d.get('title') or '').strip()
-    for key in ('excerpt', 'cat', 'kicker', 'date', 'by', 'tone', 'video'):
+    for key in ('excerpt', 'cat', 'kicker', 'date', 'by', 'video'):
         if key in d:
             setattr(article, key, d.get(key))
+    if 'tone' in d:
+        # `tone` is the one article field the marketing site drops RAW into a class="..."
+        # attribute (every other field is HTML-escaped there). Pin it to the known design
+        # tones so it can never carry markup; anything else → None (site falls back to a
+        # per-index tone). Backward-compatible: all seed/synced tones are t1..t6.
+        tone = (d.get('tone') or '').strip()
+        article.tone = tone if re.match(r'^t[1-6]$', tone) else None
     if 'image_url' in d:
         url = (d.get('image_url') or '').strip()
         if not url:
