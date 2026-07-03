@@ -2108,7 +2108,7 @@ function renderContent(){
   h.textContent=contentTab==='pending'?'بانتظار الاعتماد':'منشورة على الموقع';
   document.getElementById('ctN').textContent=items.length;
   items.forEach(({t,idx})=>el.insertAdjacentHTML('beforeend',`<div class="row esc-row${selected===idx?' sel':''}" data-i="${idx}" style="grid-template-columns:1.9fr 1fr 130px">
-    <div class="c c1"><div class="src-ic" style="background:var(--memory-bg);color:var(--memory)">${svg('doc')}</div><div><div class="parties">${t.title}</div><div class="from">${t.by} · ${t.date}</div></div></div>
+    <div class="c c1"><div class="src-ic" style="background:var(--memory-bg);color:var(--memory)">${svg('doc')}</div><div><div class="parties">${esc(t.title)}</div><div class="from">${esc(t.by)} · ${esc(t.date)}</div></div></div>
     <div class="c"><div class="from">${t.status==='published'?'منشور على الموقع':'مقال جاهز'}</div></div>
     <div class="c"><span class="status ${t.status==='published'?'s-auto':'s-wait'}"><span class="d"></span>${t.status==='published'?'منشور':'بانتظار'}</span></div></div>`));
   if(!items.length)el.innerHTML='<div style="padding:40px;text-align:center;color:var(--muted)">لا مقالات في هذا التبويب.</div>';
