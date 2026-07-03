@@ -4701,6 +4701,9 @@ def ai_goals_advisor():
 AI_AGENTS = [
     {'id': 'articles',   'label': 'المقالات والمحتوى', 'persona': 'محرر محتوى ومسؤول تحرير',
      'desc': 'المسودّات المطلوب اعتمادها وفجوات التغطية.'},
+    {'id': 'seo',        'label': 'تحسين الظهور (SEO/AEO)',
+     'persona': 'خبير SEO وتحسين الظهور في محركات البحث ومحركات الذكاء الاصطناعي',
+     'desc': 'جودة المقالات لمحركات البحث والذكاء الاصطناعي، ومتابعة النشر اليومي.'},
     {'id': 'automation', 'label': 'رصد الأتمتة', 'persona': 'مهندس أتمتة عمليات',
      'desc': 'العمليات المتكرّرة في سجل العمليات المرشّحة للأتمتة (n8n).'},
     {'id': 'sales',      'label': 'المبيعات', 'persona': 'مدير مبيعات',
@@ -4738,10 +4741,83 @@ def _agent_action_counts(limit=800):
     }
 
 
+_SEO_COMPETITORS = re.compile(r'coursera|udemy|udacity|edx|linkedin|youtube|يوتيوب|كورسيرا|يوديمي', re.I)
+
+
+def _seo_scorecard(a):
+    """Deterministic SEO/AEO checks on ONE platform article (dict from /bridge/articles).
+    Returns a scorecard {score 0-100, issues[]} — the objective 'verification' the founder asked
+    for; the agent's LLM then turns the aggregate into a readable report + fix list."""
+    title = (a.get('title') or '').strip()
+    body = a.get('body') or ''
+    meta = (a.get('meta_description') or '').strip()
+    kws = a.get('keywords') or []
+    faq = a.get('faq') or []
+    words = len(re.findall(r'\S+', body))
+    h2 = len(re.findall(r'(?m)^##\s', body))
+    score, issues = 100, []
+    if not (20 <= len(title) <= 70):
+        issues.append('طول العنوان غير مثالي (٢٠-٧٠ حرفًا)'); score -= 8
+    if not meta:
+        issues.append('لا يوجد وصف ميتا (meta description)'); score -= 20
+    elif not (110 <= len(meta) <= 165):
+        issues.append('طول وصف الميتا غير مثالي (١١٠-١٦٥ حرفًا)'); score -= 8
+    if len(kws) < 3:
+        issues.append('كلمات مفتاحية قليلة (أقل من ٣)'); score -= 15
+    if words < 300:
+        issues.append('المقال قصير جدًا (أقل من ٣٠٠ كلمة)'); score -= 22
+    elif words < 600:
+        issues.append('المقال أقصر من المثالي (أقل من ٦٠٠ كلمة)'); score -= 8
+    if h2 < 2:
+        issues.append('بنية عناوين ضعيفة (أقل من عنوانين فرعيين)'); score -= 12
+    if not faq:
+        issues.append('لا يوجد قسم أسئلة شائعة (مهم لمحركات الذكاء الاصطناعي)'); score -= 15
+    if kws and not any((str(k).split() or [''])[0] and (str(k).split()[0] in title) for k in kws):
+        issues.append('الكلمة المفتاحية غير ظاهرة في العنوان'); score -= 6
+    if _SEO_COMPETITORS.search(body):
+        issues.append('⚠️ يذكر منصة منافسة (ممنوع) — يحتاج تصحيحًا فوريًا'); score -= 35
+    if re.search(r'https?://', body):
+        issues.append('يحتوي روابط خارجية'); score -= 8
+    return {
+        'id': a.get('id'), 'title': title[:80], 'status': a.get('status'), 'category': a.get('category'),
+        'score': max(0, min(100, score)), 'words': words, 'h2': h2,
+        'has_faq': bool(faq), 'keywords_count': len(kws), 'issues': issues[:6],
+    }
+
+
+def _seo_bundle():
+    """Score every platform article + summarise publishing cadence for the SEO agent."""
+    payload = _bridge_get('/api/bridge/articles', {'limit': 120}) or {}
+    arts = payload.get('articles') or []
+    cards = [_seo_scorecard(a) for a in arts]
+    scores = [c['score'] for c in cards]
+    pub = [a for a in arts if a.get('status') == 'published']
+    pub_dates = sorted([a.get('published_at') for a in pub if a.get('published_at')], reverse=True)
+    issue_freq = {}
+    for c in cards:
+        for it in c['issues']:
+            issue_freq[it] = issue_freq.get(it, 0) + 1
+    return {
+        'total_articles': len(cards),
+        'published': len(pub),
+        'drafts': sum(1 for c in cards if c['status'] == 'draft'),
+        'avg_seo_score': round(sum(scores) / len(scores), 1) if scores else None,
+        'passing_80plus': sum(1 for s in scores if s >= 80),
+        'needs_work_below_60': sum(1 for s in scores if s < 60),
+        'competitor_mentions': sum(1 for c in cards if any('منافسة' in i for i in c['issues'])),
+        'weakest_articles': sorted(cards, key=lambda c: c['score'])[:8],
+        'common_issues': sorted(
+            [{'issue': k, 'count': v} for k, v in issue_freq.items()], key=lambda x: -x['count'])[:6],
+        'recent_published_dates': pub_dates[:10],
+    }
+
+
 def _agent_bundle(agent):
     """Build the real data bundle handed to an agent's LLM call. Best-effort — every
     source degrades to None/0 instead of raising, so an agent still runs offline."""
     b = {}
+    if agent == 'seo':
+        b['seo'] = _seo_bundle()
     # Shared chat-demand insights (P15 hand-off) — used by several agents.
     if agent in ('sales', 'marketing', 'topics', 'incoming'):
         ci = _bridge_get('/api/bridge/chat-insights', {'limit': 1500}) or {}
@@ -4952,6 +5028,32 @@ def ai_agents_list():
         'agents': [_serialize_report(a['id'], _latest_agent_report(a['id'])) for a in AI_AGENTS],
         'ai_configured': bool(next((k for k, c in AI_PROVIDERS.items() if os.environ.get(c['env_key'])), None)),
     })
+
+
+@app.route('/api/ai/agents/run-cron', methods=['POST'])
+def ai_agents_run_cron():
+    """n8n (secret-gated): DAILY autonomous run of the AI team — so the SEO agent verifies article
+    quality + monitors publishing every day with nobody logging in. ?agent=seo|all (default all)."""
+    secret = request.headers.get('X-ELP-Metrics-Secret', '')
+    if not (PLATFORM_METRICS_SECRET and secret and secrets.compare_digest(secret, PLATFORM_METRICS_SECRET)):
+        return jsonify({'error': 'unauthorized'}), 401
+    agent = (request.args.get('agent') or (request.json or {}).get('agent') or 'all').strip().lower()
+    ran = []
+    try:
+        if agent == 'all':
+            for aid in AI_AGENT_IDS:
+                if aid != 'master':
+                    _run_agent(aid); ran.append(aid)
+            _run_agent('master'); ran.append('master')
+        elif agent in AI_AGENT_MAP:
+            _run_agent(agent); ran.append(agent)
+        else:
+            return jsonify({'error': 'unknown agent'}), 400
+    except Exception:
+        logging.getLogger(__name__).exception('ai_agents_run_cron failed')
+        return jsonify({'ok': False, 'ran': ran}), 200  # never 5xx to the cron
+    _audit('ai.agents_run_cron', target=agent, meta={'ran': len(ran)})
+    return jsonify({'ok': True, 'ran': ran})
 
 
 @app.route('/api/ai/agents/run', methods=['POST'])
