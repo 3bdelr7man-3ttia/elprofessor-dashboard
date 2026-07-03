@@ -292,6 +292,12 @@
             source: src,
             ai_answer: t.ai_answer || t.aiAnswer || "",
             merged_article: t.merged_article || "",
+            // FIX1: persistent topic↔article link (bridge contract). Once this topic produced a
+            // real CMS article, linked_article_id holds that article's id → the row shows «✓ له مقال»
+            // (not the «اعمل مقال» button) across refreshes. Legacy topics → null/false.
+            linked_article_id: t.linked_article_id || null,
+            article_made_at: t.article_made_at || null,
+            has_article: !!(t.has_article != null ? t.has_article : t.linked_article_id),
             author_email: t.author_email || "",
             comments: (eng.comments != null ? eng.comments : 0) | 0,
             reactions: (eng.reactions != null ? eng.reactions : 0) | 0,
@@ -1340,6 +1346,17 @@
       });
   };
 
+  // FIX1: link a topic to the CMS article it just produced, so «اعمل مقال» turns into a
+  // persistent «✓ له مقال» badge across refreshes. Sends ONLY linked_article_id — the platform
+  // (BridgeTopicPatch) auto-stamps article_made_at and computes has_article. The article was
+  // ALREADY really created; a link failure only affects the badge, so it's a quiet toast (never a
+  // fake success) and we still run `after` so navigation proceeds. Pass articleId="" to UNLINK.
+  EP.markTopicArticled = function (t, articleId, after) {
+    api("/platform-topics/" + encodeURIComponent(t.id), { method: "PUT", body: { linked_article_id: String(articleId == null ? "" : articleId) } })
+      .then(function () { EP.reload("platformTopics", after); })
+      .catch(function (e) { quietToast((e && e.message) || "تعذّر ربط المقال بالموضوع"); if (after) after(); });
+  };
+
   // «آراء بانتظار المراجعة»: approve/reject a pending user opinion (comment) on a topic.
   // Approve -> it becomes a public comment (+points to author, notify topic author on first
   // approval). Reject -> hidden. Both refresh the pending queue. All via the SECRET bridge.
@@ -1424,10 +1441,24 @@
       .then(function () { note("حُذف الخبر «" + t.title + "»"); EP.reload("platformNews", after); })
       .catch(function (e) { quietToast((e && e.message) || "تعذّر الحذف"); if (after) after(); });
   };
+  // FIX2: «حوّل لموضوع» — the platform now returns the CREATED topic (status "open" for a manual
+  // curation → it lands on the board «المنشورة», not a hidden drafts tab). We refresh the news
+  // list in the background AND reload platformTopics so the new topic is in PTOPICS to navigate to
+  // and highlight, then hand the caller the topic + its id. after(topic, newId) — topic=null on
+  // failure (the caller then does NOT navigate). NOTE: EP.reload calls its rerender callback TWICE
+  // (once immediately for the loading state, once on completion), so we gate on state==="ready" to
+  // fire `after` EXACTLY ONCE — and only after PTOPICS is actually populated with the new topic.
   EP.deriveTopicFromNews = function (t, after) {
     post("/platform-news/" + t.id + "/derive-topic", {})
-      .then(function () { note("حُوِّل «" + t.title + "» إلى موضوع — راجعه في «المواضيع»"); EP.reload("platformNews", after); })
-      .catch(function (e) { quietToast((e && e.message) || "تعذّر التحويل لموضوع"); if (after) after(); });
+      .then(function (topic) {
+        var newId = (topic && topic.id != null) ? topic.id : null;
+        note("حُوِّل «" + t.title + "» إلى موضوع — انتقلنا إليه في «المواضيع»");
+        EP.reload("platformNews");   // refresh the source list in the background (no rerender)
+        EP.reload("platformTopics", function () {
+          if (EP.state.platformTopics === "ready" && after) after(topic || null, newId);
+        });
+      })
+      .catch(function (e) { quietToast((e && e.message) || "تعذّر التحويل لموضوع"); if (after) after(null, null); });
   };
   EP.saveNewsSources = function (g, after) {
     api("/platform-news-sources", { method: "PUT", body: g })

@@ -1970,7 +1970,11 @@ def platform_topics_update(topic_id):
     # source/status/merged_article added so the dashboard can label the source, route a
     # topic between the internal sections (draft/open/merged/published), and store a
     # merged article. The bridge validates source & status against its own enums.
-    for key in ('title', 'question', 'specialty', 'ai_answer', 'source', 'status', 'merged_article'):
+    # linked_article_id/article_made_at added (FIX1) so «اعمل مقال» can PERSIST the topic↔article
+    # link on the platform → the topic then shows «✓ له مقال» across refreshes (non-empty id links
+    # + auto-stamps article_made_at; "" unlinks). The bridge (BridgeTopicPatch) validates them.
+    for key in ('title', 'question', 'specialty', 'ai_answer', 'source', 'status', 'merged_article',
+                'linked_article_id', 'article_made_at'):
         if key in body:
             payload[key] = body.get(key)
     return _platform_proxy('PUT', f"/api/bridge/topics/{topic_id}", json_body=payload)

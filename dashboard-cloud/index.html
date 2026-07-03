@@ -2344,15 +2344,46 @@ function viewTopics(v){
   var ab=document.getElementById('topAdd');if(ab)ab.onclick=()=>topCreateModal(tab==='ideas'?'idea':(tab==='incoming'?'expert':'human'));
   renderTopics();
 }
+// FIX1: شارة «✓ له مقال» — إشارة واضحة أنّ الموضوع اتعمله مقال بالفعل (له رابط دائم على المنصة).
+function topArticledBadge(){return '<span class="chip" style="padding:3px 10px;font-size:11.5px;cursor:default;background:var(--agree-bg);color:var(--agree);border-color:transparent;font-weight:800">'+svg('check','ic')+'له مقال</span>';}
+// FIX1: «افتح المقال» — يقفز للمقال المرتبط داخل «المقالات» (يفتحه للمراجعة/النشر). لو المقال
+// اتحذف من المدونة، «المقالات» تُفلت الانتظار بأمان ولا تفتح شيئًا (لا سلوك مزيّف).
+function topOpenArticle(t){
+  if(!t||!t.linked_article_id){toast('لا مقال مرتبط بهذا الموضوع');return;}
+  PENDING_ARTICLE_SELECT=t.linked_article_id;   // «المقالات» تفتح هذا المقال مباشرةً
+  topicsTab='articles';selected=null;renderView();
+}
+// FIX2: id الموضوع المراد إبرازه بعد «حوّل لموضوع» — تُبرزه renderTopics وتُمرّره للعرض.
+var TOPIC_HIGHLIGHT_ID=null;
+// FIX2: بعد «حوّل لموضوع» — انتقل لتبويب الموضوع الجديد (المنشورة عادةً)، أبرزه، وأظهر ملاحظة واضحة.
+function topicGotoNew(topic,newId){
+  var id=newId||(topic&&topic.id)||null;
+  // الموضوع الجديد صار في PTOPICS بعد إعادة التحميل — حدّد تبويبه الحقيقي (open+news → المنشورة).
+  var found=id?((PTOPICS||[]).filter(function(x){return x.id===id;})[0]||null):null;
+  var tab=found?topicTabOf(found):(topic?topicTabOf(topic):'board');
+  topicsTab=tab;topicsCat='all';selected=null;
+  TOPIC_HIGHLIGHT_ID=id;
+  renderView();   // current لسه 'topics' — نفس الموديول، تبويب مختلف
+  var tabAr=(TOPIC_TAB_META[tab]&&TOPIC_TAB_META[tab].t)||'المنشورة';
+  toast('تم — الموضوع في «'+tabAr+'». وممكن تعمل منه مقال.');
+}
 // أزرار كل صف حسب التبويب — كلها إجراءات حقيقية (PUT/DELETE/publish عبر الجسر السرّي).
 function topRowActions(t){
   // أثناء ما الوكيل بيكتب المقال: بدّل الأزرار بمؤشّر «الوكيل يكتب المقال…» (حالة عمل أمينة).
   if(TOPIC_GENERATING[t.id])return '<span class="status s-wait" style="cursor:default">'+svg('robot','ic')+' الوكيل يكتب المقال…</span>';
   var del='<button class="btn btn-warn" data-del="'+t.id+'" style="padding:5px 10px;font-size:12px">حذف</button>';
-  // Gate on having a title+question (enough to author from) — NOT on a pre-existing ai_answer.
-  // generate-article writes a fresh SEO piece from the topic; the honest-failure modal covers
-  // the case the LLM can't produce one, so no topic is stranded without a forward action.
-  var art=(t.title&&t.question)?'<button class="btn btn-human" data-article="'+t.id+'" style="padding:5px 10px;font-size:12px">اعمل مقال</button>':'';
+  // FIX1: a topic that ALREADY produced an article shows «✓ له مقال» + «افتح المقال» instead of the
+  // «اعمل مقال» button — so a handled topic is visibly done and never accidentally re-generated from
+  // the row (regenerating is only possible deliberately from the review modal, with a confirm).
+  var art;
+  if(t.linked_article_id){
+    art=topArticledBadge()+'<button class="btn btn-ghost" data-openart="'+t.id+'" style="padding:5px 10px;font-size:12px">'+svg('doc','ic')+'افتح المقال</button>';
+  }else{
+    // Gate on having a title+question (enough to author from) — NOT on a pre-existing ai_answer.
+    // generate-article writes a fresh SEO piece from the topic; the honest-failure modal covers
+    // the case the LLM can't produce one, so no topic is stranded without a forward action.
+    art=(t.title&&t.question)?'<button class="btn btn-human" data-article="'+t.id+'" style="padding:5px 10px;font-size:12px">اعمل مقال</button>':'';
+  }
   var tab=topicTabOf(t);
   if(tab==='board')   return art+del;
   if(tab==='working') return '<button class="btn btn-primary" data-pub="'+t.id+'" style="padding:5px 10px;font-size:12px">نشر</button>'+art+del;
@@ -2365,14 +2396,16 @@ function renderTopics(){
   var nEl=document.getElementById('topN');if(nEl)nEl.textContent=items.length;
   const tab=(topicsTab==='incoming'||topicsTab==='working'||topicsTab==='ideas')?topicsTab:'board';
   if(!items.length){el.innerHTML='<div style="padding:40px;text-align:center;color:var(--muted)">'+(topicsCat!=='all'?'لا مواضيع في هذه الفئة داخل هذا التبويب.':TOPIC_TAB_META[tab].empty)+'</div>';return;}
-  items.forEach((t)=>{var m=TOPIC_SRC[t.source]||TOPIC_SRC.human;el.insertAdjacentHTML('beforeend',`<div class="row esc-row" data-row="${t.id}" style="grid-template-columns:2fr 1.3fr 0.9fr 250px;cursor:pointer">
-    <div class="c c1"><div class="src-ic" style="background:${m.bg};color:${m.fg}">${svg(m.ic)}</div><div><div class="parties">${topEsc(t.title)}</div><div class="from" style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">${topSrcBadge(t.source)}${t.category?'<span class="chip" style="padding:1px 8px;font-size:10.5px;cursor:default">'+topEsc(t.category)+'</span>':''}${t.ai_answer?'<b style="color:var(--ink);font-size:11.5px">مسوّدة ذكاء ✓</b>':''}</div></div></div>
+  items.forEach((t)=>{var m=TOPIC_SRC[t.source]||TOPIC_SRC.human;var hl=(t.id===TOPIC_HIGHLIGHT_ID);el.insertAdjacentHTML('beforeend',`<div class="row esc-row${hl?' sel':''}" data-row="${t.id}" style="grid-template-columns:2fr 1.3fr 0.9fr 250px;cursor:pointer${hl?';outline:2px solid var(--gold);outline-offset:-2px;background:var(--gold-bg)':''}">
+    <div class="c c1"><div class="src-ic" style="background:${m.bg};color:${m.fg}">${svg(m.ic)}</div><div><div class="parties">${topEsc(t.title)}${hl?' <span class="chip" style="padding:1px 8px;font-size:10.5px;cursor:default;background:var(--gold-bg);color:var(--gold);border-color:transparent;font-weight:800">'+svg('sparkles','ic')+'جديد</span>':''}</div><div class="from" style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">${topSrcBadge(t.source)}${t.category?'<span class="chip" style="padding:1px 8px;font-size:10.5px;cursor:default">'+topEsc(t.category)+'</span>':''}${t.linked_article_id?topArticledBadge():(t.ai_answer?'<b style="color:var(--ink);font-size:11.5px">مسوّدة ذكاء ✓</b>':'')}</div></div></div>
     <div class="c"><div class="from">${t.country?topEsc(t.country)+' · ':''}${svg('doc','ic')} ${money(t.comments||0)} تعليق معتمد</div><div class="from" style="opacity:.7">${t.date||'—'}</div></div>
     <div class="c"><span class="status ${(t.status==='published'||t.status==='open')?'s-auto':'s-wait'}"><span class="d"></span>${topStatusAr(t.status)}</span></div>
     <div class="c" style="gap:6px;flex-wrap:wrap">${topRowActions(t)}</div></div>`);});
   // فتح المراجعة بالنقر على الصف كامل (إصلاح: الصف كان لا يفتح شيئًا) — الأزرار توقف الانتشار.
   el.querySelectorAll('.row[data-row]').forEach(r=>r.onclick=()=>{var t=PTOPICS.find(x=>x.id===r.dataset.row);if(t)topReviewModal(t);});
   el.querySelectorAll('[data-article]').forEach(b=>b.onclick=(ev)=>{ev.stopPropagation();var t=PTOPICS.find(x=>x.id===b.dataset.article);if(t)topMakeArticle(t);});
+  // FIX1: «افتح المقال» — يقفز للمقال المرتبط داخل «المقالات».
+  el.querySelectorAll('[data-openart]').forEach(b=>b.onclick=(ev)=>{ev.stopPropagation();var t=PTOPICS.find(x=>x.id===b.dataset.openart);if(t)topOpenArticle(t);});
   el.querySelectorAll('[data-pub]').forEach(b=>b.onclick=(ev)=>{ev.stopPropagation();var t=PTOPICS.find(x=>x.id===b.dataset.pub);if(!t)return;
     if(!confirm('نشر «'+t.title+'» على بورد المنصة؟'))return;
     if(window.EP){EP.publishTopic(t,()=>viewTopics(document.getElementById('view')));}});
@@ -2388,6 +2421,12 @@ function renderTopics(){
   el.querySelectorAll('[data-del]').forEach(b=>b.onclick=(ev)=>{ev.stopPropagation();var t=PTOPICS.find(x=>x.id===b.dataset.del);if(!t)return;
     if(!confirm('حذف موضوع «'+t.title+'»؟'))return;
     if(window.EP){EP.deleteTopic(t,()=>viewTopics(document.getElementById('view')));}});
+  // FIX2: بعد «حوّل لموضوع» — مرّر لعرض الموضوع الجديد المُبرَز (one-shot) ثم أفلت الإبراز.
+  if(TOPIC_HIGHLIGHT_ID){
+    var _hr=el.querySelector('.row[data-row="'+(window.CSS&&CSS.escape?CSS.escape(TOPIC_HIGHLIGHT_ID):TOPIC_HIGHLIGHT_ID)+'"]');
+    if(_hr&&_hr.scrollIntoView)try{_hr.scrollIntoView({behavior:'smooth',block:'center'});}catch(e){_hr.scrollIntoView();}
+    TOPIC_HIGHLIGHT_ID=null;   // الإبراز يبقى ظاهرًا في هذا العرض؛ ولا يتكرّر عند تبديل التبويبات
+  }
 }
 // خطوة العبور: «اعمل مقال» = الوكيل الذكي يكتب مقال SEO جديدًا مبنيًّا على الموضوع (عنوان/مقتطف/جسم
 // جديدة — ليس نسخًا من نص الموضوع). الموضوع يظهر تحت «قيد العمل (الوكيل)» بحالة «الوكيل يكتب المقال…»،
@@ -2396,14 +2435,21 @@ function renderTopics(){
 function topMakeArticle(t){
   if(!window.EP){toast('غير متصل بالمنصة');return;}
   if(TOPIC_GENERATING[t.id]){toast('الوكيل يكتب المقال بالفعل…');return;}
-  if(!confirm('يكتب الوكيل الذكي مقال SEO جديدًا من «'+t.title+'» (ليس نسخًا من نصّ الموضوع). يظهر مسودّة في «المقالات» لمراجعتك ثم «اعتمد وانشر». متابعة؟'))return;
+  // FIX1: الموضوع له مقال بالفعل — لا تُعِد التوليد إلا بتأكيد صريح (منع إعادة التوليد بالخطأ).
+  var msg=t.linked_article_id
+    ? ('لهذا الموضوع «'+t.title+'» مقال بالفعل. تعمل مقالًا آخر جديدًا؟ (يُنشأ كمسودّة إضافية في «المقالات»)')
+    : ('يكتب الوكيل الذكي مقال SEO جديدًا من «'+t.title+'» (ليس نسخًا من نصّ الموضوع). يظهر مسودّة في «المقالات» لمراجعتك ثم «اعتمد وانشر». متابعة؟');
+  if(!confirm(msg))return;
   TOPIC_GENERATING[t.id]=true;
   topicsTab='working';selected=null;renderView();   // أظهر حالة العمل تحت «قيد العمل (الوكيل)»
   EP.generateArticleFromTopic(t,function(ok,newId,errMsg){
     delete TOPIC_GENERATING[t.id];                    // أعِد ضبط الموضوع دائمًا — لا يبقى عالقًا في «الوكيل يكتب»
     if(ok){
       PENDING_ARTICLE_SELECT=newId;                   // افتح المسودّة الجديدة فورًا في «المقالات» (لا تضيع)
-      topicsTab='articles';selected=null;renderView();
+      // FIX1: علّم الموضوع أنّ له مقالًا (رابط دائم على المنصة) فيصير زرّه «✓ له مقال» بعد التحديث.
+      // الرابط أمرٌ ثانوي: المقال أُنشئ فعلًا؛ لو فشل الربط ننتقل للمقال كالمعتاد (لا نجاح مزيّف).
+      if(newId!=null){EP.markTopicArticled(t,newId,function(){topicsTab='articles';selected=null;renderView();});}
+      else{topicsTab='articles';selected=null;renderView();}
     }else{
       topicsTab=topicTabOf(t);selected=null;renderView();   // رجّع الموضوع لتبويبه الطبيعي (متاح لإعادة المحاولة)
       topArticleError(t,errMsg);                       // خطأ واضح وصريح بالسبب (مش توست هادئ)
@@ -2445,9 +2491,17 @@ function topReviewModal(t){
   var meta='<div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:12px">'+topSrcBadge(t.source)+(t.category?'<span class="chip" style="padding:2px 9px;font-size:11px;cursor:default">'+topEsc(t.category)+'</span>':'')+(t.country?'<span class="chip" style="padding:2px 9px;font-size:11px;cursor:default">'+topEsc(t.country)+'</span>':'')+'<span style="font-size:12px;color:var(--muted)">'+svg('doc','ic')+' '+money(eng.comments||0)+' تعليق معتمد</span>'+(t.author_email?'<span style="font-size:11.5px;color:var(--muted);direction:ltr">'+topEsc(t.author_email)+'</span>':'')+'</div>';
   var mergedFld=t.merged_article?('<div class="fld"><label>المقال الممزوج (merged_article)</label><textarea id="tpr_mg" style="min-height:120px">'+topEsc(t.merged_article)+'</textarea></div>'):'';
   var pubBtn=t.status==='published'?'':'<button class="btn btn-primary" id="tp_pub">'+svg('check')+'نشر على البورد</button>';
-  var artBtn=(t.title&&t.question)?'<button class="btn btn-human" id="tpr_art">'+svg('doc')+'اعمل مقال</button>':'';
+  // FIX1: a topic that already produced an article shows «✓ له مقال» + «افتح المقال» here too. A
+  // deliberate «اعمل مقال آخر» stays available (guarded by a confirm inside topMakeArticle).
+  var artBtn;
+  if(t.linked_article_id){
+    artBtn=topArticledBadge()+'<button class="btn btn-ghost" id="tpr_openart">'+svg('doc')+'افتح المقال</button>'+((t.title&&t.question)?'<button class="btn btn-ghost" id="tpr_art" style="opacity:.9">'+svg('sparkles')+'اعمل مقال آخر</button>':'');
+  }else{
+    artBtn=(t.title&&t.question)?'<button class="btn btn-human" id="tpr_art">'+svg('doc')+'اعمل مقال</button>':'';
+  }
+  var linkedNote=t.linked_article_id?('<div class="note-ai" style="border-inline-start-color:var(--agree);background:var(--agree-bg);color:var(--agree);margin-bottom:12px">'+svg('check','ic')+'<div><b>لهذا الموضوع مقال بالفعل.</b> اضغط «افتح المقال» لمراجعته أو نشره على المدونة.</div></div>'):'';
   var s=openModal('مراجعة الموضوع — '+topStatusAr(t.status),
-    meta+
+    meta+linkedNote+
     '<div class="fld"><label>العنوان</label><input id="tpr_t" value="'+topEsc(t.title)+'"></div>'+
     '<div class="row2"><div class="fld"><label>الفئة</label><input id="tpr_sp" value="'+topEsc(t.category||t.specialty)+'"></div><div class="fld"><label>المصدر</label><select id="tpr_src">'+srcOpts+'</select></div></div>'+
     '<div class="fld"><label>الحالة / التوجيه</label><select id="tpr_st">'+statusOpts+'</select></div>'+
@@ -2470,6 +2524,7 @@ function topReviewModal(t){
     EP.publishTopic(t,function(){closeModal();viewTopics(document.getElementById('view'));});
   };
   var ar=s.querySelector('#tpr_art');if(ar)ar.onclick=function(){closeModal();topMakeArticle(t);};
+  var oa=s.querySelector('#tpr_openart');if(oa)oa.onclick=function(){closeModal();topOpenArticle(t);};
   var dl=s.querySelector('#tpr_del');if(dl)dl.onclick=function(){
     if(!confirm('حذف موضوع «'+t.title+'»؟'))return;
     if(window.EP){EP.deleteTopic(t,function(){closeModal();viewTopics(document.getElementById('view'));});}
@@ -2519,8 +2574,10 @@ function renderNews(){
     <div class="c" style="gap:6px;flex-wrap:wrap"><button class="btn btn-primary" data-derive="${t.id}" style="padding:5px 9px;font-size:12px">حوّل لموضوع</button><button class="btn btn-ghost" data-edit="${t.id}" style="padding:5px 9px;font-size:12px">تعديل</button><button class="btn btn-warn" data-del="${t.id}" style="padding:5px 9px;font-size:12px">حذف</button></div></div>`));
   el.querySelectorAll('[data-edit]').forEach(b=>b.onclick=()=>{var t=PNEWS.find(x=>x.id===b.dataset.edit);if(t)nwsModal(t);});
   el.querySelectorAll('[data-derive]').forEach(b=>b.onclick=()=>{var t=PNEWS.find(x=>x.id===b.dataset.derive);if(!t)return;
-    if(!confirm('تحويل خبر «'+t.title+'» إلى موضوع نقاش؟'))return;
-    if(window.EP){EP.deriveTopicFromNews(t,()=>viewNews(document.getElementById('view')));}});
+    if(!confirm('تحويل خبر «'+t.title+'» إلى موضوع نقاش؟ سننتقل بك إلى «المواضيع» حيث يظهر الموضوع الجديد في «المنشورة».'))return;
+    // FIX2: بعد التحويل، انتقل مباشرةً للموضوع الجديد وأبرزه (لا يبقى الفاوندر يدوّر عليه). لا ننتقل
+    // إلا عند رجوع موضوع فعلي — عند الفشل يظهر خطأ ونبقى في «الأخبار».
+    if(window.EP){EP.deriveTopicFromNews(t,function(topic,newId){if(topic)topicGotoNew(topic,newId);});}});
   el.querySelectorAll('[data-del]').forEach(b=>b.onclick=()=>{var t=PNEWS.find(x=>x.id===b.dataset.del);if(!t)return;
     if(!confirm('حذف خبر «'+t.title+'»؟'))return;
     if(window.EP){EP.deleteNews(t,()=>viewNews(document.getElementById('view')));}});
