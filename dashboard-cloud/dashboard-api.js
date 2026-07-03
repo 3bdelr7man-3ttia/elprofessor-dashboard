@@ -77,7 +77,8 @@
     data: { dashboard: null, metrics: null, users: null, content: null, finance: null, messages: null, inbox: null,
             escrow: null, investment: null, marketing: null, partners: null, courses: null, settings: null,
             packages: null, t_data: null, i_data: null, targets: null, foundation: null, team: null,
-            notifications: null, goalsAdvisor: null, tutorials: null, platformTopics: null, platformTopicsAnalysis: null, experts: null,
+            notifications: null, goalsAdvisor: null, tutorials: null, platformTopics: null, platformTopicsAnalysis: null,
+            platformOpinions: null, experts: null,
             aiAgents: null, dashUsers: null, audit: null, usage: null },
     state: {}, // 'idle' | 'loading' | 'ready' | 'error'
     _started: {}, // منع التحميل المزدوج
@@ -309,6 +310,31 @@
       return get("/platform-topics-analysis").then(function (r) {
         EP.data.platformTopicsAnalysis = r || {};
         window.PTOPICS_ANALYSIS = r || {};
+      });
+    },
+
+    // «آراء بانتظار المراجعة»: /api/platform-opinions?status=pending -> raw array of
+    // {id,topic_id,topic_title,author_email,body,status,ai_moderation:{...}|null,created_at}.
+    // Users comment on topics; on-topic non-abusive opinions auto-approve on the platform,
+    // the rest land here as `pending` for human approve/reject. Newest first.
+    platformOpinions: function () {
+      return get("/platform-opinions?status=pending").then(function (r) {
+        var list = Array.isArray(r) ? r : ((r && r.opinions) || []);
+        EP.data.platformOpinions = { raw: list };
+        window.POPINIONS = list.map(function (o) {
+          var at = o.created_at;
+          return {
+            id: o.id,
+            topic_id: o.topic_id || "",
+            topic_title: o.topic_title || "",
+            author_email: o.author_email || "",
+            body: o.body || "",
+            status: o.status || "pending",
+            moderation: o.ai_moderation || null,   // {ai_checked,on_topic,abusive,reason,decided_by,decision}
+            date: arDate(at),
+            at: at ? (Date.parse(at) || 0) : 0,
+          };
+        }).sort(function (a, b) { return b.at - a.at; });
       });
     },
 
@@ -1278,6 +1304,51 @@
       .catch(function (e) { quietToast((e && e.message) || "تعذّر الحذف"); if (after) after(); });
   };
 
+  // «اعمل مقال»: the platform LLM AUTHORS a fresh SEO article FROM this topic (new
+  // headline/excerpt/body — NEVER a copy of the topic text), then we store the RETURNED
+  // structured article as a CMS DRAFT for review in «المقالات». Honest failure: on any LLM
+  // error we surface the message and do NOT create a draft (no fake success, no topic copy).
+  // done(ok): ok=true only if a real draft was created.
+  EP.generateArticleFromTopic = function (t, done) {
+    post("/platform-topics/" + encodeURIComponent(t.id) + "/generate-article", {})
+      .then(function (art) {
+        if (!art || !art.title || !Array.isArray(art.body) || !art.body.length)
+          throw new Error("لم يُنشئ الذكاء مقالًا صالحًا — حاول مرّة أخرى");
+        // store the FRESH article (not the topic text) as a draft in the blog CMS
+        return post("/content/articles", {
+          title: art.title,
+          cat: art.cat || t.category || t.specialty || "قانوني",
+          kicker: art.kicker || "تحليل قانوني",
+          excerpt: art.excerpt || "",
+          by: "الوكيل الذكي — تحليل قانوني",
+          body: art.body,                 // list[str]: paragraphs + '## ' headings
+          image_url: "",
+        });
+      })
+      .then(function () {
+        note("كتب الوكيل مقالًا من «" + (t.title || "") + "» — راجعه في «المقالات» ثم «اعتمد وانشر»");
+        EP.reload("content", function () { if (done) done(true); });
+      })
+      .catch(function (e) {
+        quietToast((e && e.message) || "تعذّر توليد المقال بالذكاء");
+        if (done) done(false);
+      });
+  };
+
+  // «آراء بانتظار المراجعة»: approve/reject a pending user opinion (comment) on a topic.
+  // Approve -> it becomes a public comment (+points to author, notify topic author on first
+  // approval). Reject -> hidden. Both refresh the pending queue. All via the SECRET bridge.
+  EP.approveOpinion = function (o, after) {
+    post("/platform-opinions/" + encodeURIComponent(o.id) + "/approve", {})
+      .then(function () { note("اعتُمد الرأي — ظهر كتعليق على «" + (o.topic_title || "الموضوع") + "»"); EP.reload("platformOpinions", after); })
+      .catch(function (e) { quietToast((e && e.message) || "تعذّر اعتماد الرأي"); if (after) after(); });
+  };
+  EP.rejectOpinion = function (o, after) {
+    post("/platform-opinions/" + encodeURIComponent(o.id) + "/reject", {})
+      .then(function () { note("رُفض الرأي — لن يظهر على الموضوع"); EP.reload("platformOpinions", after); })
+      .catch(function (e) { quietToast((e && e.message) || "تعذّر رفض الرأي"); if (after) after(); });
+  };
+
   // «ولّد بالذكاء»: trigger a generation run on the platform, then poll-sync the new drafts into the
   // blog (this SQLite, which feeds elprofessor.net). Features publish; news/legal come in as drafts.
   EP.runDailyContent = function (after) {
@@ -1665,6 +1736,7 @@
                 escrow: null, investment: null, marketing: null, partners: null, courses: null, settings: null,
                 packages: null, t_data: null, i_data: null, targets: null, foundation: null, team: null,
                 notifications: null, goalsAdvisor: null, tutorials: null, platformTopics: null, platformTopicsAnalysis: null,
+                platformOpinions: null,
                 aiAgents: null, dashUsers: null, audit: null, usage: null };
     EP.state = {};
     window.location.reload();

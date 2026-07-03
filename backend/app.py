@@ -1983,6 +1983,40 @@ def platform_topics_delete(topic_id):
     return _platform_proxy('DELETE', f"/api/bridge/topics/{topic_id}")
 
 
+# --- «اعمل مقال» (generate an SEO article FROM a topic): the platform LLM AUTHORS a fresh
+# article (new headline/excerpt/body — NOT a copy of the topic text). This is a synchronous
+# LLM generation (~600-1000 words) so it needs a longer timeout than the shared 12s proxy;
+# hence a dedicated handler rather than _platform_proxy. On success returns the structured
+# article for the dashboard to store as a CMS draft. On LLM failure surfaces an honest error
+# (503 ai_unavailable / 502 generation_failed) — never a fake success and never the topic text.
+@app.route('/api/platform-topics/<topic_id>/generate-article', methods=['POST'])
+@token_required
+@roles_required('admin')               # LLM generation + downstream CMS create are admin-gated
+def platform_topics_generate_article(topic_id):
+    if not PLATFORM_METRICS_SECRET:
+        return jsonify({'error': 'لم يتم ضبط الربط بعد'}), 503
+    try:
+        r = requests.post(
+            f"{PLATFORM_API_URL}/api/bridge/topics/{topic_id}/generate-article",
+            headers={'X-ELP-Metrics-Secret': PLATFORM_METRICS_SECRET},
+            timeout=60,                 # synchronous LLM authoring — allow it time to finish
+        )
+    except Exception:
+        return jsonify({'error': 'تعذّر الاتصال بالمنصة'}), 502
+    if r.status_code != 200:
+        body = r.json() if r.content else {}
+        detail = body.get('detail') if isinstance(body, dict) else None
+        # the platform's error `detail` is a dict {error, message, cause} — surface its message
+        if isinstance(detail, dict):
+            msg = detail.get('message') or detail.get('error')
+        elif isinstance(detail, str):
+            msg = detail
+        else:
+            msg = None
+        return jsonify({'error': msg or 'تعذّر توليد المقال بالذكاء'}), r.status_code
+    return jsonify(r.json() if r.content else {})
+
+
 # --- «لوحة تحليل AI» for the Topics module: top topics by engagement, counts by
 # category/source, and the categories most in demand (from chat). Reads the platform's
 # real aggregation via the SECRET bridge — no fabricated numbers here.
@@ -1997,6 +2031,35 @@ def platform_topics_analysis():
         limit = 10
     limit = max(1, min(50, limit))
     return _platform_proxy('GET', '/api/bridge/topics/analysis', params={'limit': limit})
+
+
+# --- «آراء بانتظار المراجعة» (Opinions/comments moderation): users comment on topics; the
+# platform auto-approves on-topic, non-abusive opinions and flags the rest as `pending` for
+# human review here. GET lists them (with the AI-moderation verdict); approve/reject act on
+# them. Reads + writes go through the SECRET bridge (server-side secret only).
+@app.route('/api/platform-opinions', methods=['GET'])
+@token_required
+@roles_required('admin', 'employee')   # employee may VIEW + moderate opinions
+@module_required('topics')             # D9: admin can revoke per-role module access
+def platform_opinions_list():
+    status = (request.args.get('status') or 'pending').strip()
+    if status not in ('pending', 'all', 'approved', 'rejected'):
+        status = 'pending'
+    return _platform_proxy('GET', '/api/bridge/opinions', params={'status': status})
+
+
+@app.route('/api/platform-opinions/<opinion_id>/approve', methods=['POST'])
+@token_required
+@roles_required('admin', 'employee')
+def platform_opinions_approve(opinion_id):
+    return _platform_proxy('POST', f"/api/bridge/opinions/{opinion_id}/approve")
+
+
+@app.route('/api/platform-opinions/<opinion_id>/reject', methods=['POST'])
+@token_required
+@roles_required('admin', 'employee')
+def platform_opinions_reject(opinion_id):
+    return _platform_proxy('POST', f"/api/bridge/opinions/{opinion_id}/reject")
 
 
 # --- «أتمتة المقالات» (Articles automation): one daily AI run fills «المقالات» on the platform

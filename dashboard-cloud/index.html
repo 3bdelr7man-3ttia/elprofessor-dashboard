@@ -1982,7 +1982,8 @@ function addAdvertiserModal(edit){
 function topicsTabbar(active){
   // auto = تيار مقالات المنصة الآلي، يُبرز «المقالات».
   var hi=(active==='auto'||active==='blog')?'articles':active;
-  var tabs=[['board','المنشورة'],['incoming','واردة'],['working','قيد العمل (الوكيل)'],['ideas','أفكار للاعتماد'],['news','الأخبار'],['articles','المقالات']];
+  // work-first order: ideas → news → working → articles, then published + incoming LAST.
+  var tabs=[['ideas','أفكار للاعتماد'],['news','الأخبار'],['working','قيد العمل (الوكيل)'],['articles','المقالات'],['board','المنشورة'],['incoming','واردة']];
   return '<div class="tabbar" id="topicsTabs">'+tabs.map(function(t){return '<div class="tab'+(hi===t[0]?' on':'')+'" data-tt="'+t[0]+'">'+t[1]+'</div>';}).join('')+'</div>';
 }
 function wireTopicsTabs(){var tb=document.getElementById('topicsTabs');if(tb)tb.querySelectorAll('.tab').forEach(function(t){t.onclick=function(){topicsTab=t.dataset.tt;selected=null;topicsCat='all';renderView();};});}
@@ -2007,11 +2008,16 @@ function topicTabOf(t){
   return 'ideas';
 }
 function topicTabCounts(){var c={board:0,incoming:0,working:0,ideas:0};(PTOPICS||[]).forEach(function(t){var k=topicTabOf(t);if(c[k]!=null)c[k]++;});return c;}
+// أثناء ما الوكيل بيكتب مقالًا من موضوع، نعرض الموضوع بحالة «الوكيل يكتب المقال…» تحت «قيد العمل».
+var TOPIC_GENERATING={};   // topic id -> true while the agent authors an article FROM it
 // المواضيع بعد تطبيق التبويب + فلتر الفئة النشط.
 function topicsForActiveTab(){
   var tab=(topicsTab==='board'||topicsTab==='incoming'||topicsTab==='working'||topicsTab==='ideas')?topicsTab:'board';
   return (PTOPICS||[]).filter(function(t){
-    if(topicTabOf(t)!==tab)return false;
+    var inTab=topicTabOf(t)===tab;
+    // «قيد العمل (الوكيل)»: أظهر أي موضوع الوكيل شغّال على مقاله الآن مهما كانت حالته الأصلية.
+    if(tab==='working'&&TOPIC_GENERATING[t.id])inTab=true;
+    if(!inTab)return false;
     if(topicsCat!=='all'&&(t.category||'')!==topicsCat)return false;
     return true;
   });
@@ -2061,6 +2067,42 @@ function topicsAIAnalysisPanel(){
   return head+body+foot;
 }
 function wireTopicsAIPanel(v){var b=(v||document).querySelector('#taRefresh');if(b)b.onclick=function(){if(window.EP)EP.reload('platformTopicsAnalysis',()=>renderView());};}
+
+/* ===== «آراء بانتظار المراجعة» — طابور مراجعة تعليقات المستخدمين على المواضيع =====
+   يُغذّى من /api/platform-opinions?status=pending (جسر سرّي). التعليقات المطابقة للموضوع وغير
+   المسيئة تُعتمد آليًا بالذكاء على المنصة؛ المشكوك فيها تظهر هنا لاعتماد/رفض بشري. عدد التعليقات
+   على كل موضوع (engagement) = المعتمدة فقط، محسوبة على المنصة. حالات فارغة أمينة. */
+// حكم الذكاء على الرأي — يوضّح لماذا يحتاج مراجعة بشرية (خارج الموضوع/إساءة) أو أنه بانتظار مراجعة.
+function opinionModVerdict(m){
+  var base='class="chip" style="padding:2px 9px;font-size:11px;cursor:default;border-color:transparent;font-weight:800;';
+  if(!m)return '<span '+base+'background:var(--memory-bg);color:var(--memory)">'+svg('doc','ic')+' بانتظار مراجعة بشرية</span>';
+  var reason=m.reason?' — '+topEsc(m.reason):'';
+  if(m.abusive)return '<span '+base+'background:var(--conflict-bg);color:var(--conflict)">'+svg('scale','ic')+' الذكاء: قد يحوي إساءة'+reason+'</span>';
+  if(m.on_topic===false)return '<span '+base+'background:var(--gold-bg);color:var(--gold)">'+svg('sparkles','ic')+' الذكاء: خارج الموضوع'+reason+'</span>';
+  return '<span '+base+'background:var(--memory-bg);color:var(--memory)">'+svg('doc','ic')+' بانتظار مراجعة بشرية'+reason+'</span>';
+}
+function opinionsReviewPanel(){
+  if(window.EP){EP.ensure('platformOpinions',()=>renderView());}
+  var st=(window.EP&&EP.state.platformOpinions)||'idle';
+  var list=(window.POPINIONS)||[];
+  var head='<section class="panel" style="margin-top:16px;border:1px solid var(--human)"><div class="ph"><h3>'+svg('hands')+' آراء بانتظار المراجعة</h3><span class="hint">تعليقات المستخدمين على المواضيع — اعتمدها لتظهر أو ارفضها</span><span class="n" id="opN" style="margin-inline-start:auto">'+money(list.length)+'</span><button class="btn btn-ghost" id="opRefresh" style="flex:none;min-width:auto;padding:6px 12px;font-size:12px">'+svg('sparkles')+'حدّث</button></div><div id="opRows">';
+  var foot='</div></section>';
+  if(st==='error')return head+'<div class="policy" style="margin:12px;border-inline-start-color:var(--conflict);background:var(--conflict-bg);color:var(--conflict)">'+svg('scale','ic')+'<div>تعذّر جلب الآراء من المنصة. <b style="cursor:pointer;text-decoration:underline" onclick="EP.reload(\'platformOpinions\',()=>renderView())">إعادة المحاولة</b></div></div>'+foot;
+  if(st==='loading'||st==='idle')return head+'<div style="padding:24px;text-align:center;color:var(--muted)">…جارٍ تحميل الآراء</div>'+foot;
+  if(!list.length)return head+'<div style="padding:24px;text-align:center;color:var(--muted)">لا آراء بانتظار المراجعة الآن. التعليقات المطابقة للموضوع تُعتمد آليًا بالذكاء؛ المشكوك فيها فقط تظهر هنا.</div>'+foot;
+  var rows=list.map(function(o){
+    return '<div class="row esc-row" style="grid-template-columns:1fr 190px;align-items:flex-start;cursor:default">'+
+      '<div class="c c1" style="align-items:flex-start"><div class="src-ic" style="background:var(--human-bg);color:var(--human)">'+svg('hands')+'</div><div style="min-width:0"><div class="parties" style="white-space:normal">'+topEsc(o.body)+'</div><div class="from" style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-top:5px">'+opinionModVerdict(o.moderation)+'<span class="chip" style="padding:1px 8px;font-size:10.5px;cursor:default">'+svg('doc','ic')+' '+topEsc(o.topic_title||'—')+'</span>'+(o.author_email?'<span style="font-size:11px;color:var(--muted);direction:ltr">'+topEsc(o.author_email)+'</span>':'')+(o.date?'<span style="font-size:11px;color:var(--muted)">'+topEsc(o.date)+'</span>':'')+'</div></div></div>'+
+      '<div class="c" style="gap:6px;flex-wrap:wrap;justify-content:flex-end;align-items:flex-start"><button class="btn btn-primary" data-op-approve="'+o.id+'" style="padding:5px 12px;font-size:12px">'+svg('check')+'اعتمد</button><button class="btn btn-warn" data-op-reject="'+o.id+'" style="padding:5px 12px;font-size:12px">ارفض</button></div>'+
+    '</div>';
+  }).join('');
+  return head+rows+foot;
+}
+function wireOpinionsPanel(v){
+  var rb=(v||document).querySelector('#opRefresh');if(rb)rb.onclick=function(){if(window.EP)EP.reload('platformOpinions',()=>renderView());};
+  (v||document).querySelectorAll('[data-op-approve]').forEach(function(b){b.onclick=function(){var o=(window.POPINIONS||[]).find(function(x){return x.id===b.dataset.opApprove;});if(!o||!window.EP)return;EP.approveOpinion(o,()=>renderView());};});
+  (v||document).querySelectorAll('[data-op-reject]').forEach(function(b){b.onclick=function(){var o=(window.POPINIONS||[]).find(function(x){return x.id===b.dataset.opReject;});if(!o||!window.EP)return;if(!confirm('رفض هذا الرأي؟ لن يظهر على الموضوع.'))return;EP.rejectOpinion(o,()=>renderView());};});
+}
 
 /* ===== CONTENT / BLOG VIEW (تبويب «مدونة الموقع») ===== */
 // المواضيع/المقالات: تُجلب حيّة من /api/content/articles عبر طبقة EP (window.TOPICS).
@@ -2274,7 +2316,6 @@ function viewTopics(v){
   const totCom=(PTOPICS||[]).reduce((s,t)=>s+(t.comments||0),0);
   v.innerHTML=`
     ${topicsTabbar(tab)}
-    ${topicsAIAnalysisPanel()}
     <div class="policy" style="border-inline-start-color:var(--gold)">${svg('sparkles','ic')}<div><b>${meta.t}:</b> ${meta.note}</div></div>
     ${Tst==='error'?`<div class="policy" style="border-inline-start-color:var(--conflict);background:var(--conflict-bg);color:var(--conflict)">${svg('scale','ic')}<div>تعذّر جلب المواضيع من المنصة. <b style="cursor:pointer;text-decoration:underline" onclick="EP.reload('platformTopics',()=>viewTopics(document.getElementById('view')))">إعادة المحاولة</b></div></div>`:''}
     ${Tst==='loading'?`<div class="policy" style="border-inline-start-color:var(--gold)">${svg('sparkles','ic')}<div>…جارٍ تحميل المواضيع من المنصة</div></div>`:''}
@@ -2285,8 +2326,11 @@ function viewTopics(v){
       <div class="kpi ${tab==='ideas'?'k-3':'k-1'}"><div class="top"><span class="ic">${svg('sparkles')}</span>أفكار</div><b>${money(C.ideas)}</b><div class="sub">للاعتماد</div></div>
     </div>
     ${topicCatChips()}
-    <div class="inboxwrap"><section class="panel"><div class="ph"><h3>${meta.t}</h3><span class="n" id="topN">0</span><button class="btn btn-human" id="topAdd" style="flex:none;min-width:auto;padding:6px 13px;font-size:12px;margin-inline-start:auto">+ ${tab==='ideas'?'فكرة/موضوع':'موضوع جديد (بحث)'}</button></div><div id="topRows"></div></section></div>`;
+    <div class="inboxwrap"><section class="panel"><div class="ph"><h3>${meta.t}</h3><span class="n" id="topN">0</span><button class="btn btn-human" id="topAdd" style="flex:none;min-width:auto;padding:6px 13px;font-size:12px;margin-inline-start:auto">+ ${tab==='ideas'?'فكرة/موضوع':'موضوع جديد (بحث)'}</button></div><div id="topRows"></div></section></div>
+    ${opinionsReviewPanel()}
+    ${topicsAIAnalysisPanel()}`;
   wireTopicsTabs();
+  wireOpinionsPanel(v);
   wireTopicsAIPanel(v);
   wireTopicCatChips(v);
   var ab=document.getElementById('topAdd');if(ab)ab.onclick=()=>topCreateModal(tab==='ideas'?'idea':(tab==='incoming'?'expert':'human'));
@@ -2294,6 +2338,8 @@ function viewTopics(v){
 }
 // أزرار كل صف حسب التبويب — كلها إجراءات حقيقية (PUT/DELETE/publish عبر الجسر السرّي).
 function topRowActions(t){
+  // أثناء ما الوكيل بيكتب المقال: بدّل الأزرار بمؤشّر «الوكيل يكتب المقال…» (حالة عمل أمينة).
+  if(TOPIC_GENERATING[t.id])return '<span class="status s-wait" style="cursor:default">'+svg('robot','ic')+' الوكيل يكتب المقال…</span>';
   var del='<button class="btn btn-warn" data-del="'+t.id+'" style="padding:5px 10px;font-size:12px">حذف</button>';
   var art=t.ai_answer?'<button class="btn btn-human" data-article="'+t.id+'" style="padding:5px 10px;font-size:12px">اعمل مقال</button>':'';
   var tab=topicTabOf(t);
@@ -2310,7 +2356,7 @@ function renderTopics(){
   if(!items.length){el.innerHTML='<div style="padding:40px;text-align:center;color:var(--muted)">'+(topicsCat!=='all'?'لا مواضيع في هذه الفئة داخل هذا التبويب.':TOPIC_TAB_META[tab].empty)+'</div>';return;}
   items.forEach((t)=>{var m=TOPIC_SRC[t.source]||TOPIC_SRC.human;el.insertAdjacentHTML('beforeend',`<div class="row esc-row" data-row="${t.id}" style="grid-template-columns:2fr 1.3fr 0.9fr 250px;cursor:pointer">
     <div class="c c1"><div class="src-ic" style="background:${m.bg};color:${m.fg}">${svg(m.ic)}</div><div><div class="parties">${topEsc(t.title)}</div><div class="from" style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">${topSrcBadge(t.source)}${t.category?'<span class="chip" style="padding:1px 8px;font-size:10.5px;cursor:default">'+topEsc(t.category)+'</span>':''}${t.ai_answer?'<b style="color:var(--ink);font-size:11.5px">مسوّدة ذكاء ✓</b>':''}</div></div></div>
-    <div class="c"><div class="from">${t.country?topEsc(t.country)+' · ':''}${svg('doc','ic')} ${money(t.comments||0)} تعليق</div><div class="from" style="opacity:.7">${t.date||'—'}</div></div>
+    <div class="c"><div class="from">${t.country?topEsc(t.country)+' · ':''}${svg('doc','ic')} ${money(t.comments||0)} تعليق معتمد</div><div class="from" style="opacity:.7">${t.date||'—'}</div></div>
     <div class="c"><span class="status ${(t.status==='published'||t.status==='open')?'s-auto':'s-wait'}"><span class="d"></span>${topStatusAr(t.status)}</span></div>
     <div class="c" style="gap:6px;flex-wrap:wrap">${topRowActions(t)}</div></div>`);});
   // فتح المراجعة بالنقر على الصف كامل (إصلاح: الصف كان لا يفتح شيئًا) — الأزرار توقف الانتشار.
@@ -2332,14 +2378,21 @@ function renderTopics(){
     if(!confirm('حذف موضوع «'+t.title+'»؟'))return;
     if(window.EP){EP.deleteTopic(t,()=>viewTopics(document.getElementById('view')));}});
 }
-// خطوة العبور: موضوع (بمسوّدة ذكاء) ← مقال مسودّة في «المقالات» (يُصاغ بجسم = مسوّدة الذكاء)
-// ← يُراجَع هناك (يُفتح كامل النصّ) ثم «اعتمد وانشر» مباشرة على elprofessor.net. يكمل خطّ الإنتاج بضغطة.
+// خطوة العبور: «اعمل مقال» = الوكيل الذكي يكتب مقال SEO جديدًا مبنيًّا على الموضوع (عنوان/مقتطف/جسم
+// جديدة — ليس نسخًا من نص الموضوع). الموضوع يظهر تحت «قيد العمل (الوكيل)» بحالة «الوكيل يكتب المقال…»،
+// وعند النجاح تُنشأ مسودّة مقال في «المقالات» تُراجَع ثم «اعتمد وانشر» مباشرة على elprofessor.net.
+// خطأ أمين إن تعذّر الذكاء — لا نجاح مزيّف ولا نسخ لنصّ الموضوع.
 function topMakeArticle(t){
-  if(!t.ai_answer){toast('لا توجد مسوّدة ذكاء لهذا الموضوع بعد');return;}
   if(!window.EP){toast('غير متصل بالمنصة');return;}
-  if(!confirm('تحويل «'+t.title+'» إلى مقال مسودّة في «المقالات»؟ (تفتحه هناك وتراجعه ثم «اعتمد وانشر»)'))return;
-  var g={t:t.title,cat:t.category||t.specialty||'قانوني',k:'موضوع',ex:(t.summary||'').slice(0,180),by:'موضوع + رأي خبير',body:t.ai_answer,img:''};
-  EP.createArticle(g,false,function(){topicsTab='articles';selected=null;renderView();});
+  if(TOPIC_GENERATING[t.id]){toast('الوكيل يكتب المقال بالفعل…');return;}
+  if(!confirm('يكتب الوكيل الذكي مقال SEO جديدًا من «'+t.title+'» (ليس نسخًا من نصّ الموضوع). يظهر مسودّة في «المقالات» لمراجعتك ثم «اعتمد وانشر». متابعة؟'))return;
+  TOPIC_GENERATING[t.id]=true;
+  topicsTab='working';selected=null;renderView();   // أظهر حالة العمل تحت «قيد العمل (الوكيل)»
+  EP.generateArticleFromTopic(t,function(ok){
+    delete TOPIC_GENERATING[t.id];
+    if(ok)topicsTab='articles';                       // انتقل إلى «المقالات» حيث المسودّة الجديدة للمراجعة
+    selected=null;renderView();
+  });
 }
 // الخطوة ١: بحث/مسودّة — عنوان + سؤال + فئة + مصدر ← الذكاء يُنشئ مسوّدة.
 function topCreateModal(defSrc){
@@ -2364,7 +2417,7 @@ function topReviewModal(t){
   var eng=t.engagement||{comments:0,reactions:0};
   var statusOpts=['draft','open','merged','published'].map(function(k){return '<option value="'+k+'"'+(t.status===k?' selected':'')+'>'+topStatusAr(k)+'</option>';}).join('');
   var srcOpts=['human','idea','expert','news'].map(function(k){var m=TOPIC_SRC[k];return '<option value="'+k+'"'+(t.source===k?' selected':'')+'>'+m.label+'</option>';}).join('');
-  var meta='<div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:12px">'+topSrcBadge(t.source)+(t.category?'<span class="chip" style="padding:2px 9px;font-size:11px;cursor:default">'+topEsc(t.category)+'</span>':'')+(t.country?'<span class="chip" style="padding:2px 9px;font-size:11px;cursor:default">'+topEsc(t.country)+'</span>':'')+'<span style="font-size:12px;color:var(--muted)">'+svg('doc','ic')+' '+money(eng.comments||0)+' تعليق</span>'+(t.author_email?'<span style="font-size:11.5px;color:var(--muted);direction:ltr">'+topEsc(t.author_email)+'</span>':'')+'</div>';
+  var meta='<div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:12px">'+topSrcBadge(t.source)+(t.category?'<span class="chip" style="padding:2px 9px;font-size:11px;cursor:default">'+topEsc(t.category)+'</span>':'')+(t.country?'<span class="chip" style="padding:2px 9px;font-size:11px;cursor:default">'+topEsc(t.country)+'</span>':'')+'<span style="font-size:12px;color:var(--muted)">'+svg('doc','ic')+' '+money(eng.comments||0)+' تعليق معتمد</span>'+(t.author_email?'<span style="font-size:11.5px;color:var(--muted);direction:ltr">'+topEsc(t.author_email)+'</span>':'')+'</div>';
   var mergedFld=t.merged_article?('<div class="fld"><label>المقال الممزوج (merged_article)</label><textarea id="tpr_mg" style="min-height:120px">'+topEsc(t.merged_article)+'</textarea></div>'):'';
   var pubBtn=t.status==='published'?'':'<button class="btn btn-primary" id="tp_pub">'+svg('check')+'نشر على البورد</button>';
   var artBtn=t.ai_answer?'<button class="btn btn-human" id="tpr_art">'+svg('doc')+'اعمل مقال</button>':'';
