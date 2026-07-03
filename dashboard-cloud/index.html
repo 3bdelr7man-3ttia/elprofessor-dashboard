@@ -430,6 +430,7 @@ function renderView(){
     if(topicsTab==='news')return viewNews(v);
     if(topicsTab==='auto')return viewArticlesAuto(v);
     if(topicsTab==='articles'||topicsTab==='blog')return viewContent(v);
+    if(topicsTab==='comments')return viewComments(v);   // «التعليقات»: بانتظار + معتمدة + تحليل
     return viewTopics(v);   // board | incoming | working | ideas
   }
   if(current==='tutorials')return viewTutorials(v);
@@ -1982,8 +1983,8 @@ function addAdvertiserModal(edit){
 function topicsTabbar(active){
   // auto = تيار مقالات المنصة الآلي، يُبرز «المقالات».
   var hi=(active==='auto'||active==='blog')?'articles':active;
-  // work-first order: ideas → news → working → articles, then published + incoming LAST.
-  var tabs=[['ideas','أفكار للاعتماد'],['news','الأخبار'],['working','قيد العمل (الوكيل)'],['articles','المقالات'],['board','المنشورة'],['incoming','واردة']];
+  // work-first order: ideas → news → working → articles → comments, then published + incoming LAST.
+  var tabs=[['ideas','أفكار للاعتماد'],['news','الأخبار'],['working','قيد العمل (الوكيل)'],['articles','المقالات'],['comments','التعليقات'],['board','المنشورة'],['incoming','واردة']];
   return '<div class="tabbar" id="topicsTabs">'+tabs.map(function(t){return '<div class="tab'+(hi===t[0]?' on':'')+'" data-tt="'+t[0]+'">'+t[1]+'</div>';}).join('')+'</div>';
 }
 function wireTopicsTabs(){var tb=document.getElementById('topicsTabs');if(tb)tb.querySelectorAll('.tab').forEach(function(t){t.onclick=function(){topicsTab=t.dataset.tt;selected=null;topicsCat='all';renderView();};});}
@@ -2103,6 +2104,78 @@ function wireOpinionsPanel(v){
   var rb=(v||document).querySelector('#opRefresh');if(rb)rb.onclick=function(){if(window.EP)EP.reload('platformOpinions',()=>renderView());};
   (v||document).querySelectorAll('[data-op-approve]').forEach(function(b){b.onclick=function(){var o=(window.POPINIONS||[]).find(function(x){return x.id===b.dataset.opApprove;});if(!o||!window.EP)return;EP.approveOpinion(o,()=>renderView());};});
   (v||document).querySelectorAll('[data-op-reject]').forEach(function(b){b.onclick=function(){var o=(window.POPINIONS||[]).find(function(x){return x.id===b.dataset.opReject;});if(!o||!window.EP)return;if(!confirm('رفض هذا الرأي؟ لن يظهر على الموضوع.'))return;EP.rejectOpinion(o,()=>renderView());};});
+}
+
+/* ===== «المنشورة/المعتمدة» — التعليقات المعتمدة الظاهرة على المواضيع (قراءة فقط) =====
+   تُغذّى من /api/platform-opinions?status=approved (جسر سرّي). لا أزرار — عرض حقيقي فقط. */
+function opinionsApprovedPanel(){
+  if(window.EP){EP.ensure('platformOpinionsApproved',()=>renderView());}
+  var st=(window.EP&&EP.state.platformOpinionsApproved)||'idle';
+  var list=(window.POPINIONS_APPROVED)||[];
+  var head='<section class="panel" style="margin-top:16px;border:1px solid var(--agree)"><div class="ph"><h3>'+svg('check')+' التعليقات المعتمدة/المنشورة</h3><span class="hint">ظاهرة على المواضيع للجمهور — قراءة فقط</span><span class="n" id="opApN" style="margin-inline-start:auto">'+money(list.length)+'</span><button class="btn btn-ghost" id="opApRefresh" style="flex:none;min-width:auto;padding:6px 12px;font-size:12px">'+svg('sparkles')+'حدّث</button></div><div id="opApRows">';
+  var foot='</div></section>';
+  if(st==='error')return head+'<div class="policy" style="margin:12px;border-inline-start-color:var(--conflict);background:var(--conflict-bg);color:var(--conflict)">'+svg('scale','ic')+'<div>تعذّر جلب التعليقات المعتمدة من المنصة. <b style="cursor:pointer;text-decoration:underline" onclick="EP.reload(\'platformOpinionsApproved\',()=>renderView())">إعادة المحاولة</b></div></div>'+foot;
+  if(st==='loading'||st==='idle')return head+'<div style="padding:24px;text-align:center;color:var(--muted)">…جارٍ تحميل التعليقات المعتمدة</div>'+foot;
+  if(!list.length)return head+'<div style="padding:24px;text-align:center;color:var(--muted)">لا تعليقات معتمدة بعد. التعليقات المطابقة للموضوع تُعتمد آليًا بالذكاء وتظهر هنا.</div>'+foot;
+  var rows=list.map(function(o){
+    return '<div class="row esc-row" style="grid-template-columns:1fr;align-items:flex-start;cursor:default">'+
+      '<div class="c c1" style="align-items:flex-start"><div class="src-ic" style="background:var(--agree-bg);color:var(--agree)">'+svg('check')+'</div><div style="min-width:0"><div class="parties" style="white-space:normal">'+topEsc(o.body)+'</div><div class="from" style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-top:5px"><span class="chip" style="padding:1px 8px;font-size:10.5px;cursor:default">'+svg('doc','ic')+' '+topEsc(o.topic_title||'—')+'</span>'+(o.author_email?'<span style="font-size:11px;color:var(--muted);direction:ltr">'+topEsc(o.author_email)+'</span>':'')+(o.date?'<span style="font-size:11px;color:var(--muted)">'+topEsc(o.date)+'</span>':'')+'</div></div></div>'+
+    '</div>';
+  }).join('');
+  return head+rows+foot;
+}
+function wireApprovedOpinionsPanel(v){
+  var rb=(v||document).querySelector('#opApRefresh');if(rb)rb.onclick=function(){if(window.EP)EP.reload('platformOpinionsApproved',()=>renderView());};
+}
+
+/* لوحة تحليل التعليقات + «استنتاجات» — أرقام حقيقية من /api/platform-opinions-analysis
+   (bridge opinions/analysis). حالة فارغة أمينة عند تعذّر الجلب أو غياب البيانات — لا أرقام مُفبركة. */
+function opinionsAnalyticsPanel(){
+  if(window.EP){EP.ensure('platformOpinionsAnalysis',()=>renderView());}
+  var st=(window.EP&&EP.state.platformOpinionsAnalysis)||'idle';
+  var A=(window.POPINIONS_ANALYSIS)||{};
+  var head='<section class="panel" style="margin-top:16px;border:1px solid var(--ai)"><div class="ph"><h3>'+svg('robot')+' تحليل التعليقات و«استنتاجات»</h3><span class="hint">بانتظار/معتمد/مرفوض · أعلى المواضيع تعليقًا · الفئات · خلاصة الذكاء (حيّ)</span><button class="btn btn-ghost" id="opAnRefresh" style="flex:none;min-width:auto;padding:6px 12px;font-size:12px;margin-inline-start:auto">'+svg('sparkles')+'حدّث</button></div><div style="padding:14px 16px">';
+  var foot='</div></section>';
+  if(st==='error')return head+'<div class="policy" style="margin:0;border-inline-start-color:var(--conflict);background:var(--conflict-bg);color:var(--conflict)">'+svg('scale','ic')+'<div>تعذّر جلب تحليل التعليقات من المنصة. <b style="cursor:pointer;text-decoration:underline" onclick="EP.reload(\'platformOpinionsAnalysis\',()=>renderView())">إعادة المحاولة</b></div></div>'+foot;
+  if(st==='loading'||st==='idle')return head+'<div style="padding:14px;text-align:center;color:var(--muted)">…جارٍ تحميل التحليل</div>'+foot;
+  var sc=A.status_counts||{};
+  var pend=sc.pending||0, appr=sc.approved||0, rej=sc.rejected||0, tot=A.total_opinions||0;
+  if(!tot&&!pend&&!appr&&!rej)return head+'<div style="padding:14px;text-align:center;color:var(--muted)">لا تعليقات بعد للتحليل — كل الأرقام صفر. حين يعلّق المستخدمون على المواضيع تبدأ القياسات هنا.</div>'+foot;
+  var kpis='<div class="kpis" style="margin-bottom:12px">'+
+    '<div class="kpi k-2"><div class="top"><span class="ic">'+svg('doc')+'</span>بانتظار المراجعة</div><b>'+money(pend)+'</b><div class="sub">تحتاج قرارك</div></div>'+
+    '<div class="kpi k-3"><div class="top"><span class="ic">'+svg('check')+'</span>معتمدة</div><b>'+money(appr)+'</b><div class="sub">ظاهرة على المواضيع</div></div>'+
+    '<div class="kpi k-4"><div class="top"><span class="ic">'+svg('scale')+'</span>مرفوضة</div><b>'+money(rej)+'</b><div class="sub">مخفيّة</div></div></div>';
+  var top=(A.top_topics||[]).slice(0,5);
+  var topHtml=top.length?top.map(function(t){return '<div style="display:flex;align-items:center;gap:9px;padding:7px 0;border-bottom:1px solid var(--line)"><span style="flex:1;font-size:13px;font-weight:700;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(t.title||'—')+'</span>'+(t.category?'<span class="chip" style="padding:2px 8px;font-size:10.5px;cursor:default">'+esc(t.category)+'</span>':'')+'<span style="font-size:12px;color:var(--muted);flex:none">'+svg('check','ic')+' '+money(t.count||0)+'</span></div>';}).join(''):'<div style="color:var(--muted);font-size:12.5px">لا تعليقات معتمدة بعد.</div>';
+  var byCat=(A.by_category||[]).slice(0,8);
+  var maxCat=byCat.reduce(function(m,x){return Math.max(m,x.count||0);},0)||1;
+  var catHtml=byCat.length?byCat.map(function(x){var w=Math.round((x.count||0)/maxCat*100);return '<div style="display:flex;align-items:center;gap:8px;padding:4px 0;font-size:12.5px"><span style="width:120px;flex:none;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(x.category||'غير مصنّف')+'</span><div style="flex:1;height:9px;background:var(--surface-2);border-radius:6px;overflow:hidden"><div style="width:'+w+'%;height:100%;background:var(--ai)"></div></div><b style="width:34px;text-align:left;flex:none">'+money(x.count||0)+'</b></div>';}).join(''):'<div style="color:var(--muted);font-size:12.5px">لا فئات بعد.</div>';
+  var insights=A.insights||'', insNote=A.insights_note||'';
+  var insHtml=insights?'<div class="note-ai" style="margin-top:12px">'+svg('robot','ic')+'<div><b>استنتاجات الذكاء:</b> '+topEsc(insights)+'</div></div>':(insNote?'<div class="policy" style="margin:12px 0 0;border-inline-start-color:var(--memory)">'+svg('doc','ic')+'<div>'+topEsc(insNote)+'</div></div>':'');
+  var body=kpis+
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">'+
+      '<div><div style="font-size:12px;font-weight:800;color:var(--muted);margin-bottom:4px">'+svg('trend','ic')+' أعلى المواضيع تعليقًا (معتمدة)</div>'+topHtml+'</div>'+
+      '<div><div style="font-size:12px;font-weight:800;color:var(--muted);margin-bottom:4px">'+svg('grid','ic')+' حسب الفئة</div>'+catHtml+'</div>'+
+    '</div>'+
+    insHtml+
+    (A.engagement_note?'<div style="margin-top:10px;font-size:12px;color:var(--muted)">'+svg('doc','ic')+' '+topEsc(A.engagement_note)+'</div>':'');
+  return head+body+foot;
+}
+function wireOpinionsAnalyticsPanel(v){var b=(v||document).querySelector('#opAnRefresh');if(b)b.onclick=function(){if(window.EP)EP.reload('platformOpinionsAnalysis',()=>renderView());};}
+
+/* ===== «التعليقات» — تبويب مستقل داخل «المواضيع»: بانتظار المراجعة + المعتمدة + تحليل و«استنتاجات».
+   نُقل «آراء بانتظار المراجعة» إلى هنا (لا يُكرَّر في «المواضيع»). كل اللوحات بيانات حقيقية من المنصة. */
+function viewComments(v){
+  v.innerHTML=`
+    ${topicsTabbar('comments')}
+    <div class="policy" style="border-inline-start-color:var(--human)">${svg('hands','ic')}<div><b>التعليقات (آراء المستخدمين على المواضيع):</b> التعليق المطابق للموضوع وغير المسيء <b>يُعتمد آليًا بالذكاء</b> ويظهر على الموضوع؛ المشكوك فيه يقف <b>«بانتظار المراجعة»</b> لقرارك (اعتمد/ارفض). بالأسفل <b>تحليل و«استنتاجات»</b> على البيانات الحقيقية.</div></div>
+    ${opinionsReviewPanel()}
+    ${opinionsApprovedPanel()}
+    ${opinionsAnalyticsPanel()}`;
+  wireTopicsTabs();
+  wireOpinionsPanel(v);
+  wireApprovedOpinionsPanel(v);
+  wireOpinionsAnalyticsPanel(v);
 }
 
 /* ===== CONTENT / BLOG VIEW (تبويب «مدونة الموقع») ===== */
@@ -2335,10 +2408,8 @@ function viewTopics(v){
     </div>
     ${topicCatChips()}
     <div class="inboxwrap"><section class="panel"><div class="ph"><h3>${meta.t}</h3><span class="n" id="topN">0</span><button class="btn btn-human" id="topAdd" style="flex:none;min-width:auto;padding:6px 13px;font-size:12px;margin-inline-start:auto">+ ${tab==='ideas'?'فكرة/موضوع':'موضوع جديد (بحث)'}</button></div><div id="topRows"></div></section></div>
-    ${opinionsReviewPanel()}
     ${topicsAIAnalysisPanel()}`;
   wireTopicsTabs();
-  wireOpinionsPanel(v);
   wireTopicsAIPanel(v);
   wireTopicCatChips(v);
   var ab=document.getElementById('topAdd');if(ab)ab.onclick=()=>topCreateModal(tab==='ideas'?'idea':(tab==='incoming'?'expert':'human'));

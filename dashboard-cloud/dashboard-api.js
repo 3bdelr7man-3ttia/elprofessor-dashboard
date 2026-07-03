@@ -78,7 +78,7 @@
             escrow: null, investment: null, marketing: null, partners: null, courses: null, settings: null,
             packages: null, t_data: null, i_data: null, targets: null, foundation: null, team: null,
             notifications: null, goalsAdvisor: null, tutorials: null, platformTopics: null, platformTopicsAnalysis: null,
-            platformOpinions: null, experts: null,
+            platformOpinions: null, platformOpinionsApproved: null, platformOpinionsAnalysis: null, experts: null,
             aiAgents: null, dashUsers: null, audit: null, usage: null },
     state: {}, // 'idle' | 'loading' | 'ready' | 'error'
     _started: {}, // منع التحميل المزدوج
@@ -341,6 +341,39 @@
             at: at ? (Date.parse(at) || 0) : 0,
           };
         }).sort(function (a, b) { return b.at - a.at; });
+      });
+    },
+
+    // «التعليقات المعتمدة/المنشورة»: /api/platform-opinions?status=approved -> نفس شكل الآراء لكن
+    // معتمدة (ظاهرة على الموضوع للجمهور). قائمة قراءة فقط داخل تبويب «التعليقات». الأحدث أولًا.
+    platformOpinionsApproved: function () {
+      return get("/platform-opinions?status=approved").then(function (r) {
+        var list = Array.isArray(r) ? r : ((r && r.opinions) || []);
+        EP.data.platformOpinionsApproved = { raw: list };
+        window.POPINIONS_APPROVED = list.map(function (o) {
+          var at = o.created_at;
+          return {
+            id: o.id,
+            topic_id: o.topic_id || "",
+            topic_title: o.topic_title || "",
+            author_email: o.author_email || "",
+            body: o.body || "",
+            status: o.status || "approved",
+            date: arDate(at),
+            at: at ? (Date.parse(at) || 0) : 0,
+          };
+        }).sort(function (a, b) { return b.at - a.at; });
+      });
+    },
+
+    // لوحة تحليل التعليقات + «استنتاجات»: /api/platform-opinions-analysis (بروكسي رفيع ->
+    // /api/bridge/opinions/analysis) -> {status_counts:{pending,approved,rejected}, total_opinions,
+    // top_topics:[{id,title,count,category}], by_category:[{category,count}], insights, insights_note,
+    // engagement_note}. أرقام حقيقية؛ نخزّن الاستجابة كما هي فتمرّ الحقول للـ panel بلا تحويل.
+    platformOpinionsAnalysis: function () {
+      return get("/platform-opinions-analysis").then(function (r) {
+        EP.data.platformOpinionsAnalysis = r || {};
+        window.POPINIONS_ANALYSIS = r || {};
       });
     },
 

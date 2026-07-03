@@ -2069,6 +2069,27 @@ def platform_opinions_reject(opinion_id):
     return _platform_proxy('POST', f"/api/bridge/opinions/{opinion_id}/reject")
 
 
+# --- «تحليل التعليقات و«استنتاجات»» (Opinions analytics/insights): real aggregation from the
+# platform — pending/approved/rejected counts, top topics by APPROVED-comment count, by-category
+# distribution, and a best-effort AI «استنتاجات» summary (honest empty state when unavailable).
+# Thin proxy over the SECRET, secret-guarded bridge endpoint (server-side secret only).
+@app.route('/api/platform-opinions-analysis', methods=['GET'])
+@token_required
+@roles_required('admin', 'employee')   # employee may VIEW the analytics panel
+@module_required('topics')             # D9: admin can revoke per-role module access
+def platform_opinions_analysis():
+    try:
+        limit = int(request.args.get('limit') or 10)
+    except (TypeError, ValueError):
+        limit = 10
+    limit = max(1, min(50, limit))
+    # summarize: default true (also run the AI «استنتاجات» pass); accept common falsy strings to skip it.
+    raw = (request.args.get('summarize') or '').strip().lower()
+    summarize = 'false' if raw in ('0', 'false', 'no', 'off') else 'true'
+    return _platform_proxy('GET', '/api/bridge/opinions/analysis',
+                           params={'limit': limit, 'summarize': summarize})
+
+
 # --- «أتمتة المقالات» (Articles automation): one daily AI run fills «المقالات» on the platform
 # with DRAFTS (1 platform explainer + a few news-derived analyses) that the founder approves here.
 @app.route('/api/platform-articles', methods=['GET'])
