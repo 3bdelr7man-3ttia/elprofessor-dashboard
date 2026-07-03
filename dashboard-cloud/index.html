@@ -2010,6 +2010,7 @@ function topicTabOf(t){
 function topicTabCounts(){var c={board:0,incoming:0,working:0,ideas:0};(PTOPICS||[]).forEach(function(t){var k=topicTabOf(t);if(c[k]!=null)c[k]++;});return c;}
 // أثناء ما الوكيل بيكتب مقالًا من موضوع، نعرض الموضوع بحالة «الوكيل يكتب المقال…» تحت «قيد العمل».
 var TOPIC_GENERATING={};   // topic id -> true while the agent authors an article FROM it
+var PENDING_ARTICLE_SELECT=null;   // aid of a just-created blog draft -> auto-open it in «المقالات»
 // المواضيع بعد تطبيق التبويب + فلتر الفئة النشط.
 function topicsForActiveTab(){
   var tab=(topicsTab==='board'||topicsTab==='incoming'||topicsTab==='working'||topicsTab==='ideas')?topicsTab:'board';
@@ -2112,19 +2113,25 @@ function viewContent(v){
   if(window.EP){EP.ensure('content',()=>viewContent(v));EP.ensure('platformArticles',()=>viewContent(v));}
   // تبويبات الأخبار/الصور/الصفحات معطّلة (لا واجهة خلفية) — اقتصر على المقالات.
   if(contentTab!=='pending'&&contentTab!=='published')contentTab='pending';
+  // بعد «اعمل مقال»: افتح المسودّة الجديدة مباشرةً في عرض المراجعة (لا تضيع أبدًا).
+  if(PENDING_ARTICLE_SELECT!=null){
+    var _pi=TOPICS.findIndex(function(t){return t.aid===PENDING_ARTICLE_SELECT;});
+    if(_pi>=0){contentTab=(TOPICS[_pi].status==='published')?'published':'pending';selected=_pi;PENDING_ARTICLE_SELECT=null;}
+    else if((window.EP&&EP.state.content)==='ready'){PENDING_ARTICLE_SELECT=null;}   // حُمّلت القائمة ولم يوجد — أفلت الانتظار
+  }
   const Cst=(window.EP&&EP.state.content)||'idle';
   const pend=TOPICS.filter(t=>t.status==='pending').length,pub=TOPICS.filter(t=>t.status==='published').length;
   const autoPub=(window.PARTS||[]).filter(a=>a.status==='published').length,autoDraft=(window.PARTS||[]).length-autoPub;
   v.innerHTML=`
     ${topicsTabbar('articles')}
-    <div class="policy" style="border-inline-start-color:var(--memory)">${svg('doc','ic')}<div><b>المقالات — طبقة SEO/المدونة:</b> مسودّة (من موضوع/خبر/فكرة) ← <b>افتحها لتقرأ النصّ كامل</b> ← <b>اعتمد وانشر</b> فتظهر مباشرة على <span style="direction:ltr">elprofessor.net</span> وتنتقل لقائمة «المنشورة».</div></div>
-    <div class="policy" style="border-inline-start-color:var(--ai);background:var(--ai-bg)">${svg('sparkles','ic')}<div><b>تيّاران:</b> <b>(١) آلي</b> — مقالات شرح المنصة/القيمة تُنشَر تلقائيًّا. <b>(٢) بمراجعة</b> — تحليلات الأخبار والمواضيع تأتي <b>مسودّات</b> هنا للاعتماد. <b>حالة الورك فلو:</b> ${Cst==='loading'?'…جارٍ الجلب':'يعمل — '+money(pend)+' بانتظار المراجعة، '+money(pub)+' منشورة على الموقع'}. تيار المنصة الآلي: <b>${money(autoPub)}</b> منشور / <b>${money(autoDraft)}</b> مسودّة — <b style="cursor:pointer;text-decoration:underline" id="ctAutoLink">افتح تيار المنصة الآلي</b>.</div></div>
+    <div class="policy" style="border-inline-start-color:var(--memory)">${svg('doc','ic')}<div><b>«المقالات» = مدوّنة الموقع فقط (<span style="direction:ltr">elprofessor.net</span>).</b> مسودّة (من موضوع/خبر/فكرة أو زر «اعمل مقال») ← <b>افتحها لتقرأ النصّ كامل</b> ← <b>اعتمد وانشر</b> فتظهر مباشرة على <span style="direction:ltr">elprofessor.net</span> وتنتقل لقائمة «منشورة». تحويل الموضوع بـ«اعمل مقال» يصل هنا كمسودّة تحت «بانتظار الاعتماد».</div></div>
+    <div class="policy" style="border-inline-start-color:var(--ai);background:var(--ai-bg)">${svg('robot','ic')}<div><b>ليست نفس القائمة:</b> «<b>تيّار المنصة الآلي</b>» لوحة مقالات <b><span style="direction:ltr">app.elprofessor.net</span></b> (شرح/قيمة تُدار على المنصّة نفسها) — <b>منفصلة تمامًا</b> عن مدوّنة الموقع هنا. ${Cst==='loading'?'…جارٍ الجلب':'المدوّنة: <b>'+money(pend)+'</b> بانتظار الاعتماد، <b>'+money(pub)+'</b> منشورة على الموقع'}. <b style="cursor:pointer;text-decoration:underline" id="ctAutoLink">افتح تيّار المنصة الآلي ←</b></div></div>
     ${Cst==='error'?`<div class="policy" style="border-inline-start-color:var(--conflict);background:var(--conflict-bg);color:var(--conflict)">${svg('scale','ic')}<div>تعذّر جلب المقالات من الخادم. <b style="cursor:pointer;text-decoration:underline" onclick="EP.reload('content',()=>viewContent(document.getElementById('view')))">إعادة المحاولة</b></div></div>`:''}
     ${Cst==='loading'?`<div class="policy" style="border-inline-start-color:var(--memory)">${svg('doc','ic')}<div>…جارٍ تحميل المقالات من الخادم</div></div>`:''}
     <div class="kpis">
       <div class="kpi k-2"><div class="top"><span class="ic">${svg('doc')}</span>بانتظار الاعتماد</div><b>${money(pend)}</b><div class="sub">مسودّات جاهزة للمراجعة</div></div>
-      <div class="kpi k-3"><div class="top"><span class="ic">${svg('check')}</span>منشورة على المدونة</div><b>${money(pub)}</b><div class="sub">على الموقع</div></div>
-      <div class="kpi k-4"><div class="top"><span class="ic">${svg('robot')}</span>تيار المنصة الآلي</div><b>${money(autoPub)}</b><div class="sub">${money(autoDraft)} مسودّة</div></div>
+      <div class="kpi k-3"><div class="top"><span class="ic">${svg('check')}</span>منشورة على المدونة</div><b>${money(pub)}</b><div class="sub">على <span style="direction:ltr">elprofessor.net</span></div></div>
+      <div class="kpi k-4"><div class="top"><span class="ic">${svg('robot')}</span>تيّار المنصة (app)</div><b>${money(autoPub+autoDraft)}</b><div class="sub">لوحة منفصلة — ليست المدوّنة</div></div>
     </div>
     <div class="tabbar" id="ctTabs">
       <div class="tab${contentTab==='pending'?' on':''}" data-t="pending">بانتظار الاعتماد (${pend})</div>
@@ -2238,13 +2245,13 @@ function viewArticlesAuto(v){
   const pub=PARTS.filter(a=>a.status==='published').length,draft=PARTS.length-pub;
   v.innerHTML=`
     ${topicsTabbar('articles')}
-    <div class="policy" style="border-inline-start-color:var(--memory)">${svg('doc','ic')}<div><b>تيار المنصة الآلي</b> (مقالات app.elprofessor.net). <b style="cursor:pointer;text-decoration:underline" id="artBack">→ رجوع لمقالات المدونة (elprofessor.net)</b></div></div>
-    <div class="policy" style="border-inline-start-color:var(--ai)">${svg('sparkles','ic')}<div><b>تيّاران للمقالات:</b> <b>(١) آلي</b> — مقالات <b>شرح المنصة</b> والقيمة والذكاء الممزوج برأي الخبير <b>تُنشَر تلقائيًّا</b> على المدونة (آمنة: النصّ يُنقّى من أي HTML قبل النشر). <b>(٢) بمراجعة</b> — تحليلات الأخبار والمواضيع المقترحة تأتي <b>مسودّات</b> ← اضغط الصفّ لفتح النصّ كامل ← <b>اعتمد وانشر</b>.</div></div>
-    <div class="policy" style="border-inline-start-color:var(--gold);background:var(--gold-bg)">${svg('robot','ic')}<div><b>وكيل المقالات (AI Team):</b> يقترح مواضيع للاعتماد ويتحسّن بمرور الوقت — يعمل <b>عند الطلب</b> من قسم «الفريق (AI Team)»، لا باستقلالية كاملة. شغّل التوليد يدويًّا من هنا أو اربط n8n على <code>POST /api/bridge/content/daily-run</code> يوميًّا. <b>${money(pub)}</b> مقالًا منشورًا الآن.</div></div>
+    <div class="policy" style="border-inline-start-color:var(--memory)">${svg('doc','ic')}<div><b>تيّار المنصة الآلي</b> — لوحة مقالات <b><span style="direction:ltr">app.elprofessor.net</span></b> (منفصلة عن مدوّنة الموقع). <b style="cursor:pointer;text-decoration:underline" id="artBack">→ رجوع لمقالات المدونة (<span style="direction:ltr">elprofessor.net</span>)</b></div></div>
+    <div class="policy" style="border-inline-start-color:var(--ai)">${svg('sparkles','ic')}<div><b>هذه لوحة مقالات المنصّة نفسها — «اعتمد وانشر» هنا يعني النشر على <span style="direction:ltr">app.elprofessor.net</span> (ليس المدوّنة).</b> التوليد اليومي يُنشئ مسودّات، ويعكس مقالات <b>«شرح المنصة»</b> تلقائيًّا إلى مدوّنة الموقع (النصّ يُنقّى من أي HTML قبل النشر). تحليلات الأخبار والمواضيع تأتي مسودّات — اضغط الصفّ لفتح النصّ كامل.</div></div>
+    <div class="policy" style="border-inline-start-color:var(--gold);background:var(--gold-bg)">${svg('robot','ic')}<div><b>وكيل المقالات (AI Team):</b> يقترح مواضيع للاعتماد ويتحسّن بمرور الوقت — يعمل <b>عند الطلب</b> من قسم «الفريق (AI Team)»، لا باستقلالية كاملة. شغّل التوليد يدويًّا من هنا أو اربط n8n على <code>POST /api/bridge/content/daily-run</code> يوميًّا. <b>${money(pub)}</b> مقالًا منشورًا على المنصّة الآن.</div></div>
     ${Ast==='error'?`<div class="policy" style="border-inline-start-color:var(--conflict);background:var(--conflict-bg);color:var(--conflict)">${svg('scale','ic')}<div>تعذّر جلب المقالات من المنصة. <b style="cursor:pointer;text-decoration:underline" onclick="EP.reload('platformArticles',()=>viewArticlesAuto(document.getElementById('view')))">إعادة المحاولة</b></div></div>`:''}
     ${Ast==='loading'?`<div class="policy" style="border-inline-start-color:var(--ai)">${svg('sparkles','ic')}<div>…جارٍ التحميل من المنصة</div></div>`:''}
     <div class="kpis">
-      <div class="kpi k-3"><div class="top"><span class="ic">${svg('check')}</span>منشورة</div><b>${money(pub)}</b><div class="sub">في «المقالات»</div></div>
+      <div class="kpi k-3"><div class="top"><span class="ic">${svg('check')}</span>منشورة على المنصّة</div><b>${money(pub)}</b><div class="sub">على <span style="direction:ltr">app.elprofessor.net</span></div></div>
       <div class="kpi k-2"><div class="top"><span class="ic">${svg('doc')}</span>مسودّات</div><b>${money(draft)}</b><div class="sub">بانتظار اعتمادك</div></div>
       <div class="kpi k-1"><div class="top"><span class="ic">${svg('sparkles')}</span>الإجمالي</div><b>${money(PARTS.length)}</b><div class="sub">مقال</div></div>
     </div>
@@ -2271,8 +2278,8 @@ function artDetailModal(a){
   var actions=pub
     ?'<button class="btn btn-ghost" id="ad_unpub">إلغاء النشر</button>'
     :'<button class="btn btn-primary" id="ad_pub">'+svg('check')+'اعتمد وانشر</button>';
-  var s=openModal('مقال آلي — '+(pub?'منشور':'مسودّة'),
-    '<div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:10px"><span class="chip" style="padding:2px 9px;font-size:11px;cursor:default;background:var(--ai-bg);color:var(--ai);border-color:transparent;font-weight:800">'+svg('sparkles','ic')+'آلي</span><span class="chip" style="padding:2px 9px;font-size:11px;cursor:default">'+aEsc(ART_CAT[a.category]||a.category)+'</span><span class="status '+(pub?'s-auto':'s-wait')+'"><span class="d"></span>'+(pub?'منشور':'مسودّة')+'</span></div>'+
+  var s=openModal('مقال آلي (app.elprofessor.net) — '+(pub?'منشور على المنصّة':'مسودّة'),
+    '<div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:10px"><span class="chip" style="padding:2px 9px;font-size:11px;cursor:default;background:var(--ai-bg);color:var(--ai);border-color:transparent;font-weight:800">'+svg('sparkles','ic')+'آلي</span><span class="chip" style="padding:2px 9px;font-size:11px;cursor:default">'+aEsc(ART_CAT[a.category]||a.category)+'</span><span class="status '+(pub?'s-auto':'s-wait')+'"><span class="d"></span>'+(pub?'منشور على المنصّة':'مسودّة')+'</span></div>'+
     '<div class="dh" style="padding:0 0 8px"><h3>'+aEsc(a.title)+'</h3></div>'+
     (raw.excerpt||a.excerpt?'<div class="fld"><label>المقدّمة</label><div class="val" style="font-weight:600">'+aEsc(raw.excerpt||a.excerpt)+'</div></div>':'')+
     '<div class="lab" style="margin:10px 0 4px">نص المقال</div><div style="background:var(--surface-2,#f7f7f9);border:1px solid var(--line,#e6e6ee);border-radius:10px;padding:12px 14px;max-height:320px;overflow:auto;margin-bottom:10px">'+bodyHtml+'</div>'+
@@ -2289,7 +2296,7 @@ function renderArticlesAuto(){
   items.forEach((a)=>el.insertAdjacentHTML('beforeend',`<div class="row esc-row" data-row="${a.id}" style="grid-template-columns:2.2fr 1fr 1fr 220px;cursor:pointer">
     <div class="c c1"><div class="src-ic" style="background:var(--ai-bg);color:var(--ai)">${svg('sparkles')}</div><div><div class="parties">${aEsc(a.title)}</div><div class="from">${aEsc(a.excerpt)||'—'}</div></div></div>
     <div class="c"><div class="from">${ART_CAT[a.category]||a.category} · ${a.date||'—'}</div></div>
-    <div class="c"><span class="status ${a.status==='published'?'s-auto':'s-wait'}"><span class="d"></span>${a.status==='published'?'منشور':'مسودّة'}</span></div>
+    <div class="c"><span class="status ${a.status==='published'?'s-auto':'s-wait'}"><span class="d"></span>${a.status==='published'?'منشور (app)':'مسودّة'}</span></div>
     <div class="c" style="gap:6px">${a.status==='published'?`<button class="btn btn-ghost" data-unpub="${a.id}" style="padding:5px 11px;font-size:12px">إلغاء النشر</button>`:`<button class="btn btn-primary" data-pub="${a.id}" style="padding:5px 11px;font-size:12px">اعتمد وانشر</button>`}<button class="btn btn-warn" data-del="${a.id}" style="padding:5px 11px;font-size:12px">حذف</button></div></div>`));
   el.querySelectorAll('.row[data-row]').forEach(r=>r.onclick=()=>{var a=PARTS.find(x=>x.id===r.dataset.row);if(a)artDetailModal(a);});
   el.querySelectorAll('[data-pub]').forEach(b=>b.onclick=(ev)=>{ev.stopPropagation();var a=PARTS.find(x=>x.id===b.dataset.pub);if(!a||!window.EP)return;
@@ -2388,11 +2395,25 @@ function topMakeArticle(t){
   if(!confirm('يكتب الوكيل الذكي مقال SEO جديدًا من «'+t.title+'» (ليس نسخًا من نصّ الموضوع). يظهر مسودّة في «المقالات» لمراجعتك ثم «اعتمد وانشر». متابعة؟'))return;
   TOPIC_GENERATING[t.id]=true;
   topicsTab='working';selected=null;renderView();   // أظهر حالة العمل تحت «قيد العمل (الوكيل)»
-  EP.generateArticleFromTopic(t,function(ok){
-    delete TOPIC_GENERATING[t.id];
-    if(ok)topicsTab='articles';                       // انتقل إلى «المقالات» حيث المسودّة الجديدة للمراجعة
-    selected=null;renderView();
+  EP.generateArticleFromTopic(t,function(ok,newId,errMsg){
+    delete TOPIC_GENERATING[t.id];                    // أعِد ضبط الموضوع دائمًا — لا يبقى عالقًا في «الوكيل يكتب»
+    if(ok){
+      PENDING_ARTICLE_SELECT=newId;                   // افتح المسودّة الجديدة فورًا في «المقالات» (لا تضيع)
+      topicsTab='articles';selected=null;renderView();
+    }else{
+      topicsTab=topicTabOf(t);selected=null;renderView();   // رجّع الموضوع لتبويبه الطبيعي (متاح لإعادة المحاولة)
+      topArticleError(t,errMsg);                       // خطأ واضح وصريح بالسبب (مش توست هادئ)
+    }
   });
+}
+// خطأ «اعمل مقال» — نافذة واضحة بالسبب الحقيقي (لا مقال زائف، والموضوع رجع كما هو). زر «أعد المحاولة».
+function topArticleError(t,msg){
+  var s=openModal('تعذّر إنشاء المقال',
+    '<div class="note-ai" style="border-inline-start-color:var(--conflict);background:var(--conflict-bg);color:var(--conflict);margin-bottom:12px">'+svg('scale','ic')+'<div><b>لم يُنشأ أي مقال.</b><br>'+topEsc(msg||'خدمة الذكاء الاصطناعي غير متاحة الآن.')+'</div></div>'+
+    '<div style="font-size:13px;color:var(--muted);line-height:1.85;margin-bottom:12px">الموضوع «'+topEsc(t.title)+'» رجع كما هو ولم يتغيّر. تقدر تعيد المحاولة الآن؛ ولو استمرّ الخطأ فالسبب غالبًا ضبط الذكاء على الخادم — راجع مفتاح الـAI (<span style="direction:ltr">DEEPSEEK_API_KEY</span>).</div>'+
+    '<div class="acts"><button class="btn btn-primary" id="tae_retry">'+svg('sparkles')+'أعد المحاولة</button><button class="btn btn-ghost" id="tae_x">إغلاق</button></div>');
+  s.querySelector('#tae_x').onclick=closeModal;
+  var rt=s.querySelector('#tae_retry');if(rt)rt.onclick=function(){closeModal();topMakeArticle(t);};
 }
 // الخطوة ١: بحث/مسودّة — عنوان + سؤال + فئة + مصدر ← الذكاء يُنشئ مسوّدة.
 function topCreateModal(defSrc){

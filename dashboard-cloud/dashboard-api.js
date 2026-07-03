@@ -1325,13 +1325,18 @@
           image_url: "",
         });
       })
-      .then(function () {
+      .then(function (created) {
+        // real id of the freshly created blog draft — the UI uses it to auto-open the draft in
+        // the review view so the article is NEVER lost after «اعمل مقال».
+        var newId = (created && created.id != null) ? created.id : null;
         note("كتب الوكيل مقالًا من «" + (t.title || "") + "» — راجعه في «المقالات» ثم «اعتمد وانشر»");
-        EP.reload("content", function () { if (done) done(true); });
+        EP.reload("content", function () { if (done) done(true, newId); });
       })
       .catch(function (e) {
-        quietToast((e && e.message) || "تعذّر توليد المقال بالذكاء");
-        if (done) done(false);
+        // honest failure: hand the real reason to the caller (which shows a LOUD error) — no fake
+        // success, no draft created, and the topic is reset by the caller (not stuck «الوكيل يكتب»).
+        var msg = (e && e.message) || "تعذّر توليد المقال بالذكاء";
+        if (done) done(false, null, msg);
       });
   };
 
