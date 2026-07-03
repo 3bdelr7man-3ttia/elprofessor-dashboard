@@ -1999,7 +1999,10 @@ def platform_topics_generate_article(topic_id):
         r = requests.post(
             f"{PLATFORM_API_URL}/api/bridge/topics/{topic_id}/generate-article",
             headers={'X-ELP-Metrics-Secret': PLATFORM_METRICS_SECRET},
-            timeout=60,                 # synchronous LLM authoring — allow it time to finish
+            # Must exceed the platform's own DeepSeek timeout (90s for deepseek-chat) so a slow
+            # 600-1000-word generation isn't guillotined here at 60s while the platform still
+            # succeeds — which would burn the LLM call and return a false failure to the operator.
+            timeout=120,
         )
     except Exception:
         return jsonify({'error': 'تعذّر الاتصال بالمنصة'}), 502
@@ -2077,9 +2080,11 @@ def platform_articles_list():
 @roles_required('admin')               # only admin triggers a generation run
 def platform_articles_daily_run():
     body = request.json or {}
+    # Presence check (not `or`) so an explicit 0 is respected — the platform allows topics=0 to
+    # disable topic derivation; `int(x or 3)` would silently coerce a requested 0 back to the default.
     return _platform_proxy('POST', '/api/bridge/content/daily-run', json_body={
-        'articles': int(body.get('articles') or 3),
-        'topics': int(body.get('topics') or 2),
+        'articles': int(body['articles']) if body.get('articles') is not None else 3,
+        'topics': int(body['topics']) if body.get('topics') is not None else 2,
         'publish': bool(body.get('publish') or False),
     })
 

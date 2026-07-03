@@ -1364,9 +1364,15 @@
         if (after) after();
         var tries = 0;
         var iv = setInterval(function () {
-          if (++tries > 6 || !document.getElementById("ctRows")) { clearInterval(iv); return; } // ~3 min / left view
+          var onBlog = !!document.getElementById("ctRows");   // viewContent (blog)
+          var onAuto = !!document.getElementById("artRows");  // viewArticlesAuto (platform stream)
+          if (++tries > 6 || (!onBlog && !onAuto)) { clearInterval(iv); return; } // ~3 min / left view
           post("/content/sync-from-platform", {})                         // flush whatever finished into the blog
-            .then(function () { EP.reload("content", function () { if (document.getElementById("ctRows") && after) after(); }); })
+            .then(function () {
+              EP.reload(onAuto ? "platformArticles" : "content", function () {
+                if ((document.getElementById("ctRows") || document.getElementById("artRows")) && after) after();
+              });
+            })
             .catch(function () {});
         }, 30000);
       })
