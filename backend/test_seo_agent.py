@@ -49,6 +49,14 @@ def test_competitor_mention_is_heavily_penalised():
     assert any('منافسة' in i for i in c['issues']) and c['score'] <= 70
 
 
+def test_json_faq_parser():
+    import json as _json
+    assert appmod._json_faq(None) == []
+    assert appmod._json_faq('not json') == []
+    assert appmod._json_faq(_json.dumps([{'q': 'س', 'a': 'ج'}, {'q': '', 'a': 'x'}, {'bad': 1}])) == [{'q': 'س', 'a': 'ج'}]
+    assert appmod._json_list(_json.dumps(['ك1', 'ك2'])) == ['ك1', 'ك2']
+
+
 def test_seo_bundle_degrades_without_bridge(monkeypatch):
     # no platform secret / bridge → _bridge_get returns None → empty but well-formed bundle, never raises
     monkeypatch.setattr(appmod, '_bridge_get', lambda *a, **k: None)
