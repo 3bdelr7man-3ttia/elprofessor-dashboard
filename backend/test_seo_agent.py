@@ -57,6 +57,25 @@ def test_json_faq_parser():
     assert appmod._json_list(_json.dumps(['ك1', 'ك2'])) == ['ك1', 'ك2']
 
 
+def test_md_to_blocks_splits_glued_heading_and_strips_hashes():
+    # a heading glued to its paragraph by a SINGLE newline must split into 2 blocks (regression: the
+    # whole thing used to become one bold block starting with a literal '### ##').
+    md = "### مبدأ جديد في الإثبات\nصدر هذا الشهر مبدأ يؤكد ذلك."
+    blocks = appmod._md_to_blocks(md)
+    assert blocks[0] == '## مبدأ جديد في الإثبات'          # heading, hashes stripped
+    assert blocks[1] == 'صدر هذا الشهر مبدأ يؤكد ذلك.'      # separate paragraph
+    # malformed nested markers '### ##' → single clean heading, no literal '#'
+    assert appmod._md_to_blocks("### ## عنوان مشوّه")[0] == '## عنوان مشوّه'
+
+
+def test_strip_inline_md_no_double_escape_and_strips_bold():
+    # regression: html.escape here + esc() on the site produced literal «&quot;»
+    assert '&quot;' not in appmod._strip_inline_md('يؤكد أن "اليمين الحاسمة"')
+    assert appmod._strip_inline_md('يؤكد أن "اليمين"') == 'يؤكد أن "اليمين"'
+    assert appmod._strip_inline_md('**مبدأ** مهم') == 'مبدأ مهم'         # bold stripped
+    assert appmod._md_to_blocks('- بند أول\n- بند ثانٍ')[0] == '• بند أول'  # bullets
+
+
 def test_seo_bundle_degrades_without_bridge(monkeypatch):
     # no platform secret / bridge → _bridge_get returns None → empty but well-formed bundle, never raises
     monkeypatch.setattr(appmod, '_bridge_get', lambda *a, **k: None)

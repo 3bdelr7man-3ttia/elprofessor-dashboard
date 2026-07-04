@@ -5859,30 +5859,48 @@ def _ar_date_from(ts):
 
 
 def _strip_inline_md(s):
-    s = re.sub(r'\*\*(.+?)\*\*', r'\1', s)
+    s = re.sub(r'\[([^\]]+)\]\([^)]*\)', r'\1', s)   # [text](url) → text (no external links on the site)
+    s = re.sub(r'\*\*(.+?)\*\*', r'\1', s)           # **bold** → bold
     s = re.sub(r'__(.+?)__', r'\1', s)
-    s = re.sub(r'\*(.+?)\*', r'\1', s)
-    s = re.sub(r'`(.+?)`', r'\1', s)
-    # Neutralize any HTML the LLM emitted so <script>/<img onerror=…> can never
-    # reach the marketing site (these blocks are rendered as raw HTML there).
-    s = html.escape(s)
+    s = re.sub(r'\*(.+?)\*', r'\1', s)               # *italic* → italic
+    s = re.sub(r'`(.+?)`', r'\1', s)                 # `code` → code
+    s = re.sub(r'^\s*>\s?', '', s)                   # blockquote marker
+    # NOTE: no html.escape here — the marketing site html-escapes every block once at render
+    # (its single XSS layer). Escaping here too caused double-escaping («&quot;» showing literally).
     return s.strip()
 
 
 def _md_to_blocks(md):
-    """Convert the platform's markdown article body → the marketing site's body format: a list of
-    blocks where a heading is '## ...' (rendered <h2>) and everything else is a paragraph."""
+    """Convert the platform's markdown article body → the marketing site's block format:
+      • a heading line ('# '..'###### ', even a malformed '### ## ') → '## <text>' (site renders <h2>/<h3>)
+      • a bullet line ('- '/'* ') → '• <text>'
+      • everything else → a paragraph (consecutive text lines merged)
+    LINE-based so a heading glued to its paragraph by a single newline is SPLIT (not merged into one
+    bold block), and ALL leading hash markers are stripped so no literal '#'/'##' ever renders."""
     import re
-    blocks = []
-    for raw in (md or '').split('\n\n'):
-        b = raw.strip()
-        if not b:
+    blocks, para = [], []
+
+    def flush():
+        if para:
+            blocks.append(_strip_inline_md(' '.join(para)))
+            para.clear()
+
+    for line in (md or '').replace('\r', '').split('\n'):
+        ln = line.strip()
+        if not ln:
+            flush()
             continue
-        m = re.match(r'^#{1,6}\s+(.*)$', b)
-        if m:
-            blocks.append('## ' + _strip_inline_md(m.group(1)))
+        h = re.match(r'^#{1,6}[#\s]*(\S.*?)\s*$', ln)   # heading (strips nested/extra hashes)
+        b = re.match(r'^[-*•]\s+(\S.*?)\s*$', ln)        # bullet
+        if h:
+            flush()
+            blocks.append('## ' + _strip_inline_md(h.group(1)))
+        elif b:
+            flush()
+            blocks.append(_strip_inline_md('• ' + b.group(1)))
         else:
-            blocks.append(_strip_inline_md(' '.join(ln.strip() for ln in b.split('\n'))))
+            para.append(ln)
+    flush()
     return blocks
 
 
