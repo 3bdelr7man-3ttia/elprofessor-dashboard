@@ -4799,7 +4799,7 @@ def _seo_bundle():
         live = []
     cards = [_seo_scorecard({
         'id': a.id, 'title': a.title, 'status': 'published', 'category': a.cat,
-        'body': ' '.join(_article_body_list(a)),
+        'body': '\n'.join(_article_body_list(a)),  # newline-join so the (?m)^##  heading regex matches blocks
         'meta_description': a.meta_description or a.excerpt or '',
         'keywords': _json_list(a.keywords), 'faq': _json_faq(a.faq),
     }) for a in live]
