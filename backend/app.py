@@ -5840,6 +5840,16 @@ def _apply_article_fields(article, d):
         if not isinstance(body, list):
             body = []
         article.body = json.dumps([str(x) for x in body], ensure_ascii=False)
+    # SEO/AEO metadata (so «اعمل مقال» articles carry the same meta/keywords/FAQ → JSON-LD on the site)
+    if 'meta_description' in d:
+        article.meta_description = (d.get('meta_description') or '')[:400]
+    if 'keywords' in d:
+        kw = d.get('keywords')
+        article.keywords = json.dumps([str(x) for x in kw][:12], ensure_ascii=False) if isinstance(kw, list) else None
+    if 'faq' in d:
+        fq = d.get('faq')
+        article.faq = json.dumps([f for f in fq if isinstance(f, dict) and f.get('q') and f.get('a')][:8],
+                                 ensure_ascii=False) if isinstance(fq, list) else None
 
 def _no_store(resp):
     resp.headers['Cache-Control'] = 'no-store'

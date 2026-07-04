@@ -1359,6 +1359,9 @@
           cat: art.cat || t.category || t.specialty || "قانوني",
           kicker: art.kicker || "تحليل قانوني",
           excerpt: art.excerpt || "",
+          meta_description: art.meta_description || art.excerpt || "",  // SEO/AEO metadata (same as auto articles)
+          keywords: art.keywords || [],
+          faq: art.faq || [],
           by: "الوكيل الذكي — تحليل قانوني",
           body: art.body,                 // list[str]: paragraphs + '## ' headings
           image_url: "",
