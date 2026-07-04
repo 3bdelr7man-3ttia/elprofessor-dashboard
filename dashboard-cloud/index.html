@@ -2195,6 +2195,31 @@ function viewComments(v){
 // المواضيع/المقالات: تُجلب حيّة من /api/content/articles عبر طبقة EP (window.TOPICS).
 // لا مصدر تصميمي — إن فشل الجلب تبقى القائمة فارغة وتظهر لافتة «أعد المحاولة».
 var TOPICS=[];
+// خطة النشر اليومية — تعمل تلقائيًّا كل يوم عبر n8n cron (بلا تشغيل يدوي). الأوقات المصدرية UTC،
+// تُعرض بتوقيت القاهرة. المواضيع الفعلية تُختار وقت التوليد (أحدث خبر / الفئة بالتناوب / ميزة بالتناوب).
+function publishSchedulePanel(){
+  var SLOTS=[
+    {utc:9, label:'تحليل خبر', d:'من أحدث خبر قانوني'},
+    {utc:11,label:'مقال فئوي', d:'موجّه لفئة مستهدفة'},
+    {utc:14,label:'مقال من موضوع', d:'من نقاش على المنصة'},
+    {utc:16,label:'مقال فئوي', d:'موجّه لفئة مستهدفة'},
+    {utc:19,label:'مقال عن ميزة', d:'يشرح ميزة في المنصة'}
+  ];
+  var now=new Date(), nowU=now.getUTCHours()+now.getUTCMinutes()/60;
+  function cairo(h){var dt=new Date(Date.UTC(now.getUTCFullYear(),now.getUTCMonth(),now.getUTCDate(),h,0));
+    return dt.toLocaleTimeString('ar-EG',{hour:'numeric',minute:'2-digit',hour12:true,timeZone:'Africa/Cairo'});}
+  var nextIdx=SLOTS.findIndex(function(s){return s.utc>nowU;});
+  var rows=SLOTS.map(function(s,i){var nx=(i===nextIdx);
+    return '<div style="display:flex;gap:10px;align-items:center;padding:4px 0;'+(nx?'font-weight:800':'')+'">'
+      +'<span style="min-width:78px;direction:ltr;text-align:end;color:'+(nx?'var(--ai)':'var(--muted)')+'">'+cairo(s.utc)+'</span>'
+      +'<span style="opacity:'+(nx?1:.6)+'">'+svg(nx?'sparkles':'clock')+'</span>'
+      +'<span>'+s.label+' <span style="color:var(--muted);font-weight:400;font-size:12px">— '+s.d+'</span>'+(nx?' <b style="color:var(--ai)">← القادم</b>':'')+'</span></div>';}).join('');
+  var nextTxt=nextIdx>=0?('القادم: <b>'+SLOTS[nextIdx].label+'</b> الساعة <b>'+cairo(SLOTS[nextIdx].utc)+'</b> بتوقيت القاهرة'):'انتهت مواعيد اليوم — يبدأ من جديد غدًا صباحًا';
+  return '<div class="policy" style="border-inline-start-color:var(--ai);background:var(--ai-bg)">'+svg('clock','ic')
+    +'<div><b>خطة النشر اليومية — تلقائية بالكامل</b> (تعمل لوحدها كل يوم، بلا تشغيل يدوي). '+nextTxt+'.'
+    +'<div style="margin-top:8px">'+rows+'</div>'
+    +'<div style="color:var(--muted);font-size:12px;margin-top:6px">٥ مقالات يوميًا + جلب أخبار مرّتين. زر «شغّل التوليد» للتشغيل الفوري فقط عند الحاجة.</div></div></div>';
+}
 function viewContent(v){
   if(window.EP){EP.ensure('content',()=>viewContent(v));EP.ensure('platformArticles',()=>viewContent(v));}
   // تبويبات الأخبار/الصور/الصفحات معطّلة (لا واجهة خلفية) — اقتصر على المقالات.
@@ -2210,6 +2235,7 @@ function viewContent(v){
   v.innerHTML=`
     ${topicsTabbar('articles')}
     <div class="policy" style="border-inline-start-color:var(--memory)">${svg('doc','ic')}<div><b>«المقالات» = مقالات الموقع فقط (<span style="direction:ltr">elprofessor.net</span>).</b> مسودّة (من موضوع/خبر/فكرة أو زر «اعمل مقال») ← <b>افتحها لتقرأ النصّ كامل</b> ← <b>اعتمد وانشر</b> فتظهر مباشرة على <span style="direction:ltr">elprofessor.net</span> وتنتقل لقائمة «منشورة». تحويل الموضوع بـ«اعمل مقال» يصل هنا كمسودّة تحت «بانتظار الاعتماد».</div></div>
+    ${publishSchedulePanel()}
     ${Cst==='error'?`<div class="policy" style="border-inline-start-color:var(--conflict);background:var(--conflict-bg);color:var(--conflict)">${svg('scale','ic')}<div>تعذّر جلب المقالات من الخادم. <b style="cursor:pointer;text-decoration:underline" onclick="EP.reload('content',()=>viewContent(document.getElementById('view')))">إعادة المحاولة</b></div></div>`:''}
     ${Cst==='loading'?`<div class="policy" style="border-inline-start-color:var(--memory)">${svg('doc','ic')}<div>…جارٍ تحميل المقالات من الخادم</div></div>`:''}
     <div class="kpis">
