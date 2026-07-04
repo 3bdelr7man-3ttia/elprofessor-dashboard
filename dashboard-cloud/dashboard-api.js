@@ -1362,6 +1362,7 @@
           meta_description: art.meta_description || art.excerpt || "",  // SEO/AEO metadata (same as auto articles)
           keywords: art.keywords || [],
           faq: art.faq || [],
+          target_audience: art.target_audience || "عام",   // «الفئوية» → site audience filter
           by: "الوكيل الذكي — تحليل قانوني",
           body: art.body,                 // list[str]: paragraphs + '## ' headings
           image_url: "",

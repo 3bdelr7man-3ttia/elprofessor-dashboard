@@ -408,6 +408,7 @@ class Article(db.Model):
     meta_description = db.Column(db.Text)   # SEO <meta name=description> (from the platform generator)
     keywords = db.Column(db.Text)           # JSON-encoded list[str] of focus keywords
     faq = db.Column(db.Text)                # JSON-encoded list[{q,a}] → FAQPage JSON-LD (AEO)
+    target_audience = db.Column(db.Text)    # «الفئوية» → site audience filter (المحامون/وكلاء النيابة/…)
     status = db.Column(db.String(20), default='draft')  # draft | published
     published_at = db.Column(db.DateTime, nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.datetime.utcnow)
@@ -5694,7 +5695,7 @@ def ensure_runtime_schema():
                     connection.execute(text("ALTER TABLE articles ADD COLUMN image_url TEXT"))
                 except Exception:
                     pass
-            for _seo_col in ('meta_description', 'keywords', 'faq'):
+            for _seo_col in ('meta_description', 'keywords', 'faq', 'target_audience'):
                 if _seo_col not in article_columns:
                     try:
                         connection.execute(text(f"ALTER TABLE articles ADD COLUMN {_seo_col} TEXT"))
@@ -5809,6 +5810,7 @@ def serialize_article(article):
         'meta_description': article.meta_description or article.excerpt or '',
         'keywords': _json_list(article.keywords),
         'faq': _json_faq(article.faq),
+        'target_audience': article.target_audience or 'عام',   # «الفئوية» → site audience filter
         'status': article.status or 'draft',
         'published_at': article.published_at.isoformat() if article.published_at else None,
     }
@@ -5850,6 +5852,8 @@ def _apply_article_fields(article, d):
         fq = d.get('faq')
         article.faq = json.dumps([f for f in fq if isinstance(f, dict) and f.get('q') and f.get('a')][:8],
                                  ensure_ascii=False) if isinstance(fq, list) else None
+    if 'target_audience' in d:
+        article.target_audience = (d.get('target_audience') or 'عام')[:60]  # «الفئوية»
 
 def _no_store(resp):
     resp.headers['Cache-Control'] = 'no-store'
@@ -5980,6 +5984,7 @@ def _sync_platform_articles():
             keywords=json.dumps([str(k) for k in (a.get('keywords') or [])][:12], ensure_ascii=False),
             faq=json.dumps([f for f in (a.get('faq') or []) if isinstance(f, dict) and f.get('q') and f.get('a')][:8],
                            ensure_ascii=False),
+            target_audience=(a.get('target_audience') or 'عام')[:60],  # «الفئوية» → site audience filter
             status='published' if is_published else 'draft',
         )
         if is_published:
