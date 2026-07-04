@@ -5205,10 +5205,14 @@ _SEED_ARTICLES = [
 
 
 def _seed_published_articles():
-    """Idempotently seed the real published blog articles (guarded by title). Runs on every
-    boot; never duplicates. Newest-first via descending published_at."""
+    """Bootstrap-only seed of the demo blog articles: runs ONLY when the blog is completely empty,
+    so a brand-new deploy isn't blank — but once there is ANY article (real content or a kept demo),
+    it never re-seeds. This makes deleting the demo articles PERMANENT (a redeploy won't resurrect
+    them, now that the blog DB is on a persistent volume)."""
     base = datetime.datetime.utcnow()
     created = 0
+    if Article.query.first():
+        return 0  # blog already has content → do not (re-)seed demos
     for i, s in enumerate(_SEED_ARTICLES):
         if Article.query.filter_by(title=s['title']).first():
             continue
