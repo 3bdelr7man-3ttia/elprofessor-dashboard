@@ -2198,23 +2198,24 @@ var TOPICS=[];
 // خطة النشر اليومية — تعمل تلقائيًّا كل يوم عبر n8n cron (بلا تشغيل يدوي). الأوقات المصدرية UTC،
 // تُعرض بتوقيت القاهرة. المواضيع الفعلية تُختار وقت التوليد (أحدث خبر / الفئة بالتناوب / ميزة بالتناوب).
 function publishSchedulePanel(){
+  // مواعيد n8n cron مضبوطة بتوقيت القاهرة (خادم n8n على TZ القاهرة) — فالساعات دي هي أوقات النشر الفعلية.
   var SLOTS=[
-    {utc:9, label:'تحليل خبر', d:'من أحدث خبر قانوني'},
-    {utc:11,label:'مقال فئوي', d:'موجّه لفئة مستهدفة'},
-    {utc:14,label:'مقال من موضوع', d:'من نقاش على المنصة'},
-    {utc:16,label:'مقال فئوي', d:'موجّه لفئة مستهدفة'},
-    {utc:19,label:'مقال عن ميزة', d:'يشرح ميزة في المنصة'}
+    {h:9, label:'تحليل خبر', d:'من أحدث خبر قانوني'},
+    {h:11,label:'مقال فئوي', d:'موجّه لفئة مستهدفة'},
+    {h:14,label:'مقال من موضوع', d:'من نقاش على المنصة'},
+    {h:16,label:'مقال فئوي', d:'موجّه لفئة مستهدفة'},
+    {h:19,label:'مقال عن ميزة', d:'يشرح ميزة في المنصة'}
   ];
-  var now=new Date(), nowU=now.getUTCHours()+now.getUTCMinutes()/60;
-  function cairo(h){var dt=new Date(Date.UTC(now.getUTCFullYear(),now.getUTCMonth(),now.getUTCDate(),h,0));
-    return dt.toLocaleTimeString('ar-EG',{hour:'numeric',minute:'2-digit',hour12:true,timeZone:'Africa/Cairo'});}
-  var nextIdx=SLOTS.findIndex(function(s){return s.utc>nowU;});
+  var cp=new Date().toLocaleString('en-US',{timeZone:'Africa/Cairo',hour:'2-digit',minute:'2-digit',hour12:false}).split(':');
+  var nowH=(parseInt(cp[0],10)%24)+parseInt(cp[1],10)/60;
+  function fmt(h){return new Date(2000,0,1,h,0).toLocaleTimeString('ar-EG',{hour:'numeric',minute:'2-digit',hour12:true});}
+  var nextIdx=SLOTS.findIndex(function(s){return s.h>nowH;});
   var rows=SLOTS.map(function(s,i){var nx=(i===nextIdx);
     return '<div style="display:flex;gap:10px;align-items:center;padding:4px 0;'+(nx?'font-weight:800':'')+'">'
-      +'<span style="min-width:78px;direction:ltr;text-align:end;color:'+(nx?'var(--ai)':'var(--muted)')+'">'+cairo(s.utc)+'</span>'
+      +'<span style="min-width:78px;direction:ltr;text-align:end;color:'+(nx?'var(--ai)':'var(--muted)')+'">'+fmt(s.h)+'</span>'
       +'<span style="opacity:'+(nx?1:.6)+'">'+svg(nx?'sparkles':'clock')+'</span>'
       +'<span>'+s.label+' <span style="color:var(--muted);font-weight:400;font-size:12px">— '+s.d+'</span>'+(nx?' <b style="color:var(--ai)">← القادم</b>':'')+'</span></div>';}).join('');
-  var nextTxt=nextIdx>=0?('القادم: <b>'+SLOTS[nextIdx].label+'</b> الساعة <b>'+cairo(SLOTS[nextIdx].utc)+'</b> بتوقيت القاهرة'):'انتهت مواعيد اليوم — يبدأ من جديد غدًا صباحًا';
+  var nextTxt=nextIdx>=0?('القادم: <b>'+SLOTS[nextIdx].label+'</b> الساعة <b>'+fmt(SLOTS[nextIdx].h)+'</b> بتوقيت القاهرة'):'انتهت مواعيد اليوم — يبدأ من جديد غدًا صباحًا';
   return '<div class="policy" style="border-inline-start-color:var(--ai);background:var(--ai-bg)">'+svg('clock','ic')
     +'<div><b>خطة النشر اليومية — تلقائية بالكامل</b> (تعمل لوحدها كل يوم، بلا تشغيل يدوي). '+nextTxt+'.'
     +'<div style="margin-top:8px">'+rows+'</div>'
