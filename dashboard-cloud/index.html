@@ -2061,6 +2061,9 @@ function topicsAIAnalysisPanel(){
   var byCat=(A.by_category||[]).slice(0,8);
   var maxCat=byCat.reduce(function(m,x){return Math.max(m,x.count||0);},0)||1;
   var catHtml=byCat.length?byCat.map(function(x){var w=Math.round((x.count||0)/maxCat*100);return '<div style="display:flex;align-items:center;gap:8px;padding:4px 0;font-size:12.5px"><span style="width:120px;flex:none;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(x.category||'غير مصنّف')+'</span><div style="flex:1;height:9px;background:var(--surface-2);border-radius:6px;overflow:hidden"><div style="width:'+w+'%;height:100%;background:var(--ai)"></div></div><b style="width:34px;text-align:left;flex:none">'+money(x.count||0)+'</b></div>';}).join(''):'<div style="color:var(--muted);font-size:12.5px">لا فئات بعد.</div>';
+  var byAud=(A.by_audience||[]).slice(0,8);
+  var maxAud=byAud.reduce(function(m,x){return Math.max(m,x.count||0);},0)||1;
+  var audHtml=byAud.length?byAud.map(function(x){var w=Math.round((x.count||0)/maxAud*100);return '<div style="display:flex;align-items:center;gap:8px;padding:4px 0;font-size:12.5px"><span style="width:120px;flex:none;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(x.audience||'عام')+'</span><div style="flex:1;height:9px;background:var(--surface-2);border-radius:6px;overflow:hidden"><div style="width:'+w+'%;height:100%;background:var(--gold)"></div></div><b style="width:34px;text-align:left;flex:none">'+money(x.count||0)+'</b></div>';}).join(''):'<div style="color:var(--muted);font-size:12.5px">لسه ما فيش تصنيف فئوي — يظهر مع كل موضوع جديد.</div>';
   var demand=(A.categories_in_demand||[]).slice(0,6);
   var demandHtml=demand.length?demand.map(function(x){return '<span class="chip" style="padding:3px 11px;font-size:11.5px;cursor:default;background:var(--gold-bg);color:var(--gold);border-color:transparent">'+svg('trend','ic')+esc(x.category||'—')+' · '+money(x.count||0)+'</span>';}).join(' '):'<span style="color:var(--muted);font-size:12.5px">لا بيانات طلب من الشات بعد.</span>';
   var body=''+
@@ -2070,6 +2073,7 @@ function topicsAIAnalysisPanel(){
       '<div><div style="font-size:12px;font-weight:800;color:var(--muted);margin-bottom:4px">'+svg('trend','ic')+' أعلى المواضيع تفاعلًا</div>'+topHtml+'</div>'+
       '<div><div style="font-size:12px;font-weight:800;color:var(--muted);margin-bottom:4px">'+svg('grid','ic')+' حسب الفئة</div>'+catHtml+'</div>'+
     '</div>'+
+    '<div style="margin-top:12px"><div style="font-size:12px;font-weight:800;color:var(--gold);margin-bottom:4px">'+svg('users','ic')+' الفئوية — المواضيع حسب الفئة المستهدفة</div>'+audHtml+'</div>'+
     '<div style="margin-top:12px"><div style="font-size:12px;font-weight:800;color:var(--muted);margin-bottom:6px">'+svg('trend','ic')+' الفئات الأكثر طلبًا (من الشات)</div>'+demandHtml+'</div>'+
     (A.engagement_note?'<div class="note-ai" style="margin-top:12px">'+svg('robot','ic')+'<div>'+esc(A.engagement_note)+'</div></div>':'');
   return head+body+foot;
@@ -2156,6 +2160,9 @@ function opinionsAnalyticsPanel(){
   var byCat=(A.by_category||[]).slice(0,8);
   var maxCat=byCat.reduce(function(m,x){return Math.max(m,x.count||0);},0)||1;
   var catHtml=byCat.length?byCat.map(function(x){var w=Math.round((x.count||0)/maxCat*100);return '<div style="display:flex;align-items:center;gap:8px;padding:4px 0;font-size:12.5px"><span style="width:120px;flex:none;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(x.category||'غير مصنّف')+'</span><div style="flex:1;height:9px;background:var(--surface-2);border-radius:6px;overflow:hidden"><div style="width:'+w+'%;height:100%;background:var(--ai)"></div></div><b style="width:34px;text-align:left;flex:none">'+money(x.count||0)+'</b></div>';}).join(''):'<div style="color:var(--muted);font-size:12.5px">لا فئات بعد.</div>';
+  var byAud=(A.by_audience||[]).slice(0,8);
+  var maxAud=byAud.reduce(function(m,x){return Math.max(m,x.count||0);},0)||1;
+  var audHtml=byAud.length?byAud.map(function(x){var w=Math.round((x.count||0)/maxAud*100);return '<div style="display:flex;align-items:center;gap:8px;padding:4px 0;font-size:12.5px"><span style="width:120px;flex:none;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(x.audience||'عام')+'</span><div style="flex:1;height:9px;background:var(--surface-2);border-radius:6px;overflow:hidden"><div style="width:'+w+'%;height:100%;background:var(--gold)"></div></div><b style="width:34px;text-align:left;flex:none">'+money(x.count||0)+'</b></div>';}).join(''):'<div style="color:var(--muted);font-size:12.5px">لسه ما فيش تصنيف فئوي — يظهر مع كل موضوع جديد.</div>';
   var insights=A.insights||'', insNote=A.insights_note||'';
   var insHtml=insights?'<div class="note-ai" style="margin-top:12px">'+svg('robot','ic')+'<div><b>استنتاجات الذكاء:</b> '+topEsc(insights)+'</div></div>':(insNote?'<div class="policy" style="margin:12px 0 0;border-inline-start-color:var(--memory)">'+svg('doc','ic')+'<div>'+topEsc(insNote)+'</div></div>':'');
   var body=kpis+
