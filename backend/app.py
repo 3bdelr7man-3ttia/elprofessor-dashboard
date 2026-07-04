@@ -4789,21 +4789,31 @@ def _seo_scorecard(a):
 
 
 def _seo_bundle():
-    """Score every platform article + summarise publishing cadence for the SEO agent."""
-    payload = _bridge_get('/api/bridge/articles', {'limit': 120}) or {}
-    arts = payload.get('articles') or []
-    cards = [_seo_scorecard(a) for a in arts]
+    """Audit the LIVE published blog (what's actually on elprofessor.net — the persistent corpus we
+    MONITOR) + count platform drafts still awaiting approval (the pre-publish quality gate)."""
+    # 1) live published blog articles — the real, persistent corpus the agent monitors day to day
+    try:
+        live = (Article.query.filter_by(status='published')
+                .order_by(Article.published_at.desc().nullslast(), Article.created_at.desc()).limit(150).all())
+    except Exception:
+        live = []
+    cards = [_seo_scorecard({
+        'id': a.id, 'title': a.title, 'status': 'published', 'category': a.cat,
+        'body': ' '.join(_article_body_list(a)),
+        'meta_description': a.meta_description or a.excerpt or '',
+        'keywords': _json_list(a.keywords), 'faq': _json_faq(a.faq),
+    }) for a in live]
     scores = [c['score'] for c in cards]
-    pub = [a for a in arts if a.get('status') == 'published']
-    pub_dates = sorted([a.get('published_at') for a in pub if a.get('published_at')], reverse=True)
+    pub_dates = sorted([a.published_at.isoformat() for a in live if a.published_at], reverse=True)
     issue_freq = {}
     for c in cards:
         for it in c['issues']:
             issue_freq[it] = issue_freq.get(it, 0) + 1
+    # 2) platform drafts still awaiting the founder's approval (not yet on the site)
+    plat = (_bridge_get('/api/bridge/articles', {'limit': 60, 'status': 'draft'}) or {}).get('articles') or []
     return {
-        'total_articles': len(cards),
-        'published': len(pub),
-        'drafts': sum(1 for c in cards if c['status'] == 'draft'),
+        'live_published_articles': len(cards),
+        'awaiting_approval_platform_drafts': len(plat),
         'avg_seo_score': round(sum(scores) / len(scores), 1) if scores else None,
         'passing_80plus': sum(1 for s in scores if s >= 80),
         'needs_work_below_60': sum(1 for s in scores if s < 60),

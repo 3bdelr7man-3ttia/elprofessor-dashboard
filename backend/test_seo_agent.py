@@ -76,8 +76,12 @@ def test_strip_inline_md_no_double_escape_and_strips_bold():
     assert appmod._md_to_blocks('- بند أول\n- بند ثانٍ')[0] == '• بند أول'  # bullets
 
 
-def test_seo_bundle_degrades_without_bridge(monkeypatch):
-    # no platform secret / bridge → _bridge_get returns None → empty but well-formed bundle, never raises
+def test_seo_bundle_audits_live_blog_and_degrades(monkeypatch):
+    # audits the LIVE published blog (persistent corpus) + counts platform drafts; never raises even
+    # when the bridge is unreachable.
     monkeypatch.setattr(appmod, '_bridge_get', lambda *a, **k: None)
-    b = appmod._seo_bundle()
-    assert b['total_articles'] == 0 and b['avg_seo_score'] is None and b['weakest_articles'] == []
+    with appmod.app.app_context():
+        b = appmod._seo_bundle()
+    assert 'live_published_articles' in b and 'awaiting_approval_platform_drafts' in b
+    assert b['awaiting_approval_platform_drafts'] == 0          # bridge down → 0 drafts, no crash
+    assert b['live_published_articles'] >= 0 and 'weakest_articles' in b
