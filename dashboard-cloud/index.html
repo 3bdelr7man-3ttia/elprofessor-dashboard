@@ -856,7 +856,10 @@ function viewAnalysis(v){
   const arr=x=>Array.isArray(x)?x:[];
   const total=d.total||0, ne=d.needs_expert||0, ner=Math.round((d.needs_expert_rate||0)*100);
   const anon=d.anonymous||0, authed=d.authed||0;
-  const seg=arr(d.by_segment), country=arr(d.by_country), cat=arr(d.by_category), sub=arr(d.by_subcategory), intent=arr(d.by_intent), unmet=arr(d.unmet);
+  // الطلب حسب الشريحة: نضع «غير محدد» (unknown) في الآخر دائمًا حتى تظهر الفئات المستهدفة (محامون/نيابة/خريجون/شركات) أولًا ولا يطغى «عام».
+  const _segRaw=arr(d.by_segment);
+  const seg=_segRaw.filter(x=>(x.segment||'')!=='unknown'&&(x.segment||'')!=='').concat(_segRaw.filter(x=>(x.segment||'')==='unknown'||(x.segment||'')===''));
+  const country=arr(d.by_country), cat=arr(d.by_category), sub=arr(d.by_subcategory), intent=arr(d.by_intent), unmet=arr(d.unmet);
   const eo=d.expert_opinions||{requested:0,paid:0,conversion_rate:0};
   const eoPct=Math.round((eo.conversion_rate||0)*100);
   const recent=arr(d.recent_questions);
@@ -1094,7 +1097,7 @@ function viewOverview(v){
   const escM=(window.EP&&EP.data.escrow&&EP.data.escrow.metrics)||null;
   const escHeld=escM?Math.round(escM.held_sum||0):null;
   const escCount=escM?(escM.held_count||0):null;
-  const cards=[['users','المستخدمون',MODULES.users],['escrow','الضمان والنزاعات',MODULES.escrow],['finance','المالية',MODULES.finance],['courses','الدورات والتدريب',MODULES.courses],['marketing','التسويق',MODULES.marketing],['topics','المواضيع والمدونة',MODULES.topics]];
+  const cards=[['users','المستخدمون',MODULES.users],['escrow','الضمان والنزاعات',MODULES.escrow],['finance','المالية',MODULES.finance],['courses','الدورات والتدريب',MODULES.courses],['marketing','التسويق',MODULES.marketing],['topics','المواضيع والمقالات',MODULES.topics]];
   // Real KPIs from /api/dashboard when loaded; otherwise design defaults.
   const fin=D?D.financial:null, crs=D?D.courses:null;
   const M=(window.EP&&EP.data.metrics)||null; // /api/platform-metrics (admin) — live platform user count
@@ -1544,7 +1547,7 @@ function pkgCur(cc){for(var i=0;i<GEO_COUNTRIES.length;i++){if(GEO_COUNTRIES[i][
 function pkgPrice(p,cc){var pr=p.prices||{};return pr[cc]!=null?pr[cc]:(pr.default!=null?pr.default:0);}
 // بيانات تصميمية احتياطية (fallback) عند تعذّر جلب /api/packages.
 const PACKAGES=[
-  {name:'الباقة المجانية',cycle:'مجانية',prices:{EG:0,SA:0,AE:0,KW:0,QA:0,default:0},features:['تصفّح الدورات','المحاضرة الأولى مجانًا','مقالات المدونة'],active:true},
+  {name:'الباقة المجانية',cycle:'مجانية',prices:{EG:0,SA:0,AE:0,KW:0,QA:0,default:0},features:['تصفّح الدورات','المحاضرة الأولى مجانًا','مقالات المقالات'],active:true},
   {name:'باقة الأدوات',cycle:'شهري',prices:{EG:199,SA:39,AE:39,KW:3,QA:39,default:15},features:['المحرر القانوني الذكي','قوالب ومكتبة أحكام','إملاء وتدقيق'],active:true},
   {name:'باقة برو',cycle:'شهري',prices:{EG:399,SA:79,AE:79,KW:6,QA:79,default:29},features:['كل أدوات الباقة','استشارة شهرية بخصم','أولوية الدعم','شهادات معتمدة'],active:true},
   {name:'باقة الشركات',cycle:'شهري',prices:{EG:1500,SA:300,AE:300,KW:22,QA:300,default:99},features:['حتى ١٠ مستخدمين','تدريب مخصّص','حساب مدير','فوترة B2B'],active:false}
@@ -1979,7 +1982,7 @@ function addAdvertiserModal(edit){
    - قيد العمل (الوكيل): مواضيع الوكيل شغّال عليها (merged).
    - أفكار للاعتماد: مسودّات (وكيل/بشري) — اعتماد/رفض.
    - الأخبار: منتقاة بصوتنا (viewNews) + «حوّل لموضوع».
-   - المقالات: مسودّات المدونة (viewContent) → افتح → «اعتمد وانشر» مباشرة على elprofessor.net. */
+   - المقالات: مسودّات المقالات (viewContent) → افتح → «اعتمد وانشر» مباشرة على elprofessor.net. */
 function topicsTabbar(active){
   // auto = تيار مقالات المنصة الآلي، يُبرز «المقالات».
   var hi=(active==='auto'||active==='blog')?'articles':active;
@@ -2197,14 +2200,14 @@ function viewContent(v){
   const autoPub=(window.PARTS||[]).filter(a=>a.status==='published').length,autoDraft=(window.PARTS||[]).length-autoPub;
   v.innerHTML=`
     ${topicsTabbar('articles')}
-    <div class="policy" style="border-inline-start-color:var(--memory)">${svg('doc','ic')}<div><b>«المقالات» = مدوّنة الموقع فقط (<span style="direction:ltr">elprofessor.net</span>).</b> مسودّة (من موضوع/خبر/فكرة أو زر «اعمل مقال») ← <b>افتحها لتقرأ النصّ كامل</b> ← <b>اعتمد وانشر</b> فتظهر مباشرة على <span style="direction:ltr">elprofessor.net</span> وتنتقل لقائمة «منشورة». تحويل الموضوع بـ«اعمل مقال» يصل هنا كمسودّة تحت «بانتظار الاعتماد».</div></div>
-    <div class="policy" style="border-inline-start-color:var(--ai);background:var(--ai-bg)">${svg('robot','ic')}<div><b>ليست نفس القائمة:</b> «<b>تيّار المنصة الآلي</b>» لوحة مقالات <b><span style="direction:ltr">app.elprofessor.net</span></b> (شرح/قيمة تُدار على المنصّة نفسها) — <b>مخزنان منفصلان</b>، لكن مقالات «شرح المنصة» تُعكَس تلقائيًّا إلى مدوّنة الموقع هنا. ${Cst==='loading'?'…جارٍ الجلب':'المدوّنة: <b>'+money(pend)+'</b> بانتظار الاعتماد، <b>'+money(pub)+'</b> منشورة على الموقع'}. <b style="cursor:pointer;text-decoration:underline" id="ctAutoLink">افتح تيّار المنصة الآلي ←</b></div></div>
+    <div class="policy" style="border-inline-start-color:var(--memory)">${svg('doc','ic')}<div><b>«المقالات» = مقالات الموقع فقط (<span style="direction:ltr">elprofessor.net</span>).</b> مسودّة (من موضوع/خبر/فكرة أو زر «اعمل مقال») ← <b>افتحها لتقرأ النصّ كامل</b> ← <b>اعتمد وانشر</b> فتظهر مباشرة على <span style="direction:ltr">elprofessor.net</span> وتنتقل لقائمة «منشورة». تحويل الموضوع بـ«اعمل مقال» يصل هنا كمسودّة تحت «بانتظار الاعتماد».</div></div>
+    <div class="policy" style="border-inline-start-color:var(--ai);background:var(--ai-bg)">${svg('robot','ic')}<div><b>ليست نفس القائمة:</b> «<b>تيّار المنصة الآلي</b>» لوحة مقالات <b><span style="direction:ltr">app.elprofessor.net</span></b> (شرح/قيمة تُدار على المنصّة نفسها) — <b>مخزنان منفصلان</b>، لكن مقالات «شرح المنصة» تُعكَس تلقائيًّا إلى مقالات الموقع هنا. ${Cst==='loading'?'…جارٍ الجلب':'المقالات: <b>'+money(pend)+'</b> بانتظار الاعتماد، <b>'+money(pub)+'</b> منشورة على الموقع'}. <b style="cursor:pointer;text-decoration:underline" id="ctAutoLink">افتح تيّار المنصة الآلي ←</b></div></div>
     ${Cst==='error'?`<div class="policy" style="border-inline-start-color:var(--conflict);background:var(--conflict-bg);color:var(--conflict)">${svg('scale','ic')}<div>تعذّر جلب المقالات من الخادم. <b style="cursor:pointer;text-decoration:underline" onclick="EP.reload('content',()=>viewContent(document.getElementById('view')))">إعادة المحاولة</b></div></div>`:''}
     ${Cst==='loading'?`<div class="policy" style="border-inline-start-color:var(--memory)">${svg('doc','ic')}<div>…جارٍ تحميل المقالات من الخادم</div></div>`:''}
     <div class="kpis">
       <div class="kpi k-2"><div class="top"><span class="ic">${svg('doc')}</span>بانتظار الاعتماد</div><b>${money(pend)}</b><div class="sub">مسودّات جاهزة للمراجعة</div></div>
-      <div class="kpi k-3"><div class="top"><span class="ic">${svg('check')}</span>منشورة على المدونة</div><b>${money(pub)}</b><div class="sub">على <span style="direction:ltr">elprofessor.net</span></div></div>
-      <div class="kpi k-4"><div class="top"><span class="ic">${svg('robot')}</span>تيّار المنصة (app)</div><b>${money(autoPub+autoDraft)}</b><div class="sub">لوحة منفصلة — ليست المدوّنة</div></div>
+      <div class="kpi k-3"><div class="top"><span class="ic">${svg('check')}</span>منشورة على المقالات</div><b>${money(pub)}</b><div class="sub">على <span style="direction:ltr">elprofessor.net</span></div></div>
+      <div class="kpi k-4"><div class="top"><span class="ic">${svg('robot')}</span>تيّار المنصة (app)</div><b>${money(autoPub+autoDraft)}</b><div class="sub">لوحة منفصلة — ليست المقالات</div></div>
     </div>
     <div class="tabbar" id="ctTabs">
       <div class="tab${contentTab==='pending'?' on':''}" data-t="pending">بانتظار الاعتماد (${pend})</div>
@@ -2248,7 +2251,7 @@ function drawContent(){
     ? _body.map(function(b){b=String(b);return b.indexOf('## ')===0?'<h4 style="margin:14px 0 6px;font-size:15px;font-weight:800;color:var(--ink)">'+esc(b.slice(3))+'</h4>':'<p style="margin:0 0 10px;line-height:1.9;color:var(--ink-2);font-size:13.5px">'+esc(b)+'</p>';}).join('')
     : '<div style="color:var(--muted);font-size:13px">(لا يوجد نص لعرضه)</div>';
   el.innerHTML=`<div class="dh"><div class="k">مقال مدونة · ${pub?'منشور':'بانتظار اعتماد'}</div><h3>${esc(t.title)}</h3></div><div class="db">
-    <div class="route"><span class="step">المنصة · توليد بالذكاء</span><span class="arrow">←</span><span class="step" style="color:var(--memory);font-weight:800">المدونة</span><span class="arrow">←</span><span class="step" style="color:var(--gold);font-weight:800">elprofessor.net</span></div>
+    <div class="route"><span class="step">المنصة · توليد بالذكاء</span><span class="arrow">←</span><span class="step" style="color:var(--memory);font-weight:800">المقالات</span><span class="arrow">←</span><span class="step" style="color:var(--gold);font-weight:800">elprofessor.net</span></div>
     <div class="note-ai">${svg('sparkles','ic')}<div>${esc(t.by)} — راجِع المقال كامل تحت قبل الاعتماد.</div></div>
     ${_raw.excerpt?`<div class="field"><div class="lab">المقدّمة</div><div class="val" style="font-weight:600">${esc(_raw.excerpt)}</div></div>`:''}
     <div class="lab" style="margin:10px 0 4px">نص المقال</div>
@@ -2273,7 +2276,7 @@ function drawContent(){
 }
 
 /* ===== CMS HELPERS (المحتوى → الموقع) =====
-   تبويبات الأخبار/الصور/الصفحات القديمة أُزيلت (بلا واجهة خلفية). المدونة الآن تبويب واحد
+   تبويبات الأخبار/الصور/الصفحات القديمة أُزيلت (بلا واجهة خلفية). المقالات الآن تبويب واحد
    «مدونة الموقع» داخل «المواضيع». مصدر واحد فقط للنشر: الـ API الحقيقي
    (POST /api/content/articles + …/publish) الذي يغذّي elprofessor.net مباشرةً — لا دفع
    محلّي مزيّف ولا بيانات تصميمية. ما يُعتمد هنا يظهر على الموقع من نفس المصدر. */
@@ -2286,7 +2289,7 @@ function createArticleModal(edit){
   var s=openModal(edit?'تعديل مقال':'إنشاء مقال للموقع',
     '<div class="fld"><label>العنوان</label><input id="a_t" value="'+topEsc(e.title||'')+'" placeholder="عنوان المقال"></div>'+
     '<div class="row2"><div class="fld"><label>التصنيف</label><input id="a_cat" value="'+topEsc(e.cat||'')+'" placeholder="قانون الشركات"></div><div class="fld"><label>الوسم</label><input id="a_k" value="'+topEsc(e.kicker||'')+'" placeholder="تشريعات"></div></div>'+
-    '<div class="fld"><label>المقتطف</label><textarea id="a_ex" placeholder="ملخص قصير يظهر في بطاقة المدونة">'+topEsc(e.excerpt||'')+'</textarea></div>'+
+    '<div class="fld"><label>المقتطف</label><textarea id="a_ex" placeholder="ملخص قصير يظهر في بطاقة المقالات">'+topEsc(e.excerpt||'')+'</textarea></div>'+
     '<div class="fld"><label>نص المقال</label><textarea id="a_body" style="min-height:160px" placeholder="افصل بين الفقرات بسطر فارغ">'+topEsc(_bodyText)+'</textarea></div>'+
     '<div class="fld"><label>المصدر</label><input id="a_by" value="'+topEsc(e.by||'الذكاء + رأي خبير')+'"></div>'+
     '<div class="fld"><label>صورة المقال</label><input id="a_imgurl" value="'+topEsc(_imgUrl)+'" placeholder="رابط صورة المقال (https://...)" style="direction:ltr;text-align:left"></div>'+
@@ -2317,8 +2320,8 @@ function viewArticlesAuto(v){
   const pub=PARTS.filter(a=>a.status==='published').length,draft=PARTS.length-pub;
   v.innerHTML=`
     ${topicsTabbar('articles')}
-    <div class="policy" style="border-inline-start-color:var(--memory)">${svg('doc','ic')}<div><b>تيّار المنصة الآلي</b> — لوحة مقالات <b><span style="direction:ltr">app.elprofessor.net</span></b> (منفصلة عن مدوّنة الموقع). <b style="cursor:pointer;text-decoration:underline" id="artBack">→ رجوع لمقالات المدونة (<span style="direction:ltr">elprofessor.net</span>)</b></div></div>
-    <div class="policy" style="border-inline-start-color:var(--ai)">${svg('sparkles','ic')}<div><b>هذه لوحة مقالات المنصّة نفسها — «اعتمد وانشر» هنا يعني النشر على <span style="direction:ltr">app.elprofessor.net</span> (ليس المدوّنة).</b> التوليد اليومي يُنشئ مسودّات، ويعكس مقالات <b>«شرح المنصة»</b> تلقائيًّا إلى مدوّنة الموقع (النصّ يُنقّى من أي HTML قبل النشر). تحليلات الأخبار والمواضيع تأتي مسودّات — اضغط الصفّ لفتح النصّ كامل.</div></div>
+    <div class="policy" style="border-inline-start-color:var(--memory)">${svg('doc','ic')}<div><b>تيّار المنصة الآلي</b> — لوحة مقالات <b><span style="direction:ltr">app.elprofessor.net</span></b> (منفصلة عن مقالات الموقع). <b style="cursor:pointer;text-decoration:underline" id="artBack">→ رجوع لمقالات المقالات (<span style="direction:ltr">elprofessor.net</span>)</b></div></div>
+    <div class="policy" style="border-inline-start-color:var(--ai)">${svg('sparkles','ic')}<div><b>هذه لوحة مقالات المنصّة نفسها — «اعتمد وانشر» هنا يعني النشر على <span style="direction:ltr">app.elprofessor.net</span> (ليس المقالات).</b> التوليد اليومي يُنشئ مسودّات، ويعكس مقالات <b>«شرح المنصة»</b> تلقائيًّا إلى مقالات الموقع (النصّ يُنقّى من أي HTML قبل النشر). تحليلات الأخبار والمواضيع تأتي مسودّات — اضغط الصفّ لفتح النصّ كامل.</div></div>
     <div class="policy" style="border-inline-start-color:var(--gold);background:var(--gold-bg)">${svg('robot','ic')}<div><b>وكيل المقالات (AI Team):</b> يقترح مواضيع للاعتماد ويتحسّن بمرور الوقت — يعمل <b>عند الطلب</b> من قسم «الفريق (AI Team)»، لا باستقلالية كاملة. شغّل التوليد يدويًّا من هنا أو اربط n8n على <code>POST /api/bridge/content/daily-run</code> يوميًّا. <b>${money(pub)}</b> مقالًا منشورًا على المنصّة الآن.</div></div>
     ${Ast==='error'?`<div class="policy" style="border-inline-start-color:var(--conflict);background:var(--conflict-bg);color:var(--conflict)">${svg('scale','ic')}<div>تعذّر جلب المقالات من المنصة. <b style="cursor:pointer;text-decoration:underline" onclick="EP.reload('platformArticles',()=>viewArticlesAuto(document.getElementById('view')))">إعادة المحاولة</b></div></div>`:''}
     ${Ast==='loading'?`<div class="policy" style="border-inline-start-color:var(--ai)">${svg('sparkles','ic')}<div>…جارٍ التحميل من المنصة</div></div>`:''}
@@ -2418,7 +2421,7 @@ function viewTopics(v){
 // FIX1: شارة «✓ له مقال» — إشارة واضحة أنّ الموضوع اتعمله مقال بالفعل (له رابط دائم على المنصة).
 function topArticledBadge(){return '<span class="chip" style="padding:3px 10px;font-size:11.5px;cursor:default;background:var(--agree-bg);color:var(--agree);border-color:transparent;font-weight:800">'+svg('check','ic')+'له مقال</span>';}
 // FIX1: «افتح المقال» — يقفز للمقال المرتبط داخل «المقالات» (يفتحه للمراجعة/النشر). لو المقال
-// اتحذف من المدونة، «المقالات» تُفلت الانتظار بأمان ولا تفتح شيئًا (لا سلوك مزيّف).
+// اتحذف من المقالات، «المقالات» تُفلت الانتظار بأمان ولا تفتح شيئًا (لا سلوك مزيّف).
 function topOpenArticle(t){
   if(!t||!t.linked_article_id){toast('لا مقال مرتبط بهذا الموضوع');return;}
   PENDING_ARTICLE_SELECT=t.linked_article_id;   // «المقالات» تفتح هذا المقال مباشرةً
@@ -2570,7 +2573,7 @@ function topReviewModal(t){
   }else{
     artBtn=(t.title&&t.question)?'<button class="btn btn-human" id="tpr_art">'+svg('doc')+'اعمل مقال</button>':'';
   }
-  var linkedNote=t.linked_article_id?('<div class="note-ai" style="border-inline-start-color:var(--agree);background:var(--agree-bg);color:var(--agree);margin-bottom:12px">'+svg('check','ic')+'<div><b>لهذا الموضوع مقال بالفعل.</b> اضغط «افتح المقال» لمراجعته أو نشره على المدونة.</div></div>'):'';
+  var linkedNote=t.linked_article_id?('<div class="note-ai" style="border-inline-start-color:var(--agree);background:var(--agree-bg);color:var(--agree);margin-bottom:12px">'+svg('check','ic')+'<div><b>لهذا الموضوع مقال بالفعل.</b> اضغط «افتح المقال» لمراجعته أو نشره على المقالات.</div></div>'):'';
   var s=openModal('مراجعة الموضوع — '+topStatusAr(t.status),
     meta+linkedNote+
     '<div class="fld"><label>العنوان</label><input id="tpr_t" value="'+topEsc(t.title)+'"></div>'+
