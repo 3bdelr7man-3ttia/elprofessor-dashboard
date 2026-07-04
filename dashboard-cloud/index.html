@@ -356,7 +356,7 @@ const money=n=>n.toLocaleString('ar-EG');
 function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
 
 let current='inbox', selected=null, activeFilter='all', escTab='sessions', finTab='summary', usersFilter='all', courseTab='platform', invTab='investors', mktTab='campaigns', contentTab='pending';
-let usersTag='all', teamTab='experts', topicsTab='board', topicsCat='all', pendingUserFocus=null;
+let usersTag='all', teamTab='experts', topicsTab='ideas', topicsCat='all', pendingUserFocus=null;
 let role='admin';
 const ROLE_NAV={
   employee:['users','courses','topics','tutorials'],
@@ -400,7 +400,7 @@ function roleNavFor(r){
   }catch(e){}}
   return base;
 }
-function go(mod){current=mod;selected=null;activeFilter='all';escTab='sessions';finTab='summary';usersFilter='all';usersTag='all';teamTab='experts';topicsTab='board';topicsCat='all';courseTab='platform';invTab='investors';mktTab='campaigns';contentTab='pending';anFilters={seg:'all',country:'all',cat:'all',ne:'all',time:'all'};
+function go(mod){current=mod;selected=null;activeFilter='all';escTab='sessions';finTab='summary';usersFilter='all';usersTag='all';teamTab='experts';topicsTab='ideas';topicsCat='all';courseTab='platform';invTab='investors';mktTab='campaigns';contentTab='pending';anFilters={seg:'all',country:'all',cat:'all',ne:'all',time:'all'};
   document.getElementById('pageTitle').textContent=MODULES[mod].label;
   document.querySelectorAll('.nav .item').forEach(x=>x.classList.toggle('on',x.dataset.mod===mod));
   renderView();
@@ -2207,17 +2207,15 @@ function viewContent(v){
   }
   const Cst=(window.EP&&EP.state.content)||'idle';
   const pend=TOPICS.filter(t=>t.status==='pending').length,pub=TOPICS.filter(t=>t.status==='published').length;
-  const autoPub=(window.PARTS||[]).filter(a=>a.status==='published').length,autoDraft=(window.PARTS||[]).length-autoPub;
   v.innerHTML=`
     ${topicsTabbar('articles')}
     <div class="policy" style="border-inline-start-color:var(--memory)">${svg('doc','ic')}<div><b>«المقالات» = مقالات الموقع فقط (<span style="direction:ltr">elprofessor.net</span>).</b> مسودّة (من موضوع/خبر/فكرة أو زر «اعمل مقال») ← <b>افتحها لتقرأ النصّ كامل</b> ← <b>اعتمد وانشر</b> فتظهر مباشرة على <span style="direction:ltr">elprofessor.net</span> وتنتقل لقائمة «منشورة». تحويل الموضوع بـ«اعمل مقال» يصل هنا كمسودّة تحت «بانتظار الاعتماد».</div></div>
-    <div class="policy" style="border-inline-start-color:var(--ai);background:var(--ai-bg)">${svg('robot','ic')}<div><b>ليست نفس القائمة:</b> «<b>تيّار المنصة الآلي</b>» لوحة مقالات <b><span style="direction:ltr">app.elprofessor.net</span></b> (شرح/قيمة تُدار على المنصّة نفسها) — <b>مخزنان منفصلان</b>، لكن مقالات «شرح المنصة» تُعكَس تلقائيًّا إلى مقالات الموقع هنا. ${Cst==='loading'?'…جارٍ الجلب':'المقالات: <b>'+money(pend)+'</b> بانتظار الاعتماد، <b>'+money(pub)+'</b> منشورة على الموقع'}. <b style="cursor:pointer;text-decoration:underline" id="ctAutoLink">افتح تيّار المنصة الآلي ←</b></div></div>
     ${Cst==='error'?`<div class="policy" style="border-inline-start-color:var(--conflict);background:var(--conflict-bg);color:var(--conflict)">${svg('scale','ic')}<div>تعذّر جلب المقالات من الخادم. <b style="cursor:pointer;text-decoration:underline" onclick="EP.reload('content',()=>viewContent(document.getElementById('view')))">إعادة المحاولة</b></div></div>`:''}
     ${Cst==='loading'?`<div class="policy" style="border-inline-start-color:var(--memory)">${svg('doc','ic')}<div>…جارٍ تحميل المقالات من الخادم</div></div>`:''}
     <div class="kpis">
       <div class="kpi k-2"><div class="top"><span class="ic">${svg('doc')}</span>بانتظار الاعتماد</div><b>${money(pend)}</b><div class="sub">مسودّات جاهزة للمراجعة</div></div>
       <div class="kpi k-3"><div class="top"><span class="ic">${svg('check')}</span>منشورة على المقالات</div><b>${money(pub)}</b><div class="sub">على <span style="direction:ltr">elprofessor.net</span></div></div>
-      <div class="kpi k-4"><div class="top"><span class="ic">${svg('robot')}</span>تيّار المنصة (app)</div><b>${money(autoPub+autoDraft)}</b><div class="sub">لوحة منفصلة — ليست المقالات</div></div>
+      <div class="kpi k-1"><div class="top"><span class="ic">${svg('robot')}</span>النشر التلقائي</div><b>يومي</b><div class="sub">أخبار + مواضيع + ميزات — تُنشر تلقائيًّا</div></div>
     </div>
     <div class="tabbar" id="ctTabs">
       <div class="tab${contentTab==='pending'?' on':''}" data-t="pending">بانتظار الاعتماد (${pend})</div>
@@ -2234,7 +2232,6 @@ function viewContent(v){
     gb.disabled=true;EP.runDailyContent(()=>viewContent(document.getElementById('view')));
   };
   var sb=document.getElementById('ctSync');if(sb)sb.onclick=()=>{ if(window.EP)EP.syncContent(()=>viewContent(document.getElementById('view'))); };
-  var al=document.getElementById('ctAutoLink');if(al)al.onclick=()=>{topicsTab='auto';selected=null;renderView();};
   renderContent();
 }
 function renderContent(){
