@@ -5951,13 +5951,13 @@ def _sync_platform_articles():
             continue
         cat = a.get('category') or 'other'
         is_feature = (cat == 'feature')
-        # Two-stream policy (D6):
-        #   • AUTO stream — 'feature' explainers (platform features, value-of-legal-training,
-        #     human-tempered-AI) AUTO-PUBLISH. Safe because _md_to_blocks → _strip_inline_md
-        #     html-escapes every paragraph, so no markup can ever reach the live site.
-        #   • REVIEW stream — news / legal-analysis / topic-derived articles land as DRAFT
-        #     pending human review + SEO before they hit elprofessor.net.
-        is_published = is_feature or (a.get('status') == 'published')
+        # Publish policy (founder chose AUTO-PUBLISH ALL, 2026-07-04): everything the daily engine
+        # generates goes live on elprofessor.net automatically. Reversible without a deploy via env
+        # BLOG_AUTOPUBLISH_ALL=false → falls back to the old two-stream (only feature explainers auto-
+        # publish; news/legal/topic land as DRAFT for review). Rendering stays XSS-safe (blocks are
+        # html-escaped at render on the site).
+        autopublish_all = os.environ.get('BLOG_AUTOPUBLISH_ALL', 'true').strip().lower() == 'true'
+        is_published = autopublish_all or is_feature or (a.get('status') == 'published')
         art = Article(
             title=title[:500],
             excerpt=(a.get('excerpt') or '')[:1000],
