@@ -425,7 +425,7 @@ function renderView(){
   if(current==='topics'){
     // «المواضيع» = موديول واحد بستة تبويبات داخلية:
     //   المنشورة / واردة / قيد العمل (الوكيل) / أفكار للاعتماد  → viewTopics (تُفلتر بالتبويب النشط)
-    //   الأخبار → viewNews · المقالات → viewContent (مسودّات مدونة → اعتماد → نشر مباشر)
+    //   الأخبار → viewNews · المقالات → viewContent (مسودّات مقالات → اعتماد → نشر مباشر)
     //   auto = تيار مقالات المنصة الآلي (يُفتح من داخل «المقالات») · blog = اسم قديم لـ articles.
     if(topicsTab==='news')return viewNews(v);
     if(topicsTab==='auto')return viewArticlesAuto(v);
@@ -844,6 +844,9 @@ const VERIFY={verified:{t:'موثّق',cls:'s-auto'},pending:{t:'بانتظار 
 
 // قسم تحليل الطلب — مين بيسأل عن إيه (من الشات)، من أي دولة، تصنيف الذكاء، والخدمات المطلوبة اللي مش مقدّمينها.
 const SEG_LABEL={individual:'أفراد',employee:'موظفون',government:'حكومي',student:'طلاب',lawyer:'محامون',senior:'محامٍ خبير',prof:'أستاذ جامعة',trainer:'مدرّبون',company:'شركات',firm:'شركة محاماة',grad:'خريج جديد',influencer:'مؤثر/رائد أعمال',researcher:'باحثون',prosecutor:'وكلاء نيابة',unknown:'غير محدد'};
+// توحيد أسماء الفئات: أي قيمة إنجليزية تتحوّل للعربي (فتختفي «civil» وتندمج مع «مدني»).
+const CAT_NORM={civil:'مدني',criminal:'جنائي',penal:'جنائي',commercial:'تجاري',business:'تجاري',labor:'عمالي',labour:'عمالي',employment:'عمالي',family:'أحوال شخصية','personal status':'أحوال شخصية',ip:'ملكية فكرية','intellectual property':'ملكية فكرية',real_estate:'عقاري وتوثيق','real estate':'عقاري وتوثيق',realty:'عقاري وتوثيق',notarization:'عقاري وتوثيق',company:'شركات',companies:'شركات',corporate:'شركات',general:'عام',other:'عام',tax:'ضرائب',taxes:'ضرائب',administrative:'إداري',constitutional:'دستوري',arbitration:'تحكيم'};
+function catAr(c){c=String(c==null?'':c).trim();return CAT_NORM[c.toLowerCase()]||c;}
 const COUNTRY_LABEL={egypt:'مصر',saudi:'السعودية',uae:'الإمارات',qatar:'قطر',other:'دول أخرى',unknown:'غير محدد'};
 // حالة تصفية «تحليل الطلب» — تصفّي قائمة «أحدث الأسئلة» (لكل صفّ حقوله من الجسر). اللوحات
 // المجمّعة تظل على كامل البيانات (مبيّن في تلميحها) لأن التجميع يتم في المنصة على كل الأرشيف.
@@ -1975,7 +1978,7 @@ function addAdvertiserModal(edit){
 }
 
 /* ===== «المواضيع» — موديول واحد يوحّد خطّ الإنتاج (D6, re-architect) =====
-   فكرة → (خبر) → موضوع → نقاش → مقال → مدونة (SEO، بموافقة).
+   فكرة → (خبر) → موضوع → نقاش → مقال → مقالات (SEO، بموافقة).
    ستة تبويبات داخلية تتشارك شريطًا واحدًا + «لوحة تحليل AI» + «فلتر بالفئة»:
    - المنشورة: مواضيع حيّة على بورد المنصة (badge مصدر + فئة + تفاعل + «اعمل مقال»).
    - واردة: طلبات من خبراء/الخارج — اعتماد/توجيه.
@@ -2023,16 +2026,16 @@ function topicsForActiveTab(){
     // «قيد العمل (الوكيل)»: أظهر أي موضوع الوكيل شغّال على مقاله الآن مهما كانت حالته الأصلية.
     if(tab==='working'&&TOPIC_GENERATING[t.id])inTab=true;
     if(!inTab)return false;
-    if(topicsCat!=='all'&&(t.category||'')!==topicsCat)return false;
+    if(topicsCat!=='all'&&catAr(t.category||'')!==topicsCat)return false;
     return true;
   });
 }
 // شرائح فلتر الفئة — قيمة المحامي: فلتر واحد يجمع كل مواضيع المجال. مبنيّة من الفئات الحقيقية.
 function topicCatChips(){
   var seen={},cats=[];
-  (PTOPICS||[]).forEach(function(t){var c=t.category||'';if(c&&!seen[c]){seen[c]=1;cats.push(c);}});
+  (PTOPICS||[]).forEach(function(t){var c=catAr(t.category||'');if(c&&!seen[c]){seen[c]=1;cats.push(c);}});
   var an=(window.PTOPICS_ANALYSIS&&PTOPICS_ANALYSIS.by_category)||[];
-  an.forEach(function(x){var c=x.category||'';if(c&&c!=='غير مصنّف'&&!seen[c]){seen[c]=1;cats.push(c);}});
+  an.forEach(function(x){var c=catAr(x.category||'');if(c&&c!=='غير مصنّف'&&!seen[c]){seen[c]=1;cats.push(c);}});
   cats.sort();
   var chips='<span class="chip'+(topicsCat==='all'?' on':'')+'" data-cat="all">كل الفئات</span>';
   chips+=cats.map(function(c){return '<span class="chip'+(topicsCat===c?' on':'')+'" data-cat="'+esc(c)+'">'+esc(c)+'</span>';}).join('');
@@ -2181,7 +2184,7 @@ function viewComments(v){
   wireOpinionsAnalyticsPanel(v);
 }
 
-/* ===== CONTENT / BLOG VIEW (تبويب «مدونة الموقع») ===== */
+/* ===== CONTENT / BLOG VIEW (تبويب «مقالات الموقع») ===== */
 // المواضيع/المقالات: تُجلب حيّة من /api/content/articles عبر طبقة EP (window.TOPICS).
 // لا مصدر تصميمي — إن فشل الجلب تبقى القائمة فارغة وتظهر لافتة «أعد المحاولة».
 var TOPICS=[];
@@ -2250,7 +2253,7 @@ function drawContent(){
   var _bodyHtml=_body.length
     ? _body.map(function(b){b=String(b);return b.indexOf('## ')===0?'<h4 style="margin:14px 0 6px;font-size:15px;font-weight:800;color:var(--ink)">'+esc(b.slice(3))+'</h4>':'<p style="margin:0 0 10px;line-height:1.9;color:var(--ink-2);font-size:13.5px">'+esc(b)+'</p>';}).join('')
     : '<div style="color:var(--muted);font-size:13px">(لا يوجد نص لعرضه)</div>';
-  el.innerHTML=`<div class="dh"><div class="k">مقال مدونة · ${pub?'منشور':'بانتظار اعتماد'}</div><h3>${esc(t.title)}</h3></div><div class="db">
+  el.innerHTML=`<div class="dh"><div class="k">مقال مقالات · ${pub?'منشور':'بانتظار اعتماد'}</div><h3>${esc(t.title)}</h3></div><div class="db">
     <div class="route"><span class="step">المنصة · توليد بالذكاء</span><span class="arrow">←</span><span class="step" style="color:var(--memory);font-weight:800">المقالات</span><span class="arrow">←</span><span class="step" style="color:var(--gold);font-weight:800">elprofessor.net</span></div>
     <div class="note-ai">${svg('sparkles','ic')}<div>${esc(t.by)} — راجِع المقال كامل تحت قبل الاعتماد.</div></div>
     ${_raw.excerpt?`<div class="field"><div class="lab">المقدّمة</div><div class="val" style="font-weight:600">${esc(_raw.excerpt)}</div></div>`:''}
@@ -2277,7 +2280,7 @@ function drawContent(){
 
 /* ===== CMS HELPERS (المحتوى → الموقع) =====
    تبويبات الأخبار/الصور/الصفحات القديمة أُزيلت (بلا واجهة خلفية). المقالات الآن تبويب واحد
-   «مدونة الموقع» داخل «المواضيع». مصدر واحد فقط للنشر: الـ API الحقيقي
+   «مقالات الموقع» داخل «المواضيع». مصدر واحد فقط للنشر: الـ API الحقيقي
    (POST /api/content/articles + …/publish) الذي يغذّي elprofessor.net مباشرةً — لا دفع
    محلّي مزيّف ولا بيانات تصميمية. ما يُعتمد هنا يظهر على الموقع من نفس المصدر. */
 function createArticleModal(edit){
@@ -2386,7 +2389,7 @@ function renderArticlesAuto(){
 }
 // بيانات كل تبويب موضوعات داخلي (عنوان + شرح الورك فلو + حالة فارغة).
 var TOPIC_TAB_META={
-  board:   {t:'المنشورة',           note:'مواضيع حيّة على بورد المنصة — الناس تناقش وتعلّق. لكل موضوع <b>مصدره</b> و<b>فئته</b> و<b>تفاعله</b>. حوّل الأقوى إلى <b>مقال SEO</b> للمدونة.', empty:'لا مواضيع منشورة على البورد بعد.'},
+  board:   {t:'المنشورة',           note:'مواضيع حيّة على بورد المنصة — الناس تناقش وتعلّق. لكل موضوع <b>مصدره</b> و<b>فئته</b> و<b>تفاعله</b>. حوّل الأقوى إلى <b>مقال SEO</b> للمقالات.', empty:'لا مواضيع منشورة على البورد بعد.'},
   incoming:{t:'واردة',              note:'طلبات من <b>خبراء/الخارج</b> — راجعها ثم <b>اعتمد</b> لتصعد للبورد، أو <b>وجّهها للوكيل</b> ليشتغل عليها.', empty:'لا مواضيع واردة الآن.'},
   working: {t:'قيد العمل (الوكيل)',  note:'مواضيع <b>الوكيل الذكي شغّال عليها</b> (دمج آراء/صياغة). راجع الناتج ثم <b>انشر</b> على البورد عند الجهوز.', empty:'لا مواضيع قيد عمل الوكيل الآن.'},
   ideas:   {t:'أفكار للاعتماد',      note:'مسودّات مقترحة (الوكيل أو بشري). <b>اعتمد</b> الفكرة لتصعد للبورد، أو <b>ارفض</b>.', empty:'لا أفكار بانتظار الاعتماد — اضغط «+ فكرة/موضوع» لإضافة واحدة.'}
