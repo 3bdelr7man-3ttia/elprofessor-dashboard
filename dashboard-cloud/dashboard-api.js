@@ -359,6 +359,8 @@
             author_email: o.author_email || "",
             body: o.body || "",
             status: o.status || "approved",
+            editor_reply: o.editor_reply || "",
+            editor_reply_by: o.editor_reply_by || "",
             date: arDate(at),
             at: at ? (Date.parse(at) || 0) : 0,
           };
@@ -1406,6 +1408,18 @@
     post("/platform-opinions/" + encodeURIComponent(o.id) + "/reject", {})
       .then(function () { note("رُفض الرأي — لن يظهر على الموضوع"); EP.reload("platformOpinions", after); })
       .catch(function (e) { quietToast((e && e.message) || "تعذّر رفض الرأي"); if (after) after(); });
+  };
+  // Editors DELETE a published comment, or REPLY to it (manual text, or {ai:true} to let the AI draft it).
+  EP.deleteOpinion = function (o, after) {
+    api("/platform-opinions/" + encodeURIComponent(o.id), { method: "DELETE" })
+      .then(function () { note("حُذف التعليق"); EP.reload("platformOpinionsApproved", after); })
+      .catch(function (e) { quietToast((e && e.message) || "تعذّر حذف التعليق"); if (after) after(); });
+  };
+  EP.replyOpinion = function (o, opts, after) {
+    opts = opts || {};
+    post("/platform-opinions/" + encodeURIComponent(o.id) + "/reply", { reply: opts.reply || "", ai: !!opts.ai })
+      .then(function () { note("أُرسل الرد — ظهر تحت التعليق على المنصة"); EP.reload("platformOpinionsApproved", after); })
+      .catch(function (e) { quietToast((e && e.message) || "تعذّر إرسال الرد"); if (after) after(); });
   };
 
   // «ولّد بالذكاء»: trigger a generation run on the platform, then poll-sync the new drafts into the

@@ -2122,20 +2122,30 @@ function opinionsApprovedPanel(){
   if(window.EP){EP.ensure('platformOpinionsApproved',()=>renderView());}
   var st=(window.EP&&EP.state.platformOpinionsApproved)||'idle';
   var list=(window.POPINIONS_APPROVED)||[];
-  var head='<section class="panel" style="margin-top:16px;border:1px solid var(--agree)"><div class="ph"><h3>'+svg('check')+' التعليقات المعتمدة/المنشورة</h3><span class="hint">ظاهرة على المواضيع للجمهور — قراءة فقط</span><span class="n" id="opApN" style="margin-inline-start:auto">'+money(list.length)+'</span><button class="btn btn-ghost" id="opApRefresh" style="flex:none;min-width:auto;padding:6px 12px;font-size:12px">'+svg('sparkles')+'حدّث</button></div><div id="opApRows">';
+  var head='<section class="panel" style="margin-top:16px;border:1px solid var(--agree)"><div class="ph"><h3>'+svg('check')+' التعليقات المعتمدة/المنشورة</h3><span class="hint">ظاهرة على المواضيع للجمهور — تقدر ترُدّ عليها أو تحذفها</span><span class="n" id="opApN" style="margin-inline-start:auto">'+money(list.length)+'</span><button class="btn btn-ghost" id="opApRefresh" style="flex:none;min-width:auto;padding:6px 12px;font-size:12px">'+svg('sparkles')+'حدّث</button></div><div id="opApRows">';
   var foot='</div></section>';
   if(st==='error')return head+'<div class="policy" style="margin:12px;border-inline-start-color:var(--conflict);background:var(--conflict-bg);color:var(--conflict)">'+svg('scale','ic')+'<div>تعذّر جلب التعليقات المعتمدة من المنصة. <b style="cursor:pointer;text-decoration:underline" onclick="EP.reload(\'platformOpinionsApproved\',()=>renderView())">إعادة المحاولة</b></div></div>'+foot;
   if(st==='loading'||st==='idle')return head+'<div style="padding:24px;text-align:center;color:var(--muted)">…جارٍ تحميل التعليقات المعتمدة</div>'+foot;
   if(!list.length)return head+'<div style="padding:24px;text-align:center;color:var(--muted)">لا تعليقات معتمدة بعد. التعليقات المطابقة للموضوع تُعتمد آليًا بالذكاء وتظهر هنا.</div>'+foot;
   var rows=list.map(function(o){
+    var reply=o.editor_reply?('<div style="margin:8px 0 2px;padding:8px 11px;border-inline-start:3px solid var(--ai);background:var(--ai-bg);border-radius:8px"><div style="font-size:11.5px;font-weight:800;color:var(--ai);margin-bottom:2px">'+svg('shield','ic')+' رد '+topEsc(o.editor_reply_by||'هيئة التحرير')+'</div><div style="font-size:13px;color:var(--ink)">'+topEsc(o.editor_reply)+'</div></div>'):'';
+    var acts='<div style="display:flex;gap:7px;margin-top:8px;flex-wrap:wrap">'+
+      (o.editor_reply?'':'<button class="btn btn-ghost" data-air="'+topEsc(o.id)+'" style="flex:none;min-width:auto;padding:5px 11px;font-size:12px">'+svg('robot')+' رد بالذكاء</button>')+
+      '<button class="btn btn-ghost" data-rep="'+topEsc(o.id)+'" style="flex:none;min-width:auto;padding:5px 11px;font-size:12px">'+svg('hands')+' '+(o.editor_reply?'عدّل الرد':'رد يدوي')+'</button>'+
+      '<button class="btn btn-ghost" data-del="'+topEsc(o.id)+'" style="flex:none;min-width:auto;padding:5px 11px;font-size:12px;color:var(--conflict)">'+svg('x')+' حذف</button></div>';
     return '<div class="row esc-row" style="grid-template-columns:1fr;align-items:flex-start;cursor:default">'+
-      '<div class="c c1" style="align-items:flex-start"><div class="src-ic" style="background:var(--agree-bg);color:var(--agree)">'+svg('check')+'</div><div style="min-width:0"><div class="parties" style="white-space:normal">'+topEsc(o.body)+'</div><div class="from" style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-top:5px"><span class="chip" style="padding:1px 8px;font-size:10.5px;cursor:default">'+svg('doc','ic')+' '+topEsc(o.topic_title||'—')+'</span>'+(o.author_email?'<span style="font-size:11px;color:var(--muted);direction:ltr">'+topEsc(o.author_email)+'</span>':'')+(o.date?'<span style="font-size:11px;color:var(--muted)">'+topEsc(o.date)+'</span>':'')+'</div></div></div>'+
+      '<div class="c c1" style="align-items:flex-start"><div class="src-ic" style="background:var(--agree-bg);color:var(--agree)">'+svg('check')+'</div><div style="min-width:0;flex:1"><div class="parties" style="white-space:normal">'+topEsc(o.body)+'</div><div class="from" style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-top:5px"><span class="chip" style="padding:1px 8px;font-size:10.5px;cursor:default">'+svg('doc','ic')+' '+topEsc(o.topic_title||'—')+'</span>'+(o.author_email?'<span style="font-size:11px;color:var(--muted);direction:ltr">'+topEsc(o.author_email)+'</span>':'')+(o.date?'<span style="font-size:11px;color:var(--muted)">'+topEsc(o.date)+'</span>':'')+'</div>'+reply+acts+'</div></div>'+
     '</div>';
   }).join('');
   return head+rows+foot;
 }
 function wireApprovedOpinionsPanel(v){
-  var rb=(v||document).querySelector('#opApRefresh');if(rb)rb.onclick=function(){if(window.EP)EP.reload('platformOpinionsApproved',()=>renderView());};
+  var root=v||document;
+  var rb=root.querySelector('#opApRefresh');if(rb)rb.onclick=function(){if(window.EP)EP.reload('platformOpinionsApproved',()=>renderView());};
+  function find(id){return ((window.POPINIONS_APPROVED)||[]).filter(function(x){return String(x.id)===String(id);})[0];}
+  root.querySelectorAll('[data-del]').forEach(function(b){b.onclick=function(){var o=find(b.dataset.del);if(!o||!window.EP)return;if(!confirm('حذف التعليق نهائيًا؟'))return;b.disabled=true;EP.deleteOpinion(o,function(){renderView();});};});
+  root.querySelectorAll('[data-air]').forEach(function(b){b.onclick=function(){var o=find(b.dataset.air);if(!o||!window.EP)return;b.disabled=true;b.innerHTML='…جارٍ توليد الرد';EP.replyOpinion(o,{ai:true},function(){renderView();});};});
+  root.querySelectorAll('[data-rep]').forEach(function(b){b.onclick=function(){var o=find(b.dataset.rep);if(!o||!window.EP)return;var t=window.prompt('اكتب ردّ هيئة التحرير على التعليق:',o.editor_reply||'');if(t==null)return;t=String(t).trim();if(!t)return;b.disabled=true;EP.replyOpinion(o,{reply:t},function(){renderView();});};});
 }
 
 /* لوحة تحليل التعليقات + «استنتاجات» — أرقام حقيقية من /api/platform-opinions-analysis
