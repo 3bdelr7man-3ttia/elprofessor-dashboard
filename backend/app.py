@@ -1412,7 +1412,7 @@ def platform_messages():
     return _platform_proxy('GET', '/api/bridge/messages', params={'status': request.args.get('status') or 'new'})
 
 
-def _platform_proxy(method, path, params=None, json_body=None):
+def _platform_proxy(method, path, params=None, json_body=None, timeout=12):
     """Proxy an admin action to the main platform via the shared service secret.
     Same pattern as platform_metrics/platform_users above, factored out because the
     approval endpoints below all need it. Returns a Flask (json, status) response."""
@@ -1425,7 +1425,7 @@ def _platform_proxy(method, path, params=None, json_body=None):
             params=params,
             json=json_body,
             headers={'X-ELP-Metrics-Secret': PLATFORM_METRICS_SECRET},
-            timeout=12,
+            timeout=timeout,
         )
     except Exception:
         return jsonify({'error': 'تعذر الاتصال بالمنصة'}), 502
@@ -2071,6 +2071,27 @@ def platform_opinions_approve(opinion_id):
 @roles_required('admin', 'employee')
 def platform_opinions_reject(opinion_id):
     return _platform_proxy('POST', f"/api/bridge/opinions/{opinion_id}/reject")
+
+
+@app.route('/api/platform-opinions/<opinion_id>', methods=['DELETE'])
+@token_required
+@roles_required('admin', 'employee')
+@module_required('topics')
+def platform_opinions_delete(opinion_id):
+    """Editors delete a comment on the platform."""
+    return _platform_proxy('DELETE', f"/api/bridge/opinions/{opinion_id}")
+
+
+@app.route('/api/platform-opinions/<opinion_id>/reply', methods=['POST'])
+@token_required
+@roles_required('admin', 'employee')
+@module_required('topics')
+def platform_opinions_reply(opinion_id):
+    """Editors reply to a comment (manual text, or AI-drafted when {ai:true} with no text).
+    Longer timeout because the AI draft round-trips through the platform's LLM."""
+    body = request.get_json(silent=True) or {}
+    return _platform_proxy('POST', f"/api/bridge/opinions/{opinion_id}/reply",
+                           json_body={'reply': body.get('reply', ''), 'ai': bool(body.get('ai'))}, timeout=60)
 
 
 # --- «تحليل التعليقات و«استنتاجات»» (Opinions analytics/insights): real aggregation from the
