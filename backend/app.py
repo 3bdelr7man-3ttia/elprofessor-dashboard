@@ -1523,6 +1523,34 @@ def platform_trainer_decide(application_id, action):
     )
 
 
+@app.route('/api/platform-join-requests', methods=['GET'])
+@token_required
+@roles_required('admin', 'employee')   # employee may VIEW pending join requests (follow-up)
+def platform_join_requests():
+    """Section-key join requests captured on the platform (Phase 2). Thin proxy to the platform
+    bridge; the admin grants/rejects → the platform flips the user's section key."""
+    return _platform_proxy(
+        'GET',
+        '/api/bridge/join-requests',
+        params={'status': request.args.get('status') or 'all',
+                'section': request.args.get('section') or ''},
+    )
+
+
+@app.route('/api/platform-join-requests/<request_id>/<action>', methods=['POST'])
+@token_required
+@roles_required('admin', 'employee')
+def platform_join_request_decide(request_id, action):
+    if action not in ('approve', 'reject'):
+        return jsonify({'error': 'إجراء غير معروف'}), 400
+    body = request.json or {}
+    return _platform_proxy(
+        'POST',
+        f"/api/bridge/join-requests/{request_id}/decide",
+        json_body={'decision': action, 'admin_note': body.get('admin_note') or ''},
+    )
+
+
 @app.route('/api/platform-program-requests', methods=['GET'])
 @token_required
 @roles_required('admin', 'employee')   # employee may VIEW pending program requests (follow-up)

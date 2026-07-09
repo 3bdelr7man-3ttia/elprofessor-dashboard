@@ -514,6 +514,22 @@
           });
         }).catch(function () {})
       );
+      // Section-key join requests (Phase 2): خبير/محامي/ناشر/مبدع/تسويق — اعتماد المفتاح يفتح القسم للعضو.
+      jobs.push(
+        get("/platform-join-requests?status=pending").then(function (a) {
+          var reqs = (a && a.requests) || [];
+          var SEC = { expert_offers: "خبير معتمد", lawyer_offers: "محامٍ معتمد", publisher: "ناشر", creative: "مبدع", marketing: "مزوّد تسويق" };
+          reqs.forEach(function (jr) {
+            realRows.push({
+              out: "طلب انضمام — " + (SEC[jr.section] || jr.section), from: "مفاتيح الأقسام", src: "cap", dest: "team",
+              triage: "human", sla: "اعتماد المفتاح", slaWarn: false,
+              note: shortNote(jr.note) || "طلب انضمام جديد — راجع البيانات واعتمد أو ارفض.",
+              ref: "JR-" + jr.id, who: jr.user_name || jr.user_email || "—",
+              apiKind: "join", apiId: jr.id,
+            });
+          });
+        }).catch(function () {})
+      );
       // تسليمات الشات (P15): رسائل تواصل جديدة تُكتب محليًّا في «الرسائل» ← تظهر في الوارد كذلك.
       jobs.push(
         get("/messages?status=new").then(function (a) {
@@ -1188,6 +1204,8 @@
   EP.decideInboxItem = function (i, action, after) {
     var path = i.apiKind === "trainer"
       ? "/platform-trainer-applications/" + i.apiId + "/" + action
+      : i.apiKind === "join"
+      ? "/platform-join-requests/" + i.apiId + "/" + action
       : "/platform-program-requests/" + i.apiId + "/" + action;
     post(path, { admin_note: "" })
       .then(function () { note(action === "approve" ? "تم الاعتماد ✓" : "تم الرفض"); EP.reload("inbox", after); })
