@@ -514,6 +514,21 @@
           });
         }).catch(function () {})
       );
+      // Topics pending review (founder review 2026-07-09): موضوع عضو لازم يتراجع قبل ما ينزل اللوحة العامة.
+      jobs.push(
+        get("/platform-pending-topics").then(function (a) {
+          var rows = Array.isArray(a) ? a : ((a && a.topics) || []);
+          rows.forEach(function (t) {
+            realRows.push({
+              out: "موضوع بانتظار المراجعة", from: "المواضيع", src: "layers", dest: "topics",
+              triage: "human", sla: "مراجعة النشر", slaWarn: false,
+              note: (t.title || "موضوع جديد") + " — " + shortNote(t.summary || t.question) + " · راجع واعتمد أو ارفض النشر.",
+              ref: "TPC-" + t.id, who: (t.category || "عضو المنصة"),
+              apiKind: "topic", apiId: t.id,
+            });
+          });
+        }).catch(function () {})
+      );
       // Section-key join requests (Phase 2): خبير/محامي/ناشر/مبدع/تسويق — اعتماد المفتاح يفتح القسم للعضو.
       jobs.push(
         get("/platform-join-requests?status=pending").then(function (a) {
@@ -1206,6 +1221,8 @@
       ? "/platform-trainer-applications/" + i.apiId + "/" + action
       : i.apiKind === "join"
       ? "/platform-join-requests/" + i.apiId + "/" + action
+      : i.apiKind === "topic"
+      ? "/platform-pending-topics/" + i.apiId + "/" + action
       : "/platform-program-requests/" + i.apiId + "/" + action;
     post(path, { admin_note: "" })
       .then(function () { note(action === "approve" ? "تم الاعتماد ✓" : "تم الرفض"); EP.reload("inbox", after); })

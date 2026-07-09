@@ -1551,6 +1551,24 @@ def platform_join_request_decide(request_id, action):
     )
 
 
+@app.route('/api/platform-pending-topics', methods=['GET'])
+@token_required
+@roles_required('admin', 'employee')   # employee may VIEW topics pending review
+def platform_pending_topics():
+    """Member-authored topics awaiting review before they hit the public board (founder review
+    2026-07-09). Thin proxy to the platform bridge, filtered to status=pending_review."""
+    return _platform_proxy('GET', '/api/bridge/topics', params={'status': 'pending_review'})
+
+
+@app.route('/api/platform-pending-topics/<topic_id>/<action>', methods=['POST'])
+@token_required
+@roles_required('admin', 'employee')
+def platform_pending_topic_decide(topic_id, action):
+    if action not in ('approve', 'reject'):
+        return jsonify({'error': 'إجراء غير معروف'}), 400
+    return _platform_proxy('POST', f"/api/bridge/topics/{topic_id}/{action}")
+
+
 @app.route('/api/platform-program-requests', methods=['GET'])
 @token_required
 @roles_required('admin', 'employee')   # employee may VIEW pending program requests (follow-up)
