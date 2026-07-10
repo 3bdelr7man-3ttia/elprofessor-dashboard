@@ -545,6 +545,67 @@
           });
         }).catch(function () {})
       );
+      // R1 — دفعات محلية (InstaPay/فودافون) بانتظار التأكيد. التأكيد ينفّذ المنح + الإيميل على المنصة (لا نكرّره هنا).
+      jobs.push(
+        get("/platform-manual-payments?status=pending_review").then(function (a) {
+          var pays = (a && a.payments) || [];
+          pays.forEach(function (p) {
+            realRows.push({
+              out: "دفعة يدوية بانتظار التأكيد", from: "الدفع المحلي", src: "wallet", dest: "escrow",
+              triage: "human", sla: "طابِق الإيصال وأكّد", slaWarn: true,
+              note: (p.product_label || p.product_type || "منتج") + " · " + (p.amount != null ? p.amount : "") + " " + (p.currency || "EGP") + (p.method ? " · " + p.method : "") + (p.reference_number ? " · مرجع " + p.reference_number : "") + " — أكّد بعد مطابقة الإيصال.",
+              ref: "PAY-" + p.id, who: p.user_name || p.user_email || p.user_phone || "—",
+              apiKind: "manual_payment", apiId: p.id, canReject: true,
+              approveLabel: "تأكيد الدفعة", proofUrl: p.screenshot_url || "",
+            });
+          });
+        }).catch(function () {})
+      );
+      // R1 — أعمال ركن الإبداع بانتظار المراجعة.
+      jobs.push(
+        get("/platform-creative?status=pending_review").then(function (a) {
+          var items = (a && a.items) || [];
+          items.forEach(function (c) {
+            realRows.push({
+              out: "عمل إبداعي بانتظار المراجعة", from: "ركن الإبداع", src: "sparkles", dest: "topics",
+              triage: "human", sla: "اعتماد النشر", slaWarn: false,
+              note: (c.title || "عمل جديد") + (c.kind ? " · " + c.kind : "") + " — راجع واعتمد أو ارفض النشر.",
+              ref: "CRV-" + c.id, who: c.creator_name || c.creator_email || "—",
+              apiKind: "creative", apiId: c.id, canReject: true, approveLabel: "اعتماد ونشر",
+            });
+          });
+        }).catch(function () {})
+      );
+      // R1 — كتب/أعمال معرفية بانتظار المراجعة (⚠️ ننبّه لو بلا ملف).
+      jobs.push(
+        get("/platform-knowledge-review?status=pending_review").then(function (a) {
+          var items = (a && a.items) || [];
+          items.forEach(function (k) {
+            realRows.push({
+              out: "كتاب/عمل بانتظار المراجعة", from: "سوق المعرفة", src: "book", dest: "knowledge",
+              triage: "human", sla: "اعتماد النشر", slaWarn: false,
+              note: (k.title || "عمل جديد") + (k.file_url ? "" : " · ⚠️ بلا ملف PDF") + " — راجع واعتمد أو ارفض.",
+              ref: "KNW-" + k.id, who: k.owner_name || k.owner_email || "—",
+              apiKind: "book", apiId: k.id, canReject: true, approveLabel: "اعتماد ونشر",
+            });
+          });
+        }).catch(function () {})
+      );
+      // R1 — طلبات توثيق بلا خبير متاح (routed_admin): حوّلها لخبير معتمد. حلقة المنتج الأساسية.
+      jobs.push(
+        get("/platform-verify?status=routed_admin").then(function (a) {
+          var reqs = (a && a.requests) || [];
+          reqs.forEach(function (rq) {
+            realRows.push({
+              out: "طلب توثيق بلا خبير — يحتاج توجيهًا", from: "توثيق الإجابات", src: "cap", dest: "team",
+              triage: "human", sla: "حوّله لخبير", slaWarn: true,
+              note: shortNote(rq.question) + (rq.specialty ? " · تخصص: " + rq.specialty : "") + " — اختر خبيرًا معتمدًا ووجّه الطلب إليه.",
+              ref: "VRF-" + rq.id, who: rq.user_name || rq.user_email || "—",
+              apiKind: "verify", apiId: rq.id, candidates: rq.candidate_experts || [],
+            });
+          });
+        }).catch(function () {})
+      );
       // تسليمات الشات (P15): رسائل تواصل جديدة تُكتب محليًّا في «الرسائل» ← تظهر في الوارد كذلك.
       jobs.push(
         get("/messages?status=new").then(function (a) {
@@ -564,11 +625,13 @@
         get("/platform-leads?status=new").then(function (a) {
           var leads = (a && (a.leads || a.items)) || (Array.isArray(a) ? a : []);
           (leads || []).slice(0, 25).forEach(function (l) {
+            var lid = l.id || l._id;
             realRows.push({
               out: "عميل محتمل جديد", from: "الشات", src: "users", dest: "users",
-              triage: "human", sla: "متابعة", slaWarn: false, viewOnly: true,
+              triage: "human", sla: "متابعة", slaWarn: false,
               note: shortNote(l.need || l.topic || l.summary || "عميل محتمل من محادثة الشات"),
-              ref: "LEAD-" + (l.id || l._id || "?"), who: l.name || l.full_name || l.email || "—",
+              ref: "LEAD-" + (lid || "?"), who: l.name || l.full_name || l.email || "—",
+              apiKind: lid ? "lead" : undefined, apiId: lid, resolve: !!lid, viewOnly: !lid,
             });
           });
         }).catch(function () {})
@@ -578,11 +641,13 @@
         get("/platform-messages?status=new").then(function (a) {
           var pms = (a && (a.messages || a.items)) || (Array.isArray(a) ? a : []);
           (pms || []).slice(0, 25).forEach(function (m) {
+            var pmid = m.id || m._id;
             realRows.push({
               out: "رسالة من المنصة", from: "الشات", src: "inbox", dest: "messages",
-              triage: "human", sla: "بانتظار الرد", slaWarn: false, viewOnly: true,
+              triage: "human", sla: "بانتظار الرد", slaWarn: false,
               note: shortNote(m.body || m.text || m.summary || m.topic),
-              ref: "PMSG-" + (m.id || m._id || "?"), who: m.name || m.user_name || m.email || "—",
+              ref: "PMSG-" + (pmid || "?"), who: m.name || m.user_name || m.email || "—",
+              apiKind: pmid ? "message" : undefined, apiId: pmid, resolve: !!pmid, viewOnly: !pmid,
             });
           });
         }).catch(function () {})
@@ -1215,18 +1280,42 @@
       });
   };
 
-  // اعتماد بند وارد حقيقي (مدرّب/برنامج)
+  // اعتماد/رفض بند وارد حقيقي (مدرّب/برنامج/انضمام/موضوع/إبداع/كتاب/دفعة يدوية).
   EP.decideInboxItem = function (i, action, after) {
-    var path = i.apiKind === "trainer"
-      ? "/platform-trainer-applications/" + i.apiId + "/" + action
-      : i.apiKind === "join"
-      ? "/platform-join-requests/" + i.apiId + "/" + action
-      : i.apiKind === "topic"
-      ? "/platform-pending-topics/" + i.apiId + "/" + action
-      : "/platform-program-requests/" + i.apiId + "/" + action;
-    post(path, { admin_note: "" })
+    var path, body = { admin_note: "" };
+    switch (i.apiKind) {
+      case "trainer":  path = "/platform-trainer-applications/" + i.apiId + "/" + action; break;
+      case "join":     path = "/platform-join-requests/" + i.apiId + "/" + action; break;
+      case "topic":    path = "/platform-pending-topics/" + i.apiId + "/" + action; break;
+      case "creative": path = "/platform-creative/" + i.apiId + "/" + action; break;
+      case "manual_payment":
+        // المنصة تقبل confirm/reject؛ نترجم اعتماد→confirm.
+        path = "/platform-manual-payments/" + i.apiId + "/" + (action === "approve" ? "confirm" : "reject"); break;
+      case "book":
+        path = "/platform-knowledge/" + encodeURIComponent(i.apiId) + "/decide";
+        body = { decision: action, admin_note: "" }; break;
+      default:         path = "/platform-program-requests/" + i.apiId + "/" + action;
+    }
+    post(path, body)
       .then(function () { note(action === "approve" ? "تم الاعتماد ✓" : "تم الرفض"); EP.reload("inbox", after); })
       .catch(function (e) { quietToast((e && e.message) || "تعذّر تنفيذ العملية"); if (after) after(); });
+  };
+
+  // إنهاء بند «عرض فقط» (عميل محتمل/رسالة منصة) عبر جسر resolve.
+  EP.resolveInboxItem = function (i, after) {
+    var path = i.apiKind === "message"
+      ? "/platform-messages/" + encodeURIComponent(i.apiId) + "/resolve"
+      : "/platform-leads/" + encodeURIComponent(i.apiId) + "/resolve";
+    post(path, {})
+      .then(function () { note("اتقفل البند ✓"); EP.reload("inbox", after); })
+      .catch(function (e) { quietToast((e && e.message) || "تعذّر تنفيذ العملية"); if (after) after(); });
+  };
+
+  // توثيق: تحويل طلب بلا خبير إلى خبير معتمد محدَّد (يعيد فتحه ويُشعره).
+  EP.reassignVerify = function (reqId, expertEmail, after) {
+    post("/platform-verify/" + encodeURIComponent(reqId) + "/reassign", { expert_email: expertEmail })
+      .then(function () { note("اتحوّل الطلب للخبير ✓"); EP.reload("inbox", after); })
+      .catch(function (e) { quietToast((e && e.message) || "تعذّر التحويل"); if (after) after(); });
   };
 
   // تحليل الطلب (D2): شغّل مصنّف الأسئلة بالذكاء على رسائل الشات غير المصنّفة.

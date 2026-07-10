@@ -1569,6 +1569,115 @@ def platform_pending_topic_decide(topic_id, action):
     return _platform_proxy('POST', f"/api/bridge/topics/{topic_id}/{action}")
 
 
+# --------------------------------------------------------------------------- R1 launch-fix inboxes
+# Four inflows whose platform bridges existed but had no dashboard row, plus the two brand-new
+# bridges (verify queue + live-course reservations). All thin proxies — fulfillment/email stay
+# SERVER-SIDE on the platform; the dashboard only forwards the decision.
+@app.route('/api/platform-manual-payments', methods=['GET'])
+@token_required
+@roles_required('admin', 'employee')
+def platform_manual_payments():
+    """Manual (InstaPay/Vodafone) payments awaiting confirmation. Confirm/reject drives grant +
+    finance event + customer email on the PLATFORM — never re-implement that here."""
+    return _platform_proxy('GET', '/api/bridge/manual-payments',
+                           params={'status': request.args.get('status') or 'pending_review'})
+
+
+@app.route('/api/platform-manual-payments/<payment_id>/<action>', methods=['POST'])
+@token_required
+@roles_required('admin', 'employee')
+def platform_manual_payment_decide(payment_id, action):
+    if action not in ('confirm', 'reject'):
+        return jsonify({'error': 'إجراء غير معروف'}), 400
+    body = request.json or {}
+    return _platform_proxy('POST', f"/api/bridge/manual-payments/{payment_id}/decide",
+                           json_body={'decision': action, 'admin_note': body.get('admin_note') or ''})
+
+
+@app.route('/api/platform-creative', methods=['GET'])
+@token_required
+@roles_required('admin', 'employee')
+def platform_creative():
+    """ركن الإبداع works awaiting review (pending_review)."""
+    return _platform_proxy('GET', '/api/bridge/creative',
+                           params={'status': request.args.get('status') or 'pending_review'})
+
+
+@app.route('/api/platform-creative/<item_id>/<action>', methods=['POST'])
+@token_required
+@roles_required('admin', 'employee')
+def platform_creative_decide(item_id, action):
+    if action not in ('approve', 'reject'):
+        return jsonify({'error': 'إجراء غير معروف'}), 400
+    body = request.json or {}
+    return _platform_proxy('POST', f"/api/bridge/creative/{item_id}/decide",
+                           json_body={'decision': action, 'note': body.get('admin_note') or ''})
+
+
+@app.route('/api/platform-knowledge-review', methods=['GET'])
+@token_required
+@roles_required('admin', 'employee')
+def platform_knowledge_review():
+    """Books/works awaiting review (status=pending_review) — the review-status view that the
+    marketplace listing (/platform-knowledge, filtered by rights) does not provide."""
+    return _platform_proxy('GET', '/api/bridge/knowledge/review',
+                           params={'status': request.args.get('status') or 'pending_review'})
+
+
+@app.route('/api/platform-knowledge/<item_id>/decide', methods=['POST'])
+@token_required
+@roles_required('admin', 'employee')
+def platform_knowledge_decide(item_id):
+    body = request.json or {}
+    action = body.get('decision') or ''
+    if action not in ('approve', 'reject'):
+        return jsonify({'error': 'إجراء غير معروف'}), 400
+    return _platform_proxy('POST', f"/api/bridge/knowledge/{item_id}/decide",
+                           json_body={'decision': action, 'note': body.get('admin_note') or ''})
+
+
+@app.route('/api/platform-verify', methods=['GET'])
+@token_required
+@roles_required('admin', 'employee')
+def platform_verify_queue():
+    """Answer-verification requests with no available expert (routed_admin) — the product core
+    loop. The founder reassigns each to a specific approved expert."""
+    return _platform_proxy('GET', '/api/bridge/verify',
+                           params={'status': request.args.get('status') or 'routed_admin'})
+
+
+@app.route('/api/platform-verify/<req_id>/reassign', methods=['POST'])
+@token_required
+@roles_required('admin', 'employee')
+def platform_verify_reassign(req_id):
+    body = request.json or {}
+    return _platform_proxy('POST', f"/api/bridge/verify/{req_id}/reassign",
+                           json_body={'expert_email': body.get('expert_email') or ''})
+
+
+@app.route('/api/platform-courses/<slug>/reservations', methods=['GET'])
+@token_required
+@roles_required('admin', 'employee')
+def platform_course_reservations(slug):
+    """Seat roster for a live course (who reserved, status)."""
+    return _platform_proxy('GET', f"/api/bridge/courses/{slug}/reservations",
+                           params={'status': request.args.get('status') or 'all'})
+
+
+@app.route('/api/platform-leads/<lead_id>/resolve', methods=['POST'])
+@token_required
+@roles_required('admin', 'employee')
+def platform_lead_resolve(lead_id):
+    return _platform_proxy('POST', f"/api/bridge/leads/{lead_id}/resolve")
+
+
+@app.route('/api/platform-messages/<message_id>/resolve', methods=['POST'])
+@token_required
+@roles_required('admin', 'employee')
+def platform_message_resolve(message_id):
+    return _platform_proxy('POST', f"/api/bridge/messages/{message_id}/resolve")
+
+
 @app.route('/api/platform-program-requests', methods=['GET'])
 @token_required
 @roles_required('admin', 'employee')   # employee may VIEW pending program requests (follow-up)

@@ -495,6 +495,30 @@ function renderInbox(){
   el.querySelectorAll('.row').forEach(r=>r.onclick=()=>{selected=+r.dataset.i;renderInbox();drawInbox();});
   drawInbox();
 }
+// أزرار الإجراء في درج الوارد — مبنية على قدرات البند (R1): اعتماد/رفض، تأكيد دفعة، تحويل توثيق لخبير، إنهاء.
+function inboxActs(i,m){
+  let a='';
+  if(i.triage==='auto'){
+    a=`<button class="btn btn-primary" data-a="open">${svg('check')}عُولجت — عرض</button>`;
+  }else if(i.apiKind==='verify'){
+    const cs=i.candidates||[];
+    if(cs.length){
+      const opts=cs.map(e=>`<option value="${esc(e.email)}">${esc(e.name||e.email)}</option>`).join('');
+      a=`<select data-reassign-sel style="width:100%;margin:0 0 8px;padding:8px;border-radius:8px;border:1px solid rgba(128,128,128,.35);background:transparent;color:inherit;font-family:inherit">${opts}</select>`+
+        `<button class="btn btn-human" data-a="reassign">${svg('cap')}حوّل للخبير المحدَّد</button>`;
+    }else{
+      a=`<div style="font-size:13px;color:var(--muted);line-height:1.7">لا يوجد خبير معتمد في هذا التخصص بعد — اعتمد خبيرًا أولًا من «الخبراء والمدربون».</div>`;
+    }
+  }else if(i.resolve){
+    a=`<button class="btn btn-human" data-a="resolve">${svg('check')}اعتبرها منتهية</button>`;
+  }else if(i.apiKind){
+    a=`<button class="btn btn-human" data-a="approve">${svg('check')}${esc(i.approveLabel||'اعتمد وحوّل للموديول')}</button>`;
+    if(i.canReject)a+=`<button class="btn btn-ghost" data-a="reject">رفض</button>`;
+  }
+  if(i.proofUrl)a+=`<a class="btn btn-ghost" href="${esc(i.proofUrl)}" target="_blank" rel="noopener">${svg('inbox')}إيصال الدفع</a>`;
+  a+=`<button class="btn btn-ghost" data-a="goto">فتح ${m.label}</button>`;
+  return a;
+}
 function drawInbox(){
   const el=document.getElementById('drawer');if(!el)return;
   if(selected===null){el.innerHTML=`<div class="empty">${svg('inbox','ic')}<p>اختر بندًا من الوارد لرؤية مساره الكامل والإجراء.</p></div>`;return;}
@@ -506,11 +530,17 @@ function drawInbox(){
     <div class="field"><div class="lab">حالة الفرز</div><div class="val"><span class="triage ${tr.cls}"><span class="d"></span>${tr.t}</span></div></div>
     <div class="field"><div class="lab">الطرف</div><div class="val">${esc(i.who)}</div></div>
     <div class="field"><div class="lab">المهلة</div><div class="val" style="${i.slaWarn?'color:var(--conflict)':''}">${i.sla}</div></div>
-    <div class="acts">${i.triage==='auto'?`<button class="btn btn-primary" data-a="open">${svg('check')}عُولجت — عرض</button>`:`<button class="btn btn-human" data-a="approve">${svg('check')}اعتمد وحوّل للموديول</button>`}<button class="btn btn-ghost" data-a="goto">فتح ${m.label}</button></div></div>`;
+    <div class="acts">${inboxActs(i,m)}</div></div>`;
+  const refreshInbox=()=>{selected=null;viewInbox(document.getElementById('view'));};
   el.querySelectorAll('[data-a]').forEach(b=>b.onclick=()=>{
-    if(b.dataset.a==='goto'){go(i.dest);return;}
-    if(b.dataset.a==='approve'&&i.apiKind&&window.EP){EP.decideInboxItem(i,'approve',()=>{selected=null;viewInbox(document.getElementById('view'));});return;}
-    toast(b.dataset.a==='approve'?'تم الاعتماد ← '+m.label:'عرض في '+m.label);});
+    const a=b.dataset.a;
+    if(a==='goto'){go(i.dest);return;}
+    if(!window.EP){toast('الربط غير متاح');return;}
+    if(a==='approve'&&i.apiKind){EP.decideInboxItem(i,'approve',refreshInbox);return;}
+    if(a==='reject'&&i.apiKind){EP.decideInboxItem(i,'reject',refreshInbox);return;}
+    if(a==='resolve'){EP.resolveInboxItem(i,refreshInbox);return;}
+    if(a==='reassign'){const sel=el.querySelector('[data-reassign-sel]');const em=sel?sel.value:'';if(!em){toast('اختر خبيرًا أولًا');return;}EP.reassignVerify(i.apiId,em,refreshInbox);return;}
+    toast('عرض في '+m.label);});
 }
 
 /* ===== ESCROW VIEW ===== */
