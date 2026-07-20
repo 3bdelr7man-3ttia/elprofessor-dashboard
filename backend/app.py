@@ -1471,6 +1471,17 @@ def platform_chat_insights():
         return jsonify({'error': 'تعذر جلب التحليل'}), 502
     return jsonify(r.json() if r.content else {})
 
+@app.route('/api/platform-chat-insights/<insight_id>', methods=['GET'])
+@token_required
+@roles_required('admin')
+def platform_chat_insight_detail(insight_id):
+    """Open ONE question from «تحليل الطلب»: its full text, what «بروف» answered, and —
+    when the turn was signed-in — who asked. The list route above is open to `employee`
+    and carries no identity; this one does, so it is admin-only. The platform writes an
+    audit entry on every open."""
+    return _platform_proxy('GET', f"/api/bridge/chat-insights/{insight_id}")
+
+
 @app.route('/api/platform-chat-insights/classify', methods=['POST'])
 @token_required
 @roles_required('admin', 'employee')

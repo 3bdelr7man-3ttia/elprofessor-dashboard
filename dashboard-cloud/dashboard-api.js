@@ -1373,6 +1373,17 @@
 
   // تحليل الطلب (D2): شغّل مصنّف الأسئلة بالذكاء على رسائل الشات غير المصنّفة.
   // الجسر لا يرمي خطأ عند فشل النموذج — يرجّع {classified:0, remaining, error}؛ نعالج الحالتين.
+  // Open ONE logged question: full text + what «بروف» replied + who asked (signed-in
+  // turns only). Admin-only on the server; the list route deliberately carries no identity.
+  EP.chatInsightDetail = function (id, onOk, onErr) {
+    get("/platform-chat-insights/" + encodeURIComponent(id))
+      .then(function (d) { onOk(d); })
+      .catch(function (e) {
+        quietToast((e && e.message) || "تعذّر فتح المحادثة");
+        if (onErr) onErr(e);
+      });
+  };
+
   EP.runDemandClassify = function (after) {
     note("بنصنّف الأسئلة بالذكاء… ممكن ياخد ثواني");
     post("/platform-chat-insights/classify?limit=100", {})

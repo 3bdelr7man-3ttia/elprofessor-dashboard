@@ -858,6 +858,36 @@ const COUNTRY_LABEL={egypt:'مصر',saudi:'السعودية',uae:'الإمارا
 // حالة تصفية «تحليل الطلب» — تصفّي قائمة «أحدث الأسئلة» (لكل صفّ حقوله من الجسر). اللوحات
 // المجمّعة تظل على كامل البيانات (مبيّن في تلميحها) لأن التجميع يتم في المنصة على كل الأرشيف.
 var anFilters={seg:'all',country:'all',cat:'all',ne:'all',time:'all'};
+// يفتح سؤالًا من «تحليل الطلب» كمحادثة كاملة: السؤال، وردّ «بروف» عليه، ومن سأل.
+// المسار أدمن فقط على الخادم لأنه يحمل هوية، وكل فتحة تُسجَّل في سجل التدقيق.
+function openQuestionThread(id){
+  if(!(window.EP&&EP.chatInsightDetail)){toast('غير متاح — لا يوجد اتصال بالخادم');return;}
+  const sc=openModal('المحادثة','<div style="padding:26px;text-align:center;color:var(--muted)">جارٍ الفتح…</div>');
+  EP.chatInsightDetail(id,function(d){
+    const body=sc.querySelector('.mb');if(!body)return;
+    const who=d.identity?(esc(d.identity.full_name||'—')+' · '+esc(d.identity.email||'—'))
+             :'زائر مجهول — لا حساب ولا بيانات تعريف';
+    const meta=[d.category,d.intent,d.agent].filter(Boolean).map(esc).join(' · ');
+    const turns=(d.messages||[]).map(m=>{
+      const me=m.role==='user';
+      return '<div style="margin-bottom:12px"><div style="font-size:11px;font-weight:800;color:'
+        +(me?'var(--muted)':'var(--ai)')+';margin-bottom:4px">'+(me?'السائل':'بروف')+'</div>'
+        +'<div style="font-size:13.5px;line-height:1.7;color:var(--ink);background:'
+        +(me?'var(--surface-2)':'var(--ai-bg)')+';border-radius:10px;padding:10px 13px;white-space:pre-wrap">'
+        +esc(m.content||'—')+'</div></div>';
+    }).join('')||'<div class="empty">لا رسائل محفوظة.</div>';
+    // الجلسة المجهولة عديمة الحالة بالتصميم: المحفوظ لقطة من الرد لا الخيط كاملًا،
+    // والأسئلة الأقدم من هذه الميزة بلا أي رد محفوظ. نقولها صراحةً بدل إيهام الاكتمال.
+    const warn=d.truncated?'<div class="policy" style="border-inline-start-color:var(--gold);background:var(--gold-bg);margin-bottom:14px">'
+      +'<div>هذه لقطة محفوظة لا محادثة كاملة — جلسة الزائر لا تُحفظ، والأسئلة الأقدم من هذه الميزة بلا ردّ مخزَّن.</div></div>':'';
+    body.innerHTML=warn
+      +'<div class="field"><div class="lab">من سأل</div><div class="val">'+who+'</div></div>'
+      +(meta?'<div class="field"><div class="lab">التصنيف</div><div class="val">'+meta+'</div></div>':'')
+      +'<div class="field"><div class="lab">التاريخ</div><div class="val">'+esc(d.created_at||'—')+'</div></div>'
+      +'<div style="margin-top:16px;max-height:46vh;overflow:auto">'+turns+'</div>';
+  },function(){closeModal();});
+}
+
 function viewAnalysis(v){
   if(window.EP){EP.ensure('analysis',()=>viewAnalysis(v));}
   const st=(window.EP&&EP.state.analysis)||'idle';
@@ -934,8 +964,10 @@ function viewAnalysis(v){
       <div id="anUnmet" style="padding:6px 0">${st==='loading'?loading:(unmet.length?unmet.map(u=>`<div class="policy anUnmetRow" style="cursor:pointer;border-inline-start-color:var(--gold);margin:10px 14px">${svg('sparkles','ic')}<div style="flex:1"><b>${esc(u.label)}</b> — طلب متكرّر مش بنقدّم له خدمة (${money(u.count||0)} مرة).<div style="margin-top:4px;color:var(--muted);font-size:11.5px">مثال: ${esc(u.sample_question||'—')}</div></div><span style="flex:none;color:var(--gold);font-weight:800;font-size:12px">أنشئ خدمة ←</span></div>`).join(''):`<div class="empty" style="padding:26px">${unclassified?'شغّل «حدّث التصنيف» الأول عشان نكتشف الطلب الناقص.':'لا خدمات ناقصة مكتشفة بعد — أول ما الذكاء يلاقي طلبًا متكرّرًا مش بنقدّمه هيظهر هنا كفرصة.'}</div>`)}</div>
     </section>
     <section class="panel"><div class="ph"><h3>أحدث الأسئلة</h3><span class="n">${fq.length}</span><span class="hint">${anyFilter?('مصفّاة من '+money(recent.length)):'حيّة من الشات'}</span></div>
-      <div id="anRecent" style="max-height:520px;overflow:auto">${st==='loading'?loading:(fq.length?fq.map(r=>`<div style="padding:11px 16px;border-bottom:1px solid var(--border)"><div style="font-size:13.5px;color:var(--ink);line-height:1.5">${esc(r.question)}</div><div style="margin-top:5px;font-size:11.5px;color:var(--muted)">${SEG_LABEL[r.segment]||r.segment||'—'} · ${COUNTRY_LABEL[r.country]||r.country||'غير محدد'}${r.category?' · <span style="color:var(--navy)">'+esc(r.category)+'</span>':''}${r.intent?' · '+esc(r.intent):''}${r.needs_expert?' · <span style="color:var(--human)">يحتاج خبير</span>':''}</div></div>`).join(''):`<div class="empty">${recent.length?'لا أسئلة مطابقة للتصفية.':'لا أسئلة بعد.'}</div>`)}</div>
+      <div id="anRecent" style="max-height:520px;overflow:auto">${st==='loading'?loading:(fq.length?fq.map(r=>`<div class="anq-row"${r.id?' data-q="'+esc(r.id)+'"':''} style="padding:11px 16px;border-bottom:1px solid var(--border)${r.id?';cursor:pointer':''}"><div style="font-size:13.5px;color:var(--ink);line-height:1.5">${esc(r.question)}</div><div style="margin-top:5px;font-size:11.5px;color:var(--muted)">${SEG_LABEL[r.segment]||r.segment||'—'} · ${COUNTRY_LABEL[r.country]||r.country||'غير محدد'}${r.category?' · <span style="color:var(--navy)">'+esc(r.category)+'</span>':''}${r.intent?' · '+esc(r.intent):''}${r.needs_expert?' · <span style="color:var(--human)">يحتاج خبير</span>':''}${r.anonymous?' · <span style="color:var(--muted)">زائر</span>':' · <span style="color:var(--ai)">مسجَّل</span>'}${r.id?' · <span style="color:var(--gold);font-weight:700">افتح المحادثة ←</span>':''}</div></div>`).join(''):`<div class="empty">${recent.length?'لا أسئلة مطابقة للتصفية.':'لا أسئلة بعد.'}</div>`)}</div>
     </section>`;
+  v.querySelectorAll('.anq-row[data-q]').forEach(row=>row.onclick=()=>openQuestionThread(row.dataset.q));
+
   // ربط عناصر التحكّم بعد الرسم.
   const fb=document.getElementById('anFilterbar');
   if(fb){
