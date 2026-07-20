@@ -128,8 +128,11 @@ class User(db.Model):
     email = db.Column(db.String(255), unique=True, nullable=False)
     password_hash = db.Column(db.String(255), nullable=False)
     name = db.Column(db.String(255))
-    role = db.Column(db.String(50), default='admin')
-    dashboard_role = db.Column(db.String(50), default='admin')
+    # FAIL CLOSED: a row created without an explicit role is the LEAST privileged
+    # one, never an admin. Every creation path (register / sso / create_user /
+    # seed) sets both fields explicitly.
+    role = db.Column(db.String(50), default='viewer')
+    dashboard_role = db.Column(db.String(50), default='viewer')
     linked_to_name = db.Column(db.String(255))
     preferred_currency = db.Column(db.String(10), default='AUTO')
     is_active = db.Column(db.Boolean, default=True)
@@ -495,12 +498,15 @@ def token_required(f):
     return decorated
 
 def roles_required(*allowed_roles):
+    """Coarse role gate. Delegates to role_grants() — the SINGLE source of truth
+    shared with every data-scoping filter — so a route gate and a row filter can
+    never disagree about who this user is (see role_grants for the rule)."""
     def decorator(f):
         @functools.wraps(f)
         def decorated(*args, **kwargs):
             if not getattr(g, 'user', None):
                 return jsonify({'error': 'Unauthorized'}), 401
-            if g.user.role not in allowed_roles:
+            if not role_grants(g.user, *allowed_roles):
                 return jsonify({'error': 'Forbidden'}), 403
             return f(*args, **kwargs)
         return decorated
@@ -524,12 +530,20 @@ def _role_permissions():
     except Exception:
         return {}
 
-def role_allows_module(role, module):
-    """True if `role` may access `module`. admin → always; a role absent from the
-    persisted map → permissive (no restriction configured yet)."""
-    role = (role or '').strip().lower()
-    if role == 'admin':
+def role_allows_module(user, module):
+    """True if `user` may access `module`. Unambiguous admin → always; a role
+    absent from the persisted map → permissive (no restriction configured yet).
+
+    Takes the USER, not a raw role string: «is this an admin?» has exactly one
+    answer in this file (is_admin_scope), and a bare `role == 'admin'` here
+    disagreed with it — a split-identity row (dashboard_role='admin',
+    role='trainer') that every other gate denies used to sail past every
+    module restriction."""
+    if not user:
+        return False
+    if is_admin_scope(user):
         return True
+    role = user_dashboard_role(user)
     entry = _role_permissions().get(role)
     if not entry:
         return True
@@ -546,7 +560,7 @@ def module_required(module):
         def decorated(*args, **kwargs):
             if not getattr(g, 'user', None):
                 return jsonify({'error': 'Unauthorized'}), 401
-            if not role_allows_module(user_dashboard_role(g.user), module):
+            if not role_allows_module(g.user, module):
                 return jsonify({'error': 'هذا القسم غير متاح لدورك'}), 403
             return f(*args, **kwargs)
         return decorated
@@ -556,21 +570,78 @@ def module_required(module):
 # HELPER
 # ============================================================
 
+def normalize_role(value):
+    """Canonical form of a role string. 'Admin ' → 'admin'. Every comparison in
+    this file MUST go through this — a literal comparison locked real admins out
+    of their own dashboard whenever the stored value carried case/whitespace."""
+    return (value or '').strip().lower()
+
+
+def role_grants(user, *allowed_roles):
+    """THE authority on «does this user hold one of these roles?».
+
+    A user carries TWO role fields (`role`, the legacy column, and
+    `dashboard_role`, what the UI renders). They used to be read by different
+    layers — route gates read `role`, data filters read `dashboard_role` — so a
+    row with role='admin'/dashboard_role='trainer' walked through every admin
+    gate while its UI said «trainer», and the reverse (role='trainer'/
+    dashboard_role='admin', which the old buggy dashboard_role migration created
+    wholesale) read the whole money ledger.
+
+    Rule: the EFFECTIVE role is `dashboard_role` (the identity the user is
+    actually operating under), but a divergent `role` may only ever DOWNGRADE —
+    when the two fields disagree, BOTH have to be allowed. Consequences:
+      * real admin (admin/admin)                 → allowed  (never locked out)
+      * admin/trainer split                      → denied admin routes (its UI is a trainer's anyway)
+      * trainer/admin split (legacy migration)   → denied admin routes (no escalation)
+      * dashboard_role empty (pre-migration row) → falls back to `role`, so a
+        seed-created admin with only `role='admin'` still passes.
+    Neither field alone can escalate, which is why this is safer than either the
+    strict `dashboard_role` preference or the permissive `_is_admin_user` OR.
+    """
+    if not user:
+        return False
+    allowed = {normalize_role(r) for r in allowed_roles}
+    dash = normalize_role(getattr(user, 'dashboard_role', None))
+    raw = normalize_role(getattr(user, 'role', None))
+    effective = dash or raw or 'viewer'
+    if effective not in allowed:
+        return False
+    for other in (dash, raw):
+        if other and other != effective and other not in allowed:
+            return False
+    return True
+
+
+def is_admin_scope(user):
+    """True only for an unambiguous admin — the gate for FULL-ledger reads
+    (every payout / every investment / every course's money rows)."""
+    return role_grants(user, 'admin')
+
+
 def _is_admin_user(user):
+    """Permissive «might be an admin» — used ONLY by the last-admin protection,
+    where over-counting is the safe direction (it refuses to demote/delete an
+    account that could still be the last way back in). NEVER use it to grant
+    access; use role_grants()/is_admin_scope() for that."""
     if not user:
         return False
     return 'admin' in {
-        (getattr(user, 'role', None) or '').strip().lower(),
-        (getattr(user, 'dashboard_role', None) or '').strip().lower(),
+        normalize_role(getattr(user, 'role', None)),
+        normalize_role(getattr(user, 'dashboard_role', None)),
     }
 
 def active_admin_count(exclude_id=None):
     """Count active local dashboard admins, optionally excluding one user id."""
+    # Counts only accounts that can ACTUALLY act as admin (role_grants), not the
+    # permissive «might be». Under-counting is the safe direction here: it makes
+    # the last-admin guard fire MORE often, so a split-identity row that cannot
+    # really administer anything can never be mistaken for the spare key.
     count = 0
     for u in User.query.filter_by(is_active=True).all():
         if exclude_id is not None and u.id == exclude_id:
             continue
-        if _is_admin_user(u):
+        if role_grants(u, 'admin'):
             count += 1
     return count
 
@@ -627,7 +698,29 @@ def to_egp(usd, egp, rate=None):
     return (egp or 0) + (usd or 0) * rate
 
 def user_dashboard_role(user):
-    return (getattr(user, 'dashboard_role', None) or getattr(user, 'role', None) or 'viewer').strip()
+    """The role the user is OPERATING under (what the UI renders), normalized.
+    Use it to choose WHICH scope applies; use role_grants()/is_admin_scope() to
+    decide whether a privilege is granted."""
+    return normalize_role(getattr(user, 'dashboard_role', None)) or normalize_role(getattr(user, 'role', None)) or 'viewer'
+
+def reported_role(user):
+    """The role we may TELL the client it has — i.e. the one the gates honour.
+
+    `user_dashboard_role()` answers «which scope applies»; it happily returns
+    'admin' for a split row (role='trainer'/dashboard_role='admin') that
+    `role_grants()` denies at every admin route. Reporting that to the client
+    painted the full admin rail and then 403'd every request behind it — a
+    broken screen with no explanation, and the buggy dashboard_role migration
+    created such rows wholesale. When the two fields disagree the account holds
+    no role either field alone can grant, so we report the harmless 'viewer'
+    (the «بانتظار التفعيل» screen) instead of a promise the server will refuse.
+    """
+    dash = normalize_role(getattr(user, 'dashboard_role', None))
+    raw = normalize_role(getattr(user, 'role', None))
+    if dash and raw and dash != raw:
+        return 'viewer'
+    return dash or raw or 'viewer'
+
 
 def user_linked_name(user):
     return (getattr(user, 'linked_to_name', None) or getattr(user, 'name', None) or '').strip()
@@ -653,6 +746,91 @@ def names_match(left, right):
     if not a or not b:
         return False
     return a == b or a in b or b in a
+
+# Honorific prefixes dropped from the FRONT of a person's name before an
+# entitlement (money) comparison. Anchored to the start on purpose: the general
+# normalize_name() above does a blanket str.replace that eats the «د » sitting
+# INSIDE «أحمد عادل», which is harmless while both sides are mangled the same way
+# but is exactly the kind of lossiness you do not want under a strict equality.
+# Written in ALREADY-normalized form (أ/إ/آ→ا, ى→ي, ة→ه) — see below.
+_ENTITLEMENT_HONORIFICS = (
+    'د.', 'د', 'دكتور', 'الدكتور', 'دكتوره',
+    'ا.', 'استاذ', 'الاستاذ', 'استاذه',
+    'م.', 'مهندس', 'المهندس',
+    'dr.', 'dr', 'prof.', 'prof', 'mr.', 'mr', 'mrs.', 'mrs', 'ms.', 'ms',
+)
+
+_HARAKAT_RE = re.compile('[ً-ْٰ]')
+
+
+def normalize_person_name(value):
+    """Canonical form of a PERSON's name, for entitlement matching ONLY.
+
+    Lossless apart from cosmetics an Arabic name legitimately varies by:
+    case/whitespace, tatweel + harakat, the alef/yaa/taa-marbuta spelling
+    variants, and a LEADING honorific («د. أحمد عادل» ≡ «أحمد عادل»). It never
+    strips the only remaining token, so a name that IS an honorific cannot
+    collapse to the empty string and start matching everything.
+
+    Deliberately separate from normalize_name()/names_match(): those two are the
+    fuzzy course-linking rule and must not change.
+    """
+    raw = (value or '').strip().lower()
+    if not raw:
+        return ''
+    raw = raw.replace('ـ', '')          # tatweel
+    raw = _HARAKAT_RE.sub('', raw)           # harakat / dagger alef
+    for src, dst in (('أ', 'ا'), ('إ', 'ا'), ('آ', 'ا'), ('ٱ', 'ا'), ('ى', 'ي'), ('ة', 'ه')):
+        raw = raw.replace(src, dst)
+    parts = raw.split()
+    while len(parts) > 1 and parts[0] in _ENTITLEMENT_HONORIFICS:
+        parts.pop(0)
+    return ' '.join(parts)
+
+
+def entitlement_key(user):
+    """The ONE name this account may claim money rows under: `linked_to_name`,
+    which ONLY an admin can write (/api/users POST+PUT). Never `user.name` —
+    that is the platform's `full_name`, i.e. USER-CONTROLLED via /api/auth/sso,
+    and under the old substring match an account that renamed itself to the
+    single letter «ا» read every payout and every investment in the ledger.
+    Empty (an account the admin has not linked) claims NOTHING."""
+    if not user:
+        return ''
+    return normalize_person_name(getattr(user, 'linked_to_name', None))
+
+
+def entitlement_name_matches(row_name, user):
+    """Row name ⟷ account link, EXACT after normalization. No containment:
+    containment let a one-character name be a substring of every row."""
+    key = entitlement_key(user)
+    if not key:
+        return False
+    return normalize_person_name(row_name) == key
+
+
+def payout_visible_to(payout, user):
+    """Is this ONE payout row the user's own? The single matching rule for
+    entitlement rows — /api/payouts and the per-course ledger both call it, so
+    there is exactly one definition of «my row» in the codebase."""
+    if not user:
+        return False
+    return entitlement_name_matches(getattr(payout, 'name', ''), user)
+
+
+def investment_visible_to(investment, user):
+    """Is this ONE investment row the user's own? Same single rule for
+    /api/investments, /active, /history and the per-course ledger.
+    The investor_user_id link is a hard foreign key (set when the investor
+    themself created the row) and stays authoritative; the name path is the
+    strict, admin-controlled one."""
+    if not user:
+        return False
+    owner_id = getattr(investment, 'investor_user_id', None)
+    if owner_id is not None and getattr(user, 'id', None) is not None and owner_id == user.id:
+        return True
+    return entitlement_name_matches(getattr(investment, 'investor_name', ''), user)
+
 
 def investor_display_name(user=None, explicit_name=''):
     if explicit_name:
@@ -1117,7 +1295,7 @@ def login():
         'user_id': user.id,
         'exp': datetime.datetime.utcnow() + datetime.timedelta(days=30)
     }, app.config['SECRET_KEY'], algorithm='HS256')
-    dashboard_role = user_dashboard_role(user)
+    dashboard_role = reported_role(user)
     _audit('auth.login', target=user.id, meta={'role': dashboard_role}, actor=user.email)
     return jsonify({'token': token, 'user': {'id': user.id, 'email': user.email, 'name': user.name, 'role': dashboard_role, 'dashboard_role': dashboard_role, 'linked_to_name': user_linked_name(user), 'preferred_currency': (user.preferred_currency or 'AUTO')}})
 
@@ -1157,7 +1335,7 @@ def register():
 @app.route('/api/auth/me', methods=['GET'])
 @token_required
 def me():
-    dashboard_role = user_dashboard_role(g.user)
+    dashboard_role = reported_role(g.user)
     return jsonify({'id': g.user.id, 'email': g.user.email, 'name': g.user.name, 'role': dashboard_role, 'dashboard_role': dashboard_role, 'linked_to_name': user_linked_name(g.user), 'preferred_currency': (g.user.preferred_currency or 'AUTO')})
 
 # --- Single sign-on FROM the main platform (one identity reaches the BI brain) ---
@@ -1214,8 +1392,11 @@ def sso_login():
         db.session.add(user)
     else:
         # Don't override an explicit dashboard role the admin set here; only fill gaps.
-        if not (getattr(user, 'dashboard_role', None) or '').strip():
+        if not normalize_role(getattr(user, 'dashboard_role', None)):
             user.dashboard_role = mapped_role
+        # Never leave the two identity fields split (role_grants denies a split).
+        if not normalize_role(getattr(user, 'role', None)):
+            user.role = normalize_role(user.dashboard_role) or mapped_role
         if not user.is_active:
             user.is_active = True
     db.session.commit()
@@ -1224,7 +1405,7 @@ def sso_login():
         'user_id': user.id,
         'exp': datetime.datetime.utcnow() + datetime.timedelta(days=30)
     }, app.config['SECRET_KEY'], algorithm='HS256')
-    role_out = user_dashboard_role(user)
+    role_out = reported_role(user)
     return jsonify({'token': token_out, 'user': {'id': user.id, 'email': user.email, 'name': user.name, 'role': role_out, 'dashboard_role': role_out, 'linked_to_name': user_linked_name(user), 'preferred_currency': (user.preferred_currency or 'AUTO')}})
 
 # --- Pull live platform numbers (the "ربط = مزامنة" data sync) ---
@@ -2584,7 +2765,7 @@ def bridge_escrow():
             try:
                 data = jwt.decode(token, app.config['SECRET_KEY'], algorithms=['HS256'])
                 u = User.query.get(data['user_id'])
-                authorized = bool(u and u.is_active and _is_admin_user(u))
+                authorized = bool(u and u.is_active and role_grants(u, 'admin'))
             except Exception:
                 authorized = False
     if not authorized:
@@ -2618,12 +2799,15 @@ def create_user():
         return jsonify({'error': 'Email and password are required'}), 400
     if User.query.filter_by(email=email).first():
         return jsonify({'error': 'User already exists'}), 409
+    # ONE normalized decision written to BOTH identity fields — 'Admin' and
+    # 'admin ' must not become a different (and un-grantable) role.
+    new_role = normalize_role(d.get('dashboard_role') or d.get('role')) or 'viewer'
     user = User(
         email=email,
         password_hash=generate_password_hash(password, method='pbkdf2:sha256'),
         name=d.get('name') or email.split('@')[0],
-        role=d.get('dashboard_role') or d.get('role') or 'viewer',
-        dashboard_role=d.get('dashboard_role') or d.get('role') or 'viewer',
+        role=new_role,
+        dashboard_role=new_role,
         linked_to_name=d.get('linked_to_name') or '',
         preferred_currency=(d.get('preferred_currency') or 'AUTO').upper(),
         is_active=True
@@ -2657,13 +2841,28 @@ def update_user(id):
                 'error': 'لا يمكن تعديل المدير الوحيد المتبقي (الدور/التفعيل/البريد). أضف مديرًا آخر أولًا.'
             }), 409
 
+    # NORMALIZE + KEEP THE TWO IDENTITY FIELDS IN SYNC. `role` and
+    # `dashboard_role` are one decision: a payload touching only one of them used
+    # to mint a split identity (one field says admin, the other trainer), which
+    # role_grants() then has to deny on BOTH sides. Writing both from one
+    # normalized value makes divergence unrepresentable going forward.
+    if ('role' in d) or ('dashboard_role' in d):
+        chosen = ''
+        for rk in ('dashboard_role', 'role'):
+            if normalize_role(d.get(rk)):
+                chosen = normalize_role(d.get(rk))
+                break
+        chosen = chosen or 'viewer'
+        d['role'] = chosen
+        d['dashboard_role'] = chosen
+
     for key in ['name', 'email', 'role', 'dashboard_role', 'linked_to_name', 'preferred_currency', 'is_active']:
         if key in d:
             value = d[key]
             if key == 'email' and value:
                 value = value.lower().strip()
-            if key in ('role', 'dashboard_role') and not value:
-                value = 'viewer'
+            if key in ('role', 'dashboard_role'):
+                value = normalize_role(value) or 'viewer'
             if key == 'preferred_currency':
                 value = (value or 'AUTO').upper()
             setattr(user, key, value)
@@ -3039,6 +3238,7 @@ def delete_asset(id):
 
 @app.route('/api/forecast', methods=['GET'])
 @token_required
+@roles_required('admin')               # full P&L forecast (revenue/payroll/rent) — no non-admin screen calls it
 def list_forecast():
     items = ForecastMonth.query.order_by(ForecastMonth.month.asc()).all()
     return jsonify([{
@@ -3052,6 +3252,7 @@ def list_forecast():
 
 @app.route('/api/forecast/<int:id>', methods=['PUT'])
 @token_required
+@roles_required('admin')               # financial WRITE — never open to trainer/investor/viewer
 def update_forecast(id):
     f = ForecastMonth.query.get_or_404(id)
     d = request.json or {}
@@ -3122,6 +3323,7 @@ def delete_expense(id):
 
 @app.route('/api/campaigns', methods=['GET'])
 @token_required
+@roles_required('admin')               # ad budget/spend/CAC — only the admin «marketing» module calls it
 def list_campaigns():
     items = Campaign.query.order_by(Campaign.created_at.desc()).all()
     course_lookup = {c.id: c for c in Course.query.all()}
@@ -3154,6 +3356,7 @@ def list_campaigns():
 
 @app.route('/api/campaigns', methods=['POST'])
 @token_required
+@roles_required('admin')               # marketing budget/spend WRITE — admin only
 def create_campaign():
     d = request.json or {}
     c = Campaign(
@@ -3174,6 +3377,7 @@ def create_campaign():
 
 @app.route('/api/campaigns/<int:id>', methods=['PUT'])
 @token_required
+@roles_required('admin')               # marketing budget/spend WRITE — admin only
 def update_campaign(id):
     c = Campaign.query.get_or_404(id)
     d = request.json or {}
@@ -3188,6 +3392,7 @@ def update_campaign(id):
 
 @app.route('/api/campaigns/<int:id>', methods=['DELETE'])
 @token_required
+@roles_required('admin')               # marketing budget/spend WRITE — admin only
 def delete_campaign(id):
     c = Campaign.query.get_or_404(id)
     db.session.delete(c)
@@ -3203,21 +3408,65 @@ def delete_campaign(id):
 @module_required('courses')            # D9: admin can revoke per-role module access
 def list_courses():
     viewer_role = user_dashboard_role(g.user)
-    linked_name = user_linked_name(g.user)
+    is_admin = is_admin_scope(g.user)
+    is_staff = role_grants(g.user, 'admin', 'employee')
     items = Course.query.order_by(Course.created_at.desc()).all()
-    if viewer_role == 'trainer':
-        items = [item for item in items if names_match(item.trainer_name, linked_name) or names_match(item.trainer_name, g.user.name)]
+
+    def is_own_trainer_course(course):
+        """The SAME predicate that scopes the trainer's list below — so every
+        course a trainer can see, it can also see its own percentage for. Using
+        a stricter rule here would blank «نسبتي» on courses the filter already
+        handed them.
+
+        Uses the strict entitlement rule, NOT names_match(): the loose one is a
+        containment test against `user.name`, which is the platform `full_name`
+        the USER writes via SSO — an account renamed to «ا» matched every course.
+        Every other money surface already moved to this helper; this route was
+        the last one left holding the old rule."""
+        return entitlement_name_matches(course.trainer_name, g.user)
+
+    # WHICH COURSES. Staff (admin + the read-only employee, whose ROLE_NAV owns
+    # the «courses» module) see the catalogue; everyone else is scoped, and an
+    # unrecognised/viewer role sees NOTHING. Previously only trainer/investor
+    # were scoped, so a self-created SSO `viewer` listed the whole catalogue.
+    if is_staff:
+        pass
+    elif viewer_role == 'trainer':
+        items = [item for item in items if is_own_trainer_course(item)]
     elif viewer_role == 'investor':
         if request.args.get('scope') == 'marketplace':
             # المستثمر يشوف بس الدورات اللي الأدمن فتحها للاستثمار.
             items = [item for item in items if item.open_for_investment]
         else:
-            course_ids = {item.course_id for item in Investment.query.filter_by(investor_name=linked_name).all()}
+            # Same rule as /api/investments — the investor_user_id foreign key
+            # first, then the admin-controlled name. Matching on the raw
+            # user-supplied name (the old filter_by) let a chosen display name
+            # claim someone else's portfolio.
+            course_ids = {
+                item.course_id for item in Investment.query.all()
+                if investment_visible_to(item, g.user)
+            }
             items = [item for item in items if item.id in course_ids]
+    else:
+        items = []
     rate = get_rate()
     result = []
     for c in items:
         financial = course_financials(c, rate)
+        # WHICH MONEY ROWS. These two lists name individuals and their amounts —
+        # the same data /api/payouts and /api/investments protect. Serving them
+        # unfiltered here was a COMPLETE bypass of those filters, so they obey
+        # exactly the same per-row rule (same helper, no second matching logic):
+        # admin → all rows; trainer → its own payout rows; investor → its own
+        # investments; anyone else (employee, viewer) → nothing.
+        visible_payouts = [
+            p for p in financial['linked_payouts_models']
+            if is_admin or payout_visible_to(p, g.user)
+        ]
+        visible_investments = [
+            i for i in financial['investments']
+            if is_admin or investment_visible_to(i, g.user)
+        ]
         linked_payouts = [
             {
                 'id': p.id,
@@ -3228,7 +3477,7 @@ def list_courses():
                 'percent': p.percent,
                 'total_egp': round(payout_amount(p, rate)),
             }
-            for p in financial['linked_payouts_models']
+            for p in visible_payouts
         ]
         linked_expenses = [
             {
@@ -3240,29 +3489,56 @@ def list_courses():
             }
             for e in financial['course_expenses_models']
         ]
-        result.append({
+        # THE NON-FINANCIAL COURSE ROW — everything a non-admin screen actually
+        # renders. Verified against the two consumers in dashboard-cloud:
+        #   employee «الدورات» (loader `courses` → viewCourses/renderCourses):
+        #     id, title, trainer_name, students_count, price_egp/price_usd,
+        #     status, lms_synced, platform_course_id, platform_course_slug
+        #   trainer «دوراتي/أرباحي» (loader `t_data`):
+        #     id, title, students_count, price_egp/price_usd, status,
+        #     revenue_split.trainer_percent  (added back below, own courses only)
+        row = {
             'id': c.id, 'title': c.title, 'category': c.category,
             'trainer_name': c.trainer_name, 'status': c.status,
             'price_egp': c.price_egp, 'price_usd': c.price_usd,
-            'cost_egp': c.cost_egp, 'cost_usd': c.cost_usd,
             'students_count': c.students_count,
             'start_date': serialize_date(c.start_date), 'end_date': serialize_date(c.end_date),
-            'total_revenue': financial['total_revenue'], 'total_cost': financial['total_cost'],
-            'linked_expense_cost': financial['linked_expense_cost'],
-            'linked_payout_cost': financial['linked_payout_cost'],
-            'linked_investment_cost': financial['linked_investment_cost'],
-            'linked_expenses': linked_expenses,
-            'linked_payouts': linked_payouts,
-            'profit': financial['profit'],
-            'revenue_split': financial['split'],
-            'distribution': financial['distribution'],
-            'linked_investments': [serialize_investment(item, rate, {c.id: c}) for item in financial['investments']],
             'lms_id': c.lms_id, 'notes': c.notes,
             'platform_course_id': c.platform_course_id, 'platform_course_slug': c.platform_course_slug,
             'lms_synced': bool(c.lms_synced), 'lms_instructor_email': c.lms_instructor_email,
             'open_for_investment': bool(c.open_for_investment),
-            'lms_sales_count': c.lms_sales_count or 0, 'lms_revenue': c.lms_revenue or 0, 'lms_currency': c.lms_currency or '',
-        })
+        }
+        if is_admin:
+            # THE COMPANY LEDGER FOR THIS COURSE. Revenue, cost, profit and the
+            # distribution are the same numbers /api/finance protects; serving
+            # them on the course row was a side door around it. The employee mode
+            # promises «قراءة فقط: المستخدمون والدورات، بلا أرقام مالية» — this is
+            # where that promise is kept.
+            row.update({
+                'cost_egp': c.cost_egp, 'cost_usd': c.cost_usd,
+                'total_revenue': financial['total_revenue'], 'total_cost': financial['total_cost'],
+                'linked_expense_cost': financial['linked_expense_cost'],
+                'linked_payout_cost': financial['linked_payout_cost'],
+                'linked_investment_cost': financial['linked_investment_cost'],
+                'linked_expenses': linked_expenses,
+                'profit': financial['profit'],
+                'revenue_split': financial['split'],
+                'distribution': financial['distribution'],
+                'lms_sales_count': c.lms_sales_count or 0,
+                'lms_revenue': c.lms_revenue or 0,
+                'lms_currency': c.lms_currency or '',
+            })
+        elif viewer_role == 'trainer' and is_own_trainer_course(c):
+            # ONLY the owning trainer's own percentage — the one financial field
+            # a trainer screen renders («نسبتي» in t_home / t_earnings). No
+            # amounts: no revenue, no cost, no profit, no distribution.
+            row['revenue_split'] = financial['split']
+        # Own entitlement rows (already filtered per row above) travel with the
+        # course for every role: a trainer's own payouts, an investor's own
+        # investments. For an employee/viewer both lists are empty by construction.
+        row['linked_payouts'] = linked_payouts
+        row['linked_investments'] = [serialize_investment(item, rate, {c.id: c}) for item in visible_investments]
+        result.append(row)
     return jsonify(result)
 
 @app.route('/api/courses', methods=['POST'])
@@ -3480,10 +3756,20 @@ def create_lms_course():
 # SETTINGS
 # ============================================================
 
+# Settings keys a NON-admin session is allowed to read. The settings table also
+# holds integration keys and raw bank figures, so it is an allowlist, never a
+# denylist. `role_permissions` is here because the shell asks for it on EVERY
+# login (renderNav → EP.ensure('settings')) to build a non-admin's own menu —
+# 403-ing the whole route would silently drop the D9 menu restrictions.
+NON_ADMIN_SETTING_KEYS = {ROLE_PERMISSIONS_KEY}
+
+
 @app.route('/api/settings', methods=['GET'])
 @token_required
 def get_settings():
     items = Setting.query.all()
+    if not is_admin_scope(g.user):
+        return jsonify({s.key: s.value for s in items if s.key in NON_ADMIN_SETTING_KEYS})
     return jsonify({s.key: s.value for s in items})
 
 @app.route('/api/settings', methods=['PUT'])
@@ -3615,6 +3901,11 @@ def _platform_plan_to_pkg(p):
 
 @app.route('/api/packages', methods=['GET'])
 @token_required
+# NOT admin-only: the employee «المستخدمون» screen loads packages to label each
+# platform user's plan (index.html viewUsers → EP.ensure('packages')). Closing it
+# to admin would break a screen ROLE_NAV grants the employee. Content = public
+# plan names/prices, so staff-wide is the right blast radius.
+@roles_required('admin', 'employee')
 def get_packages():
     # Prefer the LIVE platform plans (via the bridge); fall back to the local copy if the bridge
     # isn't reachable so the screen never goes blank.
@@ -3819,10 +4110,11 @@ def delete_partner(id):
 def list_payouts():
     rate = get_rate()
     items = Payout.query.order_by(Payout.date.desc()).all()
-    viewer_role = user_dashboard_role(g.user)
-    linked_name = user_linked_name(g.user)
-    if viewer_role == 'trainer':
-        items = [item for item in items if names_match(item.name, linked_name) or names_match(item.name, g.user.name)]
+    # ONLY an unambiguous admin reads the whole payout ledger; EVERY other role
+    # (employee included — its mode promises «no financial numbers», and it has
+    # no finance module in ROLE_NAV) sees only rows carrying its own name.
+    if not is_admin_scope(g.user):
+        items = [item for item in items if payout_visible_to(item, g.user)]
     return jsonify([{
         'id': p.id, 'date': serialize_date(p.date), 'name': p.name, 'role': p.role,
         'related_to': p.related_to, 'basis_amount_egp': p.basis_amount_egp,
@@ -3879,10 +4171,10 @@ def list_investments():
     items = Investment.query.order_by(Investment.created_at.desc()).all()
     course_lookup = {course.id: course for course in Course.query.all()}
     opportunity_lookup = {item.id: item for item in InvestmentOpportunity.query.all()}
-    viewer_role = user_dashboard_role(g.user)
-    linked_name = user_linked_name(g.user)
-    if viewer_role == 'investor':
-        items = [item for item in items if names_match(item.investor_name, linked_name) or names_match(item.investor_name, g.user.name) or item.investor_user_id == g.user.id]
+    # ONLY an unambiguous admin reads the full cap table; EVERY other role
+    # (employee included) sees only its OWN investments.
+    if not is_admin_scope(g.user):
+        items = [item for item in items if investment_visible_to(item, g.user)]
     return jsonify([serialize_investment(item, rate, course_lookup, opportunity_lookup) for item in items])
 
 @app.route('/api/investments', methods=['POST'])
@@ -3964,11 +4256,10 @@ def delete_investment(id):
 @token_required
 def investment_active():
     rate = get_rate()
-    viewer_role = user_dashboard_role(g.user)
-    linked_name = user_linked_name(g.user)
     items = Investment.query.filter(Investment.status.in_(['active', 'pending', 'accrued'])).order_by(Investment.created_at.desc()).all()
-    if viewer_role == 'investor':
-        items = [item for item in items if names_match(item.investor_name, linked_name) or names_match(item.investor_name, g.user.name) or item.investor_user_id == g.user.id]
+    # Same scoping rule as /api/investments — otherwise this route is a bypass.
+    if not is_admin_scope(g.user):
+        items = [item for item in items if investment_visible_to(item, g.user)]
     course_lookup = {course.id: course for course in Course.query.all()}
     opportunity_lookup = {item.id: item for item in InvestmentOpportunity.query.all()}
     return jsonify([serialize_investment(item, rate, course_lookup, opportunity_lookup) for item in items])
@@ -3977,17 +4268,23 @@ def investment_active():
 @token_required
 def investment_history():
     rate = get_rate()
-    viewer_role = user_dashboard_role(g.user)
-    linked_name = user_linked_name(g.user)
     items = Investment.query.filter(Investment.status.in_(['completed', 'loss', 'paid'])).order_by(Investment.created_at.desc()).all()
-    if viewer_role == 'investor':
-        items = [item for item in items if names_match(item.investor_name, linked_name) or names_match(item.investor_name, g.user.name) or item.investor_user_id == g.user.id]
+    # Same scoping rule as /api/investments — otherwise this route is a bypass.
+    if not is_admin_scope(g.user):
+        items = [item for item in items if investment_visible_to(item, g.user)]
     course_lookup = {course.id: course for course in Course.query.all()}
     opportunity_lookup = {item.id: item for item in InvestmentOpportunity.query.all()}
     return jsonify([serialize_investment(item, rate, course_lookup, opportunity_lookup) for item in items])
 
 @app.route('/api/investment-opportunities', methods=['GET'])
 @token_required
+# The deal sheet: target_amount / current_funded / expected_roi / trainer_name /
+# students_count per opportunity. Only the two screens that exist for it may
+# read it — admin «الاستثمار» (loader `investment`) and the investor portal
+# (loader `i_data`). No employee/trainer/viewer screen calls this route: the
+# employee nav is ROLE_NAV.employee = users·courses·topics·tutorials, and both
+# investor-portal jobs already `.catch()`, so a 403 degrades, never breaks.
+@roles_required('admin', 'investor')
 def list_investment_opportunities():
     rate = get_rate()
     items = InvestmentOpportunity.query.order_by(InvestmentOpportunity.created_at.desc()).all()
@@ -4047,15 +4344,54 @@ def delete_investment_opportunity(id):
     db.session.commit()
     return jsonify({'message': 'تم حذف فرصة الاستثمار'})
 
+def wallet_owner_name(user):
+    """The investor-wallet key THIS account may open, or '' for none.
+
+    get_or_create_wallet() WRITES a row, so whatever reaches it becomes a
+    permanent `InvestorWallet`. It used to receive user_linked_name(), which
+    falls back to the user's own display name — so any authenticated viewer or
+    employee minted a wallet under their display name, polluting
+    /api/admin/wallets, and an exact display-name collision opened a REAL
+    investor's wallet. Two locks now: the account must actually hold a
+    money-bearing role, and the key must be the admin-set `linked_to_name`
+    (never a name the user picked for themself)."""
+    if not role_grants(user, 'investor', 'trainer'):
+        return ''
+    return (getattr(user, 'linked_to_name', None) or '').strip()
+
+
+def empty_wallet_payload():
+    """A VALID, all-zero wallet — not a 403 and not an error. The investor
+    portal's `i_data` loader calls /me/investor-wallet unconditionally and its
+    ivMe() falls back to hard-coded DESIGN numbers whenever the wallet is null,
+    so an error here would print fake balances on the screen. Zeros are both
+    honest and unbreakable."""
+    return {
+        'id': None, 'investor_name': '', 'investor_user_id': None,
+        'balance': 0, 'balance_egp': 0,
+        'total_invested': 0, 'total_invested_egp': 0,
+        'total_returns': 0, 'total_returns_egp': 0,
+        'avg_roi': 0, 'level': 'bronze', 'pending_withdrawals': 0,
+        'created_at': None,
+    }
+
+
 @app.route('/api/me/investor-wallet', methods=['GET'])
 @token_required
 def get_investor_wallet():
     rate = get_rate()
-    viewer_role = user_dashboard_role(g.user)
-    investor_name = request.args.get('investor_name', '').strip() if viewer_role == 'admin' else user_linked_name(g.user)
+    # Reading ANOTHER investor's wallet by name is an admin-only privilege — it
+    # must use the same authority as every other admin decision, otherwise a
+    # split-identity row (dashboard_role='admin') reads any wallet it names.
+    if is_admin_scope(g.user):
+        investor_name = request.args.get('investor_name', '').strip()
+        owner_user_id = None
+    else:
+        investor_name = wallet_owner_name(g.user)
+        owner_user_id = g.user.id
     if not investor_name:
-        return jsonify({'error': 'لا يوجد مستثمر مرتبط بهذا الحساب'}), 400
-    wallet = get_or_create_wallet(investor_name, g.user.id if viewer_role in ('investor', 'trainer') else None)
+        return jsonify(empty_wallet_payload())
+    wallet = get_or_create_wallet(investor_name, owner_user_id)
     payload = sync_wallet(wallet)
     db.session.commit()
     return jsonify(serialize_wallet(payload['wallet'], rate, payload['avg_roi'], payload['pending_withdrawals']))
@@ -4064,10 +4400,13 @@ def get_investor_wallet():
 @token_required
 def request_withdrawal():
     rate = get_rate()
-    investor_name = user_linked_name(g.user)
+    # A MONEY WRITE keyed by the same wallet name — it must not accept a
+    # self-chosen display name either (it would both mint a wallet and file a
+    # withdrawal request against whatever name collided).
+    investor_name = wallet_owner_name(g.user)
     if not investor_name:
         return jsonify({'error': 'هذا الحساب غير مرتبط بمحفظة مستثمر'}), 400
-    wallet = get_or_create_wallet(investor_name, g.user.id if user_dashboard_role(g.user) in ('investor', 'trainer') else None)
+    wallet = get_or_create_wallet(investor_name, g.user.id)
     payload = sync_wallet(wallet)
     d = request.json or {}
     amount = float(d.get('amount') or 0)
@@ -4087,10 +4426,13 @@ def request_withdrawal():
 @app.route('/api/investor/badges', methods=['GET'])
 @token_required
 def get_investor_badges():
-    investor_name = user_linked_name(g.user)
+    # Same wallet-minting hazard as /me/investor-wallet: this route also CREATES
+    # a row. Same key, same two locks; [] for anyone without one (the portal
+    # already renders an empty badge list fine).
+    investor_name = wallet_owner_name(g.user)
     if not investor_name:
         return jsonify([])
-    wallet = get_or_create_wallet(investor_name, g.user.id if user_dashboard_role(g.user) in ('investor', 'trainer') else None)
+    wallet = get_or_create_wallet(investor_name, g.user.id)
     payload = sync_wallet(wallet)
     db.session.commit()
     return jsonify(serialize_badges(payload['wallet']))
@@ -4145,16 +4487,22 @@ def update_withdrawal(id):
 
 @app.route('/api/ai/investment-recommendation', methods=['GET'])
 @token_required
+# Same deal-sheet data, plus an expected_return_value derived from the course's
+# REAL revenue. Verified: no caller at all in dashboard-cloud/dashboard-api.js or
+# index.html (grep «investment-recommendation» → 0 hits), so nothing can break.
+@roles_required('admin', 'investor')
 def ai_investment_recommendation():
     opportunities = InvestmentOpportunity.query.order_by(InvestmentOpportunity.created_at.desc()).all()
     course_lookup = {course.id: course for course in Course.query.all()}
     if not opportunities:
         return jsonify({'title': 'لا توجد فرص مطروحة الآن', 'message': 'أضف أول فرصة استثمارية لتظهر التوصيات الذكية.', 'opportunity_id': None})
-    viewer_role = user_dashboard_role(g.user)
-    investor_name = user_linked_name(g.user)
+    # Third wallet-MINTING path (it calls get_or_create_wallet). Same key as
+    # /me/investor-wallet and /investor/badges — admin-set link only, so this
+    # route can no longer create a row under a self-chosen display name either.
+    investor_name = wallet_owner_name(g.user)
     wallet = None
     avg_roi = 0
-    if viewer_role in ('investor', 'trainer') and investor_name:
+    if investor_name:
         wallet = get_or_create_wallet(investor_name, g.user.id)
         payload = sync_wallet(wallet)
         avg_roi = payload['avg_roi']
@@ -4176,6 +4524,7 @@ def ai_investment_recommendation():
 
 @app.route('/api/courses/<int:id>/revenue-split', methods=['GET'])
 @token_required
+@roles_required('admin')               # profit shares of ANY course — no frontend caller outside admin
 def get_revenue_split(id):
     course = Course.query.get_or_404(id)
     split = get_course_split(course.id)
@@ -4184,6 +4533,7 @@ def get_revenue_split(id):
 
 @app.route('/api/courses/<int:id>/revenue-split', methods=['PUT'])
 @token_required
+@roles_required('admin')               # trainer/platform/investor profit shares — admin only
 def update_revenue_split(id):
     course = Course.query.get_or_404(id)
     split = get_course_split(course.id)
@@ -4370,7 +4720,9 @@ def generate_ai_snapshot():
     """Generate a structured data snapshot for AI consumption."""
     rate = get_rate()
     viewer_role = user_dashboard_role(g.user) if getattr(g, 'user', None) else 'admin'
-    linked_name = user_linked_name(g.user) if getattr(g, 'user', None) else ''
+    # No g.user = an internal/cron caller that already passed its own gate.
+    viewer = getattr(g, 'user', None)
+    is_admin = is_admin_scope(viewer) if viewer else True
     revenues = Revenue.query.all()
     expenses = Expense.query.filter_by(is_business=True).all()
     payouts = Payout.query.filter(Payout.status != 'waived').all()
@@ -4380,18 +4732,26 @@ def generate_ai_snapshot():
     assets = Asset.query.all()
     forecasts = ForecastMonth.query.order_by(ForecastMonth.month.asc()).limit(6).all()
 
-    if viewer_role == 'trainer':
-        courses = [course for course in courses if names_match(course.trainer_name, linked_name) or names_match(course.trainer_name, g.user.name)]
+    # This snapshot is the whole ledger in one response — revenues, expenses, payouts,
+    # the cash box and the assets. It scoped `trainer`/`investor` with the loose
+    # containment rule (bypassable by a self-chosen display name) and did not scope
+    # `employee` AT ALL, handing the read-only staff role every figure the finance
+    # module is supposed to withhold from it. Now: admin scope → everything; the two
+    # money roles → their own rows via the strict entitlement rule; anyone else → nothing.
+    if is_admin:
+        pass
+    elif viewer_role == 'trainer':
+        courses = [course for course in courses if entitlement_name_matches(course.trainer_name, viewer)]
         course_ids = {course.id for course in courses}
         course_titles = {(course.title or '').strip() for course in courses}
         revenues = [item for item in revenues if item.course_id in course_ids or any(title and title in (item.description or '') for title in course_titles)]
-        payouts = [item for item in payouts if names_match(item.name, linked_name) or names_match(item.name, g.user.name)]
+        payouts = [item for item in payouts if payout_visible_to(item, viewer)]
         expenses = [item for item in expenses if any(title and (title in (item.description or '') or title in (item.notes or '')) for title in course_titles)]
         campaigns = [item for item in campaigns if item.course_id in course_ids]
         cash_transactions = []
         assets = []
     elif viewer_role == 'investor':
-        investments = [item for item in Investment.query.all() if names_match(item.investor_name, linked_name) or names_match(item.investor_name, g.user.name)]
+        investments = [item for item in Investment.query.all() if investment_visible_to(item, viewer)]
         course_ids = {item.course_id for item in investments}
         courses = [course for course in courses if course.id in course_ids]
         course_titles = {(course.title or '').strip() for course in courses}
@@ -4401,7 +4761,11 @@ def generate_ai_snapshot():
         campaigns = [item for item in campaigns if item.course_id in course_ids]
         cash_transactions = []
         assets = []
-    
+    else:
+        # employee / viewer / anything unrecognised: no money at all.
+        revenues, expenses, payouts, cash_transactions = [], [], [], []
+        campaigns, courses, assets, forecasts = [], [], [], []
+
     total_rev = sum(to_egp(r.amount_usd, r.amount_egp, rate) for r in revenues)
     payout_cost = payout_total(payouts, rate)
     cash_balance = cash_total(cash_transactions, rate)
@@ -4608,11 +4972,18 @@ def _bridge_list(payload, *keys):
 
 @app.route('/api/notifications', methods=['GET'])
 @token_required
-@roles_required('admin', 'employee')
 def notifications():
     """Aggregate REAL pending events into a notification list + unread count.
     Each item: {id, title, detail, kind, route, when, unread}.
     Computed live from real tables (and the platform bridge); [] when nothing pending."""
+    # STAFF-ONLY CONTENT, but NOT a 403. The bell lives in the app shell, which
+    # every role renders, and its loader has no error branch — a 403 turned a
+    # trainer's click into a red failure state. An empty list is the same
+    # information (there is nothing here for you) with no broken screen.
+    # The gate stays server-side: the items below name real people and amounts.
+    if not role_grants(g.user, 'admin', 'employee'):
+        return jsonify({'count': 0, 'total': 0, 'items': []})   # same shape as the real reply
+
     items = []
 
     # 1) Unreplied contact messages (local table — always available).
@@ -5426,7 +5797,9 @@ def seed():
                 email=admin_email,
                 password_hash=generate_password_hash(admin_password, method='pbkdf2:sha256'),
                 name=os.environ.get('ADMIN_NAME', 'عبدالرحمن'),
-                role='admin'
+                role='admin',
+                dashboard_role='admin',   # explicit: the column default is 'viewer' now
+                is_active=True,
             )
             db.session.add(admin)
         else:
@@ -5545,6 +5918,7 @@ def reset_business_data():
             existing_admin.password_hash = generate_password_hash(
                 admin_password, method='pbkdf2:sha256')
             existing_admin.role = 'admin'
+            existing_admin.dashboard_role = 'admin'   # keep the two identity fields in sync
             existing_admin.is_active = True
             summary['admin'] = f'reset password for {admin_email}'
         else:
@@ -5553,6 +5927,8 @@ def reset_business_data():
                 password_hash=generate_password_hash(admin_password, method='pbkdf2:sha256'),
                 name=os.environ.get('ADMIN_NAME', 'عبدالرحمن'),
                 role='admin',
+                dashboard_role='admin',   # explicit: the column default is 'viewer' now
+                is_active=True,
             ))
             summary['admin'] = f'created fresh admin {admin_email}'
         db.session.commit()
@@ -5858,8 +6234,27 @@ def ensure_runtime_schema():
         if 'users' in existing_tables:
             user_columns = {column['name'] for column in inspector.get_columns('users')}
             if 'dashboard_role' not in user_columns:
-                connection.execute(text("ALTER TABLE users ADD COLUMN dashboard_role VARCHAR(50) DEFAULT 'admin'"))
-                connection.execute(text("UPDATE users SET dashboard_role = role WHERE dashboard_role IS NULL"))
+                # NO DB-level DEFAULT here, deliberately. SQLite backfills an
+                # ADDed column with its DEFAULT, so the previous
+                # `DEFAULT 'admin'` promoted EVERY pre-existing row to admin and
+                # the follow-up `WHERE dashboard_role IS NULL` then matched
+                # nothing. Adding the column NULL-able and copying `role` into it
+                # keeps the row's real, pre-existing role as the source of truth.
+                connection.execute(text("ALTER TABLE users ADD COLUMN dashboard_role VARCHAR(50)"))
+            # Backfill is OUTSIDE the add-column branch and matches only rows the
+            # column carries no decision for (NULL/empty), so it is idempotent,
+            # safe to re-run on every boot, and can never downgrade a real admin.
+            # NOTE: a database ALREADY migrated by the buggy version cannot be
+            # repaired automatically — a row reading role='trainer',
+            # dashboard_role='admin' is indistinguishable from a deliberate
+            # promotion, so it is left alone (role_grants() denies admin to such
+            # split rows, which contains the damage). See the founder SQL in the
+            # handover notes to inspect and correct those rows by hand.
+            connection.execute(text(
+                "UPDATE users SET dashboard_role = role "
+                "WHERE role IS NOT NULL AND TRIM(role) <> '' "
+                "AND (dashboard_role IS NULL OR TRIM(dashboard_role) = '')"
+            ))
             if 'linked_to_name' not in user_columns:
                 connection.execute(text("ALTER TABLE users ADD COLUMN linked_to_name VARCHAR(255)"))
             if 'preferred_currency' not in user_columns:
@@ -6397,7 +6792,7 @@ def _escrow_metrics_authorized():
     try:
         data = jwt.decode(token, app.config['SECRET_KEY'], algorithms=['HS256'])
         user = User.query.get(data['user_id'])
-        return bool(user and user.is_active and _is_admin_user(user))
+        return bool(user and user.is_active and role_grants(user, 'admin'))
     except Exception:
         return False
 

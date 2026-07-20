@@ -336,22 +336,13 @@ var INBOX=[];
 const TRI={auto:{cls:'tri-auto',t:'عالجه الذكاء'},human:{cls:'tri-human',t:'محوّل لبشري'},wait:{cls:'tri-wait',t:'بانتظار'},late:{cls:'tri-late',t:'متأخّر — عاجل'}};
 
 // escrow data
-const ESCROW=[
-  {id:'ESC-0500',student:'أحمد سامي',expert:'خبير عمالي — أ. ياسر',amount:600,held:'منذ ساعة',release:'باقٍ ٧١س',status:'held'},
-  {id:'ESC-0489',student:'م. خليلي',expert:'خبير عقاري — أ. سمير',amount:1200,held:'منذ يومين',release:'بانتظار تأكيد الطالب',status:'confirm'},
-  {id:'ESC-0492',student:'عمر أبو مدين',expert:'خبيرة ملكية فكرية',amount:850,held:'منذ ٤ أيام',release:'باقٍ ٦س — تحرير تلقائي',status:'confirm'},
-  {id:'ESC-0495',student:'باسم دويكات',expert:'خبير جنائي — أ. كريم',amount:1500,held:'منذ يوم',release:'مجمّد — نزاع مفتوح',status:'dispute'}
-];
+// الضمان: لا جلسات/نزاعات/تحريرات تصميمية — تُجلب حيّة من الخادم (محمّل escrow) أو تبقى فارغة.
+const ESCROW=[];
 const STATUS={held:{cls:'s-wait',t:'محجوز'},confirm:{cls:'s-human',t:'بانتظار تأكيد'},dispute:{cls:'s-late',t:'نزاع'}};
-const DISPUTES=[
-  {id:'DSP-0212',session:'ESC-0495',party:'باسم دويكات',expert:'خبير جنائي — أ. كريم',reason:'الخدمة لم تكتمل كما اتُّفق عليه في الوصف.',stage:'review',amount:1500,opened:'منذ ٣ أيام',sla:'القرار خلال يوم عمل — متأخّر ٣س',warn:true}
-];
-const RELEASED=[
-  {id:'ESC-0480',expert:'خبير ضرائب',amount:2000,when:'أمس'},
-  {id:'ESC-0478',expert:'خبير عقاري',amount:900,when:'منذ يومين'}
-];
+const DISPUTES=[];
+const RELEASED=[];
 const COMMISSION=0.15;
-const money=n=>n.toLocaleString('ar-EG');
+const money=n=>(n==null||isNaN(n))?'—':Number(n).toLocaleString('ar-EG');
 // HTML-escape for safe interpolation into innerHTML (global — used by drawers/modals/views).
 function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
 
@@ -544,7 +535,7 @@ function drawInbox(){
 }
 
 /* ===== ESCROW VIEW ===== */
-// مصادر البيانات الحيّة (مع سقوط آمن للبيانات التصميمية لو الخادم غير متاح).
+// مصادر البيانات الحيّة (وقوائم فارغة لو الخادم غير متاح — لا بديل تصميمي).
 function escSessions(){return (window.EP&&EP.data.escrow)?EP.data.escrow.sessions:ESCROW;}
 function escDisputes(){return (window.EP&&EP.data.escrow)?EP.data.escrow.disputes:DISPUTES;}
 function escReleased(){return (window.EP&&EP.data.escrow)?EP.data.escrow.released:RELEASED;}
@@ -559,7 +550,7 @@ function viewEscrow(v){
   const relSum=mt?Math.round(mt.released_sum||0):REL.reduce((s,r)=>s+(r.amount||0),0);
   v.innerHTML=`
     <div class="policy">${svg('shield','ic')}<div><b>سياسة الضمان:</b> تحرير تلقائي للخبير بعد <b>٧٢ ساعة</b> من الجلسة إن لم يعترض الطالب · نافذة فتح النزاع <b>٤٨ ساعة</b> · العمولة (<b>١٥٪</b>) تُقتطع عند التحرير لا عند التحصيل.</div></div>
-    ${Est==='error'?`<div class="policy" style="border-inline-start-color:var(--conflict);background:var(--conflict-bg);color:var(--conflict)">${svg('scale','ic')}<div>تعذّر جلب الضمان من الخادم — تُعرض بيانات تصميمية. <b style="cursor:pointer;text-decoration:underline" onclick="EP.reload('escrow',()=>viewEscrow(document.getElementById('view')))">إعادة المحاولة</b></div></div>`:''}
+    ${Est==='error'?`<div class="policy" style="border-inline-start-color:var(--conflict);background:var(--conflict-bg);color:var(--conflict)">${svg('scale','ic')}<div>تعذّر جلب الضمان من الخادم — لا تُعرض أي بيانات بديلة. <b style="cursor:pointer;text-decoration:underline" onclick="EP.reload('escrow',()=>viewEscrow(document.getElementById('view')))">إعادة المحاولة</b></div></div>`:''}
     ${Est==='loading'?`<div class="policy">${svg('shield','ic')}<div>…جارٍ تحميل جلسات الضمان من الخادم</div></div>`:''}
     <div class="kpis">
       <div class="kpi k-1"><div class="top"><span class="ic">${svg('shield')}</span>محجوز حاليًا</div><b>${money(held)} <small style="font-size:13px">ج</small></b><div class="sub">عبر ${active} جلسات نشطة</div></div>
@@ -664,18 +655,12 @@ function drawEsc(){
 }
 
 /* ===== FINANCE VIEW ===== */
-const REVENUES=[
-  {date:'٢١ يونيو',who:'عبدالرحمن القحطاني',desc:'اشتراك دورة',amount:2000,method:'بطاقة',cat:'دورة'},
-  {date:'٢٠ يونيو',who:'م. خليلي',desc:'استشارة بضمان (محرّرة)',amount:1020,method:'ضمان',cat:'استشارة'},
-  {date:'١٨ يونيو',who:'RATTEL LTD',desc:'إيداع يدوي — إنستاباي',amount:1400,method:'إنستاباي',cat:'إيداع'},
-  {date:'١٥ يونيو',who:'عمر أبو مدين',desc:'باقة أدوات',amount:850,method:'فودافون كاش',cat:'اشتراك'}
-];
-const EXPENSES=[
-  {date:'٢٠ يونيو',cat:'أدوات واشتراكات',desc:'Anthropic + OpenAI',amount:2500,business:true},
-  {date:'١٩ يونيو',cat:'استضافة',desc:'Hostinger + Coolify',amount:900,business:true},
-  {date:'١٧ يونيو',cat:'تسويق',desc:'حملة إعلانية',amount:1500,business:true},
-  {date:'١٦ يونيو',cat:'شخصي',desc:'مصروف شخصي مختلط',amount:600,business:false}
-];
+// الإيرادات والمصروفات: لا بيانات تصميمية إطلاقًا — تُجلب حيّة من /api/revenues و/api/expenses
+// (انظر محمّلَي revenues/expenses في dashboard-api.js). قبل الجلب أو عند فشله: قائمة فارغة + حالة صريحة.
+function finRevenues(){return (window.EP&&Array.isArray(EP.data.revenues))?EP.data.revenues:[];}
+function finExpenses(){return (window.EP&&Array.isArray(EP.data.expenses))?EP.data.expenses:[];}
+// ملخّص المالية الحيّ (/api/finance/summary) — مرفوع لنطاق الوحدة كي تراه renderFin أيضًا.
+function finSummary(){return (window.EP&&EP.data.finance)||null;}
 // السحوبات: لا بيانات تصميمية — تُجلب حيّة من /api/admin/withdrawals (تحمل wid للاعتماد/الرفض).
 var WITHDRAWALS=[];
 function finWithdrawals(){
@@ -685,28 +670,31 @@ function finWithdrawals(){
   return WITHDRAWALS;
 }
 const WSTATUS={pending:{cls:'s-human',t:'بانتظار اعتماد'},done:{cls:'s-auto',t:'نُفِّذ'}};
-var FMONTHLY=[{m:'مارس',i:18,o:6},{m:'أبريل',i:31,o:8},{m:'مايو',i:22,o:7},{m:'يونيو',i:28,o:9}];
+// التدفّق النقدي الشهري: لا شهور مخترعة — يملؤه محمّل finance من /api/finance/summary أو يبقى فارغًا.
+var FMONTHLY=[];
 
 function viewFinance(v){
-  if(window.EP){EP.ensure('finance',()=>viewFinance(v));EP.ensure('investment',()=>viewFinance(v));}
-  const F=(window.EP&&EP.data.finance)||null, Fst=(window.EP&&EP.state.finance)||'idle';
+  if(window.EP){EP.ensure('finance',()=>viewFinance(v));EP.ensure('investment',()=>viewFinance(v));EP.ensure('revenues',()=>viewFinance(v));EP.ensure('expenses',()=>viewFinance(v));}
+  const F=finSummary(), Fst=(window.EP&&EP.state.finance)||'idle';
+  const RVS=finRevenues(), EXS=finExpenses();
   const WD=finWithdrawals();
   const pendW=WD.filter(w=>w.status==='pending').reduce((s,w)=>s+w.amount,0);
-  const kRev = F ? money(F.total_revenue)+' <small style="font-size:13px">ج</small>' : (Fst==='loading'?'…':'٢٤٧٬٥٣٨ <small style="font-size:13px">ج</small>');
-  const kExp = F ? money(F.total_expenses)+' <small style="font-size:13px">ج</small>' : (Fst==='loading'?'…':'٣٢٬٩٧٠ <small style="font-size:13px">ج</small>');
-  const kNet = F ? (((F.total_revenue-F.total_expenses)>=0?'+':'')+money(F.total_revenue-F.total_expenses)+' <small style="font-size:13px">ج</small>') : (Fst==='loading'?'…':'+٢١٤٬٥٦٨ <small style="font-size:13px">ج</small>');
+  // عند تعذّر الجلب لا نخترع رقمًا: شرطة (—) + البانر الأحمر.
+  const kRev = F ? money(F.total_revenue)+' <small style="font-size:13px">ج</small>' : (Fst==='loading'?'…':'—');
+  const kExp = F ? money(F.total_expenses)+' <small style="font-size:13px">ج</small>' : (Fst==='loading'?'…':'—');
+  const kNet = F ? (((F.total_revenue-F.total_expenses)>=0?'+':'')+money(F.total_revenue-F.total_expenses)+' <small style="font-size:13px">ج</small>') : (Fst==='loading'?'…':'—');
   v.innerHTML=`
-    ${Fst==='error'?`<div class="policy" style="border-inline-start-color:var(--conflict);background:var(--conflict-bg);color:var(--conflict)">${svg('scale','ic')}<div>تعذّر جلب المالية من الخادم — تُعرض أرقام تصميمية. <b style="cursor:pointer;text-decoration:underline" onclick="EP.reload('finance',()=>viewFinance(document.getElementById('view')))">إعادة المحاولة</b></div></div>`:''}
+    ${Fst==='error'?`<div class="policy" style="border-inline-start-color:var(--conflict);background:var(--conflict-bg);color:var(--conflict)">${svg('scale','ic')}<div>تعذّر جلب المالية من الخادم — لا تُعرض أي أرقام بديلة. <b style="cursor:pointer;text-decoration:underline" onclick="EP.reload('finance',()=>viewFinance(document.getElementById('view')))">إعادة المحاولة</b></div></div>`:''}
     <div class="kpis">
-      <div class="kpi k-3"><div class="top"><span class="ic">${svg('wallet')}</span>إجمالي الإيرادات</div><b>${kRev}</b><div class="sub">${F?'حيّ من المالية':'حتى اليوم'}</div></div>
+      <div class="kpi k-3"><div class="top"><span class="ic">${svg('wallet')}</span>إجمالي الإيرادات</div><b>${kRev}</b><div class="sub">${F?'حيّ من المالية':'بانتظار الخادم'}</div></div>
       <div class="kpi k-4"><div class="top"><span class="ic">${svg('trend')}</span>إجمالي المصروفات</div><b>${kExp}</b><div class="sub">أعمال + شخصي مفصول</div></div>
       <div class="kpi k-1"><div class="top"><span class="ic">${svg('grid')}</span>صافي الربح</div><b>${kNet}</b><div class="sub">إيرادات − مصروفات</div></div>
       <div class="kpi k-2"><div class="top"><span class="ic">${svg('clock')}</span>سحوبات بانتظار</div><b>${money(pendW)} <small style="font-size:13px">ج</small></b><div class="sub">${WD.filter(w=>w.status==='pending').length} طلبات للاعتماد</div></div>
     </div>
     <div class="tabbar" id="finTabs">
       <div class="tab${finTab==='summary'?' on':''}" data-t="summary">الملخص</div>
-      <div class="tab${finTab==='revenues'?' on':''}" data-t="revenues">الإيرادات (${REVENUES.length})</div>
-      <div class="tab${finTab==='expenses'?' on':''}" data-t="expenses">المصروفات (${EXPENSES.length})</div>
+      <div class="tab${finTab==='revenues'?' on':''}" data-t="revenues">الإيرادات (${RVS.length})</div>
+      <div class="tab${finTab==='expenses'?' on':''}" data-t="expenses">المصروفات (${EXS.length})</div>
       <div class="tab${finTab==='withdrawals'?' on':''}" data-t="withdrawals">السحوبات (${WD.length})</div>
     </div>
     <div class="inboxwrap">
@@ -714,42 +702,19 @@ function viewFinance(v){
       <aside class="drawer" id="drawer"></aside>
     </div>`;
   v.querySelectorAll('#finTabs .tab').forEach(t=>t.onclick=()=>{finTab=t.dataset.t;selected=null;viewFinance(v);});
+  // الإضافة اليدوية (إيراد/مصروف/سحب) غير مربوطة بأي واجهة كتابة — كانت تكتب في الذاكرة وتضيع
+  // مع أول تحديث للصفحة. عُطِّلت صراحةً بدل زرّ يوهم بالحفظ، لحين ربطها بالخادم.
   var fa=document.getElementById('finAdd');
-  if(finTab==='expenses'||finTab==='revenues'||finTab==='withdrawals'){fa.style.display='';document.getElementById('finAddLbl').textContent=finTab==='expenses'?'مصروف جديد':finTab==='revenues'?'إيراد جديد':'تسجيل سحب';fa.onclick=function(){finTab==='expenses'?expenseModal():finTab==='revenues'?revenueModal():withdrawalModal();};}
+  if(finTab==='expenses'||finTab==='revenues'||finTab==='withdrawals'){
+    fa.style.display='';fa.disabled=true;
+    fa.style.opacity='.5';fa.style.cursor='not-allowed';
+    fa.title='الإضافة اليدوية غير مفعّلة بعد — تُسجَّل الحركات تلقائيًا من المنصة.';
+    document.getElementById('finAddLbl').textContent='الإضافة اليدوية غير مفعّلة';
+  }
   renderFin();
 }
-function expenseModal(edit){
-  var e=edit||{};
-  var s=openModal(edit?'تعديل مصروف':'مصروف جديد',
-    '<div class="fld"><label>الوصف</label><input id="ex_d" value="'+(e.desc||'')+'" placeholder="إيجار القاعة…"></div>'+
-    '<div class="row2"><div class="fld"><label>المبلغ (ج)</label><input id="ex_a" type="number" value="'+(e.amount||'')+'"></div><div class="fld"><label>الفئة</label><input id="ex_c" value="'+(e.cat||'')+'" placeholder="أدوات / استضافة…"></div></div>'+
-    '<div class="row2"><div class="fld"><label>التاريخ</label><input id="ex_dt" value="'+(e.date||'')+'" placeholder="٢٠ يونيو"></div><div class="fld"><label>التصنيف</label><select id="ex_b"><option value="1"'+(e.business!==false?' selected':'')+'>أعمال</option><option value="0"'+(e.business===false?' selected':'')+'>شخصي</option></select></div></div>'+
-    '<div class="fld"><label>إيصال (اختياري)</label><div style="border:1.5px dashed var(--line);border-radius:10px;padding:13px;text-align:center;color:var(--muted);font-size:12.5px;cursor:pointer">'+svg('inbox','ic')+' ارفع صورة الإيصال</div></div>'+
-    '<div class="acts" style="margin-top:12px"><button class="btn btn-primary" id="ex_s">'+svg('check')+(edit?'حفظ':'أضف المصروف')+'</button>'+(edit?'<button class="btn btn-warn" id="ex_del">حذف</button>':'')+'<button class="btn btn-ghost" id="ex_x">إلغاء</button></div>');
-  s.querySelector('#ex_x').onclick=closeModal;
-  s.querySelector('#ex_s').onclick=function(){var d={desc:s.querySelector('#ex_d').value.trim()||'مصروف',amount:+s.querySelector('#ex_a').value||0,cat:s.querySelector('#ex_c').value.trim()||'عام',date:s.querySelector('#ex_dt').value.trim()||'الآن',business:s.querySelector('#ex_b').value==='1'};if(edit){Object.assign(edit,d);}else{EXPENSES.unshift(d);}closeModal();finTab='expenses';viewFinance(document.getElementById('view'));notify(edit?'حُدّث المصروف':'أُضيف مصروف «'+d.desc+'»');};
-  var xd=s.querySelector('#ex_del');if(xd)xd.onclick=function(){var i=EXPENSES.indexOf(edit);if(i>-1)EXPENSES.splice(i,1);closeModal();viewFinance(document.getElementById('view'));notify('حُذف المصروف');};
-}
-function revenueModal(edit){
-  var e=edit||{};
-  var s=openModal(edit?'تعديل إيراد':'إيراد جديد',
-    '<div class="fld"><label>الوصف</label><input id="rv_d" value="'+(e.desc||'')+'" placeholder="اشتراك دورة…"></div>'+
-    '<div class="row2"><div class="fld"><label>المبلغ (ج)</label><input id="rv_a" type="number" value="'+(e.amount||'')+'"></div><div class="fld"><label>العميل</label><input id="rv_w" value="'+(e.who||'')+'"></div></div>'+
-    '<div class="row2"><div class="fld"><label>الوسيلة</label><input id="rv_m" value="'+(e.method||'')+'" placeholder="بطاقة / إنستاباي"></div><div class="fld"><label>التصنيف</label><input id="rv_c" value="'+(e.cat||'')+'" placeholder="دورة / استشارة"></div></div>'+
-    '<div class="fld"><label>التاريخ</label><input id="rv_dt" value="'+(e.date||'')+'" placeholder="٢١ يونيو"></div>'+
-    '<div class="acts" style="margin-top:12px"><button class="btn btn-primary" id="rv_s">'+svg('check')+(edit?'حفظ':'أضف الإيراد')+'</button>'+(edit?'<button class="btn btn-warn" id="rv_del">حذف</button>':'')+'<button class="btn btn-ghost" id="rv_x">إلغاء</button></div>');
-  s.querySelector('#rv_x').onclick=closeModal;
-  s.querySelector('#rv_s').onclick=function(){var d={desc:s.querySelector('#rv_d').value.trim()||'إيراد',amount:+s.querySelector('#rv_a').value||0,who:s.querySelector('#rv_w').value.trim()||'—',method:s.querySelector('#rv_m').value.trim()||'—',cat:s.querySelector('#rv_c').value.trim()||'عام',date:s.querySelector('#rv_dt').value.trim()||'الآن'};if(edit){Object.assign(edit,d);}else{REVENUES.unshift(d);}closeModal();finTab='revenues';viewFinance(document.getElementById('view'));notify(edit?'حُدّث الإيراد':'أُضيف إيراد «'+d.desc+'»');};
-  var rd=s.querySelector('#rv_del');if(rd)rd.onclick=function(){var i=REVENUES.indexOf(edit);if(i>-1)REVENUES.splice(i,1);closeModal();viewFinance(document.getElementById('view'));notify('حُذف الإيراد');};
-}
-function withdrawalModal(){
-  var s=openModal('تسجيل سحب',
-    '<div class="fld"><label>المستفيد</label><input id="wd_w" placeholder="اسم المستخدم/المدرّب"></div>'+
-    '<div class="row2"><div class="fld"><label>المبلغ (ج)</label><input id="wd_a" type="number"></div><div class="fld"><label>الوجهة</label><input id="wd_d" placeholder="إنستاباي / بنك"></div></div>'+
-    '<div class="acts" style="margin-top:12px"><button class="btn btn-primary" id="wd_s">'+svg('check')+'سجّل السحب</button><button class="btn btn-ghost" id="wd_x">إلغاء</button></div>');
-  s.querySelector('#wd_x').onclick=closeModal;
-  s.querySelector('#wd_s').onclick=function(){var d={who:s.querySelector('#wd_w').value.trim()||'مستخدم',amount:+s.querySelector('#wd_a').value||0,dest:s.querySelector('#wd_d').value.trim()||'—',status:'pending',when:'الآن'};WITHDRAWALS.unshift(d);closeModal();finTab='withdrawals';viewFinance(document.getElementById('view'));notify('سُجّل طلب سحب لـ '+d.who);};
-}
+// حُذفت نماذج «مصروف جديد / إيراد جديد / تسجيل سحب»: كانت تكتب في مصفوفات ذاكرة بلا أي نداء API،
+// فتضيع البيانات مع أول تحديث للصفحة. تُعاد عند ربط واجهات الكتابة الحقيقية بالخادم.
 function catBars(arr,color){return arr.map(([l,val])=>`<div style="margin-bottom:9px"><div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:3px"><span>${l}</span><span style="font-weight:700">${val}٪</span></div><div style="height:8px;background:var(--surface-2);border-radius:4px;overflow:hidden"><div style="height:100%;width:${val}%;background:${color};border-radius:4px"></div></div></div>`).join('');}
 function drawFinInfo(){const el=document.getElementById('drawer');if(el)el.innerHTML=`<div class="empty">${svg('wallet','ic')}<p>اختر تبويبًا ثم بندًا لرؤية التفاصيل والإجراء.</p></div>`;}
 function svgLine(data,color){
@@ -796,18 +761,34 @@ function svgBars(data,color,unit){
   return '<div style="display:flex;gap:10px;align-items:flex-end;height:170px;padding-top:8px">'+bars+'</div>';
 }
 function renderFin(){
+  // ملاحظة: كان هذا التبويب يقرأ المتغيّر F المُعرَّف محليًّا داخل viewFinance فيرمي ReferenceError
+  // ويُفرِّغ الشاشة عند كل نقرة على «الملخص». صار يقرأه من المصدر المشترك finSummary().
+  const F=finSummary();
   const body=document.getElementById('finBody'),h=document.getElementById('finH'),n=document.getElementById('finN'),hint=document.getElementById('finHint');
+  const Fst=(window.EP&&EP.state.finance)||'idle';
+  const Rst=(window.EP&&EP.state.revenues)||'idle', Est=(window.EP&&EP.state.expenses)||'idle';
+  // حالة صريحة لكل قائمة: تحميل / خطأ / فارغة — بلا أي صفوف مخترعة.
+  function finState(st,emptyTxt,key,label){
+    if(st==='loading')return '<div style="padding:40px;text-align:center;color:var(--muted)">…جارٍ التحميل من الخادم</div>';
+    if(st==='error')return '<div style="padding:40px;text-align:center;color:var(--conflict)">تعذّر جلب '+label+' من الخادم. <b style="cursor:pointer;text-decoration:underline" onclick="EP.reload(\''+key+'\',()=>viewFinance(document.getElementById(\'view\')))">إعادة المحاولة</b></div>';
+    return '<div style="padding:40px;text-align:center;color:var(--muted)">'+emptyTxt+'</div>';
+  }
   body.innerHTML='';
   if(finTab==='summary'){
     h.textContent='الملخص — Cash Flow الشهري';n.style.display='none';hint.textContent='الوارد مقابل الصادر (بالألف ج)';
-    const mx=Math.max(...FMONTHLY.map(m=>Math.max(m.i,m.o)));
-    let bars='<div style="display:flex;gap:18px;align-items:flex-end;padding:22px 24px 8px">';
-    FMONTHLY.forEach(m=>{bars+=`<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:6px"><div style="display:flex;gap:5px;align-items:flex-end;height:130px"><div style="width:18px;background:var(--agree);border-radius:5px 5px 0 0;height:${m.i/mx*130}px"></div><div style="width:18px;background:var(--conflict);border-radius:5px 5px 0 0;height:${m.o/mx*130}px"></div></div><div style="font-size:12px;font-weight:700;color:var(--ink-2)">${m.m}</div></div>`;});
-    bars+='</div>';
+    let bars='';
+    if(!FMONTHLY.length){
+      bars=`<div style="padding:34px 24px;text-align:center;color:var(--muted);font-size:13px">${Fst==='loading'?'…جارٍ تحميل التدفّق الشهري من الخادم':(Fst==='error'?'تعذّر جلب التدفّق الشهري من الخادم.':'لا حركة شهرية مسجّلة بعد — تظهر الأعمدة تلقائيًا مع أول إيراد أو مصروف.')}</div>`;
+    } else {
+      const mx=Math.max(...FMONTHLY.map(m=>Math.max(m.i,m.o)))||1;
+      bars='<div style="display:flex;gap:18px;align-items:flex-end;padding:22px 24px 8px">';
+      FMONTHLY.forEach(m=>{bars+=`<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:6px"><div style="display:flex;gap:5px;align-items:flex-end;height:130px"><div style="width:18px;background:var(--agree);border-radius:5px 5px 0 0;height:${m.i/mx*130}px"></div><div style="width:18px;background:var(--conflict);border-radius:5px 5px 0 0;height:${m.o/mx*130}px"></div></div><div style="font-size:12px;font-weight:700;color:var(--ink-2)">${m.m}</div></div>`;});
+      bars+='</div>';
+    }
     body.innerHTML=`
-      <div style="padding:18px 24px 4px"><div style="font-size:11px;font-weight:800;color:var(--muted);margin-bottom:6px">صافي التدفّق الشهري (بالألف ج)</div>${svgLine(FMONTHLY.map(m=>({m:m.m,v:m.i-m.o})),'#1C9A5B')}</div>
+      ${FMONTHLY.length?`<div style="padding:18px 24px 4px"><div style="font-size:11px;font-weight:800;color:var(--muted);margin-bottom:6px">صافي التدفّق الشهري (بالألف ج)</div>${svgLine(FMONTHLY.map(m=>({m:m.m,v:m.i-m.o})),'#1C9A5B')}</div>`:''}
       ${bars}
-      <div style="display:flex;gap:16px;padding:0 24px 14px;font-size:12px;color:var(--ink-2)"><span style="display:flex;align-items:center;gap:6px"><span style="width:11px;height:11px;border-radius:3px;background:var(--agree)"></span>وارد</span><span style="display:flex;align-items:center;gap:6px"><span style="width:11px;height:11px;border-radius:3px;background:var(--conflict)"></span>صادر</span></div>
+      ${FMONTHLY.length?'<div style="display:flex;gap:16px;padding:0 24px 14px;font-size:12px;color:var(--ink-2)"><span style="display:flex;align-items:center;gap:6px"><span style="width:11px;height:11px;border-radius:3px;background:var(--agree)"></span>وارد</span><span style="display:flex;align-items:center;gap:6px"><span style="width:11px;height:11px;border-radius:3px;background:var(--conflict)"></span>صادر</span></div>':''}
       <div style="border-top:1px solid var(--line);padding:18px 24px;display:grid;grid-template-columns:1fr 1fr;gap:24px">
         <div><div style="font-size:11px;font-weight:800;color:var(--muted);margin-bottom:12px">الإيرادات حسب المصدر</div>${(F&&Array.isArray(F.revenue_by_source)&&F.revenue_by_source.length)?svgDonut(F.revenue_by_source.map(function(s,i){return {label:s.label||s.source||'مصدر',val:Math.round(s.amount||s.val||0),color:['#1C9A5B','#0E8E9B','#C8870E','#9E2B4E','#8A93A6'][i%5]};})):'<div style="color:var(--muted);font-size:13px;padding:14px 0">لا بيانات كافية</div>'}</div>
         <div><div style="font-size:11px;font-weight:800;color:var(--muted);margin-bottom:12px">المصروفات: أعمال مقابل شخصي</div>${(F&&(F.expenses_business!=null||F.expenses_personal!=null))?svgDonut([{label:'أعمال',val:Math.round(F.expenses_business||0),color:'#9E2B4E'},{label:'شخصي',val:Math.round(F.expenses_personal||0),color:'#8A93A6'}]):'<div style="color:var(--muted);font-size:13px;padding:14px 0">لا بيانات كافية</div>'}</div>
@@ -815,19 +796,21 @@ function renderFin(){
     drawFinInfo();return;
   }
   n.style.display='';
-  if(finTab==='revenues'){h.textContent='الإيرادات';n.textContent=REVENUES.length;hint.textContent='كل إيراد يصب من المنصة';
-    REVENUES.forEach((r,idx)=>body.insertAdjacentHTML('beforeend',`<div class="row esc-row${selected==='r'+idx?' sel':''}" data-r="${idx}" style="grid-template-columns:1.5fr 1fr 1fr 120px">
-      <div class="c c1"><div class="src-ic" style="background:var(--agree-bg);color:var(--agree)">${svg('wallet')}</div><div><div class="parties">${r.who}</div><div class="from">${r.desc} · ${r.date}</div></div></div>
+  if(finTab==='revenues'){const RVS=finRevenues();h.textContent='الإيرادات';n.textContent=RVS.length;hint.textContent='كل إيراد يصب من المنصة';
+    RVS.forEach((r,idx)=>body.insertAdjacentHTML('beforeend',`<div class="row esc-row${selected==='r'+idx?' sel':''}" data-r="${idx}" style="grid-template-columns:1.5fr 1fr 1fr 120px">
+      <div class="c c1"><div class="src-ic" style="background:var(--agree-bg);color:var(--agree)">${svg('wallet')}</div><div><div class="parties">${esc(r.who)}</div><div class="from">${esc(r.desc)} · ${esc(r.date)}</div></div></div>
       <div class="c"><div class="amt" style="color:var(--agree)">+${money(r.amount)} <small>ج</small></div></div>
-      <div class="c"><div class="from">${r.method}</div></div>
-      <div class="c"><span class="status s-auto"><span class="d"></span>${r.cat}</span></div></div>`));
+      <div class="c"><div class="from">${esc(r.method)}</div></div>
+      <div class="c"><span class="status s-auto"><span class="d"></span>${esc(r.cat)}</span></div></div>`));
+    if(!RVS.length)body.innerHTML=finState(Rst,'لا إيرادات مسجّلة بعد','revenues','الإيرادات');
     body.querySelectorAll('.row').forEach(x=>x.onclick=()=>{selected='r'+x.dataset.r;renderFin();drawFin();});
-  } else if(finTab==='expenses'){h.textContent='المصروفات';n.textContent=EXPENSES.length;hint.textContent='أعمال · شخصي مفصول';
-    EXPENSES.forEach((e,idx)=>body.insertAdjacentHTML('beforeend',`<div class="row esc-row${selected==='e'+idx?' sel':''}" data-e="${idx}" style="grid-template-columns:1.5fr 1fr 1fr 120px">
-      <div class="c c1"><div class="src-ic" style="background:${e.business?'var(--gold-bg)':'var(--surface-2)'};color:${e.business?'var(--gold)':'var(--muted)'}">${svg('trend')}</div><div><div class="parties">${e.desc}</div><div class="from">${e.cat} · ${e.date}</div></div></div>
+  } else if(finTab==='expenses'){const EXS=finExpenses();h.textContent='المصروفات';n.textContent=EXS.length;hint.textContent='أعمال · شخصي مفصول';
+    EXS.forEach((e,idx)=>body.insertAdjacentHTML('beforeend',`<div class="row esc-row${selected==='e'+idx?' sel':''}" data-e="${idx}" style="grid-template-columns:1.5fr 1fr 1fr 120px">
+      <div class="c c1"><div class="src-ic" style="background:${e.business?'var(--gold-bg)':'var(--surface-2)'};color:${e.business?'var(--gold)':'var(--muted)'}">${svg('trend')}</div><div><div class="parties">${esc(e.desc)}</div><div class="from">${esc(e.cat)} · ${esc(e.date)}</div></div></div>
       <div class="c"><div class="amt" style="color:var(--conflict)">−${money(e.amount)} <small>ج</small></div></div>
-      <div class="c"><div class="from">${e.cat}</div></div>
+      <div class="c"><div class="from">${esc(e.cat)}</div></div>
       <div class="c"><span class="status ${e.business?'s-wait':''}" style="${e.business?'':'background:var(--surface-2);color:var(--muted)'}"><span class="d" style="${e.business?'':'background:var(--muted)'}"></span>${e.business?'أعمال':'شخصي'}</span></div></div>`));
+    if(!EXS.length)body.innerHTML=finState(Est,'لا مصروفات مسجّلة بعد','expenses','المصروفات');
     body.querySelectorAll('.row').forEach(x=>x.onclick=()=>{selected='e'+x.dataset.e;renderFin();drawFin();});
   } else {const WD=finWithdrawals();h.textContent='طلبات السحب';n.textContent=WD.length;hint.textContent='واردة من محافظ المنصة — اعتمد ثم نفّذ';
     WD.forEach((w,idx)=>{const st=WSTATUS[w.status]||WSTATUS.pending;body.insertAdjacentHTML('beforeend',`<div class="row esc-row${selected==='w'+idx?' sel':''}" data-w="${idx}" style="grid-template-columns:1.5fr 1fr 1fr 130px">
@@ -844,8 +827,8 @@ function drawFin(){
   const el=document.getElementById('drawer');if(!el)return;
   if(selected===null){drawFinInfo();return;}
   const t=selected[0],i=+selected.slice(1);
-  if(t==='r'){const r=REVENUES[i];el.innerHTML=`<div class="dh"><div class="k">إيراد</div><h3>${r.who}</h3></div><div class="db"><div class="field"><div class="lab">المبلغ</div><div class="bigamt" style="color:var(--agree)">+${money(r.amount)} <small>ج</small></div></div><div class="field"><div class="lab">الوصف</div><div class="val">${r.desc}</div></div><div class="field"><div class="lab">الوسيلة · التصنيف</div><div class="val">${r.method} · ${r.cat}</div></div><div class="field"><div class="lab">التاريخ</div><div class="val">${r.date}</div></div><div class="acts"><button class="btn btn-ghost" data-a="inv">فاتورة PDF</button></div></div>`;}
-  else if(t==='e'){const e=EXPENSES[i];el.innerHTML=`<div class="dh"><div class="k">مصروف</div><h3>${e.desc}</h3></div><div class="db"><div class="field"><div class="lab">المبلغ</div><div class="bigamt" style="color:var(--conflict)">−${money(e.amount)} <small>ج</small></div></div><div class="field"><div class="lab">الفئة</div><div class="val">${e.cat}</div></div><div class="field"><div class="lab">التصنيف</div><div class="val">${e.business?'مصروف أعمال':'شخصي — مفصول عن الأعمال'}</div></div><div class="acts"><button class="btn btn-ghost" data-a="recat">إعادة تصنيف</button></div></div>`;}
+  if(t==='r'){const r=finRevenues()[i];if(!r){drawFinInfo();return;}el.innerHTML=`<div class="dh"><div class="k">إيراد</div><h3>${esc(r.who)}</h3></div><div class="db"><div class="field"><div class="lab">المبلغ</div><div class="bigamt" style="color:var(--agree)">+${money(r.amount)} <small>ج</small></div></div><div class="field"><div class="lab">الوصف</div><div class="val">${esc(r.desc)}</div></div><div class="field"><div class="lab">الوسيلة · التصنيف</div><div class="val">${esc(r.method)} · ${esc(r.cat)}</div></div><div class="field"><div class="lab">التاريخ</div><div class="val">${esc(r.date)}</div></div></div>`;return;}
+  else if(t==='e'){const e=finExpenses()[i];if(!e){drawFinInfo();return;}el.innerHTML=`<div class="dh"><div class="k">مصروف</div><h3>${esc(e.desc)}</h3></div><div class="db"><div class="field"><div class="lab">المبلغ</div><div class="bigamt" style="color:var(--conflict)">−${money(e.amount)} <small>ج</small></div></div><div class="field"><div class="lab">الفئة</div><div class="val">${esc(e.cat)}</div></div><div class="field"><div class="lab">التصنيف</div><div class="val">${e.business?'مصروف أعمال':'شخصي — مفصول عن الأعمال'}</div></div></div>`;return;}
   else{const w=finWithdrawals()[i];if(!w){drawFinInfo();return;}const done=w.status==='done';const live=!!w.wid;
     // أزرار الاعتماد/الرفض تعمل فقط مع طلب حقيقي يحمل wid (PUT /admin/withdrawals/{id}). بدونه تُعطَّل.
     const actions=done?'':live
@@ -856,20 +839,14 @@ function drawFin(){
       if((a==='ok'||a==='no')&&w.wid&&window.EP){EP.decideWithdrawal(w.wid,a==='ok'?'approved':'rejected',()=>{selected=null;viewFinance(document.getElementById('view'));});return;}});
     return;
   }
-  el.querySelectorAll('[data-a]').forEach(b=>b.onclick=()=>{const a=b.dataset.a;toast(a==='inv'?'تم توليد الفاتورة':a==='recat'?'فتح إعادة التصنيف':'تم');});
 }
 
 /* ===== USERS VIEW ===== */
 const ROLE={admin:{t:'أدمن',c:'var(--human)',bg:'var(--human-bg)'},staff:{t:'موظف',c:'var(--navy)',bg:'var(--surface-2)'},member:{t:'عضو',c:'var(--ai)',bg:'var(--ai-bg)'},investor:{t:'مستثمر',c:'var(--memory)',bg:'var(--memory-bg)'}};
 const ROLES_LIST=['admin','staff','member','investor'];
-var USERS=[
-  {id:'u1',name:'أحمد سامي',email:'ahmed.sami@mail.com',phone:'٠١٠٢٢٢٣٣٤٤',role:'member',trainer:'pending',plan:'مجانية',joined:'٢١ يونيو',verified:'pending'},
-  {id:'u2',name:'د. ليلى منصور',email:'laila.m@mail.com',phone:'٠١١٥٥٦٦٧٧٨',role:'member',trainer:'approved',plan:'باقة الأدوات',joined:'١٨ يونيو',verified:'verified'},
-  {id:'u3',name:'عمر أبو مدين',email:'omar.am@mail.com',phone:'٠١٠٩٩٨٨٧٧٦',role:'investor',trainer:'none',plan:'مجانية',joined:'١٥ يونيو',verified:'verified'},
-  {id:'u4',name:'محمد خليلي',email:'m.khalily@mail.com',phone:'٠١٢٣٣٤٤٥٥٦',role:'member',trainer:'none',plan:'برو',joined:'أبريل ٢٠٢٥',verified:'verified'},
-  {id:'u5',name:'عبدالرحمن عطية',email:'admin@elprofessor.net',phone:'٠١٠٠٠٠١١١١',role:'admin',trainer:'none',plan:'—',joined:'٢٠٢٤',verified:'verified'},
-  {id:'u6',name:'سمير حسن',email:'samir@elprofessor.net',phone:'٠١٠٧٧٧٨٨٩٩',role:'staff',trainer:'none',plan:'—',joined:'٢٠٢٥',verified:'verified'}
-];
+// المستخدمون: لا أسماء/حسابات تصميمية — يملؤها محمّل users من /api/platform-users (window.USERS)
+// أو تبقى فارغة بحالة صريحة.
+var USERS=[];
 const VERIFY={verified:{t:'موثّق',cls:'s-auto'},pending:{t:'بانتظار توثيق',cls:'s-wait'},none:{t:'غير موثّق',cls:''}};
 
 // قسم تحليل الطلب — مين بيسأل عن إيه (من الشات)، من أي دولة، تصنيف الذكاء، والخدمات المطلوبة اللي مش مقدّمينها.
@@ -977,9 +954,9 @@ function viewUsers(v){
   const Ust=(window.EP&&EP.state.users)||'idle';
   const total=USERS.length, last7=USERS.filter(u=>u.last7).length, verified=USERS.filter(u=>u.verified==='verified').length, trainers=USERS.filter(u=>u.trainer==='approved').length;
   v.innerHTML=`
-    ${Ust==='error'?`<div class="policy" style="border-inline-start-color:var(--conflict);background:var(--conflict-bg);color:var(--conflict)">${svg('scale','ic')}<div>تعذّر جلب المستخدمين من المنصة — تُعرض بيانات تصميمية. <b style="cursor:pointer;text-decoration:underline" onclick="EP.reload('users',()=>viewUsers(document.getElementById('view')))">إعادة المحاولة</b></div></div>`:''}
+    ${Ust==='error'?`<div class="policy" style="border-inline-start-color:var(--conflict);background:var(--conflict-bg);color:var(--conflict)">${svg('scale','ic')}<div>تعذّر جلب المستخدمين من المنصة — لا تُعرض أي حسابات بديلة. <b style="cursor:pointer;text-decoration:underline" onclick="EP.reload('users',()=>viewUsers(document.getElementById('view')))">إعادة المحاولة</b></div></div>`:''}
     <div class="kpis">
-      <div class="kpi k-1"><div class="top"><span class="ic">${svg('users')}</span>إجمالي المستخدمين</div><b>${Ust==='loading'?'…':money(total)}</b><div class="sub">${(window.EP&&EP.data.users)?'من المنصة الحيّة':'من الموقع + الجدد'}</div></div>
+      <div class="kpi k-1"><div class="top"><span class="ic">${svg('users')}</span>إجمالي المستخدمين</div><b>${Ust==='loading'?'…':money(total)}</b><div class="sub">${(window.EP&&EP.data.users)?'من المنصة الحيّة':'بانتظار الخادم'}</div></div>
       <div class="kpi k-3"><div class="top"><span class="ic">${svg('trend')}</span>تسجيلات آخر ٧ أيام</div><b>${money(last7)}</b><div class="sub">يصبّون من المنصة</div></div>
       <div class="kpi k-2"><div class="top"><span class="ic">${svg('shield')}</span>موثّقون</div><b>${money(verified)}<small style="font-size:13px"> ظاهرون</small></b><div class="sub">صفة محقّقة</div></div>
       <div class="kpi k-4"><div class="top"><span class="ic">${svg('cap')}</span>مدرّبون معتمدون</div><b>${money(trainers)}</b><div class="sub">عبر طلبات التدريب</div></div>
@@ -990,7 +967,10 @@ function viewUsers(v){
       <section class="panel"><div class="ph"><h3>المستخدمون</h3><span class="n" id="uN">0</span><button class="btn btn-human" id="uAdd" style="flex:none;min-width:auto;padding:6px 13px;font-size:12px;margin-inline-start:auto">+ إضافة مستخدم</button></div><div id="uRows">${Ust==='loading'?'<div style="padding:40px;text-align:center;color:var(--muted)">…جارٍ التحميل</div>':''}</div></section>
       <aside class="drawer" id="drawer"></aside>
     </div>`;
-  document.getElementById('uAdd').onclick=function(){addUserModal();};
+  // «+ إضافة مستخدم» تكتب فعليًا عبر POST /platform-users في الوضع الحيّ فقط؛ بدونه تُعطَّل.
+  var uA=document.getElementById('uAdd');
+  if(window.EP&&EP.createUser&&EP.data.users){uA.onclick=function(){addUserModal();};}
+  else{uA.disabled=true;uA.style.opacity='.5';uA.style.cursor='not-allowed';uA.textContent='الإضافة غير مفعّلة';uA.title='الإضافة اليدوية غير مفعّلة بعد — تُسجَّل الحسابات تلقائيًا من المنصة.';}
   if(Ust!=='loading')renderUsers();
 }
 function renderUsers(){
@@ -1021,6 +1001,12 @@ function renderUsers(){
   const matchTag=u=>{if(usersTag==='all')return true;if(usersTag.indexOf('seg:')===0)return u.segment===usersTag.slice(4);if(usersTag.indexOf('tag:')===0)return (u.tags||[]).indexOf(usersTag.slice(4))>-1;return true;};
   const items=USERS.filter(u=>(usersFilter==='all'||u.role===usersFilter||(usersFilter==='trainer'&&u.trainer!=='none'))&&matchTag(u));
   document.getElementById('uN').textContent=items.length;
+  if(!items.length){
+    var _ust=(window.EP&&EP.state.users)||'idle';
+    el.innerHTML='<div style="padding:40px;text-align:center;color:var(--muted)">'+
+      (_ust==='error'?'تعذّر جلب المستخدمين من المنصة.':(USERS.length?'لا مستخدمين ضمن هذا الفلتر.':'لا مستخدمين بعد — يظهرون هنا فور التسجيل في المنصة.'))+'</div>';
+    drawUser();return;
+  }
   const segPS='display:inline-block;padding:2px 7px;border-radius:6px;font-size:10.5px;font-weight:700;background:var(--ai-bg);color:var(--ai)';
   const tagPS='display:inline-block;padding:2px 7px;border-radius:6px;font-size:10.5px;font-weight:700;background:var(--gold-bg);color:var(--gold);border:1px solid #EAD9A8';
   items.forEach(u=>{const r=ROLE[u.role],vf=VERIFY[u.verified],ui=USERS.indexOf(u);
@@ -1091,11 +1077,16 @@ function drawUser(){
   inline.querySelectorAll('.urole').forEach(b=>b.onclick=()=>{const rid=b.dataset.r;if(rid===u.role)return;if(lastAdmin&&rid!=='admin'){toast('ممنوع: لا يمكن إزالة آخر أدمن');return;}
     if(window.EP&&EP.data.users&&u.platform){const prev=u.role;u.role=rid;renderUsers();EP.setUserRole(u,rid,prev,()=>renderUsers());return;}
     u.role=rid;renderUsers();toast('تم تغيير دور '+u.name+' إلى «'+ROLE[rid].t+'»');});
-  inline.querySelectorAll('[data-a]').forEach(b=>b.onclick=()=>{const a=b.dataset.a;
-    if(a==='train'){u.trainer='approved';renderUsers();notify('اعتُمد '+u.name+' كمدرّب');}
-    else if(a==='untrain'){u.trainer='none';renderUsers();toast('أُلغي اعتماد '+u.name+' كمدرّب');}
-    else if(a==='edit'){addUserModal(u);}
-    else if(a==='del'){if(lastAdmin){toast('ممنوع: لا يمكن حذف آخر أدمن');return;}USERS.splice(selected,1);selected=null;renderUsers();notify('حُذف المستخدم '+u.name);}
+  inline.querySelectorAll('[data-a]').forEach(b=>{const a=b.dataset.a;
+    // «اعتماد كمدرّب» و«حذف» بلا واجهة خلفية: كانا يعدّلان مصفوفة في الذاكرة ويعلنان نجاحًا
+    // يعود عن آخره أول تحديث للصفحة. زر معطّل بسبب معلن أصدق من زر يكذب.
+    if(a==='train'||a==='untrain'||a==='del'){
+      b.disabled=true;b.style.opacity='.5';b.style.cursor='not-allowed';
+      b.title=a==='del'?'حذف المستخدم يتم من المنصة — غير مفعّل هنا بعد'
+                       :'اعتماد المدرّب يتم من «الوارد» عبر طلبات المدربين — غير مفعّل هنا بعد';
+      return;
+    }
+    b.onclick=()=>{if(a==='edit')addUserModal(u);};
   });
 }
 function addUserModal(edit){
@@ -1112,12 +1103,13 @@ function addUserModal(edit){
     var nm=s.querySelector('#u_n').value.trim()||'مستخدم جديد';
     var data={name:nm,email:s.querySelector('#u_e').value.trim()||'user@mail.com',phone:s.querySelector('#u_p').value.trim()||'—',role:s.querySelector('#u_r').value,plan:s.querySelector('#u_pl').value.trim()||'مجانية',trainer:s.querySelector('#u_tr').checked?'approved':'none',verified:edit?e.verified:'pending',joined:edit?e.joined:'الآن'};
     var addLocal=function(){USERS.push(Object.assign({id:'u'+(USERS.length+1)},data));renderUsers();};
-    if(edit){Object.assign(edit,data);closeModal();renderUsers();notify('حُدّثت بيانات '+nm);return;}
+    // التعديل بلا واجهة خلفية: كان يكتب في الكائن المحلي ويعلن الحفظ. نعلن الحقيقة بدلًا من ذلك.
+    if(edit){closeModal();toast('تعديل بيانات المستخدم يتم من المنصة — غير مفعّل هنا بعد');return;}
     // إضافة شخص جديد + إسناد دوره. عند اتصال الجسر الحيّ نكتب للـ API (POST /platform-users)؛
     // غير ذلك (بيانات تصميمية) نضيف محليًا. الدور دائمًا يُختار هنا من قائمة الأدوار.
     closeModal();
     if(window.EP&&EP.createUser&&EP.data.users){EP.createUser(data,addLocal,function(){});}
-    else{addLocal();notify('أُضيف المستخدم '+nm);}
+    else{toast('تعذّر الاتصال بالخادم — لم يُضَف المستخدم');}
   };
 }
 
@@ -1134,16 +1126,16 @@ function viewOverview(v){
   // Real KPIs from /api/dashboard when loaded; otherwise design defaults.
   const fin=D?D.financial:null, crs=D?D.courses:null;
   const M=(window.EP&&EP.data.metrics)||null; // /api/platform-metrics (admin) — live platform user count
-  const kUsers = M&&(M.total_users!=null) ? money(M.total_users) : (crs?money(crs.total_students||0):'٥٩');
-  const kUsersSub = M ? 'من المنصة الحيّة' : (Dst==='loading'?'…':'تقدير تصميمي');
-  const kProfit = fin ? (fin.net_profit>=0?'+':'')+money(fin.net_profit)+' <small style="font-size:13px">ج</small>' : (Dst==='loading'?'…':'+٢١٤٬٥٦٨ <small style="font-size:13px">ج</small>');
+  const kUsers = M&&(M.total_users!=null) ? money(M.total_users) : (crs?money(crs.total_students||0):'—');
+  const kUsersSub = M ? 'من المنصة الحيّة' : (Dst==='loading'?'…':'بانتظار الخادم');
+  const kProfit = fin ? (fin.net_profit>=0?'+':'')+money(fin.net_profit)+' <small style="font-size:13px">ج</small>' : (Dst==='loading'?'…':'—');
   // سلسلة شهرية من بيانات الخادم الحقيقية فقط — بلا أرقام تصميمية وهمية.
   // عند غياب البيانات (أو حالة شبه فارغة) يتكفّل svgBars بعرض «لا بيانات كافية لعرض النمو».
   const monthlySeries = (D&&Array.isArray(D.monthly)&&D.monthly.length)
     ? D.monthly.slice(-6).map(m=>({m:(m.month||'').slice(5),v:Math.round((m.revenue||0)/1000)}))
     : [];
   v.innerHTML=`
-    ${Dst==='error'?`<div class="policy" style="border-inline-start-color:var(--conflict);background:var(--conflict-bg);color:var(--conflict)">${svg('scale','ic')}<div>تعذّر جلب أرقام المالية من الخادم — تُعرض أرقام تصميمية مؤقتًا. <b style="cursor:pointer;text-decoration:underline" onclick="EP.reload('dashboard',()=>viewOverview(document.getElementById('view')))">إعادة المحاولة</b></div></div>`:''}
+    ${Dst==='error'?`<div class="policy" style="border-inline-start-color:var(--conflict);background:var(--conflict-bg);color:var(--conflict)">${svg('scale','ic')}<div>تعذّر جلب أرقام المالية من الخادم — لا تُعرض أي أرقام بديلة. <b style="cursor:pointer;text-decoration:underline" onclick="EP.reload('dashboard',()=>viewOverview(document.getElementById('view')))">إعادة المحاولة</b></div></div>`:''}
     <div class="kpis">
       <div class="kpi k-1"><div class="top"><span class="ic">${svg('users')}</span>مستخدمو المنصة</div><b>${kUsers}</b><div class="sub">${kUsersSub}</div></div>
       <div class="kpi k-3"><div class="top"><span class="ic">${svg('wallet')}</span>صافي الربح</div><b>${kProfit}</b><div class="sub">${fin?'إيرادات − مصروفات':'حتى اليوم'}</div></div>
@@ -1210,7 +1202,7 @@ function viewCourses(v){
   const pcPub=PCRS.filter(c=>c.is_active).length, pcEnr=PCRS.reduce((s,c)=>s+(c.total_enrolled||0),0);
   v.innerHTML=`
     <div class="policy" style="border-inline-start-color:var(--memory)">${svg('book','ic')}<div><b>نموذج التعلّم:</b> بنية الدورة والاشتراك والجدولة والتقدّم <b>native في المنصة</b> · الفيديو على سيرفر مخصّص · المحاضرة الأولى مجانًا ثم الدفع للاستكمال.</div></div>
-    ${Cstr==='error'?`<div class="policy" style="border-inline-start-color:var(--conflict);background:var(--conflict-bg);color:var(--conflict)">${svg('scale','ic')}<div>تعذّر جلب الدورات من الخادم — تُعرض بيانات تصميمية. <b style="cursor:pointer;text-decoration:underline" onclick="EP.reload('courses',()=>viewCourses(document.getElementById('view')))">إعادة المحاولة</b></div></div>`:''}
+    ${Cstr==='error'?`<div class="policy" style="border-inline-start-color:var(--conflict);background:var(--conflict-bg);color:var(--conflict)">${svg('scale','ic')}<div>تعذّر جلب الدورات من الخادم — لا تُعرض أي بيانات بديلة. <b style="cursor:pointer;text-decoration:underline" onclick="EP.reload('courses',()=>viewCourses(document.getElementById('view')))">إعادة المحاولة</b></div></div>`:''}
     ${Cstr==='loading'?`<div class="policy" style="border-inline-start-color:var(--memory)">${svg('book','ic')}<div>…جارٍ تحميل الدورات من الخادم</div></div>`:''}
     <div class="kpis">
       <div class="kpi k-1"><div class="top"><span class="ic">${svg('book')}</span>دورات منشورة على المنصة</div><b>${money(pcPub)}</b><div class="sub">من ${PCRS.length} دورة على app.elprofessor.net</div></div>
@@ -1578,14 +1570,9 @@ const GEO_COUNTRIES=[['EG','مصر','ج.م'],['SA','السعودية','ر.س'],[
 var geoCountry='EG';
 function pkgCur(cc){for(var i=0;i<GEO_COUNTRIES.length;i++){if(GEO_COUNTRIES[i][0]===cc)return GEO_COUNTRIES[i][2];}return 'ج.م';}
 function pkgPrice(p,cc){var pr=p.prices||{};return pr[cc]!=null?pr[cc]:(pr.default!=null?pr.default:0);}
-// بيانات تصميمية احتياطية (fallback) عند تعذّر جلب /api/packages.
-const PACKAGES=[
-  {name:'الباقة المجانية',cycle:'مجانية',prices:{EG:0,SA:0,AE:0,KW:0,QA:0,default:0},features:['تصفّح الدورات','المحاضرة الأولى مجانًا','مقالات المقالات'],active:true},
-  {name:'باقة الأدوات',cycle:'شهري',prices:{EG:199,SA:39,AE:39,KW:3,QA:39,default:15},features:['المحرر القانوني الذكي','قوالب ومكتبة أحكام','إملاء وتدقيق'],active:true},
-  {name:'باقة برو',cycle:'شهري',prices:{EG:399,SA:79,AE:79,KW:6,QA:79,default:29},features:['كل أدوات الباقة','استشارة شهرية بخصم','أولوية الدعم','شهادات معتمدة'],active:true},
-  {name:'باقة الشركات',cycle:'شهري',prices:{EG:1500,SA:300,AE:300,KW:22,QA:300,default:99},features:['حتى ١٠ مستخدمين','تدريب مخصّص','حساب مدير','فوترة B2B'],active:false}
-];
-// مصدر العرض: الباقات الحيّة من الخادم إن توفّرت، وإلا البيانات التصميمية.
+// الباقات: لا أسعار تصميمية — تُجلب حيّة من /api/packages أو تبقى القائمة فارغة.
+const PACKAGES=[];
+// مصدر العرض: الباقات الحيّة من الخادم إن توفّرت، وإلا قائمة فارغة.
 function pkPackages(){return (window.EP&&EP.data.packages)?EP.data.packages.packages:PACKAGES;}
 function viewPackages(v){
   if(window.EP){EP.ensure('packages',()=>viewPackages(v));}
@@ -1597,7 +1584,7 @@ function viewPackages(v){
   var maxP=PKS.length?Math.max.apply(null,PKS.map(function(p){return pkgPrice(p,geoCountry);})):0;
   v.innerHTML=`
     <div class="policy" style="border-inline-start-color:var(--gold)">${svg('wallet','ic')}<div><b>تسعير جغرافي تلقائي:</b> الزائر في كل بلد يرى سعر بلده مباشرة (geo-IP). المبدّل أدناه <b>محاكاة</b> لمعاينة ما يراه الزائر من كل بلد.</div></div>
-    ${Pstr==='error'?`<div class="policy" style="border-inline-start-color:var(--conflict);background:var(--conflict-bg);color:var(--conflict)">${svg('scale','ic')}<div>تعذّر جلب الباقات من الخادم — تُعرض بيانات تصميمية. <b style="cursor:pointer;text-decoration:underline" onclick="EP.reload('packages',()=>viewPackages(document.getElementById('view')))">إعادة المحاولة</b></div></div>`:''}
+    ${Pstr==='error'?`<div class="policy" style="border-inline-start-color:var(--conflict);background:var(--conflict-bg);color:var(--conflict)">${svg('scale','ic')}<div>تعذّر جلب الباقات من الخادم — لا تُعرض أي أسعار بديلة. <b style="cursor:pointer;text-decoration:underline" onclick="EP.reload('packages',()=>viewPackages(document.getElementById('view')))">إعادة المحاولة</b></div></div>`:''}
     ${Pstr==='loading'?`<div class="policy" style="border-inline-start-color:var(--gold)">${svg('wallet','ic')}<div>…جارٍ تحميل الباقات والأسعار من الخادم</div></div>`:''}
     <div class="filterbar" id="geoBar"><span class="lbl">معاينة بلد الزائر:</span></div>
     <div class="kpis">
@@ -1614,7 +1601,10 @@ function viewPackages(v){
   var g=document.getElementById('pkGrid');
   if(!PKS.length){g.innerHTML='<div style="padding:40px;text-align:center;color:var(--muted);grid-column:1/-1">لا باقات بعد — أضف أول باقة.</div>';}
   PKS.forEach(function(p,i){var pr=pkgPrice(p,geoCountry);var priceHtml=(pr>0?money(pr)+' <small style="font-size:12px;color:var(--muted)">'+cur+'/'+p.cycle+'</small>':'مجانية');g.insertAdjacentHTML('beforeend','<div class="pkcard" data-i="'+i+'" style="border:1px solid var(--line);border-radius:14px;padding:16px;cursor:pointer;'+(p.active?'':'opacity:.6')+'"><div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px"><div style="font-family:Cairo;font-weight:800;font-size:15px;color:var(--navy)">'+p.name+'</div><span class="status '+(p.active?'s-auto':'')+'" style="'+(p.active?'':'background:var(--surface-2);color:var(--muted)')+';font-size:10px"><span class="d" style="'+(p.active?'':'background:var(--muted)')+'"></span>'+(p.active?'نشطة':'موقوفة')+'</span></div><div style="font-family:Cairo;font-weight:900;font-size:24px;color:var(--human)">'+priceHtml+'</div><div style="margin-top:10px;display:grid;gap:6px">'+(p.features||[]).map(function(f){return '<div style="display:flex;gap:7px;align-items:flex-start;font-size:12px;color:var(--ink-2)"><span style="width:6px;height:6px;border-radius:50%;background:var(--agree);margin-top:6px;flex:none"></span><span>'+f+'</span></div>';}).join('')+'</div></div>');});
-  document.getElementById('pkAdd').onclick=function(){packageModal(null);};
+  // «+ باقة» تُحفظ فعليًا (PUT /packages) في الوضع الحيّ فقط؛ بدونه تُعطَّل بدل الكتابة في الذاكرة.
+  var pkA=document.getElementById('pkAdd');
+  if(live){pkA.onclick=function(){packageModal(null);};}
+  else{pkA.disabled=true;pkA.style.opacity='.5';pkA.style.cursor='not-allowed';pkA.textContent='الإضافة غير مفعّلة';pkA.title='الإضافة اليدوية غير مفعّلة بعد — تُحفظ الباقات على الخادم فقط.';}
   g.querySelectorAll('.pkcard').forEach(function(c){c.onclick=function(){packageModal(+c.dataset.i);};});
 }
 // يبني نسخة محدّثة من القائمة الحيّة بعد تعديل/إضافة/حذف باقة، ثم يحفظها عبر PUT ويعيد الجلب.
@@ -1637,7 +1627,7 @@ function packageModal(idx){
     if(edit){Object.assign(edit,d);}else{PACKAGES.push(d);}closeModal();viewPackages(document.getElementById('view'));notify(edit?'حُدّثت الباقة':'أُضيفت باقة «'+d.name+'»');};
   var pd=s.querySelector('#pk_d');if(pd)pd.onclick=function(){
     if(live){var next=PKS.filter(function(_,i){return i!==idx;}).map(function(p){return Object.assign({},p);});closeModal();pkPersist(next);return;}
-    PACKAGES.splice(idx,1);closeModal();viewPackages(document.getElementById('view'));notify('حُذفت الباقة');};
+    closeModal();toast('تعذّر الحذف — لا يوجد اتصال حيّ بالخادم');};
 }
 // الإشعارات: أحداث حقيقية مُجمّعة من الخادم عبر EP.data.notifications (GET /api/notifications).
 // كل عنصر: {id,title,detail,kind,route,time,read}. نُلحق محليًّا إشعارات الأفعال الفورية (notify)
@@ -1705,7 +1695,7 @@ function createCourseModal(presetTitle){
       EP.createCourse({title:t,trainer_name:inst,price_egp:tp==='مدفوعة'?(+pr||0):0,status:'active'},function(){closeModal();courseTab='courses';viewCourses(document.getElementById('view'));});
       return;
     }
-    COURSES.push({title:t,inst:inst,enrolled:0,price:tp,from:pr?money(+pr)+' ج':'مجانية',status:'draft'});closeModal();courseTab='courses';viewCourses(document.getElementById('view'));notify('أنشأت دورة «'+t+'» كمسودّة');};
+    closeModal();toast('تعذّر إنشاء الدورة — لا يوجد اتصال حيّ بالخادم');};
   s.querySelector('#m_titch').onclick=()=>{
     var t=s.querySelector('#m_title').value.trim();var inst=s.querySelector('#m_inst').value.trim()||'فريق البروفيسور';
     var pr=s.querySelector('#m_price').value;var tp=s.querySelector('#m_type').value;
@@ -1770,7 +1760,7 @@ function viewInvestment(v){
   const IVR=ivInvestors(),OPP=ivOpps(),WD=ivWd();
   const totalInv=IVR.reduce((s,i)=>s+(i.invested||0),0), totRet=IVR.reduce((s,i)=>s+(i.returns||0),0);
   v.innerHTML=`
-    ${Ivst==='error'?`<div class="policy" style="border-inline-start-color:var(--conflict);background:var(--conflict-bg);color:var(--conflict)">${svg('scale','ic')}<div>تعذّر جلب بيانات الاستثمار من الخادم — تُعرض بيانات تصميمية. <b style="cursor:pointer;text-decoration:underline" onclick="EP.reload('investment',()=>viewInvestment(document.getElementById('view')))">إعادة المحاولة</b></div></div>`:''}
+    ${Ivst==='error'?`<div class="policy" style="border-inline-start-color:var(--conflict);background:var(--conflict-bg);color:var(--conflict)">${svg('scale','ic')}<div>تعذّر جلب بيانات الاستثمار من الخادم — لا تُعرض أي بيانات بديلة. <b style="cursor:pointer;text-decoration:underline" onclick="EP.reload('investment',()=>viewInvestment(document.getElementById('view')))">إعادة المحاولة</b></div></div>`:''}
     ${Ivst==='loading'?`<div class="policy">${svg('brief','ic')}<div>…جارٍ تحميل بيانات الاستثمار من الخادم</div></div>`:''}
     <div class="kpis">
       <div class="kpi k-1"><div class="top"><span class="ic">${svg('brief')}</span>محافظ المستثمرين</div><b>${money(IVR.length)}</b><div class="sub">نشطة</div></div>
@@ -1785,8 +1775,17 @@ function viewInvestment(v){
     </div>
     <div class="inboxwrap"><section class="panel"><div class="ph"><h3 id="ivH"></h3><span class="n" id="ivN"></span><button class="btn btn-human" id="ivAdd" style="flex:none;min-width:auto;padding:6px 13px;font-size:12px;margin-inline-start:auto">+ <span id="ivAddLbl">مستثمر</span></button></div><div id="ivRows"></div></section><aside class="drawer" id="drawer"></aside></div>`;
   v.querySelectorAll('#invTabs .tab').forEach(t=>t.onclick=()=>{invTab=t.dataset.t;selected=null;viewInvestment(v);});
+  // «+ فرصة» مربوطة فعليًا (POST /investment/opportunities) في الوضع الحيّ فقط.
+  // «+ مستثمر» غير مربوطة بأي واجهة كتابة — كانت تكتب في الذاكرة فقط، فعُطِّلت صراحةً.
   var ivAdd=document.getElementById('ivAdd');
-  if(invTab==='wd'){ivAdd.style.display='none';}else{ivAdd.style.display='';document.getElementById('ivAddLbl').textContent=invTab==='opps'?'فرصة':'مستثمر';ivAdd.onclick=function(){invTab==='opps'?oppModal():investorModal();};}
+  var ivLive=!!(window.EP&&EP.data.investment);
+  if(invTab==='wd'){ivAdd.style.display='none';}
+  else if(invTab==='opps'&&ivLive){ivAdd.style.display='';document.getElementById('ivAddLbl').textContent='فرصة';ivAdd.onclick=function(){oppModal();};}
+  else{
+    ivAdd.style.display='';ivAdd.disabled=true;ivAdd.style.opacity='.5';ivAdd.style.cursor='not-allowed';
+    ivAdd.title=invTab==='opps'?'تعذّر الاتصال بالخادم — إضافة الفرص متاحة في الوضع الحيّ فقط.':'الإضافة اليدوية غير مفعّلة بعد — تُسجَّل المحافظ تلقائيًا من المنصة.';
+    document.getElementById('ivAddLbl').textContent='الإضافة غير مفعّلة';
+  }
   renderInv();
 }
 function renderInv(){
@@ -1832,7 +1831,7 @@ function drawInv(){
     if(a==='edit'){t==='i'?investorModal(ivInvestors()[i],i):oppModal(ivOpps()[i],i);}
     else if(a==='del'){
       if(t==='o'&&live){var oo=ivOpps()[i];if(oo&&oo.oid){EP.deleteOpportunity(oo.oid,()=>{selected=null;viewInvestment(document.getElementById('view'));});return;}}
-      if(t==='i'){INVESTORS.splice(i,1);notify('حُذف المستثمر');}else{INVOPPS.splice(i,1);notify('حُذفت الفرصة');}selected=null;viewInvestment(document.getElementById('view'));}
+      toast('تعذّر الحذف — لا يوجد اتصال حيّ بالخادم');}
     else{
       if(t==='w'&&live){var ww=ivWd()[i];if(ww&&ww.wid){EP.decideWithdrawal(ww.wid,a==='ok'?'approved':'rejected',()=>{selected=null;viewInvestment(document.getElementById('view'));});return;}}
       toast(a==='ok'?'تم اعتماد سحب المستثمر':'تم الرفض');}
@@ -1892,11 +1891,8 @@ function oppModal(edit,idx){
 }
 
 /* ===== MARKETING VIEW ===== */
-const CAMPAIGNS=[
-  {name:'حملة جوجل — الدورات',platform:'Google Ads',spent:4500,leads:38,cac:118,status:'active'},
-  {name:'فيسبوك — الدبلومة',platform:'Facebook',spent:2200,leads:15,cac:147,status:'active'},
-  {name:'إنستجرام — وعي بالعلامة',platform:'Instagram',spent:1500,leads:9,cac:167,status:'paused'}
-];
+// الحملات: لا بيانات تصميمية — تُجلب حيّة من /api/campaigns (محمّل marketing) أو تبقى فارغة.
+const CAMPAIGNS=[];
 // المعلنون/الممولون: لا واجهة خلفية — لا بيانات تصميمية والتبويب محجوب.
 const ADVERTISERS=[];
 function mktCampaigns(){return (window.EP&&EP.data.marketing)?EP.data.marketing.campaigns:CAMPAIGNS;}
@@ -1908,7 +1904,7 @@ function viewMarketing(v){
   const CMP=mktCampaigns();
   const spent=CMP.reduce((s,c)=>s+(c.spent||0),0),leads=CMP.reduce((s,c)=>s+(c.leads||0),0),active=CMP.filter(c=>c.status==='active').length;
   v.innerHTML=`
-    ${Mkst==='error'?`<div class="policy" style="border-inline-start-color:var(--conflict);background:var(--conflict-bg);color:var(--conflict)">${svg('scale','ic')}<div>تعذّر جلب الحملات من الخادم — تُعرض بيانات تصميمية. <b style="cursor:pointer;text-decoration:underline" onclick="EP.reload('marketing',()=>viewMarketing(document.getElementById('view')))">إعادة المحاولة</b></div></div>`:''}
+    ${Mkst==='error'?`<div class="policy" style="border-inline-start-color:var(--conflict);background:var(--conflict-bg);color:var(--conflict)">${svg('scale','ic')}<div>تعذّر جلب الحملات من الخادم — لا تُعرض أي بيانات بديلة. <b style="cursor:pointer;text-decoration:underline" onclick="EP.reload('marketing',()=>viewMarketing(document.getElementById('view')))">إعادة المحاولة</b></div></div>`:''}
     ${Mkst==='loading'?`<div class="policy">${svg('mega','ic')}<div>…جارٍ تحميل الحملات من الخادم</div></div>`:''}
     <div class="kpis">
       <div class="kpi k-1"><div class="top"><span class="ic">${svg('mega')}</span>حملات نشطة</div><b>${money(active)}</b><div class="sub">من ${CMP.length}</div></div>
@@ -1921,8 +1917,10 @@ function viewMarketing(v){
     </div>
     <div class="inboxwrap"><section class="panel"><div class="ph"><h3 id="mkH"></h3><span class="n" id="mkN"></span><button class="btn btn-human" id="mkAdd" style="flex:none;min-width:auto;padding:6px 13px;font-size:12px;margin-inline-start:auto">+ <span id="mkAddLbl">حملة جديدة</span></button></div><div id="mkRows"></div></section><aside class="drawer" id="drawer"></aside></div>`;
   v.querySelectorAll('#mktTabs .tab').forEach(t=>t.onclick=()=>{mktTab=t.dataset.t;selected=null;viewMarketing(v);});
-  document.getElementById('mkAddLbl').textContent=mktTab==='advertisers'?'إضافة ممول':'حملة جديدة';
-  document.getElementById('mkAdd').onclick=()=>{mktTab==='advertisers'?addAdvertiserModal():createCampaignModal();};
+  // «+ حملة جديدة» تُحفظ فعليًا (POST /campaigns) في الوضع الحيّ فقط؛ بدونه تُعطَّل بدل الكتابة في الذاكرة.
+  var mkA=document.getElementById('mkAdd');
+  if(window.EP&&EP.data.marketing){document.getElementById('mkAddLbl').textContent='حملة جديدة';mkA.onclick=()=>{createCampaignModal();};}
+  else{document.getElementById('mkAddLbl').textContent='الإضافة غير مفعّلة';mkA.disabled=true;mkA.style.opacity='.5';mkA.style.cursor='not-allowed';mkA.title='تعذّر الاتصال بالخادم — إنشاء الحملات متاح في الوضع الحيّ فقط.';}
   renderMkt();
 }
 function renderMkt(){
@@ -1959,7 +1957,7 @@ function drawMkt(){
   } else {const a=ADVERTISERS[i];el.innerHTML=`<div class="dh"><div class="k">مموّل/معلن</div><h3>${a.name}</h3></div><div class="db"><div class="field"><div class="lab">النوع</div><div class="val">${a.type}</div></div><div class="field"><div class="lab">المبلغ</div><div class="bigamt">${money(a.amount)} <small>ج</small></div></div><div class="acts"><button class="btn btn-ghost" data-a="edit">تعديل</button><button class="btn btn-warn" data-a="del">حذف</button></div></div>`;
     el.querySelectorAll('[data-a]').forEach(b=>b.onclick=()=>{const x=b.dataset.a;
       if(x==='edit'){addAdvertiserModal(a);}
-      else if(x==='del'){ADVERTISERS.splice(i,1);selected=null;viewMarketing(document.getElementById('view'));notify('حُذف المموّل «'+a.name+'»');}
+      else if(x==='del'){toast('تعذّر الحذف — لا يوجد اتصال حيّ بالخادم');}
     });
   }
 }
@@ -2945,7 +2943,7 @@ function viewPartners(v){
     <div style="font-family:Cairo;font-weight:900;font-size:16px;color:var(--navy)">${p.equity}٪</div>
     <div style="width:110px;text-align:left;font-size:12px;color:var(--ink-2)">${p.invested?money(p.invested)+' ج':'—'}</div></div>`).join('');
   v.innerHTML=`
-    ${Pst==='error'?`<div class="policy" style="border-inline-start-color:var(--conflict);background:var(--conflict-bg);color:var(--conflict)">${svg('scale','ic')}<div>تعذّر جلب الشركاء من الخادم — تُعرض بيانات تصميمية. <b style="cursor:pointer;text-decoration:underline" onclick="EP.reload('partners',()=>viewPartners(document.getElementById('view')))">إعادة المحاولة</b></div></div>`:''}
+    ${Pst==='error'?`<div class="policy" style="border-inline-start-color:var(--conflict);background:var(--conflict-bg);color:var(--conflict)">${svg('scale','ic')}<div>تعذّر جلب الشركاء من الخادم — لا تُعرض أي بيانات بديلة. <b style="cursor:pointer;text-decoration:underline" onclick="EP.reload('partners',()=>viewPartners(document.getElementById('view')))">إعادة المحاولة</b></div></div>`:''}
     ${Pst==='loading'?`<div class="policy">${svg('hands','ic')}<div>…جارٍ تحميل الشركاء من الخادم</div></div>`:''}
     <div class="kpis">
       <div class="kpi k-1"><div class="top"><span class="ic">${svg('hands')}</span>الشركاء</div><b>${money(realPartners.length)}</b><div class="sub">+ احتياطي</div></div>
@@ -2990,7 +2988,7 @@ function partnerModal(idx){
   };
   var pd=s.querySelector('#p_d');if(pd)pd.onclick=function(){
     if(live&&edit&&edit.pid){EP.deletePartner(edit.pid,function(){closeModal();viewPartners(document.getElementById('view'));});return;}
-    PARTNERS.splice(idx,1);closeModal();viewPartners(document.getElementById('view'));notify('حُذف الشريك «'+e.name+'»');};
+    closeModal();toast('تعذّر الحذف — لا يوجد اتصال حيّ بالخادم');};
 }
 
 /* ===== EXPERTS & TRAINERS (D5) ===== */
@@ -3098,7 +3096,7 @@ function teamModal(idx){
   var s=openModal(edit?'تعديل عضو':'إضافة عضو فريق','<div class="fld"><label>الاسم</label><input id="tm_n" value="'+(e.name||'')+'"></div><div class="fld"><label>الدور/الصفة</label><input id="tm_r" value="'+(e.role||'موظف')+'"></div><div class="acts" style="margin-top:14px"><button class="btn btn-primary" id="tm_s">'+svg('check')+(edit?'حفظ':'أضف')+'</button>'+(edit?'<button class="btn btn-warn" id="tm_d">حذف</button>':'')+'<button class="btn btn-ghost" id="tm_x">إلغاء</button></div>');
   s.querySelector('#tm_x').onclick=closeModal;
   s.querySelector('#tm_s').onclick=function(){var d={name:s.querySelector('#tm_n').value.trim()||'عضو',role:s.querySelector('#tm_r').value.trim()||'موظف'};if(edit){Object.assign(edit,d);}else{TEAM_MEMBERS.push(d);}closeModal();viewTeam(document.getElementById('view'));notify(edit?'حُدّث العضو':'أُضيف «'+d.name+'» للفريق');};
-  var td=s.querySelector('#tm_d');if(td)td.onclick=function(){TEAM_MEMBERS.splice(idx,1);closeModal();viewTeam(document.getElementById('view'));notify('حُذف العضو');};
+  var td=s.querySelector('#tm_d');if(td)td.onclick=function(){closeModal();toast('تعذّر الحذف — لا يوجد اتصال حيّ بالخادم');};
 }
 
 /* ===== FOUNDATION ===== */
@@ -3128,7 +3126,7 @@ function viewFoundation(v){
   var assetsCcy=(K&&(K.assetsVal||0)>0)?' ج':'';
   var founders=(window.EP&&EP.data.foundation&&typeof tmFounders==='function')?tmFounders():0;
   v.innerHTML=`
-    ${Fst==='error'&&!live?`<div class="policy" style="border-inline-start-color:var(--conflict);background:var(--conflict-bg);color:var(--conflict)">${svg('scale','ic')}<div>تعذّر جلب بيانات التأسيس من الخادم — تُعرض بيانات تصميمية. <b style="cursor:pointer;text-decoration:underline" onclick="EP.reload('foundation',()=>viewFoundation(document.getElementById('view')))">إعادة المحاولة</b></div></div>`:''}
+    ${Fst==='error'&&!live?`<div class="policy" style="border-inline-start-color:var(--conflict);background:var(--conflict-bg);color:var(--conflict)">${svg('scale','ic')}<div>تعذّر جلب بيانات التأسيس من الخادم — لا تُعرض أي بيانات بديلة. <b style="cursor:pointer;text-decoration:underline" onclick="EP.reload('foundation',()=>viewFoundation(document.getElementById('view')))">إعادة المحاولة</b></div></div>`:''}
     <div class="kpis">
       <div class="kpi k-3"><div class="top"><span class="ic">${svg('wallet')}</span>رأس المال</div><b>${Fst==='loading'&&!live?'…':money(cap)} <small style="font-size:13px">ج</small></b><div class="sub">${live?'حيّ — ضخّ رأس المال':'مستثمَر + تشغيلي'}</div></div>
       <div class="kpi k-4"><div class="top"><span class="ic">${svg('trend')}</span>مصروف شهري ثابت</div><b>${monthlyCcy?money(monthly):'$'+money(monthly)}${monthlyCcy?'<small style="font-size:13px">'+monthlyCcy+'</small>':''}</b><div class="sub">${live?'إيجار/اشتراكات شهرية':T.length+' اشتراكات'}</div></div>
@@ -3144,11 +3142,15 @@ function viewFoundation(v){
     <section class="panel"><div class="ph"><h3 id="fH"></h3><span class="n" id="fN"></span>${live?'<span class="hint" id="fLiveHint" style="margin-inline-start:auto"></span>':'<button class="btn btn-human" id="fAdd" style="flex:none;min-width:auto;padding:6px 13px;font-size:12px;margin-inline-start:auto">+ <span id="fAddLbl">معدة</span></button>'}</div><div id="fRows"></div></section>`;
   v.querySelectorAll('#fTabs .tab').forEach(t=>t.onclick=()=>{foundationTab=t.dataset.t;viewFoundation(v);});
   if(!live){
-    document.getElementById('fAddLbl').textContent=(foundationTab==='tools'?'أداة/اشتراك':foundationTab==='capital'?'بند رأس مال':foundationTab==='status'?'بند حالة':'معدة/أصل');
-    document.getElementById('fAdd').onclick=()=>{foundationTab==='tools'?fndToolModal():foundationTab==='capital'?fndCapitalModal():foundationTab==='status'?fndStatusModal():fndAssetModal();};
+    // «+ أصل / أداة / بند رأس مال / بند حالة» كانت تكتب في مصفوفات ذاكرة بلا نداء API،
+    // فتضيع مع أول تحديث للصفحة — عُطِّلت صراحةً لحين ربطها بالخادم.
+    var fA=document.getElementById('fAdd');
+    document.getElementById('fAddLbl').textContent='الإضافة اليدوية غير مفعّلة';
+    fA.disabled=true;fA.style.opacity='.5';fA.style.cursor='not-allowed';
+    fA.title='الإضافة اليدوية غير مفعّلة بعد — تُسجَّل البنود تلقائيًا من المنصة.';
   } else {
     var lh=document.getElementById('fLiveHint');
-    if(lh)lh.textContent=foundationTab==='status'?'حالة الكيان (تصميمية)':(foundationTab==='capital'?'من الشركاء (قراءة)':'من الأصول (قراءة)');
+    if(lh)lh.textContent=foundationTab==='status'?'حالة الكيان (غير مربوطة بمصدر)':(foundationTab==='capital'?'من الشركاء (قراءة)':'من الأصول (قراءة)');
   }
   renderFoundation(live);
 }
@@ -3185,28 +3187,28 @@ function fndAssetModal(edit,idx){
     '<div class="acts" style="margin-top:12px"><button class="btn btn-primary" id="f_s">'+svg('check')+(edit?'حفظ':'أضف')+'</button>'+(edit?'<button class="btn btn-warn" id="f_d">حذف</button>':'')+'<button class="btn btn-ghost" id="f_x">إلغاء</button></div>');
   s.querySelector('#f_x').onclick=closeModal;
   s.querySelector('#f_s').onclick=function(){var d={name:s.querySelector('#f_n').value.trim()||'أصل',value:+s.querySelector('#f_v').value||0,qty:+s.querySelector('#f_q').value||1,note:s.querySelector('#f_no').value.trim()||'—'};if(edit){Object.assign(edit,d);}else{FND_ASSETS.push(d);}closeModal();viewFoundation(document.getElementById('view'));notify(edit?'حُدّث «'+d.name+'»':'أُضيفت معدة «'+d.name+'»');};
-  var fd=s.querySelector('#f_d');if(fd)fd.onclick=function(){FND_ASSETS.splice(idx,1);closeModal();viewFoundation(document.getElementById('view'));notify('حُذفت «'+e.name+'»');};
+  var fd=s.querySelector('#f_d');if(fd)fd.onclick=function(){closeModal();toast('تعذّر الحذف — لا يوجد اتصال حيّ بالخادم');};
 }
 function fndToolModal(edit,idx){
   var e=edit||{};
   var s=openModal(edit?'تعديل أداة':'إضافة أداة/اشتراك','<div class="fld"><label>الاسم</label><input id="t_n" value="'+(e.name||'')+'"></div><div class="row2"><div class="fld"><label>التكلفة ($)</label><input id="t_c" type="number" value="'+(e.cost||'')+'"></div><div class="fld"><label>الدورة</label><input id="t_cy" value="'+(e.cycle||'شهري')+'"></div></div><div class="acts" style="margin-top:12px"><button class="btn btn-primary" id="t_s">'+svg('check')+(edit?'حفظ':'أضف')+'</button>'+(edit?'<button class="btn btn-warn" id="t_d">حذف</button>':'')+'<button class="btn btn-ghost" id="t_x">إلغاء</button></div>');
   s.querySelector('#t_x').onclick=closeModal;
   s.querySelector('#t_s').onclick=function(){var d={name:s.querySelector('#t_n').value.trim()||'أداة',cost:+s.querySelector('#t_c').value||0,cycle:s.querySelector('#t_cy').value.trim()||'شهري'};if(edit){Object.assign(edit,d);}else{FND_TOOLS.push(d);}closeModal();viewFoundation(document.getElementById('view'));notify(edit?'حُدّثت الأداة':'أُضيفت «'+d.name+'»');};
-  var td=s.querySelector('#t_d');if(td)td.onclick=function(){FND_TOOLS.splice(idx,1);closeModal();viewFoundation(document.getElementById('view'));notify('حُذفت «'+e.name+'»');};
+  var td=s.querySelector('#t_d');if(td)td.onclick=function(){closeModal();toast('تعذّر الحذف — لا يوجد اتصال حيّ بالخادم');};
 }
 function fndCapitalModal(edit,idx){
   var e=edit||{};
   var s=openModal(edit?'تعديل بند':'بند رأس مال','<div class="fld"><label>البند</label><input id="cp_n" value="'+(e.name||'')+'"></div><div class="row2"><div class="fld"><label>المبلغ (ج)</label><input id="cp_a" type="number" value="'+(e.amount||'')+'"></div><div class="fld"><label>ملاحظة</label><input id="cp_no" value="'+(e.note||'')+'"></div></div><div class="acts" style="margin-top:12px"><button class="btn btn-primary" id="cp_s">'+svg('check')+(edit?'حفظ':'أضف')+'</button>'+(edit?'<button class="btn btn-warn" id="cp_d">حذف</button>':'')+'<button class="btn btn-ghost" id="cp_x">إلغاء</button></div>');
   s.querySelector('#cp_x').onclick=closeModal;
   s.querySelector('#cp_s').onclick=function(){var d={name:s.querySelector('#cp_n').value.trim()||'بند',amount:+s.querySelector('#cp_a').value||0,note:s.querySelector('#cp_no').value.trim()||'—'};if(edit){Object.assign(edit,d);}else{FND_CAPITAL.push(d);}closeModal();viewFoundation(document.getElementById('view'));notify(edit?'حُدّث البند':'أُضيف «'+d.name+'»');};
-  var cd=s.querySelector('#cp_d');if(cd)cd.onclick=function(){FND_CAPITAL.splice(idx,1);closeModal();viewFoundation(document.getElementById('view'));notify('حُذف «'+e.name+'»');};
+  var cd=s.querySelector('#cp_d');if(cd)cd.onclick=function(){closeModal();toast('تعذّر الحذف — لا يوجد اتصال حيّ بالخادم');};
 }
 function fndStatusModal(edit,idx){
   var e=edit||{};
   var s=openModal(edit?'تعديل بند':'بند حالة','<div class="fld"><label>البند</label><input id="st_n" value="'+(e.name||'')+'"></div><div class="fld"><label>الحالة</label><input id="st_st" value="'+(e.state||'جارٍ')+'"></div><div class="acts" style="margin-top:12px"><button class="btn btn-primary" id="st_save">'+svg('check')+(edit?'حفظ':'أضف')+'</button>'+(edit?'<button class="btn btn-warn" id="st_d">حذف</button>':'')+'<button class="btn btn-ghost" id="st_x">إلغاء</button></div>');
   s.querySelector('#st_x').onclick=closeModal;
   s.querySelector('#st_save').onclick=function(){var d={name:s.querySelector('#st_n').value.trim()||'بند',state:s.querySelector('#st_st').value.trim()||'جارٍ'};if(edit){Object.assign(edit,d);}else{FND_STATUS.push(d);}closeModal();viewFoundation(document.getElementById('view'));notify(edit?'حُدّث البند':'أُضيف «'+d.name+'»');};
-  var sd=s.querySelector('#st_d');if(sd)sd.onclick=function(){FND_STATUS.splice(idx,1);closeModal();viewFoundation(document.getElementById('view'));notify('حُذف «'+e.name+'»');};
+  var sd=s.querySelector('#st_d');if(sd)sd.onclick=function(){closeModal();toast('تعذّر الحذف — لا يوجد اتصال حيّ بالخادم');};
 }
 
 /* ===== TARGETS ===== */
@@ -3234,7 +3236,7 @@ function viewTargets(v){
   const qPct=(window.EP&&EP.data.targets&&EP.data.targets.quarterPct!=null)?EP.data.targets.quarterPct:(sumT?Math.round(sumA/sumT*100):0);
   const bars=BARS.map((t,i)=>`<div class="tgbar" ${liveBars?'':`data-i="${i}"`} style="flex:1;display:flex;flex-direction:column;align-items:center;gap:6px${liveBars?'':';cursor:pointer'}" ${liveBars?'':'title="اضغط للتعديل"'}><div style="display:flex;gap:5px;align-items:flex-end;height:130px"><div style="width:18px;background:var(--agree);border-radius:5px 5px 0 0;height:${(t.actual||0)/mx*130}px" title="فعلي ${money(t.actual||0)}${liveBars?' ألف':''}"></div><div style="width:18px;background:var(--gold);border-radius:5px 5px 0 0;height:${(t.target||0)/mx*130}px" title="هدف ${money(t.target||0)}${liveBars?' ألف':''}"></div></div><div style="font-size:12px;font-weight:700;color:var(--ink-2)">${t.m}</div></div>`).join('');
   v.innerHTML=`
-    ${Tst==='error'&&!live?`<div class="policy" style="border-inline-start-color:var(--conflict);background:var(--conflict-bg);color:var(--conflict)">${svg('scale','ic')}<div>تعذّر جلب الأهداف والتوقّعات من الخادم — تُعرض بيانات تصميمية. <b style="cursor:pointer;text-decoration:underline" onclick="EP.reload('targets',()=>viewTargets(document.getElementById('view')))">إعادة المحاولة</b></div></div>`:''}
+    ${Tst==='error'&&!live?`<div class="policy" style="border-inline-start-color:var(--conflict);background:var(--conflict-bg);color:var(--conflict)">${svg('scale','ic')}<div>تعذّر جلب الأهداف والتوقّعات من الخادم — لا تُعرض أي بيانات بديلة. <b style="cursor:pointer;text-decoration:underline" onclick="EP.reload('targets',()=>viewTargets(document.getElementById('view')))">إعادة المحاولة</b></div></div>`:''}
     <div class="kpis">
       <div class="kpi k-3"><div class="top"><span class="ic">${svg('trend')}</span>أهداف نشطة</div><b>${Tst==='loading'&&!live?'…':money(GLS.length-done)}</b><div class="sub">${done} مكتمل</div></div>
       <div class="kpi k-1"><div class="top"><span class="ic">${svg('check')}</span>على المسار</div><b>${money(onTrack)}</b><div class="sub">تسير حسب الخطة</div></div>
@@ -3319,14 +3321,14 @@ function goalModal(idx){
     '<div class="acts" style="margin-top:14px"><button class="btn btn-primary" id="g_s">'+svg('check')+(edit?'حفظ':'أضف')+'</button>'+(edit?'<button class="btn btn-warn" id="g_del">حذف</button>':'')+'<button class="btn btn-ghost" id="g_x">إلغاء</button></div>');
   s.querySelector('#g_x').onclick=closeModal;
   s.querySelector('#g_s').onclick=function(){var d={title:s.querySelector('#g_t').value.trim()||'هدف',cat:s.querySelector('#g_c').value.trim()||'عام',owner:s.querySelector('#g_o').value.trim()||'الإدارة',current:+s.querySelector('#g_cur').value||0,target:+s.querySelector('#g_tg').value||1,unit:s.querySelector('#g_u').value.trim(),due:s.querySelector('#g_d').value.trim()||'—',status:s.querySelector('#g_st').value};if(edit){Object.assign(edit,d);}else{GOALS.push(d);}closeModal();viewTargets(document.getElementById('view'));notify(edit?'حُدّث الهدف «'+d.title+'»':'أُضيف هدف «'+d.title+'»');};
-  var gd=s.querySelector('#g_del');if(gd)gd.onclick=function(){GOALS.splice(idx,1);closeModal();viewTargets(document.getElementById('view'));notify('حُذف الهدف');};
+  var gd=s.querySelector('#g_del');if(gd)gd.onclick=function(){closeModal();toast('تعذّر الحذف — لا يوجد اتصال حيّ بالخادم');};
 }
 function targetModal(idx){
   var edit=(idx!=null&&idx>=0)?TARGETS[idx]:null,e=edit||{};
   var s=openModal(edit?'تعديل هدف شهر':'إضافة شهر','<div class="fld"><label>الشهر</label><input id="tg_m" value="'+(e.m||'')+'" placeholder="نوفمبر"></div><div class="row2"><div class="fld"><label>الفعلي (ألف ج)</label><input id="tg_a" type="number" value="'+(e.actual!=null?e.actual:'')+'"></div><div class="fld"><label>الهدف (ألف ج)</label><input id="tg_t" type="number" value="'+(e.target!=null?e.target:'')+'"></div></div><div class="acts" style="margin-top:14px"><button class="btn btn-primary" id="tg_s">'+svg('check')+(edit?'حفظ':'أضف')+'</button>'+(edit?'<button class="btn btn-warn" id="tg_d">حذف</button>':'')+'<button class="btn btn-ghost" id="tg_x">إلغاء</button></div>');
   s.querySelector('#tg_x').onclick=closeModal;
   s.querySelector('#tg_s').onclick=function(){var d={m:s.querySelector('#tg_m').value.trim()||'شهر',actual:+s.querySelector('#tg_a').value||0,target:+s.querySelector('#tg_t').value||0};if(edit){Object.assign(edit,d);}else{TARGETS.push(d);}closeModal();viewTargets(document.getElementById('view'));notify(edit?'حُدّث الهدف':'أُضيف «'+d.m+'»');};
-  var td=s.querySelector('#tg_d');if(td)td.onclick=function(){TARGETS.splice(idx,1);closeModal();viewTargets(document.getElementById('view'));notify('حُذف الشهر');};
+  var td=s.querySelector('#tg_d');if(td)td.onclick=function(){closeModal();toast('تعذّر الحذف — لا يوجد اتصال حيّ بالخادم');};
 }
 
 /* ===== SETTINGS ===== */
@@ -3343,7 +3345,8 @@ function viewSettings(v){
   if(window.EP){EP.ensure('settings',()=>viewSettings(v));EP.ensure('dashUsers',()=>viewSettings(v));EP.ensure('usage',()=>viewSettings(v));EP.ensure('aiModels',()=>viewSettings(v));}
   const Sst=(window.EP&&EP.state.settings)||'idle';
   const S=(window.EP&&EP.data.settings)||null;
-  const fxVal=(S&&S.exchange_rate!=null)?S.exchange_rate:50;
+  const fxLive=!!(S&&S.exchange_rate!=null);
+  const fxVal=fxLive?S.exchange_rate:'';
   const coName=(S&&S.company_name)||'البروفيسور — ElProfessor';
   const coDomain=(S&&S.company_domain)||'dashboard.elprofessor.net';
   const fiscal=(S&&S.fiscal_year_start)||'تبدأ ١ يناير';
@@ -3351,11 +3354,11 @@ function viewSettings(v){
   const models=(window.EP&&EP.data.aiModels)||[];
   const U=(window.EP&&EP.data.usage)||null;
   v.innerHTML=`
-    ${Sst==='error'?`<div class="policy" style="border-inline-start-color:var(--conflict);background:var(--conflict-bg);color:var(--conflict)">${svg('scale','ic')}<div>تعذّر جلب الإعدادات من الخادم — تُعرض قيم تصميمية. <b style="cursor:pointer;text-decoration:underline" onclick="EP.reload('settings',()=>viewSettings(document.getElementById('view')))">إعادة المحاولة</b></div></div>`:''}
+    ${Sst==='error'?`<div class="policy" style="border-inline-start-color:var(--conflict);background:var(--conflict-bg);color:var(--conflict)">${svg('scale','ic')}<div>تعذّر جلب الإعدادات من الخادم — لا تُعرض أي قيم بديلة. <b style="cursor:pointer;text-decoration:underline" onclick="EP.reload('settings',()=>viewSettings(document.getElementById('view')))">إعادة المحاولة</b></div></div>`:''}
     <div class="inboxwrap" style="grid-template-columns:1fr 1fr;align-items:start">
       <section class="panel"><div class="ph"><h3>المالية والعملة</h3></div><div style="padding:16px 18px">
         <div style="font-size:12px;font-weight:800;color:var(--muted);margin-bottom:6px">سعر صرف الدولار (ج/$)</div>
-        <div style="display:flex;gap:8px"><input id="fxInput" value="${fxVal}" style="flex:1;border:1px solid var(--line);border-radius:10px;padding:9px 13px;font:inherit;outline:0"><button class="btn btn-human" style="flex:none;min-width:auto;padding:9px 16px" data-a="fx">حفظ</button></div>
+        <div style="display:flex;gap:8px"><input id="fxInput" value="${fxVal}"${fxLive?'':' disabled placeholder="—"'} style="flex:1;border:1px solid var(--line);border-radius:10px;padding:9px 13px;font:inherit;outline:0"><button class="btn btn-human" style="flex:none;min-width:auto;padding:9px 16px" data-a="fx">حفظ</button></div>
         <div style="font-size:12px;font-weight:800;color:var(--muted);margin:16px 0 8px">البلدان والعملات المفعّلة</div>
         <div style="display:flex;flex-wrap:wrap;gap:7px">${['🇪🇬 مصر — ج.م','🇸🇦 السعودية — ر.س','🇶🇦 قطر — ر.ق','🇦🇪 الإمارات — د.إ','🌍 دولي — $'].map(c=>`<span class="chip on" style="cursor:default">${c}</span>`).join('')}</div>
       </div></section>
@@ -3540,9 +3543,10 @@ function drawMarket(){
 }
 
 /* ===== TRAINER / INVESTOR / VIEWER PORTALS ===== */
-const TR_COURSES=[{title:'صياغة العقود الاحترافية',enrolled:28,paid:21,from:'١٥٠ ج'},{title:'أساسيات القانون التجاري',enrolled:12,paid:0,from:'١٠٠ ج'}];
-const TR_EARN={total:18400,month:4200,escrow:1200,withdrawable:12000,rate:38};
-// مصادر بيانات المدرّب: حيّة من EP.data.t_data إن وُجدت، وإلا البيانات التصميمية.
+// لوحة المدرّب: لا دورات ولا أرباح تصميمية — تُجلب حيّة من EP.data.t_data أو تبقى أصفارًا/فارغة.
+const TR_COURSES=[];
+const TR_EARN={total:0,month:0,escrow:0,withdrawable:0,rate:0};
+// مصادر بيانات المدرّب: حيّة من EP.data.t_data إن وُجدت، وإلا القيم الفارغة أعلاه.
 function trData(){return (window.EP&&EP.data.t_data)?EP.data.t_data:null;}
 function trCourses(){var d=trData();return d?d.courses:TR_COURSES;}
 function trEarn(){var d=trData();if(!d)return TR_EARN;return {total:(d.accrued+d.paid),month:d.month,escrow:d.escrow,withdrawable:d.accrued,rate:d.rate};}
@@ -3559,7 +3563,7 @@ function viewTHome(v){
       <div class="kpi k-2"><div class="top"><span class="ic">${svg('wallet')}</span>أرباح الشهر</div><b>${st==='loading'&&!live?'…':money(E.month)} <small style="font-size:13px">ج</small></b><div class="sub">آخر ٣٠ يومًا</div></div>
       <div class="kpi k-4"><div class="top"><span class="ic">${svg('trend')}</span>نسبتي</div><b>${E.rate}٪</b><div class="sub">ترتفع بالأداء</div></div>
     </div>
-    ${st==='error'&&!live?`<div class="policy" style="border-inline-start-color:var(--conflict);background:var(--conflict-bg)">${svg('shield','ic')}<div>تعذّر تحميل بيانات لوحتك — عرض مؤقت بالبيانات التصميمية. <a href="#" data-retry style="color:var(--navy);font-weight:800">إعادة المحاولة</a></div></div>`:''}
+    ${st==='error'&&!live?`<div class="policy" style="border-inline-start-color:var(--conflict);background:var(--conflict-bg)">${svg('shield','ic')}<div>تعذّر تحميل بيانات لوحتك — لا تُعرض أي أرقام بديلة. <a href="#" data-retry style="color:var(--navy);font-weight:800">إعادة المحاولة</a></div></div>`:''}
     <section class="panel"><div class="ph"><h3>برامجي السريعة</h3></div><div style="padding:16px;display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px">
       <button class="btn btn-ghost" data-go="t_courses">إدارة دوراتي</button>
       <button class="btn btn-ghost" data-go="t_earnings">أرباحي والسحب</button>
@@ -3588,7 +3592,7 @@ function viewTEarnings(v){
   const E=trEarn();
   const wd=Math.round(E.withdrawable||0);
   v.innerHTML=`
-    ${st==='error'&&!live?`<div class="policy" style="border-inline-start-color:var(--conflict);background:var(--conflict-bg)">${svg('shield','ic')}<div>تعذّر تحميل أرباحك — عرض مؤقت بالبيانات التصميمية. <a href="#" data-retry style="color:var(--navy);font-weight:800">إعادة المحاولة</a></div></div>`:''}
+    ${st==='error'&&!live?`<div class="policy" style="border-inline-start-color:var(--conflict);background:var(--conflict-bg)">${svg('shield','ic')}<div>تعذّر تحميل أرباحك — لا تُعرض أي أرقام بديلة. <a href="#" data-retry style="color:var(--navy);font-weight:800">إعادة المحاولة</a></div></div>`:''}
     <div class="kpis">
       <div class="kpi k-3"><div class="top"><span class="ic">${svg('wallet')}</span>إجمالي أرباحي</div><b>${st==='loading'&&!live?'…':money(Math.round(E.total))} <small style="font-size:13px">ج</small></b><div class="sub">مستحق + مدفوع</div></div>
       <div class="kpi k-1"><div class="top"><span class="ic">${svg('trend')}</span>هذا الشهر</div><b>${st==='loading'&&!live?'…':money(Math.round(E.month))} <small style="font-size:13px">ج</small></b><div class="sub">آخر ٣٠ يومًا</div></div>
@@ -3602,9 +3606,10 @@ function viewTEarnings(v){
   v.querySelector('[data-a="wd"]').onclick=()=>toast(wd>0?'تم تسجيل طلب الصرف — تراجعه الإدارة وتنفّذه خلال ١–٥ أيام':'لا يوجد مستحق قابل للصرف حاليًا');
   var rt=v.querySelector('[data-retry]');if(rt)rt.onclick=(e)=>{e.preventDefault();EP.reload('t_data',()=>viewTEarnings(v));};
 }
-const INV_ME={balance:12000,invested:25000,returns:3200,level:'فضي'};
-const INV_MY=[{title:'تمويل دورة الذكاء للمحامين',amount:15000,roi:'١٨٪',status:'نشط'},{title:'حملة تسويق الدبلومة',amount:10000,roi:'١٢٪',status:'نشط'}];
-// مصادر بيانات المستثمر: حيّة من EP.data.i_data إن وُجدت، وإلا البيانات التصميمية.
+// لوحة المستثمر: لا محفظة ولا استثمارات تصميمية — تُجلب حيّة من EP.data.i_data أو تبقى أصفارًا/فارغة.
+const INV_ME={balance:0,invested:0,returns:0,level:'—'};
+const INV_MY=[];
+// مصادر بيانات المستثمر: حيّة من EP.data.i_data إن وُجدت، وإلا القيم الفارغة أعلاه.
 function ivData(){return (window.EP&&EP.data.i_data)?EP.data.i_data:null;}
 const INV_LEVELS={bronze:'برونزي',silver:'فضي',gold:'ذهبي',platinum:'بلاتيني'};
 function ivMe(){var d=ivData();if(!d||!d.wallet)return INV_ME;var w=d.wallet;return {balance:Math.round(w.balance_egp||0),invested:Math.round(w.total_invested_egp||0),returns:Math.round(w.total_returns_egp||0),level:INV_LEVELS[w.level]||w.level||'برونزي'};}
@@ -3616,7 +3621,7 @@ function viewIHome(v){
   const live=!!(ivData()&&ivData().wallet);
   const M=ivMe();
   v.innerHTML=`
-    ${st==='error'&&!live?`<div class="policy" style="border-inline-start-color:var(--conflict);background:var(--conflict-bg)">${svg('shield','ic')}<div>تعذّر تحميل محفظتك — عرض مؤقت بالبيانات التصميمية. <a href="#" data-retry style="color:var(--navy);font-weight:800">إعادة المحاولة</a></div></div>`:''}
+    ${st==='error'&&!live?`<div class="policy" style="border-inline-start-color:var(--conflict);background:var(--conflict-bg)">${svg('shield','ic')}<div>تعذّر تحميل محفظتك — لا تُعرض أي أرقام بديلة. <a href="#" data-retry style="color:var(--navy);font-weight:800">إعادة المحاولة</a></div></div>`:''}
     <div class="kpis">
       <div class="kpi k-1"><div class="top"><span class="ic">${svg('brief')}</span>رصيد المحفظة</div><b>${st==='loading'&&!live?'…':money(M.balance)} <small style="font-size:13px">ج</small></b><div class="sub">متاح للسحب</div></div>
       <div class="kpi k-3"><div class="top"><span class="ic">${svg('wallet')}</span>مُستثمَر</div><b>${st==='loading'&&!live?'…':money(M.invested)} <small style="font-size:13px">ج</small></b><div class="sub">رأس مالي</div></div>
@@ -3724,10 +3729,8 @@ function clubModal(c){
 
 /* ===== MESSAGES (تواصل من الموقع) ===== */
 var msgFilter='all';
-const SEED_MSGS=[
-  {name:'مكتب الرشيد للمحاماة',email:'office@rashid.law',phone:'٠١٠٢٢٣٣٤٤٥',topic:'شراكة / درّب معنا',body:'نرغب في تقديم دورات تدريبية عبر منصتكم، كيف نبدأ؟',at:Date.now()-3600e3*5,status:'new'},
-  {name:'سارة المنصوري',email:'sara.m@mail.com',phone:'٠٥٥٦٦٧٧٨٨',topic:'الاشتراك والباقات',body:'هل باقة الأدوات تشمل المحرر القانوني للشركات الصغيرة؟',at:Date.now()-3600e3*26,status:'replied'}
-];
+// رسائل التواصل: لا رسائل تصميمية — تُجلب حيّة من /api/messages أو من التخزين المحلي فقط.
+const SEED_MSGS=[];
 function loadMsgs(){
   var arr=[];try{arr=JSON.parse(localStorage.getItem('elp_contact_messages')||'[]');}catch(e){}
   return arr.concat(SEED_MSGS);

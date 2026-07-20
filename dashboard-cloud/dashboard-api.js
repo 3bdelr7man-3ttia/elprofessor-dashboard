@@ -74,7 +74,8 @@
     authed: false,
     user: null,
     role: null, // الدور الحقيقي بعد الدخول (يضبطه applyAccount من /auth/me)
-    data: { dashboard: null, metrics: null, users: null, content: null, finance: null, messages: null, inbox: null,
+    data: { dashboard: null, metrics: null, users: null, content: null, finance: null, revenues: null, expenses: null,
+            messages: null, inbox: null,
             escrow: null, investment: null, marketing: null, partners: null, courses: null, settings: null,
             packages: null, t_data: null, i_data: null, targets: null, foundation: null, team: null,
             notifications: null, goalsAdvisor: null, tutorials: null, platformTopics: null, platformTopicsAnalysis: null,
@@ -153,6 +154,22 @@
       return new Intl.DateTimeFormat("ar-EG", { day: "numeric", month: "long" }).format(d);
     } catch (e) { return (iso || "").slice(0, 10); }
   }
+  // خرائط تعريب حقول المالية (مطابقة لقيم backend/app.py: Revenue.source / Revenue.payment_method
+  // / Expense.category). أي قيمة غير معروفة تُعرض كما وردت من الخادم بلا اختلاق.
+  var REV_SOURCE_AR = {
+    course: "دورة", consulting: "استشارة", subscription: "اشتراك", package: "باقة",
+    book: "كتاب", escrow: "ضمان", commission: "عمولة", deposit: "إيداع", other: "أخرى",
+  };
+  var REV_METHOD_AR = {
+    bank_transfer: "تحويل بنكي", cash: "نقدًا", stripe: "بطاقة (Stripe)", paytabs: "بطاقة (PayTabs)",
+    wise: "Wise", instapay: "إنستاباي", vodafone_cash: "فودافون كاش", manual: "يدوي", other: "أخرى",
+  };
+  var EXP_CAT_AR = {
+    tools: "أدوات واشتراكات", hosting: "استضافة", marketing: "تسويق", travel: "سفر",
+    legal: "قانوني", office: "مكتب", bank_fees: "رسوم بنكية", salaries: "رواتب",
+    asset_rent: "إيجار أصول", payout: "صرف مستحقات", other: "أخرى",
+  };
+
   // اسم الشهر العربي المختصر من مفتاح "YYYY-MM" أو تاريخ ISO (للأهداف/التوقّعات).
   var AR_MONTHS = ["يناير", "فبراير", "مارس", "أبريل", "مايو", "يونيو", "يوليو", "أغسطس", "سبتمبر", "أكتوبر", "نوفمبر", "ديسمبر"];
   function arMonthShort(key) {
@@ -454,12 +471,48 @@
     finance: function () {
       return get("/finance/summary").then(function (s) {
         EP.data.finance = s;
-        // ابنِ سلسلة الرسم الشهري (وارد/صادر بالألف) من البيانات الحيّة.
-        if (Array.isArray(s.monthly) && s.monthly.length) {
-          window.FMONTHLY = s.monthly.slice(-6).map(function (m) {
-            return { m: (m.month || "").slice(5) || (m.month || ""), i: Math.round((m.revenue || 0) / 1000), o: Math.round((m.expenses || 0) / 1000) };
-          });
-        }
+        // ابنِ سلسلة الرسم الشهري (وارد/صادر بالألف) من البيانات الحيّة — وتبقى فارغة لو لا شهور.
+        window.FMONTHLY = (Array.isArray(s.monthly) ? s.monthly : []).slice(-6).map(function (m) {
+          return { m: (m.month || "").slice(5) || (m.month || ""), i: Math.round((m.revenue || 0) / 1000), o: Math.round((m.expenses || 0) / 1000) };
+        });
+      });
+    },
+
+    // الإيرادات: /api/revenues -> [ {id,date,source,description,amount_egp,amount_usd,total_egp,
+    // client_name,course_id,campaign_id,payment_method,notes} ].
+    // نحوّل الأسماء هنا (لا في العرض) لشكل صفوف شاشة المالية: {date,who,desc,amount,method,cat}.
+    revenues: function () {
+      return get("/revenues").then(function (r) {
+        var list = Array.isArray(r) ? r : ((r && r.revenues) || []);
+        EP.data.revenues = list.map(function (x) {
+          return {
+            id: x.id,
+            date: arDate(x.date),
+            who: x.client_name || "—",
+            desc: x.description || "—",
+            amount: Math.round(x.total_egp != null ? x.total_egp : (x.amount_egp || 0)),
+            method: REV_METHOD_AR[x.payment_method] || x.payment_method || "—",
+            cat: REV_SOURCE_AR[x.source] || x.source || "—",
+          };
+        });
+      });
+    },
+
+    // المصروفات: /api/expenses -> [ {id,date,category,description,amount_egp,amount_usd,total_egp,
+    // is_business,paid_by,has_receipt,notes} ] -> {date,cat,desc,amount,business}.
+    expenses: function () {
+      return get("/expenses").then(function (r) {
+        var list = Array.isArray(r) ? r : ((r && r.expenses) || []);
+        EP.data.expenses = list.map(function (x) {
+          return {
+            id: x.id,
+            date: arDate(x.date),
+            cat: EXP_CAT_AR[x.category] || x.category || "عام",
+            desc: x.description || "—",
+            amount: Math.round(x.total_egp != null ? x.total_egp : (x.amount_egp || 0)),
+            business: x.is_business !== false,
+          };
+        });
       });
     },
 
