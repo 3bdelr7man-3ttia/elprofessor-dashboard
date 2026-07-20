@@ -250,9 +250,11 @@ body{font-family:'IBM Plex Sans Arabic',sans-serif;background:var(--bg);color:va
       <div class="txt"><h1>البروفيسور</h1><span>غرفة التحكم</span></div>
     </div>
     <div class="navwrap">
-      <div class="grp">الوارد والإدارة</div><nav class="nav" id="nav-main"></nav>
-      <div class="grp">المال والنمو</div><nav class="nav" id="nav-money"></nav>
-      <div class="grp">الشركة والذكاء</div><nav class="nav" id="nav-co"></nav>
+      <div class="grp">شغل النهاردة</div><nav class="nav" id="nav-today"></nav>
+      <div class="grp">الناس والدورات</div><nav class="nav" id="nav-people"></nav>
+      <div class="grp">الفلوس</div><nav class="nav" id="nav-money"></nav>
+      <div class="grp">الطلب والمحتوى</div><nav class="nav" id="nav-demand"></nav>
+      <div class="grp grp-toggle" id="grpCo" role="button" tabindex="0">الشركة <span id="grpCoCaret">▾</span></div><nav class="nav" id="nav-co"></nav>
     </div>
     <div class="me"><div class="av" id="meAv">—</div><div style="flex:1;min-width:0"><div class="nm" id="meName">—</div><div class="rl" id="meRole">—</div></div><button id="logoutBtn" title="تسجيل الخروج" aria-label="تسجيل الخروج" style="background:rgba(255,255,255,.08);border:0;color:rgba(255,255,255,.7);width:32px;height:32px;border-radius:9px;cursor:pointer;flex:none;display:grid;place-items:center"><svg class="icon" viewBox="0 0 24 24" style="width:17px;height:17px"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="m16 17 5-5-5-5"/><path d="M21 12H9"/></svg></button></div>
   </aside>
@@ -300,37 +302,48 @@ const ICONS={
 };
 function svg(n,c){return '<svg class="icon '+(c||'')+'" viewBox="0 0 24 24">'+(ICONS[n]||'')+'</svg>';}
 
+// خمس مجموعات تعكس دورة عمل يومية بدل تصنيف نظري. المجموعة الأخيرة «الشركة» مطويّة
+// افتراضيًا: مراجعة شهرية لا شغل يومي. كان الأدمن يرى ٢٢ عنصرًا مسطّحًا دفعة واحدة.
+// حُذف موديولان: «النوادي» (soon:true بلا واجهة خلفية) و«السوق والطلبات» (بلا محمّل
+// بيانات ولا endpoint — كان يعرض صفرًا دائمًا فيقرأ كحقيقة).
 const MODULES={
-  overview:{label:'نظرة عامة',ic:'grid',c:'var(--navy)',bg:'var(--surface-2)',grp:'main'},
-  inbox:{label:'الوارد من المنصة',ic:'inbox',c:'var(--human)',bg:'var(--human-bg)',grp:'main'},
-  analysis:{label:'تحليل الطلب',ic:'trend',c:'var(--gold)',bg:'var(--gold-bg)',grp:'main'},
-  users:{label:'المستخدمون',ic:'users',c:'var(--ai)',bg:'var(--ai-bg)',grp:'main'},
-  courses:{label:'الدورات والتدريب',ic:'book',c:'var(--memory)',bg:'var(--memory-bg)',grp:'main'},
-  escrow:{label:'الضمان والنزاعات',ic:'shield',c:'var(--conflict)',bg:'var(--conflict-bg)',grp:'main'},
-  market:{label:'السوق والطلبات',ic:'store',c:'var(--gold)',bg:'var(--gold-bg)',grp:'main'},
-  clubs:{label:'النوادي',ic:'cap',c:'var(--ai)',bg:'var(--ai-bg)',grp:'main',soon:true},
-  messages:{label:'الرسائل (تواصل)',ic:'inbox',c:'var(--ai)',bg:'var(--ai-bg)',grp:'main'},
+  overview:{label:'نظرة عامة',ic:'grid',c:'var(--navy)',bg:'var(--surface-2)',grp:'today'},
+  inbox:{label:'الوارد',ic:'inbox',c:'var(--human)',bg:'var(--human-bg)',grp:'today'},
+  messages:{label:'الرسائل',ic:'inbox',c:'var(--ai)',bg:'var(--ai-bg)',grp:'today'},
+  courses:{label:'الدورات والتدريب',ic:'book',c:'var(--memory)',bg:'var(--memory-bg)',grp:'people'},
+  team:{label:'الخبراء والمدربون',ic:'cap',c:'var(--ai)',bg:'var(--ai-bg)',grp:'people'},
+  users:{label:'المستخدمون',ic:'users',c:'var(--ai)',bg:'var(--ai-bg)',grp:'people'},
   finance:{label:'المالية',ic:'wallet',c:'var(--agree)',bg:'var(--agree-bg)',grp:'money'},
-  investment:{label:'الاستثمار',ic:'brief',c:'var(--gold)',bg:'var(--gold-bg)',grp:'money'},
-  marketing:{label:'التسويق',ic:'mega',c:'var(--human)',bg:'var(--human-bg)',grp:'money'},
-  partners:{label:'الشركاء',ic:'hands',c:'var(--navy)',bg:'var(--surface-2)',grp:'money'},
-  topics:{label:'المواضيع',ic:'sparkles',c:'var(--gold)',bg:'var(--gold-bg)',grp:'money'},
-  tutorials:{label:'الدليل',ic:'book',c:'var(--ai)',bg:'var(--ai-bg)',grp:'money'},
+  escrow:{label:'الضمان والنزاعات',ic:'shield',c:'var(--conflict)',bg:'var(--conflict-bg)',grp:'money'},
   packages:{label:'الباقات والأسعار',ic:'wallet',c:'var(--gold)',bg:'var(--gold-bg)',grp:'money'},
-  knowledge:{label:'سوق المعرفة',ic:'book',c:'var(--memory)',bg:'var(--memory-bg)',grp:'money'},
-  team:{label:'الخبراء والمدربون',ic:'cap',c:'var(--ai)',bg:'var(--ai-bg)',grp:'co'},
+  analysis:{label:'تحليل الطلب',ic:'trend',c:'var(--gold)',bg:'var(--gold-bg)',grp:'demand'},
+  topics:{label:'المحتوى',ic:'sparkles',c:'var(--gold)',bg:'var(--gold-bg)',grp:'demand'},
+  marketing:{label:'التسويق',ic:'mega',c:'var(--human)',bg:'var(--human-bg)',grp:'demand'},
+  knowledge:{label:'سوق المعرفة',ic:'book',c:'var(--memory)',bg:'var(--memory-bg)',grp:'demand'},
+  investment:{label:'الاستثمار',ic:'brief',c:'var(--gold)',bg:'var(--gold-bg)',grp:'co'},
+  partners:{label:'الشركاء',ic:'hands',c:'var(--navy)',bg:'var(--surface-2)',grp:'co'},
   foundation:{label:'مرحلة التأسيس',ic:'build',c:'var(--muted)',bg:'var(--surface-2)',grp:'co'},
   targets:{label:'الأهداف والتوقعات',ic:'trend',c:'var(--gold)',bg:'var(--gold-bg)',grp:'co'},
-  ai:{label:'الفريق (AI Team)',ic:'robot',c:'var(--ai)',bg:'var(--ai-bg)',grp:'co'},
-  settings:{label:'الإعدادات',ic:'gear',c:'var(--muted)',bg:'var(--surface-2)',grp:'co'},
-  t_home:{label:'لوحتي',ic:'grid',c:'var(--navy)',bg:'var(--surface-2)',grp:'role'},
-  t_courses:{label:'دوراتي',ic:'book',c:'var(--memory)',bg:'var(--memory-bg)',grp:'role'},
-  t_earnings:{label:'أرباحي واستثماري',ic:'wallet',c:'var(--agree)',bg:'var(--agree-bg)',grp:'role'},
-  i_home:{label:'لوحتي',ic:'grid',c:'var(--navy)',bg:'var(--surface-2)',grp:'role'},
-  i_market:{label:'ماركت الاستثمار',ic:'brief',c:'var(--gold)',bg:'var(--gold-bg)',grp:'role'},
-  i_invest:{label:'استثماراتي',ic:'trend',c:'var(--memory)',bg:'var(--memory-bg)',grp:'role'},
-  v_pending:{label:'بانتظار التفعيل',ic:'clock',c:'var(--muted)',bg:'var(--surface-2)',grp:'role'}
+  tutorials:{label:'دليل الاستخدام',ic:'book',c:'var(--ai)',bg:'var(--ai-bg)',grp:'co'},
+  ai:{label:'مساعدو الذكاء',ic:'robot',c:'var(--ai)',bg:'var(--ai-bg)',grp:'co'},
+  settings:{label:'الإعدادات',ic:'gear',c:'var(--muted)',bg:'var(--surface-2)',grp:'co'}
 };
+// موديولات الأدوار غير-الأدمن مفصولة بنيويًّا: كانت تعيش داخل MODULES وتُخفى بشرط ضمني
+// (المجموعات الثلاث المرسومة)، فأي مجموعة جديدة كانت تكشفها للأدمن بالخطأ.
+const ROLE_MODULES={
+  t_home:{label:'لوحتي',ic:'grid',c:'var(--navy)',bg:'var(--surface-2)'},
+  t_courses:{label:'دوراتي',ic:'book',c:'var(--memory)',bg:'var(--memory-bg)'},
+  t_earnings:{label:'أرباحي واستثماري',ic:'wallet',c:'var(--agree)',bg:'var(--agree-bg)'},
+  i_home:{label:'محفظتي',ic:'grid',c:'var(--navy)',bg:'var(--surface-2)'},
+  i_market:{label:'ماركت الاستثمار',ic:'brief',c:'var(--gold)',bg:'var(--gold-bg)'},
+  i_invest:{label:'استثماراتي',ic:'trend',c:'var(--memory)',bg:'var(--memory-bg)'},
+  v_pending:{label:'بانتظار التفعيل',ic:'clock',c:'var(--muted)',bg:'var(--surface-2)'}
+};
+// كل بحث عن موديول يمرّ من هنا — الأدمن لا يرى موديولات الأدوار والعكس.
+function moduleDef(id){return MODULES[id]||ROLE_MODULES[id]||null;}
+// كل بحث `MODULES[x]` في بقية الملف يمرّ عبر هذا البروكسي بدل أن ينكسر على موديولات
+// الأدوار بعد فصلها — أقل تدخّلًا من تحويل خمسة عشر موضعًا إلى نداء دالة.
+const MODULES_LOOKUP=new Proxy({},{get:(_,k)=>moduleDef(String(k)),has:(_,k)=>!!moduleDef(String(k))});
 // الوارد: لا بيانات تصميمية — تملؤه طبقة الـ API (window.INBOX = صفوف حقيقية) أو يبقى فارغًا.
 var INBOX=[];
 const TRI={auto:{cls:'tri-auto',t:'عالجه الذكاء'},human:{cls:'tri-human',t:'محوّل لبشري'},wait:{cls:'tri-wait',t:'بانتظار'},late:{cls:'tri-late',t:'متأخّر — عاجل'}};
@@ -362,22 +375,30 @@ function itemHTML(id,m){
   const soon=m.soon?'<span class="badge-soon">قريبًا</span>':'';
   return `<div class="item${on}${al}" data-mod="${id}">${svg(m.ic)}<span>${m.label}</span>${soon}${cnt}</div>`;
 }
+const NAV_GROUPS={today:'nav-today',people:'nav-people',money:'nav-money',demand:'nav-demand',co:'nav-co'};
+// «الشركة» مطويّة افتراضيًا (مراجعة شهرية لا شغل يومي)؛ الاختيار يبقى بين الجلسات.
+function coOpen(){try{return localStorage.getItem('ep_grp_co')==='1';}catch(e){return false;}}
+function setCoOpen(v){try{localStorage.setItem('ep_grp_co',v?'1':'0');}catch(e){}}
 function renderNav(){
-  const groups={main:'nav-main',money:'nav-money',co:'nav-co'};
-  Object.values(groups).forEach(id=>document.getElementById(id).innerHTML='');
+  Object.values(NAV_GROUPS).forEach(id=>{const el=document.getElementById(id);if(el)el.innerHTML='';});
   const labels=document.querySelectorAll('.rail .grp');
   if(role==='admin'){
     labels.forEach(g=>g.style.display='');
-    Object.entries(groups).forEach(([g,elId])=>{
-      const el=document.getElementById(elId);
+    Object.entries(NAV_GROUPS).forEach(([g,elId])=>{
+      const el=document.getElementById(elId);if(!el)return;
       Object.entries(MODULES).filter(([id,m])=>m.grp===g).forEach(([id,m])=>el.insertAdjacentHTML('beforeend',itemHTML(id,m)));
     });
+    const open=coOpen(),coNav=document.getElementById('nav-co'),caret=document.getElementById('grpCoCaret');
+    if(coNav)coNav.style.display=open?'':'none';
+    if(caret)caret.textContent=open?'▾':'▸';
+    const grpCo=document.getElementById('grpCo');
+    if(grpCo){grpCo.style.cursor='pointer';grpCo.onclick=()=>{setCoOpen(!coOpen());renderNav();};}
   } else {
     labels.forEach(g=>g.style.display='none');
     // خريطة الصلاحيات المحفوظة (D9) تُقيّد قائمة الموديولات للدور غير-الأدمن.
     if(window.EP&&EP.authed)EP.ensure('settings',renderNav);
-    const el=document.getElementById('nav-main');
-    roleNavFor(role).forEach(id=>{const m=MODULES[id];if(m)el.insertAdjacentHTML('beforeend',itemHTML(id,m));});
+    const el=document.getElementById('nav-today');
+    roleNavFor(role).forEach(id=>{const m=moduleDef(id);if(m)el.insertAdjacentHTML('beforeend',itemHTML(id,m));});
   }
   document.querySelectorAll('.nav .item').forEach(it=>it.onclick=()=>go(it.dataset.mod));
 }
@@ -391,15 +412,19 @@ function roleNavFor(r){
   }catch(e){}}
   return base;
 }
-function go(mod){current=mod;selected=null;activeFilter='all';escTab='sessions';finTab='summary';usersFilter='all';usersTag='all';teamTab='experts';topicsTab='ideas';topicsCat='all';courseTab='platform';invTab='investors';mktTab='campaigns';contentTab='pending';anFilters={seg:'all',country:'all',cat:'all',ne:'all',time:'all'};
-  document.getElementById('pageTitle').textContent=MODULES[mod].label;
+function go(mod){
+  // رابط/إشعار قديم قد يشير إلى موديول حُذف («النوادي»، «السوق والطلبات») — نهبط على
+  // الشاشة الافتراضية بدل أن نرمي على تعريف غير موجود ونُفرغ اللوحة.
+  if(!moduleDef(mod))mod=(role==='admin')?'inbox':(roleNavFor(role)[0]||'v_pending');
+  current=mod;selected=null;activeFilter='all';escTab='sessions';finTab='summary';usersFilter='all';usersTag='all';teamTab='experts';topicsTab='ideas';topicsCat='all';courseTab='platform';invTab='investors';mktTab='campaigns';contentTab='pending';anFilters={seg:'all',country:'all',cat:'all',ne:'all',time:'all'};
+  document.getElementById('pageTitle').textContent=(moduleDef(mod)||{}).label||'';
   document.querySelectorAll('.nav .item').forEach(x=>x.classList.toggle('on',x.dataset.mod===mod));
   renderView();
 }
 function renderView(){
   const v=document.getElementById('view');
   // موديولات «قريبًا» (لا واجهة خلفية حقيقية بعد) — لا تعرض بياناتها التصميمية.
-  if(MODULES[current]&&MODULES[current].soon)return viewSoon(v);
+  if(MODULES_LOOKUP[current]&&MODULES_LOOKUP[current].soon)return viewSoon(v);
   if(current==='inbox')return viewInbox(v);
   if(current==='analysis')return viewAnalysis(v);
   if(current==='escrow')return viewEscrow(v);
@@ -411,6 +436,8 @@ function renderView(){
   if(current==='marketing')return viewMarketing(v);
   if(current==='packages')return viewPackages(v);
   if(current==='knowledge')return viewKnowledge(v);
+  // «النوادي» و«السوق والطلبات» حُذفا من القائمة (بلا واجهة خلفية / بلا محمّل بيانات).
+  // الشاشتان باقيتان لأن رابطًا قديمًا قد يشير إليهما، ولن تُعرضا في التنقّل.
   if(current==='clubs')return viewClubs(v);
   if(current==='messages')return viewMessages(v);
   if(current==='topics'){
@@ -470,13 +497,13 @@ function renderInbox(){
   const dests=[...new Set(INBOX.map(i=>i.dest))];
   const mk=(f,label,color)=>`<div class="chip${activeFilter===f?' on':''}" data-f="${f}">${color?`<span class="dotc" style="background:${color}"></span>`:''}${label}</div>`;
   fe.insertAdjacentHTML('beforeend',mk('all','الكل'));
-  dests.forEach(d=>fe.insertAdjacentHTML('beforeend',mk(d,MODULES[d].label,MODULES[d].c)));
+  dests.forEach(d=>fe.insertAdjacentHTML('beforeend',mk(d,MODULES_LOOKUP[d].label,MODULES_LOOKUP[d].c)));
   fe.querySelectorAll('.chip').forEach(c=>c.onclick=()=>{activeFilter=c.dataset.f;renderInbox();});
   const el=document.getElementById('rows');el.innerHTML='';
   const q=(document.getElementById('q').value||'').trim();
-  const items=INBOX.filter(i=>{const okF=activeFilter==='all'||i.dest===activeFilter||i.triage===activeFilter;const okQ=!q||(i.out+i.from+i.who+MODULES[i.dest].label).includes(q);return okF&&okQ;});
+  const items=INBOX.filter(i=>{const okF=activeFilter==='all'||i.dest===activeFilter||i.triage===activeFilter;const okQ=!q||(i.out+i.from+i.who+MODULES_LOOKUP[i.dest].label).includes(q);return okF&&okQ;});
   document.getElementById('inboxN').textContent=items.length;
-  items.forEach(i=>{const m=MODULES[i.dest],tr=TRI[i.triage],ri=INBOX.indexOf(i);
+  items.forEach(i=>{const m=MODULES_LOOKUP[i.dest],tr=TRI[i.triage],ri=INBOX.indexOf(i);
     el.insertAdjacentHTML('beforeend',`<div class="row inbox-row${selected===ri?' sel':''}" data-i="${ri}">
       <div class="c c1"><div class="src-ic">${svg(i.src)}</div><div><div class="out">${esc(i.out)}</div><div class="from">من سطح: <b>${esc(i.from)}</b> · ${esc(i.who)}</div></div></div>
       <div class="c"><div class="destwrap"><span class="arrow">←</span><span class="dest" style="background:${m.bg};color:${m.c}">${svg(m.ic)}${m.label}</span></div></div>
@@ -513,7 +540,7 @@ function inboxActs(i,m){
 function drawInbox(){
   const el=document.getElementById('drawer');if(!el)return;
   if(selected===null){el.innerHTML=`<div class="empty">${svg('inbox','ic')}<p>اختر بندًا من الوارد لرؤية مساره الكامل والإجراء.</p></div>`;return;}
-  const i=INBOX[selected],m=MODULES[i.dest],tr=TRI[i.triage];
+  const i=INBOX[selected],m=MODULES_LOOKUP[i.dest],tr=TRI[i.triage];
   el.innerHTML=`<div class="dh"><div class="k">بند وارد · ${esc(i.ref)}</div><h3>${esc(i.out)}</h3></div><div class="db">
     <div class="route"><span class="step">المنصة · ${esc(i.from)}</span><span class="arrow">←</span><span class="step" style="color:${m.c};font-weight:800">${m.label}</span></div>
     <div class="note-ai">${svg('sparkles','ic')}<div>${esc(i.note)}</div></div>
@@ -1180,7 +1207,7 @@ function viewOverview(v){
       <section class="panel"><div class="ph"><h3>الموديولات</h3><span class="hint">مدخل سريع</span></div><div id="ovMods" style="padding:12px;display:grid;grid-template-columns:1fr 1fr;gap:10px"></div></section>
     </div>`;
   const re=document.getElementById('ovRows');
-  act.forEach(i=>{const m=MODULES[i.dest],tr=TRI[i.triage];re.insertAdjacentHTML('beforeend',`<div class="row" data-d="${i.dest}" style="grid-template-columns:1fr 150px;cursor:pointer">
+  act.forEach(i=>{const m=MODULES_LOOKUP[i.dest],tr=TRI[i.triage];re.insertAdjacentHTML('beforeend',`<div class="row" data-d="${i.dest}" style="grid-template-columns:1fr 150px;cursor:pointer">
     <div class="c c1"><div class="src-ic">${svg(i.src)}</div><div><div class="out">${esc(i.out)}</div><div class="from">← ${m.label} · ${esc(i.who)}</div></div></div>
     <div class="c"><span class="triage ${tr.cls}"><span class="d"></span>${tr.t}</span></div></div>`);});
   if(!act.length)re.innerHTML='<div style="padding:36px;text-align:center;color:var(--muted)">لا وارد يحتاج تصرّفك</div>';
@@ -1683,7 +1710,7 @@ function renderNotifPanel(){
   } else if(!list.length){
     body='<div class="np-empty">لا إشعارات جديدة</div>';
   } else {
-    body=list.map(function(n,i){var rt=n.route&&MODULES[n.route]?(' data-go="'+n.route+'"'):'';var cur=n.route&&MODULES[n.route]?';cursor:pointer':'';
+    body=list.map(function(n,i){var rt=n.route&&MODULES_LOOKUP[n.route]?(' data-go="'+n.route+'"'):'';var cur=n.route&&MODULES_LOOKUP[n.route]?';cursor:pointer':'';
       return '<div class="np-row '+(n.read?'read':'unread')+'"'+rt+' data-ni="'+i+'" style="'+cur+'"><span class="nd"></span><div><div class="ntx">'+esc(n.title||'إشعار')+'</div>'+(n.detail?'<div class="ntx" style="font-weight:400;color:var(--ink-2);font-size:11.5px">'+esc(n.detail)+'</div>':'')+'<div class="ntm">'+esc(n.time||'')+'</div></div></div>';
     }).join('');
   }
@@ -1691,7 +1718,7 @@ function renderNotifPanel(){
   var allBtn=p.querySelector('#npAll');if(allBtn)allBtn.onclick=function(){NOTIFS.forEach(function(n){n.read=true;});if(window.EP&&EP.data&&EP.data.notifications)EP.data.notifications.forEach(function(n){n.read=true;});notifBadge();renderNotifPanel();};
   var rb=p.querySelector('#npRetry');if(rb)rb.onclick=function(){if(window.EP&&EP.reload)EP.reload('notifications',renderNotifPanel);};
   // نقر صف -> علّمه مقروءًا + انتقل لوحدته (route) إن وُجدت.
-  p.querySelectorAll('.np-row[data-ni]').forEach(function(r){r.onclick=function(){var n=list[+r.dataset.ni];if(n)n.read=true;var go2=r.dataset.go;if(go2&&MODULES[go2]&&typeof go==='function'){p.style.display='none';go(go2);}notifBadge();renderNotifPanel();};});
+  p.querySelectorAll('.np-row[data-ni]').forEach(function(r){r.onclick=function(){var n=list[+r.dataset.ni];if(n)n.read=true;var go2=r.dataset.go;if(go2&&MODULES_LOOKUP[go2]&&typeof go==='function'){p.style.display='none';go(go2);}notifBadge();renderNotifPanel();};});
   notifBadge();
 }
 // إشعار فوري لفعل المستخدم: toast + إلحاق محلي أعلى القائمة (حتى تظهر فورًا).
@@ -3822,7 +3849,7 @@ function deleteMsg(m){try{var k='elp_contact_messages';var arr=JSON.parse(localS
 
 /* ===== SOON (قريبًا) ===== */
 function viewSoon(v){
-  const m=MODULES[current]||{label:'',ic:'clock',bg:'var(--surface-2)',c:'var(--muted)'};
+  const m=MODULES_LOOKUP[current]||{label:'',ic:'clock',bg:'var(--surface-2)',c:'var(--muted)'};
   v.innerHTML=`<div class="placeholder" style="margin-top:30px"><div class="pic" style="background:${m.bg};color:${m.c}">${svg(m.ic).replace('width="20" height="20"','width="28" height="28"')}</div>
     <h3>${m.label}</h3>
     <p>هذا الموديول قيد التطوير ولا يعرض بيانات بعد. سيُفعَّل بمصدر بيانات حقيقي في مرحلة لاحقة.</p>
@@ -3831,7 +3858,7 @@ function viewSoon(v){
 
 /* ===== PLACEHOLDER ===== */
 function viewPlaceholder(v){
-  const m=MODULES[current];
+  const m=MODULES_LOOKUP[current];
   v.innerHTML=`<div class="placeholder"><div class="pic" style="background:${m.bg};color:${m.c}">${svg(m.ic).replace('width="20" height="20"','width="28" height="28"')}</div>
     <h3>موديول «${m.label}»</h3>
     <p>هذا الموديول موجود في الداش بورد الحالية وسيُعاد تصميمه بهوية المنصة على نفس نمط <b>الوارد</b> و<b>الضمان</b>. ${m.soon?'(موديول جديد ضمن الفجوات).':''}</p>
@@ -3856,7 +3883,7 @@ function setRole(r){
   if(r==='admin'){banner.style.display='none';}
   else{banner.style.display='flex';banner.innerHTML=ROLE_MSG[r];}
   if(!(r==='admin'||ROLE_NAV[r].includes(current))){current=ROLE_NAV[r][0];selected=null;}
-  document.getElementById('pageTitle').textContent=MODULES[current].label;
+  document.getElementById('pageTitle').textContent=MODULES_LOOKUP[current].label;
   renderNav();renderView();
 }
 // لا يوجد مبدّل أدوار مرئي: الدور يُشتق من الحساب (setRole يُستدعى من EP_BOOT فقط).
