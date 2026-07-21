@@ -4,7 +4,9 @@ Flask + SQLAlchemy + SQLite (upgradeable to MySQL/PostgreSQL)
 """
 import os, json, datetime, hashlib, secrets, functools, logging, time, re, html
 from collections import deque
-from flask import Flask, request, jsonify, g, send_from_directory
+from urllib.parse import quote
+from xml.sax.saxutils import escape as xesc
+from flask import Flask, request, jsonify, g, send_from_directory, Response
 from flask_cors import CORS
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy import inspect, text
@@ -56,6 +58,15 @@ if database_url.startswith('postgres://'):
 app.config['SQLALCHEMY_DATABASE_URI'] = database_url
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
+# Emit real UTF-8 in every JSON response instead of \uXXXX escapes. These payloads are
+# almost entirely Arabic, so escaping inflates them ~2.7x — the public articles feed that
+# every marketing-site page load blocks on measured 2,007,714 bytes escaped vs 737,192
+# unescaped (-63%). Safe for every client: the response was already served as UTF-8
+# (RFC 8259 mandates UTF-8 for JSON) and parsers read raw UTF-8 and \uXXXX identically.
+# NOTE: Flask >= 2.2 API (requirements pin flask==3.0.0). On Flask < 2.2 this line must be
+# `app.config['JSON_AS_ASCII'] = False` instead.
+app.json.ensure_ascii = False
+
 # CORS allow-list. Default to the dashboard + brand origins; override via CORS_ORIGINS
 # (comma-separated). A literal '*' is honoured but discouraged with credentials.
 _DEFAULT_CORS_ORIGINS = [
@@ -79,6 +90,13 @@ CORS(
 db = SQLAlchemy(app)
 
 
+# Paths that must stay crawlable even if this host is ever blanket-noindexed.
+# `/sitemap-articles.xml` is served for elprofessor.net (its /.htaccess 301s here); a
+# `X-Robots-Tag: noindex` on it would stop Google reading the article URLs entirely —
+# silently, with no error anywhere. Keep this list in sync with any noindex work.
+_ROBOTS_EXEMPT_PATHS = frozenset({'/sitemap-articles.xml'})
+
+
 # ---- baseline security headers on every response (clickjacking / MIME-sniff / TLS-downgrade) ----
 @app.after_request
 def _security_headers(resp):
@@ -87,6 +105,10 @@ def _security_headers(resp):
     resp.headers.setdefault('Referrer-Policy', 'strict-origin-when-cross-origin')
     if IS_PRODUCTION:
         resp.headers.setdefault('Strict-Transport-Security', 'max-age=31536000; includeSubDomains')
+    # ⚠️ If you add `X-Robots-Tag: noindex, nofollow` to this host, add it ABOVE this
+    # guard — never below it, and never in a proxy/nginx layer Flask cannot reach.
+    if request.path in _ROBOTS_EXEMPT_PATHS:
+        resp.headers.pop('X-Robots-Tag', None)
     return resp
 
 
@@ -6602,18 +6624,63 @@ def content_sync_cron():
     return jsonify(body), status
 
 
+# Card-sized subset of serialize_article() for `?fields=summary`: everything the
+# blog.html and Company-Site.html card renderers read, without the `body`/`faq`/
+# `keywords` bulk that only an article page needs. `kicker`/`tone`/`video` are NOT
+# optional — dropping them silently kills the card kicker line, the tone colour class
+# (falls back to a positional default) and the video badge on both renderers.
+_ARTICLE_SUMMARY_KEYS = ('id', 'slug', 'title', 'cat', 'by', 'date', 'excerpt', 'image_url',
+                         'kicker', 'tone', 'video')
+
+
 @app.route('/api/content/articles', methods=['GET'])
 def public_articles_feed():
     """PUBLIC: published articles feed for the marketing site. No auth, no cache.
     Hard-pinned to published — an arbitrary ?status param must NOT leak drafts.
-    Admins read every status via the gated /api/content/articles/all."""
+    Admins read every status via the gated /api/content/articles/all.
+    Optional `?fields=summary` trims each article to the listing fields; without the
+    param the payload keeps every key it has always had (content-loader.js unchanged)."""
     query = Article.query.filter_by(status='published')
     items = query.order_by(
         Article.published_at.desc().nullslast(),
         Article.created_at.desc(),
     ).all()
-    resp = jsonify({'source': 'dashboard', 'articles': [serialize_article(a) for a in items]})
+    rows = [serialize_article(a) for a in items]
+    if (request.args.get('fields') or '').strip().lower() == 'summary':
+        # `if k in r` on purpose: if serialize_article() ever renames/drops one of these
+        # keys, a card loses one field instead of the whole PUBLIC feed 500-ing (which
+        # would drop the blog to the «لا مقالات منشورة بعد» fallback for users AND Googlebot).
+        rows = [{k: r[k] for k in _ARTICLE_SUMMARY_KEYS if k in r} for r in rows]
+    resp = jsonify({'source': 'dashboard', 'articles': rows})
     return _no_store(resp)
+
+
+@app.route('/sitemap-articles.xml', methods=['GET'])
+def public_articles_sitemap():
+    """PUBLIC: sitemap of every published article, served for elprofessor.net (whose
+    /.htaccess 301s /sitemap-articles.xml here). The slug in <loc> comes from the SAME
+    _article_slug() the feed serializes, so the clean /blog/<slug> URLs resolve.
+
+    ⚠️ This path MUST stay indexable. If `X-Robots-Tag: noindex, nofollow` is ever added
+    to the dashboard host, it has to exempt this route — see _ROBOTS_EXEMPT_PATHS."""
+    items = Article.query.filter_by(status='published').order_by(
+        Article.published_at.desc().nullslast(),
+        Article.created_at.desc(),
+    ).all()
+    rows = []
+    for a in items:
+        loc = 'https://elprofessor.net/blog/' + quote(_article_slug(a), safe='')
+        lm = a.published_at or a.created_at
+        # A dateless article emits NO <lastmod> element at all: an empty <lastmod></lastmod>
+        # invalidates the ENTIRE sitemap in Search Console, not just that one <url>.
+        lastmod = ('<lastmod>%s</lastmod>' % lm.strftime('%Y-%m-%d')) if lm else ''
+        rows.append('<url><loc>%s</loc>%s<changefreq>monthly</changefreq></url>'
+                    % (xesc(loc), lastmod))
+    xml = ('<?xml version="1.0" encoding="UTF-8"?>'
+           '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">'
+           + ''.join(rows) + '</urlset>')
+    return Response(xml, mimetype='application/xml')
+
 
 @app.route('/api/content/articles/all', methods=['GET'])
 @token_required
