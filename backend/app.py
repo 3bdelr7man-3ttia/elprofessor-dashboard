@@ -6546,6 +6546,219 @@ def _delete_platform_article(aid):
         pass
 
 
+# ---------------------------------------------------------------------------
+# دفع صفحات المقالات المُسبقة العرض إلى elprofessor.net
+# ---------------------------------------------------------------------------
+# المشكلة اللي بيحلّها: صفحات /blog/<slug> بتتعرض بالـJS. الزواحف اللي ما بتنفّذش JS
+# (GPTBot و ClaudeBot و PerplexityBot و Bingbot وكل معاينات المشاركة) بتشوف قوقعة
+# فاضية إلا لو فيه نسخة ثابتة في blog/_pre/<id>.html على استضافة الموقع.
+#
+# كان بيتشغّل بالإيد. في 2026-08-02 اتكشف إن آخر تشغيل كان 2026-07-21 ⇒ ٣٦ مقال
+# (ids 78–113) وصلوا للزواحف بعنوان عام «مقال — البروفيسور» وبلا نص، بصمت، لمدة
+# اتناشر يوم. الربط هنا بيمنع تكرار ده: كل مزامنة تنشر مقالًا بتدفع النسخ فورًا.
+#
+# ليه هنا وليس في n8n: ورك فلو المزامنة بينده /api/content/sync-cron ٦ مرات يوميًا
+# بعد كل توليد مباشرة. الربط جوّه المزامنة بيخلّي التغطية تلقائية بلا أي تعديل على n8n.
+#
+# ⚠️ عقد السلامة: الداشبورد ده بيخدّم فيد المقالات وسايت‌ماب elprofessor.net — لو وقع،
+# الموقع يفضى. علشان كده كل شيء هنا fail-soft: كل الاستيرادات كسولة، وكل فشل بيتسجّل
+# ويرجع، وما بيرفعش استثناء للطلب اللي ناداه. غياب node أو paramiko أو متغيّرات SSH
+# = الميزة متعطّلة والداشبورد شغّال عادي.
+PRERENDER_ENABLED = os.environ.get('PRERENDER_ENABLED', 'true').strip().lower() == 'true'
+PRERENDER_ORIGIN = os.environ.get('PRERENDER_ORIGIN', 'https://elprofessor.net').rstrip('/')
+PRERENDER_SSH_HOST = os.environ.get('PRERENDER_SSH_HOST', '')
+PRERENDER_SSH_PORT = int(os.environ.get('PRERENDER_SSH_PORT', '65002') or 65002)
+PRERENDER_SSH_USER = os.environ.get('PRERENDER_SSH_USER', '')
+PRERENDER_SSH_PASSWORD = os.environ.get('PRERENDER_SSH_PASSWORD', '')
+PRERENDER_SITE_ROOT = os.environ.get(
+    'PRERENDER_SITE_ROOT', 'domains/elprofessor.net/public_html').strip('/')
+_PRERENDER_SCRIPT = os.environ.get('PRERENDER_SCRIPT', '/app/prerender.py')
+_PRERENDER_HASHES = '/data/prerender-hashes.json'
+
+_prerender_lock = None          # threading.Lock, أول استخدام
+_prerender_running = False
+_prerender_last = {'state': 'never-run'}
+
+
+def _prerender_ready():
+    """(ok, reason) — كل المتطلبات موجودة؟ بلا أي استيراد ثقيل لو الجواب لا."""
+    import shutil as _sh
+    if not PRERENDER_ENABLED:
+        return False, 'disabled by PRERENDER_ENABLED'
+    if not (PRERENDER_SSH_HOST and PRERENDER_SSH_USER and PRERENDER_SSH_PASSWORD):
+        return False, 'ssh credentials not configured'
+    if not os.path.isfile(_PRERENDER_SCRIPT):
+        return False, 'generator missing at %s' % _PRERENDER_SCRIPT
+    if not _sh.which('node'):
+        return False, 'node not installed in image'
+    try:
+        import paramiko  # noqa: F401
+    except Exception as exc:                    # noqa: BLE001
+        return False, 'paramiko unavailable: %s' % exc
+    return True, ''
+
+
+def _prerender_feed_json():
+    """نفس شكل /api/content/articles — بيتكتب لملف ويتمرّر بـ--feed-file.
+
+    ⚠️ عمدًا مش بننده الـendpoint العام عبر HTTP: جونيكورن شغّال بـworker واحد،
+    فطلب من الخدمة لنفسها جوّه معالِج طلب = قفل ميّت يعلّق الداشبورد كله."""
+    items = Article.query.filter_by(status='published').order_by(
+        Article.published_at.desc().nullslast(),
+        Article.created_at.desc(),
+    ).all()
+    return json.dumps({'source': 'dashboard', 'articles': [serialize_article(a) for a in items]},
+                      ensure_ascii=False)
+
+
+def _prerender_push(reason=''):
+    """يولّد صفحات المقالات ويرفع المتغيّر منها فقط. لا يرفع استثناءً أبدًا."""
+    global _prerender_last
+    import subprocess, tempfile, shutil as _sh                       # noqa: E401
+    started = time.time()
+    ok, why = _prerender_ready()
+    if not ok:
+        _prerender_last = {'state': 'skipped', 'reason': why, 'at': datetime.datetime.utcnow().isoformat()}
+        app.logger.info('prerender: skipped (%s)', why)
+        return _prerender_last
+    tmp = tempfile.mkdtemp(prefix='prerender-')
+    try:
+        os.makedirs(os.path.join(tmp, 'blog', '_pre'), exist_ok=True)
+        # القوالب من الموقع الحيّ — المولّد بيستخرج مُصيِّر article.html منها ويشغّله
+        for name in ('article.html', 'blog.html'):
+            r = requests.get('%s/%s' % (PRERENDER_ORIGIN, name), timeout=30,
+                             headers={'User-Agent': 'elprofessor-prerender/1.0'})
+            if r.status_code != 200:
+                raise RuntimeError('template %s HTTP %s' % (name, r.status_code))
+            with open(os.path.join(tmp, name), 'w', encoding='utf-8') as fh:
+                fh.write(r.text)
+        feed_path = os.path.join(tmp, '_feed.json')
+        with open(feed_path, 'w', encoding='utf-8') as fh:
+            fh.write(_prerender_feed_json())
+
+        proc = subprocess.run(
+            ['python3', _PRERENDER_SCRIPT, '--site', tmp, '--feed-file', feed_path],
+            capture_output=True, text=True, timeout=600)
+        if proc.returncode != 0:
+            # عقد المولّد all-or-nothing: أي فشل تحقّق ⇒ ما كتبش حاجة. مفيش نصف رفع.
+            raise RuntimeError('generator exit %s: %s' % (
+                proc.returncode, (proc.stderr or proc.stdout or '')[-600:]))
+
+        # نرفع المتغيّر فقط — ٦ تشغيلات يوميًا × ١١٥ ملف رفعٌ كامل هدر بلا داعٍ
+        try:
+            with open(_PRERENDER_HASHES, encoding='utf-8') as fh:
+                known = json.load(fh)
+        except Exception:                        # noqa: BLE001
+            known = {}
+        wanted, fresh = [], {}
+        for rel in ['blog.html', 'feed.xml', 'blog/_pre/manifest.txt'] + [
+                'blog/_pre/' + n for n in sorted(os.listdir(os.path.join(tmp, 'blog', '_pre')))
+                if n.endswith('.html')]:
+            path = os.path.join(tmp, rel)
+            if not os.path.isfile(path):
+                continue
+            with open(path, 'rb') as fh:
+                digest = hashlib.sha256(fh.read()).hexdigest()
+            fresh[rel] = digest
+            if known.get(rel) != digest:
+                wanted.append(rel)
+
+        uploaded = 0
+        if wanted:
+            import paramiko
+            cl = paramiko.SSHClient()
+            cl.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+            cl.connect(PRERENDER_SSH_HOST, port=PRERENDER_SSH_PORT, username=PRERENDER_SSH_USER,
+                       password=PRERENDER_SSH_PASSWORD, timeout=30, allow_agent=False,
+                       look_for_keys=False)
+            try:
+                sftp = cl.open_sftp()
+                home = sftp.normalize('.')
+                root = '%s/%s' % (home.rstrip('/'), PRERENDER_SITE_ROOT)
+                for d in ('blog', 'blog/_pre'):
+                    try:
+                        sftp.stat('%s/%s' % (root, d))
+                    except IOError:
+                        sftp.mkdir('%s/%s' % (root, d))
+                for rel in wanted:
+                    # .tmp ثم rename: الرفع المباشر بيخلّي الملف نصّه مقروء للزاحف
+                    # لو وصل طلب أثناء النقل. rename على نفس نظام الملفات ذرّي.
+                    dst = '%s/%s' % (root, rel)
+                    sftp.put(os.path.join(tmp, rel), dst + '.tmp')
+                    try:
+                        sftp.remove(dst)
+                    except IOError:
+                        pass
+                    sftp.rename(dst + '.tmp', dst)
+                    uploaded += 1
+                sftp.close()
+            finally:
+                cl.close()
+            try:
+                with open(_PRERENDER_HASHES, 'w', encoding='utf-8') as fh:
+                    json.dump(fresh, fh)
+            except Exception:                    # noqa: BLE001
+                pass                             # كاش تحسين فقط — فقدانه = رفع كامل مرة
+
+        _prerender_last = {
+            'state': 'ok', 'reason': reason, 'articles': len(fresh) - 3,
+            'uploaded': uploaded, 'unchanged': len(fresh) - len(wanted),
+            'seconds': round(time.time() - started, 1),
+            'at': datetime.datetime.utcnow().isoformat(),
+        }
+        app.logger.info('prerender: ok (%s) uploaded=%s', reason, uploaded)
+    except Exception as exc:                     # noqa: BLE001
+        _prerender_last = {'state': 'error', 'reason': reason, 'error': str(exc)[:500],
+                           'seconds': round(time.time() - started, 1),
+                           'at': datetime.datetime.utcnow().isoformat()}
+        app.logger.warning('prerender: FAILED (%s): %s', reason, exc)
+    finally:
+        _sh.rmtree(tmp, ignore_errors=True)
+    return _prerender_last
+
+
+def _prerender_push_async(reason=''):
+    """بيرجّع فورًا. التوليد والرفع ممكن ياخدوا دقيقة، والداشبورد بـworker واحد —
+    فتشغيله داخل الطلب بيجمّد فيد المقالات للموقع الحيّ طول المدة دي."""
+    global _prerender_lock, _prerender_running
+    import threading
+    if _prerender_lock is None:
+        _prerender_lock = threading.Lock()
+
+    def run():
+        global _prerender_running
+        with _prerender_lock:
+            _prerender_running = True
+            try:
+                with app.app_context():
+                    _prerender_push(reason)
+            finally:
+                _prerender_running = False
+
+    if _prerender_running:
+        app.logger.info('prerender: already running, skipping (%s)', reason)
+        return {'state': 'already-running'}
+    threading.Thread(target=run, name='prerender', daemon=True).start()
+    return {'state': 'started', 'reason': reason}
+
+
+@app.route('/api/content/prerender-cron', methods=['POST', 'GET'])
+def content_prerender_cron():
+    """GET = حالة آخر تشغيل (تشخيص). POST مؤمَّن بنفس سرّ المزامنة = شغّل الآن.
+    POST ?sync=1 بينتظر النتيجة — للتحقّق اليدوي بعد النشر."""
+    if request.method == 'GET':
+        ready, why = _prerender_ready()
+        return jsonify({'ready': ready, 'reason': why or None, 'running': _prerender_running,
+                        'last': _prerender_last})
+    secret = request.headers.get('X-ELP-Metrics-Secret', '')
+    if not (PLATFORM_METRICS_SECRET and secret
+            and secrets.compare_digest(secret, PLATFORM_METRICS_SECRET)):
+        return jsonify({'error': 'unauthorized'}), 401
+    if (request.args.get('sync') or '') == '1':
+        return jsonify(_prerender_push('manual-sync'))
+    return jsonify(_prerender_push_async('manual'))
+
+
 def _sync_platform_articles():
     """Import platform-generated article drafts into the blog. Returns (dict, status)."""
     if not PLATFORM_METRICS_SECRET:
@@ -6601,7 +6814,13 @@ def _sync_platform_articles():
         else:
             drafts += 1
         _delete_platform_article(a.get('id'))  # only AFTER a successful import
-    return {'ok': True, 'imported': imported, 'published': published, 'drafts': drafts}, 200
+    out = {'ok': True, 'imported': imported, 'published': published, 'drafts': drafts}
+    # مقال جديد منشور = صفحة الزواحف بتاعته لسه مش موجودة على الاستضافة. الدفع هنا
+    # هو اللي بيمنع تكرار انحسار يوليو ٢٠٢٦ (٣٦ مقال قواقع فاضية اتناشر يوم).
+    # لاحق (Thread) عمدًا: المزامنة لازم ترجّع بسرعة، والتوليد+الرفع بياخدوا دقيقة.
+    if published:
+        out['prerender'] = _prerender_push_async('sync:+%d' % published)
+    return out, 200
 
 
 @app.route('/api/content/sync-from-platform', methods=['POST'])
@@ -6712,11 +6931,15 @@ def admin_article_update(id):
     article = Article.query.get_or_404(id)
     d = request.json or {}
     _apply_article_fields(article, d)
+    was_published = article.status == 'published'
     if 'status' in d and (d.get('status') in ('draft', 'published')):
         article.status = d['status']
         if article.status == 'published' and not article.published_at:
             article.published_at = datetime.datetime.utcnow()
     db.session.commit()
+    # أي تعديل على مقال منشور (أو نشر/سحب) يغيّر ما يجب أن تراه الزواحف
+    if was_published or article.status == 'published':
+        _prerender_push_async('article-update:%s' % id)
     return jsonify(serialize_article(article))
 
 @app.route('/api/content/articles/<int:id>', methods=['DELETE'])
@@ -6725,9 +6948,14 @@ def admin_article_update(id):
 def admin_article_delete(id):
     article = Article.query.get_or_404(id)
     _title = article.title
+    _was_published = article.status == 'published'
     db.session.delete(article)
     db.session.commit()
     _audit('article.reject_delete', target=id, meta={'title': _title})
+    # المولّد بيشيل ملفات _pre اللي مبقاش ليها مقال منشور (prune) — بدون الدفع هنا
+    # تفضل صفحة مقال محذوف مُقدَّمة للزواحف إلى ما لا نهاية.
+    if _was_published:
+        _prerender_push_async('article-delete:%s' % id)
     return jsonify({'ok': True})
 
 @app.route('/api/content/articles/<int:id>/publish', methods=['POST'])
@@ -6739,6 +6967,7 @@ def admin_article_publish(id):
     article.published_at = datetime.datetime.utcnow()
     db.session.commit()
     _audit('article.publish', target=id, meta={'title': article.title})
+    _prerender_push_async('article-publish:%s' % id)
     return jsonify(serialize_article(article))
 
 def serialize_message(m):

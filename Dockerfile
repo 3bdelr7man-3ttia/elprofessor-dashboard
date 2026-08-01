@@ -13,13 +13,18 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 WORKDIR /app
 
 COPY backend/requirements.txt /tmp/requirements.txt
+# nodejs: مطلوب لتوليد صفحات المقالات المُسبقة العرض (prerender.py يشغّل مُصيِّر
+# article.html نفسه داخل node:vm بدل إعادة كتابته — فلا تتفرّع نسختان من المُصيِّر).
+# لو فشل تثبيته لأي سبب، الميزة بتتعطّل لوحدها والداشبورد بيقوم عادي (فحص وقت التشغيل
+# في _prerender_push) — الداشبورد بيخدّم فيد مقالات الموقع الحيّ فما ينفعش يقع علشانها.
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends curl \
+    && apt-get install -y --no-install-recommends curl nodejs \
     && rm -rf /var/lib/apt/lists/* \
     && pip install --no-cache-dir -r /tmp/requirements.txt \
     && mkdir -p /data
 
 COPY backend/app.py /app/app.py
+COPY backend/prerender.py /app/prerender.py
 # The new cloud-design dashboard becomes the served frontend (Flask serves /app/dist).
 # Only the live app files are shipped — the standalone prototype HTMLs
 # (Dashboard-Outputs.html / Dashboard-State.html) are unreferenced and not deployed.
