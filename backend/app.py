@@ -173,6 +173,13 @@ class Revenue(db.Model):
     campaign_id = db.Column(db.Integer, db.ForeignKey('campaigns.id'), nullable=True)
     payment_method = db.Column(db.String(50))  # bank_transfer, cash, stripe, wise
     payment_id = db.Column(db.String(255), unique=True, nullable=True)  # idempotency key for platform finance-events (re-delivery safe)
+    # FX honesty for finance-events in a currency that isn't EGP/USD: amount_egp/usd
+    # stay NULL/0 (no guessed conversion) and the true figure lives here instead of
+    # being silently dropped. needs_fx=True flags it for reports ("بعملة أجنبية —
+    # بانتظار تسوية") until someone books the real conversion manually.
+    amount_original = db.Column(db.Float, nullable=True)
+    currency = db.Column(db.String(8), nullable=True)
+    needs_fx = db.Column(db.Boolean, default=False)
     notes = db.Column(db.Text)
     created_at = db.Column(db.DateTime, default=datetime.datetime.utcnow)
 
@@ -2673,6 +2680,27 @@ def _metrics_secret_ok():
     )
 
 
+def _course_for_finance_event(course_id, course_slug, course_title):
+    """Resolve the Course record a finance-event's course_id/slug/course_title
+    refers to, so a bridge sale attaches to the real course instead of relying on
+    revenues_for_course()'s fragile title-in-description scan. Tries the
+    platform's own identifiers first (exact, survives course renames), then an
+    exact title match; returns None if nothing matches — the old substring scan
+    in revenues_for_course()/expenses_for_course() still covers it on read."""
+    course = None
+    cid = str(course_id).strip() if course_id else ''
+    if cid:
+        course = (Course.query.filter_by(platform_course_id=cid).first()
+                  or Course.query.filter_by(lms_id=cid).first())
+    slug = str(course_slug).strip() if course_slug else ''
+    if not course and slug:
+        course = Course.query.filter_by(platform_course_slug=slug).first()
+    title = str(course_title).strip() if course_title else ''
+    if not course and title:
+        course = Course.query.filter_by(title=title).first()
+    return course
+
+
 @app.route('/api/metrics/finance-event', methods=['POST'])
 def metrics_finance_event():
     """LINKAGE RECEIVER — the platform POSTs each real money event here so the
@@ -2681,11 +2709,21 @@ def metrics_finance_event():
 
     Auth: shared service secret (X-ELP-Metrics-Secret) — NOT a user JWT.
 
-    Body: { payment_id, amount, currency, kind, source, occurred_at, meta? }
+    Body: { payment_id, amount, amount_original, currency, kind, source,
+            occurred_at, course_id, course_slug, course_title, meta? }
       kind = 'sale'|'course'|'consulting'|'subscription'|... → idempotent Revenue row.
       kind = 'escrow_hold'  → mirror an EscrowSession in 'held' (read-mirror only).
       kind = 'escrow_release'|'escrow_refund'|'escrow_dispute' → reflect the status
               transition on the mirrored EscrowSession. No real money is moved here.
+
+    Currency honesty: EGP/USD post to amount_egp/amount_usd as usual. Any other
+    currency does NOT get zeroed out — the true amount lands in amount_original
+    (+ currency) and needs_fx=True, so reports can show «بعملة أجنبية — بانتظار
+    تسوية» instead of silently losing the sale.
+
+    course_id/course_slug/course_title (top-level or inside meta) are matched
+    against the Course table (see _course_for_finance_event) to set course_id
+    directly, rather than depending on the description substring scan.
 
     Idempotency: Revenue.payment_id is unique → re-delivery never double-counts.
     Escrow mirroring is keyed by payment_id (stored in EscrowSession.ref)."""
@@ -2704,6 +2742,18 @@ def metrics_finance_event():
     kind = (d.get('kind') or 'sale').strip().lower()
     source = (d.get('source') or 'platform').strip()[:100]
     meta = d.get('meta') or {}
+
+    # amount_original — the platform's own pre-FX figure in `currency`. Falls back
+    # to `amount` so this stays backward compatible with senders that don't send it.
+    try:
+        raw_original = d.get('amount_original')
+        amount_original = round(float(raw_original), 2) if raw_original is not None else amount
+    except (TypeError, ValueError):
+        amount_original = amount
+
+    course_id_in = d.get('course_id') or meta.get('course_id')
+    course_slug_in = d.get('course_slug') or d.get('slug') or meta.get('course_slug') or meta.get('slug')
+    course_title_in = d.get('course_title') or meta.get('course_title')
 
     # occurred_at → a date for the ledger (fall back to today on bad input).
     occurred_raw = (d.get('occurred_at') or '').strip()
@@ -2764,13 +2814,22 @@ def metrics_finance_event():
         # Already recorded — re-delivery is a no-op (do NOT double-count).
         return jsonify({'ok': True, 'revenue_id': existing.id, 'duplicate': True}), 200
 
+    is_egp = currency == 'EGP'
+    is_usd = currency == 'USD'
+    foreign = not (is_egp or is_usd)  # neither EGP nor USD → don't guess an FX rate
+    matched_course = _course_for_finance_event(course_id_in, course_slug_in, course_title_in)
+
     rev = Revenue(
         date=occurred_date,
         source=kind if kind else 'sale',
         description=(meta.get('description') or f'Platform {kind} {payment_id}')[:1000],
-        amount_egp=amount if currency == 'EGP' else 0,
-        amount_usd=amount if currency == 'USD' else 0,
+        amount_egp=(amount if is_egp else (None if foreign else 0)),
+        amount_usd=(amount if is_usd else 0),
+        amount_original=(amount_original if foreign else None),
+        currency=(currency if foreign else None),
+        needs_fx=foreign,
         client_name=(meta.get('client_name') or meta.get('buyer_email') or '')[:255],
+        course_id=(matched_course.id if matched_course else None),
         payment_method=(meta.get('payment_method') or source or 'platform')[:50],
         payment_id=payment_id,
         notes=f'bridge:finance-event:{source}',
@@ -3158,7 +3217,8 @@ def list_revenues():
         'description': r.description, 'amount_egp': r.amount_egp, 'amount_usd': r.amount_usd,
         'total_egp': round(to_egp(r.amount_usd, r.amount_egp, rate)),
         'client_name': r.client_name, 'course_id': r.course_id, 'campaign_id': r.campaign_id,
-        'payment_method': r.payment_method, 'notes': r.notes
+        'payment_method': r.payment_method, 'notes': r.notes,
+        'amount_original': r.amount_original, 'currency': r.currency, 'needs_fx': bool(r.needs_fx),
     } for r in items])
 
 @app.route('/api/revenues', methods=['POST'])
@@ -6344,6 +6404,12 @@ def ensure_runtime_schema():
                         ))
                     except Exception:
                         pass
+            if 'amount_original' not in revenue_columns:
+                connection.execute(text("ALTER TABLE revenues ADD COLUMN amount_original FLOAT"))
+            if 'currency' not in revenue_columns:
+                connection.execute(text("ALTER TABLE revenues ADD COLUMN currency VARCHAR(8)"))
+            if 'needs_fx' not in revenue_columns:
+                connection.execute(text("ALTER TABLE revenues ADD COLUMN needs_fx BOOLEAN DEFAULT 0"))
         if 'campaigns' in existing_tables:
             campaign_columns = {column['name'] for column in inspector.get_columns('campaigns')}
             if 'course_id' not in campaign_columns:
