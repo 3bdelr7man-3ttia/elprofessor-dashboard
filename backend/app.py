@@ -2217,6 +2217,54 @@ def platform_knowledge_delete(item_id):
     return _platform_proxy('DELETE', f"/api/bridge/knowledge/{item_id}")
 
 
+# --- «إضافة كتاب» لسوق المعرفة (bridge /api/bridge/books) ---
+# الأدمن يضيف كتابًا من اللوحة → يُنشأ على المنصة بنفس شكل عناصر المتجر (Store/knowledge)
+# فيظهر فورًا في قائمة «سوق المعرفة» هنا وفي متجر المنصة. الجسر السرّي server-side فقط.
+@app.route('/api/platform-books', methods=['GET'])
+@token_required
+@roles_required('admin', 'employee')
+def platform_books_list():
+    """قائمة كتب سوق المعرفة عبر الجسر (قراءة فقط)."""
+    return _platform_proxy('GET', '/api/bridge/books')
+
+
+@app.route('/api/platform-books', methods=['POST'])
+@token_required
+@roles_required('admin')
+def platform_books_create():
+    """إنشاء كتاب في سوق المعرفة. العقد المشترك:
+    {title, author?, description?, price?, currency?, file_url, cover_url?, is_active}."""
+    d = request.json or {}
+    title = (d.get('title') or '').strip()
+    file_url = (d.get('file_url') or '').strip()
+    if not title:
+        return jsonify({'error': 'عنوان الكتاب مطلوب'}), 400
+    if not file_url:
+        return jsonify({'error': 'رابط ملف الكتاب (PDF) مطلوب'}), 400
+    try:
+        price = float(d.get('price') or 0)
+    except (TypeError, ValueError):
+        return jsonify({'error': 'سعر غير صالح'}), 400
+    if price < 0:
+        return jsonify({'error': 'السعر لا يكون سالبًا'}), 400
+    payload = {
+        'title': title[:300],
+        'author': (d.get('author') or '').strip()[:200],
+        'description': (d.get('description') or '').strip()[:2000],
+        'price': price,
+        'currency': ((d.get('currency') or 'EGP').strip() or 'EGP')[:8],
+        'file_url': file_url[:1000],
+        'cover_url': (d.get('cover_url') or '').strip()[:1000],
+        'is_active': bool(d.get('is_active', True)),
+    }
+    resp = _platform_proxy('POST', '/api/bridge/books', json_body=payload)
+    status = resp[1] if isinstance(resp, tuple) else 200
+    if status == 200:
+        _audit('book.create', target=title[:80],
+               meta={'price': payload['price'], 'currency': payload['currency']})
+    return resp
+
+
 @app.route('/api/platform-courses/<course_id>/schedule', methods=['PUT'])
 @token_required
 @roles_required('admin', 'employee')

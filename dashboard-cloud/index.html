@@ -109,7 +109,7 @@ body{font-family:'IBM Plex Sans Arabic',sans-serif;background:var(--bg);color:va
 .row:last-child{border-bottom:none}
 .row:hover{background:var(--surface-2)}
 .row.sel{background:var(--human-bg)}
-.row .c{padding:13px 16px}
+.row .c{padding:13px 16px;min-width:0}
 .row.inbox-row{grid-template-columns:1fr 200px 168px}
 .row.esc-row{grid-template-columns:1.4fr 1fr 150px 150px}
 .row .c1{display:flex;gap:12px;align-items:flex-start;min-width:0}
@@ -119,6 +119,13 @@ body{font-family:'IBM Plex Sans Arabic',sans-serif;background:var(--bg);color:va
 .row .from{font-size:11.5px;color:var(--muted);margin-top:1px}
 .row .from b{color:var(--ink-2);font-weight:600}
 .parties{font-size:12.5px;color:var(--ink);font-weight:600}
+/* صفوف الدورات: عنوان واضح + شارات ميتاداتا تلتفّ بدل سطر مزدحم + وصف مقصوص بسطرين.
+   على الشاشات الضيقة تتراصّ الأعمدة بدل ما تنعصر (إصلاح «الدورات مش ظاهرة»). */
+.crs-meta{display:flex;flex-wrap:wrap;gap:5px;margin-top:6px}
+.crs-meta .mchip{font-size:10.5px;font-weight:700;background:var(--surface-2);border:1px solid var(--line);border-radius:999px;padding:2px 9px;color:var(--ink-2);white-space:nowrap}
+.crs-meta .mchip b{color:var(--navy);font-weight:800}
+.crs-desc{font-size:11.5px;color:var(--muted);line-height:1.6;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+@media(max-width:1080px){.row.crs-row{grid-template-columns:1fr!important}.row.crs-row .c{padding-top:5px;padding-bottom:5px}.row.crs-row .c:first-child{padding-top:13px}.row.crs-row .c:last-child{padding-bottom:13px}}
 .parties .arr{color:var(--muted);margin:0 5px}
 .parties .exp{color:var(--ai);font-weight:700}
 .amt{font-family:Cairo;font-weight:900;font-size:15px;color:var(--navy)}
@@ -957,16 +964,13 @@ function viewAnalysis(v){
   const sel=(dim,allLabel,items,valField,labelFn)=>`<select class="an-sel" data-dim="${dim}"><option value="all">${allLabel}</option>${items.map(x=>{const vv=String(x[valField]);return `<option value="${esc(vv)}"${anFilters[dim]===vv?' selected':''}>${esc(labelFn(x[valField]))}</option>`;}).join('')}</select>`;
   const emptyClassify=`<div class="empty">${unclassified?'لسه مفيش تصنيف بالذكاء — اضغط «حدّث التصنيف» فوق.':'لا بيانات بعد.'}</div>`;
   const subHtml=sub.length?`<div style="margin-top:12px;padding-top:10px;border-top:1px dashed var(--line)"><div style="font-size:11px;font-weight:800;color:var(--muted);margin-bottom:7px">أكثر الفئات الفرعية</div><div style="display:flex;flex-wrap:wrap;gap:6px">${sub.slice(0,10).map(x=>`<span class="chip" style="cursor:default">${esc(x.subcategory||'—')} <b style="color:var(--navy)">${money(x.count||0)}</b></span>`).join('')}</div></div>`:'';
+  // «أحدث الأسئلة» أول ما يُرسَم (طلب المؤسس): القائمة الحيّة فوق، وشريط التصفية تحتها مباشرة،
+  // ثم الأرقام واللوحات المجمّعة. التصفية والتنقيب من اللوحات لسه شغّالين على نفس القائمة.
   v.innerHTML=`
     ${st==='error'?`<div class="policy" style="border-inline-start-color:var(--conflict);background:var(--conflict-bg);color:var(--conflict)">${svg('scale','ic')}<div>تعذّر جلب التحليل من المنصة — تأكد من ضبط الربط (METRICS_SECRET). <b style="cursor:pointer;text-decoration:underline" onclick="EP.reload('analysis',()=>viewAnalysis(document.getElementById('view')))">إعادة المحاولة</b></div></div>`:''}
-    <div class="kpis">
-      <div class="kpi k-1"><div class="top"><span class="ic">${svg('inbox')}</span>إجمالي الأسئلة</div><b>${st==='loading'?'…':money(total)}</b><div class="sub">من الشات (مسجّل + زائر)</div></div>
-      <div class="kpi k-2"><div class="top"><span class="ic">${svg('shield')}</span>محتاجين رأي خبير</div><b>${money(ne)} <small style="font-size:13px">${ner}%</small></b><div class="sub">وصلوا لموقف يستاهل خبير</div></div>
-      <div class="kpi k-3"><div class="top"><span class="ic">${svg('users')}</span>مسجّلون / زوّار</div><b>${money(authed)} <small style="font-size:13px">/ ${money(anon)}</small></b><div class="sub">حساب مقابل مجهول</div></div>
-      <div class="kpi k-4"><div class="top"><span class="ic">${svg('wallet')}</span>تحويل «رأي خبير»</div><b>${money(eo.paid)}<small style="font-size:13px">/${money(eo.requested)}</small> <small style="font-size:13px">${eoPct}%</small></b><div class="sub">دفعوا مقابل طلبوا</div></div>
-      <div class="kpi k-1"><div class="top"><span class="ic">${svg('scale')}</span>دول نشطة</div><b>${st==='loading'?'…':money(activeCountries)}</b><div class="sub">بلاد بتسأل فعليًّا</div></div>
-    </div>
-    ${st==='loading'?'':`<div class="policy" style="align-items:center;border-inline-start-color:var(--gold)">${svg('sparkles','ic')}<div style="flex:1"><b>التصنيف بالذكاء:</b> مصنّف ${money(classified)} سؤال · غير مصنّف ${money(unclassified)}. ${unclassified?'شغّل التصنيف عشان الفئات والنية والخدمات الناقصة تتحدّث.':'كل الأسئلة متصنّفة.'}</div><button class="btn btn-primary" id="anClassify" style="flex:none;min-width:auto;padding:7px 13px;font-size:12px">${svg('sparkles')}حدّث التصنيف</button></div>`}
+    <section class="panel" style="margin-bottom:14px"><div class="ph"><h3>أحدث الأسئلة</h3><span class="n">${fq.length}</span><span class="hint">${anyFilter?('مصفّاة من '+money(recent.length)):'حيّة من الشات'}</span></div>
+      <div id="anRecent" style="max-height:520px;overflow:auto">${st==='loading'?loading:(fq.length?fq.map(r=>`<div class="anq-row"${r.id?' data-q="'+esc(r.id)+'"':''} style="padding:11px 16px;border-bottom:1px solid var(--border)${r.id?';cursor:pointer':''}"><div style="font-size:13.5px;color:var(--ink);line-height:1.5">${esc(r.question)}</div><div style="margin-top:5px;font-size:11.5px;color:var(--muted)">${SEG_LABEL[r.segment]||r.segment||'—'} · ${COUNTRY_LABEL[r.country]||r.country||'غير محدد'}${r.category?' · <span style="color:var(--navy)">'+esc(r.category)+'</span>':''}${r.intent?' · '+esc(r.intent):''}${r.needs_expert?' · <span style="color:var(--human)">يحتاج خبير</span>':''}${r.anonymous?' · <span style="color:var(--muted)">زائر</span>':' · <span style="color:var(--ai)">مسجَّل</span>'}${r.id?' · <span style="color:var(--gold);font-weight:700">افتح المحادثة ←</span>':''}</div></div>`).join(''):`<div class="empty">${recent.length?'لا أسئلة مطابقة للتصفية.':'لا أسئلة بعد.'}</div>`)}</div>
+    </section>
     <div class="filterbar" id="anFilterbar"><span class="lbl">تصفية أحدث الأسئلة:</span>
       ${sel('seg','كل الشرائح',seg,'segment',x=>SEG_LABEL[x]||x)}
       ${sel('country','كل الدول',country,'country',x=>COUNTRY_LABEL[x]||x)}
@@ -975,6 +979,14 @@ function viewAnalysis(v){
       ${chip('time','all','كل الوقت')}${chip('time','7','آخر ٧ أيام')}${chip('time','30','آخر ٣٠ يوم')}
       ${anyFilter?'<div class="chip" id="anReset" style="border-color:var(--conflict);color:var(--conflict)">مسح التصفية ✕</div>':''}
     </div>
+    <div class="kpis">
+      <div class="kpi k-1"><div class="top"><span class="ic">${svg('inbox')}</span>إجمالي الأسئلة</div><b>${st==='loading'?'…':money(total)}</b><div class="sub">من الشات (مسجّل + زائر)</div></div>
+      <div class="kpi k-2"><div class="top"><span class="ic">${svg('shield')}</span>محتاجين رأي خبير</div><b>${money(ne)} <small style="font-size:13px">${ner}%</small></b><div class="sub">وصلوا لموقف يستاهل خبير</div></div>
+      <div class="kpi k-3"><div class="top"><span class="ic">${svg('users')}</span>مسجّلون / زوّار</div><b>${money(authed)} <small style="font-size:13px">/ ${money(anon)}</small></b><div class="sub">حساب مقابل مجهول</div></div>
+      <div class="kpi k-4"><div class="top"><span class="ic">${svg('wallet')}</span>تحويل «رأي خبير»</div><b>${money(eo.paid)}<small style="font-size:13px">/${money(eo.requested)}</small> <small style="font-size:13px">${eoPct}%</small></b><div class="sub">دفعوا مقابل طلبوا</div></div>
+      <div class="kpi k-1"><div class="top"><span class="ic">${svg('scale')}</span>دول نشطة</div><b>${st==='loading'?'…':money(activeCountries)}</b><div class="sub">بلاد بتسأل فعليًّا</div></div>
+    </div>
+    ${st==='loading'?'':`<div class="policy" style="align-items:center;border-inline-start-color:var(--gold)">${svg('sparkles','ic')}<div style="flex:1"><b>التصنيف بالذكاء:</b> مصنّف ${money(classified)} سؤال · غير مصنّف ${money(unclassified)}. ${unclassified?'شغّل التصنيف عشان الفئات والنية والخدمات الناقصة تتحدّث.':'كل الأسئلة متصنّفة.'}</div><button class="btn btn-primary" id="anClassify" style="flex:none;min-width:auto;padding:7px 13px;font-size:12px">${svg('sparkles')}حدّث التصنيف</button></div>`}
     <div class="an-grid">
       <section class="panel"><div class="ph"><h3>الطلب حسب الشريحة</h3><span class="n">${seg.length}</span><span class="hint">على كل البيانات · اضغط للتنقيب</span></div>
         <div style="padding:14px 16px">${st==='loading'?loading:anBars(seg,'segment',x=>SEG_LABEL[x]||x||'—','var(--gold)','seg')}</div></section>
@@ -989,9 +1001,6 @@ function viewAnalysis(v){
     </div>
     <section class="panel" style="margin-bottom:16px"><div class="ph"><h3>خدمات مطلوبة لا نقدّمها</h3><span class="n">${unmet.length}</span><span class="hint">طلب متكرّر لا نقدّم له خدمة — فرصة</span></div>
       <div id="anUnmet" style="padding:6px 0">${st==='loading'?loading:(unmet.length?unmet.map(u=>`<div class="policy anUnmetRow" style="cursor:pointer;border-inline-start-color:var(--gold);margin:10px 14px">${svg('sparkles','ic')}<div style="flex:1"><b>${esc(u.label)}</b> — طلب متكرّر مش بنقدّم له خدمة (${money(u.count||0)} مرة).<div style="margin-top:4px;color:var(--muted);font-size:11.5px">مثال: ${esc(u.sample_question||'—')}</div></div><span style="flex:none;color:var(--gold);font-weight:800;font-size:12px">أنشئ خدمة ←</span></div>`).join(''):`<div class="empty" style="padding:26px">${unclassified?'شغّل «حدّث التصنيف» الأول عشان نكتشف الطلب الناقص.':'لا خدمات ناقصة مكتشفة بعد — أول ما الذكاء يلاقي طلبًا متكرّرًا مش بنقدّمه هيظهر هنا كفرصة.'}</div>`)}</div>
-    </section>
-    <section class="panel"><div class="ph"><h3>أحدث الأسئلة</h3><span class="n">${fq.length}</span><span class="hint">${anyFilter?('مصفّاة من '+money(recent.length)):'حيّة من الشات'}</span></div>
-      <div id="anRecent" style="max-height:520px;overflow:auto">${st==='loading'?loading:(fq.length?fq.map(r=>`<div class="anq-row"${r.id?' data-q="'+esc(r.id)+'"':''} style="padding:11px 16px;border-bottom:1px solid var(--border)${r.id?';cursor:pointer':''}"><div style="font-size:13.5px;color:var(--ink);line-height:1.5">${esc(r.question)}</div><div style="margin-top:5px;font-size:11.5px;color:var(--muted)">${SEG_LABEL[r.segment]||r.segment||'—'} · ${COUNTRY_LABEL[r.country]||r.country||'غير محدد'}${r.category?' · <span style="color:var(--navy)">'+esc(r.category)+'</span>':''}${r.intent?' · '+esc(r.intent):''}${r.needs_expert?' · <span style="color:var(--human)">يحتاج خبير</span>':''}${r.anonymous?' · <span style="color:var(--muted)">زائر</span>':' · <span style="color:var(--ai)">مسجَّل</span>'}${r.id?' · <span style="color:var(--gold);font-weight:700">افتح المحادثة ←</span>':''}</div></div>`).join(''):`<div class="empty">${recent.length?'لا أسئلة مطابقة للتصفية.':'لا أسئلة بعد.'}</div>`)}</div>
     </section>`;
   v.querySelectorAll('.anq-row[data-q]').forEach(row=>row.onclick=()=>openQuestionThread(row.dataset.q));
 
@@ -1185,8 +1194,10 @@ function viewOverview(v){
   // Real KPIs from /api/dashboard when loaded; otherwise design defaults.
   const fin=D?D.financial:null, crs=D?D.courses:null;
   const M=(window.EP&&EP.data.metrics)||null; // /api/platform-metrics (admin) — live platform user count
-  const kUsers = M&&(M.total_users!=null) ? money(M.total_users) : (crs?money(crs.total_students||0):'—');
-  const kUsersSub = M ? 'من المنصة الحيّة' : (Dst==='loading'?'…':'بانتظار الخادم');
+  // عدد المستخدمين من مصدر واحد فقط: /api/admin/metrics الأصلي (native) على المنصة.
+  // لا بديل من «عدد طلاب دفتر الدورات» — رقم مختلف المعنى كان بيتعرض كأنه مستخدمي المنصة.
+  const kUsers = M&&(M.total_users!=null) ? money(M.total_users) : (Dst==='loading'?'…':'—');
+  const kUsersSub = M&&(M.total_users!=null) ? 'من المنصة الحيّة' : (Dst==='loading'?'…':'تعذّر الجلب من المنصة');
   const kProfit = fin ? (fin.net_profit>=0?'+':'')+money(fin.net_profit)+' <small style="font-size:13px">ج</small>' : (Dst==='loading'?'…':'—');
   // سلسلة شهرية من بيانات الخادم الحقيقية فقط — بلا أرقام تصميمية وهمية.
   // عند غياب البيانات (أو حالة شبه فارغة) يتكفّل svgBars بعرض «لا بيانات كافية لعرض النمو».
@@ -1304,15 +1315,22 @@ function renderCourses(){
     el.innerHTML='<div style="padding:9px 14px;font-size:11.5px;color:var(--muted);border-bottom:1px solid var(--border)">كل دورة موجودة على المنصة — منشورة كانت أو مسودة — بحالتها وطريقة تشغيلها. «نشر» يخلّيها تظهر للطلاب على app.elprofessor.net.</div>';
     PCRS.forEach(function(c,idx){var st=pcStatus(c);var pr=(c.price_amount!=null&&c.price_amount>0)?(money(c.price_amount)+' '+esc(c.price_currency||'')):(c.type==='recorded_free'?'مجانية':'—');
       var lessons=(c.lesson_count||0);var typ=PC_TYPE[c.type]||esc(c.type||'');var src=PC_SOURCE[c.source]||esc(c.source||'');
-      var meta=esc(c.instructor_name||'—')+' · '+typ+' · '+pr+' · '+money(c.total_enrolled||0)+' مسجّل · '+money(lessons)+' درس · '+src;
-      el.insertAdjacentHTML('beforeend','<div class="row esc-row'+(selected==='P'+idx?' sel':'')+'" data-pc="'+idx+'" style="grid-template-columns:1.9fr 1.5fr 130px"><div class="c c1"><div class="src-ic" style="background:var(--memory-bg);color:var(--memory)">'+svg('book')+'</div><div><div class="parties">'+esc(c.title||'—')+(c.bid_enabled?' <span class="status s-auto" style="font-size:9px;margin-inline-start:4px"><span class="d"></span>مزايدة</span>':'')+'</div><div class="from">'+meta+'</div></div></div><div class="c"><div class="from" style="font-size:11px;color:var(--muted)">'+esc(c.short_description||'')+'</div></div><div class="c"><span class="status '+st[0]+'"><span class="d"></span>'+st[1]+'</span></div></div>');});
+      // شارات ميتاداتا تلتفّ بدل السطر المزدحم الواحد — كل رقم باين لوحده.
+      var meta='<div class="crs-meta">'
+        +'<span class="mchip">'+esc(c.instructor_name||'بلا مدرّب')+'</span>'
+        +'<span class="mchip">'+typ+'</span>'
+        +'<span class="mchip">السعر <b>'+pr+'</b></span>'
+        +'<span class="mchip"><b>'+money(c.total_enrolled||0)+'</b> مسجّل</span>'
+        +'<span class="mchip"><b>'+money(lessons)+'</b> درس</span>'
+        +'<span class="mchip">'+src+'</span></div>';
+      el.insertAdjacentHTML('beforeend','<div class="row esc-row crs-row'+(selected==='P'+idx?' sel':'')+'" data-pc="'+idx+'" style="grid-template-columns:2.1fr 1.4fr 150px"><div class="c c1"><div class="src-ic" style="background:var(--memory-bg);color:var(--memory)">'+svg('book')+'</div><div style="min-width:0"><div class="parties" style="font-size:13.3px;font-weight:700">'+esc(c.title||'—')+(c.bid_enabled?' <span class="status s-auto" style="font-size:9px;margin-inline-start:4px"><span class="d"></span>مزايدة</span>':'')+'</div>'+meta+'</div></div><div class="c"><div class="crs-desc">'+esc(c.short_description||'')+'</div></div><div class="c"><span class="status '+st[0]+'"><span class="d"></span>'+st[1]+'</span></div></div>');});
     el.querySelectorAll('.row').forEach(function(x){x.onclick=function(){selected='P'+x.dataset.pc;renderCourses();drawCourse();};});
     return;
   }
   if(courseTab==='demand'){renderCourseDemand(el,h);return;}
   if(courseTab==='courses'){const CRS=csCourses();h.textContent='سجل الإدارة';document.getElementById('cN').textContent=CRS.length;
     if(!CRS.length)el.innerHTML='<div style="padding:40px;text-align:center;color:var(--muted)">لا دورات في سجل الإدارة بعد.</div>';
-    CRS.forEach((c,idx)=>{const st=CSTATUS[c.status]||{cls:'',t:c.status};var rev=(c.total_revenue!=null&&(window.EP&&EP.data.courses))?c.total_revenue:(c.enrolled*(c.priceNum||0));var ours=c.owner==='platform'?100:(100-c.rate);var ownerBadge=c.owner==='platform'?'<span class="status s-human" style="font-size:9.5px;margin-inline-start:6px"><span class="d"></span>المنصة</span>':'<span class="status" style="font-size:9.5px;margin-inline-start:6px;background:var(--memory-bg);color:var(--memory)"><span class="d" style="background:var(--memory)"></span>مدرّب</span>';el.insertAdjacentHTML('beforeend',`<div class="row esc-row${selected==='c'+idx?' sel':''}" data-c="${idx}" style="grid-template-columns:1.7fr .8fr 1fr 1.15fr 100px">
+    CRS.forEach((c,idx)=>{const st=CSTATUS[c.status]||{cls:'',t:c.status};var rev=(c.total_revenue!=null&&(window.EP&&EP.data.courses))?c.total_revenue:(c.enrolled*(c.priceNum||0));var ours=c.owner==='platform'?100:(100-c.rate);var ownerBadge=c.owner==='platform'?'<span class="status s-human" style="font-size:9.5px;margin-inline-start:6px"><span class="d"></span>المنصة</span>':'<span class="status" style="font-size:9.5px;margin-inline-start:6px;background:var(--memory-bg);color:var(--memory)"><span class="d" style="background:var(--memory)"></span>مدرّب</span>';el.insertAdjacentHTML('beforeend',`<div class="row esc-row crs-row${selected==='c'+idx?' sel':''}" data-c="${idx}" style="grid-template-columns:1.7fr .8fr 1fr 1.15fr 100px">
       <div class="c c1"><div class="src-ic" style="background:var(--memory-bg);color:var(--memory)">${svg('book')}</div><div><div class="parties">${esc(c.title)}${ownerBadge}</div><div class="from">${esc(c.inst)}</div></div></div>
       <div class="c"><div class="from"><b style="color:var(--ink)">${c.enrolled}</b> مسجّل</div></div>
       <div class="c"><div class="from">إيراد <b style="color:var(--navy)">${money(rev)} ج</b></div></div>
@@ -1595,8 +1613,10 @@ function viewKnowledge(v){
     '<div class="kpi k-2"><div class="top"><span class="ic">'+svg('users')+'</span>اقتناءات</div><b>'+money(acq)+'</b><div class="sub">إجمالي</div></div></div>'+
     // استيراد مكتبة Drive للـRAG — مكانه هنا (معرفة تُغذّي الذكاء/المحرّر) لا في الدورات.
     '<details class="panel" style="margin-bottom:16px"><summary style="cursor:pointer;padding:13px 18px;font-family:Cairo;font-weight:800;color:var(--navy);list-style:none;display:flex;align-items:center;gap:8px;background:var(--surface-2)">'+svg('book','ic')+'استيراد مكتبة قانونية من Google Drive (تُغذّي الذكاء والمحرّر)</summary><div style="padding:14px 16px;display:grid;gap:8px"><div style="font-size:11.5px;color:var(--muted)">اربط حساب Drive أول مرة من المنصة، وبعدين الصق Folder ID واختار النوع واستورد. كل استيراد بياخد لحد ٤٠ ملف نصّي من الفولدر (الكتب الممسوحة صور بتتخطى — محتاجة OCR لاحقًا).</div><input id="drvFolder" placeholder="Folder ID (من رابط الفولدر)" style="padding:9px 11px;border:1px solid var(--line);border-radius:8px;direction:ltr;text-align:left"><select id="drvCat" style="padding:9px 11px;border:1px solid var(--line);border-radius:8px"><option value="memo_template">صيغ/نماذج (memo_template)</option><option value="law">قوانين/تشريعات (law)</option><option value="ruling">أحكام (ruling)</option><option value="custom">أخرى</option></select><button class="btn btn-primary" id="drvGo" style="flex:none">'+svg('check')+'استورد من Drive</button></div></details>'+
-    '<section class="panel"><div class="ph"><h3>عناصر السوق</h3><span class="n">'+KN.length+'</span></div><div id="knRows"></div></section>';
+    '<section class="panel"><div class="ph"><h3>عناصر السوق</h3><span class="n">'+KN.length+'</span><button class="btn btn-human" id="knAddBook" style="flex:none;min-width:auto;padding:6px 13px;font-size:12px;margin-inline-start:auto">+ إضافة كتاب</button></div><div id="knRows"></div></section>';
   var dg=document.getElementById('drvGo');if(dg)dg.onclick=function(){var f=(document.getElementById('drvFolder').value||'').trim();if(!f){toast('الصق Folder ID');return;}var cat=document.getElementById('drvCat').value;dg.disabled=true;EP.ingestDriveLibrary(f,cat,function(){dg.disabled=false;});};
+  var ab=document.getElementById('knAddBook');
+  if(ab){if(window.EP&&EP.createBook){ab.onclick=addBookModal;}else{ab.disabled=true;ab.style.opacity='.5';ab.title='الإضافة متاحة في الوضع الحيّ فقط';}}
   var el=document.getElementById('knRows');
   if(!KN.length){el.innerHTML='<div style="padding:40px;text-align:center;color:var(--muted)">لا عناصر بعد — لما حد يرفع كتاب/بحث هيظهر هنا.</div>';return;}
   KN.forEach(function(k,idx){var sale=k.rights==='owned_for_sale';var pr=(k.price_amount!=null)?(money(k.price_amount)+' '+esc(k.price_currency||'')):'—';var st=k.is_active?['s-auto','ظاهر']:['s-late','مخفي'];
@@ -1608,6 +1628,39 @@ function viewKnowledge(v){
   });
   el.querySelectorAll('.knedit').forEach(function(b){b.onclick=function(){knowledgeEditModal(KN[+b.dataset.i]);};});
   el.querySelectorAll('.kndel').forEach(function(b){b.onclick=function(){if(confirm('تشيل العنصر من السوق؟')&&window.EP)EP.deleteKnowledge(b.dataset.id,function(){viewKnowledge(document.getElementById('view'));});};});
+}
+// «إضافة كتاب»: الأدمن يضيف كتابًا لسوق المعرفة مباشرة — يُنشأ على المنصة عبر
+// POST /api/platform-books (بروكسي سرّي → /api/bridge/books) بنفس شكل عناصر المتجر،
+// فيظهر فورًا في متجر المنصة وفي القائمة هنا. الملف رابط PDF جاهز (رفع الملفات لاحقًا).
+function addBookModal(){
+  var s=openModal('إضافة كتاب لسوق المعرفة',
+    '<div class="fld"><label>عنوان الكتاب *</label><input id="bk_t" placeholder="مثال: صيغ الدعاوى المدنية — الجزء الأول"></div>'+
+    '<div class="fld"><label>المؤلف</label><input id="bk_a" placeholder="اسم المؤلف/الجهة"></div>'+
+    '<div class="fld"><label>الوصف</label><textarea id="bk_d" placeholder="وصف مختصر يظهر في بطاقة الكتاب بالمتجر"></textarea></div>'+
+    '<div class="row2"><div class="fld"><label>السعر (0 = مجاني)</label><input id="bk_p" type="number" min="0" value="0"></div><div class="fld"><label>العملة</label><select id="bk_c"><option value="EGP">جنيه مصري (EGP)</option><option value="USD">دولار (USD)</option></select></div></div>'+
+    '<div class="fld"><label>رابط ملف الكتاب (PDF) *</label><input id="bk_f" placeholder="https://..." style="direction:ltr;text-align:left"></div>'+
+    '<div class="fld"><label>رابط صورة الغلاف</label><input id="bk_cv" placeholder="https://... (اختياري)" style="direction:ltr;text-align:left"></div>'+
+    '<label class="tg" style="margin:8px 0"><input type="checkbox" id="bk_act" checked> ظاهر في المتجر فورًا</label>'+
+    '<div class="acts"><button class="btn btn-primary" id="bk_s">'+svg('check')+'أضف الكتاب</button><button class="btn btn-ghost" id="bk_x">إلغاء</button></div>');
+  s.querySelector('#bk_x').onclick=closeModal;
+  s.querySelector('#bk_s').onclick=function(){
+    var title=s.querySelector('#bk_t').value.trim();
+    var file_url=s.querySelector('#bk_f').value.trim();
+    if(!title){toast('عنوان الكتاب مطلوب');return;}
+    if(!file_url){toast('رابط ملف الكتاب (PDF) مطلوب');return;}
+    var body={
+      title:title,
+      author:s.querySelector('#bk_a').value.trim(),
+      description:s.querySelector('#bk_d').value.trim(),
+      price:+s.querySelector('#bk_p').value||0,
+      currency:s.querySelector('#bk_c').value||'EGP',
+      file_url:file_url,
+      cover_url:s.querySelector('#bk_cv').value.trim(),
+      is_active:s.querySelector('#bk_act').checked
+    };
+    var btn=s.querySelector('#bk_s');btn.disabled=true;btn.style.opacity='.6';
+    EP.createBook(body,function(){closeModal();viewKnowledge(document.getElementById('view'));});
+  };
 }
 function knowledgeEditModal(k){
   if(!k)return;var sale=k.rights==='owned_for_sale';
@@ -2073,12 +2126,33 @@ function addAdvertiserModal(edit){
    - أفكار للاعتماد: مسودّات (وكيل/بشري) — اعتماد/رفض.
    - الأخبار: منتقاة بصوتنا (viewNews) + «حوّل لموضوع».
    - المقالات: مسودّات المقالات (viewContent) → افتح → «اعتمد وانشر» مباشرة على elprofessor.net. */
+// عدّادات التبويبات (حقيقية، best-effort): تظهر فقط لما بيانات التبويب تكون محمّلة فعلًا —
+// دي اللي بتكشف «فين المصنع رايح»: البورد ثابت بينما «أفكار للاعتماد» بتتكدّس بالمئات.
+function topicsTabCountsAll(){
+  var c={};
+  if(window.EP){
+    // حمّل مصادر العدّادات مرة واحدة (ensure لا يكرّر) — فتظهر الأرقام على كل تبويبات المجموعة.
+    EP.ensure('platformTopics',function(){renderView();});
+    EP.ensure('platformNews',function(){renderView();});
+    EP.ensure('platformOpinions',function(){renderView();});
+    EP.ensure('content',function(){renderView();});
+    if(EP.state.platformTopics==='ready'){var t=topicTabCounts();c.board=t.board;c.incoming=t.incoming;c.working=t.working;c.ideas=t.ideas;}
+    if(EP.state.platformNews==='ready')c.news=(window.PNEWS||[]).filter(function(n){return n.status!=='published';}).length;
+    if(EP.state.content==='ready')c.articles=(window.TOPICS||[]).filter(function(x){return x.status==='pending';}).length;
+    if(EP.state.platformOpinions==='ready')c.comments=(window.POPINIONS||[]).length;
+  }
+  return c;
+}
 function topicsTabbar(active){
   // auto = تيار مقالات المنصة الآلي، يُبرز «المقالات».
   var hi=(active==='auto'||active==='blog')?'articles':active;
+  var C=topicsTabCountsAll();
   // work-first order: ideas → news → working → articles → comments, then published + incoming LAST.
   var tabs=[['ideas','أفكار للاعتماد'],['news','الأخبار'],['working','قيد العمل (الوكيل)'],['articles','المقالات'],['comments','التعليقات'],['board','المنشورة'],['incoming','واردة']];
-  return '<div class="tabbar" id="topicsTabs">'+tabs.map(function(t){return '<div class="tab'+(hi===t[0]?' on':'')+'" data-tt="'+t[0]+'">'+t[1]+'</div>';}).join('')+'</div>';
+  return '<div class="tabbar" id="topicsTabs">'+tabs.map(function(t){
+    var n=C[t[0]];
+    var badge=(n!=null&&n>0)?' <span style="font-weight:800;color:var(--human)">('+money(n)+')</span>':'';
+    return '<div class="tab'+(hi===t[0]?' on':'')+'" data-tt="'+t[0]+'">'+t[1]+badge+'</div>';}).join('')+'</div>';
 }
 function wireTopicsTabs(){var tb=document.getElementById('topicsTabs');if(tb)tb.querySelectorAll('.tab').forEach(function(t){t.onclick=function(){topicsTab=t.dataset.tt;selected=null;topicsCat='all';renderView();};});}
 
@@ -2192,7 +2266,7 @@ function opinionsReviewPanel(){
   var rows=list.map(function(o){
     return '<div class="row esc-row" style="grid-template-columns:1fr 190px;align-items:flex-start;cursor:default">'+
       '<div class="c c1" style="align-items:flex-start"><div class="src-ic" style="background:var(--human-bg);color:var(--human)">'+svg('hands')+'</div><div style="min-width:0"><div class="parties" style="white-space:normal">'+topEsc(o.body)+'</div><div class="from" style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-top:5px">'+opinionModVerdict(o.moderation)+'<span class="chip" style="padding:1px 8px;font-size:10.5px;cursor:default">'+svg('doc','ic')+' '+topEsc(o.topic_title||'—')+'</span>'+(o.author_email?'<span style="font-size:11px;color:var(--muted);direction:ltr">'+topEsc(o.author_email)+'</span>':'')+(o.date?'<span style="font-size:11px;color:var(--muted)">'+topEsc(o.date)+'</span>':'')+'</div></div></div>'+
-      '<div class="c" style="gap:6px;flex-wrap:wrap;justify-content:flex-end;align-items:flex-start"><button class="btn btn-primary" data-op-approve="'+o.id+'" style="padding:5px 12px;font-size:12px">'+svg('check')+'اعتمد</button><button class="btn btn-warn" data-op-reject="'+o.id+'" style="padding:5px 12px;font-size:12px">ارفض</button></div>'+
+      '<div class="c" style="gap:6px;flex-wrap:wrap;justify-content:flex-end;align-items:flex-start"><button class="btn btn-primary" data-op-approve="'+o.id+'" style="padding:5px 12px;font-size:12px">'+svg('check')+'اعتمد</button><button class="btn btn-warn" data-op-reject="'+o.id+'" style="padding:5px 12px;font-size:12px">ارفض</button><button class="btn btn-ghost" data-op-del="'+o.id+'" style="padding:5px 12px;font-size:12px;color:var(--conflict)">حذف نهائي</button></div>'+
     '</div>';
   }).join('');
   return head+rows+foot;
@@ -2201,6 +2275,8 @@ function wireOpinionsPanel(v){
   var rb=(v||document).querySelector('#opRefresh');if(rb)rb.onclick=function(){if(window.EP)EP.reload('platformOpinions',()=>renderView());};
   (v||document).querySelectorAll('[data-op-approve]').forEach(function(b){b.onclick=function(){var o=(window.POPINIONS||[]).find(function(x){return x.id===b.dataset.opApprove;});if(!o||!window.EP)return;EP.approveOpinion(o,()=>renderView());};});
   (v||document).querySelectorAll('[data-op-reject]').forEach(function(b){b.onclick=function(){var o=(window.POPINIONS||[]).find(function(x){return x.id===b.dataset.opReject;});if(!o||!window.EP)return;if(!confirm('رفض هذا الرأي؟ لن يظهر على الموضوع.'))return;EP.rejectOpinion(o,()=>renderView());};});
+  // «حذف نهائي»: للتعليقات التجريبية/غير المرغوبة — يمسح التعليق من القاعدة (لا مجرد رفض).
+  (v||document).querySelectorAll('[data-op-del]').forEach(function(b){b.onclick=function(){var o=(window.POPINIONS||[]).find(function(x){return x.id===b.dataset.opDel;});if(!o||!window.EP)return;if(!confirm('حذف هذا التعليق نهائيًّا من القاعدة؟'))return;EP.deleteOpinion(o,()=>renderView());};});
 }
 
 /* ===== «المنشورة/المعتمدة» — التعليقات المعتمدة الظاهرة على المواضيع (قراءة فقط) =====
@@ -2501,11 +2577,16 @@ function renderArticlesAuto(){
   const el=document.getElementById('artRows');if(!el)return;el.innerHTML='';
   const items=PARTS.slice();
   if(!items.length){el.innerHTML='<div style="padding:40px;text-align:center;color:var(--muted)">لا مقالات بعد — اضغط «شغّل التوليد اليومي» لتوليد أول دفعة مسودّات بالذكاء.</div>';return;}
-  items.forEach((a)=>el.insertAdjacentHTML('beforeend',`<div class="row esc-row" data-row="${a.id}" style="grid-template-columns:2.2fr 1fr 1fr 220px;cursor:pointer">
-    <div class="c c1"><div class="src-ic" style="background:var(--ai-bg);color:var(--ai)">${svg('sparkles')}</div><div><div class="parties">${aEsc(a.title)}</div><div class="from">${aEsc(a.excerpt)||'—'}</div></div></div>
+  // «على الموقع بالفعل»: مسودّة منصّة عنوانها منشور فعلًا على مقالات elprofessor.net —
+  // بقايا استيراد سابق (المزامنة بتتخطّى العنوان المكرّر ولا تحذف نسخة المنصة). آمنة الحذف.
+  var _blogTitles={};((window.TOPICS)||[]).forEach(function(x){var t=(x.title||'').trim();if(t)_blogTitles[t]=1;});
+  var _stale=items.filter(function(a){return a.status!=='published'&&_blogTitles[(a.title||'').trim()];}).length;
+  if(_stale)el.insertAdjacentHTML('beforeend','<div style="padding:9px 14px;font-size:11.5px;color:var(--gold);border-bottom:1px solid var(--border);background:var(--gold-bg);font-weight:700">'+money(_stale)+' مسودّة هنا عنوانها منشور بالفعل على مقالات الموقع (بقايا مزامنة سابقة) — عليها شارة «على الموقع بالفعل» وحذفها آمن؛ متعتمدهاش تاني.</div>');
+  items.forEach((a)=>{var onBlog=(a.status!=='published'&&_blogTitles[(a.title||'').trim()]);el.insertAdjacentHTML('beforeend',`<div class="row esc-row" data-row="${a.id}" style="grid-template-columns:2.2fr 1fr 1fr 220px;cursor:pointer">
+    <div class="c c1"><div class="src-ic" style="background:var(--ai-bg);color:var(--ai)">${svg('sparkles')}</div><div><div class="parties">${aEsc(a.title)}${onBlog?' <span class="status s-wait" style="font-size:9.5px;margin-inline-start:4px"><span class="d"></span>على الموقع بالفعل</span>':''}</div><div class="from">${aEsc(a.excerpt)||'—'}</div></div></div>
     <div class="c"><div class="from">${ART_CAT[a.category]||a.category} · ${a.date||'—'}</div></div>
     <div class="c"><span class="status ${a.status==='published'?'s-auto':'s-wait'}"><span class="d"></span>${a.status==='published'?'منشور (app)':'مسودّة'}</span></div>
-    <div class="c" style="gap:6px">${a.status==='published'?`<button class="btn btn-ghost" data-unpub="${a.id}" style="padding:5px 11px;font-size:12px">إلغاء النشر</button>`:`<button class="btn btn-primary" data-pub="${a.id}" style="padding:5px 11px;font-size:12px">اعتمد وانشر</button>`}<button class="btn btn-warn" data-del="${a.id}" style="padding:5px 11px;font-size:12px">حذف</button></div></div>`));
+    <div class="c" style="gap:6px">${a.status==='published'?`<button class="btn btn-ghost" data-unpub="${a.id}" style="padding:5px 11px;font-size:12px">إلغاء النشر</button>`:`<button class="btn btn-primary" data-pub="${a.id}" style="padding:5px 11px;font-size:12px">اعتمد وانشر</button>`}<button class="btn btn-warn" data-del="${a.id}" style="padding:5px 11px;font-size:12px">حذف</button></div></div>`);});
   el.querySelectorAll('.row[data-row]').forEach(r=>r.onclick=()=>{var a=PARTS.find(x=>x.id===r.dataset.row);if(a)artDetailModal(a);});
   el.querySelectorAll('[data-pub]').forEach(b=>b.onclick=(ev)=>{ev.stopPropagation();var a=PARTS.find(x=>x.id===b.dataset.pub);if(!a||!window.EP)return;
     EP.publishArticleP(a,()=>viewArticlesAuto(document.getElementById('view')));});
@@ -2532,6 +2613,7 @@ function viewTopics(v){
   v.innerHTML=`
     ${topicsTabbar(tab)}
     <div class="policy" style="border-inline-start-color:var(--gold)">${svg('sparkles','ic')}<div><b>${meta.t}:</b> ${meta.note}</div></div>
+    ${(tab==='board'&&C.ideas>0)?`<div class="policy" style="border-inline-start-color:var(--human);background:var(--human-bg)">${svg('trend','ic')}<div><b>البورد بيكبر بالاعتماد فقط:</b> مصنع المحتوى شغّال يوميًّا وبيولّد المواضيع <b>كمسودّات</b> — عندك الآن <b>${money(C.ideas)}</b> موضوعًا بانتظار قرارك في «أفكار للاعتماد». اعتمد اللي يستحق يطلع هنا، وارفض الباقي. <b id="goIdeas" style="cursor:pointer;text-decoration:underline;color:var(--human)">افتح أفكار للاعتماد ←</b></div></div>`:''}
     ${Tst==='error'?`<div class="policy" style="border-inline-start-color:var(--conflict);background:var(--conflict-bg);color:var(--conflict)">${svg('scale','ic')}<div>تعذّر جلب المواضيع من المنصة. <b style="cursor:pointer;text-decoration:underline" onclick="EP.reload('platformTopics',()=>viewTopics(document.getElementById('view')))">إعادة المحاولة</b></div></div>`:''}
     ${Tst==='loading'?`<div class="policy" style="border-inline-start-color:var(--gold)">${svg('sparkles','ic')}<div>…جارٍ تحميل المواضيع من المنصة</div></div>`:''}
     <div class="kpis">
@@ -2547,6 +2629,7 @@ function viewTopics(v){
   wireTopicsAIPanel(v);
   wireTopicCatChips(v);
   var ab=document.getElementById('topAdd');if(ab)ab.onclick=()=>topCreateModal(tab==='ideas'?'idea':(tab==='incoming'?'expert':'human'));
+  var gi=document.getElementById('goIdeas');if(gi)gi.onclick=()=>{topicsTab='ideas';selected=null;topicsCat='all';renderView();};
   renderTopics();
 }
 // FIX1: شارة «✓ له مقال» — إشارة واضحة أنّ الموضوع اتعمله مقال بالفعل (له رابط دائم على المنصة).

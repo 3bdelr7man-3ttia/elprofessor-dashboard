@@ -1421,6 +1421,14 @@
       .then(function () { note("اتشال العنصر من السوق"); EP.reload("knowledge", after); })
       .catch(function (e) { quietToast((e && e.message) || "تعذّر الحذف"); if (after) after(); });
   };
+  // «إضافة كتاب» لسوق المعرفة: POST /platform-books (بروكسي سرّي → /api/bridge/books على المنصة).
+  // العقد: {title, author?, description?, price?, currency?, file_url, cover_url?, is_active}.
+  // الكتاب يُنشأ بنفس شكل عناصر المتجر فيظهر فورًا في متجر المنصة وفي قائمة «سوق المعرفة».
+  EP.createBook = function (body, after) {
+    post("/platform-books", body || {})
+      .then(function () { note("اتضاف الكتاب «" + ((body && body.title) || "") + "» لسوق المعرفة ✓"); EP.reload("knowledge", after); })
+      .catch(function (e) { quietToast((e && e.message) || "تعذّر إضافة الكتاب"); if (after) after(); });
+  };
   // تثبيت/تعديل موعد دورة حية (zoom/تواريخ/مقاعد).
   EP.updateSchedule = function (courseId, body, after) {
     api("/platform-courses/" + encodeURIComponent(courseId) + "/schedule", { method: "PUT", body: body })
@@ -1597,10 +1605,15 @@
       .then(function () { note("رُفض الرأي — لن يظهر على الموضوع"); EP.reload("platformOpinions", after); })
       .catch(function (e) { quietToast((e && e.message) || "تعذّر رفض الرأي"); if (after) after(); });
   };
-  // Editors DELETE a published comment, or REPLY to it (manual text, or {ai:true} to let the AI draft it).
+  // Editors DELETE a comment outright (works from BOTH queues: pending test comments and
+  // published ones) — refresh both lists so the row vanishes wherever it was shown.
   EP.deleteOpinion = function (o, after) {
     api("/platform-opinions/" + encodeURIComponent(o.id), { method: "DELETE" })
-      .then(function () { note("حُذف التعليق"); EP.reload("platformOpinionsApproved", after); })
+      .then(function () {
+        note("حُذف التعليق");
+        EP.reload("platformOpinions", null);
+        EP.reload("platformOpinionsApproved", after);
+      })
       .catch(function (e) { quietToast((e && e.message) || "تعذّر حذف التعليق"); if (after) after(); });
   };
   EP.replyOpinion = function (o, opts, after) {
