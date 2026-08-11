@@ -93,6 +93,35 @@ CMS_TZ = timezone.utc
 MARK_FEAT_OPEN, MARK_FEAT_CLOSE = "<!--EP:FEAT-->", "<!--/EP:FEAT-->"
 MARK_GRID_OPEN, MARK_GRID_CLOSE = "<!--EP:GRID-->", "<!--/EP:GRID-->"
 
+# ---------------------------------------------------------------------------
+# صندوق النموذج المجاني (lead magnet) — مكانه article.html، لا هنا.
+#
+# ⛔ لا تحقن صندوقًا من هذا الملف. القالب يحمل واحدًا (<section id="leadMagnet">)
+#    بعد </article> مباشرةً وقبل «مقالات ذات صلة»، وهذا المولّد ينسخ القالب كما
+#    هو ولا يغيّر منه إلا المراسي المذكورة أدناه — فالصندوق يصل إلى كل صفحة
+#    مُسبقة العرض تلقائيًّا. حقن نسخة ثانية هنا = صندوقان متلاصقان على ~١٤٠
+#    صفحة، ومصدرا حقيقة للنموذج نفسه يتفرّعان مع الوقت (نفس علّة «مُصيِّرين»
+#    التي يمنعها هذا الملف أصلًا).
+#
+# موضعه في القالب صحيح ومقصود: خارج #art و#relatedWrap. الترطيب يعيد كتابة
+# innerHTML لهذين العنصرين فقط، وما بينهما يبقى كما هو فلا يمحوه الـJS.
+#
+# دورنا هنا التحقق فقط — عند كل مقال، قبل أن يُكتب أي بايت:
+#   • لا صندوق أصلًا ⇒ تحذير لا فشل (قد يكون حذفًا مقصودًا من القالب؛ إسقاط
+#     ١٤٠ صفحة بسبب عنصر تسويقي اختياري عقوبة أكبر من الذنب — منطق «keywords»).
+#   • صندوق موجود ⇒ لا بد أن يكون سليمًا: مرّة واحدة، بمصيدة، وبالأصل الصحيح.
+#
+# ⚠️ عدّادان لا واحد، وهذا مقصود:
+#   URL يعدّ *المعالِجات* (يرد مرّة واحدة في السكربت)، والمصيدة تعدّ *الصناديق*
+#   (حقل في كل نموذج). تكرار قسم الصندوق في القالب يعطي صندوقين ظاهرين بمعالِج
+#   واحد ⇒ عدّاد الـURL وحده يراها «واحدة» ويمرّرها. المصيدة هي ما يكشفها.
+#   المصيدة أيضًا جزء من عقد الخادم (يُسقط من يملأ «website») لا زينة، فتغيّر
+#   اسمها عطل حقيقي يستحق الفشل لا التحذير.
+# ---------------------------------------------------------------------------
+LEAD_MAGNET_URL = "https://api.elprofessor.net/api/lead-magnet"
+LEAD_MAGNET_ASSET = "fee-contract-template"
+LEAD_MAGNET_HONEYPOT = 'name="website"'
+
 
 class Fail(Exception):
     """فشل قاتل — لا يُكتب شيء على القرص."""
@@ -521,7 +550,8 @@ def build_article(tpl, a, r):
     out = replace_once(out, "</script>\n<style>\n:root{",
                        "</script>\n" + blocks + "<style>\n:root{", "ld-insert")
 
-    # 8) المتن + المقالات ذات الصلة
+    # 8) المتن + المقالات ذات الصلة. صندوق النموذج المجاني بينهما في القالب
+    #    ويمرّ كما هو — لا نحقنه هنا (انظر تعليق LEAD_MAGNET_URL أعلاه).
     out = replace_once(out, '<article class="art" id="art"></article>',
                        '<article class="art" id="art">' + r["art"] + "</article>", "art")
     out = replace_once(out, '<section class="wrap related" id="relatedWrap"></section>',
@@ -611,6 +641,27 @@ def verify_article(html, a, r, meta, ctx):
         bad("<meta charset> missing or beyond byte 1024 (found at %d)" % pos)
     if "window.EP_PRERENDERED=true" not in html:
         bad("EP_PRERENDERED flag missing")
+
+    # صندوق النموذج المجاني — يأتي من القالب؛ نتحقق فقط (التفصيل عند الثابت)
+    n_post = html.count(LEAD_MAGNET_URL)            # معالِجات الإرسال
+    n_box = html.count(LEAD_MAGNET_HONEYPOT)        # صناديق ظاهرة
+    if n_post > 1:
+        bad("lead-magnet posts to %s from %d places (expected 1) — article.html must hold "
+            "exactly one box and this generator must not inject one" % (LEAD_MAGNET_URL, n_post))
+    if n_post == 1 or n_box:
+        if n_box > 1:
+            bad("lead-magnet box appears %d times (expected 1) — the boxes stack on the "
+                "page; counted by the honeypot field %s" % (n_box, LEAD_MAGNET_HONEYPOT))
+        elif n_box == 0:
+            bad("lead-magnet box has no honeypot field (%s) — the form would be bot-farmed, "
+                "and the server drops submissions by that field name"
+                % LEAD_MAGNET_HONEYPOT)
+        if n_post != 1:
+            bad("lead-magnet box is present but posts to %s %d times — a form with no "
+                "handler collects nothing" % (LEAD_MAGNET_URL, n_post))
+        if LEAD_MAGNET_ASSET not in html:
+            bad("lead-magnet posts without asset %r — the wrong file would be sent"
+                % LEAD_MAGNET_ASSET)
 
     txt = strip_to_text(html)
     if len(txt) < 1500:
@@ -825,6 +876,17 @@ def main(argv=None):
     if "\r" in art_tpl or "\r" in blog_doc:
         raise Fail("template has CRLF line endings; the anchors assume LF")
 
+    # الصندوق يُنسخ من القالب. غيابه ليس عطلًا قاتلًا، لكنه يمرّ صامتًا على ١٤٠
+    # صفحة ولا يلاحظه أحد — فنقوله بصوت مسموع في السجل وفي مخرجات التشغيل.
+    lm_in_tpl = art_tpl.count(LEAD_MAGNET_HONEYPOT)
+    if lm_in_tpl == 0 and LEAD_MAGNET_URL not in art_tpl:
+        log("WARN: article.html has no lead-magnet box (no POST to %s) — every prerendered "
+            "page will ship without it. Deploy the site template first, then push."
+            % LEAD_MAGNET_URL)
+    elif lm_in_tpl != 1:
+        log("WARN: article.html has a lead-magnet box but %d honeypot field(s) named %s "
+            "(expected 1) — verification will fail" % (lm_in_tpl, LEAD_MAGNET_HONEYPOT))
+
     article_code = extract_inline(art_tpl, '</script>\n<script src="/content-loader.js',
                                   "article.html")
     blog_code = extract_inline(blog_doc, '</script>\n<script src="content-loader.js', "blog.html")
@@ -923,6 +985,7 @@ def main(argv=None):
         "blog_text_chars": blog_len,
         "rss_bytes": len(rss.encode("utf-8")),
         "faq_rendered_visibly": ctx["renderer_has_faq"],
+        "lead_magnet_per_page": lm_in_tpl,
         "pruned": len(stale),
         "feed_url": feed_url,
         "feed_link_mismatch": mismatch,
