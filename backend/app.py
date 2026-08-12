@@ -700,6 +700,21 @@ def _audit(action, target='', meta=None, actor=None):
         except Exception:
             pass
 
+def _actor_email():
+    """The signed-in dashboard user's email, for platform-side attribution (`closed_by`,
+    `hidden_by`…). Falls back to 'dashboard' so a write is never blocked by a missing session —
+    but an anonymous write is impossible anyway: every caller is @token_required.
+
+    Clamped to 120 chars because that is the platform's declared limit for `by`
+    (BridgeMarketClose/BridgeMarketHide, max_length=120). Our column allows 255, and a longer
+    value would 422 the whole moderation write — losing the ACTION to save the attribution."""
+    try:
+        email = (getattr(g, 'user', None) and getattr(g.user, 'email', None)) or 'dashboard'
+    except Exception:
+        return 'dashboard'
+    return str(email)[:120]
+
+
 def _resp_ok(resp):
     """True when a Flask view return value carries a 2xx status. Handles both a bare
     Response (status 200 by default) and a (body, status) tuple (our proxy error shape)."""
@@ -1585,6 +1600,57 @@ def platform_users_set_tags(user_id):
     tags = [str(t).strip() for t in raw if str(t).strip()][:20] if isinstance(raw, list) else []
     return _platform_proxy('POST', f"/api/bridge/users/{user_id}/tags", json_body={'tags': tags})
 
+# --- Remove a trainer/expert profile (the «محمد افندي» problem) -----------------
+# There was NO way to remove a seeded/demo trainer from anywhere: the dashboard buttons were
+# hard-disabled because no platform endpoint existed, the only revoke path needs a
+# `trainer_applications` row a seeded trainer never had, and the bulk launch-clean sweep also
+# purges every course. These two proxies expose the platform's single-user primitives.
+#
+# DEACTIVATE, not DELETE — deliberately. The public directory already hides a profile that
+# isn't `profile_public_ready`, and a true purge would have to cascade ~40 collections. More
+# importantly the platform re-approves anyone still holding a granted provider section key on
+# every boot (backfill_provider_status) and on every authenticated request
+# (migrate_legacy_user_doc), so the deactivate MUST write a non-empty `rejected` sentinel AND
+# revoke the section keys in the same update — that logic lives on the platform, server-side.
+# ⚠️ FOUNDER_EMAIL on the platform still defaults to admin@demo.com (ops_command.py): set that
+# env var to the founder's real account BEFORE removing that specific trainer, or the Telegram
+# «اعمل دورة» action ends up drafting courses under a deactivated owner.
+@app.route('/api/platform-trainers/<user_id>/deactivate', methods=['POST'])
+@token_required
+@roles_required('admin')               # revoking a provider identity is admin-only
+def platform_trainer_deactivate(user_id):
+    body = request.json or {}
+    payload = {
+        'reason': (body.get('reason') or '')[:200],
+        # Also tag the account as test data → hidden from every public board/directory at the
+        # query layer, not just by the profile-completeness gate.
+        'is_test': bool(body.get('is_test')),
+    }
+    resp = _platform_proxy('POST', f"/api/bridge/trainers/{user_id}/deactivate", json_body=payload)
+    if _resp_ok(resp):
+        _audit('trainer.deactivate', target=user_id,
+               meta={'email': (body.get('email') or ''), 'is_test': payload['is_test'],
+                     'reason': payload['reason']})
+    return resp
+
+
+@app.route('/api/platform-users/<user_id>/flag-test', methods=['POST'])
+@token_required
+@roles_required('admin')
+def platform_users_flag_test(user_id):
+    """The cheap hide-everywhere switch: mark a platform account as test data (or clear it).
+    Public directories/boards filter `is_test` at the query layer, so this removes a demo
+    account from every public surface without touching its data."""
+    body = request.json or {}
+    is_test = bool(body.get('is_test', True))
+    resp = _platform_proxy('POST', f"/api/bridge/users/{user_id}/flag-test",
+                           json_body={'is_test': is_test})
+    if _resp_ok(resp):
+        _audit('user.flag_test', target=user_id,
+               meta={'email': (body.get('email') or ''), 'is_test': is_test})
+    return resp
+
+
 @app.route('/api/platform-experts', methods=['GET'])
 @token_required
 @roles_required('admin', 'employee')   # employee = read-only directory (no mutations)
@@ -1651,8 +1717,22 @@ def _platform_proxy(method, path, params=None, json_body=None, timeout=12):
     except Exception:
         return jsonify({'error': 'تعذر الاتصال بالمنصة'}), 502
     if r.status_code != 200:
-        body = r.json() if r.content else {}
-        return jsonify({'error': body.get('detail') or 'تعذر تنفيذ العملية'}), r.status_code
+        try:
+            body = r.json() if r.content else {}
+        except Exception:
+            body = {}
+        detail = body.get('detail') if isinstance(body, dict) else None
+        # FastAPI's `detail` is not always a string: our bridge raises STRUCTURED errors
+        # ({error, message, allowed} — e.g. 422 «فئة غير معروفة»), and pydantic raises a LIST of
+        # field errors. Surface the human message; never hand the browser the raw object, which
+        # renders as «[object Object]» and reads as a dashboard bug instead of a rejected value.
+        if isinstance(detail, dict):
+            msg = detail.get('message') or detail.get('error')
+        elif isinstance(detail, list):
+            msg = 'المنصة رفضت البيانات المرسلة'
+        else:
+            msg = detail
+        return jsonify({'error': msg or 'تعذر تنفيذ العملية'}), r.status_code
     return jsonify(r.json() if r.content else {})
 
 
@@ -1785,9 +1865,16 @@ def platform_pending_topics():
 @token_required
 @roles_required('admin', 'employee')
 def platform_pending_topic_decide(topic_id, action):
+    """Approve/reject a MEMBER-proposed topic. Must stay on these two routes: approve flips it to
+    the public board AND notifies its author, reject marks it rejected — whereas the generic
+    PUT/DELETE pair silently skips the notification and hard-deletes the member's topic with its
+    comments. The Topics module's «مقترحة من الأعضاء» tab calls this, not the CRUD routes."""
     if action not in ('approve', 'reject'):
         return jsonify({'error': 'إجراء غير معروف'}), 400
-    return _platform_proxy('POST', f"/api/bridge/topics/{topic_id}/{action}")
+    resp = _platform_proxy('POST', f"/api/bridge/topics/{topic_id}/{action}")
+    if _resp_ok(resp):
+        _audit(f'topic.{action}', target=topic_id)
+    return resp
 
 
 # --------------------------------------------------------------------------- R1 launch-fix inboxes
@@ -2415,6 +2502,49 @@ def platform_topics_delete(topic_id):
     return _platform_proxy('DELETE', f"/api/bridge/topics/{topic_id}")
 
 
+# --- «الفئة» (segment) on a topic ------------------------------------------------
+# The founder's segmentation ask: every topic belongs to ONE audience lane (خريجون جدد /
+# النيابة الإدارية / جنائي / طلاب حقوق …) so each group finds its own conversations.
+#
+# ⛔ THE VOCABULARY IS OWNED BY THE PLATFORM (routes/topics.TOPIC_SEGMENTS) AND IS NEVER
+#    REDEFINED HERE. The dashboard reads it from /api/platform-topic-segments below and posts
+#    back the `id` it got. A second list in this repo is how the two sides drift apart.
+#
+# ⚠️ The body key MUST be `segment`. The platform's BridgeSegmentIn reads `segment` only, and an
+#    empty/absent value is its EXPLICIT «clear the human choice, hand the lane back to the
+#    classifier» signal — so the old `target_audience` key was dropped by pydantic, arrived as
+#    "", WIPED the stored lane and still answered 200. Nothing about that failure was visible.
+#    `target_audience` is a different (older, news) axis and is not writable here at all.
+@app.route('/api/platform-topic-segments', methods=['GET'])
+@token_required
+@roles_required('admin', 'employee')
+@module_required('topics')
+def platform_topic_segments():
+    """The LOCKED «الفئات» vocabulary + live counts, straight from the platform:
+    [{id, label, count}]. The dashboard's dropdown is built from THIS — never from a local list."""
+    return _platform_proxy('GET', '/api/bridge/topics/segments')
+
+
+@app.route('/api/platform-topics/<topic_id>/segment', methods=['POST'])
+@token_required
+@roles_required('admin', 'employee')
+@module_required('topics')
+def platform_topics_set_segment(topic_id):
+    body = request.json or {}
+    # Accept the id under any of the keys the UI has historically sent; forward ONE key.
+    seg = (body.get('segment') or body.get('target_audience')
+           or body.get('audience') or '').strip()[:60]
+    if not seg:
+        return jsonify({'error': 'اختر الفئة المستهدفة أولًا'}), 400
+    resp = _platform_proxy('POST', f"/api/bridge/topics/{topic_id}/segment",
+                           json_body={'segment': seg})
+    # A value outside the locked vocabulary comes back 422 with the platform's own Arabic
+    # message (surfaced by _platform_proxy) — it is NOT audited and NOT reported as success.
+    if _resp_ok(resp):
+        _audit('topic.set_segment', target=topic_id, meta={'segment': seg})
+    return resp
+
+
 # --- «اعمل مقال» (generate an SEO article FROM a topic): the platform LLM AUTHORS a fresh
 # article (new headline/excerpt/body — NOT a copy of the topic text). This is a synchronous
 # LLM generation (~600-1000 words) so it needs a longer timeout than the shared 12s proxy;
@@ -2537,6 +2667,125 @@ def platform_opinions_analysis():
     summarize = 'false' if raw in ('0', 'false', 'no', 'off') else 'true'
     return _platform_proxy('GET', '/api/bridge/opinions/analysis',
                            params={'limit': limit, 'summarize': summarize})
+
+
+# =========================================================================== «السوق» (MARKET)
+# The founder's #1 competitive feature had NO management surface at all: the nav item was
+# removed on 2026-07-20 as a lying zero, and no market bridge endpoint existed on either side.
+# These are the dashboard's read/act proxies over the platform's market bridge. Same rule as
+# every block above: the METRICS_SECRET is sent SERVER-SIDE only, the browser never sees it.
+#
+# Lanes mirror the live market's `kind` EXACTLY as the bridge declares them
+# (marketplace.bridge_market_requests: request|public_service|course_request|training_offer|all):
+#   request (خبرة) · course_request (دورة/تدريب) · public_service (خدمة للجمهور) ·
+#   training_offer (مدرّب بيعرض خدمته — عرض لا طلب).
+# `knowledge` is NOT one of them: it is a members-board lane over `knowledge_items`, a collection
+# the market bridge never reads — keeping it here bought a permanent «٠» tab and, once the query
+# name is correct, a hard 422. `need_kind` is the demand classification the chat captured.
+_MARKET_KINDS = ('request', 'course_request', 'public_service', 'training_offer', 'all')
+_MARKET_STATUSES = ('open', 'matched', 'closed', 'all')
+
+
+def _market_proxy(method, path, params=None, json_body=None):
+    """_platform_proxy + one distinction that matters for a bridge shipping concurrently:
+    a 404 means «the market bridge isn't deployed on the platform yet», not «this failed».
+    Tagging it lets the dashboard render an honest «قيد النشر» state instead of an error that
+    looks like a bug. Anything else passes through unchanged."""
+    resp = _platform_proxy(method, path, params=params, json_body=json_body)
+    if isinstance(resp, tuple) and int(resp[1]) == 404:
+        return jsonify({'error': 'جسر «السوق» لم يُنشر على المنصة بعد',
+                        'bridge_missing': True}), 404
+    return resp
+
+
+@app.route('/api/platform-market-requests', methods=['GET'])
+@token_required
+@roles_required('admin', 'employee')   # employee may VIEW the board (decisions are admin-only)
+def platform_market_requests():
+    """The live market board, management view: every lane, every status, full PII (the platform
+    serializes with is_admin=True) plus offer counts. Filters are forwarded, never re-implemented
+    here — the platform owns what a lane means."""
+    kind = (request.args.get('kind') or 'all').strip()
+    if kind not in _MARKET_KINDS:
+        kind = 'all'
+    status = (request.args.get('status') or 'all').strip()
+    if status not in _MARKET_STATUSES:
+        status = 'all'
+    try:
+        limit = int(request.args.get('limit') or 200)
+    except (TypeError, ValueError):
+        limit = 200
+    # The bridge's query parameter is `lane`, not `kind` — FastAPI silently IGNORES an unknown
+    # query name, so `kind=` filtered nothing and every lane came back as «all» (masked only
+    # because the browser re-filters client-side, and broken the moment the list is paged).
+    # We keep accepting `?kind=` inbound; only the outbound name changes.
+    params = {'lane': kind, 'status': status, 'limit': max(1, min(500, limit))}
+    need_kind = (request.args.get('need_kind') or '').strip()[:40]
+    if need_kind and need_kind != 'all':
+        params['need_kind'] = need_kind
+    return _market_proxy('GET', '/api/bridge/market/requests', params=params)
+
+
+@app.route('/api/platform-market-requests/<request_id>', methods=['GET'])
+@token_required
+@roles_required('admin', 'employee')
+def platform_market_request_detail(request_id):
+    """One request + the offers bid on it (who bid, how much, ETA, accepted/declined)."""
+    return _market_proxy('GET', f"/api/bridge/market/requests/{request_id}")
+
+
+@app.route('/api/platform-market-requests/<request_id>/close', methods=['POST'])
+@token_required
+@roles_required('admin')               # closing someone's request is a real, visible act
+def platform_market_request_close(request_id):
+    body = request.json or {}
+    # The platform's model is BridgeMarketClose{by, reason} — it stores `closed_by`/`closed_reason`
+    # from exactly those two. `admin_note` was an invented key: pydantic dropped it, so the close
+    # succeeded while the operator's note vanished and `closed_by` recorded the literal "dashboard".
+    note = (body.get('reason') or body.get('admin_note') or '')[:300]
+    resp = _market_proxy('POST', f"/api/bridge/market/requests/{request_id}/close",
+                         json_body={'by': _actor_email(), 'reason': note})
+    if _resp_ok(resp):
+        _audit('market.close_request', target=request_id, meta={'note': note})
+    return resp
+
+
+@app.route('/api/platform-market-requests/<request_id>/hide', methods=['POST'])
+@token_required
+@roles_required('admin')
+def platform_market_request_hide(request_id):
+    """Hide / un-hide a request on every public board.
+
+    MODERATION, NOT DELETION and NOT a test tag: `hidden` is the switch the platform actually
+    enforces end-to-end (_public_gate excludes it, get_request 404s non-owners, create_offer
+    refuses bids on it) and it is reversible + attributed. The old button posted to
+    `/flag-test`, a route that does not exist on the platform — per-request `is_test` is owned
+    by the batch sweep (POST /api/bridge/flag-test-data), keyed on the owner's email — so every
+    click 404'd and the UI blamed an «undeployed bridge» that was in fact deployed."""
+    body = request.json or {}
+    hidden = bool(body.get('hidden', True))
+    resp = _market_proxy('POST', f"/api/bridge/market/requests/{request_id}/hide",
+                         json_body={'hidden': hidden, 'by': _actor_email(),
+                                    'reason': (body.get('reason') or '')[:300]})
+    if _resp_ok(resp):
+        _audit('market.hide_request', target=request_id, meta={'hidden': hidden})
+    return resp
+
+
+@app.route('/api/platform-market-demand', methods=['GET'])
+@token_required
+@roles_required('admin', 'employee')
+def platform_market_demand():
+    """«الطلب الحقيقي» — the founder's decision surface: aggregated demand grouped by need kind
+    (+ specialty), with the courses that repeated demand suggests building next. This is the
+    join the dashboard never had: the old «الطلب على الدورات» panel read a legacy collection
+    the market never writes to, plus a 40-row chat sample."""
+    try:
+        days = int(request.args.get('days') or 90)
+    except (TypeError, ValueError):
+        days = 90
+    return _market_proxy('GET', '/api/bridge/market/demand',
+                         params={'days': max(1, min(365, days))})
 
 
 # --- «أتمتة المقالات» (Articles automation): one daily AI run fills «المقالات» on the platform

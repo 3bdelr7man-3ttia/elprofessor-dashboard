@@ -311,8 +311,10 @@ function svg(n,c){return '<svg class="icon '+(c||'')+'" viewBox="0 0 24 24">'+(I
 
 // خمس مجموعات تعكس دورة عمل يومية بدل تصنيف نظري. المجموعة الأخيرة «الشركة» مطويّة
 // افتراضيًا: مراجعة شهرية لا شغل يومي. كان الأدمن يرى ٢٢ عنصرًا مسطّحًا دفعة واحدة.
-// حُذف موديولان: «النوادي» (soon:true بلا واجهة خلفية) و«السوق والطلبات» (بلا محمّل
-// بيانات ولا endpoint — كان يعرض صفرًا دائمًا فيقرأ كحقيقة).
+// حُذف موديول «النوادي» (soon:true بلا واجهة خلفية).
+// «السوق» رجع (2026-08-12) بعد ما اتبنى الجسر: /api/platform-market-requests + …-demand.
+// كان محذوفًا لأنه بلا محمّل بيانات ولا endpoint فيعرض صفرًا دائمًا؛ دلوقتي بيقرا البورد الحيّ
+// بنفس الحارات اللي على المنصة، ولو الجسر لسه ما اتنشرش بيقول كده صراحةً بدل ما يعرض صفرًا.
 const MODULES={
   overview:{label:'نظرة عامة',ic:'grid',c:'var(--navy)',bg:'var(--surface-2)',grp:'today'},
   inbox:{label:'الوارد',ic:'inbox',c:'var(--human)',bg:'var(--human-bg)',grp:'today'},
@@ -323,6 +325,7 @@ const MODULES={
   finance:{label:'المالية',ic:'wallet',c:'var(--agree)',bg:'var(--agree-bg)',grp:'money'},
   escrow:{label:'الضمان والنزاعات',ic:'shield',c:'var(--conflict)',bg:'var(--conflict-bg)',grp:'money'},
   packages:{label:'الباقات والأسعار',ic:'wallet',c:'var(--gold)',bg:'var(--gold-bg)',grp:'money'},
+  market:{label:'السوق',ic:'store',c:'var(--human)',bg:'var(--human-bg)',grp:'demand'},
   analysis:{label:'تحليل الطلب',ic:'trend',c:'var(--gold)',bg:'var(--gold-bg)',grp:'demand'},
   topics:{label:'المحتوى',ic:'sparkles',c:'var(--gold)',bg:'var(--gold-bg)',grp:'demand'},
   marketing:{label:'التسويق',ic:'mega',c:'var(--human)',bg:'var(--human-bg)',grp:'demand'},
@@ -368,6 +371,8 @@ function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){retur
 
 let current='inbox', selected=null, activeFilter='all', escTab='sessions', finTab='summary', usersFilter='all', courseTab='platform', invTab='investors', mktTab='campaigns', contentTab='pending';
 let usersTag='all', teamTab='experts', topicsTab='ideas', topicsCat='all', pendingUserFocus=null;
+// «السوق»: الحارة (kind) + نوع الاحتياج (need_kind) + الحالة — نفس محاور البورد الحيّ.
+let mkLane='all', mkNeed='all', mkStatus='all', mkSel=null;
 let role='admin';
 const ROLE_NAV={
   employee:['users','courses','topics','tutorials'],
@@ -420,10 +425,11 @@ function roleNavFor(r){
   return base;
 }
 function go(mod){
-  // رابط/إشعار قديم قد يشير إلى موديول حُذف («النوادي»، «السوق والطلبات») — نهبط على
-  // الشاشة الافتراضية بدل أن نرمي على تعريف غير موجود ونُفرغ اللوحة.
+  // رابط/إشعار قديم قد يشير إلى موديول حُذف («النوادي») — نهبط على الشاشة
+  // الافتراضية بدل أن نرمي على تعريف غير موجود ونُفرغ اللوحة.
   if(!moduleDef(mod))mod=(role==='admin')?'inbox':(roleNavFor(role)[0]||'v_pending');
   current=mod;selected=null;activeFilter='all';escTab='sessions';finTab='summary';usersFilter='all';usersTag='all';teamTab='experts';topicsTab='ideas';topicsCat='all';courseTab='platform';invTab='investors';mktTab='campaigns';contentTab='pending';anFilters={seg:'all',country:'all',cat:'all',ne:'all',time:'all'};
+  mkLane='all';mkNeed='all';mkStatus='all';mkSel=null;
   document.getElementById('pageTitle').textContent=(moduleDef(mod)||{}).label||'';
   document.querySelectorAll('.nav .item').forEach(x=>x.classList.toggle('on',x.dataset.mod===mod));
   renderView();
@@ -443,8 +449,8 @@ function renderView(){
   if(current==='marketing')return viewMarketing(v);
   if(current==='packages')return viewPackages(v);
   if(current==='knowledge')return viewKnowledge(v);
-  // «النوادي» و«السوق والطلبات» حُذفا من القائمة (بلا واجهة خلفية / بلا محمّل بيانات).
-  // الشاشتان باقيتان لأن رابطًا قديمًا قد يشير إليهما، ولن تُعرضا في التنقّل.
+  // «النوادي» حُذفت من القائمة (بلا واجهة خلفية). الشاشة باقية لأن رابطًا قديمًا قد يشير
+  // إليها، ولن تُعرض في التنقّل.
   if(current==='clubs')return viewClubs(v);
   if(current==='messages')return viewMessages(v);
   if(current==='topics'){
@@ -1132,7 +1138,8 @@ function drawUser(){
     <div class="acts" style="margin-top:10px">
       ${u.trainer==='approved'?`<button class="btn btn-warn" data-a="untrain" style="flex:none;min-width:auto;padding:7px 12px;font-size:12px">إلغاء اعتماد المدرّب</button>`:`<button class="btn btn-primary" data-a="train" style="flex:none;min-width:auto;padding:7px 12px;font-size:12px">${svg('check')}اعتمد كمدرّب</button>`}
       <button class="btn btn-ghost" data-a="edit" style="flex:none;min-width:auto;padding:7px 12px;font-size:12px">تعديل البيانات</button>
-      <button class="btn btn-warn" data-a="del" style="flex:none;min-width:auto;padding:7px 12px;font-size:12px">حذف</button>
+      ${canWrite?`<button class="btn btn-ghost" data-a="hide" style="flex:none;min-width:auto;padding:7px 12px;font-size:12px">${u.is_test?'ارفع وسم «تجريبي»':'وسم «تجريبي» (إخفاء)'}</button>`:''}
+      <button class="btn btn-warn" data-a="del" style="flex:none;min-width:auto;padding:7px 12px;font-size:12px">${u.trainer==='approved'?'احذف من المدربين':'حذف'}</button>
     </div></div>`;
   inline.querySelector('.uedit-x').onclick=()=>{selected=null;renderUsers();};
   // إسناد الباقة (يُكتب عبر الجسر) + رابط أمين لإدارة الأسعار/الخصومات (لا كوبون وهميّ).
@@ -1146,16 +1153,86 @@ function drawUser(){
     if(window.EP&&EP.data.users&&u.platform){const prev=u.role;u.role=rid;renderUsers();EP.setUserRole(u,rid,prev,()=>renderUsers());return;}
     u.role=rid;renderUsers();toast('تم تغيير دور '+u.name+' إلى «'+ROLE[rid].t+'»');});
   inline.querySelectorAll('[data-a]').forEach(b=>{const a=b.dataset.a;
-    // «اعتماد كمدرّب» و«حذف» بلا واجهة خلفية: كانا يعدّلان مصفوفة في الذاكرة ويعلنان نجاحًا
-    // يعود عن آخره أول تحديث للصفحة. زر معطّل بسبب معلن أصدق من زر يكذب.
-    if(a==='train'||a==='untrain'||a==='del'){
+    // «اعتماد كمدرّب» لسه من «الوارد» (طلب المدرّب هو اللي بيوقّع العقد ويمنح المفاتيح) —
+    // زر معطّل بسبب معلن أصدق من زر يكذب.
+    if(a==='train'){
       b.disabled=true;b.style.opacity='.5';b.style.cursor='not-allowed';
-      b.title=a==='del'?'حذف المستخدم يتم من المنصة — غير مفعّل هنا بعد'
-                       :'اعتماد المدرّب يتم من «الوارد» عبر طلبات المدربين — غير مفعّل هنا بعد';
+      b.title='اعتماد المدرّب يتم من «الوارد» عبر طلبات المدربين';
+      return;
+    }
+    // «إلغاء اعتماد المدرّب» و«حذف» بقى ليهم مسار حقيقي على المنصة (bridge deactivate):
+    // بيلغي الاعتماد، يسحب مفاتيح العروض، يفرّغ البروفايل، ويوسم الحساب تجريبيًّا — كله في
+    // كتابة واحدة عشان الذاتي-الشفاء على المنصة ما يرجّعش الاعتماد تاني.
+    if(a==='untrain'||a==='del'){
+      if(!canWrite){
+        b.disabled=true;b.style.opacity='.5';b.style.cursor='not-allowed';
+        b.title='متاح لمستخدمي المنصة الحقيقيين فقط';
+        return;
+      }
+      b.title='إلغاء الاعتماد + إخفاء من كل الواجهات العامة (الحساب نفسه لا يُمسح)';
+      b.onclick=()=>{
+        if(u.trainer==='approved'){trainerRemoveModal(u,()=>renderUsers());return;}
+        // مش مدرّب: مفيش «حذف نهائي» من هنا. نقول كده صراحةً ونعرض البديل الحقيقي بدل زر بيكدب.
+        var s=openModal('حذف «'+u.name+'»',
+          '<div class="note-ai" style="border-inline-start-color:var(--gold);background:var(--gold-bg);margin-bottom:12px">'+svg('shield','ic')+
+            '<div><b>الحذف النهائي مش من هنا.</b> مسح حساب عضو محتاج كاسكيد على بيانات مرتبطة (محادثات، طلبات سوق، مدفوعات، تعليقات) وبيتم من عملية مخصّصة على المنصة.</div></div>'+
+          '<div style="font-size:13px;line-height:1.9;margin-bottom:12px">اللي تقدر تعمله دلوقتي وبيحقّق نفس الغرض عمليًّا: <b>وسم الحساب «تجريبي»</b> — بيختفي من كل بورد ودليل عام على مستوى الاستعلام، وبياناته تفضل سليمة.</div>'+
+          '<div class="acts"><button class="btn btn-warn" id="udm_hide">وسم «تجريبي» وإخفاء</button><button class="btn btn-ghost" id="udm_x">إغلاق</button></div>');
+        s.querySelector('#udm_x').onclick=closeModal;
+        s.querySelector('#udm_hide').onclick=function(){closeModal();EP.flagUserTest(u,true,()=>renderUsers());};
+      };
+      return;
+    }
+    if(a==='hide'){
+      b.onclick=()=>{
+        var on=!u.is_test;
+        if(!confirm(on?('وسم «'+u.name+'» كحساب تجريبي؟ هيختفي من كل الواجهات العامة (من غير مساس بالبيانات).')
+                      :('رفع وسم «تجريبي» عن «'+u.name+'»؟ هيرجع يظهر على الواجهات العامة.')))return;
+        EP.flagUserTest(u,on,()=>renderUsers());
+      };
       return;
     }
     b.onclick=()=>{if(a==='edit')addUserModal(u);};
   });
+}
+/* ===== إزالة مدرّب/خبير من المنصة =========================================
+   «إلغاء تفعيل» مش «حذف»، وده مقصود:
+   - الدليل العام أصلًا بيخفي أي بروفايل مش مكتمل، والوسم التجريبي بيخفيه من كل بورد.
+   - الحذف الحقيقي محتاج كاسكيد على عشرات المجموعات على المنصة (رصيد/حجوزات/تعليقات…).
+   - وأهم من ده: المنصة بتعيد اعتماد أي حد لسه ماسك مفتاح قسم مُمنَح — في كل إقلاع
+     (backfill_provider_status) وفي كل طلب مُصادَق (migrate_legacy_user_doc). فالإلغاء
+     الصحيح لازم يكتب sentinel «rejected» ويسحب المفاتيح في نفس العملية، وده بيحصل
+     server-side على المنصة. الزرار هنا بيستدعي المسار ده، مش بيقلّده.
+   النافذة بتسمّي كل حاجة هتتمسح، وبتطلب كتابة البريد بالظبط — إجراء لا رجعة فيه فوريًّا. */
+function trainerRemoveModal(u,after){
+  var email=(u&&u.email)||'';
+  var s=openModal('إزالة «'+((u&&u.name)||email)+'» من المدربين',
+    '<div class="note-ai" style="border-inline-start-color:var(--conflict);background:var(--conflict-bg);color:var(--conflict);margin-bottom:12px">'+svg('shield','ic')+
+      '<div><b>ده إجراء إداري حقيقي على المنصة.</b> الحساب نفسه <b>مش هيتمسح</b> — بيتلغي اعتماده كمدرّب/خبير وبيختفي من كل الواجهات العامة.</div></div>'+
+    '<div style="font-size:13px;line-height:2;margin-bottom:12px"><b>اللي هيتنفّذ بالظبط:</b><ul style="margin:6px 0 0;padding-inline-start:20px">'+
+      '<li>حالة المدرّب ← <b>مرفوض</b> (قيمة صريحة، مش تفريغ — التفريغ بيترجّع لوحده أول إقلاع)</li>'+
+      '<li>سحب مفاتيح تقديم العروض: <span style="direction:ltr;display:inline-block">expert_offers</span> و<span style="direction:ltr;display:inline-block">lawyer_offers</span></li>'+
+      '<li>تفريغ التخصصات والنبذة وسعر الجلسة ← يسقط من الدليل العام</li>'+
+      '<li>وسم الحساب <b>تجريبي</b> ← مخفي من كل بورد/دليل على مستوى الاستعلام</li>'+
+      '<li>تسجيل العملية في سجلّ العمليات باسمك</li></ul></div>'+
+    '<div class="note-ai" style="margin-bottom:12px">'+svg('sparkles','ic')+'<div><b>قبل ما تشيل حساب الديمو:</b> لو ده الحساب اللي عليه <span style="direction:ltr;display:inline-block">FOUNDER_EMAIL</span> على المنصة، اضبط المتغيّر ده على بريدك الحقيقي الأول — غير كده أمر «اعمل دورة» من تليجرام هيفضل يسجّل الدورات باسم حساب متوقّف.</div></div>'+
+    '<div class="fld"><label>اكتب البريد للتأكيد <span style="direction:ltr;display:inline-block">'+esc(email)+'</span></label><input id="trm_e" placeholder="'+esc(email)+'" style="direction:ltr;text-align:right"></div>'+
+    '<label class="tg"><input type="checkbox" id="trm_test" checked> وسم الحساب «تجريبي» كمان (مستحسن لحسابات الديمو)</label>'+
+    '<div class="fld" style="margin-top:10px"><label>سبب (اختياري — بيتسجّل)</label><input id="trm_r" placeholder="حساب ديمو / انتهى التعاقد…"></div>'+
+    '<div class="acts" style="margin-top:14px"><button class="btn btn-warn" id="trm_go" disabled style="opacity:.5">إزالة نهائيًّا من المدربين</button><button class="btn btn-ghost" id="trm_x">إلغاء</button></div>');
+  var inp=s.querySelector('#trm_e'),go=s.querySelector('#trm_go');
+  inp.oninput=function(){
+    var ok=inp.value.trim().toLowerCase()===String(email).toLowerCase()&&!!email;
+    go.disabled=!ok;go.style.opacity=ok?'1':'.5';
+  };
+  s.querySelector('#trm_x').onclick=closeModal;
+  go.onclick=function(){
+    if(go.disabled)return;
+    if(!window.EP){toast('غير متصل بالمنصة');return;}
+    var opts={is_test:s.querySelector('#trm_test').checked,reason:s.querySelector('#trm_r').value.trim()};
+    closeModal();
+    EP.deactivateTrainer(u,opts,after||function(){renderView();});
+  };
 }
 function addUserModal(edit){
   var e=edit||{};
@@ -2136,7 +2213,13 @@ function topicsTabCountsAll(){
     EP.ensure('platformNews',function(){renderView();});
     EP.ensure('platformOpinions',function(){renderView();});
     EP.ensure('content',function(){renderView();});
-    if(EP.state.platformTopics==='ready'){var t=topicTabCounts();c.board=t.board;c.incoming=t.incoming;c.working=t.working;c.ideas=t.ideas;}
+    EP.ensure('platformPendingTopics',function(){renderView();});
+    // مفردات «الفئات» المقفولة من المنصة — لازم تكون جاهزة قبل ما أي دروب-داون يترسم.
+    EP.ensure('platformTopicSegments',function(){renderView();});
+    if(EP.state.platformTopics==='ready'){var t=topicTabCounts();c.board=t.board;c.incoming=t.incoming;c.working=t.working;c.ideas=t.ideas;c.pending=t.pending;c.rejected=t.rejected;}
+    // طابور «مقترحة من الأعضاء» له مصدره الخاص (?status=pending_review) — أدقّ من قصّ القائمة
+    // العامة عند ٥٠ صفًّا، فنُفضّله متى توفّر.
+    if(EP.state.platformPendingTopics==='ready')c.pending=(window.PTOPICS_PENDING||[]).length;
     if(EP.state.platformNews==='ready')c.news=(window.PNEWS||[]).filter(function(n){return n.status!=='published';}).length;
     if(EP.state.content==='ready')c.articles=(window.TOPICS||[]).filter(function(x){return x.status==='pending';}).length;
     if(EP.state.platformOpinions==='ready')c.comments=(window.POPINIONS||[]).length;
@@ -2147,8 +2230,11 @@ function topicsTabbar(active){
   // auto = تيار مقالات المنصة الآلي، يُبرز «المقالات».
   var hi=(active==='auto'||active==='blog')?'articles':active;
   var C=topicsTabCountsAll();
-  // work-first order: ideas → news → working → articles → comments, then published + incoming LAST.
-  var tabs=[['ideas','أفكار للاعتماد'],['news','الأخبار'],['working','قيد العمل (الوكيل)'],['articles','المقالات'],['comments','التعليقات'],['board','المنشورة'],['incoming','واردة']];
+  // work-first order: مقترحة من الأعضاء أولًا (عضو حقيقي مستنّي قرار = أغلى بند في الطابور)،
+  // بعدها ideas → news → working → articles → comments، والمنشورة/الواردة آخرًا.
+  // «مرفوضة» تبويب يظهر فقط لما يكون فيه مرفوض — قبل كده كانوا بيرجعوا لطابور الاعتماد للأبد.
+  var tabs=[['pending','مقترحة من الأعضاء'],['ideas','أفكار للاعتماد'],['news','الأخبار'],['working','قيد العمل (الوكيل)'],['articles','المقالات'],['comments','التعليقات'],['board','المنشورة'],['incoming','واردة']];
+  if(C.rejected>0||active==='rejected')tabs.push(['rejected','مرفوضة']);
   return '<div class="tabbar" id="topicsTabs">'+tabs.map(function(t){
     var n=C[t[0]];
     var badge=(n!=null&&n>0)?' <span style="font-weight:800;color:var(--human)">('+money(n)+')</span>':'';
@@ -2165,23 +2251,73 @@ var TOPIC_SRC={
   human: {label:'بشري',  bg:'var(--memory-bg)',fg:'var(--memory)', ic:'doc'}
 };
 function topSrcBadge(src){var m=TOPIC_SRC[src]||TOPIC_SRC.human;return '<span class="chip" style="padding:2px 9px;font-size:11px;cursor:default;background:'+m.bg+';color:'+m.fg+';border-color:transparent;font-weight:800">'+svg(m.ic,'ic')+m.label+'</span>';}
-function topStatusAr(st){return st==='published'?'منشور':st==='open'?'على البورد':st==='merged'?'قيد العمل':'مسودّة';}
+function topStatusAr(st){return st==='published'?'منشور':st==='open'?'على البورد':st==='merged'?'قيد العمل':st==='pending_review'?'بانتظار المراجعة':st==='rejected'?'مرفوض':st==='archived'?'مؤرشف':'مسودّة';}
 // إسناد كل موضوع لتبويب داخلي واحد بالضبط اعتمادًا على (source + status) الحقيقيَّين:
-//   المنشورة = published|open · واردة = خبير غير منشور · قيد العمل = merged · أفكار = مسودّة غير خبير.
+//   المنشورة = published|open · مقترحة من الأعضاء = pending_review · مرفوضة = rejected ·
+//   واردة = خبير غير منشور · قيد العمل = merged · أفكار = مسودّة غير خبير.
+// pending_review و rejected كانا بيتحوّلوا لـ'draft' في المحمّل فيقعوا تحت «أفكار للاعتماد» —
+// تبويب زرّ «ارفض» فيه بيحذف موضوع العضو نهائيًّا، و«اعتمد» بيتخطّى المسار اللي بيبلّغ صاحبه.
 function topicTabOf(t){
   var st=t.status||'draft', src=t.source||'human';
+  if(st==='pending_review')return 'pending';
+  if(st==='rejected')return 'rejected';
   if(st==='published'||st==='open')return 'board';
   if(st==='merged')return 'working';
   if(src==='expert')return 'incoming';
   return 'ideas';
 }
-function topicTabCounts(){var c={board:0,incoming:0,working:0,ideas:0};(PTOPICS||[]).forEach(function(t){var k=topicTabOf(t);if(c[k]!=null)c[k]++;});return c;}
+function topicTabCounts(){var c={board:0,incoming:0,working:0,ideas:0,pending:0,rejected:0};(PTOPICS||[]).forEach(function(t){var k=topicTabOf(t);if(c[k]!=null)c[k]++;});return c;}
+// «الفئات» (segments) — ⛔ المفردات مقفولة ومصدرها الوحيد هو المنصة (routes/topics.TOPIC_SEGMENTS)
+// عبر /api/platform-topic-segments -> [{id,label,count}]. ممنوع تعريف قائمة تانية هنا: القائمة
+// القديمة كانت محور «الفئوية» بتاع الأخبار (news.NEWS_AUDIENCES)، و٨ من قيمها العشرة مرفوضة
+// من المنصة (422 «فئة غير معروفة») — يعني دروب-داون بيعرض قيم غير قانونية على المؤسس.
+// القيمة المرسَلة = `id`، والمعروض = `label`.
+function tpSegments(){return (window.PTOPIC_SEGMENTS||[]);}
+// شارة «الفئة» على الصف — بتقرا segment_label الجاي من الجسر، وبتقول «تلقائي» لما المصنّف هو
+// اللي خمّنها (مش اختيار بشري) عشان المحرّر يعرف يثق في إيه. «بلا فئة» تفضل ظاهرة لو مفيش لابل.
+function tpSegBadge(label,isAuto){
+  if(!label)return '<span class="chip" style="padding:1px 8px;font-size:10.5px;cursor:default;background:var(--surface-2);color:var(--muted);border-color:transparent;font-weight:800">بلا فئة</span>';
+  return '<span class="chip" style="padding:1px 8px;font-size:10.5px;cursor:default;background:var(--gold-bg);color:var(--gold);border-color:transparent;font-weight:800">'+svg('users','ic')+esc(label)+(isAuto?' · تلقائي':'')+'</span>';
+}
+// قائمة إسناد «الفئة» لموضوع — POST /platform-topics/{id}/segment {segment:id}.
+// لو المفردات لسه ما وصلتش من المنصة، القائمة بتتعطّل بوضوح بدل ما تعرض قيم مخترعة.
+function tpSegSelect(t,cls){
+  if(window.EP&&EP.ensure)EP.ensure('platformTopicSegments',function(){renderView();});
+  var segs=tpSegments();
+  if(!segs.length)return '<select class="'+(cls||'tp-seg')+'" disabled style="border:1px solid var(--line);border-radius:9px;padding:5px 9px;font:inherit;font-size:11.5px;background:var(--surface-2);color:var(--muted)"><option>…جارٍ تحميل الفئات</option></select>';
+  var cur=t.segment||'';
+  return '<select class="'+(cls||'tp-seg')+'" data-tid="'+esc(t.id)+'" style="border:1px solid var(--line);border-radius:9px;padding:5px 9px;font:inherit;font-size:11.5px;background:var(--surface)">'+
+    '<option value="">— الفئة المستهدفة —</option>'+
+    segs.map(function(s){return '<option value="'+esc(s.id)+'"'+(cur===s.id?' selected':'')+'>'+esc(s.label)+'</option>';}).join('')+'</select>';
+}
+function wireTpSegSelects(root,list,after){
+  (root||document).querySelectorAll('select.tp-seg').forEach(function(sel){
+    sel.onclick=function(ev){ev.stopPropagation();};
+    sel.onchange=function(ev){
+      ev.stopPropagation();
+      var a=sel.value;if(!a)return;              // القيمة = id الفئة المقفول (مش نص عربي)
+      var t=(list||[]).filter(function(x){return x.id===sel.dataset.tid;})[0];
+      if(!t||!window.EP)return;
+      EP.setTopicSegment(t,a,after||function(){renderView();});
+    };
+  });
+}
 // أثناء ما الوكيل بيكتب مقالًا من موضوع، نعرض الموضوع بحالة «الوكيل يكتب المقال…» تحت «قيد العمل».
 var TOPIC_GENERATING={};   // topic id -> true while the agent authors an article FROM it
 var PENDING_ARTICLE_SELECT=null;   // aid of a just-created blog draft -> auto-open it in «المقالات»
 // المواضيع بعد تطبيق التبويب + فلتر الفئة النشط.
+// التبويبات اللي بتقرا من PTOPICS (القائمة العامة). «مقترحة من الأعضاء» ليها مصدرها الخاص.
+const TOPIC_LIST_TABS=['board','incoming','working','ideas','pending','rejected'];
+function topicsActiveTab(){return TOPIC_LIST_TABS.indexOf(topicsTab)>-1?topicsTab:'board';}
 function topicsForActiveTab(){
-  var tab=(topicsTab==='board'||topicsTab==='incoming'||topicsTab==='working'||topicsTab==='ideas')?topicsTab:'board';
+  var tab=topicsActiveTab();
+  // «مقترحة من الأعضاء» = طابور pending_review المخصّص (?status=pending_review) لأنه غير مقصوص
+  // عند ٥٠ صفًّا زيّ القائمة العامة. لو الطابور لسه ما اتحمّلش، نرجع لما في PTOPICS بدل الفراغ.
+  if(tab==='pending'){
+    var q=(window.PTOPICS_PENDING||[]);
+    var src=q.length?q:(PTOPICS||[]).filter(function(t){return topicTabOf(t)==='pending';});
+    return src.filter(function(t){return topicsCat==='all'||catAr(t.category||t.specialty||'')===topicsCat;});
+  }
   return (PTOPICS||[]).filter(function(t){
     var inTab=topicTabOf(t)===tab;
     // «قيد العمل (الوكيل)»: أظهر أي موضوع الوكيل شغّال على مقاله الآن مهما كانت حالته الأصلية.
@@ -2601,24 +2737,28 @@ var TOPIC_TAB_META={
   board:   {t:'المنشورة',           note:'مواضيع حيّة على بورد المنصة — الناس تناقش وتعلّق. لكل موضوع <b>مصدره</b> و<b>فئته</b> و<b>تفاعله</b>. حوّل الأقوى إلى <b>مقال SEO</b> للمقالات.', empty:'لا مواضيع منشورة على البورد بعد.'},
   incoming:{t:'واردة',              note:'طلبات من <b>خبراء/الخارج</b> — راجعها ثم <b>اعتمد</b> لتصعد للبورد، أو <b>وجّهها للوكيل</b> ليشتغل عليها.', empty:'لا مواضيع واردة الآن.'},
   working: {t:'قيد العمل (الوكيل)',  note:'مواضيع <b>الوكيل الذكي شغّال عليها</b> (دمج آراء/صياغة). راجع الناتج ثم <b>انشر</b> على البورد عند الجهوز.', empty:'لا مواضيع قيد عمل الوكيل الآن.'},
-  ideas:   {t:'أفكار للاعتماد',      note:'مسودّات مقترحة (الوكيل أو بشري). <b>اعتمد</b> الفكرة لتصعد للبورد، أو <b>ارفض</b>.', empty:'لا أفكار بانتظار الاعتماد — اضغط «+ فكرة/موضوع» لإضافة واحدة.'}
+  ideas:   {t:'أفكار للاعتماد',      note:'مسودّات مقترحة (الوكيل أو بشري). <b>اعتمد</b> الفكرة لتصعد للبورد، أو <b>ارفض</b>.', empty:'لا أفكار بانتظار الاعتماد — اضغط «+ فكرة/موضوع» لإضافة واحدة.'},
+  pending: {t:'مقترحة من الأعضاء',   note:'مواضيع كتبها <b>أعضاء حقيقيون</b> وهي <b>مخفيّة عن البورد</b> لحد ما تعتمدها. «اعتمد» بينشرها <b>ويبلّغ صاحبها</b>، و«ارفض» بيوقفها من غير حذف. اسند <b>الفئة المستهدفة</b> عشان الموضوع يوصل لجمهوره.', empty:'مفيش مواضيع مقترحة من الأعضاء دلوقتي.'},
+  rejected:{t:'مرفوضة',              note:'مواضيع اترفضت — موجودة هنا عشان ما ترجعش لطابور الاعتماد كل مرة. تقدر تعتمدها لو غيّرت رأيك، أو تحذفها نهائيًّا.', empty:'مفيش مواضيع مرفوضة.'}
 };
 function viewTopics(v){
-  if(window.EP){EP.ensure('platformTopics',()=>viewTopics(v));}
-  const tab=(topicsTab==='incoming'||topicsTab==='working'||topicsTab==='ideas')?topicsTab:'board';
+  if(window.EP){EP.ensure('platformTopics',()=>viewTopics(v));EP.ensure('platformPendingTopics',()=>viewTopics(v));}
+  const tab=topicsActiveTab();
   const meta=TOPIC_TAB_META[tab];
   const Tst=(window.EP&&EP.state.platformTopics)||'idle';
   const C=topicTabCounts();
+  const pendCount=(window.PTOPICS_PENDING||[]).length||C.pending;
   const totCom=(PTOPICS||[]).reduce((s,t)=>s+(t.comments||0),0);
   v.innerHTML=`
     ${topicsTabbar(tab)}
     <div class="policy" style="border-inline-start-color:var(--gold)">${svg('sparkles','ic')}<div><b>${meta.t}:</b> ${meta.note}</div></div>
+    ${(tab!=='pending'&&pendCount>0)?`<div class="policy" style="border-inline-start-color:var(--human);background:var(--human-bg)">${svg('users','ic')}<div><b>${money(pendCount)}</b> موضوعًا كتبهم <b>أعضاء حقيقيون</b> ومخفيّين عن البورد لحد ما تقرّر. دي أغلى بنود الطابور — عضو حقيقي مستنّي. <b id="goPending" style="cursor:pointer;text-decoration:underline;color:var(--human)">افتح المقترحة من الأعضاء ←</b></div></div>`:''}
     ${(tab==='board'&&C.ideas>0)?`<div class="policy" style="border-inline-start-color:var(--human);background:var(--human-bg)">${svg('trend','ic')}<div><b>البورد بيكبر بالاعتماد فقط:</b> مصنع المحتوى شغّال يوميًّا وبيولّد المواضيع <b>كمسودّات</b> — عندك الآن <b>${money(C.ideas)}</b> موضوعًا بانتظار قرارك في «أفكار للاعتماد». اعتمد اللي يستحق يطلع هنا، وارفض الباقي. <b id="goIdeas" style="cursor:pointer;text-decoration:underline;color:var(--human)">افتح أفكار للاعتماد ←</b></div></div>`:''}
     ${Tst==='error'?`<div class="policy" style="border-inline-start-color:var(--conflict);background:var(--conflict-bg);color:var(--conflict)">${svg('scale','ic')}<div>تعذّر جلب المواضيع من المنصة. <b style="cursor:pointer;text-decoration:underline" onclick="EP.reload('platformTopics',()=>viewTopics(document.getElementById('view')))">إعادة المحاولة</b></div></div>`:''}
     ${Tst==='loading'?`<div class="policy" style="border-inline-start-color:var(--gold)">${svg('sparkles','ic')}<div>…جارٍ تحميل المواضيع من المنصة</div></div>`:''}
     <div class="kpis">
+      <div class="kpi ${tab==='pending'?'k-3':'k-2'}"><div class="top"><span class="ic">${svg('users')}</span>مقترحة من الأعضاء</div><b>${money(pendCount)}</b><div class="sub">${pendCount?'مستنيّة قرارك — مخفيّة عن البورد':'مفيش مقترحات مستنيّة'}</div></div>
       <div class="kpi ${tab==='board'?'k-3':'k-1'}"><div class="top"><span class="ic">${svg('check')}</span>المنشورة</div><b>${money(C.board)}</b><div class="sub">على البورد</div></div>
-      <div class="kpi ${tab==='incoming'?'k-3':'k-2'}"><div class="top"><span class="ic">${svg('mega')}</span>واردة</div><b>${money(C.incoming)}</b><div class="sub">من الخبراء</div></div>
       <div class="kpi ${tab==='working'?'k-3':'k-4'}"><div class="top"><span class="ic">${svg('robot')}</span>قيد العمل</div><b>${money(C.working)}</b><div class="sub">الوكيل</div></div>
       <div class="kpi ${tab==='ideas'?'k-3':'k-1'}"><div class="top"><span class="ic">${svg('sparkles')}</span>أفكار</div><b>${money(C.ideas)}</b><div class="sub">للاعتماد</div></div>
     </div>
@@ -2630,6 +2770,7 @@ function viewTopics(v){
   wireTopicCatChips(v);
   var ab=document.getElementById('topAdd');if(ab)ab.onclick=()=>topCreateModal(tab==='ideas'?'idea':(tab==='incoming'?'expert':'human'));
   var gi=document.getElementById('goIdeas');if(gi)gi.onclick=()=>{topicsTab='ideas';selected=null;topicsCat='all';renderView();};
+  var gp=document.getElementById('goPending');if(gp)gp.onclick=()=>{topicsTab='pending';selected=null;topicsCat='all';renderView();};
   renderTopics();
 }
 // FIX1: شارة «✓ له مقال» — إشارة واضحة أنّ الموضوع اتعمله مقال بالفعل (له رابط دائم على المنصة).
@@ -2673,48 +2814,95 @@ function topRowActions(t){
     art=(t.title&&t.question)?'<button class="btn btn-human" data-article="'+t.id+'" style="padding:5px 10px;font-size:12px">اعمل مقال</button>':'';
   }
   var tab=topicTabOf(t);
-  if(tab==='board')   return art+del;
+  // موضوع عضو (pending_review): القرار لازم يعدّي على مسار approve/reject المخصّص — هو اللي
+  // بينشر ويبلّغ صاحب الموضوع، وهو اللي بيرفض من غير ما يمسح كلام العضو وتعليقاته.
+  if(tab==='pending')return tpSegSelect(t)+
+    '<button class="btn btn-primary" data-pmapprove="'+t.id+'" style="padding:5px 10px;font-size:12px">اعتمد وبلّغ</button>'+
+    '<button class="btn btn-warn" data-pmreject="'+t.id+'" style="padding:5px 10px;font-size:12px">ارفض</button>';
+  if(tab==='rejected')return '<button class="btn btn-primary" data-pmapprove="'+t.id+'" style="padding:5px 10px;font-size:12px">اعتمد بعد المراجعة</button>'+del;
+  if(tab==='board')   return tpSegSelect(t)+art+del;
   if(tab==='working') return '<button class="btn btn-primary" data-pub="'+t.id+'" style="padding:5px 10px;font-size:12px">نشر</button>'+art+del;
   if(tab==='incoming')return '<button class="btn btn-primary" data-approve="'+t.id+'" style="padding:5px 10px;font-size:12px">اعتمد</button><button class="btn btn-ghost" data-route="'+t.id+'" style="padding:5px 10px;font-size:12px">للوكيل</button>'+del;
-  return '<button class="btn btn-primary" data-approve="'+t.id+'" style="padding:5px 10px;font-size:12px">اعتمد</button><button class="btn btn-warn" data-reject="'+t.id+'" style="padding:5px 10px;font-size:12px">ارفض</button>';   // ideas
+  return tpSegSelect(t)+'<button class="btn btn-primary" data-approve="'+t.id+'" style="padding:5px 10px;font-size:12px">اعتمد</button><button class="btn btn-warn" data-reject="'+t.id+'" style="padding:5px 10px;font-size:12px">ارفض</button>';   // ideas
 }
 function renderTopics(){
   const el=document.getElementById('topRows');if(!el)return;el.innerHTML='';
   const items=topicsForActiveTab();
   var nEl=document.getElementById('topN');if(nEl)nEl.textContent=items.length;
-  const tab=(topicsTab==='incoming'||topicsTab==='working'||topicsTab==='ideas')?topicsTab:'board';
+  const tab=topicsActiveTab();
+  // البحث لازم يكون في صفوف التبويب النشط، مش في PTOPICS وحدها: «مقترحة من الأعضاء» بتيجي من
+  // طابور pending_review المنفصل، فالبحث في القائمة العامة كان هيرجّع undefined ويقتل كل الأزرار.
+  const find=(id)=>items.filter(x=>x.id===id)[0]||(PTOPICS||[]).filter(x=>x.id===id)[0]||null;
+  const rerender=()=>viewTopics(document.getElementById('view'));
   if(!items.length){el.innerHTML='<div style="padding:40px;text-align:center;color:var(--muted)">'+(topicsCat!=='all'?'لا مواضيع في هذه الفئة داخل هذا التبويب.':TOPIC_TAB_META[tab].empty)+'</div>';return;}
   items.forEach((t)=>{var m=TOPIC_SRC[t.source]||TOPIC_SRC.human;var hl=(t.id===TOPIC_HIGHLIGHT_ID);el.insertAdjacentHTML('beforeend',`<div class="row esc-row${hl?' sel':''}" data-row="${t.id}" style="grid-template-columns:2fr 1.3fr 0.9fr 250px;cursor:pointer${hl?';outline:2px solid var(--gold);outline-offset:-2px;background:var(--gold-bg)':''}">
-    <div class="c c1"><div class="src-ic" style="background:${m.bg};color:${m.fg}">${svg(m.ic)}</div><div><div class="parties">${topEsc(t.title)}${hl?' <span class="chip" style="padding:1px 8px;font-size:10.5px;cursor:default;background:var(--gold-bg);color:var(--gold);border-color:transparent;font-weight:800">'+svg('sparkles','ic')+'جديد</span>':''}</div><div class="from" style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">${topSrcBadge(t.source)}${t.category?'<span class="chip" style="padding:1px 8px;font-size:10.5px;cursor:default">'+topEsc(t.category)+'</span>':''}${t.linked_article_id?topArticledBadge():(t.ai_answer?'<b style="color:var(--ink);font-size:11.5px">مسوّدة ذكاء ✓</b>':'')}</div></div></div>
+    <div class="c c1"><div class="src-ic" style="background:${m.bg};color:${m.fg}">${svg(m.ic)}</div><div><div class="parties">${topEsc(t.title)}${hl?' <span class="chip" style="padding:1px 8px;font-size:10.5px;cursor:default;background:var(--gold-bg);color:var(--gold);border-color:transparent;font-weight:800">'+svg('sparkles','ic')+'جديد</span>':''}</div><div class="from" style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">${topSrcBadge(t.source)}${t.category?'<span class="chip" style="padding:1px 8px;font-size:10.5px;cursor:default">'+topEsc(t.category)+'</span>':''}${tpSegBadge(t.segment_label,t.segment_auto)}${t.linked_article_id?topArticledBadge():(t.ai_answer?'<b style="color:var(--ink);font-size:11.5px">مسوّدة ذكاء ✓</b>':'')}</div></div></div>
     <div class="c"><div class="from">${t.country?topEsc(t.country)+' · ':''}${svg('doc','ic')} ${money(t.comments||0)} تعليق معتمد</div><div class="from" style="opacity:.7">${t.date||'—'}</div></div>
-    <div class="c"><span class="status ${(t.status==='published'||t.status==='open')?'s-auto':'s-wait'}"><span class="d"></span>${topStatusAr(t.status)}</span></div>
+    <div class="c"><span class="status ${(t.status==='published'||t.status==='open')?'s-auto':(t.status==='rejected'?'s-late':'s-wait')}"><span class="d"></span>${topStatusAr(t.status)}</span></div>
     <div class="c" style="gap:6px;flex-wrap:wrap">${topRowActions(t)}</div></div>`);});
   // فتح المراجعة بالنقر على الصف كامل (إصلاح: الصف كان لا يفتح شيئًا) — الأزرار توقف الانتشار.
-  el.querySelectorAll('.row[data-row]').forEach(r=>r.onclick=()=>{var t=PTOPICS.find(x=>x.id===r.dataset.row);if(t)topReviewModal(t);});
-  el.querySelectorAll('[data-article]').forEach(b=>b.onclick=(ev)=>{ev.stopPropagation();var t=PTOPICS.find(x=>x.id===b.dataset.article);if(t)topMakeArticle(t);});
+  // موضوع العضو له نافذته الخاصة (قراءة + قرار)، لأن نافذة التحرير العامة بتكتب الحالة بـPUT
+  // فتتخطّى المسار اللي بيبلّغ صاحب الموضوع.
+  el.querySelectorAll('.row[data-row]').forEach(r=>r.onclick=()=>{var t=find(r.dataset.row);if(!t)return;
+    if(topicTabOf(t)==='pending')topPendingModal(t);else topReviewModal(t);});
+  el.querySelectorAll('[data-article]').forEach(b=>b.onclick=(ev)=>{ev.stopPropagation();var t=find(b.dataset.article);if(t)topMakeArticle(t);});
   // FIX1: «افتح المقال» — يقفز للمقال المرتبط داخل «المقالات».
-  el.querySelectorAll('[data-openart]').forEach(b=>b.onclick=(ev)=>{ev.stopPropagation();var t=PTOPICS.find(x=>x.id===b.dataset.openart);if(t)topOpenArticle(t);});
-  el.querySelectorAll('[data-pub]').forEach(b=>b.onclick=(ev)=>{ev.stopPropagation();var t=PTOPICS.find(x=>x.id===b.dataset.pub);if(!t)return;
+  el.querySelectorAll('[data-openart]').forEach(b=>b.onclick=(ev)=>{ev.stopPropagation();var t=find(b.dataset.openart);if(t)topOpenArticle(t);});
+  el.querySelectorAll('[data-pub]').forEach(b=>b.onclick=(ev)=>{ev.stopPropagation();var t=find(b.dataset.pub);if(!t)return;
     if(!confirm('نشر «'+t.title+'» على بورد المنصة؟'))return;
-    if(window.EP){EP.publishTopic(t,()=>viewTopics(document.getElementById('view')));}});
-  el.querySelectorAll('[data-approve]').forEach(b=>b.onclick=(ev)=>{ev.stopPropagation();var t=PTOPICS.find(x=>x.id===b.dataset.approve);if(!t)return;
+    if(window.EP){EP.publishTopic(t,rerender);}});
+  el.querySelectorAll('[data-approve]').forEach(b=>b.onclick=(ev)=>{ev.stopPropagation();var t=find(b.dataset.approve);if(!t)return;
     if(!confirm('اعتماد «'+t.title+'» ورفعه إلى بورد المنصة؟'))return;
-    if(window.EP){EP.updateTopic(t.id,{title:t.title,status:'open'},()=>viewTopics(document.getElementById('view')));}});
-  el.querySelectorAll('[data-route]').forEach(b=>b.onclick=(ev)=>{ev.stopPropagation();var t=PTOPICS.find(x=>x.id===b.dataset.route);if(!t)return;
+    if(window.EP){EP.updateTopic(t.id,{title:t.title,status:'open'},rerender);}});
+  // اعتماد/رفض موضوع عضو — مسار القرار (ينشر ويبلّغ / يرفض بلا حذف).
+  el.querySelectorAll('[data-pmapprove]').forEach(b=>b.onclick=(ev)=>{ev.stopPropagation();var t=find(b.dataset.pmapprove);if(!t)return;
+    if(!confirm('اعتماد «'+t.title+'» ونشره على البورد؟ هيتبعت إشعار لصاحب الموضوع.'))return;
+    if(window.EP){EP.decidePendingTopic(t,'approve',rerender);}});
+  el.querySelectorAll('[data-pmreject]').forEach(b=>b.onclick=(ev)=>{ev.stopPropagation();var t=find(b.dataset.pmreject);if(!t)return;
+    if(!confirm('رفض «'+t.title+'»؟ مش هيظهر على البورد — والموضوع بيتحفظ (مش هيتحذف).'))return;
+    if(window.EP){EP.decidePendingTopic(t,'reject',rerender);}});
+  el.querySelectorAll('[data-route]').forEach(b=>b.onclick=(ev)=>{ev.stopPropagation();var t=find(b.dataset.route);if(!t)return;
     if(!confirm('توجيه «'+t.title+'» إلى الوكيل الذكي ليشتغل عليه؟'))return;
-    if(window.EP){EP.updateTopic(t.id,{title:t.title,status:'merged'},()=>viewTopics(document.getElementById('view')));}});
-  el.querySelectorAll('[data-reject]').forEach(b=>b.onclick=(ev)=>{ev.stopPropagation();var t=PTOPICS.find(x=>x.id===b.dataset.reject);if(!t)return;
+    if(window.EP){EP.updateTopic(t.id,{title:t.title,status:'merged'},rerender);}});
+  el.querySelectorAll('[data-reject]').forEach(b=>b.onclick=(ev)=>{ev.stopPropagation();var t=find(b.dataset.reject);if(!t)return;
     if(!confirm('رفض «'+t.title+'» وحذفه؟'))return;
-    if(window.EP){EP.deleteTopic(t,()=>viewTopics(document.getElementById('view')));}});
-  el.querySelectorAll('[data-del]').forEach(b=>b.onclick=(ev)=>{ev.stopPropagation();var t=PTOPICS.find(x=>x.id===b.dataset.del);if(!t)return;
+    if(window.EP){EP.deleteTopic(t,rerender);}});
+  el.querySelectorAll('[data-del]').forEach(b=>b.onclick=(ev)=>{ev.stopPropagation();var t=find(b.dataset.del);if(!t)return;
     if(!confirm('حذف موضوع «'+t.title+'»؟'))return;
-    if(window.EP){EP.deleteTopic(t,()=>viewTopics(document.getElementById('view')));}});
+    if(window.EP){EP.deleteTopic(t,rerender);}});
+  wireTpSegSelects(el,items,rerender);
   // FIX2: بعد «حوّل لموضوع» — مرّر لعرض الموضوع الجديد المُبرَز (one-shot) ثم أفلت الإبراز.
   if(TOPIC_HIGHLIGHT_ID){
     var _hr=el.querySelector('.row[data-row="'+(window.CSS&&CSS.escape?CSS.escape(TOPIC_HIGHLIGHT_ID):TOPIC_HIGHLIGHT_ID)+'"]');
     if(_hr&&_hr.scrollIntoView)try{_hr.scrollIntoView({behavior:'smooth',block:'center'});}catch(e){_hr.scrollIntoView();}
     TOPIC_HIGHLIGHT_ID=null;   // الإبراز يبقى ظاهرًا في هذا العرض؛ ولا يتكرّر عند تبديل التبويبات
   }
+}
+/* نافذة موضوع عضو (pending_review): قراءة كاملة + إسناد الفئة + قرار.
+   قراءة فقط عن قصد — تعديل نصّ عضو من غير علمه مش قرار إداري، والقرار نفسه بيعدّي على مسار
+   approve/reject اللي بينشر ويبلّغ (أو يرفض بلا حذف)، مش على PUT/DELETE. */
+function topPendingModal(t){
+  var s=openModal('موضوع مقترح من عضو',
+    '<div class="note-ai" style="margin-bottom:12px">'+svg('users','ic')+'<div>الموضوع ده <b>مخفي عن البورد العام</b> لحد ما تعتمده. «اعتمد» بينشره <b>ويبعت إشعار لصاحبه</b>؛ «ارفض» بيوقفه <b>من غير حذف</b>.</div></div>'+
+    '<div class="fld"><label>العنوان</label><div style="font-weight:800;font-size:14px;line-height:1.7">'+topEsc(t.title||'—')+'</div></div>'+
+    '<div class="fld"><label>السؤال / النصّ</label><div style="font-size:13px;line-height:1.9;white-space:pre-wrap;max-height:34vh;overflow:auto">'+topEsc(t.question||'—')+'</div></div>'+
+    '<div class="row2"><div class="fld"><label>الفئة القانونية</label><div style="font-size:13px">'+topEsc(t.category||t.specialty||'غير مصنّف')+'</div></div>'+
+    '<div class="fld"><label>الفئة المستهدفة (حارة البورد)</label><div id="tpm_seg"></div></div></div>'+
+    '<div style="font-size:11.5px;color:var(--muted);margin-top:-4px">'+(t.author_email?'صاحب الموضوع محفوظ على المنصة ولا يُعرض على البورد.':'الهوية مُخفاة على البورد العام.')+'</div>'+
+    '<div class="acts" style="margin-top:14px"><button class="btn btn-primary" id="tpm_ok">'+svg('check')+'اعتمد وانشر وبلّغ صاحبه</button><button class="btn btn-warn" id="tpm_no">ارفض (بلا حذف)</button><button class="btn btn-ghost" id="tpm_x">إغلاق</button></div>');
+  var segHost=s.querySelector('#tpm_seg');if(segHost)segHost.innerHTML=tpSegSelect(t);
+  wireTpSegSelects(s,[t],function(){renderView();});
+  s.querySelector('#tpm_x').onclick=closeModal;
+  s.querySelector('#tpm_ok').onclick=function(){
+    if(!window.EP)return;closeModal();
+    EP.decidePendingTopic(t,'approve',function(){viewTopics(document.getElementById('view'));});
+  };
+  s.querySelector('#tpm_no').onclick=function(){
+    if(!window.EP)return;
+    if(!confirm('رفض «'+t.title+'»؟ الموضوع بيتحفظ ومش هيظهر على البورد.'))return;
+    closeModal();
+    EP.decidePendingTopic(t,'reject',function(){viewTopics(document.getElementById('view'));});
+  };
 }
 // خطوة العبور: «اعمل مقال» = الوكيل الذكي يكتب مقال SEO جديدًا مبنيًّا على الموضوع (عنوان/مقتطف/جسم
 // جديدة — ليس نسخًا من نص الموضوع). الموضوع يظهر تحت «قيد العمل (الوكيل)» بحالة «الوكيل يكتب المقال…»،
@@ -2792,12 +2980,17 @@ function topReviewModal(t){
     meta+linkedNote+
     '<div class="fld"><label>العنوان</label><input id="tpr_t" value="'+topEsc(t.title)+'"></div>'+
     '<div class="row2"><div class="fld"><label>الفئة</label><input id="tpr_sp" value="'+topEsc(t.category||t.specialty)+'"></div><div class="fld"><label>المصدر</label><select id="tpr_src">'+srcOpts+'</select></div></div>'+
+    // «الفئة»: حارة الجمهور اللي بيها الموضوع يوصل لناسه على البورد. مفرداتها مقفولة على المنصة
+    // وتُحفظ بمسارها الخاص (POST …/segment) فور الاختيار — مش مع «حفظ التعديلات».
+    '<div class="fld"><label>الفئة المستهدفة (حارة البورد) <span style="color:var(--muted);font-weight:600">— تُحفظ فور الاختيار</span></label><div id="tpr_seg"></div></div>'+
     '<div class="fld"><label>الحالة / التوجيه</label><select id="tpr_st">'+statusOpts+'</select></div>'+
     '<div class="fld"><label>السؤال</label><textarea id="tpr_q" style="min-height:70px">'+topEsc(t.question)+'</textarea></div>'+
     '<div class="note-ai" style="margin:4px 0 8px">'+svg('sparkles','ic')+'<div>مسوّدة الذكاء — راجعها وعدّلها قبل النشر:</div></div>'+
     '<div class="fld"><label>مسوّدة الذكاء (ai_answer)</label><textarea id="tpr_ai" style="min-height:170px" placeholder="(لم يُنشئ الذكاء مسوّدة بعد)">'+topEsc(t.ai_answer)+'</textarea></div>'+
     mergedFld+
     '<div class="acts" style="margin-top:6px"><button class="btn btn-human" id="tpr_save">'+svg('check')+'حفظ التعديلات</button>'+pubBtn+artBtn+'<button class="btn btn-warn" id="tpr_del">حذف</button><button class="btn btn-ghost" id="tpr_x">إغلاق</button></div>');
+  var segHost=s.querySelector('#tpr_seg');if(segHost)segHost.innerHTML=tpSegSelect(t);
+  wireTpSegSelects(s,[t],function(){renderView();});
   s.querySelector('#tpr_x').onclick=closeModal;
   s.querySelector('#tpr_save').onclick=function(){
     var g={title:s.querySelector('#tpr_t').value.trim(),specialty:s.querySelector('#tpr_sp').value.trim(),question:s.querySelector('#tpr_q').value.trim(),ai_answer:s.querySelector('#tpr_ai').value,source:s.querySelector('#tpr_src').value,status:s.querySelector('#tpr_st').value};
@@ -3157,9 +3350,28 @@ function drawExpert(email){
       <div><div class="lab">الطلاب</div><div class="val">${money(e.students_count||0)}</div></div>
     </div>
     <div class="field"><div class="lab">الحالة</div><div class="val">${e.online?'<span style="color:var(--agree);font-weight:800">متصل الآن</span>':'غير متصل'}</div></div>
-    <div class="acts" style="margin-top:10px"><button class="btn btn-primary" id="expAcct">${svg('users')}اعرض الحساب</button></div>
+    ${expVisibilityNote(e)}
+    <div class="acts" style="margin-top:10px"><button class="btn btn-primary" id="expAcct">${svg('users')}اعرض الحساب</button><button class="btn btn-warn" id="expDel">احذف من المدربين</button></div>
   </div>`;
   var b=document.getElementById('expAcct');if(b)b.onclick=function(){focusUser(e.email);};
+  var d=document.getElementById('expDel');
+  if(d)d.onclick=function(){
+    // صفوف الخبراء بتحمل البريد بس؛ الإزالة محتاجة id المستخدم على المنصة، فنطابق من «المستخدمون».
+    var u=(window.USERS||[]).filter(function(x){return (x.email||'').toLowerCase()===(e.email||'').toLowerCase();})[0];
+    if(!u){toast('افتح «اعرض الحساب» الأول — محتاجين حساب المنصة عشان الإزالة');return;}
+    trainerRemoveModal(u,function(){viewTeam(document.getElementById('view'));});
+  };
+}
+// ملاحظة الظهور: خبير معتمد هنا لكنه مخفي عن الدليل العام (بروفايل ناقص أو حساب تجريبي) —
+// من غيرها الصفّ بيبان «شغّال» والمؤسس مش عارف ليه محدش شايفه.
+function expVisibilityNote(e){
+  var reasons=[];
+  if(e.is_test)reasons.push('الحساب موسوم «تجريبي»');
+  if(e.public_ready===false)reasons.push('البروفايل ناقص (نبذة ≥ ٢٠ حرفًا + سعر جلسة)');
+  else if(e.public_ready==null&&(!e.bio||e.bio.length<20))reasons.push('النبذة أقصر من ٢٠ حرفًا');
+  if(!reasons.length)return '';
+  return '<div class="note-ai" style="border-inline-start-color:var(--gold);background:var(--gold-bg);margin-top:8px">'+svg('shield','ic')+
+    '<div><b>مخفي عن الدليل العام.</b> السبب: '+esc(reasons.join(' · '))+'.</div></div>';
 }
 function viewTeam(v){
   if(window.EP){EP.ensure('experts',()=>viewTeam(v));EP.ensure('users',()=>viewTeam(v));EP.ensure('inbox',()=>viewTeam(v));}
@@ -3653,35 +3865,257 @@ function auditModal(){
   if(window.EP)EP.reload('audit',render);else render();
 }
 
-/* ===== MARKET ===== */
-// طلبات السوق: لا واجهة خلفية بعد — العدد الحقيقي على المنصة = 0.
-// أُفرغت المصفوفة التصميمية حتى لا تظهر «٤ طلبات نشطة» وهمية؛ تُعبّأ حيّة عند توفّر API.
-const MKTREQ=(window.EP&&Array.isArray(EP.data.market))?EP.data.market:[];
-const MSTATUS={matching:{t:'قيد المطابقة',cls:'s-wait'},quorum:{t:'يتجمّع النصاب',cls:'s-human'},open:{t:'مطروح',cls:'s-wait'},matched:{t:'تمّت المطابقة',cls:'s-auto'}};
-function viewMarket(v){
-  v.innerHTML=`
-    <div class="kpis">
-      <div class="kpi k-1"><div class="top"><span class="ic">${svg('store')}</span>طلبات نشطة</div><b>${money(MKTREQ.length)}</b><div class="sub">في السوق</div></div>
-      <div class="kpi k-2"><div class="top"><span class="ic">${svg('sparkles')}</span>قيد المطابقة</div><b>${money(MKTREQ.filter(r=>r.status==='matching').length)}</b><div class="sub">الذكاء يطابق</div></div>
-      <div class="kpi k-4"><div class="top"><span class="ic">${svg('cap')}</span>يتجمّع نصابها</div><b>${money(MKTREQ.filter(r=>r.status==='quorum').length)}</b><div class="sub">تدريب جماعي</div></div>
-      <div class="kpi k-3"><div class="top"><span class="ic">${svg('check')}</span>تمّت مطابقتها</div><b>${money(MKTREQ.filter(r=>r.status==='matched').length)}</b><div class="sub">انتقلت للضمان</div></div>
-    </div>
-    <div class="inboxwrap"><section class="panel"><div class="ph"><h3>طلبات السوق</h3><span class="n">${MKTREQ.length}</span><span class="hint">اضغط طلبًا لرؤية المطابقة</span></div><div id="mqRows"></div></section><aside class="drawer" id="drawer"></aside></div>`;
-  const el=document.getElementById('mqRows');
-  if(!MKTREQ.length)el.innerHTML='<div style="padding:40px;text-align:center;color:var(--muted)">لا طلبات نشطة في السوق حاليًا.</div>';
-  MKTREQ.forEach((r,idx)=>{const st=MSTATUS[r.status];el.insertAdjacentHTML('beforeend',`<div class="row esc-row${selected===idx?' sel':''}" data-i="${idx}" style="grid-template-columns:1.8fr 1fr 150px">
-    <div class="c c1"><div class="src-ic" style="background:var(--gold-bg);color:var(--gold)">${svg('store')}</div><div><div class="parties">${r.title}</div><div class="from">${r.by} · ${r.type}</div></div></div>
-    <div class="c"><div class="from">${r.type}</div></div>
-    <div class="c"><span class="status ${st.cls}"><span class="d"></span>${st.t}</span></div></div>`);});
-  el.querySelectorAll('.row').forEach(x=>x.onclick=()=>{selected=+x.dataset.i;viewMarket(v);drawMarket();});
-  drawMarket();
+/* ===== MARKET «السوق» =====================================================
+   شاشة إدارة البورد الحيّ. الحارات هنا = نفس الحارات على المنصة بالظبط (kind)، عشان اللي
+   المؤسس بيشوفه هنا يبقى هو نفسه اللي العضو بيشوفه هناك — مش تصنيف تاني بأسماء تانية.
+   كل الأرقام من الجسر (/api/platform-market-requests). مفيش صفّ مخترع ولا رقم محسوب محليًّا.
+   لو الجسر لسه ما اتنشرش على المنصة، الشاشة بتقول كده صراحةً بدل ما تعرض «٠». */
+// الحارات — kind كما تكتبه المنصة. «كل الحارات» أولًا لأن أول سؤال هو «فيه إيه النهاردة؟».
+const MK_LANES=[
+  {k:'all',           t:'كل الحارات',      ic:'store', sub:'كل الطلبات'},
+  {k:'request',       t:'سوق الخبرة',      ic:'scale', sub:'محتاج خبير/رأي/مراجعة'},
+  {k:'course_request',t:'مطلوب دورة',      ic:'cap',   sub:'محتاج تدريب — يردّ عليه مدرّب'},
+  {k:'public_service',t:'خدمات للجمهور',   ic:'hands', sub:'خدمة قانونية مطلوبة'},
+  // «كتب ومعرفة» اتشالت: حارة الكتب بتعيش في مجموعة تانية (knowledge_items) والجسر ده بيقرا
+  // market_requests بس — فالتبويب كان صفرًا كاذبًا للأبد. مكانها الحارة الرابعة الحقيقية.
+  {k:'training_offer',t:'عروض المدرّبين',  ic:'cap',   sub:'مدرّب بيعرض خدمته — عرض لا طلب'}
+];
+// نوع الاحتياج كما صنّفه الشات — المحور اللي بيجاوب «الطلب بيتكرر على إيه؟».
+// المفاتيح لازم تطابق قيم المنصة بالحرف: القيمة المنشورة هي training_offer (مش trainer_offer،
+// ده مجرد alias بيتطبّع قبل التخزين) — فالمفتاح الغلط كان بيعرض المعرّف الإنجليزي خام.
+const MK_NEED={expert:'خبير',service:'خدمة',course:'دورة/تدريب',book:'كتاب/معرفة',training_offer:'عرض مدرّب',other:'غير مصنّف'};
+const MK_STATUS={open:{t:'مفتوح',cls:'s-wait'},matched:{t:'تمّت المطابقة',cls:'s-auto'},closed:{t:'مقفول',cls:''}};
+function mkNeedAr(n){return MK_NEED[n]||n||'غير مصنّف';}
+function mkLaneAr(k){var l=MK_LANES.filter(function(x){return x.k===k;})[0];return l?l.t:(k||'—');}
+function mkData(){return (window.EP&&EP.data.market)||null;}
+function mkAllRows(){var d=mkData();return (d&&d.rows)?d.rows:[];}
+// الصفوف بعد الحارة + نوع الاحتياج + الحالة (الفلاتر الثلاثة اللي طلبها المؤسس).
+function mkRows(){
+  return mkAllRows().filter(function(r){
+    if(mkLane!=='all'&&r.kind!==mkLane)return false;
+    if(mkNeed!=='all'&&r.need_kind!==mkNeed)return false;
+    if(mkStatus!=='all'&&r.status!==mkStatus)return false;
+    return true;
+  });
 }
-function drawMarket(){
-  const el=document.getElementById('drawer');if(!el)return;
-  if(selected===null){el.innerHTML=`<div class="empty">${svg('store','ic')}<p>اختر طلبًا لرؤية حالة المطابقة.</p></div>`;return;}
-  const r=MKTREQ[selected],st=MSTATUS[r.status];
-  el.innerHTML=`<div class="dh"><div class="k">طلب سوق · ${r.type}</div><h3>${r.title}</h3></div><div class="db"><div class="note-ai">${svg('sparkles','ic')}<div>${r.note}</div></div><div class="field"><div class="lab">صاحب الطلب</div><div class="val">${r.by}</div></div><div class="field"><div class="lab">الحالة</div><div class="val"><span class="status ${st.cls}"><span class="d"></span>${st.t}</span></div></div><div class="acts"><button class="btn btn-human" data-a="push">دفع المطابقة</button><button class="btn btn-ghost" data-a="close">إغلاق الطلب</button></div></div>`;
-  el.querySelectorAll('[data-a]').forEach(b=>b.onclick=()=>toast(b.dataset.a==='push'?'تم دفع المطابقة':'تم إغلاق الطلب'));
+function mkTestBadge(){return '<span class="chip" style="padding:1px 8px;font-size:10.5px;cursor:default;background:var(--gold-bg);color:var(--gold);border-color:transparent;font-weight:800">تجريبي</span>';}
+// «مخفي» = إجراء إشراف حقيقي على المنصة (hidden): مش على أي بورد عام، وبيفضل هنا وعند صاحبه.
+function mkHiddenBadge(){return '<span class="chip" style="padding:1px 8px;font-size:10.5px;cursor:default;background:var(--conflict-bg);color:var(--conflict);border-color:transparent;font-weight:800">مخفي عن البورد</span>';}
+function mkPrivBadge(vis){return vis==='public'
+  ?'<span class="chip" style="padding:1px 8px;font-size:10.5px;cursor:default;background:var(--agree-bg);color:var(--agree);border-color:transparent;font-weight:800">عام</span>'
+  :'<span class="chip" style="padding:1px 8px;font-size:10.5px;cursor:default;background:var(--surface-2);color:var(--muted);border-color:transparent;font-weight:800">خاص</span>';}
+// بطاقة «الجسر لسه ما اتنشرش» — أمينة وواضحة: القسم جاهز، الطرف التاني ناقص.
+function mkBridgeMissingCard(what){
+  return '<div class="policy" style="border-inline-start-color:var(--gold);background:var(--gold-bg)">'+svg('clock','ic')+
+    '<div><b>'+esc(what)+' جاهز هنا — وناقص نشر المنصة.</b><br>الجسر <span style="direction:ltr;display:inline-block">/api/bridge/market/*</span> لسه ما اتنشرش على <span style="direction:ltr;display:inline-block">api.elprofessor.net</span>. أول ما يتنشر الشاشة دي هتتملى لوحدها — مفيش شغل ناقص هنا.</div></div>';
+}
+function viewMarket(v){
+  if(window.EP){EP.ensure('market',()=>viewMarket(v));EP.ensure('marketDemand',()=>viewMarket(v));}
+  var st=(window.EP&&EP.state.market)||'idle';
+  var D=mkData();
+  var missing=!!(D&&D.missing);
+  var all=mkAllRows(),rows=mkRows();
+  var openN=all.filter(function(r){return r.status==='open';}).length;
+  var noOffer=all.filter(function(r){return r.status==='open'&&!r.offer_count;}).length;
+  var matched=all.filter(function(r){return r.status==='matched';}).length;
+  var laneCount=function(k){return k==='all'?all.length:all.filter(function(r){return r.kind===k;}).length;};
+  // `total` من الجسر = العدد قبل التقطيع بالصفحات؛ الصفوف المحمّلة مقصوصة عند حدّ الطلب.
+  // لو فيه فرق، قوله صراحةً بدل ما نعرض عدد الصفحة على إنه إجمالي السوق.
+  var totalN=(D&&D.count!=null&&D.count>all.length)?D.count:all.length;
+  // شرائح نوع الاحتياج مبنية من البيانات الحقيقية (مش قائمة ثابتة تدّعي حارات فاضية).
+  var needs={};all.forEach(function(r){needs[r.need_kind]=(needs[r.need_kind]||0)+1;});
+  var needChips='<span class="chip'+(mkNeed==='all'?' on':'')+'" data-need="all">كل الاحتياجات</span>'+
+    Object.keys(needs).sort().map(function(n){return '<span class="chip'+(mkNeed===n?' on':'')+'" data-need="'+esc(n)+'">'+esc(mkNeedAr(n))+' ('+money(needs[n])+')</span>';}).join('');
+  var statusChips=['all','open','matched','closed'].map(function(s){
+    var lbl=s==='all'?'كل الحالات':MK_STATUS[s].t;
+    return '<span class="chip'+(mkStatus===s?' on':'')+'" data-mst="'+s+'">'+lbl+'</span>';}).join('');
+  v.innerHTML=
+    '<div class="policy" style="border-inline-start-color:var(--human)">'+svg('store','ic')+'<div><b>السوق:</b> العضو بيكتب احتياجه (خبير · خدمة · دورة · كتاب) ← المعتمدون بيقدّموا عروضهم بسعر ← القبول بيفتح استشارة والفلوس تتحجز في الضمان. الحارات تحت هي <b>نفس حارات البورد الحيّ</b>.</div></div>'+
+    (missing?mkBridgeMissingCard('قسم «السوق»'):'')+
+    (st==='error'?'<div class="policy" style="border-inline-start-color:var(--conflict);background:var(--conflict-bg);color:var(--conflict)">'+svg('scale','ic')+'<div>تعذّر جلب طلبات السوق من المنصة. <b style="cursor:pointer;text-decoration:underline" onclick="EP.reload(\'market\',()=>viewMarket(document.getElementById(\'view\')))">إعادة المحاولة</b></div></div>':'')+
+    (st==='loading'?'<div class="policy" style="border-inline-start-color:var(--human)">'+svg('clock','ic')+'<div>…جارٍ تحميل البورد من المنصة</div></div>':'')+
+    '<div class="kpis">'+
+      '<div class="kpi k-1"><div class="top"><span class="ic">'+svg('store')+'</span>إجمالي الطلبات</div><b>'+money(totalN)+'</b><div class="sub">'+(totalN>all.length?('كل الحارات — معروض منها '+money(all.length)):'كل الحارات')+'</div></div>'+
+      '<div class="kpi k-2"><div class="top"><span class="ic">'+svg('clock')+'</span>مفتوحة</div><b>'+money(openN)+'</b><div class="sub">بانتظار عروض</div></div>'+
+      '<div class="kpi k-4"><div class="top"><span class="ic">'+svg('scale')+'</span>بلا عرض واحد</div><b>'+money(noOffer)+'</b><div class="sub">'+(noOffer?'محتاجة خبراء يشوفوها':'كل المفتوح عليه عروض')+'</div></div>'+
+      '<div class="kpi k-3"><div class="top"><span class="ic">'+svg('check')+'</span>تمّت مطابقتها</div><b>'+money(matched)+'</b><div class="sub">اتحوّلت لاستشارة/ضمان</div></div>'+
+    '</div>'+
+    '<div class="tabbar" id="mkTabs">'+MK_LANES.map(function(l){
+      return '<div class="tab'+(mkLane===l.k?' on':'')+'" data-lane="'+l.k+'" title="'+esc(l.sub)+'">'+esc(l.t)+' <span style="font-weight:800;color:var(--human)">('+money(laneCount(l.k))+')</span></div>';}).join('')+'</div>'+
+    '<div class="tfilter" style="display:flex;flex-wrap:wrap;gap:7px;margin:2px 0 8px;align-items:center"><span style="font-size:12px;font-weight:800;color:var(--muted);margin-inline-end:2px">'+svg('sparkles','ic')+' نوع الاحتياج:</span>'+needChips+'</div>'+
+    '<div class="tfilter" style="display:flex;flex-wrap:wrap;gap:7px;margin:0 0 14px;align-items:center"><span style="font-size:12px;font-weight:800;color:var(--muted);margin-inline-end:2px">'+svg('check','ic')+' الحالة:</span>'+statusChips+'</div>'+
+    '<div class="inboxwrap"><section class="panel"><div class="ph"><h3>'+esc(mkLaneAr(mkLane))+'</h3><span class="n" id="mkN">0</span><span class="hint">اضغط طلبًا لعرض تفاصيله وعروضه</span></div><div id="mkRowsEl"></div></section><aside class="drawer" id="drawer"></aside></div>'+
+    mkDemandPanel();
+  document.getElementById('mkTabs').querySelectorAll('.tab').forEach(function(t){t.onclick=function(){mkLane=t.dataset.lane;mkSel=null;viewMarket(v);};});
+  v.querySelectorAll('[data-need]').forEach(function(c){c.onclick=function(){mkNeed=c.dataset.need;mkSel=null;viewMarket(v);};});
+  v.querySelectorAll('[data-mst]').forEach(function(c){c.onclick=function(){mkStatus=c.dataset.mst;mkSel=null;viewMarket(v);};});
+  wireMarketDemand(v);
+  var el=document.getElementById('mkRowsEl'),nEl=document.getElementById('mkN');
+  if(nEl)nEl.textContent=rows.length;
+  if(!rows.length){
+    var emptyMsg=missing?'هيظهر البورد هنا أول ما يتنشر جسر السوق على المنصة.'
+      :(all.length?'مفيش طلبات مطابِقة للفلاتر دي — جرّب «كل الحارات».'
+                  :'مفيش طلبات في السوق لسه. أول طلب بييجي من الشات: «بروف» بيحوّل احتياج الزائر لطلب هنا.');
+    el.innerHTML='<div style="padding:40px;text-align:center;color:var(--muted)">'+emptyMsg+'</div>';
+    drawMarketReq();return;
+  }
+  el.innerHTML=rows.map(function(r){
+    var s=MK_STATUS[r.status]||{t:r.status,cls:''};
+    var lane=MK_LANES.filter(function(x){return x.k===r.kind;})[0]||MK_LANES[1];
+    return '<div class="row esc-row'+(mkSel===r.id?' sel':'')+'" data-mk="'+esc(r.id)+'" style="grid-template-columns:2fr 1.2fr 0.9fr 140px;cursor:pointer">'+
+      '<div class="c c1"><div class="src-ic" style="background:var(--human-bg);color:var(--human)">'+svg(lane.ic)+'</div><div><div class="parties">'+esc(r.title)+'</div>'+
+        '<div class="from" style="display:flex;gap:6px;align-items:center;flex-wrap:wrap"><span class="chip" style="padding:1px 8px;font-size:10.5px;cursor:default">'+esc(mkLaneAr(r.kind))+'</span>'+
+        '<span class="chip" style="padding:1px 8px;font-size:10.5px;cursor:default;background:var(--ai-bg);color:var(--ai);border-color:transparent">'+esc(mkNeedAr(r.need_kind))+'</span>'+
+        mkPrivBadge(r.visibility)+(r.is_test?mkTestBadge():'')+(r.hidden?mkHiddenBadge():'')+(r.specialty?'<span class="chip" style="padding:1px 8px;font-size:10.5px;cursor:default">'+esc(r.specialty)+'</span>':'')+'</div></div></div>'+
+      '<div class="c"><div class="from">'+esc(r.member_name||r.member_alias)+'</div><div class="from" style="opacity:.7">'+esc(r.date||'—')+'</div></div>'+
+      '<div class="c"><div class="from"><b style="color:'+(r.offer_count?'var(--agree)':'var(--muted)')+'">'+money(r.offer_count)+'</b> عرض</div></div>'+
+      '<div class="c"><span class="status '+s.cls+'"><span class="d"></span>'+esc(s.t)+'</span></div></div>';
+  }).join('');
+  el.querySelectorAll('.row[data-mk]').forEach(function(x){x.onclick=function(){mkSel=(mkSel===x.dataset.mk)?null:x.dataset.mk;viewMarket(v);};});
+  drawMarketReq();
+}
+// لوحة التفاصيل: بيانات الصفّ فورًا + العروض تُجلب من الجسر (مين قدّم، بكام، وإيه القرار).
+var MK_DETAIL={};   // request id -> {loading|error|data}
+function drawMarketReq(){
+  var el=document.getElementById('drawer');if(!el)return;
+  if(!mkSel){el.innerHTML='<div class="empty">'+svg('store','ic')+'<p>اضغط طلبًا لعرض نصّه، صاحبه، والعروض المقدَّمة عليه.</p></div>';return;}
+  var r=mkAllRows().filter(function(x){return x.id===mkSel;})[0];
+  if(!r){el.innerHTML='<div class="empty">'+svg('store','ic')+'<p>الطلب لم يعد موجودًا — حدّث الصفحة.</p></div>';return;}
+  var s=MK_STATUS[r.status]||{t:r.status,cls:''};
+  var d=MK_DETAIL[r.id];
+  if(!d&&window.EP&&EP.marketRequestDetail){
+    MK_DETAIL[r.id]={loading:true};
+    EP.marketRequestDetail(r.id,function(data){MK_DETAIL[r.id]={data:data};drawMarketReq();},
+                                function(e){MK_DETAIL[r.id]={error:(e&&e.status===404)?'missing':'fail'};drawMarketReq();});
+    d=MK_DETAIL[r.id];
+  }
+  var offers=(d&&d.data&&(d.data.offers||(d.data.request&&d.data.request.offers)))||[];
+  var offersHtml;
+  if(d&&d.loading)offersHtml='<div style="padding:10px;color:var(--muted);font-size:12.5px">…جارٍ جلب العروض</div>';
+  else if(d&&d.error==='missing')offersHtml='<div style="padding:10px;color:var(--muted);font-size:12.5px">العروض هتظهر أول ما يتنشر جسر السوق.</div>';
+  else if(d&&d.error)offersHtml='<div style="padding:10px;color:var(--conflict);font-size:12.5px">تعذّر جلب العروض.</div>';
+  else if(!offers.length)offersHtml='<div style="padding:10px;color:var(--muted);font-size:12.5px">مفيش عروض على الطلب ده لسه.</div>';
+  else offersHtml=offers.map(function(o){
+    var accepted=(o.status==='accepted')||(r.accepted_offer_id&&o.id===r.accepted_offer_id);
+    return '<div style="padding:9px 0;border-bottom:1px solid var(--line)"><div style="display:flex;justify-content:space-between;gap:8px;align-items:center">'+
+      '<b style="font-size:12.5px">'+esc(o.expert_display||o.expert_email||'خبير')+'</b>'+
+      '<span style="font-size:12px;font-weight:800;color:var(--agree)">'+money(o.price)+' '+esc(o.currency||'')+'</span></div>'+
+      '<div style="font-size:11.5px;color:var(--muted);margin-top:3px">'+(o.eta_days?('خلال '+money(o.eta_days)+' يوم · '):'')+esc(o.status||'')+(accepted?' ✓ مقبول':'')+'</div>'+
+      (o.message?'<div style="font-size:12px;margin-top:4px;line-height:1.7">'+esc(o.message)+'</div>':'')+'</div>';
+  }).join('');
+  el.innerHTML='<div class="dh"><div class="k">'+esc(mkLaneAr(r.kind))+' · '+esc(mkNeedAr(r.need_kind))+'</div><h3>'+esc(r.title)+'</h3></div><div class="db">'+
+    (r.body?'<div class="field"><div class="lab">نصّ الطلب</div><div class="val" style="line-height:1.8">'+esc(r.body)+'</div></div>':'')+
+    '<div class="uedit-grid" style="margin-top:6px">'+
+      '<div><div class="lab">صاحب الطلب</div><div class="val" style="font-size:12.5px">'+esc(r.member_name||'—')+'</div><div style="font-size:11px;color:var(--muted);direction:ltr;text-align:right">'+esc(r.member_email||'')+'</div><div style="font-size:11px;color:var(--muted)">على البورد العام يظهر باسم: '+esc(r.member_alias)+'</div></div>'+
+      '<div><div class="lab">الحالة</div><div class="val"><span class="status '+s.cls+'"><span class="d"></span>'+esc(s.t)+'</span></div></div>'+
+      '<div><div class="lab">التخصص</div><div class="val" style="font-size:12.5px">'+esc(r.specialty||'—')+'</div></div>'+
+      '<div><div class="lab">الميزانية</div><div class="val" style="font-size:12.5px">'+(r.budget?money(r.budget)+' '+esc(r.currency||''):'—')+'</div></div>'+
+      '<div><div class="lab">الظهور</div><div class="val" style="font-size:12.5px">'+(r.visibility==='public'?'عام على البورد':'خاص — للخبراء المدعوّين فقط')+(r.hidden?' · <b style="color:var(--conflict)">مخفي بقرار إشراف</b>':'')+'</div>'+(r.hidden&&r.hidden_reason?'<div style="font-size:11px;color:var(--muted)">'+esc(r.hidden_reason)+'</div>':'')+'</div>'+
+      '<div><div class="lab">التاريخ</div><div class="val" style="font-size:12.5px">'+esc(r.date||'—')+'</div></div>'+
+    '</div>'+
+    (r.preferred_expert_email?'<div class="field"><div class="lab">موجَّه لخبير بعينه</div><div class="val" style="font-size:12.5px;direction:ltr;text-align:right">'+esc(r.preferred_expert_email)+'</div></div>':'')+
+    '<div class="lab" style="margin-top:12px">العروض المقدَّمة ('+money(offers.length||r.offer_count)+')</div>'+offersHtml+
+    '<div class="acts" style="margin-top:12px">'+
+      (r.status!=='closed'?'<button class="btn btn-ghost" id="mkClose" style="flex:none;min-width:auto;padding:7px 12px;font-size:12px">إغلاق الطلب</button>':'')+
+      // الرافعة الحقيقية = «مخفي» (hidden): بتشيله من كل بورد عام، وبتفضل ظاهرة هنا ولصاحبها،
+      // وقابلة للرجوع. مش حذف ومش وسم «تجريبي» (ده ملك الكنسة الجماعية على مستوى الحساب).
+      '<button class="btn btn-warn" id="mkHide" style="flex:none;min-width:auto;padding:7px 12px;font-size:12px">'+(r.hidden?'أظهر الطلب على البورد':'إخفاء عن البورد العام')+'</button>'+
+    '</div></div>';
+  var cb=document.getElementById('mkClose');
+  if(cb)cb.onclick=function(){if(!confirm('إغلاق الطلب «'+r.title+'»؟ مش هيقبل عروض جديدة.'))return;
+    if(window.EP)EP.closeMarketRequest(r,'',function(){delete MK_DETAIL[r.id];viewMarket(document.getElementById('view'));});};
+  var hb=document.getElementById('mkHide');
+  if(hb)hb.onclick=function(){
+    if(!r.hidden&&!confirm('إخفاء «'+r.title+'» عن البورد العام؟ صاحبه هيفضل شايفه، والإجراء قابل للرجوع.'))return;
+    if(window.EP)EP.hideMarketRequest(r,!r.hidden,function(){delete MK_DETAIL[r.id];viewMarket(document.getElementById('view'));});};
+}
+/* «الطلب الحقيقي» — شاشة القرار: الاحتياج اللي بيتكرر هو اللي بيقرّر الدورة الجاية.
+   الأرقام من /api/platform-market-demand (تجميع فعلي على market_requests + إشارات الشات) —
+   مش عيّنة ٤٠ سؤالًا ولا مجموعة قديمة السوق ما بيكتبش فيها. */
+function mkDemandPanel(){
+  var st=(window.EP&&EP.state.marketDemand)||'idle';
+  var A=(window.EP&&EP.data.marketDemand)||null;
+  var head='<section class="panel" style="margin-top:16px;border:1px solid var(--gold)"><div class="ph"><h3>'+svg('trend')+' الطلب الحقيقي — نبني إيه بعد كده؟</h3><span class="hint">تجميع فعلي لاحتياجات السوق</span><button class="btn btn-ghost" id="mkdRefresh" style="flex:none;min-width:auto;padding:6px 12px;font-size:12px;margin-inline-start:auto">'+svg('sparkles')+'حدّث</button></div><div style="padding:14px 16px">';
+  var foot='</div></section>';
+  if(A&&A.missing)return head+mkBridgeMissingCard('لوحة «الطلب الحقيقي»')+foot;
+  if(st==='error')return head+'<div class="policy" style="margin:0;border-inline-start-color:var(--conflict);background:var(--conflict-bg);color:var(--conflict)">'+svg('scale','ic')+'<div>تعذّر جلب تجميع الطلب. <b style="cursor:pointer;text-decoration:underline" onclick="EP.reload(\'marketDemand\',()=>viewMarket(document.getElementById(\'view\')))">إعادة المحاولة</b></div></div>'+foot;
+  if(st==='loading'||!A)return head+'<div style="padding:14px;text-align:center;color:var(--muted)">…جارٍ حساب الطلب</div>'+foot;
+  var byNeed=(A.by_need_kind||A.by_kind||[]);
+  var maxN=byNeed.reduce(function(m,x){return Math.max(m,x.count||0);},0)||1;
+  var needHtml=byNeed.length?byNeed.map(function(x){
+    var label=mkNeedAr(x.need_kind||x.kind);
+    var w=Math.round((x.count||0)/maxN*100);
+    // مفاتيح الباكِند فعليًّا: {count,total,matched,closed,zero_offer,with_offers}. «بلا عرض»
+    // هي أعلى إشارة في اللوحة (احتياج محدش ردّ عليه = ثغرة في الكتالوج) وكانت مش بتوصل للمؤسس.
+    var extra=[];
+    if(x.zero_offer)extra.push(money(x.zero_offer)+' بلا عرض');
+    if(x.with_offers!=null&&x.with_offers)extra.push(money(x.with_offers)+' عليها عروض');
+    if(x.open!=null)extra.push(money(x.open)+' مفتوح');
+    if(x.offers!=null)extra.push(money(x.offers)+' عرض');
+    return '<div style="display:flex;align-items:center;gap:8px;padding:5px 0;font-size:12.5px"><span style="width:110px;flex:none">'+esc(label)+'</span>'+
+      '<div style="flex:1;height:10px;background:var(--surface-2);border-radius:6px;overflow:hidden"><div style="width:'+w+'%;height:100%;background:var(--human)"></div></div>'+
+      '<b style="width:34px;text-align:left;flex:none">'+money(x.count||0)+'</b>'+
+      (extra.length?'<span style="font-size:11px;color:var(--muted);flex:none">'+esc(extra.join(' · '))+'</span>':'')+'</div>';
+  }).join(''):'<div style="color:var(--muted);font-size:12.5px">لسه مفيش احتياجات مسجّلة — أول طلب من الشات هيبدأ العدّ.</div>';
+  // «حسب التخصص»: الجسر ما بيبعتش by_specialty — التخصص بيجي على كل اقتراح دورة. نجمّعه هنا،
+  // ولو مفيش تخصصات خالص نرجع لأقوى المصطلحات المتكرّرة (top_topics) ونقولها صراحةً في العنوان
+  // عشان كلمة مستنبطة ما تتقريش على إنها تخصص مسجّل.
+  var bySpec=Array.isArray(A.by_specialty)?A.by_specialty:null,specFromTopics=false;
+  if(!bySpec){
+    var agg={};
+    (A.suggested_courses||[]).forEach(function(c){var sp=c.specialty||'';if(!sp)return;agg[sp]=(agg[sp]||0)+(c.signal_count!=null?c.signal_count:1);});
+    bySpec=Object.keys(agg).map(function(sp){return {specialty:sp,count:agg[sp]};});
+    if(!bySpec.length){specFromTopics=true;bySpec=(A.top_topics||[]).map(function(t){return {specialty:t.term,count:t.count||0};});}
+  }
+  bySpec=bySpec.slice().sort(function(a,b){return (b.count||0)-(a.count||0);}).slice(0,8);
+  var maxS=bySpec.reduce(function(m,x){return Math.max(m,x.count||0);},0)||1;
+  var specHtml=bySpec.length?bySpec.map(function(x){var w=Math.round((x.count||0)/maxS*100);
+    return '<div style="display:flex;align-items:center;gap:8px;padding:4px 0;font-size:12.5px"><span style="width:110px;flex:none;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(x.specialty||x.term||'غير مصنّف')+'</span><div style="flex:1;height:9px;background:var(--surface-2);border-radius:6px;overflow:hidden"><div style="width:'+w+'%;height:100%;background:var(--gold)"></div></div><b style="width:34px;text-align:left;flex:none">'+money(x.count||0)+'</b></div>';
+  }).join(''):'<div style="color:var(--muted);font-size:12.5px">لا تخصصات مسجّلة بعد.</div>';
+  // اقتراحات الدورات: مفاتيح الجسر هي {title_hint, signal_count, origin, sources, samples,
+  // specialty} — مفيش title ولا count، فالصفوف كانت كلها «—» بلا أرقام والزرار كان بيمرّر «—»
+  // كعنوان للدورة الجديدة. و`origin` لازم يبان: chat_terms = موضوع مستنبط من الشات، مش طلب صريح.
+  var sug=(A.suggested_courses||A.suggestions||[]);
+  var sugHtml=sug.length?sug.map(function(c,i){
+    var title=c.title_hint||c.title||c.name||c.topic||'';
+    var disp=title||'(بلا عنوان)';
+    var n=(c.signal_count!=null?c.signal_count:(c.demand_count!=null?c.demand_count:(c.count!=null?c.count:null)));
+    var S=c.sources||{};
+    var reason=c.reason||c.why||(c.samples&&c.samples.length?c.samples[0]:'')||
+      [S.market_requests?money(S.market_requests)+' طلب سوق':'',
+       S.training_interests?money(S.training_interests)+' اهتمام تدريب':'',
+       S.course_interests?money(S.course_interests)+' اهتمام دورة':'',
+       S.chat?money(S.chat)+' إشارة شات':''].filter(Boolean).join(' · ');
+    var tag=(c.origin==='chat_terms')
+      ?'<span style="font-size:10px;font-weight:800;color:var(--muted);border:1px solid var(--line);border-radius:6px;padding:1px 5px">مستنبط من الشات</span>'
+      :'<span style="font-size:10px;font-weight:800;color:var(--human);border:1px solid var(--human);border-radius:6px;padding:1px 5px">مطلوب صريح</span>';
+    return '<div class="trow" data-mkd="'+i+'" style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--line)">'+
+      '<div class="src-ic" style="background:var(--gold-bg);color:var(--gold)">'+svg('cap')+'</div>'+
+      '<div style="flex:1;min-width:0"><div style="font-weight:800;font-size:13px;display:flex;gap:6px;align-items:center;flex-wrap:wrap"><span style="overflow:hidden;text-overflow:ellipsis">'+esc(disp)+'</span>'+tag+'</div>'+(reason?'<div style="font-size:11.5px;color:var(--muted)">'+esc(reason)+'</div>':'')+'</div>'+
+      (n!=null?'<div style="text-align:center;min-width:56px"><div style="font-weight:800;font-size:13px;color:var(--human)">'+money(n)+'</div><div style="font-size:10.5px;color:var(--muted)">إشارة</div></div>':'')+
+      '<button class="btn btn-primary mkd-make" data-title="'+esc(title)+'" style="flex:none;min-width:auto;padding:6px 12px;font-size:12px">اعمل الدورة</button></div>';
+  }).join(''):'<div style="color:var(--muted);font-size:12.5px">لسه مفيش طلب متكرّر يبرّر دورة. الاقتراح بيظهر لما نفس الاحتياج يتكرّر.</div>';
+  // سطر أسفل اللوحة من الإشارات الحقيقية (مفيش note على الجسر) — «بلا ردّ» هي الرقم اللي بيهم.
+  var G=A.signals||{},noteBits=[];
+  if(G.unanswered_requests!=null)noteBits.push(money(G.unanswered_requests)+' طلب مفتوح بلا عرض واحد');
+  if(G.total_requests!=null)noteBits.push('من إجمالي '+money(G.total_requests)+' طلب');
+  if(G.chat_rows!=null)noteBits.push(money(G.chat_rows)+' إشارة شات');
+  var note=A.note||A.engagement_note||(noteBits.length?(noteBits.join(' · ')+(A.window_days?(' — آخر '+money(A.window_days)+' يوم'):'')):'');
+  return head+
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">'+
+      '<div><div style="font-size:12px;font-weight:800;color:var(--muted);margin-bottom:4px">'+svg('sparkles','ic')+' الطلب حسب نوع الاحتياج</div>'+needHtml+'</div>'+
+      '<div><div style="font-size:12px;font-weight:800;color:var(--muted);margin-bottom:4px">'+svg('scale','ic')+' حسب التخصص'+(specFromTopics?' (مواضيع متكرّرة)':'')+'</div>'+specHtml+'</div>'+
+    '</div>'+
+    '<div style="margin-top:14px"><div style="font-size:12px;font-weight:800;color:var(--gold);margin-bottom:4px">'+svg('cap','ic')+' دورات يقترحها الطلب</div>'+sugHtml+'</div>'+
+    (note?'<div class="note-ai" style="margin-top:12px">'+svg('robot','ic')+'<div>'+esc(note)+'</div></div>':'')+
+    foot;
+}
+function wireMarketDemand(v){
+  var b=(v||document).querySelector('#mkdRefresh');
+  if(b)b.onclick=function(){if(window.EP)EP.reload('marketDemand',()=>viewMarket(document.getElementById('view')));};
+  (v||document).querySelectorAll('.mkd-make').forEach(function(btn){
+    btn.onclick=function(ev){ev.stopPropagation();createCourseModal(btn.dataset.title||'');};
+  });
 }
 
 /* ===== TRAINER / INVESTOR / VIEWER PORTALS ===== */

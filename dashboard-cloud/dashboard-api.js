@@ -79,7 +79,9 @@
             escrow: null, investment: null, marketing: null, partners: null, courses: null, settings: null,
             packages: null, t_data: null, i_data: null, targets: null, foundation: null, team: null,
             notifications: null, goalsAdvisor: null, tutorials: null, platformTopics: null, platformTopicsAnalysis: null,
+            platformPendingTopics: null, platformTopicSegments: null,
             platformOpinions: null, platformOpinionsApproved: null, platformOpinionsAnalysis: null, experts: null,
+            market: null, marketDemand: null,
             aiAgents: null, dashUsers: null, audit: null, usage: null },
     state: {}, // 'idle' | 'loading' | 'ready' | 'error'
     _started: {}, // منع التحميل المزدوج
@@ -184,6 +186,63 @@
   }
 
   // ---- المحمّلات لكل شاشة ----
+  // ---- «السوق»: تطبيع صفوف الطلبات القادمة من جسر المنصة ----
+  // The lane a request sits in IS its `kind` (the platform writes one of four). `need_kind` is
+  // the demand classification the chat captured; older rows predate it, so we derive it from the
+  // lane rather than showing a blank — a request with no need label is unreadable on a board
+  // whose whole job is «which need repeats».
+  var MARKET_NEED_FOR_KIND = {
+    request: "expert", course_request: "course", public_service: "service",
+    training_offer: "training_offer", knowledge: "book"
+  };
+  function mapMarket(r) {
+    // The bridge returns {items, total, counts:{by_lane,by_need_kind,by_status}} — `items` is the
+    // real key. Reading `requests`/`rows` (a shape the platform never implemented) meant an empty
+    // list against a fully working board: four KPIs at «٠» plus the «مفيش طلبات» empty state, i.e.
+    // exactly the lying zero this section was rebuilt to kill. Tolerate the aliases, prefer `items`.
+    var list = Array.isArray(r) ? r : ((r && (r.items || r.requests || r.rows)) || []);
+    var rows = list.map(function (q) {
+      var kind = q.kind || "request";
+      var at = q.created_at;
+      return {
+        id: q.id || "",
+        kind: kind,
+        need_kind: q.need_kind || MARKET_NEED_FOR_KIND[kind] || "other",
+        title: q.title || "بلا عنوان",
+        body: q.body || "",
+        specialty: q.specialty || "",
+        service: q.service || "",
+        status: q.status || "open",
+        visibility: q.visibility || "private",
+        // Management view: the platform hands us the real identity (is_admin=true). The alias is
+        // what the PUBLIC board shows — keep both so the founder can tell them apart at a glance.
+        member_alias: q.member_alias || "عضو",
+        member_email: q.member_email || "",
+        member_name: q.member_name || "",
+        preferred_expert_email: q.preferred_expert_email || "",
+        budget: q.budget || 0,
+        currency: q.currency || "",
+        offer_count: (q.offer_count != null ? q.offer_count : (q.offers_count || 0)) | 0,
+        accepted_offer_id: q.accepted_offer_id || null,
+        consultation_id: q.consultation_id || null,
+        is_test: !!q.is_test,
+        // Moderation state (the platform's real, reversible lever): a hidden request is off every
+        // public board but still listed here — nothing ever silently disappears on the founder.
+        hidden: !!q.hidden,
+        hidden_reason: q.hidden_reason || "",
+        created_at: at || "",
+        date: arDate(at),
+        at: at ? (Date.parse(at) || 0) : 0,
+      };
+    }).sort(function (a, b) { return b.at - a.at; });
+    // `total` is the bridge's pre-pagination count; `count` never existed on this payload.
+    return {
+      raw: list, rows: rows, missing: false,
+      counts: (r && r.counts) || null,
+      count: (r && r.total != null) ? r.total : ((r && r.count != null) ? r.count : rows.length),
+    };
+  }
+
   var LOADERS = {
     // نظرة عامة: /api/dashboard (+ /api/platform-metrics لعدد المستخدمين الحيّ)
     dashboard: function () {
@@ -208,6 +267,75 @@
       });
     },
 
+    // ===================================================================== «السوق» (MARKET)
+    // /api/platform-market-requests -> {items:[...], total, counts:{by_lane,by_need_kind,by_status},
+    // lane, need_kind, status}. Rows come from the platform's OWN serializer with is_admin=true,
+    // so field names here must match it exactly: kind / member_alias / body / hidden /
+    // status(open|matched|closed) — the deleted orphan view read r.by / r.type / r.note and
+    // invented statuses, which is why it could never work. Same rule for the ENVELOPE: read the
+    // keys the endpoint sends, never the ones it «should» send.
+    //
+    // 404 is NOT an error: the market bridge ships from the platform repo, so until it deploys
+    // we resolve with {missing:true} and the view renders an honest «قيد النشر» card. A real
+    // failure (500/502/503) still rejects → state 'error' → retry button. Never conflate them.
+    market: function () {
+      return get("/platform-market-requests")
+        .then(function (r) { EP.data.market = mapMarket(r); })
+        .catch(function (e) {
+          if (e && e.status === 404) { EP.data.market = { raw: [], rows: [], missing: true }; return; }
+          throw e;
+        });
+    },
+
+    // «الطلب الحقيقي»: /api/platform-market-demand -> the REAL shape (ops_bridge.bridge_market_demand):
+    //   {by_need_kind:[{need_kind,label,count,total,matched,closed,zero_offer,with_offers}],
+    //    top_topics:[{term,count,sources}],
+    //    suggested_courses:[{title_hint,signal_count,origin,sources,samples,specialty}],
+    //    signals:{...}, scanned:{...}, window_days, generated_at}
+    // There is no `title`, no `count` on a course, and no `by_specialty` — the view derives the
+    // specialty column from the courses' own `specialty`. This is the founder's decision surface:
+    // which repeated need justifies building which course next.
+    marketDemand: function () {
+      return get("/platform-market-demand")
+        .then(function (r) { EP.data.marketDemand = r || {}; })
+        .catch(function (e) {
+          if (e && e.status === 404) { EP.data.marketDemand = { missing: true }; return; }
+          throw e;
+        });
+    },
+
+    // المواضيع المقترحة من الأعضاء (pending_review): /api/platform-pending-topics.
+    // A member's topic is INVISIBLE on the public board until approved here — and approve/reject
+    // must go through the decision routes (they notify the author); the CRUD routes don't.
+    platformPendingTopics: function () {
+      return get("/platform-pending-topics").then(function (r) {
+        var list = Array.isArray(r) ? r : ((r && r.topics) || []);
+        EP.data.platformPendingTopics = { raw: list };
+        window.PTOPICS_PENDING = list.map(function (t) {
+          var at = t.created_at || t.updated_at;
+          return {
+            id: t.id,
+            title: t.title || "",
+            question: t.question || "",
+            specialty: t.specialty || t.category || "",
+            category: t.category || t.specialty || "",
+            target_audience: t.target_audience || "",
+            // «الفئة» — the LOCKED lane (id + label + who chose it). Different axis from the
+            // legacy target_audience; both are served, only this one is writable.
+            segment: t.segment || "",
+            segment_label: t.segment_label || "",
+            segment_auto: t.segment_auto !== false,
+            author_email: t.author_email || "",
+            author_kind: t.author_kind || "member",
+            country: t.country || "",
+            status: t.status || "pending_review",
+            date: arDate(at),
+            at: at ? (Date.parse(at) || 0) : 0,
+          };
+        }).sort(function (a, b) { return b.at - a.at; });
+      });
+    },
+
     // المستخدمون: /api/platform-users -> {users:[...], count}
     users: function () {
       return get("/platform-users").then(function (r) {
@@ -229,6 +357,8 @@
             plan: planLabel[u.plan_id] || u.plan_id || "—",
             plan_id: u.plan_id || "",       // المعرّف الخام للباقة (يفعّل تحكّم إسناد الباقة في الدرج)
             segment: u.segment || "",       // التصنيف التلقائي من الشات (محامي/طالب/شركة… أو "" لو لم يتحدّث)
+            is_test: !!u.is_test,           // حساب تجريبي/ديمو — مخفي عن كل الواجهات العامة على المنصة
+            public_ready: (u.public_ready != null) ? !!u.public_ready : null,   // يظهر في الدليل العام؟ (null = الجسر لا يرسلها بعد)
             tags: Array.isArray(u.tags) ? u.tags : [],   // تاجات يدوية يضبطها الأدمن (تصنيف يدوي)
             joined: arDate(u.created_at),
             last7: within7(u.created_at),
@@ -288,7 +418,11 @@
       return get("/platform-topics").then(function (r) {
         var list = Array.isArray(r) ? r : ((r && r.topics) || []);
         EP.data.platformTopics = { raw: list };
-        var VALID_STATUS = { draft: 1, open: 1, merged: 1, published: 1 };
+        // pending_review + rejected MUST survive. They used to be coerced to 'draft', which filed
+        // a member's proposal under «أفكار للاعتماد» — a tab whose «ارفض» HARD-DELETES the topic
+        // and whose «اعتمد» skips the route that notifies the author — and made every rejected
+        // topic resurface in the approval queue forever.
+        var VALID_STATUS = { draft: 1, pending_review: 1, open: 1, merged: 1, published: 1, rejected: 1, archived: 1 };
         var VALID_SOURCE = { news: 1, expert: 1, idea: 1, human: 1 };
         window.PTOPICS = list.map(function (t) {
           var st = t.status || (t.is_published || t.published ? "published" : "draft");
@@ -305,6 +439,13 @@
             summary: t.summary || "",
             specialty: cat,
             category: cat,
+            // «الفئوية» (legacy news axis) + «الفئة» (segment: the LOCKED lane the platform
+            // filters on). The bridge emits both on every row; the loader used to drop `segment`,
+            // so the axis the dashboard writes to could never be shown or preselected.
+            target_audience: t.target_audience || "",
+            segment: t.segment || "",
+            segment_label: t.segment_label || "",
+            segment_auto: t.segment_auto !== false,   // true = the classifier guessed it
             country: t.country || "",
             source: src,
             ai_answer: t.ai_answer || t.aiAnswer || "",
@@ -324,6 +465,18 @@
             at: at ? (Date.parse(at) || 0) : 0,
           };
         }).sort(function (a, b) { return b.at - a.at; });   // newest first (matches bridge cap-50 order)
+      });
+    },
+
+    // «الفئات» — مفردات مقفولة مصدرها المنصة: /api/platform-topic-segments -> [{id,label,count}].
+    // ⛔ لا تُعرَّف هنا ولا في index.html. The platform owns TOPIC_SEGMENTS; the dashboard renders
+    // whatever it returns and posts back the `id`. A hardcoded second list is how the dropdown
+    // ended up offering 8 values the backend rejects (and 0 of the ones it accepts).
+    platformTopicSegments: function () {
+      return get("/platform-topic-segments").then(function (r) {
+        var list = Array.isArray(r) ? r : ((r && r.segments) || []);
+        EP.data.platformTopicSegments = list;
+        window.PTOPIC_SEGMENTS = list.filter(function (s) { return s && s.id; });
       });
     },
 
@@ -923,6 +1076,10 @@
             referral_count: e.referral_count || 0,
             courses_count: e.courses_count || 0,
             students_count: e.students_count || 0,
+            // إشارات الجودة/الظهور — الجسر ممكن ما يبعتهاش بعد (null = مش معروف، مش «لأ»).
+            is_test: !!e.is_test,
+            public_ready: (e.public_ready != null) ? !!e.public_ready : null,
+            session_rate: (e.session_rate != null) ? e.session_rate : null,
           };
         });
       });
@@ -1541,6 +1698,109 @@
       .catch(function (e) { quietToast((e && e.message) || "تعذّر الحذف"); if (after) after(); });
   };
 
+  // اعتماد/رفض موضوع مقترح من عضو — عبر مسار القرار (يُشعر صاحب الموضوع)، لا عبر PUT/DELETE.
+  // Approve → the topic goes live on the public board and its author is notified. Reject → marked
+  // rejected (NOT deleted: the member's text and its comments survive, and it stops resurfacing
+  // in the approval queue). Refreshes both the pending queue and the main board.
+  EP.decidePendingTopic = function (t, action, after) {
+    post("/platform-pending-topics/" + encodeURIComponent(t.id) + "/" + action, {})
+      .then(function () {
+        note(action === "approve" ? ("اتنشر «" + (t.title || "") + "» على البورد ✓ واتبلّغ صاحبه")
+                                  : "اترفض الموضوع — مش هيظهر على البورد");
+        EP.reload("platformTopics", null);
+        EP.reload("platformPendingTopics", after);
+      })
+      .catch(function (e) { quietToast((e && e.message) || "تعذّر تنفيذ القرار"); if (after) after(); });
+  };
+
+  // «الفئة»: إسناد الحارة (segment) لموضوع. `segId` هو المعرّف المقفول الجاي من المنصة
+  // (/platform-topic-segments) — مش نص عربي حر.
+  // POST /platform-topics/{id}/segment {segment} → the platform validates against its LOCKED
+  // vocabulary and 422s an unknown value with its own Arabic message. We report the FAILURE:
+  // the old call sent `target_audience`, which pydantic dropped → the platform read «فارغ» =
+  // «امسح الاختيار البشري»، فمسح الحارة المخزّنة وردّ 200، والداشبورد قال «اتسندت ✓».
+  EP.setTopicSegment = function (t, segId, after) {
+    var lbl = (window.PTOPIC_SEGMENTS || []).filter(function (s) { return s.id === segId; })[0];
+    post("/platform-topics/" + encodeURIComponent(t.id) + "/segment", { segment: segId })
+      .then(function () {
+        note("اتسندت الفئة «" + ((lbl && lbl.label) || segId) + "» للموضوع ✓");
+        EP.reload("platformTopicSegments", null);   // العدّادات اتغيّرت
+        EP.reload("platformTopics", null);
+        EP.reload("platformPendingTopics", after);
+      })
+      .catch(function (e) {
+        // فشل ظاهر دائمًا — ومفيش «نجاح» كاذب: الصفوف بتترجع لحالتها الحقيقية بإعادة التحميل.
+        quietToast(e && e.status === 404
+          ? "إسناد «الفئة» لسه ما اتنشرش على المنصة"
+          : ((e && e.message) || "تعذّر إسناد الفئة — الفئة لازم تكون من فئات المنصة المعتمدة"));
+        EP.reload("platformTopics", null);
+        EP.reload("platformPendingTopics", after);
+      });
+  };
+
+  // ---- «السوق»: إجراءات الإدارة ----
+  // فتح طلب واحد بعروضه (لوحة التفاصيل). 404 هنا = إمّا الجسر لسه ما اتنشرش أو الطلب اتشال.
+  EP.marketRequestDetail = function (id, onOk, onErr) {
+    get("/platform-market-requests/" + encodeURIComponent(id))
+      .then(function (d) { onOk(d || {}); })
+      .catch(function (e) { if (onErr) onErr(e); });
+  };
+  EP.closeMarketRequest = function (r, reason, after) {
+    // البودي {by, reason} هو اللي المنصة بتقراه فعلًا (BridgeMarketClose) وبتسجّل بيه
+    // closed_by/closed_reason — `admin_note` كان بيتلغى بصمت فيتسجّل القافل باسم «dashboard».
+    // الهوية بتتحط سيرفر-سايد من جلسة الأدمن، مش من المتصفّح.
+    post("/platform-market-requests/" + encodeURIComponent(r.id) + "/close", { reason: reason || "" })
+      .then(function () { note("اتقفل الطلب «" + (r.title || "") + "»"); EP.reload("market", after); })
+      .catch(function (e) { quietToast((e && e.message) || "تعذّر إغلاق الطلب"); if (after) after(); });
+  };
+  // إخفاء/إظهار طلب على البورد العام — الرافعة الحقيقية الوحيدة اللي المنصة بتفرضها
+  // (_public_gate + get_request + create_offer)، وقابلة للرجوع ومنسوبة لصاحبها.
+  // القديم كان بيضرب /flag-test: مسار مش موجود على المنصة أصلًا (وسم «تجريبي» على طلب بعينه
+  // ملك الكنسة الجماعية) — فكل ضغطة كانت 404 والواجهة بتلوم «جسر لسه ما اتنشرش» وهو منشور.
+  EP.hideMarketRequest = function (r, hide, after) {
+    post("/platform-market-requests/" + encodeURIComponent(r.id) + "/hide",
+         { hidden: !!hide, reason: "" })
+      .then(function () {
+        note(hide ? "اتخفى الطلب عن البورد العام — قابل للرجوع" : "رجع الطلب للبورد العام");
+        EP.reload("market", after);
+      })
+      .catch(function (e) { quietToast((e && e.message) || "تعذّر تغيير الإخفاء"); if (after) after(); });
+  };
+
+  // ---- إزالة مدرّب/خبير من المنصة (مشكلة «محمد افندي») ----
+  // إلغاء تفعيل، لا حذف. The platform re-approves anyone still holding a granted provider
+  // section key on every boot and on every authenticated request, so a correct removal has to
+  // write a `rejected` sentinel AND revoke those keys in one atomic update — which is exactly
+  // what the bridge endpoint does. We also tag the account as test data so it disappears from
+  // every public surface at the query layer, not just the profile-completeness gate.
+  EP.deactivateTrainer = function (u, opts, after) {
+    opts = opts || {};
+    post("/platform-trainers/" + encodeURIComponent(u.id) + "/deactivate", {
+      reason: opts.reason || "", is_test: opts.is_test !== false, email: u.email || ""
+    })
+      .then(function () {
+        note("اتشال «" + (u.name || u.email || "") + "» من المدربين — اتلغى اعتماده واتخفى عن الدليل العام");
+        EP.reload("experts", null);
+        EP.reload("users", after);
+      })
+      .catch(function (e) {
+        quietToast(e && e.status === 404
+          ? "إلغاء تفعيل المدرّب لسه ما اتنشرش على المنصة"
+          : ((e && e.message) || "تعذّر إلغاء تفعيل المدرّب"));
+        if (after) after();
+      });
+  };
+  EP.flagUserTest = function (u, isTest, after) {
+    post("/platform-users/" + encodeURIComponent(u.id) + "/flag-test", { is_test: !!isTest, email: u.email || "" })
+      .then(function () { note(isTest ? "اتوسم الحساب «تجريبي» — مخفي عن كل الواجهات العامة" : "اترفع وسم «تجريبي»"); EP.reload("users", after); })
+      .catch(function (e) {
+        quietToast(e && e.status === 404
+          ? "وسم الحساب «تجريبي» لسه ما اتنشرش على المنصة"
+          : ((e && e.message) || "تعذّر تغيير الوسم"));
+        if (after) after();
+      });
+  };
+
   // «اعمل مقال»: the platform LLM AUTHORS a fresh SEO article FROM this topic (new
   // headline/excerpt/body — NEVER a copy of the topic text), then we store the RETURNED
   // structured article as a CMS DRAFT for review in «المقالات». Honest failure: on any LLM
@@ -2030,7 +2290,8 @@
                 escrow: null, investment: null, marketing: null, partners: null, courses: null, settings: null,
                 packages: null, t_data: null, i_data: null, targets: null, foundation: null, team: null,
                 notifications: null, goalsAdvisor: null, tutorials: null, platformTopics: null, platformTopicsAnalysis: null,
-                platformOpinions: null,
+                platformPendingTopics: null, platformTopicSegments: null, platformOpinions: null,
+                market: null, marketDemand: null,
                 aiAgents: null, dashUsers: null, audit: null, usage: null };
     EP.state = {};
     window.location.reload();
