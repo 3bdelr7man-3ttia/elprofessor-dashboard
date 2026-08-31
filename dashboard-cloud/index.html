@@ -356,6 +356,8 @@ function moduleDef(id){return MODULES[id]||ROLE_MODULES[id]||null;}
 const MODULES_LOOKUP=new Proxy({},{get:(_,k)=>moduleDef(String(k)),has:(_,k)=>!!moduleDef(String(k))});
 // الوارد: لا بيانات تصميمية — تملؤه طبقة الـ API (window.INBOX = صفوف حقيقية) أو يبقى فارغًا.
 var INBOX=[];
+// أسماء الطوابير التي تعذّر جلبها في آخر تحميل (تملؤها dashboard-api.js) — تُعلَن فوق العدّاد.
+var INBOX_FAILED=[];
 const TRI={auto:{cls:'tri-auto',t:'عالجه الذكاء'},human:{cls:'tri-human',t:'محوّل لبشري'},wait:{cls:'tri-wait',t:'بانتظار'},late:{cls:'tri-late',t:'متأخّر — عاجل'}};
 
 // escrow data
@@ -485,7 +487,11 @@ function renderView(){
 /* ===== INBOX VIEW ===== */
 function viewInbox(v){
   if(window.EP){EP.ensure('inbox',()=>viewInbox(v));}
+  // ⛔ عدّادٌ لا يكذب: طابورٌ تعذّر جلبه يُعلَن باسمه فوق الأرقام — «صفر» بسبب عطلٍ في الشبكة
+  // يقرأه المؤسس «مفيش طلبات» ويمشي، وهو أسوأ من رسالة خطأ.
+  const failedQ=(window.INBOX_FAILED&&window.INBOX_FAILED.length)?window.INBOX_FAILED:[];
   v.innerHTML=`
+    ${failedQ.length?`<div class="policy" style="border-inline-start-color:var(--conflict);background:var(--conflict-bg);color:var(--conflict)">${svg('scale','ic')}<div>تعذّر جلب: <b>${failedQ.map(esc).join(' · ')}</b> — الأرقام تحت <b>لا تشملها</b>. <b style="cursor:pointer;text-decoration:underline" onclick="EP.reload('inbox',()=>viewInbox(document.getElementById('view')))">أعد المحاولة</b></div></div>`:''}
     <div class="kpis" id="kpis"></div>
     <div class="filterbar" id="filters"><span class="lbl">التوجيه:</span></div>
     <div class="inboxwrap">
@@ -502,7 +508,8 @@ function viewInbox(v){
   KP.forEach(k=>ke.insertAdjacentHTML('beforeend',`<div class="kpi ${k.cls}" data-f="${k.f}"><div class="top"><span class="ic">${svg(k.ic)}</span>${k.t}</div><b>${money(k.v)}</b></div>`));
   ke.querySelectorAll('.kpi').forEach(c=>c.onclick=()=>{activeFilter=c.dataset.f;renderInbox();});
   renderInbox();
-  if(!cAll){const re=document.getElementById('rows');if(re)re.innerHTML='<div style="padding:40px;text-align:center;color:var(--muted)">لا وارد جديد</div>';const nN=document.getElementById('inboxN');if(nN)nN.textContent='0';}
+  // الحالة الفارغة تقول الصدق: «فاضي» فقط حين وصل كل طابور فعلًا؛ وإلا فهي «ما وصلش»، لا صفر.
+  if(!cAll){const re=document.getElementById('rows');if(re)re.innerHTML='<div style="padding:40px;text-align:center;color:var(--muted)">'+(failedQ.length?'ما قدرناش نجيب '+failedQ.map(esc).join(' · ')+' — مش معناه إن مفيش طلبات.':'لا وارد جديد')+'</div>';const nN=document.getElementById('inboxN');if(nN)nN.textContent='0';}
 }
 function renderInbox(){
   const fe=document.getElementById('filters');
@@ -514,11 +521,16 @@ function renderInbox(){
   fe.querySelectorAll('.chip').forEach(c=>c.onclick=()=>{activeFilter=c.dataset.f;renderInbox();});
   const el=document.getElementById('rows');el.innerHTML='';
   const q=(document.getElementById('q').value||'').trim();
-  const items=INBOX.filter(i=>{const okF=activeFilter==='all'||i.dest===activeFilter||i.triage===activeFilter;const okQ=!q||(i.out+i.from+i.who+MODULES_LOOKUP[i.dest].label).includes(q);return okF&&okQ;});
+  // البحث يشمل الخدمة والبريد كذلك: المؤسس يفتّش باسم المتقدّم أو بالخدمة التي ادّعاها.
+  const items=INBOX.filter(i=>{const okF=activeFilter==='all'||i.dest===activeFilter||i.triage===activeFilter;const okQ=!q||(i.out+i.from+i.who+(i.serviceLabel||'')+(i.email||'')+MODULES_LOOKUP[i.dest].label).includes(q);return okF&&okQ;});
   document.getElementById('inboxN').textContent=items.length;
   items.forEach(i=>{const m=MODULES_LOOKUP[i.dest],tr=TRI[i.triage],ri=INBOX.indexOf(i);
+    // سطر ثانٍ للصفوف التي تحمل خدمةً وتاريخًا (طلبات تقديم الخدمة): «أي خدمة · متى» — وشارة
+    // «مرخَّصة» بجوار العنوان، لأن القرار فيها لا يُتّخذ بلا مستند.
+    const lic=i.licensed?` <span class="status" style="background:var(--conflict-bg);color:var(--conflict);font-size:9.5px"><span class="d" style="background:var(--conflict)"></span>مرخَّصة</span>`:'';
+    const line2=(i.serviceLabel||i.whenLabel)?`<div class="from">${i.serviceLabel?`الخدمة: <b>${esc(i.serviceLabel)}</b>`:''}${(i.serviceLabel&&i.whenLabel)?' · ':''}${i.whenLabel?esc(i.whenLabel):''}</div>`:'';
     el.insertAdjacentHTML('beforeend',`<div class="row inbox-row${selected===ri?' sel':''}" data-i="${ri}">
-      <div class="c c1"><div class="src-ic">${svg(i.src)}</div><div><div class="out">${esc(i.out)}</div><div class="from">من سطح: <b>${esc(i.from)}</b> · ${esc(i.who)}</div></div></div>
+      <div class="c c1"><div class="src-ic">${svg(i.src)}</div><div><div class="out">${esc(i.out)}${lic}</div><div class="from">من سطح: <b>${esc(i.from)}</b> · ${esc(i.who)}</div>${line2}</div></div>
       <div class="c"><div class="destwrap"><span class="arrow">←</span><span class="dest" style="background:${m.bg};color:${m.c}">${svg(m.ic)}${m.label}</span></div></div>
       <div class="c"><span class="triage ${tr.cls}"><span class="d"></span>${tr.t}</span><div class="sla${i.slaWarn?' warn':''}">${svg('clock')}${i.sla}</div></div>
     </div>`);});
@@ -544,7 +556,11 @@ function inboxActs(i,m){
     a=`<button class="btn btn-human" data-a="resolve">${svg('check')}اعتبرها منتهية</button>`;
   }else if(i.apiKind){
     a=`<button class="btn btn-human" data-a="approve">${svg('check')}${esc(i.approveLabel||'اعتمد وحوّل للموديول')}</button>`;
-    if(i.canReject)a+=`<button class="btn btn-ghost" data-a="reject">رفض</button>`;
+    if(i.canReject){
+      // ⛔ «رفض بسبب»: ما يُكتب هنا هو نصّه الذي يقرؤه صاحب الطلب في المنصة — لا ملاحظة داخلية.
+      if(i.rejectNeedsReason)a+=`<textarea data-reject-reason rows="2" placeholder="سبب الرفض — يقرأه مقدّم الطلب كما تكتبه" style="width:100%;margin:2px 0 8px;padding:8px 10px;border-radius:9px;border:1px solid var(--line);background:var(--surface);color:inherit;font:inherit;font-size:12.5px;resize:vertical"></textarea>`;
+      a+=`<button class="btn btn-ghost" data-a="reject">رفض</button>`;
+    }
   }
   if(i.proofUrl)a+=`<a class="btn btn-ghost" href="${esc(i.proofUrl)}" target="_blank" rel="noopener">${svg('inbox')}إيصال الدفع</a>`;
   a+=`<button class="btn btn-ghost" data-a="goto">فتح ${m.label}</button>`;
@@ -554,13 +570,23 @@ function drawInbox(){
   const el=document.getElementById('drawer');if(!el)return;
   if(selected===null){el.innerHTML=`<div class="empty">${svg('inbox','ic')}<p>اختر بندًا من الوارد لرؤية مساره الكامل والإجراء.</p></div>`;return;}
   const i=INBOX[selected],m=MODULES_LOOKUP[i.dest],tr=TRI[i.triage];
+  // ⚠️ الفئة المرخَّصة (مرافعة · توثيق · مراجعة حسابات · ترجمة معتمدة): تُقرأ قبل أي زرّ.
+  const licStrip=i.licensed?`<div class="policy" style="border-inline-start-color:var(--conflict);background:var(--conflict-bg);color:var(--conflict);margin:0 0 12px">${svg('scale','ic')}<div><b>خدمة مرخَّصة</b> — مزاولتها معلَّقة على ترخيص/قيد. التحقّق فيها بالمستند نفسه لا بقراءة الطلب.</div></div>`:'';
+  const fld=(lab,val,style)=>val?`<div class="field"><div class="lab">${lab}</div><div class="val"${style?` style="${style}"`:''}>${esc(val)}</div></div>`:'';
+  // «ما أرفقه» — إجابات النموذج كما كتبها، وروابطه مستخرَجة. لا يُنقّب المراجِع في مكان آخر.
+  const det=(i.details||[]).map(d=>fld(esc(d.k),d.v)).join('');
+  const att=(i.attachments||[]).length?`<div class="field"><div class="lab">روابط أرفقها</div><div class="val">${(i.attachments||[]).map(u=>`<div><a href="${esc(u)}" target="_blank" rel="noopener noreferrer" style="color:var(--ai);word-break:break-all;direction:ltr;display:inline-block">${esc(u)}</a></div>`).join('')}</div></div>`:'';
   el.innerHTML=`<div class="dh"><div class="k">بند وارد · ${esc(i.ref)}</div><h3>${esc(i.out)}</h3></div><div class="db">
+    ${licStrip}
     <div class="route"><span class="step">المنصة · ${esc(i.from)}</span><span class="arrow">←</span><span class="step" style="color:${m.c};font-weight:800">${m.label}</span></div>
     <div class="note-ai">${svg('sparkles','ic')}<div>${esc(i.note)}</div></div>
     <div class="field"><div class="lab">يُدار في موديول</div><div class="val" style="color:${m.c}">${m.label}</div></div>
     <div class="field"><div class="lab">حالة الفرز</div><div class="val"><span class="triage ${tr.cls}"><span class="d"></span>${tr.t}</span></div></div>
-    <div class="field"><div class="lab">الطرف</div><div class="val">${esc(i.who)}</div></div>
-    <div class="field"><div class="lab">المهلة</div><div class="val" style="${i.slaWarn?'color:var(--conflict)':''}">${i.sla}</div></div>
+    <div class="field"><div class="lab">${i.serviceLabel?'مقدّم الطلب':'الطرف'}</div><div class="val">${esc(i.who)}${i.email&&i.email!==i.who?`<div style="font-size:11.5px;color:var(--muted);direction:ltr;text-align:right">${esc(i.email)}</div>`:''}</div></div>
+    ${fld('الخدمة المطلوب تقديمها',i.serviceLabel)}
+    ${fld('حالة الطلب',i.statusLabel)}
+    ${det}${att}
+    <div class="field"><div class="lab">${i.whenLabel?'التقديم':'المهلة'}</div><div class="val" style="${i.slaWarn?'color:var(--conflict)':''}">${esc(i.sla)}</div></div>
     <div class="acts">${inboxActs(i,m)}</div></div>`;
   const refreshInbox=()=>{selected=null;viewInbox(document.getElementById('view'));};
   el.querySelectorAll('[data-a]').forEach(b=>b.onclick=()=>{
@@ -568,7 +594,14 @@ function drawInbox(){
     if(a==='goto'){go(i.dest);return;}
     if(!window.EP){toast('الربط غير متاح');return;}
     if(a==='approve'&&i.apiKind){EP.decideInboxItem(i,'approve',refreshInbox);return;}
-    if(a==='reject'&&i.apiKind){EP.decideInboxItem(i,'reject',refreshInbox);return;}
+    if(a==='reject'&&i.apiKind){
+      // سبب الرفض يسافر مع القرار — لأن المنصة تعرضه لصاحب الطلب. رفضٌ بلا سبب يُمنع هنا،
+      // والبروكسي يمنعه ثانيةً على الخادم (لا نعتمد على المتصفّح وحده).
+      const rt=el.querySelector('[data-reject-reason]');
+      const reason=rt?String(rt.value||'').trim():'';
+      if(i.rejectNeedsReason&&!reason){toast('اكتب سبب الرفض — مقدّم الطلب يقرأه');if(rt)rt.focus();return;}
+      EP.decideInboxItem(i,'reject',refreshInbox,reason);return;
+    }
     if(a==='resolve'){EP.resolveInboxItem(i,refreshInbox);return;}
     if(a==='reassign'){const sel=el.querySelector('[data-reassign-sel]');const em=sel?sel.value:'';if(!em){toast('اختر خبيرًا أولًا');return;}EP.reassignVerify(i.apiId,em,refreshInbox);return;}
     toast('عرض في '+m.label);});
