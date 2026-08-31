@@ -356,6 +356,8 @@ function moduleDef(id){return MODULES[id]||ROLE_MODULES[id]||null;}
 const MODULES_LOOKUP=new Proxy({},{get:(_,k)=>moduleDef(String(k)),has:(_,k)=>!!moduleDef(String(k))});
 // الوارد: لا بيانات تصميمية — تملؤه طبقة الـ API (window.INBOX = صفوف حقيقية) أو يبقى فارغًا.
 var INBOX=[];
+// أسماء الطوابير التي تعذّر جلبها في آخر تحميل (تملؤها dashboard-api.js) — تُعلَن فوق العدّاد.
+var INBOX_FAILED=[];
 const TRI={auto:{cls:'tri-auto',t:'عالجه الذكاء'},human:{cls:'tri-human',t:'محوّل لبشري'},wait:{cls:'tri-wait',t:'بانتظار'},late:{cls:'tri-late',t:'متأخّر — عاجل'}};
 
 // escrow data
@@ -483,9 +485,27 @@ function renderView(){
 }
 
 /* ===== INBOX VIEW ===== */
+// ⛔ عدّادٌ لا يكذب: طابورٌ تعذّر جلبه يُعلَن باسمه فوق الأرقام — «صفر» بسبب عطلٍ في الشبكة
+// يقرأه المؤسس «مفيش طلبات» ويمشي، وهو أسوأ من رسالة خطأ.
+// ⚠️ هذه القراءة كانت محبوسة في «الوارد» وحده، بينما «نظرة عامة» و«الخبراء والمدربون»
+// و«الدورات» تستهلك **نفس** المُحمِّل (EP.ensure('inbox',…)) وتتجاهل عطله — فالجملة التي
+// قُتلت في الوارد ظلّت حيّة على بُعد نقرة. الشرط واحد هنا لكل شاشة تقرأ الوارد.
+function inboxFailedList(){return (window.INBOX_FAILED&&window.INBOX_FAILED.length)?window.INBOX_FAILED:[];}
+function inboxFailedStrip(viewFn){
+  const f=inboxFailedList();
+  if(!f.length)return '';
+  return `<div class="policy" style="border-inline-start-color:var(--conflict);background:var(--conflict-bg);color:var(--conflict)">${svg('scale','ic')}<div>تعذّر جلب: <b>${f.map(esc).join(' · ')}</b> — أرقام الوارد تحت <b>لا تشملها</b>. <b style="cursor:pointer;text-decoration:underline" onclick="EP.reload('inbox',()=>${viewFn}(document.getElementById('view')))">أعد المحاولة</b></div></div>`;
+}
+// ذيلٌ للحالة الفارغة: «صفر» مع طابور متعثّر ليس «لا شيء» بل «لا نعرف».
+function inboxFailedTail(){
+  const f=inboxFailedList();
+  return f.length?` — <b style="color:var(--conflict)">عدا ${esc(f.join(' · '))} (تعذّر جلبها)</b>`:'';
+}
 function viewInbox(v){
   if(window.EP){EP.ensure('inbox',()=>viewInbox(v));}
+  const failedQ=inboxFailedList();
   v.innerHTML=`
+    ${inboxFailedStrip('viewInbox')}
     <div class="kpis" id="kpis"></div>
     <div class="filterbar" id="filters"><span class="lbl">التوجيه:</span></div>
     <div class="inboxwrap">
@@ -502,7 +522,8 @@ function viewInbox(v){
   KP.forEach(k=>ke.insertAdjacentHTML('beforeend',`<div class="kpi ${k.cls}" data-f="${k.f}"><div class="top"><span class="ic">${svg(k.ic)}</span>${k.t}</div><b>${money(k.v)}</b></div>`));
   ke.querySelectorAll('.kpi').forEach(c=>c.onclick=()=>{activeFilter=c.dataset.f;renderInbox();});
   renderInbox();
-  if(!cAll){const re=document.getElementById('rows');if(re)re.innerHTML='<div style="padding:40px;text-align:center;color:var(--muted)">لا وارد جديد</div>';const nN=document.getElementById('inboxN');if(nN)nN.textContent='0';}
+  // الحالة الفارغة تقول الصدق: «فاضي» فقط حين وصل كل طابور فعلًا؛ وإلا فهي «ما وصلش»، لا صفر.
+  if(!cAll){const re=document.getElementById('rows');if(re)re.innerHTML='<div style="padding:40px;text-align:center;color:var(--muted)">'+(failedQ.length?'ما قدرناش نجيب '+failedQ.map(esc).join(' · ')+' — مش معناه إن مفيش طلبات.':'لا وارد جديد')+'</div>';const nN=document.getElementById('inboxN');if(nN)nN.textContent='0';}
 }
 function renderInbox(){
   const fe=document.getElementById('filters');
@@ -514,11 +535,16 @@ function renderInbox(){
   fe.querySelectorAll('.chip').forEach(c=>c.onclick=()=>{activeFilter=c.dataset.f;renderInbox();});
   const el=document.getElementById('rows');el.innerHTML='';
   const q=(document.getElementById('q').value||'').trim();
-  const items=INBOX.filter(i=>{const okF=activeFilter==='all'||i.dest===activeFilter||i.triage===activeFilter;const okQ=!q||(i.out+i.from+i.who+MODULES_LOOKUP[i.dest].label).includes(q);return okF&&okQ;});
+  // البحث يشمل الخدمة والبريد كذلك: المؤسس يفتّش باسم المتقدّم أو بالخدمة التي ادّعاها.
+  const items=INBOX.filter(i=>{const okF=activeFilter==='all'||i.dest===activeFilter||i.triage===activeFilter;const okQ=!q||(i.out+i.from+i.who+(i.serviceLabel||'')+(i.email||'')+MODULES_LOOKUP[i.dest].label).includes(q);return okF&&okQ;});
   document.getElementById('inboxN').textContent=items.length;
   items.forEach(i=>{const m=MODULES_LOOKUP[i.dest],tr=TRI[i.triage],ri=INBOX.indexOf(i);
+    // سطر ثانٍ للصفوف التي تحمل خدمةً وتاريخًا (طلبات تقديم الخدمة): «أي خدمة · متى» — وشارة
+    // «مرخَّصة» بجوار العنوان، لأن القرار فيها لا يُتّخذ بلا مستند.
+    const lic=i.licensed?` <span class="status" style="background:var(--conflict-bg);color:var(--conflict);font-size:9.5px"><span class="d" style="background:var(--conflict)"></span>مرخَّصة</span>`:'';
+    const line2=(i.serviceLabel||i.whenLabel)?`<div class="from">${i.serviceLabel?`الخدمة: <b>${esc(i.serviceLabel)}</b>`:''}${(i.serviceLabel&&i.whenLabel)?' · ':''}${i.whenLabel?esc(i.whenLabel):''}</div>`:'';
     el.insertAdjacentHTML('beforeend',`<div class="row inbox-row${selected===ri?' sel':''}" data-i="${ri}">
-      <div class="c c1"><div class="src-ic">${svg(i.src)}</div><div><div class="out">${esc(i.out)}</div><div class="from">من سطح: <b>${esc(i.from)}</b> · ${esc(i.who)}</div></div></div>
+      <div class="c c1"><div class="src-ic">${svg(i.src)}</div><div><div class="out">${esc(i.out)}${lic}</div><div class="from">من سطح: <b>${esc(i.from)}</b> · ${esc(i.who)}</div>${line2}</div></div>
       <div class="c"><div class="destwrap"><span class="arrow">←</span><span class="dest" style="background:${m.bg};color:${m.c}">${svg(m.ic)}${m.label}</span></div></div>
       <div class="c"><span class="triage ${tr.cls}"><span class="d"></span>${tr.t}</span><div class="sla${i.slaWarn?' warn':''}">${svg('clock')}${i.sla}</div></div>
     </div>`);});
@@ -544,7 +570,11 @@ function inboxActs(i,m){
     a=`<button class="btn btn-human" data-a="resolve">${svg('check')}اعتبرها منتهية</button>`;
   }else if(i.apiKind){
     a=`<button class="btn btn-human" data-a="approve">${svg('check')}${esc(i.approveLabel||'اعتمد وحوّل للموديول')}</button>`;
-    if(i.canReject)a+=`<button class="btn btn-ghost" data-a="reject">رفض</button>`;
+    if(i.canReject){
+      // ⛔ «رفض بسبب»: ما يُكتب هنا هو نصّه الذي يقرؤه صاحب الطلب في المنصة — لا ملاحظة داخلية.
+      if(i.rejectNeedsReason)a+=`<textarea data-reject-reason rows="2" placeholder="سبب الرفض — يقرأه مقدّم الطلب كما تكتبه" style="width:100%;margin:2px 0 8px;padding:8px 10px;border-radius:9px;border:1px solid var(--line);background:var(--surface);color:inherit;font:inherit;font-size:12.5px;resize:vertical"></textarea>`;
+      a+=`<button class="btn btn-ghost" data-a="reject">رفض</button>`;
+    }
   }
   if(i.proofUrl)a+=`<a class="btn btn-ghost" href="${esc(i.proofUrl)}" target="_blank" rel="noopener">${svg('inbox')}إيصال الدفع</a>`;
   a+=`<button class="btn btn-ghost" data-a="goto">فتح ${m.label}</button>`;
@@ -554,13 +584,27 @@ function drawInbox(){
   const el=document.getElementById('drawer');if(!el)return;
   if(selected===null){el.innerHTML=`<div class="empty">${svg('inbox','ic')}<p>اختر بندًا من الوارد لرؤية مساره الكامل والإجراء.</p></div>`;return;}
   const i=INBOX[selected],m=MODULES_LOOKUP[i.dest],tr=TRI[i.triage];
+  // ⚠️ الفئة المرخَّصة (مرافعة · توثيق · مراجعة حسابات · ترجمة معتمدة): تُقرأ قبل أي زرّ.
+  // ⛔ وغيابها ليس نفيًا: الوسم مطابقةٌ نصّية لما كتبه المتقدّم، فالمراجِع الذي تعلّم رؤية
+  // الشارة كان يقرأ خلوّ الصفّ «ليست فئة مرخَّصة». الصفّ الخدمي يقول أيهما هو صراحةً.
+  const licStrip=i.licensed
+    ?`<div class="policy" style="border-inline-start-color:var(--conflict);background:var(--conflict-bg);color:var(--conflict);margin:0 0 12px">${svg('scale','ic')}<div><b>خدمة مرخَّصة</b> — مزاولتها معلَّقة على ترخيص/قيد. التحقّق فيها بالمستند نفسه لا بقراءة الطلب.</div></div>`
+    :(i.serviceLabel?`<div class="policy" style="margin:0 0 12px">${svg('scale','ic')}<div><b>لم تُطابَق فئة مرخَّصة تلقائيًا.</b> الوسم يقرأ ما كتبه المتقدّم — وغيابه <b>ليس شهادةً</b> بأن الخدمة غير مرخَّصة. تحقّق من صفته بنفسك قبل القبول.</div></div>`:'');
+  const fld=(lab,val,style)=>val?`<div class="field"><div class="lab">${lab}</div><div class="val"${style?` style="${style}"`:''}>${esc(val)}</div></div>`:'';
+  // «ما أرفقه» — إجابات النموذج كما كتبها، وروابطه مستخرَجة. لا يُنقّب المراجِع في مكان آخر.
+  const det=(i.details||[]).map(d=>fld(esc(d.k),d.v)).join('');
+  const att=(i.attachments||[]).length?`<div class="field"><div class="lab">روابط أرفقها</div><div class="val">${(i.attachments||[]).map(u=>`<div><a href="${esc(u)}" target="_blank" rel="noopener noreferrer" style="color:var(--ai);word-break:break-all;direction:ltr;display:inline-block">${esc(u)}</a></div>`).join('')}</div></div>`:'';
   el.innerHTML=`<div class="dh"><div class="k">بند وارد · ${esc(i.ref)}</div><h3>${esc(i.out)}</h3></div><div class="db">
+    ${licStrip}
     <div class="route"><span class="step">المنصة · ${esc(i.from)}</span><span class="arrow">←</span><span class="step" style="color:${m.c};font-weight:800">${m.label}</span></div>
     <div class="note-ai">${svg('sparkles','ic')}<div>${esc(i.note)}</div></div>
     <div class="field"><div class="lab">يُدار في موديول</div><div class="val" style="color:${m.c}">${m.label}</div></div>
     <div class="field"><div class="lab">حالة الفرز</div><div class="val"><span class="triage ${tr.cls}"><span class="d"></span>${tr.t}</span></div></div>
-    <div class="field"><div class="lab">الطرف</div><div class="val">${esc(i.who)}</div></div>
-    <div class="field"><div class="lab">المهلة</div><div class="val" style="${i.slaWarn?'color:var(--conflict)':''}">${i.sla}</div></div>
+    <div class="field"><div class="lab">${i.serviceLabel?'مقدّم الطلب':'الطرف'}</div><div class="val">${esc(i.who)}${i.email&&i.email!==i.who?`<div style="font-size:11.5px;color:var(--muted);direction:ltr;text-align:right">${esc(i.email)}</div>`:''}</div></div>
+    ${fld('الخدمة المطلوب تقديمها',i.serviceLabel)}
+    ${fld('حالة الطلب',i.statusLabel)}
+    ${det}${att}
+    <div class="field"><div class="lab">${i.whenLabel?'التقديم':'المهلة'}</div><div class="val" style="${i.slaWarn?'color:var(--conflict)':''}">${esc(i.sla)}</div></div>
     <div class="acts">${inboxActs(i,m)}</div></div>`;
   const refreshInbox=()=>{selected=null;viewInbox(document.getElementById('view'));};
   el.querySelectorAll('[data-a]').forEach(b=>b.onclick=()=>{
@@ -568,7 +612,14 @@ function drawInbox(){
     if(a==='goto'){go(i.dest);return;}
     if(!window.EP){toast('الربط غير متاح');return;}
     if(a==='approve'&&i.apiKind){EP.decideInboxItem(i,'approve',refreshInbox);return;}
-    if(a==='reject'&&i.apiKind){EP.decideInboxItem(i,'reject',refreshInbox);return;}
+    if(a==='reject'&&i.apiKind){
+      // سبب الرفض يسافر مع القرار — لأن المنصة تعرضه لصاحب الطلب. رفضٌ بلا سبب يُمنع هنا،
+      // والبروكسي يمنعه ثانيةً على الخادم (لا نعتمد على المتصفّح وحده).
+      const rt=el.querySelector('[data-reject-reason]');
+      const reason=rt?String(rt.value||'').trim():'';
+      if(i.rejectNeedsReason&&!reason){toast('اكتب سبب الرفض — مقدّم الطلب يقرأه');if(rt)rt.focus();return;}
+      EP.decideInboxItem(i,'reject',refreshInbox,reason);return;
+    }
     if(a==='resolve'){EP.resolveInboxItem(i,refreshInbox);return;}
     if(a==='reassign'){const sel=el.querySelector('[data-reassign-sel]');const em=sel?sel.value:'';if(!em){toast('اختر خبيرًا أولًا');return;}EP.reassignVerify(i.apiId,em,refreshInbox);return;}
     toast('عرض في '+m.label);});
@@ -1283,11 +1334,12 @@ function viewOverview(v){
     : [];
   v.innerHTML=`
     ${Dst==='error'?`<div class="policy" style="border-inline-start-color:var(--conflict);background:var(--conflict-bg);color:var(--conflict)">${svg('scale','ic')}<div>تعذّر جلب أرقام المالية من الخادم — لا تُعرض أي أرقام بديلة. <b style="cursor:pointer;text-decoration:underline" onclick="EP.reload('dashboard',()=>viewOverview(document.getElementById('view')))">إعادة المحاولة</b></div></div>`:''}
+    ${inboxFailedStrip('viewOverview')}
     <div class="kpis">
       <div class="kpi k-1"><div class="top"><span class="ic">${svg('users')}</span>مستخدمو المنصة</div><b>${kUsers}</b><div class="sub">${kUsersSub}</div></div>
       <div class="kpi k-3"><div class="top"><span class="ic">${svg('wallet')}</span>صافي الربح</div><b>${kProfit}</b><div class="sub">${fin?'إيرادات − مصروفات':'حتى اليوم'}</div></div>
       <div class="kpi k-2"><div class="top"><span class="ic">${svg('shield')}</span>محجوز في الضمان</div><b>${escHeld!=null?money(escHeld)+' <small style="font-size:13px">ج</small>':'—'}</b><div class="sub">${escCount!=null?('عبر '+money(escCount)+' جلسات'):'لا بيانات'}</div></div>
-      <div class="kpi k-4"><div class="top"><span class="ic">${svg('inbox')}</span>وارد يحتاج تصرّفك</div><b>${money(act.length)}</b><div class="sub">${act.filter(i=>i.triage==='late').length} عاجل</div></div>
+      <div class="kpi k-4"><div class="top"><span class="ic">${svg('inbox')}</span>وارد يحتاج تصرّفك</div><b>${money(act.length)}${inboxFailedList().length?'<small style="font-size:13px;color:var(--conflict)"> +؟</small>':''}</b><div class="sub"${inboxFailedList().length?' style="color:var(--conflict)"':''}>${inboxFailedList().length?'عددٌ ناقص — تعذّر جلب '+esc(inboxFailedList().join(' · ')):act.filter(i=>i.triage==='late').length+' عاجل'}</div></div>
     </div>
     <section class="panel" style="margin-bottom:16px"><div class="ph"><h3>نمو الإيرادات الشهري</h3><span class="hint">بالألف ج${D?' · حيّ':''}</span></div><div style="padding:16px 24px 12px">${svgBars(monthlySeries,'var(--agree)','ك')}</div></section>
     <div style="display:grid;grid-template-columns:1.4fr 1fr;gap:16px;align-items:start" class="ov-grid">
@@ -1298,7 +1350,7 @@ function viewOverview(v){
   act.forEach(i=>{const m=MODULES_LOOKUP[i.dest],tr=TRI[i.triage];re.insertAdjacentHTML('beforeend',`<div class="row" data-d="${i.dest}" style="grid-template-columns:1fr 150px;cursor:pointer">
     <div class="c c1"><div class="src-ic">${svg(i.src)}</div><div><div class="out">${esc(i.out)}</div><div class="from">← ${m.label} · ${esc(i.who)}</div></div></div>
     <div class="c"><span class="triage ${tr.cls}"><span class="d"></span>${tr.t}</span></div></div>`);});
-  if(!act.length)re.innerHTML='<div style="padding:36px;text-align:center;color:var(--muted)">لا وارد يحتاج تصرّفك</div>';
+  if(!act.length)re.innerHTML='<div style="padding:36px;text-align:center;color:var(--muted)">'+(inboxFailedList().length?'لا وارد <b>ممّا وصلنا</b>'+inboxFailedTail():'لا وارد يحتاج تصرّفك')+'</div>';
   re.querySelectorAll('.row').forEach(r=>r.onclick=()=>go(r.dataset.d));
   const me=document.getElementById('ovMods');
   cards.forEach(([id,label,m])=>me.insertAdjacentHTML('beforeend',`<div class="ovcard" data-m="${id}" style="border:1px solid var(--line);border-radius:11px;padding:13px;cursor:pointer;transition:box-shadow .15s">
@@ -1351,11 +1403,12 @@ function viewCourses(v){
     <div class="policy" style="border-inline-start-color:var(--memory)">${svg('book','ic')}<div><b>نموذج التعلّم:</b> بنية الدورة والاشتراك والجدولة والتقدّم <b>native في المنصة</b> · الفيديو على سيرفر مخصّص · المحاضرة الأولى مجانًا ثم الدفع للاستكمال.</div></div>
     ${Cstr==='error'?`<div class="policy" style="border-inline-start-color:var(--conflict);background:var(--conflict-bg);color:var(--conflict)">${svg('scale','ic')}<div>تعذّر جلب الدورات من الخادم — لا تُعرض أي بيانات بديلة. <b style="cursor:pointer;text-decoration:underline" onclick="EP.reload('courses',()=>viewCourses(document.getElementById('view')))">إعادة المحاولة</b></div></div>`:''}
     ${Cstr==='loading'?`<div class="policy" style="border-inline-start-color:var(--memory)">${svg('book','ic')}<div>…جارٍ تحميل الدورات من الخادم</div></div>`:''}
+    ${inboxFailedStrip('viewCourses')}
     <div class="kpis">
       <div class="kpi k-1"><div class="top"><span class="ic">${svg('book')}</span>دورات منشورة على المنصة</div><b>${money(pcPub)}</b><div class="sub">من ${PCRS.length} دورة على app.elprofessor.net</div></div>
       <div class="kpi k-3"><div class="top"><span class="ic">${svg('users')}</span>إجمالي المسجّلين</div><b>${money(pcEnr)}</b><div class="sub">عبر كل دورات المنصة</div></div>
-      <div class="kpi k-2"><div class="top"><span class="ic">${svg('cap')}</span>طلبات برامج</div><b>${money(PRG.length)}</b><div class="sub">بانتظار الاعتماد</div></div>
-      <div class="kpi k-4"><div class="top"><span class="ic">${svg('shield')}</span>طلبات مدربين</div><b>${money(TRQ.length)}</b><div class="sub">بانتظار الاعتماد</div></div>
+      <div class="kpi k-2"><div class="top"><span class="ic">${svg('cap')}</span>طلبات برامج</div><b>${money(PRG.length)}</b><div class="sub"${inboxFailedList().length?' style="color:var(--conflict)"':''}>${inboxFailedList().length?'عددٌ ناقص — تعذّر جلب الوارد':'بانتظار الاعتماد'}</div></div>
+      <div class="kpi k-4"><div class="top"><span class="ic">${svg('shield')}</span>طلبات مدربين</div><b>${money(TRQ.length)}</b><div class="sub"${inboxFailedList().length?' style="color:var(--conflict)"':''}>${inboxFailedList().length?'عددٌ ناقص — تعذّر جلب الوارد':'بانتظار الاعتماد'}</div></div>
     </div>
     <div class="tabbar" id="cTabs">
       <div class="tab${courseTab==='platform'?' on':''}" data-t="platform">الكتالوج (على المنصة) (${PCRS.length})</div>
@@ -3398,6 +3451,7 @@ function viewTeam(v){
   </div>`;
   v.innerHTML=`
     ${Est==='error'?`<div class="policy" style="border-inline-start-color:var(--conflict);background:var(--conflict-bg);color:var(--conflict)">${svg('scale','ic')}<div>تعذّر جلب الخبراء من المنصة. <b style="cursor:pointer;text-decoration:underline" onclick="EP.reload('experts',()=>viewTeam(document.getElementById('view')))">إعادة المحاولة</b></div></div>`:''}
+    ${inboxFailedStrip('viewTeam')}
     <div class="kpis">
       <div class="kpi k-1"><div class="top"><span class="ic">${svg('cap')}</span>عدد الخبراء</div><b>${loadK||money(experts.length)}</b><div class="sub">مدرّبون معتمدون (خبراء)</div></div>
       <div class="kpi k-2"><div class="top"><span class="ic">${svg('shield')}</span>أكثر خبير إحالات</div><b style="font-size:16px">${loadK||esc(topRefLbl)}</b><div class="sub">${topRefSub}</div></div>
@@ -3406,7 +3460,7 @@ function viewTeam(v){
     </div>
     <div class="tabbar" id="teamTabs">
       <div class="tab${teamTab==='experts'?' on':''}" data-t="experts">الخبراء (${money(experts.length)})</div>
-      <div class="tab${teamTab==='trainers'?' on':''}" data-t="trainers">المدربون (${money(experts.length)}${pendingTrainers.length?' · '+money(pendingTrainers.length)+' بانتظار':''})</div>
+      <div class="tab${teamTab==='trainers'?' on':''}" data-t="trainers">المدربون (${money(experts.length)}${pendingTrainers.length?' · '+money(pendingTrainers.length)+' بانتظار':(inboxFailedList().length?' · ؟ بانتظار':'')})</div>
       <div class="tab${teamTab==='admins'?' on':''}" data-t="admins">الفريق الإداري (${money(admins.length)})</div>
     </div>
     <div class="inboxwrap">
@@ -3422,16 +3476,26 @@ function viewTeam(v){
     mm.querySelectorAll('.exp-row').forEach(r=>r.onclick=()=>{teamSelEmail=r.dataset.email;drawExpert(teamSelEmail);mm.querySelectorAll('.exp-row').forEach(x=>x.classList.toggle('sel',x===r));});
   } else if(teamTab==='trainers'){
     mh.textContent='المدربون';mn.textContent=experts.length;hint.textContent='دورات وطلاب + طلبات الانضمام';
-    const pendHtml=pendingTrainers.length?`<div style="padding:9px 16px;background:var(--human-bg);font-size:11.5px;font-weight:800;color:var(--human)">طلبات انضمام كمدرّب (${money(pendingTrainers.length)})</div>`+pendingTrainers.map((i,idx)=>`<div style="display:flex;align-items:center;gap:12px;padding:12px 16px;border-bottom:1px solid var(--line)">
+    // ⛔ «(0) طلبات انضمام» فوق طابورٍ تعذّر جلبه = كذب: يُعلَن «؟» وسببه بدل الصفر.
+    const pendHead=!!(pendingTrainers.length||inboxFailedList().length);
+    const pendHtml=pendHead?`<div style="padding:9px 16px;background:var(--human-bg);font-size:11.5px;font-weight:800;color:var(--human)">طلبات انضمام كمدرّب (${pendingTrainers.length?money(pendingTrainers.length):'؟'})${inboxFailedList().length?`<span style="color:var(--conflict);font-weight:700"> — تعذّر جلب ${esc(inboxFailedList().join(' · '))}</span>`:''}</div>`+pendingTrainers.map((i,idx)=>`<div style="display:flex;align-items:center;gap:12px;padding:12px 16px;border-bottom:1px solid var(--line)">
         <div class="src-ic" style="background:var(--human-bg);color:var(--human)">${svg('cap')}</div>
         <div style="flex:1"><div style="font-weight:700;font-size:13.5px">${esc(i.who||'—')}</div><div style="font-size:11.5px;color:var(--muted)">${esc(i.note||'طلب انضمام كمدرّب')}</div></div>
         <div style="display:flex;gap:6px"><button class="btn btn-primary tr-appr" data-idx="${idx}" style="flex:none;min-width:auto;padding:6px 12px;font-size:12px">اعتمد</button><button class="btn btn-warn tr-rej" data-idx="${idx}" style="flex:none;min-width:auto;padding:6px 12px;font-size:12px">رفض</button></div>
       </div>`).join(''):'';
-    const apprHtml=experts.length?(pendingTrainers.length?'<div style="padding:9px 16px;background:var(--surface-2);font-size:11.5px;font-weight:800;color:var(--muted)">مدرّبون معتمدون</div>':'')+experts.map(e=>expRow(e,'courses')).join(''):(pendingTrainers.length?'':'<div style="padding:40px;text-align:center;color:var(--muted)">لا مدرّبين معتمدين بعد.</div>');
+    const apprHtml=experts.length?(pendHead?'<div style="padding:9px 16px;background:var(--surface-2);font-size:11.5px;font-weight:800;color:var(--muted)">مدرّبون معتمدون</div>':'')+experts.map(e=>expRow(e,'courses')).join(''):(pendHead?'':'<div style="padding:40px;text-align:center;color:var(--muted)">لا مدرّبين معتمدين بعد.</div>');
     mm.innerHTML=pendHtml+apprHtml;
     mm.querySelectorAll('.exp-row').forEach(r=>r.onclick=()=>{teamSelEmail=r.dataset.email;drawExpert(teamSelEmail);mm.querySelectorAll('.exp-row').forEach(x=>x.classList.toggle('sel',x===r));});
     mm.querySelectorAll('.tr-appr').forEach(b=>b.onclick=()=>{var i=pendingTrainers[+b.dataset.idx];if(!i||!window.EP)return;if(!confirm('اعتماد «'+(i.who||'')+'» كمدرّب معتمد؟'))return;EP.decideInboxItem(i,'approve',()=>viewTeam(document.getElementById('view')));});
-    mm.querySelectorAll('.tr-rej').forEach(b=>b.onclick=()=>{var i=pendingTrainers[+b.dataset.idx];if(!i||!window.EP)return;if(!confirm('رفض طلب «'+(i.who||'')+'»؟'))return;EP.decideInboxItem(i,'reject',()=>viewTeam(document.getElementById('view')));});
+    // ⛔ «رفض بسبب» — الحارس كان يقف عند طابور الانضمام وحده: هذا الزرّ (زرّ الرفض **الوحيد**
+    // للمدرّب) كان ينادي decideInboxItem بثلاثة معاملات ⇒ admin_note:"" — بينما شاشة المنصة
+    // صارت تعرض لصاحبه خانة «سبب الرفض» خاوية. البروكسي يمنعه ثانيةً على الخادم.
+    mm.querySelectorAll('.tr-rej').forEach(b=>b.onclick=()=>{var i=pendingTrainers[+b.dataset.idx];if(!i||!window.EP)return;
+      var reason=prompt('سبب رفض طلب «'+(i.who||'')+'» — يقرأه مقدّم الطلب كما تكتبه:','');
+      if(reason===null)return;
+      reason=String(reason||'').trim();
+      if(!reason){toast('اكتب سبب الرفض — مقدّم الطلب يقرأه');return;}
+      EP.decideInboxItem(i,'reject',()=>viewTeam(document.getElementById('view')),reason);});
   } else {
     mh.textContent='الفريق الإداري';mn.textContent=admins.length;
     const liveAdmins=(window.USERS||[]).length>0;

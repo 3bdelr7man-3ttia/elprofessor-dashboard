@@ -156,6 +156,45 @@
       return new Intl.DateTimeFormat("ar-EG", { day: "numeric", month: "long" }).format(d);
     } catch (e) { return (iso || "").slice(0, 10); }
   }
+
+  // ——— «طلبات تقديم الخدمة»: متى قُدِّم الطلب، وكم قعد بلا قرار ———
+  // ⛔ أرقام لاتينية داخل جملة عربية عمدًا: التاريخ بالأرقام العربية-الهندية يتبعثر في الـbidi
+  // (فخّ مسجَّل في هذا المشروع). ⛔ ولا مهلة معلنة هنا: المؤسس لم يحدّد بعد «من يراجع وفي كم»،
+  // فنعرض **عمر الطلب** كما هو ولا نصفه بـ«متأخّر» عن موعدٍ لا وجود له.
+  function jrAge(iso) {
+    var t = Date.parse(iso || ""); if (isNaN(t)) return "";
+    var days = Math.floor((Date.now() - t) / 86400e3);
+    if (days <= 0) return "اليوم";
+    if (days === 1) return "من يوم";
+    if (days === 2) return "من يومين";
+    if (days <= 10) return "من " + days + " أيام";
+    return "من " + days + " يومًا";
+  }
+  function jrWhen(iso) {
+    var day = String(iso || "").slice(0, 10);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) return "";
+    var age = jrAge(iso);
+    return "قُدِّم " + day + (age ? " · " + age : "");
+  }
+  // تسميات حقول نموذج الانضمام (platform-app/src/v2/SectionGate.jsx). عرضٌ فقط: أي مفتاح جديد
+  // هناك يظهر هنا باسمه الخام بدل أن يختفي — فلا يضيع ما كتبه المتقدّم لو تقدّم النموذج علينا.
+  var JR_ANSWER_LABEL = {
+    specialty: "التخصص", experience: "سنوات الخبرة", years: "سنوات الخبرة",
+    record: "السجلّ المهني", proof: "إثبات الصفة", rate: "الحصة المقترحة",
+    bio: "نبذة", what: "ما سينشره", type: "النوع", rights: "الحقوق",
+    kind: "النوع", samples: "نماذج أعمال", about: "نبذة",
+    service: "نوع الخدمة", scope: "النطاق", pricing: "التسعير",
+    subjects: "مجالات التدريب", linkedin: "لينكدإن", cv: "السيرة الذاتية", sample: "عيّنة عمل",
+  };
+  function jrDetails(answers) {
+    var out = [];
+    if (!answers || typeof answers !== "object") return out;
+    Object.keys(answers).forEach(function (k) {
+      var v = String(answers[k] == null ? "" : answers[k]).trim();
+      if (v) out.push({ k: JR_ANSWER_LABEL[k] || k, v: v.length > 400 ? v.slice(0, 400) + "…" : v });
+    });
+    return out;
+  }
   // خرائط تعريب حقول المالية (مطابقة لقيم backend/app.py: Revenue.source / Revenue.payment_method
   // / Expense.category). أي قيمة غير معروفة تُعرض كما وردت من الخادم بلا اختلاق.
   var REV_SOURCE_AR = {
@@ -691,7 +730,14 @@
     inbox: function () {
       var jobs = [];
       var realRows = [];
+      var failed = [];
       function shortNote(s) { s = String(s || "").trim(); return s.length > 90 ? s.slice(0, 90) + "…" : s; }
+      // ⛔ «العدّاد لا يكذب»: كل طابور هنا كان يبتلع خطأه بصمت، فطابورٌ تعذّر جلبه كان يبدو
+      // **فارغًا** — والشاشة تقول «لا وارد جديد» فوق طلبات قائمة لم تصل. الابتلاع يبقى (طابور
+      // متعثّر يجب ألّا يُسقِط بقية الوارد) لكن اسمه يُسجَّل، والشاشة تعلن أن العدد ناقص.
+      // الاستثناءان المقصودان: «عملاء الشات» و«رسائل المنصة» — جسران best-effort قد لا يكونان
+      // مهيّأين أصلًا، فوسمهما فشلًا يعني تحذيرًا دائمًا بلا عطل.
+      function fail(label) { return function () { if (failed.indexOf(label) < 0) failed.push(label); }; }
       jobs.push(
         get("/platform-trainer-applications?status=pending").then(function (a) {
           var apps = (a && a.applications) || [];
@@ -704,7 +750,7 @@
               apiKind: "trainer", apiId: ap.id,
             });
           });
-        }).catch(function () {})
+        }).catch(fail("طلبات المدرّبين"))
       );
       jobs.push(
         get("/platform-program-requests?status=pending").then(function (a) {
@@ -718,7 +764,7 @@
               apiKind: "program", apiId: rq.id,
             });
           });
-        }).catch(function () {})
+        }).catch(fail("طلبات البرامج"))
       );
       // Topics pending review (founder review 2026-07-09): موضوع عضو لازم يتراجع قبل ما ينزل اللوحة العامة.
       jobs.push(
@@ -733,23 +779,41 @@
               apiKind: "topic", apiId: t.id,
             });
           });
-        }).catch(function () {})
+        }).catch(fail("المواضيع بانتظار المراجعة"))
       );
-      // Section-key join requests (Phase 2): خبير/محامي/ناشر/مبدع/تسويق — اعتماد المفتاح يفتح القسم للعضو.
+      // «طلبات تقديم الخدمة» — طابور مفاتيح الأقسام نفسه (Phase 2)، لا طابور ثانٍ: كل صفّ هنا هو
+      // ادّعاء «أقدر أقدّم هذه الخدمة»، وقبوله هو ما ينشر اسم صاحبه (قرار المؤسس 2026-08-31:
+      // «اسمه يظهر بعد التحقق»). الصفّ يحمل الخمسة التي يُبَتّ بها: من · أي خدمة · متى ·
+      // أمرخَّصةٌ هي · وحالته — والمنصة ترسلها جاهزة في serialize_request (routes/join_requests.py)
+      // فلا نستنتج منها شيئًا هنا.
       jobs.push(
         get("/platform-join-requests?status=pending").then(function (a) {
           var reqs = (a && a.requests) || [];
           var SEC = { expert_offers: "خبير معتمد", lawyer_offers: "محامٍ معتمد", publisher: "ناشر", creative: "مبدع", marketing: "مزوّد تسويق" };
           reqs.forEach(function (jr) {
+            var when = jr.submitted_at || jr.created_at || "";
             realRows.push({
-              out: "طلب انضمام — " + (SEC[jr.section] || jr.section), from: "مفاتيح الأقسام", src: "cap", dest: "team",
-              triage: "human", sla: "اعتماد المفتاح", slaWarn: false,
-              note: shortNote(jr.note) || "طلب انضمام جديد — راجع البيانات واعتمد أو ارفض.",
+              out: "طلب تقديم خدمة", from: jr.section_label || SEC[jr.section] || jr.section,
+              src: "cap", dest: "team", triage: "human",
+              // ⛔ لا مهلة معلنة لهذا الطابور بعد ⇒ لا وسم «متأخّر»: نعرض عمر الطلب فقط.
+              sla: jrWhen(when) || "بانتظار قرارك", slaWarn: false,
+              note: shortNote(jr.note) || "بلا ملاحظة مكتوبة من المتقدّم — القرار من الخدمة وما أرفقه تحت.",
               ref: "JR-" + jr.id, who: jr.user_name || jr.user_email || "—",
               apiKind: "join", apiId: jr.id,
+              // «رفض بسبب»: المنصة تعرض `admin_note` لصاحب الطلب حرفًا كسبب رفضه، فالرفض هنا
+              // لا يمرّ بلا سبب مكتوب (محروس في الواجهة وفي البروكسي معًا).
+              canReject: true, rejectNeedsReason: true,
+              approveLabel: "قبول — يُنشَر باسمه",
+              serviceLabel: jr.service_label || "",
+              licensed: !!jr.licensed,
+              statusLabel: jr.status_label || "",
+              whenLabel: jrWhen(when),
+              email: jr.user_email || "",
+              attachments: Array.isArray(jr.attachments) ? jr.attachments : [],
+              details: jrDetails(jr.answers),
             });
           });
-        }).catch(function () {})
+        }).catch(fail("طلبات تقديم الخدمة"))
       );
       // R1 — دفعات محلية (InstaPay/فودافون) بانتظار التأكيد. التأكيد ينفّذ المنح + الإيميل على المنصة (لا نكرّره هنا).
       jobs.push(
@@ -765,7 +829,7 @@
               approveLabel: "تأكيد الدفعة", proofUrl: p.screenshot_url || "",
             });
           });
-        }).catch(function () {})
+        }).catch(fail("الدفعات اليدوية"))
       );
       // R1 — أعمال ركن الإبداع بانتظار المراجعة.
       jobs.push(
@@ -780,7 +844,7 @@
               apiKind: "creative", apiId: c.id, canReject: true, approveLabel: "اعتماد ونشر",
             });
           });
-        }).catch(function () {})
+        }).catch(fail("أعمال ركن الإبداع"))
       );
       // R1 — كتب/أعمال معرفية بانتظار المراجعة (⚠️ ننبّه لو بلا ملف).
       jobs.push(
@@ -795,7 +859,7 @@
               apiKind: "book", apiId: k.id, canReject: true, approveLabel: "اعتماد ونشر",
             });
           });
-        }).catch(function () {})
+        }).catch(fail("سوق المعرفة"))
       );
       // R1 — طلبات توثيق بلا خبير متاح (routed_admin): حوّلها لخبير معتمد. حلقة المنتج الأساسية.
       jobs.push(
@@ -810,7 +874,7 @@
               apiKind: "verify", apiId: rq.id, candidates: rq.candidate_experts || [],
             });
           });
-        }).catch(function () {})
+        }).catch(fail("طلبات التوثيق"))
       );
       // تسليمات الشات (P15): رسائل تواصل جديدة تُكتب محليًّا في «الرسائل» ← تظهر في الوارد كذلك.
       jobs.push(
@@ -824,7 +888,7 @@
               ref: "MSG-" + m.id, who: m.name || m.email || "—",
             });
           });
-        }).catch(function () {})
+        }).catch(fail("الرسائل"))
       );
       // عملاء محتملون من الشات (best-effort — الجسر قد لا يوفّره بعد).
       jobs.push(
@@ -862,6 +926,10 @@
         EP.data.inbox = realRows;
         // الوارد = الصفوف الحقيقية فقط (لا دمج لأي بيانات تصميمية).
         window.INBOX = realRows;
+        // أسماء الطوابير التي تعذّر جلبها — الشاشة تعلنها فوق العدّاد، فالعدد ناقصٌ معلومًا
+        // لا فارغًا مطمئنًا.
+        EP.data.inboxFailed = failed;
+        window.INBOX_FAILED = failed;
       });
     },
 
@@ -1491,8 +1559,12 @@
   };
 
   // اعتماد/رفض بند وارد حقيقي (مدرّب/برنامج/انضمام/موضوع/إبداع/كتاب/دفعة يدوية).
-  EP.decideInboxItem = function (i, action, after) {
-    var path, body = { admin_note: "" };
+  // `adminNote` = سبب القرار كما يكتبه المراجِع. ⛔ كان مثبَّتًا على "" فكان كل رفض يصل صاحبه
+  // بلا سبب — والمنصة تعرض هذا الحقل نفسه لصاحب الطلب («سبب الرفض»). النداءات القديمة بثلاثة
+  // معاملات تبقى كما هي (سبب فارغ) بلا كسر.
+  EP.decideInboxItem = function (i, action, after, adminNote) {
+    var reason = String(adminNote == null ? "" : adminNote).trim().slice(0, 1000);
+    var path, body = { admin_note: reason };
     switch (i.apiKind) {
       case "trainer":  path = "/platform-trainer-applications/" + i.apiId + "/" + action; break;
       case "join":     path = "/platform-join-requests/" + i.apiId + "/" + action; break;
@@ -1503,7 +1575,7 @@
         path = "/platform-manual-payments/" + i.apiId + "/" + (action === "approve" ? "confirm" : "reject"); break;
       case "book":
         path = "/platform-knowledge/" + encodeURIComponent(i.apiId) + "/decide";
-        body = { decision: action, admin_note: "" }; break;
+        body = { decision: action, admin_note: reason }; break;
       default:         path = "/platform-program-requests/" + i.apiId + "/" + action;
     }
     post(path, body)

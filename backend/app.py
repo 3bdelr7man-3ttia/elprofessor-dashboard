@@ -1814,14 +1814,30 @@ def _platform_delete_course(platform_id):
 @token_required
 @roles_required('admin', 'employee')
 def platform_trainer_decide(application_id, action):
+    """Decide one «طلب انضمام كمدرّب». Same two rules as the join-request twin below — the
+    guard used to stop at that queue while trainer applications were rejected silently:
+
+      1. رفضٌ بلا سبب ممنوع — the platform hands `admin_note` back to the applicant as
+         «سبب الرفض» (SectionGate reads it off /api/my/trainer-application). An empty note
+         leaves him with a bare «مرفوض» over an empty box built for him. Guarded on the SERVER.
+      2. the decision is written to our own audit log — the bridge stamps no acting email.
+
+    `get_json(silent=True)` (not `request.json`): a body-less POST raises 415 in Flask 3, which
+    is exactly the reason-less rejection that must come back with the SENTENCE, not a page."""
     if action not in ('approve', 'reject'):
         return jsonify({'error': 'إجراء غير معروف'}), 400
-    body = request.json or {}
-    return _platform_proxy(
+    body = request.get_json(silent=True) or {}
+    note = str(body.get('admin_note') or '').strip()[:1000]
+    if action == 'reject' and not note:
+        return jsonify({'error': 'اكتب سبب الرفض — مقدّم الطلب يقرأه كما هو'}), 400
+    resp = _platform_proxy(
         'POST',
         f"/api/bridge/trainer-applications/{application_id}/{action}",
-        json_body={'admin_note': body.get('admin_note') or ''},
+        json_body={'admin_note': note},
     )
+    if _resp_ok(resp):
+        _audit(f'trainer_application.{action}', target=application_id, meta={'note': note})
+    return resp
 
 
 @app.route('/api/platform-join-requests', methods=['GET'])
@@ -1842,14 +1858,35 @@ def platform_join_requests():
 @token_required
 @roles_required('admin', 'employee')
 def platform_join_request_decide(request_id, action):
+    """Decide one «طلب تقديم خدمة». Approving it is what PUBLISHES the applicant's name
+    (the platform's grant flips section_keys + trainer_status → the public expert surfaces),
+    so this route is the only place the founder's «اسمه يظهر بعد التحقق» is enforced by a human.
+
+    Two things must be true here and are pinned by test_service_requests.py:
+      1. رفضٌ بلا سبب ممنوع — the platform hands `admin_note` straight back to the applicant as
+         «سبب الرفض» (join_requests.serialize_request → `reason`). An empty note leaves him with
+         a bare «مرفوض», which is the silence the founder's decision explicitly forbids. Guarded
+         on the SERVER, not only in the browser.
+      2. the deciding employee is recorded — the bridge stamps `by="dashboard"` for every
+         dashboard call, so the acting email exists nowhere but our own audit log.
+    """
     if action not in ('approve', 'reject'):
         return jsonify({'error': 'إجراء غير معروف'}), 400
-    body = request.json or {}
-    return _platform_proxy(
+    # `get_json(silent=True)` (not `request.json`): a body-less POST raises 415 in Flask 3, and a
+    # rejection sent without a body is exactly the case that must come back with the SENTENCE
+    # below, not with an unsupported-media-type page nobody can act on.
+    body = request.get_json(silent=True) or {}
+    note = str(body.get('admin_note') or '').strip()[:1000]
+    if action == 'reject' and not note:
+        return jsonify({'error': 'اكتب سبب الرفض — مقدّم الطلب يقرأه كما هو'}), 400
+    resp = _platform_proxy(
         'POST',
         f"/api/bridge/join-requests/{request_id}/decide",
-        json_body={'decision': action, 'admin_note': body.get('admin_note') or ''},
+        json_body={'decision': action, 'admin_note': note},
     )
+    if _resp_ok(resp):
+        _audit(f'join_request.{action}', target=request_id, meta={'note': note})
+    return resp
 
 
 @app.route('/api/platform-pending-topics', methods=['GET'])
