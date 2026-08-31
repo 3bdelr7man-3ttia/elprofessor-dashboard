@@ -485,13 +485,27 @@ function renderView(){
 }
 
 /* ===== INBOX VIEW ===== */
+// ⛔ عدّادٌ لا يكذب: طابورٌ تعذّر جلبه يُعلَن باسمه فوق الأرقام — «صفر» بسبب عطلٍ في الشبكة
+// يقرأه المؤسس «مفيش طلبات» ويمشي، وهو أسوأ من رسالة خطأ.
+// ⚠️ هذه القراءة كانت محبوسة في «الوارد» وحده، بينما «نظرة عامة» و«الخبراء والمدربون»
+// و«الدورات» تستهلك **نفس** المُحمِّل (EP.ensure('inbox',…)) وتتجاهل عطله — فالجملة التي
+// قُتلت في الوارد ظلّت حيّة على بُعد نقرة. الشرط واحد هنا لكل شاشة تقرأ الوارد.
+function inboxFailedList(){return (window.INBOX_FAILED&&window.INBOX_FAILED.length)?window.INBOX_FAILED:[];}
+function inboxFailedStrip(viewFn){
+  const f=inboxFailedList();
+  if(!f.length)return '';
+  return `<div class="policy" style="border-inline-start-color:var(--conflict);background:var(--conflict-bg);color:var(--conflict)">${svg('scale','ic')}<div>تعذّر جلب: <b>${f.map(esc).join(' · ')}</b> — أرقام الوارد تحت <b>لا تشملها</b>. <b style="cursor:pointer;text-decoration:underline" onclick="EP.reload('inbox',()=>${viewFn}(document.getElementById('view')))">أعد المحاولة</b></div></div>`;
+}
+// ذيلٌ للحالة الفارغة: «صفر» مع طابور متعثّر ليس «لا شيء» بل «لا نعرف».
+function inboxFailedTail(){
+  const f=inboxFailedList();
+  return f.length?` — <b style="color:var(--conflict)">عدا ${esc(f.join(' · '))} (تعذّر جلبها)</b>`:'';
+}
 function viewInbox(v){
   if(window.EP){EP.ensure('inbox',()=>viewInbox(v));}
-  // ⛔ عدّادٌ لا يكذب: طابورٌ تعذّر جلبه يُعلَن باسمه فوق الأرقام — «صفر» بسبب عطلٍ في الشبكة
-  // يقرأه المؤسس «مفيش طلبات» ويمشي، وهو أسوأ من رسالة خطأ.
-  const failedQ=(window.INBOX_FAILED&&window.INBOX_FAILED.length)?window.INBOX_FAILED:[];
+  const failedQ=inboxFailedList();
   v.innerHTML=`
-    ${failedQ.length?`<div class="policy" style="border-inline-start-color:var(--conflict);background:var(--conflict-bg);color:var(--conflict)">${svg('scale','ic')}<div>تعذّر جلب: <b>${failedQ.map(esc).join(' · ')}</b> — الأرقام تحت <b>لا تشملها</b>. <b style="cursor:pointer;text-decoration:underline" onclick="EP.reload('inbox',()=>viewInbox(document.getElementById('view')))">أعد المحاولة</b></div></div>`:''}
+    ${inboxFailedStrip('viewInbox')}
     <div class="kpis" id="kpis"></div>
     <div class="filterbar" id="filters"><span class="lbl">التوجيه:</span></div>
     <div class="inboxwrap">
@@ -571,7 +585,11 @@ function drawInbox(){
   if(selected===null){el.innerHTML=`<div class="empty">${svg('inbox','ic')}<p>اختر بندًا من الوارد لرؤية مساره الكامل والإجراء.</p></div>`;return;}
   const i=INBOX[selected],m=MODULES_LOOKUP[i.dest],tr=TRI[i.triage];
   // ⚠️ الفئة المرخَّصة (مرافعة · توثيق · مراجعة حسابات · ترجمة معتمدة): تُقرأ قبل أي زرّ.
-  const licStrip=i.licensed?`<div class="policy" style="border-inline-start-color:var(--conflict);background:var(--conflict-bg);color:var(--conflict);margin:0 0 12px">${svg('scale','ic')}<div><b>خدمة مرخَّصة</b> — مزاولتها معلَّقة على ترخيص/قيد. التحقّق فيها بالمستند نفسه لا بقراءة الطلب.</div></div>`:'';
+  // ⛔ وغيابها ليس نفيًا: الوسم مطابقةٌ نصّية لما كتبه المتقدّم، فالمراجِع الذي تعلّم رؤية
+  // الشارة كان يقرأ خلوّ الصفّ «ليست فئة مرخَّصة». الصفّ الخدمي يقول أيهما هو صراحةً.
+  const licStrip=i.licensed
+    ?`<div class="policy" style="border-inline-start-color:var(--conflict);background:var(--conflict-bg);color:var(--conflict);margin:0 0 12px">${svg('scale','ic')}<div><b>خدمة مرخَّصة</b> — مزاولتها معلَّقة على ترخيص/قيد. التحقّق فيها بالمستند نفسه لا بقراءة الطلب.</div></div>`
+    :(i.serviceLabel?`<div class="policy" style="margin:0 0 12px">${svg('scale','ic')}<div><b>لم تُطابَق فئة مرخَّصة تلقائيًا.</b> الوسم يقرأ ما كتبه المتقدّم — وغيابه <b>ليس شهادةً</b> بأن الخدمة غير مرخَّصة. تحقّق من صفته بنفسك قبل القبول.</div></div>`:'');
   const fld=(lab,val,style)=>val?`<div class="field"><div class="lab">${lab}</div><div class="val"${style?` style="${style}"`:''}>${esc(val)}</div></div>`:'';
   // «ما أرفقه» — إجابات النموذج كما كتبها، وروابطه مستخرَجة. لا يُنقّب المراجِع في مكان آخر.
   const det=(i.details||[]).map(d=>fld(esc(d.k),d.v)).join('');
@@ -1316,11 +1334,12 @@ function viewOverview(v){
     : [];
   v.innerHTML=`
     ${Dst==='error'?`<div class="policy" style="border-inline-start-color:var(--conflict);background:var(--conflict-bg);color:var(--conflict)">${svg('scale','ic')}<div>تعذّر جلب أرقام المالية من الخادم — لا تُعرض أي أرقام بديلة. <b style="cursor:pointer;text-decoration:underline" onclick="EP.reload('dashboard',()=>viewOverview(document.getElementById('view')))">إعادة المحاولة</b></div></div>`:''}
+    ${inboxFailedStrip('viewOverview')}
     <div class="kpis">
       <div class="kpi k-1"><div class="top"><span class="ic">${svg('users')}</span>مستخدمو المنصة</div><b>${kUsers}</b><div class="sub">${kUsersSub}</div></div>
       <div class="kpi k-3"><div class="top"><span class="ic">${svg('wallet')}</span>صافي الربح</div><b>${kProfit}</b><div class="sub">${fin?'إيرادات − مصروفات':'حتى اليوم'}</div></div>
       <div class="kpi k-2"><div class="top"><span class="ic">${svg('shield')}</span>محجوز في الضمان</div><b>${escHeld!=null?money(escHeld)+' <small style="font-size:13px">ج</small>':'—'}</b><div class="sub">${escCount!=null?('عبر '+money(escCount)+' جلسات'):'لا بيانات'}</div></div>
-      <div class="kpi k-4"><div class="top"><span class="ic">${svg('inbox')}</span>وارد يحتاج تصرّفك</div><b>${money(act.length)}</b><div class="sub">${act.filter(i=>i.triage==='late').length} عاجل</div></div>
+      <div class="kpi k-4"><div class="top"><span class="ic">${svg('inbox')}</span>وارد يحتاج تصرّفك</div><b>${money(act.length)}${inboxFailedList().length?'<small style="font-size:13px;color:var(--conflict)"> +؟</small>':''}</b><div class="sub"${inboxFailedList().length?' style="color:var(--conflict)"':''}>${inboxFailedList().length?'عددٌ ناقص — تعذّر جلب '+esc(inboxFailedList().join(' · ')):act.filter(i=>i.triage==='late').length+' عاجل'}</div></div>
     </div>
     <section class="panel" style="margin-bottom:16px"><div class="ph"><h3>نمو الإيرادات الشهري</h3><span class="hint">بالألف ج${D?' · حيّ':''}</span></div><div style="padding:16px 24px 12px">${svgBars(monthlySeries,'var(--agree)','ك')}</div></section>
     <div style="display:grid;grid-template-columns:1.4fr 1fr;gap:16px;align-items:start" class="ov-grid">
@@ -1331,7 +1350,7 @@ function viewOverview(v){
   act.forEach(i=>{const m=MODULES_LOOKUP[i.dest],tr=TRI[i.triage];re.insertAdjacentHTML('beforeend',`<div class="row" data-d="${i.dest}" style="grid-template-columns:1fr 150px;cursor:pointer">
     <div class="c c1"><div class="src-ic">${svg(i.src)}</div><div><div class="out">${esc(i.out)}</div><div class="from">← ${m.label} · ${esc(i.who)}</div></div></div>
     <div class="c"><span class="triage ${tr.cls}"><span class="d"></span>${tr.t}</span></div></div>`);});
-  if(!act.length)re.innerHTML='<div style="padding:36px;text-align:center;color:var(--muted)">لا وارد يحتاج تصرّفك</div>';
+  if(!act.length)re.innerHTML='<div style="padding:36px;text-align:center;color:var(--muted)">'+(inboxFailedList().length?'لا وارد <b>ممّا وصلنا</b>'+inboxFailedTail():'لا وارد يحتاج تصرّفك')+'</div>';
   re.querySelectorAll('.row').forEach(r=>r.onclick=()=>go(r.dataset.d));
   const me=document.getElementById('ovMods');
   cards.forEach(([id,label,m])=>me.insertAdjacentHTML('beforeend',`<div class="ovcard" data-m="${id}" style="border:1px solid var(--line);border-radius:11px;padding:13px;cursor:pointer;transition:box-shadow .15s">
@@ -1384,11 +1403,12 @@ function viewCourses(v){
     <div class="policy" style="border-inline-start-color:var(--memory)">${svg('book','ic')}<div><b>نموذج التعلّم:</b> بنية الدورة والاشتراك والجدولة والتقدّم <b>native في المنصة</b> · الفيديو على سيرفر مخصّص · المحاضرة الأولى مجانًا ثم الدفع للاستكمال.</div></div>
     ${Cstr==='error'?`<div class="policy" style="border-inline-start-color:var(--conflict);background:var(--conflict-bg);color:var(--conflict)">${svg('scale','ic')}<div>تعذّر جلب الدورات من الخادم — لا تُعرض أي بيانات بديلة. <b style="cursor:pointer;text-decoration:underline" onclick="EP.reload('courses',()=>viewCourses(document.getElementById('view')))">إعادة المحاولة</b></div></div>`:''}
     ${Cstr==='loading'?`<div class="policy" style="border-inline-start-color:var(--memory)">${svg('book','ic')}<div>…جارٍ تحميل الدورات من الخادم</div></div>`:''}
+    ${inboxFailedStrip('viewCourses')}
     <div class="kpis">
       <div class="kpi k-1"><div class="top"><span class="ic">${svg('book')}</span>دورات منشورة على المنصة</div><b>${money(pcPub)}</b><div class="sub">من ${PCRS.length} دورة على app.elprofessor.net</div></div>
       <div class="kpi k-3"><div class="top"><span class="ic">${svg('users')}</span>إجمالي المسجّلين</div><b>${money(pcEnr)}</b><div class="sub">عبر كل دورات المنصة</div></div>
-      <div class="kpi k-2"><div class="top"><span class="ic">${svg('cap')}</span>طلبات برامج</div><b>${money(PRG.length)}</b><div class="sub">بانتظار الاعتماد</div></div>
-      <div class="kpi k-4"><div class="top"><span class="ic">${svg('shield')}</span>طلبات مدربين</div><b>${money(TRQ.length)}</b><div class="sub">بانتظار الاعتماد</div></div>
+      <div class="kpi k-2"><div class="top"><span class="ic">${svg('cap')}</span>طلبات برامج</div><b>${money(PRG.length)}</b><div class="sub"${inboxFailedList().length?' style="color:var(--conflict)"':''}>${inboxFailedList().length?'عددٌ ناقص — تعذّر جلب الوارد':'بانتظار الاعتماد'}</div></div>
+      <div class="kpi k-4"><div class="top"><span class="ic">${svg('shield')}</span>طلبات مدربين</div><b>${money(TRQ.length)}</b><div class="sub"${inboxFailedList().length?' style="color:var(--conflict)"':''}>${inboxFailedList().length?'عددٌ ناقص — تعذّر جلب الوارد':'بانتظار الاعتماد'}</div></div>
     </div>
     <div class="tabbar" id="cTabs">
       <div class="tab${courseTab==='platform'?' on':''}" data-t="platform">الكتالوج (على المنصة) (${PCRS.length})</div>
@@ -3431,6 +3451,7 @@ function viewTeam(v){
   </div>`;
   v.innerHTML=`
     ${Est==='error'?`<div class="policy" style="border-inline-start-color:var(--conflict);background:var(--conflict-bg);color:var(--conflict)">${svg('scale','ic')}<div>تعذّر جلب الخبراء من المنصة. <b style="cursor:pointer;text-decoration:underline" onclick="EP.reload('experts',()=>viewTeam(document.getElementById('view')))">إعادة المحاولة</b></div></div>`:''}
+    ${inboxFailedStrip('viewTeam')}
     <div class="kpis">
       <div class="kpi k-1"><div class="top"><span class="ic">${svg('cap')}</span>عدد الخبراء</div><b>${loadK||money(experts.length)}</b><div class="sub">مدرّبون معتمدون (خبراء)</div></div>
       <div class="kpi k-2"><div class="top"><span class="ic">${svg('shield')}</span>أكثر خبير إحالات</div><b style="font-size:16px">${loadK||esc(topRefLbl)}</b><div class="sub">${topRefSub}</div></div>
@@ -3439,7 +3460,7 @@ function viewTeam(v){
     </div>
     <div class="tabbar" id="teamTabs">
       <div class="tab${teamTab==='experts'?' on':''}" data-t="experts">الخبراء (${money(experts.length)})</div>
-      <div class="tab${teamTab==='trainers'?' on':''}" data-t="trainers">المدربون (${money(experts.length)}${pendingTrainers.length?' · '+money(pendingTrainers.length)+' بانتظار':''})</div>
+      <div class="tab${teamTab==='trainers'?' on':''}" data-t="trainers">المدربون (${money(experts.length)}${pendingTrainers.length?' · '+money(pendingTrainers.length)+' بانتظار':(inboxFailedList().length?' · ؟ بانتظار':'')})</div>
       <div class="tab${teamTab==='admins'?' on':''}" data-t="admins">الفريق الإداري (${money(admins.length)})</div>
     </div>
     <div class="inboxwrap">
@@ -3455,16 +3476,26 @@ function viewTeam(v){
     mm.querySelectorAll('.exp-row').forEach(r=>r.onclick=()=>{teamSelEmail=r.dataset.email;drawExpert(teamSelEmail);mm.querySelectorAll('.exp-row').forEach(x=>x.classList.toggle('sel',x===r));});
   } else if(teamTab==='trainers'){
     mh.textContent='المدربون';mn.textContent=experts.length;hint.textContent='دورات وطلاب + طلبات الانضمام';
-    const pendHtml=pendingTrainers.length?`<div style="padding:9px 16px;background:var(--human-bg);font-size:11.5px;font-weight:800;color:var(--human)">طلبات انضمام كمدرّب (${money(pendingTrainers.length)})</div>`+pendingTrainers.map((i,idx)=>`<div style="display:flex;align-items:center;gap:12px;padding:12px 16px;border-bottom:1px solid var(--line)">
+    // ⛔ «(0) طلبات انضمام» فوق طابورٍ تعذّر جلبه = كذب: يُعلَن «؟» وسببه بدل الصفر.
+    const pendHead=!!(pendingTrainers.length||inboxFailedList().length);
+    const pendHtml=pendHead?`<div style="padding:9px 16px;background:var(--human-bg);font-size:11.5px;font-weight:800;color:var(--human)">طلبات انضمام كمدرّب (${pendingTrainers.length?money(pendingTrainers.length):'؟'})${inboxFailedList().length?`<span style="color:var(--conflict);font-weight:700"> — تعذّر جلب ${esc(inboxFailedList().join(' · '))}</span>`:''}</div>`+pendingTrainers.map((i,idx)=>`<div style="display:flex;align-items:center;gap:12px;padding:12px 16px;border-bottom:1px solid var(--line)">
         <div class="src-ic" style="background:var(--human-bg);color:var(--human)">${svg('cap')}</div>
         <div style="flex:1"><div style="font-weight:700;font-size:13.5px">${esc(i.who||'—')}</div><div style="font-size:11.5px;color:var(--muted)">${esc(i.note||'طلب انضمام كمدرّب')}</div></div>
         <div style="display:flex;gap:6px"><button class="btn btn-primary tr-appr" data-idx="${idx}" style="flex:none;min-width:auto;padding:6px 12px;font-size:12px">اعتمد</button><button class="btn btn-warn tr-rej" data-idx="${idx}" style="flex:none;min-width:auto;padding:6px 12px;font-size:12px">رفض</button></div>
       </div>`).join(''):'';
-    const apprHtml=experts.length?(pendingTrainers.length?'<div style="padding:9px 16px;background:var(--surface-2);font-size:11.5px;font-weight:800;color:var(--muted)">مدرّبون معتمدون</div>':'')+experts.map(e=>expRow(e,'courses')).join(''):(pendingTrainers.length?'':'<div style="padding:40px;text-align:center;color:var(--muted)">لا مدرّبين معتمدين بعد.</div>');
+    const apprHtml=experts.length?(pendHead?'<div style="padding:9px 16px;background:var(--surface-2);font-size:11.5px;font-weight:800;color:var(--muted)">مدرّبون معتمدون</div>':'')+experts.map(e=>expRow(e,'courses')).join(''):(pendHead?'':'<div style="padding:40px;text-align:center;color:var(--muted)">لا مدرّبين معتمدين بعد.</div>');
     mm.innerHTML=pendHtml+apprHtml;
     mm.querySelectorAll('.exp-row').forEach(r=>r.onclick=()=>{teamSelEmail=r.dataset.email;drawExpert(teamSelEmail);mm.querySelectorAll('.exp-row').forEach(x=>x.classList.toggle('sel',x===r));});
     mm.querySelectorAll('.tr-appr').forEach(b=>b.onclick=()=>{var i=pendingTrainers[+b.dataset.idx];if(!i||!window.EP)return;if(!confirm('اعتماد «'+(i.who||'')+'» كمدرّب معتمد؟'))return;EP.decideInboxItem(i,'approve',()=>viewTeam(document.getElementById('view')));});
-    mm.querySelectorAll('.tr-rej').forEach(b=>b.onclick=()=>{var i=pendingTrainers[+b.dataset.idx];if(!i||!window.EP)return;if(!confirm('رفض طلب «'+(i.who||'')+'»؟'))return;EP.decideInboxItem(i,'reject',()=>viewTeam(document.getElementById('view')));});
+    // ⛔ «رفض بسبب» — الحارس كان يقف عند طابور الانضمام وحده: هذا الزرّ (زرّ الرفض **الوحيد**
+    // للمدرّب) كان ينادي decideInboxItem بثلاثة معاملات ⇒ admin_note:"" — بينما شاشة المنصة
+    // صارت تعرض لصاحبه خانة «سبب الرفض» خاوية. البروكسي يمنعه ثانيةً على الخادم.
+    mm.querySelectorAll('.tr-rej').forEach(b=>b.onclick=()=>{var i=pendingTrainers[+b.dataset.idx];if(!i||!window.EP)return;
+      var reason=prompt('سبب رفض طلب «'+(i.who||'')+'» — يقرأه مقدّم الطلب كما تكتبه:','');
+      if(reason===null)return;
+      reason=String(reason||'').trim();
+      if(!reason){toast('اكتب سبب الرفض — مقدّم الطلب يقرأه');return;}
+      EP.decideInboxItem(i,'reject',()=>viewTeam(document.getElementById('view')),reason);});
   } else {
     mh.textContent='الفريق الإداري';mn.textContent=admins.length;
     const liveAdmins=(window.USERS||[]).length>0;

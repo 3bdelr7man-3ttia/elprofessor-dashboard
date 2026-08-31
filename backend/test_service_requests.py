@@ -240,3 +240,62 @@ def test_the_reason_is_clamped_to_the_platform_limit(ctx):
     ctx['client'].post('/api/platform-join-requests/jr-1/reject',
                        json={'admin_note': 'ب' * 5000}, headers=ctx['admin'])
     assert len(ctx['sent'][-1]['json']['admin_note']) == 1000
+
+
+# --------------------------------------------------------------------- trainer applications
+# نفس الحارس، الطابور الآخر: «قدّم كمدرّب» يسكن `trainer_applications` لا `join_requests`،
+# وشاشة المنصة صارت تعرض لصاحبه خانة «سبب الرفض» (SectionGate ← /api/my/trainer-application).
+# فالرفض الصامت هنا كان يترك الخانة خاوية فوق كلمة «مرفوض» — نفس الصمت المنهيّ عنه.
+
+def test_trainer_reject_without_a_reason_never_leaves_the_dashboard(ctx):
+    r = ctx['client'].post('/api/platform-trainer-applications/tr-1/reject',
+                           json={'admin_note': '  '}, headers=ctx['admin'])
+    assert r.status_code == 400
+    assert 'سبب الرفض' in r.get_json()['error']
+    assert ctx['sent'] == []
+    assert _audit_actions() == []
+
+
+def test_trainer_reject_with_no_body_returns_the_sentence_not_a_415(ctx):
+    """`request.json` على جسمٍ غائب يرفع 415 في Flask 3 — صفحةٌ لا يستطيع المراجِع التصرّف
+    حيالها. الرفض بلا جسم هو بالضبط الحالة التي يجب أن تعود بالجملة."""
+    r = ctx['client'].post('/api/platform-trainer-applications/tr-1/reject', headers=ctx['admin'])
+    assert r.status_code == 400
+    assert 'سبب الرفض' in r.get_json()['error']
+    assert ctx['sent'] == []
+
+
+def test_trainer_reject_reason_travels_verbatim_and_is_audited(ctx):
+    reason = 'خبرتك التدريبية غير موثّقة — أرفق دورتين سابقتين بروابطهما'
+    r = ctx['client'].post('/api/platform-trainer-applications/tr-1/reject',
+                           json={'admin_note': reason}, headers=ctx['emp'])
+    assert r.status_code == 200
+    call = ctx['sent'][-1]
+    assert call['path'] == '/api/bridge/trainer-applications/tr-1/reject'
+    assert call['json'] == {'admin_note': reason}
+    assert ('trainer_application.reject', 'emp@test.com') in _audit_actions()
+    assert reason in _audit_meta('trainer_application.reject')
+
+
+def test_trainer_approve_needs_no_reason_and_is_audited(ctx):
+    """الاعتماد هو ما يرفع `trainer_status` فيظهر الاسم في الدليل — والجسر يختم
+    by="dashboard" للجميع، فهوية من اعتمد لا تعيش إلا في سجلّنا."""
+    r = ctx['client'].post('/api/platform-trainer-applications/tr-2/approve',
+                           json={}, headers=ctx['emp'])
+    assert r.status_code == 200
+    assert ctx['sent'][-1]['json'] == {'admin_note': ''}
+    assert ('trainer_application.approve', 'emp@test.com') in _audit_actions()
+
+
+def test_a_refused_trainer_decision_is_never_audited(ctx):
+    ctx['replies']['/api/bridge/trainer-applications/tr-9/approve'] = FakeResp(404, {'detail': 'x'})
+    r = ctx['client'].post('/api/platform-trainer-applications/tr-9/approve',
+                           json={}, headers=ctx['admin'])
+    assert r.status_code == 404
+    assert _audit_actions() == []
+
+
+def test_trainer_reason_is_clamped_to_the_platform_limit(ctx):
+    ctx['client'].post('/api/platform-trainer-applications/tr-1/reject',
+                       json={'admin_note': 'ب' * 5000}, headers=ctx['admin'])
+    assert len(ctx['sent'][-1]['json']['admin_note']) == 1000
