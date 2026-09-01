@@ -183,13 +183,25 @@
     record: "السجلّ المهني", proof: "إثبات الصفة", rate: "الحصة المقترحة",
     bio: "نبذة", what: "ما سينشره", type: "النوع", rights: "الحقوق",
     kind: "النوع", samples: "نماذج أعمال", about: "نبذة",
-    service: "نوع الخدمة", scope: "النطاق", pricing: "التسعير",
+    service: "نوع الخدمة", scope: "نطاق ما يسلّمه", pricing: "التسعير",
     subjects: "مجالات التدريب", linkedin: "لينكدإن", cv: "السيرة الذاتية", sample: "عيّنة عمل",
+    // ——— استمارة مقدّم الخدمة (2026-09-01): مفاتيحها مطابقة حرفيًّا لـSG_PROVIDER_FIELDS
+    // (platform-app) ولـPROVIDER_ANSWER_LABEL (backend). مفتاحٌ يختلف = إجابةٌ بلا اسم.
+    done_before: "قدّمها قبل كده؟ وكام مرة؟", delivery_time: "مدة التسليم المعتادة",
+    price: "سعره المعتاد", work1: "عمل سابق (١)", work2: "عمل سابق (٢)",
+    capacity: "الصفة", bar_number: "رقم القيد / الترخيص",
   };
+  // الأسئلة اللي بيُبنى عليها القرار — تتصدّر العرض بترتيبها، والباقي وراها بترتيبه.
+  // ⛔ مفيش سؤال بيختفي: مفتاح مش في القايمة دي بيتعرض وراها باسمه الخام.
+  var JR_ANSWER_ORDER = ["capacity", "bar_number", "done_before", "delivery_time", "scope",
+    "price", "work1", "work2"];
   function jrDetails(answers) {
     var out = [];
     if (!answers || typeof answers !== "object") return out;
-    Object.keys(answers).forEach(function (k) {
+    var keys = Object.keys(answers);
+    var ordered = JR_ANSWER_ORDER.filter(function (k) { return keys.indexOf(k) !== -1; })
+      .concat(keys.filter(function (k) { return JR_ANSWER_ORDER.indexOf(k) === -1; }));
+    ordered.forEach(function (k) {
       var v = String(answers[k] == null ? "" : answers[k]).trim();
       if (v) out.push({ k: JR_ANSWER_LABEL[k] || k, v: v.length > 400 ? v.slice(0, 400) + "…" : v });
     });
@@ -787,26 +799,40 @@
       // أمرخَّصةٌ هي · وحالته — والمنصة ترسلها جاهزة في serialize_request (routes/join_requests.py)
       // فلا نستنتج منها شيئًا هنا.
       jobs.push(
-        get("/platform-join-requests?status=pending").then(function (a) {
+        // ⛔ `status=open` مش `pending`: الطابور المفتوح = المعلَّق **و** اللي اتطلب منه مستند
+        // (`needs_info`). لو قرأنا `pending` وحده كان «اطلب عيّنة/مستندًا» يشيل الصفّ من الوارد
+        // — يبقى زرّ حذف مش قرار، والملف يضيع بين الطرفين.
+        get("/platform-join-requests?status=open").then(function (a) {
           var reqs = (a && a.requests) || [];
           var SEC = { expert_offers: "خبير معتمد", lawyer_offers: "محامٍ معتمد", publisher: "ناشر", creative: "مبدع", marketing: "مزوّد تسويق" };
           reqs.forEach(function (jr) {
             var when = jr.submitted_at || jr.created_at || "";
+            var waiting = jr.status === "needs_info";
             realRows.push({
-              out: "طلب تقديم خدمة", from: jr.section_label || SEC[jr.section] || jr.section,
+              out: waiting ? "طلب تقديم خدمة — بانتظار ردّه" : "طلب تقديم خدمة",
+              from: jr.section_label || SEC[jr.section] || jr.section,
               src: "cap", dest: "team", triage: "human",
               // ⛔ لا مهلة معلنة لهذا الطابور بعد ⇒ لا وسم «متأخّر»: نعرض عمر الطلب فقط.
-              sla: jrWhen(when) || "بانتظار قرارك", slaWarn: false,
-              note: shortNote(jr.note) || "بلا ملاحظة مكتوبة من المتقدّم — القرار من الخدمة وما أرفقه تحت.",
+              sla: waiting ? "طُلب منه مستند — بانتظار ردّه" : (jrWhen(when) || "بانتظار قرارك"),
+              slaWarn: false,
+              note: waiting
+                ? ("طُلب منه: " + shortNote(jr.info_request || "استكمال بياناته") + " — الصفّ مفتوح لحدّ ما يبعت.")
+                : (shortNote(jr.note) || "بلا ملاحظة مكتوبة من المتقدّم — القرار من الاستمارة تحت."),
               ref: "JR-" + jr.id, who: jr.user_name || jr.user_email || "—",
               apiKind: "join", apiId: jr.id,
               // «رفض بسبب»: المنصة تعرض `admin_note` لصاحب الطلب حرفًا كسبب رفضه، فالرفض هنا
               // لا يمرّ بلا سبب مكتوب (محروس في الواجهة وفي البروكسي معًا).
               canReject: true, rejectNeedsReason: true,
+              // القرار الثالث (2026-09-01): يرجّع الطلب لصاحبه بطلب محدَّد ويسيب الصفّ مفتوح.
+              canRequestInfo: true,
               approveLabel: "قبول — يُنشَر باسمه",
               serviceLabel: jr.service_label || "",
               licensed: !!jr.licensed,
+              // ⚠️ الشرط اللي هيرفضه الخادم: مرخَّصة بلا رقم قيد. بيتقري قبل أي زرّ.
+              licenceMissing: !!jr.licence_missing,
+              licenceNote: jr.licence_note || "",
               statusLabel: jr.status_label || "",
+              infoRequest: jr.info_request || "",
               whenLabel: jrWhen(when),
               email: jr.user_email || "",
               attachments: Array.isArray(jr.attachments) ? jr.attachments : [],
@@ -1565,6 +1591,14 @@
   EP.decideInboxItem = function (i, action, after, adminNote) {
     var reason = String(adminNote == null ? "" : adminNote).trim().slice(0, 1000);
     var path, body = { admin_note: reason };
+    // القرار الثالث «اطلب عيّنة/مستندًا» — طابور تقديم الخدمة وحده يملكه اليوم. مش قرار نهائي:
+    // الصفّ يفضل مفتوح، والنصّ ده هو اللي بيقراه المقدّم حرفًا.
+    if (action === "request_info") {
+      post("/platform-join-requests/" + i.apiId + "/request_info", body)
+        .then(function () { note("اتبعت المطلوب لصاحب الطلب — الصفّ لسه مفتوح ✓"); EP.reload("inbox", after); })
+        .catch(function (e) { quietToast((e && e.message) || "تعذّر إرسال الطلب"); if (after) after(); });
+      return;
+    }
     switch (i.apiKind) {
       case "trainer":  path = "/platform-trainer-applications/" + i.apiId + "/" + action; break;
       case "join":     path = "/platform-join-requests/" + i.apiId + "/" + action; break;

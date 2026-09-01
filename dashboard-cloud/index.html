@@ -169,6 +169,9 @@ body{font-family:'IBM Plex Sans Arabic',sans-serif;background:var(--bg);color:va
 .btn-primary{background:var(--agree);color:#fff}.btn-primary:hover{filter:brightness(.94)}
 .btn-human{background:var(--human);color:#fff}.btn-human:hover{background:#8a2444}
 .btn-ghost{background:var(--surface-2);color:var(--ink);border:1px solid var(--line);flex:none;min-width:auto;padding:11px 14px}.btn-ghost:hover{background:var(--line)}
+/* القرار الثالث «اطلب عيّنة/مستندًا»: لا أخضر اعتماد ولا رمادي رفض — قرارٌ يفتح الباب لا يغلقه.
+   بعرض كامل لأنه يقع تحت خانة نصّه، فيُقرأ الاثنان كوحدة واحدة. */
+.btn-ask{background:transparent;color:var(--ai);border:1.5px dashed var(--ai);flex-basis:100%}.btn-ask:hover{background:var(--ai-bg)}
 .btn-warn{background:var(--conflict-bg);color:var(--conflict);border:1px solid #E9C9BB}.btn-warn:hover{background:#f6e2d8}
 .drawer .empty{padding:48px 22px;text-align:center;color:var(--muted)}
 .drawer .empty .ic{width:40px;height:40px;margin:0 auto 12px;opacity:.5}
@@ -541,7 +544,8 @@ function renderInbox(){
   items.forEach(i=>{const m=MODULES_LOOKUP[i.dest],tr=TRI[i.triage],ri=INBOX.indexOf(i);
     // سطر ثانٍ للصفوف التي تحمل خدمةً وتاريخًا (طلبات تقديم الخدمة): «أي خدمة · متى» — وشارة
     // «مرخَّصة» بجوار العنوان، لأن القرار فيها لا يُتّخذ بلا مستند.
-    const lic=i.licensed?` <span class="status" style="background:var(--conflict-bg);color:var(--conflict);font-size:9.5px"><span class="d" style="background:var(--conflict)"></span>مرخَّصة</span>`:'';
+    // شارة الفئة المرخَّصة — وتصير «بلا قيد» حين يكون الاعتماد موقوفًا فعلًا على الخادم.
+    const lic=i.licensed?` <span class="status" style="background:var(--conflict-bg);color:var(--conflict);font-size:9.5px"><span class="d" style="background:var(--conflict)"></span>${i.licenceMissing?'مرخَّصة · بلا قيد':'مرخَّصة'}</span>`:'';
     const line2=(i.serviceLabel||i.whenLabel)?`<div class="from">${i.serviceLabel?`الخدمة: <b>${esc(i.serviceLabel)}</b>`:''}${(i.serviceLabel&&i.whenLabel)?' · ':''}${i.whenLabel?esc(i.whenLabel):''}</div>`:'';
     el.insertAdjacentHTML('beforeend',`<div class="row inbox-row${selected===ri?' sel':''}" data-i="${ri}">
       <div class="c c1"><div class="src-ic">${svg(i.src)}</div><div><div class="out">${esc(i.out)}${lic}</div><div class="from">من سطح: <b>${esc(i.from)}</b> · ${esc(i.who)}</div>${line2}</div></div>
@@ -569,10 +573,23 @@ function inboxActs(i,m){
   }else if(i.resolve){
     a=`<button class="btn btn-human" data-a="resolve">${svg('check')}اعتبرها منتهية</button>`;
   }else if(i.apiKind){
-    a=`<button class="btn btn-human" data-a="approve">${svg('check')}${esc(i.approveLabel||'اعتمد وحوّل للموديول')}</button>`;
+    // ⛔ القبول ممنوع على الخادم لو خدمة مرخَّصة بلا رقم قيد (join_requests.grant_*). بنقوله
+    // هنا قبل الضغطة بدل ما يضغط ويقرا رفضًا ما يفهمش سببه — والزرّ نفسه بيوقف.
+    if(i.licenceMissing){
+      a=`<button class="btn btn-human" disabled style="opacity:.5;cursor:not-allowed">${svg('check')}${esc(i.approveLabel||'اعتماد')} — موقوف</button>`;
+    }else{
+      a=`<button class="btn btn-human" data-a="approve">${svg('check')}${esc(i.approveLabel||'اعتمد وحوّل للموديول')}</button>`;
+    }
+    // ⛔ القرار الثالث (قرار المؤسس 2026-09-01): «اطلب عيّنة/مستندًا» — يرجّع الطلب لصاحبه
+    // بطلب محدَّد ويسيب الصفّ مفتوح في الوارد. النصّ ده هو اللي بيقراه المقدّم حرفًا، فطلب بلا
+    // نصّ ممنوع هنا وفي البروكسي معًا (طلبٌ مبهم = الصمت نفسه في ثوب فعل).
+    if(i.canRequestInfo){
+      a+=`<textarea data-info-ask rows="2" placeholder="المطلوب منه بالضبط — يقرأه كما تكتبه (مثال: ابعت رقم قيدك بالنقابة، وعيّنة عقد صغتَه)" style="width:100%;margin:8px 0;padding:8px 10px;border-radius:9px;border:1px solid var(--line);background:var(--surface);color:inherit;font:inherit;font-size:12.5px;resize:vertical">${esc(i.licenceMissing?'ابعتلنا رقم قيدك بالنقابة — أو رابط صورة الكارنيه — واكتبه في خانة «رقم القيد» في الاستمارة.':'')}</textarea>`;
+      a+=`<button class="btn btn-ask" data-a="request_info">${svg('inbox')}اطلب عيّنة/مستندًا — الصفّ يفضل مفتوح</button>`;
+    }
     if(i.canReject){
       // ⛔ «رفض بسبب»: ما يُكتب هنا هو نصّه الذي يقرؤه صاحب الطلب في المنصة — لا ملاحظة داخلية.
-      if(i.rejectNeedsReason)a+=`<textarea data-reject-reason rows="2" placeholder="سبب الرفض — يقرأه مقدّم الطلب كما تكتبه" style="width:100%;margin:2px 0 8px;padding:8px 10px;border-radius:9px;border:1px solid var(--line);background:var(--surface);color:inherit;font:inherit;font-size:12.5px;resize:vertical"></textarea>`;
+      if(i.rejectNeedsReason)a+=`<textarea data-reject-reason rows="2" placeholder="سبب الرفض — يقرأه مقدّم الطلب كما تكتبه" style="width:100%;margin:8px 0;padding:8px 10px;border-radius:9px;border:1px solid var(--line);background:var(--surface);color:inherit;font:inherit;font-size:12.5px;resize:vertical"></textarea>`;
       a+=`<button class="btn btn-ghost" data-a="reject">رفض</button>`;
     }
   }
@@ -587,15 +604,21 @@ function drawInbox(){
   // ⚠️ الفئة المرخَّصة (مرافعة · توثيق · مراجعة حسابات · ترجمة معتمدة): تُقرأ قبل أي زرّ.
   // ⛔ وغيابها ليس نفيًا: الوسم مطابقةٌ نصّية لما كتبه المتقدّم، فالمراجِع الذي تعلّم رؤية
   // الشارة كان يقرأ خلوّ الصفّ «ليست فئة مرخَّصة». الصفّ الخدمي يقول أيهما هو صراحةً.
-  const licStrip=i.licensed
-    ?`<div class="policy" style="border-inline-start-color:var(--conflict);background:var(--conflict-bg);color:var(--conflict);margin:0 0 12px">${svg('scale','ic')}<div><b>خدمة مرخَّصة</b> — مزاولتها معلَّقة على ترخيص/قيد. التحقّق فيها بالمستند نفسه لا بقراءة الطلب.</div></div>`
+  const licStrip=i.licenceMissing
+    /* ⛔ الشرط لا النصيحة: المنصة ترفض المنح على الخادم وهذا فارغ — فالسطر يقول ما سيحدث، لا ما يُستحسن. */
+    ?`<div class="policy" style="border-inline-start-color:var(--conflict);background:var(--conflict-bg);color:var(--conflict);margin:0 0 12px">${svg('scale','ic')}<div><b>خدمة مرخَّصة بلا رقم قيد — الاعتماد موقوف.</b> ${esc(i.licenceNote||'لا اعتماد قبل أن يكتب رقم قيده بالنقابة (أو رابط إثباته).')} استعمل «اطلب عيّنة/مستندًا» تحت.</div></div>`
+    :i.licensed
+    ?`<div class="policy" style="border-inline-start-color:var(--conflict);background:var(--conflict-bg);color:var(--conflict);margin:0 0 12px">${svg('scale','ic')}<div><b>خدمة مرخَّصة</b> — مزاولتها معلَّقة على ترخيص/قيد. كتب رقم قيده في الاستمارة تحت، <b>وطابِقه بنفسك</b>: وجودُ رقمٍ ليس تحقّقًا منه.</div></div>`
     :(i.serviceLabel?`<div class="policy" style="margin:0 0 12px">${svg('scale','ic')}<div><b>لم تُطابَق فئة مرخَّصة تلقائيًا.</b> الوسم يقرأ ما كتبه المتقدّم — وغيابه <b>ليس شهادةً</b> بأن الخدمة غير مرخَّصة. تحقّق من صفته بنفسك قبل القبول.</div></div>`:'');
+  // «طُلب منه» — ما طلبناه بالفعل، فلا يُطلب مرّتان ولا يُقرأ الصفّ على أنه منسيّ.
+  const askStrip=i.infoRequest
+    ?`<div class="policy" style="border-inline-start-color:var(--ai);background:var(--ai-bg);color:var(--ai);margin:0 0 12px">${svg('inbox','ic')}<div><b>طُلب منه:</b> ${esc(i.infoRequest)}</div></div>`:'';
   const fld=(lab,val,style)=>val?`<div class="field"><div class="lab">${lab}</div><div class="val"${style?` style="${style}"`:''}>${esc(val)}</div></div>`:'';
   // «ما أرفقه» — إجابات النموذج كما كتبها، وروابطه مستخرَجة. لا يُنقّب المراجِع في مكان آخر.
   const det=(i.details||[]).map(d=>fld(esc(d.k),d.v)).join('');
   const att=(i.attachments||[]).length?`<div class="field"><div class="lab">روابط أرفقها</div><div class="val">${(i.attachments||[]).map(u=>`<div><a href="${esc(u)}" target="_blank" rel="noopener noreferrer" style="color:var(--ai);word-break:break-all;direction:ltr;display:inline-block">${esc(u)}</a></div>`).join('')}</div></div>`:'';
   el.innerHTML=`<div class="dh"><div class="k">بند وارد · ${esc(i.ref)}</div><h3>${esc(i.out)}</h3></div><div class="db">
-    ${licStrip}
+    ${licStrip}${askStrip}
     <div class="route"><span class="step">المنصة · ${esc(i.from)}</span><span class="arrow">←</span><span class="step" style="color:${m.c};font-weight:800">${m.label}</span></div>
     <div class="note-ai">${svg('sparkles','ic')}<div>${esc(i.note)}</div></div>
     <div class="field"><div class="lab">يُدار في موديول</div><div class="val" style="color:${m.c}">${m.label}</div></div>
@@ -619,6 +642,14 @@ function drawInbox(){
       const reason=rt?String(rt.value||'').trim():'';
       if(i.rejectNeedsReason&&!reason){toast('اكتب سبب الرفض — مقدّم الطلب يقرأه');if(rt)rt.focus();return;}
       EP.decideInboxItem(i,'reject',refreshInbox,reason);return;
+    }
+    if(a==='request_info'&&i.apiKind){
+      // ⛔ طلب بلا نصّ ممنوع: المقدّم يقرأ هذا النصّ حرفًا، و«استكمل طلبك» صمتٌ في ثوب فعل.
+      // البروكسي يمنعه ثانيةً على الخادم (لا نعتمد على المتصفّح وحده).
+      const at=el.querySelector('[data-info-ask]');
+      const ask=at?String(at.value||'').trim():'';
+      if(!ask){toast('اكتب المطلوب بالضبط — مقدّم الطلب يقرأه كما تكتبه');if(at)at.focus();return;}
+      EP.decideInboxItem(i,'request_info',refreshInbox,ask);return;
     }
     if(a==='resolve'){EP.resolveInboxItem(i,refreshInbox);return;}
     if(a==='reassign'){const sel=el.querySelector('[data-reassign-sel]');const em=sel?sel.value:'';if(!em){toast('اختر خبيرًا أولًا');return;}EP.reassignVerify(i.apiId,em,refreshInbox);return;}

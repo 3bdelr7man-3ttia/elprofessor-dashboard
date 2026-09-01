@@ -220,8 +220,64 @@ def test_a_refused_decision_is_never_audited(ctx):
     assert _audit_actions() == []
 
 
+# --------------------------------------------------------------------- the THIRD decision
+# Founder 2026-09-01: «نضغط نديه الموافقة لو إجاباته تمام، ولو طلبنا منه عينات نطلب في خطوة
+# متقدمة». `request_info` is that third decision — NOT a verdict: the platform parks the row in
+# `needs_info`, which stays inside the queue's `open` filter, and hands the applicant a specific
+# ask he reads verbatim. What must hold on THIS side:
+
+def test_request_info_forwards_the_ask_and_is_audited(ctx):
+    ask = 'ابعت رقم قيدك بالنقابة، وعيّنة مذكرة صغتَها.'
+    r = ctx['client'].post('/api/platform-join-requests/jr-3/request_info',
+                           json={'admin_note': ask}, headers=ctx['emp'])
+    assert r.status_code == 200
+    sent = ctx['sent'][-1]
+    assert sent['path'] == '/api/bridge/join-requests/jr-3/decide'
+    assert sent['json']['decision'] == 'request_info'
+    # `ask` is the bridge's explicit name for it — the platform writes it to `info_request`,
+    # never to `admin_note` (which IS the applicant's «سبب الرفض» and would show him a
+    # rejection reason for a request nobody rejected).
+    assert sent['json']['ask'] == ask
+    assert ('join_request.request_info', 'emp@test.com') in _audit_actions()
+    assert ask in (_audit_meta('join_request.request_info') or '')
+
+
+def test_request_info_with_no_ask_never_leaves_the_dashboard(ctx):
+    """⛔ An ask that names nothing is the founder's forbidden silence wearing the costume of an
+    action — worse than no button, because the reviewer believes he acted. Guarded on the
+    SERVER (the browser guards it too, but a browser-only guard is not a guard)."""
+    r = ctx['client'].post('/api/platform-join-requests/jr-3/request_info',
+                           json={'admin_note': '   '}, headers=ctx['admin'])
+    assert r.status_code == 400
+    assert 'اكتب المطلوب بالضبط' in r.get_json()['error']
+    assert ctx['sent'] == []
+    assert _audit_actions() == []
+
+
+def test_request_info_with_no_body_at_all_returns_the_sentence_not_a_415(ctx):
+    r = ctx['client'].post('/api/platform-join-requests/jr-3/request_info', headers=ctx['admin'])
+    assert r.status_code == 400
+    assert 'اكتب المطلوب بالضبط' in r.get_json()['error']
+
+
+def test_a_refused_request_info_is_never_audited(ctx):
+    ctx['replies']['/api/bridge/join-requests/jr-9/decide'] = FakeResp(404, {'detail': 'غير موجود'})
+    r = ctx['client'].post('/api/platform-join-requests/jr-9/request_info',
+                           json={'admin_note': 'رقم القيد'}, headers=ctx['admin'])
+    assert r.status_code == 404
+    assert _audit_actions() == []
+
+
+def test_the_open_queue_filter_reaches_the_platform_verbatim(ctx):
+    """⛔ The inbox reads `status=open` (pending + needs_info), not `pending`. Forwarding it as
+    anything else would make «اطلب عيّنة/مستندًا» delete the row from the inbox — a button that
+    loses the file between both parties instead of moving it."""
+    ctx['client'].get('/api/platform-join-requests?status=open', headers=ctx['admin'])
+    assert ctx['sent'][-1]['params']['status'] == 'open'
+
+
 def test_an_unknown_action_is_refused_locally(ctx):
-    """Only approve/reject exist. A typo must not become a path on the platform."""
+    """Only approve/reject/request_info exist. A typo must not become a path on the platform."""
     r = ctx['client'].post('/api/platform-join-requests/jr-1/grant', json={}, headers=ctx['admin'])
     assert r.status_code == 400
     assert ctx['sent'] == []

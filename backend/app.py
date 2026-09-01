@@ -1869,8 +1869,14 @@ def platform_join_request_decide(request_id, action):
          on the SERVER, not only in the browser.
       2. the deciding employee is recorded — the bridge stamps `by="dashboard"` for every
          dashboard call, so the acting email exists nowhere but our own audit log.
+
+    THREE decisions, not two (founder 2026-09-01): `request_info` — «اطلب عيّنة/مستندًا» —
+    hands the request BACK to the applicant with a specific ask and leaves the row OPEN
+    (platform status `needs_info`, still inside the queue's `open` filter). It carries the
+    same reason-less guard as reject, and for the same reason: an ask that names nothing is
+    the silence the founder's decision forbids, wearing the costume of an action.
     """
-    if action not in ('approve', 'reject'):
+    if action not in ('approve', 'reject', 'request_info'):
         return jsonify({'error': 'إجراء غير معروف'}), 400
     # `get_json(silent=True)` (not `request.json`): a body-less POST raises 415 in Flask 3, and a
     # rejection sent without a body is exactly the case that must come back with the SENTENCE
@@ -1879,10 +1885,15 @@ def platform_join_request_decide(request_id, action):
     note = str(body.get('admin_note') or '').strip()[:1000]
     if action == 'reject' and not note:
         return jsonify({'error': 'اكتب سبب الرفض — مقدّم الطلب يقرأه كما هو'}), 400
+    if action == 'request_info' and not note:
+        return jsonify({'error': 'اكتب المطلوب بالضبط — مقدّم الطلب يقرأه كما تكتبه'}), 400
     resp = _platform_proxy(
         'POST',
         f"/api/bridge/join-requests/{request_id}/decide",
-        json_body={'decision': action, 'admin_note': note},
+        # `ask` مرآةٌ لنفس النصّ: عقد الجسر يسمّي طلبَ المستند `ask` صراحةً (لا «ملاحظة أدمن»)،
+        # فلا يُكتب في `admin_note` على الوثيقة — وهي «سبب الرفض» الذي يقرؤه المقدّم.
+        json_body={'decision': action, 'admin_note': note,
+                   **({'ask': note} if action == 'request_info' else {})},
     )
     if _resp_ok(resp):
         _audit(f'join_request.{action}', target=request_id, meta={'note': note})
