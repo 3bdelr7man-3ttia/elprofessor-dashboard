@@ -2896,6 +2896,94 @@ def founding_lead_set_status(lead_id):
     return resp
 
 
+# --- «الدعوات وقائمة الانتظار» — المكان الذي يبعت منه المؤسس -----------------------------------
+# قرار المؤسس: المنصّة تفضل مفتوحة للتصفّح كما هي، والمقفول هو **إنشاء الحساب** وحده — ولا
+# يُنشأ حسابٌ إلّا لبريدٍ مدعوّ، وبعد التسجيل كل شيء مفتوح للمدعوّ. الصفوف بتعيش على المنصة
+# (db.invites / db.waitlist) وبتتقري هنا عبر الجسر بالسرّ المشترك، زي بقية بروكسيات الجسر.
+# ⛔ الصفوف دي بريدٌ وأسماء: خلف مصادقة ودور، وده حدّها — ما تظهرش في أي مكان عام.
+# ⛔ الرابط بيرجع من المنصة نفسها؛ الداشبورد ما بتلفّقش رابطًا من التوكن — مسار قبول الدعوة
+#    ملك المنصة، وأي تخمين هنا معناه رابطٌ بيقع على الواتساب بعد ما المؤسس يبعته.
+# ⛔ ولا بريد بيتبعت من هنا نيابةً عن المؤسس: بيتعمل الرابط وهو بينسخه ويبعته بنفسه.
+@app.route('/api/invites', methods=['GET'])
+@token_required
+@roles_required('admin', 'employee')   # قراءة فقط؛ الصفوف فيها بيانات تواصل
+def invites_list():
+    """صفوف الدعوات من الجسر (الترتيب يملكه الجسر ولا يُعاد هنا)."""
+    try:
+        limit = int(request.args.get('limit') or 100)
+    except (TypeError, ValueError):
+        limit = 100
+    return _platform_proxy('GET', '/api/bridge/invites',
+                           params={'limit': max(1, min(500, limit))})
+
+
+@app.route('/api/invites', methods=['POST'])
+@token_required
+@roles_required('admin', 'employee')
+def invite_create():
+    """إنشاء دعوةٍ لبريدٍ واحد — والجسر بيرجّع الرابط الجاهز للنسخ.
+
+    البريد بيتطهّر هنا (قصّ + lowercase) بنفس تطهير المنصة، عشان «Ali@x.com» و«ali@x.com»
+    ما يوصلوش للفهرس الفريد كصفّين ويرجع تصادمٌ يقرأه المؤسس كعطل. التحقق البدائي بيتعمل
+    هنا قبل ما نكلّم المنصة أصلًا — الرفض المحلّي أوضح من ٤٢٢ جايّ من بعيد."""
+    body = request.json or {}
+    email = (body.get('email') or '').strip().lower()
+    if '@' not in email or email.startswith('@') or email.endswith('@') or len(email) < 5:
+        return jsonify({'error': 'اكتب بريدًا صحيحًا'}), 400
+    payload = {
+        'email': email[:255],
+        'name': (body.get('name') or '').strip()[:120],
+        'note': (body.get('note') or '').strip()[:300],
+        'invited_by': _actor_email(),
+    }
+    resp = _platform_proxy('POST', '/api/bridge/invites', json_body=payload)
+    if _resp_ok(resp):
+        _audit('invite.create', target=email, meta={'name': payload['name']})
+    return resp
+
+
+@app.route('/api/invites/<invite_id>/revoke', methods=['POST'])
+@token_required
+@roles_required('admin', 'employee')
+def invite_revoke(invite_id):
+    """سحب دعوة — الرمز يبطل ويرجع ٤٠٤ لأي حد يفتحه بعد كده.
+
+    بلا جسمٍ مُرسَل: العقد ما بيطلبش واحدًا، ومفتاحٌ زائد بيتبلع صامتًا على المنصة (زي ما
+    حصل مع `admin_note` في إغلاق طلبات السوق) فيضيع من غير ما حد يعرف. النسبة بتتسجّل هنا
+    في سجلّ التدقيق — وده مكانها الصادق."""
+    resp = _platform_proxy('POST', f"/api/bridge/invites/{invite_id}/revoke")
+    if _resp_ok(resp):
+        _audit('invite.revoke', target=invite_id)
+    return resp
+
+
+@app.route('/api/waitlist', methods=['GET'])
+@token_required
+@roles_required('admin', 'employee')   # قراءة فقط
+def waitlist_list():
+    """صفوف «اطلب دعوة» من الجسر (الترتيب يملكه الجسر ولا يُعاد هنا)."""
+    try:
+        limit = int(request.args.get('limit') or 100)
+    except (TypeError, ValueError):
+        limit = 100
+    return _platform_proxy('GET', '/api/bridge/waitlist',
+                           params={'limit': max(1, min(500, limit))})
+
+
+@app.route('/api/waitlist/<row_id>/invite', methods=['POST'])
+@token_required
+@roles_required('admin', 'employee')
+def waitlist_invite(row_id):
+    """تحويل صفٍّ في قائمة الانتظار إلى دعوة — بضغطة، والجسر بيرجّع الرابط.
+
+    الاسم والبريد بيتاخدوا من الصفّ على المنصة، مش من المتصفّح: الصفّ هو الحقيقة، وأي إعادة
+    إرسالٍ للبيانات من هنا بتفتح باب تعديلٍ صامت لبريدٍ إحنا بس بنحوّله."""
+    resp = _platform_proxy('POST', f"/api/bridge/waitlist/{row_id}/invite")
+    if _resp_ok(resp):
+        _audit('waitlist.invite', target=row_id)
+    return resp
+
+
 # --- «أتمتة المقالات» (Articles automation): one daily AI run fills «المقالات» on the platform
 # with DRAFTS (1 platform explainer + a few news-derived analyses) that the founder approves here.
 @app.route('/api/platform-articles', methods=['GET'])

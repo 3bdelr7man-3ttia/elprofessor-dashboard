@@ -82,6 +82,7 @@
             platformPendingTopics: null, platformTopicSegments: null,
             platformOpinions: null, platformOpinionsApproved: null, platformOpinionsAnalysis: null, experts: null,
             market: null, marketDemand: null, trainingInterests: null, foundingLeads: null,
+            invites: null, waitlist: null,
             aiAgents: null, dashUsers: null, audit: null, usage: null },
     state: {}, // 'idle' | 'loading' | 'ready' | 'error'
     _started: {}, // منع التحميل المزدوج
@@ -422,6 +423,79 @@
         // 404 = مسار الجسر لسه ما اتنشرش على المنصة، مش «مفيش حد قدّم». التمييز ده هو اللي
         // بيمنع اللوحة من إنها تكدب على المؤسس بصفر.
         if (e && e.status === 404) { EP.data.foundingLeads = { rows: [], count: 0, missing: true }; return; }
+        throw e;
+      });
+    },
+
+    // ================================================================ «الدعوات» + «قائمة الانتظار»
+    // قرار المؤسس: التصفّح مفتوح زي ما هو، والمقفول هو **إنشاء الحساب** وحده — ولا يُنشأ حساب
+    // إلّا لبريدٍ مدعوّ، وبعد التسجيل كل حاجة مفتوحة للمدعوّ.
+    // /api/invites -> جسر المنصة /api/bridge/invites. الصفّ من المنصة:
+    //   {id, email, name, status: pending|opened|registered|revoked, invited_by, note,
+    //    created_at, opened_at, registered_at}
+    // ⛔ العدّادات فوق (أُرسلت/فُتحت/سُجِّل) بتتحسب من الصفوف دي في اللوحة — مفيش رقم مكتوب.
+    //    عشان كده بنطلّع هنا `opened`/`registered` كقيَم منطقية من **الختم أو الحالة**: صفّ
+    //    حالته registered وختمه ناقص لازم يتعدّ مسجّلًا، وإلا العدّاد يقلّ عن الحقيقة.
+    // ⛔ ولا رابط بيتلفّق من التوكن هنا: الرابط بيرجع من المنصة عند الإنشاء وبس.
+    invites: function () {
+      return get("/invites?limit=200").then(function (r) {
+        var list = Array.isArray(r) ? r : ((r && (r.invites || r.items || r.rows)) || []);
+        EP.data.invites = {
+          count: (r && r.count != null) ? r.count : list.length,
+          missing: false,
+          rows: list.map(function (i) {
+            var st = (i.status || "pending");
+            var at = i.created_at || "";
+            return {
+              id: i.id || "",
+              email: i.email || "",
+              name: i.name || "",
+              status: st,
+              note: i.note || "",
+              invited_by: i.invited_by || "",
+              // الرابط اختياري: بيبان لو الجسر بعته مع الصفّ، وما بيتبنيش هنا لو ما بعتوش.
+              link: i.link || i.invite_url || "",
+              opened: !!i.opened_at || st === "opened" || st === "registered",
+              registered: !!i.registered_at || st === "registered",
+              revoked: st === "revoked",
+              when: relTime(at) || arDate(at),
+              openedWhen: i.opened_at ? (relTime(i.opened_at) || arDate(i.opened_at)) : "",
+              regWhen: i.registered_at ? (relTime(i.registered_at) || arDate(i.registered_at)) : "",
+              at: at ? (Date.parse(at) || 0) : 0,
+            };
+          }).sort(function (a, b) { return b.at - a.at; }),
+        };
+      }).catch(function (e) {
+        // 404 = مسار الجسر لسه ما اتنشرش على المنصة، مش «مفيش دعوات». التمييز ده هو اللي
+        // بيمنع اللوحة من إنها تكدب على المؤسس بصفر.
+        if (e && e.status === 404) { EP.data.invites = { rows: [], count: 0, missing: true }; return; }
+        throw e;
+      });
+    },
+
+    // «اطلب دعوة» — اللي البوّابة المقفولة بتحوّشهم: /api/waitlist -> /api/bridge/waitlist.
+    // الصفّ: {id, name, email, note, status: new|invited|declined, created_at}
+    waitlist: function () {
+      return get("/waitlist?limit=200").then(function (r) {
+        var list = Array.isArray(r) ? r : ((r && (r.waitlist || r.items || r.rows)) || []);
+        EP.data.waitlist = {
+          count: (r && r.count != null) ? r.count : list.length,
+          missing: false,
+          rows: list.map(function (w) {
+            var at = w.created_at || "";
+            return {
+              id: w.id || "",
+              name: w.name || "",
+              email: w.email || "",
+              note: w.note || "",
+              status: w.status || "new",
+              when: relTime(at) || arDate(at),
+              at: at ? (Date.parse(at) || 0) : 0,
+            };
+          }).sort(function (a, b) { return b.at - a.at; }),
+        };
+      }).catch(function (e) {
+        if (e && e.status === 404) { EP.data.waitlist = { rows: [], count: 0, missing: true }; return; }
         throw e;
       });
     },
@@ -1956,6 +2030,53 @@
       .catch(function (e) { quietToast((e && e.message) || "تعذّر تحديث حالة الليد"); if (after) after(); });
   };
 
+  // ---- «الدعوات»: البوّابة الوحيدة لإنشاء حساب ----
+  // ⛔ ولا بريدٍ بيتبعت من هنا نيابةً عن المؤسس: بنعمل الدعوة، والرابط بيرجع من المنصة،
+  //    وهو بينسخه ويبعته بنفسه على واتساب. لو المنصة ما بعتتش رابطًا، بنقول كده صراحةً بدل
+  //    ما نلفّق واحدًا من التوكن — مسار قبول الدعوة ملك المنصة.
+  EP.createInvite = function (data, onLink, after) {
+    post("/invites", { name: data.name || "", email: data.email || "", note: data.note || "" })
+      .then(function (r) {
+        note("اتعملت الدعوة لـ" + (data.email || ""));
+        EP.reload("invites", after);
+        if (onLink) onLink(r || {});
+      })
+      .catch(function (e) {
+        quietToast(e && e.status === 404
+          ? "مسار الدعوات لسه ما اتنشرش على المنصة"
+          : ((e && e.message) || "تعذّر إنشاء الدعوة"));
+        if (after) after();
+      });
+  };
+
+  // سحب دعوة: الرمز يبطل. اللي سجّل بالفعل عنده حساب وما بيتمسّش — ده باب تسجيل، مش حساب.
+  EP.revokeInvite = function (inv, after) {
+    post("/invites/" + encodeURIComponent(inv.id) + "/revoke", {})
+      .then(function () { note("اتسحبت دعوة " + (inv.email || "")); EP.reload("invites", after); })
+      .catch(function (e) { quietToast((e && e.message) || "تعذّر سحب الدعوة"); if (after) after(); });
+  };
+
+  // تحويل صفٍّ من قائمة الانتظار لدعوة بضغطة — الاسم والبريد بيتاخدوا من الصفّ على المنصة،
+  // مش من المتصفّح، فمفيش باب لتعديلٍ صامت لبريدٍ إحنا بس بنحوّله.
+  EP.inviteFromWaitlist = function (row, onLink, after) {
+    post("/waitlist/" + encodeURIComponent(row.id) + "/invite", {})
+      .then(function (r) {
+        note("اتبعتت دعوة لـ" + (row.email || ""));
+        // الاتنين بيعيدوا الرسم: الصفّ خرج من الانتظار **ودخل** الدعوات، وعدّاد «أُرسلت» فوق
+        // محسوبٌ من صفوف الدعوات — فتحديث الانتظار وحده بيسيب الرقم أقلَّ من الحقيقة لحد
+        // ما حد يضغط «حدّث» (اتشاف حيًّا).
+        EP.reload("waitlist", after);
+        EP.reload("invites", after);
+        if (onLink) onLink(r || {});
+      })
+      .catch(function (e) {
+        quietToast(e && e.status === 404
+          ? "مسار الدعوات لسه ما اتنشرش على المنصة"
+          : ((e && e.message) || "تعذّر تحويل الصفّ لدعوة"));
+        if (after) after();
+      });
+  };
+
   // ---- إزالة مدرّب/خبير من المنصة (مشكلة «محمد افندي») ----
   // إلغاء تفعيل، لا حذف. The platform re-approves anyone still holding a granted provider
   // section key on every boot and on every authenticated request, so a correct removal has to
@@ -2481,6 +2602,7 @@
                 notifications: null, goalsAdvisor: null, tutorials: null, platformTopics: null, platformTopicsAnalysis: null,
                 platformPendingTopics: null, platformTopicSegments: null, platformOpinions: null,
                 market: null, marketDemand: null, trainingInterests: null, foundingLeads: null,
+                invites: null, waitlist: null,
                 aiAgents: null, dashUsers: null, audit: null, usage: null };
     EP.state = {};
     window.location.reload();
