@@ -81,7 +81,7 @@
             notifications: null, goalsAdvisor: null, tutorials: null, platformTopics: null, platformTopicsAnalysis: null,
             platformPendingTopics: null, platformTopicSegments: null,
             platformOpinions: null, platformOpinionsApproved: null, platformOpinionsAnalysis: null, experts: null,
-            market: null, marketDemand: null,
+            market: null, marketDemand: null, trainingInterests: null,
             aiAgents: null, dashUsers: null, audit: null, usage: null },
     state: {}, // 'idle' | 'loading' | 'ready' | 'error'
     _started: {}, // منع التحميل المزدوج
@@ -353,6 +353,40 @@
           if (e && e.status === 404) { EP.data.marketDemand = { missing: true }; return; }
           throw e;
         });
+    },
+
+    // «مين طلب التدريب» — الصفوف اللي ورا الرقم: /api/training-interests -> الجسر
+    // /api/bridge/training-interests، أحدثُ أوّلًا. الصفّ من المنصة:
+    //   {id, name, phone, email, wanted_course, status, created_at, updated_at}
+    // لوحة «دورات يقترحها الطلب» بتعرض `sources.training_interests` كـ**عدد** — والعدد
+    // ما بيتصلش بيه حد. ده اللي بيحوّل الرقم لأسماء وأرقام تليفونات قابلة للاتصال.
+    // الشكل الراجع محتمل يكون قائمة مباشرة أو مغلّفة، فنقبل الاتنين بدل ما نفترض واحدًا.
+    trainingInterests: function () {
+      return get("/training-interests?limit=200").then(function (r) {
+        var list = Array.isArray(r) ? r
+          : ((r && (r.interests || r.items || r.rows || r.training_interests)) || []);
+        EP.data.trainingInterests = {
+          count: (r && r.count != null) ? r.count : list.length,
+          rows: list.map(function (t) {
+            var at = t.created_at || t.updated_at || "";
+            return {
+              id: t.id || "",
+              name: t.name || "",
+              phone: t.phone || "",
+              email: t.email || "",
+              wanted_course: t.wanted_course || t.course || "",
+              status: t.status || "",
+              when: relTime(at) || arDate(at),
+              at: at ? (Date.parse(at) || 0) : 0,
+            };
+          }).sort(function (a, b) { return b.at - a.at; }),
+        };
+      }).catch(function (e) {
+        // 404 = مسار الجسر لسه ما اتنشرش على المنصة، مش «فشل». نميّزه عشان اللوحة تقول
+        // الحقيقة («قيد النشر») بدل رسالة خطأ بتقرا كأنها عطل في الداشبورد.
+        if (e && e.status === 404) { EP.data.trainingInterests = { rows: [], count: 0, missing: true }; return; }
+        throw e;
+      });
     },
 
     // المواضيع المقترحة من الأعضاء (pending_review): /api/platform-pending-topics.
@@ -2397,7 +2431,7 @@
                 packages: null, t_data: null, i_data: null, targets: null, foundation: null, team: null,
                 notifications: null, goalsAdvisor: null, tutorials: null, platformTopics: null, platformTopicsAnalysis: null,
                 platformPendingTopics: null, platformTopicSegments: null, platformOpinions: null,
-                market: null, marketDemand: null,
+                market: null, marketDemand: null, trainingInterests: null,
                 aiAgents: null, dashUsers: null, audit: null, usage: null };
     EP.state = {};
     window.location.reload();

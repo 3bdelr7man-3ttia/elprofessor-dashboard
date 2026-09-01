@@ -4005,7 +4005,7 @@ function mkBridgeMissingCard(what){
     '<div><b>'+esc(what)+' جاهز هنا — وناقص نشر المنصة.</b><br>الجسر <span style="direction:ltr;display:inline-block">/api/bridge/market/*</span> لسه ما اتنشرش على <span style="direction:ltr;display:inline-block">api.elprofessor.net</span>. أول ما يتنشر الشاشة دي هتتملى لوحدها — مفيش شغل ناقص هنا.</div></div>';
 }
 function viewMarket(v){
-  if(window.EP){EP.ensure('market',()=>viewMarket(v));EP.ensure('marketDemand',()=>viewMarket(v));}
+  if(window.EP){EP.ensure('market',()=>viewMarket(v));EP.ensure('marketDemand',()=>viewMarket(v));EP.ensure('trainingInterests',()=>viewMarket(v));}
   var st=(window.EP&&EP.state.market)||'idle';
   var D=mkData();
   var missing=!!(D&&D.missing);
@@ -4040,11 +4040,13 @@ function viewMarket(v){
     '<div class="tfilter" style="display:flex;flex-wrap:wrap;gap:7px;margin:2px 0 8px;align-items:center"><span style="font-size:12px;font-weight:800;color:var(--muted);margin-inline-end:2px">'+svg('sparkles','ic')+' نوع الاحتياج:</span>'+needChips+'</div>'+
     '<div class="tfilter" style="display:flex;flex-wrap:wrap;gap:7px;margin:0 0 14px;align-items:center"><span style="font-size:12px;font-weight:800;color:var(--muted);margin-inline-end:2px">'+svg('check','ic')+' الحالة:</span>'+statusChips+'</div>'+
     '<div class="inboxwrap"><section class="panel"><div class="ph"><h3>'+esc(mkLaneAr(mkLane))+'</h3><span class="n" id="mkN">0</span><span class="hint">اضغط طلبًا لعرض تفاصيله وعروضه</span></div><div id="mkRowsEl"></div></section><aside class="drawer" id="drawer"></aside></div>'+
-    mkDemandPanel();
+    mkDemandPanel()+
+    trainingInterestPanel();
   document.getElementById('mkTabs').querySelectorAll('.tab').forEach(function(t){t.onclick=function(){mkLane=t.dataset.lane;mkSel=null;viewMarket(v);};});
   v.querySelectorAll('[data-need]').forEach(function(c){c.onclick=function(){mkNeed=c.dataset.need;mkSel=null;viewMarket(v);};});
   v.querySelectorAll('[data-mst]').forEach(function(c){c.onclick=function(){mkStatus=c.dataset.mst;mkSel=null;viewMarket(v);};});
   wireMarketDemand(v);
+  wireTrainingInterest(v);
   var el=document.getElementById('mkRowsEl'),nEl=document.getElementById('mkN');
   if(nEl)nEl.textContent=rows.length;
   if(!rows.length){
@@ -4211,6 +4213,65 @@ function wireMarketDemand(v){
   (v||document).querySelectorAll('.mkd-make').forEach(function(btn){
     btn.onclick=function(ev){ev.stopPropagation();createCourseModal(btn.dataset.title||'');};
   });
+}
+
+/* «مين طلب التدريب» — تفاصيل الإشارة المجمَّعة اللي فوق.
+   لوحة «دورات يقترحها الطلب» بتقول `٧ اهتمام تدريب` — والرقم ما بيتصلش بيه حد. الصفوف دي
+   هي نفس الإشارة مفكوكة: مين طلب، وإيه اللي طلبه، وإمتى، وإيه حالته — أحدثُ أوّلًا.
+   المصدر: /api/training-interests -> جسر المنصة /api/bridge/training-interests.
+   ⛔ ولا سعر ولا مدّة في أي نص هنا (التسعير مش محسوم).
+   ⛔ الأرقام والإيميلات دي بيانات تواصل: اللوحة دي خلف مصادقة ودور، وده حدّها — ما تتسربش لأي
+      شاشة عامة ولا لأي نص بيتنسخ برّه. */
+const TI_STATUS={new:{t:'جديد',cls:'s-wait'},contacted:{t:'اتواصلنا',cls:''},
+  enrolled:{t:'اتسجّل',cls:'s-auto'},converted:{t:'اتحوّل',cls:'s-auto'},closed:{t:'مقفول',cls:''}};
+function tiRows(){var d=(window.EP&&EP.data.trainingInterests)||null;return (d&&d.rows)?d.rows:[];}
+// رابط الاتصال: نسيب الأرقام و«+» بس — ده بيمنع أي حرف غريب من الوصول للـattribute أصلًا،
+// وبرضه بيعدّي على esc() قبل ما يتحط في الـHTML.
+function tiTel(p){return String(p==null?'':p).replace(/[^0-9+]/g,'');}
+function trainingInterestPanel(){
+  var st=(window.EP&&EP.state.trainingInterests)||'idle';
+  var D=(window.EP&&EP.data.trainingInterests)||null;
+  var R=tiRows();
+  var head='<section class="panel" style="margin-top:16px"><div class="ph"><h3>'+svg('users')+' مين طلب التدريب</h3>'+
+    '<span class="n">'+money(R.length)+'</span>'+
+    '<span class="hint">تفاصيل «اهتمام التدريب» اللي فوق — أحدثُ أوّلًا</span>'+
+    '<button class="btn btn-ghost" id="tiRefresh" style="flex:none;min-width:auto;padding:6px 12px;font-size:12px;margin-inline-start:auto">'+svg('sparkles')+'حدّث</button></div>';
+  var foot='</section>';
+  var wrap=function(inner){return head+'<div style="padding:14px 16px">'+inner+'</div>'+foot;};
+  if(D&&D.missing)return head+'<div style="padding:14px 16px">'+
+    '<div class="policy" style="margin:0;border-inline-start-color:var(--gold);background:var(--gold-bg)">'+svg('clock','ic')+
+    '<div><b>اللوحة جاهزة هنا — وناقص نشر المنصة.</b><br>الجسر <span style="direction:ltr;display:inline-block">/api/bridge/training-interests</span> لسه مش ردّان على <span style="direction:ltr;display:inline-block">api.elprofessor.net</span>. أول ما يشتغل الصفوف هتنزل لوحدها.</div></div></div>'+foot;
+  if(st==='error')return wrap('<div class="policy" style="margin:0;border-inline-start-color:var(--conflict);background:var(--conflict-bg);color:var(--conflict)">'+svg('scale','ic')+
+    '<div>تعذّر جلب طلبات التدريب من المنصة. <b style="cursor:pointer;text-decoration:underline" onclick="EP.reload(\'trainingInterests\',()=>viewMarket(document.getElementById(\'view\')))">إعادة المحاولة</b></div></div>');
+  if((st==='loading'||st==='idle')&&!R.length)return wrap('<div style="padding:14px;text-align:center;color:var(--muted)">…جارٍ تحميل طلبات التدريب</div>');
+  if(!R.length)return wrap('<div style="color:var(--muted);font-size:12.5px">محدش سجّل اهتمامًا بالتدريب لسه. أول ما زائر يسيب بياناته على المنصة هيبان هنا بالاسم ورقمه.</div>');
+  var rows=R.map(function(t){
+    var S=TI_STATUS[t.status]||{t:(t.status||'—'),cls:''};
+    var tel=tiTel(t.phone);
+    var phoneCell=tel
+      ?'<a href="tel:'+esc(tel)+'" style="direction:ltr;display:inline-block;font-weight:800;color:var(--navy);text-decoration:none;border-bottom:1px dashed var(--line)">'+esc(t.phone)+'</a>'
+      :'<span style="color:var(--muted)">بلا رقم</span>';
+    return '<div class="trow" style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--line)">'+
+      '<div class="src-ic" style="width:34px;height:34px;border-radius:9px;display:grid;place-items:center;flex:none;background:var(--human-bg);color:var(--human)">'+svg('users')+'</div>'+
+      '<div style="flex:1;min-width:0">'+
+        '<div style="font-weight:800;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(t.name||'بلا اسم')+'</div>'+
+        (t.email?'<div style="font-size:11px;color:var(--muted);direction:ltr;text-align:start;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(t.email)+'</div>':'')+
+      '</div>'+
+      '<div style="flex:1.2;min-width:0;font-size:12.5px">'+
+        '<div style="font-size:10.5px;color:var(--muted);font-weight:800">طلب</div>'+
+        '<div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(t.wanted_course||'ما حدّدش دورة')+'</div>'+
+      '</div>'+
+      '<div style="flex:none;min-width:130px;font-size:12.5px">'+phoneCell+'</div>'+
+      '<div style="flex:none;min-width:80px;font-size:11.5px;color:var(--muted)">'+esc(t.when||'—')+'</div>'+
+      '<div style="flex:none;min-width:96px;text-align:end"><span class="status '+esc(S.cls)+'"'+(S.cls?'':' style="background:var(--surface-2);color:var(--muted)"')+'><span class="d"'+(S.cls?'':' style="background:var(--muted)"')+'></span>'+esc(S.t)+'</span></div>'+
+    '</div>';
+  }).join('');
+  var more=(D&&D.count!=null&&D.count>R.length)?('<div style="margin-top:10px;font-size:11.5px;color:var(--muted)">معروض '+money(R.length)+' من '+money(D.count)+'.</div>'):'';
+  return wrap(rows+more);
+}
+function wireTrainingInterest(v){
+  var b=(v||document).querySelector('#tiRefresh');
+  if(b)b.onclick=function(){if(window.EP)EP.reload('trainingInterests',()=>viewMarket(document.getElementById('view')));};
 }
 
 /* ===== TRAINER / INVESTOR / VIEWER PORTALS ===== */

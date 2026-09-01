@@ -2836,6 +2836,24 @@ def platform_market_demand():
                          params={'days': max(1, min(365, days))})
 
 
+# --- «مين طلب التدريب» — الصفوف، لا الرقم ---------------------------------------------------
+# اهتمام الزائر بالتدريب يُلتقط على المنصة (POST /api/training-interest → db.training_interests)
+# ويُقرأ هنا عبر الجسر. كان يصل للوحة كإشارة **مجمَّعة** جوّه «دورات يقترحها الطلب»
+# (sources.training_interests = رقم)، والرقم لا يُتصل به: المؤسس يحتاج مين طلب وإيه اللي طلبه.
+# مسار قراءة فقط: أدمن/موظف خلف مصادقة — البيانات فيها بيانات تواصل، ولا تُعرض في أي مكان عام.
+@app.route('/api/training-interests', methods=['GET'])
+@token_required
+@roles_required('admin', 'employee')   # قراءة فقط؛ لا قرار هنا
+def training_interests_list():
+    """صفوف «اهتمام تدريبي» من الجسر (أحدثُ أوّلًا؛ الترتيب يملكه الجسر ولا يُعاد هنا)."""
+    try:
+        limit = int(request.args.get('limit') or 100)
+    except (TypeError, ValueError):
+        limit = 100
+    return _platform_proxy('GET', '/api/bridge/training-interests',
+                           params={'limit': max(1, min(500, limit))})
+
+
 # --- «أتمتة المقالات» (Articles automation): one daily AI run fills «المقالات» on the platform
 # with DRAFTS (1 platform explainer + a few news-derived analyses) that the founder approves here.
 @app.route('/api/platform-articles', methods=['GET'])
