@@ -81,7 +81,7 @@
             notifications: null, goalsAdvisor: null, tutorials: null, platformTopics: null, platformTopicsAnalysis: null,
             platformPendingTopics: null, platformTopicSegments: null,
             platformOpinions: null, platformOpinionsApproved: null, platformOpinionsAnalysis: null, experts: null,
-            market: null, marketDemand: null, trainingInterests: null,
+            market: null, marketDemand: null, trainingInterests: null, foundingLeads: null,
             aiAgents: null, dashUsers: null, audit: null, usage: null },
     state: {}, // 'idle' | 'loading' | 'ready' | 'error'
     _started: {}, // منع التحميل المزدوج
@@ -385,6 +385,43 @@
         // 404 = مسار الجسر لسه ما اتنشرش على المنصة، مش «فشل». نميّزه عشان اللوحة تقول
         // الحقيقة («قيد النشر») بدل رسالة خطأ بتقرا كأنها عطل في الداشبورد.
         if (e && e.status === 404) { EP.data.trainingInterests = { rows: [], count: 0, missing: true }; return; }
+        throw e;
+      });
+    },
+
+    // «مين ردّ على دعوة المؤسس» — صفوف بوّابة الدعوة (founders.html) عبر
+    // /api/founding-leads -> جسر المنصة /api/bridge/founding-expert-leads، أحدثُ أوّلًا.
+    // الصفّ من المنصة: {id, name, whatsapp, email, specialization, years_experience,
+    //   governorate, linkedin_url, ref_code, referrals_count, status, created_at, updated_at,
+    //   contacted_at?, invited_at?, converted_at?, rejected_at?}
+    // كان مسار الأدمن على المنصة بلا مستهلك واحد: اللي بيقدّم بينزل في درج ما لوش شاشة.
+    // الشكل الراجع محتمل يكون قائمة مباشرة أو مغلّفة، فنقبل الاتنين بدل ما نفترض واحدًا.
+    foundingLeads: function () {
+      return get("/founding-leads?limit=200").then(function (r) {
+        var list = Array.isArray(r) ? r
+          : ((r && (r.leads || r.items || r.rows || r.founding_experts)) || []);
+        EP.data.foundingLeads = {
+          count: (r && r.count != null) ? r.count : list.length,
+          rows: list.map(function (l) {
+            var at = l.created_at || l.updated_at || "";
+            return {
+              id: l.id || "",
+              name: l.name || "",
+              whatsapp: l.whatsapp || l.phone || "",
+              email: l.email || "",
+              specialization: l.specialization || "",
+              years: l.years_experience || "",
+              governorate: l.governorate || "",
+              status: l.status || "new",
+              when: relTime(at) || arDate(at),
+              at: at ? (Date.parse(at) || 0) : 0,
+            };
+          }).sort(function (a, b) { return b.at - a.at; }),
+        };
+      }).catch(function (e) {
+        // 404 = مسار الجسر لسه ما اتنشرش على المنصة، مش «مفيش حد قدّم». التمييز ده هو اللي
+        // بيمنع اللوحة من إنها تكدب على المؤسس بصفر.
+        if (e && e.status === 404) { EP.data.foundingLeads = { rows: [], count: 0, missing: true }; return; }
         throw e;
       });
     },
@@ -1907,6 +1944,18 @@
       .catch(function (e) { quietToast((e && e.message) || "تعذّر تغيير الإخفاء"); if (after) after(); });
   };
 
+  // ---- «خبير مؤسس»: تعليم الليد بأنه عُولج ----
+  // الحالات معرّفة سلفًا على المنصة (LEAD_BRIDGE_STATUSES) والداشبورد بتتحقق منها سيرفر-سايد
+  // قبل ما تكلّم الجسر. الختم بيتحطّ مرة واحدة (أول لمسة هي الحقيقة) — ده سلوك الجسر نفسه.
+  EP.setFoundingLeadStatus = function (lead, status, after) {
+    post("/founding-leads/" + encodeURIComponent(lead.id) + "/status", { status: status })
+      .then(function () {
+        note("اتعلّم «" + (lead.name || "") + "» — " + status);
+        EP.reload("foundingLeads", after);
+      })
+      .catch(function (e) { quietToast((e && e.message) || "تعذّر تحديث حالة الليد"); if (after) after(); });
+  };
+
   // ---- إزالة مدرّب/خبير من المنصة (مشكلة «محمد افندي») ----
   // إلغاء تفعيل، لا حذف. The platform re-approves anyone still holding a granted provider
   // section key on every boot and on every authenticated request, so a correct removal has to
@@ -2431,7 +2480,7 @@
                 packages: null, t_data: null, i_data: null, targets: null, foundation: null, team: null,
                 notifications: null, goalsAdvisor: null, tutorials: null, platformTopics: null, platformTopicsAnalysis: null,
                 platformPendingTopics: null, platformTopicSegments: null, platformOpinions: null,
-                market: null, marketDemand: null, trainingInterests: null,
+                market: null, marketDemand: null, trainingInterests: null, foundingLeads: null,
                 aiAgents: null, dashUsers: null, audit: null, usage: null };
     EP.state = {};
     window.location.reload();

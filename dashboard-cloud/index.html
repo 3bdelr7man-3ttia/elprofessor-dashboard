@@ -1106,7 +1106,7 @@ function viewAnalysis(v){
 }
 
 function viewUsers(v){
-  if(window.EP){EP.ensure('users',()=>viewUsers(v));EP.ensure('packages',()=>viewUsers(v));}
+  if(window.EP){EP.ensure('users',()=>viewUsers(v));EP.ensure('packages',()=>viewUsers(v));EP.ensure('foundingLeads',()=>viewUsers(v));}
   const Ust=(window.EP&&EP.state.users)||'idle';
   const total=USERS.length, last7=USERS.filter(u=>u.last7).length, verified=USERS.filter(u=>u.verified==='verified').length, trainers=USERS.filter(u=>u.trainer==='approved').length;
   v.innerHTML=`
@@ -1122,7 +1122,9 @@ function viewUsers(v){
     <div class="inboxwrap">
       <section class="panel"><div class="ph"><h3>المستخدمون</h3><span class="n" id="uN">0</span><button class="btn btn-human" id="uAdd" style="flex:none;min-width:auto;padding:6px 13px;font-size:12px;margin-inline-start:auto">+ إضافة مستخدم</button></div><div id="uRows">${Ust==='loading'?'<div style="padding:40px;text-align:center;color:var(--muted)">…جارٍ التحميل</div>':''}</div></section>
       <aside class="drawer" id="drawer"></aside>
-    </div>`;
+    </div>
+    ${foundingLeadsPanel()}`;
+  wireFoundingLeads(v);
   // «+ إضافة مستخدم» تكتب فعليًا عبر POST /platform-users في الوضع الحيّ فقط؛ بدونه تُعطَّل.
   var uA=document.getElementById('uAdd');
   if(window.EP&&EP.createUser&&EP.data.users){uA.onclick=function(){addUserModal();};}
@@ -4272,6 +4274,93 @@ function trainingInterestPanel(){
 function wireTrainingInterest(v){
   var b=(v||document).querySelector('#tiRefresh');
   if(b)b.onclick=function(){if(window.EP)EP.reload('trainingInterests',()=>viewMarket(document.getElementById('view')));};
+}
+
+/* «مين ردّ على دعوة المؤسس» — الخبراء المؤسسون اللي سابوا بياناتهم على بوّابة الدعوة.
+   الصفوف بتيجي من المنصة (founders.html -> db.founding_expert_leads) عبر
+   /api/founding-leads -> جسر المنصة /api/bridge/founding-expert-leads، أحدثُ أوّلًا.
+   كان المسار الوحيد اللي بيقرأها على المنصة محميًّا بجلسة موظّف واللوحة ما بتحملهاش، فكان
+   اللي بيقدّم بينزل في درج ما لوش شاشة: المؤسس يبعت عشرين دعوة ويقدّم عشرين وما يشوفش ولا واحد.
+   ونصّ اللوحة هو زرّ «اتعالج»: درج ما بيتفضّاش بيبقى بعد أسبوع كومة ما بيفتحهاش حد.
+   ⛔ الحالات معرّفة سلفًا على المنصة (LEAD_BRIDGE_STATUSES) — ولا حالة جديدة تتخترع هنا.
+   ⛔ الأرقام والإيميلات دي بيانات تواصل: اللوحة خلف مصادقة ودور، وده حدّها — ما تظهرش في أي
+      شاشة عامة ولا في أي نص بيتنسخ برّه. */
+const FL_STATUS={new:{t:'جديد',cls:'s-wait'},contacted:{t:'اتواصلنا',cls:''},
+  invited:{t:'اتدعى',cls:'s-human'},converted:{t:'اتحوّل لمدرّب',cls:'s-auto'},
+  rejected:{t:'مش مناسب',cls:''},resolved:{t:'اتعالج',cls:''}};
+// الخطوة الجاية المسموحة لكل حالة — من نفس مجموعة المنصة، لا اختراع. converted/rejected نهاية.
+const FL_NEXT={new:[['contacted','اتواصلنا'],['rejected','مش مناسب']],
+  resolved:[['contacted','اتواصلنا'],['rejected','مش مناسب']],
+  contacted:[['invited','اتدعى'],['rejected','مش مناسب']],
+  invited:[['converted','اتحوّل لمدرّب'],['rejected','مش مناسب']],
+  converted:[],rejected:[]};
+function flRows(){var d=(window.EP&&EP.data.foundingLeads)||null;return (d&&d.rows)?d.rows:[];}
+// رابط الاتصال: أرقام و«+» بس — بيمنع أي حرف غريب من الوصول للـattribute أصلًا، وبرضه
+// بيعدّي على esc() قبل ما يتحط في الـHTML.
+function flTel(p){return String(p==null?'':p).replace(/[^0-9+]/g,'');}
+function foundingLeadsPanel(){
+  var st=(window.EP&&EP.state.foundingLeads)||'idle';
+  var D=(window.EP&&EP.data.foundingLeads)||null;
+  var R=flRows();
+  var pend=R.filter(function(l){return l.status!=='converted'&&l.status!=='rejected';}).length;
+  var head='<section class="panel" style="margin-top:16px"><div class="ph"><h3>'+svg('shield')+' مين ردّ على دعوة المؤسس</h3>'+
+    '<span class="n">'+money(R.length)+'</span>'+
+    '<span class="hint">'+(pend?('لسه محتاج ردّ: '+money(pend)):'كله اتعالج')+' — أحدثُ أوّلًا</span>'+
+    '<button class="btn btn-ghost" id="flRefresh" style="flex:none;min-width:auto;padding:6px 12px;font-size:12px;margin-inline-start:auto">'+svg('sparkles')+'حدّث</button></div>';
+  var foot='</section>';
+  var wrap=function(inner){return head+'<div style="padding:14px 16px">'+inner+'</div>'+foot;};
+  if(D&&D.missing)return head+'<div style="padding:14px 16px">'+
+    '<div class="policy" style="margin:0;border-inline-start-color:var(--gold);background:var(--gold-bg)">'+svg('clock','ic')+
+    '<div><b>اللوحة جاهزة هنا — وناقص نشر المنصة.</b><br>الجسر <span style="direction:ltr;display:inline-block">/api/bridge/founding-expert-leads</span> لسه مش ردّان على <span style="direction:ltr;display:inline-block">api.elprofessor.net</span>. أول ما يشتغل الصفوف هتنزل لوحدها.</div></div></div>'+foot;
+  if(st==='error')return wrap('<div class="policy" style="margin:0;border-inline-start-color:var(--conflict);background:var(--conflict-bg);color:var(--conflict)">'+svg('scale','ic')+
+    '<div>تعذّر جلب طلبات «خبير مؤسس» من المنصة — ودي مش «مفيش حد قدّم». <b style="cursor:pointer;text-decoration:underline" onclick="EP.reload(\'foundingLeads\',()=>viewUsers(document.getElementById(\'view\')))">إعادة المحاولة</b></div></div>');
+  if((st==='loading'||st==='idle')&&!R.length)return wrap('<div style="padding:14px;text-align:center;color:var(--muted)">…جارٍ تحميل ردود دعوة المؤسس</div>');
+  if(!R.length)return wrap('<div style="color:var(--muted);font-size:12.5px">محدش ردّ على الدعوة لسه. أول ما خبير يسيب بياناته على صفحة المؤسسين هيبان هنا بالاسم وتخصّصه ووسيلة تواصله.</div>');
+  var rows=R.map(function(l){
+    var S=FL_STATUS[l.status]||{t:(l.status||'—'),cls:''};
+    var tel=flTel(l.whatsapp);
+    var telCell=tel
+      ?'<a href="tel:'+esc(tel)+'" style="direction:ltr;display:inline-block;font-weight:800;color:var(--navy);text-decoration:none;border-bottom:1px dashed var(--line)">'+esc(l.whatsapp)+'</a>'
+      :'<span style="color:var(--muted)">بلا رقم</span>';
+    var acts=(FL_NEXT[l.status]||[]).map(function(a){
+      // ⛔ هدف لمسٍ ٤٤px ونصٌّ ١٢px — قاعدة مقفولة، لا تُصغَّر لأجل كثافة الصفّ.
+      return '<button class="btn btn-ghost fl-act" data-fl-id="'+esc(l.id)+'" data-fl-st="'+esc(a[0])+'" style="flex:none;min-width:44px;min-height:44px;padding:0 12px;font-size:12px">'+esc(a[1])+'</button>';
+    }).join('');
+    // ⛔ ٣٧٥px: الصفّ يلتفّ (flex-wrap) بدل ما يمدّ الصفحة أفقيًّا — قِيس حيًّا، مش مفترَض.
+    return '<div class="trow" style="display:flex;flex-wrap:wrap;align-items:center;gap:10px;row-gap:8px;padding:10px 0;border-bottom:1px solid var(--line)">'+
+      '<div class="src-ic" style="width:34px;height:34px;border-radius:9px;display:grid;place-items:center;flex:none;background:var(--gold-bg);color:var(--gold)">'+svg('shield')+'</div>'+
+      '<div style="flex:1 1 160px;min-width:0">'+
+        '<div style="font-weight:800;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(l.name||'بلا اسم')+'</div>'+
+        (l.email?'<div style="font-size:12px;color:var(--muted);direction:ltr;text-align:start;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(l.email)+'</div>':'')+
+      '</div>'+
+      '<div style="flex:1 1 150px;min-width:0;font-size:12.5px">'+
+        '<div style="font-size:12px;color:var(--muted);font-weight:800">التخصّص</div>'+
+        '<div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(l.specialization||'ما حدّدش')+
+          (l.governorate?('<span style="color:var(--muted)"> · '+esc(l.governorate)+'</span>'):'')+'</div>'+
+      '</div>'+
+      '<div style="flex:0 1 auto;min-width:0;font-size:12.5px">'+telCell+'</div>'+
+      '<div style="flex:none;font-size:12px;color:var(--muted)">'+esc(l.when||'—')+'</div>'+
+      '<div style="flex:none;text-align:end"><span class="status '+esc(S.cls)+'"'+(S.cls?'':' style="background:var(--surface-2);color:var(--muted)"')+'><span class="d"'+(S.cls?'':' style="background:var(--muted)"')+'></span>'+esc(S.t)+'</span></div>'+
+      '<div style="flex:none;display:flex;flex-wrap:wrap;gap:6px">'+acts+'</div>'+
+    '</div>';
+  }).join('');
+  var more=(D&&D.count!=null&&D.count>R.length)?('<div style="margin-top:10px;font-size:12px;color:var(--muted)">معروض '+money(R.length)+' من '+money(D.count)+'.</div>'):'';
+  return wrap(rows+more);
+}
+function wireFoundingLeads(v){
+  var root=(v||document);
+  var b=root.querySelector('#flRefresh');
+  var again=function(){viewUsers(document.getElementById('view'));};
+  if(b)b.onclick=function(){if(window.EP)EP.reload('foundingLeads',again);};
+  root.querySelectorAll('.fl-act').forEach(function(btn){
+    btn.onclick=function(){
+      if(!window.EP||!EP.setFoundingLeadStatus){toast('غير متصل بالمنصة');return;}
+      var id=btn.dataset.flId,stt=btn.dataset.flSt;
+      var row=flRows().filter(function(x){return x.id===id;})[0]||{id:id};
+      btn.disabled=true;btn.style.opacity='.5';
+      EP.setFoundingLeadStatus(row,stt,again);
+    };
+  });
 }
 
 /* ===== TRAINER / INVESTOR / VIEWER PORTALS ===== */

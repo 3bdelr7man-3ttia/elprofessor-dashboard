@@ -2854,6 +2854,48 @@ def training_interests_list():
                            params={'limit': max(1, min(500, limit))})
 
 
+# --- «مين ردّ على دعوة المؤسس» — درج الخبراء المؤسسين ----------------------------------------
+# بوّابة الدعوة (elprofessor.net/founders.html) بتصبّ في db.founding_expert_leads على المنصة،
+# والمنصة كان عندها مسار أدمن واحد بيقرأها (GET /api/admin/founding-experts) محميّ بجلسة موظّف
+# — واللوحة مش بتحمل جلسة موظّف، بتتكلّم بالسرّ المشترك. فالنتيجة: صفر واجهة بتستهلك الصفوف،
+# والمؤسس يبعت عشرين دعوة ويقدّم عشرين وما يشوفش ولا واحد. المسار ده هو الجسر الناقص.
+# ⛔ الصفوف دي أسماء وتليفونات وإيميلات: خلف مصادقة ودور، وده حدّها — ما تظهرش في أي مكان عام.
+FOUNDING_LEAD_STATUSES = ('contacted', 'invited', 'converted', 'rejected')  # = LEAD_BRIDGE_STATUSES
+
+
+@app.route('/api/founding-leads', methods=['GET'])
+@token_required
+@roles_required('admin', 'employee')   # قراءة فقط
+def founding_leads_list():
+    """صفوف «خبير مؤسس» من الجسر (أحدثُ أوّلًا؛ الترتيب يملكه الجسر ولا يُعاد هنا)."""
+    try:
+        limit = int(request.args.get('limit') or 100)
+    except (TypeError, ValueError):
+        limit = 100
+    return _platform_proxy('GET', '/api/bridge/founding-expert-leads',
+                           params={'limit': max(1, min(500, limit))})
+
+
+@app.route('/api/founding-leads/<lead_id>/status', methods=['POST'])
+@token_required
+@roles_required('admin', 'employee')   # اللي بيشتغل الدرج هو اللي بيعلّم عليه
+def founding_lead_set_status(lead_id):
+    """تعليم الليد بأنه عُولج — نصف اللوحة: درج ما بيتفضّاش بيبقى بعد أسبوع كومة ما بيفتحهاش حد.
+
+    الحالات مُعرَّفة على المنصة سلفًا (LEAD_BRIDGE_STATUSES) ولا نخترع واحدة: المنصة بترفض
+    المجهول بـ٤٢٢، وإحنا بنرفضه هنا بـ٤٠٠ قبل ما نكلّمها أصلًا. الختم بيتحطّ مرة واحدة
+    (أول لمسة هي الحقيقة) — ده سلوك الجسر نفسه، مش حاجة بنعيد تنفيذها هنا."""
+    body = request.json or {}
+    status = (body.get('status') or '').strip().lower()
+    if status not in FOUNDING_LEAD_STATUSES:
+        return jsonify({'error': 'حالة غير معروفة — المسموح: ' + ' | '.join(FOUNDING_LEAD_STATUSES)}), 400
+    resp = _platform_proxy('POST', f"/api/bridge/founding-leads/{lead_id}/status",
+                           json_body={'status': status})
+    if _resp_ok(resp):
+        _audit('founding_lead.status', target=lead_id, meta={'status': status})
+    return resp
+
+
 # --- «أتمتة المقالات» (Articles automation): one daily AI run fills «المقالات» on the platform
 # with DRAFTS (1 platform explainer + a few news-derived analyses) that the founder approves here.
 @app.route('/api/platform-articles', methods=['GET'])
