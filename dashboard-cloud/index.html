@@ -4367,7 +4367,7 @@ function wireFoundingLeads(v){
 }
 
 /* ===== «الدعوات وقائمة الانتظار» — مكان المؤسس =====================================
-   قرار المؤسس: المنصّة تفضل **مفتوحة للتصفّح** زي ما هي، والمقفول هو **إنشاء الحساب** وحده —
+   قرار المؤسس (2026-09-06): المنصّة **مقفولة من الخادم** لغير من أكمل رحلة الدعوة —
    ولا يُنشأ حسابٌ إلّا لبريدٍ مدعوّ، وبعد التسجيل كل حاجة مفتوحة للمدعوّ بلا أي قيد إضافي.
    الشاشة دي هي المكان الوحيد اللي بيتعمل منه الرابط، وبيتشاف منه «كام حدّ من الدعوة اشتغل».
    ⛔ العدّادات فوق **محسوبة من الصفوف** — ولا رقمٍ مكتوب ولا واحد.
@@ -4399,7 +4399,7 @@ function inviteLinkModal(res,email){
   var body=link
     ? '<div class="fld"><label>رابط الدعوة لـ'+esc(who)+' — ابعته بنفسك</label>'+
       '<input id="inv_lk" readonly value="'+esc(link)+'" style="direction:ltr;text-align:left;font-size:12.5px"></div>'+
-      '<div class="note-ai">'+svg('sparkles','ic')+'<div>الرابط ده يخصّ <b style="direction:ltr;display:inline-block">'+esc(who)+'</b> وحده — البريد ده بس اللي هيقدر يعمل بيه حساب. باقي المنصة مفتوحة للتصفّح زي ما هي.</div></div>'+acts
+      '<div class="note-ai">'+svg('sparkles','ic')+'<div>الرابط ده يخصّ <b style="direction:ltr;display:inline-block">'+esc(who)+'</b> وحده — البريد ده بس اللي هيقدر يعمل بيه حساب. المنصّة مقفولة لغير المدعوّين — بيمشي في رحلة الدعوة (صفته ⇒ تجربة ⇒ إقرار ⇒ كلمة سر) وبعدها بس بيدخل.</div></div>'+acts
     : '<div class="policy" style="margin:0 0 12px;border-inline-start-color:var(--gold);background:var(--gold-bg)">'+svg('clock','ic')+
       '<div><b>الدعوة اتعملت — والمنصة ما رجّعتش الرابط.</b><br>مش هنلفّق رابطًا من عندنا. حدّث الجدول تحت وشوف الصفّ، ولو الرابط مش راجع من الجسر ده بند مفتوح على المنصة.</div></div>'+acts;
   var s=openModal('رابط الدعوة',body);
@@ -4426,6 +4426,31 @@ function inviteCounts(){
 }
 function invPct(n,d){return d?(money(Math.round(n*100/d))+'٪ من اللي اتبعت'):'—';}
 
+// «الدعوة رحلةً» (مواصفة 2026-09-06 §٧.٣): خمس محطات بترتيب آلة الحالات — كل عدّاد = الصفوف
+// اللي بلغت المحطة أو تجاوزتها. الأرقام بتيجي محسوبة من dashboard-api.js (EP.data.invites.counts)
+// ولا رقم بيتحسب هنا تاني — تطبيقان لنفس المنطق = رقمان مختلفان بلا تست أحمر.
+const INV_STAGES=[{k:'opened',t:'فُتحت'},{k:'roles_chosen',t:'اختار صفته'},{k:'exercised',t:'جرّب'},{k:'declared',t:'أقرّ'},{k:'registered',t:'سُجِّل'}];
+// المحطات النهائية: ما ينفعش نقول «تنتهي بعد N يوم» لمسجَّل أو مسحوب أو منتهٍ أصلًا.
+const INV_TERMINAL={registered:1,revoked:1,expired:1};
+// صفّ العدّادات فوق الجدول. ⛔ صفر يُعرض صفرًا؛ و«—» لمّا نبقى عميان (الجسر مش منشور أو
+//    تعذّر الجلب) أو لمّا الجسر ما رجّعش counts أصلًا — نفس قاعدة العدّادات الكبيرة فوق.
+function invStageCounters(blind,loading){
+  var D=(window.EP&&EP.data.invites)||null;
+  var CT=(D&&D.counts)||null;
+  var val=function(k){
+    if(blind)return '—';
+    if(loading)return '…';
+    if(!CT||CT[k]==null)return '—';
+    return money(CT[k]);
+  };
+  return '<div class="inv-stages" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:8px;margin-bottom:14px">'+
+    INV_STAGES.map(function(s,ix){
+      return '<div style="background:var(--surface-2);border:1px solid var(--line);border-radius:10px;padding:9px 12px">'+
+        '<div style="font-size:11.5px;font-weight:800;color:var(--muted)">'+money(ix+1)+' · '+esc(s.t)+'</div>'+
+        '<b style="font-family:Cairo;font-size:20px;font-weight:900;display:block;margin-top:4px;line-height:1">'+val(s.k)+'</b></div>';
+    }).join('')+'</div>';
+}
+
 function viewInvites(v){
   if(window.EP){EP.ensure('invites',invAgain);EP.ensure('waitlist',invAgain);}
   var st=(window.EP&&EP.state.invites)||'idle';
@@ -4442,7 +4467,7 @@ function viewInvites(v){
   var blindSub=(D&&D.missing)?'الجسر لسه مش منشور — مش «صفر»':'تعذّر جلب الصفوف — مش «صفر»';
   v.innerHTML=
     '<div class="policy" style="border-inline-start-color:var(--gold);background:var(--gold-bg)">'+svg('shield','ic')+
-      '<div><b>المنصّة مفتوحة للتصفّح زي ما هي — المقفول هو إنشاء الحساب وحده.</b> ولا يُنشأ حساب إلّا لبريدٍ مدعوّ، وبعد ما يسجّل كل حاجة مفتوحة له. اللي ما عندهوش دعوة بيسيب بياناته في «قائمة الانتظار» تحت.</div></div>'+
+      '<div><b>المنصّة مقفولة من الخادم — ما بيدخلش غير اللي كمّل رحلة الدعوة.</b> الرابط شخصي وبينتهي بعد ١٤ يوم؛ المدعوّ بيختار صفته ويجرّب ويقرّ ويختار كلمة سر، وبعدها بس بيدخل. اللي ما عندهوش دعوة بيسيب بياناته في «قائمة الانتظار» تحت.</div></div>'+
     '<div class="kpis">'+
       '<div class="kpi k-1"><div class="top"><span class="ic">'+svg('mail')+'</span>أُرسلت</div><b>'+num(C.sent)+'</b>'+
         '<div class="sub" style="font-size:12px">'+(blind?blindSub:(C.revoked?('منها '+money(C.revoked)+' مسحوبة'):'دعوات اتعملت من هنا'))+'</div></div>'+
@@ -4480,13 +4505,28 @@ function invitesPanel(){
     '<div class="fld" style="flex:1 1 160px;margin:0"><label style="font-size:12px;font-weight:800;color:var(--muted);display:block;margin-bottom:5px">سطر لنفسك (اختياري)</label>'+
       '<input id="inv_nt" placeholder="مين ده ومنين" style="width:100%;min-height:44px;border:1px solid var(--line);border-radius:10px;padding:10px 13px;font:inherit;font-size:13px;background:var(--surface);color:var(--ink)"></div>'+
     '<button class="btn btn-primary" id="inv_go" style="flex:0 0 auto;min-height:44px;min-width:132px">'+svg('mail')+'اعمل الرابط</button></div>';
-  if(D&&D.missing)return head+'<div style="padding:14px 16px">'+invMissingCard('/api/bridge/invites')+'</div>'+foot;
-  if(st==='error')return wrap('<div class="policy" style="margin:0;border-inline-start-color:var(--conflict);background:var(--conflict-bg);color:var(--conflict)">'+svg('scale','ic')+
+  if(D&&D.missing)return head+'<div style="padding:14px 16px">'+invStageCounters(true,false)+invMissingCard('/api/bridge/invites')+'</div>'+foot;
+  var loading=(st==='loading'||st==='idle')&&!R.length;
+  // العدّادات الخمسة فوق الجدول في كل حالة بنرسم فيها الجدول — عميان ⇒ «—» مش صفر.
+  var stages=invStageCounters(blind,loading);
+  if(st==='error')return wrap(stages+'<div class="policy" style="margin:0;border-inline-start-color:var(--conflict);background:var(--conflict-bg);color:var(--conflict)">'+svg('scale','ic')+
     '<div>تعذّر جلب الدعوات من المنصة — ودي مش «مفيش دعوات». <b style="cursor:pointer;text-decoration:underline" onclick="EP.reload(\'invites\',invAgain)">إعادة المحاولة</b></div></div>');
-  if((st==='loading'||st==='idle')&&!R.length)return wrap(form+'<div style="padding:14px;text-align:center;color:var(--muted)">…جارٍ تحميل الدعوات</div>');
-  if(!R.length)return wrap(form+'<div style="color:var(--muted);font-size:12.5px">ولا دعوة اتبعتت لسه. اكتب البريد فوق واعمل أول رابط.</div>');
+  if(loading)return wrap(stages+form+'<div style="padding:14px;text-align:center;color:var(--muted)">…جارٍ تحميل الدعوات</div>');
+  if(!R.length)return wrap(stages+form+'<div style="color:var(--muted);font-size:12.5px">ولا دعوة اتبعتت لسه. اكتب البريد فوق واعمل أول رابط.</div>');
   var rows=R.map(function(i){
     var S=INV_STATUS[i.status]||{t:(i.status||'—'),cls:''};
+    // عمود «المحطة»: الاسم العربي للمحطة + الصفات/التخصص مختصرة + المتبقّي على الانتهاء.
+    // كل حقل من الجسر بيمرّ على esc() — قاعدة الملف. الصفّ اللي لسه ما اتحسبتش محطته
+    // (بلا stageLabel) بياخد «—» مش «pending» بالإنجليزي.
+    var terminal=!!INV_TERMINAL[i.stage];
+    var meta=[];
+    if(i.rolesLabel&&i.rolesLabel!=='—')meta.push(esc(i.rolesLabel));
+    if(i.specialtyLabel&&i.specialtyLabel!=='—')meta.push(esc(i.specialtyLabel));
+    var stageCell='<div style="flex:1 1 150px;min-width:0;font-size:12px">'+
+      '<div style="font-weight:800;font-size:12.5px;color:'+(i.stage==='registered'?'var(--agree)':(terminal?'var(--muted)':'var(--ink)'))+'">'+esc(i.stageLabel||'—')+'</div>'+
+      (meta.length?('<div style="color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+meta.join(' · ')+'</div>'):'')+
+      ((!terminal&&i.daysLeftLabel&&i.daysLeftLabel!=='—')?('<div style="color:'+(i.daysLeftLabel==='انتهت'?'var(--conflict)':'var(--muted)')+'">'+esc(i.daysLeftLabel)+'</div>'):'')+
+    '</div>';
     var copyBtn=i.link?('<button class="btn btn-ghost inv-cp" data-inv-link="'+esc(i.link)+'" data-inv-em="'+esc(i.email)+'" style="flex:none;min-width:44px;min-height:44px;padding:0 12px;font-size:12px">انسخ الرابط</button>'):'';
     var revBtn=i.revoked||i.registered?'':('<button class="btn btn-ghost inv-rv" data-inv-id="'+esc(i.id)+'" data-inv-em="'+esc(i.email)+'" style="flex:none;min-width:44px;min-height:44px;padding:0 12px;font-size:12px">اسحب</button>');
     var stamps='<span>اتبعتت '+esc(i.when||'—')+'</span>'+
@@ -4500,12 +4540,13 @@ function invitesPanel(){
       '</div>'+
       '<div style="flex:1 1 190px;min-width:0;font-size:12px;color:var(--muted)">'+stamps+
         (i.note?('<div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(i.note)+'</div>'):'')+'</div>'+
+      stageCell+
       '<div style="flex:none;text-align:end"><span class="status '+esc(S.cls)+'"'+(S.cls?'':' style="background:var(--surface-2);color:var(--muted)"')+'><span class="d"'+(S.cls?'':' style="background:var(--muted)"')+'></span>'+esc(S.t)+'</span></div>'+
       '<div style="flex:none;display:flex;flex-wrap:wrap;gap:6px">'+copyBtn+revBtn+'</div>'+
     '</div>';
   }).join('');
   var more=(D&&D.count!=null&&D.count>R.length)?('<div style="margin-top:10px;font-size:12px;color:var(--muted)">معروض '+money(R.length)+' من '+money(D.count)+'.</div>'):'';
-  return wrap(form+rows+more);
+  return wrap(stages+form+rows+more);
 }
 
 /* «قائمة الانتظار» — اللي البوّابة المقفولة حوّشتهم. الصفّ هنا مش سطر شكوى: هو دعوة على بُعد

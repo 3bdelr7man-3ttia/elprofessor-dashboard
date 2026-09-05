@@ -295,6 +295,54 @@
     };
   }
 
+  // ================================================================ «الدعوات رحلةً»
+  // (مواصفة 2026-09-06 §٥ و§٧.٣) — عمود «المحطة» + العدّادات الخمسة، فوق قسم «الدعوات» القائم
+  // مباشرةً بلا مسّ لسلوكه. ثوابت مشتركة للاسم العربي والرتبة والاشتقاق للخلف.
+  var STAGE_AR = {
+    pending: "لسه ما فتحش", opened: "فتح", roles_chosen: "اختار صفته", pain_seen: "قرأ",
+    exercised: "جرّب", declared: "أقرّ", registered: "سجّل ✓", expired: "انتهت", revoked: "مسحوبة",
+  };
+  // رتبة المحطة في آلة الحالات (routes/invite_journey.py) — لحساب «بلغ أو تجاوز». المحطتان
+  // النهائيتان expired/revoked بلا رتبة هنا عمدًا: الجسر بيستبدل بيهم المحطة الأصلية عند
+  // القراءة، فمفيش مصدر هنا يعرف أعلى محطة كان الصفّ بلغها قبل الانتهاء أو السحب.
+  var STAGE_ORDER = { pending: 0, opened: 1, roles_chosen: 2, pain_seen: 3, exercised: 4, declared: 5, registered: 6 };
+  var ROLE_AR = { trainer: "مدرّب", lawyer: "محامٍ", consultant: "مستشار", researcher: "باحث", graduate: "خريج" };
+  var SPECIALTY_AR = { criminal: "جنائي", civil: "مدني", corporate: "شركات", family: "أسرة", labor: "عمل", administrative: "إداري" };
+
+  function deriveInviteStage(i, statusFallback) {
+    if (i && i.stage) return i.stage;
+    // توافقٌ للخلف موثَّق في مواصفة 2026-09-06 §٥.٢: صفّ بلا `stage` (لسه ما لمسته الرحلة)
+    // تُشتقّ محطته من `status` القائم — مش اختراعًا، نفس القاعدة المكتوبة في المصدر.
+    if (statusFallback === "revoked") return "revoked";
+    if (statusFallback === "registered") return "registered";
+    if (statusFallback === "opened") return "opened";
+    return "pending";
+  }
+  function rolesLabelOf(roles) {
+    if (!Array.isArray(roles) || !roles.length) return "—";
+    return roles.map(function (r) { return ROLE_AR[r] || r; }).join("، ");
+  }
+  function daysUntilIso(iso) {
+    var t = Date.parse(iso || ""); if (isNaN(t)) return null;
+    return Math.ceil((t - Date.now()) / 86400e3);
+  }
+  // العدّادات الخمسة: كل عدّاد = عدد الصفوف التي بلغت هذه المحطة أو تجاوزتها. صفوف
+  // expired/revoked مُستبعدة من كل العدّادات (لا رتبة لها في STAGE_ORDER أعلاه) بدل ما نخمّن
+  // أعلى محطة بلغوها — فالصفر هنا صفرٌ حقيقي مش غيابًا مقروءًا كصفر.
+  function stageCounts(rows) {
+    var out = { opened: 0, roles_chosen: 0, exercised: 0, declared: 0, registered: 0 };
+    (rows || []).forEach(function (row) {
+      var rank = STAGE_ORDER.hasOwnProperty(row.stage) ? STAGE_ORDER[row.stage] : -1;
+      if (rank < 0) return;
+      if (rank >= STAGE_ORDER.opened) out.opened++;
+      if (rank >= STAGE_ORDER.roles_chosen) out.roles_chosen++;
+      if (rank >= STAGE_ORDER.exercised) out.exercised++;
+      if (rank >= STAGE_ORDER.declared) out.declared++;
+      if (rank >= STAGE_ORDER.registered) out.registered++;
+    });
+    return out;
+  }
+
   var LOADERS = {
     // نظرة عامة: /api/dashboard (+ /api/platform-metrics لعدد المستخدمين الحيّ)
     dashboard: function () {
@@ -428,11 +476,16 @@
     },
 
     // ================================================================ «الدعوات» + «قائمة الانتظار»
-    // قرار المؤسس: التصفّح مفتوح زي ما هو، والمقفول هو **إنشاء الحساب** وحده — ولا يُنشأ حساب
+    // قرار المؤسس (2026-09-06): المنصّة مقفولة من الخادم لغير من أكمل رحلة الدعوة — ولا يُنشأ حساب
     // إلّا لبريدٍ مدعوّ، وبعد التسجيل كل حاجة مفتوحة للمدعوّ.
     // /api/invites -> جسر المنصة /api/bridge/invites. الصفّ من المنصة:
     //   {id, email, name, status: pending|opened|registered|revoked, invited_by, note,
-    //    created_at, opened_at, registered_at}
+    //    created_at, opened_at, registered_at,
+    //    stage: pending|opened|roles_chosen|pain_seen|exercised|declared|registered|expired|revoked,
+    //    roles: [trainer|lawyer|consultant|researcher|graduate], specialty, expires_at}
+    //    (الحقول الأربعة الأخيرة من «الدعوة رحلةً» — مواصفة 2026-09-06 §٥.٢؛ قد تغيب من صفّ
+    //    قديم لسه ما لمسته الرحلة، فالاشتقاق تحت **يعكس نفس التوافق للخلف الموثَّق في المواصفة**
+    //    (status -> stage)، مش اختراعًا: صفّ حالته registered وبلا stage لازم يُقرأ كمسجَّل.)
     // ⛔ العدّادات فوق (أُرسلت/فُتحت/سُجِّل) بتتحسب من الصفوف دي في اللوحة — مفيش رقم مكتوب.
     //    عشان كده بنطلّع هنا `opened`/`registered` كقيَم منطقية من **الختم أو الحالة**: صفّ
     //    حالته registered وختمه ناقص لازم يتعدّ مسجّلًا، وإلا العدّاد يقلّ عن الحقيقة.
@@ -440,12 +493,11 @@
     invites: function () {
       return get("/invites?limit=200").then(function (r) {
         var list = Array.isArray(r) ? r : ((r && (r.invites || r.items || r.rows)) || []);
-        EP.data.invites = {
-          count: (r && r.count != null) ? r.count : list.length,
-          missing: false,
-          rows: list.map(function (i) {
+        var rows = list.map(function (i) {
             var st = (i.status || "pending");
             var at = i.created_at || "";
+            var stage = deriveInviteStage(i, st);
+            var daysLeft = i.expires_at ? daysUntilIso(i.expires_at) : null;
             return {
               id: i.id || "",
               email: i.email || "",
@@ -462,13 +514,34 @@
               openedWhen: i.opened_at ? (relTime(i.opened_at) || arDate(i.opened_at)) : "",
               regWhen: i.registered_at ? (relTime(i.registered_at) || arDate(i.registered_at)) : "",
               at: at ? (Date.parse(at) || 0) : 0,
+              // ---- «الدعوة رحلةً» (2026-09-06 §٧.٣): عمود المحطة + العدّادات ----
+              stage: stage,
+              stageLabel: STAGE_AR[stage] || stage,
+              roles: Array.isArray(i.roles) ? i.roles : [],
+              rolesLabel: rolesLabelOf(i.roles),
+              specialty: i.specialty || null,
+              specialtyLabel: i.specialty ? (SPECIALTY_AR[i.specialty] || i.specialty) : "—",
+              expiresAt: i.expires_at || null,
+              // «—» لا صفر: مفيش تاريخ انتهاء يعني ما نعرفش المتبقّي، مش إنه صفر يوم.
+              daysLeftLabel: (daysLeft == null) ? "—" : (daysLeft <= 0 ? "انتهت" : ("تنتهي بعد " + money(daysLeft) + " يوم")),
             };
-          }).sort(function (a, b) { return b.at - a.at; }),
+          }).sort(function (a, b) { return b.at - a.at; });
+        EP.data.invites = {
+          count: (r && r.count != null) ? r.count : list.length,
+          missing: false,
+          rows: rows,
+          // خمس عدّادات: كل عدّاد = عدد الصفوف التي بلغت هذه المحطة أو تجاوزتها (ترتيب آلة
+          // الحالات في routes/invite_journey.py). صفّ منتهٍ/مسحوب مُستبعَد من كل العدّادات —
+          // الجسر بيستبدل محطته الأصلية بـ«انتهت/مسحوبة» عند القراءة فمفيش مصدر هنا يعرف
+          // أعلى محطة كان بلغها، وتخمينها اختلاقٌ لبيانات مش موجودة.
+          counts: stageCounts(rows),
         };
       }).catch(function (e) {
         // 404 = مسار الجسر لسه ما اتنشرش على المنصة، مش «مفيش دعوات». التمييز ده هو اللي
         // بيمنع اللوحة من إنها تكدب على المؤسس بصفر.
-        if (e && e.status === 404) { EP.data.invites = { rows: [], count: 0, missing: true }; return; }
+        // counts:null مش {0,...}: العدّادات الخمسة في اللوحة بتقرا المفتاح ده، وغيابه بيرمي
+        // خطأ، وصفره بيكدب — «—» هو الصادق وإحنا عميان.
+        if (e && e.status === 404) { EP.data.invites = { rows: [], count: 0, missing: true, counts: null }; return; }
         throw e;
       });
     },
