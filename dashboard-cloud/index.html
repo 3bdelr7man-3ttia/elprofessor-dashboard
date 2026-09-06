@@ -390,6 +390,8 @@ let current=initialModuleFromHash(), selected=null, activeFilter='all', escTab='
 let usersTag='all', teamTab='experts', topicsTab='ideas', topicsCat='all', pendingUserFocus=null;
 // «السوق»: الحارة (kind) + نوع الاحتياج (need_kind) + الحالة — نفس محاور البورد الحيّ.
 let mkLane='all', mkNeed='all', mkStatus='all', mkSel=null;
+// «الدعوات» (الموجة ٣ د٨): الصفّ المختار لدرج التفصيل + تبديل «حسب الداعي».
+let invSel=null, invGroupBy=false;
 let role='admin';
 const ROLE_NAV={
   employee:['users','courses','topics','tutorials'],
@@ -447,6 +449,7 @@ function go(mod){
   if(!moduleDef(mod))mod=(role==='admin')?'inbox':(roleNavFor(role)[0]||'v_pending');
   current=mod;selected=null;activeFilter='all';escTab='sessions';finTab='summary';usersFilter='all';usersTag='all';teamTab='experts';topicsTab='ideas';topicsCat='all';courseTab='platform';invTab='investors';mktTab='campaigns';contentTab='pending';anFilters={seg:'all',country:'all',cat:'all',ne:'all',time:'all'};
   mkLane='all';mkNeed='all';mkStatus='all';mkSel=null;
+  invSel=null;invGroupBy=false;
   // رابط مباشر بالهاش (م٧): كل تنقّل بيحدّث #mod عشان يترسل كرابط جاهز («ابعتلي رابط عشان
   // أشوف الدعوات» ⇒ dashboard.elprofessor.net/#invites). replaceState لا يفتح إدخالًا
   // جديدًا في تاريخ المتصفّح لكل ضغطة نافيجيشن — الزرّ «رجوع» يفضل معناه الطبيعي.
@@ -4391,6 +4394,15 @@ function wireFoundingLeads(v){
 const INV_STATUS={pending:{t:'اتبعتت',cls:'s-wait'},opened:{t:'فتح الرابط',cls:'s-human'},
   registered:{t:'عمل حساب',cls:'s-auto'},revoked:{t:'مسحوبة',cls:''}};
 const WL_STATUS={new:{t:'مستنّي',cls:'s-wait'},invited:{t:'اتدعى',cls:'s-auto'},declined:{t:'مش دلوقتي',cls:''}};
+// درج «تفصيل المدعوّ» (الموجة ٣ د٨): تسميات الخطّ الزمني كما ترجعها فعليًّا
+// GET /api/bridge/invites/{id} (backend/routes/invites.py::TIMELINE_FIELDS) — سبعة مفاتيح
+// حقيقية لا الستّة الافتراضية في دفتر الكوبي؛ الكود الحيّ يحكم لا النصّ المكتوب سلفًا.
+const INV_TIMELINE_AR={created:'أُنشئت',opened:'فُتحت',email_bound:'كتب إيميله',
+  pain_seen:'قرأ عمله',exercised:'جرّب',declared:'أقرّ',registered:'انضمّ'};
+const INV_VERDICT_AR={correct:'صحيحة',partly:'ناقصة',wrong:'خاطئة'};
+// نسخة محلية من ROLE_AR (المعرَّفة داخل نطاق dashboard-api.js الخاص ولا تصل هنا) — لتسمية
+// صفّة كل تمرين في درج التفصيل.
+const INV_ROLE_AR={trainer:'مدرّب',lawyer:'محامٍ',consultant:'مستشار',researcher:'باحث',graduate:'خريج'};
 function invRows(){var d=(window.EP&&EP.data.invites)||null;return (d&&d.rows)?d.rows:[];}
 function wlRows(){var d=(window.EP&&EP.data.waitlist)||null;return (d&&d.rows)?d.rows:[];}
 function invAgain(){viewInvites(document.getElementById('view'));}
@@ -4403,29 +4415,32 @@ function invMissingCard(path){
 // نافذة الرابط: بتظهر مرّة واحدة بعد الإنشاء. لو المنصة ما رجّعتش رابطًا بنقول كده صراحةً —
 // ⛔ ولا رابط بيتلفّق من التوكن هنا: مسار قبول الدعوة ملك المنصة، والتخمين معناه رابط بيقع
 //    على الواتساب بعد ما المؤسس يبعته وهو فاكره شغّال.
-// نصّ الواتساب الجاهز: شخصي + مدّة الصلاحية — مواصفة الموجة ٢ (2026-09-06 م٢).
+// نصّ الواتساب الجاهز — شخصي بلا شرح آلية (دفتر الكوبي §ج٣ — الموجة ٣ 2026-09-07، يستبدل
+// نصّ الموجة ٢ اللي كان بيذكر «بينتهي بعد ١٤ يوم»: «كل الكلام ده ما حدش بيقرأه»).
 // ⛔ ولا حرف تاني عن الدعوة بيتبعت هنا: العنوان اللي بيفتحه المؤسس فاضي (wa.me/?text=)
 //    بلا رقم — هو اللي بيختار لمين يبعت، إحنا بس جهّزنا النصّ.
 function inviteWaText(name,link){
-  var who=name?('يا '+name+' '):'';
-  return 'أهلًا '+who+'👋\nده رابط دعوتك الشخصية لمنصة البروفيسور — بيخصّك إنت بس وبينتهي بعد ١٤ يوم:\n'+link;
+  var who=name?('أهلًا '+name+'،'):'أهلًا،';
+  return who+'\nدعوتك لمنصّة البروفيسور — باسمك وحدك:\n'+link;
 }
+// بطاقة الرابط بعد الإنشاء (دفتر الكوبي §ج٤): تختصر القائمة الطويلة القديمة — عنوان بالاسم +
+// سطر واحد + زرّان. لا سطر ١٤ يومًا ولا شرح لآلية الرحلة هنا.
 function inviteLinkModal(res,email,name){
   res=res||{};
   var link=res.link||res.invite_url||'';
-  var who=res.email||email||'';
-  var waHref=link?('https://wa.me/?text='+encodeURIComponent(inviteWaText(name||res.name||'',link))):'';
+  var who=name||res.name||res.email||email||'';
+  var waHref=link?('https://wa.me/?text='+encodeURIComponent(inviteWaText(name||res.name||who||'',link))):'';
   var acts='<div class="acts" style="margin-top:14px;display:flex;gap:8px;flex-wrap:wrap">'+
-    (link?'<button class="btn btn-primary" id="inv_cp" style="min-height:44px">'+svg('check')+'انسخ الرابط</button>':'')+
+    (link?'<button class="btn btn-primary" id="inv_cp" style="min-height:44px">'+svg('check')+'نسخ</button>':'')+
     (waHref?'<a class="btn btn-ghost" id="inv_wa" href="'+esc(waHref)+'" target="_blank" rel="noopener" style="min-height:44px;text-decoration:none">'+svg('mail')+'ابعت عبر واتساب</a>':'')+
     '<button class="btn btn-ghost" id="inv_x" style="min-height:44px">تمام</button></div>';
   var body=link
-    ? '<div class="fld"><label>رابط الدعوة'+(who?(' لـ'+esc(who)):'')+' — ابعته بنفسك</label>'+
+    ? '<div class="fld"><label>الرابط</label>'+
       '<input id="inv_lk" readonly value="'+esc(link)+'" style="direction:ltr;text-align:left;font-size:12.5px"></div>'+
-      '<div class="note-ai">'+svg('sparkles','ic')+'<div>الرابط ده شخصي وبينتهي بعد ١٤ يوم'+(who?(' — والإيميل ده بس اللي هيقدر يعمل بيه حساب'):' — المدعوّ هيكتب إيميله بنفسه في أول محطة من الرحلة')+'. المنصّة مقفولة لغير المدعوّين — بيمشي في رحلة الدعوة (صفته ⇒ تجربة ⇒ إقرار ⇒ كلمة سر) وبعدها بس بيدخل.</div></div>'+acts
+      '<div style="font-size:12.5px;color:var(--muted);margin-top:2px">شخصي — أرسله له بنفسك.</div>'+acts
     : '<div class="policy" style="margin:0 0 12px;border-inline-start-color:var(--gold);background:var(--gold-bg)">'+svg('clock','ic')+
       '<div><b>الدعوة اتعملت — والمنصة ما رجّعتش الرابط.</b><br>مش هنلفّق رابطًا من عندنا. حدّث الجدول تحت وشوف الصفّ، ولو الرابط مش راجع من الجسر ده بند مفتوح على المنصة.</div></div>'+acts;
-  var s=openModal('رابط الدعوة',body);
+  var s=openModal(esc(who?('رابط الدعوة لـ'+who):'رابط الدعوة'),body);
   s.querySelector('#inv_x').onclick=closeModal;
   var cp=s.querySelector('#inv_cp');
   if(cp)cp.onclick=function(){
@@ -4503,9 +4518,11 @@ function viewInvites(v){
         '<div class="sub" style="font-size:12px">'+(wblind?((WD&&WD.missing)?'الجسر لسه مش منشور — مش «صفر»':'تعذّر جلب الصفوف — مش «صفر»'):'سابوا بياناتهم في الانتظار')+'</div></div>'+
     '</div>'+
     foundingPanel()+
+    inviteSettingsPanel()+
     invitesPanel()+
     waitlistPanel();
   wireInvites(v);
+  drawInviteDetail();
 }
 
 /* «باب المؤسسين» — مفتاح مفتوح/مقفول أعلى شاشة الدعوات (مواصفة الموجة ٢ 2026-09-06 م٣).
@@ -4544,6 +4561,48 @@ function wireFounding(v){
   };
 }
 
+/* إعدادات الدعوة — فيديو الترحيب + حصّة دعوات العضو (الموجة ٣ د٨، دفتر الكوبي §ج٥)، بجانب
+   «باب المؤسسين» فوق. أدمن فقط بيحفظ (نفس حماية باب المؤسسين على الخادم)؛ الكل بيشوف. */
+function inviteSettingsPanel(){
+  if(window.EP)EP.ensure('inviteSettings',invAgain);
+  var st=(window.EP&&EP.state.inviteSettings)||'idle';
+  var D=(window.EP&&EP.data.inviteSettings)||null;
+  var blind=!!(D&&D.missing)||st==='error';
+  var loading=(st==='loading'||st==='idle')&&!D;
+  var head='<section class="panel" style="margin-bottom:16px"><div class="ph"><h3>'+svg('sparkles')+' إعدادات الدعوة</h3></div>';
+  var foot='</section>';
+  if(blind||loading){
+    var msg=(D&&D.missing)?'اللوحة جاهزة هنا — وناقص نشر المنصة (<span style="direction:ltr;display:inline-block">/api/bridge/settings/invites</span>).':(loading?'…جارٍ التحميل':'تعذّر جلب إعدادات الدعوة.');
+    return head+'<div style="padding:14px 16px;font-size:12.5px;color:var(--muted)">'+msg+'</div>'+foot;
+  }
+  var videoVal=(D&&D.welcome_video_url)||'';
+  var quotaVal=(D&&D.member_invite_quota!=null)?D.member_invite_quota:5;
+  return head+'<div style="padding:14px 16px;display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end">'+
+    '<div class="fld" style="flex:2 1 260px;margin:0"><label style="font-size:12px;font-weight:800;color:var(--muted);display:block;margin-bottom:5px">فيديو الترحيب</label>'+
+      '<input id="invSetVideo" placeholder="https://" value="'+esc(videoVal)+'" style="direction:ltr;text-align:left;width:100%;min-height:44px;border:1px solid var(--line);border-radius:10px;padding:10px 13px;font:inherit;font-size:13px;background:var(--surface);color:var(--ink)">'+
+      '<div style="font-size:11px;color:var(--muted);margin-top:4px">يوتيوب أو درايف (غير مدرج) أو فيميو.</div></div>'+
+    '<div class="fld" style="flex:1 1 130px;margin:0"><label style="font-size:12px;font-weight:800;color:var(--muted);display:block;margin-bottom:5px">دعوات لكل عضو</label>'+
+      '<input id="invSetQuota" type="number" min="0" value="'+esc(String(quotaVal))+'" style="width:100%;min-height:44px;border:1px solid var(--line);border-radius:10px;padding:10px 13px;font:inherit;font-size:13px;background:var(--surface);color:var(--ink)"></div>'+
+    '<button class="btn btn-primary" id="invSetSave" style="flex:0 0 auto;min-height:44px;min-width:96px">حفظ</button>'+
+  '</div>'+foot;
+}
+function wireInviteSettings(v){
+  var root=(v||document);
+  var b=root.querySelector('#invSetSave');
+  if(!b)return;
+  b.onclick=function(){
+    if(!window.EP||!EP.setInviteSettings){toast('غير متصل بالمنصة');return;}
+    var videoEl=root.querySelector('#invSetVideo'),quotaEl=root.querySelector('#invSetQuota');
+    var data={welcome_video_url:videoEl?(videoEl.value||'').trim():''};
+    if(quotaEl&&quotaEl.value!==''){
+      var q=parseInt(quotaEl.value,10);
+      if(!isNaN(q))data.member_invite_quota=q;
+    }
+    b.disabled=true;b.style.opacity='.5';
+    EP.setInviteSettings(data,invAgain);
+  };
+}
+
 function invitesPanel(){
   var st=(window.EP&&EP.state.invites)||'idle';
   var D=(window.EP&&EP.data.invites)||null;
@@ -4552,10 +4611,12 @@ function invitesPanel(){
   var blind=!!(D&&D.missing)||st==='error';
   var head='<section class="panel" style="margin-bottom:16px"><div class="ph"><h3>'+svg('mail')+' الدعوات</h3>'+
     '<span class="n" style="font-size:12px">'+(blind?'—':money(R.length))+'</span>'+
-    '<span class="hint" style="font-size:12px">اعمل الرابط وابعته بنفسك — أحدثُ أوّلًا</span>'+
-    '<button class="btn btn-ghost" id="invRefresh" style="flex:none;min-width:44px;min-height:44px;padding:0 14px;font-size:12px;margin-inline-start:auto">'+svg('sparkles')+'حدّث</button></div>';
+    '<span class="hint" style="font-size:12px">اضغط دعوة لعرض تفصيلها — أحدثُ أوّلًا</span>'+
+    '<button class="btn btn-ghost" id="invGroupToggle" style="flex:none;min-width:auto;min-height:44px;padding:0 12px;font-size:12px;margin-inline-start:auto">'+svg('users')+(invGroupBy?'كل الدعوات':'حسب الداعي')+'</button>'+
+    '<button class="btn btn-ghost" id="invRefresh" style="flex:none;min-width:44px;min-height:44px;padding:0 14px;font-size:12px">'+svg('sparkles')+'حدّث</button></div>';
   var foot='</section>';
-  var wrap=function(inner){return head+'<div style="padding:14px 16px">'+inner+'</div>'+foot;};
+  // درج «تفصيل المدعوّ» (د٨) بجانب القائمة — نفس نمط لوحة السوق (`.inboxwrap` + `aside#drawer`).
+  var wrap=function(inner){return '<div class="inboxwrap">'+head+'<div style="padding:14px 16px">'+inner+'</div>'+foot+'<aside class="drawer" id="drawer"></aside></div>';};
   // نموذج الإرسال بيفضل ظاهر حتى والجدول فاضي: الفراغ فرصة، والفعل أوّلًا.
   // مواصفة الموجة ٢ (2026-09-06 م٢): الاسم لازم، والإيميل اختياري — المدعوّ بلا إيميل بيكتبه
   // بنفسه في أول محطة من الرحلة، فيُربط هناك. ⛔ الترتيب اتقلب (الاسم أوّلًا) عشان يبان إنه
@@ -4576,44 +4637,192 @@ function invitesPanel(){
     '<div>تعذّر جلب الدعوات من المنصة — ودي مش «مفيش دعوات». <b style="cursor:pointer;text-decoration:underline" onclick="EP.reload(\'invites\',invAgain)">إعادة المحاولة</b></div></div>');
   if(loading)return wrap(stages+form+'<div style="padding:14px;text-align:center;color:var(--muted)">…جارٍ تحميل الدعوات</div>');
   if(!R.length)return wrap(stages+form+'<div style="color:var(--muted);font-size:12.5px">ولا دعوة اتبعتت لسه. اكتب الاسم فوق واعمل أول رابط.</div>');
-  var rows=R.map(function(i){
-    var S=INV_STATUS[i.status]||{t:(i.status||'—'),cls:''};
-    // عمود «المحطة»: الاسم العربي للمحطة + الصفات/التخصص مختصرة + المتبقّي على الانتهاء.
-    // كل حقل من الجسر بيمرّ على esc() — قاعدة الملف. الصفّ اللي لسه ما اتحسبتش محطته
-    // (بلا stageLabel) بياخد «—» مش «pending» بالإنجليزي.
-    var terminal=!!INV_TERMINAL[i.stage];
-    var meta=[];
-    if(i.rolesLabel&&i.rolesLabel!=='—')meta.push(esc(i.rolesLabel));
-    if(i.specialtyLabel&&i.specialtyLabel!=='—')meta.push(esc(i.specialtyLabel));
-    var stageCell='<div style="flex:1 1 150px;min-width:0;font-size:12px">'+
-      '<div style="font-weight:800;font-size:12.5px;color:'+(i.stage==='registered'?'var(--agree)':(terminal?'var(--muted)':'var(--ink)'))+'">'+esc(i.stageLabel||'—')+'</div>'+
-      (meta.length?('<div style="color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+meta.join(' · ')+'</div>'):'')+
-      ((!terminal&&i.daysLeftLabel&&i.daysLeftLabel!=='—')?('<div style="color:'+(i.daysLeftLabel==='انتهت'?'var(--conflict)':'var(--muted)')+'">'+esc(i.daysLeftLabel)+'</div>'):'')+
-    '</div>';
-    var copyBtn=i.link?('<button class="btn btn-ghost inv-cp" data-inv-link="'+esc(i.link)+'" data-inv-em="'+esc(i.email)+'" data-inv-nm="'+esc(i.name)+'" style="flex:none;min-width:44px;min-height:44px;padding:0 12px;font-size:12px">انسخ الرابط</button>'):'';
-    var revBtn=i.revoked||i.registered?'':('<button class="btn btn-ghost inv-rv" data-inv-id="'+esc(i.id)+'" data-inv-em="'+esc(i.email)+'" data-inv-nm="'+esc(i.name)+'" style="flex:none;min-width:44px;min-height:44px;padding:0 12px;font-size:12px">اسحب</button>');
-    var stamps='<span>اتبعتت '+esc(i.when||'—')+'</span>'+
-      (i.openedWhen?('<span style="color:var(--human)"> · فتحها '+esc(i.openedWhen)+'</span>'):'')+
-      (i.regWhen?('<span style="color:var(--agree)"> · سجّل '+esc(i.regWhen)+'</span>'):'');
-    return '<div class="trow" style="display:flex;flex-wrap:wrap;align-items:center;gap:10px;row-gap:8px;padding:10px 0;border-bottom:1px solid var(--line)">'+
-      '<div class="src-ic" style="width:34px;height:34px;border-radius:9px;display:grid;place-items:center;flex:none;background:var(--gold-bg);color:var(--gold)">'+svg('mail')+'</div>'+
-      '<div style="flex:1 1 180px;min-width:0">'+
-        '<div style="font-weight:800;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(i.name||'بلا اسم')+'</div>'+
-        // مواصفة الموجة ٢ (م٢): دعوة اتعملت بالاسم بس — الإيميل بيتكتب في أول محطة من
-        // رحلة المدعوّ نفسه، مش هنا. «—» وحدها كانت هتُقرأ خطأً/فراغًا لا قرارًا مقصودًا.
-        (i.email
-          ?'<div style="font-size:12px;color:var(--muted);direction:ltr;text-align:start;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(i.email)+'</div>'
-          :'<div style="font-size:12px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">— (هيكتبه في الرحلة)</div>')+
-      '</div>'+
-      '<div style="flex:1 1 190px;min-width:0;font-size:12px;color:var(--muted)">'+stamps+
-        (i.note?('<div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(i.note)+'</div>'):'')+'</div>'+
-      stageCell+
-      '<div style="flex:none;text-align:end"><span class="status '+esc(S.cls)+'"'+(S.cls?'':' style="background:var(--surface-2);color:var(--muted)"')+'><span class="d"'+(S.cls?'':' style="background:var(--muted)"')+'></span>'+esc(S.t)+'</span></div>'+
-      '<div style="flex:none;display:flex;flex-wrap:wrap;gap:6px">'+copyBtn+revBtn+'</div>'+
-    '</div>';
-  }).join('');
+  var rows=invGroupBy?inviteRowsGrouped(R):R.map(inviteRowHtml).join('');
   var more=(D&&D.count!=null&&D.count>R.length)?('<div style="margin-top:10px;font-size:12px;color:var(--muted)">معروض '+money(R.length)+' من '+money(D.count)+'.</div>'):'';
   return wrap(stages+form+rows+more);
+}
+// صفّ دعوة واحد — مفصول عن invitesPanel() عشان يُستعمل مسطّحًا أو مجمَّعًا «حسب الداعي» (د٨)
+// بلا تكرار. الصفّ كله قابل للضغط (يفتح درج التفصيل) — والأزرار جوّاه توقف الفقاعة بنفسها
+// (wireInvites) عشان ضغطة «انسخ»/«اسحب» ما تفتحش الدرج كمان.
+function inviteRowHtml(i){
+  var S=INV_STATUS[i.status]||{t:(i.status||'—'),cls:''};
+  // عمود «المحطة»: الاسم العربي للمحطة + الصفات/التخصص مختصرة + المتبقّي على الانتهاء.
+  // كل حقل من الجسر بيمرّ على esc() — قاعدة الملف. الصفّ اللي لسه ما اتحسبتش محطته
+  // (بلا stageLabel) بياخد «—» مش «pending» بالإنجليزي.
+  var terminal=!!INV_TERMINAL[i.stage];
+  var meta=[];
+  if(i.rolesLabel&&i.rolesLabel!=='—')meta.push(esc(i.rolesLabel));
+  if(i.specialtyLabel&&i.specialtyLabel!=='—')meta.push(esc(i.specialtyLabel));
+  var stageCell='<div style="flex:1 1 150px;min-width:0;font-size:12px">'+
+    '<div style="font-weight:800;font-size:12.5px;color:'+(i.stage==='registered'?'var(--agree)':(terminal?'var(--muted)':'var(--ink)'))+'">'+esc(i.stageLabel||'—')+'</div>'+
+    (meta.length?('<div style="color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+meta.join(' · ')+'</div>'):'')+
+    ((!terminal&&i.daysLeftLabel&&i.daysLeftLabel!=='—')?('<div style="color:'+(i.daysLeftLabel==='انتهت'?'var(--conflict)':'var(--muted)')+'">'+esc(i.daysLeftLabel)+'</div>'):'')+
+  '</div>';
+  // «دعاه» (د٨): اسم الداعي؛ المؤسس ⇒ «المؤسس»؛ غائب ⇒ «—» — invitedByLabel محسوبة في
+  // dashboard-api.js من invited_by (وثيقة {user_id,name,kind} ترجعها المنصة الآن دائمًا).
+  var inviterCell='<div style="flex:1 1 100px;min-width:0;font-size:12px">'+
+    '<div style="color:var(--muted);font-size:11px;font-weight:800">دعاه</div>'+
+    '<div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(i.invitedByLabel||'—')+'</div></div>';
+  var detailBtn='<button class="btn btn-ghost inv-detail" data-inv-id="'+esc(i.id)+'" style="flex:none;min-width:44px;min-height:44px;padding:0 12px;font-size:12px">تفصيل</button>';
+  var copyBtn=i.link?('<button class="btn btn-ghost inv-cp" data-inv-link="'+esc(i.link)+'" data-inv-em="'+esc(i.email)+'" data-inv-nm="'+esc(i.name)+'" style="flex:none;min-width:44px;min-height:44px;padding:0 12px;font-size:12px">انسخ الرابط</button>'):'';
+  var revBtn=i.revoked||i.registered?'':('<button class="btn btn-ghost inv-rv" data-inv-id="'+esc(i.id)+'" data-inv-em="'+esc(i.email)+'" data-inv-nm="'+esc(i.name)+'" style="flex:none;min-width:44px;min-height:44px;padding:0 12px;font-size:12px">اسحب</button>');
+  var stamps='<span>اتبعتت '+esc(i.when||'—')+'</span>'+
+    (i.openedWhen?('<span style="color:var(--human)"> · فتحها '+esc(i.openedWhen)+'</span>'):'')+
+    (i.regWhen?('<span style="color:var(--agree)"> · سجّل '+esc(i.regWhen)+'</span>'):'');
+  return '<div class="trow inv-row'+(invSel===i.id?' sel':'')+'" data-inv-row="'+esc(i.id)+'" style="display:flex;flex-wrap:wrap;align-items:center;gap:10px;row-gap:8px;padding:10px 6px;border-bottom:1px solid var(--line);cursor:pointer;border-radius:8px;'+(invSel===i.id?'background:var(--surface-2)':'')+'">'+
+    '<div class="src-ic" style="width:34px;height:34px;border-radius:9px;display:grid;place-items:center;flex:none;background:var(--gold-bg);color:var(--gold)">'+svg('mail')+'</div>'+
+    '<div style="flex:1 1 180px;min-width:0">'+
+      '<div style="font-weight:800;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(i.name||'بلا اسم')+'</div>'+
+      // مواصفة الموجة ٢ (م٢): دعوة اتعملت بالاسم بس — الإيميل بيتكتب في أول محطة من
+      // رحلة المدعوّ نفسه، مش هنا. «—» وحدها كانت هتُقرأ خطأً/فراغًا لا قرارًا مقصودًا.
+      (i.email
+        ?'<div style="font-size:12px;color:var(--muted);direction:ltr;text-align:start;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(i.email)+'</div>'
+        :'<div style="font-size:12px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">— (هيكتبه في الرحلة)</div>')+
+    '</div>'+
+    '<div style="flex:1 1 190px;min-width:0;font-size:12px;color:var(--muted)">'+stamps+
+      (i.note?('<div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(i.note)+'</div>'):'')+'</div>'+
+    stageCell+
+    inviterCell+
+    '<div style="flex:none;text-align:end"><span class="status '+esc(S.cls)+'"'+(S.cls?'':' style="background:var(--surface-2);color:var(--muted)"')+'><span class="d"'+(S.cls?'':' style="background:var(--muted)"')+'></span>'+esc(S.t)+'</span></div>'+
+    '<div style="flex:none;display:flex;flex-wrap:wrap;gap:6px">'+detailBtn+copyBtn+revBtn+'</div>'+
+  '</div>';
+}
+// تجميع «حسب الداعي» (د٨): كل داعٍ في قسمه بترتيب الأكثر دعواتٍ أوّلًا، و«—» (بلا داعٍ
+// معروف) دايمًا آخر قسم — مش لأنه أقل قيمة، لكن عشان القوائم المسمّاة تتصدّر الاستعراض.
+function inviteRowsGrouped(list){
+  var groups={},order=[];
+  list.forEach(function(r){
+    var key=r.invitedByLabel||'—';
+    if(!groups[key]){groups[key]=[];order.push(key);}
+    groups[key].push(r);
+  });
+  order.sort(function(a,b){
+    if(a==='—'&&b==='—')return 0;
+    if(a==='—')return 1;
+    if(b==='—')return -1;
+    return groups[b].length-groups[a].length;
+  });
+  return order.map(function(key){
+    return '<div style="margin:14px 0 6px;font-size:12px;font-weight:800;color:var(--muted);display:flex;align-items:center;gap:6px">'+svg('users','ic')+esc(key)+' <span style="font-weight:400">('+money(groups[key].length)+')</span></div>'+
+      groups[key].map(inviteRowHtml).join('');
+  }).join('');
+}
+
+/* درج «تفصيل المدعوّ» (الموجة ٣ د٨): الاسم · الإيميل/الهاتف · الداعي · الصفات/التخصص/السنوات ·
+   الخط الزمني بالطوابع · التجربة (سؤال/إجابة الذكاء/حكمه/ملاحظاته) · الإقرار · مؤسس · أزرار
+   سحب/نسخ/واتساب. يجيب البيانات الكاملة من GET /api/invites/{id} -> جسر المنصة
+   /api/bridge/invites/{id} — نفس نمط `drawMarketReq()` بالحرف (كاش محلي لكل صفّ + إعادة رسم
+   عند وصول البيانات، لا تحميلٍ مكرَّر لكل ضغطة). */
+var INV_DETAIL={};   // invite id -> {loading|error|data}
+// ⛔ relTime/arDate معرَّفتان داخل نطاق dashboard-api.js الخاص (IIFE) ولا تصلان هنا — نفس
+// نمط auditWhen/aiWhen القائم في هذا الملف لتنسيق الطابع.
+function fmtWhen(iso){if(!iso)return '—';try{return new Intl.DateTimeFormat('ar-EG',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'}).format(new Date(iso));}catch(e){return String(iso).slice(0,16)||'—';}}
+function inviteActionsHtml(i){
+  var copyBtn=i.link?'<button class="btn btn-ghost" id="ivdCp" style="flex:none;min-height:40px;padding:0 14px;font-size:12px">نسخ الرابط</button>':'';
+  var waHref=i.link?('https://wa.me/?text='+encodeURIComponent(inviteWaText(i.name,i.link))):'';
+  var waBtn=waHref?('<a class="btn btn-ghost" id="ivdWa" href="'+esc(waHref)+'" target="_blank" rel="noopener" style="flex:none;min-height:40px;padding:0 14px;font-size:12px;text-decoration:none">واتساب</a>'):'';
+  var revBtn=(i.revoked||i.registered)?'':'<button class="btn btn-warn" id="ivdRv" style="flex:none;min-height:40px;padding:0 14px;font-size:12px">سحب</button>';
+  return '<div class="acts" style="margin-top:14px;display:flex;gap:8px;flex-wrap:wrap">'+copyBtn+waBtn+revBtn+'</div>';
+}
+// جسم التفصيل من الوثيقة الكاملة (full = ردّ GET /api/invites/{id})؛ i = صفّ القائمة (احتياطًا
+// لأي حقل ما وصلش بعد، ولحفظ العمل حتى أثناء التحميل). كل حقل غائب ⇒ «—» — لا اختلاق.
+function inviteDetailBody(i,full){
+  full=full||{};
+  var inviterObj=full.inviter||null;
+  var inviterLabel=inviterObj?(inviterObj.kind==='founder'?'المؤسس':(String(inviterObj.name||'').trim()||'—')):(i.invitedByLabel||'—');
+  var inviterVideo=(inviterObj&&inviterObj.video_url)||i.invitedByVideo||'';
+  var u=full.user||null;
+  var email=i.email||full.email||'—';
+  var phone=(u&&u.phone)?u.phone:'—';
+  var rolesLabel=(i.rolesLabel&&i.rolesLabel!=='—')?i.rolesLabel:'—';
+  var specialtyLabel=(i.specialtyLabel&&i.specialtyLabel!=='—')?i.specialtyLabel:'—';
+  var years=(full.years!=null)?money(full.years):'—';
+  var timeline=Array.isArray(full.timeline)?full.timeline:[];
+  var timelineHtml=timeline.length?timeline.map(function(t){
+    return '<div style="display:flex;justify-content:space-between;gap:8px;padding:4px 0;font-size:12.5px;border-bottom:1px solid var(--line)"><span>'+esc(INV_TIMELINE_AR[t.key]||t.key)+'</span><span style="color:var(--muted)">'+esc(t.at?fmtWhen(t.at):'—')+'</span></div>';
+  }).join(''):'<div style="color:var(--muted);font-size:12.5px">—</div>';
+  var exercises=Array.isArray(full.exercises)?full.exercises:[];
+  var exHtml=exercises.length?exercises.map(function(ex){
+    return '<div style="padding:8px 0;border-bottom:1px solid var(--line)">'+
+      '<div style="font-size:11px;font-weight:800;color:var(--muted)">'+esc(INV_ROLE_AR[ex.role]||ex.role||'—')+'</div>'+
+      '<div style="font-size:12.5px;margin-top:3px"><b>السؤال</b> '+esc(ex.question||'—')+'</div>'+
+      '<div style="font-size:12.5px;margin-top:3px"><b>إجابة الذكاء</b> '+esc(ex.ai_answer||'—')+(ex.ai_source?(' <span style="color:var(--muted);font-size:11px">('+(ex.ai_source==='fallback'?'مجهّزة سلفًا':'ذكاء')+')</span>'):'')+'</div>'+
+      '<div style="font-size:12.5px;margin-top:3px"><b>الحكم</b> '+esc(INV_VERDICT_AR[ex.verdict]||ex.verdict||'—')+'</div>'+
+      '<div style="font-size:12.5px;margin-top:3px"><b>ملاحظاته</b> '+esc(ex.notes||'—')+'</div>'+
+    '</div>';
+  }).join(''):'<div style="color:var(--muted);font-size:12.5px">—</div>';
+  var decl=full.declaration||null;
+  var declHtml=decl?('أقرّ في '+esc(fmtWhen(decl.accepted_at))+' · نسخة الشروط '+esc(decl.terms_version!=null?String(decl.terms_version):'—')):'—';
+  var founding=full.founding?'نعم':'لا';
+  return '<div class="uedit-grid" style="margin-top:0">'+
+      '<div><div class="lab">الإيميل</div><div class="val" style="font-size:12.5px;direction:ltr;text-align:right">'+esc(email)+'</div></div>'+
+      '<div><div class="lab">الهاتف</div><div class="val" style="font-size:12.5px;direction:ltr;text-align:right">'+esc(phone)+'</div></div>'+
+      '<div><div class="lab">الداعي</div><div class="val" style="font-size:12.5px">'+esc(inviterLabel)+'</div>'+(inviterVideo?('<div style="font-size:11px;color:var(--muted);word-break:break-all">'+esc(inviterVideo)+'</div>'):'')+'</div>'+
+      '<div><div class="lab">الصفات</div><div class="val" style="font-size:12.5px">'+esc(rolesLabel)+'</div></div>'+
+      '<div><div class="lab">التخصص</div><div class="val" style="font-size:12.5px">'+esc(specialtyLabel)+'</div></div>'+
+      '<div><div class="lab">سنوات الخبرة</div><div class="val" style="font-size:12.5px">'+years+'</div></div>'+
+    '</div>'+
+    '<div class="lab" style="margin-top:12px">الخط الزمني</div>'+timelineHtml+
+    '<div class="lab" style="margin-top:12px">التجربة</div>'+exHtml+
+    '<div class="field" style="margin-top:10px"><div class="lab">الإقرار</div><div class="val" style="font-size:12.5px">'+declHtml+'</div></div>'+
+    '<div class="field"><div class="lab">مؤسس</div><div class="val" style="font-size:12.5px">'+founding+'</div></div>';
+}
+function drawInviteDetail(){
+  var el=document.getElementById('drawer');if(!el)return;
+  if(!invSel){el.innerHTML='<div class="empty">'+svg('mail','ic')+'<p>اضغط دعوة لعرض تفصيلها.</p></div>';return;}
+  var i=invRows().filter(function(x){return x.id===invSel;})[0];
+  if(!i){el.innerHTML='<div class="empty">'+svg('mail','ic')+'<p>الدعوة لم تعد موجودة — حدّث الصفحة.</p></div>';return;}
+  var body;
+  // «فارغ» (§ج٢): لسه ما فتحش الرابط — مفيش تفصيل حقيقي نجيبه، ومفيش داعي نكلّم الجسر.
+  if(i.stage==='pending'){
+    body='<div style="padding:6px 0;color:var(--muted);font-size:12.5px">لا تفصيل بعد — لم يُفتح الرابط.</div>';
+  } else {
+    var d=INV_DETAIL[i.id];
+    if(!d&&window.EP&&EP.inviteDetail){
+      INV_DETAIL[i.id]={loading:true};
+      EP.inviteDetail(i.id,function(data){INV_DETAIL[i.id]={data:data};if(invSel===i.id)drawInviteDetail();},
+                            function(e){INV_DETAIL[i.id]={error:(e&&e.status===404)?'missing':'fail'};if(invSel===i.id)drawInviteDetail();});
+      d=INV_DETAIL[i.id];
+    }
+    if(d&&d.loading)body='<div style="padding:6px 0;color:var(--muted);font-size:12.5px">…جارٍ جلب التفصيل</div>';
+    else if(d&&d.error==='missing')body='<div style="padding:6px 0;color:var(--muted);font-size:12.5px">التفصيل هيظهر أول ما يتنشر <span style="direction:ltr;display:inline-block">/api/bridge/invites/{id}</span> على المنصة.</div>';
+    else if(d&&d.error)body='<div style="padding:6px 0;color:var(--conflict);font-size:12.5px">تعذّر جلب تفصيل الدعوة.</div>';
+    else body=inviteDetailBody(i,(d&&d.data)||{});
+  }
+  el.innerHTML='<div class="dh"><div class="k">'+esc(i.stageLabel||'—')+'</div><h3>'+esc(i.name||'بلا اسم')+'</h3></div><div class="db">'+body+inviteActionsHtml(i)+'</div>';
+  wireInviteDetailActions(el,i);
+}
+function copyInviteLink(link){
+  if(!link){toast('مفيش رابط لسه');return;}
+  var ok=function(){toast('اتنسخ الرابط');};
+  var fallback=function(){
+    try{
+      var ta=document.createElement('textarea');ta.value=link;ta.setAttribute('readonly','');ta.style.position='fixed';ta.style.left='-9999px';
+      document.body.appendChild(ta);ta.focus();ta.select();ta.setSelectionRange(0,99999);
+      var done=document.execCommand('copy');
+      document.body.removeChild(ta);
+      if(done)return ok();
+    }catch(e){}
+    toast('انسخه يدويًا من درج التفصيل');
+  };
+  if(navigator.clipboard&&navigator.clipboard.writeText)navigator.clipboard.writeText(link).then(ok,fallback);
+  else fallback();
+}
+function wireInviteDetailActions(el,i){
+  var cp=el.querySelector('#ivdCp');
+  if(cp)cp.onclick=function(){copyInviteLink(i.link);};
+  var rv=el.querySelector('#ivdRv');
+  if(rv)rv.onclick=function(){
+    var who=i.email||i.name||'بلا اسم';
+    var s=openModal('سحب دعوة',
+      '<div style="font-size:13px;line-height:1.8">هتسحب دعوة <b style="'+(i.email?'direction:ltr;':'')+'display:inline-block">'+esc(who)+'</b>. الرابط هيبطل، ومش هيقدر يعمل بيه حساب. تقدر تبعتله دعوة جديدة في أي وقت.</div>'+
+      '<div class="acts" style="margin-top:14px;display:flex;gap:8px;flex-wrap:wrap"><button class="btn btn-primary" id="rv_y" style="min-height:44px">اسحبها</button><button class="btn btn-ghost" id="rv_n" style="min-height:44px">إلغاء</button></div>');
+    s.querySelector('#rv_n').onclick=closeModal;
+    s.querySelector('#rv_y').onclick=function(){
+      closeModal();
+      if(window.EP&&EP.revokeInvite){delete INV_DETAIL[i.id];EP.revokeInvite({id:i.id,email:i.email,name:i.name},invAgain);}
+    };
+  };
 }
 
 /* «قائمة الانتظار» — اللي البوّابة المقفولة حوّشتهم. الصفّ هنا مش سطر شكوى: هو دعوة على بُعد
@@ -4668,6 +4877,9 @@ function waitlistPanel(){
 function wireInvites(v){
   var root=(v||document);
   wireFounding(root);
+  wireInviteSettings(root);
+  var gt=root.querySelector('#invGroupToggle');
+  if(gt)gt.onclick=function(){invGroupBy=!invGroupBy;invAgain();};
   var ir=root.querySelector('#invRefresh');
   if(ir)ir.onclick=function(){if(window.EP)EP.reload('invites',invAgain);};
   var wr=root.querySelector('#wlRefresh');
@@ -4686,7 +4898,8 @@ function wireInvites(v){
     EP.createInvite(data,function(res){inviteLinkModal(res,em,nm);},invAgain);
   };
   root.querySelectorAll('.inv-rv').forEach(function(btn){
-    btn.onclick=function(){
+    btn.onclick=function(e){
+      if(e)e.stopPropagation();
       if(!window.EP||!EP.revokeInvite){toast('غير متصل بالمنصة');return;}
       var id=btn.dataset.invId,em=btn.dataset.invEm||'',nm=btn.dataset.invNm||'';
       /* دعوة بالاسم فقط (م٢) ما عندهاش إيميل — الحوار لازم يسمّي اللي هيتسحب، مش «هتسحب دعوة .» */
@@ -4695,11 +4908,23 @@ function wireInvites(v){
         '<div style="font-size:13px;line-height:1.8">هتسحب دعوة <b style="'+(em?'direction:ltr;':'')+'display:inline-block">'+esc(who)+'</b>. الرابط هيبطل، ومش هيقدر يعمل بيه حساب. تقدر تبعتله دعوة جديدة في أي وقت.</div>'+
         '<div class="acts" style="margin-top:14px;display:flex;gap:8px;flex-wrap:wrap"><button class="btn btn-primary" id="rv_y" style="min-height:44px">اسحبها</button><button class="btn btn-ghost" id="rv_n" style="min-height:44px">إلغاء</button></div>');
       s.querySelector('#rv_n').onclick=closeModal;
-      s.querySelector('#rv_y').onclick=function(){closeModal();btn.disabled=true;btn.style.opacity='.5';EP.revokeInvite({id:id,email:em,name:nm},invAgain);};
+      s.querySelector('#rv_y').onclick=function(){closeModal();btn.disabled=true;btn.style.opacity='.5';delete INV_DETAIL[id];EP.revokeInvite({id:id,email:em,name:nm},invAgain);};
     };
   });
   root.querySelectorAll('.inv-cp').forEach(function(btn){
-    btn.onclick=function(){inviteLinkModal({link:btn.dataset.invLink},btn.dataset.invEm||'',btn.dataset.invNm||'');};
+    btn.onclick=function(e){if(e)e.stopPropagation();inviteLinkModal({link:btn.dataset.invLink},btn.dataset.invEm||'',btn.dataset.invNm||'');};
+  });
+  // «تفصيل» (د٨): الصفّ كله قابل للضغط، والزرّ هنا صريح لمن يفضّل ضغطة مسمّاة. الاتنين
+  // بيعملوا نفس الحاجة: يفتحوا/يقفلوا درج التفصيل لنفس الدعوة (ضغطة تانية = إغلاق).
+  var selectInvite=function(id){invSel=(invSel===id)?null:id;invAgain();};
+  root.querySelectorAll('.inv-detail').forEach(function(btn){
+    btn.onclick=function(e){if(e)e.stopPropagation();selectInvite(btn.dataset.invId);};
+  });
+  root.querySelectorAll('.inv-row[data-inv-row]').forEach(function(row){
+    row.onclick=function(e){
+      if(e&&e.target&&e.target.closest&&e.target.closest('button,a'))return;
+      selectInvite(row.dataset.invRow);
+    };
   });
   root.querySelectorAll('.wl-inv').forEach(function(btn){
     btn.onclick=function(){

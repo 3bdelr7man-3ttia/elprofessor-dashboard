@@ -313,10 +313,13 @@ def test_every_route_requires_authentication(ctx):
     assert ctx['client'].get('/api/invites').status_code in (401, 403)
     assert ctx['client'].post('/api/invites', json={'email': 'x@y.com', 'name': 'جديد'}).status_code in (401, 403)
     assert ctx['client'].post('/api/invites/inv-1/revoke').status_code in (401, 403)
+    assert ctx['client'].get('/api/invites/inv-1').status_code in (401, 403)
     assert ctx['client'].get('/api/waitlist').status_code in (401, 403)
     assert ctx['client'].post('/api/waitlist/w-1/invite').status_code in (401, 403)
     assert ctx['client'].get('/api/settings/founding').status_code in (401, 403)
     assert ctx['client'].post('/api/settings/founding', json={'open': False}).status_code in (401, 403)
+    assert ctx['client'].get('/api/settings/invites').status_code in (401, 403)
+    assert ctx['client'].post('/api/settings/invites', json={'welcome_video_url': 'x'}).status_code in (401, 403)
     assert len(ctx['sent']) == before
 
 
@@ -324,6 +327,8 @@ def test_admin_and_employee_may_work_the_desk(ctx):
     for who in ('admin', 'emp'):
         assert ctx['client'].get('/api/invites', headers=ctx[who]).status_code == 200
         assert ctx['client'].get('/api/waitlist', headers=ctx[who]).status_code == 200
+        assert ctx['client'].get('/api/invites/inv-1', headers=ctx[who]).status_code == 200
+        assert ctx['client'].get('/api/settings/invites', headers=ctx[who]).status_code == 200
         assert ctx['client'].post('/api/invites', json={'email': 'a@b.com', 'name': 'جديد'},
                                   headers=ctx[who]).status_code == 200
 
@@ -334,12 +339,139 @@ def test_a_non_staff_role_is_refused_and_never_reaches_the_platform(ctx):
     assert ctx['client'].post('/api/invites', json={'email': 'a@b.com', 'name': 'جديد'},
                               headers=ctx['trainer']).status_code == 403
     assert ctx['client'].post('/api/invites/inv-1/revoke', headers=ctx['trainer']).status_code == 403
+    assert ctx['client'].get('/api/invites/inv-1', headers=ctx['trainer']).status_code == 403
     assert ctx['client'].get('/api/waitlist', headers=ctx['trainer']).status_code == 403
     assert ctx['client'].post('/api/waitlist/w-1/invite', headers=ctx['trainer']).status_code == 403
     assert ctx['client'].get('/api/settings/founding', headers=ctx['trainer']).status_code == 403
     assert ctx['client'].post('/api/settings/founding', json={'open': False},
                               headers=ctx['trainer']).status_code == 403
+    assert ctx['client'].get('/api/settings/invites', headers=ctx['trainer']).status_code == 403
+    assert ctx['client'].post('/api/settings/invites', json={'welcome_video_url': 'x'},
+                              headers=ctx['trainer']).status_code == 403
     assert len(ctx['sent']) == before
+
+
+# --------------------------------------------------------- «تفصيل المدعوّ» (wave 3, د٨) drawer
+
+INVITE_DETAIL_ROW = {
+    'id': 'inv-2', 'email': 'nour@example.com', 'name': 'نور حسن', 'status': 'opened',
+    'stage': 'exercised', 'roles': ['lawyer'], 'specialty': 'civil', 'years': 3,
+    'invited_by': {'user_id': None, 'name': 'فريق البروفيسور', 'kind': 'founder', 'video_url': None},
+    'inviter': {'user_id': None, 'name': 'فريق البروفيسور', 'kind': 'founder', 'video_url': None},
+    'timeline': [{'key': 'created', 'at': '2026-09-06T10:00:00'}, {'key': 'opened', 'at': '2026-09-06T12:00:00'}],
+    'exercises': [{'role': 'lawyer', 'prompt_id': 'p1', 'question': 'سؤال', 'ai_answer': 'إجابة',
+                   'ai_source': 'live', 'verdict': 'correct', 'notes': ''}],
+    'declaration': None, 'founding': False, 'user': None,
+}
+
+
+def test_invite_detail_forwards_to_the_right_bridge_path_and_body_reaches_the_browser_unchanged(ctx):
+    """The drawer needs the FULL document — exercises, declaration, timeline, inviter — and the
+    proxy must add no opinion of its own (a thin proxy over a per-invite bridge path)."""
+    ctx['replies'][('GET', '/api/bridge/invites/inv-2')] = FakeResp(200, INVITE_DETAIL_ROW)
+    r = ctx['client'].get('/api/invites/inv-2', headers=ctx['admin'])
+    assert r.status_code == 200
+    call = ctx['sent'][-1]
+    assert call['method'] == 'GET' and call['path'] == '/api/bridge/invites/inv-2'
+    body = r.get_json()
+    assert body['exercises'][0]['question'] == 'سؤال'
+    assert body['timeline'][1]['key'] == 'opened'
+    assert body['inviter']['kind'] == 'founder'
+
+
+def test_invite_detail_404_is_surfaced_not_swallowed(ctx):
+    """A revoked-or-gone invite id must read as «مش موجودة», never as an empty 200 that the
+    drawer would render as a blank person."""
+    ctx['replies'][('GET', '/api/bridge/invites/gone')] = FakeResp(404, {'detail': 'الدعوة دي مش موجودة.'})
+    r = ctx['client'].get('/api/invites/gone', headers=ctx['admin'])
+    assert r.status_code == 404
+    assert r.get_json()['error'] == 'الدعوة دي مش موجودة.'
+
+
+# ----------------------------------------------------- إعدادات الدعوة (wave 3, د٨) — ج٥
+
+def test_invite_settings_read_forwards_to_the_bridge_and_is_open_to_staff(ctx):
+    ctx['replies'][('GET', '/api/bridge/settings/invites')] = FakeResp(
+        200, {'welcome_video_url': 'https://youtu.be/x', 'member_invite_quota': 5,
+              'founder_name': None, 'updated_at': '2026-09-07T10:00:00'})
+    for who in ('admin', 'emp'):
+        r = ctx['client'].get('/api/settings/invites', headers=ctx[who])
+        assert r.status_code == 200, who
+        call = ctx['sent'][-1]
+        assert call['method'] == 'GET' and call['path'] == '/api/bridge/settings/invites'
+        assert r.get_json()['member_invite_quota'] == 5
+
+
+def test_invite_settings_write_is_admin_only(ctx):
+    """A platform-wide setting: an employee may SEE it, only an admin changes it — same
+    protection level as «باب المؤسسين»."""
+    before = len(ctx['sent'])
+    r = ctx['client'].post('/api/settings/invites', json={'welcome_video_url': 'https://youtu.be/x'},
+                           headers=ctx['emp'])
+    assert r.status_code == 403
+    assert len(ctx['sent']) == before
+
+
+def test_invite_settings_write_forwards_only_the_fields_sent(ctx):
+    """Omitting a field must mean «leave it alone» — sending it (even empty) would let one save
+    of the welcome-video field silently wipe the OTHER admin's quota, or vice versa."""
+    ctx['replies'][('POST', '/api/bridge/settings/invites')] = FakeResp(
+        200, {'welcome_video_url': 'https://youtu.be/x', 'member_invite_quota': None,
+              'founder_name': None, 'updated_at': '2026-09-07T10:00:00'})
+    ctx['client'].post('/api/settings/invites', json={'welcome_video_url': 'https://youtu.be/x'},
+                       headers=ctx['admin'])
+    call = ctx['sent'][-1]
+    assert call['method'] == 'POST' and call['path'] == '/api/bridge/settings/invites'
+    assert call['json'] == {'welcome_video_url': 'https://youtu.be/x'}
+
+    ctx['replies'][('POST', '/api/bridge/settings/invites')] = FakeResp(
+        200, {'welcome_video_url': None, 'member_invite_quota': 8,
+              'founder_name': None, 'updated_at': '2026-09-07T10:00:00'})
+    ctx['client'].post('/api/settings/invites', json={'member_invite_quota': 8}, headers=ctx['admin'])
+    call = ctx['sent'][-1]
+    assert call['json'] == {'member_invite_quota': 8}
+
+
+def test_invite_settings_empty_video_url_clears_it(ctx):
+    """An empty string is how the admin removes the video — it must reach the platform as
+    such (None), not be dropped as a falsy value."""
+    ctx['replies'][('POST', '/api/bridge/settings/invites')] = FakeResp(
+        200, {'welcome_video_url': None, 'member_invite_quota': None,
+              'founder_name': None, 'updated_at': '2026-09-07T10:00:00'})
+    ctx['client'].post('/api/settings/invites', json={'welcome_video_url': ''}, headers=ctx['admin'])
+    assert ctx['sent'][-1]['json'] == {'welcome_video_url': None}
+
+
+def test_invite_settings_rejects_a_non_numeric_or_negative_quota_before_the_platform(ctx):
+    before = len(ctx['sent'])
+    for bad in ('abc', -1, 3.5):
+        r = ctx['client'].post('/api/settings/invites', json={'member_invite_quota': bad},
+                               headers=ctx['admin'])
+        assert r.status_code == 400, bad
+    assert len(ctx['sent']) == before
+
+
+def test_invite_settings_rejects_an_empty_body_before_the_platform(ctx):
+    before = len(ctx['sent'])
+    for body in ({}, {'member_invite_quota': None}):
+        r = ctx['client'].post('/api/settings/invites', json=body, headers=ctx['admin'])
+        assert r.status_code == 400, body
+    assert len(ctx['sent']) == before
+
+
+def test_invite_settings_write_is_audited_only_on_success(ctx):
+    ctx['replies'][('POST', '/api/bridge/settings/invites')] = FakeResp(500, {'detail': 'boom'})
+    assert ctx['client'].post('/api/settings/invites', json={'member_invite_quota': 5},
+                              headers=ctx['admin']).status_code == 500
+    assert _audits('settings.invites') == []
+    ctx['replies'][('POST', '/api/bridge/settings/invites')] = FakeResp(
+        200, {'welcome_video_url': None, 'member_invite_quota': 5,
+              'founder_name': None, 'updated_at': '2026-09-07T10:00:00'})
+    assert ctx['client'].post('/api/settings/invites', json={'member_invite_quota': 5},
+                              headers=ctx['admin']).status_code == 200
+    rows = _audits('settings.invites')
+    assert len(rows) == 1
+    assert rows[0].actor_email == 'admin@test.com'
 
 
 # ------------------------------------------------------- «باب المؤسسين» (wave 2, م٣) switch
@@ -410,3 +542,24 @@ def test_secret_is_server_side_only(ctx):
     assert ctx['sent'][-1]['headers']['X-ELP-Metrics-Secret'] == 'test-metrics-secret'
     assert 'test-metrics-secret' not in r.get_data(as_text=True)
     assert 'X-ELP-Metrics-Secret' not in dict(r.headers)
+
+
+# ------------------------------------------------ drawer «الإقرار» line — the version is a TAG, not a number
+
+INDEX_HTML = os.path.join(os.path.dirname(__file__), '..', 'dashboard-cloud', 'index.html')
+
+
+def test_drawer_declaration_prints_a_string_terms_version_not_a_dash():
+    """The platform stamps `declaration.terms_version = TERMS_VERSION` — an opaque tag like «v1»
+    (a string, never a number). Routing it through the numeric `money()` formatter turned every
+    real version into NaN ⇒ «—», so a field that EXISTS was rendered as absent (screens never
+    lie). Guard the source: the version must be stringified, never money()-formatted, and the
+    `!=null` guard must survive so a genuinely missing version still reads «—»."""
+    with open(INDEX_HTML, encoding='utf-8') as fh:
+        src = fh.read()
+    lines = [ln for ln in src.splitlines() if 'نسخة الشروط' in ln]
+    assert len(lines) == 1, lines
+    line = lines[0]
+    assert 'money(decl.terms_version)' not in line
+    assert "decl.terms_version!=null?String(decl.terms_version):'—'" in line
+    assert 'esc(' in line  # still escaped — a version tag comes from the platform, not trusted HTML

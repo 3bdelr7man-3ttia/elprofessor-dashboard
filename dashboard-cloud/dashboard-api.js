@@ -82,7 +82,7 @@
             platformPendingTopics: null, platformTopicSegments: null,
             platformOpinions: null, platformOpinionsApproved: null, platformOpinionsAnalysis: null, experts: null,
             market: null, marketDemand: null, trainingInterests: null, foundingLeads: null,
-            invites: null, waitlist: null, founding: null,
+            invites: null, waitlist: null, founding: null, inviteSettings: null,
             aiAgents: null, dashUsers: null, audit: null, usage: null },
     state: {}, // 'idle' | 'loading' | 'ready' | 'error'
     _started: {}, // منع التحميل المزدوج
@@ -498,13 +498,23 @@
             var at = i.created_at || "";
             var stage = deriveInviteStage(i, st);
             var daysLeft = i.expires_at ? daysUntilIso(i.expires_at) : null;
+            // «دعاه» (الموجة ٣ د٨): الجسر يرجّع invited_by كوثيقة {user_id,name,roles,kind}
+            // دائمًا الآن (routes/invites.py::_public_invite) — صفٌّ قديم من قبل الموجة ٣
+            // قد يبعتها نصًّا (بريد الموظف اللي أنشأها من الداشبورد)، فنحتاط للشكلين.
+            var ibRaw = i.invited_by;
+            var inviterObj = (ibRaw && typeof ibRaw === "object") ? ibRaw : null;
+            var inviterLabel = inviterObj
+              ? (inviterObj.kind === "founder" ? "المؤسس" : (String(inviterObj.name || "").trim() || "—"))
+              : "—";
             return {
               id: i.id || "",
               email: i.email || "",
               name: i.name || "",
               status: st,
               note: i.note || "",
-              invited_by: i.invited_by || "",
+              invited_by: ibRaw || "",
+              invitedByLabel: inviterLabel,
+              invitedByVideo: inviterObj ? (inviterObj.video_url || "") : "",
               // الرابط اختياري: بيبان لو الجسر بعته مع الصفّ، وما بيتبنيش هنا لو ما بعتوش.
               link: i.link || i.invite_url || "",
               opened: !!i.opened_at || st === "opened" || st === "registered",
@@ -590,6 +600,25 @@
         EP.data.founding = { open: !!(r && r.open), updated_at: (r && r.updated_at) || "", missing: false };
       }).catch(function (e) {
         if (e && e.status === 404) { EP.data.founding = { open: null, missing: true }; return; }
+        throw e;
+      });
+    },
+
+    // إعدادات الدعوة (الموجة ٣ د٨): فيديو الترحيب + حصّة دعوات العضو — /api/settings/invites
+    // -> جسر المنصة /api/bridge/settings/invites. نفس قاعدة «باب المؤسسين»: 404 = الجسر لسه
+    // ما اتنشرش، مش «مفيش فيديو» — العرض «—»/فاضي لا صفرًا مختلقًا.
+    inviteSettings: function () {
+      return get("/settings/invites").then(function (r) {
+        EP.data.inviteSettings = {
+          welcome_video_url: (r && r.welcome_video_url) || "",
+          member_invite_quota: (r && r.member_invite_quota != null) ? r.member_invite_quota : null,
+          missing: false,
+        };
+      }).catch(function (e) {
+        if (e && e.status === 404) {
+          EP.data.inviteSettings = { welcome_video_url: "", member_invite_quota: null, missing: true };
+          return;
+        }
         throw e;
       });
     },
@@ -2166,6 +2195,31 @@
       });
   };
 
+  // إعدادات الدعوة (فيديو الترحيب + حصّة دعوات العضو) — أدمن فقط بيقدر يحفظ (نفس حماية «باب
+  // المؤسسين»)، لكن الجميع بيشوف. غياب مفتاح في `data` معناه «متلمسوش» على الجسر — ما بنبعتش
+  // مفتاحًا فاضيًا يمسح قيمة الطرف التاني بالغلط.
+  EP.setInviteSettings = function (data, after) {
+    post("/settings/invites", data || {})
+      .then(function () {
+        note("اتحفظت إعدادات الدعوة");
+        EP.reload("inviteSettings", after);
+      })
+      .catch(function (e) {
+        quietToast(e && e.status === 404
+          ? "مسار إعدادات الدعوة لسه ما اتنشرش على المنصة"
+          : ((e && e.message) || "تعذّر حفظ إعدادات الدعوة"));
+        if (after) after();
+      });
+  };
+
+  // تفصيل دعوة واحدة (درج «تفصيل المدعوّ» — الموجة ٣ د٨): الوثيقة كاملة (التجربة · الإقرار ·
+  // الخط الزمني) + الداعي + المستخدم المُنشأ إن وُجد. 404 = الدعوة اتشالت أو الجسر لسه ما نزلش.
+  EP.inviteDetail = function (id, onOk, onErr) {
+    get("/invites/" + encodeURIComponent(id))
+      .then(function (d) { onOk(d || {}); })
+      .catch(function (e) { if (onErr) onErr(e); });
+  };
+
   // تحويل صفٍّ من قائمة الانتظار لدعوة بضغطة — الاسم والبريد بيتاخدوا من الصفّ على المنصة،
   // مش من المتصفّح، فمفيش باب لتعديلٍ صامت لبريدٍ إحنا بس بنحوّله.
   EP.inviteFromWaitlist = function (row, onLink, after) {
@@ -2712,7 +2766,7 @@
                 notifications: null, goalsAdvisor: null, tutorials: null, platformTopics: null, platformTopicsAnalysis: null,
                 platformPendingTopics: null, platformTopicSegments: null, platformOpinions: null,
                 market: null, marketDemand: null, trainingInterests: null, foundingLeads: null,
-                invites: null, waitlist: null, founding: null,
+                invites: null, waitlist: null, founding: null, inviteSettings: null,
                 aiAgents: null, dashUsers: null, audit: null, usage: null };
     EP.state = {};
     window.location.reload();

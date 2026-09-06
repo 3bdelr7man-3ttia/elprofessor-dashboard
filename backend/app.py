@@ -2966,6 +2966,16 @@ def invite_revoke(invite_id):
     return resp
 
 
+@app.route('/api/invites/<invite_id>', methods=['GET'])
+@token_required
+@roles_required('admin', 'employee')   # قراءة فقط؛ نفس حماية القائمة — التفصيل أدقّ لا أوسع
+def invite_detail(invite_id):
+    """تفصيلُ المدعوّ (الموجة ٣ د٨): الوثيقةُ كاملةً — التجربة (سؤال/إجابة الذكاء/حكمه/ملاحظاته)،
+    الإقرار، الخطّ الزمني بالطوابع، الداعي، ومؤسسٌ أم لا — «عشان نعرف نستبعد مين ونكمّل مع مين
+    ونتصل بمين». ثنّي رفيع فوق `/api/bridge/invites/{id}` بلا رأيٍ يُضاف."""
+    return _platform_proxy('GET', f"/api/bridge/invites/{invite_id}")
+
+
 @app.route('/api/waitlist', methods=['GET'])
 @token_required
 @roles_required('admin', 'employee')   # قراءة فقط
@@ -3015,6 +3025,45 @@ def founding_switch_set():
     resp = _platform_proxy('POST', '/api/bridge/settings/founding', json_body={'open': open_flag})
     if _resp_ok(resp):
         _audit('settings.founding', target='founding', meta={'open': open_flag})
+    return resp
+
+
+# --- إعدادات الدعوة: فيديو الترحيب + حصّة دعوات العضو (الموجة ٣ 2026-09-07 د٨) ------------------
+# نفس نمط «باب المؤسسين» بالحرف: القراءة لكل مين شاف شاشة الدعوات، والكتابة أدمن فقط. غيابُ
+# حقلٍ في الجسم يعني «متلمسوش» — ما بنبعتش مفتاحًا فاضيًا يمسح قيمة الطرف التاني بالغلط.
+@app.route('/api/settings/invites', methods=['GET'])
+@token_required
+@roles_required('admin', 'employee')
+def invite_settings_get():
+    return _platform_proxy('GET', '/api/bridge/settings/invites')
+
+
+@app.route('/api/settings/invites', methods=['POST'])
+@token_required
+@roles_required('admin')
+def invite_settings_set():
+    body = request.json or {}
+    payload = {}
+    if 'welcome_video_url' in body:
+        # فاضي/null = إزالة الفيديو — المنصة (`clean_video_url`) هي اللي بتحكم على الشكل
+        # (https + يوتيوب/درايف/فيميو) وبتردّ ٤٢٢ عربية لو غلط؛ إحنا بروكسي رفيع هنا فقط.
+        payload['welcome_video_url'] = (body.get('welcome_video_url') or '').strip() or None
+    raw_quota = body.get('member_invite_quota')
+    if 'member_invite_quota' in body and raw_quota is not None:
+        # bool ابن int في بايثون (True == 1) و`int(3.5)` بيقصّ صامتًا لـ٣ — نرفض الاتنين هنا
+        # صراحةً قبل ما نبعت رقمًا مش اللي كتبه الأدمن فعلًا.
+        if isinstance(raw_quota, bool) or not isinstance(raw_quota, (int, float)) \
+                or (isinstance(raw_quota, float) and not raw_quota.is_integer()):
+            return jsonify({'error': 'حصّة الدعوات رقم صحيح'}), 400
+        quota = int(raw_quota)
+        if quota < 0:
+            return jsonify({'error': 'حصّة الدعوات لا تكون سالبة'}), 400
+        payload['member_invite_quota'] = quota
+    if not payload:
+        return jsonify({'error': 'أرسل فيديو الترحيب أو حصّة الدعوات'}), 400
+    resp = _platform_proxy('POST', '/api/bridge/settings/invites', json_body=payload)
+    if _resp_ok(resp):
+        _audit('settings.invites', target='invites', meta=payload)
     return resp
 
 
