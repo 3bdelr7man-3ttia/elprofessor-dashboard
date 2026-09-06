@@ -4505,7 +4505,7 @@ function viewInvites(v){
   var blindSub=(D&&D.missing)?'الجسر لسه مش منشور — مش «صفر»':'تعذّر جلب الصفوف — مش «صفر»';
   v.innerHTML=
     '<div class="policy" style="border-inline-start-color:var(--gold);background:var(--gold-bg)">'+svg('shield','ic')+
-      '<div><b>المنصّة مقفولة من الخادم — ما بيدخلش غير اللي كمّل رحلة الدعوة.</b> الرابط شخصي وبينتهي بعد ١٤ يوم؛ المدعوّ بيختار صفته ويجرّب ويقرّ ويختار كلمة سر، وبعدها بس بيدخل. اللي ما عندهوش دعوة بيسيب بياناته في «قائمة الانتظار» تحت.</div></div>'+
+      '<div><b>المنصّة مقفولة من الخادم — لا يدخل إلا من أكمل رحلة الدعوة.</b> الرابط شخصي وله موعد انتهاء؛ المدعوّ يختار صفته، يشاهد فيديو المنصّة، يجرّب بنفسه، ثم يُنشئ حسابه ويُقرّ. من لا يملك دعوة يترك بياناته في «قائمة الانتظار» تحت.</div></div>'+
     '<div class="kpis">'+
       '<div class="kpi k-1"><div class="top"><span class="ic">'+svg('mail')+'</span>أُرسلت</div><b>'+num(C.sent)+'</b>'+
         '<div class="sub" style="font-size:12px">'+(blind?blindSub:(C.revoked?('منها '+money(C.revoked)+' مسحوبة'):'دعوات اتعملت من هنا'))+'</div></div>'+
@@ -4519,6 +4519,7 @@ function viewInvites(v){
     '</div>'+
     foundingPanel()+
     inviteSettingsPanel()+
+    painVideosPanel()+
     invitesPanel()+
     waitlistPanel();
   wireInvites(v);
@@ -4576,11 +4577,15 @@ function inviteSettingsPanel(){
     return head+'<div style="padding:14px 16px;font-size:12.5px;color:var(--muted)">'+msg+'</div>'+foot;
   }
   var videoVal=(D&&D.welcome_video_url)||'';
+  var platformVideoVal=(D&&D.platform_video_url)||'';
   var quotaVal=(D&&D.member_invite_quota!=null)?D.member_invite_quota:5;
   return head+'<div style="padding:14px 16px;display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end">'+
     '<div class="fld" style="flex:2 1 260px;margin:0"><label style="font-size:12px;font-weight:800;color:var(--muted);display:block;margin-bottom:5px">فيديو الترحيب</label>'+
       '<input id="invSetVideo" placeholder="https://" value="'+esc(videoVal)+'" style="direction:ltr;text-align:left;width:100%;min-height:44px;border:1px solid var(--line);border-radius:10px;padding:10px 13px;font:inherit;font-size:13px;background:var(--surface);color:var(--ink)">'+
-      '<div style="font-size:11px;color:var(--muted);margin-top:4px">يوتيوب أو درايف (غير مدرج) أو فيميو.</div></div>'+
+      '<div style="font-size:11px;color:var(--muted);margin-top:4px">أوّل ما يراه المدعوّ.</div></div>'+
+    '<div class="fld" style="flex:2 1 260px;margin:0"><label style="font-size:12px;font-weight:800;color:var(--muted);display:block;margin-bottom:5px">فيديو المنصّة</label>'+
+      '<input id="invSetPlatformVideo" placeholder="https://" value="'+esc(platformVideoVal)+'" style="direction:ltr;text-align:left;width:100%;min-height:44px;border:1px solid var(--line);border-radius:10px;padding:10px 13px;font:inherit;font-size:13px;background:var(--surface);color:var(--ink)">'+
+      '<div style="font-size:11px;color:var(--muted);margin-top:4px">بعد الصفات — يوتيوب أو درايف (غير مدرج) أو فيميو.</div></div>'+
     '<div class="fld" style="flex:1 1 130px;margin:0"><label style="font-size:12px;font-weight:800;color:var(--muted);display:block;margin-bottom:5px">دعوات لكل عضو</label>'+
       '<input id="invSetQuota" type="number" min="0" value="'+esc(String(quotaVal))+'" style="width:100%;min-height:44px;border:1px solid var(--line);border-radius:10px;padding:10px 13px;font:inherit;font-size:13px;background:var(--surface);color:var(--ink)"></div>'+
     '<button class="btn btn-primary" id="invSetSave" style="flex:0 0 auto;min-height:44px;min-width:96px">حفظ</button>'+
@@ -4592,14 +4597,54 @@ function wireInviteSettings(v){
   if(!b)return;
   b.onclick=function(){
     if(!window.EP||!EP.setInviteSettings){toast('غير متصل بالمنصة');return;}
-    var videoEl=root.querySelector('#invSetVideo'),quotaEl=root.querySelector('#invSetQuota');
-    var data={welcome_video_url:videoEl?(videoEl.value||'').trim():''};
+    var videoEl=root.querySelector('#invSetVideo'),platformVideoEl=root.querySelector('#invSetPlatformVideo'),quotaEl=root.querySelector('#invSetQuota');
+    var data={welcome_video_url:videoEl?(videoEl.value||'').trim():'',
+              platform_video_url:platformVideoEl?(platformVideoEl.value||'').trim():''};
     if(quotaEl&&quotaEl.value!==''){
       var q=parseInt(quotaEl.value,10);
       if(!isNaN(q))data.member_invite_quota=q;
     }
     b.disabled=true;b.style.opacity='.5';
     EP.setInviteSettings(data,invAgain);
+  };
+}
+
+/* فيديوهات الألم لكل صفة (ملحق ٣ب-٢ ٢٠٢٦-٠٩-٠٧): رابطٌ اختياريٌّ لكل صفة + `multi` (صفتان
+   فأكثر) — يظهر بدل نصّ الألم المكتوب في محطة «المنصّة». مسارٌ أدمن فقط قراءةً وكتابةً — موظفٌ
+   يشوف اللوحة فاضيةً بسببٍ صريح («للأدمن فقط») لا صمتًا يُقرأ كـ«مفيش فيديو». */
+const PAIN_VIDEO_LABELS=[{k:'trainer',t:'مدرّب'},{k:'lawyer',t:'محامٍ'},{k:'consultant',t:'مستشار'},
+  {k:'researcher',t:'باحث'},{k:'graduate',t:'خريج'},{k:'multi',t:'أكثر من صفة'}];
+function painVideosPanel(){
+  if(window.EP)EP.ensure('inviteVideos',invAgain);
+  var st=(window.EP&&EP.state.inviteVideos)||'idle';
+  var D=(window.EP&&EP.data.inviteVideos)||null;
+  var loading=(st==='loading'||st==='idle')&&!D;
+  var head='<section class="panel" style="margin-bottom:16px"><div class="ph"><h3>'+svg('sparkles')+' فيديوهات الألم</h3></div>';
+  var foot='</section>';
+  if(D&&D.forbidden)return head+'<div style="padding:14px 16px;font-size:12.5px;color:var(--muted)">فيديوهات الألم للأدمن فقط.</div>'+foot;
+  if((D&&D.missing)||loading||st==='error'){
+    var msg=(D&&D.missing)?'اللوحة جاهزة هنا — وناقص نشر المنصة (<span style="direction:ltr;display:inline-block">/api/bridge/settings/invite-videos</span>).':(loading?'…جارٍ التحميل':'تعذّر جلب فيديوهات الألم.');
+    return head+'<div style="padding:14px 16px;font-size:12.5px;color:var(--muted)">'+msg+'</div>'+foot;
+  }
+  var fields=PAIN_VIDEO_LABELS.map(function(r){
+    var val=(D&&D[r.k])||'';
+    return '<div class="fld" style="flex:1 1 200px;margin:0"><label style="font-size:12px;font-weight:800;color:var(--muted);display:block;margin-bottom:5px">'+esc(r.t)+'</label>'+
+      '<input class="pvVideo" data-pv-key="'+r.k+'" placeholder="https://" value="'+esc(val)+'" style="direction:ltr;text-align:left;width:100%;min-height:44px;border:1px solid var(--line);border-radius:10px;padding:10px 13px;font:inherit;font-size:13px;background:var(--surface);color:var(--ink)"></div>';
+  }).join('');
+  return head+'<div style="padding:14px 16px;display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end">'+fields+
+    '<button class="btn btn-primary" id="pvSave" style="flex:0 0 auto;min-height:44px;min-width:96px">حفظ</button></div>'+
+    '<div style="padding:0 16px 14px;font-size:11px;color:var(--muted)">رابطٌ لكل صفة — يظهر بدل نصّ الألم المكتوب. يوتيوب أو درايف (غير مدرج) أو فيميو.</div>'+foot;
+}
+function wirePainVideos(v){
+  var root=(v||document);
+  var b=root.querySelector('#pvSave');
+  if(!b)return;
+  b.onclick=function(){
+    if(!window.EP||!EP.setInviteVideos){toast('غير متصل بالمنصة');return;}
+    var data={};
+    root.querySelectorAll('.pvVideo').forEach(function(inp){data[inp.dataset.pvKey]=(inp.value||'').trim();});
+    b.disabled=true;b.style.opacity='.5';
+    EP.setInviteVideos(data,invAgain);
   };
 }
 
@@ -4690,20 +4735,25 @@ function inviteRowHtml(i){
 // تجميع «حسب الداعي» (د٨): كل داعٍ في قسمه بترتيب الأكثر دعواتٍ أوّلًا، و«—» (بلا داعٍ
 // معروف) دايمًا آخر قسم — مش لأنه أقل قيمة، لكن عشان القوائم المسمّاة تتصدّر الاستعراض.
 function inviteRowsGrouped(list){
-  var groups={},order=[];
+  // المفتاح `invited_by.user_id` لا الاسم (صُحِّح ٢٠٢٦-٠٩-٠٧): اسمان متطابقان لعضوين مختلفين
+  // ما كانوش هيتفرّقوا قبل كده. المؤسس (بلا user_id) وأي صفّ قديم بلا داعٍ معروف بيرجعوا
+  // لتسميتهم الثابتة («المؤسس»/«—») فيتجمّعوا صح برضه.
+  var groups={},order=[],labels={};
   list.forEach(function(r){
-    var key=r.invitedByLabel||'—';
-    if(!groups[key]){groups[key]=[];order.push(key);}
+    var key=r.invitedByUserId||r.invitedByLabel||'—';
+    var label=r.invitedByLabel||'—';
+    if(!groups[key]){groups[key]=[];order.push(key);labels[key]=label;}
     groups[key].push(r);
   });
   order.sort(function(a,b){
-    if(a==='—'&&b==='—')return 0;
-    if(a==='—')return 1;
-    if(b==='—')return -1;
+    var la=labels[a],lb=labels[b];
+    if(la==='—'&&lb==='—')return 0;
+    if(la==='—')return 1;
+    if(lb==='—')return -1;
     return groups[b].length-groups[a].length;
   });
   return order.map(function(key){
-    return '<div style="margin:14px 0 6px;font-size:12px;font-weight:800;color:var(--muted);display:flex;align-items:center;gap:6px">'+svg('users','ic')+esc(key)+' <span style="font-weight:400">('+money(groups[key].length)+')</span></div>'+
+    return '<div style="margin:14px 0 6px;font-size:12px;font-weight:800;color:var(--muted);display:flex;align-items:center;gap:6px">'+svg('users','ic')+esc(labels[key])+' <span style="font-weight:400">('+money(groups[key].length)+')</span></div>'+
       groups[key].map(inviteRowHtml).join('');
   }).join('');
 }
@@ -4730,13 +4780,19 @@ function inviteDetailBody(i,full){
   full=full||{};
   var inviterObj=full.inviter||null;
   var inviterLabel=inviterObj?(inviterObj.kind==='founder'?'المؤسس':(String(inviterObj.name||'').trim()||'—')):(i.invitedByLabel||'—');
-  var inviterVideo=(inviterObj&&inviterObj.video_url)||i.invitedByVideo||'';
   var u=full.user||null;
   var email=i.email||full.email||'—';
   var phone=(u&&u.phone)?u.phone:'—';
   var rolesLabel=(i.rolesLabel&&i.rolesLabel!=='—')?i.rolesLabel:'—';
   var specialtyLabel=(i.specialtyLabel&&i.specialtyLabel!=='—')?i.specialtyLabel:'—';
   var years=(full.years!=null)?money(full.years):'—';
+  // «شغله بالظبط» (ملحق ٣ب-٣): سطرٌ حرٌّ يكتبه المدعوّ في محطة الصفات — «—» لو غاب.
+  var focusLabel=(full.focus&&String(full.focus).trim())||'—';
+  // «فيديو الدعوة» (ملحق ٣ب-١): الاختيار على الدعوة نفسها لا على الداعي — `video_source`
+  // يحكم النصّ لا وجود رابطٍ من عدمه؛ غيابه (دعوةٌ من قبل ٣ب) ⇒ «—» صراحةً، لا اختلاق.
+  var videoSource=full.video_source||null;
+  var videoUrl=(full.video_url&&String(full.video_url).trim())||'';
+  var videoLine=(videoSource==='platform')?'المنصّة':((videoSource==='inviter')?('الداعي'+(videoUrl?(' — '+videoUrl):'')):'—');
   var timeline=Array.isArray(full.timeline)?full.timeline:[];
   var timelineHtml=timeline.length?timeline.map(function(t){
     return '<div style="display:flex;justify-content:space-between;gap:8px;padding:4px 0;font-size:12.5px;border-bottom:1px solid var(--line)"><span>'+esc(INV_TIMELINE_AR[t.key]||t.key)+'</span><span style="color:var(--muted)">'+esc(t.at?fmtWhen(t.at):'—')+'</span></div>';
@@ -4749,22 +4805,39 @@ function inviteDetailBody(i,full){
       '<div style="font-size:12.5px;margin-top:3px"><b>إجابة الذكاء</b> '+esc(ex.ai_answer||'—')+(ex.ai_source?(' <span style="color:var(--muted);font-size:11px">('+(ex.ai_source==='fallback'?'مجهّزة سلفًا':'ذكاء')+')</span>'):'')+'</div>'+
       '<div style="font-size:12.5px;margin-top:3px"><b>الحكم</b> '+esc(INV_VERDICT_AR[ex.verdict]||ex.verdict||'—')+'</div>'+
       '<div style="font-size:12.5px;margin-top:3px"><b>ملاحظاته</b> '+esc(ex.notes||'—')+'</div>'+
+      '<div style="font-size:12.5px;margin-top:3px"><b>اقتراحه</b> '+esc(ex.proposal||'—')+'</div>'+
     '</div>';
   }).join(''):'<div style="color:var(--muted);font-size:12.5px">—</div>';
+  // «اقتراحه» بلا تمرين (ملحق ٣ب-٣): الخريج ما لوش تمرين — اقتراحه («تحب تتعلّم إيه أولًا؟») يجي في
+  // `full.proposals` وحدها [{role,label,proposal}]. نرسم منها كلّ دورٍ ما اتّرسمش جوه التمارين.
+  var extraProps=(Array.isArray(full.proposals)?full.proposals:[]).filter(function(p){
+    return p&&String(p.proposal||'').trim()&&!exercises.some(function(ex){return ex.role===p.role;});
+  });
+  if(extraProps.length){
+    if(!exercises.length)exHtml='';
+    exHtml+=extraProps.map(function(p){
+      return '<div style="padding:8px 0;border-bottom:1px solid var(--line)">'+
+        '<div style="font-size:11px;font-weight:800;color:var(--muted)">'+esc(INV_ROLE_AR[p.role]||p.label||p.role||'—')+'</div>'+
+        '<div style="font-size:12.5px;margin-top:3px"><b>اقتراحه</b> '+esc(p.proposal||'—')+'</div>'+
+      '</div>';
+    }).join('');
+  }
   var decl=full.declaration||null;
   var declHtml=decl?('أقرّ في '+esc(fmtWhen(decl.accepted_at))+' · نسخة الشروط '+esc(decl.terms_version!=null?String(decl.terms_version):'—')):'—';
   var founding=full.founding?'نعم':'لا';
   return '<div class="uedit-grid" style="margin-top:0">'+
       '<div><div class="lab">الإيميل</div><div class="val" style="font-size:12.5px;direction:ltr;text-align:right">'+esc(email)+'</div></div>'+
       '<div><div class="lab">الهاتف</div><div class="val" style="font-size:12.5px;direction:ltr;text-align:right">'+esc(phone)+'</div></div>'+
-      '<div><div class="lab">الداعي</div><div class="val" style="font-size:12.5px">'+esc(inviterLabel)+'</div>'+(inviterVideo?('<div style="font-size:11px;color:var(--muted);word-break:break-all">'+esc(inviterVideo)+'</div>'):'')+'</div>'+
+      '<div><div class="lab">الداعي</div><div class="val" style="font-size:12.5px">'+esc(inviterLabel)+'</div></div>'+
       '<div><div class="lab">الصفات</div><div class="val" style="font-size:12.5px">'+esc(rolesLabel)+'</div></div>'+
       '<div><div class="lab">التخصص</div><div class="val" style="font-size:12.5px">'+esc(specialtyLabel)+'</div></div>'+
       '<div><div class="lab">سنوات الخبرة</div><div class="val" style="font-size:12.5px">'+years+'</div></div>'+
+      '<div><div class="lab">شغله</div><div class="val" style="font-size:12.5px">'+esc(focusLabel)+'</div></div>'+
     '</div>'+
     '<div class="lab" style="margin-top:12px">الخط الزمني</div>'+timelineHtml+
     '<div class="lab" style="margin-top:12px">التجربة</div>'+exHtml+
-    '<div class="field" style="margin-top:10px"><div class="lab">الإقرار</div><div class="val" style="font-size:12.5px">'+declHtml+'</div></div>'+
+    '<div class="field" style="margin-top:10px"><div class="lab">فيديو الدعوة</div><div class="val" style="font-size:12.5px'+((videoSource==='inviter'&&videoUrl)?';word-break:break-all':'')+'">'+esc(videoLine)+'</div></div>'+
+    '<div class="field"><div class="lab">الإقرار</div><div class="val" style="font-size:12.5px">'+declHtml+'</div></div>'+
     '<div class="field"><div class="lab">مؤسس</div><div class="val" style="font-size:12.5px">'+founding+'</div></div>';
 }
 function drawInviteDetail(){
@@ -4878,6 +4951,7 @@ function wireInvites(v){
   var root=(v||document);
   wireFounding(root);
   wireInviteSettings(root);
+  wirePainVideos(root);
   var gt=root.querySelector('#invGroupToggle');
   if(gt)gt.onclick=function(){invGroupBy=!invGroupBy;invAgain();};
   var ir=root.querySelector('#invRefresh');

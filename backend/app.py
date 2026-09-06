@@ -3031,6 +3031,8 @@ def founding_switch_set():
 # --- إعدادات الدعوة: فيديو الترحيب + حصّة دعوات العضو (الموجة ٣ 2026-09-07 د٨) ------------------
 # نفس نمط «باب المؤسسين» بالحرف: القراءة لكل مين شاف شاشة الدعوات، والكتابة أدمن فقط. غيابُ
 # حقلٍ في الجسم يعني «متلمسوش» — ما بنبعتش مفتاحًا فاضيًا يمسح قيمة الطرف التاني بالغلط.
+# ⛔ ملحق ٣ب-٢ (2026-09-07): `platform_video_url` انضاف لنفس الوثيقة (محطة «المنصّة» بعد
+# الصفات) — نفس القاعدة بالحرف: فاضي/null يمسحه، وغيابه من الجسم يسيبه كما هو.
 @app.route('/api/settings/invites', methods=['GET'])
 @token_required
 @roles_required('admin', 'employee')
@@ -3048,6 +3050,8 @@ def invite_settings_set():
         # فاضي/null = إزالة الفيديو — المنصة (`clean_video_url`) هي اللي بتحكم على الشكل
         # (https + يوتيوب/درايف/فيميو) وبتردّ ٤٢٢ عربية لو غلط؛ إحنا بروكسي رفيع هنا فقط.
         payload['welcome_video_url'] = (body.get('welcome_video_url') or '').strip() or None
+    if 'platform_video_url' in body:
+        payload['platform_video_url'] = (body.get('platform_video_url') or '').strip() or None
     raw_quota = body.get('member_invite_quota')
     if 'member_invite_quota' in body and raw_quota is not None:
         # bool ابن int في بايثون (True == 1) و`int(3.5)` بيقصّ صامتًا لـ٣ — نرفض الاتنين هنا
@@ -3060,10 +3064,45 @@ def invite_settings_set():
             return jsonify({'error': 'حصّة الدعوات لا تكون سالبة'}), 400
         payload['member_invite_quota'] = quota
     if not payload:
-        return jsonify({'error': 'أرسل فيديو الترحيب أو حصّة الدعوات'}), 400
+        return jsonify({'error': 'أرسل فيديو الترحيب أو فيديو المنصّة أو حصّة الدعوات'}), 400
     resp = _platform_proxy('POST', '/api/bridge/settings/invites', json_body=payload)
     if _resp_ok(resp):
         _audit('settings.invites', target='invites', meta=payload)
+    return resp
+
+
+# --- فيديوهات الألم لكل صفة (ملحق ٣ب-٢ 2026-09-07) --------------------------------------------
+# مفتاحٌ لكل صفة + `multi` (صفتان فأكثر) — بديلٌ لنصّ الألم المكتوب في محطة «المنصّة». مسارٌ
+# **أدمن فقط قراءةً وكتابةً** — أدقّ من نمط «باب المؤسسين»/إعدادات الدعوة عمدًا (قرار هذا
+# الملحق): موظفٌ يفتح شاشة الدعوات بيشوف اللوحة فاضيةً بسببٍ صريح (٤٠٣) لا صمتًا يُقرأ كـ«مفيش
+# فيديوهات». المفاتيح الستة ثابتة وتطابق `routes/invites.py::PAIN_VIDEO_KEYS` على المنصة — مفتاحٌ
+# زيادة يتلقّطه pydantic هناك فيرفضه، إحنا بروكسي رفيع هنا فقط.
+INVITE_VIDEO_KEYS = ('trainer', 'lawyer', 'consultant', 'researcher', 'graduate', 'multi')
+
+
+@app.route('/api/settings/invite-videos', methods=['GET'])
+@token_required
+@roles_required('admin')
+def invite_videos_get():
+    return _platform_proxy('GET', '/api/bridge/settings/invite-videos')
+
+
+@app.route('/api/settings/invite-videos', methods=['POST'])
+@token_required
+@roles_required('admin')
+def invite_videos_set():
+    body = request.json or {}
+    payload = {}
+    for key in INVITE_VIDEO_KEYS:
+        if key in body:
+            # فاضي/null = إزالة فيديو الحالة دي — المنصة (`clean_video_url`) بتحكم على الشكل
+            # وبتردّ ٤٢٢ عربية لو غلط؛ إحنا بروكسي رفيع هنا فقط، زي إعدادات الدعوة بالحرف.
+            payload[key] = (body.get(key) or '').strip() or None
+    if not payload:
+        return jsonify({'error': 'أرسل رابط فيديو واحد على الأقل'}), 400
+    resp = _platform_proxy('POST', '/api/bridge/settings/invite-videos', json_body=payload)
+    if _resp_ok(resp):
+        _audit('settings.invite_videos', target='invite_videos', meta=payload)
     return resp
 
 

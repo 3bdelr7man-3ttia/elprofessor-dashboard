@@ -379,6 +379,24 @@ def test_invite_detail_forwards_to_the_right_bridge_path_and_body_reaches_the_br
     assert body['inviter']['kind'] == 'founder'
 
 
+GRADUATE_DETAIL_ROW = dict(
+    INVITE_DETAIL_ROW, id='inv-3', roles=['graduate'], exercises=[],
+    proposals=[{'role': 'graduate', 'label': 'خريج', 'proposal': 'عقود العمل أولًا'}],
+)
+
+
+def test_a_graduate_proposal_reaches_the_browser_with_no_exercise_to_carry_it(ctx):
+    """The graduate has NO exercise (`EXERCISE_ROLES` excludes them) — their «تحب تتعلّم إيه
+    أولًا؟» rides only in the bridge's top-level `proposals`. The proxy must pass that list
+    through untouched, or the drawer has nothing to draw."""
+    ctx['replies'][('GET', '/api/bridge/invites/inv-3')] = FakeResp(200, GRADUATE_DETAIL_ROW)
+    r = ctx['client'].get('/api/invites/inv-3', headers=ctx['admin'])
+    assert r.status_code == 200
+    body = r.get_json()
+    assert body['exercises'] == []
+    assert body['proposals'] == [{'role': 'graduate', 'label': 'خريج', 'proposal': 'عقود العمل أولًا'}]
+
+
 def test_invite_detail_404_is_surfaced_not_swallowed(ctx):
     """A revoked-or-gone invite id must read as «مش موجودة», never as an empty 200 that the
     drawer would render as a blank person."""
@@ -474,6 +492,115 @@ def test_invite_settings_write_is_audited_only_on_success(ctx):
     assert rows[0].actor_email == 'admin@test.com'
 
 
+# ---------------------------------------------- فيديو المنصّة على إعدادات الدعوة (ملحق ٣ب-٢)
+
+def test_invite_settings_write_forwards_platform_video_url_alone(ctx):
+    """`platform_video_url` must travel like `welcome_video_url` — its own key, untouched when
+    the admin only means to change the OTHER video."""
+    ctx['replies'][('POST', '/api/bridge/settings/invites')] = FakeResp(
+        200, {'welcome_video_url': None, 'platform_video_url': 'https://youtu.be/p',
+              'member_invite_quota': None, 'founder_name': None, 'updated_at': '2026-09-07T10:00:00'})
+    ctx['client'].post('/api/settings/invites', json={'platform_video_url': 'https://youtu.be/p'},
+                       headers=ctx['admin'])
+    call = ctx['sent'][-1]
+    assert call['method'] == 'POST' and call['path'] == '/api/bridge/settings/invites'
+    assert call['json'] == {'platform_video_url': 'https://youtu.be/p'}
+
+
+def test_invite_settings_empty_platform_video_url_clears_it(ctx):
+    ctx['replies'][('POST', '/api/bridge/settings/invites')] = FakeResp(
+        200, {'welcome_video_url': None, 'platform_video_url': None,
+              'member_invite_quota': None, 'founder_name': None, 'updated_at': '2026-09-07T10:00:00'})
+    ctx['client'].post('/api/settings/invites', json={'platform_video_url': ''}, headers=ctx['admin'])
+    assert ctx['sent'][-1]['json'] == {'platform_video_url': None}
+
+
+def test_invite_settings_write_is_admin_only_for_platform_video_too(ctx):
+    before = len(ctx['sent'])
+    r = ctx['client'].post('/api/settings/invites', json={'platform_video_url': 'https://youtu.be/p'},
+                           headers=ctx['emp'])
+    assert r.status_code == 403
+    assert len(ctx['sent']) == before
+
+
+# ---------------------------------------------------- فيديوهات الألم لكل صفة (ملحق ٣ب-٢) — admin-only
+
+def test_invite_videos_read_forwards_to_the_bridge_and_is_admin_only(ctx):
+    """Unlike welcome/platform video settings, this desk is admin-only for READS too (this
+    addendum's own decision) — an employee must see an explicit forbidden state, never a silent
+    empty screen that reads as «no videos configured»."""
+    ctx['replies'][('GET', '/api/bridge/settings/invite-videos')] = FakeResp(
+        200, {'trainer': 'https://youtu.be/t', 'lawyer': None, 'consultant': None,
+              'researcher': None, 'graduate': None, 'multi': None})
+    r = ctx['client'].get('/api/settings/invite-videos', headers=ctx['admin'])
+    assert r.status_code == 200
+    call = ctx['sent'][-1]
+    assert call['method'] == 'GET' and call['path'] == '/api/bridge/settings/invite-videos'
+    assert r.get_json()['trainer'] == 'https://youtu.be/t'
+
+    before = len(ctx['sent'])
+    assert ctx['client'].get('/api/settings/invite-videos', headers=ctx['emp']).status_code == 403
+    assert len(ctx['sent']) == before
+
+
+def test_invite_videos_write_is_admin_only(ctx):
+    before = len(ctx['sent'])
+    r = ctx['client'].post('/api/settings/invite-videos', json={'trainer': 'https://youtu.be/t'},
+                           headers=ctx['emp'])
+    assert r.status_code == 403
+    assert len(ctx['sent']) == before
+
+
+def test_invite_videos_write_forwards_only_the_keys_sent(ctx):
+    """Omitting a key must mean «leave it alone» — the same rule as every other settings write on
+    this desk (invite settings, founding door)."""
+    ctx['replies'][('POST', '/api/bridge/settings/invite-videos')] = FakeResp(
+        200, {'trainer': 'https://youtu.be/t', 'lawyer': None, 'consultant': None,
+              'researcher': None, 'graduate': None, 'multi': None})
+    ctx['client'].post('/api/settings/invite-videos', json={'trainer': 'https://youtu.be/t'},
+                       headers=ctx['admin'])
+    call = ctx['sent'][-1]
+    assert call['method'] == 'POST' and call['path'] == '/api/bridge/settings/invite-videos'
+    assert call['json'] == {'trainer': 'https://youtu.be/t'}
+
+
+def test_invite_videos_empty_value_clears_that_role_only(ctx):
+    ctx['replies'][('POST', '/api/bridge/settings/invite-videos')] = FakeResp(
+        200, {'trainer': None, 'lawyer': None, 'consultant': None,
+              'researcher': None, 'graduate': None, 'multi': None})
+    ctx['client'].post('/api/settings/invite-videos', json={'trainer': ''}, headers=ctx['admin'])
+    assert ctx['sent'][-1]['json'] == {'trainer': None}
+
+
+def test_invite_videos_rejects_an_empty_body_before_the_platform(ctx):
+    before = len(ctx['sent'])
+    r = ctx['client'].post('/api/settings/invite-videos', json={}, headers=ctx['admin'])
+    assert r.status_code == 400
+    assert len(ctx['sent']) == before
+
+
+def test_invite_videos_write_is_audited_only_on_success(ctx):
+    ctx['replies'][('POST', '/api/bridge/settings/invite-videos')] = FakeResp(500, {'detail': 'boom'})
+    assert ctx['client'].post('/api/settings/invite-videos', json={'trainer': 'https://youtu.be/t'},
+                              headers=ctx['admin']).status_code == 500
+    assert _audits('settings.invite_videos') == []
+    ctx['replies'][('POST', '/api/bridge/settings/invite-videos')] = FakeResp(
+        200, {'trainer': 'https://youtu.be/t', 'lawyer': None, 'consultant': None,
+              'researcher': None, 'graduate': None, 'multi': None})
+    assert ctx['client'].post('/api/settings/invite-videos', json={'trainer': 'https://youtu.be/t'},
+                              headers=ctx['admin']).status_code == 200
+    rows = _audits('settings.invite_videos')
+    assert len(rows) == 1
+    assert rows[0].actor_email == 'admin@test.com'
+
+
+def test_invite_videos_requires_authentication(ctx):
+    before = len(ctx['sent'])
+    assert ctx['client'].get('/api/settings/invite-videos').status_code in (401, 403)
+    assert ctx['client'].post('/api/settings/invite-videos', json={'trainer': 'x'}).status_code in (401, 403)
+    assert len(ctx['sent']) == before
+
+
 # ------------------------------------------------------- «باب المؤسسين» (wave 2, م٣) switch
 
 def test_founding_switch_read_forwards_to_the_bridge_and_is_open_to_staff(ctx):
@@ -542,6 +669,114 @@ def test_secret_is_server_side_only(ctx):
     assert ctx['sent'][-1]['headers']['X-ELP-Metrics-Secret'] == 'test-metrics-secret'
     assert 'test-metrics-secret' not in r.get_data(as_text=True)
     assert 'X-ELP-Metrics-Secret' not in dict(r.headers)
+
+
+# ------------------------------------- drawer + grouping additions (ملحق ٣ب) — grep-proof
+# «مكتوبٌ صحيحًا وبلا طريقٍ للشاشة»: a field the backend returns is worthless if no line of
+# index.html ever reads it. These pin the actual markers, not a re-implementation of the DOM.
+
+def test_drawer_shows_focus_proposal_and_invite_video_source():
+    with open(INDEX_HTML, encoding='utf-8') as fh:
+        src = fh.read()
+    assert 'full.focus' in src
+    assert '<b>اقتراحه</b>' in src and 'ex.proposal' in src
+    assert 'full.video_source' in src and 'full.video_url' in src
+    assert '>فيديو الدعوة<' in src
+
+
+def test_drawer_reads_top_level_proposals_not_only_exercise_proposals():
+    """A graduate's suggestion lives ONLY in `full.proposals` (no exercise carries it). If no line
+    of index.html reads that list, a stored answer renders as «—» — a screen that lies."""
+    with open(INDEX_HTML, encoding='utf-8') as fh:
+        src = fh.read()
+    assert 'full.proposals' in src
+
+
+def _render_invite_detail_body(full):
+    """Run the REAL `inviteDetailBody` from index.html under node with the same helpers it uses
+    (esc / money / fmtWhen / the INV_* maps), so the assertion is on what the drawer draws — not
+    on a re-implementation. Skips when node is absent."""
+    import shutil
+    import subprocess
+    import re
+    node = shutil.which('node')
+    if not node:
+        pytest.skip('node not installed')
+    with open(INDEX_HTML, encoding='utf-8') as fh:
+        src = fh.read()
+    start = src.index('function inviteDetailBody(i,full){')
+    end = src.index('\nfunction drawInviteDetail(){', start)
+    fn = src[start:end]
+    # each map is `const X={...};` — `INV_TIMELINE_AR` spans lines, so read to the closing `};`
+    consts = '\n'.join(re.findall(r'^const INV_(?:ROLE|VERDICT|TIMELINE)_AR=\{.*?\};', src, flags=re.M | re.S))
+    esc_line = re.search(r'^function esc\(s\).*$', src, flags=re.M).group(0)
+    script = (
+        consts + '\n' + esc_line + '\n'
+        'function money(v){return String(v);}\n'
+        'function fmtWhen(iso){return iso?String(iso).slice(0,16):"—";}\n'
+        + fn + '\n'
+        'process.stdout.write(inviteDetailBody({}, ' + json.dumps(full, ensure_ascii=False) + '));'
+    )
+    out = subprocess.run([node, '-e', script], capture_output=True, text=True, timeout=30)
+    assert out.returncode == 0, out.stderr
+    return out.stdout
+
+
+def test_drawer_draws_a_graduate_proposal_when_there_is_no_exercise_at_all():
+    html = _render_invite_detail_body({'exercises': [], 'proposals': GRADUATE_DETAIL_ROW['proposals']})
+    assert 'عقود العمل أولًا' in html
+    assert 'خريج' in html
+    assert '<b>اقتراحه</b>' in html
+
+
+def test_drawer_does_not_double_print_a_proposal_that_an_exercise_already_carries():
+    """`proposals` mirrors each exercise's proposal too — the drawer must draw those once (inside
+    the exercise block), and only the roles WITHOUT an exercise get the extra row."""
+    ex = dict(INVITE_DETAIL_ROW['exercises'][0], proposal='قسم عقود')
+    html = _render_invite_detail_body({
+        'exercises': [ex],
+        'proposals': [{'role': 'lawyer', 'label': 'محامٍ', 'proposal': 'قسم عقود'},
+                      {'role': 'graduate', 'label': 'خريج', 'proposal': 'عقود العمل أولًا'}],
+    })
+    assert html.count('قسم عقود') == 1
+    assert html.count('عقود العمل أولًا') == 1
+
+
+def test_drawer_still_prints_a_dash_when_there_is_neither_exercise_nor_proposal():
+    html = _render_invite_detail_body({'exercises': [], 'proposals': []})
+    assert '<b>اقتراحه</b>' not in html
+    assert 'التجربة</div><div style="color:var(--muted);font-size:12.5px">—</div>' in html
+
+
+def test_grouping_keys_on_inviter_user_id_not_name(ctx):
+    """Two different members named the same must land in two different groups — grouping on the
+    label alone would merge them. `dashboard-api.js` is the source of `invitedByUserId`;
+    `index.html` must key on it."""
+    api_path = os.path.join(os.path.dirname(__file__), '..', 'dashboard-cloud', 'dashboard-api.js')
+    with open(api_path, encoding='utf-8') as fh:
+        api_src = fh.read()
+    assert 'invitedByUserId' in api_src
+    with open(INDEX_HTML, encoding='utf-8') as fh:
+        html_src = fh.read()
+    assert 'r.invitedByUserId||r.invitedByLabel' in html_src
+
+
+def test_pain_videos_panel_is_wired_into_the_invites_screen():
+    with open(INDEX_HTML, encoding='utf-8') as fh:
+        src = fh.read()
+    assert 'painVideosPanel()' in src
+    assert 'wirePainVideos(root)' in src
+
+
+def test_the_hardcoded_14_day_line_is_gone_from_the_policy_paragraph():
+    """The comment trail above the paragraph is allowed to mention the retired «١٤ يوم» line as
+    history — only the RENDERED policy paragraph itself must no longer hard-code it."""
+    with open(INDEX_HTML, encoding='utf-8') as fh:
+        src = fh.read()
+    lines = [ln for ln in src.splitlines() if 'المنصّة مقفولة من الخادم' in ln]
+    assert len(lines) == 1, lines
+    assert '١٤ يوم' not in lines[0]
+    assert 'ويقرّ ويختار كلمة سر' not in lines[0]
 
 
 # ------------------------------------------------ drawer «الإقرار» line — the version is a TAG, not a number

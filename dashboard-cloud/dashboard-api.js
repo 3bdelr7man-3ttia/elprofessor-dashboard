@@ -82,7 +82,7 @@
             platformPendingTopics: null, platformTopicSegments: null,
             platformOpinions: null, platformOpinionsApproved: null, platformOpinionsAnalysis: null, experts: null,
             market: null, marketDemand: null, trainingInterests: null, foundingLeads: null,
-            invites: null, waitlist: null, founding: null, inviteSettings: null,
+            invites: null, waitlist: null, founding: null, inviteSettings: null, inviteVideos: null,
             aiAgents: null, dashUsers: null, audit: null, usage: null },
     state: {}, // 'idle' | 'loading' | 'ready' | 'error'
     _started: {}, // منع التحميل المزدوج
@@ -514,6 +514,10 @@
               note: i.note || "",
               invited_by: ibRaw || "",
               invitedByLabel: inviterLabel,
+              // مفتاح التجميع «حسب الداعي» (د٨، صُحِّح ٢٠٢٦-٠٩-٠٧): الاسمُ وحده يُدمج غلطًا اسمين
+              // متطابقين لعضوين مختلفين، أو يفرّق نفس العضو لو الاسم اختلف بين صفّين — الـid ثابتٌ.
+              // المؤسس (user_id غائب) بيتجمّع تحت تسميته الثابتة كما كان.
+              invitedByUserId: inviterObj ? (inviterObj.user_id || "") : "",
               invitedByVideo: inviterObj ? (inviterObj.video_url || "") : "",
               // الرابط اختياري: بيبان لو الجسر بعته مع الصفّ، وما بيتبنيش هنا لو ما بعتوش.
               link: i.link || i.invite_url || "",
@@ -611,14 +615,35 @@
       return get("/settings/invites").then(function (r) {
         EP.data.inviteSettings = {
           welcome_video_url: (r && r.welcome_video_url) || "",
+          // فيديو المنصّة (ملحق ٣ب-٢ ٢٠٢٦-٠٩-٠٧): يُعرض بعد الصفات، قبل التجربة — نفس مفتاح
+          // إعدادات الدعوة، ونفس قاعدة «غياب على المنصة لسه ⇒ فاضي هنا مش صفر مختلَق».
+          platform_video_url: (r && r.platform_video_url) || "",
           member_invite_quota: (r && r.member_invite_quota != null) ? r.member_invite_quota : null,
           missing: false,
         };
       }).catch(function (e) {
         if (e && e.status === 404) {
-          EP.data.inviteSettings = { welcome_video_url: "", member_invite_quota: null, missing: true };
+          EP.data.inviteSettings = { welcome_video_url: "", platform_video_url: "", member_invite_quota: null, missing: true };
           return;
         }
+        throw e;
+      });
+    },
+
+    // فيديوهات الألم لكل صفة (ملحق ٣ب-٢): مفتاحٌ لكل صفة + `multi` — /api/settings/invite-videos
+    // -> جسر المنصة /api/bridge/settings/invite-videos. مسارٌ **أدمن فقط** (قراءةً وكتابةً) —
+    // موظفٌ يفتح شاشة الدعوات بيشوف اللوحة فاضيةً بسببٍ صريح («٤٠٣») لا بصمتٍ يُقرأ كـ«مفيش فيديو».
+    inviteVideos: function () {
+      return get("/settings/invite-videos").then(function (r) {
+        EP.data.inviteVideos = {
+          trainer: (r && r.trainer) || "", lawyer: (r && r.lawyer) || "", consultant: (r && r.consultant) || "",
+          researcher: (r && r.researcher) || "", graduate: (r && r.graduate) || "", multi: (r && r.multi) || "",
+          missing: false, forbidden: false,
+        };
+      }).catch(function (e) {
+        var blank = { trainer: "", lawyer: "", consultant: "", researcher: "", graduate: "", multi: "" };
+        if (e && e.status === 404) { EP.data.inviteVideos = Object.assign({}, blank, { missing: true, forbidden: false }); return; }
+        if (e && e.status === 403) { EP.data.inviteVideos = Object.assign({}, blank, { missing: false, forbidden: true }); return; }
         throw e;
       });
     },
@@ -2212,6 +2237,22 @@
       });
   };
 
+  // فيديوهات الألم — أدمن فقط بيقدر يحفظ (الجسر نفسه ٤٠٣ لغير الأدمن)؛ غياب مفتاح في `data`
+  // معناه «متلمسوش»، وفاضي/`""` بيمسح فيديو الحالة دي فيرجع النصّ المكتوب.
+  EP.setInviteVideos = function (data, after) {
+    post("/settings/invite-videos", data || {})
+      .then(function () {
+        note("اتحفظت فيديوهات الألم");
+        EP.reload("inviteVideos", after);
+      })
+      .catch(function (e) {
+        quietToast(e && e.status === 404
+          ? "مسار فيديوهات الألم لسه ما اتنشرش على المنصة"
+          : ((e && e.message) || "تعذّر حفظ فيديوهات الألم"));
+        if (after) after();
+      });
+  };
+
   // تفصيل دعوة واحدة (درج «تفصيل المدعوّ» — الموجة ٣ د٨): الوثيقة كاملة (التجربة · الإقرار ·
   // الخط الزمني) + الداعي + المستخدم المُنشأ إن وُجد. 404 = الدعوة اتشالت أو الجسر لسه ما نزلش.
   EP.inviteDetail = function (id, onOk, onErr) {
@@ -2766,7 +2807,7 @@
                 notifications: null, goalsAdvisor: null, tutorials: null, platformTopics: null, platformTopicsAnalysis: null,
                 platformPendingTopics: null, platformTopicSegments: null, platformOpinions: null,
                 market: null, marketDemand: null, trainingInterests: null, foundingLeads: null,
-                invites: null, waitlist: null, founding: null, inviteSettings: null,
+                invites: null, waitlist: null, founding: null, inviteSettings: null, inviteVideos: null,
                 aiAgents: null, dashUsers: null, audit: null, usage: null };
     EP.state = {};
     window.location.reload();
