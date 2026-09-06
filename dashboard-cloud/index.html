@@ -4776,6 +4776,38 @@ function inviteActionsHtml(i){
 }
 // جسم التفصيل من الوثيقة الكاملة (full = ردّ GET /api/invites/{id})؛ i = صفّ القائمة (احتياطًا
 // لأي حقل ما وصلش بعد، ولحفظ العمل حتى أثناء التحميل). كل حقل غائب ⇒ «—» — لا اختلاق.
+// قسم «المثال» بالدرج (ملحق ٣ج — و٨): يحلّ محلّ قسم «التجربة» حين تصل `full.demo` (دعوةٌ
+// بعد ج٣). المحادثة فقاعاتٌ مختصرة (وسم «الذكاء»/«هو» + أول ١٦٠ حرفًا من كل رسالة، ومصدرها
+// إن وُجد)، ثم «الإجابة الموثَّقة» كاملةً + حكمه + ما صحّحه + اقتراحه — كلٌّ غائبٌ ⇒ «—».
+// `demo` بلا محادثةٍ بعد (فتح المحطة ولمّا يسأل) ⇒ «لم يبدأ المثال.» لا فراغ صامت.
+function demoSectionHtml(demo){
+  demo=demo||{};
+  var transcriptAll=Array.isArray(demo.transcript)?demo.transcript:[];
+  if(!transcriptAll.length)return '<div style="color:var(--muted);font-size:12.5px">لم يبدأ المثال.</div>';
+  var transcript=transcriptAll.slice(0,12);
+  var question=(demo.question&&String(demo.question).trim())||'—';
+  var bubbles=transcript.map(function(m){
+    var isAi=!!(m&&m.who==='ai');
+    var text=String((m&&m.text)||'').slice(0,160);
+    var srcNote='';
+    if(isAi&&m&&m.ai_source){srcNote=' <span style="color:var(--muted);font-size:10.5px;font-weight:600">('+(m.ai_source==='fallback'?'مجهّزة سلفًا':'ذكاء')+')</span>';}
+    return '<div style="padding:6px 9px;margin:3px 0;border-radius:9px;font-size:12px;max-width:88%;line-height:1.5;'+
+      (isAi?'background:var(--surface-2)':'background:var(--surface);border:1px solid var(--line);margin-inline-start:auto')+'">'+
+      '<div style="font-size:10.5px;font-weight:800;color:var(--muted)">'+(isAi?'الذكاء':'هو')+srcNote+'</div>'+
+      '<div style="margin-top:2px">'+esc(text)+'</div></div>';
+  }).join('');
+  var documented=demo.documented||null;
+  var verdictLabel=documented?(INV_VERDICT_AR[documented.verdict]||documented.verdict||'—'):'—';
+  var finalText=(documented&&documented.final_text&&String(documented.final_text).trim())||'—';
+  var notes=(documented&&documented.notes&&String(documented.notes).trim())||'—';
+  var proposal=(documented&&documented.proposal&&String(documented.proposal).trim())||'—';
+  return '<div style="font-size:12.5px;margin-bottom:6px"><b>السؤال</b> '+esc(question)+'</div>'+
+    '<div style="display:flex;flex-direction:column;gap:2px;margin-bottom:8px">'+bubbles+'</div>'+
+    '<div style="font-size:12.5px;margin-top:3px"><b>الإجابة الموثَّقة</b> '+esc(finalText)+'</div>'+
+    '<div style="font-size:12.5px;margin-top:3px"><b>حكمه</b> '+esc(verdictLabel)+'</div>'+
+    '<div style="font-size:12.5px;margin-top:3px"><b>ما صحّحه</b> '+esc(notes)+'</div>'+
+    '<div style="font-size:12.5px;margin-top:3px"><b>اقتراحه</b> '+esc(proposal)+'</div>';
+}
 function inviteDetailBody(i,full){
   full=full||{};
   var inviterObj=full.inviter||null;
@@ -4825,6 +4857,17 @@ function inviteDetailBody(i,full){
   var decl=full.declaration||null;
   var declHtml=decl?('أقرّ في '+esc(fmtWhen(decl.accepted_at))+' · نسخة الشروط '+esc(decl.terms_version!=null?String(decl.terms_version):'—')):'—';
   var founding=full.founding?'نعم':'لا';
+  // «المثال» (ملحق ٣ج — و٨): القسم يُختار بوجود محتوى «التجربة» القديم لا بصدق `demo` —
+  // الجسر يرجّع `demo: null` لكل دعوةٍ بعد ج٣ لسه ما سألتش، فلو حكمنا بـ`!!full.demo` كانت
+  // الدعوات الحيّة كلها هتقع على المحطة المتقاعدة «التجربة» وشرطة صامتة. بلا محتوى قديم ⇒
+  // «المثال» دائمًا (و`demoSectionHtml({})` تقول «لم يبدأ المثال.»). ودعوةٌ مختلطة (demo +
+  // exercises/proposals قديمة — دعوة ٣/٣ب كملت التمرين ثم فتحت المحطة الجديدة) ترسم القسمين
+  // بالتتابع لا تُسقط أحدهما: الشاشة ما تكدبش على اللي جوه الدعوة فعلًا.
+  var hasLegacy=!!(exercises.length||extraProps.length);
+  var hasDemo=!!full.demo||!hasLegacy;
+  var exerciseSectionsHtml='';
+  if(hasDemo)exerciseSectionsHtml+='<div class="lab" style="margin-top:12px">المثال</div>'+demoSectionHtml(full.demo||{});
+  if(hasLegacy)exerciseSectionsHtml+='<div class="lab" style="margin-top:12px">التجربة</div>'+exHtml;
   return '<div class="uedit-grid" style="margin-top:0">'+
       '<div><div class="lab">الإيميل</div><div class="val" style="font-size:12.5px;direction:ltr;text-align:right">'+esc(email)+'</div></div>'+
       '<div><div class="lab">الهاتف</div><div class="val" style="font-size:12.5px;direction:ltr;text-align:right">'+esc(phone)+'</div></div>'+
@@ -4835,7 +4878,7 @@ function inviteDetailBody(i,full){
       '<div><div class="lab">شغله</div><div class="val" style="font-size:12.5px">'+esc(focusLabel)+'</div></div>'+
     '</div>'+
     '<div class="lab" style="margin-top:12px">الخط الزمني</div>'+timelineHtml+
-    '<div class="lab" style="margin-top:12px">التجربة</div>'+exHtml+
+    exerciseSectionsHtml+
     '<div class="field" style="margin-top:10px"><div class="lab">فيديو الدعوة</div><div class="val" style="font-size:12.5px'+((videoSource==='inviter'&&videoUrl)?';word-break:break-all':'')+'">'+esc(videoLine)+'</div></div>'+
     '<div class="field"><div class="lab">الإقرار</div><div class="val" style="font-size:12.5px">'+declHtml+'</div></div>'+
     '<div class="field"><div class="lab">مؤسس</div><div class="val" style="font-size:12.5px">'+founding+'</div></div>';

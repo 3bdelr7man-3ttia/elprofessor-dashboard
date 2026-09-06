@@ -397,6 +397,40 @@ def test_a_graduate_proposal_reaches_the_browser_with_no_exercise_to_carry_it(ct
     assert body['proposals'] == [{'role': 'graduate', 'label': 'خريج', 'proposal': 'عقود العمل أولًا'}]
 
 
+DEMO_DETAIL_ROW = dict(
+    INVITE_DETAIL_ROW, id='inv-4', stage='exercised', exercises=[],
+    demo={
+        'question': 'ما مدة الطعن على قرار فصل تعسفي؟',
+        'transcript': [
+            {'who': 'ai', 'text': 'الحكم العملي أولًا... ⚠️ إجابة أوّلية', 'ai_source': 'live',
+             'at': '2026-09-07T10:00:00'},
+            {'who': 'user', 'text': 'خليها أدق', 'at': '2026-09-07T10:01:00'},
+        ],
+        'documented': {'verdict': 'partly', 'final_text': 'الإجابة المعتمدة بعد المراجعة.',
+                       'notes': 'صححت المدة', 'proposal': 'سؤال شائع آخر', 'at': '2026-09-07T10:05:00'},
+    },
+)
+
+
+def test_invite_detail_forwards_a_demo_payload_to_the_browser_unchanged(ctx):
+    """ملحق ٣ج (ج٥): الداشبورد يرسم `full.demo` (السؤال · المحادثة · الإجابة الموثَّقة) —
+    والدرج بدون رأيٍ من الوكيل هنا، فلازم الوثيقة تعبر كاملةً بلا تصفية ولا تحويل."""
+    ctx['replies'][('GET', '/api/bridge/invites/inv-4')] = FakeResp(200, DEMO_DETAIL_ROW)
+    r = ctx['client'].get('/api/invites/inv-4', headers=ctx['admin'])
+    assert r.status_code == 200
+    call = ctx['sent'][-1]
+    assert call['method'] == 'GET' and call['path'] == '/api/bridge/invites/inv-4'
+    body = r.get_json()
+    assert body['demo']['question'] == 'ما مدة الطعن على قرار فصل تعسفي؟'
+    assert len(body['demo']['transcript']) == 2
+    assert body['demo']['transcript'][0]['who'] == 'ai'
+    assert body['demo']['transcript'][0]['ai_source'] == 'live'
+    assert body['demo']['documented']['verdict'] == 'partly'
+    assert body['demo']['documented']['final_text'] == 'الإجابة المعتمدة بعد المراجعة.'
+    assert body['demo']['documented']['notes'] == 'صححت المدة'
+    assert body['demo']['documented']['proposal'] == 'سؤال شائع آخر'
+
+
 def test_invite_detail_404_is_surfaced_not_swallowed(ctx):
     """A revoked-or-gone invite id must read as «مش موجودة», never as an empty 200 that the
     drawer would render as a blank person."""
@@ -704,7 +738,9 @@ def _render_invite_detail_body(full):
         pytest.skip('node not installed')
     with open(INDEX_HTML, encoding='utf-8') as fh:
         src = fh.read()
-    start = src.index('function inviteDetailBody(i,full){')
+    # the demo section is drawn by its own function (ملحق ٣ج) — pull it too so the real
+    # `inviteDetailBody` can call it exactly as it does in the browser
+    start = src.index('function demoSectionHtml(demo){')
     end = src.index('\nfunction drawInviteDetail(){', start)
     fn = src[start:end]
     # each map is `const X={...};` — `INV_TIMELINE_AR` spans lines, so read to the closing `};`
@@ -742,10 +778,52 @@ def test_drawer_does_not_double_print_a_proposal_that_an_exercise_already_carrie
     assert html.count('عقود العمل أولًا') == 1
 
 
-def test_drawer_still_prints_a_dash_when_there_is_neither_exercise_nor_proposal():
-    html = _render_invite_detail_body({'exercises': [], 'proposals': []})
-    assert '<b>اقتراحه</b>' not in html
-    assert 'التجربة</div><div style="color:var(--muted);font-size:12.5px">—</div>' in html
+def test_drawer_says_the_demo_has_not_started_when_there_is_neither_exercise_nor_proposal():
+    """Copy deck و٨ («drawer · فارغ»): `demo` absent or `transcript = []` ⇒ «لم يبدأ المثال.».
+    The bridge returns `demo: null, exercises: []` for EVERY post-3c invite that has not asked
+    yet (opened / email_bound / roles_chosen / pain_seen) — the most common live state — so the
+    section must be chosen by the presence of legacy content, not by `demo` truthiness. Keying on
+    `!!full.demo` drew the retired «التجربة» label plus a bare «—» for all of them."""
+    for full in ({'exercises': [], 'proposals': []}, {'demo': None, 'exercises': [], 'proposals': []}):
+        html = _render_invite_detail_body(full)
+        assert '<b>اقتراحه</b>' not in html
+        assert '>المثال</div>' in html
+        assert 'لم يبدأ المثال.' in html
+        assert 'التجربة' not in html
+
+
+def test_drawer_keeps_the_legacy_section_for_a_pre_3c_invite_without_demo():
+    """و٨: «الدعوات القديمة بـ`exercises` تبقى على ج٢» — no demo, an old exercise ⇒ «التجربة»."""
+    html = _render_invite_detail_body({'exercises': [INVITE_DETAIL_ROW['exercises'][0]], 'proposals': []})
+    assert '>التجربة</div>' in html
+    assert INVITE_DETAIL_ROW['exercises'][0]['question'] in html
+    assert 'المثال' not in html
+    assert 'لم يبدأ المثال.' not in html
+
+
+def test_drawer_draws_both_sections_for_a_mixed_invite_and_drops_nothing():
+    """A live wave-3/3b invite that finished the old `/exercise` can still open the new demo
+    station (`demo_ask` only requires `roles_chosen`), so the bridge can return `demo` AND
+    `exercises[]`/`proposals[]` together. The drawer must draw both — replacing the section
+    silently threw away content that IS in the response (a screen that lies)."""
+    demo = {
+        'question': 'سؤال المثال الحيّ',
+        'transcript': [{'who': 'user', 'text': 'سؤال المثال الحيّ'},
+                       {'who': 'ai', 'text': 'ردّ الذكاء', 'ai_source': 'ai'}],
+        'documented': {'final_text': 'الإجابة الموثّقة', 'verdict': 'partial',
+                       'notes': 'صحّح المادة', 'proposal': 'اقتراح المثال'},
+    }
+    ex = dict(INVITE_DETAIL_ROW['exercises'][0], question='سؤال التمرين القديم؟')
+    html = _render_invite_detail_body({
+        'demo': demo,
+        'exercises': [ex],
+        'proposals': [{'role': 'graduate', 'label': 'خريج', 'proposal': 'اقتراح الخريج'}],
+    })
+    assert '>المثال</div>' in html and '>التجربة</div>' in html
+    assert html.index('>المثال</div>') < html.index('>التجربة</div>')
+    assert 'سؤال المثال الحيّ' in html and 'اقتراح المثال' in html
+    assert 'سؤال التمرين القديم؟' in html and 'اقتراح الخريج' in html
+    assert 'لم يبدأ المثال.' not in html
 
 
 def test_grouping_keys_on_inviter_user_id_not_name(ctx):
