@@ -82,7 +82,7 @@
             platformPendingTopics: null, platformTopicSegments: null,
             platformOpinions: null, platformOpinionsApproved: null, platformOpinionsAnalysis: null, experts: null,
             market: null, marketDemand: null, trainingInterests: null, foundingLeads: null,
-            invites: null, waitlist: null,
+            invites: null, waitlist: null, founding: null,
             aiAgents: null, dashUsers: null, audit: null, usage: null },
     state: {}, // 'idle' | 'loading' | 'ready' | 'error'
     _started: {}, // منع التحميل المزدوج
@@ -547,7 +547,10 @@
     },
 
     // «اطلب دعوة» — اللي البوّابة المقفولة بتحوّشهم: /api/waitlist -> /api/bridge/waitlist.
-    // الصفّ: {id, name, email, note, status: new|invited|declined, created_at}
+    // الصفّ (موسَّع بمواصفة الموجة ٢ 2026-09-06 §٢): {id, name, email, note|why, role,
+    //   specialty, phone, status: new|invited|declined, created_at}. `note`/`why` كلاهما
+    //   يُقرأ (توافقٌ للخلف: صفّ قديم من قبل الموجة ٢ لسه بيسمّيها `note`، والعقد الجديد
+    //   يسمّيها `why`) — ولا نفترض واحدًا غاب الآخر.
     waitlist: function () {
       return get("/waitlist?limit=200").then(function (r) {
         var list = Array.isArray(r) ? r : ((r && (r.waitlist || r.items || r.rows)) || []);
@@ -560,7 +563,12 @@
               id: w.id || "",
               name: w.name || "",
               email: w.email || "",
-              note: w.note || "",
+              note: w.why || w.note || "",
+              role: w.role || "",
+              roleLabel: w.role ? (ROLE_AR[w.role] || w.role) : "—",
+              specialty: w.specialty || "",
+              specialtyLabel: w.specialty ? (SPECIALTY_AR[w.specialty] || w.specialty) : "—",
+              phone: w.phone || "",
               status: w.status || "new",
               when: relTime(at) || arDate(at),
               at: at ? (Date.parse(at) || 0) : 0,
@@ -569,6 +577,19 @@
         };
       }).catch(function (e) {
         if (e && e.status === 404) { EP.data.waitlist = { rows: [], count: 0, missing: true }; return; }
+        throw e;
+      });
+    },
+
+    // «باب المؤسسين» — مفتاح مفتوح/مقفول (مواصفة الموجة ٢ 2026-09-06 م٣): /api/settings/founding
+    // -> جسر المنصة /api/bridge/settings/founding -> {open: bool, updated_at}. لا FOUNDING_DEADLINE
+    // بعد اليوم — الافتراض عند المنصة نفسها «مفتوح»، وهنا بنعرض اللي راجع فعلًا بلا افتراضٍ محليّ:
+    // 404 (الجسر لسه ما نزلش) يُعرض «—» مش «مفتوح» ولا «مقفول» — القاعدة نفسها في كل شاشة هنا.
+    founding: function () {
+      return get("/settings/founding").then(function (r) {
+        EP.data.founding = { open: !!(r && r.open), updated_at: (r && r.updated_at) || "", missing: false };
+      }).catch(function (e) {
+        if (e && e.status === 404) { EP.data.founding = { open: null, missing: true }; return; }
         throw e;
       });
     },
@@ -2125,8 +2146,24 @@
   // سحب دعوة: الرمز يبطل. اللي سجّل بالفعل عنده حساب وما بيتمسّش — ده باب تسجيل، مش حساب.
   EP.revokeInvite = function (inv, after) {
     post("/invites/" + encodeURIComponent(inv.id) + "/revoke", {})
-      .then(function () { note("اتسحبت دعوة " + (inv.email || "")); EP.reload("invites", after); })
+      .then(function () { note("اتسحبت دعوة " + (inv.email || inv.name || "بلا اسم")); EP.reload("invites", after); })
       .catch(function (e) { quietToast((e && e.message) || "تعذّر سحب الدعوة"); if (after) after(); });
+  };
+
+  // قلب «باب المؤسسين» — مفتاح واحد في db.settings على المنصة (مواصفة الموجة ٢ م٣).
+  // ⛔ لا عدّ مؤسسين معروض هنا ولا هناك: القرار مقفول (م٤) — فقط مفتوح/مقفول.
+  EP.setFounding = function (open, after) {
+    post("/settings/founding", { open: !!open })
+      .then(function () {
+        note(open ? "باب المؤسسين اتفتح" : "باب المؤسسين اتقفل");
+        EP.reload("founding", after);
+      })
+      .catch(function (e) {
+        quietToast(e && e.status === 404
+          ? "مسار باب المؤسسين لسه ما اتنشرش على المنصة"
+          : ((e && e.message) || "تعذّر تغيير حالة الباب"));
+        if (after) after();
+      });
   };
 
   // تحويل صفٍّ من قائمة الانتظار لدعوة بضغطة — الاسم والبريد بيتاخدوا من الصفّ على المنصة،
@@ -2675,7 +2712,7 @@
                 notifications: null, goalsAdvisor: null, tutorials: null, platformTopics: null, platformTopicsAnalysis: null,
                 platformPendingTopics: null, platformTopicSegments: null, platformOpinions: null,
                 market: null, marketDemand: null, trainingInterests: null, foundingLeads: null,
-                invites: null, waitlist: null,
+                invites: null, waitlist: null, founding: null,
                 aiAgents: null, dashUsers: null, audit: null, usage: null };
     EP.state = {};
     window.location.reload();

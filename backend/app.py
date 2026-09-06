@@ -2921,24 +2921,33 @@ def invites_list():
 @token_required
 @roles_required('admin', 'employee')
 def invite_create():
-    """إنشاء دعوةٍ لبريدٍ واحد — والجسر بيرجّع الرابط الجاهز للنسخ.
+    """إنشاء دعوةٍ — والجسر بيرجّع الرابط الجاهز للنسخ.
 
-    البريد بيتطهّر هنا (قصّ + lowercase) بنفس تطهير المنصة، عشان «Ali@x.com» و«ali@x.com»
-    ما يوصلوش للفهرس الفريد كصفّين ويرجع تصادمٌ يقرأه المؤسس كعطل. التحقق البدائي بيتعمل
-    هنا قبل ما نكلّم المنصة أصلًا — الرفض المحلّي أوضح من ٤٢٢ جايّ من بعيد."""
+    مواصفة الموجة ٢ (2026-09-06 م٢): الاسم لازم (حرفين على الأقل)، والإيميل **اختياري** —
+    المدعوّ بلا إيميل بيكتبه بنفسه في أول محطة من رحلة الدعوة على المنصة، فيُربط بالدعوة
+    هناك. البريد لو اتبعت بيتطهّر هنا (قصّ + lowercase) بنفس تطهير المنصة، عشان «Ali@x.com»
+    و«ali@x.com» ما يوصلوش للفهرس الفريد كصفّين ويرجع تصادمٌ يقرأه المؤسس كعطل. التحقق
+    البدائي بيتعمل هنا قبل ما نكلّم المنصة أصلًا — الرفض المحلّي أوضح من ٤٢٢ جايّ من بعيد.
+    ⛔ الإيميل الفاضي ما بيتبعتش كمفتاح `email` أصلًا (مش سلسلة فاضية) — الفهرس الفريد على
+    المنصة جزئي (`partialFilterExpression: {email: {$type:"string"}}`)، وإرسال '' بيحوّلها
+    سلسلة فعلًا فيتصادم أوّل دعوتين بلا إيميل بدل ما يُسمح بيهم."""
     body = request.json or {}
+    name = (body.get('name') or '').strip()[:120]
+    if len(name) < 2:
+        return jsonify({'error': 'اكتب الاسم (حرفين على الأقل)'}), 400
     email = (body.get('email') or '').strip().lower()
-    if '@' not in email or email.startswith('@') or email.endswith('@') or len(email) < 5:
-        return jsonify({'error': 'اكتب بريدًا صحيحًا'}), 400
+    if email and ('@' not in email or email.startswith('@') or email.endswith('@') or len(email) < 5):
+        return jsonify({'error': 'اكتب بريدًا صحيحًا أو سيب الخانة فاضية'}), 400
     payload = {
-        'email': email[:255],
-        'name': (body.get('name') or '').strip()[:120],
+        'name': name,
         'note': (body.get('note') or '').strip()[:300],
         'invited_by': _actor_email(),
     }
+    if email:
+        payload['email'] = email[:255]
     resp = _platform_proxy('POST', '/api/bridge/invites', json_body=payload)
     if _resp_ok(resp):
-        _audit('invite.create', target=email, meta={'name': payload['name']})
+        _audit('invite.create', target=(email or name), meta={'name': name, 'has_email': bool(email)})
     return resp
 
 
@@ -2981,6 +2990,31 @@ def waitlist_invite(row_id):
     resp = _platform_proxy('POST', f"/api/bridge/waitlist/{row_id}/invite")
     if _resp_ok(resp):
         _audit('waitlist.invite', target=row_id)
+    return resp
+
+
+# --- «باب المؤسسين» — مفتاح مفتوح/مقفول (مواصفة الموجة ٢ 2026-09-06 م٣) -----------------------
+# لا FOUNDING_DEADLINE بعد النهاردة: صفة «مؤسس» تُمنح ما دام الباب مفتوحًا، والباب مفتاح واحد
+# في db.settings على المنصة (id='founding') يقلبه المؤسس من هنا. القراءة لكل مين شاف شاشة
+# الدعوات (admin/employee)؛ القلب أدمن فقط — زي بقية القرارات اللي بتغيّر سلوك المنصة كلها.
+@app.route('/api/settings/founding', methods=['GET'])
+@token_required
+@roles_required('admin', 'employee')
+def founding_switch_get():
+    return _platform_proxy('GET', '/api/bridge/settings/founding')
+
+
+@app.route('/api/settings/founding', methods=['POST'])
+@token_required
+@roles_required('admin')
+def founding_switch_set():
+    body = request.json or {}
+    if 'open' not in body:
+        return jsonify({'error': 'أرسل open كـ true/false'}), 400
+    open_flag = bool(body.get('open'))
+    resp = _platform_proxy('POST', '/api/bridge/settings/founding', json_body={'open': open_flag})
+    if _resp_ok(resp):
+        _audit('settings.founding', target='founding', meta={'open': open_flag})
     return resp
 
 

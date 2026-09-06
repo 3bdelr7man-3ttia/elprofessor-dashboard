@@ -15,12 +15,18 @@ these routes are THIN proxies, and that is exactly why they need pinning:
   4. the email is sanitized HERE (trim + lowercase) before it can reach the platform's unique
      index as a second row for the same person,
   5. a bad email is refused BEFORE the platform is called at all,
+  5b. wave 2 (2026-09-06 م٢): the NAME is required (≥2 chars) and the email is OPTIONAL — a
+     name-only invite sends NO `email` key at all (the platform's unique index is partial on
+     `email: {$type: "string"}`; an empty string IS a string and would collide the first two
+     name-less invites),
+  5c. «باب المؤسسين» (م٣): GET open to staff, POST admin-only, audited only on success,
   6. revoke / waitlist-invite send NO invented body — an extra key is swallowed silently by
      the platform (as `admin_note` was on market close) and vanishes without a trace,
   7. the shared secret travels as an outbound header and never reaches the browser.
 
 The platform is stubbed at the `requests` layer — no network, no live platform needed.
 """
+import json
 import os
 import tempfile
 
@@ -181,23 +187,61 @@ def test_create_forwards_email_name_and_the_actor(ctx):
 def test_the_link_the_platform_returns_reaches_the_browser(ctx):
     """The founder sends the link himself on WhatsApp — if it does not survive the proxy the
     whole desk is decorative."""
-    body = ctx['client'].post('/api/invites', json={'email': 'new@example.com'},
+    body = ctx['client'].post('/api/invites', json={'email': 'new@example.com', 'name': 'جديد'},
                               headers=ctx['admin']).get_json()
     assert body['link'] == 'https://app.example.net/invite/TOK'
 
 
 def test_email_is_trimmed_and_lowercased_before_the_platform_sees_it(ctx):
     """Two rows for one human is what an un-sanitized email costs at a unique index."""
-    ctx['client'].post('/api/invites', json={'email': '  Ali@Example.COM  '}, headers=ctx['admin'])
+    ctx['client'].post('/api/invites', json={'email': '  Ali@Example.COM  ', 'name': 'علي'},
+                       headers=ctx['admin'])
     assert ctx['sent'][-1]['json']['email'] == 'ali@example.com'
 
 
 def test_a_bad_email_is_refused_here_and_never_reaches_the_platform(ctx):
     before = len(ctx['sent'])
-    for bad in ('', '   ', 'nope', 'a@', '@b.com', 'a@b'):
-        r = ctx['client'].post('/api/invites', json={'email': bad}, headers=ctx['admin'])
+    for bad in ('nope', 'a@', '@b.com', 'a@b'):
+        r = ctx['client'].post('/api/invites', json={'email': bad, 'name': 'جديد'},
+                               headers=ctx['admin'])
         assert r.status_code == 400, bad
     assert len(ctx['sent']) == before      # refused HERE, not by the platform
+
+
+# ------------------------------------------------- wave 2 (م٢): name required, email optional
+
+def test_a_name_only_invite_is_created_and_sends_no_email_key_at_all(ctx):
+    """The platform's unique index on `email` is PARTIAL (`{email: {$type: "string"}}`). An
+    empty string is a string: send `email: ''` and the SECOND name-only invite collides with
+    the first. So the key must be absent — not empty, not null — for every blank spelling."""
+    for blank in ({'name': 'علي'}, {'name': 'علي', 'email': ''}, {'name': 'علي', 'email': '   '},
+                  {'name': 'علي', 'email': None}):
+        r = ctx['client'].post('/api/invites', json=blank, headers=ctx['admin'])
+        assert r.status_code == 200, blank
+        call = ctx['sent'][-1]
+        assert call['method'] == 'POST' and call['path'] == '/api/bridge/invites'
+        assert 'email' not in call['json'], blank
+        assert call['json']['name'] == 'علي'
+        assert call['json']['invited_by'] == 'admin@test.com'
+
+
+def test_a_name_only_invite_is_audited_by_name(ctx):
+    ctx['client'].post('/api/invites', json={'name': 'علي'}, headers=ctx['admin'])
+    rows = _audits('invite.create')
+    assert len(rows) == 1
+    assert rows[0].target == 'علي'
+    assert json.loads(rows[0].meta_json) == {'name': 'علي', 'has_email': False}
+
+
+def test_a_short_or_missing_name_is_refused_here_and_never_reaches_the_platform(ctx):
+    before = len(ctx['sent'])
+    for body in ({}, {'name': ''}, {'name': ' '}, {'name': 'x'}, {'name': ' x '},
+                 {'email': 'new@example.com'}, {'email': 'new@example.com', 'name': 'x'}):
+        r = ctx['client'].post('/api/invites', json=body, headers=ctx['admin'])
+        assert r.status_code == 400, body
+        assert 'الاسم' in r.get_json()['error']
+    assert len(ctx['sent']) == before
+    assert _audits('invite.create') == []
 
 
 def test_creating_an_invite_is_audited(ctx):
@@ -213,7 +257,8 @@ def test_a_rejected_creation_is_not_audited(ctx):
     """A duplicate email 409s on the platform — an audit row for a write that never happened
     turns the log into fiction."""
     ctx['replies'][('POST', '/api/bridge/invites')] = FakeResp(409, {'detail': 'البريد مدعوٌّ سلفًا'})
-    r = ctx['client'].post('/api/invites', json={'email': 'dup@example.com'}, headers=ctx['admin'])
+    r = ctx['client'].post('/api/invites', json={'email': 'dup@example.com', 'name': 'جديد'},
+                           headers=ctx['admin'])
     assert r.status_code == 409
     assert r.get_json()['error'] == 'البريد مدعوٌّ سلفًا'
     assert _audits('invite.create') == []
@@ -266,10 +311,12 @@ def test_every_route_requires_authentication(ctx):
     """An invite token creates an ACCOUNT. Anonymous must never read one or mint one."""
     before = len(ctx['sent'])
     assert ctx['client'].get('/api/invites').status_code in (401, 403)
-    assert ctx['client'].post('/api/invites', json={'email': 'x@y.com'}).status_code in (401, 403)
+    assert ctx['client'].post('/api/invites', json={'email': 'x@y.com', 'name': 'جديد'}).status_code in (401, 403)
     assert ctx['client'].post('/api/invites/inv-1/revoke').status_code in (401, 403)
     assert ctx['client'].get('/api/waitlist').status_code in (401, 403)
     assert ctx['client'].post('/api/waitlist/w-1/invite').status_code in (401, 403)
+    assert ctx['client'].get('/api/settings/founding').status_code in (401, 403)
+    assert ctx['client'].post('/api/settings/founding', json={'open': False}).status_code in (401, 403)
     assert len(ctx['sent']) == before
 
 
@@ -277,19 +324,75 @@ def test_admin_and_employee_may_work_the_desk(ctx):
     for who in ('admin', 'emp'):
         assert ctx['client'].get('/api/invites', headers=ctx[who]).status_code == 200
         assert ctx['client'].get('/api/waitlist', headers=ctx[who]).status_code == 200
-        assert ctx['client'].post('/api/invites', json={'email': 'a@b.com'},
+        assert ctx['client'].post('/api/invites', json={'email': 'a@b.com', 'name': 'جديد'},
                                   headers=ctx[who]).status_code == 200
 
 
 def test_a_non_staff_role_is_refused_and_never_reaches_the_platform(ctx):
     before = len(ctx['sent'])
     assert ctx['client'].get('/api/invites', headers=ctx['trainer']).status_code == 403
-    assert ctx['client'].post('/api/invites', json={'email': 'a@b.com'},
+    assert ctx['client'].post('/api/invites', json={'email': 'a@b.com', 'name': 'جديد'},
                               headers=ctx['trainer']).status_code == 403
     assert ctx['client'].post('/api/invites/inv-1/revoke', headers=ctx['trainer']).status_code == 403
     assert ctx['client'].get('/api/waitlist', headers=ctx['trainer']).status_code == 403
     assert ctx['client'].post('/api/waitlist/w-1/invite', headers=ctx['trainer']).status_code == 403
+    assert ctx['client'].get('/api/settings/founding', headers=ctx['trainer']).status_code == 403
+    assert ctx['client'].post('/api/settings/founding', json={'open': False},
+                              headers=ctx['trainer']).status_code == 403
     assert len(ctx['sent']) == before
+
+
+# ------------------------------------------------------- «باب المؤسسين» (wave 2, م٣) switch
+
+def test_founding_switch_read_forwards_to_the_bridge_and_is_open_to_staff(ctx):
+    ctx['replies'][('GET', '/api/bridge/settings/founding')] = FakeResp(
+        200, {'open': True, 'updated_at': '2026-09-06T10:00:00'})
+    for who in ('admin', 'emp'):
+        r = ctx['client'].get('/api/settings/founding', headers=ctx[who])
+        assert r.status_code == 200, who
+        call = ctx['sent'][-1]
+        assert call['method'] == 'GET' and call['path'] == '/api/bridge/settings/founding'
+        assert r.get_json() == {'open': True, 'updated_at': '2026-09-06T10:00:00'}
+
+
+def test_founding_switch_flip_is_admin_only_and_forwards_a_bool(ctx):
+    """A platform-wide policy switch: an employee may SEE the door, only an admin flips it."""
+    ctx['replies'][('POST', '/api/bridge/settings/founding')] = FakeResp(
+        200, {'open': False, 'updated_at': '2026-09-06T10:00:00'})
+    before = len(ctx['sent'])
+    assert ctx['client'].post('/api/settings/founding', json={'open': False},
+                              headers=ctx['emp']).status_code == 403
+    assert len(ctx['sent']) == before
+    r = ctx['client'].post('/api/settings/founding', json={'open': False}, headers=ctx['admin'])
+    assert r.status_code == 200
+    call = ctx['sent'][-1]
+    assert call['method'] == 'POST' and call['path'] == '/api/bridge/settings/founding'
+    assert call['json'] == {'open': False}
+    assert r.get_json()['open'] is False
+
+
+def test_founding_switch_refuses_a_body_without_open_before_the_platform(ctx):
+    before = len(ctx['sent'])
+    for body in ({}, {'opened': True}, {'value': False}):
+        r = ctx['client'].post('/api/settings/founding', json=body, headers=ctx['admin'])
+        assert r.status_code == 400, body
+    assert len(ctx['sent']) == before
+    assert _audits('settings.founding') == []
+
+
+def test_founding_switch_is_audited_only_when_the_platform_accepted_it(ctx):
+    ctx['replies'][('POST', '/api/bridge/settings/founding')] = FakeResp(500, {'detail': 'boom'})
+    assert ctx['client'].post('/api/settings/founding', json={'open': False},
+                              headers=ctx['admin']).status_code == 500
+    assert _audits('settings.founding') == []
+    ctx['replies'][('POST', '/api/bridge/settings/founding')] = FakeResp(
+        200, {'open': False, 'updated_at': '2026-09-06T10:00:00'})
+    assert ctx['client'].post('/api/settings/founding', json={'open': False},
+                              headers=ctx['admin']).status_code == 200
+    rows = _audits('settings.founding')
+    assert len(rows) == 1
+    assert rows[0].target == 'founding'
+    assert rows[0].actor_email == 'admin@test.com'
 
 
 def test_the_desk_has_no_delete(ctx):
