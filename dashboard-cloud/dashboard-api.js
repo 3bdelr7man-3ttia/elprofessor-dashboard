@@ -301,6 +301,10 @@
   var STAGE_AR = {
     pending: "لسه ما فتحش", opened: "فتح", roles_chosen: "اختار صفته", pain_seen: "قرأ",
     exercised: "جرّب", declared: "أقرّ", registered: "سجّل ✓", expired: "انتهت", revoked: "مسحوبة",
+    // الموجة ٤ (ع٤/ح٥): محطّتان جديدتان في آلة الحالات — `awaiting_approval` قبل `pending`،
+    // و`rejected` ميّتة كـ`revoked`. بلا اسمٍ هنا كان عمود «المحطة» وعنوان الدرج بيطبعوا
+    // الاسم اللاتيني الخام (نفس فخّ «pending بالإنجليزي» المكتوب في index.html).
+    awaiting_approval: "قيد الموافقة", rejected: "مرفوضة",
   };
   // رتبة المحطة في آلة الحالات (routes/invite_journey.py) — لحساب «بلغ أو تجاوز». المحطتان
   // النهائيتان expired/revoked بلا رتبة هنا عمدًا: الجسر بيستبدل بيهم المحطة الأصلية عند
@@ -519,6 +523,15 @@
               // المؤسس (user_id غائب) بيتجمّع تحت تسميته الثابتة كما كان.
               invitedByUserId: inviterObj ? (inviterObj.user_id || "") : "",
               invitedByVideo: inviterObj ? (inviterObj.video_url || "") : "",
+              // الأجيال والموافقة (الموجة ٤ ع٤): دعوة المؤسس جيلها ١؛ دعوة عضو = جيل داعيه + ١.
+              // صفّ قديمٌ من قبل هذا الملحق ⇒ «—» لا صفرًا مختلقًا.
+              generation: (i.generation != null) ? i.generation : null,
+              // ملاحظة الرفض — يقرؤها الداعي كما كتبها الأدمن في طابور الموافقة.
+              approvalNote: i.approval_note || "",
+              // «المثال» — نفس الوثيقة (`demo`) التي يرجعها التفصيل، والقائمة تقرأ منها **وسمًا
+              // فقط** (طلب توثيق من خبير)؛ التفصيل الكامل يبقى مسؤولية درج التفصيل وحده.
+              demo: i.demo || null,
+              docRequested: !!(i.demo && i.demo.documented && i.demo.documented.mode === "request"),
               // الرابط اختياري: بيبان لو الجسر بعته مع الصفّ، وما بيتبنيش هنا لو ما بعتوش.
               link: i.link || i.invite_url || "",
               opened: !!i.opened_at || st === "opened" || st === "registered",
@@ -619,11 +632,14 @@
           // إعدادات الدعوة، ونفس قاعدة «غياب على المنصة لسه ⇒ فاضي هنا مش صفر مختلَق».
           platform_video_url: (r && r.platform_video_url) || "",
           member_invite_quota: (r && r.member_invite_quota != null) ? r.member_invite_quota : null,
+          // الموافقة من الجيل (الموجة ٤ ع٤): افتراضها ٢ على المنصة — هنا «—» لا رقمًا مختلقًا
+          // لو الجسر لسه ما رجّعش الحقل، ونفس الشاشة بترسمها ٢ فقط لمّا تبقى فعلًا القيمة.
+          invite_approval_from_generation: (r && r.invite_approval_from_generation != null) ? r.invite_approval_from_generation : null,
           missing: false,
         };
       }).catch(function (e) {
         if (e && e.status === 404) {
-          EP.data.inviteSettings = { welcome_video_url: "", platform_video_url: "", member_invite_quota: null, missing: true };
+          EP.data.inviteSettings = { welcome_video_url: "", platform_video_url: "", member_invite_quota: null, invite_approval_from_generation: null, missing: true };
           return;
         }
         throw e;
@@ -2202,6 +2218,22 @@
     post("/invites/" + encodeURIComponent(inv.id) + "/revoke", {})
       .then(function () { note("اتسحبت دعوة " + (inv.email || inv.name || "بلا اسم")); EP.reload("invites", after); })
       .catch(function (e) { quietToast((e && e.message) || "تعذّر سحب الدعوة"); if (after) after(); });
+  };
+
+  // اعتماد/رفض دعوة قيد الموافقة (الموجة ٤ ع٤): طابور «دعوات بانتظار الموافقة». أدمن فقط على
+  // الخادم — موظف بيضغط بيرجعله ٤٠٣ بنفس نمط «باب المؤسسين»، مش زرّ مخفيّ هنا.
+  EP.approveInvite = function (id, after) {
+    post("/invites/" + encodeURIComponent(id) + "/approve", {})
+      .then(function () { note("اعتُمدت — الرابط يعمل الآن"); EP.reload("invites", after); })
+      .catch(function (e) { quietToast((e && e.message) || "تعذّر اعتماد الدعوة"); if (after) after(); });
+  };
+
+  // ملاحظة الرفض اختيارية — بتوصل الداعي كما كتبها الأدمن هنا حرفيًّا؛ الحصّة ما بتتخصّمش
+  // من دعوة مرفوضة (قرارٌ على المنصة، لا هنا).
+  EP.rejectInvite = function (id, noteText, after) {
+    post("/invites/" + encodeURIComponent(id) + "/reject", { note: noteText || "" })
+      .then(function () { note("رُفضت"); EP.reload("invites", after); })
+      .catch(function (e) { quietToast((e && e.message) || "تعذّر رفض الدعوة"); if (after) after(); });
   };
 
   // قلب «باب المؤسسين» — مفتاح واحد في db.settings على المنصة (مواصفة الموجة ٢ م٣).

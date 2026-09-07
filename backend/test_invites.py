@@ -696,6 +696,107 @@ def test_the_desk_has_no_delete(ctx):
     assert ctx['client'].post('/api/waitlist', json={}, headers=ctx['admin']).status_code == 405
 
 
+# -------------------------------------------------- الأجيال والموافقة (الموجة ٤ ع٤) — proxies
+
+def test_invite_approve_forwards_to_the_right_bridge_path_and_is_admin_only(ctx):
+    """اعتماد دعوة قيد الموافقة — نفس نمط `revoke` بالحرف: بلا جسمٍ مُرسَل، وأدمن فقط (أدقّ
+    من قراءة القائمة نفسها — موظف يقدر يشوف الطابور لكن ما يعتمدش)."""
+    before = len(ctx['sent'])
+    assert ctx['client'].post('/api/invites/inv-9/approve', headers=ctx['emp']).status_code == 403
+    assert len(ctx['sent']) == before
+    r = ctx['client'].post('/api/invites/inv-9/approve', headers=ctx['admin'])
+    assert r.status_code == 200
+    call = ctx['sent'][-1]
+    assert call['method'] == 'POST'
+    assert call['path'] == '/api/bridge/invites/inv-9/approve'
+    assert call['json'] is None
+
+
+def test_invite_approve_is_audited_only_on_success(ctx):
+    ctx['replies'][('POST', '/api/bridge/invites/inv-9/approve')] = FakeResp(404, {'detail': 'مش موجودة'})
+    assert ctx['client'].post('/api/invites/inv-9/approve', headers=ctx['admin']).status_code == 404
+    assert _audits('invite.approve') == []
+    ctx['replies'][('POST', '/api/bridge/invites/inv-9/approve')] = FakeResp(200, {'ok': True})
+    assert ctx['client'].post('/api/invites/inv-9/approve', headers=ctx['admin']).status_code == 200
+    rows = _audits('invite.approve')
+    assert len(rows) == 1
+    assert rows[0].target == 'inv-9'
+    assert rows[0].actor_email == 'admin@test.com'
+
+
+def test_invite_reject_forwards_note_when_present_and_omits_body_when_absent(ctx):
+    """ملاحظة الرفض تصل الداعي كما كُتبت — غيابها يعني بلا جسمٍ مُرسَل (نفس قاعدة `revoke`:
+    مفتاحٌ فاضٍ لا يُخترع، وامتدادٌ نصّيّ محلّيّ (٣٠٠ حرف) قبل ما نكلّم المنصة أصلًا."""
+    r = ctx['client'].post('/api/invites/inv-9/reject', json={}, headers=ctx['admin'])
+    assert r.status_code == 200
+    assert ctx['sent'][-1]['json'] is None
+    r2 = ctx['client'].post('/api/invites/inv-9/reject', json={'note': '  الاسم غير مطابق  '},
+                            headers=ctx['admin'])
+    assert r2.status_code == 200
+    assert ctx['sent'][-1]['path'] == '/api/bridge/invites/inv-9/reject'
+    assert ctx['sent'][-1]['json'] == {'note': 'الاسم غير مطابق'}
+
+
+def test_invite_reject_is_admin_only(ctx):
+    before = len(ctx['sent'])
+    assert ctx['client'].post('/api/invites/inv-9/reject', json={'note': 'x'},
+                              headers=ctx['emp']).status_code == 403
+    assert len(ctx['sent']) == before
+
+
+def test_invite_reject_is_audited_only_on_success(ctx):
+    ctx['replies'][('POST', '/api/bridge/invites/inv-9/reject')] = FakeResp(500, {'detail': 'boom'})
+    assert ctx['client'].post('/api/invites/inv-9/reject', json={'note': 'سبب'},
+                              headers=ctx['admin']).status_code == 500
+    assert _audits('invite.reject') == []
+    ctx['replies'][('POST', '/api/bridge/invites/inv-9/reject')] = FakeResp(200, {'ok': True})
+    assert ctx['client'].post('/api/invites/inv-9/reject', json={'note': 'سبب'},
+                              headers=ctx['admin']).status_code == 200
+    rows = _audits('invite.reject')
+    assert len(rows) == 1
+    assert rows[0].target == 'inv-9'
+    assert json.loads(rows[0].meta_json) == {'note': 'سبب'}
+
+
+def test_invite_approve_and_reject_require_authentication(ctx):
+    before = len(ctx['sent'])
+    assert ctx['client'].post('/api/invites/inv-9/approve').status_code in (401, 403)
+    assert ctx['client'].post('/api/invites/inv-9/reject').status_code in (401, 403)
+    assert len(ctx['sent']) == before
+
+
+# -------------------------------------------- إعداد «الموافقة من الجيل» (الموجة ٤ ع٤/ح٥)
+
+def test_invite_settings_write_forwards_approval_generation_alone(ctx):
+    """يسافر بمفتاحه الخاص — نفس قاعدة كل حقل في هذا المسار: غيابه يعني «متلمسوش»."""
+    ctx['replies'][('POST', '/api/bridge/settings/invites')] = FakeResp(
+        200, {'welcome_video_url': None, 'member_invite_quota': None,
+              'invite_approval_from_generation': 3, 'founder_name': None,
+              'updated_at': '2026-09-07T10:00:00'})
+    ctx['client'].post('/api/settings/invites', json={'invite_approval_from_generation': 3},
+                       headers=ctx['admin'])
+    call = ctx['sent'][-1]
+    assert call['method'] == 'POST' and call['path'] == '/api/bridge/settings/invites'
+    assert call['json'] == {'invite_approval_from_generation': 3}
+
+
+def test_invite_settings_rejects_a_bad_approval_generation_before_the_platform(ctx):
+    before = len(ctx['sent'])
+    for bad in ('abc', -1, 0, 3.5, True):
+        r = ctx['client'].post('/api/settings/invites', json={'invite_approval_from_generation': bad},
+                               headers=ctx['admin'])
+        assert r.status_code == 400, bad
+    assert len(ctx['sent']) == before
+
+
+def test_invite_settings_approval_generation_write_is_admin_only(ctx):
+    before = len(ctx['sent'])
+    r = ctx['client'].post('/api/settings/invites', json={'invite_approval_from_generation': 2},
+                           headers=ctx['emp'])
+    assert r.status_code == 403
+    assert len(ctx['sent']) == before
+
+
 # ------------------------------------------------------------------------------ the secret
 
 def test_secret_is_server_side_only(ctx):
@@ -876,3 +977,238 @@ def test_drawer_declaration_prints_a_string_terms_version_not_a_dash():
     assert 'money(decl.terms_version)' not in line
     assert "decl.terms_version!=null?String(decl.terms_version):'—'" in line
     assert 'esc(' in line  # still escaped — a version tag comes from the platform, not trusted HTML
+
+
+# ------------------------------------------------- الأجيال والموافقة — طابور الشاشة (الموجة ٤ ع٤/ح٥)
+# «مكتوبٌ صحيحًا وبلا طريقٍ للشاشة»: الحقول اللي بروكسياتنا فوق بتعدّيها بلا رأيٍ، لازم لها سطرٌ
+# حقيقي في `index.html` يرسمها — وإلا رقمٌ محفوظ يترسم «—» صامتًا.
+
+def test_approval_queue_panel_is_wired_into_the_invites_screen():
+    with open(INDEX_HTML, encoding='utf-8') as fh:
+        src = fh.read()
+    assert 'approvalQueuePanel()' in src
+    assert 'wireApprovalQueue(root)' in src
+    assert 'دعوات بانتظار الموافقة' in src
+    assert 'لا دعوات بانتظار الموافقة.' in src
+
+
+def test_approval_queue_reads_only_awaiting_approval_rows_from_the_existing_invites_data():
+    """لا نداءَ جسرٍ جديدًا للطابور — نفس صفوف شاشة الدعوات مفلترة هنا، وإلا صار تطبيقين
+    لعدّ الصفّ الواحد (فخّ الملف: تطبيقان لمنطقٍ فيه فخاخ = رقمٌ غلط لا تستٌ أحمر)."""
+    with open(INDEX_HTML, encoding='utf-8') as fh:
+        src = fh.read()
+    assert "i.status==='awaiting_approval'" in src
+
+
+def test_approval_queue_calls_ep_approve_and_reject_with_the_row_id():
+    with open(INDEX_HTML, encoding='utf-8') as fh:
+        src = fh.read()
+    assert 'EP.approveInvite(btn.dataset.aqId,invAgain)' in src
+    assert 'EP.rejectInvite(id,noteVal,invAgain)' in src
+
+
+def test_ep_approve_and_reject_hit_the_right_proxy_paths():
+    api_path = os.path.join(os.path.dirname(__file__), '..', 'dashboard-cloud', 'dashboard-api.js')
+    with open(api_path, encoding='utf-8') as fh:
+        api_src = fh.read()
+    assert '"/invites/" + encodeURIComponent(id) + "/approve"' in api_src
+    assert '"/invites/" + encodeURIComponent(id) + "/reject"' in api_src
+    assert 'EP.approveInvite' in api_src and 'EP.rejectInvite' in api_src
+
+
+def test_invite_settings_panel_has_an_approval_generation_field_and_reads_it_from_ep_data():
+    with open(INDEX_HTML, encoding='utf-8') as fh:
+        src = fh.read()
+    assert 'invSetApprovalGen' in src
+    assert 'D.invite_approval_from_generation' in src
+    assert 'data.invite_approval_from_generation=ag' in src
+    api_path = os.path.join(os.path.dirname(__file__), '..', 'dashboard-cloud', 'dashboard-api.js')
+    with open(api_path, encoding='utf-8') as fh:
+        api_src = fh.read()
+    assert 'invite_approval_from_generation' in api_src
+
+
+def test_list_row_and_drawer_read_generation_from_the_row():
+    with open(INDEX_HTML, encoding='utf-8') as fh:
+        src = fh.read()
+    assert 'i.generation!=null?money(i.generation):' in src
+    api_path = os.path.join(os.path.dirname(__file__), '..', 'dashboard-cloud', 'dashboard-api.js')
+    with open(api_path, encoding='utf-8') as fh:
+        api_src = fh.read()
+    assert 'generation: (i.generation != null) ? i.generation : null' in api_src
+
+
+def test_list_row_shows_a_document_request_tag_when_the_invitee_asked_an_expert():
+    with open(INDEX_HTML, encoding='utf-8') as fh:
+        src = fh.read()
+    assert 'i.docRequested' in src
+    assert '>طلب توثيق<' in src
+    api_path = os.path.join(os.path.dirname(__file__), '..', 'dashboard-cloud', 'dashboard-api.js')
+    with open(api_path, encoding='utf-8') as fh:
+        api_src = fh.read()
+    assert "documented.mode === \"request\"" in api_src
+
+
+DEMO_REQUEST_DETAIL = {
+    'demo': {
+        'question': 'ما مدة الطعن على قرار فصل تعسفي؟',
+        'transcript': [
+            {'who': 'ai', 'text': 'الحكم العملي أولًا... ⚠️ إجابة أوّلية', 'ai_source': 'live'},
+            {'who': 'user', 'text': 'خليها أدق'},
+            {'who': 'ai', 'text': 'النصّ الكامل بعد التعديل — كما تركه المدعوّ.', 'ai_source': 'live'},
+        ],
+        'documented': {'mode': 'request', 'notes': 'يراجع لي بند التقادم', 'proposal': 'اقتراح المثال'},
+    },
+    'exercises': [], 'proposals': [],
+}
+
+
+def test_drawer_shows_a_document_request_instead_of_the_documented_answer():
+    """ع١/ح٥: طلب التوثيق يحلّ محلّ «الإجابة الموثَّقة» في القسم — آخر ردّ ذكاء كاملًا (لا
+    الفقاعة المقصوصة لـ١٦٠ حرفًا) + ملاحظته للخبير، وبلا سطري «حكمه»/«ما صحّحه» اللذين لا
+    ينطبقان على طلبٍ لم يُحكم عليه بعد."""
+    html = _render_invite_detail_body(DEMO_REQUEST_DETAIL)
+    assert '<b>طلب توثيق من خبير</b> النصّ الكامل بعد التعديل — كما تركه المدعوّ.' in html
+    assert '<b>ملاحظته للخبير</b> يراجع لي بند التقادم' in html
+    assert '<b>اقتراحه</b> اقتراح المثال' in html
+    assert '<b>الإجابة الموثَّقة</b>' not in html
+    assert '<b>حكمه</b>' not in html
+    assert '<b>ما صحّحه</b>' not in html
+
+
+def test_drawer_document_request_notes_absent_reads_as_a_dash():
+    full = dict(DEMO_REQUEST_DETAIL, demo=dict(DEMO_REQUEST_DETAIL['demo'],
+                documented={'mode': 'request'}))
+    html = _render_invite_detail_body(full)
+    assert '<b>ملاحظته للخبير</b> —' in html
+
+
+# ---- الموجة ٤ (ع٤): قيد الموافقة/مرفوضة في القائمة والدرج — الشاشة ما تكدبش ----
+API_JS = os.path.join(os.path.dirname(__file__), '..', 'dashboard-cloud', 'dashboard-api.js')
+
+
+def _api_src():
+    with open(API_JS, encoding='utf-8') as fh:
+        return fh.read()
+
+
+def _index_src():
+    with open(INDEX_HTML, encoding='utf-8') as fh:
+        return fh.read()
+
+
+def test_stage_ar_names_every_stage_the_platform_state_machine_can_return():
+    """`STAGE_AR[stage] || stage` هو خطّ الدفاع الوحيد ضدّ طباعة الاسم اللاتيني في عمود
+    «المحطة» وعنوان الدرج — فكل محطة في routes/invites.py STAGES لازم يكون ليها اسم هنا."""
+    import re
+    api_src = _api_src()
+    assert 'stageLabel: STAGE_AR[stage] || stage' in api_src
+    block = re.search(r'var STAGE_AR = \{(.*?)\};', api_src, flags=re.S).group(1)
+    keys = set(re.findall(r'(\w+):\s*"', block))
+    platform_stages = {'awaiting_approval', 'pending', 'opened', 'roles_chosen', 'pain_seen',
+                       'exercised', 'declared', 'registered', 'expired', 'revoked', 'rejected'}
+    assert platform_stages <= keys, sorted(platform_stages - keys)
+    assert 'awaiting_approval: "قيد الموافقة"' in api_src
+    assert 'rejected: "مرفوضة"' in api_src
+    # الرتبة تستبعدهما عمدًا من العدّادات الخمسة
+    assert 'STAGE_ORDER = { pending: 0' in api_src
+    assert 'awaiting_approval' not in re.search(r'var STAGE_ORDER = \{(.*?)\};', api_src).group(1)
+
+
+def _render_invite_row_and_drawer_actions(row):
+    """Run the REAL `inviteRowHtml` + `inviteActionsHtml` from index.html under node, with the
+    real STAGE_AR/deriveInviteStage from dashboard-api.js feeding `stage`/`stageLabel` exactly
+    like the mapper line does — so the assertion is on what the founder's table draws."""
+    import shutil
+    import subprocess
+    import re
+    node = shutil.which('node')
+    if not node:
+        pytest.skip('node not installed')
+    src = _index_src()
+    api_src = _api_src()
+
+    def fn(name, stop='\n}\n'):
+        start = src.index('function ' + name + '(')
+        return src[start:src.index(stop, start) + len(stop)]
+
+    consts = '\n'.join(re.findall(r'^const INV_(?:STATUS|TERMINAL)=\{.*?\};', src, flags=re.M | re.S))
+    stage_ar = re.search(r'var STAGE_AR = \{.*?\};', api_src, flags=re.S).group(0)
+    derive_start = api_src.index('function deriveInviteStage(')
+    derive = api_src[derive_start:api_src.index('\n  }\n', derive_start) + 5]
+    script = (
+        consts + '\n' + stage_ar + '\n' + derive + '\n'
+        + re.search(r'^function esc\(s\).*$', src, flags=re.M).group(0) + '\n'
+        + 'function money(v){return String(v);}\nfunction svg(){return "";}\nvar invSel=null;\n'
+        + fn('invLinkLive', '\n') + fn('invDeadLinkHtml') + fn('inviteWaText') + fn('inviteRowHtml') + fn('inviteActionsHtml')
+        + 'var i=' + json.dumps(row, ensure_ascii=False) + ';\n'
+        + 'i.stage=deriveInviteStage(i,i.status); i.stageLabel=STAGE_AR[i.stage]||i.stage;\n'
+        + 'process.stdout.write(JSON.stringify({row:inviteRowHtml(i),drawer:inviteActionsHtml(i),stageLabel:i.stageLabel}));'
+    )
+    out = subprocess.run([node, '-e', script], capture_output=True, text=True, timeout=30)
+    assert out.returncode == 0, out.stderr
+    return json.loads(out.stdout)
+
+
+_BASE_ROW = {'id': 'inv-a', 'email': 'a@example.com', 'name': 'أحمد', 'link': 'https://app.elprofessor.net/invite/tok',
+             'when': 'اليوم', 'openedWhen': '', 'regWhen': '', 'note': '', 'rolesLabel': '—', 'specialtyLabel': '—',
+             'daysLeftLabel': 'تنتهي بعد 14 يوم', 'invitedByLabel': 'منى', 'generation': 2, 'docRequested': False,
+             'opened': False, 'registered': False, 'revoked': False, 'approvalNote': ''}
+
+
+def test_awaiting_row_prints_arabic_stage_no_link_no_countdown_and_created_not_sent():
+    r = _render_invite_row_and_drawer_actions(dict(_BASE_ROW, status='awaiting_approval', stage='awaiting_approval'))
+    assert r['stageLabel'] == 'قيد الموافقة'
+    assert 'awaiting_approval' not in r['row'] and 'awaiting_approval' not in r['drawer']
+    assert 'انسخ الرابط' not in r['row'] and 'inv-cp' not in r['row']
+    assert 'قيد الموافقة — الرابط لا يعمل بعد.' in r['row']
+    assert 'تنتهي بعد' not in r['row']
+    assert 'أُنشئت اليوم' in r['row'] and 'اتبعتت' not in r['row']
+    # الدرج: لا نسخ ولا واتساب؛ السطر الصادق محلّهما؛ «سحب» يبقى (دعوة منتظِرة ممكن تتسحب)
+    assert 'ivdCp' not in r['drawer'] and 'ivdWa' not in r['drawer'] and 'wa.me' not in r['drawer']
+    assert 'قيد الموافقة — الرابط لا يعمل بعد.' in r['drawer']
+    assert 'ivdRv' in r['drawer']
+
+
+def test_rejected_row_prints_arabic_stage_the_team_note_and_no_link_countdown_or_revoke():
+    r = _render_invite_row_and_drawer_actions(dict(_BASE_ROW, status='rejected', stage='rejected',
+                                                    approvalNote='مش <خبير> قانوني'))
+    assert r['stageLabel'] == 'مرفوضة'
+    assert 'rejected' not in r['row'] and 'rejected' not in r['drawer']
+    assert 'انسخ الرابط' not in r['row'] and 'inv-cp' not in r['row']
+    assert 'مرفوضة — الرابط لا يعمل.' in r['row']
+    assert '<b>ملاحظة الفريق:</b> مش &lt;خبير&gt; قانوني' in r['row']   # esc() على نصّ الأدمن
+    assert 'تنتهي بعد' not in r['row']
+    assert 'أُنشئت اليوم' in r['row'] and 'اتبعتت' not in r['row']
+    assert 'inv-rv' not in r['row']
+    assert 'ivdCp' not in r['drawer'] and 'ivdWa' not in r['drawer']
+    assert '<b>ملاحظة الفريق:</b> مش &lt;خبير&gt; قانوني' in r['drawer']
+    assert 'ivdRv' not in r['drawer']
+
+
+def test_rejected_row_without_a_note_prints_no_empty_note_label():
+    r = _render_invite_row_and_drawer_actions(dict(_BASE_ROW, status='rejected', stage='rejected', approvalNote=''))
+    assert 'ملاحظة الفريق' not in r['row'] and 'ملاحظة الفريق' not in r['drawer']
+
+
+def test_a_live_pending_row_still_draws_copy_whatsapp_countdown_and_sent_stamp():
+    """الحارس الجديد ما يكسرش الصفّ العادي — الرابط الحيّ لسه بيتنسخ ويتبعت."""
+    r = _render_invite_row_and_drawer_actions(dict(_BASE_ROW, status='pending', stage='pending'))
+    assert r['stageLabel'] == 'لسه ما فتحش'
+    assert 'انسخ الرابط' in r['row'] and 'data-inv-link="https://app.elprofessor.net/invite/tok"' in r['row']
+    assert 'تنتهي بعد 14 يوم' in r['row']
+    assert 'اتبعتت اليوم' in r['row'] and 'أُنشئت' not in r['row']
+    assert 'الرابط لا يعمل' not in r['row']
+    assert 'ivdCp' in r['drawer'] and 'ivdWa' in r['drawer'] and 'wa.me' in r['drawer'] and 'ivdRv' in r['drawer']
+
+
+def test_the_link_gate_is_one_function_shared_by_row_and_drawer():
+    src = _index_src()
+    assert src.count('function invLinkLive(') == 1
+    assert "var copyBtn=invLinkLive(i)?" in src          # الصفّ
+    assert "var live=invLinkLive(i);" in src              # الدرج
+    assert "i.link?('<button" not in src and "i.link?'<button" not in src
+    assert 'awaiting_approval:1,rejected:1' in re.search(r'const INV_TERMINAL=\{.*?\};', src).group(0)
+
+
+import re  # noqa: E402  (used by the gate test above)

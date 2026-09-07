@@ -2976,6 +2976,33 @@ def invite_detail(invite_id):
     return _platform_proxy('GET', f"/api/bridge/invites/{invite_id}")
 
 
+@app.route('/api/invites/<invite_id>/approve', methods=['POST'])
+@token_required
+@roles_required('admin')   # الموافقة قرارٌ ينشّط رابطًا يفتح حسابًا — لا يوظّف
+def invite_approve(invite_id):
+    """اعتماد دعوة جيلها ≥ إعداد الموافقة (الموجة ٤ ع٤/ح٥): بعدها الحالة `pending` والرابط
+    يعمل. بلا جسمٍ مُرسَل — نفس قاعدة `invite_revoke`: العقد ما بيطلب واحدًا."""
+    resp = _platform_proxy('POST', f"/api/bridge/invites/{invite_id}/approve")
+    if _resp_ok(resp):
+        _audit('invite.approve', target=invite_id)
+    return resp
+
+
+@app.route('/api/invites/<invite_id>/reject', methods=['POST'])
+@token_required
+@roles_required('admin')
+def invite_reject(invite_id):
+    """رفض دعوة قيد الموافقة (الموجة ٤ ع٤/ح٥): الحصّة لا تُخصم منها، وملاحظة الرفض — إن
+    كُتبت — يقرؤها الداعي كما كتبها الأدمن هنا حرفيًّا."""
+    body = request.json or {}
+    note = (body.get('note') or '').strip()[:300]
+    resp = _platform_proxy('POST', f"/api/bridge/invites/{invite_id}/reject",
+                           json_body=({'note': note} if note else None))
+    if _resp_ok(resp):
+        _audit('invite.reject', target=invite_id, meta=({'note': note} if note else None))
+    return resp
+
+
 @app.route('/api/waitlist', methods=['GET'])
 @token_required
 @roles_required('admin', 'employee')   # قراءة فقط
@@ -3063,8 +3090,19 @@ def invite_settings_set():
         if quota < 0:
             return jsonify({'error': 'حصّة الدعوات لا تكون سالبة'}), 400
         payload['member_invite_quota'] = quota
+    # الموافقة من الجيل (الموجة ٤ ع٤/ح٥): كل دعوة جيلها ≥ هذا الرقم تُنشأ `awaiting_approval`.
+    # نفس تحقّق الحصّة بالحرف — bool ابن int، و`int(3.5)` بيقصّ صامتًا، فنرفض الاتنين هنا صراحةً.
+    raw_gen = body.get('invite_approval_from_generation')
+    if 'invite_approval_from_generation' in body and raw_gen is not None:
+        if isinstance(raw_gen, bool) or not isinstance(raw_gen, (int, float)) \
+                or (isinstance(raw_gen, float) and not raw_gen.is_integer()):
+            return jsonify({'error': 'الموافقة من الجيل رقم صحيح'}), 400
+        generation = int(raw_gen)
+        if generation < 1:
+            return jsonify({'error': 'الجيل رقم موجب (١ فأكثر)'}), 400
+        payload['invite_approval_from_generation'] = generation
     if not payload:
-        return jsonify({'error': 'أرسل فيديو الترحيب أو فيديو المنصّة أو حصّة الدعوات'}), 400
+        return jsonify({'error': 'أرسل فيديو الترحيب أو فيديو المنصّة أو حصّة الدعوات أو الموافقة من الجيل'}), 400
     resp = _platform_proxy('POST', '/api/bridge/settings/invites', json_body=payload)
     if _resp_ok(resp):
         _audit('settings.invites', target='invites', meta=payload)
