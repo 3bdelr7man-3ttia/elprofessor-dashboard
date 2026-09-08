@@ -173,7 +173,10 @@ def test_the_classifier_survives_a_real_process_boot():
     for value, expected in (('', [True, False]),
                             ('change-me', [False, True]),
                             ('z' * 64, [False, False])):
-        env = dict(os.environ, SECRET_KEY=value, DATABASE_URL='sqlite:///:memory:')
+        # F-021 (٠٩-٠٨): القفل الصارم عاد — هذا التست يقرأ التصنيف لا يختبر الرفض،
+        # فيمرّ بصمّام التشغيل المحلّي؛ الرفض نفسه مُختبَر في test_secret_key_fail_fast.py.
+        env = dict(os.environ, SECRET_KEY=value, DATABASE_URL='sqlite:///:memory:',
+                   ALLOW_WEAK_SECRET_KEY='1')
         out = subprocess.run([sys.executable, '-c', code], cwd=backend, env=env,
                              capture_output=True, text=True, timeout=180)
         assert out.returncode == 0, out.stderr[-800:]

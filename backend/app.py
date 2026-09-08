@@ -71,6 +71,16 @@ def _classify_secret_key(value):
 
 _secret_key = os.environ.get('SECRET_KEY')
 SECRET_KEY_IS_EPHEMERAL, SECRET_KEY_IS_PLACEHOLDER = _classify_secret_key(_secret_key)
+# F-021 (٠٩-٠٨): المؤسس أكّد وجود SECRET_KEY قويّ في Coolify ⇒ القفل الصارم عاد: مفتاحٌ غائب
+# أو نصّ الريبو الافتراضي = رفض الإقلاع بصوت، لا جلساتٌ تتقطّع بصمت مع كل نشر.
+# صمّام واحد للتشغيل المحلّي/الطوارئ فقط: ALLOW_WEAK_SECRET_KEY=1 (لا يُضبط في الإنتاج أبدًا).
+if (SECRET_KEY_IS_EPHEMERAL or SECRET_KEY_IS_PLACEHOLDER) and \
+        (os.environ.get('ALLOW_WEAK_SECRET_KEY') or '').strip() != '1':
+    raise SystemExit(
+        "FATAL: SECRET_KEY is missing or a placeholder. Set a 64-char random secret in the "
+        "environment (python -c 'import secrets;print(secrets.token_hex(32))'). "
+        "For local runs only you may set ALLOW_WEAK_SECRET_KEY=1."
+    )
 if SECRET_KEY_IS_EPHEMERAL:
     logger.error(
         "SECRET_KEY is not set — generating an EPHEMERAL key. Every redeploy invalidates "
