@@ -1958,9 +1958,30 @@ def _platform_proxy(method, path, params=None, json_body=None, timeout=12):
     return jsonify(r.json() if r.content else {})
 
 
-def _platform_create_course(c):
+# F-134/ب (قرار المؤسس 2026-09-08) — الدورة التي تنشئها الإدارة نيابةً عن مدرّب تحمل بريده،
+# وإلا وُلدت على المنصّة بلا مالك: المدرّب لا يفتحها ولا يرى دفعتها (الملكية بالبريد وحده،
+# F-134). المخرج الوحيد قرارٌ صريح: «دورة من المنصّة نفسها» ⇒ بلا بريد، والإدارة مالكها.
+COURSE_OWNER_REQUIRED_AR = 'اكتب بريد المدرّب صاحب الدورة — أو علّم «دورة من المنصّة»'
+_COURSE_EMAIL_RE = re.compile(r'^[^@\s]+@[^@\s.]+(?:\.[^@\s.]+)+$')
+
+
+def _course_owner_fields(d):
+    """(الحقول المرسَلة للمنصّة، رسالة الخطأ أو None) — تُقرأ من جسم الطلب كما هو."""
+    if d.get('platform_owned') in (True, 'true', 'True', 1, '1', 'on'):
+        return {'platform_owned': True, 'instructor_email': ''}, None
+    email = str(d.get('instructor_email') or '').strip().lower()
+    if not _COURSE_EMAIL_RE.match(email):
+        return None, COURSE_OWNER_REQUIRED_AR
+    return {'platform_owned': False, 'instructor_email': email}, None
+
+
+def _platform_create_course(c, owner=None):
     """Mirror a dashboard Course onto the platform as a NATIVE course (so it shows on
-    app.elprofessor.net, not just the dashboard ledger). Returns {id, slug} or None on failure."""
+    app.elprofessor.net, not just the dashboard ledger). Returns {id, slug} or None on failure.
+
+    `owner` = {'instructor_email', 'platform_owned'} من `_course_owner_fields` — تسافر مع كل
+    إنشاء (F-134/ب). المنصّة نفسها ترفض ٤٢٢ أي دورة تصلها بلا مالك، فالتحقق هنا حزامٌ أول
+    يعطي المستخدم رسالةً عربيةً قبل الرحلة، لا بديلًا عن حارس المنصّة."""
     if not PLATFORM_METRICS_SECRET:
         return None
     ctype = 'recorded_paid' if (c.price_egp or 0) > 0 else 'recorded_free'
@@ -1974,6 +1995,7 @@ def _platform_create_course(c):
         'is_active': True,
         'dashboard_course_id': c.id,
     }
+    payload.update(owner or {})
     try:
         r = requests.post(
             f"{PLATFORM_API_URL}/api/bridge/courses",
@@ -2527,6 +2549,12 @@ def platform_course_generate():
     }
     if not json_body['title']:
         return jsonify({'error': 'العنوان مطلوب'}), 400
+    # F-134/ب: التوليد إنشاءُ دورةٍ كذلك ⇒ نفس شرط المالك (وهو ما يوفّر نداء ذكاءٍ مهدورًا:
+    # المنصّة كانت هتولّد المنهج أوّلًا ثم ترفض الإنشاء ٤٢٢).
+    owner, owner_error = _course_owner_fields(body)
+    if owner_error:
+        return jsonify({'error': owner_error}), 400
+    json_body.update(owner)
     if body.get('price_egp') is not None:
         try:
             json_body['price_egp'] = float(body.get('price_egp'))
@@ -4555,6 +4583,12 @@ def list_courses():
 @roles_required('admin', 'employee')   # creating a course auto-mirrors to the platform → staff only
 def create_course():
     d = request.json or {}
+    # F-134/ب: الدورة التي هتتنشر على المنصّة لازم تحمل مالكها من أول لحظة — بريد المدرّب أو
+    # «دورة من المنصّة نفسها». الفحص قبل أي كتابة، فلا يبقى صفٌّ في الدفتر بلا نظيره منشورًا.
+    publish = bool(d.get('publish_to_platform', True))
+    owner, owner_error = _course_owner_fields(d)
+    if publish and owner_error:
+        return jsonify({'error': owner_error}), 400
     c = Course(
         title=d['title'], category=d.get('category', ''),
         trainer_name=d.get('trainer_name', ''), status=d.get('status', 'active'),
@@ -4572,8 +4606,8 @@ def create_course():
     # Mirror it onto the platform so it actually appears on app.elprofessor.net (not just here),
     # unless the caller opts out. Failure is non-fatal — the dashboard record still saves.
     linked = None
-    if d.get('publish_to_platform', True):
-        linked = _platform_create_course(c)
+    if publish:
+        linked = _platform_create_course(c, owner=owner)
         if linked:
             c.platform_course_id = linked.get('id')
             c.platform_course_slug = linked.get('slug')
@@ -4599,7 +4633,11 @@ def publish_course_to_platform(id):
         return jsonify({'ok': True, 'already': True,
                         'platform_course_id': c.platform_course_id,
                         'platform_course_slug': c.platform_course_slug})
-    linked = _platform_create_course(c)
+    # F-134/ب: النشر المتأخّر هو إنشاء على المنصّة كذلك ⇒ نفس شرط المالك بالحرف.
+    owner, owner_error = _course_owner_fields(request.json or {})
+    if owner_error:
+        return jsonify({'error': owner_error}), 400
+    linked = _platform_create_course(c, owner=owner)
     if not linked:
         return jsonify({'error': 'تعذّر النشر على المنصة — تأكد من الربط (METRICS_SECRET)'}), 502
     c.platform_course_id = linked.get('id')

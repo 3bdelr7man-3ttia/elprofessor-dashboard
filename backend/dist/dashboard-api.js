@@ -464,7 +464,6 @@
               email: l.email || "",
               specialization: l.specialization || "",
               years: l.years_experience || "",
-              country: l.country || l.governorate || "",
               governorate: l.governorate || "",
               status: l.status || "new",
               when: relTime(at) || arDate(at),
@@ -2679,33 +2678,13 @@
   };
 
   // ---- الدورات ----
-  // F-134/ب: كل إنشاء دورة بيحمل مالكها — بريد المدرّب أو علَم «دورة من المنصّة نفسها». الحارس
-  // ده حزام تاني (الفورم بيتحقق، والخادم بيردّ ٤٠٠ ٤٢٢): أي نداء جديد ما يقدرش يخلق دورة
-  // يتيمة بالغلط، لأن الدورة بلا بريد مالكش غير الإدارة (الملكية بالبريد وحده).
-  function courseOwnerDeclared(d) {
-    if (!d) { return false; }
-    if (d.platform_owned === true) { return true; }
-    return /^[^@\s]+@[^@\s.]+(\.[^@\s.]+)+$/.test(String(d.instructor_email || "").trim());
-  }
-  var OWNER_REQUIRED_AR = "اكتب بريد المدرّب صاحب الدورة — أو علّم «دورة من المنصّة»";
   EP.createCourse = function (d, after) {
-    if (!courseOwnerDeclared(d)) { quietToast(OWNER_REQUIRED_AR); if (after) after(); return; }
     post("/courses", d)
-      .then(function (r) {
-        // فشل المرآة مسموع: الخادم بيرجّع 201 حتى لو النشر على المنصّة فشل (الصفّ اتحفظ في
-        // الدفتر). لو سكتنا، الدورة تفضل في الدفتر بس والمؤسس فاكرها منشورة.
-        if (r && r.platform_published === false) {
-          quietToast("⚠️ اتحفظت «" + (d.title || "") + "» في الدفتر — لكن النشر على المنصة فشل. افتح الدورة واضغط «انشر على المنصة».");
-        } else {
-          note("أُضيفت دورة «" + (d.title || "") + "»");
-        }
-        EP.reload("courses", after);
-      })
+      .then(function () { note("أُضيفت دورة «" + (d.title || "") + "»"); EP.reload("courses", after); })
       .catch(function (e) { quietToast((e && e.message) || "تعذّر إنشاء الدورة"); if (after) after(); });
   };
   // «أنشئ الدورة بـ Titch» — يولّد منهجًا (دروس + أسئلة) من ملخّص/مادة ويعمل دورة native.
   EP.generateCourse = function (body, after) {
-    if (!courseOwnerDeclared(body)) { quietToast(OWNER_REQUIRED_AR); if (after) after(); return; }
     note("Titch بيحضّر المنهج… ممكن ياخد ثواني");
     post("/platform-courses/generate", body)
       .then(function (r) { note("اتعملت دورة بمنهج Titch (" + ((r && r.lesson_count) || 0) + " دروس) ✓"); EP.reload("platform_courses", function () { EP.reload("courses", after); }); })
@@ -2752,13 +2731,8 @@
       .catch(function (e) { quietToast((e && e.message) || "تعذّر حفظ الأسئلة"); throw e; });
   };
   // نشر دورة موجودة على المنصة (app.elprofessor.net) كدورة native — للدورات اللي اتعملت قبل الربط.
-  // F-134/ب: النشر المتأخّر إنشاءٌ على المنصّة كذلك ⇒ يحمل المالك. `owner` جاي من
-  // `publishCoursePlatformModal` (نفس الخانة والعلَم) — بدونه الخادم يردّ ٤٠٠ والزرّ يبقى
-  // طريقًا مسدودًا، فنمنع النداء ونقول السبب بدل رحلةٍ فاشلة.
-  EP.publishCourseToPlatform = function (id, owner, after) {
-    if (typeof owner === "function") { after = owner; owner = null; }   // نداء قديم بلا مالك
-    if (!courseOwnerDeclared(owner)) { quietToast(OWNER_REQUIRED_AR); if (after) after(); return; }
-    post("/courses/" + id + "/publish-platform", owner)
+  EP.publishCourseToPlatform = function (id, after) {
+    post("/courses/" + id + "/publish-platform", {})
       .then(function (r) { note(r && r.already ? "الدورة منشورة على المنصة بالفعل" : "نُشرت الدورة على المنصة ✓"); EP.reload("courses", after); })
       .catch(function (e) { quietToast((e && e.message) || "تعذّر النشر على المنصة"); if (after) after(); });
   };
