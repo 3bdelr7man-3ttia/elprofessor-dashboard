@@ -27,6 +27,7 @@ these routes are THIN proxies, and that is exactly why they need pinning:
 The platform is stubbed at the `requests` layer — no network, no live platform needed.
 """
 import json
+import pathlib
 import os
 import tempfile
 
@@ -41,6 +42,9 @@ os.environ['METRICS_SECRET'] = 'test-metrics-secret'
 import app as appmod  # noqa: E402
 from app import app as flask_app, db, User, AuditLog  # noqa: E402
 from werkzeug.security import generate_password_hash as _gph  # noqa: E402
+
+# F-001: رقم واتساب المدعوّ — لازم في كل إنشاء دعوة (الدعوة بتترابط بيه على المنصة).
+PHONE = '+201001234567'
 
 
 def generate_password_hash(pw):
@@ -174,27 +178,29 @@ def test_a_platform_failure_is_surfaced_not_swallowed_as_empty(ctx):
 # ------------------------------------------------------------------------- creating an invite
 
 def test_create_forwards_email_name_and_the_actor(ctx):
-    r = ctx['client'].post('/api/invites', json={'email': 'new@example.com', 'name': 'جديد'},
+    r = ctx['client'].post('/api/invites', json={'email': 'new@example.com', 'name': 'جديد', 'phone': PHONE},
                            headers=ctx['admin'])
     assert r.status_code == 200
     call = ctx['sent'][-1]
     assert call['method'] == 'POST' and call['path'] == '/api/bridge/invites'
     assert call['json']['email'] == 'new@example.com'
     assert call['json']['name'] == 'جديد'
+    # F-001: رقم الواتساب بيوصل المنصة كما كتبه المؤسس — عليه بتتبعت الدعوة وبيه بتتفتح.
+    assert call['json']['phone'] == PHONE
     assert call['json']['invited_by'] == 'admin@test.com'
 
 
 def test_the_link_the_platform_returns_reaches_the_browser(ctx):
     """The founder sends the link himself on WhatsApp — if it does not survive the proxy the
     whole desk is decorative."""
-    body = ctx['client'].post('/api/invites', json={'email': 'new@example.com', 'name': 'جديد'},
+    body = ctx['client'].post('/api/invites', json={'email': 'new@example.com', 'name': 'جديد', 'phone': PHONE},
                               headers=ctx['admin']).get_json()
     assert body['link'] == 'https://app.example.net/invite/TOK'
 
 
 def test_email_is_trimmed_and_lowercased_before_the_platform_sees_it(ctx):
     """Two rows for one human is what an un-sanitized email costs at a unique index."""
-    ctx['client'].post('/api/invites', json={'email': '  Ali@Example.COM  ', 'name': 'علي'},
+    ctx['client'].post('/api/invites', json={'email': '  Ali@Example.COM  ', 'name': 'علي', 'phone': PHONE},
                        headers=ctx['admin'])
     assert ctx['sent'][-1]['json']['email'] == 'ali@example.com'
 
@@ -202,7 +208,7 @@ def test_email_is_trimmed_and_lowercased_before_the_platform_sees_it(ctx):
 def test_a_bad_email_is_refused_here_and_never_reaches_the_platform(ctx):
     before = len(ctx['sent'])
     for bad in ('nope', 'a@', '@b.com', 'a@b'):
-        r = ctx['client'].post('/api/invites', json={'email': bad, 'name': 'جديد'},
+        r = ctx['client'].post('/api/invites', json={'email': bad, 'name': 'جديد', 'phone': PHONE},
                                headers=ctx['admin'])
         assert r.status_code == 400, bad
     assert len(ctx['sent']) == before      # refused HERE, not by the platform
@@ -216,7 +222,7 @@ def test_a_name_only_invite_is_created_and_sends_no_email_key_at_all(ctx):
     the first. So the key must be absent — not empty, not null — for every blank spelling."""
     for blank in ({'name': 'علي'}, {'name': 'علي', 'email': ''}, {'name': 'علي', 'email': '   '},
                   {'name': 'علي', 'email': None}):
-        r = ctx['client'].post('/api/invites', json=blank, headers=ctx['admin'])
+        r = ctx['client'].post('/api/invites', json={**blank, 'phone': PHONE}, headers=ctx['admin'])
         assert r.status_code == 200, blank
         call = ctx['sent'][-1]
         assert call['method'] == 'POST' and call['path'] == '/api/bridge/invites'
@@ -226,7 +232,7 @@ def test_a_name_only_invite_is_created_and_sends_no_email_key_at_all(ctx):
 
 
 def test_a_name_only_invite_is_audited_by_name(ctx):
-    ctx['client'].post('/api/invites', json={'name': 'علي'}, headers=ctx['admin'])
+    ctx['client'].post('/api/invites', json={'name': 'علي', 'phone': PHONE}, headers=ctx['admin'])
     rows = _audits('invite.create')
     assert len(rows) == 1
     assert rows[0].target == 'علي'
@@ -237,7 +243,7 @@ def test_a_short_or_missing_name_is_refused_here_and_never_reaches_the_platform(
     before = len(ctx['sent'])
     for body in ({}, {'name': ''}, {'name': ' '}, {'name': 'x'}, {'name': ' x '},
                  {'email': 'new@example.com'}, {'email': 'new@example.com', 'name': 'x'}):
-        r = ctx['client'].post('/api/invites', json=body, headers=ctx['admin'])
+        r = ctx['client'].post('/api/invites', json={**body, 'phone': PHONE}, headers=ctx['admin'])
         assert r.status_code == 400, body
         assert 'الاسم' in r.get_json()['error']
     assert len(ctx['sent']) == before
@@ -245,7 +251,7 @@ def test_a_short_or_missing_name_is_refused_here_and_never_reaches_the_platform(
 
 
 def test_creating_an_invite_is_audited(ctx):
-    ctx['client'].post('/api/invites', json={'email': 'new@example.com', 'name': 'جديد'},
+    ctx['client'].post('/api/invites', json={'email': 'new@example.com', 'name': 'جديد', 'phone': PHONE},
                        headers=ctx['admin'])
     rows = _audits('invite.create')
     assert len(rows) == 1
@@ -257,7 +263,7 @@ def test_a_rejected_creation_is_not_audited(ctx):
     """A duplicate email 409s on the platform — an audit row for a write that never happened
     turns the log into fiction."""
     ctx['replies'][('POST', '/api/bridge/invites')] = FakeResp(409, {'detail': 'البريد مدعوٌّ سلفًا'})
-    r = ctx['client'].post('/api/invites', json={'email': 'dup@example.com', 'name': 'جديد'},
+    r = ctx['client'].post('/api/invites', json={'email': 'dup@example.com', 'name': 'جديد', 'phone': PHONE},
                            headers=ctx['admin'])
     assert r.status_code == 409
     assert r.get_json()['error'] == 'البريد مدعوٌّ سلفًا'
@@ -295,14 +301,62 @@ def test_waitlist_list_forwards_to_the_bridge_path_with_a_clamped_limit(ctx):
 
 def test_waitlist_invite_converts_the_row_by_id_only(ctx):
     """The row on the platform is the truth; re-posting an email from the browser would let a
-    tampered payload invite someone else under the guise of «promote this row»."""
+    tampered payload invite someone else under the guise of «promote this row».
+    F-001: the ONLY key that survives the proxy is `phone` — the invite is bound to a WhatsApp
+    number and the waitlist form's phone is optional, so a row without one dead-ends on a 422
+    unless the founder can supply it. Everything else is still taken from the row."""
     r = ctx['client'].post('/api/waitlist/w-1/invite', json={'email': 'attacker@evil.com'},
                            headers=ctx['admin'])
     assert r.status_code == 200
     call = ctx['sent'][-1]
     assert call['path'] == '/api/bridge/waitlist/w-1/invite'
-    assert call['json'] is None
+    assert call['json'] == {'phone': ''}          # no email, no name — only the number
     assert len(_audits('waitlist.invite')) == 1
+
+
+def test_waitlist_invite_forwards_the_phone_the_founder_typed(ctx):
+    """The escape hatch has to be reachable from the dashboard, not only from a hand-written
+    curl: a server-side field with no caller is the «written but never rendered» trap."""
+    r = ctx['client'].post('/api/waitlist/w-1/invite', json={'phone': PHONE, 'email': 'attacker@evil.com'},
+                           headers=ctx['admin'])
+    assert r.status_code == 200
+    assert ctx['sent'][-1]['json'] == {'phone': PHONE}
+
+
+def test_waitlist_invite_survives_a_bodyless_post(ctx):
+    """Old callers (and the browser's own no-body path) must not 400 on a missing JSON body."""
+    r = ctx['client'].post('/api/waitlist/w-1/invite', headers=ctx['admin'])
+    assert r.status_code == 200
+    assert ctx['sent'][-1]['json'] == {'phone': ''}
+
+
+# --------------------------------------------------------- F-001: the screen sends what it asks for
+# «مكتوبٌ صحيحًا وبلا طريقٍ للشاشة»: a phone field nobody posts is a number that never arrives.
+
+_CLOUD = pathlib.Path(__file__).resolve().parents[1] / 'dashboard-cloud'
+
+
+def test_the_invite_form_renders_the_phone_field_and_sends_it():
+    page = (_CLOUD / 'index.html').read_text(encoding='utf-8')
+    api = (_CLOUD / 'dashboard-api.js').read_text(encoding='utf-8')
+    assert "id=\"inv_ph\"" in page, 'الحقل مش مرسوم في نموذج الدعوة'
+    assert 'phone:ph' in page.replace(' ', ''), 'الحقل مرسوم ومش متبعت'
+    assert 'phone: data.phone' in api, 'الطبقة مش بتبعت الرقم للجسر'
+
+
+def test_the_waitlist_button_asks_for_the_number_on_every_convert():
+    """جولة ٢: مش بس لمّا الصفّ يبقى فاضي — الرقم ده اللي المؤسس هيبعت عليه الرابط بإيده،
+    وهاتف استمارة «اطلب دعوة» اختياري وممكن يكون رقم عمل. فالسؤال في **كل** تحويل، والقيمة
+    بتتحطّ سلفًا لو الصفّ فيه رقم (يأكّدها أو يعدّلها) — والخانة إلزامية."""
+    page = (_CLOUD / 'index.html').read_text(encoding='utf-8')
+    api = (_CLOUD / 'dashboard-api.js').read_text(encoding='utf-8')
+    assert 'data-wl-ph=' in page, 'رقم الصفّ مش واصل للزرّ'
+    assert "id=\"wl_ph\"" in page, 'مفيش خانة يكتب فيها الرقم'
+    assert 'if(wlPhoneDigits(ph).length>=8){send(ph);return;}' not in page, \
+        'اختصار بيقفز فوق السؤال — المؤسس مش شايف الرقم اللي بيربط بيه'
+    assert 'var known=wlPhoneDigits(ph).length>=8;' in page, 'مفيش تفرقة في النصّ بين صفٍّ برقم وصفٍّ بلاه'
+    assert 'closeModal();send(v);' in page, 'الخانة مرسومة ومفيش سطر بيبعتها'
+    assert 'phone: (row && row.phone)' in api, 'الرقم مش بيتبعت مع تحويل الصفّ'
 
 
 # -------------------------------------------------------------------------------- auth & roles
@@ -329,7 +383,7 @@ def test_admin_and_employee_may_work_the_desk(ctx):
         assert ctx['client'].get('/api/waitlist', headers=ctx[who]).status_code == 200
         assert ctx['client'].get('/api/invites/inv-1', headers=ctx[who]).status_code == 200
         assert ctx['client'].get('/api/settings/invites', headers=ctx[who]).status_code == 200
-        assert ctx['client'].post('/api/invites', json={'email': 'a@b.com', 'name': 'جديد'},
+        assert ctx['client'].post('/api/invites', json={'email': 'a@b.com', 'name': 'جديد', 'phone': PHONE},
                                   headers=ctx[who]).status_code == 200
 
 
@@ -1212,3 +1266,43 @@ def test_the_link_gate_is_one_function_shared_by_row_and_drawer():
 
 
 import re  # noqa: E402  (used by the gate test above)
+
+
+# ------------------------------------------------- F-001: الدعوة مربوطة برقم واتساب المدعوّ
+# الرابط لوحده كان بيتاخد من أي حد بيفتحه. الرقم هو الرباط: بيتكتب في الفورم، بيتبعت للمنصة،
+# والمنصة بتطالب بيه في آخر محطة. الرفض هنا محلّي — أوضح من ٤٢٢ جايّ من بعيد.
+
+def test_an_invite_without_a_whatsapp_number_is_refused_here_and_never_reaches_the_platform(ctx):
+    before = len(ctx['sent'])
+    for body in ({'name': 'علي'}, {'name': 'علي', 'phone': ''}, {'name': 'علي', 'phone': '   '}):
+        r = ctx['client'].post('/api/invites', json=body, headers=ctx['admin'])
+        assert r.status_code == 400, body
+        assert 'واتساب' in r.get_json()['error']
+    assert len(ctx['sent']) == before
+    assert _audits('invite.create') == []
+
+
+def test_a_too_short_number_is_refused_here_too(ctx):
+    before = len(ctx['sent'])
+    for bad in ('12', 'abc', '+20', '1234567'):
+        r = ctx['client'].post('/api/invites', json={'name': 'علي', 'phone': bad}, headers=ctx['admin'])
+        assert r.status_code == 400, bad
+        assert 'واتساب' in r.get_json()['error']
+    assert len(ctx['sent']) == before
+
+
+def test_arabic_indic_digits_are_accepted_and_forwarded_as_typed(ctx):
+    """المؤسس بيكتب الرقم زي ما هو في تليفونه — أرقام عربية بتتعدّ صح، والمنصة بتستلمها كما كُتبت."""
+    r = ctx['client'].post('/api/invites', json={'name': 'علي', 'phone': '٠١٠١٢٣٤٥٦٧٨'},
+                           headers=ctx['admin'])
+    assert r.status_code == 200, r.get_json()
+    assert ctx['sent'][-1]['json']['phone'] == '٠١٠١٢٣٤٥٦٧٨'
+
+
+def test_the_invite_form_has_a_required_whatsapp_field_that_the_wiring_actually_sends():
+    """«مكتوبٌ صحيحًا وبلا طريقٍ للشاشة»: خانة في الفورم بلا سطر بيبعتها = رقم مش بيوصل."""
+    with open(INDEX_HTML, encoding='utf-8') as fh:
+        src = fh.read()
+    assert 'id="inv_ph"' in src and 'رقم الواتساب' in src
+    assert "root.querySelector('#inv_ph')" in src
+    assert 'phone:ph' in src

@@ -103,6 +103,32 @@ def _security_headers(resp):
     resp.headers.setdefault('X-Content-Type-Options', 'nosniff')
     resp.headers.setdefault('X-Frame-Options', 'DENY')
     resp.headers.setdefault('Referrer-Policy', 'strict-origin-when-cross-origin')
+    # Content-Security-Policy — deliberately OUTSIDE the IS_PRODUCTION guard.
+    # The deployed container runs with IS_PRODUCTION=False (F-021: neither ENV nor FLASK_ENV
+    # is set in the Dockerfile), so anything behind that guard never ships. This header is the
+    # net under the stored-XSS class of bug (F-091): even if an escape is missed somewhere in
+    # dashboard-cloud/index.html, `connect-src 'self'` + `img-src 'self' data:` stop the
+    # injected code from EXFILTRATING the 30-day admin JWT to an attacker's host.
+    # Inventory of what the page actually loads (verified by grep over index.html /
+    # dashboard-api.js / site-content.js): one @import stylesheet from fonts.googleapis.com
+    # (fonts themselves from fonts.gstatic.com), zero external <script>, zero <img>, zero
+    # <iframe>, and exactly one fetch() — same-origin `/api/*`. The whole UI is one inline
+    # <script> plus inline `onclick=` handlers and inline styles, hence 'unsafe-inline' on
+    # script-src/style-src; tightening that needs the page split into files first.
+    # ⛔ Do NOT move this into dashboard-cloud/nginx.conf — production is served by gunicorn
+    #    (`server: gunicorn`), that nginx config is not deployed at all.
+    resp.headers.setdefault(
+        'Content-Security-Policy',
+        "default-src 'self'; "
+        "script-src 'self' 'unsafe-inline'; "
+        "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
+        "font-src 'self' https://fonts.gstatic.com data:; "
+        "img-src 'self' data:; "
+        "connect-src 'self'; "
+        "object-src 'none'; "
+        "base-uri 'none'; "
+        "frame-ancestors 'none'"
+    )
     if IS_PRODUCTION:
         resp.headers.setdefault('Strict-Transport-Security', 'max-age=31536000; includeSubDomains')
     # ⚠️ If you add `X-Robots-Tag: noindex, nofollow` to this host, add it ABOVE this
@@ -118,8 +144,28 @@ _RATE_BUCKETS = {}
 
 
 def _client_ip():
-    xff = request.headers.get('CF-Connecting-IP') or request.headers.get('X-Forwarded-For', '')
-    return (xff.split(',')[0].strip() if xff else request.remote_addr) or 'unknown'
+    """مفتاح حدّ المعدّل — لا يُشتقّ إلا مما لا يملك العميل التحكّم فيه.
+
+    مطابقة حرفية لمنطق المنصّة في `backend/account_utils.py:450-470`.
+
+    ⛔ الصيغة القديمة كانت تأخذ `CF-Connecting-IP` أوّلًا ثم **أقصى يسار** `X-Forwarded-For`،
+    وكلاهما رأسٌ يكتبه العميل: dashboard.elprofessor.net ليست خلف كلاودفلير (الاستجابة الحيّة
+    `server: gunicorn` وبلا أي `cf-ray`)، والوسيط لا يشطب رأسًا مزوّرًا. أي أنّ قيمةً عشوائية
+    في كلّ نداء كانت تُنتج مفتاحًا جديدًا في كلّ مرّة = إلغاءٌ كامل لكلّ حدود المعدّل من جهاز واحد.
+
+    الوسيط (Traefik في Coolify، والحاوية تشغّل gunicorn مباشرةً خلفه) **يُلحِق** عنوان الاتصال
+    الحقيقي في **أقصى اليمين**، وهو الجزء الوحيد الذي لا يمرّ من يد العميل — فهو المصدر الصحيح.
+
+    `CF-Connecting-IP` يبقى مقروءًا فقط إذا أُعلن صراحةً أنّ طبقة الوسيط هي التي تضعه، عبر
+    `TRUST_CF_HEADERS=1` — لا تُفعّلها إلا لو صار الداشبورد خلف كلاودفلير فعلًا."""
+    if os.environ.get('TRUST_CF_HEADERS'):
+        cf = (request.headers.get('CF-Connecting-IP') or '').strip()
+        if cf:
+            return cf
+    parts = [p.strip() for p in (request.headers.get('X-Forwarded-For') or '').split(',') if p.strip()]
+    if parts:
+        return parts[-1]
+    return request.remote_addr or 'unknown'
 
 
 def _rate_ok(key, limit, window_sec):
@@ -2917,6 +2963,13 @@ def invites_list():
                            params={'limit': max(1, min(500, limit))})
 
 
+# F-001: أرقام عربية-هندية ⇒ ASCII قبل عدّ الخانات (نفس ترجمة المنصة). ⛔ مش `_AR_DIGITS`
+# اللي تحت في الملف — دي بتترجم في الاتجاه المعاكس (ASCII ⇒ عربي) للعرض.
+_INVITE_AR_DIGITS = str.maketrans('\u0660\u0661\u0662\u0663\u0664\u0665\u0666\u0667\u0668\u0669'
+                                  '\u06f0\u06f1\u06f2\u06f3\u06f4\u06f5\u06f6\u06f7\u06f8\u06f9',
+                                  '01234567890123456789')
+
+
 @app.route('/api/invites', methods=['POST'])
 @token_required
 @roles_required('admin', 'employee')
@@ -2938,8 +2991,16 @@ def invite_create():
     email = (body.get('email') or '').strip().lower()
     if email and ('@' not in email or email.startswith('@') or email.endswith('@') or len(email) < 5):
         return jsonify({'error': 'اكتب بريدًا صحيحًا أو سيب الخانة فاضية'}), 400
+    # F-001: رقم الواتساب لازم — الدعوة بتترابط بيه على المنصة، والرابط ما بيفتحش لغير صاحبه.
+    # الرفض المحلي بنفس قاعدة المنصة (`_phone_key`): ٨ خانات على الأقل بعد إسقاط غير الرقم.
+    phone = ' '.join((body.get('phone') or '').split()).strip()[:60]
+    if not phone:
+        return jsonify({'error': 'اكتب رقم واتساب من تدعوه — الدعوة تُفتح بهذا الرقم وحده'}), 400
+    if len(re.sub(r'[^0-9]', '', phone.translate(_INVITE_AR_DIGITS))) < 8:
+        return jsonify({'error': 'رقم واتساب غير صحيح — اكتبه بالأرقام مع كود الدولة'}), 400
     payload = {
         'name': name,
+        'phone': phone,
         'note': (body.get('note') or '').strip()[:300],
         'invited_by': _actor_email(),
     }
@@ -3023,8 +3084,15 @@ def waitlist_invite(row_id):
     """تحويل صفٍّ في قائمة الانتظار إلى دعوة — بضغطة، والجسر بيرجّع الرابط.
 
     الاسم والبريد بيتاخدوا من الصفّ على المنصة، مش من المتصفّح: الصفّ هو الحقيقة، وأي إعادة
-    إرسالٍ للبيانات من هنا بتفتح باب تعديلٍ صامت لبريدٍ إحنا بس بنحوّله."""
-    resp = _platform_proxy('POST', f"/api/bridge/waitlist/{row_id}/invite")
+    إرسالٍ للبيانات من هنا بتفتح باب تعديلٍ صامت لبريدٍ إحنا بس بنحوّله.
+
+    F-001: الاستثناء الوحيد هو رقم الواتساب — هاتف استمارة «اطلب دعوة» اختياري، والدعوة بتترابط
+    بالرقم. فلو الصفّ بلا رقمٍ صالح، الشاشة بتسأل المؤسس عنه وبيعدّي من هنا. والمنصة بتفضّل رقم
+    الصفّ نفسه لو كان صالحًا — فمفيش تعديلٌ صامت لرقمٍ كتبه صاحبه."""
+    body = request.get_json(silent=True) or {}
+    phone = str(body.get('phone') or '').strip()[:60]
+    resp = _platform_proxy('POST', f"/api/bridge/waitlist/{row_id}/invite",
+                           json_body={'phone': phone})
     if _resp_ok(resp):
         _audit('waitlist.invite', target=row_id)
     return resp
@@ -7705,8 +7773,18 @@ def serialize_message(m):
 def public_message_create():
     """PUBLIC: contact-form submissions from the marketing site. No auth."""
     d = request.json or {}
-    # Honeypot: bots fill hidden fields. Pretend success, store nothing.
+    # حدّ فضفاض ٦٠/ساعة/IP على كل نداء أيًّا كانت صحّته — يُفحص قبل أي شيء آخر (حتى قبل
+    # الـhoneypot) حتى لا يبقى المسار مفتوحًا بلا سقف لمن يقصفه بحمولة فاسدة فقط (JSON فارغ
+    # مثلًا) لتفادي الحدّ الصارم ٥/ساعة الذي انتقل تحت التحقّق الأساسي. لا يستبدل ذلك الحدّ
+    # الصارم بل يُضاف فوقه — الزائر الصادق بخمس أخطاء إملائية لا يقترب من ٦٠ أبدًا.
+    if not _rate_ok('messages:any:' + _client_ip(), 60, 3600):
+        return jsonify({'error': 'وصلتَ الحدّ المسموح لإرسال الرسائل — من فضلك حاول بعد ساعة'}), 429
+    # Honeypot: bots fill hidden fields. Pretend success, store nothing. Checked BEFORE
+    # validation — an incomplete bot payload still gets the same fake-success response —
+    # and it still burns a slot of the rate-limit bucket below (see comment there), so a
+    # bot hammering this route cannot get an unlimited free lane just by tripping it.
     if (d.get('website') or d.get('hp') or '').strip():
+        _rate_ok('messages:' + _client_ip(), 5, 3600)
         return jsonify({'ok': True})
     name = (d.get('name') or '').strip()
     email = (d.get('email') or '').strip().lower()
@@ -7718,6 +7796,13 @@ def public_message_create():
     # Length cap (light spam guard).
     if len(name) > 255 or len(body) > 5000:
         return jsonify({'error': 'المحتوى طويل جدًا'}), 400
+    # حدّ معدّل ٥ رسائل/ساعة/IP — هذا المسار هو المدخل العامّ الوحيد الذي يكتب نصًّا حرًّا
+    # يقرأه الأدمن في اللوحة (F-091)، فبلا حدٍّ يمكن حشو الصندوق بآلاف الرسائل من جهاز واحد.
+    # المفتاح مشتقّ من `_client_ip()` بعد تصحيحه (أقصى يمين X-Forwarded-For) وإلا كان تجاوزه
+    # برأسٍ يكتبه العميل. مقصودٌ أن يُطبَّق بعد التحقّق الأساسي أعلاه — لا بعد الـhoneypot —
+    # حتى لا يستهلك خمس أخطاء إملائية بريئة (بريد بلا @، حقل فاضٍ) حصّة الزائر الصادق في الساعة.
+    if not _rate_ok('messages:' + _client_ip(), 5, 3600):
+        return jsonify({'error': 'وصلتَ الحدّ المسموح لإرسال الرسائل — من فضلك حاول بعد ساعة'}), 429
     msg = Message(
         name=name[:255],
         email=email[:255],

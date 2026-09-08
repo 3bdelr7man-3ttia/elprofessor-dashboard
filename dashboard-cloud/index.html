@@ -1530,7 +1530,7 @@ function renderCourses(){
   } else if(courseTab==='trainers'){const TRQ=csTrainers();h.textContent='طلبات المدربين';document.getElementById('cN').textContent=TRQ.length;
     if(!TRQ.length)el.innerHTML='<div style="padding:40px;text-align:center;color:var(--muted)">لا طلبات مدربين</div>';
     TRQ.forEach((t,idx)=>el.insertAdjacentHTML('beforeend',`<div class="row esc-row${selected==='t'+idx?' sel':''}" data-t="${idx}" style="grid-template-columns:1.7fr 1.2fr 130px">
-      <div class="c c1"><div class="src-ic" style="background:var(--ai-bg);color:var(--ai)">${svg('cap')}</div><div><div class="parties">${t.name}</div><div class="from">${t.spec} · ${t.ref}</div></div></div>
+      <div class="c c1"><div class="src-ic" style="background:var(--ai-bg);color:var(--ai)">${svg('cap')}</div><div><div class="parties">${esc(t.name)}</div><div class="from">${esc(t.spec)} · ${esc(t.ref)}</div></div></div>
       <div class="c"><div class="from">عبر «درّب معنا»</div></div>
       <div class="c"><span class="status s-wait"><span class="d"></span>بانتظار</span></div></div>`));
     el.querySelectorAll('.row').forEach(x=>x.onclick=()=>{selected='t'+x.dataset.t;renderCourses();drawCourse();});
@@ -1608,15 +1608,15 @@ function drawCourse(){
     <div class="field"><div class="lab">الحالة</div><div class="val"><span class="status ${CSTATUS[c.status].cls}" style="${CSTATUS[c.status].cls?'':'background:var(--surface-2);color:var(--muted)'}"><span class="d" style="${CSTATUS[c.status].cls?'':'background:var(--muted)'}"></span>${CSTATUS[c.status].t}</span></div></div>
     <div class="field"><div class="lab">على المنصة</div><div class="val">${c.on_platform?`<span class="status s-auto"><span class="d"></span>ظاهرة على app.elprofessor.net</span>`:`<span class="status s-late"><span class="d"></span>مش ظاهرة على المنصة بعد</span>`}</div></div>
     <div class="acts">${c.on_platform?'':`<button class="btn btn-primary" data-a="pubplatform">${svg('check')}انشر على المنصة</button>`}<button class="btn btn-ghost" data-a="editc">${svg('check')}تعديل</button><button class="btn btn-human" data-a="video" style="flex:none;min-width:auto;padding:7px 11px;font-size:12px">المنهج والمحاضرات</button><button class="btn btn-warn" data-a="delc">حذف</button></div></div>`;}
-  else if(t==='p'){const p=csPrograms()[i];if(!p){el.innerHTML='';return;}el.innerHTML=`<div class="dh"><div class="k">طلب برنامج · من المنصة</div><h3>${p.title}</h3></div><div class="db">
+  else if(t==='p'){const p=csPrograms()[i];if(!p){el.innerHTML='';return;}el.innerHTML=`<div class="dh"><div class="k">طلب برنامج · من المنصة</div><h3>${esc(p.title)}</h3></div><div class="db">
     <div class="route"><span class="step">المنصة · السوق</span><span class="arrow">←</span><span class="step" style="color:var(--memory);font-weight:800">الدورات والتدريب</span></div>
-    <div class="field"><div class="lab">المتقدّم</div><div class="val">${p.by}</div></div>
-    <div class="field"><div class="lab">المرجع</div><div class="val">${p.ref}</div></div>
+    <div class="field"><div class="lab">المتقدّم</div><div class="val">${esc(p.by)}</div></div>
+    <div class="field"><div class="lab">المرجع</div><div class="val">${esc(p.ref)}</div></div>
     <div class="acts"><button class="btn btn-primary" data-a="approve">${svg('check')}اعتمد وحوّله دورة</button><button class="btn btn-warn" data-a="reject">رفض</button></div></div>`;}
-  else if(t==='t'){const tr=csTrainers()[i];if(!tr){el.innerHTML='';return;}el.innerHTML=`<div class="dh"><div class="k">طلب مدرّب · من «درّب معنا»</div><h3>${tr.name}</h3></div><div class="db">
+  else if(t==='t'){const tr=csTrainers()[i];if(!tr){el.innerHTML='';return;}el.innerHTML=`<div class="dh"><div class="k">طلب مدرّب · من «درّب معنا»</div><h3>${esc(tr.name)}</h3></div><div class="db">
     <div class="route"><span class="step">المنصة · درّب معنا</span><span class="arrow">←</span><span class="step" style="color:var(--ai);font-weight:800">المستخدمون/التدريب</span></div>
-    <div class="field"><div class="lab">التخصص</div><div class="val">${tr.spec}</div></div>
-    <div class="field"><div class="lab">المرجع</div><div class="val">${tr.ref}</div></div>
+    <div class="field"><div class="lab">التخصص</div><div class="val">${esc(tr.spec)}</div></div>
+    <div class="field"><div class="lab">المرجع</div><div class="val">${esc(tr.ref)}</div></div>
     <div class="field"><div class="lab">نسبة الإيراد</div><div class="val">تُحدّد عند الاعتماد (٢٥ → ٥٠٪)</div></div>
     <div class="acts"><button class="btn btn-primary" data-a="approve">${svg('check')}اعتمد كمدرّب</button><button class="btn btn-warn" data-a="reject">رفض</button></div></div>`;}
   else if(t==='o'){const o=csOffers()[i];if(!o){el.innerHTML='';return;}el.innerHTML=`<div class="dh"><div class="k">عرض سعر · «اعرض سعرك»</div><h3>${o.course}</h3></div><div class="db">
@@ -1691,7 +1691,7 @@ function pcTreeHtml(dt){
 // باني المنهج (D4): أقسام ← محاضرات (روابط Drive/YouTube) + أسئلة دروس Titch «علّمني».
 function courseCurriculumModal(c){
   if(!c.platform_id){
-    var sp=openModal('منهج الدورة — '+esc(c.title),
+    var sp=openModal('منهج الدورة — '+c.title,
       '<div class="note-ai" style="margin-bottom:12px">'+svg('sparkles','ic')+'<div>لازم تنشر الدورة على المنصة الأول، وبعدين تضيف الأقسام والمحاضرات.</div></div>'+
       '<div class="acts"><button class="btn btn-primary" id="vp_pub">'+svg('check')+'انشر على المنصة</button><button class="btn btn-ghost" id="vp_x">إغلاق</button></div>');
     sp.querySelector('#vp_x').onclick=closeModal;
@@ -1716,7 +1716,7 @@ function courseCurriculumModal(c){
     var secOpts='<option value="">بدون قسم</option>'+sections.filter(function(x){return x.title;}).map(function(x){return '<option value="'+esc(x.title)+'" data-order="'+(x.order||0)+'">'+esc(x.title)+'</option>';}).join('')+'<option value="__new__">+ قسم جديد…</option>';
     // دروس Titch وكويزها (أسئلة «علّمني»).
     var lessonRows=lessons.length?lessons.map(function(l){var q=Array.isArray(l.quiz)?l.quiz.length:0;return '<div style="display:flex;align-items:center;gap:9px;padding:8px 0;border-top:1px dashed var(--line)"><div style="flex:1"><div style="font-weight:700;font-size:12.5px">'+esc(l.title||'درس')+'</div><div style="font-size:11px;color:var(--muted)">'+money(q)+' سؤال'+(l.objective?' · '+esc(l.objective):'')+'</div></div><button class="btn btn-human lqEdit" data-id="'+esc(l.id)+'" style="flex:none;min-width:auto;padding:5px 11px;font-size:11px">إدارة الأسئلة</button></div>';}).join(''):'<div style="color:var(--muted);font-size:11.5px;padding:6px 0">لا دروس Titch في الدورة — لإضافة أسئلة «علّمني» أنشئ دورة بمنهج Titch من «+ إنشاء دورة».</div>';
-    var s=openModal('منهج الدورة — '+esc(c.title),
+    var s=openModal('منهج الدورة — '+c.title,
       '<div class="note-ai" style="margin-bottom:12px">'+svg('sparkles','ic')+'<div>نظّم الدورة في <b>أقسام</b>، وكل قسم فيه <b>محاضرات</b> (رابط Google Drive مشاركة أو YouTube). ولو الدورة بمنهج Titch تقدر تحرّر <b>أسئلة «علّمني»</b> لكل درس.</div></div>'+
       '<div class="fld"><label>الأقسام والمحاضرات</label><div id="secWrap">'+secCards+'</div></div>'+
       '<div style="border:1px dashed var(--gold);border-radius:10px;padding:11px;margin-top:8px"><div style="font-weight:800;font-size:12.5px;color:var(--navy);margin-bottom:8px">+ إضافة محاضرة</div>'+
@@ -1760,7 +1760,7 @@ function qBlockHtml(q){
 }
 function lessonQuizModal(c,lesson){
   var pid=c.platform_id;var quiz=Array.isArray(lesson.quiz)?lesson.quiz:[];
-  var s=openModal('أسئلة الدرس — '+esc(lesson.title||'درس'),
+  var s=openModal('أسئلة الدرس — '+(lesson.title||'درس'),
     '<div class="note-ai" style="margin-bottom:12px">'+svg('sparkles','ic')+'<div>حرّر أسئلة «علّمني» لهذا الدرس (كل سؤال + خياراته + الإجابة الصحيحة). الحفظ <b>يستبدل</b> كل أسئلة الدرس.</div></div>'+
     '<div id="qWrap">'+(quiz.length?quiz.map(function(q){return qBlockHtml(q);}).join(''):qBlockHtml(null))+'</div>'+
     '<button class="btn btn-ghost" id="q_add" style="width:100%;margin-bottom:10px">+ سؤال</button>'+
@@ -1847,7 +1847,7 @@ function addBookModal(){
 }
 function knowledgeEditModal(k){
   if(!k)return;var sale=k.rights==='owned_for_sale';
-  var s=openModal('تعديل — '+esc(k.title),
+  var s=openModal('تعديل — '+k.title,
     '<div class="fld"><label>العنوان</label><input id="kn_t" value="'+esc(k.title)+'"></div>'+
     (sale?'<div class="fld"><label>السعر (ج)</label><input id="kn_p" type="number" value="'+(k.price_amount||0)+'"></div>':'')+
     '<label class="tg" style="margin:8px 0"><input type="checkbox" id="kn_a" '+(k.is_active?'checked':'')+'> ظاهر في السوق</label>'+
@@ -1962,7 +1962,14 @@ function notify(msg){
   NOTIFS.unshift({title:msg,detail:'',time:'الآن',read:false});
   notifBadge();renderNotifPanel();toast('📩 '+msg);
 }
-function openModal(title,bodyHtml){const s=document.createElement('div');s.className='scrim';s.id='epModal';s.innerHTML=`<div class="modal"><div class="mh"><span>${title}</span><button data-x>✕</button></div><div class="mb">${bodyHtml}</div></div>`;document.body.appendChild(s);s.querySelector('[data-x]').onclick=closeModal;s.onclick=e=>{if(e.target===s)closeModal();};return s;}
+// F-001: نفس قاعدة الخادم (routes/invites.py::_phone_key) — أرقام عربية/فارسية ⇒ ASCII، وبس الأرقام.
+// اللي بيحكم في الآخر هو الخادم؛ ده تحقّقٌ قبل رحلة الشبكة عشان المؤسس يعرف غلطته بدري.
+function wlPhoneDigits(v){
+  return String(v||'').replace(/[\u0660-\u0669]/g,function(d){return String(d.charCodeAt(0)-0x0660);})
+                      .replace(/[\u06f0-\u06f9]/g,function(d){return String(d.charCodeAt(0)-0x06f0);})
+                      .replace(/[^0-9]/g,'');
+}
+function openModal(title,bodyHtml){const s=document.createElement('div');s.className='scrim';s.id='epModal';s.innerHTML=`<div class="modal"><div class="mh"><span>${esc(title)}</span><button data-x>✕</button></div><div class="mb">${bodyHtml}</div></div>`;document.body.appendChild(s);s.querySelector('[data-x]').onclick=closeModal;s.onclick=e=>{if(e.target===s)closeModal();};return s;}
 function closeModal(){const m=document.getElementById('epModal');if(m)m.remove();}
 function createCourseModal(presetTitle){
   // presetTitle: عنوان مبدئي (مثلاً من «عايز دورة»)؛ نتجاهل كائن الحدث عند الاستدعاء كـ onclick.
@@ -2006,7 +2013,7 @@ function editCourseModal(c){
   if(!c){return;}
   // priceNum may be absent on the design-fallback rows → derive from raw or default 0.
   var priceNum=(c.priceNum!=null)?c.priceNum:((c.raw&&c.raw.price_egp)||0);
-  var s=openModal('تعديل الدورة — '+esc(c.title),`
+  var s=openModal('تعديل الدورة — '+c.title,`
   <div class="note-ai" style="margin-bottom:12px">${svg('sparkles','ic')}<div>التعديل هيتطبّق على الدورة على المنصة كمان (لو منشورة).</div></div>
   <div class="fld"><label>عنوان الدورة</label><input id="e_title" value="${esc(c.title)}"></div>
   <div class="fld"><label>المحاضر / الجهة</label><input id="e_inst" value="${esc(c.inst)}"></div>
@@ -2138,7 +2145,7 @@ function investorModal(edit,idx){
     '<div class="note-ai" style="margin-bottom:12px">'+svg('sparkles','ic')+'<div>التسجيل يتم من المنصة فقط. اختر مستخدمًا <b>مسجّلًا</b> لتحويله إلى مستثمر — لا إنشاء يدوي.</div></div>'+
     '<div class="fld"><label>اختر من المستخدمين المسجّلين</label><select id="iv_pick">'+
       '<option value="">— اختر مستخدمًا —</option>'+
-      USERS.map(function(u){return '<option value="'+u.name+'">'+u.name+' · '+u.email+'</option>';}).join('')+
+      USERS.map(function(u){return '<option value="'+esc(u.name)+'">'+esc(u.name)+' · '+esc(u.email)+'</option>';}).join('')+
     '</select></div>';
   var s=openModal(edit?'تعديل مستثمر':'تحويل مستخدم إلى مستثمر',
     pickerFld+
@@ -3354,7 +3361,7 @@ function aiReportDrawer(agentId){
   if(!a)return;
   const bullets=(a.bullets&&a.bullets.length)?a.bullets.map(x=>`<div style="display:flex;gap:8px;align-items:flex-start;padding:6px 0;font-size:13px;border-bottom:1px solid var(--line)"><span style="color:var(--ai);flex:none">${svg('check')}</span><span>${esc(x)}</span></div>`).join(''):'<div style="color:var(--muted);font-size:12.5px;padding:6px 0">لا نقاط.</div>';
   const actions=(a.actions&&a.actions.length)?a.actions.map(x=>`<div style="display:flex;gap:8px;align-items:flex-start;padding:6px 0;font-size:13px"><span style="color:var(--gold);flex:none">${svg('sparkles')}</span><span>${esc(x)}</span></div>`).join(''):'<div style="color:var(--muted);font-size:12.5px;padding:6px 0">لا إجراءات مقترحة.</div>';
-  const s=openModal('تقرير: '+esc(a.label),
+  const s=openModal('تقرير: '+a.label,
     '<div class="note-ai" style="margin-bottom:12px">'+svg('robot','ic')+'<div>'+(esc(a.summary||'')||'<i>بلا ملخّص</i>')+'</div></div>'+
     '<div style="font-size:12px;font-weight:800;color:var(--muted);margin:4px 0 4px">النقاط</div>'+bullets+
     '<div style="font-size:12px;font-weight:800;color:var(--muted);margin:14px 0 4px">الإجراءات المقترحة</div>'+actions+
@@ -3407,7 +3414,7 @@ function partnerModal(idx){
   var nameFld = edit
     ? '<div class="fld"><label>الاسم</label><input id="p_n" value="'+(e.name||'')+'"></div>'
     : '<div class="note-ai" style="margin-bottom:12px">'+svg('sparkles','ic')+'<div>التسجيل من المنصة فقط. اختر مستخدمًا <b>مسجّلًا</b> لإضافته كشريك.</div></div>'+
-      '<div class="fld"><label>اختر من المستخدمين المسجّلين</label><select id="p_n"><option value="">— اختر مستخدمًا —</option>'+USERS.map(function(u){return '<option value="'+u.name+'">'+u.name+' · '+u.email+'</option>';}).join('')+'</select></div>';
+      '<div class="fld"><label>اختر من المستخدمين المسجّلين</label><select id="p_n"><option value="">— اختر مستخدمًا —</option>'+USERS.map(function(u){return '<option value="'+esc(u.name)+'">'+esc(u.name)+' · '+esc(u.email)+'</option>';}).join('')+'</select></div>';
   var s=openModal(edit?'تعديل شريك':'إضافة شريك من المسجّلين',
     nameFld+
     '<div class="fld"><label>الصفة</label><input id="p_r" value="'+(e.role||'شريك')+'"></div>'+
@@ -3736,11 +3743,11 @@ function renderGoalsAdvisor(){
   if(Ast==='error'&&!A){el.innerHTML='<div class="note-ai" style="background:var(--conflict-bg);border-color:#E9C9BB;color:var(--conflict)">'+svg('scale','ic')+'<div>تعذّر جلب توصيات المستشار. <b style="cursor:pointer;text-decoration:underline" onclick="EP.reload(\'goalsAdvisor\',renderGoalsAdvisor)">إعادة المحاولة</b></div></div>';return;}
   if(!A||(!A.headline&&!(A.insights||[]).length&&!(A.suggested||[]).length)){el.innerHTML='<div class="empty" style="text-align:center;color:var(--muted)">'+svg('sparkles','ic')+'<p>لا توصيات بعد — تتكوّن مع تراكم أداء المنصة.</p></div>';return;}
   var html='';
-  if(A.headline)html+='<div class="note-ai">'+svg('sparkles','ic')+'<div><b>'+A.headline+'</b></div></div>';
+  if(A.headline)html+='<div class="note-ai">'+svg('sparkles','ic')+'<div><b>'+esc(A.headline)+'</b></div></div>';
   if((A.insights||[]).length){
     html+='<div style="display:flex;flex-direction:column;gap:8px;margin-bottom:'+((A.suggested||[]).length?'14px':'0')+'">';
     A.insights.forEach(function(ins){var t=(typeof ins==='string')?ins:(ins&&(ins.text||ins.title||ins.detail)||'');if(!t)return;
-      html+='<div style="display:flex;gap:9px;align-items:flex-start;font-size:12.5px;color:var(--ink-2);line-height:1.6"><span style="color:var(--ai);flex:none;margin-top:2px;width:16px;height:16px">'+svg('trend')+'</span><div>'+t+'</div></div>';});
+      html+='<div style="display:flex;gap:9px;align-items:flex-start;font-size:12.5px;color:var(--ink-2);line-height:1.6"><span style="color:var(--ai);flex:none;margin-top:2px;width:16px;height:16px">'+svg('trend')+'</span><div>'+esc(t)+'</div></div>';});
     html+='</div>';
   }
   if((A.suggested||[]).length){
@@ -3748,13 +3755,13 @@ function renderGoalsAdvisor(){
     A.suggested.forEach(function(g,i){
       var title=(typeof g==='string')?g:(g&&(g.title||g.text)||'هدف مقترح');
       var meta=[];
-      if(g&&g.target!=null)meta.push('المستهدف '+money(+g.target||0)+(g.unit?' '+g.unit:''));
-      if(g&&g.due)meta.push('الموعد '+g.due);
-      if(g&&g.rationale)meta.push(g.rationale);
+      if(g&&g.target!=null)meta.push('المستهدف '+money(+g.target||0)+(g.unit?' '+esc(g.unit):''));
+      if(g&&g.due)meta.push('الموعد '+esc(g.due));
+      if(g&&g.rationale)meta.push(esc(g.rationale));
       var canAdd=(typeof g==='object'&&g);
       html+='<div style="display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid var(--line);border-radius:9px;margin-bottom:8px;background:var(--surface-2)">'+
-        '<span class="dest" style="background:var(--gold-bg);color:#9a6a08;font-size:10.5px">'+((g&&g.cat)||'مقترح')+'</span>'+
-        '<div style="flex:1"><div style="font-weight:700;font-size:13px;color:var(--ink)">'+title+'</div>'+(meta.length?'<div style="font-size:11px;color:var(--muted);margin-top:3px">'+meta.join(' · ')+'</div>':'')+'</div>'+
+        '<span class="dest" style="background:var(--gold-bg);color:#9a6a08;font-size:10.5px">'+esc((g&&g.cat)||'مقترح')+'</span>'+
+        '<div style="flex:1"><div style="font-weight:700;font-size:13px;color:var(--ink)">'+esc(title)+'</div>'+(meta.length?'<div style="font-size:11px;color:var(--muted);margin-top:3px">'+meta.join(' · ')+'</div>':'')+'</div>'+
         (canAdd?'<button class="btn btn-human gadv-add" data-i="'+i+'" style="flex:none;min-width:auto;padding:5px 11px;font-size:11.5px">+ تبنّي</button>':'')+'</div>';
     });
   }
@@ -3773,10 +3780,10 @@ function renderGoals(liveGoals){
   if(!GLS.length){el.innerHTML='<div class="empty" style="padding:34px;text-align:center;color:var(--muted)">'+svg('check','ic')+'<p>لا أهداف مسجّلة بعد</p></div>';return;}
   GLS.forEach(function(g,i){var st=GSTAT[g.status]||GSTAT.on;var pct=Math.min(100,Math.round(g.current/(g.target||1)*100));var barC=g.status==='behind'?'var(--conflict)':g.status==='done'?'var(--human)':'var(--agree)';
     el.insertAdjacentHTML('beforeend','<div class="grow" '+(liveGoals?'':'data-i="'+i+'"')+' style="padding:13px 16px;border-bottom:1px solid var(--line)'+(liveGoals?'':';cursor:pointer')+'">'+
-      '<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px"><span class="dest" style="background:var(--surface-2);color:var(--ink-2);font-size:10.5px">'+g.cat+'</span><div style="flex:1;font-weight:700;font-size:13.5px;color:var(--ink)">'+g.title+'</div><span class="status '+st.cls+'" style="font-size:10.5px"><span class="d"></span>'+st.t+'</span></div>'+
+      '<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px"><span class="dest" style="background:var(--surface-2);color:var(--ink-2);font-size:10.5px">'+esc(g.cat)+'</span><div style="flex:1;font-weight:700;font-size:13.5px;color:var(--ink)">'+esc(g.title)+'</div><span class="status '+st.cls+'" style="font-size:10.5px"><span class="d"></span>'+st.t+'</span></div>'+
       '<div style="display:flex;align-items:center;gap:12px"><div style="flex:1;height:8px;background:var(--surface-2);border-radius:4px;overflow:hidden"><div style="height:100%;width:'+pct+'%;background:'+barC+';border-radius:4px"></div></div>'+
-      '<div style="font-size:12px;font-weight:700;color:var(--navy);white-space:nowrap">'+g.current+' / '+g.target+' '+g.unit+'</div></div>'+
-      '<div style="font-size:11px;color:var(--muted);margin-top:6px">المسؤول: '+g.owner+' · الموعد: '+g.due+' · '+pct+'٪</div></div>');
+      '<div style="font-size:12px;font-weight:700;color:var(--navy);white-space:nowrap">'+g.current+' / '+g.target+' '+esc(g.unit)+'</div></div>'+
+      '<div style="font-size:11px;color:var(--muted);margin-top:6px">المسؤول: '+esc(g.owner)+' · الموعد: '+esc(g.due)+' · '+pct+'٪</div></div>');
   });
   if(!liveGoals)el.querySelectorAll('.grow').forEach(function(r){r.onmouseenter=function(){r.style.background='var(--surface-2)';};r.onmouseleave=function(){r.style.background='';};r.onclick=function(){goalModal(+r.dataset.i);};});
 }
@@ -3784,10 +3791,10 @@ function goalModal(idx){
   var edit=(idx!=null&&idx>=0)?GOALS[idx]:null,e=edit||{};
   var statusOpts=[['on','على المسار'],['behind','متأخّر'],['done','مكتمل']].map(function(o){return '<option value="'+o[0]+'"'+((e.status||'on')===o[0]?' selected':'')+'>'+o[1]+'</option>';}).join('');
   var s=openModal(edit?'تعديل هدف':'إضافة هدف',
-    '<div class="fld"><label>الهدف</label><input id="g_t" value="'+(e.title||'')+'" placeholder="الوصول إلى ١٠٠ مستخدم"></div>'+
-    '<div class="row2"><div class="fld"><label>التصنيف</label><input id="g_c" value="'+(e.cat||'نمو')+'"></div><div class="fld"><label>المسؤول</label><input id="g_o" value="'+(e.owner||'الإدارة')+'"></div></div>'+
+    '<div class="fld"><label>الهدف</label><input id="g_t" value="'+esc(e.title||'')+'" placeholder="الوصول إلى ١٠٠ مستخدم"></div>'+
+    '<div class="row2"><div class="fld"><label>التصنيف</label><input id="g_c" value="'+esc(e.cat||'نمو')+'"></div><div class="fld"><label>المسؤول</label><input id="g_o" value="'+esc(e.owner||'الإدارة')+'"></div></div>'+
     '<div class="row2"><div class="fld"><label>التقدّم الحالي</label><input id="g_cur" type="number" value="'+(e.current!=null?e.current:'')+'"></div><div class="fld"><label>المستهدف</label><input id="g_tg" type="number" value="'+(e.target!=null?e.target:'')+'"></div></div>'+
-    '<div class="row2"><div class="fld"><label>الوحدة</label><input id="g_u" value="'+(e.unit||'')+'" placeholder="مستخدم / دورة"></div><div class="fld"><label>الموعد</label><input id="g_d" value="'+(e.due||'')+'" placeholder="سبتمبر"></div></div>'+
+    '<div class="row2"><div class="fld"><label>الوحدة</label><input id="g_u" value="'+esc(e.unit||'')+'" placeholder="مستخدم / دورة"></div><div class="fld"><label>الموعد</label><input id="g_d" value="'+esc(e.due||'')+'" placeholder="سبتمبر"></div></div>'+
     '<div class="fld"><label>الحالة</label><select id="g_st">'+statusOpts+'</select></div>'+
     '<div class="acts" style="margin-top:14px"><button class="btn btn-primary" id="g_s">'+svg('check')+(edit?'حفظ':'أضف')+'</button>'+(edit?'<button class="btn btn-warn" id="g_del">حذف</button>':'')+'<button class="btn btn-ghost" id="g_x">إلغاء</button></div>');
   s.querySelector('#g_x').onclick=closeModal;
@@ -4443,7 +4450,7 @@ function inviteLinkModal(res,email,name){
       '<div style="font-size:12.5px;color:var(--muted);margin-top:2px">شخصي — أرسله له بنفسك.</div>'+acts
     : '<div class="policy" style="margin:0 0 12px;border-inline-start-color:var(--gold);background:var(--gold-bg)">'+svg('clock','ic')+
       '<div><b>الدعوة اتعملت — والمنصة ما رجّعتش الرابط.</b><br>مش هنلفّق رابطًا من عندنا. حدّث الجدول تحت وشوف الصفّ، ولو الرابط مش راجع من الجسر ده بند مفتوح على المنصة.</div></div>'+acts;
-  var s=openModal(esc(who?('رابط الدعوة لـ'+who):'رابط الدعوة'),body);
+  var s=openModal(who?('رابط الدعوة لـ'+who):'رابط الدعوة',body);
   s.querySelector('#inv_x').onclick=closeModal;
   var cp=s.querySelector('#inv_cp');
   if(cp)cp.onclick=function(){
@@ -4764,6 +4771,9 @@ function invitesPanel(){
   var form='<div id="invForm" style="display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end;margin-bottom:14px">'+
     '<div class="fld" style="flex:1 1 160px;margin:0"><label style="font-size:12px;font-weight:800;color:var(--muted);display:block;margin-bottom:5px">الاسم</label>'+
       '<input id="inv_nm" placeholder="الاسم الكامل" required style="width:100%;min-height:44px;border:1px solid var(--line);border-radius:10px;padding:10px 13px;font:inherit;font-size:13px;background:var(--surface);color:var(--ink)"></div>'+
+    '<div class="fld" style="flex:1 1 180px;margin:0"><label style="font-size:12px;font-weight:800;color:var(--muted);display:block;margin-bottom:5px">رقم الواتساب</label>'+
+      '<input id="inv_ph" type="tel" inputmode="tel" required placeholder="+2010xxxxxxxx" style="direction:ltr;text-align:left;width:100%;min-height:44px;border:1px solid var(--line);border-radius:10px;padding:10px 13px;font:inherit;font-size:13px;background:var(--surface);color:var(--ink)">'+
+      '<div style="font-size:11.5px;color:var(--muted);margin-top:4px">الدعوة تُفتح بهذا الرقم وحده — أرسل الرابط عليه.</div></div>'+
     '<div class="fld" style="flex:1 1 200px;margin:0"><label style="font-size:12px;font-weight:800;color:var(--muted);display:block;margin-bottom:5px">البريد (اختياري)</label>'+
       '<input id="inv_em" type="email" inputmode="email" placeholder="name@mail.com (لو عندك)" style="direction:ltr;text-align:left;width:100%;min-height:44px;border:1px solid var(--line);border-radius:10px;padding:10px 13px;font:inherit;font-size:13px;background:var(--surface);color:var(--ink)"></div>'+
     '<div class="fld" style="flex:1 1 160px;margin:0"><label style="font-size:12px;font-weight:800;color:var(--muted);display:block;margin-bottom:5px">سطر لنفسك (اختياري)</label>'+
@@ -5091,7 +5101,7 @@ function waitlistPanel(){
   var rows=R.map(function(w){
     var S=WL_STATUS[w.status]||{t:(w.status||'—'),cls:''};
     var act=(w.status==='new')
-      ?'<button class="btn btn-human wl-inv" data-wl-id="'+esc(w.id)+'" data-wl-em="'+esc(w.email)+'" style="flex:none;min-width:44px;min-height:44px;padding:0 14px;font-size:12px">ابعت دعوة</button>'
+      ?'<button class="btn btn-human wl-inv" data-wl-id="'+esc(w.id)+'" data-wl-em="'+esc(w.email)+'" data-wl-nm="'+esc(w.name||'')+'" data-wl-ph="'+esc(w.phone||'')+'" style="flex:none;min-width:44px;min-height:44px;padding:0 14px;font-size:12px">ابعت دعوة</button>'
       :'';
     // «الصفة» + التخصّص + الهاتف — حقول موسَّعة بمواصفة الموجة ٢ (2026-09-06 §٢). كل واحد
     // منها اختياري في نموذج «سجّل اهتمامك»، فـ«—» هي الصادقة عند الغياب، لا فراغ صامت.
@@ -5139,7 +5149,12 @@ function wireInvites(v){
     if(nm.length<2){toast('اكتب الاسم (حرفين على الأقل)');return;}
     var em=(root.querySelector('#inv_em').value||'').trim();
     if(em&&(em.indexOf('@')<1||em.indexOf('@')===em.length-1)){toast('اكتب بريدًا صحيحًا أو سيب الخانة فاضية');return;}
-    var data={name:nm,email:em,note:(root.querySelector('#inv_nt').value||'').trim()};
+    // F-001: رقم الواتساب لازم — الدعوة بتترابط بيه، والرابط ما بيفتحش لغير صاحبه.
+    var ph=(root.querySelector('#inv_ph').value||'').trim();
+    var phDigits=wlPhoneDigits(ph);
+    if(!ph){toast('اكتب رقم واتساب من تدعوه — الدعوة تُفتح بهذا الرقم وحده');return;}
+    if(phDigits.length<8){toast('رقم واتساب غير صحيح — اكتبه بالأرقام مع كود الدولة');return;}
+    var data={name:nm,email:em,phone:ph,note:(root.querySelector('#inv_nt').value||'').trim()};
     go.disabled=true;go.style.opacity='.5';
     EP.createInvite(data,function(res){inviteLinkModal(res,em,nm);},invAgain);
   };
@@ -5175,9 +5190,34 @@ function wireInvites(v){
   root.querySelectorAll('.wl-inv').forEach(function(btn){
     btn.onclick=function(){
       if(!window.EP||!EP.inviteFromWaitlist){toast('غير متصل بالمنصة');return;}
-      var id=btn.dataset.wlId,em=btn.dataset.wlEm||'';
-      btn.disabled=true;btn.style.opacity='.5';
-      EP.inviteFromWaitlist({id:id,email:em},function(res){inviteLinkModal(res,em);},invAgain);
+      var id=btn.dataset.wlId,em=btn.dataset.wlEm||'',nm=btn.dataset.wlNm||'',ph=btn.dataset.wlPh||'';
+      // F-001 (جولة ٢): الدعوة بتترابط برقم واتساب، والرقم ده هو اللي المؤسس هيبعت عليه الرابط
+      // بإيده. فبنسأل عنه في **كل** تحويل — مش بس لما الصفّ يبقى فاضي:
+      //   · هاتفُ استمارة «اطلب دعوة» اختياري، وممكن يكون رقم عمل مش واتساب؛
+      //   · وتحويلٌ بضغطة واحدة على رقمٍ ما شافوش حد = رباطٌ على رقم غلط ما بيتصلحش من الشاشة.
+      // الرقم بيتحطّ في الخانة سلفًا لو الصفّ فيه واحد — بيأكّده أو بيعدّله، والخانة إلزامية.
+      var send=function(phone){
+        btn.disabled=true;btn.style.opacity='.5';
+        EP.inviteFromWaitlist({id:id,email:em,phone:phone||''},function(res){inviteLinkModal(res,em,nm);},invAgain);
+      };
+      var known=wlPhoneDigits(ph).length>=8;
+      var s=openModal('رقم واتساب المدعوّ',
+        '<div style="font-size:13px;line-height:1.8;color:var(--muted)">'+
+          (known
+            ? 'ده الرقم اللي كتبه <b style="color:var(--ink)">'+esc(nm||em||'المدعوّ')+'</b> في الاستمارة. الدعوة هتترابط بيه — الرابط ما بيفتحش لغير صاحبه. أكّده أو عدّله للرقم اللي هتبعت عليه فعلًا.'
+            : 'الصفّ ده مكتوبش فيه رقم واتساب صالح، والدعوة بتترابط بالرقم — الرابط ما بيفتحش لغير صاحبه. اكتب رقم <b style="color:var(--ink)">'+esc(nm||em||'المدعوّ')+'</b>.')+
+        '</div>'+
+        '<input id="wl_ph" type="tel" inputmode="tel" required placeholder="+2010xxxxxxxx" value="'+esc(ph)+'" style="direction:ltr;text-align:left;width:100%;min-height:44px;margin-top:12px;border:1px solid var(--line);border-radius:10px;padding:10px 13px;font:inherit;font-size:13px;background:var(--surface);color:var(--ink)">'+
+        '<div class="acts" style="margin-top:14px;display:flex;gap:8px;flex-wrap:wrap"><button class="btn btn-primary" id="wl_y" style="min-height:44px">اعمل الرابط</button><button class="btn btn-ghost" id="wl_n" style="min-height:44px">إلغاء</button></div>');
+      var input=s.querySelector('#wl_ph');
+      if(input)input.focus();
+      s.querySelector('#wl_n').onclick=closeModal;
+      s.querySelector('#wl_y').onclick=function(){
+        var v=(input.value||'').trim();
+        if(!v){toast('اكتب رقم واتساب من تدعوه — الدعوة تُفتح بهذا الرقم وحده');return;}
+        if(wlPhoneDigits(v).length<8){toast('رقم واتساب غير صحيح — اكتبه بالأرقام مع كود الدولة');return;}
+        closeModal();send(v);
+      };
     };
   });
 }
@@ -5400,7 +5440,7 @@ function renderMsgs(msgs){
   var el=document.getElementById('msgRows');el.innerHTML='';
   var items=msgs.filter(function(m){return msgFilter==='all'||m.status===msgFilter;});
   document.getElementById('msgN').textContent=items.length;
-  items.forEach(function(m,i){var realIdx=msgs.indexOf(m);el.insertAdjacentHTML('beforeend','<div class="row esc-row" data-i="'+realIdx+'" style="grid-template-columns:1.7fr 1fr 130px"><div class="c c1"><div class="src-ic" style="background:var(--ai-bg);color:var(--ai)">'+svg('inbox')+'</div><div><div class="parties">'+m.name+'</div><div class="from">'+m.topic+' · '+timeAgo(m.at)+'</div></div></div><div class="c"><div class="from" style="direction:ltr;text-align:right">'+m.email+'</div></div><div class="c"><span class="status '+(m.status==='new'?'s-wait':'s-auto')+'"><span class="d"></span>'+(m.status==='new'?'جديدة':'تم الرد')+'</span></div></div>');});
+  items.forEach(function(m,i){var realIdx=msgs.indexOf(m);el.insertAdjacentHTML('beforeend','<div class="row esc-row" data-i="'+realIdx+'" style="grid-template-columns:1.7fr 1fr 130px"><div class="c c1"><div class="src-ic" style="background:var(--ai-bg);color:var(--ai)">'+svg('inbox')+'</div><div><div class="parties">'+esc(m.name)+'</div><div class="from">'+esc(m.topic)+' · '+timeAgo(m.at)+'</div></div></div><div class="c"><div class="from" style="direction:ltr;text-align:right">'+esc(m.email)+'</div></div><div class="c"><span class="status '+(m.status==='new'?'s-wait':'s-auto')+'"><span class="d"></span>'+(m.status==='new'?'جديدة':'تم الرد')+'</span></div></div>');});
   if(!items.length)el.innerHTML='<div style="padding:40px;text-align:center;color:var(--muted)">لا رسائل في هذا التصنيف.</div>';
   el.querySelectorAll('.row').forEach(function(r){r.onclick=function(){selected=+r.dataset.i;drawMsg(msgs);};});
   drawMsg(msgs);
@@ -5409,11 +5449,11 @@ function drawMsg(msgs){
   var el=document.getElementById('drawer');if(!el)return;
   if(selected===null){el.innerHTML='<div class="empty">'+svg('inbox','ic')+'<p>اختر رسالة لقراءتها والرد عليها.</p></div>';return;}
   var m=msgs[selected];if(!m){el.innerHTML='';return;}
-  el.innerHTML='<div class="dh"><div class="k">رسالة تواصل · من الموقع</div><h3>'+m.name+'</h3></div><div class="db">'+
+  el.innerHTML='<div class="dh"><div class="k">رسالة تواصل · من الموقع</div><h3>'+esc(m.name)+'</h3></div><div class="db">'+
     '<div class="route"><span class="step">الموقع · فورم التواصل</span><span class="arrow">←</span><span class="step" style="color:var(--ai);font-weight:800">الرسائل</span></div>'+
-    '<div class="field"><div class="lab">البريد · الهاتف</div><div class="val" style="font-size:12.5px">'+m.email+'<br>'+(m.phone||'—')+'</div></div>'+
-    '<div class="field"><div class="lab">نوع الطلب</div><div class="val">'+m.topic+'</div></div>'+
-    '<div class="field"><div class="lab">الرسالة</div><div class="val" style="background:var(--surface-2);border-radius:9px;padding:11px 13px;font-weight:500">'+m.body+'</div></div>'+
+    '<div class="field"><div class="lab">البريد · الهاتف</div><div class="val" style="font-size:12.5px">'+esc(m.email)+'<br>'+esc(m.phone||'—')+'</div></div>'+
+    '<div class="field"><div class="lab">نوع الطلب</div><div class="val">'+esc(m.topic)+'</div></div>'+
+    '<div class="field"><div class="lab">الرسالة</div><div class="val" style="background:var(--surface-2);border-radius:9px;padding:11px 13px;font-weight:500">'+esc(m.body)+'</div></div>'+
     '<div class="acts">'+(m.status==='new'?'<button class="btn btn-primary" data-a="reply">'+svg('check')+'تم الرد</button>':'')+'<button class="btn btn-ghost" data-a="email">رد بالبريد</button><button class="btn btn-warn" data-a="del">حذف</button></div></div>';
   el.querySelectorAll('[data-a]').forEach(function(b){b.onclick=function(){var a=b.dataset.a;
     if(a==='reply'){
