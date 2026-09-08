@@ -27,7 +27,7 @@ import pytest
 
 _tmpdir = tempfile.mkdtemp()
 os.environ['DATABASE_URL'] = f"sqlite:///{os.path.join(_tmpdir, 'founding_leads_test.db')}"
-os.environ['SECRET_KEY'] = 'test-secret-key-for-founding-leads'
+os.environ['SECRET_KEY'] = 'test-secret-key-for-founding-leads-0123456789abcdef'
 os.environ['METRICS_SECRET'] = 'test-metrics-secret'
 
 import app as appmod  # noqa: E402

@@ -8,7 +8,7 @@ import tempfile
 # Point the app at a throwaway SQLite file BEFORE importing the app module.
 _tmpdir = tempfile.mkdtemp()
 os.environ['DATABASE_URL'] = f"sqlite:///{os.path.join(_tmpdir, 'seo_test.db')}"
-os.environ['SECRET_KEY'] = 'test-secret-key-for-seo'
+os.environ['SECRET_KEY'] = 'test-secret-key-for-seo-0123456789abcdef'
 os.environ['METRICS_SECRET'] = 'test-metrics-secret'
 
 import app as appmod  # noqa: E402

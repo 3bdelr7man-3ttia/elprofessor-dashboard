@@ -22,7 +22,7 @@ import pytest
 _tmpdir = tempfile.mkdtemp()
 _dbpath = os.path.join(_tmpdir, 'finance_event_test.db')
 os.environ['DATABASE_URL'] = f'sqlite:///{_dbpath}'
-os.environ['SECRET_KEY'] = 'test-secret-key-for-finance-event'
+os.environ['SECRET_KEY'] = 'test-secret-key-for-finance-event-0123456789abcdef'
 os.environ['METRICS_SECRET'] = 'test-metrics-secret'
 
 import app as appmod  # noqa: E402
