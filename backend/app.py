@@ -7616,8 +7616,13 @@ def _prerender_push(reason=''):
         os.makedirs(os.path.join(tmp, 'blog', '_pre'), exist_ok=True)
         # القوالب من الموقع الحيّ — المولّد بيستخرج مُصيِّر article.html منها ويشغّله
         for name in ('article.html', 'blog.html'):
+            # كاسر كاش إلزامي: الـCDN أمام الموقع بيرجّع نسخة قديمة من القالب لدقائق/ساعات
+            # بعد أي رفع، فيتولّد ٢٢٦ مقالًا بقالبٍ بائت (ضرب فعليًّا ٠٩-٠٨ مع F-022).
+            # الاستعلام العشوائي + no-cache يجبران القراءة من الأصل.
             r = requests.get('%s/%s' % (PRERENDER_ORIGIN, name), timeout=30,
-                             headers={'User-Agent': 'elprofessor-prerender/1.0'})
+                             params={'nocache': str(int(time.time()))},
+                             headers={'User-Agent': 'elprofessor-prerender/1.0',
+                                      'Cache-Control': 'no-cache', 'Pragma': 'no-cache'})
             if r.status_code != 200:
                 raise RuntimeError('template %s HTTP %s' % (name, r.status_code))
             with open(os.path.join(tmp, name), 'w', encoding='utf-8') as fh:
