@@ -371,6 +371,17 @@ RAW_SINKS = [
     'id="g_u" value="\'+(e.unit||\'\')+\'"',
     'id="g_d" value="\'+(e.due||\'\')+\'"',
     "'+g.cat+'", "'+g.title+'", "'+g.owner+'", "'+g.due+'", "'+g.unit+'",
+    # prelaunch B7 — the sinks F-093's fix left behind, one class each. The renderers
+    # themselves are exercised in tests/test_xss_sinks_round2.py; these are the grep half.
+    # F-135 course drawer (employee-writable via POST /api/courses):
+    '${c.title}', '${c.inst}', '${c.enrolled}', '${c.from}',
+    # F-142 price offers (platform bridge + an LLM-authored segment label):
+    '${o.course}', '${o.buyer}', '${SEG_LABEL[o.segment]||o.segment}', '${o.currency}',
+    # F-144 escrow (written by the BRIDGE SECRET, not by the admin):
+    '${e.student}', '${e.expert}', '${e.release}', '${d.reason}', '${d.party}',
+    "${d.expert||''}", '${d.sla}', '${r.expert}',
+    # F-146 targets screen (month label + the dead-today edit modal's value="…"):
+    '${t.m}', 'value="\'+(e.m||\'\')+\'"',
 ]
 
 
@@ -403,7 +414,15 @@ def test_every_fixed_sink_is_actually_escaped_in_the_shipped_file():
                    'id="g_d" value="\'+esc(e.due||\'\')+\'"',
                    # ...and renderGoals' five text sites (current/target stay numeric)
                    "'+esc(g.cat)+'", "'+esc(g.title)+'", "'+esc(g.owner)+'",
-                   "'+esc(g.due)+'", "'+esc(g.unit)+'"):
+                   "'+esc(g.due)+'", "'+esc(g.unit)+'",
+                   # prelaunch B7 — the escaped form of every sink added to RAW_SINKS above
+                   '${esc(c.title)}', '${esc(c.inst)}', '${esc(c.enrolled)}', '${esc(c.from)}',
+                   '${esc(o.course)}', '${esc(o.buyer)}', '${esc(o.currency)}',
+                   '${SEG_LABEL[o.segment]||esc(o.segment)}',
+                   '${esc(e.student)}', '${esc(e.expert)}', '${esc(e.release)}',
+                   '${esc(d.reason)}', '${esc(d.party)}', "${esc(d.expert||'')}",
+                   '${esc(d.sla)}', '${esc(r.expert)}',
+                   '${esc(t.m)}', 'value="\'+esc(e.m||\'\')+\'"'):
         assert needle in src, needle
 
 
@@ -568,6 +587,9 @@ EXPECTED_CSP_DIRECTIVES = [
     "connect-src 'self'",
     "object-src 'none'",
     "base-uri 'none'",
+    # F-141 — measured inside Chromium (AUDIT/tools/csp_exfil_probe.py): without this a
+    # top-level POST built by injected code walks the admin JWT out past connect-src.
+    "form-action 'self'",
     "frame-ancestors 'none'",
 ]
 
@@ -581,8 +603,12 @@ def test_csp_ships_even_when_is_production_is_false(client):
     assert csp, 'no Content-Security-Policy header'
     for d in EXPECTED_CSP_DIRECTIVES:
         assert d in csp, (d, csp)
-    # HSTS stays production-only — proof the CSP is genuinely outside that branch
-    assert 'Strict-Transport-Security' not in r.headers
+    # CHANGED (prelaunch B7 / F-021): this used to assert HSTS is ABSENT here, as proof the
+    # CSP sits outside the IS_PRODUCTION branch. That assertion pinned the bug: the deployed
+    # container also runs with IS_PRODUCTION False, so production-only meant nowhere. HSTS is
+    # now unconditional (a UA must ignore it on a non-secure connection, RFC 6797 §7.2), and
+    # its presence here IS the proof that the live https host finally receives it.
+    assert r.headers.get('Strict-Transport-Security') == 'max-age=31536000; includeSubDomains'
 
 
 def test_csp_is_on_the_html_entrypoint_too(client):

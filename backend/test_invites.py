@@ -1194,7 +1194,8 @@ def _render_invite_row_and_drawer_actions(row):
         consts + '\n' + stage_ar + '\n' + derive + '\n'
         + re.search(r'^function esc\(s\).*$', src, flags=re.M).group(0) + '\n'
         + 'function money(v){return String(v);}\nfunction svg(){return "";}\nvar invSel=null;\n'
-        + fn('invLinkLive', '\n') + fn('invDeadLinkHtml') + fn('inviteWaText') + fn('inviteRowHtml') + fn('inviteActionsHtml')
+        + fn('invLinkLive', '\n') + fn('invDeadLinkHtml') + fn('inviteWaText') + fn('inviteRowHtml')
+        + fn('invReissuable') + fn('inviteActionsHtml')
         + 'var i=' + json.dumps(row, ensure_ascii=False) + ';\n'
         + 'i.stage=deriveInviteStage(i,i.status); i.stageLabel=STAGE_AR[i.stage]||i.stage;\n'
         + 'process.stdout.write(JSON.stringify({row:inviteRowHtml(i),drawer:inviteActionsHtml(i),stageLabel:i.stageLabel}));'
@@ -1254,6 +1255,120 @@ def test_a_live_pending_row_still_draws_copy_whatsapp_countdown_and_sent_stamp()
     assert 'اتبعتت اليوم' in r['row'] and 'أُنشئت' not in r['row']
     assert 'الرابط لا يعمل' not in r['row']
     assert 'ivdCp' in r['drawer'] and 'ivdWa' in r['drawer'] and 'wa.me' in r['drawer'] and 'ivdRv' in r['drawer']
+
+
+# --------------------------------------------------------------------------- F-012: «أعِد إصدارها»
+
+# الدعوة المنتهية كان بريدها بيفضل محجوز والداشبورد بيقول «اتعملت الدعوة» وبيسلّم الرابط الميّت
+# نفسه. الزرّ ده بينادي `POST /api/invites/{id}/reissue` ⇒ رمزٌ جديد ومهلة جديدة، والقديم بيفضل ٤١٠.
+
+def test_a_dead_invite_drawer_offers_reissue():
+    for kw in ({'status': 'pending', 'stage': 'expired', 'daysLeftLabel': 'انتهت'},
+               {'status': 'revoked', 'stage': 'revoked', 'revoked': True},
+               {'status': 'rejected', 'stage': 'rejected'}):
+        r = _render_invite_row_and_drawer_actions(dict(_BASE_ROW, **kw))
+        assert 'ivdRe' in r['drawer'], kw
+        assert 'أعِد إصدارها' in r['drawer'], kw
+
+
+def test_a_live_or_registered_invite_never_offers_reissue():
+    """ما بنكسرش رابطًا في الطريق، ولا بنعيد إصدار دعوةٍ صاحبها انضمّ (حسابه قائم)."""
+    live = _render_invite_row_and_drawer_actions(dict(_BASE_ROW, status='pending', stage='pending'))
+    assert 'ivdRe' not in live['drawer'] and 'أعِد إصدارها' not in live['drawer']
+    done = _render_invite_row_and_drawer_actions(
+        dict(_BASE_ROW, status='registered', stage='registered', registered=True))
+    assert 'ivdRe' not in done['drawer']
+    # وحتى المنتهية لو صاحبها منضمّ (صفّ قديم بمحطة registered) — الشرط بيقرا `registered` أوّلًا
+    weird = _render_invite_row_and_drawer_actions(
+        dict(_BASE_ROW, status='registered', stage='expired', registered=True))
+    assert 'ivdRe' not in weird['drawer']
+
+
+def test_the_reissue_button_is_wired_to_the_platform_call():
+    """⛔ فخّ «مكتوبٌ ولا يُرسم/ولا يُنادى»: زرٌّ بلا سلك = توست كاذب."""
+    src = _index_src()
+    api = _api_src()
+    assert src.count('function invReissuable(') == 1
+    assert "el.querySelector('#ivdRe')" in src
+    assert 'EP.reissueInvite' in src
+    assert 'EP.reissueInvite = function' in api
+    assert '"/invites/" + encodeURIComponent(inv.id) + "/reissue"' in api
+    # المودال بيقول الحقيقة: الرابط القديم بيموت
+    assert 'الرابط القديم هيفضل ميّت' in src
+
+
+def test_the_reissue_route_is_actually_registered():
+    """الزرّ المشحون بلا مسارٍ = ٤٠٤ في الإنتاج. القاعدةُ في `url_map` هي الدليل، لا النصّ."""
+    rules = {r.rule: sorted(r.methods) for r in flask_app.url_map.iter_rules()}
+    assert '/api/invites/<invite_id>/reissue' in rules
+    assert 'POST' in rules['/api/invites/<invite_id>/reissue']
+
+
+def test_reissue_forwards_to_the_right_bridge_path_with_no_invented_body(ctx):
+    """نفس نمط `revoke`/`approve` بالحرف: المعرِّف في المسار، بلا جسمٍ مُرسَل (مفتاحٌ زائد
+    بيتبلع صامتًا على المنصة)، والسرّ بيسافر ترويسةً خارجة."""
+    ctx['replies'][('POST', '/api/bridge/invites/inv-1/reissue')] = FakeResp(
+        200, {'ok': True, 'invite': {'id': 'inv-1', 'stage': 'pending'},
+              'link': 'https://app.example.net/invite/NEWTOK'})
+    r = ctx['client'].post('/api/invites/inv-1/reissue', headers=ctx['admin'])
+    assert r.status_code == 200
+    call = ctx['sent'][-1]
+    assert call['method'] == 'POST'
+    assert call['path'] == '/api/bridge/invites/inv-1/reissue'
+    assert call['json'] is None
+    assert call['headers']['X-ELP-Metrics-Secret'] == 'test-metrics-secret'
+
+
+def test_the_new_link_the_platform_returns_reaches_the_browser_unchanged(ctx):
+    """الداشبورد ما بتلفّقش رابطًا: اللي بيرجع من الجسر هو اللي بينسخه المؤسس."""
+    ctx['replies'][('POST', '/api/bridge/invites/inv-1/reissue')] = FakeResp(
+        200, {'ok': True, 'link': 'https://app.example.net/invite/NEWTOK'})
+    body = ctx['client'].post('/api/invites/inv-1/reissue', headers=ctx['admin']).get_json()
+    assert body['link'] == 'https://app.example.net/invite/NEWTOK'
+    assert 'test-metrics-secret' not in json.dumps(body)
+
+
+def test_reissue_is_admin_only_and_never_reaches_the_platform_for_a_non_admin(ctx):
+    """البعث بيولّد رابطًا يفتح حسابًا — قرارُ مؤسسٍ لا موظّف (زي `approve` بالضبط)."""
+    before = len(ctx['sent'])
+    for who in ('emp', 'trainer'):
+        assert ctx['client'].post('/api/invites/inv-1/reissue', headers=ctx[who]).status_code == 403
+    assert ctx['client'].post('/api/invites/inv-1/reissue').status_code in (401, 403)
+    assert len(ctx['sent']) == before
+    assert _audits('invite.reissue') == []
+
+
+def test_reissue_is_audited_only_on_success(ctx):
+    """المنصّة بتردّ ٤٠٩ على الحيّة والمنضمّة — والسجلّ ما يكدبش بصفٍّ لعمليةٍ ما تمّتش."""
+    ctx['replies'][('POST', '/api/bridge/invites/inv-1/reissue')] = FakeResp(
+        409, {'detail': 'الدعوة ما زالت حيّة'})
+    assert ctx['client'].post('/api/invites/inv-1/reissue', headers=ctx['admin']).status_code == 409
+    assert _audits('invite.reissue') == []
+    ctx['replies'][('POST', '/api/bridge/invites/inv-1/reissue')] = FakeResp(200, {'ok': True})
+    assert ctx['client'].post('/api/invites/inv-1/reissue', headers=ctx['admin']).status_code == 200
+    rows = _audits('invite.reissue')
+    assert len(rows) == 1
+    assert rows[0].target == 'inv-1'
+    assert rows[0].actor_email == 'admin@test.com'
+
+
+def test_a_platform_refusal_message_reaches_the_founder_as_written(ctx):
+    """٤٠٩ «ما زالت حيّة» لازم توصل كما هي — مش «تعذر تنفيذ العملية» ولا `[object Object]`."""
+    ctx['replies'][('POST', '/api/bridge/invites/inv-1/reissue')] = FakeResp(
+        409, {'detail': 'الدعوة ما زالت حيّة — لا تُبعث إلا الميّتة'})
+    r = ctx['client'].post('/api/invites/inv-1/reissue', headers=ctx['admin'])
+    assert r.status_code == 409
+    assert r.get_json()['error'] == 'الدعوة ما زالت حيّة — لا تُبعث إلا الميّتة'
+
+
+def test_the_reissue_desk_is_post_only_and_no_other_method_touches_the_platform(ctx):
+    """سطحٌ واحد: POST وبس. الـGET بيقع على catch-all بتاع الـSPA (سلوكٌ قائمٌ لكل المسارات،
+    مش خاصًّا بهنا) فالمقياس الصادق: **صفر نداء للجسر** من أي طريقةٍ غير POST."""
+    before = len(ctx['sent'])
+    assert ctx['client'].delete('/api/invites/inv-1/reissue', headers=ctx['admin']).status_code == 405
+    assert ctx['client'].put('/api/invites/inv-1/reissue', headers=ctx['admin']).status_code == 405
+    ctx['client'].get('/api/invites/inv-1/reissue', headers=ctx['admin'])
+    assert len(ctx['sent']) == before
 
 
 def test_the_link_gate_is_one_function_shared_by_row_and_drawer():

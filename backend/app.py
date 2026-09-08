@@ -35,22 +35,58 @@ IS_PRODUCTION = (
     or (os.environ.get('PROD') or '').strip().lower() in ('1', 'true', 'yes')
 )
 
+# F-021 — the deployed container runs with IS_PRODUCTION=False, so a guard behind that
+# flag never fires. A hard boot failure here would take the LIVE dashboard down the moment
+# ENV=production is set without a stable SECRET_KEY, so the guard is deliberately NOT fatal
+# yet: it shouts at boot and it is REPORTABLE on /api/health, so the founder can confirm the
+# env var exists (and is not the repo's placeholder) BEFORE the fail-fast is restored.
+# ⛔ docker-compose.yml:10 ships `SECRET_KEY: ${SECRET_KEY:-change-this-in-coolify-…}` — a
+#    default value published in the repo — so "the variable is set" is NOT proof by itself.
+_SECRET_KEY_PLACEHOLDERS = frozenset({
+    'change-this-in-coolify-to-a-long-random-secret',
+    'change-this-in-coolify', 'change-me', 'changeme', 'change_me',
+    'secret', 'secret-key', 'dev', 'development', 'test', 'password',
+})
+SECRET_KEY_MIN_LEN = 32
+
+
+def _classify_secret_key(value):
+    """(is_ephemeral, is_placeholder) لقيمة SECRET_KEY الخام.
+
+    ⛔ دالّةٌ واحدة عمدًا: التصنيف يجري مرّةً واحدة عند الاستيراد، فلو أعاد التستُ كتابة
+       الشرط داخله صار يختبر نسخته لا الشحنة (فخّ «تطبيقان لمنطقٍ واحد» المسجَّل في ذاكرة
+       المشروع). الاختبار يستدعي هذه الدالّة نفسها بقيمٍ مختلفة.
+    - ephemeral: لا قيمة (ولا فراغ) ⇒ مفتاحٌ مولَّد عند الإقلاع: كل نشرٍ يُسقط كل الجلسات
+      الصادرة، والمفتاح يختلف بين النسخ.
+    - placeholder: قيمةٌ موجودة لكنها النصّ الافتراضي المنشور في الريبو، أو أقصر من أن
+      تُقاوم التخمين.
+    """
+    clean = (value or '').strip()
+    is_ephemeral = not clean
+    is_placeholder = bool(clean) and (
+        clean.lower() in _SECRET_KEY_PLACEHOLDERS or len(clean) < SECRET_KEY_MIN_LEN
+    )
+    return is_ephemeral, is_placeholder
+
+
 _secret_key = os.environ.get('SECRET_KEY')
-if not _secret_key:
-    if IS_PRODUCTION:
-        # In production a missing SECRET_KEY is fatal: an ephemeral key would
-        # silently invalidate every issued JWT on each redeploy (logs everyone out)
-        # and makes sessions forgeable across instances. Fail fast instead.
-        raise RuntimeError(
-            "SECRET_KEY is not set in production. Set a strong, stable SECRET_KEY "
-            "env var (e.g. `python -c 'import secrets;print(secrets.token_hex(32))'`) "
-            "before starting the dashboard backend."
-        )
-    logger.warning(
-        "SECRET_KEY is not set — generating an ephemeral key (dev only). "
-        "This INVALIDATES all issued JWTs on restart; SET SECRET_KEY in production."
+SECRET_KEY_IS_EPHEMERAL, SECRET_KEY_IS_PLACEHOLDER = _classify_secret_key(_secret_key)
+if SECRET_KEY_IS_EPHEMERAL:
+    logger.error(
+        "SECRET_KEY is not set — generating an EPHEMERAL key. Every redeploy invalidates "
+        "all issued JWTs (everyone is logged out silently) and sessions are not shared "
+        "across instances. Set a strong, stable SECRET_KEY env var "
+        "(python -c 'import secrets;print(secrets.token_hex(32))'). "
+        "Reported on GET /api/health as secret_key_configured=false."
     )
     _secret_key = secrets.token_hex(32)
+elif SECRET_KEY_IS_PLACEHOLDER:
+    logger.error(
+        "SECRET_KEY is set to a PLACEHOLDER / too-short value (< 32 chars or the value "
+        "published in docker-compose.yml). Anyone reading the repo can forge an admin JWT. "
+        "Replace it with a 64-char random secret. "
+        "Reported on GET /api/health as secret_key_placeholder=true."
+    )
 app.config['SECRET_KEY'] = _secret_key
 database_url = os.environ.get('DATABASE_URL', 'sqlite:///elprofessor.db')
 if database_url.startswith('postgres://'):
@@ -105,10 +141,17 @@ def _security_headers(resp):
     resp.headers.setdefault('Referrer-Policy', 'strict-origin-when-cross-origin')
     # Content-Security-Policy — deliberately OUTSIDE the IS_PRODUCTION guard.
     # The deployed container runs with IS_PRODUCTION=False (F-021: neither ENV nor FLASK_ENV
-    # is set in the Dockerfile), so anything behind that guard never ships. This header is the
-    # net under the stored-XSS class of bug (F-091): even if an escape is missed somewhere in
-    # dashboard-cloud/index.html, `connect-src 'self'` + `img-src 'self' data:` stop the
-    # injected code from EXFILTRATING the 30-day admin JWT to an attacker's host.
+    # is set in the Dockerfile), so anything behind that guard never ships. This header is a
+    # SECOND layer under the stored-XSS class of bug (F-091): if an escape is missed somewhere
+    # in dashboard-cloud/index.html, `connect-src 'self'` + `img-src 'self' data:` +
+    # `form-action 'self'` shrink the ways injected code can EXFILTRATE the 30-day admin JWT.
+    # ⚠️ F-141 — measured, not assumed (AUDIT/tools/csp_exfil_probe.py inside Chromium):
+    #    fetch / <img> / sendBeacon / WebSocket are BLOCKED, and a top-level POST is blocked
+    #    only because `form-action 'self'` is present below. A top-level NAVIGATION
+    #    (window.open / location = …) still carries the token out and CSP cannot stop it —
+    #    `navigate-to` was dropped from the spec. So this header REDUCES exfiltration, it does
+    #    not prevent it; the real locks are esc() at every sink and a shorter token life
+    #    (F-108). ⛔ Never accept CSP as a substitute for esc().
     # Inventory of what the page actually loads (verified by grep over index.html /
     # dashboard-api.js / site-content.js): one @import stylesheet from fonts.googleapis.com
     # (fonts themselves from fonts.gstatic.com), zero external <script>, zero <img>, zero
@@ -127,10 +170,16 @@ def _security_headers(resp):
         "connect-src 'self'; "
         "object-src 'none'; "
         "base-uri 'none'; "
+        "form-action 'self'; "
         "frame-ancestors 'none'"
     )
-    if IS_PRODUCTION:
-        resp.headers.setdefault('Strict-Transport-Security', 'max-age=31536000; includeSubDomains')
+    # HSTS — also OUTSIDE the IS_PRODUCTION guard, for the same measured reason (F-021):
+    # dashboard.elprofessor.net answered with X-Frame-Options + nosniff but NO
+    # Strict-Transport-Security, i.e. the deployed container has IS_PRODUCTION=False and this
+    # header never reached a browser. It is safe unconditionally: RFC 6797 §7.2 requires a UA
+    # to IGNORE this header when the connection is not secure, so a local http:// dev server
+    # is unaffected, while the live https:// host finally gets it.
+    resp.headers.setdefault('Strict-Transport-Security', 'max-age=31536000; includeSubDomains')
     # ⚠️ If you add `X-Robots-Tag: noindex, nofollow` to this host, add it ABOVE this
     # guard — never below it, and never in a proxy/nginx layer Flask cannot reach.
     if request.path in _ROBOTS_EXEMPT_PATHS:
@@ -177,6 +226,108 @@ def _rate_ok(key, limit, window_sec):
         return False
     dq.append(now)
     return True
+
+
+# ---- قفلٌ لكل حساب على حدة (F-011) ----
+# حدّ المعدّل أعلاه مفتاحه **العنوان**، فمُهاجمٌ يوزّع محاولاته على عناوين كثيرة (أو شبكة
+# بروكسي) يجرّب كلمات سرّ على حسابٍ بعينه بلا سقف — وهو ما قيس فعلًا: ١٢-١٤ محاولة من
+# عناوين مختلفة ⇒ صفر منع. هذا العدّاد مفتاحه **البريد المُرسَل** فلا مفرّ منه بتغيير
+# العنوان. والمفتاح هو ما كتبه العميل لا حسابٌ موجود، فبريدٌ غير مسجَّل يُقفل مثله تمامًا
+# ولا يصير القفل عرّافًا يقول «هذا الحساب موجود».
+#
+# ⚖️ **المقايضة، وقرارها مكتوبٌ هنا عمدًا:** مفتاحٌ يكتبه المهاجم = بابُ حجبِ خدمة على
+#    لوحةٍ لها أدمن واحد. فالرفض **مخفَّف لا مطلق**، بضمانتين:
+#    (أ) **عنوانٌ سبق أن نجح منه دخولٌ لهذا الحساب لا يُقفل أبدًا** — فمن يعرف بريد المؤسس
+#        يقدر يزعج مجهولين، ولا يقدر يُخرج المؤسس من جهازه المعتاد. والعنوان هنا هو
+#        `_client_ip()` = أقصى يمين `X-Forwarded-For` الذي يُلحقه الوسيط، فلا يُزوَّر.
+#    (ب) **تهدئةٌ متصاعدة** تبدأ من ٦٠ث وتتضاعف مع كل قفلٍ متتالٍ حتى سقف ١٥ دقيقة، وتتلاشى
+#        بعد ساعةٍ بلا قفل. فأوّل خطأٍ بريءٍ يكلّف دقيقة، والتخمين المُصرّ وحده يصل للربع ساعة.
+# 🧹 والخريطتان مفتاحهما نصٌّ يكتبه المهاجم، فهما **مُقلَّمتان**: كل مدخلٍ ينتهي يُحذف عند
+#    لمسه، وكنسةٌ دوريّة كل ١٠ دقائق تمسح المنتهي كلّه حتى لو لم يُسأل عنه ثانيةً.
+LOGIN_FAIL_LIMIT = 8          # محاولة فاشلة
+LOGIN_FAIL_WINDOW = 900       # خلال ١٥ دقيقة
+LOGIN_LOCK_BASE = 60          # ⇒ تهدئة أولى دقيقة واحدة
+LOGIN_LOCK_MAX = 900          # ⇒ سقف التصاعد ربع ساعة
+LOGIN_STRIKE_DECAY = 3600     # قفلٌ لم يتكرّر خلال ساعة يُنسى فيعود التصاعد للبداية
+LOGIN_KNOWN_IPS_PER_ACCOUNT = 5
+# نصٌّ واحد للحالتين (قفلٌ قائم / قفلٌ وقع الآن) فلا يصير الفرقُ بينهما عرّافًا.
+LOGIN_LOCK_MESSAGE = 'محاولات دخول كثيرة على هذا الحساب — الدخول متوقّف مؤقتًا، جرّب بعد شوية'
+_LOGIN_FAILURES = {}          # email -> deque[timestamps]
+_LOGIN_LOCKED_UNTIL = {}      # email -> epoch seconds
+_LOGIN_STRIKES = {}           # email -> (عدد الأقفال المتتالية, وقت آخر قفل)
+_LOGIN_KNOWN_IPS = {}         # email -> deque[ip]  (عناوين نجح منها دخولٌ فعليّ)
+_LOGIN_SWEEP_AT = [0.0]       # وقت الكنسة الدوريّة القادمة
+LOGIN_SWEEP_EVERY = 600
+
+
+def _login_sweep(now=None):
+    """كنسةٌ دوريّة: المفاتيح نصٌّ يكتبه المهاجم، فلا يجوز أن ينمو أيٌّ منها بلا حدّ."""
+    now = now if now is not None else time.time()
+    if now < _LOGIN_SWEEP_AT[0]:
+        return
+    _LOGIN_SWEEP_AT[0] = now + LOGIN_SWEEP_EVERY
+    for email in [k for k, until in _LOGIN_LOCKED_UNTIL.items() if until <= now]:
+        _LOGIN_LOCKED_UNTIL.pop(email, None)
+    for email in [k for k, dq in _LOGIN_FAILURES.items()
+                  if not dq or dq[-1] <= now - LOGIN_FAIL_WINDOW]:
+        _LOGIN_FAILURES.pop(email, None)
+    for email in [k for k, (_n, at) in _LOGIN_STRIKES.items()
+                  if at <= now - LOGIN_STRIKE_DECAY]:
+        _LOGIN_STRIKES.pop(email, None)
+
+
+def _login_cooldown(email, now):
+    """التهدئة المستحقّة الآن: ٦٠ث × ٢^(الأقفال المتتالية) بسقف ١٥ دقيقة."""
+    n, at = _LOGIN_STRIKES.get(email, (0, 0.0))
+    if at <= now - LOGIN_STRIKE_DECAY:
+        n = 0
+    return min(LOGIN_LOCK_BASE * (2 ** n), LOGIN_LOCK_MAX), n
+
+
+def _login_locked(email, ip=None):
+    """هل هذا الحساب في تهدئة الآن؟ (وتُنظَّف المداخل المنتهية بدل أن تتراكم للأبد)"""
+    _login_sweep()
+    until = _LOGIN_LOCKED_UNTIL.get(email)
+    if until is None:
+        return False
+    if until <= time.time():
+        _LOGIN_LOCKED_UNTIL.pop(email, None)
+        _LOGIN_FAILURES.pop(email, None)
+        return False
+    # (أ) عنوانٌ معروفٌ لهذا الحساب لا يُحجب بقفلٍ صنعه غيره.
+    if ip and ip in _LOGIN_KNOWN_IPS.get(email, ()):
+        return False
+    return True
+
+
+def _login_failed(email):
+    """يسجّل محاولة فاشلة، ويُرجع True إن كانت هي التي أغلقت الحساب."""
+    now = time.time()
+    _login_sweep(now)
+    dq = _LOGIN_FAILURES.setdefault(email, deque())
+    while dq and dq[0] <= now - LOGIN_FAIL_WINDOW:
+        dq.popleft()
+    dq.append(now)
+    if len(dq) >= LOGIN_FAIL_LIMIT:
+        cooldown, strikes = _login_cooldown(email, now)
+        _LOGIN_LOCKED_UNTIL[email] = now + cooldown
+        _LOGIN_STRIKES[email] = (strikes + 1, now)
+        _LOGIN_FAILURES.pop(email, None)
+        return True
+    if not dq:                      # لا يحدث اليوم، لكن لا يُترك صفٌّ فارغ خلفنا أبدًا
+        _LOGIN_FAILURES.pop(email, None)
+    return False
+
+
+def _login_succeeded(email, ip=None):
+    """دخولٌ ناجح يمسح تاريخ الفشل — فالمستخدم الشرعي لا يورَّث قفلًا من محاولاته القديمة."""
+    _LOGIN_FAILURES.pop(email, None)
+    _LOGIN_LOCKED_UNTIL.pop(email, None)
+    _LOGIN_STRIKES.pop(email, None)
+    if ip:
+        seen = _LOGIN_KNOWN_IPS.setdefault(email, deque(maxlen=LOGIN_KNOWN_IPS_PER_ACCOUNT))
+        if ip not in seen:
+            seen.append(ip)
 
 
 CUT_OFF_DATE = datetime.date(2026, 6, 1)
@@ -1371,16 +1522,31 @@ def serialize_date(d):
 
 @app.route('/api/auth/login', methods=['POST'])
 def login():
-    if not _rate_ok('login:' + _client_ip(), 10, 300):
+    client_ip = _client_ip()
+    if not _rate_ok('login:' + client_ip, 10, 300):
         return jsonify({'error': 'محاولات كتير — استنى شوية وجرّب تاني'}), 429
     data = request.json or {}
     email = (data.get('email') or '').lower().strip()
     password = data.get('password') or ''
     if not email or len(email) > 255 or len(password) > 256:
         return jsonify({'error': 'Invalid credentials'}), 401
+    # F-011 (ب): قفلٌ لكل حساب — يُفحص بعد تنظيف البريد وقبل أي لمسٍ لقاعدة البيانات.
+    # العنوان يُمرَّر كي لا يُحجب جهازٌ سبق أن نجح منه دخولٌ لهذا الحساب (انظر التعليق عند
+    # `_login_locked`: القفل يمنع التخمين الموزَّع بلا أن يصير سلاح حجبِ خدمةٍ على المؤسس).
+    if _login_locked(email, client_ip):
+        return jsonify({'error': LOGIN_LOCK_MESSAGE}), 429
     user = User.query.filter_by(email=email).first()
     if not user or not check_password_hash(user.password_hash, password):
+        if _login_failed(email):
+            return jsonify({'error': LOGIN_LOCK_MESSAGE}), 429
         return jsonify({'error': 'Invalid credentials'}), 401
+    # F-011 (ج): حسابٌ معطَّل (أو مسجَّل ذاتيًّا بانتظار الموافقة) كان يأخذ توكنًا صالحًا
+    # ثلاثين يومًا ويُكتب له سطر تدقيق «دخولٌ ناجح». التوكن عقيمٌ (قارئو Authorization
+    # الثلاثة يفحصون is_active) لكن الأثر باقٍ: دفتر تدقيقٍ يكذب وواجهةٌ تُدخِله ثم تُخرجه.
+    if not user.is_active:
+        _audit('auth.login_blocked_inactive', target=user.id, meta={'reason': 'inactive'}, actor=user.email)
+        return jsonify({'error': 'الحساب غير مُفعَّل — بانتظار موافقة الإدارة'}), 403
+    _login_succeeded(email, client_ip)
     token = jwt.encode({
         'user_id': user.id,
         'exp': datetime.datetime.utcnow() + datetime.timedelta(days=30)
@@ -3027,6 +3193,21 @@ def invite_revoke(invite_id):
     return resp
 
 
+@app.route('/api/invites/<invite_id>/reissue', methods=['POST'])
+@token_required
+@roles_required('admin')   # البعث بيولّد رابطًا يفتح حسابًا — قرارُ مؤسسٍ لا موظّف (زي approve)
+def invite_reissue(invite_id):
+    """F-012: بعثُ دعوةٍ ميّتة (منتهية · مسحوبة · مرفوضة) برمزٍ ومهلةٍ جديدين.
+
+    ⛔ الرابط القديم بيفضل ميّتًا وبيردّ ٤١٠ — المنصّة بتحطّه في `old_tokens`، والداشبورد
+    ما بتلفّقش رابطًا: اللي بيرجع من الجسر هو الرابط الجديد. الحيّةُ ٤٠٩ (ما نكسرش رابطًا في
+    الطريق) والمنضمُّ ٤٠٩ (حسابه قائم). بلا جسمٍ مُرسَل — نفس قاعدة `invite_revoke`."""
+    resp = _platform_proxy('POST', f"/api/bridge/invites/{invite_id}/reissue")
+    if _resp_ok(resp):
+        _audit('invite.reissue', target=invite_id)
+    return resp
+
+
 @app.route('/api/invites/<invite_id>', methods=['GET'])
 @token_required
 @roles_required('admin', 'employee')   # قراءة فقط؛ نفس حماية القائمة — التفصيل أدقّ لا أوسع
@@ -3760,7 +3941,8 @@ def usage_stats():
 
 @app.route('/api/dashboard', methods=['GET'])
 @token_required
-@roles_required('admin', 'employee')
+@roles_required('admin')   # F-095: الدفتر المالي للأدمن وحده — «موظّف المتابعة»
+                           # كان يقرأه كاملًا من الـAPI بينما الواجهة تخفيه فقط
 def dashboard():
     rate = get_rate()
     
@@ -3929,7 +4111,8 @@ def dashboard():
 
 @app.route('/api/revenues', methods=['GET'])
 @token_required
-@roles_required('admin', 'employee')
+@roles_required('admin')   # F-095: الدفتر المالي للأدمن وحده — «موظّف المتابعة»
+                           # كان يقرأه كاملًا من الـAPI بينما الواجهة تخفيه فقط
 def list_revenues():
     items = Revenue.query.order_by(Revenue.date.desc()).all()
     rate = get_rate()
@@ -3992,7 +4175,8 @@ def delete_revenue(id):
 
 @app.route('/api/expenses', methods=['GET'])
 @token_required
-@roles_required('admin', 'employee')
+@roles_required('admin')   # F-095: الدفتر المالي للأدمن وحده — «موظّف المتابعة»
+                           # كان يقرأه كاملًا من الـAPI بينما الواجهة تخفيه فقط
 def list_expenses():
     items = Expense.query.order_by(Expense.date.desc()).all()
     rate = get_rate()
@@ -4005,7 +4189,8 @@ def list_expenses():
 
 @app.route('/api/assets', methods=['GET'])
 @token_required
-@roles_required('admin', 'employee')
+@roles_required('admin')   # F-095: الدفتر المالي للأدمن وحده — «موظّف المتابعة»
+                           # كان يقرأه كاملًا من الـAPI بينما الواجهة تخفيه فقط
 def list_assets():
     items = Asset.query.order_by(Asset.category.asc(), Asset.value_egp.desc()).all()
     return jsonify([{
@@ -4805,7 +4990,8 @@ def update_packages():
 
 @app.route('/api/cashflow', methods=['GET'])
 @token_required
-@roles_required('admin', 'employee')
+@roles_required('admin')   # F-095: الدفتر المالي للأدمن وحده — «موظّف المتابعة»
+                           # كان يقرأه كاملًا من الـAPI بينما الواجهة تخفيه فقط
 def list_cashflow():
     rate = get_rate()
     items = CashTransaction.query.order_by(CashTransaction.date.desc(), CashTransaction.id.desc()).all()
@@ -4866,7 +5052,8 @@ def delete_cashflow(id):
 
 @app.route('/api/partners', methods=['GET'])
 @token_required
-@roles_required('admin', 'employee')
+@roles_required('admin')   # F-095: الدفتر المالي للأدمن وحده — «موظّف المتابعة»
+                           # كان يقرأه كاملًا من الـAPI بينما الواجهة تخفيه فقط
 def list_partners():
     rate = get_rate()
     items = Partner.query.order_by(Partner.equity_percent.desc()).all()
@@ -5620,8 +5807,11 @@ def generate_ai_snapshot():
             'cash_balance_egp': round(cash_balance),
             'cash_balance_usd': round(cash_balance / rate, 2) if rate else 0,
             'top_clients': [{'name': n, 'total_egp': round(t)} for n, t in top_clients],
-            'raw_bank_revenue_egp': round(get_setting_float('raw_bank_revenue_usd', 0) * rate + get_setting_float('raw_bank_revenue_egp', 0)),
-            'raw_bank_expenses_egp': round(get_setting_float('raw_bank_expenses_usd', 0) * rate + get_setting_float('raw_bank_expenses_egp', 0)),
+            # F-095: أرقام البنك الخام مصدرها `Setting` لا الصفوف، فتصفيرُ الصفوف أعلاه ما كانش
+            # بيمسّها — كانت تخرج كاملةً لأي غير-أدمن. المالُ الخام للأدمن وحده (والنداء الداخلي
+            # بلا `g.user` — الكرون — بيعدّي كأدمن زي بقيّة الدالّة).
+            'raw_bank_revenue_egp': round(get_setting_float('raw_bank_revenue_usd', 0) * rate + get_setting_float('raw_bank_revenue_egp', 0)) if is_admin else 0,
+            'raw_bank_expenses_egp': round(get_setting_float('raw_bank_expenses_usd', 0) * rate + get_setting_float('raw_bank_expenses_egp', 0)) if is_admin else 0,
         },
         'cashflow': {
             'balance_egp': round(cash_balance),
@@ -5653,8 +5843,14 @@ def generate_ai_snapshot():
 
 @app.route('/api/ai/snapshot', methods=['GET'])
 @token_required
-@roles_required('admin', 'employee')
+@roles_required('admin')
 def ai_snapshot():
+    # F-095 — آخر بابٍ على الدفتر المالي. كان `roles_required('admin','employee')` اعتمادًا على
+    # القناع الداخلي في `generate_ai_snapshot` («employee/viewer: no money at all»)، لكن القناع
+    # كان بيصفّر الصفوف وحدها ويسيب `raw_bank_revenue_egp`/`raw_bank_expenses_egp` — أرقام البنك
+    # الخام جايّة من `Setting` مش من الصفوف — تخرج بالكامل لأي موظّف. الدور اتشال هنا (نصف قطر
+    # الإغلاق صفر: صفر نداء لـ`/api/ai/snapshot` في `dashboard-cloud/`، و`ROLE_NAV.employee` =
+    # users·courses·topics·tutorials) والقناع نفسه اتسدّ تحت — بوّابة وقناع، مش واحد منهما.
     return jsonify(generate_ai_snapshot())
 
 @app.route('/api/ai/ask', methods=['POST'])
@@ -5704,7 +5900,8 @@ def ai_log_response():
 
 @app.route('/api/finance/summary', methods=['GET'])
 @token_required
-@roles_required('admin', 'employee')
+@roles_required('admin')   # F-095: الدفتر المالي للأدمن وحده — «موظّف المتابعة»
+                           # كان يقرأه كاملًا من الـAPI بينما الواجهة تخفيه فقط
 def finance_summary():
     rate = get_rate()
     revenues = Revenue.query.all()
@@ -6004,8 +6201,14 @@ def _goals_heuristic(m):
 
 @app.route('/api/ai/goals-advisor', methods=['GET'])
 @token_required
-@roles_required('admin', 'employee')
+@roles_required('admin')
 def ai_goals_advisor():
+    # F-095 — الباب الحادي عشر على الدفتر المالي. كان `roles_required('admin','employee')`
+    # فيرجع للموظّف `metrics` كاملة (total_revenue_egp · total_expenses_egp · net_profit_egp ·
+    # last_month_revenue_egp) و`current` داخل الأهداف المقترحة — أي نفس الأرقام التي أُغلقت
+    # عنه في العشرة مسارات. نصف قطر الإغلاق صفر: الشاشة الوحيدة التي تستدعيه هي `viewTargets`
+    # (dashboard-cloud/index.html:3738) وموديول «targets» ليس في ROLE_NAV.employee
+    # (index.html:397 = users·courses·topics·tutorials) ⇒ لا شاشة يملكها الموظّف تنكسر.
     """AI guidance for next-period targets, grounded in REAL platform numbers.
     Shape: { headline, insights:[...], suggested_targets:[{label,current,target,rationale}],
              source:'ai'|'heuristic', metrics:{...} }."""
@@ -8004,9 +8207,12 @@ def escrow_hold():
     rate = min(max(rate, 0.0), 1.0)
     session = EscrowSession(
         id=_next_seq_id(EscrowSession, 'ESC'),
-        student_name=(d.get('student_name') or '').strip(),
+        # F-144: سقف طولٍ على الاسمين — الكاتب هنا هو **سرّ الجسر** لا الأدمن، وهما يُرسمان
+        # في شاشة الضمان. الهروب في الواجهة هو الحارس، وهذا سقفٌ ثانٍ يمنع حمولةً طويلة
+        # من ملء العمود (255) وقطعِ نفسها في منتصف كيان HTML.
+        student_name=(d.get('student_name') or '').strip()[:255],
         student_email=(d.get('student_email') or '').strip().lower(),
-        expert_name=(d.get('expert_name') or '').strip(),
+        expert_name=(d.get('expert_name') or '').strip()[:255],
         expert_email=(d.get('expert_email') or '').strip().lower(),
         amount=amount,
         currency=currency,
@@ -8197,7 +8403,8 @@ def escrow_process_auto_releases():
 
 @app.route('/api/escrow', methods=['GET'])
 @token_required
-@roles_required('admin', 'employee')
+@roles_required('admin')   # F-095: الدفتر المالي للأدمن وحده — «موظّف المتابعة»
+                           # كان يقرأه كاملًا من الـAPI بينما الواجهة تخفيه فقط
 def escrow_list():
     status = (request.args.get('status') or '').strip()
     q = EscrowSession.query
@@ -8209,14 +8416,16 @@ def escrow_list():
 
 @app.route('/api/disputes', methods=['GET'])
 @token_required
-@roles_required('admin', 'employee')
+@roles_required('admin')   # F-095: الدفتر المالي للأدمن وحده — «موظّف المتابعة»
+                           # كان يقرأه كاملًا من الـAPI بينما الواجهة تخفيه فقط
 def disputes_list():
     items = Dispute.query.order_by(Dispute.opened_at.desc()).all()
     return jsonify([serialize_dispute(d) for d in items])
 
 @app.route('/api/escrow/metrics', methods=['GET'])
 @token_required
-@roles_required('admin', 'employee')
+@roles_required('admin')   # F-095: الدفتر المالي للأدمن وحده — «موظّف المتابعة»
+                           # كان يقرأه كاملًا من الـAPI بينما الواجهة تخفيه فقط
 def escrow_metrics():
     now = datetime.datetime.utcnow()
     all_sessions = EscrowSession.query.all()
@@ -8240,7 +8449,22 @@ def escrow_metrics():
 
 @app.route('/api/health', methods=['GET'])
 def health():
-    return jsonify({'status': 'ok', 'version': '1.0.0'})
+    # F-021 — الحالة التي لا تُقاس إلا من داخل الحاوية تُعلَن هنا، لا تُخمَّن من الخارج:
+    # هل تعرف الحاوية أنها إنتاج، وهل مفتاح التوقيع مضبوطٌ وثابت أم مولَّدٌ عند كل إقلاع
+    # (فتسقط كل الجلسات صامتة) أم هو القيمة الافتراضية المنشورة في `docker-compose.yml`.
+    # تُعلَن **أعلامٌ منطقية فقط** — لا قيمة ولا جزءٌ منها ولا طولها.
+    #
+    # ⛔ ومع ذلك فهي **ليست عامّة**: `secret_key_placeholder=true` يخبر أي زائرٍ مجهول أن
+    #    مفتاح التوقيع هو النصّ المنشور في `docker-compose.yml:10` (أو أقصر من ٣٢ محرفًا)
+    #    ⇒ دعوةٌ صريحة لتزوير توكن أدمن. فالردّ العامّ يبقى {status, version} وحدهما،
+    #    والأعلام لا تُعرض إلا لمن يقدّم ترويسة `X-ELP-Metrics-Secret` أو توكن أدمن —
+    #    وهو ما يقدر المؤسس على تمريره في curl كما يفعل مع بقيّة مسارات الجسر.
+    body = {'status': 'ok', 'version': '1.0.0'}
+    if _escrow_metrics_authorized():
+        body['is_production'] = IS_PRODUCTION
+        body['secret_key_configured'] = not SECRET_KEY_IS_EPHEMERAL
+        body['secret_key_placeholder'] = SECRET_KEY_IS_PLACEHOLDER
+    return jsonify(body)
 
 @app.route('/', defaults={'path': ''})
 @app.route('/<path:path>')

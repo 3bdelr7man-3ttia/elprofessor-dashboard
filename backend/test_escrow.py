@@ -217,7 +217,12 @@ def test_dispute_resolve_split_zero_is_refund(ctx):
         assert Revenue.query.filter_by(source='escrow_commission').count() == 0
 
 
-def test_employee_cannot_write_but_can_read(ctx):
+def test_employee_can_neither_write_nor_read_escrow(ctx):
+    """CHANGED (prelaunch / F-095): the read half used to assert 200 for an employee. That
+    assertion pinned the bug — escrow rows carry party names AND money (held / commission /
+    net), the دفتر المالي by another name, and the UI hid the screen from the employee while
+    the API served it. `ROLE_NAV.employee` grants users/courses/topics/tutorials only, so no
+    employee screen loses data by this. The write half is unchanged."""
     client, admin_h, emp_h, _ = ctx
     sid = _hold(client, admin_h, amount=1000).get_json()['session']['id']
     # Writes -> 403.
@@ -227,10 +232,14 @@ def test_employee_cannot_write_but_can_read(ctx):
     assert client.post('/api/escrow/process-auto-releases', headers=emp_h).status_code == 403
     # Hold via employee JWT (no secret, not admin) -> 403.
     assert _hold(client, emp_h, amount=100).status_code == 403
-    # Reads -> 200.
-    assert client.get('/api/escrow', headers=emp_h).status_code == 200
-    assert client.get('/api/disputes', headers=emp_h).status_code == 200
-    assert client.get('/api/escrow/metrics', headers=emp_h).status_code == 200
+    # Reads -> 403 as well now (admin only). See tests/test_finance_authz.py for the matrix.
+    assert client.get('/api/escrow', headers=emp_h).status_code == 403
+    assert client.get('/api/disputes', headers=emp_h).status_code == 403
+    assert client.get('/api/escrow/metrics', headers=emp_h).status_code == 403
+    # ...and the admin still reads all three (never assert only an absence).
+    assert client.get('/api/escrow', headers=admin_h).status_code == 200
+    assert client.get('/api/disputes', headers=admin_h).status_code == 200
+    assert client.get('/api/escrow/metrics', headers=admin_h).status_code == 200
 
 
 def test_process_auto_releases_only_past_due_no_dispute(ctx):

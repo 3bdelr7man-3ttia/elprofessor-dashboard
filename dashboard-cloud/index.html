@@ -722,10 +722,10 @@ function renderEsc(){
     if(!SES.length)el.innerHTML='<div style="padding:40px;text-align:center;color:var(--muted)">لا جلسات في الضمان حاليًا.</div>';
     SES.forEach((e,idx)=>{const st=STATUS[e.status]||{cls:'',t:e.status};
       el.insertAdjacentHTML('beforeend',`<div class="row esc-row${selected===idx?' sel':''}" data-i="${idx}">
-        <div class="c c1"><div class="src-ic">${svg('shield')}</div><div><div class="parties">${e.student}<span class="arr">←</span><span class="exp">${e.expert}</span></div><div class="from">${e.id} · حُجز ${e.held}</div></div></div>
+        <div class="c c1"><div class="src-ic">${svg('shield')}</div><div><div class="parties">${esc(e.student)}<span class="arr">←</span><span class="exp">${esc(e.expert)}</span></div><div class="from">${esc(e.id)} · حُجز ${esc(e.held)}</div></div></div>
         <div class="c"><div class="amt">${money(e.amount)} <small>ج محجوز</small></div></div>
         <div class="c"><span class="status ${st.cls}"><span class="d"></span>${st.t}</span></div>
-        <div class="c"><div class="sla${e.status==='dispute'?' warn':''}">${svg('clock')}${e.release}</div></div>
+        <div class="c"><div class="sla${e.status==='dispute'?' warn':''}">${svg('clock')}${esc(e.release)}</div></div>
       </div>`);});
     el.querySelectorAll('.row').forEach(r=>r.onclick=()=>{selected=+r.dataset.i;renderEsc();drawEsc();});
   } else if(escTab==='disputes'){
@@ -733,10 +733,10 @@ function renderEsc(){
     if(!DSP.length)el.innerHTML='<div style="padding:40px;text-align:center;color:var(--muted)">لا نزاعات مفتوحة.</div>';
     DSP.forEach((d,idx)=>{
       el.insertAdjacentHTML('beforeend',`<div class="row esc-row${selected==='d'+idx?' sel':''}" data-d="${idx}" style="grid-template-columns:1.4fr 1fr 150px 150px">
-        <div class="c c1"><div class="src-ic" style="background:var(--conflict-bg);color:var(--conflict)">${svg('scale')}</div><div><div class="parties">${d.party}<span class="arr">↔</span><span class="exp">${d.expert||''}</span></div><div class="from">${d.id} · جلسة ${d.session} · فُتح ${d.opened}</div></div></div>
+        <div class="c c1"><div class="src-ic" style="background:var(--conflict-bg);color:var(--conflict)">${svg('scale')}</div><div><div class="parties">${esc(d.party)}<span class="arr">↔</span><span class="exp">${esc(d.expert||'')}</span></div><div class="from">${esc(d.id)} · جلسة ${esc(d.session)} · فُتح ${esc(d.opened)}</div></div></div>
         <div class="c"><div class="amt">${money(d.amount)} <small>ج مجمّد</small></div></div>
         <div class="c"><span class="status s-late"><span class="d"></span>قيد المراجعة</span></div>
-        <div class="c"><div class="sla${d.warn?' warn':''}">${svg('clock')}${d.sla}</div></div>
+        <div class="c"><div class="sla${d.warn?' warn':''}">${svg('clock')}${esc(d.sla)}</div></div>
       </div>`);});
     el.querySelectorAll('.row').forEach(r=>r.onclick=()=>{selected='d'+r.dataset.d;renderEsc();drawEsc();});
   } else {
@@ -744,7 +744,7 @@ function renderEsc(){
     if(!REL.length)el.innerHTML='<div style="padding:40px;text-align:center;color:var(--muted)">لا جلسات محرّرة بعد.</div>';
     REL.forEach(r=>{const comm=(r.commission!=null)?Math.round(r.commission):Math.round((r.amount||0)*COMMISSION),net=(r.net!=null)?Math.round(r.net):((r.amount||0)-comm);
       el.insertAdjacentHTML('beforeend',`<div class="row esc-row" style="grid-template-columns:1.4fr 1fr 1fr 130px;cursor:default">
-        <div class="c c1"><div class="src-ic" style="background:var(--agree-bg);color:var(--agree)">${svg('check')}</div><div><div class="parties">${r.expert}</div><div class="from">${r.id} · حُرِّر ${r.when}</div></div></div>
+        <div class="c c1"><div class="src-ic" style="background:var(--agree-bg);color:var(--agree)">${svg('check')}</div><div><div class="parties">${esc(r.expert)}</div><div class="from">${esc(r.id)} · حُرِّر ${esc(r.when)}</div></div></div>
         <div class="c"><div class="amt">${money(r.amount)} <small>ج</small></div></div>
         <div class="c"><div class="from">للخبير <b style="color:var(--agree)">${money(net)}</b> · عمولة <b style="color:var(--gold)">${money(comm)}</b></div></div>
         <div class="c"><span class="status s-auto"><span class="d"></span>مكتمل</span></div>
@@ -758,12 +758,12 @@ function drawEsc(){
   if(selected===null){el.innerHTML=`<div class="empty">${svg('shield','ic')}<p>اختر جلسة أو نزاعًا لإجراء التحرير أو الاسترداد أو الفصل.</p></div>`;return;}
   if(typeof selected==='string'&&selected[0]==='d'){
     const d=escDisputes()[+selected.slice(1)];if(!d){el.innerHTML='';return;}
-    el.innerHTML=`<div class="dh" style="background:var(--conflict)"><div class="k">نزاع · ${d.id}</div><h3>فصل نزاع جلسة ${d.session}</h3></div><div class="db">
+    el.innerHTML=`<div class="dh" style="background:var(--conflict)"><div class="k">نزاع · ${esc(d.id)}</div><h3>فصل نزاع جلسة ${esc(d.session)}</h3></div><div class="db">
       <div class="timeline"><div class="st done"><div class="dot">${svg('check').replace('class="icon ','class="icon" style="width:11px;height:11px" ')}</div>مفتوحة</div><div class="st cur"><div class="dot"></div>قيد المراجعة</div><div class="st"><div class="dot"></div>القرار</div></div>
       <div class="field"><div class="lab">المبلغ المجمّد</div><div class="bigamt">${money(d.amount)} <small>ج</small></div></div>
-      <div class="field"><div class="lab">سبب الشكوى</div><div class="val">${d.reason}</div></div>
-      <div class="field"><div class="lab">الطرف المُحتج</div><div class="val">${d.party}${d.expert?(' ↔ '+d.expert):''}</div></div>
-      <div class="field"><div class="lab">المهلة</div><div class="val" style="color:var(--conflict)">${d.sla}</div></div>
+      <div class="field"><div class="lab">سبب الشكوى</div><div class="val">${esc(d.reason)}</div></div>
+      <div class="field"><div class="lab">الطرف المُحتج</div><div class="val">${esc(d.party)}${d.expert?(' ↔ '+esc(d.expert)):''}</div></div>
+      <div class="field"><div class="lab">المهلة</div><div class="val" style="color:var(--conflict)">${esc(d.sla)}</div></div>
       <div class="acts"><button class="btn btn-human" data-a="ref">${svg('back')}لصالح الطالب (استرداد)</button><button class="btn btn-primary" data-a="rel">${svg('check')}لصالح الخبير (تحرير)</button><button class="btn btn-ghost" data-a="split">تقسيم</button></div></div>`;
     el.querySelectorAll('[data-a]').forEach(b=>b.onclick=()=>{const a=b.dataset.a;
       if(live&&d.did){var dec=a==='ref'?'student':a==='rel'?'expert':'split';EP.disputeResolve(d.did,dec,()=>{selected=null;viewEscrow(document.getElementById('view'));});return;}
@@ -772,11 +772,11 @@ function drawEsc(){
   }
   const e=escSessions()[selected];if(!e){el.innerHTML='';return;}
   const comm=(e.commission!=null)?Math.round(e.commission):Math.round((e.amount||0)*COMMISSION),net=(e.net!=null)?Math.round(e.net):((e.amount||0)-comm),st=STATUS[e.status]||{cls:'',t:e.status};
-  el.innerHTML=`<div class="dh"><div class="k">جلسة بضمان · ${e.id}</div><h3>${e.student} ← ${e.expert}</h3></div><div class="db">
+  el.innerHTML=`<div class="dh"><div class="k">جلسة بضمان · ${esc(e.id)}</div><h3>${esc(e.student)} ← ${esc(e.expert)}</h3></div><div class="db">
     <div class="field"><div class="lab">المبلغ المحجوز</div><div class="bigamt">${money(e.amount)} <small>ج</small></div>
       <div class="split"><div class="s net"><div class="l">للخبير بعد العمولة</div><div class="v">${money(net)}</div></div><div class="s comm"><div class="l">عمولة المنصة ١٥٪</div><div class="v">${money(comm)}</div></div></div></div>
     <div class="field"><div class="lab">الحالة</div><div class="val"><span class="status ${st.cls}"><span class="d"></span>${st.t}</span></div></div>
-    <div class="field"><div class="lab">التحرير التلقائي</div><div class="val" style="${e.status==='dispute'?'color:var(--conflict)':''}">${e.release}</div></div>
+    <div class="field"><div class="lab">التحرير التلقائي</div><div class="val" style="${e.status==='dispute'?'color:var(--conflict)':''}">${esc(e.release)}</div></div>
     ${e.status==='dispute'
       ? `<div class="note-ai" style="background:var(--conflict-bg);border-color:#E9C9BB;color:var(--conflict)">${svg('scale','ic')}<div>هذه الجلسة عليها نزاع مفتوح — يُدار من تبويب «النزاعات».</div></div><div class="acts"><button class="btn btn-warn" data-a="opendsp">فتح النزاع</button></div>`
       : `<div class="acts"><button class="btn btn-primary" data-a="release">${svg('check')}حرّر للخبير</button><button class="btn btn-warn" data-a="refund">استرداد للطالب</button><button class="btn btn-ghost" data-a="dispute">فتح نزاع</button></div>`}
@@ -1515,7 +1515,7 @@ function renderCourses(){
     if(!CRS.length)el.innerHTML='<div style="padding:40px;text-align:center;color:var(--muted)">لا دورات في سجل الإدارة بعد.</div>';
     CRS.forEach((c,idx)=>{const st=CSTATUS[c.status]||{cls:'',t:c.status};var rev=(c.total_revenue!=null&&(window.EP&&EP.data.courses))?c.total_revenue:(c.enrolled*(c.priceNum||0));var ours=c.owner==='platform'?100:(100-c.rate);var ownerBadge=c.owner==='platform'?'<span class="status s-human" style="font-size:9.5px;margin-inline-start:6px"><span class="d"></span>المنصة</span>':'<span class="status" style="font-size:9.5px;margin-inline-start:6px;background:var(--memory-bg);color:var(--memory)"><span class="d" style="background:var(--memory)"></span>مدرّب</span>';el.insertAdjacentHTML('beforeend',`<div class="row esc-row crs-row${selected==='c'+idx?' sel':''}" data-c="${idx}" style="grid-template-columns:1.7fr .8fr 1fr 1.15fr 100px">
       <div class="c c1"><div class="src-ic" style="background:var(--memory-bg);color:var(--memory)">${svg('book')}</div><div><div class="parties">${esc(c.title)}${ownerBadge}</div><div class="from">${esc(c.inst)}</div></div></div>
-      <div class="c"><div class="from"><b style="color:var(--ink)">${c.enrolled}</b> مسجّل</div></div>
+      <div class="c"><div class="from"><b style="color:var(--ink)">${esc(c.enrolled)}</b> مسجّل</div></div>
       <div class="c"><div class="from">إيراد <b style="color:var(--navy)">${money(rev)} ج</b></div></div>
       <div class="c"><div class="from">نحن <b style="color:var(--agree)">${ours}٪</b>${c.owner==='platform'?'':' · هو <b style="color:var(--gold)">'+c.rate+'٪</b>'}</div></div>
       <div class="c"><span class="status ${st.cls}" style="${st.cls?'':'background:var(--surface-2);color:var(--muted)'}"><span class="d" style="${st.cls?'':'background:var(--muted)'}"></span>${st.t}</span></div></div>`);});
@@ -1543,8 +1543,8 @@ function renderCourses(){
     el.innerHTML='<div style="padding:9px 14px;font-size:11.5px;color:var(--muted);border-bottom:1px solid var(--border)">عروض المشترين على الدورات المفعَّلة للمزايدة — اعتمِد/ارفض/اعرض مقابلًا. (تفعيل المزايدة لكل دورة من دِرَج الدورة في «الكتالوج».)</div>';
     if(!OFR.length)el.insertAdjacentHTML('beforeend','<div style="padding:30px;text-align:center;color:var(--muted)">لا عروض أسعار بانتظار القرار.</div>');
     OFR.forEach((o,idx)=>el.insertAdjacentHTML('beforeend',`<div class="row esc-row${selected==='o'+idx?' sel':''}" data-o="${idx}" style="grid-template-columns:1.6fr 1fr 1fr 110px">
-      <div class="c c1"><div class="src-ic" style="background:var(--gold-bg);color:var(--gold)">${svg('wallet')}</div><div><div class="parties">${o.course}</div><div class="from">${o.buyer} · ${SEG_LABEL[o.segment]||o.segment}</div></div></div>
-      <div class="c"><div class="from">عرضه <b style="color:var(--navy)">${money(o.offered)} ${o.currency}</b></div></div>
+      <div class="c c1"><div class="src-ic" style="background:var(--gold-bg);color:var(--gold)">${svg('wallet')}</div><div><div class="parties">${esc(o.course)}</div><div class="from">${esc(o.buyer)} · ${SEG_LABEL[o.segment]||esc(o.segment)}</div></div></div>
+      <div class="c"><div class="from">عرضه <b style="color:var(--navy)">${money(o.offered)} ${esc(o.currency)}</b></div></div>
       <div class="c"><div class="from">العادل <b style="color:var(--gold)">${money(o.list)}</b> · الحد ${money(o.floor)}</div></div>
       <div class="c"><span class="status s-wait"><span class="d"></span>بانتظار</span></div></div>`));
     el.querySelectorAll('.row').forEach(x=>x.onclick=()=>{selected='o'+x.dataset.o;renderCourses();drawCourse();});
@@ -1601,10 +1601,10 @@ function drawCourse(){
     </div></div>`;
     if(window.EP&&c.id){EP.loadCourseVideos(c.id).then(function(dt){if(selected!=='P'+i)return;var box=document.getElementById('pcTree');if(box)box.innerHTML=pcTreeHtml(dt);}).catch(function(){var box=document.getElementById('pcTree');if(box)box.innerHTML='<span style="color:var(--muted)">تعذّر تحميل المنهج</span>';});}
   }
-  else if(t==='c'){const c=csCourses()[i];if(!c){el.innerHTML='';return;}el.innerHTML=`<div class="dh"><div class="k">دورة · native في المنصة</div><h3>${c.title}</h3></div><div class="db">
+  else if(t==='c'){const c=csCourses()[i];if(!c){el.innerHTML='';return;}el.innerHTML=`<div class="dh"><div class="k">دورة · native في المنصة</div><h3>${esc(c.title)}</h3></div><div class="db">
     <div class="note-ai">${svg('sparkles','ic')}<div>دورة native — الفيديو على السيرفر الخارجي. الجدولة والاشتراك والتقدّم داخل المنصة.</div></div>
-    <div class="field"><div class="lab">المحاضر</div><div class="val">${c.inst}</div></div>
-    <div class="field"><div class="lab">المسجّلون · السعر</div><div class="val">${c.enrolled} مسجّل · ${c.price} (تبدأ من ${c.from})</div></div>
+    <div class="field"><div class="lab">المحاضر</div><div class="val">${esc(c.inst)}</div></div>
+    <div class="field"><div class="lab">المسجّلون · السعر</div><div class="val">${esc(c.enrolled)} مسجّل · ${c.price} (تبدأ من ${esc(c.from)})</div></div>
     <div class="field"><div class="lab">الحالة</div><div class="val"><span class="status ${CSTATUS[c.status].cls}" style="${CSTATUS[c.status].cls?'':'background:var(--surface-2);color:var(--muted)'}"><span class="d" style="${CSTATUS[c.status].cls?'':'background:var(--muted)'}"></span>${CSTATUS[c.status].t}</span></div></div>
     <div class="field"><div class="lab">على المنصة</div><div class="val">${c.on_platform?`<span class="status s-auto"><span class="d"></span>ظاهرة على app.elprofessor.net</span>`:`<span class="status s-late"><span class="d"></span>مش ظاهرة على المنصة بعد</span>`}</div></div>
     <div class="acts">${c.on_platform?'':`<button class="btn btn-primary" data-a="pubplatform">${svg('check')}انشر على المنصة</button>`}<button class="btn btn-ghost" data-a="editc">${svg('check')}تعديل</button><button class="btn btn-human" data-a="video" style="flex:none;min-width:auto;padding:7px 11px;font-size:12px">المنهج والمحاضرات</button><button class="btn btn-warn" data-a="delc">حذف</button></div></div>`;}
@@ -1619,13 +1619,13 @@ function drawCourse(){
     <div class="field"><div class="lab">المرجع</div><div class="val">${esc(tr.ref)}</div></div>
     <div class="field"><div class="lab">نسبة الإيراد</div><div class="val">تُحدّد عند الاعتماد (٢٥ → ٥٠٪)</div></div>
     <div class="acts"><button class="btn btn-primary" data-a="approve">${svg('check')}اعتمد كمدرّب</button><button class="btn btn-warn" data-a="reject">رفض</button></div></div>`;}
-  else if(t==='o'){const o=csOffers()[i];if(!o){el.innerHTML='';return;}el.innerHTML=`<div class="dh"><div class="k">عرض سعر · «اعرض سعرك»</div><h3>${o.course}</h3></div><div class="db">
-    <div class="note-ai">${svg('sparkles','ic')}<div>المشتري عرض سعرًا أقل من السعر العادل. اعتمده، ارفضه، أو اعرض رقمًا مقابلًا (لا يقل عن الحد الأدنى ${money(o.floor)} ${o.currency}).</div></div>
-    <div class="field"><div class="lab">المشتري · الصفة</div><div class="val">${o.buyer} · ${SEG_LABEL[o.segment]||o.segment}</div></div>
-    <div class="field"><div class="lab">السعر العادل (حسب بلده وصفته)</div><div class="val">${money(o.list)} ${o.currency}</div></div>
-    <div class="field"><div class="lab">عرض المشتري · الحد الأدنى</div><div class="val"><b style="color:var(--navy)">${money(o.offered)}</b> ${o.higher?'<span class="status s-auto" style="font-size:9.5px"><span class="d"></span>أعلى من السعر</span>':''} · لا يقل عن ${money(o.floor)} ${o.currency}</div></div>
+  else if(t==='o'){const o=csOffers()[i];if(!o){el.innerHTML='';return;}el.innerHTML=`<div class="dh"><div class="k">عرض سعر · «اعرض سعرك»</div><h3>${esc(o.course)}</h3></div><div class="db">
+    <div class="note-ai">${svg('sparkles','ic')}<div>المشتري عرض سعرًا أقل من السعر العادل. اعتمده، ارفضه، أو اعرض رقمًا مقابلًا (لا يقل عن الحد الأدنى ${money(o.floor)} ${esc(o.currency)}).</div></div>
+    <div class="field"><div class="lab">المشتري · الصفة</div><div class="val">${esc(o.buyer)} · ${SEG_LABEL[o.segment]||esc(o.segment)}</div></div>
+    <div class="field"><div class="lab">السعر العادل (حسب بلده وصفته)</div><div class="val">${money(o.list)} ${esc(o.currency)}</div></div>
+    <div class="field"><div class="lab">عرض المشتري · الحد الأدنى</div><div class="val"><b style="color:var(--navy)">${money(o.offered)}</b> ${o.higher?'<span class="status s-auto" style="font-size:9.5px"><span class="d"></span>أعلى من السعر</span>':''} · لا يقل عن ${money(o.floor)} ${esc(o.currency)}</div></div>
     <div class="field"><div class="lab">سبب السعر الأقل</div><div class="val" style="line-height:1.6">${o.reason?esc(o.reason):'<span style="color:var(--muted)">— بدون سبب —</span>'}</div></div>
-    <div class="fld" style="margin:8px 0"><label>عرض مقابل (اختياري)</label><input id="ofr_amt" type="number" min="${o.floor}" placeholder="مثال: ${money(Math.round((o.offered+o.list)/2))}" style="direction:ltr;text-align:right"></div>
+    <div class="fld" style="margin:8px 0"><label>عرض مقابل (اختياري)</label><input id="ofr_amt" type="number" min="${esc(o.floor)}" placeholder="مثال: ${money(Math.round((o.offered+o.list)/2))}" style="direction:ltr;text-align:right"></div>
     <div class="acts"><button class="btn btn-primary" data-a="approve">${svg('check')}اعتمد عرضه (${money(o.offered)})</button><button class="btn btn-human" data-a="counter">أرسل العرض المقابل</button><button class="btn btn-warn" data-a="reject">رفض</button></div></div>`;}
   else {const sc=csSchedules()[i];if(!sc){el.innerHTML='';return;}el.innerHTML=`<div class="dh"><div class="k">موعد دورة حيّة</div><h3>${esc(sc.title)}</h3></div><div class="db">
     <div class="note-ai">${svg('sparkles','ic')}<div>راجِع موعد المدرّب وثبّته، وحطّ رابط Zoom وعدد المقاعد. التثبيت بيأكّد الموعد للطلاب.</div></div>
@@ -3712,7 +3712,7 @@ function viewTargets(v){
   const onTrack=GLS.filter(g=>g.status==='on').length,behind=GLS.filter(g=>g.status==='behind').length,done=GLS.filter(g=>g.status==='done').length;
   // النسبة المحقّقة ماليًّا: من الخادم إن وُجدت، وإلا تُحتسب من البارات.
   const qPct=(window.EP&&EP.data.targets&&EP.data.targets.quarterPct!=null)?EP.data.targets.quarterPct:(sumT?Math.round(sumA/sumT*100):0);
-  const bars=BARS.map((t,i)=>`<div class="tgbar" ${liveBars?'':`data-i="${i}"`} style="flex:1;display:flex;flex-direction:column;align-items:center;gap:6px${liveBars?'':';cursor:pointer'}" ${liveBars?'':'title="اضغط للتعديل"'}><div style="display:flex;gap:5px;align-items:flex-end;height:130px"><div style="width:18px;background:var(--agree);border-radius:5px 5px 0 0;height:${(t.actual||0)/mx*130}px" title="فعلي ${money(t.actual||0)}${liveBars?' ألف':''}"></div><div style="width:18px;background:var(--gold);border-radius:5px 5px 0 0;height:${(t.target||0)/mx*130}px" title="هدف ${money(t.target||0)}${liveBars?' ألف':''}"></div></div><div style="font-size:12px;font-weight:700;color:var(--ink-2)">${t.m}</div></div>`).join('');
+  const bars=BARS.map((t,i)=>`<div class="tgbar" ${liveBars?'':`data-i="${i}"`} style="flex:1;display:flex;flex-direction:column;align-items:center;gap:6px${liveBars?'':';cursor:pointer'}" ${liveBars?'':'title="اضغط للتعديل"'}><div style="display:flex;gap:5px;align-items:flex-end;height:130px"><div style="width:18px;background:var(--agree);border-radius:5px 5px 0 0;height:${(t.actual||0)/mx*130}px" title="فعلي ${money(t.actual||0)}${liveBars?' ألف':''}"></div><div style="width:18px;background:var(--gold);border-radius:5px 5px 0 0;height:${(t.target||0)/mx*130}px" title="هدف ${money(t.target||0)}${liveBars?' ألف':''}"></div></div><div style="font-size:12px;font-weight:700;color:var(--ink-2)">${esc(t.m)}</div></div>`).join('');
   v.innerHTML=`
     ${Tst==='error'&&!live?`<div class="policy" style="border-inline-start-color:var(--conflict);background:var(--conflict-bg);color:var(--conflict)">${svg('scale','ic')}<div>تعذّر جلب الأهداف والتوقّعات من الخادم — لا تُعرض أي بيانات بديلة. <b style="cursor:pointer;text-decoration:underline" onclick="EP.reload('targets',()=>viewTargets(document.getElementById('view')))">إعادة المحاولة</b></div></div>`:''}
     <div class="kpis">
@@ -3803,7 +3803,7 @@ function goalModal(idx){
 }
 function targetModal(idx){
   var edit=(idx!=null&&idx>=0)?TARGETS[idx]:null,e=edit||{};
-  var s=openModal(edit?'تعديل هدف شهر':'إضافة شهر','<div class="fld"><label>الشهر</label><input id="tg_m" value="'+(e.m||'')+'" placeholder="نوفمبر"></div><div class="row2"><div class="fld"><label>الفعلي (ألف ج)</label><input id="tg_a" type="number" value="'+(e.actual!=null?e.actual:'')+'"></div><div class="fld"><label>الهدف (ألف ج)</label><input id="tg_t" type="number" value="'+(e.target!=null?e.target:'')+'"></div></div><div class="acts" style="margin-top:14px"><button class="btn btn-primary" id="tg_s">'+svg('check')+(edit?'حفظ':'أضف')+'</button>'+(edit?'<button class="btn btn-warn" id="tg_d">حذف</button>':'')+'<button class="btn btn-ghost" id="tg_x">إلغاء</button></div>');
+  var s=openModal(edit?'تعديل هدف شهر':'إضافة شهر','<div class="fld"><label>الشهر</label><input id="tg_m" value="'+esc(e.m||'')+'" placeholder="نوفمبر"></div><div class="row2"><div class="fld"><label>الفعلي (ألف ج)</label><input id="tg_a" type="number" value="'+(e.actual!=null?e.actual:'')+'"></div><div class="fld"><label>الهدف (ألف ج)</label><input id="tg_t" type="number" value="'+(e.target!=null?e.target:'')+'"></div></div><div class="acts" style="margin-top:14px"><button class="btn btn-primary" id="tg_s">'+svg('check')+(edit?'حفظ':'أضف')+'</button>'+(edit?'<button class="btn btn-warn" id="tg_d">حذف</button>':'')+'<button class="btn btn-ghost" id="tg_x">إلغاء</button></div>');
   s.querySelector('#tg_x').onclick=closeModal;
   s.querySelector('#tg_s').onclick=function(){var d={m:s.querySelector('#tg_m').value.trim()||'شهر',actual:+s.querySelector('#tg_a').value||0,target:+s.querySelector('#tg_t').value||0};if(edit){Object.assign(edit,d);}else{TARGETS.push(d);}closeModal();viewTargets(document.getElementById('view'));notify(edit?'حُدّث الهدف':'أُضيف «'+d.m+'»');};
   var td=s.querySelector('#tg_d');if(td)td.onclick=function(){closeModal();toast('تعذّر الحذف — لا يوجد اتصال حيّ بالخادم');};
@@ -4892,7 +4892,15 @@ function inviteActionsHtml(i){
   var waBtn=waHref?('<a class="btn btn-ghost" id="ivdWa" href="'+esc(waHref)+'" target="_blank" rel="noopener" style="flex:none;min-height:40px;padding:0 14px;font-size:12px;text-decoration:none">واتساب</a>'):'';
   var dead=live?'':invDeadLinkHtml(i);
   var revBtn=(i.revoked||i.registered||i.status==='rejected')?'':'<button class="btn btn-warn" id="ivdRv" style="flex:none;min-height:40px;padding:0 14px;font-size:12px">سحب</button>';
-  return '<div class="acts" style="margin-top:14px;display:flex;gap:8px;flex-wrap:wrap;align-items:center">'+copyBtn+waBtn+dead+revBtn+'</div>';
+  // F-012: دعوة ميّتة (انتهت · اتسحبت · اترفضت) — «أعِد إصدارها» بيديها رمزًا جديدًا ومهلة جديدة،
+  // والرابط القديم بيفضل ميّت. من غير الزرّ ده كان اللي انتهت دعوته بريده محجوز وما فيش طريق يرجع.
+  var reBtn=invReissuable(i)?'<button class="btn btn-primary" id="ivdRe" style="flex:none;min-height:40px;padding:0 14px;font-size:12px">أعِد إصدارها</button>':'';
+  return '<div class="acts" style="margin-top:14px;display:flex;gap:8px;flex-wrap:wrap;align-items:center">'+copyBtn+waBtn+dead+reBtn+revBtn+'</div>';
+}
+// الميّتة وحدها تُعاد: المنضمّ حسابه قائم، والحيّة رابطها في الطريق ما يتكسرش.
+function invReissuable(i){
+  if(!i||!i.id||i.registered)return false;
+  return i.stage==='expired'||i.revoked||i.status==='rejected';
 }
 // جسم التفصيل من الوثيقة الكاملة (full = ردّ GET /api/invites/{id})؛ i = صفّ القائمة (احتياطًا
 // لأي حقل ما وصلش بعد، ولحفظ العمل حتى أثناء التحميل). كل حقل غائب ⇒ «—» — لا اختلاق.
@@ -5065,6 +5073,20 @@ function copyInviteLink(link){
 function wireInviteDetailActions(el,i){
   var cp=el.querySelector('#ivdCp');
   if(cp)cp.onclick=function(){copyInviteLink(i.link);};
+  var re=el.querySelector('#ivdRe');
+  if(re)re.onclick=function(){
+    var who=i.email||i.name||'بلا اسم';
+    var s=openModal('إعادة إصدار الدعوة',
+      '<div style="font-size:13px;line-height:1.8">هيتعمل رابط <b>جديد</b> لـ<b style="'+(i.email?'direction:ltr;':'')+'display:inline-block">'+esc(who)+'</b> بمهلة جديدة، والرحلة هتبدأ من أولها. <b>الرابط القديم هيفضل ميّت</b> — اللي عنده هيقرا «الدعوة دي انتهت». ابعت الجديد بنفسك.</div>'+
+      '<div class="acts" style="margin-top:14px;display:flex;gap:8px;flex-wrap:wrap"><button class="btn btn-primary" id="re_y" style="min-height:44px">أعِد إصدارها</button><button class="btn btn-ghost" id="re_n" style="min-height:44px">إلغاء</button></div>');
+    s.querySelector('#re_n').onclick=closeModal;
+    s.querySelector('#re_y').onclick=function(){
+      closeModal();
+      if(!window.EP||!EP.reissueInvite){toast('غير متصل بالمنصة');return;}
+      delete INV_DETAIL[i.id];
+      EP.reissueInvite({id:i.id,email:i.email,name:i.name},function(r){if(r&&r.link)copyInviteLink(r.link);},invAgain);
+    };
+  };
   var rv=el.querySelector('#ivdRv');
   if(rv)rv.onclick=function(){
     var who=i.email||i.name||'بلا اسم';
@@ -5261,7 +5283,7 @@ function viewTCourses(v){
   if(st==='loading'&&!live){body=`<div class="empty">${svg('book','ic')}<p>جارٍ تحميل دوراتك…</p></div>`;}
   else if(st==='error'&&!live){body=`<div class="empty">${svg('shield','ic')}<p>تعذّر تحميل دوراتك. <a href="#" data-retry style="color:var(--navy);font-weight:800">إعادة المحاولة</a></p></div>`;}
   else if(!C.length){body=`<div class="empty">${svg('book','ic')}<p>لا توجد دورات مرتبطة بحسابك بعد. اطلب من الإدارة ربط دوراتك بصفتك.</p></div>`;}
-  else {body=C.map(c=>{var statusCls=(c.status==='active'||c.paid)?'s-auto':'s-wait';var statusTxt=(c.status==='active')?'نشطة':(c.paid?'نشطة':'تجمع نصاب');return `<div class="row esc-row" style="grid-template-columns:1.8fr 1fr 1fr 110px;cursor:default"><div class="c c1"><div class="src-ic" style="background:var(--memory-bg);color:var(--memory)">${svg('book')}</div><div><div class="parties">${esc(c.title)}</div><div class="from">تبدأ من ${esc(c.from)}</div></div></div><div class="c"><div class="from"><b style="color:var(--ink)">${c.enrolled}</b> مسجّل</div></div><div class="c"><div class="from"><b style="color:var(--agree)">${c.paid}</b> دافع</div></div><div class="c"><span class="status ${statusCls}"><span class="d"></span>${statusTxt}</span></div></div>`;}).join('');}
+  else {body=C.map(c=>{var statusCls=(c.status==='active'||c.paid)?'s-auto':'s-wait';var statusTxt=(c.status==='active')?'نشطة':(c.paid?'نشطة':'تجمع نصاب');return `<div class="row esc-row" style="grid-template-columns:1.8fr 1fr 1fr 110px;cursor:default"><div class="c c1"><div class="src-ic" style="background:var(--memory-bg);color:var(--memory)">${svg('book')}</div><div><div class="parties">${esc(c.title)}</div><div class="from">تبدأ من ${esc(c.from)}</div></div></div><div class="c"><div class="from"><b style="color:var(--ink)">${esc(c.enrolled)}</b> مسجّل</div></div><div class="c"><div class="from"><b style="color:var(--agree)">${esc(c.paid)}</b> دافع</div></div><div class="c"><span class="status ${statusCls}"><span class="d"></span>${statusTxt}</span></div></div>`;}).join('');}
   v.innerHTML=`<section class="panel"><div class="ph"><h3>دوراتي</h3><span class="n">${C.length}</span></div><div>${body}</div></section>`;
   var rt=v.querySelector('[data-retry]');if(rt)rt.onclick=(e)=>{e.preventDefault();EP.reload('t_data',()=>viewTCourses(v));};
 }
