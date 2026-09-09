@@ -1888,7 +1888,6 @@ function viewCourses(v){
     // «الطلب على الدورات»: إحصاءات الطلب + طلبات «عايز دورة» من الشات — تُحمَّل عند فتح التبويب فقط.
     if(courseTab==='demand'){EP.ensure('program_request_stats',()=>viewCourses(v));EP.ensure('analysis',()=>viewCourses(v));}}
   const Cstr=(window.EP&&EP.state.courses)||'idle';
-  const live=!!(window.EP&&EP.data.courses);
   const CRS=csCourses();
   const PRG=csPrograms(), TRQ=csTrainers(), OFR=csOffers();
   const PRS=(window.EP&&EP.data.program_request_stats)||{stats:[],count:0};
@@ -1915,20 +1914,26 @@ function viewCourses(v){
       <div class="tab${courseTab==='schedules'?' on':''}" data-t="schedules">مواعيد الحيّة (${csSchedules().length})</div>
     </div>
     <div class="inboxwrap">
-      <section class="panel"><div class="ph"><h3 id="cH">الكتالوج (على المنصة)</h3><span class="n" id="cN">0</span>${(live&&courseTab==='courses')?`<button class="btn btn-ghost" id="cSync" style="flex:none;min-width:auto;padding:6px 12px;font-size:12px;margin-inline-start:auto">مزامنة من الأكاديمية</button><button class="btn btn-human" id="cCreate" style="flex:none;min-width:auto;padding:6px 12px;font-size:12px">+ إنشاء دورة</button>`:(courseTab==='courses'?`<button class="btn btn-human" id="cCreate" style="flex:none;min-width:auto;padding:6px 13px;font-size:12px;margin-inline-start:auto">+ إنشاء دورة من الإدارة</button>`:'')}</div><div id="cRows"></div></section>
+      <section class="panel"><div class="ph"><h3 id="cH">الكتالوج (على المنصة)</h3><span class="n" id="cN">0</span>${courseTab==='courses'?`<button class="btn btn-human" id="cCreate" style="flex:none;min-width:auto;padding:6px 13px;font-size:12px;margin-inline-start:auto">+ إنشاء دورة من الإدارة</button>`:''}</div><div id="cRows"></div></section>
       <aside class="drawer" id="drawer"></aside>
     </div>`;
   v.querySelectorAll('#cTabs .tab').forEach(t=>t.onclick=()=>{courseTab=t.dataset.t;selected=null;viewCourses(v);});
   var cCreate=document.getElementById('cCreate');if(cCreate)cCreate.onclick=createCourseModal;
-  var cSync=document.getElementById('cSync');if(cSync)cSync.onclick=function(){EP.syncCoursesLms(()=>{selected=null;viewCourses(document.getElementById('view'));});};
   renderCourses();
 }
 // شارة حالة دورة المنصة (مشتقّة من approval_status + is_active) + تسمية النوع.
 function pcStatus(c){
   if(c.approval_status==='pending')return['s-wait','بانتظار الاعتماد'];
   if(c.approval_status==='rejected')return['s-late','مرفوضة'];
+  // الأرشفة ليست حالةً ثانية: هي نفس `is_active=false` وفوقها طابع `archived_at` — والشارة
+  // تقولها بصريح العبارة، وإلا قرأها المستخدم «مسودة لسه» فحاول ينشرها من جديد.
+  if(!c.is_active&&c.archived_at)return['s-late','مؤرشفة — مخفية'];
   return c.is_active?['s-auto','منشورة — ظاهرة للطلاب']:['s-late','مسودة — مش ظاهرة'];
 }
+// أيّ الفعلين تستحقّه الدورة (قرار المؤسس 2026-09-10): «حذف» لمسودّةٍ لم تُنشر ولا مسجّل عليها،
+// و«أرشفة» لغير ذلك. ⛔ ده ترشيحٌ للواجهة فقط — الحارس الحقيقي على المنصّة (٤٠٩ لو فيه
+// اشتراك أو دفعة)، لأن اللوحة لا ترى المدفوعات أصلًا.
+function pcCanHardDelete(c){return !c.is_active&&!c.archived_at&&!(+(c.total_enrolled||0)>0);}
 const PC_TYPE={recorded_paid:'مسجّلة مدفوعة',recorded_free:'مسجّلة مجانية',live_upcoming:'مباشرة'};
 const PC_SOURCE={titch:'🪄 Titch',dashboard:'من الإدارة',native:'أصلية'};
 function renderCourses(){
@@ -1948,8 +1953,18 @@ function renderCourses(){
         +'<span class="mchip"><b>'+money(c.total_enrolled||0)+'</b> مسجّل</span>'
         +'<span class="mchip"><b>'+money(lessons)+'</b> درس</span>'
         +'<span class="mchip">'+src+'</span></div>';
-      el.insertAdjacentHTML('beforeend','<div class="row esc-row crs-row'+(selected==='P'+idx?' sel':'')+'" data-pc="'+idx+'" style="grid-template-columns:2.1fr 1.4fr 150px"><div class="c c1"><div class="src-ic" style="background:var(--memory-bg);color:var(--memory)">'+svg('book')+'</div><div style="min-width:0"><div class="parties" style="font-size:13.3px;font-weight:700">'+esc(c.title||'—')+(c.bid_enabled?' <span class="status s-auto" style="font-size:9px;margin-inline-start:4px"><span class="d"></span>مزايدة</span>':'')+'</div>'+meta+'</div></div><div class="c"><div class="crs-desc">'+esc(c.short_description||'')+'</div></div><div class="c"><span class="status '+st[0]+'"><span class="d"></span>'+st[1]+'</span></div></div>');});
+      // الفعل في الصفّ نفسه: «حذف» لمسودّةٍ نظيفة، و«أرشفة» لغيرها، ولا شيء لدورةٍ مؤرشفة.
+      var hard=pcCanHardDelete(c);
+      // ⛔ نفس شرط الشارة في pcStatus بالحرف (`archived_at && !is_active`): طابعٌ قديمٌ فاضلٌ
+      // في القاعدة على دورةٍ حيّةٍ كان يقفل الصفَّ بلا زرّ — لا أرشفة ولا حذف، للأبد.
+      var act=(c.archived_at&&!c.is_active)?'<span style="font-size:11px;color:var(--muted)">مؤرشفة</span>'
+        :(hard?'<button class="btn btn-warn pcDel" data-pc-act="hard" data-i="'+idx+'" style="flex:none;min-width:auto;padding:6px 12px;font-size:11.5px">حذف</button>'
+              :'<button class="btn btn-ghost pcDel" data-pc-act="archive" data-i="'+idx+'" style="flex:none;min-width:auto;padding:6px 12px;font-size:11.5px">أرشفة</button>');
+      el.insertAdjacentHTML('beforeend','<div class="row esc-row crs-row'+(selected==='P'+idx?' sel':'')+'" data-pc="'+idx+'" style="grid-template-columns:1.9fr 1.15fr 172px 92px"><div class="c c1"><div class="src-ic" style="background:var(--memory-bg);color:var(--memory)">'+svg('book')+'</div><div style="min-width:0"><div class="parties" style="font-size:13.3px;font-weight:700">'+esc(c.title||'—')+(c.bid_enabled?' <span class="status s-auto" style="font-size:9px;margin-inline-start:4px"><span class="d"></span>مزايدة</span>':'')+'</div>'+meta+'</div></div><div class="c"><div class="crs-desc">'+esc(c.short_description||'')+'</div></div><div class="c"><span class="status '+st[0]+'"><span class="d"></span>'+st[1]+'</span></div><div class="c" style="justify-content:flex-start">'+act+'</div></div>');});
     el.querySelectorAll('.row').forEach(function(x){x.onclick=function(){selected='P'+x.dataset.pc;renderCourses();drawCourse();};});
+    // زرّ الصفّ فعلٌ لا اختيار: نمنع صعود النقرة للصفّ وإلا فتح الدرج فوق المودال.
+    el.querySelectorAll('.pcDel').forEach(function(b){b.onclick=function(ev){ev.stopPropagation();
+      var row=csPlatformCourses()[+b.dataset.i];if(row)pcRemoveModal(row,b.dataset.pcAct==='hard');};});
     return;
   }
   if(courseTab==='demand'){renderCourseDemand(el,h);return;}
@@ -1992,6 +2007,37 @@ function renderCourses(){
     el.querySelectorAll('.row').forEach(x=>x.onclick=()=>{selected='o'+x.dataset.o;renderCourses();drawCourse();});
   }
   drawCourse();
+}
+// مودال تأكيد «حذف/أرشفة» دورة من الكتالوج (قرار المؤسس 2026-09-10).
+// يقول **بالضبط** ما سيحدث لكل شيء يخصّ الدورة — لأن الفعلين يبدوان واحدًا وهما ليسا كذلك:
+// واحدٌ لا رجعة فيه، والآخر يخفي ويحفظ. وخطأ الخادم يُطبع كما هو داخل المودال، والمودال
+// يبقى مفتوحًا عليه: رفضٌ يختفي مع الشاشة يقرؤه المستخدم «اتنفّذ».
+function pcRemoveModal(c,hard){
+  var title=hard?'حذف الدورة نهائيًّا':'أرشفة الدورة';
+  var enrolled=+(c.total_enrolled||0);
+  var body=hard
+    ? '<div style="line-height:1.85;font-size:13px">هتتمسح <b>«'+esc(c.title||'—')+'»</b> من قاعدة المنصّة <b style="color:var(--conflict)">نهائيًّا</b>:'
+      +'<ul style="margin:9px 0 0;padding-inline-start:20px"><li>هتختفي من الكتالوج ومن app.elprofessor.net.</li>'
+      +'<li>محاضراتها ومنهجها وأسئلتها هيروحوا معاها.</li>'
+      +'<li>مفيش تراجع — ولا نسخة تتسترجع من اللوحة.</li></ul>'
+      +'<div style="margin-top:11px;color:var(--muted);font-size:11.5px">الحذف مسموح لأن الدورة مسودّة بلا مسجّلين. لو طلع عليها اشتراك أو دفعة، المنصّة هترفض وهتقولك، ووقتها استعمل «أرشفة».</div></div>'
+    : '<div style="line-height:1.85;font-size:13px">هتتأرشف <b>«'+esc(c.title||'—')+'»</b>:'
+      +'<ul style="margin:9px 0 0;padding-inline-start:20px"><li>هتختفي من كتالوج المنصّة — الطلاب الجدد مش هيشوفوها.</li>'
+      +'<li><b>'+money(enrolled)+' مسجّل</b> والدفعات والتقدّم بيفضلوا زي ما هُمّ، والمشترك الحالي بيكمّل.</li>'
+      +'<li>مفيش حذف: تقدر ترجّعها بـ«نشر على المنصة» من درج الدورة.</li></ul></div>';
+  var s2=openModal(title,body
+    +'<div id="pcRmErr" style="display:none;margin-top:12px;padding:10px 12px;border-radius:10px;background:var(--conflict-bg);color:var(--conflict);font-size:12.5px;line-height:1.7"></div>'
+    +'<div class="acts" style="margin-top:14px"><button class="btn '+(hard?'btn-warn':'btn-primary')+'" id="pcRmGo">'+(hard?'احذفها نهائيًّا':'أرشفها')+'</button><button class="btn btn-ghost" id="pcRmNo">إلغاء</button></div>');
+  s2.querySelector('#pcRmNo').onclick=closeModal;
+  s2.querySelector('#pcRmGo').onclick=function(){
+    if(!window.EP||!c.id){closeModal();return;}
+    var go=s2.querySelector('#pcRmGo');go.disabled=true;go.textContent='…بننفّذ';
+    EP.removePlatformCourse(c.id,hard,function(err){
+      if(err){var box=s2.querySelector('#pcRmErr');if(box){box.textContent=err;box.style.display='block';}
+        go.disabled=false;go.textContent=hard?'احذفها نهائيًّا':'أرشفها';return;}
+      closeModal();selected=null;viewCourses(document.getElementById('view'));
+    });
+  };
 }
 // «الطلب على الدورات» (D4): أكثر الدورات طلبًا (من program_requests) + «عايز دورة» (من الشات) بزر إنشاء.
 function renderCourseDemand(el,h){
@@ -4513,7 +4559,7 @@ function renderRolePerms(){
   };
 }
 // سجلّ العمليات (Audit) — يفتح مودال بأحدث العمليات الحقيقية من /api/audit (F5).
-const AUDIT_LABEL={'user.role_change':'تغيير دور مستخدم','user.plan_assign':'إسناد باقة','course.create':'إنشاء دورة','course.update':'تعديل دورة','course.delete':'حذف دورة','course.approve':'اعتماد دورة','course.reject':'رفض دورة','article.publish':'نشر مقال','article.reject_delete':'رفض/حذف مقال','settings.update':'تعديل الإعدادات','admin.add_user':'إضافة حساب إداري','admin.update_user':'تعديل حساب إداري','auth.login':'تسجيل دخول','ai.agent_run':'تشغيل وكيل ذكاء','ai.agents_run':'تشغيل كل الوكلاء'};
+const AUDIT_LABEL={'user.role_change':'تغيير دور مستخدم','user.plan_assign':'إسناد باقة','course.create':'إنشاء دورة','course.update':'تعديل دورة','course.delete':'حذف دورة','course.archive':'أرشفة دورة','course.approve':'اعتماد دورة','course.reject':'رفض دورة','article.publish':'نشر مقال','article.reject_delete':'رفض/حذف مقال','settings.update':'تعديل الإعدادات','admin.add_user':'إضافة حساب إداري','admin.update_user':'تعديل حساب إداري','auth.login':'تسجيل دخول','ai.agent_run':'تشغيل وكيل ذكاء','ai.agents_run':'تشغيل كل الوكلاء'};
 function auditWhen(iso){if(!iso)return'—';try{return new Intl.DateTimeFormat('ar-EG',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'}).format(new Date(iso));}catch(e){return String(iso).slice(0,16);}}
 function auditModal(){
   var s=openModal('سجلّ العمليات (Audit Log)',

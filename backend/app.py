@@ -948,6 +948,16 @@ def _resp_ok(resp):
     except Exception:
         return False
 
+def _proxy_json(resp):
+    """جسمُ ردٍّ راجعٍ من `_platform_proxy` (Response أو (body, status))، أو {} إن تعذّر قراءته.
+    يُستعمل حين يكون **محتوى** الردّ هو الحَكَم لا كودُه (مثال: أرشفت المنصّة أم حذفت فعلًا)."""
+    try:
+        r = resp[0] if isinstance(resp, tuple) else resp
+        body = r.get_json(silent=True)
+        return body if isinstance(body, dict) else {}
+    except Exception:
+        return {}
+
 def get_rate():
     s = Setting.query.get('exchange_rate')
     return float(s.value) if s else 50.0
@@ -2513,8 +2523,22 @@ def platform_course_edit(course_id):
 @token_required
 @roles_required('admin', 'employee')
 def platform_course_delete(course_id):
-    """Delete a native course from the dashboard (soft-delete → disappears from the platform)."""
-    return _platform_proxy('DELETE', f"/api/bridge/courses/{course_id}")
+    """فعلا الكتالوج (قرار المؤسس 2026-09-10):
+
+    * بلا معاملات = **أرشفة**: الدورة تختفي من كتالوج المنصّة، ويبقى المشتركون ودفعاتهم.
+    * `?hard=1` = **حذف نهائي**: المنصّة نفسها ترفضه ٤٠٩ (عربية) لو للدورة اشتراكٌ أو دفعة —
+      الحارس هناك لا هنا، واللوحة تعرض رسالته كما هي عبر `_platform_proxy`.
+    """
+    hard = str(request.args.get('hard') or '').strip().lower() in ('1', 'true', 'yes')
+    resp = _platform_proxy('DELETE', f"/api/bridge/courses/{course_id}",
+                           params={'hard': 'true'} if hard else None)
+    if _resp_ok(resp):
+        # ⛔ الفعل الذي يُسجَّل هو ما **حدث**، لا ما طلبناه: منصّةٌ أقدم (بلا معامل `hard`)
+        # تتجاهل المعامل المجهول وتؤرشف وترجّع ٢٠٠ — فسطرُ تدقيقٍ يقول «حذف دورة» عن دورةٍ
+        # لسه في القاعدة أسوأ من غياب السطر. الردُّ نفسه يحمل التفرقة: `deleted` vs `archived`.
+        _audit('course.delete' if _proxy_json(resp).get('deleted') is True else 'course.archive',
+               target=course_id)
+    return resp
 
 
 @app.route('/api/platform-courses/<course_id>/detail', methods=['GET'])
@@ -4769,109 +4793,14 @@ def delete_course(id):
     return jsonify({'message': 'تم الحذف'})
 
 
-# Pull the REAL courses from the academy (WordPress/Tutor, via the platform bridge) and
-# upsert them into our Course table keyed by lms_id = tutor_id, tied to each course's
-# instructor (by email). Manual financials (price/cost) are preserved on update.
-_LMS_STATUS_MAP = {'publish': 'active', 'draft': 'draft', 'pending': 'draft', 'trash': 'archived', 'private': 'draft'}
-
-
-@app.route('/api/courses/sync-lms', methods=['POST'])
-@token_required
-@roles_required('admin', 'employee')
-def sync_courses_from_lms():
-    if not PLATFORM_METRICS_SECRET:
-        return jsonify({'error': 'لم يتم ضبط الربط بعد'}), 503
-    try:
-        r = requests.get(
-            f"{PLATFORM_API_URL}/api/bridge/lms-courses",
-            headers={'X-ELP-Metrics-Secret': PLATFORM_METRICS_SECRET},
-            timeout=30,
-        )
-    except Exception:
-        return jsonify({'error': 'تعذر الاتصال بالمنصة'}), 502
-    if r.status_code != 200:
-        body = r.json() if r.content else {}
-        return jsonify({'error': body.get('detail') or 'تعذر جلب الدورات من الأكاديمية'}), r.status_code
-
-    rows = (r.json() or {}).get('courses', [])
-    created = 0
-    updated = 0
-    for row in rows:
-        tutor_id = str(row.get('tutor_id') or '').strip()
-        if not tutor_id:
-            continue
-        status = _LMS_STATUS_MAP.get(str(row.get('post_status') or '').strip().lower(), 'draft')
-        instructor = (row.get('instructor_name') or '').strip()
-        email = (row.get('instructor_email') or '').strip().lower()
-        c = Course.query.filter_by(lms_id=tutor_id).first()
-        if c is None:
-            c = Course(lms_id=tutor_id, price_egp=0, price_usd=0, cost_egp=0, cost_usd=0)
-            db.session.add(c)
-            created += 1
-        else:
-            updated += 1
-        # Academy owns: title, trainer (instructor), student count, status, link.
-        # We keep our manual financials (price/cost) untouched.
-        c.title = (row.get('title') or c.title or '').strip() or 'دورة بدون عنوان'
-        c.trainer_name = instructor or c.trainer_name
-        c.lms_instructor_email = email
-        c.students_count = int(row.get('enrolled_count') or 0)
-        c.status = status
-        c.lms_synced = True
-        # Real revenue from WooCommerce (if matched by product name on the platform side).
-        if 'woo_revenue' in row:
-            c.lms_sales_count = int(row.get('woo_sales') or 0)
-            c.lms_revenue = float(row.get('woo_revenue') or 0)
-            c.lms_currency = row.get('woo_currency') or c.lms_currency
-    db.session.commit()
-    return jsonify({
-        'message': 'تمت المزامنة من الأكاديمية',
-        'total': len(rows), 'created': created, 'updated': updated,
-    })
-
-
-# Create a course ON the academy (WordPress/Tutor) from here, tied to its instructor by
-# email. Admin can set any instructor; a trainer creates only under their own email.
-# Created as a draft; once published it flows back via the sync above.
-@app.route('/api/courses/create-lms', methods=['POST'])
-@token_required
-@roles_required('admin', 'trainer', 'employee')
-def create_lms_course():
-    if not PLATFORM_METRICS_SECRET:
-        return jsonify({'error': 'لم يتم ضبط الربط بعد'}), 503
-    d = request.json or {}
-    if not (d.get('title') or '').strip():
-        return jsonify({'error': 'عنوان الدورة مطلوب'}), 400
-    # A trainer can only create a course under their own (academy) email.
-    if user_dashboard_role(g.user) == 'trainer':
-        instructor_email = (g.user.email or '').strip().lower()
-    else:
-        instructor_email = (d.get('instructor_email') or '').strip().lower()
-    if not instructor_email:
-        return jsonify({'error': 'إيميل المحاضر مطلوب'}), 400
-    payload = {
-        'title': d['title'].strip(),
-        'content': d.get('content', ''),
-        'level': d.get('level', 'beginner'),
-        'price_type': 'paid' if d.get('price_type') == 'paid' else 'free',
-        'duration_hours': int(d.get('duration_hours') or 0),
-        'duration_minutes': int(d.get('duration_minutes') or 0),
-        'instructor_email': instructor_email,
-        'status': 'draft',
-    }
-    try:
-        r = requests.post(
-            f"{PLATFORM_API_URL}/api/bridge/lms-courses",
-            json=payload,
-            headers={'X-ELP-Metrics-Secret': PLATFORM_METRICS_SECRET},
-            timeout=30,
-        )
-    except Exception:
-        return jsonify({'error': 'تعذر الاتصال بالمنصة'}), 502
-    body = r.json() if r.content else {}
-    if r.status_code != 200:
-        return jsonify({'error': body.get('detail') or body.get('error') or 'تعذر إنشاء الدورة على الأكاديمية'}), r.status_code
-    return jsonify({'message': 'تم إنشاء الدورة كمسودة على الأكاديمية', **body})
+# ⛔ «المزامنة مع الأكاديمية» انتهت (قرار المؤسس 2026-09-10). كان هنا مساران يقرآن ويكتبان في
+# أكاديمية WordPress/Tutor عبر جسر دوراتها على المنصّة: واحدٌ يسحب دوراتها إلى دفتر SQLite،
+# وآخر يُنشئ عليها دورةً من هنا. الدورات صارت native على المنصّة وحدها، فالمساران حُذفا
+# بالكامل ومعهما زرّاهما في الواجهة.
+# أعمدة الأكاديمية في جدول `courses` باقية **بيانات تاريخية فقط**: لا واجهة تقرؤها ولا مسار
+# يكتبها. وبهذا لم يبقَ في اللوحة مستهلكٌ لجسر دورات الأكاديمية (يفتح الطريق لحذفه هناك).
+# ⛔ لا تُعِد كتابتها: المسح البرمجي في tests/test_courses_catalog_actions.py هو الحارس، وأي
+# ذكرٍ حرفيٍّ للمسار المحذوف — ولو في تعليق — يُسقط الطقم عمدًا.
 
 # ============================================================
 # SETTINGS

@@ -1480,7 +1480,7 @@
               priceNum: c.price_egp || 0, rate: trainerPct,
               owner: (c.trainer_name && trainerPct) ? "trainer" : "platform",
               status: c.status === "active" ? "published" : (c.status === "draft" ? "draft" : "published"),
-              lms_synced: !!c.lms_synced, total_revenue: c.total_revenue || 0, cid: c.id,
+              total_revenue: c.total_revenue || 0, cid: c.id,
               on_platform: !!c.platform_course_id, platform_id: c.platform_course_id || "", platform_slug: c.platform_course_slug || "", raw: c,
             };
           }),
@@ -2116,6 +2116,26 @@
         EP.reload("platform_courses", after);
       })
       .catch(function (e) { quietToast((e && e.message) || "تعذّر تحديث حالة الدورة"); if (after) after(); });
+  };
+
+  // «أرشفة»/«حذف» دورة من الكتالوج (قرار المؤسس 2026-09-10).
+  //   hard=false ⇒ أرشفة: تختفي من كتالوج المنصّة ويفضل المشتركون ودفعاتهم.
+  //   hard=true  ⇒ حذف نهائي: المنصّة ترفضه ٤٠٩ لو عليها اشتراك أو دفعة.
+  // ⛔ رسالة الخادم تُعرض **كما هي**: لا نعيد صياغتها ولا نستبدلها بنصٍّ عام — نصّ الرفض هو
+  // الذي يقول للمستخدم لماذا رُفض وماذا يفعل بدلًا منه. تصل للنداء الراجع ليرسمها المودال.
+  EP.removePlatformCourse = function (courseId, hard, after) {
+    api("/platform-courses/" + encodeURIComponent(courseId) + (hard ? "?hard=1" : ""), { method: "DELETE" })
+      .then(function (r) {
+        // ⛔ التوست يتبع ردّ المنصّة لا نيّتنا: منصّةٌ أقدم بلا «حذف نهائي» تتجاهل `hard=1`
+        // وتؤرشف وترجّع ٢٠٠ — فـ«اتحذفت نهائيًّا» وقتها كذبٌ على دورةٍ لسه موجودة.
+        note((r && r.deleted) ? "اتحذفت الدورة نهائيًّا من المنصة ✓" : "اتأرشفت الدورة — اختفت من الكتالوج وسجلّها محفوظ ✓");
+        EP.reload("platform_courses", function () { if (after) after(null, r); });
+      })
+      .catch(function (e) {
+        var msg = (e && e.message) || (hard ? "تعذّر حذف الدورة" : "تعذّرت أرشفة الدورة");
+        quietToast(msg);
+        if (after) after(msg);
+      });
   };
 
   // المحتوى: إنشاء/نشر/تعديل
@@ -2837,16 +2857,9 @@
       .then(function (r) { note(r && r.already ? "الدورة منشورة على المنصة بالفعل" : "نُشرت الدورة على المنصة ✓"); EP.reload("courses", after); })
       .catch(function (e) { quietToast((e && e.message) || "تعذّر النشر على المنصة"); if (after) after(); });
   };
-  EP.syncCoursesLms = function (after) {
-    post("/courses/sync-lms", {})
-      .then(function (r) { note((r && r.message) || "تمت المزامنة من الأكاديمية"); EP.reload("courses", after); })
-      .catch(function (e) { quietToast((e && e.message) || "تعذّرت المزامنة"); if (after) after(); });
-  };
-  EP.createLmsCourse = function (d, after) {
-    post("/courses/create-lms", d)
-      .then(function (r) { note((r && r.message) || "أُنشئت الدورة على الأكاديمية"); EP.reload("courses", after); })
-      .catch(function (e) { quietToast((e && e.message) || "تعذّر إنشاء الدورة"); if (after) after(); });
-  };
+  // ⛔ «المزامنة مع الأكاديمية» انتهت (قرار المؤسس 2026-09-10): دالّتا المزامنة والإنشاء على
+  // الأكاديمية اتشالوا ومعاهم مساراهما في الخادم. الدورات native على المنصّة وحدها، والمسح
+  // البرمجي في tests/test_courses_catalog_actions.py يمنع رجوعهما — ولو باسمٍ في تعليق.
 
   // ---- الإعدادات ----
   EP.saveSettings = function (d, after) {
