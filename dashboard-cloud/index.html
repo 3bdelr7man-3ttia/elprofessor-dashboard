@@ -26,22 +26,28 @@ body{font-family:'IBM Plex Sans Arabic',sans-serif;background:var(--bg);color:va
 
 /* RAIL */
 .rail{width:248px;flex:none;background:linear-gradient(180deg,var(--rail) 0%,var(--navy-2) 100%);color:#fff;display:flex;flex-direction:column}
-.rail .brand{padding:20px 20px 16px;display:flex;align-items:center;gap:11px;border-bottom:1px solid rgba(255,255,255,.08)}
+.rail .brand{padding:14px 20px 12px;display:flex;align-items:center;gap:11px;border-bottom:1px solid rgba(255,255,255,.08)}
 .rail .brand .mark{width:38px;height:38px;border-radius:11px;background:linear-gradient(135deg,var(--human) 0%,#7d2240 100%);display:grid;place-items:center;font-family:'Aref Ruqaa',serif;font-size:22px;font-weight:700;flex:none;box-shadow:0 4px 12px rgba(158,43,78,.35)}
 .rail .brand .txt h1{font-family:'Aref Ruqaa',serif;font-size:20px;font-weight:700;line-height:1.3}
 .rail .brand .txt span{font-size:10.5px;color:rgba(255,255,255,.55);font-weight:600;letter-spacing:.3px}
-.rail .navwrap{flex:1;overflow-y:auto;padding:12px 12px 8px;scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.2) transparent}
+.rail .navwrap{flex:1;overflow-y:auto;padding:8px 12px 6px;scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.2) transparent}
 .rail .navwrap::-webkit-scrollbar{width:5px}.rail .navwrap::-webkit-scrollbar-thumb{background:rgba(255,255,255,.18);border-radius:3px}
-.rail .grp{font-size:10px;font-weight:800;color:rgba(255,255,255,.4);letter-spacing:.6px;padding:10px 10px 6px}
+.rail .grp{font-size:10px;font-weight:800;color:rgba(255,255,255,.4);letter-spacing:.6px;padding:6px 10px 4px}
 .nav{display:flex;flex-direction:column;gap:2px}
-.nav .item{display:flex;align-items:center;gap:11px;padding:9px 11px;border-radius:10px;cursor:pointer;color:rgba(255,255,255,.78);font-weight:600;font-size:13.2px;position:relative;transition:background .15s,color .15s}
+.nav .item{display:flex;align-items:center;gap:11px;padding:7px 11px;border-radius:10px;cursor:pointer;color:rgba(255,255,255,.78);font-weight:600;font-size:13.2px;position:relative;transition:background .15s,color .15s}
 .nav .item:hover{background:rgba(255,255,255,.06);color:#fff}
 .nav .item.on{background:rgba(255,255,255,.10);color:#fff}
 .nav .item.on::before{content:"";position:absolute;right:-12px;top:50%;transform:translateY(-50%);width:4px;height:22px;border-radius:4px;background:var(--human-2)}
 .nav .item .ic{opacity:.85}
 .nav .item .count{margin-inline-start:auto;font-size:10.5px;font-weight:800;background:rgba(255,255,255,.14);border-radius:999px;padding:1px 8px;min-width:22px;text-align:center}
 .nav .item.alert .count{background:var(--human);color:#fff}
-.rail .me{padding:13px 16px;border-top:1px solid rgba(255,255,255,.08);display:flex;align-items:center;gap:10px}
+.rail .copin{flex:none;padding:6px 12px 8px;border-top:1px solid rgba(255,255,255,.10);background:rgba(0,0,0,.14);position:relative}
+/* تلميح «فيه تحت»: تدرّجٌ فوق السطح المثبَّت مباشرةً، فالصفّ الذي يقصّه حدُّ التمرير يُقرأ
+   «مقصوصٌ لأن القائمة تُمرَّر» لا «عطلٌ في الرسم». يعمل على كل المقاسات ولا يلتقط النقر. */
+.rail .copin::before{content:"";position:absolute;inset-inline:0;top:-20px;height:20px;pointer-events:none;background:linear-gradient(to top,rgba(11,22,44,.85),rgba(11,22,44,0))}
+.rail .copin .grp{padding:5px 10px 4px}
+.rail .copin .item{padding:6px 11px;font-size:12.6px}
+.rail .me{padding:10px 16px;border-top:1px solid rgba(255,255,255,.08);display:flex;align-items:center;gap:10px}
 .rail .me .av{width:34px;height:34px;border-radius:10px;background:var(--navy-3);display:grid;place-items:center;font-weight:800;font-size:14px;color:#fff;flex:none}
 .rail .me .nm{font-size:12.5px;font-weight:700;line-height:1.3}
 .rail .me .rl{font-size:10.5px;color:rgba(255,255,255,.5)}
@@ -85,6 +91,12 @@ body{font-family:'IBM Plex Sans Arabic',sans-serif;background:var(--bg);color:va
 .tabbar{display:flex;gap:4px;background:var(--surface-2);border:1px solid var(--line);border-radius:11px;padding:4px;margin-bottom:16px;width:max-content;max-width:100%}
 .tabbar .tab{font-size:12.5px;font-weight:700;border-radius:8px;padding:7px 15px;cursor:pointer;color:var(--ink-2);white-space:nowrap}
 .tabbar .tab.on{background:var(--surface);color:var(--navy);box-shadow:0 1px 3px rgba(0,0,0,.08);font-weight:800}
+/* شريط تبويبٍ **ابن** (يقع تحت شريط أب على نفس الشاشة — «الأهداف والتأسيس» ⇒ «التأسيس»).
+   الأب صندوقٌ محدَّدٌ بحدود وخلفية، والابن سطرٌ مسطّحٌ أصغر بخطٍّ سفليّ: بلا هذا التدرّج
+   يُقرأ الشريطان كمستوىً واحد على بُعد ٢٠٠ بكسل فلا يعرف المؤسس أيّهما يحكم الآخر. */
+.tabbar.sub{background:transparent;border:0;border-radius:0;padding:0 2px;gap:2px;margin:-2px 0 14px;border-bottom:1px solid var(--line);width:100%;overflow-x:auto}
+.tabbar.sub .tab{font-size:11.5px;font-weight:700;padding:6px 11px;border-radius:0;border-bottom:2px solid transparent;margin-bottom:-1px}
+.tabbar.sub .tab.on{background:transparent;box-shadow:none;color:var(--navy);border-bottom-color:var(--gold)}
 
 /* policy banner */
 .policy{display:flex;gap:11px;background:var(--surface);border:1px solid var(--line);border-inline-start:4px solid var(--gold);border-radius:11px;padding:12px 15px;margin-bottom:16px;font-size:12.3px;color:var(--ink-2);line-height:1.6}
@@ -233,7 +245,15 @@ body{font-family:'IBM Plex Sans Arabic',sans-serif;background:var(--bg);color:va
    بنفس قوة `.menu-btn{display:grid}` داخل `@media(max-width:760px)`، فالمتأخّر يفوز
    بترتيب الظهور لا بعرض الشاشة — وضعُها بعدها أخفى زرّ القائمة على كل هاتف. */
 .menu-btn{display:none;width:38px;height:38px;border-radius:10px;border:1px solid var(--line);background:var(--surface);place-items:center;color:var(--ink-2);cursor:pointer;flex:none}
-@media(max-width:760px){.row.inbox-row,.row.esc-row{grid-template-columns:1fr}.rail{position:fixed;inset:0 0 0 auto;z-index:60;transform:translateX(100%);transition:transform .25s;box-shadow:-8px 0 30px rgba(0,0,0,.3)}.rail.open{transform:translateX(0)}.menu-btn{display:grid}.topbar{padding:0 14px;gap:10px}.topbar .search{display:none}.content{padding:14px 14px 40px}.kpis{grid-template-columns:1fr 1fr}.inboxwrap{grid-template-columns:1fr}.tabbar{overflow-x:auto;max-width:100%}}
+@media(max-width:760px){.row.inbox-row,.row.esc-row{grid-template-columns:1fr}.rail{position:fixed;inset:0 0 0 auto;z-index:60;transform:translateX(100%);transition:transform .25s;box-shadow:-8px 0 30px rgba(0,0,0,.3)}.rail.open{transform:translateX(0)}.menu-btn{display:grid}.topbar{padding:0 14px;gap:10px}.topbar .search{display:none}.content{padding:14px 14px 40px}.kpis{grid-template-columns:1fr 1fr}.inboxwrap{grid-template-columns:1fr}.tabbar{overflow-x:auto;max-width:100%}
+  /* الشريط الجانبي على الهاتف: ١٢ صفًّا + ٥ عناوين + السطح المثبَّت لازم يخلّصوا داخل ٨٤٤
+     بكسل، وإلا وقع عنوان المجموعة الأخيرة على حدّ القصّ وبان كأنه عطل. */
+  .rail .brand{padding:10px 18px 9px}
+  .rail .navwrap{padding:6px 11px 4px}
+  .rail .grp{padding:4px 10px 2px}
+  .nav .item{padding:5px 11px;font-size:12.9px}
+  .rail .copin .item{padding:5px 11px}
+  .rail .me{padding:8px 15px}}
 .railscrim{display:none;position:fixed;inset:0;background:rgba(15,23,42,.5);z-index:55}
 .railscrim.on{display:block}
 /* ===== AUTH / LOGIN OVERLAY (added by dashboard-api wiring) ===== */
@@ -266,8 +286,14 @@ body{font-family:'IBM Plex Sans Arabic',sans-serif;background:var(--bg);color:va
       <div class="grp">شغل النهاردة</div><nav class="nav" id="nav-today"></nav>
       <div class="grp">الناس والدورات</div><nav class="nav" id="nav-people"></nav>
       <div class="grp">الفلوس</div><nav class="nav" id="nav-money"></nav>
-      <div class="grp">الطلب والمحتوى</div><nav class="nav" id="nav-demand"></nav>
-      <div class="grp grp-toggle" id="grpCo" role="button" tabindex="0">الشركة <span id="grpCoCaret">▾</span></div><nav class="nav" id="nav-co"></nav>
+      <div class="grp">الطلب</div><nav class="nav" id="nav-demand"></nav>
+      <div class="grp">التسويق والمحتوى</div><nav class="nav" id="nav-content"></nav>
+    </div>
+    <!-- «الشركة» سطحٌ مثبَّت خارج صندوق التمرير (`.navwrap` وحده هو الذي يُمرَّر): كانت مجموعةً
+         مطويّةً داخله، فبنودها السبعة كانت تقع تحت حدّ الرؤية عند فتحها على شاشة ٧٢٠ —
+         «اختفت» شكوى مقيسة لا انطباع. المثبَّت لا يمكن أن يختفي بنيويًّا مهما صغرت الشاشة. -->
+    <div class="copin" id="coPin">
+      <div class="grp">الشركة</div><nav class="nav" id="nav-co"></nav>
     </div>
     <div class="me"><div class="av" id="meAv">—</div><div style="flex:1;min-width:0"><div class="nm" id="meName">—</div><div class="rl" id="meRole">—</div></div><button id="logoutBtn" title="تسجيل الخروج" aria-label="تسجيل الخروج" style="background:rgba(255,255,255,.08);border:0;color:rgba(255,255,255,.7);width:32px;height:32px;border-radius:9px;cursor:pointer;flex:none;display:grid;place-items:center"><svg class="icon" viewBox="0 0 24 24" style="width:17px;height:17px"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="m16 17 5-5-5-5"/><path d="M21 12H9"/></svg></button></div>
   </aside>
@@ -322,29 +348,62 @@ function svg(n,c){return '<svg class="icon '+(c||'')+'" viewBox="0 0 24 24">'+(I
 // «السوق» رجع (2026-08-12) بعد ما اتبنى الجسر: /api/platform-market-requests + …-demand.
 // كان محذوفًا لأنه بلا محمّل بيانات ولا endpoint فيعرض صفرًا دائمًا؛ دلوقتي بيقرا البورد الحيّ
 // بنفس الحارات اللي على المنصة، ولو الجسر لسه ما اتنشرش بيقول كده صراحةً بدل ما يعرض صفرًا.
+// ⭐ بنية ٢٠٢٦-٠٩-٠٩ المعتمدة (AUDIT/dash/00_dashboard_review.md §٤): خمس مجموعات ظاهرة
+// بترتيب يوم العمل + سطح «الشركة» مثبَّت أسفل الشريط. البنود التي **بلا `grp`** لم تُحذف
+// ولم تُعطَّل: هي شاشات ابتُلعت داخل غيرها (نظرة عامة ⇐ الوارد · الرسائل ⇐ شريحة في الوارد ·
+// الباقات ⇐ تبويب في المالية) — تعريفها باقٍ لأن صفوف الوارد تقرأ `MODULES_LOOKUP[dest]`
+// للاسم واللون، ولأن REDIRECTS تحت تحوّل روابطها القديمة بدل أن تكسرها.
 const MODULES={
-  overview:{label:'نظرة عامة',ic:'grid',c:'var(--navy)',bg:'var(--surface-2)',grp:'today'},
+  // ١) شغل النهاردة
   inbox:{label:'الوارد',ic:'inbox',c:'var(--human)',bg:'var(--human-bg)',grp:'today'},
-  messages:{label:'الرسائل',ic:'inbox',c:'var(--ai)',bg:'var(--ai-bg)',grp:'today'},
+  invites:{label:'الدعوات',ic:'mail',c:'var(--gold)',bg:'var(--gold-bg)',grp:'today'},
+  // ٢) الناس والدورات
   courses:{label:'الدورات والتدريب',ic:'book',c:'var(--memory)',bg:'var(--memory-bg)',grp:'people'},
   team:{label:'الخبراء والمدربون',ic:'cap',c:'var(--ai)',bg:'var(--ai-bg)',grp:'people'},
   users:{label:'المستخدمون',ic:'users',c:'var(--ai)',bg:'var(--ai-bg)',grp:'people'},
-  invites:{label:'الدعوات',ic:'mail',c:'var(--gold)',bg:'var(--gold-bg)',grp:'people'},
+  // ٣) الفلوس
   finance:{label:'المالية',ic:'wallet',c:'var(--agree)',bg:'var(--agree-bg)',grp:'money'},
   escrow:{label:'الضمان والنزاعات',ic:'shield',c:'var(--conflict)',bg:'var(--conflict-bg)',grp:'money'},
-  packages:{label:'الباقات والأسعار',ic:'wallet',c:'var(--gold)',bg:'var(--gold-bg)',grp:'money'},
+  // ٤) الطلب
   market:{label:'السوق',ic:'store',c:'var(--human)',bg:'var(--human-bg)',grp:'demand'},
   analysis:{label:'تحليل الطلب',ic:'trend',c:'var(--gold)',bg:'var(--gold-bg)',grp:'demand'},
-  topics:{label:'المحتوى',ic:'sparkles',c:'var(--gold)',bg:'var(--gold-bg)',grp:'demand'},
-  marketing:{label:'التسويق',ic:'mega',c:'var(--human)',bg:'var(--human-bg)',grp:'demand'},
   knowledge:{label:'سوق المعرفة',ic:'book',c:'var(--memory)',bg:'var(--memory-bg)',grp:'demand'},
-  investment:{label:'الاستثمار',ic:'brief',c:'var(--gold)',bg:'var(--gold-bg)',grp:'co'},
-  partners:{label:'الشركاء',ic:'hands',c:'var(--navy)',bg:'var(--surface-2)',grp:'co'},
-  foundation:{label:'مرحلة التأسيس',ic:'build',c:'var(--muted)',bg:'var(--surface-2)',grp:'co'},
-  targets:{label:'الأهداف والتوقعات',ic:'trend',c:'var(--gold)',bg:'var(--gold-bg)',grp:'co'},
-  tutorials:{label:'دليل الاستخدام',ic:'book',c:'var(--ai)',bg:'var(--ai-bg)',grp:'co'},
+  // ٥) التسويق والمحتوى
+  topics:{label:'المحتوى',ic:'sparkles',c:'var(--gold)',bg:'var(--gold-bg)',grp:'content'},
+  marketing:{label:'التسويق',ic:'mega',c:'var(--human)',bg:'var(--human-bg)',grp:'content'},
+  // ⚙ سطح «الشركة» المثبَّت (grp:'co') — الأسماء هي أسماء الدمج المعتمد، والشاشات المدموجة
+  // (الشركاء · مرحلة التأسيس) لسه شاشات قائمة يُفتحان من داخل أبويهما لحين المرحلة ٢.
+  investment:{label:'الاستثمار والشركاء',ic:'brief',c:'var(--gold)',bg:'var(--gold-bg)',grp:'co'},
+  targets:{label:'الأهداف والتأسيس',ic:'trend',c:'var(--gold)',bg:'var(--gold-bg)',grp:'co'},
   ai:{label:'مساعدو الذكاء',ic:'robot',c:'var(--ai)',bg:'var(--ai-bg)',grp:'co'},
-  settings:{label:'الإعدادات',ic:'gear',c:'var(--muted)',bg:'var(--surface-2)',grp:'co'}
+  settings:{label:'الإعدادات',ic:'gear',c:'var(--muted)',bg:'var(--surface-2)',grp:'co'},
+  // — بلا صفٍّ في القائمة (مبتلعة أو تُفتح من داخل شاشة أخرى) —
+  overview:{label:'نظرة عامة',ic:'grid',c:'var(--navy)',bg:'var(--surface-2)'},
+  messages:{label:'الرسائل',ic:'inbox',c:'var(--ai)',bg:'var(--ai-bg)'},
+  packages:{label:'الباقات والأسعار',ic:'wallet',c:'var(--gold)',bg:'var(--gold-bg)'},
+  // «الشركاء» و«مرحلة التأسيس» ابتُلعا في سطح الشركة (المرحلة ٢ من §٤): الشركاء صاروا
+  // تبويب «الملّاك ورأس المال» داخل «الاستثمار والشركاء»، والتأسيس صار تبويبًا داخل
+  // «الأهداف والتأسيس». التعريفان باقيان لأن REDIRECTS تحت تحوّل روابطهما القديمة، ولأن
+  // صفوف الوارد والإشعارات تقرأ MODULES_LOOKUP[dest] للاسم واللون.
+  partners:{label:'الشركاء',ic:'hands',c:'var(--navy)',bg:'var(--surface-2)'},
+  foundation:{label:'مرحلة التأسيس',ic:'build',c:'var(--muted)',bg:'var(--surface-2)'},
+  tutorials:{label:'دليل الاستخدام',ic:'book',c:'var(--ai)',bg:'var(--ai-bg)'}
+};
+// ترتيب سطح «الشركة» المثبَّت — صريحٌ لا مشتقٌّ من ترتيب المفاتيح، فلا يتزحزح بأي إضافة لاحقة.
+const CO_PINNED=['investment','targets','ai','settings'];
+// شاشاتٌ ابتُلعت: كل رابط قديم إليها يهبط على وريثها بالحالة الصحيحة (لا صفحة مكسورة ولا
+// شاشة ميتة في القائمة). القيمة = [الموديول الوريث، دالة تضبط الحالة الداخلية].
+const REDIRECTS={
+  overview:['inbox',null],
+  messages:['inbox',function(){activeFilter='t:messages';}],
+  packages:['finance',function(){finTab='packages';}],
+  // «دليل الاستخدام» خرج من القائمة إلى تبويبٍ داخل «المحتوى»؛ الرابط القديم #tutorials
+  // يهبط عليه بشريط تبويباته ظاهرًا وبإبراز «المحتوى» في الشريط الجانبي.
+  tutorials:['topics',function(){topicsTab='tutorials';}],
+  // الدمجان المعتمدان في سطح «الشركة» (§٤ «جدول المصير»): نفس الكيان في شاشتين ⇒ شاشة
+  // واحدة بتبويبين. الرابط القديم يهبط على وريثه **بتبويبه الصحيح**، لا على أوّل تبويب.
+  partners:['investment',function(){invTab='owners';}],
+  foundation:['targets',function(){tgTab='foundation';}]
 };
 // موديولات الأدوار غير-الأدمن مفصولة بنيويًّا: كانت تعيش داخل MODULES وتُخفى بشرط ضمني
 // (المجموعات الثلاث المرسومة)، فأي مجموعة جديدة كانت تكشفها للأدمن بالخطأ.
@@ -382,15 +441,22 @@ function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){retur
 // رابط مباشر بالهاش (مواصفة الموجة ٢ 2026-09-06 م٧: «ابعتلي رابط عشان أشوف الدعوات»):
 // عند التحميل لو #mod بيشير لموديول حقيقي (moduleDef(mod) موجود) بيبقى هو الشاشة الأولى
 // بدل «inbox» الافتراضية. هاش فاضي أو غير معروف = نفس السلوك القديم بالحرف (لا كسر).
+var PENDING_REDIRECT_STATE=null;   // دالة ضبط حالة الوريث، تُنفَّذ بعد إعلان متغيّرات الحالة (TDZ)
 function initialModuleFromHash(){
   try{
     var h=String(location.hash||'').replace(/^#/,'').trim();
+    // شاشة مبتلعة (#overview · #messages · #packages) ⇒ وريثها بالحالة الصحيحة، لا صفحة مكسورة.
+    if(h&&REDIRECTS[h]){PENDING_REDIRECT_STATE=REDIRECTS[h][1];return REDIRECTS[h][0];}
     if(h&&moduleDef(h))return h;
   }catch(e){}
   return 'inbox';
 }
-let current=initialModuleFromHash(), selected=null, activeFilter='all', escTab='sessions', finTab='summary', usersFilter='all', courseTab='platform', invTab='investors', mktTab='campaigns', contentTab='pending';
+let current=initialModuleFromHash(), selected=null, activeFilter='all', escTab='sessions', finTab='summary', usersFilter='all', courseTab='platform', invTab='owners', contentTab='pending';
 let usersTag='all', teamTab='experts', topicsTab='ideas', topicsCat='all', pendingUserFocus=null;
+// «الأهداف والتأسيس»: تبويبان — الأهداف والتوقّعات (افتراضي) · التأسيس والأصول.
+let tgTab='goals';
+// الآن وقد أُعلنت متغيّرات الحالة كلها: طبّق حالة الوريث لرابطٍ مبتلَعٍ فُتح مباشرةً.
+if(PENDING_REDIRECT_STATE){try{PENDING_REDIRECT_STATE();}catch(e){}PENDING_REDIRECT_STATE=null;}
 // «السوق»: الحارة (kind) + نوع الاحتياج (need_kind) + الحالة — نفس محاور البورد الحيّ.
 let mkLane='all', mkNeed='all', mkStatus='all', mkSel=null;
 // «الدعوات» (الموجة ٣ د٨): الصفّ المختار لدرج التفصيل + تبديل «حسب الداعي».
@@ -405,36 +471,40 @@ const ROLE_NAV={
 
 function itemHTML(id,m){
   const on=id===current?' on':'';const al=m.alert?' alert':'';
-  const cnt=m.count?`<span class="count">${m.count}</span>`:'';
+  const cnt=m.count?`<span class="count">${money(m.count)}</span>`:'';
   const soon=m.soon?'<span class="badge-soon">قريبًا</span>':'';
   return `<div class="item${on}${al}" data-mod="${id}">${svg(m.ic)}<span>${m.label}</span>${soon}${cnt}</div>`;
 }
-const NAV_GROUPS={today:'nav-today',people:'nav-people',money:'nav-money',demand:'nav-demand',co:'nav-co'};
-// «الشركة» مطويّة افتراضيًا (مراجعة شهرية لا شغل يومي)؛ الاختيار يبقى بين الجلسات.
-function coOpen(){try{return localStorage.getItem('ep_grp_co')==='1';}catch(e){return false;}}
-function setCoOpen(v){try{localStorage.setItem('ep_grp_co',v?'1':'0');}catch(e){}}
+// ترتيب المجموعات الخمس الظاهرة — هو نفسه ترتيب رسمها، ومصدر الحقيقة الوحيد للاختبار.
+const NAV_GROUPS={today:'nav-today',people:'nav-people',money:'nav-money',demand:'nav-demand',content:'nav-content'};
 function renderNav(){
   Object.values(NAV_GROUPS).forEach(id=>{const el=document.getElementById(id);if(el)el.innerHTML='';});
+  const coNav=document.getElementById('nav-co'),coPin=document.getElementById('coPin');
+  if(coNav)coNav.innerHTML='';
   const labels=document.querySelectorAll('.rail .grp');
   if(role==='admin'){
     labels.forEach(g=>g.style.display='');
+    if(coPin)coPin.style.display='';
     Object.entries(NAV_GROUPS).forEach(([g,elId])=>{
       const el=document.getElementById(elId);if(!el)return;
       Object.entries(MODULES).filter(([id,m])=>m.grp===g).forEach(([id,m])=>el.insertAdjacentHTML('beforeend',itemHTML(id,m)));
     });
-    const open=coOpen(),coNav=document.getElementById('nav-co'),caret=document.getElementById('grpCoCaret');
-    if(coNav)coNav.style.display=open?'':'none';
-    if(caret)caret.textContent=open?'▾':'▸';
-    const grpCo=document.getElementById('grpCo');
-    if(grpCo){grpCo.style.cursor='pointer';grpCo.onclick=()=>{setCoOpen(!coOpen());renderNav();};}
+    // سطح «الشركة» المثبَّت: يُرسم من CO_PINNED بترتيبه الصريح، خارج صندوق التمرير.
+    if(coNav)CO_PINNED.forEach(id=>{const m=MODULES[id];if(m)coNav.insertAdjacentHTML('beforeend',itemHTML(id,m));});
   } else {
     labels.forEach(g=>g.style.display='none');
+    if(coPin)coPin.style.display='none';
     // خريطة الصلاحيات المحفوظة (D9) تُقيّد قائمة الموديولات للدور غير-الأدمن.
     if(window.EP&&EP.authed)EP.ensure('settings',renderNav);
     const el=document.getElementById('nav-today');
     roleNavFor(role).forEach(id=>{const m=moduleDef(id);if(m)el.insertAdjacentHTML('beforeend',itemHTML(id,m));});
   }
-  document.querySelectorAll('.nav .item').forEach(it=>it.onclick=()=>go(it.dataset.mod));
+  // نقر بند الشريط يهبط حيث الشغل المعدود في شارته: بندٌ يقول «٢» ثم يفتح تبويبًا يقول
+  // «(0)» يكذّب شارته. `land` يُكتب في `applyNavCounts` من نفس طابور المنصّة.
+  document.querySelectorAll('.nav .item').forEach(it=>it.onclick=()=>{
+    const m=MODULES[it.dataset.mod];
+    goOps(it.dataset.mod,m&&m.land);
+  });
 }
 // قائمة موديولات الدور غير-الأدمن = الأساس (ROLE_NAV) مُقاطَعًا بخريطة الصلاحيات
 // المحفوظة role_permissions (إن ضبطها الأدمن). غياب إدخال للدور = بلا تقييد (متوافق رجعيًّا).
@@ -447,12 +517,16 @@ function roleNavFor(r){
   return base;
 }
 function go(mod){
+  // شاشة مبتلعة ⇒ وريثها (نظرة عامة ⇐ الوارد · الرسائل ⇐ شريحة «رسائل» · الباقات ⇐ تبويب المالية).
+  const rd=REDIRECTS[mod]; if(rd)mod=rd[0];
   // رابط/إشعار قديم قد يشير إلى موديول حُذف («النوادي») — نهبط على الشاشة
   // الافتراضية بدل أن نرمي على تعريف غير موجود ونُفرغ اللوحة.
   if(!moduleDef(mod))mod=(role==='admin')?'inbox':(roleNavFor(role)[0]||'v_pending');
-  current=mod;selected=null;activeFilter='all';escTab='sessions';finTab='summary';usersFilter='all';usersTag='all';teamTab='experts';topicsTab='ideas';topicsCat='all';courseTab='platform';invTab='investors';mktTab='campaigns';contentTab='pending';anFilters={seg:'all',country:'all',cat:'all',ne:'all',time:'all'};
+  current=mod;selected=null;activeFilter='all';escTab='sessions';finTab='summary';usersFilter='all';usersTag='all';teamTab='experts';topicsTab='ideas';topicsCat='all';courseTab='platform';invTab='owners';tgTab='goals';foundationTab='assets';contentTab='pending';anFilters={seg:'all',country:'all',cat:'all',ne:'all',time:'all'};
   mkLane='all';mkNeed='all';mkStatus='all';mkSel=null;
   invSel=null;invGroupBy=false;
+  // حالة الوريث تُضبَط **بعد** التصفير أعلاه، وإلا مسحناها بأيدينا.
+  if(rd&&rd[1])rd[1]();
   // رابط مباشر بالهاش (م٧): كل تنقّل بيحدّث #mod عشان يترسل كرابط جاهز («ابعتلي رابط عشان
   // أشوف الدعوات» ⇒ dashboard.elprofessor.net/#invites). replaceState لا يفتح إدخالًا
   // جديدًا في تاريخ المتصفّح لكل ضغطة نافيجيشن — الزرّ «رجوع» يفضل معناه الطبيعي.
@@ -475,11 +549,10 @@ function renderView(){
   if(current==='courses')return viewCourses(v);
   if(current==='investment')return viewInvestment(v);
   if(current==='marketing')return viewMarketing(v);
-  if(current==='packages')return viewPackages(v);
   if(current==='knowledge')return viewKnowledge(v);
-  // «النوادي» حُذفت من القائمة (بلا واجهة خلفية). الشاشة باقية لأن رابطًا قديمًا قد يشير
-  // إليها، ولن تُعرض في التنقّل.
-  if(current==='clubs')return viewClubs(v);
+  // ⛔ «النوادي» حُذفت بالكامل (الشاشة والبيانات والمسار) — كانت كودًا بلا أي مدخلٍ من
+  // الواجهة منذ إخراجها من القائمة، و«مساحة قرارٍ كاذبة»: أزرار اعتماد ورفض تكتب في
+  // مصفوفاتٍ في الذاكرة بلا خادم. `go('clubs')` يهبط الآن على الوارد كأي معرّفٍ مجهول.
   if(current==='messages')return viewMessages(v);
   if(current==='topics'){
     // «المواضيع» = موديول واحد بستة تبويبات داخلية:
@@ -490,13 +563,18 @@ function renderView(){
     if(topicsTab==='auto')return viewArticlesAuto(v);
     if(topicsTab==='articles'||topicsTab==='blog')return viewContent(v);
     if(topicsTab==='comments')return viewComments(v);   // «التعليقات»: بانتظار + معتمدة + تحليل
+    // ⛔ «مكتوبٌ صحيحًا وبلا طريقٍ للشاشة»: كان الشريط يُحقن بـinsertAdjacentHTML **بعد**
+    // viewTutorials، ثم يستيقظ EP.ensure('tutorials') فيُعيد استدعاءها فتكتب v.innerHTML من
+    // جديد وتمسحه — الشريط لم يعش إطارًا واحدًا. الحلّ هو نمط «الباقات» المثبَت: الأب يملك
+    // الشريط، والابن يملك عقدته وحدها (#tutHost)، فإعادة الرسم تصيب الابن فقط.
+    if(topicsTab==='tutorials'){v.innerHTML=topicsTabbar('tutorials')+'<div id="tutHost"></div>';wireTopicsTabs();viewTutorials(document.getElementById('tutHost'));return;}
     return viewTopics(v);   // board | incoming | working | ideas
   }
-  if(current==='tutorials')return viewTutorials(v);
   if(current==='ai')return viewAI(v);
-  if(current==='partners')return viewPartners(v);
   if(current==='team')return viewTeam(v);
-  if(current==='foundation')return viewFoundation(v);
+  // «الشركاء» ⇐ تبويب «الملّاك ورأس المال» في «الاستثمار والشركاء»، و«مرحلة التأسيس» ⇐
+  // تبويب «التأسيس والأصول» في «الأهداف والتأسيس». الوصول إليهما عبر REDIRECTS أعلاه،
+  // فلا مسار مباشر هنا يفتح نصف شاشةٍ بلا شريط تبويبها.
   if(current==='targets')return viewTargets(v);
   if(current==='settings')return viewSettings(v);
   if(current==='market')return viewMarket(v);
@@ -516,6 +594,13 @@ function renderView(){
 // ⚠️ هذه القراءة كانت محبوسة في «الوارد» وحده، بينما «نظرة عامة» و«الخبراء والمدربون»
 // و«الدورات» تستهلك **نفس** المُحمِّل (EP.ensure('inbox',…)) وتتجاهل عطله — فالجملة التي
 // قُتلت في الوارد ظلّت حيّة على بُعد نقرة. الشرط واحد هنا لكل شاشة تقرأ الوارد.
+function mailReply(email,who){
+  // ⛔ زرٌّ بلا فعل ممنوع: كان يطبع toast ويقف. إمّا يفتح البريد فعلًا، أو لا يُرسم.
+  var em=String(email||'').trim();
+  if(!em){toast('لا بريد مسجَّل لـ'+(who||'هذا الطرف') );return;}
+  var url='mailto:'+encodeURIComponent(em)+'?subject='+encodeURIComponent('ردًّا على رسالتك — البروفيسور');
+  try{window.open(url,'_blank');}catch(e){location.href=url;}
+}
 function inboxFailedList(){return (window.INBOX_FAILED&&window.INBOX_FAILED.length)?window.INBOX_FAILED:[];}
 function inboxFailedStrip(viewFn){
   const f=inboxFailedList();
@@ -527,42 +612,230 @@ function inboxFailedTail(){
   const f=inboxFailedList();
   return f.length?` — <b style="color:var(--conflict)">عدا ${esc(f.join(' · '))} (تعذّر جلبها)</b>`:'';
 }
+// ⛔ السقف الصامت انتهى: ما قُصَّ يُعلَن باسم مصدره وعدده. القصّ نفسه لم يعد يحدث عمليًّا
+// (السقف ٥٠٠/مصدر) لكن الإعلان يبقى، لأن السطر الذي يظهر يوم يُقَصّ هو الفرق بين
+// «مفيش تاني» و«فيه تاني مش معروض».
+function inboxTruncList(){return (window.INBOX_TRUNCATED&&window.INBOX_TRUNCATED.length)?window.INBOX_TRUNCATED:[];}
+function inboxTruncStrip(){
+  const t=inboxTruncList();
+  if(!t.length)return '';
+  return `<div class="policy" style="border-inline-start-color:var(--gold);background:var(--gold-bg);color:var(--gold)">${svg('inbox','ic')}<div>الطابور مقصوص: <b>${t.map(esc).join(' · ')}</b> — الباقي موجود ومش معروض هنا.</div></div>`;
+}
+// ⛔ «متأخّر» يُعرَّف مرّةً واحدة. كان لكلّ شريطٍ حسابُه (`triage==='late'` هنا، و
+// `triage==='late'||slaWarn` هناك)، فطبعت الشاشة الواحدة رقمَي تأخّرٍ مختلفَين فوق بعضهما.
+// أي بندٍ فات ميعاده **أو** قارَبه هو متأخّر — والقيمة والوصف يقرآن من هنا وحدهما.
+function inboxIsLate(i){return i.triage==='late'||!!i.slaWarn;}
+function inboxLateCount(){return INBOX.filter(inboxIsLate).length;}
+// شريط «نظرة عامة» بعد دمجها: **سياق الشركة** وحده (مستخدمون · ربح · ضمان) أعلى الوارد.
+// ⛔ أرقام الوارد خرجت من هنا نهائيًّا: كانت تُكرَّر بعد ٢٠٠ بكسل في شريط الفرز القابل
+// للنقر تحت أسماءٍ أخرى وبحسابٍ آخر — ثمانية مربّعات، ثلاثةٌ منها نفس الرقم، واثنان
+// يتناقضان على كلمة «متأخّر». شريطٌ واحد يملك كل رقم وارد: شريط الفرز.
+function ovKpiStrip(){
+  const D=(window.EP&&EP.data.dashboard)||null, Dst=(window.EP&&EP.state.dashboard)||'idle';
+  const escM=(window.EP&&EP.data.escrow&&EP.data.escrow.metrics)||null;
+  const escHeld=escM?Math.round(escM.held_sum||0):null, escCount=escM?(escM.held_count||0):null;
+  const fin=D?D.financial:null;
+  const M=(window.EP&&EP.data.metrics)||null;
+  const kUsers=(M&&M.total_users!=null)?money(M.total_users):(Dst==='loading'?'…':'—');
+  const kUsersSub=(M&&M.total_users!=null)?'من المنصة الحيّة':(Dst==='loading'?'…':'تعذّر الجلب من المنصة');
+  const kProfit=fin?((fin.net_profit>=0?'+':'')+money(fin.net_profit)+' <small style="font-size:13px">ج</small>'):(Dst==='loading'?'…':'—');
+  return `<div class="kpis" id="ovKpis">
+      <div class="kpi k-1"><div class="top"><span class="ic">${svg('users')}</span>مستخدمو المنصة</div><b>${kUsers}</b><div class="sub">${kUsersSub}</div></div>
+      <div class="kpi k-3"><div class="top"><span class="ic">${svg('wallet')}</span>صافي الربح</div><b>${kProfit}</b><div class="sub">${fin?'إيرادات − مصروفات':'حتى اليوم'}</div></div>
+      <div class="kpi k-2"><div class="top"><span class="ic">${svg('shield')}</span>محجوز في الضمان</div><b>${escHeld!=null?money(escHeld)+' <small style="font-size:13px">ج</small>':'—'}</b><div class="sub">${escCount!=null?('عبر '+money(escCount)+' جلسات'):'لا بيانات'}</div></div>
+    </div>`;
+}
+// «كل اللي مستنيك» — طابور المنصّة التشغيلي كما ترسله هي (لا اشتقاق في المتصفّح، وإلا صار
+// رقمًا ثانيًا يخالف دايجست تليجرام). عدّاد صفر لا يُرسَم: الطابور يقول ما ينتظرك فقط.
+// ⛔ «الشاشة الفاضية بتكدب» — الوجهة ليست الموديول وحده، هي **الموديول + تبويبه**. كانت
+// الشارة تعدّ دفعتين يدويّتين ثم تهبط على «الجلسات في الضمان (0)»، وسحبَ محفظةٍ ثم تهبط على
+// «الملخّص»: عدٌّ صحيحٌ يقود إلى شاشةٍ تعرض صفرًا منه. `go()` يصفّر كل متغيّرات التبويب
+// عمدًا، فالهبوط الصحيح = `go(mod)` **ثم** دالّةُ ضبطِ التبويب. هذه هي الخانة الخامسة في
+// كل صفٍّ من `opsQueueCounters` (مقروءةً من هذا الجدول بمفتاح الطابور).
+// غيابُ مفتاحٍ هنا = «الشاشة الافتراضية هي مكان الشغل فعلًا» — مقيسٌ لا مفترض:
+//   founding_leads_new ⇒ «المستخدمون» (الليد صفٌّ في نفس الجدول) · testimonials_pending
+//   ⇒ «المواضيع» بتبويبه الافتراضي · course_split_pending ⇒ ملخّص المالية.
+const OPSQ_LANDINGS={
+  manual_payments_pending:function(){escTab='manual';viewEscrow(document.getElementById('view'));},
+  wallet_payouts_pending:function(){finTab='withdrawals';viewFinance(document.getElementById('view'));},
+  // ⛔ الوجهة كانت مقلوبة: «أوامر دفع متعثّرة» مالٌ **وارد** (أوامر بطاقة في `payments`)،
+  // وتبويب «السحوبات» مالٌ **خارج** (طلبات `wallet_payouts`) — الشارة كانت تهبط بالمؤسس على
+  // قائمةٍ لا تحوي صفًّا واحدًا ممّا عدّته. لكل اتجاهٍ تبويبه.
+  stuck_card_payments:function(){finTab='stuck';viewFinance(document.getElementById('view'));},
+  // تبويب «الكتالوج (على المنصة)» هو **تبويب الاعتماد**: `pcStatus` يرسم «بانتظار الاعتماد»
+  // وزرّ «نشر» فيه وحده. (هو الافتراضي أصلًا — والصفّ هنا يمنع أن يغيّره تصفيرٌ لاحق بصمت.)
+  courses_pending:function(){courseTab='platform';viewCourses(document.getElementById('view'));},
+  course_interests_24h:function(){courseTab='demand';viewCourses(document.getElementById('view'));},
+  training_interests_24h:function(){courseTab='demand';viewCourses(document.getElementById('view'));},
+  live_needs_decision:function(){courseTab='schedules';viewCourses(document.getElementById('view'));},
+  trainer_applications_pending:function(){teamTab='trainers';viewTeam(document.getElementById('view'));},
+  // «مسودّات مواضيع» = تبويب «أفكار للاعتماد» حرفيًّا: `topicTabOf` يسند كل مسودّةٍ غير
+  // خبيرٍ إليه. الصفّ صريحٌ هنا كي لا يُقرأ التطابق كصدفة.
+  topics_drafts:function(){topicsTab='ideas';renderView();}
+};
+function opsQueueCounters(Q){
+  const n=v=>(v&&typeof v==='object')?(v.count||0):(v||0);
+  // العنصر الرابع = مفتاح الطابور في حمولة المنصّة — منه تُقرأ `oldest_hours` لتقرير
+  // «هل هذا الطابور متأخّر؟» بلا حسابٍ ثانٍ في المتصفّح. والخامس = هبوطُه داخل الشاشة.
+  // العنصر الثالث `null` = **لا شاشة لهذا الطابور بعد**: الرقم يُعرَض (هو رقم المنصّة نفسه
+  // الذي يطبعه الدايجست) لكن بلا شارةٍ على الشريط وبلا نقرة — «شارةٌ تشير إلى لا شيء أسوأ
+  // من غيابها»، و«وعود الملف» (lead magnets) خارج نطاق هذه الموجة عمدًا.
+  return [
+    ['طلبات مدرّبين',n(Q.trainer_applications_pending),'team','trainer_applications_pending'],
+    ['دورات بانتظار الاعتماد',n(Q.courses_pending),'courses','courses_pending'],
+    ['دفعات يدوية',n(Q.manual_payments_pending),'escrow','manual_payments_pending'],
+    // ⛔ الشارة والقائمة من مصدرٍ واحد: هذا العدّاد يُقرأ من قائمة السحوبات المرسومة نفسها
+    // متى جهزت (`walletPayoutsCount`) — قبلها كان يقرأ الطابور وحده بينما التبويب يسرد دفترًا
+    // آخر، فتقول الشارة ١ وتقول الشاشة تحتها ٠.
+    ['سحوبات محافظ',walletPayoutsCount(Q),'finance','wallet_payouts_pending'],
+    ['أوامر دفع متعثّرة',n(Q.stuck_card_payments),'finance','stuck_card_payments'],
+    ['اهتمام بالدورات (٢٤س)',n(Q.course_interests_24h),'courses','course_interests_24h'],
+    ['مهتمّون بالتدريب (٢٤س)',n(Q.training_interests_24h),'courses','training_interests_24h'],
+    ['اقتسام إيراد معلّق',n(Q.course_split_pending),'finance','course_split_pending'],
+    ['شهادات بانتظار المراجعة',n(Q.testimonials_pending),'topics','testimonials_pending'],
+    ['مسودّات مواضيع',n(Q.topics_drafts),'topics','topics_drafts'],
+    ['ليدات خبير مؤسس',n(Q.founding_leads_new),'users','founding_leads_new'],
+    ['وعود ملف لم تُسلَّم',n(Q.lead_magnet_awaiting_asset),null,'lead_magnet_awaiting_asset'],
+    ['دورات حيّة تحتاج قرارًا',(Q.live_needs_decision||[]).length,'courses','live_needs_decision']
+  ].filter(r=>r[1]>0).map(r=>r.concat([OPSQ_LANDINGS[r[3]]||null]));
+}
+// الهبوط الكامل: افتح الموديول ثم اضبط تبويبه. تُنادى من شريحة «كل اللي مستنيك» ومن نقر
+// بند الشريط — لا من `go()` نفسها: `go()` مسارٌ عامّ (هاش · تحويلات · روابط قديمة) وله
+// تبويباته الخاصّة (`REDIRECTS`)، فحقنُ الهبوط فيه يدهسها.
+function goOps(mod,land){if(!mod)return;go(mod);if(typeof land==='function')land();}
+// شارات العدّ على صفوف الشريط: من **نفس** طابور المنصّة الذي تحته في «كل اللي مستنيك» —
+// لا عدٌّ ثانٍ في المتصفّح يخالفه. صفرٌ لا يُرسم (الشارة تعني «فيه مستنّي»)، و«تنبيه»
+// (أحمر) حين يقول الطابور إن أقدم بندٍ فيه تعدّى ٢٤ ساعة.
+// ⭐ الشرط الحاكم في §٤: «من غير الشارات أي ترتيب يبقى تخمين». الكود كان موجودًا (خانة
+// `count` في itemHTML وصنف `.alert` في الـCSS) وما كانش حد بيكتب الأرقام — دي كتابتها.
+// صفر تغيير على الخادم: كل رقمٍ هنا مقروءٌ من حمولةٍ **تُجلَب أصلًا** لشاشةٍ قائمة.
+const NAV_ALERT_HOURS=24;
+// «الوارد» = قرارات معلّقة + رسائل لم يُردّ عليها. الطابور الموحَّد نفسه بعد الدمج: كل صفٍّ
+// فيه إمّا قرارٌ ينتظرك أو رسالةٌ تنتظر ردًّا — فالشارة هي طول الطابور حرفيًّا، لا حساب
+// ثانٍ. و«تنبيه» يقرأ inboxIsLate() نفسها التي يقرأها مربّع «متأخّر» فوق الشاشة، فلا
+// يمكن لشارةٍ وشاشةٍ أن تختلفا على كلمة «متأخّر».
+function navInboxCount(){return (window.INBOX&&window.INBOX.length)||0;}
+// «الدعوات» = ما ينتظر موافقتك وحده (`awaiting_approval`) — لا كل الدعوات: الشارة تعني
+// «فيه شغل»، ودعوةٌ مُرسَلةٌ تنتظر صاحبها ليست شغلًا عندك. `at` هو ختم الإنشاء الذي تبعثه
+// المنصّة، ومنه وحده يُقرَّر التأخّر (لا ساعةَ متصفّحٍ تُخترع).
+function navInvitesQueue(){
+  try{return (typeof approvalQueueRows==='function')?(approvalQueueRows()||[]):[];}catch(e){return [];}
+}
+function applyNavCounts(){
+  Object.keys(MODULES).forEach(id=>{delete MODULES[id].count;delete MODULES[id].alert;delete MODULES[id].land;});
+  const Q=(window.EP&&EP.data.opsQueue)||null;
+  if(Q)opsQueueCounters(Q).forEach(c=>{
+    const m=MODULES[c[2]];if(!m)return;
+    m.count=(m.count||0)+c[1];
+    // بندُ الشريط قد يجمع طوابيرَ عدّة (الدورات = اعتماد + اهتمام + تدريب + حيّة). الهبوط
+    // يتبع **أوّل** طابورٍ منها في ترتيب `opsQueueCounters` — وهو ترتيب الأولوية نفسه الذي
+    // تُرسَم به الشرائح، فأوّلُه هو أثقل ما ينتظر قرارًا (الاعتماد قبل الاهتمام).
+    if(!m.land&&typeof c[4]==='function')m.land=c[4];
+    const raw=Q[c[3]];
+    if(raw&&typeof raw==='object'&&typeof raw.oldest_hours==='number'&&raw.oldest_hours>=NAV_ALERT_HOURS)m.alert=true;
+  });
+  // الوارد — قرارات + رسائل، من الطابور المرسوم نفسه.
+  const nIn=navInboxCount();
+  if(nIn>0){MODULES.inbox.count=nIn;if(typeof inboxLateCount==='function'&&inboxLateCount()>0)MODULES.inbox.alert=true;}
+  // الدعوات — بانتظار موافقتك.
+  const inv=navInvitesQueue();
+  if(inv.length){
+    MODULES.invites.count=inv.length;
+    const now=Date.now();
+    if(inv.some(function(i){return i&&i.at&&(now-i.at)>=NAV_ALERT_HOURS*3600e3;}))MODULES.invites.alert=true;
+  }
+  renderNav();
+}
+function opsQueuePanel(){
+  const st=(window.EP&&EP.state.opsQueue)||'idle';
+  const Q=(window.EP&&EP.data.opsQueue)||null;
+  let body;
+  if(st==='loading')body='<div style="padding:18px 22px;color:var(--muted);font-size:13px">…جارٍ جلب الطابور من المنصة</div>';
+  else if(st==='error'||!Q)body=`<div style="padding:18px 22px;color:var(--conflict);font-size:13px">تعذّر جلب طابور المنصة — الأرقام تحت <b>لا تشمله</b>. <b style="cursor:pointer;text-decoration:underline" onclick="EP.reload('opsQueue',()=>viewInbox(document.getElementById('view')))">إعادة المحاولة</b></div>`;
+  else{
+    const cs=opsQueueCounters(Q), alerts=Array.isArray(Q.alerts)?Q.alerts:[];
+    const chips=cs.length
+      ? '<div style="padding:12px 16px;display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:9px">'+cs.map(c=>c[2]
+          ? `<div class="opsq" data-m="${esc(c[2])}" data-k="${esc(c[3])}" style="border:1px solid var(--line);border-radius:10px;padding:9px 11px;cursor:pointer;display:flex;align-items:center;gap:9px"><b style="font-family:Cairo;font-size:16px;color:var(--human)">${money(c[1])}</b><span style="font-size:12px;color:var(--ink-2)">${esc(c[0])}</span></div>`
+          : `<div class="opsq-noscreen" data-k="${esc(c[3])}" title="رقم المنصّة — لا شاشة له في الداشبورد بعد" style="border:1px dashed var(--line);border-radius:10px;padding:9px 11px;display:flex;align-items:center;gap:9px;opacity:.72"><b style="font-family:Cairo;font-size:16px;color:var(--muted)">${money(c[1])}</b><span style="font-size:12px;color:var(--muted)">${esc(c[0])} <span style="font-size:10.5px">· لا شاشة له بعد</span></span></div>`
+        ).join('')+'</div>'
+      : '<div style="padding:18px 22px;color:var(--muted);font-size:13px">لا شيء ينتظرك في طابور المنصة الآن.</div>';
+    const al=alerts.length?'<div style="padding:0 16px 12px">'+alerts.map(a=>`<div style="font-size:12.5px;color:var(--conflict);font-weight:700;padding:3px 0">${esc(a)}</div>`).join('')+'</div>':'';
+    body=chips+al;
+  }
+  return `<section class="panel" style="margin-bottom:14px"><div class="ph"><h3>كل اللي مستنيك — من المنصة</h3><span class="hint">أرقام المنصة نفسها (نفس ما يطبعه الدايجست)</span></div>${body}</section>`;
+}
 function viewInbox(v){
-  if(window.EP){EP.ensure('inbox',()=>viewInbox(v));}
+  if(window.EP){EP.ensure('inbox',()=>viewInbox(v));EP.ensure('opsQueue',()=>viewInbox(v));EP.ensure('dashboard',()=>viewInbox(v));EP.ensure('escrow',()=>viewInbox(v));}
   const failedQ=inboxFailedList();
   v.innerHTML=`
     ${inboxFailedStrip('viewInbox')}
+    ${inboxTruncStrip()}
+    ${ovKpiStrip()}
+    ${opsQueuePanel()}
     <div class="kpis" id="kpis"></div>
-    <div class="filterbar" id="filters"><span class="lbl">التوجيه:</span></div>
+    <div class="filterbar" id="filters"><span class="lbl">النوع:</span></div>
     <div class="inboxwrap">
       <section class="panel"><div class="ph"><h3>صندوق الوارد</h3><span class="n" id="inboxN">0</span><span class="hint">اضغط أي بند لرؤية التوجيه والإجراء</span></div><div id="rows"></div></section>
       <aside class="drawer" id="drawer"></aside>
     </div>`;
-  // مؤشرات الوارد محسوبة من الصفوف الحقيقية فقط.
+  // مؤشرات الوارد محسوبة من الصفوف الحقيقية فقط — وهذا هو **الشريط الوحيد** الذي يطبع
+  // رقم وارد. «متأخّر» يُقرأ من inboxLateCount() لا من تعبيرٍ مكرّر، فلا يمكن لمربّعين
+  // أن يختلفا عليه، ووصف المربّع يقرأ نفس الرقم الذي تحته.
   const cAll=INBOX.length;
   const cHuman=INBOX.filter(i=>i.triage==='human').length;
   const cAuto=INBOX.filter(i=>i.triage==='auto').length;
-  const cLate=INBOX.filter(i=>i.triage==='late'||i.slaWarn).length;
-  const KP=[{cls:'k-1',ic:'inbox',t:'وارد جديد',v:cAll,f:'all'},{cls:'k-2',ic:'users',t:'بانتظار اعتماد بشري',v:cHuman,f:'human'},{cls:'k-3',ic:'check',t:'عالجها الذكاء آليًّا',v:cAuto,f:'auto'},{cls:'k-4',ic:'clock',t:'متأخّر عن المهلة',v:cLate,f:'late'}];
+  const cLate=inboxLateCount();
+  const missing=inboxFailedList();
+  const KP=[
+    {cls:'k-1',ic:'inbox',t:'وارد جديد',v:cAll,f:'all',sub:missing.length?('عددٌ ناقص — تعذّر جلب '+esc(missing.join(' · '))):'كل البنود · اضغط للفرز',warn:!!missing.length},
+    {cls:'k-2',ic:'users',t:'بانتظار اعتماد بشري',v:cHuman,f:'human',sub:'قرارك مطلوب'},
+    {cls:'k-3',ic:'check',t:'عالجها الذكاء آليًّا',v:cAuto,f:'auto',sub:'بلا تدخّل منك'},
+    {cls:'k-4',ic:'clock',t:'متأخّر عن المهلة',v:cLate,f:'late',sub:cLate?('فات ميعاده أو قارَبه · '+money(cLate)+' بندًا'):'لا شيء فات ميعاده'}];
   const ke=document.getElementById('kpis');
-  KP.forEach(k=>ke.insertAdjacentHTML('beforeend',`<div class="kpi ${k.cls}" data-f="${k.f}"><div class="top"><span class="ic">${svg(k.ic)}</span>${k.t}</div><b>${money(k.v)}</b></div>`));
+  KP.forEach(k=>ke.insertAdjacentHTML('beforeend',`<div class="kpi ${k.cls}" data-f="${k.f}"><div class="top"><span class="ic">${svg(k.ic)}</span>${k.t}</div><b>${money(k.v)}${k.warn?'<small style="font-size:13px;color:var(--conflict)"> +؟</small>':''}</b><div class="sub"${k.warn?' style="color:var(--conflict)"':''}>${k.sub}</div></div>`));
   ke.querySelectorAll('.kpi').forEach(c=>c.onclick=()=>{activeFilter=c.dataset.f;renderInbox();});
+  // الشريحة تهبط على **تبويبها** لا على أوّل تبويبٍ في الموديول (وإلا عدّت شغلًا وفتحت
+  // شاشةً تعرض صفرًا منه). `OPSQ_LANDINGS` هو نفس الجدول الذي تقرأ منه شارات الشريط.
+  v.querySelectorAll('.opsq').forEach(c=>c.onclick=()=>goOps(c.dataset.m,OPSQ_LANDINGS[c.dataset.k]));
+  applyNavCounts();
   renderInbox();
   // الحالة الفارغة تقول الصدق: «فاضي» فقط حين وصل كل طابور فعلًا؛ وإلا فهي «ما وصلش»، لا صفر.
   if(!cAll){const re=document.getElementById('rows');if(re)re.innerHTML='<div style="padding:40px;text-align:center;color:var(--muted)">'+(failedQ.length?'ما قدرناش نجيب '+failedQ.map(esc).join(' · ')+' — مش معناه إن مفيش طلبات.':'لا وارد جديد')+'</div>';const nN=document.getElementById('inboxN');if(nN)nN.textContent='0';}
 }
+// محور «النوع» بعد دمج «الرسائل» في «الوارد» — ستّ شرائح ثابتة الترتيب بدل شريحةٍ لكل وجهة.
+// الوجهة كانت محورًا للتنقّل لا للفرز؛ والنوع هو ما يقرّر شكل الفعل (اعتماد · ردّ · تأكيد دفعة).
+function inboxType(i){
+  if(i.dest==='messages')return 'messages';
+  if(i.apiKind==='manual_payment')return 'money';
+  if(i.apiKind==='verify')return 'verify';
+  if(i.apiKind)return 'decisions';
+  return 'other';
+}
+// الفلترة تفهم ثلاثة محاور معًا: النوع (t:…) · الفرز (human/auto/late) · الوجهة (توافق رجعيّ
+// مع أي رابط/كود قديم يمرّر اسم موديول). أي محور مجهول لا يُفرغ الشاشة بصمت — يسقط على الوجهة.
+function inboxMatches(i,f){
+  if(!f||f==='all')return true;
+  if(f==='late')return inboxIsLate(i);
+  if(f==='human'||f==='auto')return i.triage===f;
+  if(f.indexOf('t:')===0)return inboxType(i)===f.slice(2);
+  return i.dest===f;
+}
 function renderInbox(){
   const fe=document.getElementById('filters');
   fe.querySelectorAll('.chip').forEach(c=>c.remove());
-  const dests=[...new Set(INBOX.map(i=>i.dest))];
   const mk=(f,label,color)=>`<div class="chip${activeFilter===f?' on':''}" data-f="${f}">${color?`<span class="dotc" style="background:${color}"></span>`:''}${label}</div>`;
-  fe.insertAdjacentHTML('beforeend',mk('all','الكل'));
-  dests.forEach(d=>fe.insertAdjacentHTML('beforeend',mk(d,MODULES_LOOKUP[d].label,MODULES_LOOKUP[d].c)));
-  fe.querySelectorAll('.chip').forEach(c=>c.onclick=()=>{activeFilter=c.dataset.f;renderInbox();});
+  const cnt=t=>INBOX.filter(i=>inboxType(i)===t).length;
+  const lateN=inboxLateCount();
+  fe.insertAdjacentHTML('beforeend',mk('all','الكل ('+money(INBOX.length)+')'));
+  [['decisions','قرارات','var(--ai)'],['messages','رسائل','var(--ai)'],['money','فلوس','var(--agree)'],['verify','توثيق','var(--gold)'],['other','أخرى','var(--muted)']]
+    .forEach(t=>{const n=cnt(t[0]);if(n)fe.insertAdjacentHTML('beforeend',mk('t:'+t[0],t[1]+' ('+money(n)+')',t[2]));});
+  if(lateN)fe.insertAdjacentHTML('beforeend',mk('late','متأخّر ('+money(lateN)+')','var(--conflict)'));
+  fe.querySelectorAll('.chip').forEach(c=>c.onclick=()=>{activeFilter=c.dataset.f;selected=null;renderInbox();});
   const el=document.getElementById('rows');el.innerHTML='';
   const q=(document.getElementById('q').value||'').trim();
   // البحث يشمل الخدمة والبريد كذلك: المؤسس يفتّش باسم المتقدّم أو بالخدمة التي ادّعاها.
-  const items=INBOX.filter(i=>{const okF=activeFilter==='all'||i.dest===activeFilter||i.triage===activeFilter;const okQ=!q||(i.out+i.from+i.who+(i.serviceLabel||'')+(i.email||'')+MODULES_LOOKUP[i.dest].label).includes(q);return okF&&okQ;});
+  const items=INBOX.filter(i=>{const okF=inboxMatches(i,activeFilter);const okQ=!q||(i.out+i.from+i.who+(i.serviceLabel||'')+(i.email||'')+MODULES_LOOKUP[i.dest].label).includes(q);return okF&&okQ;});
   document.getElementById('inboxN').textContent=items.length;
   items.forEach(i=>{const m=MODULES_LOOKUP[i.dest],tr=TRI[i.triage],ri=INBOX.indexOf(i);
     // سطر ثانٍ للصفوف التي تحمل خدمةً وتاريخًا (طلبات تقديم الخدمة): «أي خدمة · متى» — وشارة
@@ -570,8 +843,10 @@ function renderInbox(){
     // شارة الفئة المرخَّصة — وتصير «بلا قيد» حين يكون الاعتماد موقوفًا فعلًا على الخادم.
     const lic=i.licensed?` <span class="status" style="background:var(--conflict-bg);color:var(--conflict);font-size:9.5px"><span class="d" style="background:var(--conflict)"></span>${i.licenceMissing?'مرخَّصة · بلا قيد':'مرخَّصة'}</span>`:'';
     const line2=(i.serviceLabel||i.whenLabel)?`<div class="from">${i.serviceLabel?`الخدمة: <b>${esc(i.serviceLabel)}</b>`:''}${(i.serviceLabel&&i.whenLabel)?' · ':''}${i.whenLabel?esc(i.whenLabel):''}</div>`:'';
+    // وسم مصدر الرسالة على الصفّ نفسه: «من الموقع» تُردّ من هنا، «من المنصة» تُنهى فقط.
+    const msrc=i.msgSource?` <span class="status" style="background:var(--ai-bg);color:var(--ai);font-size:9.5px"><span class="d" style="background:var(--ai)"></span>${i.msgSource==='site'?'من الموقع':'من المنصة'}</span>`:'';
     el.insertAdjacentHTML('beforeend',`<div class="row inbox-row${selected===ri?' sel':''}" data-i="${ri}">
-      <div class="c c1"><div class="src-ic">${svg(i.src)}</div><div><div class="out">${esc(i.out)}${lic}</div><div class="from">من سطح: <b>${esc(i.from)}</b> · ${esc(i.who)}</div>${line2}</div></div>
+      <div class="c c1"><div class="src-ic">${svg(i.src)}</div><div><div class="out">${esc(i.out)}${lic}${msrc}</div><div class="from">من سطح: <b>${esc(i.from)}</b> · ${esc(i.who)}</div>${line2}</div></div>
       <div class="c"><div class="destwrap"><span class="arrow">←</span><span class="dest" style="background:${m.bg};color:${m.c}">${svg(m.ic)}${m.label}</span></div></div>
       <div class="c"><span class="triage ${tr.cls}"><span class="d"></span>${tr.t}</span><div class="sla${i.slaWarn?' warn':''}">${svg('clock')}${i.sla}</div></div>
     </div>`);});
@@ -582,6 +857,16 @@ function renderInbox(){
 // أزرار الإجراء في درج الوارد — مبنية على قدرات البند (R1): اعتماد/رفض، تأكيد دفعة، تحويل توثيق لخبير، إنهاء.
 function inboxActs(i,m){
   let a='';
+  // ⛔ صفّ الرسالة يردّ من درج الوارد نفسه (قاعدة الدمج رقم ١): كان الردّ الحقيقي محبوسًا في
+  // شاشة «الرسائل» وحدها بينما الصفّ ظاهرٌ في الشاشتين — فعلٌ وحيدٌ خلف شاشة مبتلَعة.
+  // المصدران لهما وسمٌ ظاهر لأن سلوكهما يختلف فعلًا: رسالة الموقع تُردّ وتُحذف من هنا،
+  // ورسالة المنصّة تُنهى هنا ويُردّ عليها داخل المنصّة — ادّعاء التوحيد كذبٌ مريح.
+  if(i.dest==='messages'&&i.msgSource==='site'&&i.msgId!=null){
+    a=`<button class="btn btn-primary" data-a="msg_reply">${svg('check')}ردّ — ويُعلَّم «تم الرد»</button>`;
+    a+=`<button class="btn btn-ghost" data-a="msg_email">رد بالبريد</button>`;
+    a+=`<button class="btn btn-warn" data-a="msg_del">حذف الرسالة</button>`;
+    return a;
+  }
   if(i.triage==='auto'){
     a=`<button class="btn btn-primary" data-a="open">${svg('check')}عُولجت — عرض</button>`;
   }else if(i.apiKind==='verify'){
@@ -647,6 +932,8 @@ function drawInbox(){
     <div class="field"><div class="lab">يُدار في موديول</div><div class="val" style="color:${m.c}">${m.label}</div></div>
     <div class="field"><div class="lab">حالة الفرز</div><div class="val"><span class="triage ${tr.cls}"><span class="d"></span>${tr.t}</span></div></div>
     <div class="field"><div class="lab">${i.serviceLabel?'مقدّم الطلب':'الطرف'}</div><div class="val">${esc(i.who)}${i.email&&i.email!==i.who?`<div style="font-size:11.5px;color:var(--muted);direction:ltr;text-align:right">${esc(i.email)}</div>`:''}</div></div>
+    ${i.msgSource?fld('نص الرسالة',i.body,'background:var(--surface-2);border-radius:9px;padding:11px 13px;font-weight:500'):''}
+    ${i.msgSource?fld('نوع الطلب',i.topic):''}
     ${fld('الخدمة المطلوب تقديمها',i.serviceLabel)}
     ${fld('حالة الطلب',i.statusLabel)}
     ${det}${att}
@@ -655,8 +942,15 @@ function drawInbox(){
   const refreshInbox=()=>{selected=null;viewInbox(document.getElementById('view'));};
   el.querySelectorAll('[data-a]').forEach(b=>b.onclick=()=>{
     const a=b.dataset.a;
-    if(a==='goto'){go(i.dest);return;}
+    if(a==='goto'){
+      // الدفعة اليدوية لها تبويبها في «الضمان والنزاعات» — كان الوارد يوجّهها لوجهةٍ بلا شاشة.
+      if(i.dest==='escrow'&&i.apiKind==='manual_payment'){goEscrowManual();return;}
+      go(i.dest);return;
+    }
     if(!window.EP){toast('الربط غير متاح');return;}
+    if(a==='msg_email'){mailReply(i.email,i.who);return;}
+    if(a==='msg_reply'&&i.msgId!=null){EP.replyMessage({id:i.msgId,name:i.who},function(){EP.reload('inbox',refreshInbox);});return;}
+    if(a==='msg_del'&&i.msgId!=null){EP.deleteMessage({id:i.msgId,name:i.who},function(){EP.reload('inbox',refreshInbox);});return;}
     if(a==='approve'&&i.apiKind){EP.decideInboxItem(i,'approve',refreshInbox);return;}
     if(a==='reject'&&i.apiKind){
       // سبب الرفض يسافر مع القرار — لأن المنصة تعرضه لصاحب الطلب. رفضٌ بلا سبب يُمنع هنا،
@@ -684,8 +978,13 @@ function drawInbox(){
 function escSessions(){return (window.EP&&EP.data.escrow)?EP.data.escrow.sessions:ESCROW;}
 function escDisputes(){return (window.EP&&EP.data.escrow)?EP.data.escrow.disputes:DISPUTES;}
 function escReleased(){return (window.EP&&EP.data.escrow)?EP.data.escrow.released:RELEASED;}
+// «الدفعات اليدوية» — نفس صفوف الوارد التي وجهتها `dest:'escrow'` (لا مصدر بيانات ثانٍ):
+// الوارد كان يوجّهها إلى وجهةٍ **بلا شاشة تستقبلها**، فالزرّ كان يفتح الضمان ويترك المستخدم
+// أمام جلساتٍ لا علاقة لها بالإيصال الذي في يده.
+function escManualRows(){return (window.EP&&Array.isArray(EP.data.inbox))?EP.data.inbox.filter(function(r){return r.apiKind==='manual_payment';}):[];}
+function goEscrowManual(){go('escrow');escTab='manual';selected=null;viewEscrow(document.getElementById('view'));}
 function viewEscrow(v){
-  if(window.EP){EP.ensure('escrow',()=>viewEscrow(v));}
+  if(window.EP){EP.ensure('escrow',()=>viewEscrow(v));EP.ensure('inbox',()=>viewEscrow(v));}
   const Est=(window.EP&&EP.state.escrow)||'idle';
   const live=!!(window.EP&&EP.data.escrow);
   const SES=escSessions(),DSP=escDisputes(),REL=escReleased();
@@ -693,27 +992,51 @@ function viewEscrow(v){
   const held=mt?Math.round(mt.held_sum||0):SES.reduce((s,e)=>s+(e.amount||0),0);
   const active=mt?(mt.held_count||0):SES.length, waiting=mt?(mt.awaiting_release_count||0):SES.filter(e=>e.status==='confirm').length, disp=mt?(mt.disputes_count||0):DSP.length;
   const relSum=mt?Math.round(mt.released_sum||0):REL.reduce((s,r)=>s+(r.amount||0),0);
-  v.innerHTML=`
-    <div class="policy">${svg('shield','ic')}<div><b>سياسة الضمان:</b> تحرير تلقائي للخبير بعد <b>٧٢ ساعة</b> من الجلسة إن لم يعترض الطالب · نافذة فتح النزاع <b>٤٨ ساعة</b> · العمولة (<b>١٥٪</b>) تُقتطع عند التحرير لا عند التحصيل.</div></div>
-    ${Est==='error'?`<div class="policy" style="border-inline-start-color:var(--conflict);background:var(--conflict-bg);color:var(--conflict)">${svg('scale','ic')}<div>تعذّر جلب الضمان من الخادم — لا تُعرض أي بيانات بديلة. <b style="cursor:pointer;text-decoration:underline" onclick="EP.reload('escrow',()=>viewEscrow(document.getElementById('view')))">إعادة المحاولة</b></div></div>`:''}
-    ${Est==='loading'?`<div class="policy">${svg('shield','ic')}<div>…جارٍ تحميل جلسات الضمان من الخادم</div></div>`:''}
-    <div class="kpis">
+  const MAN=escManualRows();
+  // ⛔ شاشة فاضية بتكدب: المنصّة عمرها ما بعتت حدث ضمان واحد — فالسياسة تحت كانت تُقرأ كأنها
+  // دفترٌ يمتلئ. الإعلان صريح، والتبويب الوحيد الذي **يمتلئ فعلًا** اليوم هو الدفعات اليدوية.
+  // ⛔ أربعة أصفارٍ فوق صفوفٍ حيّة: مؤشّرات جلسات الضمان (كلّها صفر لأن المنصّة لم ترسل
+  // حدثًا بعد) كانت تُرسم فوق جدول الدفعات اليدوية المليء — والتبويب هو الوحيد الذي تُخفى
+  // عنه لافتة «موقوف»، فلا شيء يفسّر الأصفار. على هذا التبويب: عدّاداته هو، من صفوفه هو.
+  const manNoProof=MAN.filter(function(p){return !p.proofUrl;}).length;
+  const manSum=MAN.reduce(function(s,p){return s+(p.amount||0);},0);
+  const escKpis=(escTab==='manual')
+    ? `<div class="kpis" id="manKpis">
+      <div class="kpi k-1"><div class="top"><span class="ic">${svg('wallet')}</span>بانتظار التأكيد</div><b>${money(MAN.length)}</b><div class="sub">دفعة يدوية في الجدول</div></div>
+      <div class="kpi k-4"><div class="top"><span class="ic">${svg('scale')}</span>بلا إيصال مرفوع</div><b>${money(manNoProof)}</b><div class="sub">${manNoProof?'لا تؤكّد قبل مطابقةٍ خارج اللوحة':'كلّها بإيصال'}</div></div>
+      <div class="kpi k-3"><div class="top"><span class="ic">${svg('trend')}</span>إجمالي المبلغ</div><b>${money(manSum)} <small style="font-size:13px">ج</small></b><div class="sub">${manSum?'كما أرسلته المنصّة':'المبلغ غير مُرسَل مع الصفّ'}</div></div>
+    </div>`
+    : `<div class="kpis" id="escKpis">
       <div class="kpi k-1"><div class="top"><span class="ic">${svg('shield')}</span>محجوز حاليًا</div><b>${money(held)} <small style="font-size:13px">ج</small></b><div class="sub">عبر ${active} جلسات نشطة</div></div>
       <div class="kpi k-2"><div class="top"><span class="ic">${svg('clock')}</span>بانتظار تحرير</div><b>${money(waiting)}</b><div class="sub">جلسة قرب انتهاء مهلتها</div></div>
       <div class="kpi k-3"><div class="top"><span class="ic">${svg('check')}</span>حُرِّر مؤخرًا</div><b>${money(relSum)} <small style="font-size:13px">ج</small></b><div class="sub">${(mt?(mt.released_count||0):REL.length)} جلسات مكتملة</div></div>
       <div class="kpi k-4"><div class="top"><span class="ic">${svg('scale')}</span>نزاعات مفتوحة</div><b>${money(disp)}</b><div class="sub">تحتاج فصلًا بشريًّا</div></div>
-    </div>
+    </div>`;
+  const suspendedBanner=(escTab==='sessions'||escTab==='disputes')
+    ?`<div class="policy" style="border-inline-start-color:var(--gold);background:var(--gold-bg);color:var(--gold)">${svg('clock','ic')}<div><b>موقوف حتى أوّل جلسة مدفوعة.</b> المنصّة لا ترسل أحداث ضمان بعد، فالجدول تحت يبقى فارغًا مهما انتظرت — الوصل الحقيقي يُنفَّذ مع أول جلسة مدفوعة. «الدفعات اليدوية» في التبويب المجاور شغّالة الآن.</div></div>`
+    :'';
+  v.innerHTML=`
+    ${suspendedBanner}
+    <div class="policy">${svg('shield','ic')}<div><b>سياسة الضمان:</b> تحرير تلقائي للخبير بعد <b>٧٢ ساعة</b> من الجلسة إن لم يعترض الطالب · نافذة فتح النزاع <b>٤٨ ساعة</b> · العمولة (<b>١٥٪</b>) تُقتطع عند التحرير لا عند التحصيل.</div></div>
+    ${Est==='error'?`<div class="policy" style="border-inline-start-color:var(--conflict);background:var(--conflict-bg);color:var(--conflict)">${svg('scale','ic')}<div>تعذّر جلب الضمان من الخادم — لا تُعرض أي بيانات بديلة. <b style="cursor:pointer;text-decoration:underline" onclick="EP.reload('escrow',()=>viewEscrow(document.getElementById('view')))">إعادة المحاولة</b></div></div>`:''}
+    ${Est==='loading'?`<div class="policy">${svg('shield','ic')}<div>…جارٍ تحميل جلسات الضمان من الخادم</div></div>`:''}
+    ${escKpis}
     <div class="tabbar" id="escTabs">
       <div class="tab${escTab==='sessions'?' on':''}" data-t="sessions">الجلسات في الضمان (${SES.length})</div>
       <div class="tab${escTab==='disputes'?' on':''}" data-t="disputes">النزاعات (${DSP.length})</div>
       <div class="tab${escTab==='released'?' on':''}" data-t="released">المُحرَّر مؤخرًا (${REL.length})</div>
+      <div class="tab${escTab==='manual'?' on':''}" data-t="manual">الدفعات اليدوية (${MAN.length})</div>
     </div>
     <div class="inboxwrap">
       <section class="panel"><div class="ph"><h3 id="escPanelH">الجلسات في الضمان</h3><span class="n" id="escN">0</span>${live?`<button class="btn btn-ghost" id="escAuto" style="flex:none;min-width:auto;padding:6px 13px;font-size:12px;margin-inline-start:auto">تحرير تلقائي للمستحقّ</button>`:`<span class="hint">اضغط جلسة لإجراء التحرير أو الاسترداد</span>`}</div><div id="escRows"></div></section>
       <aside class="drawer" id="drawer"></aside>
     </div>`;
   v.querySelectorAll('#escTabs .tab').forEach(t=>t.onclick=()=>{escTab=t.dataset.t;selected=null;viewEscrow(v);});
-  var ea=document.getElementById('escAuto');if(ea)ea.onclick=function(){EP.escrowProcessAuto(()=>{selected=null;viewEscrow(document.getElementById('view'));});};
+  var ea=document.getElementById('escAuto');
+  // «تحرير تلقائي للمستحقّ» فعلٌ خاصٌّ بجلسات الضمان — على تبويب الدفعات اليدوية يكون
+  // مساحة قرارٍ كاذبة (لا علاقة له بإيصالٍ يُطابَق)، فيُخفى هناك بدل أن يوهم.
+  if(ea&&escTab==='manual')ea.style.display='none';
+  if(ea)ea.onclick=function(){EP.escrowProcessAuto(()=>{selected=null;viewEscrow(document.getElementById('view'));});};
   renderEsc();
 }
 function renderEsc(){
@@ -742,6 +1065,17 @@ function renderEsc(){
         <div class="c"><div class="sla${d.warn?' warn':''}">${svg('clock')}${esc(d.sla)}</div></div>
       </div>`);});
     el.querySelectorAll('.row').forEach(r=>r.onclick=()=>{selected='d'+r.dataset.d;renderEsc();drawEsc();});
+  } else if(escTab==='manual'){
+    const MAN=escManualRows();
+    h.textContent='الدفعات اليدوية (InstaPay/فودافون)';document.getElementById('escN').textContent=MAN.length;
+    if(!MAN.length)el.innerHTML='<div style="padding:40px;text-align:center;color:var(--muted)">لا دفعات يدوية بانتظار التأكيد'+inboxFailedTail()+'</div>';
+    MAN.forEach((p,idx)=>{
+      el.insertAdjacentHTML('beforeend',`<div class="row esc-row man-row${selected==='m'+idx?' sel':''}" data-m="${idx}" style="grid-template-columns:1.6fr 1fr 150px">
+        <div class="c c1"><div class="src-ic" style="background:var(--gold-bg);color:var(--gold)">${svg('wallet')}</div><div><div class="parties">${esc(p.who)}</div><div class="from">${esc(p.ref)} · ${esc(p.note)}</div></div></div>
+        <div class="c"><div class="from">${p.proofUrl?`<a href="${esc(p.proofUrl)}" target="_blank" rel="noopener">إيصال الدفع</a>`:'بلا إيصال مرفوع'}</div></div>
+        <div class="c"><span class="status s-human"><span class="d"></span>بانتظار تأكيدك</span></div>
+      </div>`);});
+    el.querySelectorAll('.row').forEach(r=>r.onclick=()=>{selected='m'+r.dataset.m;renderEsc();drawEsc();});
   } else {
     h.textContent='المُحرَّر مؤخرًا';document.getElementById('escN').textContent=REL.length;
     if(!REL.length)el.innerHTML='<div style="padding:40px;text-align:center;color:var(--muted)">لا جلسات محرّرة بعد.</div>';
@@ -758,7 +1092,24 @@ function renderEsc(){
 function drawEsc(){
   const el=document.getElementById('drawer');if(!el)return;
   const live=!!(window.EP&&EP.data.escrow);
-  if(selected===null){el.innerHTML=`<div class="empty">${svg('shield','ic')}<p>اختر جلسة أو نزاعًا لإجراء التحرير أو الاسترداد أو الفصل.</p></div>`;return;}
+  if(selected===null){el.innerHTML=`<div class="empty">${svg('shield','ic')}<p>اختر جلسة أو نزاعًا أو دفعة يدوية لإجراء التحرير أو الاسترداد أو التأكيد.</p></div>`;return;}
+  // درج الدفعة اليدوية: نفس قرار الوارد بالحرف (EP.decideInboxItem) — لا مسار تأكيدٍ ثانٍ
+  // يمكن أن ينحرف عنه، فالمنصّة هي التي تمنح المنتج وترسل البريد عند التأكيد.
+  if(typeof selected==='string'&&selected[0]==='m'){
+    const p=escManualRows()[+selected.slice(1)];if(!p){el.innerHTML='';return;}
+    const back=()=>{selected=null;EP.reload('inbox',()=>viewEscrow(document.getElementById('view')));};
+    el.innerHTML=`<div class="dh"><div class="k">دفعة يدوية · ${esc(p.ref)}</div><h3>${esc(p.who)}</h3></div><div class="db">
+      <div class="route"><span class="step">المنصة · الدفع المحلي</span><span class="arrow">←</span><span class="step" style="color:var(--conflict);font-weight:800">الضمان والنزاعات</span></div>
+      <div class="field"><div class="lab">التفاصيل</div><div class="val">${esc(p.note)}</div></div>
+      <div class="field"><div class="lab">الحالة</div><div class="val"><span class="status s-human"><span class="d"></span>بانتظار مطابقة الإيصال</span></div></div>
+      ${p.proofUrl?`<div class="field"><div class="lab">الإيصال</div><div class="val"><a href="${esc(p.proofUrl)}" target="_blank" rel="noopener" style="color:var(--ai);word-break:break-all;direction:ltr;display:inline-block">${esc(p.proofUrl)}</a></div></div>`:'<div class="field"><div class="lab">الإيصال</div><div class="val" style="color:var(--conflict)">لا إيصال مرفوع — لا تؤكّد قبل مطابقةٍ خارج اللوحة.</div></div>'}
+      <div class="acts"><button class="btn btn-human" data-a="pay_ok">${svg('check')}تأكيد الدفعة</button><button class="btn btn-ghost" data-a="pay_no">رفض</button><button class="btn btn-ghost" data-a="pay_inbox">افتح في الوارد</button></div></div>`;
+    el.querySelectorAll('[data-a]').forEach(b=>b.onclick=()=>{const a=b.dataset.a;
+      if(a==='pay_inbox'){go('inbox');return;}
+      if(!window.EP){toast('الربط غير متاح');return;}
+      EP.decideInboxItem(p,a==='pay_ok'?'approve':'reject',back);});
+    return;
+  }
   if(typeof selected==='string'&&selected[0]==='d'){
     const d=escDisputes()[+selected.slice(1)];if(!d){el.innerHTML='';return;}
     el.innerHTML=`<div class="dh" style="background:var(--conflict)"><div class="k">نزاع · ${esc(d.id)}</div><h3>فصل نزاع جلسة ${esc(d.session)}</h3></div><div class="db">
@@ -808,22 +1159,74 @@ function finExpenses(){return (window.EP&&Array.isArray(EP.data.expenses))?EP.da
 function finSummary(){return (window.EP&&EP.data.finance)||null;}
 // السحوبات: لا بيانات تصميمية — تُجلب حيّة من /api/admin/withdrawals (تحمل wid للاعتماد/الرفض).
 var WITHDRAWALS=[];
-function finWithdrawals(){
+// ⛔ **رقمٌ فوق قائمةٍ لا تحويه** — العطل الذي أصلحه هذا القسم: شارة «المالية» تعدّ
+// `wallet_payouts_pending` من طابور المنصّة (مجموعة `wallet_payouts` في مونجو) وتهبط على
+// تبويب «السحوبات»، والتبويب كان يسرد **جدولًا آخر تمامًا**: `Withdrawal` في SQLite اللوحة
+// (سحوبات المستثمرين). فالشارة تقول ١ والشاشة تقول ٠، وكلاهما «صحيح» عن دفترٍ مختلف.
+// الآن التبويب يقرأ نفس المجموعة عبر جسر المنصّة (`GET /bridge/wallet-payouts?status=pending`
+// خلف `/api/platform-wallet-payouts`)، **والشارة تُحسب من هذه القائمة نفسها**
+// (`walletPayoutsCount`) — مصدرٌ واحد لا اثنان، فلا يمكن للرقم أن يخالف الصفوف تحته.
+function walletPayouts(){
+  var d=(window.EP&&EP.data.walletPayouts)||null;
+  return (d&&Array.isArray(d.rows))?d.rows:[];
+}
+// عدّاد الشارة: من القائمة المرسومة متى جهزت، وإلا من عدّاد المنصّة **لنفس المجموعة ونفس
+// الفلتر** (طلبات `pending`) — فالفارق الوحيد الممكن هو لحظة تحميل، لا دفترٌ ثانٍ.
+function walletPayoutsCount(Q){
+  var st=(window.EP&&EP.state&&EP.state.walletPayouts)||'idle';
+  if(st==='ready')return walletPayouts().length;
+  var raw=Q&&Q.wallet_payouts_pending;
+  return (raw&&typeof raw==='object')?(raw.count||0):(raw||0);
+}
+// ⛔ **دفتران لا يُجمعان تحت عدّادٍ واحد**: سحوبات المستثمرين دفترُ اللوحة (SQLite) وقرارُ
+// اعتمادها هنا، وسحوبات المحافظ دفترُ المنصّة وتسويتها هناك. جمعُهما في تبويبٍ واحد كان
+// يجعل الشارة (محافظ فقط) تخالف عدّاد التبويب (الاثنان معًا) على أوّل صفٍّ مستثمرٍ حقيقي —
+// رقمٌ فوق قائمةٍ أوسع منه. لكلٍّ تبويبُه وعدّادُه، والشارة تهبط على تبويب المحافظ وحده.
+function investorWithdrawals(){
   if(window.EP&&EP.data.investment&&Array.isArray(EP.data.investment.wd)){
-    return EP.data.investment.wd.map(function(w){return {who:w.who,amount:w.amount,dest:'—',status:'pending',when:w.when,wid:w.wid};});
+    return EP.data.investment.wd.map(function(w){return {kind:'investor',who:w.who,amount:w.amount,currency:'EGP',dest:'—',status:'pending',when:w.when,wid:w.wid};});
   }
   return WITHDRAWALS;
 }
+// صفوف التبويب المفتوح وحده — عليها يعمل الاختيار والدرج، فلا يخلط الفهرسُ دفترًا بدفتر.
+function finWithdrawals(){return finTab==='investorwd'?investorWithdrawals():walletPayouts();}
+// «أوامر دفع متعثّرة» — أوامر بطاقة **واردة** وقفت عند `created` (الزائر خرج من صفحة الدفع
+// أو ضاع الويبهوك): مجموعة `payments` لا `wallet_payouts`. مصدرها حمولة الطابور نفسها التي
+// تُكتب منها الشارة (`stuck_card_payments.orders`) — لا نداء جديد ولا رقمٌ ثانٍ يُشتقّ هنا.
+function stuckOrders(){
+  var Q=(window.EP&&EP.data.opsQueue)||null;
+  var s=Q&&Q.stuck_card_payments;
+  return (s&&Array.isArray(s.orders))?s.orders:[];
+}
+// العدّ الحقيقي من المنصّة (حتى ٢٠٠) — القائمة أوّل ٢٠ فقط. الشارة والتبويب يطبعان العدّ،
+// والقائمة تقول «أوّل ٢٠ من N» حين تكون أقصر من العدّ — لا رقمٌ فوق قائمةٍ لا تحويه.
+function stuckCount(){
+  var Q=(window.EP&&EP.data.opsQueue)||null;
+  var s=Q&&Q.stuck_card_payments;
+  var c=(s&&typeof s.count==='number')?s.count:stuckOrders().length;
+  return Math.max(c,stuckOrders().length);
+}
+// نوع الأمر بالعربي — المفاتيح كما تكتبها المنصّة (`routes/payments.py`: KIND_*). المجهول
+// يُعرَض كما هو ولا يُترجَم بالتخمين: نوعٌ جديد يظهر بمفتاحه لا بوصفٍ خاطئ.
+const PAYKIND_AR={plan:'اشتراك باقة',course:'دورة',course_offer:'دورة بسعر معتمَد',
+  consultation:'استشارة',knowledge:'سوق المعرفة',verify:'توثيق إجابة',book:'كتاب'};
+function payKindAr(k){k=String(k==null?'':k).trim();return PAYKIND_AR[k]||k||'—';}
 const WSTATUS={pending:{cls:'s-human',t:'بانتظار اعتماد'},done:{cls:'s-auto',t:'نُفِّذ'}};
 // التدفّق النقدي الشهري: لا شهور مخترعة — يملؤه محمّل finance من /api/finance/summary أو يبقى فارغًا.
 var FMONTHLY=[];
 
 function viewFinance(v){
-  if(window.EP){EP.ensure('finance',()=>viewFinance(v));EP.ensure('investment',()=>viewFinance(v));EP.ensure('revenues',()=>viewFinance(v));EP.ensure('expenses',()=>viewFinance(v));}
+  if(window.EP){EP.ensure('finance',()=>viewFinance(v));EP.ensure('investment',()=>viewFinance(v));EP.ensure('revenues',()=>viewFinance(v));EP.ensure('expenses',()=>viewFinance(v));EP.ensure('dashboard',()=>viewFinance(v));EP.ensure('pnl',()=>viewFinance(v));EP.ensure('walletPayouts',()=>viewFinance(v));EP.ensure('opsQueue',()=>viewFinance(v));}
   const F=finSummary(), Fst=(window.EP&&EP.state.finance)||'idle';
   const RVS=finRevenues(), EXS=finExpenses();
-  const WD=finWithdrawals();
-  const pendW=WD.filter(w=>w.status==='pending').reduce((s,w)=>s+w.amount,0);
+  const WPO=walletPayouts(), IWD=investorWithdrawals(), STK=stuckOrders();
+  // ⛔ العملات لا تُجمَع: المجموع بالجنيه يقتصر على صفوف الجنيه، وصفٌّ بعملةٍ أخرى يُعدّ
+  // ولا يُجمَع (نفس قاعدة تقرير المنصّة) — رقمٌ يخلط عملتين يقرأه المؤسس كأنه واحدة.
+  // ⛔ ولا يُجمَع دفترٌ إلى دفتر تحت عنوانٍ واحد: هذا المؤشّر لسحوبات **المحافظ** وحدها
+  // (نفس صفوف الشارة)، وسحوبات المستثمرين تُعدّ بجانبه باسمها لا داخل مبلغه.
+  const pendRows=WPO.filter(w=>w.status==='pending');
+  const pendW=pendRows.filter(w=>!w.currency||w.currency==='EGP').reduce((s,w)=>s+w.amount,0);
+  const invPend=IWD.filter(w=>w.status==='pending');
   // عند تعذّر الجلب لا نخترع رقمًا: شرطة (—) + البانر الأحمر.
   const kRev = F ? money(F.total_revenue)+' <small style="font-size:13px">ج</small>' : (Fst==='loading'?'…':'—');
   const kExp = F ? money(F.total_expenses)+' <small style="font-size:13px">ج</small>' : (Fst==='loading'?'…':'—');
@@ -834,13 +1237,17 @@ function viewFinance(v){
       <div class="kpi k-3"><div class="top"><span class="ic">${svg('wallet')}</span>إجمالي الإيرادات</div><b>${kRev}</b><div class="sub">${F?'حيّ من المالية':'بانتظار الخادم'}</div></div>
       <div class="kpi k-4"><div class="top"><span class="ic">${svg('trend')}</span>إجمالي المصروفات</div><b>${kExp}</b><div class="sub">أعمال + شخصي مفصول</div></div>
       <div class="kpi k-1"><div class="top"><span class="ic">${svg('grid')}</span>صافي الربح</div><b>${kNet}</b><div class="sub">إيرادات − مصروفات</div></div>
-      <div class="kpi k-2"><div class="top"><span class="ic">${svg('clock')}</span>سحوبات بانتظار</div><b>${money(pendW)} <small style="font-size:13px">ج</small></b><div class="sub">${WD.filter(w=>w.status==='pending').length} طلبات للاعتماد</div></div>
+      <div class="kpi k-2"><div class="top"><span class="ic">${svg('clock')}</span>سحوبات محافظ بانتظار</div><b>${money(pendW)} <small style="font-size:13px">ج</small></b><div class="sub">${money(pendRows.length)} طلبات · وللمستثمرين تبويبهم (${money(invPend.length)})</div></div>
     </div>
     <div class="tabbar" id="finTabs">
       <div class="tab${finTab==='summary'?' on':''}" data-t="summary">الملخص</div>
       <div class="tab${finTab==='revenues'?' on':''}" data-t="revenues">الإيرادات (${RVS.length})</div>
       <div class="tab${finTab==='expenses'?' on':''}" data-t="expenses">المصروفات (${EXS.length})</div>
-      <div class="tab${finTab==='withdrawals'?' on':''}" data-t="withdrawals">السحوبات (${WD.length})</div>
+      <div class="tab${finTab==='withdrawals'?' on':''}" data-t="withdrawals">سحوبات المحافظ (${WPO.length})</div>
+      <div class="tab${finTab==='investorwd'?' on':''}" data-t="investorwd">سحوبات المستثمرين (${IWD.length})</div>
+      <div class="tab${finTab==='stuck'?' on':''}" data-t="stuck">أوامر دفع متعثّرة (${stuckCount()})</div>
+      <div class="tab${finTab==='pnl'?' on':''}" data-t="pnl">أرباح وخسائر المنصة</div>
+      <div class="tab${finTab==='packages'?' on':''}" data-t="packages">الباقات — تسعير غير مُرسى</div>
     </div>
     <div class="inboxwrap">
       <section class="panel"><div class="ph"><h3 id="finH">الملخص</h3><span class="n" id="finN"></span><span class="hint" id="finHint"></span><button class="btn btn-human" id="finAdd" style="flex:none;min-width:auto;padding:6px 13px;font-size:12px;margin-inline-start:auto;display:none">+ <span id="finAddLbl"></span></button></div><div id="finBody"></div></section>
@@ -850,7 +1257,7 @@ function viewFinance(v){
   // الإضافة اليدوية (إيراد/مصروف/سحب) غير مربوطة بأي واجهة كتابة — كانت تكتب في الذاكرة وتضيع
   // مع أول تحديث للصفحة. عُطِّلت صراحةً بدل زرّ يوهم بالحفظ، لحين ربطها بالخادم.
   var fa=document.getElementById('finAdd');
-  if(finTab==='expenses'||finTab==='revenues'||finTab==='withdrawals'){
+  if(finTab==='expenses'||finTab==='revenues'||finTab==='withdrawals'||finTab==='investorwd'){
     fa.style.display='';fa.disabled=true;
     fa.style.opacity='.5';fa.style.cursor='not-allowed';
     fa.title='الإضافة اليدوية غير مفعّلة بعد — تُسجَّل الحركات تلقائيًا من المنصة.';
@@ -861,7 +1268,14 @@ function viewFinance(v){
 // حُذفت نماذج «مصروف جديد / إيراد جديد / تسجيل سحب»: كانت تكتب في مصفوفات ذاكرة بلا أي نداء API،
 // فتضيع البيانات مع أول تحديث للصفحة. تُعاد عند ربط واجهات الكتابة الحقيقية بالخادم.
 function catBars(arr,color){return arr.map(([l,val])=>`<div style="margin-bottom:9px"><div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:3px"><span>${l}</span><span style="font-weight:700">${val}٪</span></div><div style="height:8px;background:var(--surface-2);border-radius:4px;overflow:hidden"><div style="height:100%;width:${val}%;background:${color};border-radius:4px"></div></div></div>`).join('');}
-function drawFinInfo(){const el=document.getElementById('drawer');if(el)el.innerHTML=`<div class="empty">${svg('wallet','ic')}<p>اختر تبويبًا ثم بندًا لرؤية التفاصيل والإجراء.</p></div>`;}
+// ⛔ تعليمةٌ لا تُنفَّذ كذبة: صفوف تقرير المنصّة غير قابلة للنقر (لا إجراء عليها هنا)،
+// فالدرج بجوارها لا يجوز أن يقول «اختر بندًا». يقول ما هو صحيح على هذا التبويب.
+function drawFinInfo(){
+  const el=document.getElementById('drawer');if(!el)return;
+  if(finTab==='pnl'){el.innerHTML=`<div class="empty">${svg('wallet','ic')}<p>تقرير المنصّة للقراءة فقط — لا إجراء هنا. الأرقام كما ترسلها المنصّة، والعملات لا تُجمَع ولا تُحوَّل.</p></div>`;return;}
+  if(finTab==='stuck'){el.innerHTML=`<div class="empty">${svg('wallet','ic')}<p>أوامر دفع واردة لم تكتمل — للقراءة فقط. لا إجراء عليها من اللوحة: المتابعة مع بوّابة الدفع أو العميل.</p></div>`;return;}
+  el.innerHTML=`<div class="empty">${svg('wallet','ic')}<p>اختر تبويبًا ثم بندًا لرؤية التفاصيل والإجراء.</p></div>`;
+}
 function svgLine(data,color){
   var w=320,h=130,pad=12,n=data.length;var max=Math.max.apply(null,data.map(function(d){return d.v;}).concat([1]));
   function xs(i){return pad+(n>1?i*(w-2*pad)/(n-1):0);}function ys(v){return h-pad-(v/max)*(h-2*pad);}
@@ -919,6 +1333,59 @@ function renderFin(){
     return '<div style="padding:40px;text-align:center;color:var(--muted)">'+emptyTxt+'</div>';
   }
   body.innerHTML='';
+  if(finTab==='packages'){
+    // «الباقات» ابتُلعت هنا بقرار المؤسس: التسعير غير مُرسى، فلا تستحقّ صفًّا دائمًا في
+    // القائمة، ولا تُحذف — تُفتح من داخل «كام عندي وكام عليّ».
+    h.textContent='الباقات';n.style.display='none';hint.textContent='تسعير غير مُرسى — للمعاينة والتحرير';
+    body.innerHTML=`<div class="policy" style="border-inline-start-color:var(--gold);background:var(--gold-bg);color:var(--gold);margin:14px 16px 0">${svg('wallet','ic')}<div><b>تسعير غير مُرسى.</b> الأرقام تحت قابلة للتغيير ولم تُعتمد نهائيًّا — تُعرَض هنا لأن الباقات جزء من «كام عندي»، لا لأنها قرارٌ مقفول.</div></div><div id="pkHost"></div>`;
+    var pkHost=document.getElementById('pkHost');
+    if(pkHost)viewPackages(pkHost);
+    drawFinInfo();return;
+  }
+  if(finTab==='stuck'){
+    // ⛔ **اتجاهان متعاكسان في تبويبٍ واحد**: «أوامر دفع متعثّرة» أوامرُ بطاقةٍ **واردة**
+    // (`payments` بحالة `created`)، وكانت شارتها تهبط على «السحوبات» وهي مالٌ **خارج** من
+    // محافظ المستخدمين. صار لها تبويبها: نفس الصفوف التي يعدّها الطابور، بلا اشتقاق.
+    // للقراءة فقط: لا مسار كتابة على هذه الأوامر في اللوحة، ومساحةُ قرارٍ كاذبة أسوأ من لا شيء.
+    const STK=stuckOrders(), Qst=(window.EP&&EP.state.opsQueue)||'idle';
+    const STKN=stuckCount();
+    h.textContent='أوامر دفع متعثّرة';n.style.display='';n.textContent=STKN;
+    hint.textContent=(STKN>STK.length?('تُعرض أوّل '+STK.length+' من '+STKN+' — '):'')+'أوامر بطاقة واردة وقفت عند «أُنشئ» — للقراءة فقط';
+    if(Qst==='loading'&&!STK.length){body.innerHTML='<div style="padding:40px;text-align:center;color:var(--muted)">…جارٍ جلب الطابور من المنصة</div>';drawFinInfo();return;}
+    if(Qst==='error'&&!STK.length){body.innerHTML='<div style="padding:40px;text-align:center;color:var(--conflict)">تعذّر جلب الطابور من المنصة — لا تُعرض أرقام بديلة. <b style="cursor:pointer;text-decoration:underline" onclick="EP.reload(\'opsQueue\',()=>viewFinance(document.getElementById(\'view\')))">إعادة المحاولة</b></div>';drawFinInfo();return;}
+    body.innerHTML=`<div class="policy" style="border-inline-start-color:var(--gold);background:var(--gold-bg);color:var(--gold);margin:14px 16px 0">${svg('wallet','ic')}<div><b>دفعات واردة لم تكتمل.</b> أمرٌ أنشأه العميل ولم يصل تأكيده (خرج من صفحة الدفع أو تأخّر إشعار البوّابة). هذه ليست سحوبات — المتابعة مع البوّابة أو العميل، ولا إجراء عليها من اللوحة.</div></div>`
+      +(STK.length?STK.map(o=>`<div class="row esc-row" style="grid-template-columns:1.5fr 1fr 1fr 130px;cursor:default">
+      <div class="c c1"><div class="src-ic" style="background:var(--conflict-bg);color:var(--conflict)">${svg('wallet')}</div><div><div class="parties">${esc(o.user_email||'—')}</div><div class="from">${esc(o.id||'—')} · ${esc(fmtWhen(o.created_at))}</div></div></div>
+      <div class="c"><div class="amt">${money(o.amount||0)} <small>${esc(o.currency||'EGP')}</small></div></div>
+      <div class="c"><div class="from">${esc(payKindAr(o.kind))}</div></div>
+      <div class="c"><span class="status s-wait"><span class="d"></span>${esc(o.gateway||'بوّابة غير معروفة')}</span></div></div>`).join('')
+        :'<div style="padding:40px;text-align:center;color:var(--muted)">لا أوامر متعثّرة الآن.</div>');
+    drawFinInfo();return;
+  }
+  if(finTab==='pnl'){
+    // دفتر المنصّة الحقيقي (GET /api/bridge/ops/pnl) — كان منشورًا ومحدش بيقراه. يُعرَض
+    // **بجانب** دفتر اللوحة لا بدلًا منه: العملات لا تُجمع ولا تُحوَّل، كما ترسلها المنصّة.
+    h.textContent='أرباح وخسائر المنصة';n.style.display='none';hint.textContent='دفتر المنصّة — غير دفتر اللوحة';
+    const Pst=(window.EP&&EP.state.pnl)||'idle', P=(window.EP&&EP.data.pnl)||null;
+    if(Pst==='loading'){body.innerHTML='<div style="padding:40px;text-align:center;color:var(--muted)">…جارٍ جلب تقرير الأرباح والخسائر من المنصة</div>';drawFinInfo();return;}
+    if(Pst==='error'||!P||!P.revenue_lines){body.innerHTML='<div style="padding:40px;text-align:center;color:var(--conflict)">تعذّر جلب تقرير المنصة — لا تُعرض أرقام بديلة. <b style="cursor:pointer;text-decoration:underline" onclick="EP.reload(\'pnl\',()=>viewFinance(document.getElementById(\'view\')))">إعادة المحاولة</b></div>';drawFinInfo();return;}
+    const cur=c=>esc(String(c||'EGP'));
+    const rlines=(P.revenue_lines||[]).map(r=>`<div class="row esc-row" style="grid-template-columns:1.6fr 1fr 130px;cursor:default"><div class="c c1"><div class="src-ic" style="background:var(--agree-bg);color:var(--agree)">${svg('wallet')}</div><div><div class="parties">${esc(r.label||r.key)}</div><div class="from">${money(r.count||0)} عملية</div></div></div><div class="c"><div class="amt" style="color:var(--agree)">${money(r.amount||0)} <small>${cur(r.currency)}</small></div></div><div class="c"><span class="status s-auto"><span class="d"></span>${cur(r.currency)}</span></div></div>`).join('');
+    const clines=((P.costs&&P.costs.lines)||[]).map(c=>`<div class="row esc-row" style="grid-template-columns:1.6fr 1fr;cursor:default"><div class="c c1"><div class="src-ic" style="background:var(--conflict-bg);color:var(--conflict)">${svg('trend')}</div><div><div class="parties">${esc(c.label||c.key)}</div></div></div><div class="c"><div class="amt" style="color:var(--conflict)">−${money(c.amount||0)} <small>ج</small></div></div></div>`).join('');
+    const other=P.revenue_other_currencies||{};
+    const otherTxt=Object.keys(other).length?('إيراد بعملات أخرى (لا يُجمع مع الجنيه): '+Object.keys(other).map(k=>money(other[k])+' '+esc(k)).join(' · ')):'';
+    body.innerHTML=`
+      <div style="padding:14px 20px 0;display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px" class="pnl-top">
+        <div><div style="font-size:11px;font-weight:800;color:var(--muted)">شهر التقرير</div><div style="font-family:Cairo;font-weight:800;font-size:15px;color:var(--navy)">${esc(P.month||'—')}</div></div>
+        <div><div style="font-size:11px;font-weight:800;color:var(--muted)">${esc((P.total&&P.total.label)||'إجمالي الإيراد')}</div><div style="font-family:Cairo;font-weight:800;font-size:15px;color:var(--agree)">${money((P.total&&P.total.amount)||0)} ج</div></div>
+        <div><div style="font-size:11px;font-weight:800;color:var(--muted)">${esc((P.net&&P.net.label)||'الصافي')}</div><div style="font-family:Cairo;font-weight:800;font-size:15px;color:${((P.net&&P.net.amount)||0)>=0?'var(--agree)':'var(--conflict)'}">${money((P.net&&P.net.amount)||0)} ج</div></div>
+      </div>
+      ${otherTxt?`<div style="padding:8px 20px 0;font-size:12px;color:var(--gold);font-weight:700">${otherTxt}</div>`:''}
+      <div style="padding:14px 20px 4px;font-size:11px;font-weight:800;color:var(--muted)">بنود الإيراد</div>${rlines}
+      <div style="padding:14px 20px 4px;font-size:11px;font-weight:800;color:var(--muted)">التكاليف (تقديرية)</div>${clines}
+      ${(P.notes||[]).length?`<div style="padding:14px 20px 18px;border-top:1px solid var(--line);margin-top:10px">${(P.notes||[]).map(x=>`<div style="font-size:12px;color:var(--muted);padding:3px 0">• ${esc(x)}</div>`).join('')}</div>`:''}`;
+    drawFinInfo();return;
+  }
   if(finTab==='summary'){
     h.textContent='الملخص — Cash Flow الشهري';n.style.display='none';hint.textContent='الوارد مقابل الصادر (بالألف ج)';
     let bars='';
@@ -930,7 +1397,13 @@ function renderFin(){
       FMONTHLY.forEach(m=>{bars+=`<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:6px"><div style="display:flex;gap:5px;align-items:flex-end;height:130px"><div style="width:18px;background:var(--agree);border-radius:5px 5px 0 0;height:${m.i/mx*130}px"></div><div style="width:18px;background:var(--conflict);border-radius:5px 5px 0 0;height:${m.o/mx*130}px"></div></div><div style="font-size:12px;font-weight:700;color:var(--ink-2)">${m.m}</div></div>`;});
       bars+='</div>';
     }
+    // منحنى نمو الإيراد انتقل من «نظرة عامة» إلى هنا مع دمجها: مكانه الطبيعي عند بقيّة المال،
+    // لا في شاشة عرضٍ ثالثة تكرّر الشريط الجانبي.
+    const D=(window.EP&&EP.data.dashboard)||null;
+    const monthlySeries=(D&&Array.isArray(D.monthly)&&D.monthly.length)
+      ? D.monthly.slice(-6).map(m=>({m:(m.month||'').slice(5),v:Math.round((m.revenue||0)/1000)})) : [];
     body.innerHTML=`
+      <div style="padding:16px 24px 4px;border-bottom:1px solid var(--line)"><div style="font-size:11px;font-weight:800;color:var(--muted);margin-bottom:6px">نمو الإيرادات الشهري (بالألف ج)${D?' · حيّ':''}</div>${svgBars(monthlySeries,'var(--agree)','ك')}</div>
       ${FMONTHLY.length?`<div style="padding:18px 24px 4px"><div style="font-size:11px;font-weight:800;color:var(--muted);margin-bottom:6px">صافي التدفّق الشهري (بالألف ج)</div>${svgLine(FMONTHLY.map(m=>({m:m.m,v:m.i-m.o})),'#1C9A5B')}</div>`:''}
       ${bars}
       ${FMONTHLY.length?'<div style="display:flex;gap:16px;padding:0 24px 14px;font-size:12px;color:var(--ink-2)"><span style="display:flex;align-items:center;gap:6px"><span style="width:11px;height:11px;border-radius:3px;background:var(--agree)"></span>وارد</span><span style="display:flex;align-items:center;gap:6px"><span style="width:11px;height:11px;border-radius:3px;background:var(--conflict)"></span>صادر</span></div>':''}
@@ -957,13 +1430,19 @@ function renderFin(){
       <div class="c"><span class="status ${e.business?'s-wait':''}" style="${e.business?'':'background:var(--surface-2);color:var(--muted)'}"><span class="d" style="${e.business?'':'background:var(--muted)'}"></span>${e.business?'أعمال':'شخصي'}</span></div></div>`));
     if(!EXS.length)body.innerHTML=finState(Est,'لا مصروفات مسجّلة بعد','expenses','المصروفات');
     body.querySelectorAll('.row').forEach(x=>x.onclick=()=>{selected='e'+x.dataset.e;renderFin();drawFin();});
-  } else {const WD=finWithdrawals();h.textContent='طلبات السحب';n.textContent=WD.length;hint.textContent='واردة من محافظ المنصة — اعتمد ثم نفّذ';
-    WD.forEach((w,idx)=>{const st=WSTATUS[w.status]||WSTATUS.pending;body.insertAdjacentHTML('beforeend',`<div class="row esc-row${selected==='w'+idx?' sel':''}" data-w="${idx}" style="grid-template-columns:1.5fr 1fr 1fr 130px">
-      <div class="c c1"><div class="src-ic">${svg('wallet')}</div><div><div class="parties">${w.who}</div><div class="from">إلى ${w.dest} · ${w.when}</div></div></div>
-      <div class="c"><div class="amt">${money(w.amount)} <small>ج</small></div></div>
-      <div class="c"><div class="from">${w.dest}</div></div>
+  } else {const inv=finTab==='investorwd';const WD=finWithdrawals(),Wst=(window.EP&&EP.state.walletPayouts)||'idle';
+    h.textContent=inv?'سحوبات المستثمرين':'سحوبات المحافظ';n.textContent=WD.length;
+    hint.textContent=inv?'دفتر اللوحة — الاعتماد يتمّ من هنا':'دفتر المنصّة — نفس عدّاد الشارة تمامًا';
+    WD.forEach((w,idx)=>{const st=WSTATUS[w.status]||WSTATUS.pending;const src=w.kind==='investor'?'مستثمر · دفتر اللوحة':'محفظة المنصّة';body.insertAdjacentHTML('beforeend',`<div class="row esc-row${selected==='w'+idx?' sel':''}" data-w="${idx}" style="grid-template-columns:1.5fr 1fr 1fr 130px">
+      <div class="c c1"><div class="src-ic">${svg('wallet')}</div><div><div class="parties">${esc(w.who)}</div><div class="from">${esc(src)} · إلى ${esc(w.dest)} · ${esc(w.when)}</div></div></div>
+      <div class="c"><div class="amt">${money(w.amount)} <small>${esc(w.currency||'EGP')}</small></div></div>
+      <div class="c"><div class="from">${esc(w.dest)}</div></div>
       <div class="c"><span class="status ${st.cls}"><span class="d"></span>${st.t}</span></div></div>`);});
-    if(!WD.length)body.innerHTML='<div style="padding:40px;text-align:center;color:var(--muted)">لا طلبات سحب</div>';
+    if(!WD.length)body.innerHTML=(inv
+      ?'<div style="padding:40px;text-align:center;color:var(--muted)">لا طلبات سحب من المستثمرين.</div>'
+      :Wst==='error'
+      ?'<div style="padding:40px;text-align:center;color:var(--conflict)">تعذّر جلب سحوبات المحافظ من المنصة — لا تُعرض أرقام بديلة. <b style="cursor:pointer;text-decoration:underline" onclick="EP.reload(\'walletPayouts\',()=>viewFinance(document.getElementById(\'view\')))">إعادة المحاولة</b></div>'
+      :'<div style="padding:40px;text-align:center;color:var(--muted)">لا طلبات سحب من المحافظ.</div>');
     body.querySelectorAll('.row').forEach(x=>x.onclick=()=>{selected='w'+x.dataset.w;renderFin();drawFin();});
   }
   drawFin();
@@ -975,11 +1454,15 @@ function drawFin(){
   if(t==='r'){const r=finRevenues()[i];if(!r){drawFinInfo();return;}el.innerHTML=`<div class="dh"><div class="k">إيراد</div><h3>${esc(r.who)}</h3></div><div class="db"><div class="field"><div class="lab">المبلغ</div><div class="bigamt" style="color:var(--agree)">+${money(r.amount)} <small>ج</small></div></div><div class="field"><div class="lab">الوصف</div><div class="val">${esc(r.desc)}</div></div><div class="field"><div class="lab">الوسيلة · التصنيف</div><div class="val">${esc(r.method)} · ${esc(r.cat)}</div></div><div class="field"><div class="lab">التاريخ</div><div class="val">${esc(r.date)}</div></div></div>`;return;}
   else if(t==='e'){const e=finExpenses()[i];if(!e){drawFinInfo();return;}el.innerHTML=`<div class="dh"><div class="k">مصروف</div><h3>${esc(e.desc)}</h3></div><div class="db"><div class="field"><div class="lab">المبلغ</div><div class="bigamt" style="color:var(--conflict)">−${money(e.amount)} <small>ج</small></div></div><div class="field"><div class="lab">الفئة</div><div class="val">${esc(e.cat)}</div></div><div class="field"><div class="lab">التصنيف</div><div class="val">${e.business?'مصروف أعمال':'شخصي — مفصول عن الأعمال'}</div></div></div>`;return;}
   else{const w=finWithdrawals()[i];if(!w){drawFinInfo();return;}const done=w.status==='done';const live=!!w.wid;
-    // أزرار الاعتماد/الرفض تعمل فقط مع طلب حقيقي يحمل wid (PUT /admin/withdrawals/{id}). بدونه تُعطَّل.
-    const actions=done?'':live
+    // ⛔ زرٌّ يعتمد دفترًا آخر: `PUT /admin/withdrawals/{id}` يكتب في SQLite اللوحة وحدها،
+    // فلا يجوز أن يظهر فوق طلب محفظةٍ على المنصّة (تسويته `bridge/wallet-payouts/{id}/settle`
+    // ولا بروكسي لها بعد). صفّ المحفظة يقول أين يُنفَّذ بدل زرٍّ يعد بما لا يفعله.
+    const actions=w.kind!=='investor'
+      ?`<div style="font-size:12px;color:var(--muted);padding:8px 0;line-height:1.7">التسوية تتمّ على المنصّة (طلب سحب محفظة) — لا زرّ تنفيذٍ هنا بعد.</div>`
+      :done?'':live
       ?`<div class="acts"><button class="btn btn-primary" data-a="ok">${svg('check')}اعتمد ونفّذ التحويل</button><button class="btn btn-warn" data-a="no">رفض</button></div>`
       :`<div class="acts"><button class="btn btn-primary" disabled style="opacity:.5;cursor:not-allowed">${svg('check')}اعتمد ونفّذ التحويل</button><button class="btn btn-warn" disabled style="opacity:.5;cursor:not-allowed">رفض</button></div><div style="font-size:11.5px;color:var(--muted);padding:6px 0">طلب غير مربوط بمصدر حيّ — الإجراء معطّل.</div>`;
-    el.innerHTML=`<div class="dh"><div class="k">طلب سحب</div><h3>${w.who}</h3></div><div class="db"><div class="route"><span class="step">المنصة · المحفظة</span><span class="arrow">←</span><span class="step" style="color:var(--agree);font-weight:800">المالية</span></div><div class="field"><div class="lab">المبلغ</div><div class="bigamt">${money(w.amount)} <small>ج</small></div></div><div class="field"><div class="lab">وجهة التحويل</div><div class="val">${w.dest}</div></div><div class="field"><div class="lab">الحالة</div><div class="val"><span class="status ${(WSTATUS[w.status]||WSTATUS.pending).cls}"><span class="d"></span>${(WSTATUS[w.status]||WSTATUS.pending).t}</span></div></div>${actions}</div>`;
+    el.innerHTML=`<div class="dh"><div class="k">طلب سحب · ${w.kind==='investor'?'مستثمر (دفتر اللوحة)':'محفظة المنصّة'}</div><h3>${esc(w.who)}</h3></div><div class="db"><div class="route"><span class="step">${w.kind==='investor'?'دفتر اللوحة':'المنصة · المحفظة'}</span><span class="arrow">←</span><span class="step" style="color:var(--agree);font-weight:800">المالية</span></div><div class="field"><div class="lab">المبلغ</div><div class="bigamt">${money(w.amount)} <small>${esc(w.currency||'EGP')}</small></div></div><div class="field"><div class="lab">وجهة التحويل</div><div class="val">${esc(w.dest)}</div></div><div class="field"><div class="lab">الحالة</div><div class="val"><span class="status ${(WSTATUS[w.status]||WSTATUS.pending).cls}"><span class="d"></span>${(WSTATUS[w.status]||WSTATUS.pending).t}</span></div></div>${actions}</div>`;
     el.querySelectorAll('[data-a]').forEach(b=>b.onclick=()=>{const a=b.dataset.a;
       if((a==='ok'||a==='no')&&w.wid&&window.EP){EP.decideWithdrawal(w.wid,a==='ok'?'approved':'rejected',()=>{selected=null;viewFinance(document.getElementById('view'));});return;}});
     return;
@@ -1365,56 +1848,12 @@ function addUserModal(edit){
   };
 }
 
-/* ===== OVERVIEW VIEW ===== */
-function viewOverview(v){
-  if(window.EP){EP.ensure('dashboard',()=>viewOverview(v));EP.ensure('escrow',()=>viewOverview(v));EP.ensure('inbox',()=>viewOverview(v));}
-  const D=(window.EP&&EP.data.dashboard)||null, Dst=(window.EP&&EP.state.dashboard)||'idle';
-  const act=INBOX.filter(i=>i.triage==='human'||i.triage==='late');
-  // محجوز في الضمان: من بيانات الضمان الحقيقية (لا أرقام ثابتة).
-  const escM=(window.EP&&EP.data.escrow&&EP.data.escrow.metrics)||null;
-  const escHeld=escM?Math.round(escM.held_sum||0):null;
-  const escCount=escM?(escM.held_count||0):null;
-  const cards=[['users','المستخدمون',MODULES.users],['escrow','الضمان والنزاعات',MODULES.escrow],['finance','المالية',MODULES.finance],['courses','الدورات والتدريب',MODULES.courses],['marketing','التسويق',MODULES.marketing],['topics','المواضيع والمقالات',MODULES.topics]];
-  // Real KPIs from /api/dashboard when loaded; otherwise design defaults.
-  const fin=D?D.financial:null, crs=D?D.courses:null;
-  const M=(window.EP&&EP.data.metrics)||null; // /api/platform-metrics (admin) — live platform user count
-  // عدد المستخدمين من مصدر واحد فقط: /api/admin/metrics الأصلي (native) على المنصة.
-  // لا بديل من «عدد طلاب دفتر الدورات» — رقم مختلف المعنى كان بيتعرض كأنه مستخدمي المنصة.
-  const kUsers = M&&(M.total_users!=null) ? money(M.total_users) : (Dst==='loading'?'…':'—');
-  const kUsersSub = M&&(M.total_users!=null) ? 'من المنصة الحيّة' : (Dst==='loading'?'…':'تعذّر الجلب من المنصة');
-  const kProfit = fin ? (fin.net_profit>=0?'+':'')+money(fin.net_profit)+' <small style="font-size:13px">ج</small>' : (Dst==='loading'?'…':'—');
-  // سلسلة شهرية من بيانات الخادم الحقيقية فقط — بلا أرقام تصميمية وهمية.
-  // عند غياب البيانات (أو حالة شبه فارغة) يتكفّل svgBars بعرض «لا بيانات كافية لعرض النمو».
-  const monthlySeries = (D&&Array.isArray(D.monthly)&&D.monthly.length)
-    ? D.monthly.slice(-6).map(m=>({m:(m.month||'').slice(5),v:Math.round((m.revenue||0)/1000)}))
-    : [];
-  v.innerHTML=`
-    ${Dst==='error'?`<div class="policy" style="border-inline-start-color:var(--conflict);background:var(--conflict-bg);color:var(--conflict)">${svg('scale','ic')}<div>تعذّر جلب أرقام المالية من الخادم — لا تُعرض أي أرقام بديلة. <b style="cursor:pointer;text-decoration:underline" onclick="EP.reload('dashboard',()=>viewOverview(document.getElementById('view')))">إعادة المحاولة</b></div></div>`:''}
-    ${inboxFailedStrip('viewOverview')}
-    <div class="kpis">
-      <div class="kpi k-1"><div class="top"><span class="ic">${svg('users')}</span>مستخدمو المنصة</div><b>${kUsers}</b><div class="sub">${kUsersSub}</div></div>
-      <div class="kpi k-3"><div class="top"><span class="ic">${svg('wallet')}</span>صافي الربح</div><b>${kProfit}</b><div class="sub">${fin?'إيرادات − مصروفات':'حتى اليوم'}</div></div>
-      <div class="kpi k-2"><div class="top"><span class="ic">${svg('shield')}</span>محجوز في الضمان</div><b>${escHeld!=null?money(escHeld)+' <small style="font-size:13px">ج</small>':'—'}</b><div class="sub">${escCount!=null?('عبر '+money(escCount)+' جلسات'):'لا بيانات'}</div></div>
-      <div class="kpi k-4"><div class="top"><span class="ic">${svg('inbox')}</span>وارد يحتاج تصرّفك</div><b>${money(act.length)}${inboxFailedList().length?'<small style="font-size:13px;color:var(--conflict)"> +؟</small>':''}</b><div class="sub"${inboxFailedList().length?' style="color:var(--conflict)"':''}>${inboxFailedList().length?'عددٌ ناقص — تعذّر جلب '+esc(inboxFailedList().join(' · ')):act.filter(i=>i.triage==='late').length+' عاجل'}</div></div>
-    </div>
-    <section class="panel" style="margin-bottom:16px"><div class="ph"><h3>نمو الإيرادات الشهري</h3><span class="hint">بالألف ج${D?' · حيّ':''}</span></div><div style="padding:16px 24px 12px">${svgBars(monthlySeries,'var(--agree)','ك')}</div></section>
-    <div style="display:grid;grid-template-columns:1.4fr 1fr;gap:16px;align-items:start" class="ov-grid">
-      <section class="panel"><div class="ph"><h3>أهم الوارد — يحتاج تصرّفك</h3><span class="n">${act.length}</span><span class="hint">اضغط لفتح موديوله</span></div><div id="ovRows"></div></section>
-      <section class="panel"><div class="ph"><h3>الموديولات</h3><span class="hint">مدخل سريع</span></div><div id="ovMods" style="padding:12px;display:grid;grid-template-columns:1fr 1fr;gap:10px"></div></section>
-    </div>`;
-  const re=document.getElementById('ovRows');
-  act.forEach(i=>{const m=MODULES_LOOKUP[i.dest],tr=TRI[i.triage];re.insertAdjacentHTML('beforeend',`<div class="row" data-d="${i.dest}" style="grid-template-columns:1fr 150px;cursor:pointer">
-    <div class="c c1"><div class="src-ic">${svg(i.src)}</div><div><div class="out">${esc(i.out)}</div><div class="from">← ${m.label} · ${esc(i.who)}</div></div></div>
-    <div class="c"><span class="triage ${tr.cls}"><span class="d"></span>${tr.t}</span></div></div>`);});
-  if(!act.length)re.innerHTML='<div style="padding:36px;text-align:center;color:var(--muted)">'+(inboxFailedList().length?'لا وارد <b>ممّا وصلنا</b>'+inboxFailedTail():'لا وارد يحتاج تصرّفك')+'</div>';
-  re.querySelectorAll('.row').forEach(r=>r.onclick=()=>go(r.dataset.d));
-  const me=document.getElementById('ovMods');
-  cards.forEach(([id,label,m])=>me.insertAdjacentHTML('beforeend',`<div class="ovcard" data-m="${id}" style="border:1px solid var(--line);border-radius:11px;padding:13px;cursor:pointer;transition:box-shadow .15s">
-    <div style="width:32px;height:32px;border-radius:9px;display:grid;place-items:center;background:${m.bg};color:${m.c};margin-bottom:8px">${svg(m.ic)}</div>
-    <div style="font-family:Cairo;font-weight:800;font-size:13px;color:var(--navy)">${label}</div>
-    <div style="font-size:11.5px;color:var(--muted);margin-top:2px">${m.count?m.count+' بانتظار':'فتح الموديول'}</div></div>`));
-  me.querySelectorAll('.ovcard').forEach(c=>{c.onmouseenter=()=>c.style.boxShadow='0 6px 16px rgba(26,43,74,.08)';c.onmouseleave=()=>c.style.boxShadow='none';c.onclick=()=>go(c.dataset.m);});
-}
+/* ===== OVERVIEW VIEW (مدموجة) ===== */
+// «نظرة عامة» اندمجت في «الوارد» (البنية المعتمدة ٢٠٢٦-٠٩-٠٩): مؤشّراتها الأربعة صارت شريط
+// الوارد الأعلى (ovKpiStrip)، ومنحنى نمو الإيراد انتقل إلى «المالية»، وشبكة كروت «الموديولات»
+// حُذفت — سطح تنقّل ثالث كان يكرّر الشريط الجانبي حرفيًّا ويقرأ `m.count` الذي لا يُضبط أبدًا.
+// الدالة باقية لأن رابطًا/إشعارًا قديمًا قد يشير إليها، وهي ترسم الوارد نفسه لا شاشةً ميتة.
+function viewOverview(v){current='inbox';return viewInbox(v);}
 
 /* ===== COURSES VIEW ===== */
 // الدورات: لا بيانات تصميمية — تُجلب حيّة من /api/courses عبر طبقة EP.
@@ -1872,8 +2311,25 @@ function pkgPrice(p,cc){var pr=p.prices||{};return pr[cc]!=null?pr[cc]:(pr.defau
 const PACKAGES=[];
 // مصدر العرض: الباقات الحيّة من الخادم إن توفّرت، وإلا قائمة فارغة.
 function pkPackages(){return (window.EP&&EP.data.packages)?EP.data.packages.packages:PACKAGES;}
+// ⛔ **الباقات صارت تبويبًا لا شاشة** — وكل إعادة رسمٍ لها لازم تعرف ده. كانت `pkPersist`
+// وأزرارُ النافذة ورابطُ «إعادة المحاولة» تكتب في `#view` مباشرةً، فبعد أوّل حفظٍ أو حذفٍ
+// حقيقيّ تُدهَس شاشة «المالية» كلها (شريط التبويبات + الملخّص + الدرج) وتخرج الباقات من
+// تبويبها بينما الشريط الجانبي ما زال على «المالية» — شاشةٌ هجينة لا يعرف المؤسس أين هو
+// فيها. هذه الدالّة هي **الباب الوحيد** لإعادة الرسم.
+// ⛔ ولا تبني شاشةً أبدًا: غيابُ `#pkHost` معناه أن المؤسس **غادر التبويب** (أو الموديول
+// كلّه) قبل أن يعود الردّ — وردٌّ متأخّر يبني «المالية ← الباقات» يخطف الشاشة التي هو فيها
+// الآن (شبكةُ باقاتٍ تحت عنوان «الوارد»)، أو ينتزعه من «الإيرادات» إلى «الباقات». الشرط
+// الوحيد لإعادة البناء أن تكون «المالية» نفسها حيّةً على تبويب الباقات — وحينها لا خطف
+// ولا انتزاع. غير ذلك: لا شيء. الشاشة التي يراها المؤسس ملكُه لا ملكُ ردٍّ قديم.
+function pkRerender(){
+  var host=document.getElementById('pkHost');
+  if(host){viewPackages(host);return;}
+  if(current!=='finance'||finTab!=='packages')return;
+  var v=document.getElementById('view');
+  if(v)viewFinance(v);
+}
 function viewPackages(v){
-  if(window.EP){EP.ensure('packages',()=>viewPackages(v));}
+  if(window.EP){EP.ensure('packages',pkRerender);}
   var Pstr=(window.EP&&EP.state.packages)||'idle';
   var live=!!(window.EP&&EP.data.packages);
   var PKS=pkPackages();
@@ -1882,7 +2338,7 @@ function viewPackages(v){
   var maxP=PKS.length?Math.max.apply(null,PKS.map(function(p){return pkgPrice(p,geoCountry);})):0;
   v.innerHTML=`
     <div class="policy" style="border-inline-start-color:var(--gold)">${svg('wallet','ic')}<div><b>تسعير جغرافي تلقائي:</b> الزائر في كل بلد يرى سعر بلده مباشرة (geo-IP). المبدّل أدناه <b>محاكاة</b> لمعاينة ما يراه الزائر من كل بلد.</div></div>
-    ${Pstr==='error'?`<div class="policy" style="border-inline-start-color:var(--conflict);background:var(--conflict-bg);color:var(--conflict)">${svg('scale','ic')}<div>تعذّر جلب الباقات من الخادم — لا تُعرض أي أسعار بديلة. <b style="cursor:pointer;text-decoration:underline" onclick="EP.reload('packages',()=>viewPackages(document.getElementById('view')))">إعادة المحاولة</b></div></div>`:''}
+    ${Pstr==='error'?`<div class="policy" style="border-inline-start-color:var(--conflict);background:var(--conflict-bg);color:var(--conflict)">${svg('scale','ic')}<div>تعذّر جلب الباقات من الخادم — لا تُعرض أي أسعار بديلة. <b style="cursor:pointer;text-decoration:underline" onclick="EP.reload('packages',pkRerender)">إعادة المحاولة</b></div></div>`:''}
     ${Pstr==='loading'?`<div class="policy" style="border-inline-start-color:var(--gold)">${svg('wallet','ic')}<div>…جارٍ تحميل الباقات والأسعار من الخادم</div></div>`:''}
     <div class="filterbar" id="geoBar"><span class="lbl">معاينة بلد الزائر:</span></div>
     <div class="kpis">
@@ -1895,7 +2351,7 @@ function viewPackages(v){
       <div style="padding:16px;display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:14px" id="pkGrid"></div></section>`;
   var gb=document.getElementById('geoBar');
   GEO_COUNTRIES.forEach(function(c){gb.insertAdjacentHTML('beforeend','<div class="chip'+(geoCountry===c[0]?' on':'')+'" data-cc="'+c[0]+'">'+c[1]+'</div>');});
-  gb.querySelectorAll('.chip').forEach(function(c){c.onclick=function(){geoCountry=c.dataset.cc;viewPackages(v);};});
+  gb.querySelectorAll('.chip').forEach(function(c){c.onclick=function(){geoCountry=c.dataset.cc;pkRerender();};});
   var g=document.getElementById('pkGrid');
   if(!PKS.length){g.innerHTML='<div style="padding:40px;text-align:center;color:var(--muted);grid-column:1/-1">لا باقات بعد — أضف أول باقة.</div>';}
   PKS.forEach(function(p,i){var pr=pkgPrice(p,geoCountry);var priceHtml=(pr>0?money(pr)+' <small style="font-size:12px;color:var(--muted)">'+cur+'/'+p.cycle+'</small>':'مجانية');g.insertAdjacentHTML('beforeend','<div class="pkcard" data-i="'+i+'" style="border:1px solid var(--line);border-radius:14px;padding:16px;cursor:pointer;'+(p.active?'':'opacity:.6')+'"><div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px"><div style="font-family:Cairo;font-weight:800;font-size:15px;color:var(--navy)">'+p.name+'</div><span class="status '+(p.active?'s-auto':'')+'" style="'+(p.active?'':'background:var(--surface-2);color:var(--muted)')+';font-size:10px"><span class="d" style="'+(p.active?'':'background:var(--muted)')+'"></span>'+(p.active?'نشطة':'موقوفة')+'</span></div><div style="font-family:Cairo;font-weight:900;font-size:24px;color:var(--human)">'+priceHtml+'</div><div style="margin-top:10px;display:grid;gap:6px">'+(p.features||[]).map(function(f){return '<div style="display:flex;gap:7px;align-items:flex-start;font-size:12px;color:var(--ink-2)"><span style="width:6px;height:6px;border-radius:50%;background:var(--agree);margin-top:6px;flex:none"></span><span>'+f+'</span></div>';}).join('')+'</div></div>');});
@@ -1906,7 +2362,8 @@ function viewPackages(v){
   g.querySelectorAll('.pkcard').forEach(function(c){c.onclick=function(){packageModal(+c.dataset.i);};});
 }
 // يبني نسخة محدّثة من القائمة الحيّة بعد تعديل/إضافة/حذف باقة، ثم يحفظها عبر PUT ويعيد الجلب.
-function pkPersist(nextList){viewPackages(document.getElementById('view'));EP.savePackages(nextList,function(){viewPackages(document.getElementById('view'));});}
+// كلا الرسمتين تمرّان من `pkRerender` — لا كتابة في `#view` هنا (انظر التعليق فوقها).
+function pkPersist(nextList){pkRerender();EP.savePackages(nextList,pkRerender);}
 function packageModal(idx){
   var PKS=pkPackages();
   var live=!!(window.EP&&EP.data.packages);
@@ -1922,7 +2379,7 @@ function packageModal(idx){
   s.querySelector('#pk_x').onclick=closeModal;
   s.querySelector('#pk_s').onclick=function(){var prices={};GEO_COUNTRIES.forEach(function(c){prices[c[0]]=+s.querySelector('#pk_'+c[0]).value||0;});var d={name:s.querySelector('#pk_n').value.trim()||'باقة',cycle:s.querySelector('#pk_c').value.trim()||'شهري',prices:prices,features:s.querySelector('#pk_f').value.split('\n').map(function(x){return x.trim();}).filter(Boolean),active:s.querySelector('#pk_a').checked};
     if(live){var next=PKS.map(function(p){return Object.assign({},p);});if(edit){next[idx]=Object.assign({},edit,d);}else{next.push(d);}closeModal();pkPersist(next);return;}
-    if(edit){Object.assign(edit,d);}else{PACKAGES.push(d);}closeModal();viewPackages(document.getElementById('view'));notify(edit?'حُدّثت الباقة':'أُضيفت باقة «'+d.name+'»');};
+    if(edit){Object.assign(edit,d);}else{PACKAGES.push(d);}closeModal();pkRerender();notify(edit?'حُدّثت الباقة':'أُضيفت باقة «'+d.name+'»');};
   var pd=s.querySelector('#pk_d');if(pd)pd.onclick=function(){
     if(live){var next=PKS.filter(function(_,i){return i!==idx;}).map(function(p){return Object.assign({},p);});closeModal();pkPersist(next);return;}
     closeModal();toast('تعذّر الحذف — لا يوجد اتصال حيّ بالخادم');};
@@ -2102,87 +2559,134 @@ const INVWD=[];
 function ivInvestors(){return (window.EP&&EP.data.investment)?EP.data.investment.investors:INVESTORS;}
 function ivOpps(){return (window.EP&&EP.data.investment)?EP.data.investment.opps:INVOPPS;}
 function ivWd(){return (window.EP&&EP.data.investment)?EP.data.investment.wd:INVWD;}
+// ⭐ «الاستثمار والشركاء» — الدمج المعتمد (§٤ «جدول المصير»: الاستثمار + الشركاء ⇒ شاشة
+// واحدة). السبب مقيس لا ذوق: الكيان واحد — **حصّةُ ملكيةٍ ورأس مال** — وكان مرسومًا في
+// شاشتين، فرأس المال المدفوع من شريكٍ يظهر في «الشركاء» ورأس المال المدفوع من مستثمرٍ في
+// «الاستثمار»، وما فيش شاشة بتجاوب «مين بيملك الشركة وبكام؟» مرّةً واحدة.
+// جدولٌ واحد وتبويبان لا أكثر: «الملّاك ورأس المال» (شركاء + مستثمرون في صفوفٍ متجاورة)
+// و«فرص الاستثمار». «طلبات السحب» تبقى بابًا واحدًا في «المالية» — زرٌّ يفتحه، لا قائمة
+// ثانية تختلف عنها.
 function viewInvestment(v){
-  if(window.EP){EP.ensure('investment',()=>viewInvestment(v));}
+  if(window.EP){EP.ensure('investment',()=>viewInvestment(v));EP.ensure('partners',()=>viewInvestment(v));}
   const Ivst=(window.EP&&EP.state.investment)||'idle';
-  const IVR=ivInvestors(),OPP=ivOpps(),WD=ivWd();
-  const totalInv=IVR.reduce((s,i)=>s+(i.invested||0),0), totRet=IVR.reduce((s,i)=>s+(i.returns||0),0);
+  const Pst=(window.EP&&EP.state.partners)||'idle';
+  const IVR=ivInvestors(),OPP=ivOpps(),WD=ivWd(),PRT=ptPartners();
+  // «غير موزّع» صفٌّ محجوزٌ في جدول الحصص (الاحتياطي) لا شخص — يُعدّ في الحصص ولا يُعدّ في الملّاك.
+  const reserveEq=(PRT.find(p=>p.name==='غير موزّع')||{}).equity||0;
+  const realPartners=PRT.filter(p=>p.name!=='غير موزّع');
+  // ⭐ **تعريفٌ واحد للملّاك يقرأه الثلاثة**: المربّع · شارة التبويب · عدّاد اللوحة. كان
+  // المربّع يستثني صفّ الاحتياطي والتبويب يحسبه، فطُبعت كلمة «الملّاك» ثلاث مرّات برقمين
+  // مختلفين على بُعد ٢٠٠ بكسل. الاحتياطي **ليس مالكًا** (ليس شخصًا ولا يملك حصّةً أحد)،
+  // فيخرج من العدّ الثلاثيّ ويبقى صفُّه مرسومًا وموسومًا «احتياطي» تحت الجدول.
+  const ownersN=realPartners.length+IVR.length;
+  // أكبر حصّة — «مين ماسك الشركة؟». كان مربّعًا في «الشركاء» قبل الدمج، وعودته هنا لأن
+  // الشاشة المدموجة سؤالها الأول هو الملكية؛ والعوائد الموزّعة انتقلت إلى سطر رأس المال
+  // تحته (وهي مرسومة صفًّا صفًّا في عمود «عوائد» على أي حال).
+  const maxEq=PRT.reduce((mx,p)=>((p.equity||0)>(mx.equity||0)&&p.name!=='غير موزّع')?p:mx,{});
+  const capPartners=realPartners.reduce((s,p)=>s+(p.invested||0),0);
+  const capInvestors=IVR.reduce((s,i)=>s+(i.invested||0),0);
+  const totRet=IVR.reduce((s,i)=>s+(i.returns||0),0);
+  const bar=PRT.map(p=>`<div title="${esc(p.name)} ${money(p.equity)}٪" style="width:${p.equity}%;background:${p.c}"></div>`).join('');
   v.innerHTML=`
     ${Ivst==='error'?`<div class="policy" style="border-inline-start-color:var(--conflict);background:var(--conflict-bg);color:var(--conflict)">${svg('scale','ic')}<div>تعذّر جلب بيانات الاستثمار من الخادم — لا تُعرض أي بيانات بديلة. <b style="cursor:pointer;text-decoration:underline" onclick="EP.reload('investment',()=>viewInvestment(document.getElementById('view')))">إعادة المحاولة</b></div></div>`:''}
-    ${Ivst==='loading'?`<div class="policy">${svg('brief','ic')}<div>…جارٍ تحميل بيانات الاستثمار من الخادم</div></div>`:''}
+    ${Pst==='error'?`<div class="policy" style="border-inline-start-color:var(--conflict);background:var(--conflict-bg);color:var(--conflict)">${svg('scale','ic')}<div>تعذّر جلب الشركاء من الخادم — جدول الملكية تحت <b>ناقص</b>. <b style="cursor:pointer;text-decoration:underline" onclick="EP.reload('partners',()=>viewInvestment(document.getElementById('view')))">إعادة المحاولة</b></div></div>`:''}
+    ${(Ivst==='loading'||Pst==='loading')?`<div class="policy">${svg('brief','ic')}<div>…جارٍ تحميل الملكية ورأس المال من الخادم</div></div>`:''}
     <div class="kpis">
-      <div class="kpi k-1"><div class="top"><span class="ic">${svg('brief')}</span>محافظ المستثمرين</div><b>${money(IVR.length)}</b><div class="sub">نشطة</div></div>
-      <div class="kpi k-3"><div class="top"><span class="ic">${svg('wallet')}</span>إجمالي المُستثمَر</div><b>${money(totalInv)} <small style="font-size:13px">ج</small></b><div class="sub">رأس مال</div></div>
-      <div class="kpi k-2"><div class="top"><span class="ic">${svg('trend')}</span>عوائد موزّعة</div><b>${money(totRet)} <small style="font-size:13px">ج</small></b><div class="sub">حتى اليوم</div></div>
-      <div class="kpi k-4"><div class="top"><span class="ic">${svg('clock')}</span>سحوبات بانتظار</div><b>${money(WD.filter(w=>w.status==='pending').reduce((s,w)=>s+(w.amount||0),0))} <small style="font-size:13px">ج</small></b><div class="sub">${WD.length} طلب</div></div>
+      <div class="kpi k-1"><div class="top"><span class="ic">${svg('hands')}</span>الملّاك</div><b>${money(ownersN)}</b><div class="sub">${money(realPartners.length)} شريك · ${money(IVR.length)} مستثمر</div></div>
+      <div class="kpi k-3"><div class="top"><span class="ic">${svg('wallet')}</span>إجمالي رأس المال</div><b>${money(capPartners+capInvestors)} <small style="font-size:13px">ج</small></b><div class="sub">شركاء ${money(capPartners)} · مستثمرون ${money(capInvestors)} · عوائد موزّعة ${money(totRet)}</div></div>
+      <div class="kpi k-2"><div class="top"><span class="ic">${svg('trend')}</span>أكبر حصة</div><b>${maxEq.equity?money(maxEq.equity)+'٪':'—'}</b><div class="sub">${maxEq.name?esc(maxEq.name):'لا شركاء مسجّلون'}</div></div>
+      <div class="kpi k-4"><div class="top"><span class="ic">${svg('brief')}</span>حصص غير موزّعة</div><b>${money(reserveEq)}٪</b><div class="sub">احتياطي الشركة</div></div>
     </div>
     <div class="tabbar" id="invTabs">
-      <div class="tab${invTab==='investors'?' on':''}" data-t="investors">المستثمرون والمحافظ (${IVR.length})</div>
-      <div class="tab${invTab==='opps'?' on':''}" data-t="opps">فرص الاستثمار (${OPP.length})</div>
-      <div class="tab${invTab==='wd'?' on':''}" data-t="wd">طلبات السحب (${WD.length})</div>
+      <div class="tab${invTab==='owners'?' on':''}" data-t="owners">الملّاك ورأس المال (${money(ownersN)})</div>
+      <div class="tab${invTab==='opps'?' on':''}" data-t="opps">فرص الاستثمار (${money(OPP.length)})</div>
+      <!-- «طلبات السحب» اتشالت من هنا: كانت مرسومة مرّتين (هنا وفي «المالية») على نفس المصدر
+           (EP.data.investment.wd)، فالاعتماد كان له بابان وقائمتان قد تختلفان بالتحديث. بابٌ
+           واحد الآن في «المالية»، وهذا زرٌّ يفتحه. -->
+      <div class="tab" id="invGoWd" style="opacity:.85">طلبات السحب (${money(WD.length)}) ← في «المالية»</div>
     </div>
-    <div class="inboxwrap"><section class="panel"><div class="ph"><h3 id="ivH"></h3><span class="n" id="ivN"></span><button class="btn btn-human" id="ivAdd" style="flex:none;min-width:auto;padding:6px 13px;font-size:12px;margin-inline-start:auto">+ <span id="ivAddLbl">مستثمر</span></button></div><div id="ivRows"></div></section><aside class="drawer" id="drawer"></aside></div>`;
-  v.querySelectorAll('#invTabs .tab').forEach(t=>t.onclick=()=>{invTab=t.dataset.t;selected=null;viewInvestment(v);});
-  // «+ فرصة» مربوطة فعليًا (POST /investment/opportunities) في الوضع الحيّ فقط.
-  // «+ مستثمر» غير مربوطة بأي واجهة كتابة — كانت تكتب في الذاكرة فقط، فعُطِّلت صراحةً.
-  var ivAdd=document.getElementById('ivAdd');
-  var ivLive=!!(window.EP&&EP.data.investment);
-  if(invTab==='wd'){ivAdd.style.display='none';}
-  else if(invTab==='opps'&&ivLive){ivAdd.style.display='';document.getElementById('ivAddLbl').textContent='فرصة';ivAdd.onclick=function(){oppModal();};}
-  else{
-    ivAdd.style.display='';ivAdd.disabled=true;ivAdd.style.opacity='.5';ivAdd.style.cursor='not-allowed';
-    ivAdd.title=invTab==='opps'?'تعذّر الاتصال بالخادم — إضافة الفرص متاحة في الوضع الحيّ فقط.':'الإضافة اليدوية غير مفعّلة بعد — تُسجَّل المحافظ تلقائيًا من المنصة.';
-    document.getElementById('ivAddLbl').textContent='الإضافة غير مفعّلة';
-  }
+    ${invTab==='owners'&&PRT.length?`<section class="panel" style="margin-bottom:14px"><div class="ph"><h3>توزيع الحصص</h3><span class="hint" style="margin-inline-start:auto">النسبة المئوية لكل مالك + الاحتياطي</span></div>
+      <div style="padding:18px 20px"><div style="display:flex;height:28px;border-radius:8px;overflow:hidden;box-shadow:inset 0 0 0 1px var(--line)">${bar}</div></div></section>`:''}
+    <div class="inboxwrap"><section class="panel"><div class="ph"><h3 id="ivH"></h3><span class="n" id="ivN"></span><span class="hint" id="ivHint" style="margin-inline-start:10px"></span><button class="btn btn-human" id="ivAdd" style="flex:none;min-width:auto;padding:6px 13px;font-size:12px;margin-inline-start:auto">+ <span id="ivAddLbl">شريك</span></button></div><div id="ivRows"></div></section><aside class="drawer" id="drawer"></aside></div>`;
+  v.querySelectorAll('#invTabs .tab[data-t]').forEach(t=>t.onclick=()=>{invTab=t.dataset.t;selected=null;viewInvestment(v);});
+  var gw=document.getElementById('invGoWd');if(gw)gw.onclick=function(){go('finance');finTab='investorwd';viewFinance(document.getElementById('view'));};
+  // زرّ واحد يتبدّل بالتبويب: «+ شريك» (مربوط بـPOST /partners) و«+ فرصة» (POST
+  // /investment/opportunities). «+ مستثمر» غير موجود عمدًا: المحفظة مرآةٌ تُحسب من سجل
+  // الاستثمارات على المنصّة، وزرٌّ يكتب في الذاكرة كان يوهم بتسجيلٍ لا يحدث.
+  var ivAdd=document.getElementById('ivAdd'),ivLbl=document.getElementById('ivAddLbl');
+  var ivLive=!!(window.EP&&EP.data.investment), ptLive=!!(window.EP&&EP.data.partners);
+  if(invTab==='owners'){
+    ivLbl.textContent='شريك';
+    if(ptLive){ivAdd.disabled=false;ivAdd.style.opacity='';ivAdd.style.cursor='';ivAdd.title='';ivAdd.onclick=function(){partnerModal(null);};}
+    else{ivAdd.disabled=true;ivAdd.style.opacity='.5';ivAdd.style.cursor='not-allowed';ivLbl.textContent='الإضافة غير مفعّلة';ivAdd.title='تعذّر الاتصال بالخادم — إضافة الشركاء متاحة في الوضع الحيّ فقط.';}
+  } else if(ivLive){ivAdd.disabled=false;ivAdd.style.opacity='';ivAdd.style.cursor='';ivAdd.title='';ivLbl.textContent='فرصة';ivAdd.onclick=function(){oppModal();};}
+  else{ivAdd.disabled=true;ivAdd.style.opacity='.5';ivAdd.style.cursor='not-allowed';ivLbl.textContent='الإضافة غير مفعّلة';ivAdd.title='تعذّر الاتصال بالخادم — إضافة الفرص متاحة في الوضع الحيّ فقط.';}
   renderInv();
 }
 function renderInv(){
   const el=document.getElementById('ivRows'),h=document.getElementById('ivH');el.innerHTML='';
-  const IVR=ivInvestors(),OPP=ivOpps(),WD=ivWd();
-  if(invTab==='investors'){h.textContent='المستثمرون والمحافظ';document.getElementById('ivN').textContent=IVR.length;
-    if(!IVR.length)el.innerHTML='<div style="padding:40px;text-align:center;color:var(--muted)">لا محافظ مستثمرين بعد.</div>';
-    IVR.forEach((x,idx)=>el.insertAdjacentHTML('beforeend',`<div class="row esc-row${selected==='i'+idx?' sel':''}" data-i="${idx}" style="grid-template-columns:1.6fr 1fr 1fr 110px">
-      <div class="c c1"><div class="src-ic" style="background:var(--memory-bg);color:var(--memory)">${svg('brief')}</div><div><div class="parties">${x.name}</div><div class="from">رصيد المحفظة ${money(x.balance||0)} ج</div></div></div>
+  const IVR=ivInvestors(),OPP=ivOpps(),PRT=ptPartners();
+  if(invTab==='owners'){
+    // ⭐ جدولٌ واحد لا جدولان: الشريك والمستثمر صفّان في نفس الجدول، والعمودان
+    // (حصّة٪ · رأس مال) هما اللذان يفرّقانهما — «—» حيث لا قيمة، لا صفرٌ يكذب.
+    h.textContent='الملّاك ورأس المال';
+    // ⛔ العدّاد هو **نفس** تعريف المربّع والتبويب فوقه: الملّاك بلا صفّ الاحتياطي. الصفّ
+    // مرسومٌ تحته وموسومٌ «احتياطي»، والتلميح يقول ذلك صراحةً بدل أن يترك الفارق لغزًا.
+    const owners=PRT.filter(p=>p.name!=='غير موزّع').length+IVR.length;
+    const rowsN=PRT.length+IVR.length;
+    document.getElementById('ivN').textContent=money(owners);
+    var ivHint=document.getElementById('ivHint');
+    if(ivHint)ivHint.textContent=(rowsN>owners)?'+ صفّ «غير موزّع» (احتياطي الشركة — ليس مالكًا)':'';
+    if(!rowsN){el.innerHTML='<div style="padding:40px;text-align:center;color:var(--muted)">لا ملّاك مسجّلون بعد — لا شركاء ولا محافظ مستثمرين.</div>';drawInv();return;}
+    PRT.forEach((x,idx)=>{
+      const reserve=x.name==='غير موزّع';
+      el.insertAdjacentHTML('beforeend',`<div class="row esc-row${selected==='p'+idx?' sel':''}" data-p="${idx}" style="grid-template-columns:1.6fr .8fr 1fr 1fr 110px">
+      <div class="c c1"><span style="width:12px;height:12px;border-radius:3px;background:${x.c};flex:none;margin-inline-end:9px"></span><div><div class="parties">${esc(x.name)}</div><div class="from">${esc(x.role||'شريك')}</div></div></div>
+      <div class="c"><div class="from">حصة <b style="color:var(--navy);font-family:Cairo;font-size:15px">${money(x.equity)}٪</b></div></div>
+      <div class="c"><div class="from">رأس مال <b style="color:var(--ink)">${x.invested?money(x.invested):'—'}</b></div></div>
+      <div class="c"><div class="from">عوائد <b style="color:var(--muted)">—</b></div></div>
+      <div class="c"><span class="status ${reserve?'s-wait':'s-human'}"><span class="d"></span>${reserve?'احتياطي':'شريك'}</span></div></div>`);});
+    IVR.forEach((x,idx)=>el.insertAdjacentHTML('beforeend',`<div class="row esc-row${selected==='i'+idx?' sel':''}" data-i="${idx}" style="grid-template-columns:1.6fr .8fr 1fr 1fr 110px">
+      <div class="c c1"><div class="src-ic" style="background:var(--memory-bg);color:var(--memory)">${svg('brief')}</div><div><div class="parties">${esc(x.name)}</div><div class="from">رصيد المحفظة ${money(x.balance||0)} ج</div></div></div>
+      <div class="c"><div class="from">حصة <b style="color:var(--muted)">—</b></div></div>
       <div class="c"><div class="from">مُستثمَر <b style="color:var(--ink)">${money(x.invested||0)}</b></div></div>
       <div class="c"><div class="from">عوائد <b style="color:var(--agree)">${money(x.returns||0)}</b></div></div>
-      <div class="c"><span class="status s-auto"><span class="d"></span>${x.level||'—'}</span></div></div>`));
-    el.querySelectorAll('.row').forEach(r=>r.onclick=()=>{selected='i'+r.dataset.i;renderInv();drawInv();});
-  } else if(invTab==='opps'){h.textContent='فرص الاستثمار';document.getElementById('ivN').textContent=OPP.length;
+      <div class="c"><span class="status s-auto"><span class="d"></span>${esc(x.level||'مستثمر')}</span></div></div>`));
+    // الشريك يُحرَّر من نافذته (نفس النافذة المربوطة بالخادم)، والمستثمر يُعرَض في الدرج.
+    el.querySelectorAll('.row[data-p]').forEach(r=>r.onclick=()=>{selected='p'+r.dataset.p;renderInv();partnerModal(+r.dataset.p);});
+    el.querySelectorAll('.row[data-i]').forEach(r=>r.onclick=()=>{selected='i'+r.dataset.i;renderInv();drawInv();});
+  } else {h.textContent='فرص الاستثمار';document.getElementById('ivN').textContent=money(OPP.length);
+    var ivHint2=document.getElementById('ivHint');if(ivHint2)ivHint2.textContent='';
     if(!OPP.length)el.innerHTML='<div style="padding:40px;text-align:center;color:var(--muted)">لا فرص استثمار مطروحة — أضف أول فرصة.</div>';
     OPP.forEach((o,idx)=>{const pct=o.target?Math.round(o.raised/o.target*100):0;el.insertAdjacentHTML('beforeend',`<div class="row esc-row${selected==='o'+idx?' sel':''}" data-o="${idx}" style="grid-template-columns:1.8fr 1.4fr 110px">
-      <div class="c c1"><div class="src-ic" style="background:var(--gold-bg);color:var(--gold)">${svg('trend')}</div><div><div class="parties">${o.title}</div><div class="from">${money(o.raised)} / ${money(o.target)} ج · ${pct}٪</div></div></div>
+      <div class="c c1"><div class="src-ic" style="background:var(--gold-bg);color:var(--gold)">${svg('trend')}</div><div><div class="parties">${esc(o.title)}</div><div class="from">${money(o.raised)} / ${money(o.target)} ج · ${money(pct)}٪</div></div></div>
       <div class="c"><div style="height:8px;background:var(--surface-2);border-radius:4px;overflow:hidden;margin-top:2px"><div style="height:100%;width:${pct}%;background:var(--gold);border-radius:4px"></div></div></div>
-      <div class="c"><span class="status s-wait"><span class="d"></span>عائد ${o.roi}</span></div></div>`);});
+      <div class="c"><span class="status s-wait"><span class="d"></span>عائد ${esc(o.roi)}</span></div></div>`);});
     el.querySelectorAll('.row').forEach(r=>r.onclick=()=>{selected='o'+r.dataset.o;renderInv();drawInv();});
-  } else {h.textContent='طلبات السحب';document.getElementById('ivN').textContent=WD.length;
-    if(!WD.length)el.innerHTML='<div style="padding:40px;text-align:center;color:var(--muted)">لا طلبات سحب بانتظار.</div>';
-    WD.forEach((w,idx)=>el.insertAdjacentHTML('beforeend',`<div class="row esc-row${selected==='w'+idx?' sel':''}" data-w="${idx}" style="grid-template-columns:1.8fr 1fr 130px">
-      <div class="c c1"><div class="src-ic">${svg('wallet')}</div><div><div class="parties">${w.who}</div><div class="from">${w.when}</div></div></div>
-      <div class="c"><div class="amt">${money(w.amount)} <small>ج</small></div></div>
-      <div class="c"><span class="status s-human"><span class="d"></span>بانتظار اعتماد</span></div></div>`));
-    el.querySelectorAll('.row').forEach(r=>r.onclick=()=>{selected='w'+r.dataset.w;renderInv();drawInv();});
   }
   drawInv();
 }
 function drawInv(){
   const el=document.getElementById('drawer');if(!el)return;
   const live=!!(window.EP&&EP.data.investment);
-  if(selected===null){el.innerHTML=`<div class="empty">${svg('brief','ic')}<p>اختر مستثمرًا أو فرصة أو طلب سحب.</p></div>`;return;}
+  if(selected===null){el.innerHTML=`<div class="empty">${svg('brief','ic')}<p>اختر مالكًا أو فرصة. الشريك يُعدَّل من نافذته، وطلبات السحب تُدار في «المالية».</p></div>`;return;}
   const t=selected[0],i=+selected.slice(1);
   if(t==='i'){const x=ivInvestors()[i];if(!x){el.innerHTML='';return;}
     // في الوضع الحيّ المحفظة مرآة للقراءة فقط (تُحسب من الاستثمارات) — لا تعديل/حذف يدوي.
     var invActs=live?'':`<div class="acts"><button class="btn btn-ghost" data-a="edit">تعديل</button><button class="btn btn-warn" data-a="del">حذف</button></div>`;
-    el.innerHTML=`<div class="dh"><div class="k">محفظة مستثمر</div><h3>${x.name}</h3></div><div class="db"><div class="field"><div class="lab">رصيد المحفظة</div><div class="bigamt">${money(x.balance||0)} <small>ج</small></div></div><div class="split"><div class="s"><div class="l">مُستثمَر</div><div class="v">${money(x.invested||0)}</div></div><div class="s net"><div class="l">عوائد</div><div class="v">${money(x.returns||0)}</div></div></div><div class="field" style="margin-top:12px"><div class="lab">المستوى</div><div class="val">${x.level||'—'}</div></div><div class="note-ai">${svg('sparkles','ic')}<div>هذه المحفظة تُعرَض للمستثمر داخل المنصة كـ mirror للقراءة فقط${live?' — تُحسب آليًّا من سجل الاستثمارات':''}.</div></div>${invActs}</div>`;}
-  else if(t==='o'){const o=ivOpps()[i];if(!o){el.innerHTML='';return;}const pct=o.target?Math.round(o.raised/o.target*100):0;el.innerHTML=`<div class="dh"><div class="k">فرصة استثمار</div><h3>${o.title}</h3></div><div class="db"><div class="field"><div class="lab">التمويل</div><div class="bigamt">${money(o.raised)} <small>/ ${money(o.target)} ج</small></div></div><div class="field"><div class="lab">العائد المتوقّع</div><div class="val" style="color:var(--gold)">${o.roi}</div></div><div class="acts"><button class="btn btn-ghost" data-a="edit">تعديل الفرصة</button><button class="btn btn-warn" data-a="del">حذف</button></div></div>`;}
-  else {const w=ivWd()[i];if(!w){el.innerHTML='';return;}el.innerHTML=`<div class="dh"><div class="k">طلب سحب مستثمر</div><h3>${w.who}</h3></div><div class="db"><div class="field"><div class="lab">المبلغ</div><div class="bigamt">${money(w.amount)} <small>ج</small></div></div><div class="acts"><button class="btn btn-primary" data-a="ok">${svg('check')}اعتمد السحب</button><button class="btn btn-warn" data-a="no">رفض</button></div></div>`;}
+    el.innerHTML=`<div class="dh"><div class="k">محفظة مستثمر</div><h3>${esc(x.name)}</h3></div><div class="db"><div class="field"><div class="lab">رصيد المحفظة</div><div class="bigamt">${money(x.balance||0)} <small>ج</small></div></div><div class="split"><div class="s"><div class="l">مُستثمَر</div><div class="v">${money(x.invested||0)}</div></div><div class="s net"><div class="l">عوائد</div><div class="v">${money(x.returns||0)}</div></div></div><div class="field" style="margin-top:12px"><div class="lab">المستوى</div><div class="val">${esc(x.level||'—')}</div></div><div class="note-ai">${svg('sparkles','ic')}<div>هذه المحفظة تُعرَض للمستثمر داخل المنصة كـ mirror للقراءة فقط${live?' — تُحسب آليًّا من سجل الاستثمارات':''}.</div></div>${invActs}</div>`;}
+  else if(t==='o'){const o=ivOpps()[i];if(!o){el.innerHTML='';return;}const pct=o.target?Math.round(o.raised/o.target*100):0;el.innerHTML=`<div class="dh"><div class="k">فرصة استثمار</div><h3>${esc(o.title)}</h3></div><div class="db"><div class="field"><div class="lab">التمويل</div><div class="bigamt">${money(o.raised)} <small>/ ${money(o.target)} ج</small></div></div><div class="field"><div class="lab">العائد المتوقّع</div><div class="val" style="color:var(--gold)">${esc(o.roi)}</div></div><div class="acts"><button class="btn btn-ghost" data-a="edit">تعديل الفرصة</button><button class="btn btn-warn" data-a="del">حذف</button></div></div>`;}
+  // صفّ الشريك يفتح نافذته لا درجًا (نفس النافذة المربوطة بالخادم)، فلا درج ثالث هنا؛
+  // وصفوف «طلبات السحب» لم تعد تُرسم هنا، فاعتمادها بابٌ واحدٌ في «المالية».
+  else{el.innerHTML=`<div class="empty">${svg('hands','ic')}<p>الشريك يُعدَّل من نافذته — اضغط صفّه مرّة أخرى.</p></div>`;return;}
   el.querySelectorAll('[data-a]').forEach(b=>b.onclick=()=>{const a=b.dataset.a;
     if(a==='edit'){t==='i'?investorModal(ivInvestors()[i],i):oppModal(ivOpps()[i],i);}
     else if(a==='del'){
       if(t==='o'&&live){var oo=ivOpps()[i];if(oo&&oo.oid){EP.deleteOpportunity(oo.oid,()=>{selected=null;viewInvestment(document.getElementById('view'));});return;}}
       toast('تعذّر الحذف — لا يوجد اتصال حيّ بالخادم');}
-    else{
-      if(t==='w'&&live){var ww=ivWd()[i];if(ww&&ww.wid){EP.decideWithdrawal(ww.wid,a==='ok'?'approved':'rejected',()=>{selected=null;viewInvestment(document.getElementById('view'));});return;}}
-      toast(a==='ok'?'تم اعتماد سحب المستثمر':'تم الرفض');}
+    // ⛔ (حُذف: فرع `t==='w'` الذي كان ينادي `EP.decideWithdrawal`) — بعد خروج «طلبات
+    // السحب» إلى «المالية» ما عاد `selected` يأخذ 'w' في أيّ مسار، فكان **قرارًا ماليًّا
+    // ميّتًا**: كودُ اعتماد سحبٍ بلا زرٍّ يصله. بابه الوحيد الآن في «المالية».
   });
 }
 function investorModal(edit,idx){
@@ -2241,13 +2745,13 @@ function oppModal(edit,idx){
 /* ===== MARKETING VIEW ===== */
 // الحملات: لا بيانات تصميمية — تُجلب حيّة من /api/campaigns (محمّل marketing) أو تبقى فارغة.
 const CAMPAIGNS=[];
-// المعلنون/الممولون: لا واجهة خلفية — لا بيانات تصميمية والتبويب محجوب.
-const ADVERTISERS=[];
+// ⛔ (حُذف: فرع «المعلنون والممولون») — لا واجهة خلفية ولا مسار خادم ولا تبويب يوصله:
+// الفرع كان يقرأ مصفوفةً فارغةً ثابتة ويرسم قائمةً وأزرار «تعديل/حذف» بلا أي طريقٍ إليها.
+// المصفوفة والفرع ودرجهما محذوفون بالكامل. ومعهم ذهب **أثر الحذف**: شريطُ تبويبٍ أحادي
+// البند ومتغيّرُ حالته — شريطٌ بزرٍّ لا يبدّل شيئًا يُقرأ كعنوان، والعنوان مكانه الترويسة.
 function mktCampaigns(){return (window.EP&&EP.data.marketing)?EP.data.marketing.campaigns:CAMPAIGNS;}
 function viewMarketing(v){
   if(window.EP){EP.ensure('marketing',()=>viewMarketing(v));}
-  // تبويب المعلنين/الممولين معطّل (لا واجهة خلفية).
-  if(mktTab==='advertisers')mktTab='campaigns';
   const Mkst=(window.EP&&EP.state.marketing)||'idle';
   const CMP=mktCampaigns();
   const spent=CMP.reduce((s,c)=>s+(c.spent||0),0),leads=CMP.reduce((s,c)=>s+(c.leads||0),0),active=CMP.filter(c=>c.status==='active').length;
@@ -2260,11 +2764,10 @@ function viewMarketing(v){
       <div class="kpi k-3"><div class="top"><span class="ic">${svg('users')}</span>عملاء محتملون</div><b>${money(leads)}</b><div class="sub">من الحملات</div></div>
       <div class="kpi k-2"><div class="top"><span class="ic">${svg('trend')}</span>CAC متوسط</div><b>${money(leads?Math.round(spent/leads):0)} <small style="font-size:13px">ج</small></b><div class="sub">تكلفة العميل</div></div>
     </div>
-    <div class="tabbar" id="mktTabs">
-      <div class="tab${mktTab==='campaigns'?' on':''}" data-t="campaigns">الحملات (${CMP.length})</div>
-    </div>
+    <!-- ⛔ (حُذف: شريط التبويب أحادي البند) — بعد خروج «المعلنون» بقي شريطٌ بتبويبٍ واحد
+         «الحملات»، وهو يُقرأ كعنوانٍ لا كأداة تحكّم: زرٌّ لا يبدّل شيئًا. العنوان والعدّاد
+         في ترويسة اللوحة تحته يقولان الشيء نفسه مرّةً واحدة. -->
     <div class="inboxwrap"><section class="panel"><div class="ph"><h3 id="mkH"></h3><span class="n" id="mkN"></span><button class="btn btn-human" id="mkAdd" style="flex:none;min-width:auto;padding:6px 13px;font-size:12px;margin-inline-start:auto">+ <span id="mkAddLbl">حملة جديدة</span></button></div><div id="mkRows"></div></section><aside class="drawer" id="drawer"></aside></div>`;
-  v.querySelectorAll('#mktTabs .tab').forEach(t=>t.onclick=()=>{mktTab=t.dataset.t;selected=null;viewMarketing(v);});
   // «+ حملة جديدة» تُحفظ فعليًا (POST /campaigns) في الوضع الحيّ فقط؛ بدونه تُعطَّل بدل الكتابة في الذاكرة.
   var mkA=document.getElementById('mkAdd');
   if(window.EP&&EP.data.marketing){document.getElementById('mkAddLbl').textContent='حملة جديدة';mkA.onclick=()=>{createCampaignModal();};}
@@ -2274,7 +2777,8 @@ function viewMarketing(v){
 function renderMkt(){
   const el=document.getElementById('mkRows'),h=document.getElementById('mkH');el.innerHTML='';
   const CMP=mktCampaigns();
-  if(mktTab==='campaigns'){h.textContent='الحملات';document.getElementById('mkN').textContent=CMP.length;
+  // لوحةٌ واحدة لا تبويبات: `mktTab` نفسه حُذف مع شريطه — متغيّرُ حالةٍ بلا مبدِّل.
+  {h.textContent='الحملات';document.getElementById('mkN').textContent=money(CMP.length);
     if(!CMP.length)el.innerHTML='<div style="padding:40px;text-align:center;color:var(--muted)">لا حملات بعد — أضف أول حملة.</div>';
     CMP.forEach((c,idx)=>{const on=c.status==='active';el.insertAdjacentHTML('beforeend',`<div class="row esc-row${selected==='c'+idx?' sel':''}" data-c="${idx}" style="grid-template-columns:1.6fr 1fr 1fr 110px">
       <div class="c c1"><div class="src-ic" style="background:var(--human-bg);color:var(--human)">${svg('mega')}</div><div><div class="parties">${c.name}</div><div class="from">${c.platform} · أُنفق ${money(c.spent)} ج</div></div></div>
@@ -2282,18 +2786,12 @@ function renderMkt(){
       <div class="c"><div class="from">CAC <b style="color:${c.cac>150?'var(--conflict)':'var(--agree)'}">${c.cac} ج</b></div></div>
       <div class="c"><span class="status ${on?'s-auto':''}" style="${on?'':'background:var(--surface-2);color:var(--muted)'}"><span class="d" style="${on?'':'background:var(--muted)'}"></span>${on?'نشطة':'موقوفة'}</span></div></div>`);});
     el.querySelectorAll('.row').forEach(r=>r.onclick=()=>{selected='c'+r.dataset.c;renderMkt();drawMkt();});
-  } else {h.textContent='المعلنون والممولون';document.getElementById('mkN').textContent=ADVERTISERS.length;
-    ADVERTISERS.forEach((a,idx)=>el.insertAdjacentHTML('beforeend',`<div class="row esc-row${selected==='a'+idx?' sel':''}" data-a2="${idx}" style="grid-template-columns:1.8fr 1fr 130px">
-      <div class="c c1"><div class="src-ic" style="background:var(--gold-bg);color:var(--gold)">${svg('brief')}</div><div><div class="parties">${a.name}</div><div class="from">${a.type}</div></div></div>
-      <div class="c"><div class="amt">${money(a.amount)} <small>ج</small></div></div>
-      <div class="c"><span class="status s-auto"><span class="d"></span>مموّل</span></div></div>`));
-    el.querySelectorAll('.row').forEach(r=>r.onclick=()=>{selected='a'+r.dataset.a2;renderMkt();drawMkt();});
   }
   drawMkt();
 }
 function drawMkt(){
   const el=document.getElementById('drawer');if(!el)return;
-  if(selected===null){el.innerHTML=`<div class="empty">${svg('mega','ic')}<p>اختر حملة أو ممولًا لرؤية الأداء والإجراء.</p></div>`;return;}
+  if(selected===null){el.innerHTML=`<div class="empty">${svg('mega','ic')}<p>اختر حملة لرؤية الأداء والإجراء.</p></div>`;return;}
   const t=selected[0],i=+selected.slice(1);
   const liveMkt=!!(window.EP&&EP.data.marketing);
   if(t==='c'){const c=mktCampaigns()[i];if(!c){el.innerHTML='';return;}const on=c.status==='active';el.innerHTML=`<div class="dh"><div class="k">حملة · ${c.platform}</div><h3>${c.name}</h3></div><div class="db"><div class="split"><div class="s"><div class="l">أُنفق</div><div class="v">${money(c.spent)}</div></div><div class="s net"><div class="l">عملاء</div><div class="v">${c.leads}</div></div><div class="s comm"><div class="l">CAC</div><div class="v">${c.cac}</div></div></div><div class="acts" style="margin-top:14px"><button class="btn ${on?'btn-warn':'btn-primary'}" data-a="toggle">${on?'إيقاف':'تشغيل'}</button><button class="btn btn-ghost" data-a="edit">تعديل</button><button class="btn btn-warn" data-a="del">حذف</button></div></div>`;
@@ -2301,11 +2799,6 @@ function drawMkt(){
       if(a==='toggle'){if(liveMkt&&c.cid){EP.updateCampaign(c.cid,{status:on?'paused':'active'},()=>{viewMarketing(document.getElementById('view'));});return;}c.status=on?'paused':'active';viewMarketing(document.getElementById('view'));toast('تم تحديث حالة الحملة');}
       else if(a==='edit'){createCampaignModal(c);}
       else if(a==='del'){if(liveMkt&&c.cid){EP.deleteCampaign(c.cid,()=>{selected=null;viewMarketing(document.getElementById('view'));});return;}CAMPAIGNS.splice(i,1);selected=null;viewMarketing(document.getElementById('view'));notify('حُذفت حملة «'+c.name+'»');}
-    });
-  } else {const a=ADVERTISERS[i];el.innerHTML=`<div class="dh"><div class="k">مموّل/معلن</div><h3>${a.name}</h3></div><div class="db"><div class="field"><div class="lab">النوع</div><div class="val">${a.type}</div></div><div class="field"><div class="lab">المبلغ</div><div class="bigamt">${money(a.amount)} <small>ج</small></div></div><div class="acts"><button class="btn btn-ghost" data-a="edit">تعديل</button><button class="btn btn-warn" data-a="del">حذف</button></div></div>`;
-    el.querySelectorAll('[data-a]').forEach(b=>b.onclick=()=>{const x=b.dataset.a;
-      if(x==='edit'){addAdvertiserModal(a);}
-      else if(x==='del'){toast('تعذّر الحذف — لا يوجد اتصال حيّ بالخادم');}
     });
   }
 }
@@ -2342,16 +2835,8 @@ function createCampaignModal(edit){
     closeModal();viewMarketing(document.getElementById('view'));notify(edit?'حُدّثت الحملة':'أُنشئت حملة «'+data.name+'»');
   };
 }
-function addAdvertiserModal(edit){
-  var e=edit||{};
-  var s=openModal(edit?'تعديل ممول':'إضافة ممول',
-    '<div class="fld"><label>الاسم</label><input id="ad_n" value="'+(e.name||'')+'" placeholder="مكتب الرشيد"></div>'+
-    '<div class="fld"><label>النوع</label><input id="ad_t" value="'+(e.type||'')+'" placeholder="مموّل دورة"></div>'+
-    '<div class="fld"><label>المبلغ (ج)</label><input id="ad_a" type="number" value="'+(e.amount||'')+'" placeholder="5000"></div>'+
-    '<div class="acts" style="margin-top:14px"><button class="btn btn-primary" id="ad_s">'+svg('check')+(edit?'حفظ':'أضف')+'</button><button class="btn btn-ghost" id="ad_x">إلغاء</button></div>');
-  s.querySelector('#ad_x').onclick=closeModal;
-  s.querySelector('#ad_s').onclick=function(){var data={name:s.querySelector('#ad_n').value.trim()||'ممول',type:s.querySelector('#ad_t').value.trim()||'مموّل',amount:+s.querySelector('#ad_a').value||0};if(edit){Object.assign(edit,data);}else{ADVERTISERS.push(data);}closeModal();viewMarketing(document.getElementById('view'));notify(edit?'حُدّث الممول':'أُضيف الممول «'+data.name+'»');};
-}
+// ⛔ (حُذفت: نافذة «إضافة ممول») — كانت تُنادى من درج فرعٍ محذوف، وتكتب في مصفوفة
+// ذاكرةٍ بلا نداء خادم: بيانات تضيع مع أوّل تحديث للصفحة، وزرّ «حفظ» يكذب.
 
 /* ===== «المواضيع» — موديول واحد يوحّد خطّ الإنتاج (D6, re-architect) =====
    فكرة → (خبر) → موضوع → نقاش → مقال → مقالات (SEO، بموافقة).
@@ -2392,7 +2877,9 @@ function topicsTabbar(active){
   // work-first order: مقترحة من الأعضاء أولًا (عضو حقيقي مستنّي قرار = أغلى بند في الطابور)،
   // بعدها ideas → news → working → articles → comments، والمنشورة/الواردة آخرًا.
   // «مرفوضة» تبويب يظهر فقط لما يكون فيه مرفوض — قبل كده كانوا بيرجعوا لطابور الاعتماد للأبد.
-  var tabs=[['pending','مقترحة من الأعضاء'],['ideas','أفكار للاعتماد'],['news','الأخبار'],['working','قيد العمل (الوكيل)'],['articles','المقالات'],['comments','التعليقات'],['board','المنشورة'],['incoming','واردة']];
+  // «دليل الاستخدام» تبويبٌ هنا بعد خروجه من القائمة الجانبية (بنية ٢٠٢٦-٠٩-٠٩): نفس فعل
+  // التحرير والنشر، وتحريره نادرٌ جدًّا — فلا يستحقّ صفًّا دائمًا، ولا يجوز أن يفقد بابه.
+  var tabs=[['pending','مقترحة من الأعضاء'],['ideas','أفكار للاعتماد'],['news','الأخبار'],['working','قيد العمل (الوكيل)'],['articles','المقالات'],['comments','التعليقات'],['board','المنشورة'],['incoming','واردة'],['tutorials','دليل الاستخدام']];
   if(C.rejected>0||active==='rejected')tabs.push(['rejected','مرفوضة']);
   return '<div class="tabbar" id="topicsTabs">'+tabs.map(function(t){
     var n=C[t[0]];
@@ -3287,14 +3774,17 @@ function nwsSourcesModal(){
 // النصوص + روابط الفيديو + ترتيب الأقسام + النشر — وكلها تُرسل للمنصة عبر الجسر السرّي.
 var TUTORIALS=[];
 function tutEsc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');}
+// عقدة «الدليل»: #tutHost حين يُعرَض كتبويبٍ داخل «المحتوى» (والشريط فوقه ملكٌ للأب)،
+// و#view حين يُستدعى مباشرةً. أي إعادة رسمٍ تمرّ من هنا فلا تمسح شريط التبويبات.
+function tutHost(){return document.getElementById('tutHost')||document.getElementById('view');}
 function viewTutorials(v){
-  if(window.EP){EP.ensure('tutorials',()=>viewTutorials(v));}
+  if(window.EP){EP.ensure('tutorials',()=>viewTutorials(tutHost()));}
   const Tst=(window.EP&&EP.state.tutorials)||'idle';
   const pub=TUTORIALS.filter(t=>t.is_published).length,draft=TUTORIALS.length-pub,withVid=TUTORIALS.filter(t=>t.video_url).length;
   v.innerHTML=`
     <div class="policy" style="border-inline-start-color:var(--ai)">${svg('book','ic')}<div><b>الدليل:</b> دليل استخدام المنصة — يُدار من هنا ويُعرض للمستخدمين على المنصة. كل قسم نصّ مبدئيًا؛ أضف <b>رابط فيديو</b> ليُعرض مدمجًا.</div></div>
     <div class="policy" style="border-inline-start-color:var(--agree);background:var(--agree-bg)">${svg('check','ic')}<div><b>متصل بالمنصة:</b> ما يُنشر هنا يظهر مباشرة في «الدليل» على المنصة من <b>مصدر واحد</b>. <b>${pub}</b> قسمًا منشورًا الآن.</div></div>
-    ${Tst==='error'?`<div class="policy" style="border-inline-start-color:var(--conflict);background:var(--conflict-bg);color:var(--conflict)">${svg('scale','ic')}<div>تعذّر جلب الدليل من المنصة. <b style="cursor:pointer;text-decoration:underline" onclick="EP.reload('tutorials',()=>viewTutorials(document.getElementById('view')))">إعادة المحاولة</b></div></div>`:''}
+    ${Tst==='error'?`<div class="policy" style="border-inline-start-color:var(--conflict);background:var(--conflict-bg);color:var(--conflict)">${svg('scale','ic')}<div>تعذّر جلب الدليل من المنصة. <b style="cursor:pointer;text-decoration:underline" onclick="EP.reload('tutorials',()=>viewTutorials(tutHost()))">إعادة المحاولة</b></div></div>`:''}
     ${Tst==='loading'?`<div class="policy" style="border-inline-start-color:var(--ai)">${svg('book','ic')}<div>…جارٍ تحميل الدليل من المنصة</div></div>`:''}
     <div class="kpis">
       <div class="kpi k-3"><div class="top"><span class="ic">${svg('check')}</span>منشورة</div><b>${money(pub)}</b><div class="sub">ظاهرة للمستخدمين</div></div>
@@ -3317,7 +3807,7 @@ function renderTutorials(){
   el.querySelectorAll('[data-edit]').forEach(b=>b.onclick=()=>{var t=TUTORIALS.find(x=>x.id===b.dataset.edit);if(t)tutModal(t);});
   el.querySelectorAll('[data-del]').forEach(b=>b.onclick=()=>{var t=TUTORIALS.find(x=>x.id===b.dataset.del);if(!t)return;
     if(!confirm('حذف قسم «'+t.title+'» من الدليل؟'))return;
-    if(window.EP){EP.deleteTutorial(t,()=>viewTutorials(document.getElementById('view')));}});
+    if(window.EP){EP.deleteTutorial(t,()=>viewTutorials(tutHost()));}});
 }
 function tutModal(edit){
   var e=edit||{};
@@ -3340,8 +3830,8 @@ function tutModal(edit){
     };
     if(!g.title){toast('العنوان مطلوب');return;}
     if(!window.EP){toast('غير متصل بالمنصة');return;}
-    if(edit&&edit.id){EP.updateTutorial(edit.id,g,function(){closeModal();viewTutorials(document.getElementById('view'));});}
-    else{EP.createTutorial(g,function(){closeModal();viewTutorials(document.getElementById('view'));});}
+    if(edit&&edit.id){EP.updateTutorial(edit.id,g,function(){closeModal();viewTutorials(tutHost());});}
+    else{EP.createTutorial(g,function(){closeModal();viewTutorials(tutHost());});}
   };
 }
 
@@ -3421,37 +3911,12 @@ function aiReportDrawer(agentId){
 // جدول الحصص (cap table): لا أسماء/نِسَب/أرقام رأس مال تصميمية في المصدر — تُجلب حيّة أو يبقى فارغًا.
 const PARTNERS=[];
 function ptPartners(){return (window.EP&&EP.data.partners)?EP.data.partners.partners:PARTNERS;}
-function viewPartners(v){
-  if(window.EP){EP.ensure('partners',()=>viewPartners(v));}
-  const Pst=(window.EP&&EP.state.partners)||'idle';
-  const PRT=ptPartners();
-  const totalInv=PRT.reduce((s,p)=>s+(p.invested||0),0);
-  const reservePartner=PRT.find(p=>p.name==='غير موزّع');
-  const reserveEq=reservePartner?reservePartner.equity:0;
-  const realPartners=PRT.filter(p=>p.name!=='غير موزّع');
-  const maxEq=realPartners.length?Math.max(...realPartners.map(p=>p.equity)):0;
-  const bar=PRT.map(p=>`<div title="${p.name} ${p.equity}٪" style="width:${p.equity}%;background:${p.c}"></div>`).join('');
-  const rows=PRT.map((p,i)=>`<div class="prow" data-p="${i}" style="display:flex;align-items:center;gap:12px;padding:11px 8px;border-bottom:1px solid var(--line);cursor:pointer;border-radius:8px">
-    <span style="width:12px;height:12px;border-radius:3px;background:${p.c};flex:none"></span>
-    <div style="flex:1"><div style="font-weight:700;font-size:13.5px">${p.name}</div><div style="font-size:11.5px;color:var(--muted)">${p.role}</div></div>
-    <div style="font-family:Cairo;font-weight:900;font-size:16px;color:var(--navy)">${p.equity}٪</div>
-    <div style="width:110px;text-align:left;font-size:12px;color:var(--ink-2)">${p.invested?money(p.invested)+' ج':'—'}</div></div>`).join('');
-  v.innerHTML=`
-    ${Pst==='error'?`<div class="policy" style="border-inline-start-color:var(--conflict);background:var(--conflict-bg);color:var(--conflict)">${svg('scale','ic')}<div>تعذّر جلب الشركاء من الخادم — لا تُعرض أي بيانات بديلة. <b style="cursor:pointer;text-decoration:underline" onclick="EP.reload('partners',()=>viewPartners(document.getElementById('view')))">إعادة المحاولة</b></div></div>`:''}
-    ${Pst==='loading'?`<div class="policy">${svg('hands','ic')}<div>…جارٍ تحميل الشركاء من الخادم</div></div>`:''}
-    <div class="kpis">
-      <div class="kpi k-1"><div class="top"><span class="ic">${svg('hands')}</span>الشركاء</div><b>${money(realPartners.length)}</b><div class="sub">+ احتياطي</div></div>
-      <div class="kpi k-3"><div class="top"><span class="ic">${svg('wallet')}</span>إجمالي الاستثمار</div><b>${money(totalInv)} <small style="font-size:13px">ج</small></b><div class="sub">رأس المال</div></div>
-      <div class="kpi k-2"><div class="top"><span class="ic">${svg('trend')}</span>أكبر حصة</div><b>${maxEq}٪</b><div class="sub">المؤسس الرئيس</div></div>
-      <div class="kpi k-4"><div class="top"><span class="ic">${svg('brief')}</span>غير موزّع</div><b>${reserveEq}٪</b><div class="sub">احتياطي</div></div>
-    </div>
-    <section class="panel"><div class="ph"><h3>توزيع الحصص</h3><button class="btn btn-human" id="pAdd" style="flex:none;min-width:auto;padding:6px 13px;font-size:12px;margin-inline-start:auto">+ إضافة شريك</button></div><div style="padding:20px">
-      ${PRT.length?`<div style="display:flex;height:28px;border-radius:8px;overflow:hidden;box-shadow:inset 0 0 0 1px var(--line)">${bar}</div>
-      <div style="margin-top:10px">${rows}</div>`:'<div style="padding:30px;text-align:center;color:var(--muted)">لا شركاء مسجّلون بعد.</div>'}
-    </div></section>`;
-  document.getElementById('pAdd').onclick=function(){partnerModal(null);};
-  v.querySelectorAll('.prow').forEach(r=>{r.onmouseenter=()=>r.style.background='var(--surface-2)';r.onmouseleave=()=>r.style.background='';r.onclick=()=>partnerModal(+r.dataset.p);});
-}
+// ⛔ `viewPartners` حُذفت: شاشة «الشركاء» ابتُلعت في «الاستثمار والشركاء» — جدول الحصص
+// وشريطها صارا تبويب «الملّاك ورأس المال» هناك (وREDIRECTS.partners بيهبط عليه). ما بقي
+// هنا هو `partnerModal` وحدها: نافذةُ الإضافة/التعديل/الحذف المربوطة بالخادم فعلًا
+// (EP.createPartner · updatePartner · deletePartner) ويناديها الجدول المدموج.
+// نافذة الشريك — تُنادى من جدول «الملّاك ورأس المال» داخل «الاستثمار والشركاء»، وكل
+// نجاحٍ يعيد رسم الشاشة المدموجة (لا شاشةً محذوفة).
 function partnerModal(idx){
   var live=!!(window.EP&&EP.data.partners);
   var edit=(idx!=null&&idx>=0)?ptPartners()[idx]:null,e=edit||{};
@@ -3473,15 +3938,15 @@ function partnerModal(idx){
     var data={name:nm||'شريك',role:s.querySelector('#p_r').value.trim()||'شريك',equity:+s.querySelector('#p_eq').value||0,invested:+s.querySelector('#p_inv').value||0,c:e.c||colors[ptPartners().length%colors.length]};
     if(live){
       var body={name:data.name,role:data.role,equity_percent:data.equity,capital_egp:data.invested};
-      if(edit&&edit.pid){EP.updatePartner(edit.pid,body,function(){closeModal();viewPartners(document.getElementById('view'));});}
-      else{EP.createPartner(body,function(){closeModal();viewPartners(document.getElementById('view'));});}
+      if(edit&&edit.pid){EP.updatePartner(edit.pid,body,function(){closeModal();viewInvestment(document.getElementById('view'));});}
+      else{EP.createPartner(body,function(){closeModal();viewInvestment(document.getElementById('view'));});}
       return;
     }
     if(edit){Object.assign(edit,data);}else{PARTNERS.push(data);var u=USERS.find(function(x){return x.name===nm;});if(u)u.role='staff';}
-    closeModal();viewPartners(document.getElementById('view'));notify(edit?'حُدّث الشريك':'أُضيف الشريك «'+data.name+'»');
+    closeModal();viewInvestment(document.getElementById('view'));notify(edit?'حُدّث الشريك':'أُضيف الشريك «'+data.name+'»');
   };
   var pd=s.querySelector('#p_d');if(pd)pd.onclick=function(){
-    if(live&&edit&&edit.pid){EP.deletePartner(edit.pid,function(){closeModal();viewPartners(document.getElementById('view'));});return;}
+    if(live&&edit&&edit.pid){EP.deletePartner(edit.pid,function(){closeModal();viewInvestment(document.getElementById('view'));});return;}
     closeModal();toast('تعذّر الحذف — لا يوجد اتصال حيّ بالخادم');};
 }
 
@@ -3634,8 +4099,13 @@ function fndAssetsArr(){return (window.EP&&EP.data.foundation)?EP.data.foundatio
 function fndToolsArr(){return (window.EP&&EP.data.foundation)?EP.data.foundation.tools:FND_TOOLS;}
 function fndCapitalArr(){return (window.EP&&EP.data.foundation)?EP.data.foundation.capital:FND_CAPITAL;}
 function fndStatusArr(){return FND_STATUS;} // حالة الكيان القانوني: لا مصدر حقيقي — فارغة
+// ⛔ الابن يكتب في عقدته وحدها (`v` = `#fndHost`): «التأسيس والأصول» صار تبويبًا داخل
+// «الأهداف والتأسيس»، والشريط يملكه الأب. أي إعادة رسمٍ تخصّ الشاشة كلها (خطأ الجلب،
+// نوافذ الإضافة) تنادي `viewTargets` — الكتابة على `#view` من هنا كانت هتمسح الشريط.
 function viewFoundation(v){
-  if(window.EP){EP.ensure('foundation',()=>viewFoundation(v));}
+  // ⛔ «المؤسسون» يُشتقّ من الشركاء (tmFounders): بلا طلبهم كان المربّع يطبع **صفرًا**
+  // بجوار رأس مالٍ صحيحٍ من نفس الشركاء على نفس الشاشة — رقمٌ يكذّب جاره.
+  if(window.EP){EP.ensure('foundation',()=>viewFoundation(v));EP.ensure('partners',()=>viewFoundation(v));}
   var Fst=(window.EP&&EP.state.foundation)||'idle';
   var live=!!(window.EP&&EP.data.foundation);
   var K=live?EP.data.foundation.kpi:null;
@@ -3650,18 +4120,18 @@ function viewFoundation(v){
   var assetsCcy=(K&&(K.assetsVal||0)>0)?' ج':'';
   var founders=(window.EP&&EP.data.foundation&&typeof tmFounders==='function')?tmFounders():0;
   v.innerHTML=`
-    ${Fst==='error'&&!live?`<div class="policy" style="border-inline-start-color:var(--conflict);background:var(--conflict-bg);color:var(--conflict)">${svg('scale','ic')}<div>تعذّر جلب بيانات التأسيس من الخادم — لا تُعرض أي بيانات بديلة. <b style="cursor:pointer;text-decoration:underline" onclick="EP.reload('foundation',()=>viewFoundation(document.getElementById('view')))">إعادة المحاولة</b></div></div>`:''}
+    ${Fst==='error'&&!live?`<div class="policy" style="border-inline-start-color:var(--conflict);background:var(--conflict-bg);color:var(--conflict)">${svg('scale','ic')}<div>تعذّر جلب بيانات التأسيس من الخادم — لا تُعرض أي بيانات بديلة. <b style="cursor:pointer;text-decoration:underline" onclick="EP.reload('foundation',()=>viewTargets(document.getElementById('view')))">إعادة المحاولة</b></div></div>`:''}
     <div class="kpis">
       <div class="kpi k-3"><div class="top"><span class="ic">${svg('wallet')}</span>رأس المال</div><b>${Fst==='loading'&&!live?'…':money(cap)} <small style="font-size:13px">ج</small></b><div class="sub">${live?'حيّ — ضخّ رأس المال':'مستثمَر + تشغيلي'}</div></div>
       <div class="kpi k-4"><div class="top"><span class="ic">${svg('trend')}</span>مصروف شهري ثابت</div><b>${monthlyCcy?money(monthly):'$'+money(monthly)}${monthlyCcy?'<small style="font-size:13px">'+monthlyCcy+'</small>':''}</b><div class="sub">${live?'إيجار/اشتراكات شهرية':T.length+' اشتراكات'}</div></div>
       <div class="kpi k-1"><div class="top"><span class="ic">${svg('build')}</span>قيمة الأصول</div><b>${assetsCcy?money(assetsVal):'$'+money(assetsVal)}${assetsCcy?'<small style="font-size:13px">'+assetsCcy+'</small>':''}</b><div class="sub">${A.length} بنود معدات</div></div>
       <div class="kpi k-2"><div class="top"><span class="ic">${svg('hands')}</span>المؤسسون</div><b>${money(founders)}</b><div class="sub">شركاء</div></div>
     </div>
-    <div class="tabbar" id="fTabs">
-      <div class="tab${foundationTab==='assets'?' on':''}" data-t="assets">الأصول والمعدات (${A.length})</div>
-      <div class="tab${foundationTab==='tools'?' on':''}" data-t="tools">الأدوات والاشتراكات (${T.length})</div>
-      <div class="tab${foundationTab==='capital'?' on':''}" data-t="capital">رأس المال (${C.length})</div>
-      <div class="tab${foundationTab==='status'?' on':''}" data-t="status">حالة الكيان (${S.length})</div>
+    <div class="tabbar sub" id="fTabs">
+      <div class="tab${foundationTab==='assets'?' on':''}" data-t="assets">الأصول والمعدات (${money(A.length)})</div>
+      <div class="tab${foundationTab==='tools'?' on':''}" data-t="tools">الأدوات والاشتراكات (${money(T.length)})</div>
+      <div class="tab${foundationTab==='capital'?' on':''}" data-t="capital">رأس المال (${money(C.length)})</div>
+      <div class="tab${foundationTab==='status'?' on':''}" data-t="status">حالة الكيان (${money(S.length)})</div>
     </div>
     <section class="panel"><div class="ph"><h3 id="fH"></h3><span class="n" id="fN"></span>${live?'<span class="hint" id="fLiveHint" style="margin-inline-start:auto"></span>':'<button class="btn btn-human" id="fAdd" style="flex:none;min-width:auto;padding:6px 13px;font-size:12px;margin-inline-start:auto">+ <span id="fAddLbl">معدة</span></button>'}</div><div id="fRows"></div></section>`;
   v.querySelectorAll('#fTabs .tab').forEach(t=>t.onclick=()=>{foundationTab=t.dataset.t;viewFoundation(v);});
@@ -3683,19 +4153,19 @@ function fndEmpty(txt){return '<div class="empty" style="padding:34px;text-align
 // live=true => صفوف قراءة فقط (مرآة من الخادم، بلا تعديل/حذف يدوي). status دائمًا تصميمي قابل للتعديل.
 function renderFoundation(live){
   var el=document.getElementById('fRows'),h=document.getElementById('fH'),n=document.getElementById('fN');el.innerHTML='';
-  if(foundationTab==='assets'){var A=fndAssetsArr();var liveA=!!(window.EP&&EP.data.foundation&&EP.data.foundation.assets.length);h.textContent='الأصول والمعدات';n.textContent=A.length;
+  if(foundationTab==='assets'){var A=fndAssetsArr();var liveA=!!(window.EP&&EP.data.foundation&&EP.data.foundation.assets.length);h.textContent='الأصول والمعدات';n.textContent=money(A.length);
     if(!A.length){el.innerHTML=fndEmpty('لا أصول مسجّلة بعد');return;}
     A.forEach(function(a,i){var ccy=liveA?'':'$';el.insertAdjacentHTML('beforeend','<div class="row esc-row'+(liveA?'':' fnd')+'" data-i="'+i+'" style="grid-template-columns:1.7fr 1fr 1fr 110px"><div class="c c1"><div class="src-ic" style="background:var(--surface-2);color:var(--navy)">'+svg('build')+'</div><div><div class="parties">'+a.name+'</div><div class="from">'+(a.note||'—')+'</div></div></div><div class="c"><div class="from">العدد <b style="color:var(--ink)">'+(a.qty||1)+'</b></div></div><div class="c"><div class="amt">'+ccy+money((a.value||0)*(a.qty||1))+(liveA?' <small>ج</small>':'')+'</div></div><div class="c"><span class="status s-auto"><span class="d"></span>مسجّل</span></div></div>');});
     if(!liveA)wireFnd(function(i){fndAssetModal(FND_ASSETS[i],i);});
-  } else if(foundationTab==='tools'){var T=fndToolsArr();var liveT=!!(window.EP&&EP.data.foundation&&EP.data.foundation.tools.length);h.textContent='الأدوات والاشتراكات';n.textContent=T.length;
+  } else if(foundationTab==='tools'){var T=fndToolsArr();var liveT=!!(window.EP&&EP.data.foundation&&EP.data.foundation.tools.length);h.textContent='الأدوات والاشتراكات';n.textContent=money(T.length);
     if(!T.length){el.innerHTML=fndEmpty('لا أدوات/اشتراكات مسجّلة بعد');return;}
     T.forEach(function(a,i){var ccy=liveT?'':'$';el.insertAdjacentHTML('beforeend','<div class="row esc-row'+(liveT?'':' fnd')+'" data-i="'+i+'" style="grid-template-columns:2fr 1fr 110px"><div class="c c1"><div class="src-ic" style="background:var(--ai-bg);color:var(--ai)">'+svg('gear')+'</div><div><div class="parties">'+a.name+'</div><div class="from">'+(a.cycle||'شهري')+'</div></div></div><div class="c"><div class="amt">'+ccy+money(a.cost||0)+(liveT?' <small>ج</small>':'')+'</div></div><div class="c"><span class="status s-auto"><span class="d"></span>نشط</span></div></div>');});
     if(!liveT)wireFnd(function(i){fndToolModal(FND_TOOLS[i],i);});
-  } else if(foundationTab==='capital'){var C=fndCapitalArr();var liveC=!!(window.EP&&EP.data.foundation&&EP.data.foundation.capital.length);h.textContent='رأس المال والتمويل';n.textContent=C.length;
+  } else if(foundationTab==='capital'){var C=fndCapitalArr();var liveC=!!(window.EP&&EP.data.foundation&&EP.data.foundation.capital.length);h.textContent='رأس المال والتمويل';n.textContent=money(C.length);
     if(!C.length){el.innerHTML=fndEmpty('لا بنود رأس مال مسجّلة بعد');return;}
     C.forEach(function(a,i){el.insertAdjacentHTML('beforeend','<div class="row esc-row'+(liveC?'':' fnd')+'" data-i="'+i+'" style="grid-template-columns:2fr 1fr 110px"><div class="c c1"><div class="src-ic" style="background:var(--agree-bg);color:var(--agree)">'+svg('wallet')+'</div><div><div class="parties">'+a.name+'</div><div class="from">'+(a.note||'—')+'</div></div></div><div class="c"><div class="amt">'+money(a.amount||0)+' <small>ج</small></div></div><div class="c"><span class="status s-auto"><span class="d"></span>'+(liveC?'مساهمة شريك':'مدفوع')+'</span></div></div>');});
     if(!liveC)wireFnd(function(i){fndCapitalModal(FND_CAPITAL[i],i);});
-  } else {h.textContent='حالة الكيان القانوني';n.textContent=FND_STATUS.length;
+  } else {h.textContent='حالة الكيان القانوني';n.textContent=money(FND_STATUS.length);
     if(!FND_STATUS.length){el.innerHTML=fndEmpty('لا بنود حالة قانونية مسجّلة بعد');return;}
     FND_STATUS.forEach(function(a,i){el.insertAdjacentHTML('beforeend','<div class="row esc-row fnd" data-i="'+i+'" style="grid-template-columns:2fr 130px"><div class="c c1"><div class="src-ic" style="background:var(--memory-bg);color:var(--memory)">'+svg('shield')+'</div><div><div class="parties">'+a.name+'</div></div></div><div class="c"><span class="status s-auto"><span class="d"></span>'+a.state+'</span></div></div>');});
     wireFnd(function(i){fndStatusModal(FND_STATUS[i],i);});
@@ -3710,28 +4180,28 @@ function fndAssetModal(edit,idx){
     '<div class="fld"><label>صورة المعدة / الإيصال</label><div style="border:1.5px dashed var(--line);border-radius:10px;padding:14px;text-align:center;color:var(--muted);font-size:12.5px;cursor:pointer">'+svg('inbox','ic')+' ارفع صورة المعدة أو إيصال الشراء</div></div>'+
     '<div class="acts" style="margin-top:12px"><button class="btn btn-primary" id="f_s">'+svg('check')+(edit?'حفظ':'أضف')+'</button>'+(edit?'<button class="btn btn-warn" id="f_d">حذف</button>':'')+'<button class="btn btn-ghost" id="f_x">إلغاء</button></div>');
   s.querySelector('#f_x').onclick=closeModal;
-  s.querySelector('#f_s').onclick=function(){var d={name:s.querySelector('#f_n').value.trim()||'أصل',value:+s.querySelector('#f_v').value||0,qty:+s.querySelector('#f_q').value||1,note:s.querySelector('#f_no').value.trim()||'—'};if(edit){Object.assign(edit,d);}else{FND_ASSETS.push(d);}closeModal();viewFoundation(document.getElementById('view'));notify(edit?'حُدّث «'+d.name+'»':'أُضيفت معدة «'+d.name+'»');};
+  s.querySelector('#f_s').onclick=function(){var d={name:s.querySelector('#f_n').value.trim()||'أصل',value:+s.querySelector('#f_v').value||0,qty:+s.querySelector('#f_q').value||1,note:s.querySelector('#f_no').value.trim()||'—'};if(edit){Object.assign(edit,d);}else{FND_ASSETS.push(d);}closeModal();viewTargets(document.getElementById('view'));notify(edit?'حُدّث «'+d.name+'»':'أُضيفت معدة «'+d.name+'»');};
   var fd=s.querySelector('#f_d');if(fd)fd.onclick=function(){closeModal();toast('تعذّر الحذف — لا يوجد اتصال حيّ بالخادم');};
 }
 function fndToolModal(edit,idx){
   var e=edit||{};
   var s=openModal(edit?'تعديل أداة':'إضافة أداة/اشتراك','<div class="fld"><label>الاسم</label><input id="t_n" value="'+(e.name||'')+'"></div><div class="row2"><div class="fld"><label>التكلفة ($)</label><input id="t_c" type="number" value="'+(e.cost||'')+'"></div><div class="fld"><label>الدورة</label><input id="t_cy" value="'+(e.cycle||'شهري')+'"></div></div><div class="acts" style="margin-top:12px"><button class="btn btn-primary" id="t_s">'+svg('check')+(edit?'حفظ':'أضف')+'</button>'+(edit?'<button class="btn btn-warn" id="t_d">حذف</button>':'')+'<button class="btn btn-ghost" id="t_x">إلغاء</button></div>');
   s.querySelector('#t_x').onclick=closeModal;
-  s.querySelector('#t_s').onclick=function(){var d={name:s.querySelector('#t_n').value.trim()||'أداة',cost:+s.querySelector('#t_c').value||0,cycle:s.querySelector('#t_cy').value.trim()||'شهري'};if(edit){Object.assign(edit,d);}else{FND_TOOLS.push(d);}closeModal();viewFoundation(document.getElementById('view'));notify(edit?'حُدّثت الأداة':'أُضيفت «'+d.name+'»');};
+  s.querySelector('#t_s').onclick=function(){var d={name:s.querySelector('#t_n').value.trim()||'أداة',cost:+s.querySelector('#t_c').value||0,cycle:s.querySelector('#t_cy').value.trim()||'شهري'};if(edit){Object.assign(edit,d);}else{FND_TOOLS.push(d);}closeModal();viewTargets(document.getElementById('view'));notify(edit?'حُدّثت الأداة':'أُضيفت «'+d.name+'»');};
   var td=s.querySelector('#t_d');if(td)td.onclick=function(){closeModal();toast('تعذّر الحذف — لا يوجد اتصال حيّ بالخادم');};
 }
 function fndCapitalModal(edit,idx){
   var e=edit||{};
   var s=openModal(edit?'تعديل بند':'بند رأس مال','<div class="fld"><label>البند</label><input id="cp_n" value="'+(e.name||'')+'"></div><div class="row2"><div class="fld"><label>المبلغ (ج)</label><input id="cp_a" type="number" value="'+(e.amount||'')+'"></div><div class="fld"><label>ملاحظة</label><input id="cp_no" value="'+(e.note||'')+'"></div></div><div class="acts" style="margin-top:12px"><button class="btn btn-primary" id="cp_s">'+svg('check')+(edit?'حفظ':'أضف')+'</button>'+(edit?'<button class="btn btn-warn" id="cp_d">حذف</button>':'')+'<button class="btn btn-ghost" id="cp_x">إلغاء</button></div>');
   s.querySelector('#cp_x').onclick=closeModal;
-  s.querySelector('#cp_s').onclick=function(){var d={name:s.querySelector('#cp_n').value.trim()||'بند',amount:+s.querySelector('#cp_a').value||0,note:s.querySelector('#cp_no').value.trim()||'—'};if(edit){Object.assign(edit,d);}else{FND_CAPITAL.push(d);}closeModal();viewFoundation(document.getElementById('view'));notify(edit?'حُدّث البند':'أُضيف «'+d.name+'»');};
+  s.querySelector('#cp_s').onclick=function(){var d={name:s.querySelector('#cp_n').value.trim()||'بند',amount:+s.querySelector('#cp_a').value||0,note:s.querySelector('#cp_no').value.trim()||'—'};if(edit){Object.assign(edit,d);}else{FND_CAPITAL.push(d);}closeModal();viewTargets(document.getElementById('view'));notify(edit?'حُدّث البند':'أُضيف «'+d.name+'»');};
   var cd=s.querySelector('#cp_d');if(cd)cd.onclick=function(){closeModal();toast('تعذّر الحذف — لا يوجد اتصال حيّ بالخادم');};
 }
 function fndStatusModal(edit,idx){
   var e=edit||{};
   var s=openModal(edit?'تعديل بند':'بند حالة','<div class="fld"><label>البند</label><input id="st_n" value="'+(e.name||'')+'"></div><div class="fld"><label>الحالة</label><input id="st_st" value="'+(e.state||'جارٍ')+'"></div><div class="acts" style="margin-top:12px"><button class="btn btn-primary" id="st_save">'+svg('check')+(edit?'حفظ':'أضف')+'</button>'+(edit?'<button class="btn btn-warn" id="st_d">حذف</button>':'')+'<button class="btn btn-ghost" id="st_x">إلغاء</button></div>');
   s.querySelector('#st_x').onclick=closeModal;
-  s.querySelector('#st_save').onclick=function(){var d={name:s.querySelector('#st_n').value.trim()||'بند',state:s.querySelector('#st_st').value.trim()||'جارٍ'};if(edit){Object.assign(edit,d);}else{FND_STATUS.push(d);}closeModal();viewFoundation(document.getElementById('view'));notify(edit?'حُدّث البند':'أُضيف «'+d.name+'»');};
+  s.querySelector('#st_save').onclick=function(){var d={name:s.querySelector('#st_n').value.trim()||'بند',state:s.querySelector('#st_st').value.trim()||'جارٍ'};if(edit){Object.assign(edit,d);}else{FND_STATUS.push(d);}closeModal();viewTargets(document.getElementById('view'));notify(edit?'حُدّث البند':'أُضيف «'+d.name+'»');};
   var sd=s.querySelector('#st_d');if(sd)sd.onclick=function(){closeModal();toast('تعذّر الحذف — لا يوجد اتصال حيّ بالخادم');};
 }
 
@@ -3746,7 +4216,30 @@ const GSTAT={on:{t:'على المسار',cls:'s-auto'},behind:{t:'متأخّر',
 // مصادر الأهداف الحيّة (مع سقوط آمن للبيانات التصميمية لو الخادم غير متاح أو لا توقّعات).
 function tgBars(){return (window.EP&&EP.data.targets&&EP.data.targets.bars.length)?EP.data.targets.bars:TARGETS;}
 function tgGoals(){return (window.EP&&EP.data.targets&&EP.data.targets.goals.length)?EP.data.targets.goals:GOALS;}
+// ⭐ «الأهداف والتأسيس» — الدمج المعتمد (§٤): مرحلة التأسيس + الأهداف والتوقّعات ⇒ شاشة
+// **مراجعةٍ شهرية** واحدة بتبويبين، لأن الاتنين نفس السؤال في نفس الاجتماع: «رحنا فين من
+// اللي خطّطناه، وبكام؟». التأسيس (رأس مال · أصول · اشتراكات · حالة الكيان) هو الطرف
+// الثابت من المعادلة، والأهداف والتوقّعات هو الطرف المتحرّك — وكانا شاشتين لا تلتقيان.
+// ⛔ الشريط يملكه الأب والابن يملك عقدته وحدها (`#fndHost`): نمط «الباقات/الدليل» المثبَت
+// — لو رسم الأب الشريط ثم استيقظ EP.ensure داخل الابن فأعاد كتابة `v.innerHTML`، لَمَحا
+// الشريط ولَما عاش إطارًا واحدًا (فخّ «مكتوبٌ صحيحًا وبلا طريقٍ للشاشة»).
+// ⛔ `typeof tgTab` لا `tgTab`: طقم XSS يرفع `viewTargets` **وحدها** من الملف ويشغّلها بلا
+// متغيّرات الحالة، فقراءة متغيّرٍ غير مُعرَّف تُسقط الطقم بـReferenceError.
 function viewTargets(v){
+  // الشريط والوصلة **محلّيّان داخل الدالّة** عمدًا، لا دالّتين خارجيتين: الطقم يرفع
+  // `viewTargets` وحدها، وكل اسمٍ خارجيٍّ تناديه يُسقِطه. و`v.querySelectorAll` لا
+  // `document.querySelectorAll` للسبب نفسه (الـDOM الوهميّ في الطقم لا يحمل الثانية).
+  var _tab=(typeof tgTab==='undefined')?'goals':tgTab;
+  var _tb='<div class="tabbar" id="tgTabs"><div class="tab'+(_tab==='goals'?' on':'')+'" data-t="goals">الأهداف والتوقعات</div>'+
+          '<div class="tab'+(_tab==='foundation'?' on':'')+'" data-t="foundation">التأسيس والأصول</div></div>';
+  var _wire=function(){v.querySelectorAll('#tgTabs .tab').forEach(function(t){
+    t.onclick=function(){tgTab=t.dataset.t;selected=null;viewTargets(document.getElementById('view'));};});};
+  if(_tab==='foundation'){
+    v.innerHTML=_tb+'<div id="fndHost"></div>';
+    _wire();
+    viewFoundation(document.getElementById('fndHost'));
+    return;
+  }
   if(window.EP){EP.ensure('targets',()=>viewTargets(v));}
   const Tst=(window.EP&&EP.state.targets)||'idle';
   const liveBars=!!(window.EP&&EP.data.targets&&EP.data.targets.bars.length);
@@ -3759,13 +4252,17 @@ function viewTargets(v){
   // النسبة المحقّقة ماليًّا: من الخادم إن وُجدت، وإلا تُحتسب من البارات.
   const qPct=(window.EP&&EP.data.targets&&EP.data.targets.quarterPct!=null)?EP.data.targets.quarterPct:(sumT?Math.round(sumA/sumT*100):0);
   const bars=BARS.map((t,i)=>`<div class="tgbar" ${liveBars?'':`data-i="${i}"`} style="flex:1;display:flex;flex-direction:column;align-items:center;gap:6px${liveBars?'':';cursor:pointer'}" ${liveBars?'':'title="اضغط للتعديل"'}><div style="display:flex;gap:5px;align-items:flex-end;height:130px"><div style="width:18px;background:var(--agree);border-radius:5px 5px 0 0;height:${(t.actual||0)/mx*130}px" title="فعلي ${money(t.actual||0)}${liveBars?' ألف':''}"></div><div style="width:18px;background:var(--gold);border-radius:5px 5px 0 0;height:${(t.target||0)/mx*130}px" title="هدف ${money(t.target||0)}${liveBars?' ألف':''}"></div></div><div style="font-size:12px;font-weight:700;color:var(--ink-2)">${esc(t.m)}</div></div>`).join('');
+  // ⛔ الشريط **أوّل عقدةٍ في `#view` في كلا الفرعين**. كان في فرع «الأهداف» تحت شريط
+  // المربّعات وفي فرع «التأسيس» فوقه، فكان يقفز ١٣٥ بكسل رأسيًّا بين تبويبيه: الزرّ الذي
+  // ضغطه المؤسس يهرب من تحت مؤشّره في كل تبديل، والصفحة كلّها تنزاح.
   v.innerHTML=`
+    ${_tb}
     ${Tst==='error'&&!live?`<div class="policy" style="border-inline-start-color:var(--conflict);background:var(--conflict-bg);color:var(--conflict)">${svg('scale','ic')}<div>تعذّر جلب الأهداف والتوقّعات من الخادم — لا تُعرض أي بيانات بديلة. <b style="cursor:pointer;text-decoration:underline" onclick="EP.reload('targets',()=>viewTargets(document.getElementById('view')))">إعادة المحاولة</b></div></div>`:''}
     <div class="kpis">
-      <div class="kpi k-3"><div class="top"><span class="ic">${svg('trend')}</span>أهداف نشطة</div><b>${Tst==='loading'&&!live?'…':money(GLS.length-done)}</b><div class="sub">${done} مكتمل</div></div>
+      <div class="kpi k-3"><div class="top"><span class="ic">${svg('trend')}</span>أهداف نشطة</div><b>${Tst==='loading'&&!live?'…':money(GLS.length-done)}</b><div class="sub">${money(done)} مكتمل</div></div>
       <div class="kpi k-1"><div class="top"><span class="ic">${svg('check')}</span>على المسار</div><b>${money(onTrack)}</b><div class="sub">تسير حسب الخطة</div></div>
       <div class="kpi k-4"><div class="top"><span class="ic">${svg('clock')}</span>متأخّرة</div><b>${money(behind)}</b><div class="sub">تحتاج تدخّلًا</div></div>
-      <div class="kpi k-2"><div class="top"><span class="ic">${svg('wallet')}</span>المحقّق ماليًّا</div><b>${qPct}٪</b><div class="sub">${liveBars?'فعلي ÷ هدف التوقّعات':'من هدف الربع'}</div></div>
+      <div class="kpi k-2"><div class="top"><span class="ic">${svg('wallet')}</span>المحقّق ماليًّا</div><b>${money(qPct)}٪</b><div class="sub">${liveBars?'فعلي ÷ هدف التوقّعات':'من هدف الربع'}</div></div>
     </div>
     <section class="panel" style="margin-bottom:16px"><div class="ph"><h3>مستشار الأهداف الذكي</h3><span class="hint" style="margin-inline-start:auto">مبنيّ على أداء المنصة الحقيقي</span></div><div id="goalsAdvisor" style="padding:16px 18px"></div></section>
     <section class="panel" style="margin-bottom:16px"><div class="ph"><h3>أهداف الشركة ومتابعتها</h3><span class="n">${GLS.length}</span>${liveGoals?'<span class="hint" style="margin-inline-start:auto">مشتقّة من الأرقام الحيّة</span>':'<button class="btn btn-human" id="goalAdd" style="flex:none;min-width:auto;padding:6px 13px;font-size:12px;margin-inline-start:auto">+ هدف</button>'}</div><div id="goalRows"></div></section>
@@ -3776,6 +4273,7 @@ function viewTargets(v){
   if(!liveGoals){var ga=document.getElementById('goalAdd');if(ga)ga.onclick=function(){goalModal(null);};}
   renderGoals(liveGoals);
   renderGoalsAdvisor();
+  _wire();
 }
 // مستشار الأهداف بالـ AI: يحمّل GET /api/ai/goals-advisor (عبر EP loader) ويعرض
 // العنوان + رؤى + أهداف مقترحة. حالات تحميل/خطأ/فراغ مدعومة.
@@ -3901,8 +4399,10 @@ function viewSettings(v){
       </div></section>
       <section class="panel"><div class="ph"><h3>الأمان والسجل</h3></div><div style="padding:14px 18px;display:flex;flex-direction:column;gap:9px">
         <button class="btn btn-primary" style="width:100%" data-a="log">${svg('doc')}سجلّ العمليات (Audit Log)</button>
-        <button class="btn btn-ghost" style="width:100%;opacity:.7;cursor:default" data-a="2fa" title="غير مفعّل بعد">تفعيل المصادقة الثنائية <span class="badge-soon">قريبًا</span></button>
-        <button class="btn btn-ghost" style="width:100%;opacity:.7;cursor:default" data-a="backup" title="غير مفعّل بعد">نسخة احتياطية الآن <span class="badge-soon">قريبًا</span></button>
+        <!-- ⛔ (حُذف: زرّا «تفعيل المصادقة الثنائية» و«نسخة احتياطية الآن») — زرّان بلا فعل:
+             الضغطة الوحيدة الممكنة كانت toast «قريبًا». وعدٌ مرسومٌ في مكان القرار أسوأ من
+             غيابه: بيخلّي المؤسس فاكر إن المصادقة الثنائية والنسخ الاحتياطي «موجودان ومعطّلان»
+             وهما مش مكتوبين أصلًا. يرجعان يوم يوجد وراءهما مسارٌ حقيقي، لا قبله. -->
       </div></section>
     </div>
     <section class="panel" style="margin-top:16px"><div class="ph"><h3>الاستخدام</h3><span class="hint">أرقام حقيقية — آخر ٧ أيام</span></div>
@@ -3928,8 +4428,6 @@ function viewSettings(v){
       }
       toast('تم حفظ بيانات الشركة');return;}
     if(a==='log'){auditModal();return;}
-    // 2FA/النسخ الاحتياطي: غير مفعّلة — بلا نجاح وهمي.
-    if(a==='2fa'||a==='backup'){toast('قريبًا — غير مفعّلة بعد');return;}
   });
   var aa=document.getElementById('adminAdd');if(aa)aa.onclick=function(){addAdminModal(null);};
   renderDashUsers();
@@ -4592,6 +5090,8 @@ function viewInvites(v){
     waitlistPanel();
   wireInvites(v);
   drawInviteDetail();
+  // شارة «الدعوات» تُكتب من الصفوف التي رُسمت للتوّ — لا من نداءٍ ثانٍ يقدر يخالفها.
+  applyNavCounts();
 }
 
 /* طابور «دعوات بانتظار الموافقة» (الموجة ٤ ع٤/ح٥) — الأجيال والموافقة: دعوةٌ جيلها ≥
@@ -5418,63 +5918,12 @@ function viewViewer(v){
   v.innerHTML=`<div class="placeholder" style="margin-top:30px"><div class="pic" style="background:var(--surface-2);color:var(--muted)">${svg('clock').replace('width="20" height="20"','width="28" height="28"')}</div><h3>حسابك بانتظار التفعيل</h3><p>تم تسجيلك بنجاح. يراجع الأدمن طلبك ويحدّد دورك (مدرّب / مستثمر / موظف) لتظهر لوحتك المناسبة.</p>${ident}<span class="soon">بانتظار اعتماد الإدارة</span></div>`;
 }
 
-/* ===== CLUBS ===== */
-var clubTab='proposals';
-// النوادي: موديول «قريبًا» بلا واجهة خلفية صالحة — لا بيانات تصميمية.
-const CLUB_PROPOSALS=[];
-const CLUB_JOINS=[];
-const CLUBS=[];
-function viewClubs(v){
-  v.innerHTML=`
-    <div class="kpis">
-      <div class="kpi k-2"><div class="top"><span class="ic">${svg('cap')}</span>اقتراحات نوادٍ</div><b>${money(CLUB_PROPOSALS.length)}</b><div class="sub">بانتظار الاعتماد</div></div>
-      <div class="kpi k-4"><div class="top"><span class="ic">${svg('users')}</span>طلبات انضمام</div><b>${money(CLUB_JOINS.length)}</b><div class="sub">بانتظار قرارك</div></div>
-      <div class="kpi k-3"><div class="top"><span class="ic">${svg('check')}</span>نوادٍ نشطة</div><b>${money(CLUBS.length)}</b><div class="sub">معتمدة</div></div>
-      <div class="kpi k-1"><div class="top"><span class="ic">${svg('grid')}</span>إجمالي الأعضاء</div><b>${money(CLUBS.reduce(function(s,c){return s+c.members;},0))}</b><div class="sub">عبر النوادي</div></div>
-    </div>
-    <div class="tabbar" id="clTabs">
-      <div class="tab${clubTab==='proposals'?' on':''}" data-t="proposals">الاقتراحات (${CLUB_PROPOSALS.length})</div>
-      <div class="tab${clubTab==='joins'?' on':''}" data-t="joins">طلبات الانضمام (${CLUB_JOINS.length})</div>
-      <div class="tab${clubTab==='active'?' on':''}" data-t="active">النوادي النشطة (${CLUBS.length})</div>
-    </div>
-    <div class="inboxwrap"><section class="panel"><div class="ph"><h3 id="clH"></h3><span class="n" id="clN"></span><button class="btn btn-human" id="clAdd" style="flex:none;min-width:auto;padding:6px 13px;font-size:12px;margin-inline-start:auto">+ نادٍ</button></div><div id="clRows"></div></section><aside class="drawer" id="drawer"></aside></div>`;
-  v.querySelectorAll('#clTabs .tab').forEach(t=>t.onclick=()=>{clubTab=t.dataset.t;selected=null;viewClubs(v);});
-  document.getElementById('clAdd').onclick=function(){clubModal(null);};
-  renderClubs();
-}
-function renderClubs(){
-  var el=document.getElementById('clRows'),h=document.getElementById('clH'),n=document.getElementById('clN');el.innerHTML='';
-  if(clubTab==='proposals'){h.textContent='اقتراحات النوادي';n.textContent=CLUB_PROPOSALS.length;
-    CLUB_PROPOSALS.forEach(function(p,i){el.insertAdjacentHTML('beforeend','<div class="row esc-row" data-p="'+i+'" style="grid-template-columns:1.8fr 1fr 130px"><div class="c c1"><div class="src-ic" style="background:var(--ai-bg);color:var(--ai)">'+svg('cap')+'</div><div><div class="parties">'+p.name+'</div><div class="from">'+p.by+' · '+p.note+'</div></div></div><div class="c"><div class="from"><b style="color:var(--ink)">'+p.members+'</b> مهتم</div></div><div class="c"><span class="status s-wait"><span class="d"></span>بانتظار</span></div></div>');});
-    el.querySelectorAll('.row').forEach(function(r){r.onclick=function(){selected='p'+r.dataset.p;renderClubs();drawClub();};});
-  } else if(clubTab==='joins'){h.textContent='طلبات الانضمام';n.textContent=CLUB_JOINS.length;
-    CLUB_JOINS.forEach(function(j,i){el.insertAdjacentHTML('beforeend','<div class="row esc-row" data-j="'+i+'" style="grid-template-columns:1.8fr 1fr 130px"><div class="c c1"><div class="src-ic" style="background:var(--surface-2);color:var(--navy)">'+svg('users')+'</div><div><div class="parties">'+j.user+'</div><div class="from">'+j.club+' · '+j.when+'</div></div></div><div class="c"><div class="from">طلب انضمام</div></div><div class="c"><span class="status s-wait"><span class="d"></span>بانتظار</span></div></div>');});
-    el.querySelectorAll('.row').forEach(function(r){r.onclick=function(){selected='j'+r.dataset.j;renderClubs();drawClub();};});
-  } else {h.textContent='النوادي النشطة';n.textContent=CLUBS.length;
-    CLUBS.forEach(function(c,i){el.insertAdjacentHTML('beforeend','<div class="row esc-row" data-c="'+i+'" style="grid-template-columns:1.8fr 1fr 1fr 110px"><div class="c c1"><div class="src-ic" style="background:var(--agree-bg);color:var(--agree)">'+svg('cap')+'</div><div><div class="parties">'+c.name+'</div></div></div><div class="c"><div class="from"><b style="color:var(--ink)">'+c.members+'</b> عضو</div></div><div class="c"><div class="from">'+c.templates+' قوالب</div></div><div class="c"><span class="status s-auto"><span class="d"></span>نشط</span></div></div>');});
-    el.querySelectorAll('.row').forEach(function(r){r.onclick=function(){selected='c'+r.dataset.c;renderClubs();drawClub();};});
-  }
-  drawClub();
-}
-function drawClub(){
-  var el=document.getElementById('drawer');if(!el)return;
-  if(selected===null){el.innerHTML='<div class="empty">'+svg('cap','ic')+'<p>اختر اقتراحًا أو طلبًا أو ناديًا للإجراء.</p></div>';return;}
-  var t=selected[0],i=+selected.slice(1);
-  if(t==='p'){var p=CLUB_PROPOSALS[i];el.innerHTML='<div class="dh"><div class="k">اقتراح نادٍ · من المنصة</div><h3>'+p.name+'</h3></div><div class="db"><div class="route"><span class="step">المنصة · عضو/خبير</span><span class="arrow">←</span><span class="step" style="color:var(--ai);font-weight:800">النوادي</span></div><div class="field"><div class="lab">المقترِح</div><div class="val">'+p.by+'</div></div><div class="field"><div class="lab">الوصف</div><div class="val">'+p.note+'</div></div><div class="field"><div class="lab">المهتمون</div><div class="val">'+p.members+'</div></div><div class="acts"><button class="btn btn-primary" data-a="approve">'+svg('check')+'اعتمد النادي</button><button class="btn btn-warn" data-a="reject">رفض</button></div></div>';
-    el.querySelectorAll('[data-a]').forEach(function(b){b.onclick=function(){if(b.dataset.a==='approve'){CLUBS.push({name:p.name,members:p.members,templates:0,status:'active'});CLUB_PROPOSALS.splice(i,1);notify('اعتُمد «'+p.name+'» — نادٍ نشط الآن');}else{CLUB_PROPOSALS.splice(i,1);notify('رُفض اقتراح «'+p.name+'»');}selected=null;viewClubs(document.getElementById('view'));};});
-  } else if(t==='j'){var j=CLUB_JOINS[i];el.innerHTML='<div class="dh"><div class="k">طلب انضمام · من المنصة</div><h3>'+j.user+'</h3></div><div class="db"><div class="field"><div class="lab">النادي</div><div class="val">'+j.club+'</div></div><div class="field"><div class="lab">التاريخ</div><div class="val">'+j.when+'</div></div><div class="acts"><button class="btn btn-primary" data-a="ok">'+svg('check')+'قبول العضوية</button><button class="btn btn-warn" data-a="no">رفض</button></div></div>';
-    el.querySelectorAll('[data-a]').forEach(function(b){b.onclick=function(){var ok=b.dataset.a==='ok';CLUB_JOINS.splice(i,1);notify(ok?'قُبل '+j.user+' في '+j.club:'رُفض طلب '+j.user);selected=null;viewClubs(document.getElementById('view'));};});
-  } else {var c=CLUBS[i];el.innerHTML='<div class="dh"><div class="k">نادٍ نشط</div><h3>'+c.name+'</h3></div><div class="db"><div class="split"><div class="s"><div class="l">الأعضاء</div><div class="v">'+c.members+'</div></div><div class="s net"><div class="l">القوالب</div><div class="v">'+c.templates+'</div></div></div><div class="acts" style="margin-top:14px"><button class="btn btn-ghost" data-a="edit">تعديل</button><button class="btn btn-human" data-a="tpl">+ قالب للنادي</button><button class="btn btn-warn" data-a="del">حذف</button></div></div>';
-    el.querySelectorAll('[data-a]').forEach(function(b){b.onclick=function(){var a=b.dataset.a;if(a==='edit'){clubModal(c,i);}else if(a==='tpl'){c.templates++;renderClubs();drawClub();notify('أُضيف قالب لـ«'+c.name+'»');}else if(a==='del'){CLUBS.splice(i,1);selected=null;viewClubs(document.getElementById('view'));notify('حُذف «'+c.name+'»');}};});
-  }
-}
-function clubModal(c){
-  var edit=c||null,e=c||{};
-  var s=openModal(edit?'تعديل نادٍ':'إضافة نادٍ','<div class="fld"><label>اسم النادي</label><input id="cl_n" value="'+(e.name||'')+'"></div><div class="row2"><div class="fld"><label>الأعضاء</label><input id="cl_m" type="number" value="'+(e.members||0)+'"></div><div class="fld"><label>القوالب</label><input id="cl_t" type="number" value="'+(e.templates||0)+'"></div></div><div class="acts" style="margin-top:14px"><button class="btn btn-primary" id="cl_s">'+svg('check')+(edit?'حفظ':'أضف')+'</button><button class="btn btn-ghost" id="cl_x">إلغاء</button></div>');
-  s.querySelector('#cl_x').onclick=closeModal;
-  s.querySelector('#cl_s').onclick=function(){var d={name:s.querySelector('#cl_n').value.trim()||'نادٍ',members:+s.querySelector('#cl_m').value||0,templates:+s.querySelector('#cl_t').value||0,status:'active'};if(edit){Object.assign(c,d);}else{CLUBS.push(d);}closeModal();clubTab='active';viewClubs(document.getElementById('view'));notify(edit?'حُدّث النادي':'أُضيف «'+d.name+'»');};
-}
-
+/* ===== (حُذف: النوادي) =====
+   ⛔ كود بلا أي مدخلٍ من الواجهة: الموديول خرج من القائمة من زمان، ومفيش زرّ ولا رابط
+   ولا إشعار بيوصله، ومفيش مسار خادمٍ واحد وراه (`/api/clubs` غير موجود أصلًا). وأسوأ من
+   كونه ميتًا: كان **مساحة قرارٍ كاذبة** — «اعتمد النادي» و«قبول العضوية» يشيلان الصفّ من
+   مصفوفةٍ في الذاكرة ويطبعان إشعار نجاح، فالفعل يبان تمّ وما تمّش. حُذف بالكامل:
+   viewClubs · renderClubs · drawClub · clubModal · CLUBS · CLUB_PROPOSALS · CLUB_JOINS.  */
 /* ===== MESSAGES (تواصل من الموقع) ===== */
 var msgFilter='all';
 // رسائل التواصل: لا رسائل تصميمية — تُجلب حيّة من /api/messages أو من التخزين المحلي فقط.
@@ -5490,12 +5939,13 @@ function viewMessages(v){
   var msgs=(window.EP&&EP.data.messages)?EP.data.messages:loadMsgs();
   var nw=msgs.filter(function(m){return m.status==='new';}).length;
   v.innerHTML=`
+    <div class="policy" style="border-inline-start-color:var(--gold);background:var(--gold-bg);color:var(--gold)">${svg('inbox','ic')}<div><b>هذه الشاشة اندمجت في «الوارد».</b> الرسائل وردّها وحذفها كلها هناك تحت شريحة «رسائل» — هذه نسخةٌ باقية لروابط قديمة فقط. <b style="cursor:pointer;text-decoration:underline" onclick="go('messages')">افتح الوارد على الرسائل</b></div></div>
     <div class="policy" style="border-inline-start-color:var(--ai);background:var(--ai-bg)">${svg('inbox','ic')}<div><b>من الموقع ← غرفة العمليات:</b> كل رسالة من <span style="direction:ltr">elprofessor.net/#contact</span> تظهر هنا فورًا. مصدر واحد، لا بريد ضائع.</div></div>
     <div class="kpis">
       <div class="kpi k-2"><div class="top"><span class="ic">${svg('inbox')}</span>رسائل جديدة</div><b>${money(nw)}</b><div class="sub">بانتظار الرد</div></div>
       <div class="kpi k-1"><div class="top"><span class="ic">${svg('check')}</span>تم الرد</div><b>${money(msgs.filter(function(m){return m.status==='replied';}).length)}</b><div class="sub">مغلقة</div></div>
       <div class="kpi k-3"><div class="top"><span class="ic">${svg('users')}</span>إجمالي الرسائل</div><b>${money(msgs.length)}</b><div class="sub">من الموقع</div></div>
-      <div class="kpi k-4"><div class="top"><span class="ic">${svg('mega')}</span>أكثر نوع</div><b>استفسار</b><div class="sub">عام</div></div>
+      <div class="kpi k-4"><div class="top"><span class="ic">${svg('inbox')}</span>مكانها الآن</div><b style="font-size:15px">الوارد</b><div class="sub">شريحة «رسائل»</div></div>
     </div>
     <div class="filterbar" id="msgBar"><span class="lbl">الحالة:</span></div>
     <div class="inboxwrap"><section class="panel"><div class="ph"><h3>صندوق الرسائل</h3><span class="n" id="msgN"></span><span class="hint">اضغط رسالة للرد</span></div><div id="msgRows"></div></section><aside class="drawer" id="drawer"></aside></div>`;
@@ -5527,7 +5977,7 @@ function drawMsg(msgs){
     if(a==='reply'){
       if(window.EP&&EP.data.messages&&m.id!=null){EP.replyMessage(m,function(){selected=null;viewMessages(document.getElementById('view'));});return;}
       m.status='replied';persistMsg(m);viewMessages(document.getElementById('view'));notify('تم تعليم رسالة «'+m.name+'» كمردود عليها');}
-    else if(a==='email'){toast('فتح الرد بالبريد على '+m.email);}
+    else if(a==='email'){mailReply(m.email,m.name);}
     else if(a==='del'){
       if(window.EP&&EP.data.messages&&m.id!=null){EP.deleteMessage(m,function(){selected=null;viewMessages(document.getElementById('view'));});return;}
       deleteMsg(m);selected=null;viewMessages(document.getElementById('view'));notify('حُذفت الرسالة');}
@@ -5585,10 +6035,24 @@ window.EP_BOOT=function(){
     if(!ROLE_NAV[r]&&r!=='admin')r='viewer'; // أي دور غير معروف يهبط على شاشة الانتظار
     setRole(r); // setRole يتكفّل بالـ nav + البانر + قراءة-فقط + شاشة الهبوط ثم يعيد الرسم
     renderNotifPanel();
+    bootNavCounts();
     return;
   }
-  renderNav();renderView();renderNotifPanel();
+  renderNav();renderView();renderNotifPanel();bootNavCounts();
 };
+// شارات العدّ لا تنتظر زيارة «الوارد»: رابطٌ مباشر إلى #escrow كان يفتح لوحةً بلا أرقامٍ
+// على الشريط لأن الطابور لم يُطلَب بعد. يُطلَب مرّة عند الإقلاع، وتُكتب الشارات عند جهوزه.
+// ⛔ ثلاثة مصادرَ لا واحد: الطابور وحده كان يكتب أربع شارات، وشارتا «الوارد» و«الدعوات»
+// (اللتان يبدأ بهما يوم المؤسس) تبقيان فاضيتين لحدّ ما يفتح الشاشتين بنفسه — وهو عكس
+// الغرض بالحرف. الثلاثة تُطلَب مرّة عند الإقلاع، وكل واحدٍ يكتب شاراته لمّا يجهز.
+function bootNavCounts(){
+  if(!(role==='admin'&&window.EP&&EP.authed))return;
+  EP.ensure('opsQueue',applyNavCounts);
+  EP.ensure('inbox',applyNavCounts);
+  EP.ensure('invites',applyNavCounts);
+  // سحوبات المحافظ: الشارة تُعاد كتابتها من **القائمة** حين تصل، فلا تسبق الرقمَ صفوفُه.
+  EP.ensure('walletPayouts',applyNavCounts);
+}
 if(!window.EP||!window.EP.requireAuth){ // no auth layer present → boot directly (safe fallback)
   window.EP_BOOT();
 }

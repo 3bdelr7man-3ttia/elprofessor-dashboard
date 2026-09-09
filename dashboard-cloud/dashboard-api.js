@@ -19,6 +19,9 @@
   var API_BASE = (window.EP_API_BASE || "/api").replace(/\/$/, "");
   var TOKEN_KEY = "token";
   var TOKEN_MIRROR = "ep_dash_token";
+  // سقف صفوف المصدر الواحد في الوارد. ٢٥ كان يقصّ بصمت (عطل مسجَّل في مراجعة ٢٠٢٦-٠٩-٠٩)؛
+  // الرقم هنا سخيٌّ عمدًا، وأيّ قصٍّ يتعدّاه **يُعلَن** في الواجهة باسم مصدره وعدده.
+  var INBOX_SOURCE_CAP = 500;
 
   function getToken() {
     try { return localStorage.getItem(TOKEN_KEY) || localStorage.getItem(TOKEN_MIRROR) || ""; }
@@ -360,6 +363,50 @@
         }).catch(function () { EP.data.metrics = null; })
       );
       return Promise.all(jobs);
+    },
+
+    // «كل اللي مستنيك» — طابور المنصّة التشغيلي اليومي (GET /api/bridge/ops/queue خلف
+    // بروكسي الداشبورد). كان منشورًا بحمولة حقيقية ومحدش بيقراه: خمسة عشر عدّادًا لكل ما
+    // ينتظر المؤسس + نبضات الحارس + تنبيهاته العربية. لا اشتقاق هنا: نخزّن ما أرسلته المنصّة
+    // كما هو، والشاشة تقرأ منه — أي حساب في المتصفّح كان سيصير رقمًا ثانيًا يخالف الدايجست.
+    opsQueue: function () {
+      return get("/platform-ops-queue").then(function (r) { EP.data.opsQueue = r || {}; });
+    },
+
+    // سحوبات محافظ المنصّة المعلّقة (GET /api/bridge/wallet-payouts?status=pending خلف البروكسي).
+    // ⛔ **نفس مصدر الشارة بالحرف**: عدّاد `wallet_payouts_pending` في الطابور يعدّ مجموعة
+    // `wallet_payouts` بحالة `pending`، وهذه هي صفوفُها. قبل هذا المحمّل كان تبويب «السحوبات»
+    // يسرد جدول `Withdrawal` في SQLite اللوحة (سحوبات المستثمرين) — دفترٌ آخر تمامًا، فتقول
+    // الشارة ١ وتقول القائمة ٠. الشكل هنا شكل عرضٍ جاهز (نفس نمط محمّل `investment`) كي لا
+    // تُشتقّ الحقول مرّتين في الشاشة.
+    walletPayouts: function () {
+      return get("/platform-wallet-payouts").then(function (r) {
+        var list = (r && Array.isArray(r.payouts)) ? r.payouts : [];
+        EP.data.walletPayouts = {
+          count: list.length,
+          rows: list.map(function (p) {
+            return {
+              kind: "payout",
+              who: p.user_name || p.user_email || "—",
+              email: p.user_email || "",
+              amount: Math.round(p.amount || 0),
+              currency: (p.currency || "EGP"),
+              dest: p.destination || p.method || "—",
+              status: p.status || "pending",
+              when: relTime(p.created_at) || arDate(p.created_at),
+              fx_alert: !!p.fx_alert,
+              pid: p.id,
+              raw: p,
+            };
+          }),
+        };
+      });
+    },
+
+    // تقرير الأرباح والخسائر الشهري من المنصّة (GET /api/bridge/ops/pnl خلف البروكسي).
+    // دفتر المنصّة الحقيقي — غير دفتر SQLite المحلّي في «المالية»، ويُعرَض بجانبه لا بدلًا منه.
+    pnl: function () {
+      return get("/platform-pnl").then(function (r) { EP.data.pnl = r || {}; });
     },
 
     // تحليل الطلب من الشات: /api/platform-chat-insights (via the METRICS_SECRET bridge).
@@ -1053,6 +1100,7 @@
       var jobs = [];
       var realRows = [];
       var failed = [];
+      var truncated = [];
       function shortNote(s) { s = String(s || "").trim(); return s.length > 90 ? s.slice(0, 90) + "…" : s; }
       // ⛔ «العدّاد لا يكذب»: كل طابور هنا كان يبتلع خطأه بصمت، فطابورٌ تعذّر جلبه كان يبدو
       // **فارغًا** — والشاشة تقول «لا وارد جديد» فوق طلبات قائمة لم تصل. الابتلاع يبقى (طابور
@@ -1060,6 +1108,18 @@
       // الاستثناءان المقصودان: «عملاء الشات» و«رسائل المنصة» — جسران best-effort قد لا يكونان
       // مهيّأين أصلًا، فوسمهما فشلًا يعني تحذيرًا دائمًا بلا عطل.
       function fail(label) { return function () { if (failed.indexOf(label) < 0) failed.push(label); }; }
+      // ⛔ السقف الصامت (٢٥ صفًّا لكل مصدر رسائل) — كان `slice(0,25)` بلا أي إعلان، فرسالة رقم
+      // ٢٦ كانت تختفي والشاشة تقول «لا وارد جديد» فوقها. في طابورٍ موحَّد يصير الاختفاء أخطر،
+      // فالإصلاح قبل الدمج لا بعده: السقف ارتفع إلى INBOX_SOURCE_CAP، وأي قصٍّ يُعلَن باسم
+      // مصدره وعدده («معروض N من M») في شريطٍ فوق العدّاد. لا قصَّ صامتًا بعد اليوم.
+      function capped(list, label) {
+        list = list || [];
+        if (list.length > INBOX_SOURCE_CAP) {
+          truncated.push(label + ": معروض " + INBOX_SOURCE_CAP + " من " + list.length);
+          return list.slice(0, INBOX_SOURCE_CAP);
+        }
+        return list;
+      }
       jobs.push(
         get("/platform-trainer-applications?status=pending").then(function (a) {
           var apps = (a && a.applications) || [];
@@ -1162,6 +1222,10 @@
               note: (p.product_label || p.product_type || "منتج") + " · " + (p.amount != null ? p.amount : "") + " " + (p.currency || "EGP") + (p.method ? " · " + p.method : "") + (p.reference_number ? " · مرجع " + p.reference_number : "") + " — أكّد بعد مطابقة الإيصال.",
               ref: "PAY-" + p.id, who: p.user_name || p.user_email || p.user_phone || "—",
               apiKind: "manual_payment", apiId: p.id, canReject: true,
+              // المبلغ والعملة على الصفّ نفسه (لا انتزاع من نصّ الملاحظة): تبويب «الدفعات
+              // اليدوية» في الضمان يجمعهما في عدّاد «إجمالي المبلغ».
+              amount: (typeof p.amount === "number") ? p.amount : (parseFloat(p.amount) || 0),
+              currency: p.currency || "EGP",
               approveLabel: "تأكيد الدفعة", proofUrl: p.screenshot_url || "",
             });
           });
@@ -1216,12 +1280,16 @@
       jobs.push(
         get("/messages?status=new").then(function (a) {
           var msgs = Array.isArray(a) ? a : ((a && a.messages) || []);
-          msgs.slice(0, 25).forEach(function (m) {
+          capped(msgs, "رسائل الموقع").forEach(function (m) {
             realRows.push({
               out: "رسالة تواصل جديدة", from: "الشات/الموقع", src: "inbox", dest: "messages",
-              triage: "human", sla: "بانتظار الرد", slaWarn: false, viewOnly: true,
+              triage: "human", sla: "بانتظار الرد", slaWarn: false,
               note: (m.name ? m.name + ": " : "") + shortNote(m.body || m.topic),
               ref: "MSG-" + m.id, who: m.name || m.email || "—",
+              // ⛔ الردّ صار من درج الوارد نفسه (لا «فتح الرسائل» ثم بحثٌ عن الصفّ): الصفّ
+              // يحمل ما يحتاجه الردّ والحذف — فلا يبقى فعلٌ وحيدٌ خلف شاشةٍ مبتلَعة.
+              msgSource: "site", msgId: m.id, email: m.email || "",
+              body: m.body || "", topic: m.topic || "", phone: m.phone || "",
             });
           });
         }).catch(fail("الرسائل"))
@@ -1230,7 +1298,7 @@
       jobs.push(
         get("/platform-leads?status=new").then(function (a) {
           var leads = (a && (a.leads || a.items)) || (Array.isArray(a) ? a : []);
-          (leads || []).slice(0, 25).forEach(function (l) {
+          capped(leads || [], "عملاء الشات").forEach(function (l) {
             var lid = l.id || l._id;
             realRows.push({
               out: "عميل محتمل جديد", from: "الشات", src: "users", dest: "users",
@@ -1246,7 +1314,7 @@
       jobs.push(
         get("/platform-messages?status=new").then(function (a) {
           var pms = (a && (a.messages || a.items)) || (Array.isArray(a) ? a : []);
-          (pms || []).slice(0, 25).forEach(function (m) {
+          capped(pms || [], "رسائل المنصة").forEach(function (m) {
             var pmid = m.id || m._id;
             realRows.push({
               out: "رسالة من المنصة", from: "الشات", src: "inbox", dest: "messages",
@@ -1254,6 +1322,10 @@
               note: shortNote(m.body || m.text || m.summary || m.topic),
               ref: "PMSG-" + (pmid || "?"), who: m.name || m.user_name || m.email || "—",
               apiKind: pmid ? "message" : undefined, apiId: pmid, resolve: !!pmid, viewOnly: !pmid,
+              // وسم المصدر ظاهرٌ على الصفّ: «من المنصة» مقابل «من الموقع» — سلوكان مختلفان
+              // (هذه تُنهى على المنصة، وتلك يُردّ عليها من هنا) فلا بدّ أن يُقرأ أيّهما هو.
+              msgSource: "platform", email: m.email || m.user_email || "",
+              body: m.body || m.text || m.summary || "", topic: m.topic || "",
             });
           });
         }).catch(function () {})
@@ -1266,6 +1338,9 @@
         // لا فارغًا مطمئنًا.
         EP.data.inboxFailed = failed;
         window.INBOX_FAILED = failed;
+        // ما قُصَّ فعلًا (مصدره وعدده) — الشاشة تعلنه؛ فارغٌ = لم يُقَصّ شيء.
+        EP.data.inboxTruncated = truncated;
+        window.INBOX_TRUNCATED = truncated;
       });
     },
 

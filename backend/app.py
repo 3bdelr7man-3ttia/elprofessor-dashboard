@@ -1937,6 +1937,64 @@ def platform_messages():
     return _platform_proxy('GET', '/api/bridge/messages', params={'status': request.args.get('status') or 'new'})
 
 
+@app.route('/api/platform-ops-queue', methods=['GET'])
+@token_required
+@roles_required('admin')
+def platform_ops_queue():
+    """«كل اللي مستنيك» — the platform's daily ops queue (routes/ops_bridge.py:/bridge/ops/queue).
+
+    Fifteen counters for everything waiting on the founder (trainer applications, pending
+    courses, manual payments, wallet payouts, stuck card orders, revenue splits, testimonials,
+    draft topics, founding-expert leads, lead-magnet promises, live courses needing a decision)
+    plus the watchdog heartbeats and their Arabic alerts. The payload has been published with
+    real data for weeks and NOTHING in the dashboard read it — this proxy is the whole fix; the
+    numbers stay the platform's own (zero re-derivation here or in the browser, so the dashboard
+    can never disagree with the Telegram digest).
+
+    Admin only: the queue carries payout amounts and payment references — the same money the
+    F-095 matrix keeps away from `employee`.
+    """
+    return _platform_proxy('GET', '/api/bridge/ops/queue')
+
+
+@app.route('/api/platform-wallet-payouts', methods=['GET'])
+@token_required
+@roles_required('admin')
+def platform_wallet_payouts():
+    """Pending wallet payout requests (routes/ops_bridge.py:/bridge/wallet-payouts).
+
+    THE SAME SOURCE THE «المالية» BADGE COUNTS. The ops-queue counter
+    `wallet_payouts_pending` counts the `wallet_payouts` collection filtered to
+    `status=pending`; these are those very rows. Before this proxy the badge landed on the
+    «السحوبات» tab, which listed a DIFFERENT ledger — SQLite `Withdrawal` (investor
+    withdrawals) — so the badge said 1 while the list showed 0 and both were "right" about
+    their own book. One number, one list, one collection.
+
+    `status` passes through (pending|paid|rejected) and defaults to `pending` so the screen
+    can never silently show settled rows under a "waiting" badge. Admin only: payout amounts
+    and destinations are money — the F-095 rule that keeps `employee` out of the ledger.
+    """
+    status = (request.args.get('status') or 'pending').strip().lower()
+    if status not in ('pending', 'paid', 'rejected'):
+        status = 'pending'
+    return _platform_proxy('GET', '/api/bridge/wallet-payouts', params={'status': status})
+
+
+@app.route('/api/platform-pnl', methods=['GET'])
+@token_required
+@roles_required('admin')
+def platform_pnl():
+    """Monthly P&L from the platform (routes/marketing_ops.py:/bridge/ops/pnl).
+
+    Arabic-labeled revenue lines BY CURRENCY (never summed, never auto-converted), rough
+    cost constants, and the EGP net. `month=YYYY-MM` passes through; absent = current month.
+    This is the platform's ledger — it sits BESIDE the dashboard's own SQLite books in
+    «المالية», never replacing them: two ledgers, two questions, one screen.
+    """
+    month = (request.args.get('month') or '').strip()
+    return _platform_proxy('GET', '/api/bridge/ops/pnl', params={'month': month} if month else None)
+
+
 def _platform_proxy(method, path, params=None, json_body=None, timeout=12):
     """Proxy an admin action to the main platform via the shared service secret.
     Same pattern as platform_metrics/platform_users above, factored out because the
