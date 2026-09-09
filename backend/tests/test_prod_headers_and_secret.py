@@ -11,6 +11,7 @@ Run:  cd backend && python3 -m pytest -q tests/test_prod_headers_and_secret.py
 كل ترويسة أمانٍ يجب أن تخرج بلا شرطٍ على ذلك العلم، ويبقى العلم نفسه **معلَنًا** على
 `/api/health` كي يُقاس من الخارج بدل أن يُخمَّن.
 """
+import json
 import pytest
 
 import app as appmod  # noqa: E402
@@ -110,11 +111,19 @@ def test_health_hides_the_flags_from_a_wrong_secret_and_a_non_admin_token(client
 
 def test_health_never_leaks_the_secret_itself(client):
     """إعلانُ الحالة لا يجوز أن يصير إعلانًا للقيمة ولا لجزءٍ منها ولا لطولها."""
-    raw = client.get('/api/health', headers=_op_headers()).get_data(as_text=True)
+    body = client.get('/api/health', headers=_op_headers()).get_json()
     secret = flask_app.config['SECRET_KEY']
+    raw = json.dumps(body, ensure_ascii=False)
     assert secret not in raw
     assert secret[:8] not in raw
-    assert str(len(secret)) not in raw.replace('1.0.0', '')
+    # فحصُ الطول يُطبَّق على حقول **مفتاح التوقيع** وحدها: كتلة `ai` أرقامٌ تشغيلية
+    # (سقفُ الذكاء اليومي · التوكنز · العدّاد) لا علاقةَ لها بالمفتاح، ومطابقةُ نصٍّ عمياء
+    # على الجسم كلّه تصطدم بها صدفةً (`"cap":150` يحوي «50» فيرسب طولٌ قدره ٥٠) — إنذارٌ
+    # كاذب يوهم بتسريبٍ لا وجودَ له. الحقولُ الثلاثة الباقية هي ما يحرسه هذا السطر.
+    body.pop('ai', None)
+    rest = json.dumps(body, ensure_ascii=False)
+    assert str(len(secret)) not in rest.replace('1.0.0', '')
+    # ولا تحمل كتلةُ `ai` المفتاحَ نفسه ولا صدرَه (فُحص أعلاه على الجسم كلّه)
 
 
 def test_health_reports_an_ephemeral_key_when_secret_key_is_missing(client, monkeypatch):

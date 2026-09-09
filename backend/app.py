@@ -2,7 +2,7 @@
 ElProfessor Management Dashboard - Backend API
 Flask + SQLAlchemy + SQLite (upgradeable to MySQL/PostgreSQL)
 """
-import os, json, datetime, hashlib, secrets, functools, logging, time, re, html
+import os, json, datetime, hashlib, secrets, functools, logging, math, time, re, html
 from collections import deque
 from urllib.parse import quote
 from xml.sax.saxutils import escape as xesc
@@ -563,6 +563,22 @@ class AgentReport(db.Model):
     bullets_json = db.Column(db.Text)                  # JSON list[str] of findings
     actions_json = db.Column(db.Text)                  # JSON list[str] of suggested actions
     created_at = db.Column(db.DateTime, default=datetime.datetime.utcnow)
+
+class AIDailyUsage(db.Model):
+    """عدّاد نداءات الذكاء **الصادرة من اللوحة نفسها**، صفٌّ لكل يوم UTC.
+
+    سقف المنصّة (F-016, `account_utils.ai_daily_cap_guard`) يعيش في Mongo ولا يرى
+    مفتاح اللوحة إطلاقًا، فاللوحة كانت تنادي DeepSeek **بلا أي سقف**. هذا الجدول هو
+    نظيره هنا: صفٌّ واحد باليوم، يحمل عدّاده وعلَمَي التنبيه (٨٠٪/١٠٠٪ مرّة واحدة لا
+    مرّة كل نداء)، ويعيش في نفس SQLite فيبقى بعد إعادة النشر. المفتاح نصٌّ
+    `YYYY-MM-DD` بتوقيت UTC — فالتصفير يحدث بتغيّر اليوم لا بمؤقّت.
+    ⛔ الفشل هنا **يفتح** لا يقفل: عدّادٌ مكسور لا يجوز أن يوقف عمل المؤسس."""
+    __tablename__ = 'ai_daily_usage'
+    day = db.Column(db.String(10), primary_key=True)   # UTC YYYY-MM-DD
+    calls = db.Column(db.Integer, nullable=False, default=0)
+    alerted_80 = db.Column(db.Boolean, nullable=False, default=False)
+    alerted_100 = db.Column(db.Boolean, nullable=False, default=False)
+    updated_at = db.Column(db.DateTime, default=datetime.datetime.utcnow)
 
 class Asset(db.Model):
     __tablename__ = 'assets'
@@ -5622,10 +5638,232 @@ AI_PROVIDERS = {
         'label': 'DeepSeek',
         'env_key': 'DEEPSEEK_API_KEY',
         'model_env': 'DEEPSEEK_MODEL',
-        'default_model': 'deepseek-chat',
-        'models': ['deepseek-chat', 'deepseek-reasoner'],
+        # ⛔ DeepSeek سحبت اسمَي `deepseek-chat`/`deepseek-reasoner` في 2026-07-26؛ الاسم
+        # المسحوب يرجع 400 فيهبط كل مساعد صامتًا على البديل الثابت. المنصّة هاجرت
+        # (backend/routes/legal_search.py) واللوحة لم تهاجر — هذا هو التصحيح.
+        'default_model': 'deepseek-v4-flash',
+        'models': ['deepseek-v4-flash', 'deepseek-v4-pro'],
     },
 }
+
+# ⛔ V4 كلّه **استدلاليّ**: يستهلك التوكنز في `reasoning_content` قبل أن يملأ `content`،
+# فـ`max_tokens` صغير = **ردّ فارغ** لا خطأ. المنصّة تُرسل 8000
+# (`backend/routes/legal_search.py:177`) — نطابقها هنا حرفيًّا، **ولا تُخفَّض أبدًا**.
+AI_MAX_TOKENS = 8000
+
+# صدر الرسالة البيضاء الوحيدة التي يراها المؤسس عند أي تعطّل — لا اسم مزوّد ولا مسار.
+AI_UNAVAILABLE_AR = 'مساعد الذكاء غير متاح الآن'
+AI_DAILY_CAP_DEFAULT = 150
+
+
+class AIUnavailable(Exception):
+    """يرفعها `ai_call` وحدها. تحمل سببًا عربيًّا أبيض صالحًا للعرض كما هو —
+    فلا مساعدَ يهبط بعد اليوم على بديلٍ صامت يبدو إجابةً حقيقية."""
+
+    def __init__(self, reason_ar, kind='error'):
+        self.reason_ar = reason_ar
+        self.kind = kind          # 'no_key' | 'cap' | 'error' | 'empty'
+        super().__init__(self.message)
+
+    @property
+    def message(self):
+        return f'{AI_UNAVAILABLE_AR} — السبب: {self.reason_ar}'
+
+
+# آخر خطأ/آخر نجاح — في الذاكرة عمدًا (gunicorn `-w 1`: عاملٌ واحد ⇒ لا تشتّت)، ولا يُكتب
+# في القاعدة لأن الخطأ المتكرّر لا يجوز أن يكتب صفًّا كل مرّة. يُعرض على `/api/health`
+# للمصرَّح له وحده (سرّ الجسر أو توكن أدمن) — لا يخرج لزائر أبدًا.
+_AI_LAST = {'error': None, 'error_at': None, 'ok_at': None, 'model': None, 'provider': None}
+
+
+def ai_daily_cap():
+    """سقف نداءات اللوحة اليومية. `DASHBOARD_AI_DAILY_CAP=0` = بلا سقف (تعطيل صريح)."""
+    try:
+        return max(0, int((os.environ.get('DASHBOARD_AI_DAILY_CAP') or AI_DAILY_CAP_DEFAULT)))
+    except (TypeError, ValueError):
+        return AI_DAILY_CAP_DEFAULT
+
+
+def _ai_utc_day():
+    return datetime.datetime.utcnow().strftime('%Y-%m-%d')
+
+
+def ai_provider_in_use():
+    """أول مزوّد مضبوط بترتيب `AI_PROVIDERS`، أو `AI_PROVIDER` لو ضُبط صراحةً."""
+    forced = (os.environ.get('AI_PROVIDER') or '').strip().lower()
+    if forced in AI_PROVIDERS and os.environ.get(AI_PROVIDERS[forced]['env_key']):
+        return forced
+    return next((k for k, c in AI_PROVIDERS.items() if os.environ.get(c['env_key'])), None)
+
+
+# أسماء DeepSeek المسحوبة في 2026-07-26 — كل نداء بها يرجع 400. ⚠️ `docker-compose.yml`
+# و`backend/.env.example` ما زالا يمرّران `DEEPSEEK_MODEL=deepseek-chat`، أي أن **البيئة
+# تُحيي الاسم الميّت فوق الافتراضي الصحيح**. الكود يبطلها هنا صراحةً: اسمٌ مسحوب = يُتجاهل
+# ويُسجَّل، ويُرسَل الافتراضي الحيّ. (أي اسم آخر يمرّ كما هو — التجاوز بالبيئة يبقى مسموحًا.)
+AI_RETIRED_MODELS = {'deepseek-chat', 'deepseek-reasoner'}
+
+
+def ai_model_for(provider):
+    """`DASHBOARD_AI_MODEL` يعلو على متغيّر المزوّد الخاص، ثم الافتراضي المكتوب في السجلّ."""
+    cfg = AI_PROVIDERS.get(provider) or {}
+    default_model = (cfg.get('default_model') or '').strip()
+    override = (os.environ.get('DASHBOARD_AI_MODEL') or '').strip()
+    resolved = override or (os.environ.get(cfg.get('model_env', '')) or default_model or '').strip()
+    if resolved in AI_RETIRED_MODELS:
+        logger.error('Ignoring RETIRED model name %r from the environment — using %r instead. '
+                     'Fix DEEPSEEK_MODEL/DASHBOARD_AI_MODEL in the deployment env.',
+                     resolved, default_model)
+        return default_model
+    return resolved
+
+
+def ai_daily_usage_state():
+    """قراءة فقط — لا تكتب ولا ترمي أبدًا (تُستدعى من `/api/health`)."""
+    cap = ai_daily_cap()
+    day = _ai_utc_day()
+    state = {'day': day, 'cap': cap, 'used': 0, 'remaining': cap, 'blocked': False,
+             'alerted_80': False, 'alerted_100': False, 'counter_error': None}
+    try:
+        row = AIDailyUsage.query.get(day)
+        if row:
+            state['used'] = int(row.calls or 0)
+            state['alerted_80'] = bool(row.alerted_80)
+            state['alerted_100'] = bool(row.alerted_100)
+    except Exception as exc:   # noqa: BLE001 — يفشل مفتوحًا
+        state['counter_error'] = type(exc).__name__
+        return state
+    state['remaining'] = max(0, cap - state['used']) if cap else None
+    state['blocked'] = bool(cap and state['used'] >= cap)
+    return state
+
+
+def _ai_reserve_call():
+    """يحجز نداءً واحدًا لليوم الحالي ويُطلق تنبيهَي ٨٠٪/١٠٠٪ **مرّة واحدة** لكلٍّ.
+
+    يرجع `(allowed, state)`. الحجز يحدث **قبل** لمس الشبكة، فالنداء الذي يفشل بعد
+    انطلاقه يُحسب — لأنه قد يكون كلّف فعلًا. ⛔ أي عطل في العدّاد **يفتح** (`allowed=True`)
+    ويُسجَّل في `state['counter_error']`.
+
+    التنبيه: اللوحة **لا تملك مساعد تليجرام** (صفر نداء تليجرام في هذا الملف)، وإرسالُه
+    عبر مسار إشعارات المنصّة ممنوع صراحةً في هذا الأمر — فالتنبيه هنا **سطر لوج صارخ**
+    (`logger.error`) + علَمٌ مُخزَّن يظهر على `GET /api/health` للمصرَّح له.
+    """
+    cap = ai_daily_cap()
+    day = _ai_utc_day()
+    if not cap:
+        return True, {'day': day, 'cap': 0, 'used': 0, 'remaining': None, 'blocked': False,
+                      'alerted_80': False, 'alerted_100': False, 'counter_error': None}
+    try:
+        row = AIDailyUsage.query.get(day)
+        if row is None:
+            row = AIDailyUsage(day=day, calls=0, alerted_80=False, alerted_100=False)
+            db.session.add(row)
+        used = int(row.calls or 0)
+        if used >= cap:
+            if not row.alerted_100:      # لا صفَّ يُكتب مع كل نداءٍ مرفوض — مرّةً واحدة
+                row.alerted_100 = True
+                db.session.commit()
+            return False, {'day': day, 'cap': cap, 'used': used, 'remaining': 0, 'blocked': True,
+                           'alerted_80': bool(row.alerted_80), 'alerted_100': True,
+                           'counter_error': None}
+        used += 1
+        row.calls = used
+        row.updated_at = datetime.datetime.utcnow()
+        fire_80 = fire_100 = False
+        if used >= cap and not row.alerted_100:
+            row.alerted_100 = True
+            row.alerted_80 = True
+            fire_100 = True
+        elif used >= math.ceil(cap * 0.8) and not row.alerted_80:
+            row.alerted_80 = True
+            fire_80 = True
+        db.session.commit()
+        if fire_100:
+            logger.error('AI DAILY CAP REACHED (dashboard): %s/%s calls on %s — '
+                         'every further dashboard AI call is blocked until tomorrow (UTC).',
+                         used, cap, day)
+        elif fire_80:
+            logger.error('AI DAILY CAP 80%% (dashboard): %s/%s calls on %s.', used, cap, day)
+        return True, {'day': day, 'cap': cap, 'used': used, 'remaining': max(0, cap - used),
+                      'blocked': False, 'alerted_80': bool(row.alerted_80),
+                      'alerted_100': bool(row.alerted_100), 'counter_error': None}
+    except Exception as exc:   # noqa: BLE001
+        try:
+            db.session.rollback()
+        except Exception:
+            pass
+        logger.error('AI daily-cap counter failed (%s) — FAILING OPEN, the call proceeds.',
+                     type(exc).__name__)
+        return True, {'day': day, 'cap': cap, 'used': None, 'remaining': None, 'blocked': False,
+                      'alerted_80': False, 'alerted_100': False,
+                      'counter_error': type(exc).__name__}
+
+
+def ai_call(system_prompt, user_content, purpose='ai'):
+    """**نقطة الاختناق الوحيدة**: كل مساعد ذكاء في اللوحة يمرّ من هنا وحدها.
+
+    كانت أربع نسخ متطابقة من اختيار المزوّد + النداء (`ask` · `courses/ai-draft` ·
+    `goals-advisor` · `_agent_llm`)، فأي سقفٍ أو تسجيلٍ كان يحتاج أربع تعديلات
+    ويُنسى في الرابع. الآن: بابٌ واحد فيه السقف اليومي وحالة الفشل المرئية.
+
+    يرجع نصًّا غير فارغ، أو يرفع `AIUnavailable` برسالة عربية بيضاء جاهزة للعرض."""
+    provider = ai_provider_in_use()
+    if not provider:
+        _AI_LAST['error'] = 'no provider key configured'
+        _AI_LAST['error_at'] = datetime.datetime.utcnow().isoformat()
+        raise AIUnavailable('لم يُضبط مفتاح مزوّد الذكاء على الخادم', kind='no_key')
+    cfg = AI_PROVIDERS[provider]
+    model = ai_model_for(provider)
+    _AI_LAST['provider'], _AI_LAST['model'] = provider, model
+
+    allowed, usage = _ai_reserve_call()
+    if not allowed:
+        raise AIUnavailable(
+            f"تجاوزنا سقف اليوم ({usage['cap']} نداء) — يعود تلقائيًّا بعد منتصف الليل UTC",
+            kind='cap')
+
+    api_key = os.environ[cfg['env_key']]
+    try:
+        if provider == 'anthropic':
+            text = call_anthropic(api_key, model, system_prompt, user_content)
+        elif provider == 'openai':
+            text = call_openai_compatible('https://api.openai.com/v1', api_key, model,
+                                          system_prompt, user_content)
+        else:
+            text = call_openai_compatible('https://api.deepseek.com/v1', api_key, model,
+                                          system_prompt, user_content)
+    except Exception as exc:   # noqa: BLE001
+        _AI_LAST['error'] = _ai_safe_error(exc)
+        _AI_LAST['error_at'] = datetime.datetime.utcnow().isoformat()
+        logger.error('AI call failed (%s, provider=%s, model=%s): %s',
+                     purpose, provider, model, _AI_LAST['error'])
+        raise AIUnavailable('تعذّر الاتصال بخدمة الذكاء', kind='error')
+
+    if not (text or '').strip():
+        # V4 استدلاليّ: ردٌّ فارغ يعني عادةً أن التوكنز نفدت في التفكير — عطلٌ مرئيّ لا صمت.
+        _AI_LAST['error'] = f'empty reply (model={model})'
+        _AI_LAST['error_at'] = datetime.datetime.utcnow().isoformat()
+        logger.error('AI call returned an EMPTY reply (%s, provider=%s, model=%s).',
+                     purpose, provider, model)
+        raise AIUnavailable('ردّ فارغ من خدمة الذكاء', kind='empty')
+
+    _AI_LAST['error'] = None
+    _AI_LAST['ok_at'] = datetime.datetime.utcnow().isoformat()
+    return text
+
+
+def _ai_safe_error(exc):
+    """سببٌ تقنيّ مختصر للمؤسس بلا اسم مضيف ولا مسار (ع-٥: `str(exc)` على خطأ requests
+    يحمل `api.deepseek.com` والمسار كاملًا)."""
+    status = getattr(getattr(exc, 'response', None), 'status_code', None)
+    body = ''
+    try:
+        body = (exc.response.text or '')[:200] if getattr(exc, 'response', None) is not None else ''
+    except Exception:
+        body = ''
+    if status:
+        return f'HTTP {status}: {body}'.strip()
+    return type(exc).__name__
 
 def ai_models_payload():
     payload = []
@@ -5658,7 +5896,7 @@ def call_anthropic(api_key, model, system_prompt, user_content):
         },
         json={
             'model': model,
-            'max_tokens': 1200,
+            'max_tokens': AI_MAX_TOKENS,
             'system': system_prompt,
             'messages': [{'role': 'user', 'content': user_content}],
         },
@@ -5679,7 +5917,7 @@ def call_openai_compatible(base_url, api_key, model, system_prompt, user_content
                 {'role': 'user', 'content': user_content},
             ],
             'temperature': 0.2,
-            'max_tokens': 1200,
+            'max_tokens': AI_MAX_TOKENS,
         },
         timeout=60,
     )
@@ -5687,22 +5925,11 @@ def call_openai_compatible(base_url, api_key, model, system_prompt, user_content
     data = r.json()
     return data.get('choices', [{}])[0].get('message', {}).get('content', '')
 
-def answer_with_ai(provider, model, question, snapshot):
-    cfg = AI_PROVIDERS.get(provider)
-    if not cfg:
-        raise ValueError('Unsupported AI provider')
-    api_key = os.environ.get(cfg['env_key'])
-    if not api_key:
-        raise RuntimeError(f'{cfg["label"]} API key is not configured')
-    model = model or os.environ.get(cfg['model_env'], cfg['default_model'])
+def answer_with_ai(question, snapshot):
+    """يمرّ من `ai_call` كبقيّة المساعدين — المزوّد والموديل يُحسمان في مكان واحد،
+    فلا يعود العميل قادرًا على اختيار مزوّد من الجسم (كان `provider` يأتي من الطلب)."""
     system_prompt, user_content = build_ai_messages(question, snapshot)
-    if provider == 'anthropic':
-        return call_anthropic(api_key, model, system_prompt, user_content)
-    if provider == 'openai':
-        return call_openai_compatible('https://api.openai.com/v1', api_key, model, system_prompt, user_content)
-    if provider == 'deepseek':
-        return call_openai_compatible('https://api.deepseek.com/v1', api_key, model, system_prompt, user_content)
-    raise ValueError('Unsupported AI provider')
+    return ai_call(system_prompt, user_content, purpose='ask')
 
 @app.route('/api/ai/models', methods=['GET'])
 @token_required
@@ -5737,11 +5964,6 @@ def ai_course_draft():
     idea = ((request.json or {}).get('idea') or '').strip()
     if not idea:
         return jsonify({'error': 'اكتب فكرة الدورة الأول'}), 400
-    provider = next((k for k, c in AI_PROVIDERS.items() if os.environ.get(c['env_key'])), None)
-    if not provider:
-        return jsonify({'error': 'مفيش مفتاح AI متظبط على الخادم (زي ANTHROPIC_API_KEY).'}), 503
-    cfg = AI_PROVIDERS[provider]
-    model = os.environ.get(cfg['model_env'], cfg['default_model'])
     system_prompt = (
         'أنت مساعد لإنشاء دورات تدريبية قانونية لمنصة "البروفيسور". المستخدم سيكتب فكرة بسيطة، '
         'وأنت ترجع JSON فقط بدون أي كلام خارجه، بالشكل التالي:\n'
@@ -5751,15 +5973,10 @@ def ai_course_draft():
         'اكتب بالعربية الفصحى المبسطة. اجعل المحاور بين 4 و8 محاور عملية.'
     )
     try:
-        api_key = os.environ[cfg['env_key']]
-        if provider == 'anthropic':
-            text = call_anthropic(api_key, model, system_prompt, f'فكرة الدورة: {idea}')
-        elif provider == 'openai':
-            text = call_openai_compatible('https://api.openai.com/v1', api_key, model, system_prompt, f'فكرة الدورة: {idea}')
-        else:
-            text = call_openai_compatible('https://api.deepseek.com/v1', api_key, model, system_prompt, f'فكرة الدورة: {idea}')
-    except Exception:
-        return jsonify({'error': 'تعذر توليد المسودة بالـ AI، جرّب تاني'}), 502
+        text = ai_call(system_prompt, f'فكرة الدورة: {idea}', purpose='course_draft')
+    except AIUnavailable as unavailable:
+        return jsonify({'error': unavailable.message, 'ai_unavailable': True,
+                        'reason': unavailable.kind}), 503
     draft = _extract_json_block(text)
     if not isinstance(draft, dict) or not draft.get('title'):
         return jsonify({'error': 'الـ AI رجّع رد غير متوقع، جرّب تاني أو عدّل الفكرة'}), 502
@@ -5905,28 +6122,41 @@ def ai_snapshot():
 @token_required
 @roles_required('admin')
 def ai_ask():
-    """Proxy to the selected AI model. Expects {question, provider, model}."""
+    """Proxy to the configured AI model. Expects {question}."""
     d = request.json or {}
     question = (d.get('question') or '').strip()
-    provider = d.get('provider') or 'anthropic'
-    model = d.get('model')
     if not question:
         return jsonify({'error': 'Question is required'}), 400
-    
-    log = AILog(action=f'ask:{provider}:{model or "default"}', prompt=question)
+
+    provider = ai_provider_in_use()
+    model = ai_model_for(provider) if provider else None
+    log = AILog(action=f'ask:{provider or "none"}:{model or "default"}', prompt=question)
     db.session.add(log)
     db.session.commit()
 
     try:
         snapshot = generate_ai_snapshot()
-        response = answer_with_ai(provider, model, question, snapshot)
-        log.response = response
+        response = answer_with_ai(question, snapshot)
+    except AIUnavailable as unavailable:
+        # ع-٥: كان `str(exc)` يخرج للمتصفّح فيحمل اسم المضيف والمسار وبنية الشبكة.
+        # الآن رسالة عربية بيضاء واحدة + علَمٌ صريح — لا هبوطَ صامت يبدو إجابة.
+        log.response = f'ERROR: {unavailable.kind}'
         db.session.commit()
-        return jsonify({'question': question, 'provider': provider, 'model': model, 'log_id': log.id, 'response': response})
-    except Exception as exc:
-        log.response = f'ERROR: {exc}'
+        return jsonify({'question': question, 'provider': provider, 'model': model,
+                        'log_id': log.id, 'response': unavailable.message,
+                        'ai_unavailable': True, 'reason': unavailable.kind}), 200
+    except Exception:
+        log.response = 'ERROR: unexpected'
         db.session.commit()
-        return jsonify({'error': str(exc), 'models': ai_models_payload(), 'log_id': log.id}), 502
+        logger.exception('ai_ask failed unexpectedly')
+        return jsonify({'question': question, 'provider': provider, 'model': model,
+                        'log_id': log.id,
+                        'response': f'{AI_UNAVAILABLE_AR} — السبب: عطل غير متوقّع',
+                        'ai_unavailable': True, 'reason': 'error'}), 200
+    log.response = response
+    db.session.commit()
+    return jsonify({'question': question, 'provider': provider, 'model': model,
+                    'log_id': log.id, 'response': response, 'ai_unavailable': False})
 
 @app.route('/api/ai/log', methods=['POST'])
 @token_required
@@ -6263,12 +6493,6 @@ def ai_goals_advisor():
     m = _goals_real_metrics()
     heuristic = _goals_heuristic(m)  # deterministic baseline + safe fallback
 
-    provider = next((k for k, c in AI_PROVIDERS.items() if os.environ.get(c['env_key'])), None)
-    if not provider:
-        return jsonify(heuristic)
-
-    cfg = AI_PROVIDERS[provider]
-    model = os.environ.get(cfg['model_env'], cfg['default_model'])
     system_prompt = (
         'أنت مستشار نمو لشركة "البروفيسور" (منصة تعليم قانوني مصرية). '
         'ستحصل على أرقام أداء حقيقية. حلّلها واقترح أهدافًا واقعية للشهر القادم. '
@@ -6283,25 +6507,24 @@ def ai_goals_advisor():
         + '\n\nاقترح الأهداف بناءً على هذه الأرقام فقط.'
     )
     try:
-        api_key = os.environ[cfg['env_key']]
-        if provider == 'anthropic':
-            text = call_anthropic(api_key, model, system_prompt, user_content)
-        elif provider == 'openai':
-            text = call_openai_compatible('https://api.openai.com/v1', api_key, model, system_prompt, user_content)
-        else:
-            text = call_openai_compatible('https://api.deepseek.com/v1', api_key, model, system_prompt, user_content)
-    except Exception:
-        return jsonify(heuristic)  # AI unreachable → grounded heuristic
+        text = ai_call(system_prompt, user_content, purpose='goals_advisor')
+    except AIUnavailable as unavailable:
+        # الأرقام تبقى حقيقية (الهيوريستيك حسابٌ مباشر لا تلفيق)، لكن التعطّل **يُقال**.
+        return jsonify(dict(heuristic, ai_unavailable=True,
+                            ai_notice=unavailable.message, reason=unavailable.kind))
 
     parsed = _extract_json_block(text)
     if not isinstance(parsed, dict) or not parsed.get('suggested_targets'):
-        return jsonify(heuristic)  # unexpected reply → grounded heuristic
+        return jsonify(dict(heuristic, ai_unavailable=True,
+                            ai_notice=f'{AI_UNAVAILABLE_AR} — السبب: ردّ غير متوقّع من خدمة الذكاء',
+                            reason='empty'))
 
     # Always attach the real metrics + mark the source so the client knows it's grounded.
     parsed.setdefault('headline', heuristic['headline'])
     parsed.setdefault('insights', heuristic['insights'])
     parsed['source'] = 'ai'
     parsed['metrics'] = m
+    parsed['ai_unavailable'] = False
     return jsonify(parsed)
 
 # ============================================================
@@ -6574,12 +6797,8 @@ def _bundle_highlights(bundle):
 
 
 def _agent_llm(persona, bundle):
-    """One LLM call for an agent. Returns the raw text or None when no key is set."""
-    provider = next((k for k, c in AI_PROVIDERS.items() if os.environ.get(c['env_key'])), None)
-    if not provider:
-        return None
-    cfg = AI_PROVIDERS[provider]
-    model = os.environ.get(cfg['model_env'], cfg['default_model'])
+    """One LLM call for an agent, through the single choke point (`ai_call`).
+    Raises `AIUnavailable` — never returns a silent `None`."""
     system_prompt = (
         f'أنت {persona} ضمن فريق ذكاء اصطناعي يدير شركة "البروفيسور" (منصة تعليم قانوني '
         'مصرية). ستحصل على بيانات حقيقية عن الشركة. حلّلها بإيجاز شديد باللغة العربية. '
@@ -6591,12 +6810,7 @@ def _agent_llm(persona, bundle):
         'اجعل bullets بين 2 و5، و actions بين 1 و3.'
     )
     user_content = 'البيانات الحقيقية:\n' + json.dumps(bundle, ensure_ascii=False, indent=2)
-    api_key = os.environ[cfg['env_key']]
-    if provider == 'anthropic':
-        return call_anthropic(api_key, model, system_prompt, user_content)
-    if provider == 'openai':
-        return call_openai_compatible('https://api.openai.com/v1', api_key, model, system_prompt, user_content)
-    return call_openai_compatible('https://api.deepseek.com/v1', api_key, model, system_prompt, user_content)
+    return ai_call(system_prompt, user_content, purpose='agent')
 
 
 def _run_agent(agent):
@@ -6608,10 +6822,14 @@ def _run_agent(agent):
         return None
     bundle = _master_bundle() if agent == 'master' else _agent_bundle(agent)
     summary, bullets, actions, source = '', [], [], 'data'
+    notice = None
     try:
         text = _agent_llm(meta['persona'], bundle)
+    except AIUnavailable as unavailable:
+        text, notice = None, unavailable.message
     except Exception:
-        text = None
+        logger.exception('agent %s failed unexpectedly', agent)
+        text, notice = None, f'{AI_UNAVAILABLE_AR} — السبب: عطل غير متوقّع'
     parsed = _extract_json_block(text) if text else None
     if isinstance(parsed, dict) and (parsed.get('summary') or parsed.get('bullets')):
         summary = str(parsed.get('summary') or '')[:2000]
@@ -6619,9 +6837,11 @@ def _run_agent(agent):
         actions = [str(x)[:400] for x in (parsed.get('actions') or []) if str(x).strip()][:5]
         source = 'ai'
     else:
-        # Honest fallback — real numbers, no invented analysis.
-        summary = ('تعذّر توليد تحليل بالذكاء الآن (المفتاح غير مهيّأ أو الخدمة غير متاحة). '
-                   'هذه أرقام حقيقية بلا تحليل نصّي.')
+        # Honest fallback — real numbers, no invented analysis. والسبب **يُقال بعينه**
+        # (بلا مفتاح · سقف اليوم · الخدمة تفشل · ردّ فارغ) بدل الاتّهام الأعمى للمفتاح.
+        if not notice:
+            notice = f'{AI_UNAVAILABLE_AR} — السبب: ردّ غير متوقّع من خدمة الذكاء'
+        summary = notice + ' — هذه أرقام حقيقية بلا تحليل نصّي.'
         bullets = _bundle_highlights(bundle) or ['لا توجد بيانات كافية بعد لهذا الوكيل.']
         actions = []
         source = 'data'
@@ -6633,10 +6853,10 @@ def _run_agent(agent):
     )
     db.session.add(row)
     db.session.commit()
-    return _serialize_report(agent, row, source=source)
+    return _serialize_report(agent, row, source=source, ai_unavailable=bool(notice))
 
 
-def _serialize_report(agent, row, source=None):
+def _serialize_report(agent, row, source=None, ai_unavailable=False):
     meta = AI_AGENT_MAP.get(agent, {})
     base = {
         'agent': agent,
@@ -6647,6 +6867,7 @@ def _serialize_report(agent, row, source=None):
         'actions': [],
         'created_at': None,
         'source': source,
+        'ai_unavailable': bool(ai_unavailable),
     }
     if row:
         base.update({
@@ -8517,6 +8738,21 @@ def health():
         body['is_production'] = IS_PRODUCTION
         body['secret_key_configured'] = not SECRET_KEY_IS_EPHEMERAL
         body['secret_key_placeholder'] = SECRET_KEY_IS_PLACEHOLDER
+        # ⬇ حالة الذكاء الحقيقية في سطر واحد يقرؤه المؤسس بـcurl: أي موديل يُرسَل فعلًا،
+        # وأين العدّاد اليومي من سقفه، وآخر خطأ حقيقي (لا اسم مضيف ولا مسار — ع-٥).
+        # اللوحة بلا مساعد تليجرام، فتنبيها ٨٠٪/١٠٠٪ لوجٌ صارخ + العلَمان أدناه.
+        _provider = ai_provider_in_use()
+        body['ai'] = {
+            'provider': _provider,
+            'model': ai_model_for(_provider) if _provider else None,
+            'max_tokens': AI_MAX_TOKENS,
+            'configured': bool(_provider),
+            'daily_cap': ai_daily_usage_state(),
+            'last_error': _AI_LAST['error'],
+            'last_error_at': _AI_LAST['error_at'],
+            'last_success_at': _AI_LAST['ok_at'],
+            'alerts_channel': 'log',   # لا تليجرام في هذه اللوحة
+        }
     return jsonify(body)
 
 @app.route('/', defaults={'path': ''})

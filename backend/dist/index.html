@@ -1661,7 +1661,7 @@ function drawCourse(){
       var item=src[+selected.slice(1)];
       if(item&&item.apiId){EP.decideInboxItem({apiKind:kind,apiId:item.apiId},a==='approve'?'approve':'reject',()=>{selected=null;EP.reload('inbox',()=>viewCourses(document.getElementById('view')));});return;}
     }
-    if(a==='pubplatform'&&window.EP){var cp=csCourses()[+selected.slice(1)];if(cp&&cp.cid){EP.publishCourseToPlatform(cp.cid,()=>{viewCourses(document.getElementById('view'));});return;}}
+    if(a==='pubplatform'&&window.EP){var cp=csCourses()[+selected.slice(1)];if(cp&&cp.cid){publishCoursePlatformModal(cp,()=>{viewCourses(document.getElementById('view'));});return;}}
     if(a==='editc'){editCourseModal(csCourses()[+selected.slice(1)]);return;}
     if(a==='delc'){var cd=csCourses()[+selected.slice(1)];if(cd&&cd.cid&&window.EP){if(confirm('متأكد تحذف «'+cd.title+'»؟ هتختفي من المنصة كمان.')){EP.deleteCourse(cd.cid,function(){selected=null;viewCourses(document.getElementById('view'));});}return;}}
     if(a==='video'){courseCurriculumModal(csCourses()[+selected.slice(1)]);}
@@ -1695,7 +1695,7 @@ function courseCurriculumModal(c){
       '<div class="note-ai" style="margin-bottom:12px">'+svg('sparkles','ic')+'<div>لازم تنشر الدورة على المنصة الأول، وبعدين تضيف الأقسام والمحاضرات.</div></div>'+
       '<div class="acts"><button class="btn btn-primary" id="vp_pub">'+svg('check')+'انشر على المنصة</button><button class="btn btn-ghost" id="vp_x">إغلاق</button></div>');
     sp.querySelector('#vp_x').onclick=closeModal;
-    sp.querySelector('#vp_pub').onclick=function(){closeModal();if(window.EP&&c.cid)EP.publishCourseToPlatform(c.cid,function(){viewCourses(document.getElementById('view'));});};
+    sp.querySelector('#vp_pub').onclick=function(){closeModal();if(window.EP&&c.cid)publishCoursePlatformModal(c,function(){viewCourses(document.getElementById('view'));});};
     return;
   }
   if(!window.EP){return;}
@@ -1971,6 +1971,45 @@ function wlPhoneDigits(v){
 }
 function openModal(title,bodyHtml){const s=document.createElement('div');s.className='scrim';s.id='epModal';s.innerHTML=`<div class="modal"><div class="mh"><span>${esc(title)}</span><button data-x>✕</button></div><div class="mb">${bodyHtml}</div></div>`;document.body.appendChild(s);s.querySelector('[data-x]').onclick=closeModal;s.onclick=e=>{if(e.target===s)closeModal();};return s;}
 function closeModal(){const m=document.getElementById('epModal');if(m)m.remove();}
+// F-134/ب — «ملكية الدورة»: بلوك واحد يخدم كل بابٍ يخلق دورةً على المنصّة (إنشاء الإدارة،
+// توليد Titch، ونشر دورةٍ دفترية متأخّرًا). القرار واحد فيظهر واحدًا: خانة مطلوبة + العلَم
+// تحتها في إطارٍ معنون، لا حقلان متفرّقان يبدو أوّلهما اختياريًا.
+function courseOwnerBlockHtml(){
+  return `<div style="border:1px solid rgba(212,175,55,.35);border-radius:12px;padding:12px 14px;margin:12px 0;background:rgba(212,175,55,.05)">
+    <div style="font-family:Cairo;font-weight:800;color:var(--navy);margin-bottom:9px">ملكية الدورة</div>
+    <div class="fld" style="margin-bottom:8px"><label>بريد المدرّب صاحب الدورة <span style="color:var(--human);font-weight:800">(مطلوب)</span></label>
+      <input id="m_email" type="email" placeholder="trainer@example.com" autocomplete="off">
+      <div style="font-size:11px;color:var(--muted);margin-top:5px">البريد ده هو اللي بيخلّي الدورة تبقى دورته: تظهر في «دوراتي» عنده، ويقدر يضيف حلقاتها ويشوف دفعتها ومستحقاته. من غيره الدورة تفضل للإدارة وحدها.</div></div>
+    <label class="tg"><input type="checkbox" id="m_plat"> دورة من المنصّة نفسها (من غير مدرّب)</label>
+  </div>`;
+}
+// يربط الخانة بالعلَم ويرجّع قارئًا: {instructor_email, platform_owned} أو null بعد ما ينبّه.
+function bindCourseOwner(s){
+  var mEmail=s.querySelector('#m_email'),mPlat=s.querySelector('#m_plat');
+  // «دورة من المنصّة نفسها» = قرار صريح ببلا مالك: الخانة تتقفل وتتفضّى، فما يوصلش للمنصّة
+  // بريد ونعلَم في نفس الوقت. غير كده البريد مطلوب (نفس شرط الخادم بالحرف).
+  mPlat.onchange=function(){mEmail.disabled=mPlat.checked;if(mPlat.checked){mEmail.value='';}mEmail.style.opacity=mPlat.checked?'.5':'';};
+  return function(){
+    var plat=mPlat.checked,em=mEmail.value.trim().toLowerCase();
+    if(!plat&&!/^[^@\s]+@[^@\s.]+(\.[^@\s.]+)+$/.test(em)){toast('اكتب بريد المدرّب صاحب الدورة — أو علّم «دورة من المنصّة»');mEmail.focus();return null;}
+    return {instructor_email:plat?'':em,platform_owned:plat};
+  };
+}
+// «انشر على المنصة» لدورةٍ دفترية: إنشاءٌ على المنصّة كذلك ⇒ يسأل نفس السؤال قبل النداء،
+// وإلا كان الزرّ طريقًا مسدودًا (الخادم يردّ ٤٠٠ ومفيش خانة في المسار كله).
+function publishCoursePlatformModal(c,after){
+  var s=openModal('نشر «'+(c.title||'الدورة')+'» على المنصة',
+    `<div class="note-ai" style="margin-bottom:4px">${svg('sparkles','ic')}<div>هتتنشر كدورة native على app.elprofessor.net. لازم تحمل مالكها من أول لحظة — بعد كده الملكية بتتغيّر من صفحة الدورة على المنصّة.</div></div>`
+    + courseOwnerBlockHtml()
+    + `<div class="acts"><button class="btn btn-primary" id="p_go">${svg('check')}انشر على المنصة</button><button class="btn btn-ghost" id="p_cancel">إلغاء</button></div>`);
+  var readOwner=bindCourseOwner(s);
+  s.querySelector('#p_cancel').onclick=closeModal;
+  s.querySelector('#p_go').onclick=function(){
+    var own=readOwner();if(!own){return;}
+    closeModal();
+    if(window.EP&&EP.publishCourseToPlatform){EP.publishCourseToPlatform(c.cid,own,after);}
+  };
+}
 function createCourseModal(presetTitle){
   // presetTitle: عنوان مبدئي (مثلاً من «عايز دورة»)؛ نتجاهل كائن الحدث عند الاستدعاء كـ onclick.
   var preset=(typeof presetTitle==='string')?presetTitle:'';
@@ -1978,6 +2017,7 @@ function createCourseModal(presetTitle){
   <div class="note-ai" style="margin-bottom:12px">${svg('sparkles','ic')}<div>هتتنشر تلقائيًا على المنصة (app.elprofessor.net) كدورة native وتظهر للطلاب فورًا — تقدر تضيف الفيديوهات والتفاصيل بعدها.</div></div>
   <div class="fld"><label>عنوان الدورة</label><input id="m_title" value="${esc(preset)}" placeholder="مثال: مدخل قانون العمل"></div>
   <div class="fld"><label>المحاضر / الجهة</label><input id="m_inst" placeholder="اسم المحاضر أو «فريق البروفيسور»"></div>
+  ${courseOwnerBlockHtml()}
   <div class="row2"><div class="fld"><label>السعر يبدأ من (ج)</label><input id="m_price" type="number" placeholder="150"></div>
   <div class="fld"><label>النوع</label><select id="m_type"><option value="مدفوعة">مدفوعة</option><option value="مجانية">مجانية</option></select></div></div>
   <label class="tg"><input type="checkbox" id="m_head"> تسعير لكل فرد (per-head)</label>
@@ -1992,9 +2032,11 @@ function createCourseModal(presetTitle){
   </details>
   <div class="acts" style="margin-top:16px"><button class="btn btn-primary" id="m_save">${svg('check')}إنشاء ونشر على المنصة</button><button class="btn btn-ghost" id="m_cancel">إلغاء</button></div>`);
   s.querySelector('#m_cancel').onclick=closeModal;
+  var courseOwner=bindCourseOwner(s);
   s.querySelector('#m_save').onclick=()=>{const t=s.querySelector('#m_title').value.trim()||'دورة جديدة';const inst=s.querySelector('#m_inst').value.trim()||'فريق البروفيسور';const pr=s.querySelector('#m_price').value;const tp=s.querySelector('#m_type').value;
+    var own=courseOwner();if(!own){return;}
     if(window.EP&&EP.data.courses){
-      EP.createCourse({title:t,trainer_name:inst,price_egp:tp==='مدفوعة'?(+pr||0):0,status:'active'},function(){closeModal();courseTab='courses';viewCourses(document.getElementById('view'));});
+      EP.createCourse({title:t,trainer_name:inst,price_egp:tp==='مدفوعة'?(+pr||0):0,status:'active',instructor_email:own.instructor_email,platform_owned:own.platform_owned},function(){closeModal();courseTab='courses';viewCourses(document.getElementById('view'));});
       return;
     }
     closeModal();toast('تعذّر إنشاء الدورة — لا يوجد اتصال حيّ بالخادم');};
@@ -2005,8 +2047,9 @@ function createCourseModal(presetTitle){
     if(!t){toast('اكتب عنوان الدورة الأول');return;}
     if(material.length<40){toast('الصق مادة كافية (40 حرفًا على الأقل) عشان Titch يبني منهج مظبوط');return;}
     if(!(window.EP&&EP.generateCourse)){toast('التوليد متاح من البيانات الحيّة فقط');return;}
+    var own=courseOwner();if(!own){return;}
     var btn=s.querySelector('#m_titch');btn.disabled=true;btn.style.opacity='.6';
-    EP.generateCourse({title:t,instructor_name:inst,material:material,mission:mission,type:tp==='مدفوعة'?'recorded_paid':'recorded_free',price_egp:tp==='مدفوعة'?(+pr||0):0},function(){closeModal();courseTab='platform';viewCourses(document.getElementById('view'));});
+    EP.generateCourse({title:t,instructor_name:inst,material:material,mission:mission,type:tp==='مدفوعة'?'recorded_paid':'recorded_free',price_egp:tp==='مدفوعة'?(+pr||0):0,instructor_email:own.instructor_email,platform_owned:own.platform_owned},function(){closeModal();courseTab='platform';viewCourses(document.getElementById('view'));});
   };
 }
 function editCourseModal(c){
@@ -4363,7 +4406,7 @@ function foundingLeadsPanel(){
       '<div style="flex:1 1 150px;min-width:0;font-size:12.5px">'+
         '<div style="font-size:12px;color:var(--muted);font-weight:800">التخصّص</div>'+
         '<div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(l.specialization||'ما حدّدش')+
-          (l.governorate?('<span style="color:var(--muted)"> · '+esc(l.governorate)+'</span>'):'')+'</div>'+
+          (l.country?('<span style="color:var(--muted)"> · '+esc(l.country)+'</span>'):'')+'</div>'+
       '</div>'+
       '<div style="flex:0 1 auto;min-width:0;font-size:12.5px">'+telCell+'</div>'+
       '<div style="flex:none;font-size:12px;color:var(--muted)">'+esc(l.when||'—')+'</div>'+
