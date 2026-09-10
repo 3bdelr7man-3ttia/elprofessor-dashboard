@@ -16,7 +16,10 @@ NOT collected by the default suite (`python_files = test_*.py`); run it explicit
 Findings exercised here:
   F-095  employee reads the whole finance ledger from the API
   F-011  login: no per-account lockout, no is_active check, IP key depends on a proxy
-  F-107  /api/auth/sso resurrects a disabled account, unlimited and unaudited
+  F-107  RESOLVED 2026-09-10 — /api/auth/sso removed entirely (the platform's own
+         /api/lms/sso/verify was deleted the same day, commit 6733465; the route here
+         had already been 403-dead for months and nothing minted a `?sso=` link).
+         See tests/test_sso_route_removed.py.
   F-108  30-day token, no jti, no server logout, password rotation does not revoke
   F-118  /robots.txt is swallowed by the SPA catch-all
   F-119  GET /api/content/prerender-cron is public
@@ -28,7 +31,6 @@ Negative results pinned so nobody re-investigates them:
 import datetime
 import os
 import re
-import types
 
 import jwt
 import pytest
@@ -275,39 +277,18 @@ def test_messages_rate_limit_is_real_and_two_tiered(ctx):
 
 # --------------------------------------------------------------------------- F-107 · SSO
 
-def test_f107_sso_reactivates_a_disabled_account_unlimited_and_unaudited(ctx):
-    """OPEN. `sso_login` sets `is_active = True` unconditionally (app.py:1489-1490) while the
-    old dashboard_role survives, so «disable this account» — the only off-switch in the panel
-    — undoes itself as long as the platform account exists. No rate limit, no audit row."""
-    class FakeResp:
-        status_code = 200
-        content = b'x'
-
-        def json(self):
-            return {'aud': 'elprofessor-dashboard',
-                    'user': {'email': 'audit-fired@x.test', 'role': 'member',
-                             'full_name': 'Fired Employee'}}
-
-    original = appmod.requests
-    appmod.requests = types.SimpleNamespace(post=lambda *a, **k: FakeResp())
-    try:
-        with flask_app.app_context():
-            u = User.query.filter_by(email='audit-fired@x.test').first()
-            u.is_active = False
-            db.session.commit()
-        r = ctx['client'].post('/api/auth/sso', json={'sso': 'anything'})
-        assert r.status_code == 200 and r.get_json()['token']
-        with flask_app.app_context():
-            u = User.query.filter_by(email='audit-fired@x.test').first()
-            assert u.is_active is True                    # resurrected
-            assert u.dashboard_role == 'employee'         # with its old role
-            assert AuditLog.query.filter(AuditLog.action.like('auth.sso%')).count() == 0
-        appmod._RATE_BUCKETS.clear()
-        burst = [ctx['client'].post('/api/auth/sso', json={'sso': 'x%d' % i}).status_code
-                 for i in range(40)]
-        assert burst == [200] * 40                        # no rate limit at all
-    finally:
-        appmod.requests = original
+def test_f107_sso_route_removed(ctx):
+    """RESOLVED 2026-09-10 — the finding is moot because the route it described is gone:
+    `sso_login`/`/api/auth/sso` were deleted from app.py the same day the platform deleted
+    its own `/api/lms/sso/verify` (commit 6733465). No account-resurrection path remains
+    because there is no SSO entry point left at all. Full coverage (rule gone from
+    url_map, `lms/sso` string gone, plain login unaffected) lives in
+    tests/test_sso_route_removed.py — this stub only keeps the finding id traceable in
+    the ledger. (405, not 404: the SPA catch-all still matches the path for GET, so
+    Werkzeug answers method-not-allowed — same as any other unrouted path.)"""
+    assert not hasattr(appmod, 'sso_login')
+    r = ctx['client'].post('/api/auth/sso', json={'sso': 'anything'})
+    assert r.status_code == 405
 
 
 # ----------------------------------------------------------------------- F-108 · sessions
