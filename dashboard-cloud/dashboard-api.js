@@ -644,6 +644,16 @@
               specialty: w.specialty || "",
               specialtyLabel: w.specialty ? (SPECIALTY_AR[w.specialty] || w.specialty) : "—",
               phone: w.phone || "",
+              // F-166 (2026-09-18): «البلد» و«جاي من فين» — الصفوف الخمسة القديمة ما فيهاش
+              // الحقلين دول أصلًا، فـ«—» هي الصادقة عند الغياب، والصفّ يفضل ظاهر كامل.
+              country: w.country || "",
+              countryLabel: w.country || "—",
+              sourcePage: w.source_page || "",
+              sourceLabel: w.source_page || "—",
+              // عنوانُ الزائر كما وصل — يُعرض كما هو ولا يُترجم إلى بلد: اشتقاقُ البلد يحتاج
+              // خدمةً خارجية لا نناديها، والبلدُ المعروض هو ما اختاره الطالبُ بنفسه وحده.
+              // الصفوفُ القديمة تحمل عنوانَ الوسيط (10.0.1.2) — يُعرض كما هو، بلا تجميل.
+              ipLabel: w.ip || "—",
               status: w.status || "new",
               when: relTime(at) || arDate(at),
               at: at ? (Date.parse(at) || 0) : 0,

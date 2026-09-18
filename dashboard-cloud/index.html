@@ -5725,11 +5725,22 @@ function waitlistPanel(){
         '<div style="font-weight:800;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(w.name||'بلا اسم')+'</div>'+
         '<div style="font-size:12px;color:var(--muted);direction:ltr;text-align:start;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(w.email||'—')+'</div>'+
         '<div style="font-size:12px;color:var(--muted);direction:ltr;text-align:start;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(w.phone||'—')+'</div>'+
+        /* F-166: عنوانُ الزائر كما وصل — سطرٌ صغيرٌ بلا أيّ استنتاجٍ للبلد منه. الصفوفُ القديمة
+           تحمل عنوانَ الوسيط نفسَه في كلّها، والغائبُ يُكتب «—» لا فراغًا. */
+        '<div style="font-size:11px;color:var(--muted);opacity:.75;direction:ltr;text-align:start;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="العنوان اللي جه منه الطلب">'+esc(w.ipLabel||'—')+'</div>'+
       '</div>'+
       '<div style="flex:1 1 130px;min-width:0;font-size:12.5px">'+
         '<div style="font-size:12px;color:var(--muted);font-weight:800">الصفة</div>'+
         '<div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(w.roleLabel||'—')+
           ((w.specialtyLabel&&w.specialtyLabel!=='—')?(' · '+esc(w.specialtyLabel)):'')+'</div></div>'+
+      /* F-166: «البلد» و«جاي من فين» — الصفوف اللي اتسجّلت قبل النهارده مش حاملة الحقلين،
+         فبتتكتب «—» زي بقية الحقول الناقصة، والصفّ بيتعرض كامل مش بيتفرّغ. */
+      '<div style="flex:1 1 110px;min-width:0;font-size:12.5px">'+
+        '<div style="font-size:12px;color:var(--muted);font-weight:800">البلد</div>'+
+        '<div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(w.countryLabel||'—')+'</div></div>'+
+      '<div style="flex:1 1 130px;min-width:0;font-size:12.5px">'+
+        '<div style="font-size:12px;color:var(--muted);font-weight:800">جاي من فين</div>'+
+        '<div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(w.sourceLabel||'—')+'</div></div>'+
       '<div style="flex:1 1 190px;min-width:0;font-size:12.5px">'+
         '<div style="font-size:12px;color:var(--muted);font-weight:800">ليه عايز ينضم</div>'+
         '<div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(w.note||'—')+'</div></div>'+
