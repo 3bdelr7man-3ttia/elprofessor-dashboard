@@ -3292,7 +3292,7 @@ function drawContent(){
     <div class="lab" style="margin:10px 0 4px">نص المقال</div>
     <div style="background:var(--surface-2,#f7f7f9);border:1px solid var(--line,#e6e6ee);border-radius:10px;padding:12px 14px;max-height:300px;overflow:auto;margin-bottom:10px">${_bodyHtml}</div>
     <div class="field"><div class="lab">الحالة</div><div class="val"><span class="status ${pub?'s-auto':'s-wait'}"><span class="d"></span>${pub?'منشور على الموقع':'بانتظار الاعتماد'}</span></div></div>
-    ${pub?`<div class="acts"><button class="btn btn-ghost" data-a="site">عرض على الموقع</button><button class="btn btn-ghost" data-a="unpub">إلغاء النشر</button></div>`
+    ${pub?`<div class="acts"><button class="btn btn-ghost" data-a="site">عرض على الموقع</button><button class="btn btn-ghost" data-a="edit">تعديل</button><button class="btn btn-ghost" data-a="unpub">إلغاء النشر</button></div>`
       :`<div class="acts"><button class="btn btn-primary" data-a="pub">${svg('check')}اعتمد وانشر (SEO)</button><button class="btn btn-ghost" data-a="edit">تعديل</button><button class="btn btn-warn" data-a="reject">رفض</button></div>`}
     </div>`;
   el.querySelectorAll('[data-a]').forEach(b=>b.onclick=()=>{const a=b.dataset.a;
@@ -3321,6 +3321,8 @@ function createArticleModal(edit){
   var _raw=(edit&&window.EP&&EP.data.content&&EP.data.content.raw||[]).filter(function(a){return a.id===edit.aid;})[0]||{};
   var _bodyText=Array.isArray(_raw.body)?_raw.body.join('\n\n'):'';
   var _imgUrl=_raw.image_url||'';
+  var _meta=_raw.meta_description||'';
+  var _rev=_raw.reviewed_by||'';
   var s=openModal(edit?'تعديل مقال':'إنشاء مقال للموقع',
     '<div class="fld"><label>العنوان</label><input id="a_t" value="'+topEsc(e.title||'')+'" placeholder="عنوان المقال"></div>'+
     '<div class="row2"><div class="fld"><label>التصنيف</label><input id="a_cat" value="'+topEsc(e.cat||'')+'" placeholder="قانون الشركات"></div><div class="fld"><label>الوسم</label><input id="a_k" value="'+topEsc(e.kicker||'')+'" placeholder="تشريعات"></div></div>'+
@@ -3328,9 +3330,12 @@ function createArticleModal(edit){
     '<div class="fld"><label>نص المقال</label><textarea id="a_body" style="min-height:160px" placeholder="افصل بين الفقرات بسطر فارغ">'+topEsc(_bodyText)+'</textarea></div>'+
     '<div class="fld"><label>المصدر</label><input id="a_by" value="'+topEsc(e.by||'الذكاء + رأي خبير')+'"></div>'+
     '<div class="fld"><label>صورة المقال</label><input id="a_imgurl" value="'+topEsc(_imgUrl)+'" placeholder="رابط صورة المقال (https://...)" style="direction:ltr;text-align:left"></div>'+
+    '<div class="fld"><label>وصف البحث (meta)</label><textarea id="a_meta" placeholder="الوصف الذي يظهر تحت العنوان في جوجل — يبدأ بالإجابة المختصرة">'+topEsc(_meta)+'</textarea></div>'+
+    '<div class="fld"><label>راجعه (اختياري)</label><input id="a_rev" value="'+topEsc(_rev)+'" placeholder="اسم من راجع المقال فعلًا — اتركه فارغًا إن لم يُراجَع"></div>'+
+    (edit?'<div style="color:var(--muted);font-size:12px;margin:-4px 0 8px">رابط المقال المنشور ثابت — تغيير العنوان لا يغيّره. وتاريخ «آخر تحديث» يتحرّك فقط لتعديلٍ جوهري في النصّ.</div>':'')+
     '<div class="acts" style="margin-top:6px"><button class="btn btn-primary" id="a_save">'+svg('check')+(edit?'حفظ':'أنشئ كمسودّة')+'</button>'+(edit?'':'<button class="btn btn-human" id="a_pub">أنشئ وانشر فورًا</button>')+'<button class="btn btn-ghost" id="a_x">إلغاء</button></div>');
   s.querySelector('#a_x').onclick=closeModal;
-  function gather(){return {t:s.querySelector('#a_t').value.trim()||'مقال بلا عنوان',cat:s.querySelector('#a_cat').value.trim()||'قانوني',k:s.querySelector('#a_k').value.trim()||'مقال',ex:s.querySelector('#a_ex').value.trim(),by:s.querySelector('#a_by').value.trim()||'الإدارة',body:s.querySelector('#a_body').value.trim(),img:s.querySelector('#a_imgurl').value.trim()};}
+  function gather(){return {t:s.querySelector('#a_t').value.trim()||'مقال بلا عنوان',cat:s.querySelector('#a_cat').value.trim()||'قانوني',k:s.querySelector('#a_k').value.trim()||'مقال',ex:s.querySelector('#a_ex').value.trim(),by:s.querySelector('#a_by').value.trim()||'الإدارة',body:s.querySelector('#a_body').value.trim(),img:s.querySelector('#a_imgurl').value.trim(),meta:s.querySelector('#a_meta').value.trim(),rev:s.querySelector('#a_rev').value.trim()};}
   s.querySelector('#a_save').onclick=function(){var g=gather();
     if(!window.EP){toast('غير متصل بالخادم — تعذّر حفظ المقال');return;}
     if(edit&&edit.aid){EP.updateArticle(edit,g,function(){closeModal();viewContent(document.getElementById('view'));});return;}

@@ -481,6 +481,13 @@ def build_article(tpl, a, r):
         if key == "ld-article" and pub_dt:
             obj["datePublished"] = iso_z(pub_dt)
             obj["dateModified"] = iso_z(mod_dt or pub_dt)
+        if key == "ld-article":
+            # E4 — الفيد يقرّر نوع الكاتب حين يعرفه (author_type)؛ غيابه = ما بناه القالب كما هو.
+            if a.get("author_type") == "Organization":
+                obj["author"] = {"@type": "Organization", "name": a.get("author_name") or "البروفيسور"}
+            # reviewedBy فقط لمراجعة بشرية حقيقية مسجّلة — لا يُدّعى أبدًا.
+            if a.get("reviewed_by"):
+                obj["reviewedBy"] = {"@type": "Person", "name": str(a["reviewed_by"])}
         lds.append((key, obj))
     have = [k for k, _ in lds]
     if "ld-article" not in have or "ld-bc" not in have:

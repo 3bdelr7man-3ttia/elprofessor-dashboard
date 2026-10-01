@@ -25,6 +25,8 @@ RUN apt-get update \
 
 COPY backend/app.py /app/app.py
 COPY backend/prerender.py /app/prerender.py
+# refresh_rules.py: المُتحقِّق المشترك مع المنصّة — app.py يستورده عند الإقلاع (غيابه = الحاوية لا تقوم)
+COPY backend/refresh_rules.py /app/refresh_rules.py
 # The new cloud-design dashboard becomes the served frontend (Flask serves /app/dist).
 # Only the live app files are shipped — the standalone prototype HTMLs
 # (Dashboard-Outputs.html / Dashboard-State.html) are unreferenced and not deployed.

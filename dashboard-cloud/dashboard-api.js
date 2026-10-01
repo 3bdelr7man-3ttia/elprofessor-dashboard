@@ -2150,7 +2150,7 @@
 
   // المحتوى: إنشاء/نشر/تعديل
   EP.createArticle = function (g, publish, after) {
-    post("/content/articles", { title: g.t, cat: g.cat, kicker: g.k, excerpt: g.ex, by: g.by, body: g.body, image_url: g.img })
+    post("/content/articles", { title: g.t, cat: g.cat, kicker: g.k, excerpt: g.ex, by: g.by, body: g.body, image_url: g.img, meta_description: g.meta || "", reviewed_by: g.rev || "" })
       .then(function (a) {
         if (publish && a && a.id) return post("/content/articles/" + a.id + "/publish", {});
         return a;
@@ -2159,7 +2159,7 @@
       .catch(function (e) { quietToast((e && e.message) || "تعذّر حفظ المقال"); if (after) after(); });
   };
   EP.updateArticle = function (t, g, after) {
-    api("/content/articles/" + t.aid, { method: "PUT", body: { title: g.t, cat: g.cat, kicker: g.k, excerpt: g.ex, by: g.by, body: g.body, image_url: g.img } })
+    api("/content/articles/" + t.aid, { method: "PUT", body: { title: g.t, cat: g.cat, kicker: g.k, excerpt: g.ex, by: g.by, body: g.body, image_url: g.img, meta_description: g.meta || "", reviewed_by: g.rev || "" } })
       .then(function () { note("حُدّث «" + g.t + "»"); EP.reload("content", after); })
       .catch(function (e) { quietToast((e && e.message) || "تعذّر التحديث"); if (after) after(); });
   };

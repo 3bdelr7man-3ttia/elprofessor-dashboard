@@ -9,12 +9,14 @@ from xml.sax.saxutils import escape as xesc
 from flask import Flask, request, jsonify, g, send_from_directory, Response
 from flask_cors import CORS
 from flask_sqlalchemy import SQLAlchemy
-from sqlalchemy import inspect, text
+from sqlalchemy import inspect, text, event
+from sqlalchemy.orm.attributes import set_committed_value
 from sqlalchemy.exc import IntegrityError
 from werkzeug.security import generate_password_hash, check_password_hash
 from dotenv import load_dotenv
 import jwt
 import requests
+import refresh_rules as _rr   # E2/E3/§3.2-5 — نسخة مطابقة بايتًا لـ elprofessor/backend/services/refresh_rules.py
 
 load_dotenv()
 
@@ -140,7 +142,7 @@ db = SQLAlchemy(app)
 # `/sitemap-articles.xml` is served for elprofessor.net (its /.htaccess 301s here); a
 # `X-Robots-Tag: noindex` on it would stop Google reading the article URLs entirely —
 # silently, with no error anywhere. Keep this list in sync with any noindex work.
-_ROBOTS_EXEMPT_PATHS = frozenset({'/sitemap-articles.xml'})
+_ROBOTS_EXEMPT_PATHS = frozenset({'/sitemap-articles.xml', '/robots.txt'})
 
 
 # ---- baseline security headers on every response (clickjacking / MIME-sniff / TLS-downgrade) ----
@@ -149,6 +151,10 @@ def _security_headers(resp):
     resp.headers.setdefault('X-Content-Type-Options', 'nosniff')
     resp.headers.setdefault('X-Frame-Options', 'DENY')
     resp.headers.setdefault('Referrer-Policy', 'strict-origin-when-cross-origin')
+    # E9 — لوحة التحكّم ليست صفحة بحث: كل ما يُقدَّم من هذا المضيف noindex، عدا خريطة المقالات
+    # (ما زالت تُقدَّم من هنا كاحتياط) وrobots.txt نفسه.
+    if request.path not in _ROBOTS_EXEMPT_PATHS:
+        resp.headers.setdefault('X-Robots-Tag', 'noindex, nofollow')
     # Content-Security-Policy — deliberately OUTSIDE the IS_PRODUCTION guard.
     # The deployed container runs with IS_PRODUCTION=False (F-021: neither ENV nor FLASK_ENV
     # is set in the Dockerfile), so anything behind that guard never ships. This header is a
@@ -666,6 +672,35 @@ class Article(db.Model):
     target_audience = db.Column(db.Text)    # «الفئوية» → site audience filter (المحامون/وكلاء النيابة/…)
     status = db.Column(db.String(20), default='draft')  # draft | published
     published_at = db.Column(db.DateTime, nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.datetime.utcnow)
+    # ——— E2/E3 (المراجعة الخبيرة ٢٠٢٦-١٠-٠٢): الرابط مجمَّد + تاريخ تعديل حقيقي + نموذج المحاور ———
+    # slug: يُكتب مرّة واحدة — من العنوان وقت أول نشر — ثم لا يتغيّر أبدًا (تغيير العنوان لا يغيّر الرابط).
+    # ⛔ لا تعيد حسابه من العنوان لمقالٍ نُشر مرّة: الرابط معروف لجوجل والـcanonical مبنيّ عليه.
+    slug = db.Column(db.String(600), unique=True)
+    updated_at = db.Column(db.DateTime, nullable=True)   # تعديل جوهري فقط (refresh_rules.is_material)
+    content_hash = db.Column(db.String(64))              # sha256(عنوان+متن بلا أقسام الروابط+faq+وصف)
+    primary_kw = db.Column(db.Text)                      # الاستعلام الأساسي للصفحة
+    cluster_id = db.Column(db.String(120))               # المحور (الدليل) الذي تنتمي له الصفحة
+    role = db.Column(db.String(20))                      # hub | support | standalone (None = standalone)
+    parent_id = db.Column(db.Integer)                    # support ⇒ معرّف صفحة المحور (hub)
+    refresh_count = db.Column(db.Integer, default=0)
+    last_refreshed_at = db.Column(db.DateTime)
+    reviewed_by = db.Column(db.String(255))              # مراجع بشري حقيقي فقط (reviewedBy في JSON-LD)
+    reviewed_at = db.Column(db.DateTime)
+
+
+class ArticleVersion(db.Model):
+    """لقطة المقال **قبل** كل تحديث (refresh) — للرجوع والتدقيق. request_id فريد = التحديث لا يُطبَّق مرّتين."""
+    __tablename__ = 'article_versions'
+    id = db.Column(db.Integer, primary_key=True)
+    article_id = db.Column(db.Integer, index=True, nullable=False)
+    n = db.Column(db.Integer, nullable=False)
+    title = db.Column(db.String(500))
+    body = db.Column(db.Text)
+    faq = db.Column(db.Text)
+    meta = db.Column(db.Text)              # JSON: meta_description · keywords · change_log · reasons · material
+    hash = db.Column(db.String(64))
+    request_id = db.Column(db.String(200), unique=True)
     created_at = db.Column(db.DateTime, default=datetime.datetime.utcnow)
 
 class Message(db.Model):
@@ -7476,6 +7511,23 @@ def ensure_runtime_schema():
                         connection.execute(text(f"ALTER TABLE articles ADD COLUMN {_seo_col} TEXT"))
                     except Exception:
                         pass
+            # E2/E3 — أعمدة إضافية فقط (NULL-able، بلا DEFAULT يكتب فوق شيء). الفهرس الفريد منفصل لأن
+            # SQLite لا يقبل UNIQUE داخل ADD COLUMN؛ وNULL مسموح متكرّرًا فيه.
+            for _col, _typ in (('slug', 'VARCHAR(600)'), ('updated_at', 'DATETIME'),
+                               ('content_hash', 'VARCHAR(64)'), ('primary_kw', 'TEXT'),
+                               ('cluster_id', 'VARCHAR(120)'), ('role', 'VARCHAR(20)'),
+                               ('parent_id', 'INTEGER'), ('refresh_count', 'INTEGER'),
+                               ('last_refreshed_at', 'DATETIME'), ('reviewed_by', 'VARCHAR(255)'),
+                               ('reviewed_at', 'DATETIME')):
+                if _col not in article_columns:
+                    try:
+                        connection.execute(text(f"ALTER TABLE articles ADD COLUMN {_col} {_typ}"))
+                    except Exception:
+                        pass
+            try:
+                connection.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS ux_articles_slug ON articles (slug)"))
+            except Exception as _exc:          # noqa: BLE001 — لا يُسقط الإقلاع أبدًا
+                logger.warning('articles slug index not created: %s', _exc)
         if 'courses' in existing_tables:
             course_columns = {column['name'] for column in inspector.get_columns('courses')}
             if 'lms_instructor_email' not in course_columns:
@@ -7535,6 +7587,10 @@ def ensure_runtime_schema():
                 connection.execute(text("ALTER TABLE investments ADD COLUMN share_pct FLOAT DEFAULT 0"))
             if 'actual_return' not in investment_columns:
                 connection.execute(text("ALTER TABLE investments ADD COLUMN actual_return FLOAT DEFAULT 0"))
+    # E2 — تجميد الروابط: كل مقال بلا slug مخزَّن يأخذ الرابط المحسوب **الآن** (الحيّ نفسه بايتًا بايتًا)
+    # قبل أي شيء آخر. آمن للتكرار: لا يلمس صفًّا له slug. لا يُسقط الإقلاع أبدًا.
+    if 'articles' in existing_tables:
+        _backfill_article_slugs()
 
 # ============================================================
 # INIT
@@ -7566,12 +7622,161 @@ def _slugify_ar(text, fallback='article'):
     return s or fallback
 
 
-def _article_slug(article):
-    """Stable per-article slug. The marketing site currently resolves articles by numeric
-    `id`; `slug` is additive (SEO-friendly, stable links) and suffixed with the id so it is
-    globally unique even when two titles collide."""
+def _computed_slug(article):
+    """الرابط كما كان يُحسب دائمًا: slugify(العنوان) + «-» + المعرّف (الموقع يحلّ المقال من ذيل المعرّف).
+    ⛔ يُستعمل فقط لمقالٍ لم يُنشر قط، أو للردم من الحيّ — الرابط المخزَّن هو المرجع بعد أول نشر."""
     base = _slugify_ar(getattr(article, 'title', None))
     return f"{base}-{article.id}" if getattr(article, 'id', None) else base
+
+
+def _article_slug(article):
+    """الرابط المجمَّد (E2): `article.slug` إن وُجد، وإلا المحسوب. تغيير العنوان بعد النشر لا يغيّر الرابط —
+    قبل هذا كان `slugify(title)-id` فأي تعديل عنوان (أو تحديث CTR) يغيّر الـcanonical نفسه."""
+    stored = getattr(article, 'slug', None)
+    return stored if stored else _computed_slug(article)
+
+
+def _article_content_hash(title, blocks, faq, meta_description=''):
+    """بصمة المحتوى الذي يقرؤه الإنسان — أقسام الروابط المرسومة من البيانات مستبعدة، فإعادة بناء
+    «اقرأ أيضًا»/الدليل لا تغيّر البصمة ولا تاريخ التعديل."""
+    payload = json.dumps([(title or '').strip(), _rr.content_blocks(blocks or []),
+                          [f for f in (faq or []) if isinstance(f, dict)], (meta_description or '').strip()],
+                         ensure_ascii=False, sort_keys=True)
+    return hashlib.sha256(payload.encode('utf-8')).hexdigest()
+
+
+def _article_page(article):
+    """الصفحة بالشكل الذي تفهمه refresh_rules."""
+    return {'title': article.title or '', 'meta_description': article.meta_description or '',
+            'body': _article_body_list(article), 'faq': _json_faq(article.faq),
+            'slug': _article_slug(article)}
+
+
+def _hash_of(article):
+    return _article_content_hash(article.title, _article_body_list(article), _json_faq(article.faq),
+                                 article.meta_description or '')
+
+
+def _backfill_article_slugs():
+    """ردم الروابط المجمَّدة + البصمة لكل مقال (منشور ومسودّة) من الرابط المحسوب حاليًا — أي الحيّ.
+    idempotent: صفّ له slug لا يُلمس. يرجّع {'slugs': n, 'hashes': n}. لا يرفع استثناءً."""
+    out = {'slugs': 0, 'hashes': 0}
+    try:
+        with db.engine.begin() as conn:
+            rows = conn.execute(text("SELECT id, title, slug, content_hash, body, faq, meta_description "
+                                     "FROM articles")).fetchall()
+            for r in rows:
+                rid, title, slug, chash, body, faq, meta = r
+                fields = {}
+                if not slug:
+                    base = _slugify_ar(title)
+                    fields['slug'] = f"{base}-{rid}"
+                if not chash:
+                    probe = Article(title=title, body=body, faq=faq, meta_description=meta)
+                    fields['content_hash'] = _hash_of(probe)
+                if not fields:
+                    continue
+                try:
+                    conn.execute(text("UPDATE articles SET %s WHERE id = :id"
+                                      % ', '.join('%s = :%s' % (k, k) for k in fields)),
+                                 dict(fields, id=rid))
+                    out['slugs'] += 'slug' in fields
+                    out['hashes'] += 'content_hash' in fields
+                except Exception as exc:                 # noqa: BLE001
+                    logger.warning('slug backfill: article %s not updated: %s', rid, exc)
+        if out['slugs'] or out['hashes']:
+            logger.info('slug backfill: %s', out)
+    except Exception as exc:                             # noqa: BLE001
+        logger.warning('slug backfill skipped: %s', exc)
+    return out
+
+
+def _was_live(target):
+    """هل كان المقال منشورًا **قبل** هذا التعديل؟ (القيم المحفوظة لا الجديدة)."""
+    from sqlalchemy import inspect as _sa_inspect
+    st = _sa_inspect(target)
+
+    def old(attr):
+        h = st.attrs[attr].history
+        if h.deleted:
+            return h.deleted[0]
+        if h.unchanged:
+            return h.unchanged[0]
+        return None if h.added else getattr(target, attr, None)
+    return old('status') == 'published' or old('published_at') is not None
+
+
+def _old_value(target, attr):
+    from sqlalchemy import inspect as _sa_inspect
+    h = _sa_inspect(target).attrs[attr].history
+    if h.deleted:
+        return h.deleted[0]
+    return getattr(target, attr, None)
+
+
+@event.listens_for(Article, 'after_insert')
+def _article_after_insert(mapper, connection, target):
+    """مقال جديد: الرابط من عنوانه + معرّفه (لا يُعرف المعرّف قبل الإدراج) + البصمة."""
+    fields = {}
+    if not target.slug:
+        fields['slug'] = _computed_slug(target)
+    if not target.content_hash:
+        fields['content_hash'] = _hash_of(target)
+    if fields:
+        connection.execute(Article.__table__.update().where(Article.__table__.c.id == target.id).values(**fields))
+        for k, v in fields.items():
+            set_committed_value(target, k, v)
+
+
+@event.listens_for(Article, 'before_update')
+def _article_before_update(mapper, connection, target):
+    """الحارس المركزي لكل مسار كتابة (تعديل يدوي · تحديث · ردم روابط · مزامنة):
+      • الرابط: مقال لم يكن حيًّا قط ⇒ يتبع العنوان؛ كان حيًّا مرّة ⇒ مجمَّد للأبد.
+      • البصمة: تُعاد حسابًا دائمًا (أقسام الروابط خارجها).
+      • updated_at: يتحرّك فقط لتعديل **جوهري** على مقال كان حيًّا — لا لعنوان/وصف وحده ولا لروابط."""
+    if not _was_live(target):
+        target.slug = _computed_slug(target)
+    elif not target.slug:
+        target.slug = _computed_slug(target)
+    new_hash = _hash_of(target)
+    if new_hash != target.content_hash:
+        if _was_live(target) and target.status == 'published' and target.updated_at == _old_value(target, 'updated_at'):
+            old_page = {'body': _json_body_raw(_old_value(target, 'body')), 'faq': _json_faq(_old_value(target, 'faq'))}
+            new_page = {'body': _article_body_list(target), 'faq': _json_faq(target.faq)}
+            if _rr.is_material(old_page, new_page):
+                target.updated_at = datetime.datetime.utcnow()
+        target.content_hash = new_hash
+
+
+def _json_body_raw(raw):
+    class _B:  # noqa: N801 — نفس محلّل المتن بلا كائن
+        body = raw
+    return _article_body_list(_B)
+
+
+# ——— E4 — التوقيع (قرار المؤسس ٢٠٢٦-١٠-٠٢، معدَّل): «فريق منصة البروفيسور»، والنشر الآلي باقٍ كما هو ———
+# • توقيع مقالات المصنع (الجديدة والقائمة) = «فريق منصة البروفيسور». الفريق يراقب ويصلح من اللوحة.
+# • JSON-LD: author = Organization «منصة البروفيسور» لتواقيع الفريق/الوكيل — لا Person باسمٍ لا وجود له.
+# • reviewedBy يظهر فقط حين يُسجَّل reviewed_by فعلًا (محرّر اللوحة / جسر review) — لا مراجعة بأثر رجعي.
+TEAM_BYLINE = 'فريق منصة البروفيسور'
+ORG_AUTHOR = 'منصة البروفيسور'
+_TEAM_BYLINES = frozenset({'فريق البروفيسور', 'هيئة تحرير البروفيسور', 'خبراء البروفيسور',
+                           'الوكيل الذكي — البروفيسور', 'الوكيل الذكي — تحليل قانوني', TEAM_BYLINE, ''})
+
+
+def _is_team_byline(by):
+    return (by or '').strip() in _TEAM_BYLINES
+
+
+def _byline_fields(article):
+    if _is_team_byline(article.by):
+        return {'author_type': 'Organization', 'author_name': ORG_AUTHOR}
+    return {'author_type': 'Person', 'author_name': (article.by or '').strip()}
+
+
+def _sync_byline(author):
+    a = (author or '').strip()
+    return TEAM_BYLINE if a in _TEAM_BYLINES else a
 
 
 def serialize_article(article):
@@ -7594,6 +7799,18 @@ def serialize_article(article):
         'target_audience': article.target_audience or 'عام',   # «الفئوية» → site audience filter
         'status': article.status or 'draft',
         'published_at': article.published_at.isoformat() if article.published_at else None,
+        # E3 — تاريخ التعديل الجوهري وحده (prerender.py و article.html يقرآنه لـdateModified)
+        'updated_at': article.updated_at.isoformat() if article.updated_at else None,
+        'content_hash': article.content_hash or None,
+        'primary_kw': article.primary_kw or None,
+        'cluster_id': article.cluster_id or None,
+        'role': article.role or None,
+        'parent_id': article.parent_id or None,
+        'reviewed_by': article.reviewed_by or None,
+        'reviewed_at': article.reviewed_at.isoformat() if article.reviewed_at else None,
+        'refresh_count': article.refresh_count or 0,
+        'last_refreshed_at': article.last_refreshed_at.isoformat() if article.last_refreshed_at else None,
+        **_byline_fields(article),
     }
 
 def _apply_article_fields(article, d):
@@ -7635,6 +7852,15 @@ def _apply_article_fields(article, d):
                                  ensure_ascii=False) if isinstance(fq, list) else None
     if 'target_audience' in d:
         article.target_audience = (d.get('target_audience') or 'عام')[:60]  # «الفئوية»
+    if 'primary_kw' in d:
+        article.primary_kw = (str(d.get('primary_kw') or '').strip()[:300] or None)
+    if 'reviewed_by' in d:
+        # مراجعة بشرية حقيقية يكتبها الفريق من المحرّر بالاسم — تُنتج reviewedBy في JSON-LD.
+        # فارغ ⇒ لا مراجعة (يُمسح التاريخ أيضًا). لا تُملأ آليًّا أبدًا.
+        who = str(d.get('reviewed_by') or '').strip()[:255] or None
+        if who != (article.reviewed_by or None):
+            article.reviewed_by = who
+            article.reviewed_at = datetime.datetime.utcnow() if who else None
 
 def _no_store(resp):
     resp.headers['Cache-Control'] = 'no-store'
@@ -7693,7 +7919,7 @@ def _strip_inline_md(s):
     return s.strip()
 
 
-def _md_to_blocks(md):
+def _md_to_blocks(md, title=None):
     """Convert the platform's markdown article body → the marketing site's block format:
       • a heading line ('# '..'###### ', even a malformed '### ## ') → '## <text>' (site renders <h2>/<h3>)
       • a bullet line ('- '/'* ') → '• <text>'
@@ -7724,6 +7950,9 @@ def _md_to_blocks(md):
         else:
             para.append(ln)
     flush()
+    # E8 — الصفحة ترسم عنوانها H1 من حقل title؛ أوّل عنوانٍ في المتن يساويه = H2 يكرّر H1 (مقال 79).
+    if title and blocks and blocks[0].startswith('## ') and _rr.norm(blocks[0][3:]) == _rr.norm(title):
+        blocks = blocks[1:]
     return blocks
 
 
@@ -7731,7 +7960,9 @@ def _md_to_blocks(md):
 # القياس: صفر روابط داخلية في ١٨٩٣ كتلة متن. المكان الواحد الذي يُحسب فيه الترابط هو هنا — وقت
 # الاستيراد (كل مقال جديد) وفي سكربت الردم (المنشور سابقًا) — بنفس الدالة، حتى لا يختلف «ذو صلة»
 # بين بيئتين (ذاكرة two_implementations_of_one_trap).
-RELATED_HEADING = '## اقرأ أيضًا'
+RELATED_HEADING = _rr.RELATED_HEADING            # '## اقرأ أيضًا'
+SAME_GUIDE_HEADING = _rr.SAME_GUIDE_HEADING      # '## في نفس الدليل'      (support ⇒ المحور + شقيقتان)
+HUB_NAV_HEADING = _rr.HUB_NAV_HEADING            # '## تفاصيل أكثر في هذا الدليل' (hub ⇒ كل صفحاته التفصيلية)
 _AR_NORM_TABLE = str.maketrans({'أ': 'ا', 'إ': 'ا', 'آ': 'ا', 'ى': 'ي', 'ة': 'ه', 'ؤ': 'و', 'ئ': 'ي'})
 _REL_STOP = {'في', 'من', 'علي', 'على', 'عن', 'الي', 'الى', 'إلى', 'مع', 'بين', 'او', 'أو', 'و', 'ما',
              'ماذا', 'هل', 'كيف', 'ايه', 'إيه', 'ازاي', 'إزاي', 'دليل', 'عملي', 'شامل', 'كل', 'لا',
@@ -7763,14 +7994,34 @@ def _blog_url(article):
     return BLOG_ORIGIN + '/blog/' + quote(_article_slug(article), safe='')
 
 
-def _related_articles(title, keywords, audience, pool, exclude_id=None, k=3):
-    """أقرب `k` مقالات منشورة: تقاطع كلمات (العنوان ×٢ + الوسوم) + نقطة للجمهور نفسه.
-    يُشترط تقاطعٌ حقيقي (≥ ٢) — رابطٌ بلا صلة أسوأ من غيابه. `pool` = صفوف Article منشورة."""
+# E5 — كلمات عامّة لا تصنع صلة وحدها: مقال «عقد الامتياز» ومقال «عقد الصلح» تقاطعا في «عقد» فقط
+# فترابطا (مقال 79). تُطبَّع بنفس _rel_tokens حتى تطابق ما يخرج منه.
+_GENERIC_REL = None
+
+
+def _generic_rel_tokens():
+    global _GENERIC_REL
+    if _GENERIC_REL is None:
+        # الأربع من المواصفة + ألفاظ قوالب العقود التي تتقاطع فيها كل صفحات العقود بلا صلة موضوعية
+        # (مقيس على مقال 79: «بنود» ربطته بالفرنشايز و«اتفاق» بالصلح).
+        _GENERIC_REL = _rel_tokens('عقد عقود العقد العقود قانون القانون قانوني القانوني قانونية القانونية '
+                                   'دليل الدليل محامي المحامي محامين المحامين محاماة المحاماة محام '
+                                   'بند بنود البنود اتفاق الاتفاق اتفاقية نموذج النموذج نماذج صيغة الصيغة')
+    return _GENERIC_REL
+
+
+def _related_articles(title, keywords, audience, pool, exclude_id=None, k=3, exclude_obj=None):
+    """المقالات «المستقلّة» (بلا محور): أقرب `k` مقالات منشورة: تقاطع كلمات (العنوان ×٢ + الوسوم)
+    + نقطة للجمهور نفسه. يُشترط تقاطعٌ حقيقي (≥ ٢) **وفيه كلمة واحدة على الأقل غير عامّة**
+    (E5: «عقد/قانون/دليل/محامي» وحدها لا تكفي) — رابطٌ بلا صلة أسوأ من غيابه."""
     mine_title = _rel_tokens(title)
     mine = mine_title | _rel_tokens(*(keywords or []))
     norm_title = ' '.join(sorted(mine_title))
+    generic = _generic_rel_tokens()
     scored = []
     for a in pool:
+        if exclude_obj is not None and a is exclude_obj:
+            continue
         if exclude_id is not None and a.id == exclude_id:
             continue
         if not a.title or (a.title or '').strip() == (title or '').strip():
@@ -7779,6 +8030,8 @@ def _related_articles(title, keywords, audience, pool, exclude_id=None, k=3):
         if ' '.join(sorted(their_title)) == norm_title:
             continue
         theirs = their_title | _rel_tokens(*_json_list(a.keywords))
+        if not ((mine & theirs) - generic):
+            continue
         score = 2 * len(mine_title & their_title) + len((mine - mine_title) & theirs) + len(mine_title & theirs)
         if audience and audience != 'عام' and (a.target_audience or '') == audience:
             score += 1
@@ -7789,8 +8042,81 @@ def _related_articles(title, keywords, audience, pool, exclude_id=None, k=3):
     return [a for _s, _t, a in scored[:k]]
 
 
+def _role(a):
+    r = (getattr(a, 'role', None) or '').strip().lower()
+    return r if r in ('hub', 'support') else 'standalone'
+
+
+def _hub_for(a, pool):
+    """صفحة المحور المنشورة لصفحةٍ تفصيلية: parent_id أولًا، ثم hub منشور في نفس cluster_id."""
+    pid = getattr(a, 'parent_id', None)
+    if pid:
+        for h in pool:
+            if h.id == pid and _role(h) == 'hub' and h is not a:
+                return h
+    cid = getattr(a, 'cluster_id', None)
+    if cid:
+        for h in pool:
+            if _role(h) == 'hub' and h.cluster_id == cid and h is not a:
+                return h
+    return None
+
+
+def _supports_of(hub, pool):
+    out = [s for s in pool if s is not hub and _role(s) == 'support'
+           and ((s.parent_id and s.parent_id == hub.id) or (not s.parent_id and hub.cluster_id
+                                                             and s.cluster_id == hub.cluster_id))]
+    out.sort(key=lambda s: (s.published_at or s.created_at or datetime.datetime.min, s.id or 0))
+    return out
+
+
+def _cluster_links(a, pool):
+    """E5 — يحلّ محلّ _related_articles: أقسام الروابط **من بيانات المحور**، لا من تقاطع الكلمات وحده.
+      • support ⇒ «في نفس الدليل»: صفحة المحور أولًا ثم أقرب شقيقتين منشورتين.
+      • hub     ⇒ «تفاصيل أكثر في هذا الدليل»: كل صفحاته التفصيلية المنشورة.
+      • standalone (أو محور غير منشور) ⇒ «اقرأ أيضًا» بالمُقيِّم القديم + شرط الكلمة غير العامّة (≥ ٢).
+    `pool` = صفوف منشورة. يرجّع [(heading, [articles])] — فارغ = لا قسم."""
+    role = _role(a)
+    if role == 'support':
+        hub = _hub_for(a, pool)
+        if hub is not None:
+            sibs = [s for s in _supports_of(hub, pool) if s is not a and s.id != getattr(a, 'id', -1)]
+            mine = _rel_tokens(a.title) | _rel_tokens(*_json_list(a.keywords))
+            sibs.sort(key=lambda s: (len(mine & (_rel_tokens(s.title) | _rel_tokens(*_json_list(s.keywords)))),
+                                     s.published_at or s.created_at or datetime.datetime.min), reverse=True)
+            return [(SAME_GUIDE_HEADING, [hub] + sibs[:2])]
+    elif role == 'hub':
+        sups = _supports_of(a, pool)
+        if sups:
+            return [(HUB_NAV_HEADING, sups)]
+    rel = _related_articles(a.title, _json_list(a.keywords), a.target_audience or 'عام', pool,
+                            exclude_id=getattr(a, 'id', None), exclude_obj=a)
+    return [(RELATED_HEADING, rel)] if len(rel) >= 2 else []
+
+
+def _link_line(a):
+    # «[» و«]» في العنوان تكسر صيغة الرابط — تُستبدل بأقواس عادية
+    return '• [%s](%s)' % ((a.title or '').replace('[', '(').replace(']', ')').strip(), _blog_url(a))
+
+
+def _strip_related(blocks):
+    """يشيل كل أقسام الروابط المرسومة من البيانات (العنوان + بنود الروابط بعده) ويُبقي المحتوى كما هو."""
+    return _rr.content_blocks(blocks)
+
+
+def _with_links(blocks, a, pool):
+    """المتن بلا أقسام روابط قديمة + الأقسام الحالية من _cluster_links. يرجّع (blocks, عدد الروابط)."""
+    base = _strip_related(blocks or [])
+    out, n = list(base), 0
+    for heading, arts in _cluster_links(a, pool):
+        out.append(heading)
+        out += [_link_line(x) for x in arts]
+        n += len(arts)
+    return out, n
+
+
 def _with_related(blocks, title, keywords, audience, pool, exclude_id=None):
-    """يلحق «## اقرأ أيضًا» + ٢-٣ روابط بالمتن. أقل من رابطين ⇒ المتن كما هو (لا قسم برابطٍ يتيم).
+    """توافق رجعي (مستقلّ بلا محور): يلحق «## اقرأ أيضًا» + ٢-٣ روابط. أقل من رابطين ⇒ المتن كما هو.
     متنٌ فيه القسم سلفًا لا يُلمس (الردم آمن للتكرار)."""
     blocks = list(blocks or [])
     if any(str(b).strip() == RELATED_HEADING for b in blocks):
@@ -7798,10 +8124,22 @@ def _with_related(blocks, title, keywords, audience, pool, exclude_id=None):
     rel = _related_articles(title, keywords, audience, pool, exclude_id=exclude_id)
     if len(rel) < 2:
         return blocks, 0
-    # «[» و«]» في العنوان تكسر صيغة الرابط — تُستبدل بأقواس عادية
-    lines = ['• [%s](%s)' % ((a.title or '').replace('[', '(').replace(']', ')').strip(), _blog_url(a))
-             for a in rel]
-    return blocks + [RELATED_HEADING] + lines, len(lines)
+    return blocks + [RELATED_HEADING] + [_link_line(a) for a in rel], len(rel)
+
+
+def _refresh_links_for(arts, pool):
+    """يعيد رسم أقسام الروابط لمقالات بعينها (محور صار له تفصيلية جديدة...). لا يحرّك updated_at
+    (الروابط خارج البصمة). يرجّع عدد ما تغيّر — والمستدعي يحفظ."""
+    changed = 0
+    for art in arts:
+        if art is None or art.status != 'published':
+            continue
+        cur = _article_body_list(art)
+        new, _n = _with_links(cur, art, pool)
+        if new != cur:
+            art.body = json.dumps(new, ensure_ascii=False)
+            changed += 1
+    return changed
 
 
 def _mark_platform_duplicate(aid):
@@ -7893,6 +8231,22 @@ def _prerender_feed_json():
 
 
 _PRE_PAGE_RE = re.compile(r'^\d+\.html$')
+SITEMAP_FILE = 'sitemap-articles.xml'
+
+
+def _sftp_replace(sftp, src, dst):
+    """استبدال ذرّي: posix-rename (OpenSSH) يكتب فوق الهدف دفعة واحدة فلا لحظةَ 404 بين الحذف والنقل؛
+    وإن لم يدعمه الخادم نرجع للطريقة القديمة (حذف ثم نقل)."""
+    try:
+        sftp.posix_rename(src, dst)
+        return
+    except Exception:                            # noqa: BLE001
+        pass
+    try:
+        sftp.remove(dst)
+    except IOError:
+        pass
+    sftp.rename(src, dst)
 
 
 def _prerender_prune_remote(sftp, pre_dir, fresh):
@@ -7982,6 +8336,11 @@ def _prerender_push(reason=''):
             raise RuntimeError('generator exit %s: %s' % (
                 proc.returncode, (proc.stderr or proc.stdout or '')[-600:]))
 
+        # E1 — خريطة المقالات تُكتب في public_html نفسه (بدل 301 إلى مضيف الداشبورد) من نفس الدفعة
+        # ونفس القاعدة التي ولّدت الصفحات، فلا تسبق الخريطةُ صفحاتِها ولا تتأخّر عنها.
+        with open(os.path.join(tmp, SITEMAP_FILE), 'w', encoding='utf-8') as fh:
+            fh.write(_articles_sitemap_xml())
+
         # نرفع المتغيّر فقط — ٦ تشغيلات يوميًا × ١١٥ ملف رفعٌ كامل هدر بلا داعٍ
         try:
             with open(_PRERENDER_HASHES, encoding='utf-8') as fh:
@@ -7989,7 +8348,7 @@ def _prerender_push(reason=''):
         except Exception:                        # noqa: BLE001
             known = {}
         wanted, fresh = [], {}
-        for rel in ['blog.html', 'feed.xml', 'blog/_pre/manifest.txt'] + [
+        for rel in ['blog.html', 'feed.xml', 'blog/_pre/manifest.txt', SITEMAP_FILE] + [
                 'blog/_pre/' + n for n in sorted(os.listdir(os.path.join(tmp, 'blog', '_pre')))
                 if n.endswith('.html')]:
             path = os.path.join(tmp, rel)
@@ -8028,11 +8387,7 @@ def _prerender_push(reason=''):
                     # لو وصل طلب أثناء النقل. rename على نفس نظام الملفات ذرّي.
                     dst = '%s/%s' % (root, rel)
                     sftp.put(os.path.join(tmp, rel), dst + '.tmp')
-                    try:
-                        sftp.remove(dst)
-                    except IOError:
-                        pass
-                    sftp.rename(dst + '.tmp', dst)
+                    _sftp_replace(sftp, dst + '.tmp', dst)
                     uploaded += 1
                 pruned = _prerender_prune_remote(sftp, '%s/blog/_pre' % root, fresh)
                 gone = _prerender_sync_gone(sftp, '%s/blog/_gone' % root, _retracted_article_ids())
@@ -8046,7 +8401,7 @@ def _prerender_push(reason=''):
                 pass                             # كاش تحسين فقط — فقدانه = رفع كامل مرة
 
         _prerender_last = {
-            'state': 'ok', 'reason': reason, 'articles': len(fresh) - 3,
+            'state': 'ok', 'reason': reason, 'articles': len(fresh) - 4,
             'uploaded': uploaded, 'pruned': pruned, 'gone': gone, 'unchanged': len(fresh) - len(wanted),
             'seconds': round(time.time() - started, 1),
             'at': datetime.datetime.utcnow().isoformat(),
@@ -8212,26 +8567,39 @@ def _sync_platform_articles():
             excerpt=(a.get('excerpt') or '')[:1000],
             cat=_ART_CAT_LABEL.get(cat, 'قانوني'),
             kicker='عن المنصة' if is_feature else 'تحليل قانوني',
-            by=a.get('author') or 'فريق البروفيسور',
+            by=_sync_byline(a.get('author')),
             date=_ar_date_from(a.get('published_at') or a.get('created_at')),
-            body=json.dumps(_body_with_related(a, title, pool), ensure_ascii=False),
+            body=json.dumps(_md_to_blocks(a.get('body') or '', title), ensure_ascii=False),
             meta_description=(a.get('meta_description') or a.get('excerpt') or '')[:400],
             keywords=json.dumps([str(k) for k in (a.get('keywords') or [])][:12], ensure_ascii=False),
             faq=json.dumps([f for f in (a.get('faq') or []) if isinstance(f, dict) and f.get('q') and f.get('a')][:8],
                            ensure_ascii=False),
             target_audience=(a.get('target_audience') or 'عام')[:60],  # «الفئوية» → site audience filter
             status='published' if is_published else 'draft',
+            # نموذج المحاور (§3.2-7): المولّد يرسل استعلام الصفحة ومحورها ودورها إن عرفها
+            primary_kw=(str(a.get('primary_kw') or '').strip()[:300] or None),
+            cluster_id=(str(a.get('cluster_id') or '').strip()[:120] or None),
+            role=(a.get('role') if a.get('role') in ('hub', 'support', 'standalone') else None),
         )
+        if art.role == 'support':
+            hub = _hub_for(art, pool)
+            art.parent_id = hub.id if hub is not None else None
+        blocks, n_links = _with_links(_article_body_list(art), art, pool)
+        art.body = json.dumps(blocks, ensure_ascii=False)
         if is_published:
             art.published_at = datetime.datetime.utcnow()
         db.session.add(art)
         db.session.commit()
         imported += 1
-        if RELATED_HEADING in (art.body or ''):
+        if n_links:
             linked += 1
         if is_published:
             published += 1
             pool.append(art)          # the next import in this batch can link to this one
+            # صفحة تفصيلية جديدة ⇒ قائمة «تفاصيل أكثر في هذا الدليل» في محورها تتحدّث (بلا dateModified)
+            if art.role == 'support':
+                if _refresh_links_for([_hub_for(art, pool)], pool):
+                    db.session.commit()
         else:
             drafts += 1
         _delete_platform_article(a.get('id'))  # only AFTER a successful import
@@ -8246,55 +8614,43 @@ def _sync_platform_articles():
 
 
 def _body_with_related(a, title, pool):
-    blocks = _md_to_blocks(a.get('body') or '')
+    """توافق رجعي: متن مقالٍ قادم من المنصّة + «اقرأ أيضًا» (مستقلّ)."""
+    blocks = _md_to_blocks(a.get('body') or '', title)
     blocks, _n = _with_related(blocks, title, a.get('keywords') or [],
                                (a.get('target_audience') or 'عام'), pool)
     return blocks
 
 
-def _strip_related(blocks):
-    """يشيل قسم «اقرأ أيضًا» القديم (العنوان + بنود الروابط اللي بعده) ويرجّع باقي المتن كما هو."""
-    idx = max((i for i, b in enumerate(blocks) if str(b).strip() == RELATED_HEADING), default=None)
-    if idx is None:
-        return list(blocks)
-    tail = [b for b in blocks[idx + 1:] if not str(b).lstrip().startswith('• [')]
-    return list(blocks[:idx]) + tail
-
-
 def _backfill_related(apply=False, refresh=False):
-    """«اقرأ أيضًا» لكل مقال منشور بلا القسم. تجربة جافّة افتراضيًّا.
-    refresh=True: يعيد بناء القسم الموجود من المنشور حاليًا — لما مقال يتسحب أو يتدمج، الروابط
-    اللي بتشاور عليه في مقالات تانية تتحدّث بدل ما توصل لـ410/301. بيكتب بس لو الروابط اتغيّرت."""
+    """أقسام الروابط لكل مقال منشور — من بيانات المحور (_cluster_links). تجربة جافّة افتراضيًّا.
+    refresh=False: يضيف القسم لمن ليس عنده أيّ قسم روابط فقط.
+    refresh=True: يعيد رسم كل الأقسام من المنشور حاليًا ومن بيانات المحاور — بعد سحب/دمج/تعيين محاور.
+    ⛔ لا يحرّك updated_at ولا البصمة: الروابط خارج المحتوى (refresh_rules.content_blocks)."""
     pool = Article.query.filter_by(status='published').all()
     counts = {'published': len(pool), 'already_linked': 0, 'would_link': 0, 'too_few_related': 0,
-              'links_added': 0, 'refreshed': 0, 'applied': bool(apply)}
+              'links_added': 0, 'refreshed': 0, 'removed_sections': 0, 'applied': bool(apply)}
     sample = []
     for art in pool:
         blocks = _article_body_list(art)
-        if any(str(b).strip() == RELATED_HEADING for b in blocks):
-            if not refresh:
-                counts['already_linked'] += 1
-                continue
-            base = _strip_related(blocks)
-            new_blocks, n = _with_related(base, art.title, _json_list(art.keywords),
-                                          art.target_audience or 'عام', pool, exclude_id=art.id)
-            if n and new_blocks != blocks:
-                counts['refreshed'] += 1
-                counts['would_link'] += 1
-                if apply:
-                    art.body = json.dumps(new_blocks, ensure_ascii=False)
-            else:
-                counts['already_linked'] += 1
+        has_section = any(str(b).strip() in _rr.LINK_HEADINGS for b in blocks)
+        if has_section and not refresh:
+            counts['already_linked'] += 1
             continue
-        new_blocks, n = _with_related(blocks, art.title, _json_list(art.keywords),
-                                      art.target_audience or 'عام', pool, exclude_id=art.id)
-        if not n:
+        new_blocks, n = _with_links(blocks, art, pool)
+        if new_blocks == blocks:
+            counts['already_linked' if has_section else 'too_few_related'] += 1
+            continue
+        if has_section:
+            counts['refreshed'] += 1
+            if not n:
+                counts['removed_sections'] += 1
+        elif not n:
             counts['too_few_related'] += 1
             continue
         counts['would_link'] += 1
         counts['links_added'] += n
         if len(sample) < 5:
-            sample.append({'id': art.id, 'title': art.title, 'links': new_blocks[-n:]})
+            sample.append({'id': art.id, 'title': art.title, 'links': new_blocks[len(_strip_related(new_blocks)):]})
         if apply:
             art.body = json.dumps(new_blocks, ensure_ascii=False)
     if apply and counts['would_link']:
@@ -8315,6 +8671,224 @@ def content_backfill_related():
     out = _backfill_related(apply=apply, refresh=refresh)
     if apply and out['would_link']:
         out['prerender'] = _prerender_push_async('backfill-related:+%d' % out['would_link'])
+    return jsonify(out), 200
+
+
+def _secret_ok():
+    secret = request.headers.get('X-ELP-Metrics-Secret', '')
+    return bool(PLATFORM_METRICS_SECRET and secret and secrets.compare_digest(secret, PLATFORM_METRICS_SECRET))
+
+
+def _body_blocks_from(v, title):
+    """متن التحديث: قائمة كتل كما هي، أو ماركداون المولّد ⇒ كتل (بنفس محوّل الاستيراد)."""
+    if isinstance(v, list):
+        return [str(x) for x in v if str(x).strip()]
+    if isinstance(v, str):
+        return _md_to_blocks(v, title)
+    return None
+
+
+@app.route('/api/bridge/articles/<int:id>/refresh', methods=['POST'])
+def bridge_article_refresh(id):
+    """§3.2-5 — تحديث مقال منشور في مكانه (الرابط لا يتغيّر أبدًا). سرّ المزامنة.
+    الجسم: {request_id, if_hash, title?, meta_description?, body? (md أو كتل), faq?, change_log[], reasons[],
+            material?, dry_run?}
+      409 لو if_hash ≠ البصمة الحالية (تعديل سبق التحديث) · 200 duplicate لو request_id طُبِّق قبلًا ·
+      422 + الأخطاء لو خالف refresh_rules (رقم جديد · قسم ناقص · نقص كلمات · عنوان بلا سبب CTR · رابط مختلف).
+    يحفظ لقطة ما قبل التحديث في ArticleVersion، يحرّك updated_at فقط لتعديل جوهري، ثم prerender."""
+    if not _secret_ok():
+        return jsonify({'error': 'unauthorized'}), 401
+    d = request.get_json(silent=True) or {}
+    rid = str(d.get('request_id') or '').strip()[:200]
+    if not rid:
+        return jsonify({'error': 'request_id required'}), 400
+    prior = ArticleVersion.query.filter_by(request_id=rid).first()
+    if prior is not None:
+        return jsonify({'ok': True, 'duplicate': True, 'article_id': prior.article_id, 'version': prior.n}), 200
+    art = Article.query.get(id)
+    if art is None or art.status != 'published':
+        return jsonify({'error': 'not a published article'}), 404
+    cur_hash = _hash_of(art)
+    if str(d.get('if_hash') or '') != cur_hash:
+        return jsonify({'error': 'hash mismatch', 'current_hash': cur_hash}), 409
+    if 'slug' in d and str(d.get('slug') or '') != _article_slug(art):
+        return jsonify({'ok': False, 'errors': ['slug_changed']}), 422
+
+    cur = _article_page(art)
+    new = dict(cur)
+    if isinstance(d.get('title'), str) and d['title'].strip():
+        new['title'] = d['title'].strip()[:500]
+    if isinstance(d.get('meta_description'), str) and d['meta_description'].strip():
+        new['meta_description'] = d['meta_description'].strip()[:400]
+    blocks = _body_blocks_from(d.get('body'), new['title']) if 'body' in d else None
+    if blocks is not None:
+        new['body'] = _rr.content_blocks(blocks)
+    else:
+        new['body'] = _rr.content_blocks(cur['body'])
+    if isinstance(d.get('faq'), list):
+        new['faq'] = [f for f in d['faq'] if isinstance(f, dict) and f.get('q') and f.get('a')][:8]
+    reasons = [str(r) for r in (d.get('reasons') or [])][:10]
+    change_log = [str(c)[:300] for c in (d.get('change_log') or [])][:20]
+    verdict = _rr.validate(dict(cur, body=_rr.content_blocks(cur['body'])), new, reasons, ymyl=True,
+                           primary_kw=art.primary_kw, change_log=change_log)
+    if not verdict['ok']:
+        return jsonify(dict(verdict, ok=False)), 422
+    if d.get('dry_run'):
+        return jsonify(dict(verdict, dry_run=True, current_hash=cur_hash)), 200
+
+    n = (db.session.query(db.func.max(ArticleVersion.n)).filter(ArticleVersion.article_id == art.id).scalar() or 0) + 1
+    db.session.add(ArticleVersion(
+        article_id=art.id, n=n, title=art.title, body=art.body, faq=art.faq, hash=cur_hash, request_id=rid,
+        meta=json.dumps({'meta_description': art.meta_description, 'keywords': _json_list(art.keywords),
+                         'change_log': change_log, 'reasons': reasons, 'material': verdict['material'],
+                         'client_material': d.get('material')}, ensure_ascii=False)))
+    pool = Article.query.filter_by(status='published').all()
+    art.title = new['title']
+    art.meta_description = new['meta_description']
+    art.faq = json.dumps(new['faq'], ensure_ascii=False)
+    links_body, _n = _with_links(new['body'], art, pool)
+    art.body = json.dumps(links_body, ensure_ascii=False)
+    art.refresh_count = (art.refresh_count or 0) + 1
+    art.last_refreshed_at = datetime.datetime.utcnow()
+    # updated_at: الحارس المركزي (before_update) يحرّكه فقط لتعديل جوهري — نفس refresh_rules.is_material
+    try:
+        db.session.commit()
+    except IntegrityError:
+        db.session.rollback()
+        return jsonify({'ok': True, 'duplicate': True}), 200
+    _audit('article.refresh', target=art.id, meta={'request_id': rid, 'version': n, 'material': verdict['material']})
+    out = {'ok': True, 'article_id': art.id, 'version': n, 'material': verdict['material'],
+           'warnings': verdict['warnings'], 'hash': art.content_hash, 'slug': _article_slug(art),
+           'updated_at': art.updated_at.isoformat() if art.updated_at else None}
+    out['prerender'] = _prerender_push_async('refresh:%s' % art.id)
+    return jsonify(out), 200
+
+
+@app.route('/api/bridge/articles/<int:id>/review', methods=['POST'])
+def bridge_article_review(id):
+    """تسجيل مراجعة بشرية حقيقية (لاعتماد تليجرام لاحقًا): {reviewed_by}. يُنتج reviewedBy في JSON-LD.
+    لا يُستدعى أبدًا لمقال لم يراجعه إنسان فعلًا — لا مراجعة بأثر رجعي."""
+    if not _secret_ok():
+        return jsonify({'error': 'unauthorized'}), 401
+    d = request.get_json(silent=True) or {}
+    who = str(d.get('reviewed_by') or '').strip()[:255]
+    if not who:
+        return jsonify({'error': 'reviewed_by required'}), 400
+    art = Article.query.get_or_404(id)
+    art.reviewed_by = who
+    art.reviewed_at = datetime.datetime.utcnow()
+    db.session.commit()
+    _audit('article.review', target=id, meta={'reviewed_by': who})
+    if art.status == 'published':
+        _prerender_push_async('review:%s' % id)
+    return jsonify({'ok': True, 'id': id, 'reviewed_by': who}), 200
+
+
+def _validate_cluster_rows(rows, by_id):
+    """§3.1a (منقولة): support يحتاج parent = hub في نفس المحور؛ hub واحد لكل محور؛ الأدوار المسموحة فقط."""
+    errors = []
+    final = {}
+    for r in rows:
+        try:
+            aid = int(r.get('id'))
+        except (TypeError, ValueError):
+            errors.append('bad id: %r' % (r.get('id'),))
+            continue
+        if aid not in by_id:
+            errors.append('unknown article %s' % aid)
+            continue
+        role = (r.get('role') or 'standalone').strip().lower()
+        if role not in ('hub', 'support', 'standalone'):
+            errors.append('%s: bad role %s' % (aid, role))
+            continue
+        final[aid] = {'cluster_id': (str(r.get('cluster_id') or '').strip()[:120] or None),
+                      'role': role, 'parent_id': r.get('parent_id'),
+                      'primary_kw': (str(r.get('primary_kw') or '').strip()[:300] or None)}
+    state = {}
+    for a in by_id.values():
+        state[a.id] = {'cluster_id': a.cluster_id, 'role': _role(a), 'parent_id': a.parent_id}
+    for aid, f in final.items():
+        state[aid].update({k: f[k] for k in ('cluster_id', 'role', 'parent_id')})
+    hubs = {}
+    for aid, st in state.items():
+        if st['role'] == 'hub':
+            if not st['cluster_id']:
+                errors.append('%s: hub without cluster_id' % aid)
+            elif st['cluster_id'] in hubs:
+                errors.append('%s: second hub for cluster %s (hub %s)' % (aid, st['cluster_id'], hubs[st['cluster_id']]))
+            else:
+                hubs[st['cluster_id']] = aid
+    for aid, f in final.items():
+        st = state[aid]
+        if st['role'] == 'support':
+            try:
+                pid = int(st['parent_id'])
+            except (TypeError, ValueError):
+                errors.append('%s: support without parent_id' % aid)
+                continue
+            if state.get(pid, {}).get('role') != 'hub' or state[pid]['cluster_id'] != st['cluster_id']:
+                errors.append('%s: parent %s is not the hub of cluster %s' % (aid, pid, st['cluster_id']))
+            else:
+                f['parent_id'] = pid
+        else:
+            f['parent_id'] = None
+    return final, errors
+
+
+@app.route('/api/bridge/articles/clusters', methods=['POST'])
+def bridge_article_clusters():
+    """§3.2-9 — تعيين المحاور/الأدوار (من cluster_proposal.py بعد موافقة المؤسس). سرّ المزامنة.
+    بلا ?apply=1 = تجربة جافّة تتحقّق فقط. مع apply: يكتب الأعمدة ثم يعيد رسم أقسام الروابط (بلا dateModified)
+    ثم prerender. الجسم: {"rows": [{id, cluster_id, role, parent_id, primary_kw}]}."""
+    if not _secret_ok():
+        return jsonify({'error': 'unauthorized'}), 401
+    d = request.get_json(silent=True) or {}
+    rows = [r for r in (d.get('rows') or []) if isinstance(r, dict)][:1000]
+    by_id = {a.id: a for a in Article.query.all()}
+    final, errors = _validate_cluster_rows(rows, by_id)
+    apply = (request.args.get('apply') or '') == '1'
+    out = {'applied': False, 'rows': len(rows), 'valid': len(final), 'errors': errors[:50]}
+    if errors:
+        return jsonify(out), 422
+    if apply and final:
+        for aid, f in final.items():
+            a = by_id[aid]
+            a.cluster_id, a.role, a.parent_id = f['cluster_id'], f['role'], f['parent_id']
+            if f['primary_kw']:
+                a.primary_kw = f['primary_kw']
+        db.session.commit()
+        out['applied'] = True
+        out['links'] = {k: v for k, v in _backfill_related(apply=True, refresh=True).items() if k != 'sample'}
+        _audit('article.clusters', target=len(final), meta={'clusters': len({f['cluster_id'] for f in final.values()})})
+        out['prerender'] = _prerender_push_async('clusters:%d' % len(final))
+    return jsonify(out), 200
+
+
+@app.route('/api/content/bylines/normalize', methods=['POST'])
+def content_bylines_normalize():
+    """قرار المؤسس ٢٠٢٦-١٠-٠٢: توقيع كل مقالات المصنع القائمة = «فريق منصة البروفيسور».
+    يلمس فقط التواقيع الآلية/الجماعية المعروفة (_TEAM_BYLINES) — أي اسم شخص حقيقي يبقى كما هو.
+    لا يكتب reviewed_by ولا يحرّك updated_at (التوقيع خارج البصمة). سرّ المزامنة.
+    بلا ?apply=1 = تجربة جافّة. ?scope=all يشمل المسودّات (الافتراضي: المنشور فقط)."""
+    if not _secret_ok():
+        return jsonify({'error': 'unauthorized'}), 401
+    apply = (request.args.get('apply') or '') == '1'
+    q = Article.query
+    if (request.args.get('scope') or '') != 'all':
+        q = q.filter_by(status='published')
+    rows = [a for a in q.all() if _is_team_byline(a.by) and (a.by or '').strip() != TEAM_BYLINE]
+    before = {}
+    for a in rows:
+        before[(a.by or '').strip() or '(فارغ)'] = before.get((a.by or '').strip() or '(فارغ)', 0) + 1
+    out = {'applied': False, 'would_change': len(rows), 'by_before': before, 'to': TEAM_BYLINE}
+    if apply and rows:
+        for a in rows:
+            a.by = TEAM_BYLINE
+        db.session.commit()
+        out['applied'] = True
+        _audit('article.bylines_normalize', target=len(rows), meta={'by_before': before})
+        if any(a.status == 'published' for a in rows):
+            out['prerender'] = _prerender_push_async('bylines:%d' % len(rows))
     return jsonify(out), 200
 
 
@@ -8394,14 +8968,9 @@ def public_articles_feed():
     return _no_store(resp)
 
 
-@app.route('/sitemap-articles.xml', methods=['GET'])
-def public_articles_sitemap():
-    """PUBLIC: sitemap of every published article, served for elprofessor.net (whose
-    /.htaccess 301s /sitemap-articles.xml here). The slug in <loc> comes from the SAME
-    _article_slug() the feed serializes, so the clean /blog/<slug> URLs resolve.
-
-    ⚠️ This path MUST stay indexable. If `X-Robots-Tag: noindex, nofollow` is ever added
-    to the dashboard host, it has to exempt this route — see _ROBOTS_EXEMPT_PATHS."""
+def _articles_sitemap_xml():
+    """خريطة المقالات المنشورة — مصدر واحد للمسار الاحتياطي هنا وللملف المكتوب في public_html (E1).
+    <loc> من نفس _article_slug (المجمَّد) الذي يقرؤه الفيد. lastmod = updated_at (تعديل جوهري) أو النشر."""
     items = Article.query.filter_by(status='published').order_by(
         Article.published_at.desc().nullslast(),
         Article.created_at.desc(),
@@ -8409,16 +8978,33 @@ def public_articles_sitemap():
     rows = []
     for a in items:
         loc = 'https://elprofessor.net/blog/' + quote(_article_slug(a), safe='')
-        lm = a.published_at or a.created_at
+        lm = a.updated_at or a.published_at or a.created_at
         # A dateless article emits NO <lastmod> element at all: an empty <lastmod></lastmod>
         # invalidates the ENTIRE sitemap in Search Console, not just that one <url>.
         lastmod = ('<lastmod>%s</lastmod>' % lm.strftime('%Y-%m-%d')) if lm else ''
         rows.append('<url><loc>%s</loc>%s<changefreq>monthly</changefreq></url>'
                     % (xesc(loc), lastmod))
-    xml = ('<?xml version="1.0" encoding="UTF-8"?>'
-           '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">'
-           + ''.join(rows) + '</urlset>')
-    return Response(xml, mimetype='application/xml')
+    return ('<?xml version="1.0" encoding="UTF-8"?>'
+            '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">'
+            + ''.join(rows) + '</urlset>')
+
+
+@app.route('/robots.txt', methods=['GET'])
+def dashboard_robots():
+    """E9 — robots حقيقي بدل قشرة الـSPA: لا شيء هنا للفهرسة، عدا خريطة المقالات طالما تعيش هنا احتياطًا."""
+    body = ('User-agent: *\n'
+            'Allow: /sitemap-articles.xml\n'
+            'Disallow: /\n')
+    return Response(body, mimetype='text/plain')
+
+
+@app.route('/sitemap-articles.xml', methods=['GET'])
+def public_articles_sitemap():
+    """PUBLIC (احتياط): نفس خريطة المقالات التي يكتبها _prerender_push في public_html
+    (elprofessor.net/sitemap-articles.xml يُقدَّم من هناك مباشرة منذ ٢٠٢٦-١٠-٠٢، E1).
+
+    ⚠️ This path MUST stay indexable — see _ROBOTS_EXEMPT_PATHS."""
+    return Response(_articles_sitemap_xml(), mimetype='application/xml')
 
 
 @app.route('/api/content/articles/all', methods=['GET'])
