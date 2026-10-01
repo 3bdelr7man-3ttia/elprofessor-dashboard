@@ -142,6 +142,26 @@ def test_backfill_endpoint_is_secret_gated_and_dry_by_default(ctx, monkeypatch):
     assert r.status_code == 200 and r.get_json()['applied'] is False
 
 
+def test_bulk_unpublish_is_secret_gated_dry_by_default_and_reversible(ctx, monkeypatch):
+    monkeypatch.setattr(appmod, 'PLATFORM_METRICS_SECRET', 'sec')
+    pushes = []
+    monkeypatch.setattr(appmod, '_prerender_push_async', lambda reason='': pushes.append(reason) or 'queued')
+    c = flask_app.test_client()
+    a, b, keep = _pub('خبر خارج البراند ١'), _pub('خبر خارج البراند ٢'), _pub('مقال قانوني نافع')
+    assert c.post('/api/content/bulk-unpublish', json={'ids': [a.id]}).status_code == 401
+    h = {'X-ELP-Metrics-Secret': 'sec'}
+    dry = c.post('/api/content/bulk-unpublish', headers=h, json={'ids': [a.id, b.id, 99999]}).get_json()
+    assert dry['applied'] is False and dry['would_unpublish'] == 2 and dry['not_published_or_missing'] == 1
+    assert Article.query.filter_by(status='published').count() == 3 and pushes == []
+    done = c.post('/api/content/bulk-unpublish?apply=1', headers=h, json={'ids': [a.id, b.id]}).get_json()
+    assert done['would_unpublish'] == 2 and len(pushes) == 1          # one prerender push, not one per article
+    assert {x.title for x in Article.query.filter_by(status='published')} == {'مقال قانوني نافع'}
+    assert Article.query.count() == 3                                  # drafted, never deleted
+    pub = c.get('/api/content/articles').get_json()
+    rows = pub['articles'] if isinstance(pub, dict) else pub
+    assert [r['title'] for r in rows] == ['مقال قانوني نافع']          # gone from the public feed
+
+
 # ——— ٥) من الكتلة إلى الصفحة: prerender.py + article.html الحقيقيان ———
 
 @pytest.mark.skipif(not (shutil.which('node') and os.path.isfile(os.path.join(SITE_DIR, 'article.html'))),

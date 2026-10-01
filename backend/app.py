@@ -8165,6 +8165,31 @@ def content_backfill_related():
     return jsonify(out), 200
 
 
+@app.route('/api/content/bulk-unpublish', methods=['POST'])
+def content_bulk_unpublish():
+    """سحب جماعي لمقالات منشورة إلى مسودّة (لا حذف — قابل للرجوع بإعادة النشر). سرّ المزامنة نفسه.
+    بلا `?apply=1` = تجربة جافّة. دفعة prerender واحدة في الآخر بدل دفعة لكل مقال، والمولّد بيشيل
+    صفحات _pre اللي مبقاش ليها مقال منشور. الجسم: {"ids": [..], "reason": "..."}."""
+    secret = request.headers.get('X-ELP-Metrics-Secret', '')
+    if not (PLATFORM_METRICS_SECRET and secret and secrets.compare_digest(secret, PLATFORM_METRICS_SECRET)):
+        return jsonify({'error': 'unauthorized'}), 401
+    d = request.json or {}
+    ids = [int(i) for i in (d.get('ids') or []) if str(i).isdigit()][:500]
+    reason = str(d.get('reason') or '')[:200]
+    apply = (request.args.get('apply') or '') == '1'
+    found = Article.query.filter(Article.id.in_(ids), Article.status == 'published').all() if ids else []
+    out = {'applied': apply, 'requested': len(ids), 'would_unpublish': len(found),
+           'not_published_or_missing': len(ids) - len(found),
+           'sample': [{'id': a.id, 'title': a.title} for a in found[:5]]}
+    if apply and found:
+        for a in found:
+            a.status = 'draft'
+        db.session.commit()
+        _audit('article.bulk_unpublish', target=len(found), meta={'ids': [a.id for a in found], 'reason': reason})
+        out['prerender'] = _prerender_push_async('bulk-unpublish:-%d' % len(found))
+    return jsonify(out), 200
+
+
 @app.route('/api/content/sync-from-platform', methods=['POST'])
 @token_required
 @roles_required('admin')
