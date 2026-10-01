@@ -7892,6 +7892,27 @@ def _prerender_feed_json():
                       ensure_ascii=False)
 
 
+_PRE_PAGE_RE = re.compile(r'^\d+\.html$')
+
+
+def _prerender_prune_remote(sftp, pre_dir, fresh):
+    """يشيل من blog/_pre على الاستضافة كل صفحة مقال `<id>.html` مالهاش نسخة في التوليد الحالي.
+    ضيّق عمدًا: أسماء أرقام بس (ASCII القرار القائم) — أي ملف تاني في الفولدر ما يتلمسش،
+    و`.tmp` بتاع رفع شغّال كمان ما يتلمسش. يرجّع عدد المحذوف."""
+    keep = {rel.rsplit('/', 1)[-1] for rel in fresh if rel.startswith('blog/_pre/')}
+    if not keep:           # توليد فاضي = عطل في القراءة، مش «مفيش مقالات» — ما نمسحش الموقع كله
+        return 0
+    removed = 0
+    for name in sftp.listdir(pre_dir):
+        if _PRE_PAGE_RE.match(name) and name not in keep:
+            try:
+                sftp.remove('%s/%s' % (pre_dir, name))
+                removed += 1
+            except IOError:
+                pass
+    return removed
+
+
 def _prerender_push(reason=''):
     """يولّد صفحات المقالات ويرفع المتغيّر منها فقط. لا يرفع استثناءً أبدًا."""
     global _prerender_last
@@ -7950,7 +7971,11 @@ def _prerender_push(reason=''):
                 wanted.append(rel)
 
         uploaded = 0
-        if wanted:
+        pruned = 0
+        # الحذف من الاستضافة نفسها، مش من النسخة المحلية بس: prerender.py بيشيل الصفحة اليتيمة
+        # من tmp، لكن نسختها المرفوعة كانت بتفضل تتقدّم للزواحف للأبد (عطل 2026-10-02: ١١٥ مقالًا
+        # مسحوبًا لسه بيرجّعوا 200 بعناوينهم). فبنقارن قائمة الاستضافة بالمولَّد ونشيل الزايد.
+        if True:   # اتصال دايم: المسح محتاج قائمة الاستضافة حتى لو مفيش رفع جديد
             import paramiko
             cl = paramiko.SSHClient()
             cl.set_missing_host_key_policy(paramiko.AutoAddPolicy())
@@ -7977,6 +8002,7 @@ def _prerender_push(reason=''):
                         pass
                     sftp.rename(dst + '.tmp', dst)
                     uploaded += 1
+                pruned = _prerender_prune_remote(sftp, '%s/blog/_pre' % root, fresh)
                 sftp.close()
             finally:
                 cl.close()
@@ -7988,7 +8014,7 @@ def _prerender_push(reason=''):
 
         _prerender_last = {
             'state': 'ok', 'reason': reason, 'articles': len(fresh) - 3,
-            'uploaded': uploaded, 'unchanged': len(fresh) - len(wanted),
+            'uploaded': uploaded, 'pruned': pruned, 'unchanged': len(fresh) - len(wanted),
             'seconds': round(time.time() - started, 1),
             'at': datetime.datetime.utcnow().isoformat(),
         }
