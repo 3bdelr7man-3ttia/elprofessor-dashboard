@@ -7857,6 +7857,7 @@ _PRERENDER_HASHES = '/data/prerender-hashes.json'
 
 _prerender_lock = None          # threading.Lock, أول استخدام
 _prerender_running = False
+_prerender_pending = None       # سبب طلب وصل أثناء تشغيل ⇒ دورة إضافية بعده
 _prerender_last = {'state': 'never-run'}
 
 
@@ -8005,24 +8006,34 @@ def _prerender_push(reason=''):
 def _prerender_push_async(reason=''):
     """بيرجّع فورًا. التوليد والرفع ممكن ياخدوا دقيقة، والداشبورد بـworker واحد —
     فتشغيله داخل الطلب بيجمّد فيد المقالات للموقع الحيّ طول المدة دي."""
-    global _prerender_lock, _prerender_running
+    global _prerender_lock, _prerender_running, _prerender_pending
     import threading
     if _prerender_lock is None:
         _prerender_lock = threading.Lock()
 
     def run():
-        global _prerender_running
+        global _prerender_running, _prerender_pending
         with _prerender_lock:
             _prerender_running = True
             try:
-                with app.app_context():
-                    _prerender_push(reason)
+                why = reason
+                while True:
+                    _prerender_pending = None
+                    with app.app_context():
+                        _prerender_push(why)
+                    # طلب وصل والتوليد شغّال قرأ القاعدة قبل تعديله ⇒ لازم دورة كمان، وإلا
+                    # التعديل يفضل غايب عن صفحات الزواحف لحد ما حد ينشر حاجة تانية (عطل 2026-10-01:
+                    # ٤٩٢ رابطًا داخليًا اتكتبوا ولقوا «already-running» فاتبلعوا).
+                    if not _prerender_pending:
+                        break
+                    why = _prerender_pending
             finally:
                 _prerender_running = False
 
     if _prerender_running:
-        app.logger.info('prerender: already running, skipping (%s)', reason)
-        return {'state': 'already-running'}
+        _prerender_pending = reason or 'pending'
+        app.logger.info('prerender: running — queued one more pass after it (%s)', reason)
+        return {'state': 'queued-after-current', 'reason': reason}
     threading.Thread(target=run, name='prerender', daemon=True).start()
     return {'state': 'started', 'reason': reason}
 
