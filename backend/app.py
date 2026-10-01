@@ -8097,6 +8097,65 @@ def _prerender_push_async(reason=''):
     return {'state': 'started', 'reason': reason}
 
 
+# ——— نسخة احتياطية حيّة لقاعدة الداشبورد (F-162: كانت بلا أي نسخة) ———
+# منقولة من داشبورد سوبر أثري (نفس الأصل، مختبرة بالاسترجاع هناك ٢٠٢٦-٠٩-١٢). أُضيفت هنا قبل
+# أول هجرة تكتب على جدول المقالات (تجميد الروابط ٢٠٢٦-١٠-٠٢) — لا هجرة بلا نسخة تسبقها.
+_BACKUP_LAST = {'at': None}
+
+
+def _sqlite_file_path():
+    """مسار ملفّ القاعدة الفعليّ، أو None إن لم تكن SQLite."""
+    try:
+        database = db.engine.url.database
+    except Exception:                                    # noqa: BLE001
+        return None
+    if not database or db.engine.url.get_backend_name() != 'sqlite':
+        return None
+    if not os.path.isabs(database):
+        database = os.path.join(app.instance_path, database)
+    return database if os.path.exists(database) else None
+
+
+@app.route('/api/bridge/backup/sqlite', methods=['GET'])
+def bridge_backup_sqlite():
+    """نسخةٌ حيّةٌ مضغوطةٌ من قاعدة الداشبورد (`sqlite3.Connection.backup`). سرّ المزامنة نفسه."""
+    secret = request.headers.get('X-ELP-Metrics-Secret', '')
+    if not PLATFORM_METRICS_SECRET or not secret or not secrets.compare_digest(secret, PLATFORM_METRICS_SECRET):
+        return jsonify({'error': 'unauthorized'}), 401
+    src = _sqlite_file_path()
+    if not src:
+        return jsonify({'error': 'not a sqlite database'}), 400
+    import gzip as _gzip
+    import shutil as _shutil
+    import sqlite3 as _sqlite3
+    import tempfile as _tempfile
+    tmpdir = _tempfile.mkdtemp(prefix='dash-backup-')
+    snap = os.path.join(tmpdir, 'snapshot.db')
+    gz = snap + '.gz'
+    try:
+        source = _sqlite3.connect(src)
+        dest = _sqlite3.connect(snap)
+        try:
+            source.backup(dest)
+        finally:
+            dest.close()
+            source.close()
+        with open(snap, 'rb') as fin, _gzip.open(gz, 'wb', compresslevel=6) as fout:
+            _shutil.copyfileobj(fin, fout, 1024 * 1024)
+        with open(gz, 'rb') as fh:
+            payload = fh.read()
+    except Exception as exc:                              # noqa: BLE001
+        app.logger.error('sqlite backup failed: %s', exc)
+        return jsonify({'error': 'backup failed'}), 500
+    finally:
+        _shutil.rmtree(tmpdir, ignore_errors=True)
+    _BACKUP_LAST['at'] = datetime.datetime.utcnow().isoformat() + 'Z'
+    day = datetime.datetime.utcnow().strftime('%Y-%m-%d')
+    return Response(payload, mimetype='application/gzip', headers={
+        'Content-Disposition': 'attachment; filename="dashboard-%s.db.gz"' % day,
+        'Content-Length': str(len(payload)), 'X-Backup-Bytes': str(len(payload))})
+
+
 @app.route('/api/content/prerender-cron', methods=['POST', 'GET'])
 def content_prerender_cron():
     """GET = حالة آخر تشغيل (تشخيص). POST مؤمَّن بنفس سرّ المزامنة = شغّل الآن.
