@@ -7913,6 +7913,37 @@ def _prerender_prune_remote(sftp, pre_dir, fresh):
     return removed
 
 
+def _retracted_article_ids():
+    """مقالات اتنشرت قبل كده واتسحبت (مسودّة وليها published_at) — روابطها معروفة لجوجل،
+    فلازم ترد 410 «اتشالت» مش صفحة «المقال غير موجود» بـ200 (soft-404)."""
+    rows = Article.query.filter(Article.status != 'published', Article.published_at.isnot(None)) \
+        .with_entities(Article.id).all()
+    return {str(r[0]) for r in rows}
+
+
+def _prerender_sync_gone(sftp, gone_dir, gone_ids):
+    """يخلّي blog/_gone على الاستضافة = علامة فاضية باسم معرّف كل مقال مسحوب بالظبط.
+    blog/.htaccess بيرد 410 لأي /blog/<slug>-<id> ليه علامة. مقال يرجع ينشر ⇒ علامته تتشال هنا
+    في نفس الدفعة. يرجّع {'added': n, 'removed': n}."""
+    import io
+    try:
+        sftp.stat(gone_dir)
+    except IOError:
+        sftp.mkdir(gone_dir)
+    have = {n for n in sftp.listdir(gone_dir) if n.isdigit()}
+    added = removed = 0
+    for i in sorted(gone_ids - have, key=int):
+        sftp.putfo(io.BytesIO(b''), '%s/%s' % (gone_dir, i))
+        added += 1
+    for i in sorted(have - gone_ids, key=int):
+        try:
+            sftp.remove('%s/%s' % (gone_dir, i))
+            removed += 1
+        except IOError:
+            pass
+    return {'added': added, 'removed': removed, 'total': len(gone_ids)}
+
+
 def _prerender_push(reason=''):
     """يولّد صفحات المقالات ويرفع المتغيّر منها فقط. لا يرفع استثناءً أبدًا."""
     global _prerender_last
@@ -7972,6 +8003,7 @@ def _prerender_push(reason=''):
 
         uploaded = 0
         pruned = 0
+        gone = None
         # الحذف من الاستضافة نفسها، مش من النسخة المحلية بس: prerender.py بيشيل الصفحة اليتيمة
         # من tmp، لكن نسختها المرفوعة كانت بتفضل تتقدّم للزواحف للأبد (عطل 2026-10-02: ١١٥ مقالًا
         # مسحوبًا لسه بيرجّعوا 200 بعناوينهم). فبنقارن قائمة الاستضافة بالمولَّد ونشيل الزايد.
@@ -8003,6 +8035,7 @@ def _prerender_push(reason=''):
                     sftp.rename(dst + '.tmp', dst)
                     uploaded += 1
                 pruned = _prerender_prune_remote(sftp, '%s/blog/_pre' % root, fresh)
+                gone = _prerender_sync_gone(sftp, '%s/blog/_gone' % root, _retracted_article_ids())
                 sftp.close()
             finally:
                 cl.close()
@@ -8014,7 +8047,7 @@ def _prerender_push(reason=''):
 
         _prerender_last = {
             'state': 'ok', 'reason': reason, 'articles': len(fresh) - 3,
-            'uploaded': uploaded, 'pruned': pruned, 'unchanged': len(fresh) - len(wanted),
+            'uploaded': uploaded, 'pruned': pruned, 'gone': gone, 'unchanged': len(fresh) - len(wanted),
             'seconds': round(time.time() - started, 1),
             'at': datetime.datetime.utcnow().isoformat(),
         }
@@ -8160,16 +8193,39 @@ def _body_with_related(a, title, pool):
     return blocks
 
 
-def _backfill_related(apply=False):
-    """الردم لمرّة واحدة: «اقرأ أيضًا» لكل مقال منشور بلا القسم. تجربة جافّة افتراضيًّا."""
+def _strip_related(blocks):
+    """يشيل قسم «اقرأ أيضًا» القديم (العنوان + بنود الروابط اللي بعده) ويرجّع باقي المتن كما هو."""
+    idx = max((i for i, b in enumerate(blocks) if str(b).strip() == RELATED_HEADING), default=None)
+    if idx is None:
+        return list(blocks)
+    tail = [b for b in blocks[idx + 1:] if not str(b).lstrip().startswith('• [')]
+    return list(blocks[:idx]) + tail
+
+
+def _backfill_related(apply=False, refresh=False):
+    """«اقرأ أيضًا» لكل مقال منشور بلا القسم. تجربة جافّة افتراضيًّا.
+    refresh=True: يعيد بناء القسم الموجود من المنشور حاليًا — لما مقال يتسحب أو يتدمج، الروابط
+    اللي بتشاور عليه في مقالات تانية تتحدّث بدل ما توصل لـ410/301. بيكتب بس لو الروابط اتغيّرت."""
     pool = Article.query.filter_by(status='published').all()
     counts = {'published': len(pool), 'already_linked': 0, 'would_link': 0, 'too_few_related': 0,
-              'links_added': 0, 'applied': bool(apply)}
+              'links_added': 0, 'refreshed': 0, 'applied': bool(apply)}
     sample = []
     for art in pool:
         blocks = _article_body_list(art)
         if any(str(b).strip() == RELATED_HEADING for b in blocks):
-            counts['already_linked'] += 1
+            if not refresh:
+                counts['already_linked'] += 1
+                continue
+            base = _strip_related(blocks)
+            new_blocks, n = _with_related(base, art.title, _json_list(art.keywords),
+                                          art.target_audience or 'عام', pool, exclude_id=art.id)
+            if n and new_blocks != blocks:
+                counts['refreshed'] += 1
+                counts['would_link'] += 1
+                if apply:
+                    art.body = json.dumps(new_blocks, ensure_ascii=False)
+            else:
+                counts['already_linked'] += 1
             continue
         new_blocks, n = _with_related(blocks, art.title, _json_list(art.keywords),
                                       art.target_audience or 'عام', pool, exclude_id=art.id)
@@ -8196,7 +8252,8 @@ def content_backfill_related():
     if not (PLATFORM_METRICS_SECRET and secret and secrets.compare_digest(secret, PLATFORM_METRICS_SECRET)):
         return jsonify({'error': 'unauthorized'}), 401
     apply = (request.args.get('apply') or '') == '1'
-    out = _backfill_related(apply=apply)
+    refresh = (request.args.get('refresh') or '') == '1'
+    out = _backfill_related(apply=apply, refresh=refresh)
     if apply and out['would_link']:
         out['prerender'] = _prerender_push_async('backfill-related:+%d' % out['would_link'])
     return jsonify(out), 200

@@ -197,3 +197,26 @@ def test_related_links_reach_the_prerendered_page_and_js_links_never_do(ctx):
         assert 'href="javascript' not in page.lower() and 'اضغط هنا' in page
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
+
+
+def test_refresh_rebuilds_related_after_a_target_is_retracted(ctx):
+    arts = [_pub(t + ': دليل', ['صياغة العقود', 'العقود']) for t in (
+        'صياغة عقد التوريد', 'أخطاء صياغة العقود', 'صياغة العقود التجارية', 'مراجعة العقد قبل التوقيع',
+        'شروط الدفع في العقود')]
+    first = appmod._backfill_related(apply=True)
+    assert first['would_link'] == 5
+    victim = arts[1]
+    linked_to_victim = [a for a in arts if a.id != victim.id and ('-%d)' % victim.id) in (a.body or '')]
+    assert linked_to_victim
+    victim.status = 'draft'
+    db.session.commit()
+    plain = appmod._backfill_related(apply=True)               # old behaviour: skip, keep the dead link
+    assert plain['refreshed'] == 0
+    out = appmod._backfill_related(apply=True, refresh=True)
+    assert out['refreshed'] >= 1
+    for a in Article.query.filter_by(status='published'):
+        body = a.body or ''
+        assert ('-%d)' % victim.id) not in body               # nobody links to the retracted article
+        assert body.count(appmod.RELATED_HEADING) == 1         # one section, never stacked
+    again = appmod._backfill_related(apply=True, refresh=True)
+    assert again['refreshed'] == 0                             # idempotent: nothing changed, nothing written
