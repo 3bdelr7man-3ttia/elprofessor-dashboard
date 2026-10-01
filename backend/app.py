@@ -7667,8 +7667,22 @@ def _ar_date_from(ts):
     return _ar_date_today()
 
 
+# الرابط الوحيد المسموح أن يعبر من متن المنصّة إلى المدوّنة: صفحة مقالٍ على الموقع نفسه.
+# كل ما عداه (خارجي · javascript: · نسبي غريب) يُنزع إلى نصّه — الموقع يرسم المتن بعد الهروب
+# ثم يحوّل [نص](رابط) إلى <a>، فالحارس هنا هو أول طبقتين (والثانية في article.html نفسها).
+_BLOG_LINK_RE = re.compile(r'^(?:https://elprofessor\.net)?/blog/[A-Za-z0-9%\-_.~]+$')
+BLOG_ORIGIN = 'https://elprofessor.net'
+
+
+def _keep_blog_link(m):
+    text, url = m.group(1), (m.group(2) or '').strip()
+    if _BLOG_LINK_RE.match(url) and '[' not in text and ']' not in text:
+        return '[%s](%s)' % (text, url)
+    return text
+
+
 def _strip_inline_md(s):
-    s = re.sub(r'\[([^\]]+)\]\([^)]*\)', r'\1', s)   # [text](url) → text (no external links on the site)
+    s = re.sub(r'\[([^\]]+)\]\(([^)]*)\)', _keep_blog_link, s)   # same-site /blog/ link kept; any other → text
     s = re.sub(r'\*\*(.+?)\*\*', r'\1', s)           # **bold** → bold
     s = re.sub(r'__(.+?)__', r'\1', s)
     s = re.sub(r'\*(.+?)\*', r'\1', s)               # *italic* → italic
@@ -7711,6 +7725,95 @@ def _md_to_blocks(md):
             para.append(ln)
     flush()
     return blocks
+
+
+# ——— «اقرأ أيضًا»: ٢-٣ روابط داخلية لكل مقال (طلب المؤسس ٢٠٢٦-١٠-٠١) ———
+# القياس: صفر روابط داخلية في ١٨٩٣ كتلة متن. المكان الواحد الذي يُحسب فيه الترابط هو هنا — وقت
+# الاستيراد (كل مقال جديد) وفي سكربت الردم (المنشور سابقًا) — بنفس الدالة، حتى لا يختلف «ذو صلة»
+# بين بيئتين (ذاكرة two_implementations_of_one_trap).
+RELATED_HEADING = '## اقرأ أيضًا'
+_AR_NORM_TABLE = str.maketrans({'أ': 'ا', 'إ': 'ا', 'آ': 'ا', 'ى': 'ي', 'ة': 'ه', 'ؤ': 'و', 'ئ': 'ي'})
+_REL_STOP = {'في', 'من', 'علي', 'على', 'عن', 'الي', 'الى', 'إلى', 'مع', 'بين', 'او', 'أو', 'و', 'ما',
+             'ماذا', 'هل', 'كيف', 'ايه', 'إيه', 'ازاي', 'إزاي', 'دليل', 'عملي', 'شامل', 'كل', 'لا',
+             'هذا', 'هذه', 'التي', 'الذي', 'قبل', 'بعد', 'عند', 'يجب', 'خطوه', 'بخطوه', 'مصر', 'الخليج'}
+
+
+def _rel_tokens(*texts):
+    out = set()
+    for t in texts:
+        t = re.sub(r'[\u064B-\u065F\u0670\u0640]', '', str(t or '')).translate(_AR_NORM_TABLE).lower()
+        for w in re.findall(r'\w+', t):
+            if w in _REL_STOP or len(w) < 3 or w.isdigit():
+                continue
+            for pre in ('وال', 'بال', 'لل', 'ال'):
+                if w.startswith(pre) and len(w) - len(pre) >= 3:
+                    w = w[len(pre):]
+                    break
+            for suf in ('ين', 'ون', 'ات'):
+                if w.endswith(suf) and len(w) - len(suf) >= 3:
+                    w = w[:-len(suf)]
+                    break
+            if w.endswith('ه') and len(w) >= 4:
+                w = w[:-1]
+            out.add(w)
+    return out
+
+
+def _blog_url(article):
+    return BLOG_ORIGIN + '/blog/' + quote(_article_slug(article), safe='')
+
+
+def _related_articles(title, keywords, audience, pool, exclude_id=None, k=3):
+    """أقرب `k` مقالات منشورة: تقاطع كلمات (العنوان ×٢ + الوسوم) + نقطة للجمهور نفسه.
+    يُشترط تقاطعٌ حقيقي (≥ ٢) — رابطٌ بلا صلة أسوأ من غيابه. `pool` = صفوف Article منشورة."""
+    mine_title = _rel_tokens(title)
+    mine = mine_title | _rel_tokens(*(keywords or []))
+    norm_title = ' '.join(sorted(mine_title))
+    scored = []
+    for a in pool:
+        if exclude_id is not None and a.id == exclude_id:
+            continue
+        if not a.title or (a.title or '').strip() == (title or '').strip():
+            continue
+        their_title = _rel_tokens(a.title)
+        if ' '.join(sorted(their_title)) == norm_title:
+            continue
+        theirs = their_title | _rel_tokens(*_json_list(a.keywords))
+        score = 2 * len(mine_title & their_title) + len((mine - mine_title) & theirs) + len(mine_title & theirs)
+        if audience and audience != 'عام' and (a.target_audience or '') == audience:
+            score += 1
+        if score >= 2:
+            ts = a.published_at or a.created_at or datetime.datetime.min
+            scored.append((score, ts, a))
+    scored.sort(key=lambda x: (x[0], x[1]), reverse=True)
+    return [a for _s, _t, a in scored[:k]]
+
+
+def _with_related(blocks, title, keywords, audience, pool, exclude_id=None):
+    """يلحق «## اقرأ أيضًا» + ٢-٣ روابط بالمتن. أقل من رابطين ⇒ المتن كما هو (لا قسم برابطٍ يتيم).
+    متنٌ فيه القسم سلفًا لا يُلمس (الردم آمن للتكرار)."""
+    blocks = list(blocks or [])
+    if any(str(b).strip() == RELATED_HEADING for b in blocks):
+        return blocks, 0
+    rel = _related_articles(title, keywords, audience, pool, exclude_id=exclude_id)
+    if len(rel) < 2:
+        return blocks, 0
+    # «[» و«]» في العنوان تكسر صيغة الرابط — تُستبدل بأقواس عادية
+    lines = ['• [%s](%s)' % ((a.title or '').replace('[', '(').replace(']', ')').strip(), _blog_url(a))
+             for a in rel]
+    return blocks + [RELATED_HEADING] + lines, len(lines)
+
+
+def _mark_platform_duplicate(aid):
+    """المسودّة عنوانها منشورٌ على المدوّنة: تخرج من طابور «draft» على المنصّة **بلا حذف**.
+    قبل هذا كانت تبقى «معلّقة» للأبد، فأوقفت المسارين الفئوي والميزات منذ ٣٠ أغسطس."""
+    if not aid or not PLATFORM_METRICS_SECRET:
+        return
+    try:
+        requests.post(f"{PLATFORM_API_URL}/api/bridge/articles/{aid}/mark-duplicate",
+                      headers={'X-ELP-Metrics-Secret': PLATFORM_METRICS_SECRET}, timeout=10)
+    except Exception:
+        pass
 
 
 def _delete_platform_article(aid):
@@ -7953,14 +8056,18 @@ def _sync_platform_articles():
         arts = (r.json() or {}).get('articles', []) if r.status_code == 200 else []
     except Exception:
         return {'error': 'تعذّر الاتصال بالمنصة'}, 502
-    imported = published = drafts = 0
+    imported = published = drafts = duplicates = linked = 0
+    pool = Article.query.filter_by(status='published').all()
     for a in arts:
         title = (a.get('title') or '').strip()
         if not title:
             continue
-        # already in the blog? skip — but do NOT delete the platform copy (a genuinely-different
-        # article that happens to share a title must never be silently destroyed).
+        # already in the blog? do NOT delete the platform copy (a genuinely-different article that
+        # happens to share a title must never be silently destroyed) — but take it OUT of the draft
+        # queue, or it sits «pending» forever and the generator's rotation stalls on it.
         if Article.query.filter_by(title=title).first():
+            _mark_platform_duplicate(a.get('id'))
+            duplicates += 1
             continue
         cat = a.get('category') or 'other'
         is_feature = (cat == 'feature')
@@ -7978,7 +8085,7 @@ def _sync_platform_articles():
             kicker='عن المنصة' if is_feature else 'تحليل قانوني',
             by=a.get('author') or 'فريق البروفيسور',
             date=_ar_date_from(a.get('published_at') or a.get('created_at')),
-            body=json.dumps(_md_to_blocks(a.get('body') or ''), ensure_ascii=False),
+            body=json.dumps(_body_with_related(a, title, pool), ensure_ascii=False),
             meta_description=(a.get('meta_description') or a.get('excerpt') or '')[:400],
             keywords=json.dumps([str(k) for k in (a.get('keywords') or [])][:12], ensure_ascii=False),
             faq=json.dumps([f for f in (a.get('faq') or []) if isinstance(f, dict) and f.get('q') and f.get('a')][:8],
@@ -7991,18 +8098,71 @@ def _sync_platform_articles():
         db.session.add(art)
         db.session.commit()
         imported += 1
+        if RELATED_HEADING in (art.body or ''):
+            linked += 1
         if is_published:
             published += 1
+            pool.append(art)          # the next import in this batch can link to this one
         else:
             drafts += 1
         _delete_platform_article(a.get('id'))  # only AFTER a successful import
-    out = {'ok': True, 'imported': imported, 'published': published, 'drafts': drafts}
+    out = {'ok': True, 'imported': imported, 'published': published, 'drafts': drafts,
+           'duplicates': duplicates, 'with_related_links': linked}
     # مقال جديد منشور = صفحة الزواحف بتاعته لسه مش موجودة على الاستضافة. الدفع هنا
     # هو اللي بيمنع تكرار انحسار يوليو ٢٠٢٦ (٣٦ مقال قواقع فاضية اتناشر يوم).
     # لاحق (Thread) عمدًا: المزامنة لازم ترجّع بسرعة، والتوليد+الرفع بياخدوا دقيقة.
     if published:
         out['prerender'] = _prerender_push_async('sync:+%d' % published)
     return out, 200
+
+
+def _body_with_related(a, title, pool):
+    blocks = _md_to_blocks(a.get('body') or '')
+    blocks, _n = _with_related(blocks, title, a.get('keywords') or [],
+                               (a.get('target_audience') or 'عام'), pool)
+    return blocks
+
+
+def _backfill_related(apply=False):
+    """الردم لمرّة واحدة: «اقرأ أيضًا» لكل مقال منشور بلا القسم. تجربة جافّة افتراضيًّا."""
+    pool = Article.query.filter_by(status='published').all()
+    counts = {'published': len(pool), 'already_linked': 0, 'would_link': 0, 'too_few_related': 0,
+              'links_added': 0, 'applied': bool(apply)}
+    sample = []
+    for art in pool:
+        blocks = _article_body_list(art)
+        if any(str(b).strip() == RELATED_HEADING for b in blocks):
+            counts['already_linked'] += 1
+            continue
+        new_blocks, n = _with_related(blocks, art.title, _json_list(art.keywords),
+                                      art.target_audience or 'عام', pool, exclude_id=art.id)
+        if not n:
+            counts['too_few_related'] += 1
+            continue
+        counts['would_link'] += 1
+        counts['links_added'] += n
+        if len(sample) < 5:
+            sample.append({'id': art.id, 'title': art.title, 'links': new_blocks[-n:]})
+        if apply:
+            art.body = json.dumps(new_blocks, ensure_ascii=False)
+    if apply and counts['would_link']:
+        db.session.commit()
+    counts['sample'] = sample
+    return counts
+
+
+@app.route('/api/content/backfill-related', methods=['POST'])
+def content_backfill_related():
+    """سرّ المزامنة نفسه. بلا `?apply=1` = تجربة جافّة تعدّ فقط. مع `apply=1` يكتب ثم يدفع صفحات
+    الـprerender (الروابط تظهر للزواحف لا للمتصفّح وحده)."""
+    secret = request.headers.get('X-ELP-Metrics-Secret', '')
+    if not (PLATFORM_METRICS_SECRET and secret and secrets.compare_digest(secret, PLATFORM_METRICS_SECRET)):
+        return jsonify({'error': 'unauthorized'}), 401
+    apply = (request.args.get('apply') or '') == '1'
+    out = _backfill_related(apply=apply)
+    if apply and out['would_link']:
+        out['prerender'] = _prerender_push_async('backfill-related:+%d' % out['would_link'])
+    return jsonify(out), 200
 
 
 @app.route('/api/content/sync-from-platform', methods=['POST'])
