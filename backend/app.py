@@ -703,6 +703,22 @@ class ArticleVersion(db.Model):
     request_id = db.Column(db.String(200), unique=True)
     created_at = db.Column(db.DateTime, default=datetime.datetime.utcnow)
 
+
+class BlogTopic(db.Model):
+    """سجلّ موضوعات المدوّنة (٢٠٢٦-١٠-٠٢) — محورٌ (cluster_id) بعنوانٍ عربي ورابطٍ ASCII ثابت.
+    يغذّي رقائق «الموضوعات» في blog.html وصفحات /blog/topic/<slug> التي يولّدها prerender.py.
+    ⛔ slug لا يتغيّر بعد البذر: هو رابط صفحة مفهرسة. العنوان والوصف يحرّرهما المؤسس من اللوحة."""
+    __tablename__ = 'blog_topics'
+    id = db.Column(db.Integer, primary_key=True)
+    cluster_id = db.Column(db.String(120), unique=True, nullable=False)
+    slug = db.Column(db.String(80), unique=True, nullable=False)
+    label = db.Column(db.String(200), nullable=False)
+    description = db.Column(db.Text)
+    hub_id = db.Column(db.Integer)                        # مقال المحور وقت البذر (الحيّ يُحسب من role=hub)
+    sort_order = db.Column(db.Integer, default=0)
+    updated_at = db.Column(db.DateTime, default=datetime.datetime.utcnow)
+
+
 class Message(db.Model):
     __tablename__ = 'messages'
     id = db.Column(db.Integer, primary_key=True)
@@ -7779,7 +7795,122 @@ def _sync_byline(author):
     return TEAM_BYLINE if a in _TEAM_BYLINES else a
 
 
+# ——— سجلّ موضوعات المدوّنة (قرار المؤسس ٢٠٢٦-١٠-٠٢) ———
+# البذرة من backend/data/clusters_curated_2026-10-02.csv في ريبو المنصّة (٢٠ محورًا منسَّقًا).
+# مكتوبة هنا لا مقروءة من ملف: الصورة تنسخ ملفات بعينها، وملفٌ غائب = سجلّ فارغ صامت.
+# ⛔ slug = رابط صفحة مفهرسة (/blog/topic/<slug>) — ASCII قصير مقروء، لا يتغيّر بعد النشر،
+#    ولا ينتهي برقم (فلا يشبه أبدًا ذيل «-<id>» الذي تحلّ به قواعد blog/.htaccess المقال).
+TOPIC_SLUG_RE = re.compile(r'^[a-z](?:[a-z0-9-]{0,62}[a-z])?$')
+BLOG_TOPICS_SEED = (
+    # (cluster_id, slug, label, hub_id, description)
+    ('c-arbitration', 'tahkeem', 'إجراءات التحكيم', 149,
+     'التحكيم من شرطه في العقد حتى تنفيذ الحكم أو الطعن عليه بالبطلان: الخطوات والمواعيد والأخطاء التي تُسقط الحق.'),
+    ('c-become-arbitrator', 'muhakkim', 'كيف تصبح محكّمًا', 86,
+     'الطريق العملي إلى قوائم المحكّمين: الاعتماد والزمالات وما تشتريه فعلًا، وكيف تبني أول قضاياك.'),
+    ('c-expert-witness', 'khabir-qanuni', 'الخبير القانوني المعتمد', 42,
+     'من محامٍ متمرّس إلى خبير يُعتدّ برأيه: بناء الملف، وصياغة التقرير الذي يصمد، وتسعير الرأي الفني.'),
+    ('c-join-prosecution', 'iltihaq-bil-niyaba', 'الالتحاق بالنيابة', 194,
+     'من خريج حقوق إلى عضو نيابة: شروط التقديم والأوراق، واختبار القياس، والمقابلة الشخصية، ثم التدرّج الوظيفي.'),
+    ('c-prosecution-skills', 'maharat-al-niyaba', 'مهارات عضو النيابة', 169,
+     'الاستجواب وصياغة القرارات وإدارة ضغط القضايا: أدوات عضو النيابة اليومية وأخطاؤه الشائعة.'),
+    ('c-judges', 'amal-al-qadi', 'عمل القاضي', 191,
+     'فنّ التسبيب وإدارة جدول الجلسات وتحدّيات المنصّة: دليل عملي للقاضي في عمله اليومي.'),
+    ('c-criminal-procedure', 'al-ijraat-al-jinaiya', 'قانون الإجراءات الجنائية الجديد', 34,
+     'ما تغيّر في قانون الإجراءات الجنائية الجديد وأثره العملي على الدفاع والتحقيق والمحاكمة.'),
+    ('c-new-lawyer', 'bidayat-al-muhamah', 'أول سنين المحاماة', 101,
+     'خريطة السنوات الأولى في المحاماة: القيد والتمرين، وأول جلسة، واختيار المكتب والتخصّص.'),
+    ('c-fees', 'atab-al-muhamah', 'عقد أتعاب المحاماة', 79,
+     'كيف تكتب عقد أتعاب يحفظ حقّك وتسعّر عملك قبل أن تبدأ مع أي موكّل.'),
+    ('c-litigation-drafting', 'siyaghat-al-mudhakkirat', 'صياغة المذكرات والدعاوى', 96,
+     'صياغة مذكرة الدفاع وصحيفة الدعوى والإنذار والتوكيل: البناء الصحيح والطلبات التي تقبلها المحكمة.'),
+    ('c-contracts', 'siyaghat-al-uqood', 'صياغة العقود', 82,
+     'صياغة العقود التجارية ومراجعتها قبل التوقيع: البنود الحاكمة، والعيوب التي تظهر فاتورتها لحظة الخلاف.'),
+    ('c-legal-english', 'english-qanuni', 'الإنجليزية والترجمة القانونية', 214,
+     'الصياغة القانونية بالإنجليزية وترجمة العقود والأحكام: المصطلحات والفخاخ، وطريق الاعتماد كمترجم قانوني.'),
+    ('c-ai-lawyers', 'dhakaa-istinaei', 'الذكاء الاصطناعي للمحامين', 56,
+     'كيف يستخدم المحامي وعضو النيابة الذكاء الاصطناعي في البحث والصياغة بأمان، وأين تقف حدوده.'),
+    ('c-firm-marketing', 'taswiq-al-maktab', 'تسويق مكتب المحاماة', 135,
+     'بناء حضور رقمي يجلب الموكّلين دون مخالفة آداب المهنة، وصناعة اسمٍ مرجعي في تخصّصك.'),
+    ('c-firm-management', 'idarat-al-maktab', 'إدارة مكتب المحاماة', 147,
+     'تحويل المكتب الفردي إلى مؤسسة: أنظمة المواعيد والملفات، وتأهيل الفريق، والتوسّع خارج مصر.'),
+    ('c-legal-trainer', 'mudarrib-qanuni', 'المدرّب القانوني', 73,
+     'من ممارس إلى مدرّب قانوني مرجع: بناء الحقيبة التدريبية، والاعتماد، وتحديث المحتوى وحمايته.'),
+    ('c-sell-courses', 'bay-al-dawrat', 'بيع الدورات القانونية', 130,
+     'كيف تبيع دورتك القانونية أونلاين وتملأ مقاعدها، في مصر والخليج.'),
+    ('c-gulf-counsel', 'mustashar-al-khalij', 'المستشار القانوني في الخليج والشركات', 142,
+     'العمل مستشارًا قانونيًا في الخليج أو داخل الشركات: الفرق بين القيد والاستشارة، والمستندات التي تحمي الشركة.'),
+    ('c-company-setup', 'tasis-al-sharikat', 'تأسيس الشركات', 236,
+     'الإجراءات القانونية لتأسيس شركة: اتفاقية الشركاء، وتسجيل العلامة التجارية، والامتثال لحماية البيانات.'),
+    ('c-e-evidence', 'tawqi-electroni', 'الدليل والتوقيع الإلكتروني', 245,
+     'متى يصمد التوقيع الإلكتروني والرسائل الرقمية أمام القضاء، وكيف تقدّمها دليلًا مقبولًا.'),
+)
+
+
+def _seed_blog_topics():
+    """يُدرج المحاور الناقصة فقط — لا يكتب فوق عنوانٍ أو وصفٍ حرّره المؤسس. آمن عند كل إقلاع."""
+    have = {t.cluster_id for t in BlogTopic.query.all()}
+    added = 0
+    for i, (cid, slug, label, hub, desc) in enumerate(BLOG_TOPICS_SEED):
+        if cid in have:
+            continue
+        db.session.add(BlogTopic(cluster_id=cid, slug=slug, label=label, hub_id=hub,
+                                 description=desc, sort_order=i + 1))
+        added += 1
+    if added:
+        db.session.commit()
+    return added
+
+
+def _blog_topics_map():
+    """{cluster_id: BlogTopic} — مرّة واحدة لكل طلب (serialize_article يُنادى ١٥٤ مرّة في الفيد)."""
+    from flask import has_request_context
+    if has_request_context() and getattr(g, '_blog_topics', None) is not None:
+        return g._blog_topics
+    try:
+        m = {t.cluster_id: t for t in BlogTopic.query.all()}
+    except Exception:                       # noqa: BLE001 — الفيد العامّ لا يسقط بسبب السجلّ
+        m = {}
+    if has_request_context():
+        g._blog_topics = m
+    return m
+
+
+def _topic_url(slug):
+    return 'https://elprofessor.net/blog/topic/' + slug
+
+
+def _published_topics():
+    """[(BlogTopic, [مقالات منشورة])] لكل محور له مقال منشور واحد على الأقل، بترتيب السجلّ.
+    مصدر واحد: الفيد (prerender) وخريطة الموقع يقرآنه فلا تتفرّق مجموعتا الصفحات."""
+    arts = Article.query.filter_by(status='published').all()
+    by_c = {}
+    for a in arts:
+        if a.cluster_id:
+            by_c.setdefault(a.cluster_id, []).append(a)
+    out = []
+    for t in BlogTopic.query.order_by(BlogTopic.sort_order, BlogTopic.id).all():
+        if by_c.get(t.cluster_id) and TOPIC_SLUG_RE.match(t.slug or ''):
+            out.append((t, by_c[t.cluster_id]))
+    return out
+
+
+def serialize_topic(t, arts=None):
+    hub = None
+    if arts:
+        hubs = [a for a in arts if _role(a) == 'hub']
+        hub = hubs[0].id if hubs else None
+    return {'cluster_id': t.cluster_id, 'slug': t.slug, 'label': t.label,
+            'description': t.description or '', 'hub_id': hub or t.hub_id,
+            'count': len(arts or []), 'url': _topic_url(t.slug),
+            'updated_at': t.updated_at.isoformat() if t.updated_at else None}
+
+
+def _topics_feed():
+    return [serialize_topic(t, arts) for t, arts in _published_topics()]
+
+
 def serialize_article(article):
+    _tp = _blog_topics_map().get(article.cluster_id) if article.cluster_id else None
     return {
         'id': article.id,
         'slug': _article_slug(article),
@@ -7806,6 +7937,9 @@ def serialize_article(article):
         'cluster_id': article.cluster_id or None,
         'role': article.role or None,
         'parent_id': article.parent_id or None,
+        # سجلّ الموضوعات — رقائق blog.html ورابط «ضمن موضوع» في article.html يقرآنهما
+        'topic_slug': _tp.slug if _tp else None,
+        'topic_label': _tp.label if _tp else None,
         'reviewed_by': article.reviewed_by or None,
         'reviewed_at': article.reviewed_at.isoformat() if article.reviewed_at else None,
         'refresh_count': article.refresh_count or 0,
@@ -8226,7 +8360,9 @@ def _prerender_feed_json():
         Article.published_at.desc().nullslast(),
         Article.created_at.desc(),
     ).all()
-    return json.dumps({'source': 'dashboard', 'articles': [serialize_article(a) for a in items]},
+    # topics: صفحات /blog/topic/<slug> — نفس _published_topics التي تبني خريطة الموقع
+    return json.dumps({'source': 'dashboard', 'articles': [serialize_article(a) for a in items],
+                       'topics': _topics_feed()},
                       ensure_ascii=False)
 
 
@@ -8261,6 +8397,32 @@ def _prerender_prune_remote(sftp, pre_dir, fresh):
         if _PRE_PAGE_RE.match(name) and name not in keep:
             try:
                 sftp.remove('%s/%s' % (pre_dir, name))
+                removed += 1
+            except IOError:
+                pass
+    return removed
+
+
+TOPIC_DIR = '_topic'            # blog/_topic/<slug>.html ⇐ /blog/topic/<slug> (قاعدة blog/.htaccess)
+_TOPIC_PAGE_RE = re.compile(r'^[a-z](?:[a-z0-9-]{0,62}[a-z])?\.html$')
+
+
+def _prerender_prune_topics(sftp, topic_dir, fresh):
+    """يشيل من blog/_topic كل صفحة موضوع لم تعد في التوليد الحالي (موضوع اختفى أو بلا مقال منشور).
+    نفس ضيق _prerender_prune_remote: أسماء slug بنمطها فقط، والـ.tmp لا يُلمس. توليدٌ بلا أي
+    صفحة موضوع = لا مسح (قد يكون فيدًا بلا topics لا «لا موضوعات»)."""
+    keep = {rel.rsplit('/', 1)[-1] for rel in fresh if rel.startswith('blog/%s/' % TOPIC_DIR)}
+    if not keep:
+        return 0
+    removed = 0
+    try:
+        names = sftp.listdir(topic_dir)
+    except IOError:
+        return 0
+    for name in names:
+        if _TOPIC_PAGE_RE.match(name) and name not in keep:
+            try:
+                sftp.remove('%s/%s' % (topic_dir, name))
                 removed += 1
             except IOError:
                 pass
@@ -8348,9 +8510,12 @@ def _prerender_push(reason=''):
         except Exception:                        # noqa: BLE001
             known = {}
         wanted, fresh = [], {}
+        _topic_tmp = os.path.join(tmp, 'blog', TOPIC_DIR)
+        topic_pages = ['blog/%s/%s' % (TOPIC_DIR, n) for n in sorted(os.listdir(_topic_tmp))
+                       if _TOPIC_PAGE_RE.match(n)] if os.path.isdir(_topic_tmp) else []
         for rel in ['blog.html', 'feed.xml', 'blog/_pre/manifest.txt', SITEMAP_FILE] + [
                 'blog/_pre/' + n for n in sorted(os.listdir(os.path.join(tmp, 'blog', '_pre')))
-                if n.endswith('.html')]:
+                if n.endswith('.html')] + topic_pages:
             path = os.path.join(tmp, rel)
             if not os.path.isfile(path):
                 continue
@@ -8362,6 +8527,7 @@ def _prerender_push(reason=''):
 
         uploaded = 0
         pruned = 0
+        topics_pruned = 0
         gone = None
         # الحذف من الاستضافة نفسها، مش من النسخة المحلية بس: prerender.py بيشيل الصفحة اليتيمة
         # من tmp، لكن نسختها المرفوعة كانت بتفضل تتقدّم للزواحف للأبد (عطل 2026-10-02: ١١٥ مقالًا
@@ -8377,7 +8543,7 @@ def _prerender_push(reason=''):
                 sftp = cl.open_sftp()
                 home = sftp.normalize('.')
                 root = '%s/%s' % (home.rstrip('/'), PRERENDER_SITE_ROOT)
-                for d in ('blog', 'blog/_pre'):
+                for d in ('blog', 'blog/_pre', 'blog/' + TOPIC_DIR):
                     try:
                         sftp.stat('%s/%s' % (root, d))
                     except IOError:
@@ -8390,7 +8556,8 @@ def _prerender_push(reason=''):
                     _sftp_replace(sftp, dst + '.tmp', dst)
                     uploaded += 1
                 pruned = _prerender_prune_remote(sftp, '%s/blog/_pre' % root, fresh)
-                gone = _prerender_sync_gone(sftp, '%s/blog/_gone' % root, _retracted_article_ids())
+                topics_pruned = _prerender_prune_topics(sftp, '%s/blog/%s' % (root, TOPIC_DIR), fresh)
+                gone =_prerender_sync_gone(sftp, '%s/blog/_gone' % root, _retracted_article_ids())
                 sftp.close()
             finally:
                 cl.close()
@@ -8401,7 +8568,8 @@ def _prerender_push(reason=''):
                 pass                             # كاش تحسين فقط — فقدانه = رفع كامل مرة
 
         _prerender_last = {
-            'state': 'ok', 'reason': reason, 'articles': len(fresh) - 4,
+            'state': 'ok', 'reason': reason, 'articles': len(fresh) - 4 - len(topic_pages),
+            'topics': len(topic_pages), 'topics_pruned': topics_pruned,
             'uploaded': uploaded, 'pruned': pruned, 'gone': gone, 'unchanged': len(fresh) - len(wanted),
             'seconds': round(time.time() - started, 1),
             'at': datetime.datetime.utcnow().isoformat(),
@@ -8943,7 +9111,7 @@ def content_sync_cron():
 # optional — dropping them silently kills the card kicker line, the tone colour class
 # (falls back to a positional default) and the video badge on both renderers.
 _ARTICLE_SUMMARY_KEYS = ('id', 'slug', 'title', 'cat', 'by', 'date', 'excerpt', 'image_url',
-                         'kicker', 'tone', 'video')
+                         'kicker', 'tone', 'video', 'target_audience', 'topic_slug', 'topic_label')
 
 
 @app.route('/api/content/articles', methods=['GET'])
@@ -8984,9 +9152,67 @@ def _articles_sitemap_xml():
         lastmod = ('<lastmod>%s</lastmod>' % lm.strftime('%Y-%m-%d')) if lm else ''
         rows.append('<url><loc>%s</loc>%s<changefreq>monthly</changefreq></url>'
                     % (xesc(loc), lastmod))
+    # صفحات الموضوعات (/blog/topic/<slug>) — نفس المجموعة التي يولّدها prerender من الفيد.
+    # lastmod = أحدث updated_at/published_at بين مقالاته المنشورة.
+    try:
+        topics = _published_topics()
+    except Exception as exc:                      # noqa: BLE001 — الخريطة لا تسقط بسبب السجلّ
+        logger.warning('sitemap: topics skipped: %s', exc)
+        topics = []
+    for t, arts in topics:
+        stamps = [x for x in ((a.updated_at or a.published_at) for a in arts) if x]
+        lastmod = ('<lastmod>%s</lastmod>' % max(stamps).strftime('%Y-%m-%d')) if stamps else ''
+        rows.append('<url><loc>%s</loc>%s<changefreq>weekly</changefreq></url>'
+                    % (xesc(_topic_url(t.slug)), lastmod))
     return ('<?xml version="1.0" encoding="UTF-8"?>'
             '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">'
             + ''.join(rows) + '</urlset>')
+
+
+@app.route('/api/content/topics', methods=['GET'])
+def public_blog_topics():
+    """PUBLIC: موضوعات المدوّنة التي لها مقال منشور — {topics:[{cluster_id, slug, label, description,
+    hub_id, count, url}]}. ?all=1 يضمّ المحاور بلا مقالات منشورة (count=0)."""
+    if (request.args.get('all') or '') == '1':
+        pub = {t.cluster_id: arts for t, arts in _published_topics()}
+        rows = [serialize_topic(t, pub.get(t.cluster_id, []))
+                for t in BlogTopic.query.order_by(BlogTopic.sort_order, BlogTopic.id).all()]
+    else:
+        rows = _topics_feed()
+    return _no_store(jsonify({'topics': rows}))
+
+
+@app.route('/api/content/topics/<cluster_id>', methods=['PUT'])
+@token_required
+@roles_required('admin')
+def admin_blog_topic_update(cluster_id):
+    """تحرير عنوان الموضوع ووصفه من اللوحة. slug للقراءة فقط (رابط مفهرس) — يُرفض تغييره هنا."""
+    t = BlogTopic.query.filter_by(cluster_id=cluster_id).first()
+    if not t:
+        return jsonify({'error': 'موضوع غير موجود'}), 404
+    d = request.json or {}
+    if 'slug' in d and (d.get('slug') or '') != t.slug:
+        return jsonify({'error': 'رابط الموضوع ثابت ولا يُعدَّل من هنا — تغييره يكسر صفحة مفهرسة'}), 400
+    changed = False
+    if 'label' in d:
+        label = (d.get('label') or '').strip()
+        if not label or len(label) > 120:
+            return jsonify({'error': 'عنوان الموضوع مطلوب (حتى ١٢٠ حرفًا)'}), 400
+        changed |= label != t.label
+        t.label = label
+    if 'description' in d:
+        desc = (d.get('description') or '').strip()
+        if len(desc) > 400:
+            return jsonify({'error': 'الوصف حتى ٤٠٠ حرف (جملة أو جملتان)'}), 400
+        changed |= desc != (t.description or '')
+        t.description = desc
+    if changed:
+        t.updated_at = datetime.datetime.utcnow()
+        db.session.commit()
+        _audit('blog_topic.update', target=t.cluster_id, meta={'label': t.label})
+        _prerender_push_async('topic:%s' % t.cluster_id)
+    pub = {x.cluster_id: arts for x, arts in _published_topics()}
+    return jsonify(serialize_topic(t, pub.get(t.cluster_id, [])))
 
 
 @app.route('/robots.txt', methods=['GET'])
@@ -9617,6 +9843,11 @@ def serve_frontend(path):
 with app.app_context():
     db.create_all()
     ensure_runtime_schema()
+    try:
+        _seed_blog_topics()   # سجلّ موضوعات المدوّنة — يُدرج الناقص فقط، لا يكتب فوق تحرير المؤسس
+    except Exception as _exc:  # noqa: BLE001 — الإقلاع لا يسقط بسبب السجلّ
+        logger.warning('blog topics seed skipped: %s', _exc)
+        db.session.rollback()
     seed()  # admin/user init only — always safe
     reset_business_data()  # ENV-GATED full wipe (RESET_BUSINESS_DATA) — no-op when unset
     if (os.environ.get('SEED_DEMO_DATA') or '').strip().lower() == 'true':

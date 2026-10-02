@@ -17,6 +17,8 @@ Apache على نفس الرابط تمامًا وبلا أي تحويل (الق�
     blog/_pre/manifest.txt  معرّفات المقالات المنشورة — خطوة النشر تحذف ما ليس فيها
     blog.html               قائمة المقالات مكتوبة في الـHTML الخام (الـJS يظل يُحدّثها)
     feed.xml                RSS 2.0 بالنص الكامل داخل content:encoded
+    blog/_topic/<slug>.html صفحة «دليل موضوع» لكل محور في سجلّ الموضوعات له مقال منشور
+                            (تُقدَّم على /blog/topic/<slug> بقاعدة blog/.htaccess)
 
   WHY THE FILE NAME IS THE ARTICLE ID, NOT THE ARABIC SLUG
     مسار النشر = tar على macOS ثم فك على Linux. ماك قد يسلّم الاسم العربي بصيغة
@@ -299,7 +301,8 @@ def fetch_feed(feed_file=None, url=FEED_URL, min_articles=MIN_ARTICLES):
                        "resolves the article from the slug's trailing id" % (key, a["slug"]))
     log("feed: %d articles, ids %s..%s, source=%r"
         % (len(articles), articles[-1].get("id"), articles[0].get("id"), data.get("source")))
-    return articles, (data.get("source") or "")
+    topics = data.get("topics") if isinstance(data.get("topics"), list) else []
+    return articles, (data.get("source") or ""), topics
 
 
 # ---------------------------------------------------------------------------
@@ -674,6 +677,12 @@ def verify_article(html, a, r, meta, ctx):
     if len(txt) < 1500:
         bad("script/style-stripped text is only %d chars" % len(txt))
 
+    # «ضمن موضوع: …» — يتسلّح فور أن يقرأ مُصيِّر article.html الحقل topic_slug
+    ts = str(a.get("topic_slug") or "")
+    if ctx.get("renderer_has_topic") and TOPIC_SLUG_RE.match(ts) and a.get("role") in ("hub", "support"):
+        if ('href="/blog/topic/%s"' % ts) not in art:
+            bad("topic link /blog/topic/%s missing from #art (renderer reads topic_slug)" % ts)
+
     # يتسلّح تلقائيًّا فور إضافة عرض الأسئلة الشائعة إلى المُصيِّر في article.html
     if ctx["renderer_has_faq"] and a.get("faq"):
         q = str((a["faq"][0] or {}).get("q") or "")
@@ -814,6 +823,351 @@ def build_rss(articles, rendered, blog_doc, feed_url, limit=0):
 
 
 # ---------------------------------------------------------------------------
+# صفحات الموضوعات — /blog/topic/<slug>  ⇐  blog/_topic/<slug>.html
+#
+# صفحة «دليل موضوع» ثابتة لكل محور في سجلّ الموضوعات (الداشبورد) له مقال منشور:
+# H1 = اسم الموضوع، ثم وصفه، ثم مقال المحور (hub) أولًا، ثم التفصيلية (support)، ثم
+# مقالات مستقلّة قريبة إن وُجدت. القالب = blog.html نفسه (الترويسة والتذييل والأنماط
+# والقياس كما هي) — نستبدل الرأس والهيرو ومنطقة المحتوى بمراسٍ حرفية، ونشيل مُصيِّر
+# المدوّنة (لا شيء يُرسم هنا بالـJS).
+#
+# ⛔ الصفحة تُقدَّم على /blog/topic/<slug> لا على الجذر ⇒ كل مسار نسبي في القالب
+#    (mobile-fixes.css · pixel.js · favicon…) يُحوَّل لمسار مطلق، وإلا ٤٠٤ صامت
+#    (نفس فخّ article.html المسجّل مرّتين في CLAUDE.md الموقع).
+# ⛔ فشل بناء الموضوعات لا يُسقط التشغيل كله: المقالات أهم، فنسجّل بصوت عالٍ
+#    ونكمل بلا صفحات موضوعات (ولا نمسح القديمة — المسح يشترط توليدًا غير فارغ).
+# ---------------------------------------------------------------------------
+TOPIC_DIR = "_topic"
+TOPIC_SLUG_RE = re.compile(r"^[a-z](?:[a-z0-9-]{0,62}[a-z])?$")
+TOPIC_PAGE_RE = re.compile(r"^[a-z](?:[a-z0-9-]{0,62}[a-z])?\.html$")
+MARK_TOPICS_OPEN, MARK_TOPICS_CLOSE = "<!--EP:TOPICS-->", "<!--/EP:TOPICS-->"
+TONES = ("t1", "t2", "t3", "t4", "t5", "t6")
+AR_MONTHS = ("يناير", "فبراير", "مارس", "أبريل", "مايو", "يونيو", "يوليو", "أغسطس",
+             "سبتمبر", "أكتوبر", "نوفمبر", "ديسمبر")
+_AR_DIGITS = str.maketrans("0123456789", "٠١٢٣٤٥٦٧٨٩")
+
+# تطبيع عربي لمطابقة «مقالات قريبة» — نفس قواعد بحث blog.html (الألف/التاء المربوطة/الياء/التشكيل).
+# ⛔ \uXXXX فقط داخل أصناف التعبير النمطي (فخّ الـbidi في ذاكرة المشروع).
+_AR_TASHKEEL = re.compile("[ؐ-ًؚ-ٰٟۖ-ۭـ]")
+_AR_SPLIT = re.compile("[^0-9a-zء-ي]+")
+_AR_STOP = frozenset(
+    "في من على الى عن مع او ان ما ماذا كيف لماذا متى هل هو هي هذا هذه ذلك التي الذي بين بعد قبل "
+    "عند كل اي لا لم لن قد ثم حتى دليل عملي عمليه خطوه بخطوه اهم اول كامل شامل جديد الجديد "
+    "مصر المصري المصريه قانون القانون قانوني القانوني القانونيه محامي المحامي محامين ازاي يعني "
+    "وكيف اللي مش بدل علشان".split())
+
+
+def _ar_norm(s):
+    s = _AR_TASHKEEL.sub("", str(s or "").lower())
+    s = re.sub("[آأإٱ]", "ا", s)
+    s = s.replace("ة", "ه").replace("ى", "ي")
+    s = s.replace("ؤ", "و").replace("ئ", "ي")
+    return s
+
+
+def _ar_tokens(*texts):
+    out = set()
+    for t in texts:
+        for w in _AR_SPLIT.split(_ar_norm(t)):
+            if len(w) >= 5 and w.startswith("ال"):
+                w = w[2:]
+            if len(w) >= 3 and w not in _AR_STOP:
+                out.add(w)
+    return out
+
+
+def _ar_count(n):
+    """العدد مع المعدود: مقال واحد · مقالان · ٣–١٠ مقالات · ١١+ مقالًا (نفس epCount في blog.html)."""
+    if n == 1:
+        return "مقال واحد"
+    if n == 2:
+        return "مقالان"
+    return ("%d %s" % (n, "مقالات" if 3 <= n % 100 <= 10 else "مقالًا")).translate(_AR_DIGITS)
+
+
+def topic_url(slug):
+    return ORIGIN + "/blog/topic/" + slug
+
+
+def _href(a):
+    return "/blog/" + urllib.parse.quote(str(a["slug"]), safe="")
+
+
+def _ar_date(a):
+    t = str(a.get("date") or "").strip()
+    if t:
+        return t
+    dt = parse_cms_dt(a.get("published_at"))
+    if not dt:
+        return ""
+    return ("%d %s %d" % (dt.day, AR_MONTHS[dt.month - 1], dt.year)).translate(_AR_DIGITS)
+
+
+def _safe_http(u):
+    u = str(u or "").strip()
+    return u if re.match(r"^https?://", u, re.I) else ""
+
+
+def _pub_key(a):
+    dt = parse_cms_dt(a.get("published_at"))
+    return (dt.timestamp() if dt else 0.0, int(a["id"]))
+
+
+def topic_groups(topics, articles):
+    """[(topic, hub|None, [supports], [related standalone])] — بترتيب السجلّ. محور بلا مقال منشور يسقط."""
+    by_c = {}
+    for a in articles:
+        if a.get("cluster_id"):
+            by_c.setdefault(a["cluster_id"], []).append(a)
+    # «مقالات قريبة» صارمة عمدًا: المستقلّ غالبًا خبر أو صفحة منتج، ورابطٌ غير ذي صلة على دليل
+    # منسَّق أسوأ من لا رابط. نعدّ فقط الكلمات النادرة في المدوّنة (تظهر في ≤ ٦ مقالات) من عنوان
+    # الموضوع وكلمات مقالاته المفتاحية، ونشترط ٣ تقاطعات، ونستبعد صفحات «عن المنصة».
+    df = {}
+    for a in articles:
+        for w in _ar_tokens(a.get("title"), *(a.get("keywords") or [])):
+            df[w] = df.get(w, 0) + 1
+    rare = lambda toks: {w for w in toks if df.get(w, 0) <= 6}   # noqa: E731
+    loose = [a for a in articles if not a.get("cluster_id") and (a.get("cat") or "") != "عن المنصة"]
+    out, seen = [], set()
+    for t in topics:
+        if not isinstance(t, dict):
+            continue
+        slug, cid = str(t.get("slug") or ""), t.get("cluster_id")
+        if not TOPIC_SLUG_RE.match(slug) or slug in seen or not t.get("label"):
+            if slug and not TOPIC_SLUG_RE.match(slug):
+                log("WARN: topic %r has a non-ASCII/invalid slug %r — skipped" % (cid, slug))
+            continue
+        members = by_c.get(cid) or []
+        if not members:
+            continue
+        seen.add(slug)
+        hubs = [a for a in members if (a.get("role") or "") == "hub"]
+        hubs.sort(key=lambda a: (str(a["id"]) != str(t.get("hub_id") or ""), _pub_key(a)))
+        hub = hubs[0] if hubs else None
+        sups = sorted((a for a in members if a is not hub), key=_pub_key)
+        mine = rare(_ar_tokens(t.get("label"), *[m.get("primary_kw") or "" for m in members],
+                               *[k for m in members for k in (m.get("keywords") or [])]))
+        scored = []
+        for a in loose:
+            sc = len(mine & rare(_ar_tokens(a.get("title"), *(a.get("keywords") or []))))
+            if sc >= 3:
+                scored.append((sc, _pub_key(a), a))
+        scored.sort(key=lambda x: (x[0], x[1]), reverse=True)
+        out.append((t, hub, sups, [a for _s, _k, a in scored[:3]]))
+    return out
+
+
+def _icons(blog_code):
+    ele = re.search(r"var ELE='([^']*)';", blog_code)
+    bell = re.search(r"var BELL='([^']*)';", blog_code)
+    return (ele.group(1) if ele else ""), (bell.group(1) if bell else "")
+
+
+def _card(a, i, ele, bell):
+    tone = a.get("tone") if a.get("tone") in TONES else TONES[i % 6]
+    img = _safe_http(a.get("image_url"))
+    inner = ('<img class="thumb-img" loading="lazy" alt="%s" src="%s">' % (esc_attr(a["title"]), esc_attr(img))
+             if img else ele)
+    return ('<a class="post" href="%s"><div class="thumb %s">%s<span class="badge">%s</span></div>'
+            '<div class="body"><div class="meta"><span class="cat">%s</span>·<span>%s</span></div>'
+            '<h3>%s</h3><p>%s</p><div class="by">%s%s</div></div></a>'
+            % (esc_attr(_href(a)), tone, inner, esc_text(a.get("cat") or ""),
+               esc_text(a.get("kicker") or "مقال"), esc_text(_ar_date(a)),
+               esc_text(a["title"]), esc_text(a.get("excerpt") or ""), bell, esc_text(a.get("by") or "")))
+
+
+def _feat(a, ele, bell):
+    tone = a.get("tone") if a.get("tone") in TONES else "t1"
+    img = _safe_http(a.get("image_url"))
+    inner = ('<img class="ft-img" loading="lazy" alt="%s" src="%s">' % (esc_attr(a["title"]), esc_attr(img))
+             if img else ele)
+    return ('<a class="feat" href="%s"><div class="ft-thumb %s">%s</div><div class="ft-body">'
+            '<div class="ft-tag">دليل الموضوع — ابدأ من هنا</div><h2>%s</h2><p>%s</p>'
+            '<div class="ft-meta"><span class="ft-by">%s%s</span>·<span>%s</span></div></div></a>'
+            % (esc_attr(_href(a)), tone, inner, esc_text(a["title"]), esc_text(a.get("excerpt") or ""),
+               bell, esc_text(a.get("by") or ""), esc_text(_ar_date(a))))
+
+
+TOPIC_CSS = """<style id="epTopicCss">
+.tp-desc{font-size:17px;color:var(--ink-2);margin-top:16px;max-width:680px;line-height:1.8}
+.tp-count{display:inline-block;margin-top:16px;font-size:13px;font-weight:800;color:var(--human);background:var(--human-bg);border-radius:999px;padding:4px 16px}
+.tp-main{padding:32px 0 48px}
+.tp-h2{font-family:Cairo,'IBM Plex Sans Arabic',sans-serif;font-size:20px;font-weight:800;color:var(--ink);margin:8px 0 24px;line-height:1.5}
+.tp-h2 span{color:var(--muted);font-weight:700;font-size:15px}
+.tp-main .bgrid{padding-bottom:32px}
+.tp-more{border-top:1px solid var(--line);padding-top:32px;margin-top:8px}
+.tp-more ul{list-style:none;display:flex;flex-wrap:wrap;gap:8px}
+.tp-more a{display:inline-flex;align-items:center;min-height:44px;font-size:14px;font-weight:700;border:1.5px solid var(--line);background:var(--surface);border-radius:999px;padding:8px 16px;color:var(--ink-2)}
+.tp-more a:hover{border-color:var(--human);color:var(--human)}
+.tp-back{margin-top:32px}
+.tp-back a{display:inline-flex;align-items:center;min-height:44px;font-weight:800;color:var(--human)}
+@media(max-width:760px){.tp-desc{font-size:16px}.tp-main{padding:24px 0 32px}}
+</style>"""
+
+_REL_URL = re.compile(r'\b(href|src)="(?!/|#|https?:|mailto:|tel:|data:|javascript:)([^"]+)"')
+
+
+def _script_open_tags(doc):
+    """متن الصفحة خارج السكربتات + الوسوم الافتتاحية للسكربتات (فيها src) — ما يجب أن يكون مطلقًا."""
+    parts = re.split(r"(?is)(<script\b.*?</script>)", doc)
+    return "".join(p[:p.find(">") + 1] if p[:7].lower() == "<script" else p for p in parts)
+
+
+def _absolutize(doc):
+    """مسارات نسبية ⇒ مطلقة: في كل الوسوم، وفي الوسم الافتتاحي لـ<script src=…> (pixel.js نسبي في
+    القالب!) — أمّا متن السكربتات الداخلية فلا نلمسه."""
+    parts = re.split(r"(?is)(<script\b.*?</script>)", doc)
+    out = []
+    for p in parts:
+        if p[:7].lower() == "<script":
+            k = p.find(">") + 1
+            out.append(_REL_URL.sub(r'\1="/\2"', p[:k]) + p[k:])
+        else:
+            out.append(_REL_URL.sub(r'\1="/\2"', p))
+    return "".join(out)
+
+
+def build_topic_page(blog_doc, blog_code, topic, hub, sups, related, all_topics):
+    slug, label = topic["slug"], str(topic["label"]).strip()
+    desc = str(topic.get("description") or "").strip() or (
+        "كل مقالات البروفيسور عن «%s» في مكان واحد: الدليل الأساسي أولًا ثم التفاصيل." % label)
+    url = topic_url(slug)
+    members = ([hub] if hub else []) + list(sups)
+    ele, bell = _icons(blog_code)
+    out = blog_doc
+
+    def line(pattern, new, what):
+        nonlocal out
+        out = replace_once(out, unique_line(out, pattern, what), new, what)
+
+    title = "%s — دليل موضوع | البروفيسور" % label
+    line(r"^<title>.*</title>$", "<title>%s</title>" % esc_text(title), "title")
+    line(r'^<meta name="description" content=".*">$',
+         '<meta name="description" content="%s">' % esc_attr(desc[:300]), "description")
+    line(r'^<link rel="canonical" href=".*">$', '<link rel="canonical" href="%s">' % esc_attr(url), "canonical")
+    line(r'^<meta property="og:title" content=".*">$',
+         '<meta property="og:title" content="%s">' % esc_attr(title), "og:title")
+    line(r'^<meta property="og:description" content=".*">$',
+         '<meta property="og:description" content="%s">' % esc_attr(desc[:300]), "og:description")
+    line(r'^<meta property="og:url" content=".*">$', '<meta property="og:url" content="%s">' % esc_attr(url),
+         "og:url")
+    line(r'^<meta name="twitter:title" content=".*">$',
+         '<meta name="twitter:title" content="%s">' % esc_attr(title), "twitter:title")
+    line(r'^<meta name="twitter:description" content=".*">$',
+         '<meta name="twitter:description" content="%s">' % esc_attr(desc[:300]), "twitter:description")
+
+    items = [{"@type": "ListItem", "position": i + 1, "url": article_url(a["slug"]), "name": str(a["title"])}
+             for i, a in enumerate(members)]
+    coll = {"@context": "https://schema.org", "@type": "CollectionPage", "@id": url + "#page", "url": url,
+            "name": label, "description": desc, "inLanguage": "ar",
+            "isPartOf": {"@id": ORIGIN + "/#website"}, "about": {"@type": "Thing", "name": label},
+            "mainEntity": {"@type": "ItemList", "numberOfItems": len(items), "itemListElement": items}}
+    bc = {"@context": "https://schema.org", "@type": "BreadcrumbList", "itemListElement": [
+        {"@type": "ListItem", "position": 1, "name": "الرئيسية", "item": ORIGIN + "/"},
+        {"@type": "ListItem", "position": 2, "name": "المقالات", "item": ORIGIN + "/blog.html"},
+        {"@type": "ListItem", "position": 3, "name": label, "item": url}]}
+    lds = ('<script type="application/ld+json" id="ld-topic">%s</script>\n'
+           '<script type="application/ld+json" id="ld-topic-bc">%s</script>\n'
+           % (esc_ldjson(coll), esc_ldjson(bc)))
+    out = replace_once(out, "</script>\n<style>\n:root{", "</script>\n" + lds + "<style>\n:root{", "ld-insert")
+    out = replace_once(out, "</head>", TOPIC_CSS + "\n</head>", "head-close")
+
+    # الهيرو: فتات المسار + H1 + الوصف
+    out = replace_once(out, '<div class="crumbs"><a href="/">الرئيسية</a> · المقالات</div>',
+                       '<nav class="crumbs" aria-label="مسار التنقّل"><a href="/">الرئيسية</a> · '
+                       '<a href="/blog.html">المقالات</a> · <span aria-current="page">%s</span></nav>'
+                       % esc_text(label), "hero-crumbs")
+    h1 = unique_line(out, r"^\s*<h1>.*</h1>$", "hero-h1")
+    indent = h1[:len(h1) - len(h1.lstrip())]
+    out = replace_once(out, h1, '%s<h1>%s</h1>\n%s<p class="tp-desc">%s</p>\n%s<span class="tp-count">%s</span>'
+                       % (indent, esc_text(label), indent, esc_text(desc), indent,
+                          esc_text(_ar_count(len(members)) + " في هذا الموضوع")),
+                       "hero-h1")
+
+    # المحتوى: من «FILTERS + CONTENT» حتى «CTA»
+    sec = ['<section class="wrap tp-main" id="topicMain">']
+    if hub:
+        sec.append(_feat(hub, ele, bell))
+    if sups:
+        sec.append('<h2 class="tp-h2">%s <span>(%s)</span></h2>'
+                   % ("تفاصيل في هذا الموضوع" if hub else "مقالات هذا الموضوع",
+                      str(len(sups)).translate(_AR_DIGITS)))
+        sec.append('<div class="bgrid">' + "".join(_card(a, i, ele, bell) for i, a in enumerate(sups)) + "</div>")
+    if related:
+        sec.append('<h2 class="tp-h2">مقالات قريبة من الموضوع</h2>')
+        sec.append('<div class="bgrid">' + "".join(_card(a, i + 3, ele, bell) for i, a in enumerate(related))
+                   + "</div>")
+    others = [t for t in all_topics if t["slug"] != slug]
+    if others:
+        sec.append('<nav class="tp-more" aria-label="موضوعات أخرى"><h2 class="tp-h2">موضوعات أخرى</h2><ul>'
+                   + "".join('<li><a href="/blog/topic/%s">%s</a></li>' % (esc_attr(t["slug"]), esc_text(t["label"]))
+                             for t in others) + "</ul></nav>")
+    sec.append('<p class="tp-back"><a href="/blog.html">← كل المقالات</a></p></section>')
+    i = out.find("<!-- FILTERS + CONTENT -->")
+    j = out.find("<!-- CTA -->")
+    if i < 0 or j <= i or out.count("<!-- FILTERS + CONTENT -->") != 1 or out.count("<!-- CTA -->") != 1:
+        raise Fail("topic page: blog.html content anchors (FILTERS + CONTENT / CTA) not found exactly once")
+    out = out[:i] + "<!-- TOPIC: %s -->\n" % slug + "\n".join(sec) + "\n\n" + out[j:]
+
+    # مُصيِّر المدوّنة لا مكان له هنا (لا #grid ولا #filters) — نشيله مع علَمه ومحمّل الفيد
+    pat = (r'(?s)(?:<script>window\.EP_PRERENDERED=true;</script>\n)?<script src="site-content\.js[^"]*">'
+           r'</script>\n<script>\nvar ELE=.*?</script>\n<script src="content-loader\.js[^"]*"></script>\n?')
+    found = re.findall(pat, out)
+    if len(found) != 1:
+        raise Fail("topic page: blog renderer block matched %d times (expected 1)" % len(found))
+    out = out.replace(found[0], "", 1)
+    return _absolutize(out), {"url": url, "members": members, "related": related, "label": label}
+
+
+def verify_topic_page(html, topic, meta):
+    errs = []
+    slug = topic["slug"]
+
+    def bad(m):
+        errs.append("topic=%s: %s" % (slug, m))
+
+    h1s = re.findall(r"<h1>(.*?)</h1>", html)
+    if len(h1s) != 1 or h1s[0] != esc_text(meta["label"]):
+        bad("H1 is %r (expected exactly one = the topic label)" % h1s)
+    if html.count('<link rel="canonical"') != 1 or ('<link rel="canonical" href="%s">' % meta["url"]) not in html:
+        bad("canonical missing/duplicated or not %s" % meta["url"])
+    for a in meta["members"] + meta["related"]:
+        if ('href="%s"' % esc_attr(_href(a))) not in html:
+            bad("member article id=%s has no link on the page" % a["id"])
+    ids = re.findall(r'<script type="application/ld\+json" id="([^"]+)"', html)
+    for need in ("ld-topic", "ld-topic-bc"):
+        if ids.count(need) != 1:
+            bad("%s block count != 1" % need)
+    for m in re.finditer(r'(?s)<script type="application/ld\+json"[^>]*>(.*?)</script>', html):
+        try:
+            json.loads(m.group(1))
+        except Exception as exc:                # noqa: BLE001
+            bad("a JSON-LD block does not parse: %s" % exc)
+    if html.count(GTM_ID) != 2:
+        bad("%s count != 2" % GTM_ID)
+    if html.count("pixel.js?v=") != 1:
+        bad("pixel.js count != 1")
+    for leak in ("content-loader.js", "var ELE=", "EP_RENDER", 'id="grid"', 'id="filters"'):
+        if leak in html:
+            bad("blog renderer leftover %r on a static topic page" % leak)
+    rel = _REL_URL.findall(_script_open_tags(html))
+    if rel:
+        bad("relative URL(s) on a /blog/topic/ page (404 there): %r" % rel[:3])
+    if len(strip_to_text(html)) < 400:
+        bad("stripped text too short")
+    return errs
+
+
+def build_topics_dir(topics, groups):
+    """فهرس ثابت لروابط صفحات الموضوعات داخل blog.html — الزاحف يصلها من صفحة المقالات."""
+    if not groups:
+        return ""
+    return ('<h2 class="tdir-h">تصفّح حسب الموضوع</h2><ul class="tdir-list">'
+            + "".join('<li><a href="/blog/topic/%s">%s</a></li>' % (esc_attr(t["slug"]), esc_text(t["label"]))
+                      for t, _h, _s, _r in groups) + "</ul>")
+
+
+# ---------------------------------------------------------------------------
 # الكتابة
 # ---------------------------------------------------------------------------
 FILE_MODE = 0o644        # محتوى ويب: لا بد أن يقرأه مستخدم الخادم
@@ -902,6 +1256,7 @@ def main(argv=None):
     soft404 = re.search(r"var nfTitle=DATA\.length\?'([^']*)':'([^']*)'", article_code)
     ctx = {
         "renderer_has_faq": "faqHtml" in article_code,
+        "renderer_has_topic": "topic_slug" in article_code,
         "soft404": list(soft404.groups()) if soft404 else [],
         "placeholder": unique_line(art_tpl, r"^<title>.*</title>$", "title")[len("<title>"):-len("</title>")],
     }
@@ -910,7 +1265,7 @@ def main(argv=None):
     log("renderer: article inline script %d chars, visible FAQ rendering %s"
         % (len(article_code), "ON" if ctx["renderer_has_faq"] else "OFF (JSON-LD only)"))
 
-    articles, source = fetch_feed(args.feed_file, args.feed_url, args.min_articles)
+    articles, source, feed_topics = fetch_feed(args.feed_file, args.feed_url, args.min_articles)
     by_id = {str(a["id"]): a for a in articles}
 
     if args.id:
@@ -940,10 +1295,36 @@ def main(argv=None):
         if aid in write_ids:
             pending[os.path.join(pre_dir, "%s.html" % aid)] = html
 
+    # صفحات الموضوعات — فشلها لا يُسقط المقالات (انظر التعليق عند TOPIC_DIR)
+    topic_dir = os.path.join(site, "blog", TOPIC_DIR)
+    topic_pages, topics_error, groups = {}, None, []
+    try:
+        groups = topic_groups(feed_topics, articles)
+        all_t = [g[0] for g in groups]
+        for t, hub, sups, rel in groups:
+            thtml, tmeta = build_topic_page(blog_doc, blog_code, t, hub, sups, rel, all_t)
+            terrs = verify_topic_page(thtml, t, tmeta)
+            if terrs:
+                raise Fail("; ".join(terrs[:6]))
+            topic_pages[os.path.join(topic_dir, t["slug"] + ".html")] = thtml
+    except Fail as exc:
+        topics_error = str(exc)[:600]
+        topic_pages, groups = {}, []
+        log("WARN: topic pages skipped (articles unaffected): %s" % topics_error)
+    if feed_topics and not groups and not topics_error:
+        log("WARN: the feed carries %d topic(s) but none has a published article" % len(feed_topics))
+
     blog_html = build_blog(blog_doc, res["blog"])
+    if MARK_TOPICS_OPEN in blog_html and groups:
+        if blog_html.count(MARK_TOPICS_OPEN) != 1 or blog_html.count(MARK_TOPICS_CLOSE) != 1:
+            raise Fail("blog.html markers %s are not unique" % MARK_TOPICS_OPEN)
+        ti = blog_html.index(MARK_TOPICS_OPEN) + len(MARK_TOPICS_OPEN)
+        tj = blog_html.index(MARK_TOPICS_CLOSE, ti)
+        blog_html = blog_html[:ti] + "\n" + build_topics_dir(feed_topics, groups) + "\n" + blog_html[tj:]
     berrs, blog_len = verify_blog(blog_html, articles)
     errors.extend(berrs)
     pending[blog_path] = blog_html
+    pending.update(topic_pages)
 
     feed_url = ORIGIN + "/" + args.feed_name.lstrip("/")
     rss = build_rss(articles, res["articles"], blog_doc, feed_url, args.rss_limit)
@@ -972,6 +1353,12 @@ def main(argv=None):
         for name in sorted(os.listdir(pre_dir)):
             if name.endswith(".html") and name[:-5] not in by_id:
                 stale.append(os.path.join(pre_dir, name))
+    # موضوع اختفى من السجلّ (أو فقد آخر مقالاته المنشورة) ⇒ صفحته تُمسح. توليدٌ بلا أي صفحة = لا مسح.
+    if topic_pages and os.path.isdir(topic_dir) and not args.no_prune:
+        for name in sorted(os.listdir(topic_dir)):
+            pth = os.path.join(topic_dir, name)
+            if TOPIC_PAGE_RE.match(name) and pth not in topic_pages:
+                stale.append(pth)
 
     if args.dry_run:
         log("DRY RUN — would write %d file(s), prune %d stale" % (len(pending), len(stale)))
@@ -994,6 +1381,8 @@ def main(argv=None):
         "faq_rendered_visibly": ctx["renderer_has_faq"],
         "lead_magnet_per_page": lm_in_tpl,
         "pruned": len(stale),
+        "topics": sorted(os.path.basename(p)[:-5] for p in topic_pages),
+        "topics_error": topics_error,
         "feed_url": feed_url,
         "feed_link_mismatch": mismatch,
         "dry_run": bool(args.dry_run),

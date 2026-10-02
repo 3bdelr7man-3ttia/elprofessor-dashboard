@@ -3249,7 +3249,7 @@ function viewContent(v){
       <div class="tab${contentTab==='pending'?' on':''}" data-t="pending">بانتظار الاعتماد (${pend})</div>
       <div class="tab${contentTab==='published'?' on':''}" data-t="published">منشورة (${pub})</div>
     </div>
-    <div class="inboxwrap"><section class="panel"><div class="ph"><h3 id="ctH"></h3><span class="n" id="ctN"></span><div style="margin-inline-start:auto;display:flex;gap:8px"><button class="btn btn-primary" id="ctGen" style="flex:none;min-width:auto;padding:6px 13px;font-size:12px">${svg('sparkles')} ولّد بالذكاء</button><button class="btn btn-ghost" id="ctSync" style="flex:none;min-width:auto;padding:6px 11px;font-size:12px">${svg('check')} جلب</button><button class="btn btn-human" id="ctCreate" style="flex:none;min-width:auto;padding:6px 13px;font-size:12px">+ <span id="ctCreateLbl">مقال جديد</span></button></div></div><div id="ctRows"></div></section><aside class="drawer" id="drawer"></aside></div>`;
+    <div class="inboxwrap"><section class="panel"><div class="ph"><h3 id="ctH"></h3><span class="n" id="ctN"></span><div style="margin-inline-start:auto;display:flex;gap:8px"><button class="btn btn-primary" id="ctGen" style="flex:none;min-width:auto;padding:6px 13px;font-size:12px">${svg('sparkles')} ولّد بالذكاء</button><button class="btn btn-ghost" id="ctSync" style="flex:none;min-width:auto;padding:6px 11px;font-size:12px">${svg('check')} جلب</button><button class="btn btn-ghost" id="ctTopics" style="flex:none;min-width:auto;padding:6px 11px;font-size:12px">${svg('doc')} موضوعات المدوّنة</button><button class="btn btn-human" id="ctCreate" style="flex:none;min-width:auto;padding:6px 13px;font-size:12px">+ <span id="ctCreateLbl">مقال جديد</span></button></div></div><div id="ctRows"></div></section><aside class="drawer" id="drawer"></aside></div>`;
   wireTopicsTabs();
   v.querySelectorAll('#ctTabs .tab').forEach(t=>t.onclick=()=>{contentTab=t.dataset.t;selected=null;viewContent(v);});
   document.getElementById('ctCreateLbl').textContent='مقال جديد';
@@ -3260,7 +3260,30 @@ function viewContent(v){
     gb.disabled=true;EP.runDailyContent(()=>viewContent(document.getElementById('view')));
   };
   var sb=document.getElementById('ctSync');if(sb)sb.onclick=()=>{ if(window.EP)EP.syncContent(()=>viewContent(document.getElementById('view'))); };
+  var tb=document.getElementById('ctTopics');if(tb)tb.onclick=()=>{blogTopicsModal();};
   renderContent();
+}
+/* موضوعات المدوّنة — تحرير عنوان الموضوع ووصفه (صفحة /blog/topic/<slug> ورقائق «الموضوعات» على المدوّنة).
+   الرابط (slug) يُعرض للقراءة فقط: صفحة مفهرسة، وتغييره يكسرها. */
+function blogTopicsModal(){
+  if(!window.EP||!EP.blogTopics){toast('غير متصل بالخادم');return;}
+  var s=openModal('موضوعات المدوّنة','<div id="btList" style="color:var(--muted);font-size:13px">…جارٍ تحميل الموضوعات</div>');
+  EP.blogTopics(function(err,rows){
+    var box=s.querySelector('#btList');if(!box)return;
+    if(err){box.textContent=err;return;}
+    box.innerHTML='<div style="color:var(--muted);font-size:12px;margin-bottom:10px">العنوان والوصف يظهران على صفحة الموضوع وفي رقائق «الموضوعات» بالمدوّنة. الرابط ثابت ولا يتغيّر.</div>'+
+      rows.map(function(t,i){return '<div class="fld" style="border-top:1px solid var(--line);padding-top:10px">'+
+        '<label><span style="direction:ltr;display:inline-block">/blog/topic/'+topEsc(t.slug)+'</span> · '+(t.count||0)+' مقال منشور</label>'+
+        '<input data-i="'+i+'" data-f="label" value="'+topEsc(t.label)+'" maxlength="120">'+
+        '<textarea data-i="'+i+'" data-f="description" style="min-height:60px;margin-top:6px" maxlength="400">'+topEsc(t.description||'')+'</textarea>'+
+        '<div class="acts" style="margin-top:6px"><button class="btn btn-primary" data-save="'+i+'">حفظ</button>'+
+        (t.count?'<a class="btn btn-ghost" target="_blank" rel="noopener" href="'+topEsc(t.url)+'">عرض الصفحة</a>':'')+'</div></div>';}).join('');
+    box.querySelectorAll('[data-save]').forEach(function(b){b.onclick=function(){
+      var i=+b.dataset.save,t=rows[i];
+      var lab=box.querySelector('input[data-i="'+i+'"]').value.trim(),desc=box.querySelector('textarea[data-i="'+i+'"]').value.trim();
+      if(!lab){toast('عنوان الموضوع مطلوب');return;}
+      b.disabled=true;EP.saveBlogTopic(t.cluster_id,{label:lab,description:desc},function(e2,nt){b.disabled=false;if(nt)rows[i]=nt;});};});
+  });
 }
 function renderContent(){
   const el=document.getElementById('ctRows'),h=document.getElementById('ctH');el.innerHTML='';

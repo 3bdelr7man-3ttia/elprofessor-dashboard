@@ -2179,6 +2179,19 @@
       .catch(function (e) { quietToast((e && e.message) || "تعذّر رفض المقال"); if (after) after(); });
   };
 
+  // موضوعات المدوّنة (سجلّ /api/content/topics) — العنوان والوصف فقط؛ رابط الموضوع ثابت لا يُعدَّل.
+  // الحفظ يُطلق توليد الصفحات الثابتة في الخلفية، فتتحدّث /blog/topic/<slug> ورقائق المدوّنة.
+  EP.blogTopics = function (cb) {
+    get("/content/topics?all=1")
+      .then(function (r) { cb(null, (r && r.topics) || []); })
+      .catch(function (e) { cb((e && e.message) || "تعذّر جلب الموضوعات", []); });
+  };
+  EP.saveBlogTopic = function (clusterId, body, cb) {
+    api("/content/topics/" + encodeURIComponent(clusterId), { method: "PUT", body: body })
+      .then(function (t) { note("حُفظ الموضوع «" + ((t && t.label) || "") + "» — صفحته تتحدّث خلال دقائق"); if (cb) cb(null, t); })
+      .catch(function (e) { var m = (e && e.message) || "تعذّر حفظ الموضوع"; quietToast(m); if (cb) cb(m); });
+  };
+
   // الدليل: إنشاء/تعديل/حذف قسم — تمرّ عبر الـ proxy السرّي (لا سرّ في المتصفح).
   EP.createTutorial = function (g, after) {
     post("/tutorials", g)
