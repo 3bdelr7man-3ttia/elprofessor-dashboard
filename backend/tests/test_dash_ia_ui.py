@@ -247,6 +247,23 @@ def test_the_platform_waiting_queue_is_rendered_in_the_inbox(page, server):
     assert 'طلب بلا أول رد منذ 40 ساعة' in txt        # تنبيهات المنصّة تُطبع حرفيًّا
 
 
+def test_a_founding_expert_lead_is_a_row_in_the_inbox_with_its_next_step(page, server):
+    """المؤسس (٢٠٢٦-١٠-٠٧): «مدرّب عايز ينضم وصل على تليجرام ومظهرش في الداشبورد» — الليد كان
+    له لوحة تحت «المستخدمون» وحدها. الآن هو صفٌّ في الوارد باسمه وتخصّصه، ودرجه يحمل الخطوة
+    التالية («اتواصلنا») والرفض. المُحوَّل/المرفوض لا يشغل الوارد."""
+    _go(page, server, 'inbox')
+    rows = page.inner_text('#rows')
+    assert 'د. ثابت أبو الروس' in rows, rows[:400]
+    assert 'خبير اتحوّل' not in rows
+    page.click('#rows .row:has-text("د. ثابت أبو الروس")')
+    page.wait_for_timeout(300)
+    drawer = page.inner_text('#drawer')
+    assert 'تحكيم' in drawer and 'فلسطين' in drawer and '+970599000000' in drawer, drawer[:600]
+    acts = page.eval_on_selector_all('#drawer .acts [data-a]', 'els=>els.map(e=>e.dataset.a+":"+e.textContent.trim())')
+    assert any(a.startswith('approve:') and 'اتواصلنا' in a for a in acts), acts
+    assert any(a.startswith('reject:') for a in acts), acts
+
+
 def test_the_merged_overview_kpi_strip_sits_on_top_of_the_inbox(page, server):
     """شريط «نظرة عامة» بعد الدمج = سياق الشركة وحده. ثلاثة مربّعات، ولا رقم وارد فيها."""
     _go(page, server, 'inbox')
@@ -434,7 +451,7 @@ def test_the_truncation_notice_actually_renders_when_a_source_exceeds_the_cap(pw
             assert 'رسائل الموقع' in hit[0] and 'معروض 500 من 520' in hit[0], hit[0]
             # المصدر المقصوص وحده يقف عند السقف؛ بقيّة الطوابير تمرّ كاملة
             assert pg.evaluate("INBOX.filter(i=>inboxType(i)==='messages').length") == 500
-            assert int(pg.inner_text('#inboxN').strip()) == 503     # ٥٠٠ + دفعتان + طلب مدرّب
+            assert int(pg.inner_text('#inboxN').strip()) == 504     # ٥٠٠ + دفعتان + طلب مدرّب + ليد خبير مؤسس (٢٠٢٦-١٠-٠٧)
         finally:
             br.close()
 

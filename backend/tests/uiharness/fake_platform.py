@@ -128,7 +128,19 @@ INVITES = {"count": 4, "invites": [
 
 # ⛔ الشركاء **ليسوا** من المنصّة: `/api/partners` دفترُ الداشبورد نفسه في SQLite —
 # فبذرُهم يحدث في `run_dash.py` لا هنا. خطأٌ سهل: صفٌّ يُكتب هنا يبقى غير مقروء للأبد.
+# ليد «خبير مؤسس» من founders.html — المؤسس (٢٠٢٦-١٠-٠٧): مدرّب عايز ينضم وصل على تليجرام
+# ومظهرش في الوارد؛ الصفّ كان له لوحة تحت «المستخدمون» فقط. صفّان: جديد (يظهر) ومُحوَّل (لا يظهر).
+FOUNDING_LEADS = [
+    {"id": "fl-1", "name": "د. ثابت أبو الروس", "whatsapp": "+970599000000",
+     "email": "thabit@example.test", "specialization": "تحكيم", "years_experience": "أكثر من 15",
+     "country": "فلسطين", "status": "new", "created_at": _iso(30), "updated_at": _iso(30)},
+    {"id": "fl-2", "name": "خبير اتحوّل", "whatsapp": "+201000000002",
+     "email": "done@example.test", "specialization": "مدني", "years_experience": "10",
+     "country": "مصر", "status": "converted", "created_at": _iso(300), "updated_at": _iso(100)},
+]
+
 ROUTES = {
+    "/api/bridge/founding-expert-leads": FOUNDING_LEADS,
     "/api/bridge/invites": INVITES,
     "/api/bridge/ops/queue": QUEUE,
     "/api/bridge/ops/pnl": PNL,

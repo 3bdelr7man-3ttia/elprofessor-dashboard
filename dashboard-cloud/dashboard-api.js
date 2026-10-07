@@ -1144,6 +1144,44 @@
           });
         }).catch(fail("طلبات المدرّبين"))
       );
+      // «خبير مؤسس» — من استمارة «درّب معنا» (founders.html ⇒ db.founding_expert_leads). قرار المؤسس
+      // (٢٠٢٦-١٠-٠٧): مدرّب وصل على تليجرام ومظهرش في الداشبورد — الليد كان له لوحة تحت
+      // «المستخدمون» وحدها ولا صفّ له هنا. الصفّ يحمل الخطوة التالية نفسها (FL_NEXT في الشاشة):
+      // جديد ⇒ «اتواصلنا» ⇒ «اتدعى» ⇒ «اتحوّل لمدرّب»، والرفض «مش مناسب». المُحوَّل/المرفوض نهاية
+      // فلا يشغل الوارد. ⛔ نفس جسر لوحة المستخدمين بالحرف (/founding-leads) — لا عدّ ثانٍ.
+      jobs.push(
+        get("/founding-leads?limit=200").then(function (r) {
+          var leads = Array.isArray(r) ? r : ((r && (r.leads || r.items || r.rows)) || []);
+          var NEXT = { new: ["contacted", "اتواصلنا"], resolved: ["contacted", "اتواصلنا"],
+                       contacted: ["invited", "اتدعى"], invited: ["converted", "اتحوّل لمدرّب"] };
+          var LABEL = { new: "جديد", resolved: "اتعالج", contacted: "اتواصلنا", invited: "اتدعى" };
+          leads.forEach(function (l) {
+            var st = l.status || "new";
+            var nxt = NEXT[st];
+            if (!nxt) return;                       // converted / rejected = نهاية
+            var at = l.created_at || l.updated_at || "";
+            var country = l.country || l.governorate || "";
+            var spec = l.specialization || "ما حدّدش";
+            realRows.push({
+              out: "خبير مؤسس — طلب انضمام كمدرّب", from: "درّب معنا", src: "shield", dest: "users",
+              triage: "human", sla: relTime(at) || "بانتظار قرارك", slaWarn: false,
+              note: "التخصّص: " + spec + (l.years_experience ? " · الخبرة: " + l.years_experience : "")
+                + (country ? " · البلد: " + country : "") + " — كلّمه على واتساب، وعلّم الخطوة من هنا.",
+              ref: "FND-" + l.id, who: l.name || "بلا اسم", email: l.email || "",
+              statusLabel: LABEL[st] || st,
+              details: [
+                { k: "واتساب", v: l.whatsapp || l.phone || "" },
+                { k: "التخصّص", v: spec },
+                { k: "الخبرة", v: l.years_experience || "" },
+                { k: "البلد", v: country },
+                { k: "لينكدإن", v: l.linkedin_url || "" },
+              ].filter(function (d) { return d.v; }),
+              apiKind: "founding", apiId: l.id, canReject: true,
+              approveLabel: nxt[1], nextStatus: nxt[0],
+            });
+          });
+        }).catch(fail("ليدات خبير مؤسس"))
+      );
       jobs.push(
         get("/platform-program-requests?status=pending").then(function (a) {
           var reqs = (a && a.requests) || [];
@@ -1996,6 +2034,11 @@
     }
     switch (i.apiKind) {
       case "trainer":  path = "/platform-trainer-applications/" + i.apiId + "/" + action; break;
+      case "founding":
+        // حالة الليد على المنصة (LEAD_BRIDGE_STATUSES): اعتماد = الخطوة التالية المحمولة على الصفّ،
+        // رفض = «مش مناسب». لا سبب يسافر هنا — الليد لا يقرأ شيئًا على المنصة (لم يسجّل بعد).
+        path = "/founding-leads/" + encodeURIComponent(i.apiId) + "/status";
+        body = { status: action === "approve" ? (i.nextStatus || "contacted") : "rejected" }; break;
       case "join":     path = "/platform-join-requests/" + i.apiId + "/" + action; break;
       case "topic":    path = "/platform-pending-topics/" + i.apiId + "/" + action; break;
       case "creative": path = "/platform-creative/" + i.apiId + "/" + action; break;
