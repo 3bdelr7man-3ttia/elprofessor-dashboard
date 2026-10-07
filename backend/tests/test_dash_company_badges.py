@@ -221,7 +221,7 @@ def test_badges_are_drawn_on_the_rail_with_the_stub_counts(page):
     assert n['escrow'] == 2, n            # الدفعتان اليدويّتان
     assert n['finance'] == 3, n           # سحب محفظةٍ واحد + أمرا دفعٍ متعثّران
     assert n['courses'] == 11, n          # ١ اعتماد + ٧ اهتمام + ٢ تدريب + ١ حيّة
-    assert n['inbox'] == 43, n
+    assert n['inbox'] == 44, n            # ٤٣ + بند «خبير مؤسس» الجديد في الوارد (٢٠٢٦-١٠-٠٧)
     assert n.get('settings') is None      # بندٌ بلا طابور: بلا شارة
 
 
@@ -242,12 +242,13 @@ def test_the_invites_badge_equals_the_approval_queue_on_screen(page, server):
 
 def test_alert_badges_mark_only_the_queues_the_platform_calls_late(page):
     """أحمر = «أقدم بندٍ فيه تعدّى ٢٤ ساعة» بشهادة المنصّة نفسها، لا بحساب المتصفّح:
-       الضمان (٣٠س) · الخبراء (٥١س) · المستخدمون (١٦٠٠س) · الدعوات (٧٢س) · الوارد (فيه
+       الضمان (٣٠س) · الخبراء (٥١س وليدات المؤسسين ١٦٠٠س) · الدعوات (٧٢س) · الوارد (فيه
        دفعةٌ يدويّةٌ موسومةٌ متأخّرة). والمالية (٩س) والدورات: بلا إنذار."""
     a = _alerts(page)
-    for late in ('escrow', 'team', 'users', 'invites', 'inbox'):
+    for late in ('escrow', 'team', 'invites', 'inbox'):
         assert late in a, (late, a)
-    for on_time in ('finance', 'courses', 'settings', 'marketing'):
+    # ليدات الخبراء المؤسسين (١٦٠٠س) انتقلت إلى «الخبراء والمدربون» (٢٠٢٦-١٠-٠٧) فلا إنذار على «المستخدمون»
+    for on_time in ('finance', 'courses', 'settings', 'marketing', 'users'):
         assert on_time not in a, (on_time, a)
 
 

@@ -264,6 +264,28 @@ def test_a_founding_expert_lead_is_a_row_in_the_inbox_with_its_next_step(page, s
     assert any(a.startswith('reject:') for a in acts), acts
 
 
+def test_founding_leads_live_on_the_experts_screen_not_under_users(page, server):
+    """المؤسس (٢٠٢٦-١٠-٠٧): «لقيته تحت خالص في المستخدمون — اللي عايز يبقى مدرّب مكانه
+    الخبراء والمدربين». اللوحة فوق تبويبات «الخبراء والمدربون»، وغابت عن «المستخدمون»،
+    وبند الوارد وشريحة الطابور يهبطان على «الخبراء والمدربون»."""
+    _go(page, server, 'team')
+    _until(page, "!!(window.EP && EP.state.foundingLeads==='ready')", 30000)
+    page.wait_for_timeout(300)
+    txt = page.inner_text('#view')
+    assert 'مين ردّ على دعوة المؤسس' in txt and 'د. ثابت أبو الروس' in txt, txt[:500]
+    # فوق التبويبات لا تحتها: اللوحة تسبق شريط التبويب في ترتيب الصفحة
+    assert page.evaluate("document.querySelector('#flRefresh').compareDocumentPosition(document.querySelector('#teamTabs')) & Node.DOCUMENT_POSITION_FOLLOWING") != 0
+    _go(page, server, 'users')
+    page.wait_for_timeout(600)
+    assert 'مين ردّ على دعوة المؤسس' not in page.inner_text('#view')
+    # الوارد: بند الليد يفتح «الخبراء والمدربون»
+    _go(page, server, 'inbox')
+    page.click('#rows .row:has-text("د. ثابت أبو الروس")')
+    page.wait_for_timeout(300)
+    assert 'الخبراء والمدربون' in page.inner_text('#drawer .acts [data-a="goto"]')
+    assert page.evaluate("opsQueueCounters(EP.data.opsQueue).find(c=>c[3]==='founding_leads_new')[2]") == 'team'
+
+
 def test_the_merged_overview_kpi_strip_sits_on_top_of_the_inbox(page, server):
     """شريط «نظرة عامة» بعد الدمج = سياق الشركة وحده. ثلاثة مربّعات، ولا رقم وارد فيها."""
     _go(page, server, 'inbox')
@@ -513,9 +535,9 @@ def test_the_rail_badges_carry_the_platform_queue_numbers(page, server):
                        '.map(e=>[e.dataset.mod,e.querySelector(".count").textContent])')
     got = dict(counts)
     assert got.get('topics') == '٣١١', got            # مسودّات المواضيع
-    assert got.get('team') == '٣', got                # طلبات المدرّبين
+    assert got.get('team') == '١٢', got               # ٣ طلبات مدرّبين + ٩ ليدات خبير مؤسس (٢٠٢٦-١٠-٠٧: مكانها «الخبراء والمدربون»)
     assert got.get('escrow') == '٢', got              # الدفعات اليدوية
-    assert got.get('users') == '٩', got               # ليدات الخبراء المؤسسين
+    assert 'users' not in got, got                    # «المستخدمون» بلا شارة: ليدات الخبراء غادرتها
     assert got.get('courses') == '١١', got            # ١ + ٧ + ٢ + ١ (دورة حيّة)
     # صفرٌ لا يُرسم: بندٌ بلا طابورٍ ينتظرك يبقى بلا شارة (وإلا بدا كل بندٍ كأن فيه شغلًا)
     assert 'market' not in got and 'analysis' not in got and 'settings' not in got, got
@@ -526,4 +548,4 @@ def test_the_rail_badges_carry_the_platform_queue_numbers(page, server):
     # «تنبيه» أحمر للطوابير التي تجاوز أقدمُها ٢٤ ساعة (٥١س · ٣٠س · ١٦٠٠س · دعوةٌ ٧٢س ·
     # والوارد لأن فيه دفعةً يدويّةً موسومةً متأخّرة)
     alerts = page.eval_on_selector_all('.rail .item.alert', 'els=>els.map(e=>e.dataset.mod)')
-    assert sorted(alerts) == ['escrow', 'inbox', 'invites', 'team', 'users'], alerts
+    assert sorted(alerts) == ['escrow', 'inbox', 'invites', 'team'], alerts   # تنبيه الليدات (١٦٠٠س) على «الخبراء والمدربون» الآن

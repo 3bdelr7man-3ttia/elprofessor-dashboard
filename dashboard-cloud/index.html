@@ -653,7 +653,8 @@ function ovKpiStrip(){
 // عمدًا، فالهبوط الصحيح = `go(mod)` **ثم** دالّةُ ضبطِ التبويب. هذه هي الخانة الخامسة في
 // كل صفٍّ من `opsQueueCounters` (مقروءةً من هذا الجدول بمفتاح الطابور).
 // غيابُ مفتاحٍ هنا = «الشاشة الافتراضية هي مكان الشغل فعلًا» — مقيسٌ لا مفترض:
-//   founding_leads_new ⇒ «المستخدمون» (الليد صفٌّ في نفس الجدول) · testimonials_pending
+//   founding_leads_new ⇒ «الخبراء والمدربون» (اللوحة فوق التبويبات — قرار المؤسس ٢٠٢٦-١٠-٠٧:
+//   «اللي عايز يبقى مدرّب مكانه المدرّبين، مش المستخدمون») · testimonials_pending
 //   ⇒ «المواضيع» بتبويبه الافتراضي · course_split_pending ⇒ ملخّص المالية.
 const OPSQ_LANDINGS={
   manual_payments_pending:function(){escTab='manual';viewEscrow(document.getElementById('view'));},
@@ -694,7 +695,7 @@ function opsQueueCounters(Q){
     ['اقتسام إيراد معلّق',n(Q.course_split_pending),'finance','course_split_pending'],
     ['شهادات بانتظار المراجعة',n(Q.testimonials_pending),'topics','testimonials_pending'],
     ['مسودّات مواضيع',n(Q.topics_drafts),'topics','topics_drafts'],
-    ['ليدات خبير مؤسس',n(Q.founding_leads_new),'users','founding_leads_new'],
+    ['ليدات خبير مؤسس',n(Q.founding_leads_new),'team','founding_leads_new'],
     ['وعود ملف لم تُسلَّم',n(Q.lead_magnet_awaiting_asset),null,'lead_magnet_awaiting_asset'],
     ['دورات حيّة تحتاج قرارًا',(Q.live_needs_decision||[]).length,'courses','live_needs_decision']
   ].filter(r=>r[1]>0).map(r=>r.concat([OPSQ_LANDINGS[r[3]]||null]));
@@ -1612,7 +1613,7 @@ function viewAnalysis(v){
 }
 
 function viewUsers(v){
-  if(window.EP){EP.ensure('users',()=>viewUsers(v));EP.ensure('packages',()=>viewUsers(v));EP.ensure('foundingLeads',()=>viewUsers(v));}
+  if(window.EP){EP.ensure('users',()=>viewUsers(v));EP.ensure('packages',()=>viewUsers(v));}
   const Ust=(window.EP&&EP.state.users)||'idle';
   const total=USERS.length, last7=USERS.filter(u=>u.last7).length, verified=USERS.filter(u=>u.verified==='verified').length, trainers=USERS.filter(u=>u.trainer==='approved').length;
   v.innerHTML=`
@@ -1628,9 +1629,7 @@ function viewUsers(v){
     <div class="inboxwrap">
       <section class="panel"><div class="ph"><h3>المستخدمون</h3><span class="n" id="uN">0</span><button class="btn btn-human" id="uAdd" style="flex:none;min-width:auto;padding:6px 13px;font-size:12px;margin-inline-start:auto">+ إضافة مستخدم</button></div><div id="uRows">${Ust==='loading'?'<div style="padding:40px;text-align:center;color:var(--muted)">…جارٍ التحميل</div>':''}</div></section>
       <aside class="drawer" id="drawer"></aside>
-    </div>
-    ${foundingLeadsPanel()}`;
-  wireFoundingLeads(v);
+    </div>`;
   // «+ إضافة مستخدم» تكتب فعليًا عبر POST /platform-users في الوضع الحيّ فقط؛ بدونه تُعطَّل.
   var uA=document.getElementById('uAdd');
   if(window.EP&&EP.createUser&&EP.data.users){uA.onclick=function(){addUserModal();};}
@@ -4072,7 +4071,7 @@ function expVisibilityNote(e){
     '<div><b>مخفي عن الدليل العام.</b> السبب: '+esc(reasons.join(' · '))+'.</div></div>';
 }
 function viewTeam(v){
-  if(window.EP){EP.ensure('experts',()=>viewTeam(v));EP.ensure('users',()=>viewTeam(v));EP.ensure('inbox',()=>viewTeam(v));}
+  if(window.EP){EP.ensure('experts',()=>viewTeam(v));EP.ensure('users',()=>viewTeam(v));EP.ensure('inbox',()=>viewTeam(v));EP.ensure('foundingLeads',()=>viewTeam(v));}
   const Est=(window.EP&&EP.state.experts)||'idle';
   const experts=(window.EXPERTS||[]);
   const admins=teamAdmins();
@@ -4103,6 +4102,7 @@ function viewTeam(v){
       <div class="kpi k-4"><div class="top"><span class="ic">${svg('book')}</span>مدرّبون بدورات</div><b>${loadK||money(withCourses)}</b><div class="sub">يقدّمون دورات فعلًا</div></div>
       <div class="kpi k-3"><div class="top"><span class="ic">${svg('trend')}</span>متصلون الآن</div><b>${loadK||money(online)}</b><div class="sub">حاضرون للاستشارة</div></div>
     </div>
+    ${foundingLeadsPanel()}
     <div class="tabbar" id="teamTabs">
       <div class="tab${teamTab==='experts'?' on':''}" data-t="experts">الخبراء (${money(experts.length)})</div>
       <div class="tab${teamTab==='trainers'?' on':''}" data-t="trainers">المدربون (${money(experts.length)}${pendingTrainers.length?' · '+money(pendingTrainers.length)+' بانتظار':(inboxFailedList().length?' · ؟ بانتظار':'')})</div>
@@ -4112,6 +4112,7 @@ function viewTeam(v){
       <section class="panel"><div class="ph"><h3 id="tmH"></h3><span class="n" id="tmN">0</span><span class="hint" id="tmHint" style="margin-inline-start:auto"></span></div><div id="tmMain">${Est==='loading'&&!experts.length?'<div style="padding:40px;text-align:center;color:var(--muted)">…جارٍ التحميل</div>':''}</div></section>
       <aside class="drawer" id="drawer"></aside>
     </div>`;
+  wireFoundingLeads(v);
   document.getElementById('teamTabs').querySelectorAll('.tab').forEach(t=>t.onclick=()=>{teamTab=t.dataset.t;teamSelEmail=null;viewTeam(v);});
   const mh=document.getElementById('tmH'),mm=document.getElementById('tmMain'),mn=document.getElementById('tmN'),hint=document.getElementById('tmHint');
   if(Est==='loading'&&!experts.length){mh.textContent='الخبراء';return;}
@@ -4922,6 +4923,7 @@ function wireTrainingInterest(v){
 }
 
 /* «مين ردّ على دعوة المؤسس» — الخبراء المؤسسون اللي سابوا بياناتهم على بوّابة الدعوة.
+   مكانها شاشة «الخبراء والمدربون» فوق التبويبات (كانت تحت جدول «المستخدمون» — قرار المؤسس ٢٠٢٦-١٠-٠٧).
    الصفوف بتيجي من المنصة (founders.html -> db.founding_expert_leads) عبر
    /api/founding-leads -> جسر المنصة /api/bridge/founding-expert-leads، أحدثُ أوّلًا.
    كان المسار الوحيد اللي بيقرأها على المنصة محميًّا بجلسة موظّف واللوحة ما بتحملهاش، فكان
@@ -4958,7 +4960,7 @@ function foundingLeadsPanel(){
     '<div class="policy" style="margin:0;border-inline-start-color:var(--gold);background:var(--gold-bg)">'+svg('clock','ic')+
     '<div><b>اللوحة جاهزة هنا — وناقص نشر المنصة.</b><br>الجسر <span style="direction:ltr;display:inline-block">/api/bridge/founding-expert-leads</span> لسه مش ردّان على <span style="direction:ltr;display:inline-block">api.elprofessor.net</span>. أول ما يشتغل الصفوف هتنزل لوحدها.</div></div></div>'+foot;
   if(st==='error')return wrap('<div class="policy" style="margin:0;border-inline-start-color:var(--conflict);background:var(--conflict-bg);color:var(--conflict)">'+svg('scale','ic')+
-    '<div>تعذّر جلب طلبات «خبير مؤسس» من المنصة — ودي مش «مفيش حد قدّم». <b style="cursor:pointer;text-decoration:underline" onclick="EP.reload(\'foundingLeads\',()=>viewUsers(document.getElementById(\'view\')))">إعادة المحاولة</b></div></div>');
+    '<div>تعذّر جلب طلبات «خبير مؤسس» من المنصة — ودي مش «مفيش حد قدّم». <b style="cursor:pointer;text-decoration:underline" onclick="EP.reload(\'foundingLeads\',()=>viewTeam(document.getElementById(\'view\')))">إعادة المحاولة</b></div></div>');
   if((st==='loading'||st==='idle')&&!R.length)return wrap('<div style="padding:14px;text-align:center;color:var(--muted)">…جارٍ تحميل ردود دعوة المؤسس</div>');
   if(!R.length)return wrap('<div style="color:var(--muted);font-size:12.5px">محدش ردّ على الدعوة لسه. أول ما خبير يسيب بياناته على صفحة المؤسسين هيبان هنا بالاسم وتخصّصه ووسيلة تواصله.</div>');
   var rows=R.map(function(l){
@@ -4995,7 +4997,7 @@ function foundingLeadsPanel(){
 function wireFoundingLeads(v){
   var root=(v||document);
   var b=root.querySelector('#flRefresh');
-  var again=function(){viewUsers(document.getElementById('view'));};
+  var again=function(){viewTeam(document.getElementById('view'));};
   if(b)b.onclick=function(){if(window.EP)EP.reload('foundingLeads',again);};
   root.querySelectorAll('.fl-act').forEach(function(btn){
     btn.onclick=function(){

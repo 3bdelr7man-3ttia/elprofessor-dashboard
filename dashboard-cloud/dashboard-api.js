@@ -1163,7 +1163,7 @@
             var country = l.country || l.governorate || "";
             var spec = l.specialization || "ما حدّدش";
             realRows.push({
-              out: "خبير مؤسس — طلب انضمام كمدرّب", from: "درّب معنا", src: "shield", dest: "users",
+              out: "خبير مؤسس — طلب انضمام كمدرّب", from: "درّب معنا", src: "shield", dest: "team",
               triage: "human", sla: relTime(at) || "بانتظار قرارك", slaWarn: false,
               note: "التخصّص: " + spec + (l.years_experience ? " · الخبرة: " + l.years_experience : "")
                 + (country ? " · البلد: " + country : "") + " — كلّمه على واتساب، وعلّم الخطوة من هنا.",
