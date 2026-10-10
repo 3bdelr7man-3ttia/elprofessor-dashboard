@@ -1006,7 +1006,8 @@ def test_the_hardcoded_14_day_line_is_gone_from_the_policy_paragraph():
     history — only the RENDERED policy paragraph itself must no longer hard-code it."""
     with open(INDEX_HTML, encoding='utf-8') as fh:
         src = fh.read()
-    lines = [ln for ln in src.splitlines() if 'المنصّة مقفولة من الخادم' in ln]
+    # (٢٠٢٦-١٠-١٠) التسجيل مفتوح: الفقرة تبدأ بـ«التسجيل مفتوح — والعضوية الكاملة مقفولة من الخادم».
+    lines = [ln for ln in src.splitlines() if 'مقفولة من الخادم لغير المدعوّ' in ln]
     assert len(lines) == 1, lines
     assert '١٤ يوم' not in lines[0]
     assert 'ويقرّ ويختار كلمة سر' not in lines[0]

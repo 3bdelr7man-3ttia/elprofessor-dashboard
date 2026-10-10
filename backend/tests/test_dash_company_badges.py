@@ -168,7 +168,7 @@ def test_zero_is_never_drawn_as_a_badge(html):
     assert 'const cnt=m.count?' in html                # itemHTML لا يرسم إلا الموجب
     block = html[html.index('function applyNavCounts(){'):html.index('function opsQueuePanel(')]
     assert 'if(nIn>0)' in block
-    assert 'if(inv.length)' in block
+    assert 'if(inv.length||pu.length)' in block        # الدعوات = طابور الموافقة + زوّار طلبوا الفتح (٢٠٢٦-١٠-١٠)، وصفرهما معًا لا يُرسم
 
 
 # ================================================================ ج) المتصفّح — الرسم الحقيقي
@@ -208,20 +208,29 @@ def _alerts(page):
 
 def test_badges_are_drawn_on_the_rail_with_the_stub_counts(page):
     """الأرقام المتوقّعة من الطقم الثابت (fake_platform + run_dash):
-       الوارد ٤٣ (طلب مدرّب ١ + دفعتان يدويّتان + ٤٠ رسالة موقع) · الدعوات ٣ (بانتظار
-       الموافقة وحدها من أصل ٤) · الدورات ١١ · **المالية ٣** (سحب محفظةٍ واحد + أمرا دفعٍ
-       متعثّران، ولكلٍّ تبويبه) · الضمان ٢."""
+       الوارد ٤٦ (طلب مدرّب ١ + دفعتان يدويّتان + ٤٠ رسالة موقع + ليد خبير مؤسس + زائران
+       مسجَّلان طلبا الفتح) · الدعوات ٥ (٣ بانتظار الموافقة من أصل ٤ + زائران طلبا الفتح؛
+       اللي سجّل ولسه ما طلبش لا يُعدّ شغلًا) · الدورات ١١ · **المالية ٣** (سحب محفظةٍ واحد
+       + أمرا دفعٍ متعثّران، ولكلٍّ تبويبه) · الضمان ٢."""
     page.wait_for_timeout(1500)
+    # الشارة الآن من ثلاثة مصادر وأربعة جوالب: انتظر ما تقيسه لا نومًا ثابتًا.
+    deadline = 30
+    while deadline > 0 and not page.evaluate(
+            "!!(window.EP && EP.state.opsQueue==='ready' && EP.state.inbox==='ready'"
+            " && EP.state.invites==='ready' && EP.state.pendingUsers==='ready')"):
+        page.wait_for_timeout(250)
+        deadline -= 0.25
+    page.wait_for_timeout(300)
     b = _badges(page)
     for mod in ('inbox', 'invites', 'courses', 'finance', 'escrow'):
         assert mod in b, (mod, b)
     ar = str.maketrans('٠١٢٣٤٥٦٧٨٩', '0123456789')
     n = {k: int(v.translate(ar).replace(',', '').replace('٬', '')) for k, v in b.items()}
-    assert n['invites'] == 3, n           # المُرسَلة لا تُعدّ: مش شغلًا عندك
+    assert n['invites'] == 5, n           # ٣ بانتظار الموافقة + زائران طلبا الفتح (المُرسَلة لا تُعدّ، والساكت لا يُعدّ)
     assert n['escrow'] == 2, n            # الدفعتان اليدويّتان
     assert n['finance'] == 3, n           # سحب محفظةٍ واحد + أمرا دفعٍ متعثّران
     assert n['courses'] == 11, n          # ١ اعتماد + ٧ اهتمام + ٢ تدريب + ١ حيّة
-    assert n['inbox'] == 44, n            # ٤٣ + بند «خبير مؤسس» الجديد في الوارد (٢٠٢٦-١٠-٠٧)
+    assert n['inbox'] == 46, n            # ٤٣ + «خبير مؤسس» (٢٠٢٦-١٠-٠٧) + زائران طلبا الفتح (٢٠٢٦-١٠-١٠)
     assert n.get('settings') is None      # بندٌ بلا طابور: بلا شارة
 
 
@@ -234,9 +243,16 @@ def test_the_inbox_badge_equals_the_number_the_screen_prints(page, server):
 
 
 def test_the_invites_badge_equals_the_approval_queue_on_screen(page, server):
+    """شارة «الدعوات» = طابور الموافقة + الزوّار الذين **طلبوا** الفتح، من الصفوف المرسومة
+    على الشاشة نفسها (٢٠٢٦-١٠-١٠): ٣ + ٢ = ٥. الزائر الساكت يُعرض في اللوحة ولا يُعدّ."""
     _go(page, server, 'invites')
     assert page.evaluate('approvalQueueRows().length') == 3
-    assert 'دعوات بانتظار الموافقة' in page.inner_text('#view')
+    assert page.evaluate('pendingUsersRequested().length') == 2
+    assert page.evaluate('puRows().length') == 3
+    txt = page.inner_text('#view')
+    assert 'دعوات بانتظار الموافقة' in txt
+    assert 'زوّار مسجَّلون ينتظرون الفتح' in txt
+    assert page.evaluate("MODULES.invites.count") == 5
     _shot(page, 'co_02_badges_invites.png')
 
 

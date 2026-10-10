@@ -3397,6 +3397,51 @@ def waitlist_invite(row_id):
     return resp
 
 
+# --- «زوّار مسجَّلون ينتظرون الفتح» — التسجيل المفتوح (مواصفة 2026-10-10 §٢-هـ/§٤) ----------
+# قرار المؤسس (2026-10-10): التسجيل رجع مفتوحًا؛ الحساب الجديد بلا دعوة يدخل زائرًا
+# (`users.access = "pending"`) يقرأ ويسأل بروف بحصّة محدودة، ويطلب دعوته من جوّه (صفة · بلد ·
+# هاتف) — والمؤسس يفتح له المنصّة من هنا. الصفوف تعيش على المنصّة وتُقرأ عبر الجسر بالسرّ
+# المشترك: الجسر يرتّبها (من طلب أوّلًا ثم الأحدث تسجيلًا) ولا يُعاد الترتيب هنا.
+# ⛔ الصفوف أسماء وإيميلات وأرقام: خلف مصادقة ودور، وده حدّها.
+PENDING_USER_ACCESS = ('member', 'pending')
+
+
+@app.route('/api/pending-users', methods=['GET'])
+@token_required
+@roles_required('admin', 'employee')   # قراءة فقط
+def pending_users_list():
+    """الزوّار المسجَّلون (`access:"pending"`) من الجسر — من طلب الفتح أوّلًا ثم الأحدث."""
+    try:
+        limit = int(request.args.get('limit') or 100)
+    except (TypeError, ValueError):
+        limit = 100
+    return _platform_proxy('GET', '/api/bridge/pending-users',
+                           params={'limit': max(1, min(500, limit))})
+
+
+@app.route('/api/pending-users/<user_id>/access', methods=['POST'])
+@token_required
+@roles_required('admin')   # الفتح يحوّل زائرًا إلى عضو كامل — قرارُ مؤسسٍ لا موظّف (زي approve)
+def pending_user_set_access(user_id):
+    """«افتح له المنصّة» / «رفض»: `{"access": "member"|"pending", "note"?}` ⇒ الجسر
+    `POST /api/bridge/users/{id}/access`. عند `member` المنصّة تعلّم الطلب معتمدًا وتبعت الإيميل
+    والتليجرام بنفسها؛ عند `pending` مع طلبٍ قائم تعلّمه مرفوضًا بالملاحظة (الزائر يفضل زائرًا،
+    ما يتمسحش). القيمة المجهولة تُرفض هنا بـ٤٠٠ قبل ما نكلّم المنصّة أصلًا."""
+    body = request.get_json(silent=True) or {}
+    access = (body.get('access') or '').strip().lower()
+    if access not in PENDING_USER_ACCESS:
+        return jsonify({'error': 'قيمة غير معروفة — المسموح: ' + ' | '.join(PENDING_USER_ACCESS)}), 400
+    note = (body.get('note') or '').strip()[:300]
+    payload = {'access': access}
+    if note:
+        payload['note'] = note
+    resp = _platform_proxy('POST', f"/api/bridge/users/{user_id}/access", json_body=payload)
+    if _resp_ok(resp):
+        _audit('pending_user.access', target=user_id,
+               meta={'access': access, **({'note': note} if note else {})})
+    return resp
+
+
 # --- «باب المؤسسين» — مفتاح مفتوح/مقفول (مواصفة الموجة ٢ 2026-09-06 م٣) -----------------------
 # لا FOUNDING_DEADLINE بعد النهاردة: صفة «مؤسس» تُمنح ما دام الباب مفتوحًا، والباب مفتاح واحد
 # في db.settings على المنصة (id='founding') يقلبه المؤسس من هنا. القراءة لكل مين شاف شاشة

@@ -696,6 +696,9 @@ function opsQueueCounters(Q){
     ['شهادات بانتظار المراجعة',n(Q.testimonials_pending),'topics','testimonials_pending'],
     ['مسودّات مواضيع',n(Q.topics_drafts),'topics','topics_drafts'],
     ['ليدات خبير مؤسس',n(Q.founding_leads_new),'team','founding_leads_new'],
+    // «زوّار ينتظرون الفتح» (التسجيل المفتوح 2026-10-10): نفس قاعدة سحوبات المحافظ — يُقرأ من
+    // قائمة اللوحة المرسومة نفسها متى جهزت (من طلب الفتح وحده)، وقبلها من الطابور إن أرسله.
+    ['زوّار ينتظرون الفتح',pendingUsersWaitingCount(Q),'invites','pending_users_requested'],
     ['وعود ملف لم تُسلَّم',n(Q.lead_magnet_awaiting_asset),null,'lead_magnet_awaiting_asset'],
     ['دورات حيّة تحتاج قرارًا',(Q.live_needs_decision||[]).length,'courses','live_needs_decision']
   ].filter(r=>r[1]>0).map(r=>r.concat([OPSQ_LANDINGS[r[3]]||null]));
@@ -722,6 +725,11 @@ function navInboxCount(){return (window.INBOX&&window.INBOX.length)||0;}
 function navInvitesQueue(){
   try{return (typeof approvalQueueRows==='function')?(approvalQueueRows()||[]):[];}catch(e){return [];}
 }
+// «الدعوات» تحمل طابورًا ثانيًا منذ التسجيل المفتوح (2026-10-10): زائرٌ مسجَّل **طلب** فتح
+// المنصّة — قرارٌ ينتظرك مثل دعوةٍ بانتظار الموافقة. اللي سجّل ولسه ما طلبش لا يُعدّ شغلًا.
+function navPendingUsersQueue(){
+  try{return (typeof pendingUsersRequested==='function')?(pendingUsersRequested()||[]):[];}catch(e){return [];}
+}
 function applyNavCounts(){
   Object.keys(MODULES).forEach(id=>{delete MODULES[id].count;delete MODULES[id].alert;delete MODULES[id].land;});
   const Q=(window.EP&&EP.data.opsQueue)||null;
@@ -739,11 +747,12 @@ function applyNavCounts(){
   const nIn=navInboxCount();
   if(nIn>0){MODULES.inbox.count=nIn;if(typeof inboxLateCount==='function'&&inboxLateCount()>0)MODULES.inbox.alert=true;}
   // الدعوات — بانتظار موافقتك.
-  const inv=navInvitesQueue();
-  if(inv.length){
-    MODULES.invites.count=inv.length;
+  const inv=navInvitesQueue(), pu=navPendingUsersQueue();
+  if(inv.length||pu.length){
+    MODULES.invites.count=inv.length+pu.length;
     const now=Date.now();
     if(inv.some(function(i){return i&&i.at&&(now-i.at)>=NAV_ALERT_HOURS*3600e3;}))MODULES.invites.alert=true;
+    if(pu.some(function(u){return u&&u.requestedAt&&(now-u.requestedAt)>=NAV_ALERT_HOURS*3600e3;}))MODULES.invites.alert=true;
   }
   renderNav();
 }
@@ -767,7 +776,7 @@ function opsQueuePanel(){
   return `<section class="panel" style="margin-bottom:14px"><div class="ph"><h3>كل اللي مستنيك — من المنصة</h3><span class="hint">أرقام المنصة نفسها (نفس ما يطبعه الدايجست)</span></div>${body}</section>`;
 }
 function viewInbox(v){
-  if(window.EP){EP.ensure('inbox',()=>viewInbox(v));EP.ensure('opsQueue',()=>viewInbox(v));EP.ensure('dashboard',()=>viewInbox(v));EP.ensure('escrow',()=>viewInbox(v));}
+  if(window.EP){EP.ensure('inbox',()=>viewInbox(v));EP.ensure('opsQueue',()=>viewInbox(v));EP.ensure('dashboard',()=>viewInbox(v));EP.ensure('escrow',()=>viewInbox(v));EP.ensure('pendingUsers',()=>viewInbox(v));}
   const failedQ=inboxFailedList();
   v.innerHTML=`
     ${inboxFailedStrip('viewInbox')}
@@ -5131,7 +5140,7 @@ function invStageCounters(blind,loading){
 }
 
 function viewInvites(v){
-  if(window.EP){EP.ensure('invites',invAgain);EP.ensure('waitlist',invAgain);}
+  if(window.EP){EP.ensure('invites',invAgain);EP.ensure('waitlist',invAgain);EP.ensure('pendingUsers',invAgain);}
   var st=(window.EP&&EP.state.invites)||'idle';
   var Wst=(window.EP&&EP.state.waitlist)||'idle';
   var D=(window.EP&&EP.data.invites)||null;
@@ -5146,7 +5155,7 @@ function viewInvites(v){
   var blindSub=(D&&D.missing)?'الجسر لسه مش منشور — مش «صفر»':'تعذّر جلب الصفوف — مش «صفر»';
   v.innerHTML=
     '<div class="policy" style="border-inline-start-color:var(--gold);background:var(--gold-bg)">'+svg('shield','ic')+
-      '<div><b>المنصّة مقفولة من الخادم — لا يدخل إلا من أكمل رحلة الدعوة.</b> الرابط شخصي وله موعد انتهاء؛ المدعوّ يختار صفته، يشاهد فيديو المنصّة، يجرّب بنفسه، ثم يُنشئ حسابه ويُقرّ. من لا يملك دعوة يترك بياناته في «قائمة الانتظار» تحت.</div></div>'+
+      '<div><b>التسجيل مفتوح — والعضوية الكاملة مقفولة من الخادم لغير المدعوّ.</b> الحساب الجديد بلا دعوة يدخل زائرًا: يقرأ ويسأل بروف بحصّة محدودة، ويطلب دعوته من جوّه (صفة · بلد · هاتف) — وأنت تفتح له المنصّة من «زوّار مسجَّلون ينتظرون الفتح» تحت. والدعوة رحلةٌ كما هي: رابط شخصي له موعد انتهاء؛ المدعوّ يختار صفته، يشاهد فيديو المنصّة، يجرّب بنفسه، ثم يُنشئ حسابه ويُقرّ. من ترك بياناته من الموقع بلا حساب في «قائمة الانتظار».</div></div>'+
     '<div class="kpis">'+
       '<div class="kpi k-1"><div class="top"><span class="ic">'+svg('mail')+'</span>أُرسلت</div><b>'+num(C.sent)+'</b>'+
         '<div class="sub" style="font-size:12px">'+(blind?blindSub:(C.revoked?('منها '+money(C.revoked)+' مسحوبة'):'دعوات اتعملت من هنا'))+'</div></div>'+
@@ -5157,12 +5166,14 @@ function viewInvites(v){
       '<div class="kpi k-4"><div class="top"><span class="ic">'+svg('clock')+'</span>مستنّي دعوة</div><b>'+
         (wblind?'—':((Wst==='loading'||Wst==='idle')&&!wlRows().length?'…':money(wlRows().filter(function(w){return w.status==='new';}).length)))+'</b>'+
         '<div class="sub" style="font-size:12px">'+(wblind?((WD&&WD.missing)?'الجسر لسه مش منشور — مش «صفر»':'تعذّر جلب الصفوف — مش «صفر»'):'سابوا بياناتهم في الانتظار')+'</div></div>'+
+      pendingUsersKpi()+
     '</div>'+
     foundingPanel()+
     inviteSettingsPanel()+
     approvalQueuePanel()+
     painVideosPanel()+
     invitesPanel()+
+    pendingUsersPanel()+
     waitlistPanel();
   wireInvites(v);
   drawInviteDetail();
@@ -5723,6 +5734,114 @@ function wireInviteDetailActions(el,i){
   };
 }
 
+/* «زوّار مسجَّلون ينتظرون الفتح» — التسجيل المفتوح (قرار المؤسس 2026-10-10): الحساب الجديد بلا
+   دعوة يدخل زائرًا (`access:"pending"`)، يقرأ ويسأل بروف بحصّة محدودة، ويطلب دعوته من جوّه.
+   اللوحة تسرد كل الزوّار — من **طلب** الفتح أوّلًا (وله بند في الوارد بنفس الزرّين) ثم من سجّل
+   ولسه ما طلبش (هنا فقط، لا في الوارد: ما نبّهش تليجرام ولا ينتظر قرارًا — لكن المؤسس يقدر
+   يفتح له من نفسه). الفتح ⇒ المنصّة تبعت الإيميل والتليجرام بنفسها. الرفض بملاحظة ⇒ يفضل زائرًا. */
+const PU_STATUS={requested:{t:'طلب الفتح',cls:'s-wait'},none:{t:'لسه ما طلبش',cls:''},rejected:{t:'اترفض — لسه زائر',cls:''},approved:{t:'اتفتح له',cls:'s-auto'}};
+function puRows(){var d=(window.EP&&EP.data.pendingUsers)||null;return (d&&d.rows)?d.rows:[];}
+function pendingUsersRequested(){return puRows().filter(function(u){return u.requested;});}
+// عدّاد شريحة «كل اللي مستنيك»: من القائمة المرسومة متى جهزت (مصدرٌ واحد مع اللوحة والشارة)،
+// وقبلها من الطابور لو المنصّة أرسلت `pending_users_requested` — وإلا صفر فلا تُرسَم.
+function pendingUsersWaitingCount(Q){
+  var st=(window.EP&&EP.state&&EP.state.pendingUsers)||'idle';
+  if(st==='ready')return pendingUsersRequested().length;
+  var raw=Q&&Q.pending_users_requested;
+  return (raw&&typeof raw==='object')?(raw.count||0):(raw||0);
+}
+// مربّع «ينتظر الفتح» في رأس شاشة «الدعوات» — نفس قاعدة بقية المربّعات: «—» لمّا نبقى عميان.
+function pendingUsersKpi(){
+  var st=(window.EP&&EP.state.pendingUsers)||'idle';
+  var D=(window.EP&&EP.data.pendingUsers)||null;
+  var blind=!!(D&&D.missing)||st==='error';
+  var R=puRows(),req=pendingUsersRequested().length,rest=R.length-req;
+  var loading=(st==='loading'||st==='idle')&&!R.length;
+  return '<div class="kpi k-1"><div class="top"><span class="ic">'+svg('users')+'</span>ينتظر الفتح</div><b id="puKpiN">'+
+    (blind?'—':(loading?'…':money(req)))+'</b>'+
+    '<div class="sub" style="font-size:12px">'+(blind?((D&&D.missing)?'الجسر لسه مش منشور — مش «صفر»':'تعذّر جلب الصفوف — مش «صفر»')
+      :(loading?'…':(rest?('زوّار طلبوا فتح المنصّة · و'+money(rest)+' سجّلوا ولسه ما طلبوش'):'زوّار سجّلوا وطلبوا فتح المنصّة')))+'</div></div>';
+}
+function pendingUsersPanel(){
+  var st=(window.EP&&EP.state.pendingUsers)||'idle';
+  var D=(window.EP&&EP.data.pendingUsers)||null;
+  var R=puRows();
+  var req=pendingUsersRequested().length;
+  var blind=!!(D&&D.missing)||st==='error';
+  var head='<section class="panel" id="puPanel"><div class="ph"><h3>'+svg('users')+' زوّار مسجَّلون ينتظرون الفتح</h3>'+
+    '<span class="n" id="puN" style="font-size:12px">'+(blind?'—':money(R.length))+'</span>'+
+    '<span class="hint" style="font-size:12px">'+(blind?'الصفوف مش واصلة':(req?('طلبوا الفتح: '+money(req)):'محدش طلب الفتح'))+' — من طلب أوّلًا، ثم الأحدث تسجيلًا</span>'+
+    '<button class="btn btn-ghost" id="puRefresh" style="flex:none;min-width:44px;min-height:44px;padding:0 14px;font-size:12px;margin-inline-start:auto">'+svg('sparkles')+'حدّث</button></div>';
+  var foot='</section>';
+  var wrap=function(inner){return head+'<div style="padding:14px 16px">'+inner+'</div>'+foot;};
+  if(D&&D.missing)return head+'<div style="padding:14px 16px">'+invMissingCard('/api/bridge/pending-users')+'</div>'+foot;
+  if(st==='error')return wrap('<div class="policy" style="margin:0;border-inline-start-color:var(--conflict);background:var(--conflict-bg);color:var(--conflict)">'+svg('scale','ic')+
+    '<div>تعذّر جلب الزوّار المسجَّلين من المنصة — ودي مش «محدش سجّل». <b style="cursor:pointer;text-decoration:underline" onclick="EP.reload(\'pendingUsers\',invAgain)">إعادة المحاولة</b></div></div>');
+  if((st==='loading'||st==='idle')&&!R.length)return wrap('<div style="padding:14px;text-align:center;color:var(--muted)">…جارٍ تحميل الزوّار المسجَّلين</div>');
+  if(!R.length)return wrap('<div style="color:var(--muted);font-size:12.5px">محدش سجّل كزائر لسه. أول ما حدّ ينشئ حسابه بلا دعوة هيبان هنا، ولمّا يطلب دعوته من جوّه هيوصلك في الوارد كمان.</div>');
+  var rows=R.map(function(u){
+    var S=PU_STATUS[u.requestStatus]||{t:(u.requestStatus||'—'),cls:''};
+    // ⛔ هدف لمسٍ ٤٤px ونصٌّ ١٢px — قاعدة مقفولة. «افتح له» للكلّ (المؤسس يقدر يفتح من نفسه)؛
+    //    «رفض» لمن طلب وحده: رفضُ ما لم يُطلب لا معنى له على المنصّة.
+    var acts='<button class="btn btn-human pu-open" data-pu-id="'+esc(u.id)+'" style="flex:none;min-width:44px;min-height:44px;padding:0 14px;font-size:12px">افتح له المنصّة</button>'+
+      (u.requested?'<button class="btn btn-ghost pu-reject" data-pu-id="'+esc(u.id)+'" style="flex:none;min-width:44px;min-height:44px;padding:0 12px;font-size:12px">رفض</button>':'');
+    return '<div class="trow pu-row" data-pu-id="'+esc(u.id)+'" style="display:flex;flex-wrap:wrap;align-items:center;gap:10px;row-gap:8px;padding:10px 0;border-bottom:1px solid var(--line)">'+
+      '<div class="src-ic" style="width:34px;height:34px;border-radius:9px;display:grid;place-items:center;flex:none;background:'+(u.requested?'var(--human-bg)':'var(--surface-2)')+';color:'+(u.requested?'var(--human)':'var(--muted)')+'">'+svg('users')+'</div>'+
+      '<div style="flex:1 1 170px;min-width:0">'+
+        '<div style="font-weight:800;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(u.name||'بلا اسم')+'</div>'+
+        '<div style="font-size:12px;color:var(--muted);direction:ltr;text-align:start;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(u.email||'—')+'</div>'+
+        '<div style="font-size:12px;color:var(--muted);direction:ltr;text-align:start;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(u.phone||'—')+'</div>'+
+      '</div>'+
+      '<div style="flex:1 1 130px;min-width:0;font-size:12.5px">'+
+        '<div style="font-size:12px;color:var(--muted);font-weight:800">الصفة</div>'+
+        '<div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(u.roleLabel||'—')+
+          ((u.specialtyLabel&&u.specialtyLabel!=='—')?(' · '+esc(u.specialtyLabel)):'')+'</div></div>'+
+      '<div style="flex:1 1 100px;min-width:0;font-size:12.5px">'+
+        '<div style="font-size:12px;color:var(--muted);font-weight:800">البلد</div>'+
+        '<div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(u.countryLabel||'—')+'</div></div>'+
+      '<div style="flex:1 1 180px;min-width:0;font-size:12.5px">'+
+        '<div style="font-size:12px;color:var(--muted);font-weight:800">ليه عايز ينضم</div>'+
+        '<div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(u.why||'—')+'</div></div>'+
+      '<div style="flex:1 1 120px;min-width:0;font-size:12px;color:var(--muted)">'+
+        '<div>سجّل '+esc(u.when||'—')+'</div>'+
+        '<div>'+(u.lastLogin?('آخر دخول '+esc(u.lastLogin)):'ما دخلش بعد')+'</div>'+
+        '<div>أسئلة بروف: '+(u.aiUsed==null?'—':money(u.aiUsed))+'</div></div>'+
+      '<div style="flex:none;text-align:end"><span class="status '+esc(S.cls)+'"'+(S.cls?'':' style="background:var(--surface-2);color:var(--muted)"')+'><span class="d"'+(S.cls?'':' style="background:var(--muted)"')+'></span>'+esc(S.t)+
+        (u.requested&&u.requestedWhen?('<span style="font-weight:500;opacity:.8"> · '+esc(u.requestedWhen)+'</span>'):'')+'</span></div>'+
+      '<div style="flex:none;display:flex;flex-wrap:wrap;gap:6px">'+acts+'</div>'+
+    '</div>';
+  }).join('');
+  var more=(D&&D.count!=null&&D.count>R.length)?('<div style="margin-top:10px;font-size:12px;color:var(--muted)">معروض '+money(R.length)+' من '+money(D.count)+'.</div>'):'';
+  return wrap(rows+more);
+}
+function wirePendingUsers(root){
+  root=root||document;
+  var r=root.querySelector('#puRefresh');
+  if(r)r.onclick=function(){if(window.EP)EP.reload('pendingUsers',invAgain);};
+  var rowOf=function(id){return puRows().filter(function(x){return x.id===id;})[0]||{id:id};};
+  root.querySelectorAll('.pu-open').forEach(function(btn){
+    btn.onclick=function(){
+      if(!window.EP||!EP.setPendingUserAccess){toast('غير متصل بالمنصة');return;}
+      var row=rowOf(btn.dataset.puId);
+      if(!confirm('فتح المنصّة لـ«'+(row.name||row.email||'')+'»؟ هيوصله إيميل إن حسابه اتفتح.'))return;
+      btn.disabled=true;btn.style.opacity='.5';
+      EP.setPendingUserAccess(row,'member','',invAgain);
+    };
+  });
+  root.querySelectorAll('.pu-reject').forEach(function(btn){
+    btn.onclick=function(){
+      if(!window.EP||!EP.setPendingUserAccess){toast('غير متصل بالمنصة');return;}
+      var row=rowOf(btn.dataset.puId);
+      // الملاحظة اختيارية وتُحفظ على الطلب (لا تُعرض للزائر بتفاصيلها — الواجهة تقول له
+      // «طلبك محتاج مراجعة» فقط). إلغاء النافذة = لا قرار.
+      var n=prompt('سبب رفض طلب «'+(row.name||'')+'» (اختياري — يُحفظ على الطلب):','');
+      if(n===null)return;
+      btn.disabled=true;btn.style.opacity='.5';
+      EP.setPendingUserAccess(row,'pending',n,invAgain);
+    };
+  });
+}
+
 /* «قائمة الانتظار» — اللي البوّابة المقفولة حوّشتهم. الصفّ هنا مش سطر شكوى: هو دعوة على بُعد
    ضغطة، ولو ما اتحوّلش بيبقى بعد أسبوع كومة ما بيفتحهاش حد. */
 function waitlistPanel(){
@@ -5786,6 +5905,7 @@ function waitlistPanel(){
 function wireInvites(v){
   var root=(v||document);
   wireFounding(root);
+  wirePendingUsers(root);
   wireInviteSettings(root);
   wireApprovalQueue(root);
   wirePainVideos(root);
@@ -6137,6 +6257,7 @@ function bootNavCounts(){
   EP.ensure('opsQueue',applyNavCounts);
   EP.ensure('inbox',applyNavCounts);
   EP.ensure('invites',applyNavCounts);
+  EP.ensure('pendingUsers',applyNavCounts);
   // سحوبات المحافظ: الشارة تُعاد كتابتها من **القائمة** حين تصل، فلا تسبق الرقمَ صفوفُه.
   EP.ensure('walletPayouts',applyNavCounts);
 }

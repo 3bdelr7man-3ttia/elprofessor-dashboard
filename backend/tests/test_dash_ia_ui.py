@@ -286,6 +286,61 @@ def test_founding_leads_live_on_the_experts_screen_not_under_users(page, server)
     assert page.evaluate("opsQueueCounters(EP.data.opsQueue).find(c=>c[3]==='founding_leads_new')[2]") == 'team'
 
 
+def test_a_pending_visitor_who_asked_is_a_row_in_the_inbox_with_open_platform_as_the_action(page, server):
+    """التسجيل المفتوح (٢٠٢٦-١٠-١٠): الزائر المسجَّل الذي **طلب** فتح المنصّة نبّه تليجرام — فله
+    صفٌّ في الوارد بإجراء («افتح له المنصّة» + رفض) وتفاصيله (الإيميل · الهاتف · الصفة · البلد
+    · ليه · أسئلة بروف). اللي سجّل ولسه ما طلبش **ليس** في الوارد — مكانه لوحة «الدعوات»."""
+    _go(page, server, 'inbox')
+    rows = page.inner_text('#rows')
+    assert 'نور الهدى سالم' in rows and 'كريم عادل' in rows, rows[:600]
+    assert 'زائر لسه ما طلبش' not in rows
+    assert page.evaluate("INBOX.filter(i=>i.apiKind==='pending_user').length") == 2
+    page.click('#rows .row:has-text("نور الهدى سالم")')
+    page.wait_for_timeout(300)
+    drawer = page.inner_text('#drawer')
+    for needle in ('nour.pending@example.test', '+201000000011', 'محامٍ', 'مصر', 'مدني',
+                   'أسئلة بروف المستعملة', 'ليه عايز ينضم'):
+        assert needle in drawer, (needle, drawer[:800])
+    acts = page.eval_on_selector_all('#drawer .acts [data-a]', 'els=>els.map(e=>e.dataset.a+":"+e.textContent.trim())')
+    assert any(a.startswith('approve:') and 'افتح له المنصّة' in a for a in acts), acts
+    assert any(a.startswith('reject:') for a in acts), acts
+    assert 'الدعوات' in page.inner_text('#drawer .acts [data-a="goto"]')
+    # الاعتماد من الدرج = POST /api/pending-users/{id}/access بـ access:"member" — لا مسارٌ آخر
+    with page.expect_request(lambda r: r.method == 'POST' and '/api/pending-users/pu-1/access' in r.url) as req:
+        page.click('#drawer .acts [data-a="approve"]')
+    body = req.value.post_data_json
+    assert body.get('access') == 'member', body
+
+
+def test_the_pending_visitors_panel_opens_the_platform_from_the_invites_screen(page, server):
+    """لوحة «زوّار مسجَّلون ينتظرون الفتح» على شاشة «الدعوات» فوق قائمة الانتظار: الثلاثة
+    معروضون (من طلب أوّلًا)، وزرّ «افتح له المنصّة» يرسل `{access:"member"}` إلى
+    `/api/pending-users/{id}/access`، و«رفض» يرسل `{access:"pending", note}` — ولا يظهر «رفض»
+    لمن لم يطلب. ومربّع «ينتظر الفتح» في الرأس يطبع الطالبين وحدهم (٢)."""
+    _go(page, server, 'invites')
+    _until(page, "!!(window.EP && EP.state.pendingUsers==='ready' && EP.state.waitlist==='ready')", 30000)
+    page.wait_for_timeout(300)
+    txt = page.inner_text('#puPanel')
+    assert 'زوّار مسجَّلون ينتظرون الفتح' in txt
+    ids = page.eval_on_selector_all('#puPanel .pu-row', 'els=>els.map(e=>e.dataset.puId)')
+    assert ids == ['pu-2', 'pu-1', 'pu-3'], ids              # من طلب أوّلًا (وبينهم الأحدث تسجيلًا أوّلًا) ثم الساكت
+    assert page.inner_text('#puKpiN').strip() == '٢'
+    # فوق قائمة الانتظار لا تحتها
+    assert page.evaluate("document.querySelector('#puPanel').compareDocumentPosition(document.querySelector('#wlRefresh')) & Node.DOCUMENT_POSITION_FOLLOWING") != 0
+    assert page.eval_on_selector_all('#puPanel .pu-row[data-pu-id="pu-3"] .pu-reject', 'els=>els.length') == 0
+    assert page.eval_on_selector_all('#puPanel .pu-row[data-pu-id="pu-3"] .pu-open', 'els=>els.length') == 1
+    page.once('dialog', lambda d: d.accept())
+    with page.expect_request(lambda r: r.method == 'POST' and '/api/pending-users/pu-2/access' in r.url) as req:
+        page.click('#puPanel .pu-row[data-pu-id="pu-2"] .pu-open')
+    assert req.value.post_data_json.get('access') == 'member'
+    page.wait_for_timeout(600)
+    page.once('dialog', lambda d: d.accept('مش دلوقتي'))
+    with page.expect_request(lambda r: r.method == 'POST' and '/api/pending-users/pu-1/access' in r.url) as req2:
+        page.click('#puPanel .pu-row[data-pu-id="pu-1"] .pu-reject')
+    body = req2.value.post_data_json
+    assert body.get('access') == 'pending' and body.get('note') == 'مش دلوقتي', body
+
+
 def test_the_merged_overview_kpi_strip_sits_on_top_of_the_inbox(page, server):
     """شريط «نظرة عامة» بعد الدمج = سياق الشركة وحده. ثلاثة مربّعات، ولا رقم وارد فيها."""
     _go(page, server, 'inbox')
@@ -473,7 +528,7 @@ def test_the_truncation_notice_actually_renders_when_a_source_exceeds_the_cap(pw
             assert 'رسائل الموقع' in hit[0] and 'معروض 500 من 520' in hit[0], hit[0]
             # المصدر المقصوص وحده يقف عند السقف؛ بقيّة الطوابير تمرّ كاملة
             assert pg.evaluate("INBOX.filter(i=>inboxType(i)==='messages').length") == 500
-            assert int(pg.inner_text('#inboxN').strip()) == 504     # ٥٠٠ + دفعتان + طلب مدرّب + ليد خبير مؤسس (٢٠٢٦-١٠-٠٧)
+            assert int(pg.inner_text('#inboxN').strip()) == 506     # ٥٠٠ + دفعتان + طلب مدرّب + ليد خبير مؤسس (٢٠٢٦-١٠-٠٧) + زائران طلبا الفتح (٢٠٢٦-١٠-١٠)
         finally:
             br.close()
 
@@ -529,7 +584,9 @@ def test_the_rail_badges_carry_the_platform_queue_numbers(page, server):
     # (الطابور · الوارد · الدعوات)، والوارد وحده يفتح عشرة نداءات جسر. ٦٠٠ms كانت تكفي
     # وحدها وتحت الطقم الكامل تسقط — فكان الاختبار أحمر في ~نصف التشغيلات النظيفة.
     _until(page, "!!(window.EP && EP.state.opsQueue==='ready'"
-                 " && EP.state.inbox==='ready' && EP.state.invites==='ready')", 30000)
+                 " && EP.state.inbox==='ready' && EP.state.invites==='ready'"
+                 " && EP.state.pendingUsers==='ready')", 30000)
+    page.wait_for_timeout(300)
     counts = page.eval_on_selector_all(
         '.rail .item', 'els=>els.filter(e=>e.querySelector(".count"))'
                        '.map(e=>[e.dataset.mod,e.querySelector(".count").textContent])')
@@ -543,7 +600,7 @@ def test_the_rail_badges_carry_the_platform_queue_numbers(page, server):
     assert 'market' not in got and 'analysis' not in got and 'settings' not in got, got
     # المرحلة ٢ أضافت شارتَي «الوارد» و«الدعوات» من مصدريهما (الطابور الموحَّد · طابور
     # الموافقة) — تفصيلهما وعلاقتهما بما تطبعه الشاشة في `test_dash_company_badges.py`.
-    assert got.get('invites') == '٣', got
+    assert got.get('invites') == '٥', got             # ٣ بانتظار الموافقة + زائران طلبا الفتح (٢٠٢٦-١٠-١٠)
     assert got.get('inbox'), got
     # «تنبيه» أحمر للطوابير التي تجاوز أقدمُها ٢٤ ساعة (٥١س · ٣٠س · ١٦٠٠س · دعوةٌ ٧٢س ·
     # والوارد لأن فيه دفعةً يدويّةً موسومةً متأخّرة)

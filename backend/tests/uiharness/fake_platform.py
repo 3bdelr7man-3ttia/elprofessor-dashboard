@@ -139,7 +139,32 @@ FOUNDING_LEADS = [
      "country": "مصر", "status": "converted", "created_at": _iso(300), "updated_at": _iso(100)},
 ]
 
+# «زوّار مسجَّلون ينتظرون الفتح» — التسجيل المفتوح (مواصفة 2026-10-10 §٢-هـ). ثلاثة: اثنان
+# **طلبا** الفتح من جوّه (بند في الوارد + شارة «الدعوات» + اللوحة) وواحد سجّل ولسه ما طلبش
+# (اللوحة وحدها). الأقدم طلبًا عمره ٣٠ ساعة: شرط «تنبيه» (> ٢٤س) على «الدعوات» يتحقّق منه أيضًا.
+PENDING_USERS = {"count": 3, "users": [
+    {"id": "pu-1", "full_name": "نور الهدى سالم", "email": "nour.pending@example.test",
+     "phone": "+201000000011", "created_at": _iso(31), "access": "pending",
+     "invite_request": {"status": "requested", "requested_at": _iso(30), "decided_at": None,
+                        "note": "", "waitlist_id": "wl-pu-1"},
+     "role_requested": "lawyer", "country": "مصر", "specialty": "civil",
+     "why": "عايزة أنضم لمجتمع المحامين وأسأل بروف من غير حدّ",
+     "last_login_at": _iso(1), "ai_used": 5},
+    {"id": "pu-2", "full_name": "كريم عادل", "email": "karim.pending@example.test",
+     "phone": "+966500000022", "created_at": _iso(6), "access": "pending",
+     "invite_request": {"status": "requested", "requested_at": _iso(3), "decided_at": None,
+                        "note": "", "waitlist_id": "wl-pu-2"},
+     "role_requested": "consultant", "country": "السعودية", "specialty": "",
+     "why": "", "last_login_at": _iso(3), "ai_used": 2},
+    {"id": "pu-3", "full_name": "زائر لسه ما طلبش", "email": "silent.pending@example.test",
+     "phone": "", "created_at": _iso(2), "access": "pending",
+     "invite_request": {"status": "none"},
+     "role_requested": "", "country": "", "specialty": "", "why": "",
+     "last_login_at": _iso(2), "ai_used": 0},
+]}
+
 ROUTES = {
+    "/api/bridge/pending-users": PENDING_USERS,
     "/api/bridge/founding-expert-leads": FOUNDING_LEADS,
     "/api/bridge/invites": INVITES,
     "/api/bridge/ops/queue": QUEUE,

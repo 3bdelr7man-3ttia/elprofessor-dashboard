@@ -85,7 +85,7 @@
             platformPendingTopics: null, platformTopicSegments: null,
             platformOpinions: null, platformOpinionsApproved: null, platformOpinionsAnalysis: null, experts: null,
             market: null, marketDemand: null, trainingInterests: null, foundingLeads: null,
-            invites: null, waitlist: null, founding: null, inviteSettings: null, inviteVideos: null,
+            invites: null, waitlist: null, pendingUsers: null, founding: null, inviteSettings: null, inviteVideos: null,
             aiAgents: null, dashUsers: null, audit: null, usage: null },
     state: {}, // 'idle' | 'loading' | 'ready' | 'error'
     _started: {}, // منع التحميل المزدوج
@@ -666,6 +666,62 @@
       });
     },
 
+    // «زوّار مسجَّلون ينتظرون الفتح» — التسجيل المفتوح (قرار المؤسس 2026-10-10): الحساب الجديد
+    // بلا دعوة يدخل زائرًا (`access:"pending"`) ويطلب دعوته من جوّه، والمؤسس يفتح له المنصّة
+    // من هنا. /api/pending-users -> جسر المنصة /api/bridge/pending-users. الصفّ (§٢-هـ):
+    //   {id, full_name, email, phone, created_at, access, invite_request:{status, requested_at,
+    //    decided_at, note}, role_requested, country, specialty, why, last_login_at, ai_used}
+    // الترتيب يملكه الجسر (من طلب أوّلًا ثم الأحدث) ويُعاد هنا بنفس القاعدة لا بغيرها — صفّ
+    // قديم بلا `invite_request` يُقرأ «لسه ما طلبش» (غياب الحقل = none بنصّ المواصفة).
+    pendingUsers: function () {
+      return get("/pending-users?limit=200").then(function (r) {
+        var list = Array.isArray(r) ? r : ((r && (r.users || r.items || r.rows)) || []);
+        EP.data.pendingUsers = {
+          count: (r && r.count != null) ? r.count : list.length,
+          missing: false,
+          rows: list.map(function (u) {
+            var ir = (u.invite_request && typeof u.invite_request === "object") ? u.invite_request : {};
+            var reqStatus = ir.status || "none";
+            var at = u.created_at || "";
+            var reqAt = ir.requested_at || "";
+            return {
+              id: u.id || "",
+              name: u.full_name || u.name || "",
+              email: u.email || "",
+              phone: u.phone || "",
+              access: u.access || "pending",
+              requestStatus: reqStatus,
+              requested: reqStatus === "requested",
+              rejected: reqStatus === "rejected",
+              note: ir.note || "",
+              role: u.role_requested || "",
+              roleLabel: u.role_requested ? (ROLE_AR[u.role_requested] || u.role_requested) : "—",
+              country: u.country || "",
+              countryLabel: u.country || "—",
+              specialty: u.specialty || "",
+              specialtyLabel: u.specialty ? (SPECIALTY_AR[u.specialty] || u.specialty) : "—",
+              why: u.why || "",
+              // أسئلة بروف المستعملة — رقمٌ من المنصّة؛ غيابه «—» لا صفرًا مختلقًا.
+              aiUsed: (u.ai_used != null) ? u.ai_used : null,
+              lastLogin: u.last_login_at ? (relTime(u.last_login_at) || arDate(u.last_login_at)) : "",
+              when: relTime(at) || arDate(at),
+              signedAt: arDate(at) || "",
+              requestedWhen: reqAt ? (relTime(reqAt) || arDate(reqAt)) : "",
+              requestedAt: reqAt ? (Date.parse(reqAt) || 0) : 0,
+              at: at ? (Date.parse(at) || 0) : 0,
+            };
+          }).sort(function (a, b) {
+            if (a.requested !== b.requested) return a.requested ? -1 : 1;
+            return b.at - a.at;
+          }),
+        };
+      }).catch(function (e) {
+        // 404 = الجسر لسه ما اتنشرش على المنصة، مش «محدش سجّل». «—» لا صفر.
+        if (e && e.status === 404) { EP.data.pendingUsers = { rows: [], count: 0, missing: true }; return; }
+        throw e;
+      });
+    },
+
     // «باب المؤسسين» — مفتاح مفتوح/مقفول (مواصفة الموجة ٢ 2026-09-06 م٣): /api/settings/founding
     // -> جسر المنصة /api/bridge/settings/founding -> {open: bool, updated_at}. لا FOUNDING_DEADLINE
     // بعد اليوم — الافتراض عند المنصة نفسها «مفتوح»، وهنا بنعرض اللي راجع فعلًا بلا افتراضٍ محليّ:
@@ -1181,6 +1237,45 @@
             });
           });
         }).catch(fail("ليدات خبير مؤسس"))
+      );
+      // «زائر مسجَّل — طلب فتح المنصّة» (التسجيل المفتوح، قرار المؤسس 2026-10-10): الحساب الجديد
+      // بلا دعوة يدخل زائرًا ويطلب دعوته من جوّه (صفة · بلد · هاتف) ⇒ تليجرام ⇒ **صفّ هنا بإجراء**
+      // (قاعدة ثابتة: أي صفّ يُنبّه تليجرام لازم له صفّ في الوارد). القرار: «افتح له المنصّة» ⇒
+      // `access:"member"` (المنصّة تبعت الإيميل والتليجرام بنفسها)، أو رفض بملاحظة ⇒ يفضل زائرًا.
+      // ⛔ اللي سجّل ولسه ما طلبش **لا** يدخل الوارد: ما نبّهش تليجرام ولا ينتظر قرارًا — مكانه
+      // لوحة «الدعوات» (pendingUsersPanel) حيث يقدر المؤسس يفتح له من نفسه. الوارد = ما ينتظر
+      // قرارك، وتسجيلٌ مفتوح بمئات الحسابات كان يغرقه. ⛔ نفس جسر اللوحة بالحرف (/pending-users).
+      jobs.push(
+        get("/pending-users?limit=200").then(function (r) {
+          var users = Array.isArray(r) ? r : ((r && (r.users || r.items || r.rows)) || []);
+          users.forEach(function (u) {
+            var ir = (u.invite_request && typeof u.invite_request === "object") ? u.invite_request : {};
+            if ((ir.status || "none") !== "requested") return;
+            var reqAt = ir.requested_at || u.created_at || "";
+            var roleLabel = u.role_requested ? (ROLE_AR[u.role_requested] || u.role_requested) : "";
+            var specLabel = u.specialty ? (SPECIALTY_AR[u.specialty] || u.specialty) : "";
+            realRows.push({
+              out: "زائر مسجَّل — طلب فتح المنصّة", from: "المنصّة", src: "users", dest: "invites",
+              triage: "human", sla: relTime(reqAt) || "بانتظار قرارك", slaWarn: false,
+              note: "سجّل حسابه ودخل زائرًا" + (roleLabel ? " · " + roleLabel : "") + (u.country ? " · " + u.country : "")
+                + " — افتح له المنصّة من هنا، أو ارفض بملاحظة ويفضل زائرًا.",
+              ref: "PU-" + u.id, who: u.full_name || u.name || "بلا اسم", email: u.email || "",
+              statusLabel: "طلب الفتح",
+              details: [
+                { k: "الإيميل", v: u.email || "" },
+                { k: "الهاتف", v: u.phone || "" },
+                { k: "الصفة", v: roleLabel },
+                { k: "البلد", v: u.country || "" },
+                { k: "التخصّص", v: specLabel },
+                { k: "ليه عايز ينضم", v: u.why || "" },
+                { k: "سجّل", v: arDate(u.created_at) || "" },
+                { k: "أسئلة بروف المستعملة", v: (u.ai_used != null) ? String(u.ai_used) : "" },
+              ].filter(function (d) { return d.v; }),
+              apiKind: "pending_user", apiId: u.id, canReject: true,
+              approveLabel: "افتح له المنصّة",
+            });
+          });
+        }).catch(fail("زوّار ينتظرون الفتح"))
       );
       jobs.push(
         get("/platform-program-requests?status=pending").then(function (a) {
@@ -2024,6 +2119,9 @@
   EP.decideInboxItem = function (i, action, after, adminNote) {
     var reason = String(adminNote == null ? "" : adminNote).trim().slice(0, 1000);
     var path, body = { admin_note: reason };
+    // مفتاحٌ ثانٍ يُعاد تحميله بعد القرار: الصفّ له لوحةٌ خارج الوارد تقرأ من EP.data مباشرةً
+    // (زوّار ينتظرون الفتح على شاشة «الدعوات») — وإلا بقي معروضًا هناك بعد ما اتفتح له.
+    var alsoReload = null;
     // القرار الثالث «اطلب عيّنة/مستندًا» — طابور تقديم الخدمة وحده يملكه اليوم. مش قرار نهائي:
     // الصفّ يفضل مفتوح، والنصّ ده هو اللي بيقراه المقدّم حرفًا.
     if (action === "request_info") {
@@ -2039,6 +2137,12 @@
         // رفض = «مش مناسب». لا سبب يسافر هنا — الليد لا يقرأ شيئًا على المنصة (لم يسجّل بعد).
         path = "/founding-leads/" + encodeURIComponent(i.apiId) + "/status";
         body = { status: action === "approve" ? (i.nextStatus || "contacted") : "rejected" }; break;
+      case "pending_user":
+        // «افتح له المنصّة» ⇒ access:"member" (المنصّة تعلّم الطلب معتمدًا وتبعت الإيميل والتليجرام
+        // بنفسها). الرفض ⇒ access:"pending" + note: يفضل زائرًا والطلب يتعلّم مرفوضًا، ما يتمسحش.
+        path = "/pending-users/" + encodeURIComponent(i.apiId) + "/access";
+        body = { access: action === "approve" ? "member" : "pending", note: reason };
+        alsoReload = "pendingUsers"; break;
       case "join":     path = "/platform-join-requests/" + i.apiId + "/" + action; break;
       case "topic":    path = "/platform-pending-topics/" + i.apiId + "/" + action; break;
       case "creative": path = "/platform-creative/" + i.apiId + "/" + action; break;
@@ -2051,8 +2155,38 @@
       default:         path = "/platform-program-requests/" + i.apiId + "/" + action;
     }
     post(path, body)
-      .then(function () { note(action === "approve" ? "تم الاعتماد ✓" : "تم الرفض"); EP.reload("inbox", after); })
+      .then(function () {
+        note(i.apiKind === "pending_user"
+          ? (action === "approve" ? "اتفتحت له المنصّة ✓" : "اترفض — فضل زائرًا")
+          : (action === "approve" ? "تم الاعتماد ✓" : "تم الرفض"));
+        if (alsoReload) EP.reload(alsoReload);
+        EP.reload("inbox", after);
+      })
       .catch(function (e) { quietToast((e && e.message) || "تعذّر تنفيذ العملية"); if (after) after(); });
+  };
+
+  // ---- «زوّار مسجَّلون ينتظرون الفتح»: الزرّان من لوحة «الدعوات» (نفس قرار الوارد بالحرف) ----
+  // `access:"member"` = افتح له المنصّة · `access:"pending"` + note = رفض (يفضل زائرًا). الاتنين
+  // بيعيدوا رسم اللوحة **والوارد**: الصفّ اللي طلب ليه بند هناك، ولو ما اتحدّثش بقي قرارًا
+  // مفتوحًا فوق قرارٍ اتّخذ.
+  EP.setPendingUserAccess = function (row, access, noteText, after) {
+    var body = { access: access === "member" ? "member" : "pending" };
+    var n = String(noteText == null ? "" : noteText).trim().slice(0, 300);
+    if (n) body.note = n;
+    post("/pending-users/" + encodeURIComponent(row.id) + "/access", body)
+      .then(function () {
+        note(body.access === "member"
+          ? "اتفتحت المنصّة لـ" + (row.name || row.email || "") + " ✓"
+          : "اترفض طلب " + (row.name || row.email || "") + " — فضل زائرًا");
+        EP.reload("inbox");
+        EP.reload("pendingUsers", after);
+      })
+      .catch(function (e) {
+        quietToast(e && e.status === 404
+          ? "جسر الزوّار لسه مش منشور على المنصة"
+          : ((e && e.message) || "تعذّر تغيير حالة الحساب"));
+        if (after) after();
+      });
   };
 
   // إنهاء بند «عرض فقط» (عميل محتمل/رسالة منصة) عبر جسر resolve.
@@ -3042,7 +3176,7 @@
                 notifications: null, goalsAdvisor: null, tutorials: null, platformTopics: null, platformTopicsAnalysis: null,
                 platformPendingTopics: null, platformTopicSegments: null, platformOpinions: null,
                 market: null, marketDemand: null, trainingInterests: null, foundingLeads: null,
-                invites: null, waitlist: null, founding: null, inviteSettings: null, inviteVideos: null,
+                invites: null, waitlist: null, pendingUsers: null, founding: null, inviteSettings: null, inviteVideos: null,
                 aiAgents: null, dashUsers: null, audit: null, usage: null };
     EP.state = {};
     window.location.reload();
