@@ -606,3 +606,110 @@ def test_the_rail_badges_carry_the_platform_queue_numbers(page, server):
     # والوارد لأن فيه دفعةً يدويّةً موسومةً متأخّرة)
     alerts = page.eval_on_selector_all('.rail .item.alert', 'els=>els.map(e=>e.dataset.mod)')
     assert sorted(alerts) == ['escrow', 'inbox', 'invites', 'team'], alerts   # تنبيه الليدات (١٦٠٠س) على «الخبراء والمدربون» الآن
+
+
+# ---------------------------------------------------------------- ١١) المسح النهائي + «⚠️ مشبوه» (مواصفة 2026-10-12 §٤)
+
+def test_a_suspicious_visitor_wears_the_flag_badge_in_the_panel_and_the_inbox(page, server):
+    """الأعلام يحسبها الخادم ويسمّيها بالعربي (`flag_labels`)؛ الواجهة تعرض «⚠️ مشبوه» بتلميح
+    الأعلام مفصولةً بـ«·» على الزائر الموسوم وحده — في لوحة «الدعوات» وفي صفّ الوارد معًا."""
+    _go(page, server, 'invites')
+    _until(page, "!!(window.EP && EP.state.pendingUsers==='ready' && EP.state.waitlist==='ready')", 30000)
+    page.wait_for_timeout(300)
+    badges = page.eval_on_selector_all('#puPanel .pu-row .flag-sus',
+                                       'els=>els.map(e=>[e.closest(".pu-row").dataset.puId,e.textContent.trim(),e.title])')
+    assert badges == [['pu-2', '⚠️ مشبوه', 'إيميل بنقط · اسم عشوائي']], badges
+    _go(page, server, 'inbox')
+    rows = page.eval_on_selector_all('#rows .row',
+                                     'els=>els.filter(e=>e.querySelector(".flag-sus")).map(e=>e.textContent)')
+    assert len(rows) == 1 and 'كريم عادل' in rows[0], rows
+    assert page.eval_on_selector('#rows .row:has-text("كريم عادل") .flag-sus', 'e=>e.title') == 'إيميل بنقط · اسم عشوائي'
+    assert page.eval_on_selector_all('#rows .row:has-text("نور الهدى سالم") .flag-sus', 'els=>els.length') == 0
+
+
+def test_the_inbox_drawer_offers_purge_next_to_open_and_reject(page, server):
+    _go(page, server, 'inbox')
+    page.click('#rows .row:has-text("كريم عادل")')
+    page.wait_for_timeout(300)
+    acts = page.eval_on_selector_all('#drawer .acts [data-a]', 'els=>els.map(e=>e.dataset.a+":"+e.textContent.trim())')
+    assert 'purge:مسح' in acts, acts
+    assert 'مشبوه' in page.inner_text('#drawer') and 'إيميل بنقط' in page.inner_text('#drawer')
+    with page.expect_request(lambda r: r.method == 'GET' and '/api/users/pu-2/purge-check' in r.url):
+        page.click('#drawer .acts [data-a="purge"]')
+    page.wait_for_selector('#epModal #upm_go', timeout=10000)
+    page.click('#epModal #upm_x')
+    page.wait_for_selector('#epModal', state='detached', timeout=5000)
+
+
+def test_the_pending_panel_purge_asks_the_platform_first_and_names_the_reason(page, server):
+    """«مسح» على زائرٍ عنده مدفوعات: النافذة تطلب `purge-check` وتقول السبب كما جاء من الخادم —
+    بلا زرّ «مسح نهائي» ولا نافذة متصفّح (alert/confirm)."""
+    _go(page, server, 'invites')
+    _until(page, "!!(window.EP && EP.state.pendingUsers==='ready' && EP.state.waitlist==='ready')", 30000)
+    page.wait_for_timeout(300)
+    assert page.eval_on_selector_all('#puPanel .pu-row .pu-purge', 'els=>els.length') == 3
+    with page.expect_request(lambda r: r.method == 'GET' and '/api/users/pu-1/purge-check' in r.url):
+        page.click('#puPanel .pu-row[data-pu-id="pu-1"] .pu-purge')
+    _until(page, "(document.querySelector('#epModal')||{}).textContent.indexOf('الحذف النهائي مش متاح')>-1", 10000)
+    modal = page.inner_text('#epModal')
+    assert 'الحذف النهائي مش متاح: عنده مدفوعات' in modal, modal
+    assert page.eval_on_selector_all('#epModal #upm_go', 'els=>els.length') == 0
+    assert page.eval_on_selector_all('#epModal #udm_hide', 'els=>els.length') == 0   # «وسم تجريبي» بديلُ شاشة المستخدمين وحدها
+    page.click('#epModal #upm_x')
+    page.wait_for_selector('#epModal', state='detached', timeout=5000)
+
+
+def test_the_eligible_visitor_is_purged_only_after_typing_the_word(page, server):
+    """مؤهّل ⇒ «الحساب ده مالوش بيانات مرتبطة» + «مسح نهائي» مقفول حتى تُكتب كلمة «مسح» ⇒
+    POST /api/users/{id}/purge ⇒ النافذة تقفل، toast «اتمسح»، والصفّ يختفي من اللوحة."""
+    _go(page, server, 'invites')
+    _until(page, "!!(window.EP && EP.state.pendingUsers==='ready' && EP.state.waitlist==='ready')", 30000)
+    page.wait_for_timeout(300)
+    page.click('#puPanel .pu-row[data-pu-id="pu-3"] .pu-purge')
+    page.wait_for_selector('#epModal #upm_go', timeout=10000)
+    modal = page.inner_text('#epModal')
+    assert 'الحساب ده مالوش بيانات مرتبطة' in modal, modal
+    assert page.eval_on_selector('#epModal #upm_go', 'e=>e.disabled') is True
+    page.fill('#epModal #upm_w', 'مس')
+    assert page.eval_on_selector('#epModal #upm_go', 'e=>e.disabled') is True
+    page.fill('#epModal #upm_w', 'مسح')
+    assert page.eval_on_selector('#epModal #upm_go', 'e=>e.disabled') is False
+    with page.expect_request(lambda r: r.method == 'POST' and '/api/users/pu-3/purge' in r.url) as req:
+        page.click('#epModal #upm_go')
+    assert req.value.post_data_json == {'note': ''}
+    page.wait_for_selector('#epModal', state='detached', timeout=10000)
+    _until(page, "document.getElementById('toasts').textContent.indexOf('اتمسح')>-1", 5000)
+    _until(page, "!document.querySelector('#puPanel .pu-row[data-pu-id=\"pu-3\"]')", 15000)
+    ids = page.eval_on_selector_all('#puPanel .pu-row', 'els=>els.map(e=>e.dataset.puId)')
+    assert ids == ['pu-2', 'pu-1'], ids
+
+
+def test_the_users_screen_delete_window_checks_first_then_purges_the_bot_only(page, server):
+    """شاشة «المستخدمون»: «حذف» على البوت ⇒ فحص ⇒ مؤهّل ⇒ كتابة «مسح» ⇒ يختفي من القائمة.
+    و«حذف» على عميلٍ عنده مدفوعات ⇒ «الحذف النهائي مش متاح: عنده مدفوعات» + بديل الوسم «تجريبي»."""
+    _go(page, server, 'users')
+    _until(page, "!!(window.EP && EP.state.users==='ready')", 30000)
+    page.wait_for_timeout(300)
+    assert 'uYCuiyZnbrpQuVmISFvbT' in page.inner_text('#uRows')
+    page.click('#uRows .row:has-text("uYCuiyZnbrpQuVmISFvbT")')
+    page.wait_for_selector('#uEdit [data-a="del"]', timeout=10000)
+    with page.expect_request(lambda r: r.method == 'GET' and '/api/users/u-bot/purge-check' in r.url):
+        page.click('#uEdit [data-a="del"]')
+    page.wait_for_selector('#epModal #upm_go', timeout=10000)
+    assert 'الحساب ده مالوش بيانات مرتبطة' in page.inner_text('#epModal')
+    page.fill('#epModal #upm_w', 'مسح')
+    with page.expect_request(lambda r: r.method == 'POST' and '/api/users/u-bot/purge' in r.url):
+        page.click('#epModal #upm_go')
+    page.wait_for_selector('#epModal', state='detached', timeout=10000)
+    _until(page, "document.getElementById('uRows').textContent.indexOf('uYCuiyZnbrpQuVmISFvbT')<0", 15000)
+    # العميل الدافع: السبب من الخادم + البديل الحقيقي، ولا «مسح نهائي»
+    page.click('#uRows .row:has-text("عميل دافع")')
+    page.wait_for_selector('#uEdit [data-a="del"]', timeout=10000)
+    page.click('#uEdit [data-a="del"]')
+    _until(page, "(document.querySelector('#epModal')||{}).textContent.indexOf('الحذف النهائي مش متاح')>-1", 10000)
+    modal = page.inner_text('#epModal')
+    assert 'الحذف النهائي مش متاح: عنده مدفوعات' in modal, modal
+    assert page.eval_on_selector_all('#epModal #upm_go', 'els=>els.length') == 0
+    assert page.eval_on_selector_all('#epModal #udm_hide', 'els=>els.length') == 1
+    page.click('#epModal #upm_x')
+    page.wait_for_selector('#epModal', state='detached', timeout=5000)

@@ -9,6 +9,7 @@
 """
 import datetime
 import json
+import re
 import sys
 import urllib.parse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -155,7 +156,10 @@ PENDING_USERS = {"count": 3, "users": [
      "invite_request": {"status": "requested", "requested_at": _iso(3), "decided_at": None,
                         "note": "", "waitlist_id": "wl-pu-2"},
      "role_requested": "consultant", "country": "السعودية", "specialty": "",
-     "why": "", "last_login_at": _iso(3), "ai_used": 2},
+     "why": "", "last_login_at": _iso(3), "ai_used": 2,
+     # مشبوه (مواصفة 2026-10-12 §٢-د): الأعلام من الخادم بتسمياتها العربية — الواجهة تعرض لا تحكم.
+     "signup_flags": ["dotted_gmail", "random_name"],
+     "flag_labels": ["إيميل بنقط", "اسم عشوائي"]},
     {"id": "pu-3", "full_name": "زائر لسه ما طلبش", "email": "silent.pending@example.test",
      "phone": "", "created_at": _iso(2), "access": "pending",
      "invite_request": {"status": "none"},
@@ -163,7 +167,32 @@ PENDING_USERS = {"count": 3, "users": [
      "last_login_at": _iso(2), "ai_used": 0},
 ]}
 
+# شاشة «المستخدمون» (`/api/bridge/users`): اثنان — بوتٌ بلا أي بيانات مرتبطة (يُمسح نهائيًّا)
+# وعميلٌ عنده مدفوعات (المسح النهائي مش متاح — النافذة تقول السبب وتعرض الوسم «تجريبي» بديلًا).
+BRIDGE_USERS = {"count": 2, "users": [
+    {"id": "u-bot", "full_name": "uYCuiyZnbrpQuVmISFvbT", "email": "bot.account@example.test",
+     "phone": "", "role": "member", "trainer_status": "none", "plan_id": "free",
+     "created_at": _iso(40), "is_test": False, "tags": []},
+    {"id": "u-paid", "full_name": "عميل دافع", "email": "paid.client@example.test",
+     "phone": "+201000000099", "role": "member", "trainer_status": "none", "plan_id": "pro",
+     "created_at": _iso(400), "is_test": False, "tags": []},
+]}
+
+# المسح النهائي (مواصفة 2026-10-12 §٢-هـ): الحارس على المنصّة. هنا حسابان غير مؤهّلين بسبب
+# «عنده مدفوعات» (pu-1 من الزوّار، u-paid من المستخدمين) والباقي مؤهّل.
+PURGE_BLOCKED = {"pu-1": "عنده مدفوعات", "u-paid": "عنده مدفوعات"}
+PURGED = set()
+
+
+def purge_check(user_id):
+    reason = PURGE_BLOCKED.get(user_id)
+    if reason:
+        return {"purgeable": False, "reason": reason, "linked": {"payments": 1}}
+    return {"purgeable": True, "reason": None, "linked": {}}
+
+
 ROUTES = {
+    "/api/bridge/users": BRIDGE_USERS,
     "/api/bridge/pending-users": PENDING_USERS,
     "/api/bridge/founding-expert-leads": FOUNDING_LEADS,
     "/api/bridge/invites": INVITES,
@@ -177,10 +206,14 @@ ROUTES = {
 }
 
 
+_PURGE_CHECK_RE = re.compile(r"^/api/bridge/users/([^/]+)/purge-check$")
+_PURGE_RE = re.compile(r"^/api/bridge/users/([^/]+)/purge$")
+
+
 class H(BaseHTTPRequestHandler):
-    def _send(self, payload):
+    def _send(self, payload, status=200):
         body = json.dumps(payload, ensure_ascii=False).encode()
-        self.send_response(200)
+        self.send_response(status)
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
@@ -188,12 +221,29 @@ class H(BaseHTTPRequestHandler):
 
     def do_GET(self):
         path = urllib.parse.urlparse(self.path).path
+        m = _PURGE_CHECK_RE.match(path)
+        if m:
+            return self._send(purge_check(m.group(1)))
         if path in ROUTES:
             return self._send(ROUTES[path])
         # أي جسرٍ آخر: فارغٌ صادق (لا صفوف مخترعة) — الشاشات تعرض «مفيش» لا بيانات وهمية.
         return self._send([])
 
     def do_POST(self):
+        path = urllib.parse.urlparse(self.path).path
+        m = _PURGE_RE.match(path)
+        if m:
+            # ⛔ نفس الفحص قبل المسح — غير مؤهّل ⇒ ٤٠٩ بالسبب (شكل المنصّة بالحرف).
+            chk = purge_check(m.group(1))
+            if not chk["purgeable"]:
+                return self._send({"detail": chk["reason"], "purgeable": False}, 409)
+            PURGED.add(m.group(1))
+            # الحساب يختفي فعلًا من القوائم: إعادة الرسم بعد المسح تُقاس على غيابٍ حقيقي لا على toast.
+            for lst in (BRIDGE_USERS["users"], PENDING_USERS["users"]):
+                lst[:] = [u for u in lst if u["id"] != m.group(1)]
+            BRIDGE_USERS["count"] = len(BRIDGE_USERS["users"])
+            PENDING_USERS["count"] = len(PENDING_USERS["users"])
+            return self._send({"ok": True, "removed": {"users": 1, "conversations": 2}})
         return self._send({"ok": True})
 
     def do_PUT(self):

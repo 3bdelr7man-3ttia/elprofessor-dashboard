@@ -3442,6 +3442,62 @@ def pending_user_set_access(user_id):
     return resp
 
 
+# --- المسح النهائي لحساب (مواصفة 2026-10-12 §٢-هـ/§٤) ------------------------------------------
+# الحارس في المنصّة: `purge-check` يقول مؤهّل/غير مؤهّل وبسببٍ عربي، و`purge` يعيد الفحص نفسه
+# قبل المسح ويرفض بـ٤٠٩ لو مش مؤهّل. الداشبورد هنا وسيطٌ أمين: أدمن فقط، ويمرّر كود الحالة
+# والجسم **كما هما** (الواجهة تقرأ `purgeable`/`reason`/`detail` بالحرف، لا ترجمةً من هنا).
+def _platform_passthrough(method, path, json_body=None, timeout=12):
+    """مثل `_platform_proxy` لكن بلا تطبيع للأخطاء: جسم المنصّة وكودها يصلان للمتصفّح كما هما.
+    الاستثناءان الوحيدان: لا سرّ ⇒ ٥٠٣، وتعذّر الاتصال ⇒ ٥٠٢ — حالتان لا جسم منصّة فيهما أصلًا."""
+    if not PLATFORM_METRICS_SECRET:
+        return jsonify({'error': 'لم يتم ضبط الربط بعد'}), 503
+    try:
+        r = requests.request(
+            method,
+            f"{PLATFORM_API_URL}{path}",
+            json=json_body,
+            headers={'X-ELP-Metrics-Secret': PLATFORM_METRICS_SECRET},
+            timeout=timeout,
+        )
+    except Exception:
+        return jsonify({'error': 'تعذر الاتصال بالمنصة'}), 502
+    try:
+        body = r.json() if r.content else {}
+    except Exception:
+        body = {}
+    if not isinstance(body, dict):
+        body = {'data': body}
+    if r.status_code != 200 and 'error' not in body:
+        # `error` مرآةٌ لـ`detail` حين يكون نصًّا — طبقة الشبكة في الواجهة تقرأ `error` أوّلًا،
+        # والجسم الأصلي (`detail` · `purgeable` · `linked`) يبقى كما وصل.
+        detail = body.get('detail')
+        body['error'] = detail if isinstance(detail, str) and detail else 'تعذر تنفيذ العملية'
+    return jsonify(body), r.status_code
+
+
+@app.route('/api/users/<user_id>/purge-check', methods=['GET'])
+@token_required
+@roles_required('admin')   # المسح قرارُ مؤسس — والفحص نفسه يكشف ما يرتبط بالحساب
+def user_purge_check(user_id):
+    """`GET /api/bridge/users/{id}/purge-check` ⇒ `{purgeable, reason, linked}` كما هو."""
+    return _platform_passthrough('GET', f"/api/bridge/users/{user_id}/purge-check")
+
+
+@app.route('/api/users/<user_id>/purge', methods=['POST'])
+@token_required
+@roles_required('admin')
+def user_purge(user_id):
+    """`POST /api/bridge/users/{id}/purge {note}` ⇒ `{ok, removed}` أو ٤٠٩ `{detail, purgeable:false}`
+    كما هو. المنصّة تعيد الفحص بنفسها قبل المسح — لا مسح من هنا بلا فحصٍ هناك."""
+    body = request.get_json(silent=True) or {}
+    note = (body.get('note') or '').strip()[:300]
+    resp = _platform_passthrough('POST', f"/api/bridge/users/{user_id}/purge", json_body={'note': note})
+    if _resp_ok(resp):
+        _audit('user.purge', target=user_id, meta={**({'note': note} if note else {}),
+                                                   'removed': _proxy_json(resp).get('removed')})
+    return resp
+
+
 # --- «باب المؤسسين» — مفتاح مفتوح/مقفول (مواصفة الموجة ٢ 2026-09-06 م٣) -----------------------
 # لا FOUNDING_DEADLINE بعد النهاردة: صفة «مؤسس» تُمنح ما دام الباب مفتوحًا، والباب مفتاح واحد
 # في db.settings على المنصة (id='founding') يقلبه المؤسس من هنا. القراءة لكل مين شاف شاشة

@@ -185,6 +185,9 @@ body{font-family:'IBM Plex Sans Arabic',sans-serif;background:var(--bg);color:va
    بعرض كامل لأنه يقع تحت خانة نصّه، فيُقرأ الاثنان كوحدة واحدة. */
 .btn-ask{background:transparent;color:var(--ai);border:1.5px dashed var(--ai);flex-basis:100%}.btn-ask:hover{background:var(--ai-bg)}
 .btn-warn{background:var(--conflict-bg);color:var(--conflict);border:1px solid #E9C9BB}.btn-warn:hover{background:#f6e2d8}
+.btn-purge{background:#C8102E;color:#fff;border:1px solid #C8102E}.btn-purge:hover{background:#A80D26}.btn-purge:disabled{cursor:not-allowed}
+.btn-purge-ghost{color:#C8102E}
+.flag-sus{display:inline-flex;align-items:center;gap:4px;background:var(--human-bg);color:var(--human);font-size:10.5px;font-weight:800;border-radius:999px;padding:2px 8px;margin-inline-start:6px;vertical-align:middle;cursor:help;white-space:nowrap}
 .drawer .empty{padding:48px 22px;text-align:center;color:var(--muted)}
 .drawer .empty .ic{width:40px;height:40px;margin:0 auto 12px;opacity:.5}
 .note-ai{background:var(--ai-bg);border:1px solid #CDE8EA;border-radius:10px;padding:11px 13px;font-size:12px;color:#0a6d78;line-height:1.6;margin-bottom:14px;display:flex;gap:9px}
@@ -855,8 +858,10 @@ function renderInbox(){
     const line2=(i.serviceLabel||i.whenLabel)?`<div class="from">${i.serviceLabel?`الخدمة: <b>${esc(i.serviceLabel)}</b>`:''}${(i.serviceLabel&&i.whenLabel)?' · ':''}${i.whenLabel?esc(i.whenLabel):''}</div>`:'';
     // وسم مصدر الرسالة على الصفّ نفسه: «من الموقع» تُردّ من هنا، «من المنصة» تُنهى فقط.
     const msrc=i.msgSource?` <span class="status" style="background:var(--ai-bg);color:var(--ai);font-size:9.5px"><span class="d" style="background:var(--ai)"></span>${i.msgSource==='site'?'من الموقع':'من المنصة'}</span>`:'';
+    // «⚠️ مشبوه» — أعلام الخادم على الزائر المسجَّل (تلميحًا)؛ للمؤسس فقط.
+    const sus=(i.flagLabels&&i.flagLabels.length)?`<span class="flag-sus" title="${esc(i.flagLabels.join(' · '))}">⚠️ مشبوه</span>`:'';
     el.insertAdjacentHTML('beforeend',`<div class="row inbox-row${selected===ri?' sel':''}" data-i="${ri}">
-      <div class="c c1"><div class="src-ic">${svg(i.src)}</div><div><div class="out">${esc(i.out)}${lic}${msrc}</div><div class="from">من سطح: <b>${esc(i.from)}</b> · ${esc(i.who)}</div>${line2}</div></div>
+      <div class="c c1"><div class="src-ic">${svg(i.src)}</div><div><div class="out">${esc(i.out)}${lic}${msrc}${sus}</div><div class="from">من سطح: <b>${esc(i.from)}</b> · ${esc(i.who)}</div>${line2}</div></div>
       <div class="c"><div class="destwrap"><span class="arrow">←</span><span class="dest" style="background:${m.bg};color:${m.c}">${svg(m.ic)}${m.label}</span></div></div>
       <div class="c"><span class="triage ${tr.cls}"><span class="d"></span>${tr.t}</span><div class="sla${i.slaWarn?' warn':''}">${svg('clock')}${i.sla}</div></div>
     </div>`);});
@@ -910,6 +915,8 @@ function inboxActs(i,m){
       if(i.rejectNeedsReason)a+=`<textarea data-reject-reason rows="2" placeholder="سبب الرفض — يقرأه مقدّم الطلب كما تكتبه" style="width:100%;margin:8px 0;padding:8px 10px;border-radius:9px;border:1px solid var(--line);background:var(--surface);color:inherit;font:inherit;font-size:12.5px;resize:vertical"></textarea>`;
       a+=`<button class="btn btn-ghost" data-a="reject">رفض</button>`;
     }
+    // «مسح» (الزائر المسجَّل): نفس مسار المسح النهائي — النافذة تفحص على المنصّة الأول.
+    if(i.canPurge)a+=`<button class="btn btn-ghost btn-purge-ghost" data-a="purge">مسح</button>`;
   }
   if(i.proofUrl)a+=`<a class="btn btn-ghost" href="${esc(i.proofUrl)}" target="_blank" rel="noopener">${svg('inbox')}إيصال الدفع</a>`;
   a+=`<button class="btn btn-ghost" data-a="goto">فتح ${m.label}</button>`;
@@ -978,6 +985,7 @@ function drawInbox(){
       if(!ask){toast('اكتب المطلوب بالضبط — مقدّم الطلب يقرأه كما تكتبه');if(at)at.focus();return;}
       EP.decideInboxItem(i,'request_info',refreshInbox,ask);return;
     }
+    if(a==='purge'&&i.apiKind){userPurgeModal({id:i.apiId,name:i.who,email:i.email},refreshInbox);return;}
     if(a==='resolve'){EP.resolveInboxItem(i,refreshInbox);return;}
     if(a==='reassign'){const sel=el.querySelector('[data-reassign-sel]');const em=sel?sel.value:'';if(!em){toast('اختر خبيرًا أولًا');return;}EP.reassignVerify(i.apiId,em,refreshInbox);return;}
     toast('عرض في '+m.label);});
@@ -1770,14 +1778,9 @@ function drawUser(){
       b.title='إلغاء الاعتماد + إخفاء من كل الواجهات العامة (الحساب نفسه لا يُمسح)';
       b.onclick=()=>{
         if(u.trainer==='approved'){trainerRemoveModal(u,()=>renderUsers());return;}
-        // مش مدرّب: مفيش «حذف نهائي» من هنا. نقول كده صراحةً ونعرض البديل الحقيقي بدل زر بيكدب.
-        var s=openModal('حذف «'+u.name+'»',
-          '<div class="note-ai" style="border-inline-start-color:var(--gold);background:var(--gold-bg);margin-bottom:12px">'+svg('shield','ic')+
-            '<div><b>الحذف النهائي مش من هنا.</b> مسح حساب عضو محتاج كاسكيد على بيانات مرتبطة (محادثات، طلبات سوق، مدفوعات، تعليقات) وبيتم من عملية مخصّصة على المنصة.</div></div>'+
-          '<div style="font-size:13px;line-height:1.9;margin-bottom:12px">اللي تقدر تعمله دلوقتي وبيحقّق نفس الغرض عمليًّا: <b>وسم الحساب «تجريبي»</b> — بيختفي من كل بورد ودليل عام على مستوى الاستعلام، وبياناته تفضل سليمة.</div>'+
-          '<div class="acts"><button class="btn btn-warn" id="udm_hide">وسم «تجريبي» وإخفاء</button><button class="btn btn-ghost" id="udm_x">إغلاق</button></div>');
-        s.querySelector('#udm_x').onclick=closeModal;
-        s.querySelector('#udm_hide').onclick=function(){closeModal();EP.flagUserTest(u,true,()=>renderUsers());};
+        // مش مدرّب: النافذة تسأل المنصّة الأول «ينفع يتمسح؟» — مؤهّل ⇒ مسح نهائي بتأكيد كتابة،
+        // غير مؤهّل ⇒ السبب من الخادم والبديل الحقيقي (وسم «تجريبي») بدل زر بيكدب.
+        userPurgeModal(u,()=>{selected=null;renderUsers();},{altHide:true});
       };
       return;
     }
@@ -1792,6 +1795,54 @@ function drawUser(){
     }
     b.onclick=()=>{if(a==='edit')addUserModal(u);};
   });
+}
+/* ===== المسح النهائي لحساب (مواصفة 2026-10-12 §٤) ==========================
+   الحارس على المنصّة: عند الفتح نسأل `purge-check` ونعرض حكمه كما هو —
+   - مؤهّل ⇒ «الحساب ده مالوش بيانات مرتبطة» + زرّ أحمر «مسح نهائي» لا يعمل إلا بكتابة كلمة «مسح»،
+   - غير مؤهّل ⇒ «الحذف النهائي مش متاح: {السبب}» (+ وسم «تجريبي» بديلًا في شاشة المستخدمين).
+   ⛔ لا alert/confirm: النافذة نفسها هي التأكيد. تُستعمل من المستخدمين والزوّار والوارد معًا. */
+function userPurgeModal(u,after,opts){
+  opts=opts||{};
+  var who=(u&&(u.name||u.email))||'';
+  var s=openModal('حذف «'+who+'»',
+    '<div id="upm_chk" style="font-size:13px;line-height:1.9;color:var(--muted);margin-bottom:12px">بنفحص…</div>'+
+    '<div id="upm_body"></div>'+
+    '<div class="acts" id="upm_acts"><button class="btn btn-ghost" id="upm_x">إغلاق</button></div>');
+  s.querySelector('#upm_x').onclick=closeModal;
+  var chk=s.querySelector('#upm_chk'),body=s.querySelector('#upm_body'),acts=s.querySelector('#upm_acts');
+  var showBlocked=function(reason){
+    chk.innerHTML='<div class="note-ai" style="border-inline-start-color:var(--gold);background:var(--gold-bg);margin:0">'+svg('shield','ic')+
+      '<div><b>الحذف النهائي مش متاح'+(reason?(': '+esc(reason)):'')+'.</b> الحساب ده مرتبط ببيانات على المنصّة، فالمسح مقفول عليه.</div></div>';
+    if(opts.altHide&&window.EP&&EP.flagUserTest){
+      body.innerHTML='<div style="font-size:13px;line-height:1.9;margin-bottom:12px">اللي تقدر تعمله دلوقتي وبيحقّق نفس الغرض عمليًّا: <b>وسم الحساب «تجريبي»</b> — بيختفي من كل الواجهات العامة، وبياناته تفضل سليمة.</div>';
+      acts.insertAdjacentHTML('afterbegin','<button class="btn btn-warn" id="udm_hide">وسم «تجريبي» وإخفاء</button>');
+      acts.querySelector('#udm_hide').onclick=function(){closeModal();EP.flagUserTest(u,true,after);};
+    }
+  };
+  var showPurgeable=function(){
+    chk.innerHTML='<div class="note-ai" style="border-inline-start-color:var(--agree);background:var(--agree-bg);color:var(--agree);margin:0">'+svg('check','ic')+
+      '<div><b>الحساب ده مالوش بيانات مرتبطة.</b> المسح نهائي ومفيش رجوع فيه.</div></div>';
+    body.innerHTML='<div class="fld"><label>اكتب كلمة «مسح» للتأكيد</label><input id="upm_w" placeholder="مسح" autocomplete="off"></div>';
+    acts.insertAdjacentHTML('afterbegin','<button class="btn btn-purge" id="upm_go" disabled style="opacity:.5">مسح نهائي</button>');
+    var inp=body.querySelector('#upm_w'),go=acts.querySelector('#upm_go');
+    inp.oninput=function(){var ok=inp.value.trim()==='مسح';go.disabled=!ok;go.style.opacity=ok?'1':'.5';};
+    go.onclick=function(){
+      if(go.disabled)return;
+      go.disabled=true;go.style.opacity='.5';go.textContent='بيتمسح…';
+      // إعادة الرسم (`after`) تتمّ من `purgeUser` بعد وصول القوائم الجديدة — لا قبلها.
+      EP.purgeUser(u,'',after).then(function(ok){if(ok){closeModal();}else{go.disabled=false;go.style.opacity='1';go.textContent='مسح نهائي';}});
+    };
+    setTimeout(function(){try{inp.focus();}catch(e){}},0);
+  };
+  if(!window.EP||!EP.purgeCheck){showBlocked('غير متصل بالمنصة');return s;}
+  EP.purgeCheck(u.id).then(function(r){
+    if(!document.body.contains(s))return;
+    if(r.purgeable)showPurgeable();else showBlocked(r.reason||'');
+  }).catch(function(e){
+    if(!document.body.contains(s))return;
+    showBlocked(e&&e.status===404?'المسح لسه مش منشور على المنصة':((e&&e.message)||'تعذّر الفحص'));
+  });
+  return s;
 }
 /* ===== إزالة مدرّب/خبير من المنصة =========================================
    «إلغاء تفعيل» مش «حذف»، وده مقصود:
@@ -5783,12 +5834,16 @@ function pendingUsersPanel(){
     var S=PU_STATUS[u.requestStatus]||{t:(u.requestStatus||'—'),cls:''};
     // ⛔ هدف لمسٍ ٤٤px ونصٌّ ١٢px — قاعدة مقفولة. «افتح له» للكلّ (المؤسس يقدر يفتح من نفسه)؛
     //    «رفض» لمن طلب وحده: رفضُ ما لم يُطلب لا معنى له على المنصّة.
+    //    «مسح» للكلّ: المنصّة تفحص الأول، وغير المؤهّل تقول النافذة سببه.
     var acts='<button class="btn btn-human pu-open" data-pu-id="'+esc(u.id)+'" style="flex:none;min-width:44px;min-height:44px;padding:0 14px;font-size:12px">افتح له المنصّة</button>'+
-      (u.requested?'<button class="btn btn-ghost pu-reject" data-pu-id="'+esc(u.id)+'" style="flex:none;min-width:44px;min-height:44px;padding:0 12px;font-size:12px">رفض</button>':'');
+      (u.requested?'<button class="btn btn-ghost pu-reject" data-pu-id="'+esc(u.id)+'" style="flex:none;min-width:44px;min-height:44px;padding:0 12px;font-size:12px">رفض</button>':'')+
+      '<button class="btn btn-ghost btn-purge-ghost pu-purge" data-pu-id="'+esc(u.id)+'" style="flex:none;min-width:44px;min-height:44px;padding:0 12px;font-size:12px">مسح</button>';
+    // شارة «⚠️ مشبوه» بأعلام الخادم (تلميحًا) — للمؤسس فقط، لا تُرسَل للزائر في أي شاشة.
+    var sus=(u.flagLabels&&u.flagLabels.length)?('<span class="flag-sus" title="'+esc(u.flagLabels.join(' · '))+'">⚠️ مشبوه</span>'):'';
     return '<div class="trow pu-row" data-pu-id="'+esc(u.id)+'" style="display:flex;flex-wrap:wrap;align-items:center;gap:10px;row-gap:8px;padding:10px 0;border-bottom:1px solid var(--line)">'+
       '<div class="src-ic" style="width:34px;height:34px;border-radius:9px;display:grid;place-items:center;flex:none;background:'+(u.requested?'var(--human-bg)':'var(--surface-2)')+';color:'+(u.requested?'var(--human)':'var(--muted)')+'">'+svg('users')+'</div>'+
       '<div style="flex:1 1 170px;min-width:0">'+
-        '<div style="font-weight:800;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(u.name||'بلا اسم')+'</div>'+
+        '<div style="font-weight:800;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(u.name||'بلا اسم')+sus+'</div>'+
         '<div style="font-size:12px;color:var(--muted);direction:ltr;text-align:start;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(u.email||'—')+'</div>'+
         '<div style="font-size:12px;color:var(--muted);direction:ltr;text-align:start;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(u.phone||'—')+'</div>'+
       '</div>'+
@@ -5838,6 +5893,12 @@ function wirePendingUsers(root){
       if(n===null)return;
       btn.disabled=true;btn.style.opacity='.5';
       EP.setPendingUserAccess(row,'pending',n,invAgain);
+    };
+  });
+  root.querySelectorAll('.pu-purge').forEach(function(btn){
+    btn.onclick=function(){
+      if(!window.EP||!EP.purgeCheck){toast('غير متصل بالمنصة');return;}
+      userPurgeModal(rowOf(btn.dataset.puId),invAgain);
     };
   });
 }

@@ -703,6 +703,10 @@
               why: u.why || "",
               // أسئلة بروف المستعملة — رقمٌ من المنصّة؛ غيابه «—» لا صفرًا مختلقًا.
               aiUsed: (u.ai_used != null) ? u.ai_used : null,
+              // أعلام الاشتباه (مواصفة 2026-10-12 §٢-د): الخادم يحسبها ويسمّيها بالعربي؛ هنا تُعرض
+              // لا تُعاد حسابها. غيابها = مش مشبوه، ولا «⚠️» تُخترع من الاسم أو الإيميل هنا.
+              signupFlags: Array.isArray(u.signup_flags) ? u.signup_flags : [],
+              flagLabels: Array.isArray(u.flag_labels) ? u.flag_labels.filter(Boolean).map(String) : [],
               lastLogin: u.last_login_at ? (relTime(u.last_login_at) || arDate(u.last_login_at)) : "",
               when: relTime(at) || arDate(at),
               signedAt: arDate(at) || "",
@@ -1254,6 +1258,7 @@
             var reqAt = ir.requested_at || u.created_at || "";
             var roleLabel = u.role_requested ? (ROLE_AR[u.role_requested] || u.role_requested) : "";
             var specLabel = u.specialty ? (SPECIALTY_AR[u.specialty] || u.specialty) : "";
+            var flagLabels = Array.isArray(u.flag_labels) ? u.flag_labels.filter(Boolean).map(String) : [];
             realRows.push({
               out: "زائر مسجَّل — طلب فتح المنصّة", from: "المنصّة", src: "users", dest: "invites",
               triage: "human", sla: relTime(reqAt) || "بانتظار قرارك", slaWarn: false,
@@ -1270,9 +1275,13 @@
                 { k: "ليه عايز ينضم", v: u.why || "" },
                 { k: "سجّل", v: arDate(u.created_at) || "" },
                 { k: "أسئلة بروف المستعملة", v: (u.ai_used != null) ? String(u.ai_used) : "" },
+                { k: "مشبوه", v: flagLabels.join(" · ") },
               ].filter(function (d) { return d.v; }),
               apiKind: "pending_user", apiId: u.id, canReject: true,
               approveLabel: "افتح له المنصّة",
+              // «مسح» من الدرج: نفس مسار المسح النهائي (الفحص على المنصّة أوّلًا)، والشارة
+              // «⚠️ مشبوه» على الصفّ بتلميح الأعلام — للمؤسس فقط، لا تصل للزائر أبدًا.
+              flagLabels: flagLabels, canPurge: true,
             });
           });
         }).catch(fail("زوّار ينتظرون الفتح"))
@@ -2186,6 +2195,45 @@
           ? "جسر الزوّار لسه مش منشور على المنصة"
           : ((e && e.message) || "تعذّر تغيير حالة الحساب"));
         if (after) after();
+      });
+  };
+
+  // ---- المسح النهائي لحساب (مواصفة 2026-10-12 §٤) ------------------------------------------
+  // الحارس على المنصّة: `purgeCheck` يرجّع {purgeable, reason, linked} — الواجهة تعرض حكمه ولا
+  // تكرّره. `purgeUser` ⇒ POST /users/{id}/purge {note}: المنصّة تعيد الفحص بنفسها وترفض بـ٤٠٩
+  // بالسبب لو اتغيّر شيء بين الفحص والضغطة. النجاح يعيد رسم المستخدمين والزوّار والوارد معًا:
+  // الحساب الممسوح له صفّ في أكثر من شاشة، ولو بقي في واحدة بقي «قرارًا مفتوحًا» فوق مسحٍ تمّ.
+  EP.purgeCheck = function (userId) {
+    return get("/users/" + encodeURIComponent(userId) + "/purge-check").then(function (r) {
+      r = r || {};
+      return {
+        purgeable: !!r.purgeable,
+        reason: (r.reason != null && r.reason !== "") ? String(r.reason) : "",
+        linked: (r.linked && typeof r.linked === "object") ? r.linked : {},
+      };
+    });
+  };
+  EP.purgeUser = function (u, noteText, after) {
+    var n = String(noteText == null ? "" : noteText).trim().slice(0, 300);
+    var who = (u && (u.name || u.email)) || "";
+    return post("/users/" + encodeURIComponent(u.id) + "/purge", { note: n })
+      .then(function () {
+        note("اتمسح");
+        // الشاشة المفتوحة تُعاد رسمًا عند **كل** إعادة تحميل (نفس `after` للثلاثة): لو رُبطت
+        // بواحدة فقط رُسمت الشاشة قبل أن يصل ما تقيسه ويبقى الصفّ الممسوح ظاهرًا كأنه لم يُمسح.
+        EP.reload("users", after);
+        EP.reload("pendingUsers", after);
+        EP.reload("inbox", after);
+        return true;
+      })
+      .catch(function (e) {
+        var d = (e && e.data) || {};
+        var reason = (typeof d.detail === "string" && d.detail) || (d.purgeable === false && d.error) || "";
+        quietToast(e && e.status === 404
+          ? "مسح الحساب لسه مش منشور على المنصة"
+          : (reason ? ("الحذف النهائي مش متاح: " + reason) : ((e && e.message) || ("تعذّر مسح " + who))));
+        if (after) after();
+        return false;
       });
   };
 

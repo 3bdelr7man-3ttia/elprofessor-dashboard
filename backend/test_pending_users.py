@@ -195,3 +195,62 @@ def test_a_platform_failure_is_surfaced_not_swallowed_as_empty(ctx):
                            headers=ctx['admin'])
     assert r.status_code == 409
     assert r.get_json()['error'] == 'حسابه عضو بالفعل'
+
+
+# ------------------------------------------------------------------ المسح النهائي (مواصفة 2026-10-12 §٤)
+# الحارس على المنصّة؛ الداشبورد وسيطٌ أمين: أدمن فقط، والجسم وكود الحالة يمرّان كما هما —
+# الواجهة تقرأ `purgeable`/`reason`/`detail` بالحرف ولا تحكم بنفسها.
+
+CHECK_BRIDGE = '/api/bridge/users/pu-1/purge-check'
+PURGE_BRIDGE = '/api/bridge/users/pu-1/purge'
+
+
+def test_purge_check_forwards_to_the_bridge_and_returns_its_body_verbatim(ctx):
+    ctx['replies'][CHECK_BRIDGE] = FakeResp(200, {'purgeable': False, 'reason': 'عنده مدفوعات',
+                                                  'linked': {'payments': 2, 'bookings': 1}})
+    r = ctx['client'].get('/api/users/pu-1/purge-check', headers=ctx['admin'])
+    assert r.status_code == 200, r.get_data(as_text=True)
+    call = ctx['sent'][-1]
+    assert call['method'] == 'GET' and call['path'] == CHECK_BRIDGE
+    assert r.get_json() == {'purgeable': False, 'reason': 'عنده مدفوعات',
+                            'linked': {'payments': 2, 'bookings': 1}}
+    ctx['replies'][CHECK_BRIDGE] = FakeResp(200, {'purgeable': True, 'reason': None, 'linked': {}})
+    assert ctx['client'].get('/api/users/pu-1/purge-check', headers=ctx['admin']).get_json() == \
+        {'purgeable': True, 'reason': None, 'linked': {}}
+
+
+def test_purge_posts_the_note_and_passes_the_platform_answer_through(ctx):
+    ctx['replies'][PURGE_BRIDGE] = FakeResp(200, {'ok': True, 'removed': {'users': 1, 'conversations': 3}})
+    r = ctx['client'].post('/api/users/pu-1/purge', json={'note': 'بوت'}, headers=ctx['admin'])
+    assert r.status_code == 200, r.get_data(as_text=True)
+    call = ctx['sent'][-1]
+    assert call['method'] == 'POST' and call['path'] == PURGE_BRIDGE
+    assert call['json'] == {'note': 'بوت'}                 # عقد الجسر: `{note}` دايمًا — ولو فاضية
+    assert r.get_json() == {'ok': True, 'removed': {'users': 1, 'conversations': 3}}
+    ctx['client'].post('/api/users/pu-1/purge', json={}, headers=ctx['admin'])
+    assert ctx['sent'][-1]['json'] == {'note': ''}
+
+
+def test_a_409_from_the_bridge_reaches_the_browser_with_its_status_and_body(ctx):
+    """غير مؤهّل ⇒ المنصّة ترفض ٤٠٩ `{detail, purgeable:false}` — الواجهة تقرأ السبب من هنا بالحرف."""
+    ctx['replies'][PURGE_BRIDGE] = FakeResp(409, {'detail': 'عنده مدفوعات', 'purgeable': False})
+    r = ctx['client'].post('/api/users/pu-1/purge', json={'note': ''}, headers=ctx['admin'])
+    assert r.status_code == 409
+    body = r.get_json()
+    assert body['detail'] == 'عنده مدفوعات' and body['purgeable'] is False
+    assert body['error'] == 'عنده مدفوعات'                 # مرآة لطبقة الشبكة في الواجهة (تقرأ `error`)
+    # ٤٠٤ = الجسر لسه ما اتنشرش: يمرّ كودًا لا «نجاحًا فارغًا»
+    ctx['replies'][CHECK_BRIDGE] = FakeResp(404, {'detail': 'Not Found'})
+    assert ctx['client'].get('/api/users/pu-1/purge-check', headers=ctx['admin']).status_code == 404
+
+
+def test_purge_and_its_check_are_admin_only_and_refused_before_the_platform_is_called(ctx):
+    before = len(ctx['sent'])
+    for hdr in (ctx['emp'], ctx['trainer']):
+        assert ctx['client'].get('/api/users/pu-1/purge-check', headers=hdr).status_code == 403
+        assert ctx['client'].post('/api/users/pu-1/purge', json={'note': ''}, headers=hdr).status_code == 403
+    assert ctx['client'].get('/api/users/pu-1/purge-check').status_code in (401, 403)
+    assert ctx['client'].post('/api/users/pu-1/purge', json={'note': ''}).status_code in (401, 403)
+    assert len(ctx['sent']) == before                 # ولا نداء واحد وصل للمنصّة
+    assert ctx['client'].get('/api/users/pu-1/purge-check', headers=ctx['admin']).status_code == 200
+    assert ctx['sent'][-1]['headers']['X-ELP-Metrics-Secret'] == 'test-metrics-secret'
