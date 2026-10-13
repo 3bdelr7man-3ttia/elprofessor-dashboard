@@ -314,6 +314,24 @@
   // القراءة، فمفيش مصدر هنا يعرف أعلى محطة كان الصفّ بلغها قبل الانتهاء أو السحب.
   var STAGE_ORDER = { pending: 0, opened: 1, roles_chosen: 2, pain_seen: 3, exercised: 4, declared: 5, registered: 6 };
   var ROLE_AR = { trainer: "مدرّب", lawyer: "محامٍ", consultant: "مستشار", researcher: "باحث", graduate: "خريج" };
+  // «داخل منين» — بلدُ عنوان الاتصال لحظةَ التسجيل (الخادم يرصده ويرسله رمزًا؛ هنا اسمٌ وعلم).
+  // غيرُ المعروف يُكتب بالرمز نفسه، والفارغ «—» — ولا بلدَ يُخترع من رقم الهاتف أو الاسم.
+  var COUNTRY_AR = { EG: "مصر", SA: "السعودية", AE: "الإمارات", KW: "الكويت", QA: "قطر", BH: "البحرين", OM: "عُمان",
+    JO: "الأردن", IQ: "العراق", LB: "لبنان", SY: "سوريا", PS: "فلسطين", YE: "اليمن", SD: "السودان", LY: "ليبيا",
+    TN: "تونس", DZ: "الجزائر", MA: "المغرب", MR: "موريتانيا", SO: "الصومال", DJ: "جيبوتي", KM: "جزر القمر",
+    TR: "تركيا", US: "أمريكا", GB: "بريطانيا", DE: "ألمانيا", FR: "فرنسا", IT: "إيطاليا", ES: "إسبانيا", NL: "هولندا",
+    CA: "كندا", AU: "أستراليا", RU: "روسيا", CN: "الصين", IN: "الهند", PK: "باكستان", ID: "إندونيسيا", MY: "ماليزيا",
+    NG: "نيجيريا", IR: "إيران", BR: "البرازيل", UA: "أوكرانيا", SE: "السويد", IE: "أيرلندا", SG: "سنغافورة", VN: "فيتنام" };
+  function flagOf(cc) {
+    cc = String(cc || "").toUpperCase();
+    if (!/^[A-Z]{2}$/.test(cc)) return "";
+    return String.fromCodePoint(0x1F1E6 + cc.charCodeAt(0) - 65, 0x1F1E6 + cc.charCodeAt(1) - 65);
+  }
+  function countryLabelOf(cc) {
+    cc = String(cc || "").trim().toUpperCase();
+    if (!cc) return "";
+    return (flagOf(cc) + " " + (COUNTRY_AR[cc] || cc)).trim();
+  }
   var SPECIALTY_AR = { criminal: "جنائي", civil: "مدني", corporate: "شركات", family: "أسرة", labor: "عمل", administrative: "إداري" };
 
   function deriveInviteStage(i, statusFallback) {
@@ -698,6 +716,10 @@
               roleLabel: u.role_requested ? (ROLE_AR[u.role_requested] || u.role_requested) : "—",
               country: u.country || "",
               countryLabel: u.country || "—",
+              // «داخل منين» (قرار المؤسس 2026-10-13): بلدُ العنوان لحظةَ التسجيل — غير البلد اللي كتبه بنفسه.
+              signupCountry: String(u.signup_country || "").toUpperCase(),
+              signupIp: u.signup_ip || "",
+              signupCountryLabel: countryLabelOf(u.signup_country),
               specialty: u.specialty || "",
               specialtyLabel: u.specialty ? (SPECIALTY_AR[u.specialty] || u.specialty) : "—",
               why: u.why || "",
@@ -1263,6 +1285,7 @@
               out: "زائر مسجَّل — طلب فتح المنصّة", from: "المنصّة", src: "users", dest: "invites",
               triage: "human", sla: relTime(reqAt) || "بانتظار قرارك", slaWarn: false,
               note: "سجّل حسابه ودخل زائرًا" + (roleLabel ? " · " + roleLabel : "") + (u.country ? " · " + u.country : "")
+                + (u.signup_country ? " · داخل من " + countryLabelOf(u.signup_country) : "")
                 + " — افتح له المنصّة من هنا، أو ارفض بملاحظة ويفضل زائرًا.",
               ref: "PU-" + u.id, who: u.full_name || u.name || "بلا اسم", email: u.email || "",
               statusLabel: "طلب الفتح",
@@ -1271,6 +1294,7 @@
                 { k: "الهاتف", v: u.phone || "" },
                 { k: "الصفة", v: roleLabel },
                 { k: "البلد", v: u.country || "" },
+                { k: "داخل منين", v: countryLabelOf(u.signup_country) + (u.signup_ip ? " · " + u.signup_ip : "") },
                 { k: "التخصّص", v: specLabel },
                 { k: "ليه عايز ينضم", v: u.why || "" },
                 { k: "سجّل", v: arDate(u.created_at) || "" },

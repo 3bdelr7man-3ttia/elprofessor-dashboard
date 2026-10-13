@@ -159,7 +159,9 @@ PENDING_USERS = {"count": 3, "users": [
      "why": "", "last_login_at": _iso(3), "ai_used": 2,
      # مشبوه (مواصفة 2026-10-12 §٢-د): الأعلام من الخادم بتسمياتها العربية — الواجهة تعرض لا تحكم.
      "signup_flags": ["dotted_gmail", "random_name"],
-     "flag_labels": ["إيميل بنقط", "اسم عشوائي"]},
+     "flag_labels": ["إيميل بنقط", "اسم عشوائي"],
+     # «داخل منين» (2026-10-13): قال «السعودية» والعنوان بيقول أمريكا — الواجهة تعرض الاثنين جنب بعض.
+     "signup_country": "US", "signup_ip": "8.8.8.8"},
     {"id": "pu-3", "full_name": "زائر لسه ما طلبش", "email": "silent.pending@example.test",
      "phone": "", "created_at": _iso(2), "access": "pending",
      "invite_request": {"status": "none"},

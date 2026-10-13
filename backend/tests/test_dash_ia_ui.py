@@ -627,6 +627,23 @@ def test_a_suspicious_visitor_wears_the_flag_badge_in_the_panel_and_the_inbox(pa
     assert page.eval_on_selector_all('#rows .row:has-text("نور الهدى سالم") .flag-sus', 'els=>els.length') == 0
 
 
+def test_the_pending_row_shows_where_the_visitor_connected_from_next_to_what_he_declared(page, server):
+    """«داخل منين» (قرار المؤسس 2026-10-13): بلدُ العنوان من الخادم (`signup_country`) يُعرض علمًا واسمًا
+    تحت «البلد» المُعلَن، والعنوان نفسه تلميحًا. الصفّ الأقدم من القرار (بلا الحقل) يكتب «—» لا بلدًا مختلقًا."""
+    _go(page, server, 'invites')
+    _until(page, "!!(window.EP && EP.state.pendingUsers==='ready' && EP.state.waitlist==='ready')", 30000)
+    page.wait_for_timeout(300)
+    geo = page.eval_on_selector_all('#puPanel .pu-row .pu-geo',
+                                    'els=>els.map(e=>[e.closest(".pu-row").dataset.puId,e.textContent.trim(),e.title])')
+    by_id = {g[0]: g[1:] for g in geo}
+    assert by_id['pu-2'] == ['داخل من: 🇺🇸 أمريكا', 'العنوان: 8.8.8.8'], by_id
+    assert by_id['pu-1'] == ['داخل من: —', ''], by_id
+    _go(page, server, 'inbox')
+    page.click('#rows .row:has-text("كريم عادل")')
+    page.wait_for_timeout(300)
+    assert 'داخل منين' in page.inner_text('#drawer') and '🇺🇸 أمريكا · 8.8.8.8' in page.inner_text('#drawer')
+
+
 def test_the_inbox_drawer_offers_purge_next_to_open_and_reject(page, server):
     _go(page, server, 'inbox')
     page.click('#rows .row:has-text("كريم عادل")')
