@@ -1994,7 +1994,11 @@ function pcStatus(c){
 // اشتراك أو دفعة)، لأن اللوحة لا ترى المدفوعات أصلًا.
 function pcCanHardDelete(c){return !c.is_active&&!c.archived_at&&!(+(c.total_enrolled||0)>0);}
 const PC_TYPE={recorded_paid:'مسجّلة مدفوعة',recorded_free:'مسجّلة مجانية',live_upcoming:'مباشرة'};
-const PC_SOURCE={titch:'🪄 Titch',dashboard:'من الإدارة',native:'أصلية'};
+const PC_SOURCE={titch:'🪄 Titch',dashboard:'من الإدارة',native:'أصلية','story-seed':'دورة تفاعلية'};
+// الدورة التفاعلية («قصة»): دروسها في ملف الدورة مش في المنهج — الملخّص {units,lessons,minutes} من الجسر.
+// زرار «معاينة» بيفتحها على المنصة زي ما المتدرّب هيشوفها (بحساب الأدمن هناك)، من غير ما تتنشر.
+function pcStory(c){var s=c&&c.story;return(s&&+s.lessons>0)?s:null;}
+function pcPreviewUrl(c){return 'https://app.elprofessor.net/?page=admincourses&preview='+encodeURIComponent(c.slug||'');}
 function renderCourses(){
   const el=document.getElementById('cRows'),h=document.getElementById('cH');el.innerHTML='';
   if(courseTab==='platform'){const PCRS=csPlatformCourses();h.textContent='الكتالوج (على المنصة)';document.getElementById('cN').textContent=PCRS.length;
@@ -2003,7 +2007,7 @@ function renderCourses(){
     if(!PCRS.length){el.innerHTML='<div style="padding:40px;text-align:center;color:var(--muted)">'+(loadingP?'…جارٍ تحميل دورات المنصة':'لا توجد دورات على المنصة بعد. أي دورة تتعمل (إدارة أو Titch) هتظهر هنا فورًا بحالتها.')+'</div>';return;}
     el.innerHTML='<div style="padding:9px 14px;font-size:11.5px;color:var(--muted);border-bottom:1px solid var(--border)">كل دورة موجودة على المنصة — منشورة كانت أو مسودة — بحالتها وطريقة تشغيلها. «نشر» يخلّيها تظهر للطلاب على app.elprofessor.net.</div>';
     PCRS.forEach(function(c,idx){var st=pcStatus(c);var pr=(c.price_amount!=null&&c.price_amount>0)?(money(c.price_amount)+' '+esc(c.price_currency||'')):(c.type==='recorded_free'?'مجانية':'—');
-      var lessons=(c.lesson_count||0);var typ=PC_TYPE[c.type]||esc(c.type||'');var src=PC_SOURCE[c.source]||esc(c.source||'');
+      var lessons=pcStory(c)?pcStory(c).lessons:(c.lesson_count||0);var typ=PC_TYPE[c.type]||esc(c.type||'');var src=PC_SOURCE[c.source]||esc(c.source||'');
       // شارات ميتاداتا تلتفّ بدل السطر المزدحم الواحد — كل رقم باين لوحده.
       var meta='<div class="crs-meta">'
         +'<span class="mchip">'+esc(c.instructor_name||'بلا مدرّب')+'</span>'
@@ -2130,23 +2134,26 @@ function drawCourse(){
   const el=document.getElementById('drawer');if(!el)return;
   if(selected===null){el.innerHTML=`<div class="empty">${svg('book','ic')}<p>اختر دورة أو طلبًا لرؤية التفاصيل والإجراء.</p></div>`;return;}
   const t=selected[0],i=+selected.slice(1);
-  if(t==='P'){const c=csPlatformCourses()[i];if(!c){el.innerHTML='';return;}var st=pcStatus(c);var pr=(c.price_amount!=null&&c.price_amount>0)?(money(c.price_amount)+' '+esc(c.price_currency||'')):(c.type==='recorded_free'?'مجانية':'—');
+  if(t==='P'){const c=csPlatformCourses()[i];if(!c){el.innerHTML='';return;}var st=pcStatus(c);var sty=pcStory(c);var pr=(c.price_amount!=null&&c.price_amount>0)?(money(c.price_amount)+' '+esc(c.price_currency||'')):(c.type==='recorded_free'?'مجانية':'—');
     el.innerHTML=`<div class="dh"><div class="k">دورة على المنصة · ${PC_SOURCE[c.source]||esc(c.source||'')}</div><h3>${esc(c.title||'—')}</h3></div><div class="db">
-    <div class="note-ai">${svg('sparkles','ic')}<div>${c.is_active?'الدورة ظاهرة للطلاب على app.elprofessor.net.':'الدورة موجودة لكنها <b>مش ظاهرة للطلاب</b> — اضغط «نشر على المنصة» تظهر فورًا.'}</div></div>
+    <div class="note-ai">${svg('sparkles','ic')}<div>${c.is_active?'الدورة ظاهرة للطلاب على app.elprofessor.net.':(sty?'الدورة موجودة لكنها <b>مش ظاهرة للطلاب</b> — شوفها الأول من «معاينة»، ولما تكون جاهزة اضغط «نشر على المنصة».':'الدورة موجودة لكنها <b>مش ظاهرة للطلاب</b> — اضغط «نشر على المنصة» تظهر فورًا.')}</div></div>
     <div class="field"><div class="lab">الحالة</div><div class="val"><span class="status ${st[0]}"><span class="d"></span>${st[1]}</span></div></div>
     <div class="field"><div class="lab">النوع · السعر</div><div class="val">${PC_TYPE[c.type]||esc(c.type||'')} · ${pr}</div></div>
     <div class="field"><div class="lab">المحاضر · المسجّلون</div><div class="val">${esc(c.instructor_name||'—')} · ${money(c.total_enrolled||0)} مسجّل</div></div>
-    <div class="field"><div class="lab">الدروس</div><div class="val">${money(c.lesson_count||0)} درس${c.source==='titch'?' · منهج Titch':''}</div></div>
-    <div class="field"><div class="lab">المنهج (الأقسام والمحاضرات)</div><div id="pcTree" class="val" style="line-height:1.7"><span style="color:var(--muted)">…جارٍ التحميل</span></div></div>
+    ${sty?`<div class="field"><div class="lab">الدروس</div><div class="val">${money(sty.lessons)} درس · ${money(sty.units)} أجزاء · حوالي ${money(sty.minutes)} دقيقة</div></div>
+    <div class="field"><div class="lab">المحتوى</div><div class="val" style="line-height:1.7">دورة تفاعلية — اضغط «معاينة» تشوفها زي ما المتدرّب هيشوفها بالظبط.</div></div>`
+    :`<div class="field"><div class="lab">الدروس</div><div class="val">${money(c.lesson_count||0)} درس${c.source==='titch'?' · منهج Titch':''}</div></div>
+    <div class="field"><div class="lab">المنهج (الأقسام والمحاضرات)</div><div id="pcTree" class="val" style="line-height:1.7"><span style="color:var(--muted)">…جارٍ التحميل</span></div></div>`}
     ${c.created_at?`<div class="field"><div class="lab">أُنشئت</div><div class="val" style="direction:ltr;text-align:right">${esc(String(c.created_at).slice(0,10))}</div></div>`:''}
     ${c.short_description?`<div class="field"><div class="lab">الوصف</div><div class="val" style="line-height:1.6">${esc(c.short_description)}</div></div>`:''}
     ${c.approval_status==='pending'?`<div class="note-ai" style="margin:8px 0;background:rgba(212,175,55,.1);border-color:rgba(212,175,55,.4)">${svg('sparkles','ic')}<div>دورة بانتظار اعتمادك (اتحوّلت من كتاب عبر Titch). اعتمدها تظهر للطلاب في «الدورات».</div></div>`:''}
     <div class="acts">
+      ${sty&&c.slug?`<a class="btn btn-human" href="${esc(pcPreviewUrl(c))}" target="_blank" rel="noopener" style="text-decoration:none">${svg('book')}معاينة</a>`:''}
       ${c.approval_status==='pending'?`<button class="btn btn-primary" data-a="pcapprove">${svg('check')}اعتمد وانشر</button><button class="btn btn-warn" data-a="pcreject">ارفض</button>`:`<button class="btn ${c.is_active?'btn-warn':'btn-primary'}" data-a="pctoggle">${svg('check')}${c.is_active?'إيقاف عن المنصة':'نشر على المنصة'}</button>`}
       ${(c.is_active&&c.type!=='recorded_free')?`<button class="btn ${c.bid_enabled?'btn-primary':'btn-ghost'}" data-a="pcbidtoggle" style="flex:none;min-width:auto;padding:7px 11px;font-size:12px">${c.bid_enabled?'مزايدة مُفعّلة ✓':'فعّل المزايدة'}</button>`:''}
-      <button class="btn btn-human" data-a="pcvideo" style="flex:none;min-width:auto;padding:7px 11px;font-size:12px">المنهج والمحاضرات</button>
+      ${sty?'':`<button class="btn btn-human" data-a="pcvideo" style="flex:none;min-width:auto;padding:7px 11px;font-size:12px">المنهج والمحاضرات</button>`}
     </div></div>`;
-    if(window.EP&&c.id){EP.loadCourseVideos(c.id).then(function(dt){if(selected!=='P'+i)return;var box=document.getElementById('pcTree');if(box)box.innerHTML=pcTreeHtml(dt);}).catch(function(){var box=document.getElementById('pcTree');if(box)box.innerHTML='<span style="color:var(--muted)">تعذّر تحميل المنهج</span>';});}
+    if(window.EP&&c.id&&!sty){EP.loadCourseVideos(c.id).then(function(dt){if(selected!=='P'+i)return;var box=document.getElementById('pcTree');if(box)box.innerHTML=pcTreeHtml(dt);}).catch(function(){var box=document.getElementById('pcTree');if(box)box.innerHTML='<span style="color:var(--muted)">تعذّر تحميل المنهج</span>';});}
   }
   else if(t==='c'){const c=csCourses()[i];if(!c){el.innerHTML='';return;}el.innerHTML=`<div class="dh"><div class="k">دورة · native في المنصة</div><h3>${esc(c.title)}</h3></div><div class="db">
     <div class="note-ai">${svg('sparkles','ic')}<div>دورة native — الفيديو على السيرفر الخارجي. الجدولة والاشتراك والتقدّم داخل المنصة.</div></div>

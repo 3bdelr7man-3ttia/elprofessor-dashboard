@@ -730,3 +730,33 @@ def test_the_users_screen_delete_window_checks_first_then_purges_the_bot_only(pa
     assert page.eval_on_selector_all('#epModal #udm_hide', 'els=>els.length') == 1
     page.click('#epModal #upm_x')
     page.wait_for_selector('#epModal', state='detached', timeout=5000)
+
+
+# ---------------------------------------------------------------- «معاينة» الدورة التفاعلية (2026-10-15)
+
+def test_the_story_course_drawer_offers_a_preview_on_the_platform(page, server):
+    """طلب المؤسس: «عايزين معاينة من الداش بورد». كارت الدورة التفاعلية فيه «معاينة» بتفتح المنصة
+    على ‎?page=admincourses&preview=<slug>‎ في تاب جديد، وبيعرض ٣٩ درس بدل «· درس» و«لا محاضرات».
+    والدورة العادية ما يظهرلهاش الزرار، ومنهجها القديم زي ما هو."""
+    _go(page, server, 'courses')
+    _until(page, "!!(window.EP && EP.state.platform_courses==='ready')", 30000)
+    page.wait_for_timeout(300)
+    rows = page.inner_text('#cRows')
+    assert 'دورة تفاعلية' in rows and 'story-seed' not in rows, rows
+    page.click('#cRows .row:has-text("أساسيات التسويق القانوني")')
+    page.wait_for_selector('#drawer a:has-text("معاينة")', timeout=10000)
+    a = page.query_selector('#drawer a:has-text("معاينة")')
+    assert a.get_attribute('href') == 'https://app.elprofessor.net/?page=admincourses&preview=marketing-basics'
+    assert a.get_attribute('target') == '_blank'
+    assert 'noopener' in (a.get_attribute('rel') or '')
+    drawer = page.inner_text('#drawer')
+    assert '٣٩ درس' in drawer or '39 درس' in drawer, drawer
+    assert 'لا محاضرات' not in drawer and 'المنهج والمحاضرات' not in drawer, drawer
+    assert 'شوفها الأول من «معاينة»' in drawer, drawer
+    _shot(page, 'story-preview-drawer.png')
+    if SHOTS:
+        page.locator('#drawer').screenshot(path=os.path.join(SHOTS, 'story-preview-drawer-full.png'))
+    # الدورة العادية: لا «معاينة»، و«المنهج والمحاضرات» باقي.
+    page.click('#cRows .row:has-text("اقرأ العقد")')
+    page.wait_for_selector('#drawer [data-a="pcvideo"]', timeout=10000)
+    assert page.eval_on_selector_all('#drawer a:has-text("معاينة")', 'els=>els.length') == 0

@@ -193,7 +193,24 @@ def purge_check(user_id):
     return {"purgeable": True, "reason": None, "linked": {}}
 
 
+# كتالوج المنصة: دورة تفاعلية («قصة») مسودة + دورة عادية — طلب «معاينة من الداش بورد» (2026-10-15).
+PLATFORM_COURSES = {"courses": [
+    {"id": "pc-story", "slug": "marketing-basics", "title": "أساسيات التسويق القانوني بالذكاء الاصطناعي",
+     "type": "recorded_free", "is_active": False, "bid_enabled": False, "price_amount": None,
+     "price_currency": "", "total_enrolled": 0, "approval_status": None, "source": "story-seed",
+     "created_at": "2026-10-14T23:00:00+00:00", "archived_at": "",
+     "short_description": "إزاي الناس اللي محتاجاك تلاقيك، من غير إعلانات، ومعاك المساعد الذكي.",
+     "instructor_name": "د. عبد الرحمن عطية", "lesson_count": 0,
+     "story": {"units": 7, "lessons": 39, "minutes": 153}},
+    {"id": "pc-old", "slug": "read-before-sign", "title": "اقرأ العقد قبل أن توقّعه",
+     "type": "recorded_free", "is_active": True, "bid_enabled": False, "price_amount": None,
+     "price_currency": "", "total_enrolled": 0, "approval_status": None, "source": "native",
+     "created_at": "2026-09-01T10:00:00+00:00", "archived_at": "", "short_description": "",
+     "instructor_name": "البروفيسور", "lesson_count": 3, "story": None},
+], "count": 2}
+
 ROUTES = {
+    "/api/bridge/courses": PLATFORM_COURSES,
     "/api/bridge/users": BRIDGE_USERS,
     "/api/bridge/pending-users": PENDING_USERS,
     "/api/bridge/founding-expert-leads": FOUNDING_LEADS,
