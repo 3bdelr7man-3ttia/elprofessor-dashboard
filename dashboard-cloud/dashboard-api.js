@@ -368,6 +368,123 @@
     return out;
   }
 
+  // ============================================================
+  // «ملف للخبير» — صفوف الوارد (الجولة ٦ · docs/EXPERT-FILES-DASHBOARD-SPEC.md §٥-ب)
+  // ⛔ ولا ساعة بتتحسب هنا: `hours_left` و`assign_overdue` من المنصة. ⛔ العملات ما بتتجمعش ولا
+  // بتتحوّل — كل مبلغ بعملته. الجداول نسخة من المنصة (REASON_LABELS · NEXT_STEP_LABELS ·
+  // CURRENCY_SYMBOL) — ⛔ ولا قيمة جديدة.
+  // ============================================================
+  var REASON_AR = { unclear: "فيه حاجة مش فاهمها", not_answered: "الرأي ما ردّش على سؤالي", wrong_facts: "فيه غلط في الوقائع" };
+  var NEXT_STEP_AR = { self: "تقدر تكمّلها بنفسك", specialist: "محتاج حد متخصص يكمّل معاك", none: "مش محتاج حاجة دلوقتي" };
+  var CUR_AR = { EGP: "ج", SAR: "ر.س", AED: "درهم", KWD: "د.ك", QAR: "ر.ق", BHD: "د.ب", OMR: "ر.ع", USD: "$" };
+  var EF_PRE = ["awaiting_assignment", "assigned"];
+  var EF_WORK = ["claimed", "writing", "needs_info"];
+  function efMoney(a, cur) { return (a == null || a === "") ? "—" : money(a) + " " + (CUR_AR[cur] || cur || ""); }
+  function KIND_AR(k) {
+    k = String(k || "");
+    if (k === "expert_file") return "ملف للخبير";
+    if (k === "session") return "جلسة";
+    if (["expert_opinion", "verification", "verify", "documented_opinion"].indexOf(k) > -1) return "توثيق رأي";
+    if (k === "consultation") return "استشارة من السوق";
+    return "استشارة";
+  }
+  // «فاضل ٥ ساعة» — أقل من ساعة بيتقال بالكلام، مش «٠ ساعة».
+  function efHours(h) { h = Number(h || 0); return h < 1 ? "أقل من ساعة" : money(Math.floor(h)) + " ساعة"; }
+  // اسم اللي اعتذر: من المرشّحين (المعتمدين) لو موجود، وإلا الإيميل (§١٤ بند ٦ — الجسر بيبعت الإيميل بس).
+  function efNameOf(f, email) {
+    var em = String(email || "").toLowerCase();
+    var c = (f.candidates || []).filter(function (x) { return String(x.email || "").toLowerCase() === em; })[0];
+    return (c && c.name) || email || "—";
+  }
+  function efFlagBadges(f) {
+    var b = [];
+    (f.price_flags || []).forEach(function (fl) {
+      if (fl === "country_mismatch") b.push({ w: true, t: "⚠️ البلد مختلف", tip: "بلد تسجيل العميل مختلف عن بلد رقم تليفونه" });
+      if (fl === "phone_ambiguous") b.push({ w: true, t: "⚠️ الرقم مش واضح", tip: "الرقم مكتوب من غير كود البلد، فاتحسب بالسعر العام" });
+    });
+    return b;
+  }
+  function efFileRow(f, lane) {
+    var pre = EF_PRE.indexOf(f.status) > -1;
+    var hl = Number(f.hours_left || 0);
+    var declined = Array.isArray(f.declined) ? f.declined : [];
+    var out;
+    if (lane === "late") out = "رأي متأخر";
+    else if (pre && hl <= 0) out = "فات ميعاد الاستلام";
+    else if (f.status === "assigned" && f.assign_overdue) out = "ملف ما اتستلمش من ١٢ ساعة";
+    else if (f.status === "awaiting_assignment" && declined.length) out = "خبير اعتذر — الملف مستني خبير تاني";
+    else if (f.status === "assigned") out = "ملف مستني الخبير يستلمه";
+    else out = "ملف مستني خبير";
+    var sla;
+    if (lane === "late") sla = "ميعاد الرأي عدّى " + (relTime(f.writing_due_at) || "");
+    else if (hl > 0) sla = "فاضل " + efHours(hl) + " وفلوسه ترجع لوحدها";
+    else sla = "الميعاد عدّى — لو الفلوس ما رجعتش لوحدها رجّعها من هنا";
+    var badges = efFlagBadges(f);
+    // «قرب الـ٤٨ ساعة»: آخر ١٢ ساعة قبل ما الفلوس ترجع لوحدها — نفس حدّ `slaWarn` تحت.
+    if (pre && hl > 0 && hl <= 12) badges.unshift({ w: true, t: "⏳ فاضل أقل من ١٢ ساعة", tip: "لو ما اتستلمش قبل الميعاد، فلوس العميل بترجع لوحدها" });
+    if (declined.length) {
+      badges.push({ t: declined.length === 1 ? "خبير اعتذر" : "اعتذر " + money(declined.length) + " خبراء",
+                    tip: declined.map(function (d) { return efNameOf(f, d.email); }).join(" · ") });
+    }
+    var since = lane === "late" ? "" : (relTime(f.paid_at) ? "اتدفع " + relTime(f.paid_at) : "");
+    return {
+      apiKind: "expert_file", apiId: f.id, efLane: lane, ef: f,
+      out: out, from: "ملف للخبير", src: "doc", dest: "inbox",
+      triage: (lane === "late" || (pre && hl <= 0)) ? "late" : "human",
+      sla: sla, slaWarn: lane === "late" || hl <= 12 || !!f.assign_overdue,
+      who: f.client_first_name || "عميل",
+      sub: [f.title, f.law_label, f.tier_label].filter(Boolean).join(" · "),
+      sub2: "الطرف التاني: " + (f.counterparty_name || "ما اتكتبش") + (since ? " · " + since : ""),
+      amountLabel: efMoney(f.amount, f.currency),
+      amountSub: "أجر الخبير " + efMoney(f.expert_amount, f.currency),
+      note: "أجر الخبير " + efMoney(f.expert_amount, f.currency) + " · الطرف التاني: " + (f.counterparty_name || "ما اتكتبش"),
+      badges: badges,
+      ref: "EF-" + String(f.id || "").slice(0, 8),
+      searchText: [f.title, f.counterparty_name, f.assigned_name, f.expert_name, f.client_first_name].filter(Boolean).join(" "),
+      candidates: Array.isArray(f.candidates) ? f.candidates : [],
+    };
+  }
+  function efDisputeRow(f) {
+    var d = f.dispute || {};
+    return {
+      apiKind: "dispute", dsrc: "file", apiId: f.id, ef: f,
+      out: "«عندي مشكلة» على ملف", from: "ملف للخبير", src: "scale", dest: "inbox",
+      triage: "human", sla: "الفلوس واقفة لحد قرارك · " + (relTime(d.at) || ""), slaWarn: false,
+      who: f.client_first_name || "عميل",
+      sub: [f.title, f.expert_name ? "الخبير: " + f.expert_name : ""].filter(Boolean).join(" · "),
+      sub2: (REASON_AR[d.reason] || "ما اتكتبش سبب") + (d.note ? " — " + d.note : ""),
+      amountLabel: efMoney(f.amount, f.currency),
+      amountSub: "أجر الخبير " + efMoney(f.expert_amount, f.currency),
+      note: (REASON_AR[d.reason] || "ما اتكتبش سبب") + (d.note ? " — " + d.note : ""),
+      badges: efFlagBadges(f),
+      ref: "DSP-" + String(f.id || "").slice(0, 8),
+      searchText: [f.title, f.counterparty_name, f.expert_name, f.client_first_name].filter(Boolean).join(" "),
+    };
+  }
+  function consDisputeRow(c) {
+    var badges = [];
+    if (c.manual_refund_settled_at) badges.push({ t: "اترجعت يدوي قبل كده", tip: "الفلوس دي رجعت للعميل يدوي قبل كده" });
+    if (c.cancel_requested) badges.push({ t: "العميل كان طالب يلغي", tip: "العميل كان طالب يلغي الحجز ده" });
+    return {
+      apiKind: "dispute", dsrc: "consultation", apiId: c.id, cons: c,
+      out: "نزاع على " + KIND_AR(c.kind), from: "الاستشارات", src: "scale", dest: "inbox",
+      triage: "human", sla: "الفلوس واقفة لحد قرارك · " + (relTime(c.disputed_at) || ""), slaWarn: false,
+      who: c.client_first_name || "عميل",
+      sub: [c.title, "الخبير: " + (c.expert_name || "—")].filter(Boolean).join(" · "),
+      sub2: c.dispute_reason || "ما اتكتبش سبب",
+      amountLabel: efMoney(c.amount, c.currency),
+      amountSub: c.expert_amount != null ? "أجر الخبير " + efMoney(c.expert_amount, c.currency) : "",
+      note: c.dispute_reason || "ما اتكتبش سبب",
+      badges: badges,
+      ref: "DSP-" + String(c.id || "").slice(0, 8),
+      searchText: [c.title, c.expert_name, c.client_first_name].filter(Boolean).join(" "),
+    };
+  }
+  // الشاشة (index.html) بتقرا نفس الجداول من هنا — مصدر واحد للنصوص.
+  EP.EF = { REASON_AR: REASON_AR, NEXT_STEP_AR: NEXT_STEP_AR, CUR_AR: CUR_AR, efMoney: efMoney,
+            KIND_AR: KIND_AR, efHours: efHours, efNameOf: efNameOf, PRE: EF_PRE, WORK: EF_WORK,
+            relTime: relTime, arDate: arDate };
+
   var LOADERS = {
     // نظرة عامة: /api/dashboard (+ /api/platform-metrics لعدد المستخدمين الحيّ)
     dashboard: function () {
@@ -1452,6 +1569,32 @@
           });
         }).catch(fail("طلبات التوثيق"))
       );
+      // «ملف للخبير» (الجولة ٦ — docs/EXPERT-FILES-DASHBOARD-SPEC.md §٥-أ): ملفات مستنية خبير ·
+      // آراء متأخرة · «عندي مشكلة» على ملف · نزاعات الاستشارات العادية. ⛔ للأدمن بس (د٥): الصفوف
+      // فيها مبالغ وأجر الخبير والطرف التاني — والمحمّل ده بيتنادى كمان من شاشات الموظف، فمن غير
+      // الحارس كان هيطلع له شريط «تعذّر جلب» دايم. ٤٠٣ ما يتسجّلش «تعذّر»، و«مقفول على المنصة»
+      // (`enabled:false`) مش عطل (د٩) — بس كل كود تاني بيبان «تعذّر» زي باقي الطوابير.
+      var efDisputeIds = {}, consDisputes = [];
+      function failUnless403(label) { return function (e) { if (e && e.status === 403) return; fail(label)(); }; }
+      if (String(EP.role || "").trim().toLowerCase() === "admin") {
+        [["waiting", "ملفات مستنية خبير"], ["late", "آراء متأخرة"], ["disputed", "نزاعات الملفات"]].forEach(function (L) {
+          jobs.push(get("/platform-expert-files?status=" + L[0]).then(function (r) {
+            if (!r || r.enabled === false) return;
+            var files = Array.isArray(r.files) ? r.files : [];
+            if ((r.total || 0) > files.length) truncated.push(L[1] + ": معروض " + files.length + " من " + r.total);
+            files.forEach(function (f) {
+              if (!f || !f.id) return;
+              if (L[0] === "disputed") { efDisputeIds[f.id] = true; realRows.push(efDisputeRow(f)); }
+              else realRows.push(efFileRow(f, L[0]));
+            });
+          }).catch(failUnless403(L[1])));
+        });
+        jobs.push(get("/platform-consultation-disputes").then(function (r) {
+          if (!r || r.enabled === false) return;
+          consDisputes = Array.isArray(r.consultations) ? r.consultations : [];
+          if ((r.total || 0) > consDisputes.length) truncated.push("نزاعات الاستشارات: معروض " + consDisputes.length + " من " + r.total);
+        }).catch(failUnless403("نزاعات الاستشارات")));
+      }
       // تسليمات الشات (P15): رسائل تواصل جديدة تُكتب محليًّا في «الرسائل» ← تظهر في الوارد كذلك.
       jobs.push(
         get("/messages?status=new").then(function (a) {
@@ -1507,6 +1650,15 @@
         }).catch(function () {})
       );
       return Promise.all(jobs).then(function () {
+        // نزاع على ملف بيظهر مرة واحدة (د٨): من قايمة الملفات (أغنى — السبب والرأيين). صفّه في قايمة
+        // الاستشارات بيتشال **بس لو صفّ الملف نفسه وصل فعلًا** — خدمة الملفات مقفولة أو قايمتها وقعت أو
+        // الملف لسه ما اتزامنش ⇒ يفضل ويتحسم من باب الاستشارات (ما يبقاش نزاع متجمّد مستخبّي). الحسم
+        // من الباب ده أو ده بيوصل لنفس الدالة على المنصة.
+        consDisputes.forEach(function (c) {
+          if (!c || !c.id) return;
+          if (c.expert_file_id && efDisputeIds[c.expert_file_id]) return;
+          realRows.push(consDisputeRow(c));
+        });
         EP.data.inbox = realRows;
         // الوارد = الصفوف الحقيقية فقط (لا دمج لأي بيانات تصميمية).
         window.INBOX = realRows;
@@ -2276,6 +2428,63 @@
     post("/platform-verify/" + encodeURIComponent(reqId) + "/reassign", { expert_email: expertEmail })
       .then(function () { note("اتحوّل الطلب للخبير ✓"); EP.reload("inbox", after); })
       .catch(function (e) { quietToast((e && e.message) || "تعذّر التحويل"); if (after) after(); });
+  };
+
+  // ---- «ملف للخبير» (الجولة ٦ — SPEC §٥-ج) --------------------------------------------------
+  // كل فعل بيرجّع Promise بـ{ok, error, noReply}: النافذة بتقفل لو ok، وإلا بترجّع الزرار وبتعرض
+  // الرسالة **جوّاها** (مش toast بس). بعد أي فعل ناجح: الوارد **و** العدّادات بيتحدّثوا.
+  // ⛔ ولا إعادة محاولة: رد ضاع (`no_reply`) ⇒ الرسالة + تحديث الوارد فورًا، والمؤسس يشوف قبل ما يدوس تاني.
+  function efDone(msg, after) {
+    note(msg);
+    EP.reload("opsQueue", after);
+    EP.reload("inbox", after);
+    return { ok: true };
+  }
+  function efFailed(e, after) {
+    var msg = (e && e.message) || "تعذّر تنفيذ العملية";
+    var noReply = !!(e && e.data && e.data.no_reply);
+    quietToast(msg);
+    if (noReply) { EP.reload("opsQueue", after); EP.reload("inbox", after); }
+    return { ok: false, error: msg, noReply: noReply };
+  }
+  EP.expertFileDetail = function (id) {
+    EP.data.efDetail = EP.data.efDetail || {};
+    return get("/platform-expert-files/" + encodeURIComponent(id)).then(function (d) {
+      EP.data.efDetail[id] = d || {};
+      return EP.data.efDetail[id];
+    });
+  };
+  // قبل الاستلام ⇒ assign (وتغيير الخبير المختار) · بعد الاستلام ⇒ reassign (د٢). الحالة من صفّ المنصة.
+  EP.expertFileSend = function (i, email, name, noteText, after) {
+    var f = (i && i.ef) || {};
+    var reassign = EF_WORK.indexOf(f.status) > -1;
+    var body = { expert_email: String(email || "").trim().toLowerCase(),
+                 note: String(noteText == null ? "" : noteText).trim().slice(0, 1000) };
+    return post("/platform-expert-files/" + encodeURIComponent(i.apiId) + (reassign ? "/reassign" : "/assign"), body)
+      .then(function () { return efDone(reassign ? "الملف اتنقل لـ" + (name || email) + " ✓" : "اتبعت لـ" + (name || email) + " ✓", after); })
+      .catch(function (e) { return efFailed(e, after); });
+  };
+  EP.expertFileRefund = function (i, noteText, after) {
+    var f = (i && i.ef) || {};
+    var body = { note: String(noteText == null ? "" : noteText).trim().slice(0, 1000), confirmed: true };
+    return post("/platform-expert-files/" + encodeURIComponent(i.apiId) + "/refund", body)
+      .then(function () { return efDone("رجعت " + efMoney(f.amount, f.currency) + " لمحفظة " + (f.client_first_name || "العميل") + " ✓", after); })
+      .catch(function (e) { return efFailed(e, after); });
+  };
+  EP.disputeDecide = function (i, action, noteText, after) {
+    var row = (i && (i.ef || i.cons)) || {};
+    var path = i.dsrc === "consultation"
+      ? "/platform-consultation-disputes/" + encodeURIComponent(i.apiId) + "/resolve"
+      : "/platform-expert-files/" + encodeURIComponent(i.apiId) + "/resolve";
+    var body = { action: action === "release" ? "release" : "refund",
+                 note: String(noteText == null ? "" : noteText).trim().slice(0, 2000), confirmed: true };
+    return post(path, body)
+      .then(function () {
+        return efDone(body.action === "release"
+          ? "اتحوّل أجر " + (row.expert_name || "الخبير") + " ✓"
+          : "رجعت " + efMoney(row.amount, row.currency) + " لمحفظة " + (row.client_first_name || "العميل") + " ✓", after);
+      })
+      .catch(function (e) { return efFailed(e, after); });
   };
 
   // تحليل الطلب (D2): شغّل مصنّف الأسئلة بالذكاء على رسائل الشات غير المصنّفة.
