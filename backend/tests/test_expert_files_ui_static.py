@@ -169,3 +169,24 @@ def test_browser_never_computes_the_hours(apijs):
     row = _body(apijs, 'function efFileRow(')
     assert 'Date.now' not in row and 'Date.parse' not in row
     assert 'hours_left' in row and 'assign_overdue' in row
+
+
+def test_failures_never_show_raw_browser_or_http_text(apijs):
+    """«Failed to fetch» / «HTTP 502» / «unauthorized» ما يوصلوش للمؤسس، والرد اللي مش رفض أكيد = «ما وصلناش رد»."""
+    body = _body(apijs, 'function efFailed(')
+    assert 'e.message' not in body
+    assert '!status' in body and 'status >= 500' in body and 'noReply' in body
+
+
+def test_money_windows_name_the_currency_in_words_and_the_audit_title_is_arabic(html):
+    for fn in ('efRefundModal', 'efResolveModal'):
+        b = _body(html, 'function %s(' % fn)
+        assert "efCurName(" in b and "' ('+" not in b, fn
+    assert 'Audit Log' not in html
+
+
+def test_a_resolve_after_a_manual_refund_never_promises_a_platform_remainder(html):
+    b = _body(html, 'function efResolveModal(')
+    assert 'manual_refund_settled_at' in b and 'المنصة هتدفع' in b
+    # المبلغ اللي هيتحوّل له رقم دايمًا (أجر الخبير أو المبلغ كله) — ولا «نصيب الخبير» من غير رقم
+    assert 'نصيب الخبير' not in b and 'const pay=has?r.expert_amount:r.amount' in b

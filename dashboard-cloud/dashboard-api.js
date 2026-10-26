@@ -377,6 +377,9 @@
   var REASON_AR = { unclear: "فيه حاجة مش فاهمها", not_answered: "الرأي ما ردّش على سؤالي", wrong_facts: "فيه غلط في الوقائع" };
   var NEXT_STEP_AR = { self: "تقدر تكمّلها بنفسك", specialist: "محتاج حد متخصص يكمّل معاك", none: "مش محتاج حاجة دلوقتي" };
   var CUR_AR = { EGP: "ج", SAR: "ر.س", AED: "درهم", KWD: "د.ك", QAR: "ر.ق", BHD: "د.ب", OMR: "ر.ع", USD: "$" };
+  // اسم العملة بالكلام في نوافذ تأكيد الفلوس (بدل الكود الإنجليزي «EGP»).
+  var CUR_NAME_AR = { EGP: "جنيه مصري", SAR: "ريال سعودي", AED: "درهم إماراتي", KWD: "دينار كويتي",
+                      QAR: "ريال قطري", BHD: "دينار بحريني", OMR: "ريال عماني", USD: "دولار أمريكي" };
   var EF_PRE = ["awaiting_assignment", "assigned"];
   var EF_WORK = ["claimed", "writing", "needs_info"];
   function efMoney(a, cur) { return (a == null || a === "") ? "—" : money(a) + " " + (CUR_AR[cur] || cur || ""); }
@@ -388,8 +391,16 @@
     if (k === "consultation") return "استشارة من السوق";
     return "استشارة";
   }
-  // «فاضل ٥ ساعة» — أقل من ساعة بيتقال بالكلام، مش «٠ ساعة».
-  function efHours(h) { h = Number(h || 0); return h < 1 ? "أقل من ساعة" : money(Math.floor(h)) + " ساعة"; }
+  // «فاضل ٥ ساعات» — أقل من ساعة بيتقال بالكلام، مش «٠ ساعة». والعدد بقاعدته: ساعة · ساعتين ·
+  // ٣–١٠ ساعات · ١١ وفوق ساعة.
+  function efHours(h) {
+    h = Number(h || 0);
+    if (h < 1) return "أقل من ساعة";
+    var n = Math.floor(h);
+    if (n === 1) return "ساعة";
+    if (n === 2) return "ساعتين";
+    return money(n) + (n <= 10 ? " ساعات" : " ساعة");
+  }
   // اسم اللي اعتذر: من المرشّحين (المعتمدين) لو موجود، وإلا الإيميل (§١٤ بند ٦ — الجسر بيبعت الإيميل بس).
   function efNameOf(f, email) {
     var em = String(email || "").toLowerCase();
@@ -408,6 +419,10 @@
     var pre = EF_PRE.indexOf(f.status) > -1;
     var hl = Number(f.hours_left || 0);
     var declined = Array.isArray(f.declined) ? f.declined : [];
+    // «للعلم» مش بند: ملف اتبعت لخبير ولسه جوه الـ١٢ ساعة بتوعه وميعاد الـ٤٨ لسه بعيد ⇒ مش محتاج من
+    // المؤسس حاجة دلوقتي. بيفضل في `INBOX` (عشان الدرج يفتح لو حب) بس برّه كل عدّ وكل شريحة — سطر
+    // «للعلم» واحد بيقول عليه. لو عدّى ١٢ ساعة (`assign_overdue`) أو قرب الميعاد ⇒ يرجع بند عادي.
+    var fyi = lane !== "late" && f.status === "assigned" && !f.assign_overdue && hl > 12;
     var out;
     if (lane === "late") out = "رأي متأخر";
     else if (pre && hl <= 0) out = "فات ميعاد الاستلام";
@@ -427,12 +442,20 @@
                     tip: declined.map(function (d) { return efNameOf(f, d.email); }).join(" · ") });
     }
     var since = lane === "late" ? "" : (relTime(f.paid_at) ? "اتدفع " + relTime(f.paid_at) : "");
+    // شارة الحالة على الصفّ بكلام الشغل نفسه (بدل «محوّل لبشري» العامة) — المتأخر بيفضل «متأخّر — عاجل».
+    // ⛔ «ما اتستلمش من ١٢ ساعة» ما ياخدش شارة «مستني الخبير» — دي بتتقري «مش محتاج حاجة».
+    var triLabel = "";
+    if (!(lane === "late" || (pre && hl <= 0))) {
+      if (f.status !== "assigned") triLabel = "مستني توزيعك";
+      else if (f.assign_overdue) triLabel = "محتاج تبعته لحد تاني";
+      else if (hl <= 12) triLabel = "قرب الميعاد وما اتستلمش";
+      else triLabel = "مستني الخبير يستلم";
+    }
     return {
-      apiKind: "expert_file", apiId: f.id, efLane: lane, ef: f,
+      apiKind: "expert_file", apiId: f.id, efLane: lane, ef: f, fyi: fyi,
       out: out, from: "ملف للخبير", src: "doc", dest: "inbox",
       triage: (lane === "late" || (pre && hl <= 0)) ? "late" : "human",
-      // شارة الحالة على الصفّ بكلام الشغل نفسه (بدل «محوّل لبشري» العامة) — المتأخر بيفضل «متأخّر — عاجل».
-      triLabel: (lane === "late" || (pre && hl <= 0)) ? "" : (f.status === "assigned" ? "مستني الخبير يستلم" : "مستني توزيعك"),
+      triLabel: triLabel,
       sla: sla, slaWarn: lane === "late" || hl <= 12 || !!f.assign_overdue,
       who: f.client_first_name || "عميل",
       sub: [f.title, f.law_label, f.tier_label].filter(Boolean).join(" · "),
@@ -483,7 +506,39 @@
     };
   }
   // الشاشة (index.html) بتقرا نفس الجداول من هنا — مصدر واحد للنصوص.
-  EP.EF = { REASON_AR: REASON_AR, NEXT_STEP_AR: NEXT_STEP_AR, CUR_AR: CUR_AR, efMoney: efMoney,
+  // ترتيب الوارد من الأعجل (بتتنادى بعد ما كل الطوابير ترد — قبلها الترتيب كان «أنهي رد وصل الأول»):
+  //   ١. صفوف «ملف للخبير» و«نزاعات» بينهم: ميعاده عدّى / رأي متأخر ⇐ `hours_left` من الأقل ⇐ النزاعات من
+  //      الأقدم. بيتحطّوا في نفس الخانات اللي كانوا فيها، فباقي الصفوف ما بتتحرّكش.
+  //   ٢. الوارد كله (ترتيب ثابت): المتأخّر ⇐ اللي قرب ميعاده ⇐ الباقي.
+  // ⛔ ولا ساعة بتتحسب هنا: الأرقام من المنصة (`hours_left`) والتواريخ بتتقارن كنص ISO زي ما جت.
+  function efUrgencyKey(r) {
+    if (r.apiKind === "expert_file") {
+      var f = r.ef || {};
+      if (r.efLane === "late") return [0, String(f.writing_due_at || "")];
+      var hl = Number(f.hours_left || 0);
+      return hl <= 0 ? [0, ""] : [1, hl];
+    }
+    var at = (r.ef && r.ef.dispute && r.ef.dispute.at) || (r.cons && r.cons.disputed_at) || "";
+    return [2, String(at)];
+  }
+  function efCmp(a, b) {
+    var ka = efUrgencyKey(a), kb = efUrgencyKey(b);
+    if (ka[0] !== kb[0]) return ka[0] - kb[0];
+    return ka[1] < kb[1] ? -1 : ka[1] > kb[1] ? 1 : 0;
+  }
+  function inboxRank(r) { return r.triage === "late" ? 0 : (r.slaWarn ? 1 : 2); }
+  function sortInboxRows(rows) {
+    var slots = [], mine = [];
+    rows.forEach(function (r, k) {
+      if (r && (r.apiKind === "expert_file" || r.apiKind === "dispute")) { slots.push(k); mine.push(r); }
+    });
+    mine.sort(efCmp);
+    slots.forEach(function (k, j) { rows[k] = mine[j]; });
+    return rows.map(function (r, k) { return [r, k]; })
+      .sort(function (a, b) { return (inboxRank(a[0]) - inboxRank(b[0])) || (a[1] - b[1]); })
+      .map(function (p) { return p[0]; });
+  }
+  EP.EF = { REASON_AR: REASON_AR, NEXT_STEP_AR: NEXT_STEP_AR, CUR_AR: CUR_AR, CUR_NAME_AR: CUR_NAME_AR, efMoney: efMoney,
             KIND_AR: KIND_AR, efHours: efHours, efNameOf: efNameOf, PRE: EF_PRE, WORK: EF_WORK,
             relTime: relTime, arDate: arDate };
 
@@ -1661,6 +1716,7 @@
           if (c.expert_file_id && efDisputeIds[c.expert_file_id]) return;
           realRows.push(consDisputeRow(c));
         });
+        realRows = sortInboxRows(realRows);
         EP.data.inbox = realRows;
         // الوارد = الصفوف الحقيقية فقط (لا دمج لأي بيانات تصميمية).
         window.INBOX = realRows;
@@ -2442,19 +2498,27 @@
     EP.reload("inbox", after);
     return { ok: true };
   }
+  // ⛔ ولا رسالة إنجليزي ولا «HTTP 502» للمؤسس. والرد اللي مش واضح إن المنصة رفضته (النت قطع · البوابة
+  // اللي قدّام الداشبورد ردّت من غير رسالة · الداشبورد نفسه وقع) بيتعامل زي «ما وصلناش رد»: الفعل ممكن
+  // يكون اتنفّذ، فالزرار يفضل مقفول والوارد يتحدّث بدل ما المؤسس يدوس تاني على عمى.
+  var EF_NO_REPLY_AR = "ما وصلناش رد — حدّث الصفحة وشوف حصل إيه قبل ما تضغط تاني";
   function efFailed(e, after) {
-    var msg = (e && e.message) || "تعذّر تنفيذ العملية";
-    var noReply = !!(e && e.data && e.data.no_reply);
+    var status = e && e.status;
+    var data = (e && e.data) || {};
+    var serverMsg = typeof data.error === "string" ? data.error : "";
+    var noReply = !!data.no_reply || !status || (status >= 500 && !serverMsg);
+    var msg;
+    if (noReply) msg = serverMsg || EF_NO_REPLY_AR;
+    else if (status === 401) msg = "انتهت الجلسة — سجّل دخول تاني وبعدين جرّب";
+    else msg = serverMsg || "تعذّر تنفيذ العملية";
     quietToast(msg);
     if (noReply) { EP.reload("opsQueue", after); EP.reload("inbox", after); }
     return { ok: false, error: msg, noReply: noReply };
   }
+  // الملف كله لدرج النزاع — ⛔ من غير كاش: كل فتحة للدرج بتجيب آخر نسخة (تعديل الخبير ممكن يوصل بعد
+  // أول فتحة)، والفشل ما يتحفظش.
   EP.expertFileDetail = function (id) {
-    EP.data.efDetail = EP.data.efDetail || {};
-    return get("/platform-expert-files/" + encodeURIComponent(id)).then(function (d) {
-      EP.data.efDetail[id] = d || {};
-      return EP.data.efDetail[id];
-    });
+    return get("/platform-expert-files/" + encodeURIComponent(id)).then(function (d) { return d || {}; });
   };
   // قبل الاستلام ⇒ assign (وتغيير الخبير المختار) · بعد الاستلام ⇒ reassign (د٢). الحالة من صفّ المنصة.
   EP.expertFileSend = function (i, email, name, noteText, after) {

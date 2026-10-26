@@ -254,6 +254,9 @@ class EFPlatform(object):
             self.disputed = [copy.deepcopy(D1)]
             self.cons = [copy.deepcopy(D1_CONS), copy.deepcopy(D2), copy.deepcopy(D3)]
         self.extra = {"unactivated": 0 if empty else 1, "awaiting_payment": 0 if empty else 3}
+        # تعديل الخبير على D1 (None = لسه ما عدّلش) · `detail_fail` = قراية الملف الجاية ترجع ٥٠٠ (مرة).
+        self.d1_revision = copy.deepcopy(D1_REVISION)
+        self.detail_fail = False
 
     # ---------------------------------------------------------------- مساعدات
     def _find(self, fid):
@@ -267,7 +270,7 @@ class EFPlatform(object):
         d = detail_view(f, CLIENT_EMAILS.get(self._key(f), "client@clients.test"))
         if f["id"] == D1["id"]:
             d["opinion"] = copy.deepcopy(D1_OPINION)
-            d["revision"] = copy.deepcopy(D1_REVISION)
+            d["revision"] = copy.deepcopy(self.d1_revision)
             d["file_no"] = 1042
             d["docs"] = [{"id": "doc-1", "name": "حكم الطلاق.pdf", "content_type": "application/pdf",
                           "size": 120000, "stage": "draft", "created_at": iso(-130)}]
@@ -323,6 +326,9 @@ class EFPlatform(object):
         if f is None:
             return 404, {"detail": "الملف ده مش موجود"}
         if method == "GET" and len(parts) == 1:
+            if self.detail_fail:
+                self.detail_fail = False
+                return 500, {"detail": "Internal Server Error"}
             return 200, self._detail(f)
         act = parts[1] if len(parts) > 1 else ""
         if act == "assign":

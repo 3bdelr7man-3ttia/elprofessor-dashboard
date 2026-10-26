@@ -42,14 +42,15 @@ def pw():
 def open_page(pw, harness):
     browsers = []
 
-    def _open(role='admin', ef=None, hash_='#inbox', wait_ready=True):
+    def _open(role='admin', ef=None, hash_='#inbox', wait_ready=True, mobile=False):
         harness.ef = ef or fx.EFPlatform()
         try:
             br = pw.chromium.launch(args=['--single-process'])
         except Exception as exc:              # متصفح مش متنزّل
             pytest.skip('chromium غير متاح لـplaywright: %s' % exc)
         browsers.append(br)
-        ctx = harness.context(br, role, {'width': 1440, 'height': 900})
+        ctx = harness.context(br, role, {'width': 390, 'height': 844} if mobile else {'width': 1440, 'height': 900},
+                              mobile)
         page = ctx.new_page()
         page.goto(DASH + '/' + hash_, wait_until='domcontentloaded')
         if wait_ready:
@@ -90,9 +91,13 @@ def test_rows_render_in_their_chips_and_a_file_dispute_is_listed_once(open_page)
 def test_queue_chips_use_the_platform_numbers_and_land_on_their_chip(open_page):
     page = open_page()
     panel = page.inner_text('section.panel >> nth=0')
-    for label in ('ملفات مستنية خبير', 'آراء متأخرة', 'ملفات فيها «عندي مشكلة»', 'ملفات اتدفعت وما وصلتش للتوزيع',
-                  'للعلم:', '📁 4 ملف مستني خبير'):
+    for label in ('ملفات لسه ما اتستلمتش', 'آراء متأخرة', 'ملفات فيها «عندي مشكلة»', 'ملفات اتدفعت وما وصلتش للتوزيع',
+                  'للعلم:', 'المنصة بتحاول تاني لوحدها كل ساعة'):
         assert label in panel, label
+    # سطر تنبيه ليه عدّاد ظاهر فوقه ما يتكررش (كان نفس الرقم مرتين) · ولا «راجعه من الداشبورد» ولا «لا شاشة له»
+    for gone in ('📁', 'رأي متأخر', 'ملف فيه ملاحظة مستنية قرارك', 'راجعه من الداشبورد', 'لا شاشة له بعد',
+                 'ملفات مستنية خبير'):
+        assert gone not in panel, gone
     page.click('.opsq[data-k="expert_files_disputed"]')
     page.wait_for_timeout(200)
     assert page.evaluate("() => activeFilter") == 't:disputes'
@@ -106,7 +111,8 @@ def test_refund_window_names_amount_currency_and_client_before_any_post(open_pag
     page.wait_for_selector('#mc_go')
     body = page.inner_text('#epModal')
     assert '٥٠٠ ج' in body and 'ياسمين' in body and fx.F3['title'] in body and 'أ. هالة سمير' in body
-    assert 'EGP' in body
+    assert 'جنيه مصري' in body and 'EGP' not in body                  # العملة بالكلام مش بالكود
+    assert 'ومش هيتحوّل أجر لـأ. هالة سمير' in body                    # من غير «مش هياخد» بصيغة المذكّر
     assert page.inner_text('#mc_go') == 'رجّع ٥٠٠ ج'
     posts = [c for c in harness.dash_calls[before:] if c[0] == 'POST']
     assert posts == []                                             # التأكيد قبل أي فعل
@@ -201,7 +207,9 @@ def test_feature_off_is_quiet_and_the_alert_is_printed(open_page):
     page = open_page(ef=fx.EFPlatform(enabled=False, cons_enabled=False, off_open_total=2))
     assert page.evaluate("() => (window.INBOX_FAILED||[]).length") == 0
     assert page.evaluate("() => INBOX.filter(r => r.apiKind==='expert_file' || r.apiKind==='dispute').length") == 0
-    assert '2 ملف مدفوع والميزة مقفولة' in page.inner_text('section.panel >> nth=0')
+    panel = page.inner_text('section.panel >> nth=0')
+    assert '٢ ملف مدفوع وخدمة «ملف للخبير» مقفولة على المنصة' in panel
+    assert 'شغّل الخدمة على المنصة تاني' in panel and 'افتح المفتاح' not in panel
 
 
 def test_bridge_text_is_escaped_everywhere(open_page):
@@ -229,6 +237,198 @@ def test_bridge_text_is_escaped_everywhere(open_page):
     page.wait_for_timeout(300)
     assert page.evaluate("() => window.__pwned") is None
     assert page.evaluate("() => document.querySelectorAll('img[src=\"x\"]').length") == 0
+
+
+def _files_order(page):
+    return page.evaluate("() => [...document.querySelectorAll('#rows .row')].map(r => INBOX[+r.dataset.i].apiId)")
+
+
+def test_assigned_file_inside_its_12_hours_is_fyi_not_an_inbox_item(open_page, harness):
+    """ملف اتبعت لخبير ولسه في مهلته مش بند: برّه العدّ والشرايح وشارة القايمة — سطر «للعلم» بس."""
+    page = open_page()
+    nav0 = page.evaluate("() => navInboxCount()")
+    _row(page, fx.F1['id'])
+    page.click('#drawer [data-a="ef_pick"]')
+    page.wait_for_selector('#epModal .ef-cand')
+    page.click('#epModal .ef-cand >> nth=0')
+    page.click('#ep_go')
+    page.wait_for_selector('#epModal', state='detached', timeout=15000)
+    page.wait_for_function("id => EP.state.inbox==='ready' && INBOX.some(r => r.apiId === id && r.fyi)",
+                           arg=fx.F1['id'], timeout=15000)
+    page.wait_for_timeout(200)
+    assert page.evaluate("() => navInboxCount()") == nav0 - 1          # شارة «الوارد» نزلت
+    chips = page.inner_text('#filters')
+    assert 'ملفات للخبير (٤)' in chips
+    page.click('#filters .chip[data-f="t:files"]')
+    assert fx.F1['title'] not in page.inner_text('#rows .row >> nth=0')
+    assert fx.F1['id'] not in _files_order(page)
+    line = page.inner_text('#rows .ef-fyi-line')
+    assert 'للعلم: ١ ملف اتبعت لخبير' in line
+    page.click('#rows .ef-fyi-line [data-a="ef_fyi"]')                 # «اعرضهم» ⇒ يتفتح ويتشاف
+    assert _files_order(page) == [fx.F1['id']]
+    assert 'مستني الخبير يستلم' in page.inner_text('#rows')
+
+
+def test_overdue_assignment_says_it_needs_a_new_expert(open_page):
+    page = open_page()
+    page.click('#filters .chip[data-f="t:files"]')
+    idx = page.evaluate("id => INBOX.findIndex(r => r.apiId === id)", fx.F3['id'])
+    row = page.inner_text('#rows .row[data-i="%d"]' % idx)
+    assert 'محتاج تبعته لحد تاني' in row and 'مستني الخبير يستلم' not in row
+
+
+def test_rows_are_sorted_most_urgent_first(open_page):
+    page = open_page()
+    page.click('#filters .chip[data-f="t:files"]')
+    # متأخر ⇐ قرب الـ٤٨ (٥ ساعات) ⇐ ما اتستلمش من ١٢ ساعة ⇐ الباقي بالساعات اللي فاضلة
+    assert _files_order(page) == [fx.F5['id'], fx.F2['id'], fx.F3['id'], fx.F4['id'], fx.F1['id']]
+    page.click('#filters .chip[data-f="t:disputes"]')
+    assert _files_order(page) == [fx.D3['id'], fx.D2['id'], fx.D1['id']]   # النزاعات من الأقدم
+    page.click('#filters .chip[data-f="t:files"]')
+    assert 'فاضل ٥ ساعات وفلوسه ترجع لوحدها' in page.inner_text('#rows')
+
+
+def test_pick_window_shows_each_candidates_load(open_page):
+    page = open_page()
+    _row(page, fx.F1['id'])
+    page.click('#drawer [data-a="ef_pick"]')
+    page.wait_for_selector('#epModal .ef-cand')
+    hala = page.inner_text('#epModal .ef-cand >> nth=0')
+    assert 'أ. هالة سمير' in hala and '⚠️ ١ ملف تاني اتبعت وما اتستلمش من ١٢ ساعة' in hala
+    page.click('#ep_x')
+    _row(page, fx.F3['id'])
+    page.click('#drawer [data-a="ef_pick"]')
+    page.wait_for_selector('#epModal .ef-cand')
+    body = page.inner_text('#epModal')
+    sami = page.evaluate("() => [...document.querySelectorAll('#epModal .ef-cand')].map(c => c.innerText)"
+                         ".filter(t => t.includes('م. سامي فؤاد'))[0] || ''")
+    assert '⚠️ ١ رأي متأخر' in sami                                    # متأخر في «عقد توريد»
+    assert 'رأي متأخر' not in hala
+
+
+def test_release_after_a_manual_refund_says_the_platform_pays(open_page):
+    page = open_page()
+    _row(page, fx.D3['id'])
+    page.click('#drawer [data-a="dsp_rel"]')
+    page.wait_for_selector('#mc_go')
+    body = page.inner_text('#epModal')
+    assert 'خالد خد ٢٥٠ ج يدوي قبل كده' in body and 'المنصة هتدفع ١٥٠ ج' in body
+    for bad in ('الباقي', 'مش هياخد', 'مش هترجع'):
+        assert bad not in body, bad
+    assert page.inner_text('#mc_go') == 'حوّل ١٥٠ ج لـد. ندى حسن'
+
+
+def test_release_without_an_expert_share_names_the_full_amount_and_the_blind_spot(open_page):
+    ef = fx.EFPlatform()
+    for c in ef.cons:
+        if c['id'] == fx.D2['id']:
+            c['expert_amount'] = None
+    page = open_page(ef=ef)
+    _row(page, fx.D2['id'])
+    assert 'بتحسم من غير ما تشوفه' in page.inner_text('#drawer')
+    assert 'شوفها من المنصة' not in page.inner_text('#drawer')
+    page.click('#drawer [data-a="dsp_rel"]')
+    page.wait_for_selector('#mc_go')
+    body = page.inner_text('#epModal')
+    assert 'هيتحوّل المبلغ كله ٧٥٠ ج' in body and 'نصيب' not in body
+    assert 'إنت بتحسم من غير ما تشوف الشغل اللي اتسلّم' in body
+    assert page.inner_text('#mc_go') == 'حوّل ٧٥٠ ج لـأ. عمرو الشريف'
+
+
+def test_verify_dispute_on_the_platform_address_names_both_payees_and_no_name_on_the_button(open_page):
+    ef = fx.EFPlatform()
+    for c in ef.cons:
+        if c['id'] == fx.D3['id']:
+            c.update({'expert_email': 'admin@platform.test', 'expert_name': 'حساب المنصة',
+                      'manual_refund_settled_at': '', 'verified_by_email': 'nada@experts.test'})
+    page = open_page(ef=ef)
+    _row(page, fx.D3['id'])
+    drawer = page.inner_text('#drawer')
+    assert 'د. ندى حسن' in drawer and 'nada@experts.test' not in drawer    # اللي وثّق باسمه
+    page.click('#drawer [data-a="dsp_rel"]')
+    page.wait_for_selector('#mc_go')
+    body = page.inner_text('#epModal')
+    assert 'د. ندى حسن (اللي وثّق)' in body and 'حساب المنصة' in body
+    assert page.inner_text('#mc_go') == 'حوّل ١٥٠ ج'
+
+
+def test_dispute_drawer_refetches_on_every_open_and_never_caches_a_failure(open_page, harness):
+    ef = fx.EFPlatform()
+    ef.d1_revision = None                                              # الخبير لسه ما عدّلش
+    page = open_page(ef=ef)
+    _row(page, fx.D1['id'])
+    page.wait_for_selector('#drawer [data-a="dsp_cmp"]', timeout=15000)
+    assert 'الخبير ما عدّلش لسه' in page.inner_text('#drawer')
+    ef.d1_revision = fx.D1_REVISION                                    # بعت تعديله بعدها
+    page.click('#drawer [data-a="dsp_close"]')
+    _row(page, fx.D1['id'])
+    page.wait_for_function("() => /الحضانة للأم لحد ١٥ سنة/.test(document.getElementById('drawer').innerText)",
+                           timeout=15000)
+    page.click('#drawer [data-a="dsp_cmp"]')
+    page.wait_for_selector('#epModal .cmp2')
+    assert fx.D1_REVISION['answers'][1]['text'][:30] in page.inner_text('#epModal')
+    page.click('#cmp_x')
+    ef.detail_fail = True                                              # قراية واحدة تقع
+    page.click('#drawer [data-a="dsp_close"]')
+    _row(page, fx.D1['id'])
+    page.wait_for_selector('#drawer .ef-err', timeout=15000)
+    page.click('#drawer [data-a="dsp_close"]')
+    _row(page, fx.D1['id'])                                            # الفتحة الجاية بتجرّب تاني
+    page.wait_for_selector('#drawer [data-a="dsp_cmp"]', timeout=15000)
+
+
+def test_lost_connection_on_refund_is_arabic_and_keeps_the_button_locked(open_page, harness):
+    page = open_page()
+    _row(page, fx.F3['id'])
+    page.click('#drawer [data-a="ef_refund"]')
+    page.wait_for_selector('#mc_go')
+    page.route('**/api/platform-expert-files/*/refund', lambda r: r.abort())   # النت قطع
+    page.click('#mc_go')
+    page.wait_for_selector('#epModal .ef-err', timeout=15000)
+    err = page.inner_text('#epModal .ef-err')
+    assert 'ما وصلناش رد' in err
+    assert page.is_disabled('#mc_go') and page.inner_text('#mc_go') == 'حدّث الأول وشوف حصل إيه'
+    for bad in ('Failed to fetch', 'Load failed', 'HTTP', 'unauthorized'):
+        assert bad not in page.inner_text('body'), bad
+
+
+def test_audit_lines_name_the_file_and_the_amount(open_page):
+    page = open_page()
+    _row(page, fx.F4['id'])
+    page.click('#drawer [data-a="ef_pick"]')
+    page.wait_for_selector('#epModal .ef-cand')
+    page.click('#epModal .ef-cand >> nth=0')
+    page.click('#ep_go')
+    page.wait_for_selector('#epModal', state='detached', timeout=15000)
+    page.evaluate("() => auditModal()")
+    page.wait_for_selector('#auditRows .au-ef', timeout=15000)
+    txt = page.inner_text('#epModal')
+    assert 'سجلّ العمليات' in txt and 'Audit Log' not in txt
+    assert '«%s» · ٥٠٠ ج · لـأ. هالة سمير' % fx.F4['title'] in txt
+    assert fx.F4['id'] not in txt                                      # مش الرقم الداخلي
+
+
+def test_mobile_queue_chip_lands_on_the_rows_and_touch_targets_are_44(open_page):
+    page = open_page(mobile=True)
+    page.evaluate("() => document.querySelector('.opsq[data-k=\"expert_files_waiting\"]').scrollIntoView({block:'center'})")
+    page.click('.opsq[data-k="expert_files_waiting"]')
+    page.wait_for_timeout(300)
+    top = page.evaluate("() => document.getElementById('filters').getBoundingClientRect().top")
+    assert 0 <= top < 844 * 0.4, top                                   # الشرايح والصفوف قدّام العين
+    assert page.evaluate("() => activeFilter") == 't:files'
+    hs = page.evaluate("() => [...document.querySelectorAll('#filters .chip')].map(c => c.getBoundingClientRect().height)")
+    assert hs and min(hs) >= 44, hs
+    _row(page, fx.F3['id'])
+    page.click('#drawer [data-a="ef_refund"]')
+    page.wait_for_selector('#mc_go')
+    box = page.evaluate("() => { const r = document.querySelector('#epModal .mh button').getBoundingClientRect(); return [r.width, r.height]; }")
+    assert box[0] >= 44 and box[1] >= 44, box
+
+
+def test_hours_are_counted_the_arabic_way(open_page):
+    page = open_page()
+    got = page.evaluate("() => [0.5, 1.2, 2.5, 5.2, 10.9, 11, 41.5].map(h => EP.EF.efHours(h))")
+    assert got == ['أقل من ساعة', 'ساعة', 'ساعتين', '٥ ساعات', '١٠ ساعات', '١١ ساعة', '٤١ ساعة']
 
 
 def test_zero_real_requests(harness):

@@ -272,7 +272,8 @@ def test_assign_sends_exactly_the_bridge_model_and_audits(ctx, plat):
     assert len(rows) == 1
     actor, target, meta = rows[0]
     assert actor == 'ef-admin@x.test'
-    assert meta['assigned_to'] == 'hala@experts.test'
+    assert meta['assigned_to'] == 'hala@experts.test' and meta['assigned_name'] == 'أ. هالة سمير'
+    assert meta['title'] == fx.F1['title']                           # السجل بيعرض اسم الملف مش رقمه
     assert meta['amount'] == 500.0 and meta['currency'] == 'EGP' and meta['note'] == 'ن'
 
 
@@ -370,9 +371,10 @@ def test_resolve_forwards_action_and_note_for_a_consultation(ctx, plat):
     assert plat.seen[-1]['json'] == {'action': 'refund', 'note': 'ملاحظة'}
     (actor, _t, meta), = _audits('consultation.resolve', CID)
     assert actor == 'ef-admin@x.test'
-    assert meta == {'kind': 'consultation', 'amount': 750, 'currency': 'EGP', 'expert_amount': 600,
-                    'status': 'refunded', 'expert_email': 'amr@experts.test', 'action': 'refund',
-                    'note': 'ملاحظة'}
+    assert meta == {'title': 'مراجعة عقد شراكة', 'kind': 'consultation', 'amount': 750, 'currency': 'EGP',
+                    'expert_amount': 600, 'status': 'refunded', 'expert_email': 'amr@experts.test',
+                    'expert_name': 'أ. عمرو الشريف', 'action': 'refund', 'note': 'ملاحظة'}
+    assert r.get_json() == {'ok': True, 'status': 'refunded'}         # ولا بيانات العميل للمتصفح
 
 
 def test_second_click_reaches_the_platform_once_more_and_its_guard_answers(ctx, plat):
@@ -533,3 +535,62 @@ def test_writes_use_the_long_timeout_and_reads_the_short_one(ctx, plat):
         _call(ctx, method, path, body)
         t = plat.seen[-1]['timeout']
         assert (t >= 25) if method == 'POST' else (t == 12), (path, t)
+
+
+# ---------------------------------------------------------------- ٧) مراجعة الجولة ٦: رد ضاع · بيانات العميل
+
+@pytest.mark.parametrize('status', [500, 503])
+def test_platform_crash_after_a_money_write_is_no_reply_not_a_refusal(ctx, plat, status):
+    """المنصة وقعت بعد ما الفلوس ممكن تكون اتحرّكت (مثلًا `_audit` بعد الاسترداد) ⇒ «ما وصلناش رد» + سطر سجل،
+    مش «اترفض» والزرار يرجع يتضغط."""
+    path = '/api/bridge/expert-files/%s/refund' % FID
+    plat.forced[('POST', path)] = (status, None)
+    r = _call(ctx, 'POST', '/api/platform-expert-files/%s/refund' % FID, {'confirmed': True})
+    assert r.status_code == 502 and r.get_json()['no_reply'] is True
+    assert len(plat.seen) == 1
+    (_a, target, meta), = _audits('expert_file.no_reply')
+    assert target == FID and meta == {'attempt': 'refund'}
+    plat.forced[('POST', '/api/bridge/consultations/%s/resolve' % CID)] = (status, {'detail': 'Internal Server Error'})
+    r = _call(ctx, 'POST', '/api/platform-consultation-disputes/%s/resolve' % CID, {'action': 'refund', 'confirmed': True})
+    assert r.status_code == 502 and r.get_json()['no_reply'] is True
+    assert len(_audits('consultation.no_reply', CID)) == 1
+
+
+def test_not_configured_is_a_plain_refusal_not_no_reply(ctx, plat, monkeypatch):
+    """من غير سرّ مفيش نداء اتعمل أصلًا ⇒ رفض عادي (ولا سطر «ما وصلش رد»)."""
+    import app as appmod
+    monkeypatch.setattr(appmod, 'PLATFORM_METRICS_SECRET', '')
+    r = _call(ctx, 'POST', '/api/platform-expert-files/%s/refund' % FID, {'confirmed': True})
+    assert r.status_code == 503 and 'no_reply' not in r.get_json()
+    assert plat.seen == [] and _audits('expert_file.no_reply') == []
+
+
+def test_detail_reaches_the_browser_without_client_data(ctx, plat):
+    r = _call(ctx, 'GET', '/api/platform-expert-files/' + fx.D1['id'])
+    body = r.get_json()
+    assert sorted(body) == ['dispute', 'id', 'opinion', 'revision', 'status', 'title']
+    raw = r.get_data(as_text=True)
+    for leak in (fx.CLIENT_EMAILS['D1'], 'ريم عبد الله', 'pay-'):
+        assert leak not in raw, leak
+
+
+@pytest.mark.parametrize('method,path,body', [r for r in ROUTES if r[0] == 'POST'])
+def test_action_replies_carry_ok_and_status_only(ctx, plat, method, path, body):
+    if path.endswith('/reassign'):
+        path = path.replace(FID, fx.F5['id'])
+        body = {'expert_email': 'faisal@experts.test'}
+    if path.endswith('/resolve') and 'expert-files' in path:
+        path = path.replace(FID, fx.D1['id'])
+    r = _call(ctx, method, path, body)
+    assert r.status_code == 200, (path, r.get_json())
+    out = r.get_json()
+    assert sorted(out) == ['ok', 'status'] and out['ok'] is True and out['status']
+    assert '@clients.test' not in r.get_data(as_text=True)
+
+
+def test_consultation_disputes_list_hides_client_email_and_payment_id(ctx, plat):
+    r = _call(ctx, 'GET', '/api/platform-consultation-disputes')
+    rows = r.get_json()['consultations']
+    assert rows and all('member_email' not in c and 'payment_id' not in c for c in rows)
+    assert rows[1]['dispute_reason'] == fx.D2['dispute_reason']        # الباقي زي ما هو
+    assert '@clients.test' not in r.get_data(as_text=True)

@@ -145,8 +145,15 @@ def desktop(browser, h):
     shot(page, '04-pick-expert-desktop.png')
     page.click('#ep_go')                                  # توزيع فعلي ⇒ سطر في السجل
     page.wait_for_selector('#epModal', state='detached', timeout=15000)
-    page.wait_for_function("() => window.EP && EP.state.inbox==='ready'", timeout=15000)
+    page.wait_for_function("id => window.EP && EP.state.inbox==='ready' && INBOX.some(r => r.apiId === id && r.fyi)",
+                           arg=fx.F1['id'], timeout=15000)
     page.wait_for_timeout(400)
+    # ٠٤ب — بعد التوزيع: F1 خرج من البنود والعدّ، وفاضل سطر «للعلم» واحد
+    chip(page, 't:files')
+    scroll_to(page, '#filters')
+    shot(page, '04b-after-assign-fyi-desktop.png')
+    if page.evaluate("id => INBOX.filter(r => !r.fyi).some(r => r.apiId === id)", fx.F1['id']):
+        PROBLEMS.append('F1 بعد التوزيع لسه بند في الوارد')
     # ٠٥ — نقل ملف متأخر (F5) بشريط التحذير
     chip(page, 't:files')
     row_by_id(page, fx.F5['id'])
@@ -213,6 +220,13 @@ def desktop(browser, h):
     shot(page, '14-manual-refunded-disabled-desktop.png')
     if page.is_enabled('#drawer [data-a="dsp_ref"]'):
         PROBLEMS.append('D3: «للعميل — رجّع فلوسه» مش مقفول مع إن الفلوس رجعت يدوي')
+    # ١٤ب — «للخبير» بعد ما الفلوس رجعت يدوي: المنصة هي اللي هتدفع الأجر
+    page.click('#drawer [data-a="dsp_rel"]')
+    page.wait_for_selector('#mc_go')
+    shot(page, '14b-release-after-manual-desktop.png')
+    if 'الباقي' in page.inner_text('#epModal') or 'المنصة هتدفع' not in page.inner_text('#epModal'):
+        PROBLEMS.append('D3: تأكيد «للخبير» بعد الرجوع اليدوي لسه بيقول «الباقي للمنصة»')
+    page.click('#mc_x')
     # ١٥ — «الضمان والنزاعات» ← «النزاعات» بسطر التحويل
     page.evaluate("() => { go('escrow'); escTab='disputes'; viewEscrow(document.getElementById('view')); }")
     page.wait_for_selector('.ef-esc-ptr', timeout=15000)
@@ -267,6 +281,13 @@ def mobile(browser, h):
     page = open_inbox(ctx, h)
     scroll_to(page, '.opsq')
     shot(page, 'm01-queue-chips-mobile.png')
+    # ٠١ب — الضغط على عدّاد «ملفات لسه ما اتستلمتش» بينزل لحد الشرايح والصفوف (كان بيرجع لأول الصفحة)
+    page.click('.opsq[data-k="expert_files_waiting"]')
+    page.wait_for_timeout(400)
+    shot(page, 'm01b-opsq-lands-on-rows-mobile.png')
+    top = page.evaluate("() => document.getElementById('filters').getBoundingClientRect().top")
+    if not (0 <= top < 844 * 0.4):
+        PROBLEMS.append('الموبايل: بعد الضغط على العدّاد الشرايح مش قدّام العين (top=%s)' % top)
     chip(page, 't:files')
     scroll_to(page, '#filters')
     shot(page, 'm02-files-chip-mobile.png')

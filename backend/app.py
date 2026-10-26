@@ -2365,9 +2365,16 @@ def _ef_note(value, limit):
     return value.strip()[:limit] if isinstance(value, str) else ''
 
 
+_EF_NOT_CONFIGURED_AR = 'لم يتم ضبط الربط بعد'   # `_platform_proxy` من غير سرّ ⇒ ولا نداء اتعمل أصلًا
+
+
 def _ef_no_reply(resp):
-    """المنصة ما ردّتش (مهلة/اتصال وقع/البوابة اللي قدامها ما ردّتش): الفعل ممكن يكون اتنفّذ والرد ضاع."""
-    return isinstance(resp, tuple) and int(resp[1]) in (502, 504)
+    """المنصة ما ردّتش رد أكيد (مهلة · اتصال وقع · البوابة اللي قدامها ما ردّتش · وقعت في النص بـ٥٠٠/٥٠٣
+    بعد ما الفلوس ممكن تكون اتحرّكت): الفعل ممكن يكون اتنفّذ والرد ضاع ⇒ «ما وصلناش رد» + سطر سجل،
+    مش «اترفض» والزرار يرجع. (الضغطة التانية على فعل اتنفّذ المنصة بترد عليها ٤٠٩ — الفلوس مش بتتصرف مرتين.)"""
+    if not isinstance(resp, tuple) or int(resp[1]) not in (500, 502, 503, 504):
+        return False
+    return _proxy_json(resp).get('error') != _EF_NOT_CONFIGURED_AR
 
 
 def _ef_no_reply_resp(kind, target, attempt, action=None):
@@ -2381,9 +2388,29 @@ def _ef_no_reply_resp(kind, target, attempt, action=None):
 def _ef_meta(f, **extra):
     """سطر السجل بأرقام المنصة (رد الفعل نفسه) — مش اللي بعته المتصفح."""
     m = {k: f.get(k) for k in ('title', 'status', 'amount', 'currency', 'expert_amount',
-                                'assigned_to', 'expert_email') if f.get(k) is not None}
+                                'assigned_to', 'assigned_name', 'expert_email', 'expert_name')
+         if f.get(k) not in (None, '')}
     m.update({k: v for k, v in extra.items() if v not in (None, '')})
     return m
+
+
+# ⛔ بيانات العميل ما توصلش للمتصفح من غير لازمة: الجسر بيرجّع الملف كله (إيميل العميل واسمه كامل ·
+# الوقائع · المقابلة · رقم الدفع)، والشاشة محتاجة الرأيين بس. السجل بياخد أرقامه من رد المنصة هنا في
+# الخادم قبل ما الرد يتقصّ.
+_EF_DETAIL_KEYS = ('id', 'title', 'status', 'dispute', 'opinion', 'revision')
+_CONS_LIST_HIDDEN = ('member_email', 'payment_id')
+
+
+def _ef_detail_out(resp):
+    if not _resp_ok(resp):
+        return resp
+    f = _proxy_json(resp)
+    return jsonify({k: f.get(k) for k in _EF_DETAIL_KEYS})
+
+
+def _ef_done(f):
+    """رد فعل ناجح للمتصفح: نجح + الحالة الجديدة بس (الشاشة بتحدّث الوارد بعده)."""
+    return jsonify({'ok': True, 'status': f.get('status')})
 
 
 def _ef_bad_id(value):
@@ -2422,7 +2449,7 @@ def platform_expert_file_detail(file_id):
     """م٢ — الملف كله (الرأي الأصلي + تعديل الخبير للنزاع). ⛔ من غير بايتات المستندات (د١٣)."""
     if _ef_bad_id(file_id):
         return jsonify({'error': 'الملف ده مش موجود'}), 404
-    return _ef_bridge('GET', f'/api/bridge/expert-files/{file_id}')
+    return _ef_detail_out(_ef_bridge('GET', f'/api/bridge/expert-files/{file_id}'))
 
 
 @app.route('/api/platform-expert-files/<file_id>/assign', methods=['POST'])
@@ -2440,7 +2467,9 @@ def platform_expert_file_assign(file_id):
     resp = _ef_bridge('POST', f'/api/bridge/expert-files/{file_id}/assign',
                       json_body={'expert_email': email, 'note': note}, timeout=25)
     if _resp_ok(resp):
-        _audit('expert_file.assign', target=file_id, meta=_ef_meta(_proxy_json(resp), note=note))
+        f = _proxy_json(resp)
+        _audit('expert_file.assign', target=file_id, meta=_ef_meta(f, note=note))
+        return _ef_done(f)
     elif _ef_no_reply(resp):
         return _ef_no_reply_resp('expert_file', file_id, 'assign')
     return resp
@@ -2466,6 +2495,7 @@ def platform_expert_file_reassign(file_id):
         last = prev[-1] if prev and isinstance(prev[-1], dict) else {}
         _audit('expert_file.reassign', target=file_id,
                meta=_ef_meta(f, note=note, previous_expert=last.get('email')))
+        return _ef_done(f)
     elif _ef_no_reply(resp):
         return _ef_no_reply_resp('expert_file', file_id, 'reassign')
     return resp
@@ -2486,7 +2516,9 @@ def platform_expert_file_refund(file_id):
     resp = _ef_bridge('POST', f'/api/bridge/expert-files/{file_id}/refund',
                       json_body={'note': note}, timeout=25)
     if _resp_ok(resp):
-        _audit('expert_file.refund', target=file_id, meta=_ef_meta(_proxy_json(resp), note=note))
+        f = _proxy_json(resp)
+        _audit('expert_file.refund', target=file_id, meta=_ef_meta(f, note=note))
+        return _ef_done(f)
     elif _ef_no_reply(resp):
         return _ef_no_reply_resp('expert_file', file_id, 'refund')
     return resp
@@ -2510,8 +2542,9 @@ def platform_expert_file_resolve(file_id):
     resp = _ef_bridge('POST', f'/api/bridge/expert-files/{file_id}/resolve',
                       json_body={'action': action, 'note': note}, timeout=25)
     if _resp_ok(resp):
-        _audit('expert_file.resolve', target=file_id,
-               meta=_ef_meta(_proxy_json(resp), action=action, note=note))
+        f = _proxy_json(resp)
+        _audit('expert_file.resolve', target=file_id, meta=_ef_meta(f, action=action, note=note))
+        return _ef_done(f)
     elif _ef_no_reply(resp):
         return _ef_no_reply_resp('expert_file', file_id, 'resolve', action)
     return resp
@@ -2528,7 +2561,11 @@ def platform_consultation_disputes():
     if isinstance(resp, tuple) and int(resp[1]) == 404:
         return jsonify({'enabled': False, 'status': 'disputed', 'consultations': [], 'count': 0, 'total': 0})
     if _resp_ok(resp):
-        return jsonify({**_proxy_json(resp), 'enabled': True})
+        body = _proxy_json(resp)
+        rows = body.get('consultations') if isinstance(body.get('consultations'), list) else []
+        body['consultations'] = [{k: v for k, v in c.items() if k not in _CONS_LIST_HIDDEN}
+                                 for c in rows if isinstance(c, dict)]
+        return jsonify({**body, 'enabled': True})
     return resp
 
 
@@ -2550,12 +2587,14 @@ def platform_consultation_dispute_resolve(consultation_id):
                       json_body={'action': action, 'note': note}, timeout=25, errors=_CONS_ERRORS_AR)
     if _resp_ok(resp):
         c = _proxy_json(resp)
-        meta = {k: c.get(k) for k in ('kind', 'amount', 'currency', 'expert_amount', 'status', 'expert_email')
-                if c.get(k) is not None}
+        meta = {k: c.get(k) for k in ('title', 'kind', 'amount', 'currency', 'expert_amount', 'status',
+                                      'expert_email', 'expert_name')
+                if c.get(k) not in (None, '')}
         meta['action'] = action
         if note:
             meta['note'] = note
         _audit('consultation.resolve', target=consultation_id, meta=meta)
+        return _ef_done(c)
     elif _ef_no_reply(resp):
         return _ef_no_reply_resp('consultation', consultation_id, 'resolve', action)
     return resp
