@@ -431,6 +431,8 @@
       apiKind: "expert_file", apiId: f.id, efLane: lane, ef: f,
       out: out, from: "ملف للخبير", src: "doc", dest: "inbox",
       triage: (lane === "late" || (pre && hl <= 0)) ? "late" : "human",
+      // شارة الحالة على الصفّ بكلام الشغل نفسه (بدل «محوّل لبشري» العامة) — المتأخر بيفضل «متأخّر — عاجل».
+      triLabel: (lane === "late" || (pre && hl <= 0)) ? "" : (f.status === "assigned" ? "مستني الخبير يستلم" : "مستني توزيعك"),
       sla: sla, slaWarn: lane === "late" || hl <= 12 || !!f.assign_overdue,
       who: f.client_first_name || "عميل",
       sub: [f.title, f.law_label, f.tier_label].filter(Boolean).join(" · "),
@@ -449,7 +451,7 @@
     return {
       apiKind: "dispute", dsrc: "file", apiId: f.id, ef: f,
       out: "«عندي مشكلة» على ملف", from: "ملف للخبير", src: "scale", dest: "inbox",
-      triage: "human", sla: "الفلوس واقفة لحد قرارك · " + (relTime(d.at) || ""), slaWarn: false,
+      triage: "human", triLabel: "مستني حسمك", sla: "الفلوس واقفة لحد قرارك · " + (relTime(d.at) || ""), slaWarn: false,
       who: f.client_first_name || "عميل",
       sub: [f.title, f.expert_name ? "الخبير: " + f.expert_name : ""].filter(Boolean).join(" · "),
       sub2: (REASON_AR[d.reason] || "ما اتكتبش سبب") + (d.note ? " — " + d.note : ""),
@@ -468,7 +470,7 @@
     return {
       apiKind: "dispute", dsrc: "consultation", apiId: c.id, cons: c,
       out: "نزاع على " + KIND_AR(c.kind), from: "الاستشارات", src: "scale", dest: "inbox",
-      triage: "human", sla: "الفلوس واقفة لحد قرارك · " + (relTime(c.disputed_at) || ""), slaWarn: false,
+      triage: "human", triLabel: "مستني حسمك", sla: "الفلوس واقفة لحد قرارك · " + (relTime(c.disputed_at) || ""), slaWarn: false,
       who: c.client_first_name || "عميل",
       sub: [c.title, "الخبير: " + (c.expert_name || "—")].filter(Boolean).join(" · "),
       sub2: c.dispute_reason || "ما اتكتبش سبب",
@@ -1611,7 +1613,7 @@
               body: m.body || "", topic: m.topic || "", phone: m.phone || "",
             });
           });
-        }).catch(fail("الرسائل"))
+        }).catch(failUnless403("الرسائل"))   // الموظف ما بيقراش رسايل الموقع (أدمن بس) — ٤٠٣ مش «تعذّر»
       );
       // عملاء محتملون من الشات (best-effort — الجسر قد لا يوفّره بعد).
       jobs.push(

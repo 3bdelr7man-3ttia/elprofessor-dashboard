@@ -217,7 +217,14 @@ body{font-family:'IBM Plex Sans Arabic',sans-serif;background:var(--bg);color:va
 .cmp2 h4{font-family:Cairo;font-size:14px;font-weight:800;color:var(--navy);margin:0 0 8px}
 .cmp2 .ef-op{margin-bottom:10px}
 .modal .acts .btn{min-width:0}
-@media(max-width:760px){.cmp2{grid-template-columns:1fr}.modal .acts .btn{flex-basis:100%}.drawer .acts .btn{flex-basis:100%}}
+/* زرار تأكيد رجوع الفلوس: لون صريح (الـbtn-warn الباهت كان بيتقري «مقفول») */
+.btn-refund{background:var(--conflict);color:#fff;border:1px solid var(--conflict)}.btn-refund:hover{filter:brightness(.94)}
+#epModal .btn:disabled,.drawer .btn:disabled{opacity:.55;cursor:not-allowed}
+.scrim[data-busy] .mh button{visibility:hidden}
+.drawer .acts .btn.ef-full{flex-basis:100%}
+@media(max-width:760px){.cmp2{grid-template-columns:1fr}.modal .acts .btn{flex-basis:100%}.drawer .acts .btn{flex-basis:100%}
+  .row.inbox-row.ef-row .c:not(.c1){padding-top:0;padding-bottom:6px}.row.inbox-row.ef-row .c:last-child{padding-bottom:13px}
+  .row.inbox-row.ef-row .c:not(.c1) .amt{display:inline}.row.inbox-row.ef-row .c:not(.c1) .amtsub{display:inline;margin-inline-start:8px}}
 .flag-sus{display:inline-flex;align-items:center;gap:4px;background:var(--human-bg);color:var(--human);font-size:10.5px;font-weight:800;border-radius:999px;padding:2px 8px;margin-inline-start:6px;vertical-align:middle;cursor:help;white-space:nowrap}
 .drawer .empty{padding:48px 22px;text-align:center;color:var(--muted)}
 .drawer .empty .ic{width:40px;height:40px;margin:0 auto 12px;opacity:.5}
@@ -916,10 +923,10 @@ function renderInbox(){
     const mid=i.amountLabel
       ?`<div class="amt">${esc(i.amountLabel)}</div>${i.amountSub?`<div class="amtsub">${esc(i.amountSub)}</div>`:''}`
       :`<div class="destwrap"><span class="arrow">←</span><span class="dest" style="background:${m.bg};color:${m.c}">${svg(m.ic)}${m.label}</span></div>`;
-    el.insertAdjacentHTML('beforeend',`<div class="row inbox-row${selected===ri?' sel':''}" data-i="${ri}">
+    el.insertAdjacentHTML('beforeend',`<div class="row inbox-row${i.amountLabel?' ef-row':''}${selected===ri?' sel':''}" data-i="${ri}">
       <div class="c c1"><div class="src-ic">${svg(i.src)}</div><div><div class="out">${esc(i.out)}${lic}${msrc}${sus}</div><div class="from">من سطح: <b>${esc(i.from)}</b> · ${esc(i.who)}</div>${line2}${sub}${sub2}${bdg}</div></div>
       <div class="c">${mid}</div>
-      <div class="c"><span class="triage ${tr.cls}"><span class="d"></span>${tr.t}</span><div class="sla${i.slaWarn?' warn':''}">${svg('clock')}${i.sla}</div></div>
+      <div class="c"><span class="triage ${tr.cls}"><span class="d"></span>${esc(i.triLabel||tr.t)}</span><div class="sla${i.slaWarn?' warn':''}">${svg('clock')}${esc(i.sla)}</div></div>
     </div>`);});
   if(!items.length)el.innerHTML='<div style="padding:40px;text-align:center;color:var(--muted)">لا وارد مطابق.</div>';
   el.querySelectorAll('.row').forEach(r=>r.onclick=()=>{selected=+r.dataset.i;renderInbox();drawInbox();efDrawerIntoView();});
@@ -1145,7 +1152,7 @@ function efRefundModal(i){
       +'<br>الخطوة دي ما ينفعش ترجع فيها.',
     rows:[['المبلغ',money(f.amount)],['العملة',efCur(f.currency)+(f.currency?' ('+f.currency+')':'')],['هيروح لـ','محفظة '+client],['الملف',f.title||'—']],
     noteLabel:'ملاحظة لينا (اختياري)',
-    btn:'رجّع '+efM(f.amount,f.currency),btnCls:'btn-warn',busy:'بيرجع…',
+    btn:'رجّع '+efM(f.amount,f.currency),btnCls:'btn-refund',busy:'بيرجع…',
     run:note=>EP.expertFileRefund(i,note,efRefreshInbox)
   });
 }
@@ -1192,8 +1199,8 @@ function drawDispute(el,i){
   el.innerHTML=`<div class="dh" style="background:var(--conflict)"><div class="k">نزاع · ${esc(kindLabel)}</div><h3>${esc(r.title||i.out)}</h3></div><div class="db">
     ${strips}${fields}${ops}
     <div class="acts">
-      <button class="btn btn-primary" data-a="dsp_rel">${svg('check')}للخبير — حوّل أجره</button>
-      <button class="btn btn-human" data-a="dsp_ref"${manual?' disabled style="opacity:.5;cursor:not-allowed" title="الفلوس دي رجعت للعميل يدوي قبل كده"':''}>${svg('back')}للعميل — رجّع فلوسه</button>
+      <button class="btn btn-primary ef-full" data-a="dsp_rel">${svg('check')}للخبير — حوّل أجره</button>
+      <button class="btn btn-human ef-full" data-a="dsp_ref"${manual?' disabled style="opacity:.5;cursor:not-allowed" title="الفلوس دي رجعت للعميل يدوي قبل كده"':''}>${svg('back')}للعميل — رجّع فلوسه</button>
       <button class="btn btn-ghost" data-a="dsp_close">إغلاق</button>
     </div></div>`;
   el.querySelectorAll('[data-a]').forEach(b=>b.onclick=()=>{
@@ -1257,7 +1264,7 @@ function efResolveModal(i,action){
     lead:`هترجّع <b>${esc(efM(r.amount,r.currency))}</b> كاملين لمحفظة <b>${esc(client)}</b> على المنصة، و<b>${esc(expert)}</b> مش هياخد أجر. الخطوة دي ما ينفعش ترجع فيها.`,
     rows:[['المبلغ',money(r.amount)],['العملة',efCur(r.currency)+(r.currency?' ('+r.currency+')':'')],['هيروح لـ','محفظة '+client],[what,r.title||'—']],
     noteLabel:noteLabel,
-    btn:'رجّع '+efM(r.amount,r.currency)+' لـ'+client,btnCls:'btn-warn',busy:'بيرجع…',run:run
+    btn:'رجّع '+efM(r.amount,r.currency)+' لـ'+client,btnCls:'btn-refund',busy:'بيرجع…',run:run
   });
 }
 
