@@ -2320,6 +2320,247 @@ def platform_verify_reassign(req_id):
                            json_body={'expert_email': body.get('expert_email') or ''})
 
 
+# --------------------------------------------------------------------------- «ملف للخبير» (الجولة ٦)
+# docs/EXPERT-FILES-DASHBOARD-SPEC.md §٣. ثمانية مسارات رفيعة فوق `_platform_proxy` — المؤسس بيوزّع
+# ويحسم، والمنصة هي اللي بتحرّك الفلوس بدوالّها المحروسة (ولا قرار مالي جديد هنا).
+#   * كلها `admin` بس (د٥): الصفوف فيها مبالغ وأجر الخبير وأسماء العملاء والطرف التاني.
+#   * التحقق المحلي قبل أي نداء للمنصة، ورفضه ما يتسجّلش.
+#   * فعل فلوس (رجوع/حسم) لازم `confirmed: true` من نافذة التأكيد (د١٠) — نداء من غير النافذة يترفض.
+#   * ⛔ ولا إعادة محاولة على كتابة: رد ضاع = رسالة «ما وصلناش رد» + سطر سجل (د١١)، والمؤسس يحدّث ويشوف.
+#   * السجل بعد النجاح بس، وأرقامه من رد المنصة مش من المتصفح (§٩).
+_EF_ID_RE = re.compile(r'[A-Za-z0-9_-]{1,64}')
+_EF_LIST_STATUSES = ('waiting', 'late', 'disputed')
+_EF_ACTIONS = ('release', 'refund')
+EF_OFF_AR = 'خدمة «ملف للخبير» مقفولة على المنصة دلوقتي'
+EF_NO_REPLY_AR = 'ما وصلناش رد من المنصة — حدّث الصفحة وشوف حصل إيه قبل ما تضغط تاني'
+# رسايل المنصة الإنجليزي (resolve_disputed + حرّاس الجسر) ⇒ عربي بسيط. العربي اللي جاي من المنصة
+# بيعدّي زي ما هو. ⛔ ناقص في جسر المنصة (§١٤ بند ٤): الترجمة مكانها هناك، ودي مؤقتة.
+_EF_ERRORS_AR = {
+    'Not Found': EF_OFF_AR,
+    'Only a disputed consultation can be resolved': 'النزاع ده اتحسم قبل كده — حدّث الصفحة',
+    'Already refunded manually': 'الفلوس دي رجعت للعميل يدوي قبل كده',
+    'Already refunded by the payment gateway': 'الفلوس دي رجعت للعميل من بوابة الدفع قبل كده',
+    'Consultation not found': 'النزاع ده مش موجود — حدّث الصفحة',
+    'action must be release or refund': 'اختار: للخبير ولا للعميل',
+    'Database not available': 'المنصة مش متاحة دلوقتي — جرّب بعد شوية',
+    'unauthorized': 'الداشبورد مش قادر يكلّم المنصة دلوقتي',
+}
+# جسر نزاعات الاستشارات مش ورا مفتاح «ملف للخبير» — ٤٠٤ عنده معناه «لسه مش منشور».
+_CONS_ERRORS_AR = dict(_EF_ERRORS_AR, **{'Not Found': 'حسم النزاعات من هنا لسه مش متاح على المنصة'})
+
+
+def _ef_bridge(method, path, params=None, json_body=None, timeout=12, errors=None):
+    """`_platform_proxy` + ترجمة رسايل الرفض الإنجليزي (نفس الكود). نداء واحد — ⛔ ولا إعادة محاولة."""
+    resp = _platform_proxy(method, path, params=params, json_body=json_body, timeout=timeout)
+    if isinstance(resp, tuple):
+        msg = _proxy_json(resp).get('error')
+        table = _EF_ERRORS_AR if errors is None else errors
+        if isinstance(msg, str) and msg in table:
+            return jsonify({'error': table[msg]}), resp[1]
+    return resp
+
+
+def _ef_note(value, limit):
+    """الملاحظة نص بس (أي نوع تاني ⇒ ""), متقصوصة لحدّ جسم المنصة نفسه."""
+    return value.strip()[:limit] if isinstance(value, str) else ''
+
+
+def _ef_no_reply(resp):
+    """المنصة ما ردّتش (مهلة/اتصال وقع/البوابة اللي قدامها ما ردّتش): الفعل ممكن يكون اتنفّذ والرد ضاع."""
+    return isinstance(resp, tuple) and int(resp[1]) in (502, 504)
+
+
+def _ef_no_reply_resp(kind, target, attempt, action=None):
+    meta = {'attempt': attempt}
+    if action:
+        meta['action'] = action
+    _audit(f'{kind}.no_reply', target=target, meta=meta)
+    return jsonify({'error': EF_NO_REPLY_AR, 'no_reply': True}), 502
+
+
+def _ef_meta(f, **extra):
+    """سطر السجل بأرقام المنصة (رد الفعل نفسه) — مش اللي بعته المتصفح."""
+    m = {k: f.get(k) for k in ('title', 'status', 'amount', 'currency', 'expert_amount',
+                                'assigned_to', 'expert_email') if f.get(k) is not None}
+    m.update({k: v for k, v in extra.items() if v not in (None, '')})
+    return m
+
+
+def _ef_bad_id(value):
+    return not _EF_ID_RE.fullmatch(value or '')
+
+
+def _ef_expert_email(body):
+    email = body.get('expert_email')
+    email = email.strip().lower() if isinstance(email, str) else ''
+    if len(email) > 200 or not _COURSE_EMAIL_RE.match(email):
+        return None
+    return email
+
+
+@app.route('/api/platform-expert-files', methods=['GET'])
+@token_required
+@roles_required('admin')   # مبالغ + أجر الخبير + الطرف التاني + وقائع — فلوس، زي ops-queue
+def platform_expert_files():
+    """م١ — «ملفات مستنية خبير» / «آراء متأخرة» / «نزاعات الملفات». الحمولة بالحرف + `enabled`.
+    ٤٠٤ (المفتاح مقفول أو الجسر مش منشور) ⇒ ٢٠٠ فاضي `enabled: false` — مش عطل (د٩)."""
+    s = (request.args.get('status') or 'waiting').strip().lower()
+    if s not in _EF_LIST_STATUSES:
+        s = 'waiting'
+    resp = _ef_bridge('GET', '/api/bridge/expert-files', params={'status': s})
+    if isinstance(resp, tuple) and int(resp[1]) == 404:
+        return jsonify({'enabled': False, 'status': s, 'files': [], 'count': 0, 'total': 0})
+    if _resp_ok(resp):
+        return jsonify({**_proxy_json(resp), 'enabled': True})
+    return resp
+
+
+@app.route('/api/platform-expert-files/<file_id>', methods=['GET'])
+@token_required
+@roles_required('admin')
+def platform_expert_file_detail(file_id):
+    """م٢ — الملف كله (الرأي الأصلي + تعديل الخبير للنزاع). ⛔ من غير بايتات المستندات (د١٣)."""
+    if _ef_bad_id(file_id):
+        return jsonify({'error': 'الملف ده مش موجود'}), 404
+    return _ef_bridge('GET', f'/api/bridge/expert-files/{file_id}')
+
+
+@app.route('/api/platform-expert-files/<file_id>/assign', methods=['POST'])
+@token_required
+@roles_required('admin')
+def platform_expert_file_assign(file_id):
+    """م٣ — «ابعته لـ…» قبل الاستلام (وتغيير الخبير المختار قبل ما يستلم — د٢). ⛔ مفيش فلوس بتتحرك."""
+    if _ef_bad_id(file_id):
+        return jsonify({'error': 'الملف ده مش موجود'}), 404
+    body = request.get_json(silent=True) or {}
+    email = _ef_expert_email(body)
+    if not email:
+        return jsonify({'error': 'اختار خبير الأول'}), 400
+    note = _ef_note(body.get('note'), 1000)
+    resp = _ef_bridge('POST', f'/api/bridge/expert-files/{file_id}/assign',
+                      json_body={'expert_email': email, 'note': note}, timeout=25)
+    if _resp_ok(resp):
+        _audit('expert_file.assign', target=file_id, meta=_ef_meta(_proxy_json(resp), note=note))
+    elif _ef_no_reply(resp):
+        return _ef_no_reply_resp('expert_file', file_id, 'assign')
+    return resp
+
+
+@app.route('/api/platform-expert-files/<file_id>/reassign', methods=['POST'])
+@token_required
+@roles_required('admin')
+def platform_expert_file_reassign(file_id):
+    """م٤ — نقل ملف بعد الاستلام لخبير تاني (الفلوس بتفضل محجوزة على المنصة، والجديد قدامه ٤٨ ساعة)."""
+    if _ef_bad_id(file_id):
+        return jsonify({'error': 'الملف ده مش موجود'}), 404
+    body = request.get_json(silent=True) or {}
+    email = _ef_expert_email(body)
+    if not email:
+        return jsonify({'error': 'اختار خبير الأول'}), 400
+    note = _ef_note(body.get('note'), 1000)
+    resp = _ef_bridge('POST', f'/api/bridge/expert-files/{file_id}/reassign',
+                      json_body={'expert_email': email, 'note': note}, timeout=25)
+    if _resp_ok(resp):
+        f = _proxy_json(resp)
+        prev = f.get('previous_experts') if isinstance(f.get('previous_experts'), list) else []
+        last = prev[-1] if prev and isinstance(prev[-1], dict) else {}
+        _audit('expert_file.reassign', target=file_id,
+               meta=_ef_meta(f, note=note, previous_expert=last.get('email')))
+    elif _ef_no_reply(resp):
+        return _ef_no_reply_resp('expert_file', file_id, 'reassign')
+    return resp
+
+
+@app.route('/api/platform-expert-files/<file_id>/refund', methods=['POST'])
+@token_required
+@roles_required('admin')
+def platform_expert_file_refund(file_id):
+    """م٥ — «رجّع الفلوس» قبل التسليم: المبلغ كله لمحفظة العميل على المنصة. محتاج تأكيد الشاشة."""
+    if _ef_bad_id(file_id):
+        return jsonify({'error': 'الملف ده مش موجود'}), 404
+    body = request.get_json(silent=True) or {}
+    if body.get('confirmed') is not True:
+        return jsonify({'error': 'لازم تأكّد الأول من الشاشة'}), 400
+    note = _ef_note(body.get('note'), 1000)
+    # ⛔ `confirmed` ولا أي مبلغ من المتصفح بيتبعت للمنصة — المنصة بتسترد اللي على الملف نفسه.
+    resp = _ef_bridge('POST', f'/api/bridge/expert-files/{file_id}/refund',
+                      json_body={'note': note}, timeout=25)
+    if _resp_ok(resp):
+        _audit('expert_file.refund', target=file_id, meta=_ef_meta(_proxy_json(resp), note=note))
+    elif _ef_no_reply(resp):
+        return _ef_no_reply_resp('expert_file', file_id, 'refund')
+    return resp
+
+
+@app.route('/api/platform-expert-files/<file_id>/resolve', methods=['POST'])
+@token_required
+@roles_required('admin')
+def platform_expert_file_resolve(file_id):
+    """م٦ — حسم «عندي مشكلة» على ملف: للخبير (release) أو للعميل (refund). الفلوس بس —
+    أنهي رأي يفضل الرسمي قرار مفتوح عند المؤسس (د٦)، والجسر نفسه ما بيلمسش الرأي."""
+    if _ef_bad_id(file_id):
+        return jsonify({'error': 'الملف ده مش موجود'}), 404
+    body = request.get_json(silent=True) or {}
+    action = body.get('action')
+    if action not in _EF_ACTIONS:
+        return jsonify({'error': 'اختار: للخبير ولا للعميل'}), 400
+    if body.get('confirmed') is not True:
+        return jsonify({'error': 'لازم تأكّد الأول من الشاشة'}), 400
+    note = _ef_note(body.get('note'), 2000)
+    resp = _ef_bridge('POST', f'/api/bridge/expert-files/{file_id}/resolve',
+                      json_body={'action': action, 'note': note}, timeout=25)
+    if _resp_ok(resp):
+        _audit('expert_file.resolve', target=file_id,
+               meta=_ef_meta(_proxy_json(resp), action=action, note=note))
+    elif _ef_no_reply(resp):
+        return _ef_no_reply_resp('expert_file', file_id, 'resolve', action)
+    return resp
+
+
+@app.route('/api/platform-consultation-disputes', methods=['GET'])
+@token_required
+@roles_required('admin')
+def platform_consultation_disputes():
+    """م٧ — نزاعات الاستشارات العادية («عندي مشكلة» على استشارة سوق/جلسة/توثيق). الجسر بيقبل
+    `disputed` بس. ٤٠٤ = الجسر لسه مش منشور ⇒ فاضي `enabled: false` (د٩)."""
+    resp = _ef_bridge('GET', '/api/bridge/consultations', params={'status': 'disputed'},
+                      errors=_CONS_ERRORS_AR)
+    if isinstance(resp, tuple) and int(resp[1]) == 404:
+        return jsonify({'enabled': False, 'status': 'disputed', 'consultations': [], 'count': 0, 'total': 0})
+    if _resp_ok(resp):
+        return jsonify({**_proxy_json(resp), 'enabled': True})
+    return resp
+
+
+@app.route('/api/platform-consultation-disputes/<consultation_id>/resolve', methods=['POST'])
+@token_required
+@roles_required('admin')
+def platform_consultation_dispute_resolve(consultation_id):
+    """م٨ — حسم نزاع استشارة: نفس `resolve_disputed` بتاعة الأدمن على المنصة (محروسة: مرة واحدة)."""
+    if _ef_bad_id(consultation_id):
+        return jsonify({'error': 'النزاع ده مش موجود'}), 404
+    body = request.get_json(silent=True) or {}
+    action = body.get('action')
+    if action not in _EF_ACTIONS:
+        return jsonify({'error': 'اختار: للخبير ولا للعميل'}), 400
+    if body.get('confirmed') is not True:
+        return jsonify({'error': 'لازم تأكّد الأول من الشاشة'}), 400
+    note = _ef_note(body.get('note'), 2000)
+    resp = _ef_bridge('POST', f'/api/bridge/consultations/{consultation_id}/resolve',
+                      json_body={'action': action, 'note': note}, timeout=25, errors=_CONS_ERRORS_AR)
+    if _resp_ok(resp):
+        c = _proxy_json(resp)
+        meta = {k: c.get(k) for k in ('kind', 'amount', 'currency', 'expert_amount', 'status', 'expert_email')
+                if c.get(k) is not None}
+        meta['action'] = action
+        if note:
+            meta['note'] = note
+        _audit('consultation.resolve', target=consultation_id, meta=meta)
+    elif _ef_no_reply(resp):
+        return _ef_no_reply_resp('consultation', consultation_id, 'resolve', action)
+    return resp
+
+
 @app.route('/api/platform-courses/<slug>/reservations', methods=['GET'])
 @token_required
 @roles_required('admin', 'employee')
