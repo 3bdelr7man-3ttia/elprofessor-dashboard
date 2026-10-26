@@ -222,9 +222,6 @@ body{font-family:'IBM Plex Sans Arabic',sans-serif;background:var(--bg);color:va
 #epModal .btn:disabled,.drawer .btn:disabled{opacity:.55;cursor:not-allowed}
 .scrim[data-busy] .mh button{visibility:hidden}
 .drawer .acts .btn.ef-full{flex-basis:100%}
-@media(max-width:760px){.cmp2{grid-template-columns:1fr}.modal .acts .btn{flex-basis:100%}.drawer .acts .btn{flex-basis:100%}
-  .row.inbox-row.ef-row .c:not(.c1){padding-top:0;padding-bottom:6px}.row.inbox-row.ef-row .c:last-child{padding-bottom:13px}
-  .row.inbox-row.ef-row .c:not(.c1) .amt{display:inline}.row.inbox-row.ef-row .c:not(.c1) .amtsub{display:inline;margin-inline-start:8px}}
 .flag-sus{display:inline-flex;align-items:center;gap:4px;background:var(--human-bg);color:var(--human);font-size:10.5px;font-weight:800;border-radius:999px;padding:2px 8px;margin-inline-start:6px;vertical-align:middle;cursor:help;white-space:nowrap}
 .drawer .empty{padding:48px 22px;text-align:center;color:var(--muted)}
 .drawer .empty .ic{width:40px;height:40px;margin:0 auto 12px;opacity:.5}
@@ -296,6 +293,10 @@ body{font-family:'IBM Plex Sans Arabic',sans-serif;background:var(--bg);color:va
   .rail .copin .item{padding:5px 11px}
   .rail .me{padding:8px 15px}}
 .railscrim{display:none;position:fixed;inset:0;background:rgba(15,23,42,.5);z-index:55}
+/* «ملف للخبير» (الجولة ٦) على الموبايل — بعد قاعدة `.menu-btn` عمدًا (أول ميديا ٧٦٠ لازم تفضل هي اللي بتفتح الزرار). */
+@media(max-width:760px){.cmp2{grid-template-columns:1fr}.modal .acts .btn{flex-basis:100%}.drawer .acts .btn{flex-basis:100%}
+  .row.inbox-row.ef-row .c:not(.c1){padding-top:0;padding-bottom:6px}.row.inbox-row.ef-row .c:last-child{padding-bottom:13px}
+  .row.inbox-row.ef-row .c:not(.c1) .amt{display:inline}.row.inbox-row.ef-row .c:not(.c1) .amtsub{display:inline;margin-inline-start:8px}}
 .railscrim.on{display:block}
 /* ===== AUTH / LOGIN OVERLAY (added by dashboard-api wiring) ===== */
 .ep-login{position:fixed;inset:0;z-index:200;display:grid;place-items:center;padding:22px;background:radial-gradient(1200px 600px at 70% -10%,rgba(158,43,78,.20),transparent 60%),linear-gradient(160deg,var(--rail) 0%,var(--navy-2) 100%)}
