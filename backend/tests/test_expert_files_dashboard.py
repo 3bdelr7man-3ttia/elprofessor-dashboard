@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""«ملف للخبير» في الداشبورد — المسارات التمانية فوق جسر المنصة (الجولة ٦).
+"""«ملف للخبير» في الداشبورد — المسارات فوق جسر المنصة (الجولة ٦، ومتحدّثة لأشكال الجولة ٧).
 
 Run:  cd backend && python3 -m pytest -q tests/test_expert_files_dashboard.py
 
@@ -12,6 +12,8 @@ Run:  cd backend && python3 -m pytest -q tests/test_expert_files_dashboard.py
   ٣. الفعل مرة واحدة: نداء واحد للمنصة لكل ضغطة — ولا إعادة محاولة حتى لو الرد ضاع.
   ٤. أخطاء المنصة بتوصل للمؤسس بالعربي (الإنجليزي بيتترجم، والعربي بيعدّي زي ما هو).
   ٥. السجل: بعد النجاح بس، بإيميل اللي عمل الفعل، وبأرقام المنصة مش المتصفح.
+  ٦. الجولة ٧: كل كتابة بتبعت `by` = إيميل الأدمن (من التوكن) · «رجّع الفلوس» لملف اتدفع وما وصلش ·
+     القوايم الجديدة (`blocked` · `unactivated`) · الخدمة مقفولة والجسر شغّال.
 """
 import copy
 import datetime
@@ -34,6 +36,8 @@ SECRET = 'test-metrics-secret'
 NON_ADMIN_ROLES = ['employee', 'trainer', 'investor', 'viewer', 'pending']
 FID = fx.F1['id']
 CID = fx.D2['id']
+UCID = fx.U1['consultation_id']
+ADMIN = 'ef-admin@x.test'
 
 ROUTES = [
     ('GET', '/api/platform-expert-files', None),
@@ -41,6 +45,7 @@ ROUTES = [
     ('POST', '/api/platform-expert-files/%s/assign' % FID, {'expert_email': 'hala@experts.test'}),
     ('POST', '/api/platform-expert-files/%s/reassign' % FID, {'expert_email': 'hala@experts.test'}),
     ('POST', '/api/platform-expert-files/%s/refund' % FID, {'confirmed': True}),
+    ('POST', '/api/platform-expert-files/unactivated/%s/refund' % UCID, {'confirmed': True}),
     ('POST', '/api/platform-expert-files/%s/resolve' % FID, {'action': 'release', 'confirmed': True}),
     ('GET', '/api/platform-consultation-disputes', None),
     ('POST', '/api/platform-consultation-disputes/%s/resolve' % CID, {'action': 'refund', 'confirmed': True}),
@@ -163,6 +168,9 @@ def test_list_forwards_status_and_defaults_to_waiting(ctx, plat):
     _call(ctx, 'GET', '/api/platform-expert-files?status=late')
     assert plat.seen[-1]['url'] == PLATFORM + '/api/bridge/expert-files'
     assert plat.seen[-1]['params'] == {'status': 'late'}
+    for s_ in ('blocked', 'unactivated'):                        # الجولة ٧ (ب٢ · ب٩)
+        _call(ctx, 'GET', '/api/platform-expert-files?status=' + s_)
+        assert plat.seen[-1]['params'] == {'status': s_}
     for q in ('', '?status=', '?status=all', '?status=xyz', '?status=followup'):
         _call(ctx, 'GET', '/api/platform-expert-files' + q)
         assert plat.seen[-1]['params'] == {'status': 'waiting'}, q
@@ -174,15 +182,15 @@ def test_list_payload_is_verbatim_plus_enabled(ctx, plat):
     r = _call(ctx, 'GET', '/api/platform-expert-files?status=waiting')
     assert r.status_code == 200
     body = r.get_json()
-    expected = fx.list_payload('waiting', [fx.F2, fx.F4, fx.F3, fx.F1])
+    expected = fx.list_payload('waiting', [fx.F7, fx.F2, fx.F4, fx.F3, fx.F1])
     assert body.pop('enabled') is True
     assert body == expected                       # ولا مفتاح بيتشال ولا بيتحسب
 
 
 @pytest.mark.parametrize('path,key', [('/api/platform-expert-files?status=late', 'files'),
                                       ('/api/platform-consultation-disputes', 'consultations')])
-def test_feature_off_404_is_enabled_false_not_a_failure(ctx, plat, path, key):
-    plat.ef.enabled = False
+def test_bridge_not_deployed_404_is_enabled_false_not_a_failure(ctx, plat, path, key):
+    plat.ef.deployed = False
     plat.ef.cons_enabled = False
     r = _call(ctx, 'GET', path)
     assert r.status_code == 200
@@ -210,12 +218,12 @@ def test_consultation_disputes_list_asks_for_disputed_only(ctx, plat):
     assert [c['id'] for c in body['consultations']] == [fx.D1_CONS['id'], fx.D2['id'], fx.D3['id']]
 
 
-def test_detail_not_found_feature_off_message(ctx, plat):
-    plat.ef.enabled = False
+def test_detail_bridge_not_deployed_message(ctx, plat):
+    plat.ef.deployed = False
     r = _call(ctx, 'GET', '/api/platform-expert-files/' + FID)
     assert r.status_code == 404
-    assert r.get_json() == {'error': 'خدمة «ملف للخبير» مقفولة على المنصة دلوقتي'}
-    plat.ef.enabled = True
+    assert r.get_json() == {'error': 'ملفات «ملف للخبير» مش واصلة للداشبورد لسه'}
+    plat.ef.deployed = True
     r = _call(ctx, 'GET', '/api/platform-expert-files/no-such-file')
     assert r.status_code == 404
     assert r.get_json() == {'error': 'الملف ده مش موجود'}
@@ -266,7 +274,7 @@ def test_assign_sends_exactly_the_bridge_model_and_audits(ctx, plat):
     sent = plat.seen[-1]
     assert sent['method'] == 'POST'
     assert sent['url'] == PLATFORM + '/api/bridge/expert-files/%s/assign' % FID
-    assert sent['json'] == {'expert_email': 'hala@experts.test', 'note': 'ن'}   # ولا مفتاح زيادة
+    assert sent['json'] == {'expert_email': 'hala@experts.test', 'note': 'ن', 'by': ADMIN}   # ولا مفتاح زيادة
     assert len(plat.seen) == 1                                                     # الفعل مرة واحدة
     rows = _audits('expert_file.assign', FID)
     assert len(rows) == 1
@@ -282,7 +290,7 @@ def test_reassign_goes_to_reassign_and_records_previous_expert(ctx, plat):
     r = _call(ctx, 'POST', '/api/platform-expert-files/%s/reassign' % fid, {'expert_email': 'faisal@experts.test'})
     assert r.status_code == 200, r.get_json()
     assert plat.seen[-1]['url'] == PLATFORM + '/api/bridge/expert-files/%s/reassign' % fid
-    assert plat.seen[-1]['json'] == {'expert_email': 'faisal@experts.test', 'note': ''}
+    assert plat.seen[-1]['json'] == {'expert_email': 'faisal@experts.test', 'note': '', 'by': ADMIN}
     (actor, _t, meta), = _audits('expert_file.reassign', fid)
     assert meta['previous_expert'] == 'sami@experts.test'
     assert meta['assigned_to'] == 'faisal@experts.test'
@@ -316,7 +324,7 @@ def test_refund_forwards_note_only_and_audits_platform_amounts(ctx, plat):
     r = _call(ctx, 'POST', '/api/platform-expert-files/%s/refund' % fid,
               {'confirmed': True, 'note': 'الخبير ما استلمش', 'amount': 1, 'currency': 'USD'})
     assert r.status_code == 200, r.get_json()
-    assert plat.seen[-1]['json'] == {'note': 'الخبير ما استلمش'}     # ⛔ ولا confirmed ولا مبلغ
+    assert plat.seen[-1]['json'] == {'note': 'الخبير ما استلمش', 'by': ADMIN}   # ⛔ ولا confirmed ولا مبلغ
     assert len(plat.seen) == 1
     (actor, _t, meta), = _audits('expert_file.refund', fid)
     assert actor == 'ef-admin@x.test'
@@ -326,10 +334,10 @@ def test_refund_forwards_note_only_and_audits_platform_amounts(ctx, plat):
 
 def test_note_is_text_only_and_clipped_to_the_bridge_limit(ctx, plat):
     _call(ctx, 'POST', '/api/platform-expert-files/%s/refund' % FID, {'confirmed': True, 'note': 'ن' * 1500})
-    assert plat.seen[-1]['json'] == {'note': 'ن' * 1000}
+    assert plat.seen[-1]['json'] == {'note': 'ن' * 1000, 'by': ADMIN}
     _call(ctx, 'POST', '/api/platform-expert-files/%s/resolve' % fx.D1['id'],
           {'action': 'refund', 'confirmed': True, 'note': {'x': 1}})
-    assert plat.seen[-1]['json'] == {'action': 'refund', 'note': ''}
+    assert plat.seen[-1]['json'] == {'action': 'refund', 'note': '', 'by': ADMIN}
 
 
 @pytest.mark.parametrize('action', [None, '', 'split', 'RELEASE', 'release '])
@@ -357,7 +365,7 @@ def test_resolve_forwards_action_and_note_for_a_file(ctx, plat):
               {'action': 'release', 'confirmed': True, 'note': 'الخبير عدّل والتعديل كفاية'})
     assert r.status_code == 200, r.get_json()
     assert plat.seen[-1]['url'] == PLATFORM + '/api/bridge/expert-files/%s/resolve' % fid
-    assert plat.seen[-1]['json'] == {'action': 'release', 'note': 'الخبير عدّل والتعديل كفاية'}
+    assert plat.seen[-1]['json'] == {'action': 'release', 'note': 'الخبير عدّل والتعديل كفاية', 'by': ADMIN}
     assert plat.seen[-1]['timeout'] >= 25
     (_a, _t, meta), = _audits('expert_file.resolve', fid)
     assert meta['action'] == 'release' and meta['expert_amount'] == 300.0 and meta['status'] == 'closed'
@@ -368,11 +376,11 @@ def test_resolve_forwards_action_and_note_for_a_consultation(ctx, plat):
               {'action': 'refund', 'confirmed': True, 'note': 'ملاحظة'})
     assert r.status_code == 200, r.get_json()
     assert plat.seen[-1]['url'] == PLATFORM + '/api/bridge/consultations/%s/resolve' % CID
-    assert plat.seen[-1]['json'] == {'action': 'refund', 'note': 'ملاحظة'}
+    assert plat.seen[-1]['json'] == {'action': 'refund', 'note': 'ملاحظة', 'by': ADMIN}
     (actor, _t, meta), = _audits('consultation.resolve', CID)
     assert actor == 'ef-admin@x.test'
     assert meta == {'title': 'مراجعة عقد شراكة', 'kind': 'consultation', 'amount': 750, 'currency': 'EGP',
-                    'expert_amount': 600, 'status': 'refunded', 'expert_email': 'amr@experts.test',
+                    'expert_amount': 600, 'platform_fee': 150, 'status': 'refunded', 'expert_email': 'amr@experts.test',
                     'expert_name': 'أ. عمرو الشريف', 'action': 'refund', 'note': 'ملاحظة'}
     assert r.get_json() == {'ok': True, 'status': 'refunded'}         # ولا بيانات العميل للمتصفح
 
@@ -391,20 +399,24 @@ def test_second_click_reaches_the_platform_once_more_and_its_guard_answers(ctx, 
 
 # ---------------------------------------------------------------- ٥) أخطاء المنصة بالعربي
 
-@pytest.mark.parametrize('detail,arabic', [
-    ('Already refunded by the payment gateway', 'الفلوس دي رجعت للعميل من بوابة الدفع قبل كده'),
-    ('Already refunded manually', 'الفلوس دي رجعت للعميل يدوي قبل كده'),
-    ('Only a disputed consultation can be resolved', 'النزاع ده اتحسم قبل كده — حدّث الصفحة'),
-])
-def test_english_resolve_errors_reach_the_founder_in_arabic(ctx, plat, detail, arabic):
+@pytest.mark.parametrize('detail', [fx.E_RESOLVE_GATEWAY, fx.E_RESOLVE_MANUAL, fx.E_RESOLVE_NOT_DISPUTED,
+                                    fx.E_RESOLVE_MISSING])
+def test_resolve_messages_now_come_in_arabic_and_pass_verbatim(ctx, plat, detail):
+    """الجولة ٧ (ب٤): رسايل `resolve_disputed` بقت عربي على المنصة — بتعدّي زي ما هي (الترجمة هنا اتشالت)."""
     fid = fx.D1['id']
     plat.forced[('POST', '/api/bridge/expert-files/%s/resolve' % fid)] = (409, {'detail': detail})
     r = _call(ctx, 'POST', '/api/platform-expert-files/%s/resolve' % fid, {'action': 'refund', 'confirmed': True})
     assert r.status_code == 409
-    assert r.get_json() == {'error': arabic}
+    assert r.get_json() == {'error': detail}
     plat.forced[('POST', '/api/bridge/consultations/%s/resolve' % CID)] = (409, {'detail': detail})
     r = _call(ctx, 'POST', '/api/platform-consultation-disputes/%s/resolve' % CID, {'action': 'refund', 'confirmed': True})
-    assert r.get_json() == {'error': arabic}
+    assert r.get_json() == {'error': detail}
+
+
+def test_the_english_translation_table_kept_only_the_bridge_guards():
+    """اللي فاضل إنجليزي على المنصة حرّاس الجسر بس (`_guard` · ٤٠٤ الإطار) — ترجمة الحسم اتشالت."""
+    import app as appmod
+    assert sorted(appmod._EF_ERRORS_AR) == ['Database not available', 'Not Found', 'unauthorized']
 
 
 def test_manual_refund_guard_on_a_consultation_is_arabic(ctx, plat):
@@ -438,11 +450,11 @@ def test_pydantic_list_detail_is_not_object_object(ctx, plat):
     assert r.get_json() == {'error': 'المنصة رفضت البيانات المرسلة'}
 
 
-def test_feature_switched_off_mid_action_says_so(ctx, plat):
-    plat.ef.enabled = False
+def test_bridge_missing_mid_action_says_so(ctx, plat):
+    plat.ef.deployed = False
     r = _call(ctx, 'POST', '/api/platform-expert-files/%s/refund' % FID, {'confirmed': True})
     assert r.status_code == 404
-    assert r.get_json() == {'error': 'خدمة «ملف للخبير» مقفولة على المنصة دلوقتي'}
+    assert r.get_json() == {'error': 'ملفات «ملف للخبير» مش واصلة للداشبورد لسه'}
     plat.ef.cons_enabled = False
     r = _call(ctx, 'POST', '/api/platform-consultation-disputes/%s/resolve' % CID, {'action': 'refund', 'confirmed': True})
     assert r.get_json() == {'error': 'حسم النزاعات من هنا لسه مش متاح على المنصة'}
@@ -568,7 +580,8 @@ def test_not_configured_is_a_plain_refusal_not_no_reply(ctx, plat, monkeypatch):
 def test_detail_reaches_the_browser_without_client_data(ctx, plat):
     r = _call(ctx, 'GET', '/api/platform-expert-files/' + fx.D1['id'])
     body = r.get_json()
-    assert sorted(body) == ['dispute', 'id', 'opinion', 'revision', 'status', 'title']
+    assert sorted(body) == ['dispute', 'file_no', 'id', 'opinion', 'revision', 'status', 'title']
+    assert body['file_no'] == 1042
     raw = r.get_data(as_text=True)
     for leak in (fx.CLIENT_EMAILS['D1'], 'ريم عبد الله', 'pay-'):
         assert leak not in raw, leak
@@ -594,3 +607,113 @@ def test_consultation_disputes_list_hides_client_email_and_payment_id(ctx, plat)
     assert rows and all('member_email' not in c and 'payment_id' not in c for c in rows)
     assert rows[1]['dispute_reason'] == fx.D2['dispute_reason']        # الباقي زي ما هو
     assert '@clients.test' not in r.get_data(as_text=True)
+
+
+# ---------------------------------------------------------------- ٨) الجولة ٧: اللي الجسر بقى بيبعته
+
+@pytest.mark.parametrize('method,path,body', [r for r in ROUTES if r[0] == 'POST'])
+def test_by_is_the_signed_in_admin_never_what_the_browser_sent(ctx, plat, method, path, body):
+    """`by` بيتاخد من التوكن في الخادم — `by` اللي في جسم المتصفح بيتجاهل (ب٥)."""
+    if path.endswith('/reassign'):
+        path, body = path.replace(FID, fx.F5['id']), {'expert_email': 'faisal@experts.test'}
+    if path.endswith('/resolve') and 'expert-files' in path:
+        path = path.replace(FID, fx.D1['id'])
+    r = _call(ctx, method, path, dict(body, by='someone@evil.test'))
+    assert r.status_code == 200, (path, r.get_json())
+    assert plat.seen[-1]['json']['by'] == ADMIN
+
+
+def test_blocked_and_unactivated_lists_are_verbatim(ctx, plat):
+    body = _call(ctx, 'GET', '/api/platform-expert-files?status=blocked').get_json()
+    assert body.pop('enabled') is True
+    assert body == fx.list_payload('blocked', [fx.F7, fx.F6])
+    f6 = body['files'][1]
+    assert f6['needs_attention'] is True and f6['blocked'][0]['key'] == 'release_blocked_at'
+    assert f6['blocked'][0]['label'] == fx.BLOCK_LABELS['release_blocked_at']
+    body = _call(ctx, 'GET', '/api/platform-expert-files?status=unactivated').get_json()
+    assert body.pop('enabled') is True
+    assert body == fx.list_payload('unactivated', [fx.U2, fx.U1])
+    assert body['files'][0]['file_found'] is False and body['files'][0]['id'] is None
+
+
+def test_unactivated_refund_forwards_note_and_by_and_audits_the_platform_numbers(ctx, plat):
+    r = _call(ctx, 'POST', '/api/platform-expert-files/unactivated/%s/refund' % UCID,
+              {'confirmed': True, 'note': 'التفعيل وقع', 'amount': 1})
+    assert r.status_code == 200, r.get_json()
+    assert r.get_json() == {'ok': True, 'status': 'refunded'}
+    sent = plat.seen[-1]
+    assert sent['url'] == PLATFORM + '/api/bridge/expert-files/unactivated/%s/refund' % UCID
+    assert sent['json'] == {'note': 'التفعيل وقع', 'by': ADMIN}          # ⛔ ولا confirmed ولا مبلغ
+    assert sent['timeout'] >= 25 and len(plat.seen) == 1
+    (actor, target, meta), = _audits('expert_file.refund_unactivated', UCID)
+    assert actor == ADMIN and target == UCID
+    assert meta['amount'] == 500.0 and meta['currency'] == 'EGP' and meta['money_status'] == 'refunded'
+    assert meta['title'] == fx.U1['title'] and meta['consultation_id'] == UCID
+
+
+def test_unactivated_refund_twice_is_refused_by_the_platform_and_audited_once(ctx, plat):
+    path = '/api/platform-expert-files/unactivated/%s/refund' % UCID
+    _call(ctx, 'POST', path, {'confirmed': True})
+    r = _call(ctx, 'POST', path, {'confirmed': True})
+    assert r.status_code == 409
+    assert r.get_json() == {'error': fx.E_MONEY_MOVED}
+    assert len(plat.seen) == 2 and len(_audits('expert_file.refund_unactivated', UCID)) == 1
+
+
+@pytest.mark.parametrize('body', [{}, {'confirmed': 'true'}, {'confirmed': 1}])
+def test_unactivated_refund_needs_the_confirm_window(ctx, plat, body):
+    r = _call(ctx, 'POST', '/api/platform-expert-files/unactivated/%s/refund' % UCID, body)
+    assert r.status_code == 400 and r.get_json() == {'error': 'لازم تأكّد الأول من الشاشة'}
+    assert plat.seen == [] and _audits('expert_file.refund_unactivated') == []
+
+
+@pytest.mark.parametrize('detail', [fx.E_NOT_PAID_YET, fx.E_ALREADY_LISTED, fx.E_REFUND_MANUAL, fx.E_REFUND_GATEWAY])
+def test_unactivated_refund_refusals_pass_verbatim(ctx, plat, detail):
+    plat.forced[('POST', '/api/bridge/expert-files/unactivated/%s/refund' % UCID)] = (409, {'detail': detail})
+    r = _call(ctx, 'POST', '/api/platform-expert-files/unactivated/%s/refund' % UCID, {'confirmed': True})
+    assert r.status_code == 409 and r.get_json() == {'error': detail}
+    assert _audits('expert_file.refund_unactivated') == []
+
+
+def test_unactivated_refund_no_reply_is_said_and_logged(ctx, plat):
+    plat.forced[('POST', '/api/bridge/expert-files/unactivated/%s/refund' % UCID)] = _requests.Timeout('slow')
+    r = _call(ctx, 'POST', '/api/platform-expert-files/unactivated/%s/refund' % UCID, {'confirmed': True})
+    assert r.status_code == 502 and r.get_json()['no_reply'] is True
+    (_a, target, meta), = _audits('expert_file.no_reply', UCID)
+    assert meta == {'attempt': 'refund_unactivated'}
+
+
+@pytest.mark.parametrize('bad', ['x' * 65, 'a.b', '..', 'a b', 'ملف'])
+def test_unactivated_refund_validates_the_id_first(ctx, plat, bad):
+    r = _call(ctx, 'POST', '/api/platform-expert-files/unactivated/%s/refund' % bad, {'confirmed': True})
+    assert r.status_code in (404, 405) and plat.seen == []
+
+
+def test_service_closed_lists_still_come_and_only_sending_is_refused(ctx, plat):
+    """الجولة ٧ (ب١): الخدمة مقفولة للناس والجسر شغّال بالسرّ — الصفوف بتيجي (`service_open: false`)، والرجوع
+    شغّال، و«ابعته لـ…» بيرجع برسالة المنصة زي ما هي."""
+    plat.ef.service_open = False
+    body = _call(ctx, 'GET', '/api/platform-expert-files?status=waiting').get_json()
+    assert body['enabled'] is True and body['service_open'] is False and len(body['files']) == 5
+    r = _call(ctx, 'POST', '/api/platform-expert-files/%s/assign' % FID, {'expert_email': 'hala@experts.test'})
+    assert r.status_code == 409 and r.get_json() == {'error': fx.E_SERVICE_OFF}
+    assert _audits('expert_file.assign') == []
+    r = _call(ctx, 'POST', '/api/platform-expert-files/%s/refund' % FID, {'confirmed': True})
+    assert r.status_code == 200 and len(_audits('expert_file.refund', FID)) == 1
+
+
+def test_consultation_dispute_rows_name_who_gets_paid_and_still_hide_the_client(ctx, plat):
+    rows = _call(ctx, 'GET', '/api/platform-consultation-disputes').get_json()['consultations']
+    d2 = [c for c in rows if c['id'] == fx.D2['id']][0]
+    assert d2['payee_email'] == 'amr@experts.test' and d2['payee_name'] == 'أ. عمرو الشريف'
+    assert d2['release_amount'] == 600 and d2['reason_label'] == ''
+    d1 = [c for c in rows if c['id'] == fx.D1_CONS['id']][0]
+    assert d1['reason_label'] == 'الرأي ما ردّش على سؤالي'
+    assert all('member_email' not in c and 'payment_id' not in c for c in rows)
+
+
+def test_reassign_audit_names_the_previous_expert_from_the_platform_reply(ctx, plat):
+    fid = fx.F5['id']
+    _call(ctx, 'POST', '/api/platform-expert-files/%s/reassign' % fid, {'expert_email': 'faisal@experts.test'})
+    (_a, _t, meta), = _audits('expert_file.reassign', fid)
+    assert meta['previous_expert'] == meta['previous_expert_email'] == 'sami@experts.test'
