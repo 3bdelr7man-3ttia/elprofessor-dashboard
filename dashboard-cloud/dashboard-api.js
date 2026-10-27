@@ -369,12 +369,12 @@
   }
 
   // ============================================================
-  // «ملف للخبير» — صفوف الوارد (الجولة ٦ · docs/EXPERT-FILES-DASHBOARD-SPEC.md §٥-ب)
+  // «ملف للخبير» — صفوف الوارد (الجولة ٦ + ٧ · docs/EXPERT-FILES-DASHBOARD-SPEC.md §٥-ب و§١٥)
   // ⛔ ولا ساعة بتتحسب هنا: `hours_left` و`assign_overdue` من المنصة. ⛔ العملات ما بتتجمعش ولا
-  // بتتحوّل — كل مبلغ بعملته. الجداول نسخة من المنصة (REASON_LABELS · NEXT_STEP_LABELS ·
-  // CURRENCY_SYMBOL) — ⛔ ولا قيمة جديدة.
+  // بتتحوّل — كل مبلغ بعملته. ⛔ ولا استنتاج: من الجولة ٧ المنصة بتبعت سبب النزاع بالعربي
+  // (`reason_label`) واسم اللي اعتذر (`declined[].name`) واللي هيتحوّل فعلًا (`release_amount`) ومين هيقبض
+  // (`payee_name`) وأختام «الفلوس ما اتحرّكتش لوحدها» بسببها (`blocked[].label`) — الشاشة بتقراهم زي ما هم.
   // ============================================================
-  var REASON_AR = { unclear: "فيه حاجة مش فاهمها", not_answered: "الرأي ما ردّش على سؤالي", wrong_facts: "فيه غلط في الوقائع" };
   var NEXT_STEP_AR = { self: "تقدر تكمّلها بنفسك", specialist: "محتاج حد متخصص يكمّل معاك", none: "مش محتاج حاجة دلوقتي" };
   var CUR_AR = { EGP: "ج", SAR: "ر.س", AED: "درهم", KWD: "د.ك", QAR: "ر.ق", BHD: "د.ب", OMR: "ر.ع", USD: "$" };
   // اسم العملة بالكلام في نوافذ تأكيد الفلوس (بدل الكود الإنجليزي «EGP»).
@@ -401,12 +401,6 @@
     if (n === 2) return "ساعتين";
     return money(n) + (n <= 10 ? " ساعات" : " ساعة");
   }
-  // اسم اللي اعتذر: من المرشّحين (المعتمدين) لو موجود، وإلا الإيميل (§١٤ بند ٦ — الجسر بيبعت الإيميل بس).
-  function efNameOf(f, email) {
-    var em = String(email || "").toLowerCase();
-    var c = (f.candidates || []).filter(function (x) { return String(x.email || "").toLowerCase() === em; })[0];
-    return (c && c.name) || email || "—";
-  }
   function efFlagBadges(f) {
     var b = [];
     (f.price_flags || []).forEach(function (fl) {
@@ -415,103 +409,170 @@
     });
     return b;
   }
-  function efFileRow(f, lane) {
+  // «محتاج تدخّلك» (الجولة ٧ ب٩): الكنسة على المنصة حاولت تحرّك الفلوس ووقفت، فختمت الملف. السبب بكلام المنصة
+  // نفسها (`blocked[].label`) — الشارة بتقوله في التلميح، والدرج بيكتبه سطر سطر.
+  function efBlocked(f) { return Array.isArray(f && f.blocked) ? f.blocked.filter(function (b) { return b && b.label; }) : []; }
+  function efAttentionBadge(f, fallbackTip) {
+    var b = efBlocked(f);
+    if (!b.length && !(f && f.needs_attention)) return null;
+    return { w: true, attn: true, t: "محتاج تدخّلك",
+             tip: b.map(function (x) { return x.label; }).join(" · ") || fallbackTip || "الفلوس دي محتاجة تتسوّى بإيدك" };
+  }
+  // عنوان صفّ فلوسه اتوقّفت — من أول ختم عليه.
+  var EF_BLOCK_OUT = {
+    refund_blocked_at: "فلوس ملف ما رجعتش لوحدها",
+    release_blocked_at: "أجر خبير ما اتحوّلش لوحده",
+    approval_blocked_at: "رأي اتعتمد والملف ما اتحرّكش",
+    file_activation_blocked_at: "فلوس وصلت ومش لاقيين ملفها",
+  };
+  // `closed` = الخدمة مقفولة للناس (`service_open:false` من نفس القايمة): «ابعته لـ…» مش متاح، فالشارة ما تقولش «مستني توزيعك».
+  function efFileRow(f, lane, closed) {
     var pre = EF_PRE.indexOf(f.status) > -1;
     var hl = Number(f.hours_left || 0);
     var declined = Array.isArray(f.declined) ? f.declined : [];
+    var blocked = efBlocked(f);
+    var attn = efAttentionBadge(f);
     // «للعلم» مش بند: ملف اتبعت لخبير ولسه جوه الـ١٢ ساعة بتوعه وميعاد الـ٤٨ لسه بعيد ⇒ مش محتاج من
     // المؤسس حاجة دلوقتي. بيفضل في `INBOX` (عشان الدرج يفتح لو حب) بس برّه كل عدّ وكل شريحة — سطر
-    // «للعلم» واحد بيقول عليه. لو عدّى ١٢ ساعة (`assign_overdue`) أو قرب الميعاد ⇒ يرجع بند عادي.
-    var fyi = lane !== "late" && f.status === "assigned" && !f.assign_overdue && hl > 12;
+    // «للعلم» واحد بيقول عليه. لو عدّى ١٢ ساعة (`assign_overdue`) أو قرب الميعاد أو عليه ختم ⇒ بند عادي.
+    var fyi = !attn && lane !== "late" && f.status === "assigned" && !f.assign_overdue && hl > 12;
     var out;
-    if (lane === "late") out = "رأي متأخر";
+    if (attn) out = EF_BLOCK_OUT[(blocked[0] || {}).key] || "ملف فلوسه واقفة";
+    else if (lane === "late") out = "رأي متأخر";
     else if (pre && hl <= 0) out = "فات ميعاد الاستلام";
     else if (f.status === "assigned" && f.assign_overdue) out = "ملف ما اتستلمش من ١٢ ساعة";
     else if (f.status === "awaiting_assignment" && declined.length) out = "خبير اعتذر — الملف مستني خبير تاني";
     else if (f.status === "assigned") out = "ملف مستني الخبير يستلمه";
     else out = "ملف مستني خبير";
     var sla;
-    if (lane === "late") sla = "ميعاد الرأي عدّى " + (relTime(f.writing_due_at) || "");
-    else if (hl > 0) sla = "فاضل " + efHours(hl) + " وفلوسه ترجع لوحدها";
-    else sla = "الميعاد عدّى — لو الفلوس ما رجعتش لوحدها رجّعها من هنا";
+    if (attn && blocked.length) sla = "اتوقّفت " + (relTime(blocked[0].at) || "");
+    else if (lane === "late") sla = "ميعاد الرأي عدّى " + (relTime(f.writing_due_at) || "");
+    else if (pre && hl > 0) sla = "فاضل " + efHours(hl) + " وفلوسه ترجع لوحدها";
+    else if (pre) sla = "الميعاد عدّى — لو الفلوس ما رجعتش لوحدها رجّعها من هنا";
+    else sla = f.status_label || "";
     var badges = efFlagBadges(f);
     // «قرب الـ٤٨ ساعة»: آخر ١٢ ساعة قبل ما الفلوس ترجع لوحدها — نفس حدّ `slaWarn` تحت.
     if (pre && hl > 0 && hl <= 12) badges.unshift({ w: true, t: "⏳ فاضل أقل من ١٢ ساعة", tip: "لو ما اتستلمش قبل الميعاد، فلوس العميل بترجع لوحدها" });
+    if (attn) badges.unshift(attn);
     if (declined.length) {
       badges.push({ t: declined.length === 1 ? "خبير اعتذر" : "اعتذر " + money(declined.length) + " خبراء",
-                    tip: declined.map(function (d) { return efNameOf(f, d.email); }).join(" · ") });
+                    tip: declined.map(function (d) { return d.name || d.email || "—"; }).join(" · ") });
     }
     var since = lane === "late" ? "" : (relTime(f.paid_at) ? "اتدفع " + relTime(f.paid_at) : "");
     // شارة الحالة على الصفّ بكلام الشغل نفسه (بدل «محوّل لبشري» العامة) — المتأخر بيفضل «متأخّر — عاجل».
     // ⛔ «ما اتستلمش من ١٢ ساعة» ما ياخدش شارة «مستني الخبير» — دي بتتقري «مش محتاج حاجة».
+    // صفّ عليه ختم: الشارة على الصفّ «محتاج تدخّلك» (بالسبب)، وعمود الحالة بيقول الحالة نفسها — مش نفس الكلمة مرتين.
     var triLabel = "";
-    if (!(lane === "late" || (pre && hl <= 0))) {
+    if (attn) triLabel = "فلوسه واقفة";
+    else if (closed && (pre || EF_WORK.indexOf(f.status) > -1) && lane !== "late") triLabel = "الخدمة مقفولة";
+    else if (!(lane === "late" || (pre && hl <= 0))) {
       if (f.status !== "assigned") triLabel = "مستني توزيعك";
       else if (f.assign_overdue) triLabel = "محتاج تبعته لحد تاني";
       else if (hl <= 12) triLabel = "قرب الميعاد وما اتستلمش";
       else triLabel = "مستني الخبير يستلم";
     }
     return {
-      apiKind: "expert_file", apiId: f.id, efLane: lane, ef: f, fyi: fyi,
+      apiKind: "expert_file", apiId: f.id, efLane: lane, ef: f, fyi: fyi, needsAttention: !!attn,
       out: out, from: "ملف للخبير", src: "doc", dest: "inbox",
-      triage: (lane === "late" || (pre && hl <= 0)) ? "late" : "human",
+      triage: (attn || lane === "late" || (pre && hl <= 0)) ? "late" : "human",
       triLabel: triLabel,
-      sla: sla, slaWarn: lane === "late" || hl <= 12 || !!f.assign_overdue,
+      sla: sla, slaWarn: !!attn || lane === "late" || (pre && hl <= 12) || !!f.assign_overdue,
       who: f.client_first_name || "عميل",
       sub: [f.title, f.law_label, f.tier_label].filter(Boolean).join(" · "),
       sub2: "الطرف التاني: " + (f.counterparty_name || "ما اتكتبش") + (since ? " · " + since : ""),
+      // سبب وقوف الفلوس ظاهر على الصفّ نفسه (مش في التلميح بس) — بكلام المنصة.
+      warnLine: blocked.map(function (b) { return b.label; }).join(" · "),
       amountLabel: efMoney(f.amount, f.currency),
       amountSub: "أجر الخبير " + efMoney(f.expert_amount, f.currency),
       note: "أجر الخبير " + efMoney(f.expert_amount, f.currency) + " · الطرف التاني: " + (f.counterparty_name || "ما اتكتبش"),
       badges: badges,
       ref: "EF-" + String(f.id || "").slice(0, 8),
-      searchText: [f.title, f.counterparty_name, f.assigned_name, f.expert_name, f.client_first_name].filter(Boolean).join(" "),
+      searchText: [f.title, f.counterparty_name, f.assigned_name, f.expert_name, f.client_first_name,
+                   f.file_no != null ? String(f.file_no) : ""].filter(Boolean).join(" "),
       candidates: Array.isArray(f.candidates) ? f.candidates : [],
+    };
+  }
+  // «اتدفع وما وصلش لقايمة التوزيع» (الجولة ٧ ب٢): الصفّ هو **الفلوس** (الاستشارة) — الملف ممكن يكون مش لاقيينه
+  // أو مربوط بدفعة تانية. `apiId` = معرّف الاستشارة، والفعل الوحيد «رجّع الفلوس».
+  function efUnactWhy(u) {
+    if (!u.file_found) return "مش لاقيين الملف بتاع الفلوس دي";
+    if (!u.file_on_this_payment) return "الملف ده مربوط بدفعة تانية، والفلوس دي مالهاش ملف";
+    return "الملف لسه «مستني الدفع» مع إن الفلوس وصلت";
+  }
+  function efUnactivatedRow(u) {
+    var why = efUnactWhy(u);
+    return {
+      apiKind: "expert_file", apiId: u.consultation_id, efLane: "unactivated", unact: true, ef: u, fyi: false,
+      needsAttention: true,
+      out: u.status_label || "اتدفع وما وصلش لقايمة التوزيع", from: "ملف للخبير", src: "doc", dest: "inbox",
+      triage: "late", triLabel: "فلوس من غير ملف",
+      sla: relTime(u.paid_at) ? "اتدفع " + relTime(u.paid_at) : "", slaWarn: true,
+      who: u.client_first_name || "عميل",
+      sub: [u.title, u.tier_label].filter(Boolean).join(" · "),
+      sub2: why,
+      amountLabel: efMoney(u.amount, u.currency), amountSub: "",
+      note: why,
+      badges: [efAttentionBadge(u, why) || { w: true, attn: true, t: "محتاج تدخّلك", tip: why }],
+      ref: "PAY-" + String(u.consultation_id || "").slice(0, 8),
+      searchText: [u.title, u.client_first_name].filter(Boolean).join(" "),
+      candidates: [],
     };
   }
   function efDisputeRow(f) {
     var d = f.dispute || {};
+    var reason = f.reason_label || d.reason_label || "ما اتكتبش سبب";
+    var attn = efAttentionBadge(f);
+    var badges = efFlagBadges(f);
+    if (attn) badges.unshift(attn);
     return {
-      apiKind: "dispute", dsrc: "file", apiId: f.id, ef: f,
+      apiKind: "dispute", dsrc: "file", apiId: f.id, ef: f, needsAttention: !!attn,
       out: "«عندي مشكلة» على ملف", from: "ملف للخبير", src: "scale", dest: "inbox",
-      triage: "human", triLabel: "مستني حسمك", sla: "الفلوس واقفة لحد قرارك · " + (relTime(d.at) || ""), slaWarn: false,
+      triage: "human", triLabel: "مستني حسمك",
+      warnLine: efBlocked(f).map(function (b) { return b.label; }).join(" · "),
+      sla: "الفلوس واقفة لحد قرارك · " + (relTime(d.at) || ""), slaWarn: !!attn,
       who: f.client_first_name || "عميل",
       sub: [f.title, f.expert_name ? "الخبير: " + f.expert_name : ""].filter(Boolean).join(" · "),
-      sub2: (REASON_AR[d.reason] || "ما اتكتبش سبب") + (d.note ? " — " + d.note : ""),
+      sub2: reason + (d.note ? " — " + d.note : ""),
       amountLabel: efMoney(f.amount, f.currency),
       amountSub: "أجر الخبير " + efMoney(f.expert_amount, f.currency),
-      note: (REASON_AR[d.reason] || "ما اتكتبش سبب") + (d.note ? " — " + d.note : ""),
-      badges: efFlagBadges(f),
+      note: reason + (d.note ? " — " + d.note : ""),
+      badges: badges,
       ref: "DSP-" + String(f.id || "").slice(0, 8),
-      searchText: [f.title, f.counterparty_name, f.expert_name, f.client_first_name].filter(Boolean).join(" "),
+      searchText: [f.title, f.counterparty_name, f.expert_name, f.client_first_name,
+                   f.file_no != null ? String(f.file_no) : ""].filter(Boolean).join(" "),
     };
   }
   function consDisputeRow(c) {
     var badges = [];
     if (c.manual_refund_settled_at) badges.push({ t: "اترجعت يدوي قبل كده", tip: "الفلوس دي رجعت للعميل يدوي قبل كده" });
     if (c.cancel_requested) badges.push({ t: "العميل كان طالب يلغي", tip: "العميل كان طالب يلغي الحجز ده" });
+    var reason = c.dispute_reason || c.reason_label || "ما اتكتبش سبب";
     return {
       apiKind: "dispute", dsrc: "consultation", apiId: c.id, cons: c,
       out: "نزاع على " + KIND_AR(c.kind), from: "الاستشارات", src: "scale", dest: "inbox",
       triage: "human", triLabel: "مستني حسمك", sla: "الفلوس واقفة لحد قرارك · " + (relTime(c.disputed_at) || ""), slaWarn: false,
       who: c.client_first_name || "عميل",
       sub: [c.title, "الخبير: " + (c.expert_name || "—")].filter(Boolean).join(" · "),
-      sub2: c.dispute_reason || "ما اتكتبش سبب",
+      sub2: reason,
       amountLabel: efMoney(c.amount, c.currency),
       amountSub: c.expert_amount != null ? "أجر الخبير " + efMoney(c.expert_amount, c.currency) : "",
-      note: c.dispute_reason || "ما اتكتبش سبب",
+      note: reason,
       badges: badges,
       ref: "DSP-" + String(c.id || "").slice(0, 8),
-      searchText: [c.title, c.expert_name, c.client_first_name].filter(Boolean).join(" "),
+      searchText: [c.title, c.expert_name, c.payee_name, c.client_first_name].filter(Boolean).join(" "),
     };
   }
   // الشاشة (index.html) بتقرا نفس الجداول من هنا — مصدر واحد للنصوص.
   // ترتيب الوارد من الأعجل (بتتنادى بعد ما كل الطوابير ترد — قبلها الترتيب كان «أنهي رد وصل الأول»):
-  //   ١. صفوف «ملف للخبير» و«نزاعات» بينهم: ميعاده عدّى / رأي متأخر ⇐ `hours_left` من الأقل ⇐ النزاعات من
-  //      الأقدم. بيتحطّوا في نفس الخانات اللي كانوا فيها، فباقي الصفوف ما بتتحرّكش.
+  //   ١. صفوف «ملف للخبير» و«نزاعات» بينهم: محتاج تدخّلك ⇐ ميعاده عدّى / رأي متأخر ⇐ `hours_left` من الأقل ⇐
+  //      النزاعات من الأقدم. بيتحطّوا في نفس الخانات اللي كانوا فيها، فباقي الصفوف ما بتتحرّكش.
   //   ٢. الوارد كله (ترتيب ثابت): المتأخّر ⇐ اللي قرب ميعاده ⇐ الباقي.
   // ⛔ ولا ساعة بتتحسب هنا: الأرقام من المنصة (`hours_left`) والتواريخ بتتقارن كنص ISO زي ما جت.
   function efUrgencyKey(r) {
+    if (r.needsAttention) {
+      var b = efBlocked(r.ef || {})[0];
+      return [-1, String((b && b.at) || (r.ef && r.ef.paid_at) || "")];
+    }
     if (r.apiKind === "expert_file") {
       var f = r.ef || {};
       if (r.efLane === "late") return [0, String(f.writing_due_at || "")];
@@ -538,9 +599,9 @@
       .sort(function (a, b) { return (inboxRank(a[0]) - inboxRank(b[0])) || (a[1] - b[1]); })
       .map(function (p) { return p[0]; });
   }
-  EP.EF = { REASON_AR: REASON_AR, NEXT_STEP_AR: NEXT_STEP_AR, CUR_AR: CUR_AR, CUR_NAME_AR: CUR_NAME_AR, efMoney: efMoney,
-            KIND_AR: KIND_AR, efHours: efHours, efNameOf: efNameOf, PRE: EF_PRE, WORK: EF_WORK,
-            relTime: relTime, arDate: arDate };
+  EP.EF = { NEXT_STEP_AR: NEXT_STEP_AR, CUR_AR: CUR_AR, CUR_NAME_AR: CUR_NAME_AR, efMoney: efMoney,
+            KIND_AR: KIND_AR, efHours: efHours, efBlocked: efBlocked, efUnactWhy: efUnactWhy,
+            PRE: EF_PRE, WORK: EF_WORK, relTime: relTime, arDate: arDate };
 
   var LOADERS = {
     // نظرة عامة: /api/dashboard (+ /api/platform-metrics لعدد المستخدمين الحيّ)
@@ -1626,23 +1687,34 @@
           });
         }).catch(fail("طلبات التوثيق"))
       );
-      // «ملف للخبير» (الجولة ٦ — docs/EXPERT-FILES-DASHBOARD-SPEC.md §٥-أ): ملفات مستنية خبير ·
-      // آراء متأخرة · «عندي مشكلة» على ملف · نزاعات الاستشارات العادية. ⛔ للأدمن بس (د٥): الصفوف
-      // فيها مبالغ وأجر الخبير والطرف التاني — والمحمّل ده بيتنادى كمان من شاشات الموظف، فمن غير
-      // الحارس كان هيطلع له شريط «تعذّر جلب» دايم. ٤٠٣ ما يتسجّلش «تعذّر»، و«مقفول على المنصة»
-      // (`enabled:false`) مش عطل (د٩) — بس كل كود تاني بيبان «تعذّر» زي باقي الطوابير.
-      var efDisputeIds = {}, consDisputes = [];
+      // «ملف للخبير» (الجولة ٦ + ٧ — docs/EXPERT-FILES-DASHBOARD-SPEC.md §٥-أ و§١٥): ملفات مستنية توزيع ·
+      // آراء متأخرة · «عندي مشكلة» على ملف · ملفات فلوسها اتوقّفت · ملفات اتدفعت وما وصلتش للتوزيع · نزاعات
+      // الاستشارات العادية. ⛔ للأدمن بس (د٥): الصفوف فيها مبالغ وأجر الخبير والطرف التاني — والمحمّل ده
+      // بيتنادى كمان من شاشات الموظف، فمن غير الحارس كان هيطلع له شريط «تعذّر جلب» دايم. ٤٠٣ ما يتسجّلش
+      // «تعذّر»، و«الجسر مش على المنصة لسه» (`enabled:false`) مش عطل (د٩) — بس كل كود تاني بيبان «تعذّر».
+      // الجولة ٧ (ب١): الخدمة ممكن تبقى مقفولة للناس والصفوف لسه جاية (`service_open:false`) — الشاشة بتعرضها
+      // وبتقول إن الخدمة مقفولة، ومن غير «ابعته لـ…» (المنصة بترفضه).
+      var efDisputeIds = {}, consDisputes = [], efBlockedRows = [], efSeen = {}, efOpen = null;
       function failUnless403(label) { return function (e) { if (e && e.status === 403) return; fail(label)(); }; }
       if (String(EP.role || "").trim().toLowerCase() === "admin") {
-        [["waiting", "ملفات مستنية خبير"], ["late", "آراء متأخرة"], ["disputed", "نزاعات الملفات"]].forEach(function (L) {
+        [["waiting", "ملفات مستنية توزيع"], ["late", "آراء متأخرة"], ["disputed", "نزاعات الملفات"],
+         ["blocked", "ملفات فلوسها واقفة"], ["unactivated", "ملفات اتدفعت وما وصلتش للتوزيع"]].forEach(function (L) {
           jobs.push(get("/platform-expert-files?status=" + L[0]).then(function (r) {
             if (!r || r.enabled === false) return;
+            var closed = r.service_open === false;
+            if (closed) efOpen = false;
+            else if (r.service_open === true && efOpen === null) efOpen = true;
             var files = Array.isArray(r.files) ? r.files : [];
             if ((r.total || 0) > files.length) truncated.push(L[1] + ": معروض " + files.length + " من " + r.total);
             files.forEach(function (f) {
-              if (!f || !f.id) return;
+              if (!f) return;
+              if (L[0] === "unactivated") { if (f.consultation_id) realRows.push(efUnactivatedRow(f)); return; }
+              if (!f.id) return;
+              // «فلوسها واقفة» بيتضاف بعد ما كل الحارات ترد — بس اللي مش ظاهر في حارة تانية (رأي اتسلّم وتحويله وقف).
+              if (L[0] === "blocked") { efBlockedRows.push(f); return; }
+              efSeen[f.id] = true;
               if (L[0] === "disputed") { efDisputeIds[f.id] = true; realRows.push(efDisputeRow(f)); }
-              else realRows.push(efFileRow(f, L[0]));
+              else realRows.push(efFileRow(f, L[0], closed));
             });
           }).catch(failUnless403(L[1])));
         });
@@ -1716,6 +1788,17 @@
           if (c.expert_file_id && efDisputeIds[c.expert_file_id]) return;
           realRows.push(consDisputeRow(c));
         });
+        // ملف عليه ختم «الفلوس ما اتحرّكتش» بيظهر مرة واحدة: من حارته لو ظاهر فيها (الختم بيبان على صفّه)، وإلا
+        // صفّ لوحده (مثلًا رأي اتسلّم وتحويل أجر الخبير وقف — مالوش حارة تانية).
+        efBlockedRows.forEach(function (f) {
+          if (efSeen[f.id]) return;
+          efSeen[f.id] = true;
+          realRows.push(f.status === "disputed" ? efDisputeRow(f) : efFileRow(f, "blocked", efOpen === false));
+        });
+        // الخدمة مقفولة للناس؟ من القوايم نفسها، ولو ما ردّتش من الطابور (`expert_files_service_open`).
+        var q = EP.data.opsQueue || {};
+        EP.data.efServiceOpen = efOpen !== null ? efOpen
+          : (typeof q.expert_files_service_open === "boolean" ? q.expert_files_service_open : null);
         realRows = sortInboxRows(realRows);
         EP.data.inbox = realRows;
         // الوارد = الصفوف الحقيقية فقط (لا دمج لأي بيانات تصميمية).
@@ -2537,6 +2620,15 @@
       .then(function () { return efDone("رجعت " + efMoney(f.amount, f.currency) + " لمحفظة " + (f.client_first_name || "العميل") + " ✓", after); })
       .catch(function (e) { return efFailed(e, after); });
   };
+  // «اتدفع وما وصلش لقايمة التوزيع» (الجولة ٧ ب٢): الرجوع بمعرّف الفلوس (الاستشارة) — `apiId` في الصفّ ده.
+  // ⛔ `by` ما بيتبعتش من هنا: الخادم بياخده من التوكن (إيميل الأدمن اللي داخل).
+  EP.expertFileUnactivatedRefund = function (i, noteText, after) {
+    var u = (i && i.ef) || {};
+    var body = { note: String(noteText == null ? "" : noteText).trim().slice(0, 1000), confirmed: true };
+    return post("/platform-expert-files/unactivated/" + encodeURIComponent(u.consultation_id || i.apiId) + "/refund", body)
+      .then(function () { return efDone("رجعت " + efMoney(u.amount, u.currency) + " لمحفظة " + (u.client_first_name || "العميل") + " ✓", after); })
+      .catch(function (e) { return efFailed(e, after); });
+  };
   EP.disputeDecide = function (i, action, noteText, after) {
     var row = (i && (i.ef || i.cons)) || {};
     var path = i.dsrc === "consultation"
@@ -2546,8 +2638,10 @@
                  note: String(noteText == null ? "" : noteText).trim().slice(0, 2000), confirmed: true };
     return post(path, body)
       .then(function () {
+        // اللي اتحوّل ولمين — من الصفّ نفسه (`release_amount` · `payee_name`)، مش استنتاج.
+        var payee = i.dsrc === "consultation" ? (row.payee_name || row.payee_email) : (row.expert_name || row.expert_email);
         return efDone(body.action === "release"
-          ? "اتحوّل أجر " + (row.expert_name || "الخبير") + " ✓"
+          ? "اتحوّل " + efMoney(row.release_amount, row.currency) + " لـ" + (payee || "الخبير") + " ✓"
           : "رجعت " + efMoney(row.amount, row.currency) + " لمحفظة " + (row.client_first_name || "العميل") + " ✓", after);
       })
       .catch(function (e) { return efFailed(e, after); });

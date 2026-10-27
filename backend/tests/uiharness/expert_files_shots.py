@@ -1,7 +1,10 @@
 # -*- coding: utf-8 -*-
-"""صور «ملف للخبير» في الداشبورد (الجولة ٦ · SPEC §١١) — كمبيوتر ١٤٤٠×٩٠٠ وموبايل ٣٩٠×٨٤٤.
+"""صور «ملف للخبير» في الداشبورد (الجولة ٦ · SPEC §١١ + الجولة ٧ · §١٥) — كمبيوتر ١٤٤٠×٩٠٠ وموبايل ٣٩٠×٨٤٤.
 
-    cd backend && python3 tests/uiharness/expert_files_shots.py <out_dir>
+    cd backend && python3 tests/uiharness/expert_files_shots.py <out_dir> [--only-r7]
+
+`--only-r7` = صور الجولة ٧ بس (`r7-*` · `mr7-*`): «اتدفعت وما وصلتش» ورجوع فلوسها · شارة «محتاج تدخّلك» ·
+عدّادات الطابور الجديدة ونزاعات الاستشارات · الخدمة مقفولة والصفوف ظاهرة · السجل باسم الأدمن.
 
 ⛔ صفر طلبات حقيقية: الداشبورد بيتنفّذ جوه العملية (`app.test_client()`) والمنصة جدول في الذاكرة
 (`ef_fixtures.EFPlatform`)، وأي أصل تاني بيتقفل ويتسجّل. آخر السكربت بيطبع اللي اتقفل لكل أصل، وبيفشل لو
@@ -17,7 +20,9 @@ sys.path.insert(0, _HERE)
 import ef_fixtures as fx                     # noqa: E402
 from ef_route_harness import Harness, DASH   # noqa: E402
 
-OUT = os.path.abspath(sys.argv[1] if len(sys.argv) > 1 else os.path.join(os.getcwd(), 'r6-shots'))
+_ARGS = [a for a in sys.argv[1:] if not a.startswith('--')]
+ONLY_R7 = '--only-r7' in sys.argv[1:]
+OUT = os.path.abspath(_ARGS[0] if _ARGS else os.path.join(os.getcwd(), 'r7-shots'))
 os.makedirs(OUT, exist_ok=True)
 
 DESK = {'width': 1440, 'height': 900}
@@ -238,8 +243,8 @@ def desktop(browser, h):
     shot(page, '16-audit-desktop.png')
     browser.close()
 
-    # ١٧ — الخدمة مقفولة على المنصة: مفيش صفوف ولا «تعذّر»، والتنبيه ظاهر
-    h.ef = fx.EFPlatform(enabled=False, cons_enabled=False, off_open_total=2)
+    # ١٧ — الجسر لسه مش على المنصة (الإنتاج قبل النشر): مفيش صفوف ولا «تعذّر»
+    h.ef = fx.EFPlatform(deployed=False, cons_enabled=False)
     ctx = browser.context(h, 'admin', DESK)
     page = open_inbox(ctx, h)
     failed = page.evaluate("() => (window.INBOX_FAILED||[]).slice()")
@@ -282,7 +287,7 @@ def mobile(browser, h):
     scroll_to(page, '.opsq')
     shot(page, 'm01-queue-chips-mobile.png')
     # ٠١ب — الضغط على عدّاد «ملفات لسه ما اتستلمتش» بينزل لحد الشرايح والصفوف (كان بيرجع لأول الصفحة)
-    page.click('.opsq[data-k="expert_files_waiting"]')
+    page.click('.opsq[data-k="expert_files_awaiting_assignment"]')
     page.wait_for_timeout(400)
     shot(page, 'm01b-opsq-lands-on-rows-mobile.png')
     top = page.evaluate("() => document.getElementById('filters').getBoundingClientRect().top")
@@ -322,14 +327,139 @@ def mobile(browser, h):
     browser.close()
 
 
+def _writes_carry_the_admin(h, since, who='admin@local.test'):
+    """ج١: كل كتابة وصلت المنصة المزيّفة فيها `by` = إيميل الأدمن اللي داخل."""
+    bad = [c for c in h.ef.calls[since:] if c[0] == 'POST' and (c[3] or {}).get('by') != who]
+    if bad:
+        PROBLEMS.append('كتابة وصلت المنصة من غير by الأدمن: %r' % bad)
+
+
+def round7(browser, h):
+    """الجولة ٧ (ج١–ج٥) على الكمبيوتر."""
+    h.ef = fx.EFPlatform()
+    ctx = browser.context(h, 'admin', DESK)
+    page = open_inbox(ctx, h)
+    # r7-01 — عدّادات الطابور: «مستنية توزيعك» منفصل عن «ما اتستلمش من ١٢ ساعة» + نزاعات الاستشارات + فلوس واقفة
+    scroll_to(page, '.opsq')
+    shot(page, 'r7-01-queue-counters-desktop.png')
+    for k in ('expert_files_awaiting_assignment', 'expert_files_assign_overdue', 'consultation_disputes',
+              'expert_files_blocked', 'expert_files_unactivated'):
+        if not page.query_selector('.opsq[data-k="%s"]' % k):
+            PROBLEMS.append('عدّاد %s مش ظاهر' % k)
+    # r7-02 — شريحة «محتاج تدخّلك»: «اتدفعت وما وصلتش» صفوف + أختام التوقّف بالشارة
+    page.click('.opsq[data-k="expert_files_unactivated"]')
+    page.wait_for_timeout(300)
+    shot(page, 'r7-02-attention-rows-desktop.png')
+    if page.evaluate("() => activeFilter") != 'attn':
+        PROBLEMS.append('عدّاد «اتدفعت وما وصلتش» ما فتحش «محتاج تدخّلك»')
+    # r7-03 — درج «اتدفع وما وصلش» (U2: مش لاقيين الملف + ختم الكنسة)
+    row_by_id(page, fx.U2['consultation_id'])
+    scroll_to(page, '#filters')
+    shot(page, 'r7-03-unactivated-drawer-desktop.png')
+    # r7-04 — تأكيد رجوع فلوس U1
+    row_by_id(page, fx.U1['consultation_id'])
+    page.click('#drawer [data-a="ef_refund"]')
+    page.wait_for_selector('#mc_go')
+    shot(page, 'r7-04-unactivated-refund-confirm-desktop.png')
+    since = len(h.ef.calls)
+    page.click('#mc_go')
+    page.wait_for_selector('#epModal', state='detached', timeout=15000)
+    wait_gone(page, fx.U1['consultation_id'])
+    page.wait_for_timeout(200)
+    n = sum(1 for c in h.ef.calls if c[0] == 'POST' and c[1].endswith('/unactivated/%s/refund' % fx.U1['consultation_id']))
+    if n != 1:
+        PROBLEMS.append('رجوع فلوس U1 وصل المنصة %d مرة (لازم ١)' % n)
+    # r7-05 — بعد الرجوع: U1 اختفى + رسالة النجاح
+    page.evaluate("() => { activeFilter='attn'; renderInbox(); }")
+    scroll_to(page, '#filters')
+    shot(page, 'r7-05-after-unactivated-refund-desktop.png')
+    # r7-06 — شارة «محتاج تدخّلك» على الصفّ + الدرج بالسبب (F6: أجر ما اتحوّلش لوحده بعد الـ٣ أيام)
+    row_by_id(page, fx.F6['id'])
+    scroll_to(page, '#filters')
+    shot(page, 'r7-06-blocked-badge-drawer-desktop.png')
+    if fx.BLOCK_LABELS['release_blocked_at'] not in page.inner_text('#drawer'):
+        PROBLEMS.append('F6: سبب التوقّف مش في الدرج')
+    # r7-07 — نزاع ملف: «لو اتحسم للخبير» + تأكيد التحويل باللي المنصة بعتته (release_amount · الاسم)
+    chip(page, 't:disputes')
+    row_by_id(page, fx.D1['id'])
+    page.wait_for_selector('#drawer [data-a="dsp_cmp"]', timeout=15000)
+    page.click('#drawer [data-a="dsp_rel"]')
+    page.wait_for_selector('#mc_go')
+    shot(page, 'r7-07-release-reads-the-platform-desktop.png')
+    page.click('#mc_go')
+    page.wait_for_selector('#epModal', state='detached', timeout=15000)
+    wait_gone(page, fx.D1['id'])
+    # r7-08 — توزيع ملف (F4) ⇒ السجل باسم الأدمن
+    chip(page, 't:files')
+    row_by_id(page, fx.F4['id'])
+    page.click('#drawer [data-a="ef_pick"]')
+    page.wait_for_selector('#epModal .ef-cand')
+    page.click('#epModal .ef-cand >> nth=0')
+    page.click('#ep_go')
+    page.wait_for_selector('#epModal', state='detached', timeout=15000)
+    page.wait_for_function("() => EP.state.inbox==='ready'", timeout=15000)
+    page.evaluate("() => auditModal()")
+    page.wait_for_function("() => document.getElementById('auditRows') && !/جارٍ التحميل/.test(document.getElementById('auditRows').innerText)",
+                           timeout=15000)
+    shot(page, 'r7-08-audit-admin-desktop.png')
+    if 'admin@local.test' not in page.inner_text('#auditRows'):
+        PROBLEMS.append('السجل ما فيهوش إيميل الأدمن')
+    _writes_carry_the_admin(h, 0)
+    browser.close()
+
+    # r7-09/10 — الخدمة مقفولة للناس والجسر شغّال: الصفوف ظاهرة + سطر «مقفولة» + من غير «ابعته لـ…»
+    h.ef = fx.EFPlatform(service_open=False)
+    ctx = browser.context(h, 'admin', DESK)
+    page = open_inbox(ctx, h)
+    chip(page, 't:files')
+    shot(page, 'r7-09-service-closed-rows-desktop.png')
+    if not page.query_selector('#rows .ef-off-line'):
+        PROBLEMS.append('الخدمة مقفولة ومفيش سطر يقول كده فوق الصفوف')
+    row_by_id(page, fx.F1['id'])
+    scroll_to(page, '#filters')
+    shot(page, 'r7-10-service-closed-drawer-desktop.png')
+    if page.query_selector('#drawer [data-a="ef_pick"]'):
+        PROBLEMS.append('الخدمة مقفولة وزرار «ابعته لـ…» لسه ظاهر')
+    browser.close()
+
+
+def round7_mobile(browser, h):
+    h.ef = fx.EFPlatform()
+    ctx = browser.context(h, 'admin', MOB, mobile=True)
+    page = open_inbox(ctx, h)
+    scroll_to(page, '.opsq')
+    shot(page, 'mr7-01-queue-counters-mobile.png')
+    page.click('.opsq[data-k="expert_files_blocked"]')
+    page.wait_for_timeout(400)
+    shot(page, 'mr7-02-attention-rows-mobile.png')
+    row_by_id(page, fx.U2['consultation_id'])
+    page.wait_for_timeout(300)
+    shot(page, 'mr7-03-unactivated-drawer-mobile.png')
+    page.click('#drawer [data-a="ef_refund"]')
+    page.wait_for_selector('#mc_go')
+    shot(page, 'mr7-04-unactivated-refund-confirm-mobile.png')
+    page.click('#mc_x')
+    browser.close()
+    h.ef = fx.EFPlatform(service_open=False)
+    ctx = browser.context(h, 'admin', MOB, mobile=True)
+    page = open_inbox(ctx, h)
+    chip(page, 't:files')
+    scroll_to(page, '#filters')
+    shot(page, 'mr7-05-service-closed-rows-mobile.png')
+    browser.close()
+
+
 def main():
     from playwright.sync_api import sync_playwright
     h = Harness(fx.EFPlatform())
     with sync_playwright() as p:
         browser = Browsers(p)
         try:
-            desktop(browser, h)
-            mobile(browser, h)
+            if not ONLY_R7:
+                desktop(browser, h)
+                mobile(browser, h)
+            round7(browser, h)
+            round7_mobile(browser, h)
         finally:
             browser.close()
     rep = h.blocked_report()

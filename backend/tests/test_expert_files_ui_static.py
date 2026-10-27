@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""«ملف للخبير» في الواجهة — حقائق ثابتة في المصدر (الجولة ٦ · SPEC §١٠-ب).
+"""«ملف للخبير» في الواجهة — حقائق ثابتة في المصدر (الجولة ٦ · SPEC §١٠-ب، ومتحدّثة للجولة ٧ · §١٥).
 
 Run:  cd backend && python3 -m pytest -q tests/test_expert_files_ui_static.py
 
@@ -18,10 +18,13 @@ _ROOT = os.path.dirname(os.path.dirname(_HERE))
 INDEX = os.path.join(_ROOT, 'dashboard-cloud', 'index.html')
 API_JS = os.path.join(_ROOT, 'dashboard-cloud', 'dashboard-api.js')
 
-NEW_UI_FUNCS = ('drawExpertFile', 'drawDispute', 'expertPickModal', 'moneyConfirmModal',
-                'opinionsCompareModal', 'efRefundModal', 'efResolveModal', 'efOpinionPreview')
-NEW_API_FUNCS = ('EP.expertFileDetail', 'EP.expertFileSend', 'EP.expertFileRefund', 'EP.disputeDecide')
-NEW_ROW_FUNCS = ('efFileRow', 'efDisputeRow', 'consDisputeRow', 'efFlagBadges')
+NEW_UI_FUNCS = ('drawExpertFile', 'drawDispute', 'drawUnactivated', 'expertPickModal', 'moneyConfirmModal',
+                'opinionsCompareModal', 'efRefundModal', 'efResolveModal', 'efOpinionPreview', 'efServiceLine',
+                'efBlockedStrips', 'efPayee')
+NEW_API_FUNCS = ('EP.expertFileDetail', 'EP.expertFileSend', 'EP.expertFileRefund', 'EP.expertFileUnactivatedRefund',
+                 'EP.disputeDecide')
+NEW_ROW_FUNCS = ('efFileRow', 'efDisputeRow', 'consDisputeRow', 'efFlagBadges', 'efUnactivatedRow', 'efUnactWhy',
+                 'efAttentionBadge')
 
 
 @pytest.fixture(scope='module')
@@ -70,17 +73,37 @@ def test_inbox_types_files_and_disputes_exist(html):
     assert 'i.searchText' in r
 
 
+ROUND7_KEYS = ('expert_files_awaiting_assignment', 'expert_files_assign_overdue', 'expert_files_late',
+               'expert_files_disputed', 'consultation_disputes', 'expert_files_blocked', 'expert_files_unactivated')
+
+
 def test_queue_counters_read_the_real_keys(html):
+    """الجولة ٧ (ب٣): «مستني توزيع» منفصل عن «ما اتستلمش من ١٢ ساعة» · نزاعات الاستشارات ليها عدّاد ·
+    «فلوسها واقفة» و«اتدفعت وما وصلتش» بقى ليهم صفوف (الوجهة «الوارد» مش null)."""
     c = _body(html, 'function opsQueueCounters(')
-    for key in ('expert_files_waiting', 'expert_files_late', 'expert_files_disputed', 'expert_files_unactivated'):
-        assert "'%s'" % key in c, key
-    # «اتدفعت وما وصلتش للتوزيع» عدّاد من غير شاشة (د١٢) ⇒ الوجهة null.
-    assert "n(Q.expert_files_unactivated),null,'expert_files_unactivated'" in c
-    assert 'expert_files_awaiting_assignment' not in html
-    for key in ('expert_files_waiting', 'expert_files_late', 'expert_files_disputed'):
-        assert key + ':function(){activeFilter=' in html, key
-    assert 'expert_files_awaiting_payment' in _body(html, 'function opsQueuePanel(')
-    assert 'expert_files_open_total' in _body(html, 'function opsQueuePanel(')
+    for key in ROUND7_KEYS:
+        assert "n(Q.%s),'inbox','%s'" % (key, key) in c, key
+        assert key + ':function(){efLand(' in html, key
+    # «ملفات لسه ما اتستلمتش» (مستني توزيع + اتبعت مع بعض) مش شريحة: اللي اتبعت ولسه في مهلته = «للعلم».
+    assert "Q.expert_files_waiting" not in c
+    assert "'expert_files_unactivated'" in c and ",null,'expert_files_unactivated'" not in c
+    assert 'OPSQ_NOSCREEN_NOTE' not in html
+    p = _body(html, 'function opsQueuePanel(')
+    for key in ('expert_files_assigned_unclaimed', 'expert_files_awaiting_payment', 'expert_files_open_total'):
+        assert key in p, key
+
+
+def test_queue_alerts_with_a_visible_counter_are_not_repeated(html):
+    a = html[html.index('const EF_QUEUE_ALERTS='):html.index('function opsQueuePanel(')]
+    for key in ROUND7_KEYS:
+        assert "'%s'" % key in a, key
+    # نصوص المنصة الجديدة بالحرف (ops_queue_snapshot + bridge_ops_queue)
+    for text in ('ملف مستني توزيع$', 'ملف اتبعت لخبير وما اتستلمش من ١٢ ساعة$', 'ملف فلوسه ما اتحرّكتش لوحدها',
+                 'نزاع على استشارة مستني قرارك$'):
+        assert text in a, text
+    assert 'ملف مستني خبير$' not in a                       # النص القديم اتغيّر على المنصة
+    # الخدمة مقفولة: ما نقولش «وهي مقفولة ما ينفعش من هنا» (الجسر بقى شغّال بالسرّ)
+    assert 'ما ينفعش من هنا' not in html and 'شغّل الخدمة على المنصة تاني' not in html
 
 
 def test_inbox_nav_item_keeps_opening_the_whole_inbox(html):
@@ -188,5 +211,60 @@ def test_money_windows_name_the_currency_in_words_and_the_audit_title_is_arabic(
 def test_a_resolve_after_a_manual_refund_never_promises_a_platform_remainder(html):
     b = _body(html, 'function efResolveModal(')
     assert 'manual_refund_settled_at' in b and 'المنصة هتدفع' in b
-    # المبلغ اللي هيتحوّل له رقم دايمًا (أجر الخبير أو المبلغ كله) — ولا «نصيب الخبير» من غير رقم
-    assert 'نصيب الخبير' not in b and 'const pay=has?r.expert_amount:r.amount' in b
+    # المبلغ اللي هيتحوّل له رقم دايمًا — من المنصة (`release_amount`) — ولا «نصيب الخبير» من غير رقم
+    assert 'نصيب الخبير' not in b and 'const pay=p.amount' in b
+
+
+# ---------------------------------------------------------------- الجولة ٧: الشاشة بتقرا، مش بتستنتج
+
+def test_release_reads_the_amount_and_the_payee_from_the_platform(html):
+    p = _body(html, 'function efPayee(')
+    assert 'r.release_amount' in p and 'r.payee_name' in p
+    b = _body(html, 'function efResolveModal(')
+    assert 'efPayee(i)' in b
+    # التخمين القديم اتشال: ولا «أجر الخبير أو المبلغ كله» محسوب هنا، ولا «الاحتمالين» في التوثيق
+    for gone in ('has?r.expert_amount:r.amount', 'efIsApprovedExpert', 'efNameByEmail', 'اللي وثّق) — إلا لو'):
+        assert gone not in html, gone
+    d = _body(html, 'function drawDispute(')
+    assert 'data-a="dsp_rel"${payee?\'\':\' disabled' in d          # «للخبير» مقفول لو مفيش حد يقبض
+
+
+def test_reason_names_and_fee_come_from_the_platform(html, apijs):
+    for gone in ('REASON_AR', 'efNameOf'):
+        assert gone not in html and gone not in apijs, gone
+    assert 'f.reason_label || d.reason_label' in _body(apijs, 'function efDisputeRow(')
+    assert 'd.name || d.email' in _body(apijs, 'function efFileRow(')
+    assert 'd.name||d.email' in _body(html, 'function drawExpertFile(')
+
+
+def test_needs_attention_badge_reads_the_platform_reason(apijs, html):
+    a = _body(apijs, 'function efAttentionBadge(')
+    assert 'x.label' in a and '"محتاج تدخّلك"' in a
+    assert 'f.needs_attention' in a
+    assert "if(f==='attn')return !!i.needsAttention;" in html
+    assert "mk('attn','محتاج تدخّلك ('" in _body(html, 'function renderInbox(')
+
+
+def test_unactivated_refund_is_confirmed_and_goes_by_the_money_id(apijs, html):
+    b = _body(apijs, 'EP.expertFileUnactivatedRefund = function')
+    assert 'confirmed: true' in b and '/platform-expert-files/unactivated/' in b and 'u.consultation_id' in b
+    assert 'EP.expertFileUnactivatedRefund' in _body(html, 'function efRefundModal(')
+    assert 'moneyConfirmModal' in _body(html, 'function efRefundModal(')
+
+
+def test_the_browser_never_sends_by(apijs):
+    """`by` بيتحط في الخادم من التوكن — المتصفح ما بيبعتهوش (ولا يقدر يزوّره)."""
+    for fn in NEW_API_FUNCS:
+        assert 'by:' not in _body(apijs, '%s = function' % fn), fn
+
+
+def test_service_closed_hides_sending_and_says_so(html):
+    d = _body(html, 'function drawExpertFile(')
+    assert 'efServiceClosed()' in d and 'const others=off?[]:efOthers(i,mode);' in d
+    assert 'EF_SERVICE_OFF_AR' in _body(html, 'function efServiceLine(')
+    assert 'efServiceLine()+efFyiLine()' in _body(html, 'function renderInbox(')
+
+
+def test_the_consultation_note_label_no_longer_warns_it_reaches_both_sides(html):
+    b = _body(html, 'function efResolveModal(')
+    assert 'كأن الطرفين ممكن يقروها' not in b and 'ما بتوصلش للعميل ولا للخبير' in b

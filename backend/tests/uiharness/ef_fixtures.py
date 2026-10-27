@@ -171,7 +171,7 @@ F5 = _file("ef-f5-4e5f6a7b", title="عقد توريد مع مورد سعودي",
 F6 = _file("ef-f6-5a6b7c8d", title="نفقة متجمدة من سنتين", status="delivered", law="eg", tier="written",
            amount=500.0, currency="EGP", expert_amount=300.0, paid_h=-170.0, deadline_h=-122.0, client="نور",
            counterparty="", expert_email="hala@experts.test", file_no=1037,
-           stamps={"release_blocked_at": iso(-3.0)})
+           stamps={"release_blocked_at": iso(-4.0)})
 # F7 — عدّى ٤٨ ساعة وما حدّش استلمه، والرجوع التلقائي اتوقّف: في حارة `waiting` (الميعاد عدّى) وفي `blocked`.
 F7 = _file("ef-f7-6b7c8d9e", title="حدود أرض مع الجار", status="awaiting_assignment", law="eg", tier="written",
            amount=500.0, currency="EGP", expert_amount=300.0, paid_h=-54.0, deadline_h=-6.0, client="وليد",
@@ -234,7 +234,7 @@ U1 = _unact("cu-u1-7c8d9e0f", title="توكيل عام لبيع عربية", tie
             paid_h=-3.0, client="مها", file_id="ef-u1-8d9e0f1a", file_found=True, file_on_this_payment=True,
             file_status="awaiting_payment")
 # U2 — الفلوس وصلت ومش لاقيين الملف خالص، والكنسة ختمتها.
-U2 = _unact("cu-u2-8d9e0f1b", title="ملف للخبير", tier="written_session", amount=1000.0, expert_amount=650.0,
+U2 = _unact("cu-u2-8d9e0f1b", title="فسخ عقد إيجار محل", tier="written_session", amount=1000.0, expert_amount=650.0,
             paid_h=-30.0, client="كريم", activation_blocked_h=-28.0)
 
 
