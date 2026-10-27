@@ -889,6 +889,8 @@ def test_based_on_mirror_matches_the_platform_rules():
     assert appmod._ef_based_on(exp).endswith(' وأسئلة الخبير اللي ما اتردّش عليها: «العقد مكتوب؟»، «فيه شهود؟».')
     assert 'أكّدها العميل' in appmod._ef_based_on(dict(base, client_name=''))
     assert 'وعلى القانون.' in appmod._ef_based_on(dict(base, law_label=''))
+    assert appmod._ef_ar_date('2026-10-26T22:30:00Z', 'eg') == '٢٧ أكتوبر ٢٠٢٦'       # «Z» زي «+00:00»
+    assert appmod._ef_ar_date('مش تاريخ', 'eg') == '' and appmod._ef_ar_date(None, 'eg') == ''
 
 
 # ---- «استشارات قديمة محتاجة قرارك» (م١٠ · م١١)

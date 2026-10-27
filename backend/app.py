@@ -2440,8 +2440,11 @@ def _ef_ar(value):
 
 def _ef_ar_date(iso, country):
     """«٢٦ أكتوبر ٢٠٢٦» بالمنطقة الزمنية للبلد — نفس `expert_files._ar_date`."""
+    raw = str(iso or '').strip()
+    if raw.endswith('Z'):
+        raw = raw[:-1] + '+00:00'      # بايثون ٣٫٩ ما بيقراش «Z» (المنصة على ٣٫١١ بتقراه)
     try:
-        dt = datetime.datetime.fromisoformat(str(iso)) if iso else None
+        dt = datetime.datetime.fromisoformat(raw) if raw else None
     except (TypeError, ValueError):
         dt = None
     if dt is None:

@@ -955,6 +955,43 @@ def test_an_approved_review_still_delivering_offers_no_second_decision(open_page
     assert page.evaluate("id => INBOX.find(r => r.apiId === id).needsAttention", fx.R1['id']) is True
 
 
+def test_r8_platform_text_is_escaped_in_the_new_drawers_and_windows(open_page):
+    """كل نص جاي من المنصة في درج المراجعة ودرج القديمة ونوافذهم بيتعرض نص — مش HTML."""
+    evil = '<img src=x onerror="window.__pwned=1">'
+    ef = _r8()
+    for f in ef.review:
+        f['title'] = evil
+        f['client_first_name'] = evil
+        f['expert_name'] = evil
+        f['review']['note'] = evil
+        po = f['pending_opinion']
+        po['next_step_note'] = evil
+        po['meeting_url'] = evil
+        for a in po['answers']:
+            a['question'] = evil
+            a['text'] = evil
+    for c in ef.legacy:
+        c.update({'title': evil, 'expert_name': evil, 'client_first_name': evil, 'payee_name': evil})
+    page = open_page(ef=ef)
+    _row(page, fx.R2['id'])
+    page.wait_for_function("() => /الرأي ده مبني على/.test(document.getElementById('drawer').innerText)", timeout=15000)
+    page.click('#drawer [data-a="rv_ok"]')
+    page.wait_for_selector('#mc_go')
+    page.click('#mc_x')
+    page.click('#drawer [data-a="rv_back"]')
+    page.wait_for_selector('#mc_go')
+    page.click('#mc_x')
+    _row(page, fx.L1['id'])
+    page.click('#drawer [data-a="lg_rel"]')
+    page.wait_for_selector('#mc_go')
+    page.click('#mc_x')
+    page.click('#drawer [data-a="lg_ref"]')
+    page.wait_for_selector('#mc_go')
+    page.wait_for_timeout(300)
+    assert page.evaluate("() => window.__pwned") is None
+    assert page.evaluate("() => document.querySelectorAll('img[src=\"x\"]').length") == 0
+
+
 def test_zero_real_requests_at_the_very_end(harness):
     """آخر اختبار في الملف (بعد اختبارات الجولة ٨): ولا طلب حقيقي من المتصفح ولا من جوه العملية."""
     assert harness.unexpected_blocked() == []
