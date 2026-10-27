@@ -20,11 +20,14 @@ API_JS = os.path.join(_ROOT, 'dashboard-cloud', 'dashboard-api.js')
 
 NEW_UI_FUNCS = ('drawExpertFile', 'drawDispute', 'drawUnactivated', 'expertPickModal', 'moneyConfirmModal',
                 'opinionsCompareModal', 'efRefundModal', 'efResolveModal', 'efOpinionPreview', 'efServiceLine',
-                'efBlockedStrips', 'efPayee')
+                'efBlockedStrips', 'efPayee',
+                # الجولة ٨
+                'drawReview', 'efReviewApproveModal', 'efReviewReturnModal', 'drawLegacy', 'efLegacyModal',
+                'efLockedBtn', 'efReleaseLock', 'efTrialLine', 'efSlot')
 NEW_API_FUNCS = ('EP.expertFileDetail', 'EP.expertFileSend', 'EP.expertFileRefund', 'EP.expertFileUnactivatedRefund',
-                 'EP.disputeDecide')
+                 'EP.disputeDecide', 'EP.expertFileReview', 'EP.legacyDecide')
 NEW_ROW_FUNCS = ('efFileRow', 'efDisputeRow', 'consDisputeRow', 'efFlagBadges', 'efUnactivatedRow', 'efUnactWhy',
-                 'efAttentionBadge')
+                 'efAttentionBadge', 'efReviewRow', 'legacyRow', 'efReleaseWhy', 'efRefundWhy', 'efMoneyBackBadge')
 
 
 @pytest.fixture(scope='module')
@@ -208,9 +211,12 @@ def test_money_windows_name_the_currency_in_words_and_the_audit_title_is_arabic(
     assert 'Audit Log' not in html
 
 
-def test_a_resolve_after_a_manual_refund_never_promises_a_platform_remainder(html):
+def test_a_release_after_the_client_got_the_money_back_is_never_offered(html):
+    """الجولة ٨ (البند ٥ — قرار المؤسس): العميل خد فلوسه (يدوي/البوابة) ⇒ مفيش «للخبير» خالص والفلوس فاضلة محجوزة.
+    (كانت هنا نافذة «المنصة هتدفع من فلوسها» — اتشالت.)"""
     b = _body(html, 'function efResolveModal(')
-    assert 'manual_refund_settled_at' in b and 'المنصة هتدفع' in b
+    assert 'المنصة هتدفع' not in html and 'manualPaid' not in html
+    assert 'if(!p||efReleaseLock(r,p))return;' in b
     # المبلغ اللي هيتحوّل له رقم دايمًا — من المنصة (`release_amount`) — ولا «نصيب الخبير» من غير رقم
     assert 'نصيب الخبير' not in b and 'const pay=p.amount' in b
 
@@ -226,7 +232,9 @@ def test_release_reads_the_amount_and_the_payee_from_the_platform(html):
     for gone in ('has?r.expert_amount:r.amount', 'efIsApprovedExpert', 'efNameByEmail', 'اللي وثّق) — إلا لو'):
         assert gone not in html, gone
     d = _body(html, 'function drawDispute(')
-    assert 'data-a="dsp_rel"${payee?\'\':\' disabled' in d          # «للخبير» مقفول لو مفيش حد يقبض
+    # «للخبير» مقفول لو مفيش حد يقبض — أو بسبب المنصة (الجولة ٨)، والسبب مكتوب تحت الزرار
+    assert "const relWhy=efReleaseLock(r,payee)" in d and "efLockedBtn('btn-primary','dsp_rel'" in d
+    assert "(payee?'':EF_NO_PAYEE_AR)" in _body(html, 'function efReleaseLock(')
 
 
 def test_reason_names_and_fee_come_from_the_platform(html, apijs):
@@ -284,7 +292,7 @@ def test_service_closed_never_promises_money_back_on_its_own(apijs, html):
     d = _body(html, 'function drawExpertFile(')
     assert "off?'واقف — الخدمة مقفولة'" in d and "!off&&hl>0&&!back?'لو ما اتستلمش قبل الميعاد" in d
     assert 'الفلوس مش بتتحرّك لوحدها' in html[html.index("const EF_SERVICE_OFF_AR="):][:200]
-    assert "const efSent=Q.expert_files_service_open===false?0:" in _body(html, 'function opsQueuePanel(')
+    assert "const efSent=efQMode==='closed'?0:" in _body(html, 'function opsQueuePanel(')
 
 
 def test_money_that_already_went_back_is_never_offered_a_second_refund(apijs, html):
@@ -295,3 +303,132 @@ def test_money_that_already_went_back_is_never_offered_a_second_refund(apijs, ht
     d = _body(html, 'function drawExpertFile(')
     assert 'const canRefund=(pre||work)&&!back;' in d
     assert "else if(expired){if(!back)strips+=" in d
+
+
+# --------------------------------------------------------------------------- الجولة ٨ (SPEC §١٧)
+def _inbox_loader(apijs):
+    return apijs[apijs.index('    inbox: function () {'):apijs.index('    // الضمان والنزاعات: /api/escrow')]
+
+
+def test_review_lane_is_loaded_admin_only_and_has_its_own_chip(apijs, html):
+    """١: «مستنية مراجعتك» = `status=review` من المنصة، جوه حارس الأدمن، وليها شريحة فرز جوه «ملفات للخبير»."""
+    inbox = _inbox_loader(apijs)
+    assert '["review", "آراء مستنية مراجعتك"]' in inbox
+    assert inbox.index('["review"') > inbox.index('=== "admin"')
+    assert 'if (L[0] === "review") realRows.push(efReviewRow(f));' in inbox
+    assert "if(f==='review')return i.efLane==='review';" in _body(html, 'function inboxMatches(')
+    r = _body(html, 'function renderInbox(')
+    assert "mk('review','مستنية مراجعتك ('" in r
+    assert "i.apiKind==='expert_file')return 'files'" in _body(html, 'function inboxType(')     # جوه «ملفات للخبير»
+
+
+def test_review_row_names_file_expert_law_amount_and_since_and_is_an_item(apijs):
+    row = _body(apijs, 'function efReviewRow(')
+    for key in ('f.title', 'f.law_label', 'f.expert_name', 'efMoney(f.amount, f.currency)', 'rv.submitted_at'):
+        assert key in row, key
+    assert 'fyi: false' in row and 'efLane: "review"' in row                # بند لازم فعل منك — مش «للعلم»
+    assert 'Date.now' not in row and 'Date.parse' not in row                # «من إمتى» من المنصة (relTime بس)
+
+
+def test_review_counter_and_its_landing_read_the_real_key(html):
+    c = _body(html, 'function opsQueueCounters(')
+    assert "n(Q.expert_files_in_review),'inbox','expert_files_in_review'" in c
+    assert "expert_files_in_review:function(){efLand('review');}" in html
+    a = html[html.index('const EF_QUEUE_ALERTS='):html.index('function opsQueuePanel(')]
+    assert "'expert_files_in_review'" in a and 'رأي مستني مراجعتك قبل ما يوصل للعميل$' in a
+
+
+def test_review_drawer_shows_the_opinion_like_the_client_and_has_the_two_decisions(html):
+    d = _body(html, 'function drawReview(')
+    for t in ('po.answers.map(', 'الخطوة الجاية: ', 'مبني على', 'det.based_on', 'رأي خبير معتمد لدى البروفيسور',
+              'اعتمده وابعته للعميل', 'رجّعه للخبير', 'data-a="rv_ok"', 'data-a="rv_back"'):
+        assert t in d, t
+    assert 'EP.expertFileDetail(id)' in d                                    # «مبني على» من قراية الملف كله
+    assert "el.classList.add('ef-scroll')" in d
+    assert "el.classList.remove('ef-scroll')" in _body(html, 'function drawInbox(')
+
+
+def test_review_approve_is_a_confirmed_money_window_and_return_needs_a_note(apijs, html):
+    ok = _body(html, 'function efReviewApproveModal(')
+    assert 'moneyConfirmModal(' in ok and "efCurName(f.currency)" in ok and "'المبلغ',money(f.amount)" in ok
+    assert "EP.expertFileReview(i,'approve'" in ok
+    back = _body(html, 'function efReviewReturnModal(')
+    assert 'noteRequired:true' in back and "EP.expertFileReview(i,'return'" in back
+    assert 'بتوصل للخبير زي ما هي' in back
+    m = _body(html, 'function moneyConfirmModal(')
+    assert 'o.noteRequired' in m and 'if(needNote()){note.focus();return;}' in m
+    a = _body(apijs, 'EP.expertFileReview = function')
+    assert 'if (approve) body.confirmed = true;' in a and '/review' in a
+    lit = a[a.index('var body = {'):a.index('};', a.index('var body = {'))]
+    assert 'confirmed' not in lit                                            # الرجوع للخبير مش فعل فلوس
+
+
+def test_legacy_is_its_own_chip_drawer_and_confirmed_decision(apijs, html):
+    """٣: «استشارات قديمة محتاجة قرارك» — شريحة · عدّاد · درج بفعلين بنفس نافذة التأكيد."""
+    inbox = _inbox_loader(apijs)
+    assert 'get("/platform-legacy-consultations")' in inbox
+    assert inbox.index('/platform-legacy-consultations') > inbox.index('=== "admin"')
+    assert "if(i.apiKind==='legacy')return 'legacy';" in _body(html, 'function inboxType(')
+    assert "['legacy','استشارات قديمة','var(--gold)']" in _body(html, 'function renderInbox(')
+    assert "if(i.apiKind==='legacy'){drawLegacy(el,i);return;}" in _body(html, 'function drawInbox(')
+    c = _body(html, 'function opsQueueCounters(')
+    assert "n(Q.consultations_legacy),'inbox','consultations_legacy'" in c
+    assert "consultations_legacy:function(){efLand('t:legacy');}" in html
+    d = _body(html, 'function drawLegacy(')
+    assert "'حوّل للخبير'" in d and "'رجّع للعميل'" in d
+    m = _body(html, 'function efLegacyModal(')
+    assert m.count('moneyConfirmModal(') == 2 and 'EP.legacyDecide(i,action' in m
+    a = _body(apijs, 'EP.legacyDecide = function')
+    assert 'confirmed: true' in a and '/platform-legacy-consultations/' in a and '/decide' in a
+
+
+def test_legacy_row_names_client_expert_amount_and_delivery(apijs):
+    row = _body(apijs, 'function legacyRow(')
+    for key in ('c.client_first_name', 'c.expert_name', 'efMoney(c.amount, c.currency)', 'c.delivered_at', 'c.title'):
+        assert key in row, key
+    assert 'apiKind: "legacy"' in row
+
+
+def test_release_is_locked_by_the_platform_reason_everywhere(apijs, html):
+    """٢: «للخبير» مقفول والسبب مكتوب تحته بكلام المنصة — نزاع ملف · نزاع استشارة · القديمة."""
+    why = _body(apijs, 'function efReleaseWhy(')
+    assert 'r.release_blocked_reason' in why and 'EF_RELEASE_MANUAL_AR' in why
+    assert 'العميل خد فلوسه يدوي قبل كده، فمفيش تحويل للخبير من هنا. الفلوس فاضلة محجوزة لحد ما المشكلة تتحل' in apijs
+    assert 'r.refund_blocked_reason' in _body(apijs, 'function efRefundWhy(')
+    btn = _body(html, 'function efLockedBtn(')
+    assert 'disabled' in btn and '<div class="ef-why">${esc(why)}</div>' in btn
+    assert "efLockedBtn('btn-primary','dsp_rel'" in _body(html, 'function drawDispute(')
+    assert "efLockedBtn('btn-human','dsp_ref'" in _body(html, 'function drawDispute(')
+    d = _body(html, 'function drawLegacy(')
+    assert "efLockedBtn('btn-primary','lg_rel'" in d and "efLockedBtn('btn-human','lg_ref'" in d
+    assert 'efReleaseWhy' in d and 'efRefundWhy' in d
+    for fn in ('efResolveModal', 'efLegacyModal'):                         # النافذة نفسها ما بتتفتحش لو مقفول
+        assert 'efReleaseWhy' in _body(html, 'function %s(' % fn) or 'efReleaseLock' in _body(html, 'function %s(' % fn)
+
+
+def test_service_mode_decides_closed_and_the_trial_line(apijs, html):
+    """٤: الوضع (`service_mode`) هو الحَكَم — التجربة (`allowlist`) مش مقفولة، وليها سطر «مفتوحة للتجربة بس (n حساب)»."""
+    inbox = _inbox_loader(apijs)
+    assert 'r.service_mode' in inbox and 'var closed = mode === "closed";' in inbox
+    assert 'EP.data.efServiceMode' in inbox and 'EP.data.efAllowlistSize' in inbox
+    assert "return efServiceMode()==='closed';" in _body(html, 'function efServiceClosed(')
+    assert "return efServiceMode()==='allowlist';" in _body(html, 'function efServiceTrial(')
+    t = _body(html, 'function efTrialLine(')
+    assert "'الخدمة مفتوحة للتجربة بس'" in t and "' حساب)'" in t
+    assert 'efTrialLine(EP.data.efAllowlistSize)' in _body(html, 'function efServiceLine(')
+    assert 'efServiceTrial()' in _body(html, 'function expertPickModal(')
+    p = _body(html, 'function opsQueuePanel(')
+    assert "efQMode==='allowlist'?efTrialLine(Q.expert_files_allowlist_size)" in p
+
+
+def test_r8_audit_labels(html):
+    a = html[html.index('const AUDIT_LABEL={'):html.index('function auditModal(')]
+    for key in ('expert_file.review_approve', 'expert_file.review_return', 'consultation.legacy'):
+        assert "'%s':" % key in a, key
+
+
+def test_the_menu_still_has_thirteen_items(html):
+    """⛔ ولا عنصر قايمة جديد (`CLAUDE.md`): الشغل كله صفوف وشرايح في «الوارد»."""
+    mods = _modules(html)
+    assert len([m for m, g in mods.items() if g and g != 'co']) == 12
+    assert not any('legacy' in k or 'review' in k for k in mods)

@@ -209,7 +209,8 @@ def test_employee_never_asks_for_files_and_sees_no_failure(open_page, harness):
     page.wait_for_function("() => window.EP && EP.authed", timeout=30000)
     page.evaluate("() => EP.reload('inbox')")
     page.wait_for_function("() => EP.state.inbox==='ready'", timeout=30000)
-    calls = [c for c in harness.dash_calls[before:] if 'expert-files' in c[1] or 'consultation-disputes' in c[1]]
+    calls = [c for c in harness.dash_calls[before:] if 'expert-files' in c[1] or 'consultation-disputes' in c[1]
+             or 'legacy-consultations' in c[1]]                    # الجولة ٨: والقديمة كمان أدمن بس
     assert calls == []
     assert page.evaluate("() => (window.INBOX_FAILED||[]).length") == 0
 
@@ -341,16 +342,19 @@ def test_pick_window_shows_each_candidates_load(open_page):
     assert 'رأي متأخر' not in hala
 
 
-def test_release_after_a_manual_refund_says_the_platform_pays(open_page):
+def test_release_after_a_manual_refund_is_locked_with_the_platform_reason(open_page, harness):
+    """الجولة ٨ (البند ٥): العميل خد فلوسه يدوي ⇒ «للخبير» مقفول والسبب تحته بكلام المنصة بالحرف — ولا نافذة
+    (كانت بتقول «المنصة هتدفع من فلوسها» — اتشالت)، و«للعميل» مقفول كمان (الفلوس رجعت قبل كده)."""
     page = open_page()
     _row(page, fx.D3['id'])
-    page.click('#drawer [data-a="dsp_rel"]')
-    page.wait_for_selector('#mc_go')
-    body = page.inner_text('#epModal')
-    assert 'خالد خد ٢٥٠ ج يدوي قبل كده' in body and 'المنصة هتدفع ١٥٠ ج' in body
-    for bad in ('الباقي', 'مش هياخد', 'مش هترجع'):
-        assert bad not in body, bad
-    assert page.inner_text('#mc_go') == 'حوّل ١٥٠ ج لـد. ندى حسن'
+    assert page.is_disabled('#drawer [data-a="dsp_rel"]') and page.is_disabled('#drawer [data-a="dsp_ref"]')
+    whys = page.evaluate("() => [...document.querySelectorAll('#drawer .ef-why')].map(e => e.innerText)")
+    assert whys == [fx.E_RELEASE_MANUAL, fx.E_RESOLVE_MANUAL], whys
+    page.evaluate("() => document.querySelector('#drawer [data-a=\"dsp_rel\"]').click()")
+    page.wait_for_timeout(200)
+    assert page.query_selector('#epModal') is None
+    assert 'المنصة هتدفع' not in page.inner_text('body')
+    assert not [c for c in harness.ef.calls if c[0] == 'POST']
 
 
 def test_release_without_an_expert_share_names_the_full_amount_and_the_blind_spot(open_page):
@@ -378,7 +382,9 @@ def test_verify_dispute_on_the_platform_address_names_the_payee_the_platform_sen
         if c['id'] == fx.D3['id']:
             c.update({'expert_email': 'admin@platform.test', 'expert_name': 'حساب المنصة',
                       'manual_refund_settled_at': '', 'verified_by_email': 'nada@experts.test',
-                      'payee_email': 'nada@experts.test', 'payee_name': 'د. ندى حسن', 'release_amount': 150})
+                      'payee_email': 'nada@experts.test', 'payee_name': 'د. ندى حسن', 'release_amount': 150,
+                      # من غير رجوع يدوي ⇒ المنصة ما بتقفلش «للخبير» (الجولة ٨ البند ٥)
+                      'release_blocked': None, 'release_blocked_reason': None})
     page = open_page(ef=ef)
     _row(page, fx.D3['id'])
     drawer = page.inner_text('#drawer')
@@ -634,3 +640,303 @@ def test_money_that_already_went_back_has_no_refund_button_and_says_so(open_page
     drawer = page.inner_text('#drawer')
     assert fx.REFUND_BLOCK_LABELS['manual_refund'] in drawer and 'رجّعها من هنا' not in drawer
     assert page.query_selector('#drawer [data-a="ef_refund"]') is None
+
+
+# --------------------------------------------------------------------------- الجولة ٨ (SPEC §١٧)
+def _r8(**kw):
+    return fx.EFPlatform(r8=True, **kw)
+
+
+def test_review_rows_name_the_file_expert_law_amount_and_since(open_page):
+    """١: «مستنية مراجعتك» — صفّ لكل ملف فيه اسمه والخبير والقانون والمبلغ ومن إمتى مستني، وبند مش «للعلم»."""
+    page = open_page(ef=_r8())
+    chips = page.inner_text('#filters')
+    assert 'مستنية مراجعتك (٢)' in chips and 'ملفات للخبير (١١)' in chips
+    page.click('#filters .chip[data-f="review"]')
+    rows = page.inner_text('#rows')
+    for t in (fx.R1['title'], fx.R2['title'], 'أ. رنا عادل', 'أ. وائل منصور', 'القانون المصري', '٥٠٠ ج',
+              '١٬٠٠٠ ج', 'اتبعت للمراجعة منذ ٣ س', 'أول ملف على المنصة', 'رجّعته للخبير مرة'):
+        assert t in rows, t
+    assert _files_order(page) == [fx.R1['id'], fx.R2['id']]                 # الأقدم الأول
+    assert page.evaluate("() => INBOX.filter(r => r.efLane === 'review' && !r.fyi).length") == 2
+    assert page.evaluate("() => navInboxCount()") == page.evaluate("() => inboxActive().length")
+
+
+def test_review_counter_lands_on_its_chip_and_its_alert_is_not_repeated(open_page):
+    page = open_page(ef=_r8())
+    assert page.inner_text('.opsq[data-k="expert_files_in_review"]').startswith('٢')
+    panel = page.inner_text('section.panel >> nth=0')
+    assert 'آراء مستنية مراجعتك' in panel and 'رأي مستني مراجعتك قبل ما يوصل للعميل' not in panel
+    page.click('.opsq[data-k="expert_files_in_review"]')
+    page.wait_for_timeout(200)
+    assert page.evaluate("() => activeFilter") == 'review'
+
+
+def test_review_drawer_shows_the_opinion_the_way_the_client_will_see_it(open_page):
+    page = open_page(ef=_r8())
+    _row(page, fx.R1['id'])
+    page.wait_for_function("() => /الرأي ده مبني على/.test(document.getElementById('drawer').innerText)", timeout=15000)
+    drawer = page.inner_text('#drawer')
+    for a in fx.R1_OPINION['answers']:
+        assert a['question'] in drawer and a['text'][:40] in drawer
+    assert 'الخطوة الجاية: محتاج حد متخصص يكمّل معاك' in drawer and fx.R1_OPINION['next_step_note'] in drawer
+    assert 'الرأي ده مبني على الوقائع اللي أكّدها سمر يوم' in drawer and 'ومستندين، وعلى القانون المصري.' in drawer
+    assert 'رأي خبير معتمد لدى البروفيسور' in drawer and 'خبرة في القانون المصري' in drawer
+    assert 'سمر ماهر' not in drawer                                          # الاسم الأول بس
+    for a in ('rv_ok', 'rv_back', 'ef_refund'):
+        assert page.query_selector('#drawer [data-a="%s"]' % a) is not None, a
+    assert page.query_selector('#drawer [data-a="ef_pick"]') is None
+
+
+def test_review_drawer_shows_the_session_slots_and_the_previous_return(open_page):
+    page = open_page(ef=_r8())
+    _row(page, fx.R2['id'])
+    page.wait_for_function("() => /الرأي ده مبني على/.test(document.getElementById('drawer').innerText)", timeout=15000)
+    drawer = page.inner_text('#drawer')
+    assert 'رجّعته للخبير قبل كده بملاحظة' in drawer and fx.R2['review']['note'] in drawer
+    assert 'مواعيد الجلسة اللي هتتعرض على دينا' in drawer and 'meet.example.test' in drawer
+    assert 'من غير مستندات، وردّه يوم' in drawer
+
+
+def test_review_approve_confirms_amount_currency_and_names_and_posts_once(open_page, harness):
+    page = open_page(ef=_r8())
+    _row(page, fx.R1['id'])
+    page.click('#drawer [data-a="rv_ok"]')
+    page.wait_for_selector('#mc_go')
+    body = page.inner_text('#epModal')
+    for t in ('٥٠٠', 'جنيه مصري', 'سمر', 'أ. رنا عادل', '٣٠٠ ج', fx.R1['title']):
+        assert t in body, t
+    assert page.inner_text('#mc_go') == 'ابعته لـسمر'
+    path = '/api/platform-expert-files/%s/review' % fx.R1['id']
+    harness.hold.add(('POST', path))
+    try:
+        page.locator('#mc_go').dblclick()
+        page.wait_for_timeout(300)
+        assert page.is_disabled('#mc_go') and page.inner_text('#mc_go') == 'بيتبعت…'
+    finally:
+        harness.hold.discard(('POST', path))
+    assert sum(1 for c in harness.dash_calls if c == ('POST', path)) == 1
+    harness.release_held()
+    page.wait_for_selector('#epModal', state='detached', timeout=15000)
+    page.wait_for_function("id => EP.state.inbox==='ready' && !INBOX.some(r => r.apiId === id)", arg=fx.R1['id'],
+                           timeout=15000)
+    sent = [c for c in harness.ef.calls if c[0] == 'POST' and c[1].endswith(fx.R1['id'] + '/review')]
+    assert len(sent) == 1 and sent[0][3] == {'action': 'approve', 'note': '', 'by': 'admin@local.test'}
+
+
+def test_review_return_needs_a_note_and_the_note_reaches_the_expert(open_page, harness):
+    page = open_page(ef=_r8())
+    _row(page, fx.R1['id'])
+    page.click('#drawer [data-a="rv_back"]')
+    page.wait_for_selector('#mc_go')
+    assert page.is_disabled('#mc_go')                                        # من غير ملاحظة ما ينفعش
+    page.fill('#mc_note', '   ')
+    assert page.is_disabled('#mc_go')
+    note = 'الإجابة التانية محتاجة تذكر المادة اللي بتحدد مدة سقوط الدعوى.'
+    page.fill('#mc_note', note)
+    assert page.is_enabled('#mc_go') and page.inner_text('#mc_go') == 'رجّعه لـأ. رنا عادل'
+    page.click('#mc_go')
+    page.wait_for_selector('#epModal', state='detached', timeout=15000)
+    page.wait_for_function("id => EP.state.inbox==='ready' && !INBOX.some(r => r.apiId === id)", arg=fx.R1['id'],
+                           timeout=15000)
+    sent = [c for c in harness.ef.calls if c[0] == 'POST' and c[1].endswith(fx.R1['id'] + '/review')]
+    assert len(sent) == 1 and sent[0][3] == {'action': 'return', 'note': note, 'by': 'admin@local.test'}
+
+
+def test_a_second_return_is_refused_in_the_platform_words_and_the_button_comes_back(open_page):
+    page = open_page(ef=_r8())
+    _row(page, fx.R2['id'])
+    page.click('#drawer [data-a="rv_back"]')
+    page.wait_for_selector('#mc_go')
+    page.fill('#mc_note', 'تاني')
+    page.click('#mc_go')
+    page.wait_for_selector('#epModal .ef-err', timeout=15000)
+    assert page.inner_text('#epModal .ef-err') == fx.E_REVIEW_RETURNED
+    assert page.is_enabled('#mc_go')
+
+
+def test_release_is_locked_with_the_platform_words_in_file_and_consultation_disputes(open_page, harness):
+    """٢: «للخبير» بعد ما العميل خد فلوسه — مقفول والسبب تحته بكلام المنصة (ملف · استشارة)، ولا نافذة ولا طلب."""
+    ef = _r8()
+    ef.disputed = [fx.release_locked(f, 'gateway_refund') for f in ef.disputed]
+    page = open_page(ef=ef)
+    _row(page, fx.D1['id'])
+    page.wait_for_selector('#drawer [data-a="dsp_cmp"]', timeout=15000)
+    assert page.is_disabled('#drawer [data-a="dsp_rel"]') and page.is_disabled('#drawer [data-a="dsp_ref"]')
+    whys = page.evaluate("() => [...document.querySelectorAll('#drawer .ef-why')].map(e => e.innerText)")
+    assert whys == [fx.E_RELEASE_GATEWAY, fx.E_RESOLVE_GATEWAY], whys
+    row = page.evaluate("id => INBOX.find(r => r.apiId === id).badges.map(b => b.t)", fx.D1['id'])
+    assert '«للخبير» مقفول' in row
+    _row(page, fx.D3['id'])
+    whys = page.evaluate("() => [...document.querySelectorAll('#drawer .ef-why')].map(e => e.innerText)")
+    assert whys == [fx.E_RELEASE_MANUAL, fx.E_RESOLVE_MANUAL], whys
+    page.evaluate("() => { document.querySelector('#drawer [data-a=\"dsp_rel\"]').click(); }")
+    page.wait_for_timeout(200)
+    assert page.query_selector('#epModal') is None
+    assert not [c for c in harness.ef.calls if c[0] == 'POST']
+
+
+@pytest.mark.parametrize('key,text', [('gateway_refund', fx.E_RELEASE_GATEWAY), ('manual_refund', fx.E_RELEASE_MANUAL)])
+def test_release_refused_at_decision_time_shows_the_same_words(open_page, harness, key, text):
+    """الصفّ ما كانش مقفول (اتحمّل قبل ما الفلوس ترجع للعميل)، والمنصة رفضت «للخبير» وقت الحسم ⇒ نفس الكلام جوه النافذة."""
+    ef = _r8()
+    page = open_page(ef=ef)
+    _row(page, fx.D2['id'])
+    for c in ef.cons:
+        if c['id'] == fx.D2['id']:
+            c.update({'release_blocked': key, 'release_blocked_reason': text})
+            if key == 'manual_refund':
+                c['manual_refund_settled_at'] = fx.iso(-1)
+    page.click('#drawer [data-a="dsp_rel"]')
+    page.wait_for_selector('#mc_go')
+    page.click('#mc_go')
+    page.wait_for_selector('#epModal .ef-err', timeout=15000)
+    assert page.inner_text('#epModal .ef-err') == text
+
+
+def test_legacy_rows_and_drawer_name_who_what_and_since(open_page):
+    """٣: «استشارات قديمة محتاجة قرارك» — شريحة لوحدها، صفّ لكل واحدة (الاسم · الخبير · المبلغ · من إمتى اتسلّمت)."""
+    page = open_page(ef=_r8())
+    assert 'استشارات قديمة (٣)' in page.inner_text('#filters')
+    assert page.inner_text('.opsq[data-k="consultations_legacy"]').startswith('٣')
+    page.click('.opsq[data-k="consultations_legacy"]')
+    page.wait_for_timeout(200)
+    assert page.evaluate("() => activeFilter") == 't:legacy'
+    rows = page.inner_text('#rows')
+    for t in (fx.L1['title'], 'أ. عمرو الشريف', 'سلمى', '٦٠٠ ج', 'اتسلّمت', 'ميعاد التحويل عدّى'):
+        assert t in rows, t
+    assert 'استشارة قديمة اتسلّمت ومستنية قرارك' not in page.inner_text('section.panel >> nth=0')
+    _row(page, fx.L1['id'])
+    drawer = page.inner_text('#drawer')
+    assert 'استشارة قديمة · استشارة من السوق' in drawer and 'قرارك: للخبير ولا للعميل' in drawer
+    assert '٤٨٠ ج لـأ. عمرو الشريف' in drawer and 'بتقرر من غير ما تشوفه' in drawer
+    assert page.is_enabled('#drawer [data-a="lg_rel"]') and page.is_enabled('#drawer [data-a="lg_ref"]')
+
+
+def test_legacy_release_confirms_amount_currency_and_payee_and_posts_once(open_page, harness):
+    page = open_page(ef=_r8())
+    _row(page, fx.L1['id'])
+    page.click('#drawer [data-a="lg_rel"]')
+    page.wait_for_selector('#mc_go')
+    body = page.inner_text('#epModal')
+    for t in ('٤٨٠', 'جنيه مصري', 'محفظة أ. عمرو الشريف', 'سلمى', fx.L1['title'], 'من غير ما تشوف الشغل'):
+        assert t in body, t
+    assert page.inner_text('#mc_go') == 'حوّل ٤٨٠ ج لـأ. عمرو الشريف'
+    path = '/api/platform-legacy-consultations/%s/decide' % fx.L1['id']
+    harness.hold.add(('POST', path))
+    try:
+        page.locator('#mc_go').dblclick()
+        page.wait_for_timeout(300)
+        assert page.is_disabled('#mc_go') and page.inner_text('#mc_go') == 'بيتحوّل…'
+    finally:
+        harness.hold.discard(('POST', path))
+    assert sum(1 for c in harness.dash_calls if c == ('POST', path)) == 1
+    harness.release_held()
+    page.wait_for_selector('#epModal', state='detached', timeout=15000)
+    page.wait_for_function("id => EP.state.inbox==='ready' && !INBOX.some(r => r.apiId === id)", arg=fx.L1['id'],
+                           timeout=15000)
+    sent = [c for c in harness.ef.calls if c[0] == 'POST' and c[1].endswith(fx.L1['id'] + '/legacy')]
+    assert len(sent) == 1 and sent[0][3] == {'action': 'release', 'note': '', 'by': 'admin@local.test'}
+    assert 'استشارات قديمة (٢)' in page.inner_text('#filters')
+
+
+def test_legacy_refund_confirms_the_client_and_the_full_amount(open_page, harness):
+    page = open_page(ef=_r8())
+    _row(page, fx.L3['id'])
+    page.click('#drawer [data-a="lg_ref"]')
+    page.wait_for_selector('#mc_go')
+    assert 'كاملين لمحفظة ياسر' in page.inner_text('#epModal')
+    assert page.inner_text('#mc_go') == 'رجّع ٢٥٠ ج لـياسر'
+    page.click('#mc_go')
+    page.wait_for_selector('#epModal', state='detached', timeout=15000)
+    sent = [c for c in harness.ef.calls if c[0] == 'POST' and c[1].endswith(fx.L3['id'] + '/legacy')]
+    assert len(sent) == 1 and sent[0][3]['action'] == 'refund'
+
+
+def test_legacy_locked_buttons_say_why_in_the_platform_words(open_page, harness):
+    page = open_page(ef=_r8())
+    _row(page, fx.L2['id'])
+    assert page.is_disabled('#drawer [data-a="lg_rel"]') and page.is_disabled('#drawer [data-a="lg_ref"]')
+    whys = page.evaluate("() => [...document.querySelectorAll('#drawer .ef-why')].map(e => e.innerText)")
+    assert whys == [fx.E_RELEASE_MANUAL, fx.E_RESOLVE_MANUAL], whys
+    assert 'قرارك: للخبير ولا للعميل' not in page.inner_text('#drawer')   # مفيش قرار فلوس هنا
+    page.evaluate("() => { document.querySelector('#drawer [data-a=\"lg_rel\"]').click(); }")
+    page.wait_for_timeout(200)
+    assert page.query_selector('#epModal') is None
+    assert not [c for c in harness.ef.calls if c[0] == 'POST']
+
+
+@pytest.mark.parametrize('how', ['empty', 'not_on_the_platform'])
+def test_legacy_shows_nothing_when_the_list_is_empty(open_page, how):
+    ef = _r8()
+    if how == 'empty':
+        ef.legacy = []
+    else:
+        ef.legacy_enabled = False
+    page = open_page(ef=ef)
+    assert page.query_selector('#filters .chip[data-f="t:legacy"]') is None
+    assert page.query_selector('.opsq[data-k="consultations_legacy"]') is None
+    assert page.evaluate("() => (window.INBOX_FAILED||[]).length") == 0
+    assert page.evaluate("() => INBOX.filter(r => r.apiKind === 'legacy').length") == 0
+
+
+def test_trial_mode_line_over_the_rows_and_the_platform_refusal_in_the_picker(open_page, harness):
+    """٤: الخدمة مفتوحة للتجربة بس — سطر «(n حساب)» فوق صفوف الملفات، «ابعته لـ…» شغّال بمرشّحين المنصة، ورفضها بكلامها."""
+    page = open_page(ef=_r8(mode='allowlist'))
+    assert page.evaluate("() => EP.data.efServiceMode") == 'allowlist'
+    assert page.evaluate("() => efServiceClosed()") is False
+    page.click('#filters .chip[data-f="t:files"]')
+    line = page.inner_text('#rows .ef-trial-line')
+    assert 'الخدمة مفتوحة للتجربة بس (٤ حساب)' in line
+    assert page.query_selector('#rows .ef-off-line') is None and 'مقفولة للناس' not in page.inner_text('#rows')
+    assert 'الخدمة مفتوحة للتجربة بس (٤ حساب)' in page.inner_text('section.panel >> nth=0')
+    _row(page, fx.F1['id'])
+    page.click('#drawer [data-a="ef_pick"]')
+    page.wait_for_selector('#epModal .ef-cand')
+    assert 'الخدمة مفتوحة للتجربة بس (٤ حساب)' in page.inner_text('#epModal .ef-trial-note')
+    names = page.evaluate("() => [...document.querySelectorAll('#epModal .ef-cand .nm')].map(e => e.innerText)")
+    assert names == [c['name'] for c in fx.F1['candidates']]                 # مرشّحين المنصة زي ما هم
+    idx = names.index('م. سامي فؤاد')
+    page.click('#epModal .ef-cand >> nth=%d' % idx)
+    page.click('#ep_go')
+    page.wait_for_selector('#epModal .ef-err', timeout=15000)
+    assert page.inner_text('#epModal .ef-err') == fx.E_TRIAL_ONLY
+    page.click('#epModal .ef-cand >> nth=%d' % names.index('أ. هالة سمير'))
+    page.click('#ep_go')
+    page.wait_for_selector('#epModal', state='detached', timeout=15000)
+    sent = [c for c in harness.ef.calls if c[0] == 'POST' and c[1].endswith(fx.F1['id'] + '/assign')]
+    assert [c[3]['expert_email'] for c in sent] == ['sami@experts.test', 'hala@experts.test']
+
+
+def test_open_mode_has_no_trial_line(open_page):
+    page = open_page(ef=_r8())
+    page.click('#filters .chip[data-f="t:files"]')
+    assert page.query_selector('#rows .ef-trial-line') is None
+    assert 'للتجربة' not in page.inner_text('body')
+
+
+def test_r8_audit_lines_name_the_action_the_file_and_the_admin(open_page):
+    page = open_page(ef=_r8())
+    _row(page, fx.R1['id'])
+    page.click('#drawer [data-a="rv_back"]')
+    page.wait_for_selector('#mc_go')
+    page.fill('#mc_note', 'ملاحظة للخبير.')
+    page.click('#mc_go')
+    page.wait_for_selector('#epModal', state='detached', timeout=15000)
+    page.wait_for_function("() => EP.state.inbox==='ready'", timeout=15000)
+    _row(page, fx.L1['id'])
+    page.click('#drawer [data-a="lg_rel"]')
+    page.wait_for_selector('#mc_go')
+    page.click('#mc_go')
+    page.wait_for_selector('#epModal', state='detached', timeout=15000)
+    page.evaluate("() => auditModal()")
+    page.wait_for_selector('#auditRows .au-ef', timeout=15000)
+    txt = page.inner_text('#auditRows')
+    assert 'رجوع رأي للخبير بملاحظة' in txt and '«ملاحظة للخبير.»' in txt
+    assert 'قرار على استشارة قديمة' in txt and 'اتحوّل ٤٨٠ ج للخبير (أ. عمرو الشريف)' in txt
+    assert txt.count('admin@local.test') >= 2
+
+
+def test_zero_real_requests_after_round8(harness):
+    """آخر اختبار في الملف (بعد اختبارات الجولة ٨): ولا طلب حقيقي من المتصفح ولا من جوه العملية."""
+    assert harness.unexpected_blocked() == []

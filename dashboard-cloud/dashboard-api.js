@@ -424,7 +424,33 @@
     release_blocked_at: "أجر خبير ما اتحوّلش لوحده",
     approval_blocked_at: "رأي اتعتمد والملف ما اتحرّكش",
     file_activation_blocked_at: "فلوس وصلت ومش لاقيين ملفها",
+    lapse_blocked_at: "فرق جلسة ما رجعش للعميل لوحده",          // الجولة ٨ (البند ٦)
   };
+  // ——— الجولة ٨ (البند ٥): «للخبير» بعد ما العميل خد فلوسه ممنوع، والفلوس فاضلة محجوزة لحد ما المشكلة تتحل ———
+  // السبب بكلام المنصة نفسها (`release_blocked_reason` على صفّ الملف ونزاع الاستشارة والقديمة). منصة قبل الجولة ٨ ما
+  // بتبعتهوش: ختم «رجعت يدوي» على صفّ الاستشارة ⇒ نفس جملة المنصة بالحرف (قرار المؤسس، مش استنتاج مبلغ).
+  var EF_RELEASE_MANUAL_AR = "العميل خد فلوسه يدوي قبل كده، فمفيش تحويل للخبير من هنا. الفلوس فاضلة محجوزة لحد ما المشكلة تتحل";
+  function efReleaseWhy(r) {
+    r = r || {};
+    if (r.release_blocked_reason) return String(r.release_blocked_reason);
+    if (r.manual_refund_settled_at) return EF_RELEASE_MANUAL_AR;
+    return "";
+  }
+  // «للعميل — رجّع فلوسه» مقفول ليه؟ القديمة بتبعته صريح (`refund_blocked_reason`). النزاع: الفلوس رجعت للعميل قبل كده
+  // (يدوي أو من البوابة — نفس الكود اللي قفل «للخبير») ⇒ الحسم «للعميل» بيترفض بالكلام ده على المنصة (`E_RESOLVE_*`).
+  function efRefundWhy(r) {
+    r = r || {};
+    if (r.refund_blocked_reason) return String(r.refund_blocked_reason);
+    if (r.manual_refund_settled_at || r.release_blocked === "manual_refund") return "الفلوس دي رجعت للعميل يدوي قبل كده";
+    if (r.release_blocked === "gateway_refund") return "الفلوس دي رجعت للعميل من بوابة الدفع قبل كده";
+    return "";
+  }
+  // الفلوس رجعت للعميل قبل كده (يدوي/البوابة) — شارة على صفّ النزاع.
+  function efMoneyBackBadge(r) {
+    var why = efReleaseWhy(r);
+    if (!why || (r && r.release_blocked === "not_claimed")) return null;
+    return { w: true, t: "«للخبير» مقفول", tip: why };
+  }
   // فلوس رجعت للعميل قبل كده (البوابة أو يدوي — كود `refund_blocked` من المنصة، مراجعة الجولة ٧): «رجّع الفلوس»
   // من هنا المنصة بترفضه، والكلام ما يقولش «ما رجعتش» — العميل ما ياخدهاش مرتين.
   var EF_ALREADY_BACK = { gateway_refund: true, gateway_partial: true, manual_refund: true };
@@ -533,6 +559,8 @@
     var attn = efAttentionBadge(f);
     var badges = efFlagBadges(f);
     if (attn) badges.unshift(attn);
+    var back = efMoneyBackBadge(f);
+    if (back) badges.push(back);
     return {
       apiKind: "dispute", dsrc: "file", apiId: f.id, ef: f, needsAttention: !!attn,
       out: "«عندي مشكلة» على ملف", from: "ملف للخبير", src: "scale", dest: "inbox",
@@ -555,6 +583,8 @@
     var badges = [];
     if (c.manual_refund_settled_at) badges.push({ t: "اترجعت يدوي قبل كده", tip: "الفلوس دي رجعت للعميل يدوي قبل كده" });
     if (c.cancel_requested) badges.push({ t: "العميل كان طالب يلغي", tip: "العميل كان طالب يلغي الحجز ده" });
+    var back = efMoneyBackBadge(c);
+    if (back) badges.push(back);
     var reason = c.dispute_reason || c.reason_label || "ما اتكتبش سبب";
     return {
       apiKind: "dispute", dsrc: "consultation", apiId: c.id, cons: c,
@@ -568,6 +598,63 @@
       note: reason,
       badges: badges,
       ref: "DSP-" + String(c.id || "").slice(0, 8),
+      searchText: [c.title, c.expert_name, c.payee_name, c.client_first_name].filter(Boolean).join(" "),
+    };
+  }
+  // ——— الجولة ٨ (البند ٧): «مستنية مراجعتك» — أول ملفات الخبير الجديد بتعدّي على المؤسس قبل العميل ———
+  // بند لازم فعل منك (مش «للعلم»): الرأي مش هيوصل للعميل لحد ما توافق، والفلوس محجوزة زي ما هي.
+  // من إمتى مستني = `review.submitted_at` من المنصة (ولا ساعة بتتحسب هنا).
+  function efReviewRow(f) {
+    var rv = f.review || {};
+    var returned = Number(rv.returns || 0) > 0;
+    var attn = efAttentionBadge(f);
+    var badges = efFlagBadges(f);
+    if (attn) badges.unshift(attn);
+    if (returned) badges.push({ w: true, t: "رجّعته للخبير مرة", tip: rv.note ? "ملاحظتك: " + rv.note : "رجّعته للخبير قبل كده" });
+    var n = Number(f.expert_delivered_count || 0);
+    var since = relTime(rv.submitted_at);
+    return {
+      apiKind: "expert_file", apiId: f.id, efLane: "review", ef: f, fyi: false, needsAttention: !!attn,
+      out: returned ? "رأي اتعدّل ومستني مراجعتك تاني" : "رأي مستني مراجعتك قبل ما يوصل للعميل",
+      from: "ملف للخبير", src: "doc", dest: "inbox",
+      triage: attn ? "late" : "human", triLabel: attn ? "فلوسه واقفة" : "مستني مراجعتك",
+      sla: since ? "اتبعت للمراجعة " + since : "مستني مراجعتك", slaWarn: !!attn,
+      who: f.client_first_name || "عميل",
+      sub: [f.title, f.law_label, f.tier_label].filter(Boolean).join(" · "),
+      sub2: "الخبير: " + (f.expert_name || "—") + " · " + (n ? "ملفات اتسلّمت قبل كده: " + money(n) : "أول ملف على المنصة"),
+      warnLine: efBlocked(f).map(function (b) { return b.label; }).join(" · "),
+      amountLabel: efMoney(f.amount, f.currency),
+      amountSub: "أجر الخبير " + efMoney(f.expert_amount, f.currency),
+      note: "الرأي مستني مراجعتك قبل ما يوصل لـ" + (f.client_first_name || "العميل"),
+      badges: badges,
+      ref: "RV-" + String(f.id || "").slice(0, 8),
+      searchText: [f.title, f.expert_name, f.client_first_name, f.counterparty_name,
+                   f.file_no != null ? String(f.file_no) : ""].filter(Boolean).join(" "),
+      candidates: [],
+    };
+  }
+  // ——— الجولة ٨ (البند ١٤): «استشارات قديمة محتاجة قرارك» ———
+  // اتسلّمت وفلوسها اتمسكت قبل بداية التحويل التلقائي ⇒ المنصة ما بتحرّكهاش لوحدها. الصفّ بالحرف من الجسر.
+  function legacyRow(c) {
+    var badges = [];
+    var relWhy = efReleaseWhy(c), refWhy = efRefundWhy(c);
+    if (relWhy) badges.push({ w: true, t: "«للخبير» مقفول", tip: relWhy });
+    if (refWhy) badges.push({ w: true, t: "«للعميل» مقفول", tip: refWhy });
+    if (c.due) badges.push({ t: "ميعاد التحويل عدّى", tip: "لو كانت جديدة كانت اتحوّلت للخبير لوحدها — القديمة مستنية قرارك" });
+    var when = relTime(c.delivered_at);
+    return {
+      apiKind: "legacy", apiId: c.id, cons: c,
+      out: "استشارة قديمة محتاجة قرارك", from: "الاستشارات", src: "scale", dest: "inbox",
+      triage: "human", triLabel: "مستني قرارك",
+      sla: when ? "اتسلّمت " + when : "اتسلّمت", slaWarn: false,
+      who: c.client_first_name || "عميل",
+      sub: [c.title, KIND_AR(c.kind), "الخبير: " + (c.expert_name || "—")].filter(Boolean).join(" · "),
+      sub2: "اتسلّمت قبل ما التحويل التلقائي يبدأ، فالفلوس مش هتتحرّك لوحدها",
+      amountLabel: efMoney(c.amount, c.currency),
+      amountSub: c.expert_amount != null ? "أجر الخبير " + efMoney(c.expert_amount, c.currency) : "",
+      note: "للخبير ولا للعميل؟",
+      badges: badges,
+      ref: "OLD-" + String(c.id || "").slice(0, 8),
       searchText: [c.title, c.expert_name, c.payee_name, c.client_first_name].filter(Boolean).join(" "),
     };
   }
@@ -585,6 +672,8 @@
     if (r.apiKind === "expert_file") {
       var f = r.ef || {};
       if (r.efLane === "late") return [0, String(f.writing_due_at || "")];
+      // الجولة ٨: رأي جاهز ومستني مراجعتك (العميل مستني) — مع المتأخر، الأقدم الأول.
+      if (r.efLane === "review") return [0, String((f.review || {}).submitted_at || "")];
       var hl = Number(f.hours_left || 0);
       return hl <= 0 ? [0, ""] : [1, hl];
     }
@@ -610,7 +699,7 @@
   }
   EP.EF = { NEXT_STEP_AR: NEXT_STEP_AR, CUR_AR: CUR_AR, CUR_NAME_AR: CUR_NAME_AR, efMoney: efMoney,
             KIND_AR: KIND_AR, efHours: efHours, efBlocked: efBlocked, efUnactWhy: efUnactWhy,
-            efMoneyAlreadyBack: efMoneyAlreadyBack,
+            efMoneyAlreadyBack: efMoneyAlreadyBack, efReleaseWhy: efReleaseWhy, efRefundWhy: efRefundWhy,
             PRE: EF_PRE, WORK: EF_WORK, relTime: relTime, arDate: arDate };
 
   var LOADERS = {
@@ -1704,16 +1793,23 @@
       // «تعذّر»، و«الجسر مش على المنصة لسه» (`enabled:false`) مش عطل (د٩) — بس كل كود تاني بيبان «تعذّر».
       // الجولة ٧ (ب١): الخدمة ممكن تبقى مقفولة للناس والصفوف لسه جاية (`service_open:false`) — الشاشة بتعرضها
       // وبتقول إن الخدمة مقفولة، ومن غير «ابعته لـ…» (المنصة بترفضه).
-      var efDisputeIds = {}, consDisputes = [], efBlockedRows = [], efSeen = {}, efOpen = null;
+      // الجولة ٨: «مستنية مراجعتك» (`status=review`) · «استشارات قديمة محتاجة قرارك» · وضع الخدمة (`service_mode` =
+      // open | allowlist | closed — في وضع التجربة المفتاح مقفول بس الخدمة شغّالة لأصحاب القايمة، فمش «مقفولة»).
+      var efDisputeIds = {}, consDisputes = [], efBlockedRows = [], efSeen = {}, efOpen = null, efMode = null, efAllow = null;
       function failUnless403(label) { return function (e) { if (e && e.status === 403) return; fail(label)(); }; }
       if (String(EP.role || "").trim().toLowerCase() === "admin") {
-        [["waiting", "ملفات مستنية توزيع"], ["late", "آراء متأخرة"], ["disputed", "نزاعات الملفات"],
-         ["blocked", "ملفات فلوسها واقفة"], ["unactivated", "ملفات اتدفعت وما وصلتش للتوزيع"]].forEach(function (L) {
+        [["review", "آراء مستنية مراجعتك"], ["waiting", "ملفات مستنية توزيع"], ["late", "آراء متأخرة"],
+         ["disputed", "نزاعات الملفات"], ["blocked", "ملفات فلوسها واقفة"],
+         ["unactivated", "ملفات اتدفعت وما وصلتش للتوزيع"]].forEach(function (L) {
           jobs.push(get("/platform-expert-files?status=" + L[0]).then(function (r) {
             if (!r || r.enabled === false) return;
-            var closed = r.service_open === false;
+            var mode = r.service_mode ? String(r.service_mode)
+              : (r.service_open === false ? "closed" : (r.service_open === true ? "open" : null));
+            var closed = mode === "closed";
+            if (mode && (efMode === null || closed)) efMode = mode;
+            if (typeof r.allowlist_size === "number") efAllow = r.allowlist_size;
             if (closed) efOpen = false;
-            else if (r.service_open === true && efOpen === null) efOpen = true;
+            else if (mode && efOpen === null) efOpen = true;
             var files = Array.isArray(r.files) ? r.files : [];
             if ((r.total || 0) > files.length) truncated.push(L[1] + ": معروض " + files.length + " من " + r.total);
             files.forEach(function (f) {
@@ -1723,7 +1819,8 @@
               // «فلوسها واقفة» بيتضاف بعد ما كل الحارات ترد — بس اللي مش ظاهر في حارة تانية (رأي اتسلّم وتحويله وقف).
               if (L[0] === "blocked") { efBlockedRows.push(f); return; }
               efSeen[f.id] = true;
-              if (L[0] === "disputed") { efDisputeIds[f.id] = true; realRows.push(efDisputeRow(f)); }
+              if (L[0] === "review") realRows.push(efReviewRow(f));
+              else if (L[0] === "disputed") { efDisputeIds[f.id] = true; realRows.push(efDisputeRow(f)); }
               else realRows.push(efFileRow(f, L[0], closed));
             });
           }).catch(failUnless403(L[1])));
@@ -1733,6 +1830,13 @@
           consDisputes = Array.isArray(r.consultations) ? r.consultations : [];
           if ((r.total || 0) > consDisputes.length) truncated.push("نزاعات الاستشارات: معروض " + consDisputes.length + " من " + r.total);
         }).catch(failUnless403("نزاعات الاستشارات")));
+        // الجولة ٨ (البند ١٤): القايمة فاضية ⇒ ولا صفّ ولا شريحة. ٤٠٤ (لسه مش على المنصة) ⇒ `enabled:false` بهدوء.
+        jobs.push(get("/platform-legacy-consultations").then(function (r) {
+          if (!r || r.enabled === false) return;
+          var rows = Array.isArray(r.consultations) ? r.consultations : [];
+          if ((r.total || 0) > rows.length) truncated.push("استشارات قديمة: معروض " + rows.length + " من " + r.total);
+          rows.forEach(function (c) { if (c && c.id) realRows.push(legacyRow(c)); });
+        }).catch(failUnless403("استشارات قديمة")));
       }
       // تسليمات الشات (P15): رسائل تواصل جديدة تُكتب محليًّا في «الرسائل» ← تظهر في الوارد كذلك.
       jobs.push(
@@ -1806,9 +1910,15 @@
           realRows.push(f.status === "disputed" ? efDisputeRow(f) : efFileRow(f, "blocked", efOpen === false));
         });
         // الخدمة مقفولة للناس؟ من القوايم نفسها، ولو ما ردّتش من الطابور (`expert_files_service_open`).
+        // الجولة ٨: الوضع (`service_mode`) هو الحَكَم — `efServiceOpen` = «مش مقفولة» (التجربة مش مقفولة).
         var q = EP.data.opsQueue || {};
+        var qMode = typeof q.expert_files_service_mode === "string" ? q.expert_files_service_mode
+          : (typeof q.expert_files_service_open === "boolean" ? (q.expert_files_service_open ? "open" : "closed") : null);
+        EP.data.efServiceMode = efMode || qMode;
+        EP.data.efAllowlistSize = efAllow !== null ? efAllow
+          : (typeof q.expert_files_allowlist_size === "number" ? q.expert_files_allowlist_size : null);
         EP.data.efServiceOpen = efOpen !== null ? efOpen
-          : (typeof q.expert_files_service_open === "boolean" ? q.expert_files_service_open : null);
+          : (qMode ? qMode !== "closed" : null);
         realRows = sortInboxRows(realRows);
         EP.data.inbox = realRows;
         // الوارد = الصفوف الحقيقية فقط (لا دمج لأي بيانات تصميمية).
@@ -2637,6 +2747,36 @@
     var body = { note: String(noteText == null ? "" : noteText).trim().slice(0, 1000), confirmed: true };
     return post("/platform-expert-files/unactivated/" + encodeURIComponent(u.consultation_id || i.apiId) + "/refund", body)
       .then(function () { return efDone("رجعت " + efMoney(u.amount, u.currency) + " لمحفظة " + (u.client_first_name || "العميل") + " ✓", after); })
+      .catch(function (e) { return efFailed(e, after); });
+  };
+  // الجولة ٨ (البند ٧): مراجعة رأي من أول ملفات الخبير الجديد. «اعتمده وابعته للعميل» (approve) = الرأي يوصل للعميل
+  // ومهلته تبدأ ⇒ بتأكيد الشاشة (`confirmed: true`). «رجّعه للخبير» (return) = الملاحظة لازمة وبتوصل للخبير زي ما هي.
+  // ⛔ `by` ما بيتبعتش من هنا: الخادم بياخده من التوكن.
+  EP.expertFileReview = function (i, action, noteText, after) {
+    var f = (i && i.ef) || {};
+    var approve = action === "approve";
+    var body = { action: approve ? "approve" : "return",
+                 note: String(noteText == null ? "" : noteText).trim().slice(0, 1000) };
+    if (approve) body.confirmed = true;
+    return post("/platform-expert-files/" + encodeURIComponent(i.apiId) + "/review", body)
+      .then(function () {
+        return efDone(approve ? "الرأي اتبعت لـ" + (f.client_first_name || "العميل") + " ✓"
+                              : "الرأي رجع لـ" + (f.expert_name || "الخبير") + " بملاحظتك ✓", after);
+      })
+      .catch(function (e) { return efFailed(e, after); });
+  };
+  // الجولة ٨ (البند ١٤): قرار على استشارة قديمة — للخبير (release) ولا للعميل (refund). فعل فلوس ⇒ `confirmed: true`.
+  // اللي اتحوّل ولمين من الصفّ نفسه (`release_amount` · `payee_name`).
+  EP.legacyDecide = function (i, action, noteText, after) {
+    var c = (i && i.cons) || {};
+    var body = { action: action === "release" ? "release" : "refund",
+                 note: String(noteText == null ? "" : noteText).trim().slice(0, 2000), confirmed: true };
+    return post("/platform-legacy-consultations/" + encodeURIComponent(i.apiId) + "/decide", body)
+      .then(function () {
+        return efDone(body.action === "release"
+          ? "اتحوّل " + efMoney(c.release_amount, c.currency) + " لـ" + (c.payee_name || c.expert_name || "الخبير") + " ✓"
+          : "رجعت " + efMoney(c.amount, c.currency) + " لمحفظة " + (c.client_first_name || "العميل") + " ✓", after);
+      })
       .catch(function (e) { return efFailed(e, after); });
   };
   EP.disputeDecide = function (i, action, noteText, after) {
