@@ -14,6 +14,9 @@ Run:  cd backend && python3 -m pytest -q tests/test_expert_files_dashboard.py
   ٥. السجل: بعد النجاح بس، بإيميل اللي عمل الفعل، وبأرقام المنصة مش المتصفح.
   ٦. الجولة ٧: كل كتابة بتبعت `by` = إيميل الأدمن (من التوكن) · «رجّع الفلوس» لملف اتدفع وما وصلش ·
      القوايم الجديدة (`blocked` · `unactivated`) · الخدمة مقفولة والجسر شغّال.
+  ٧. الجولة ٨ (§١٧): مراجعة أول ملفات الخبير (اعتمد بتأكيد · رجّع بملاحظة لازمة) + «مبني على» بنفس قاعدة المنصة ·
+     «استشارات قديمة محتاجة قرارك» (القايمة والقرار بتأكيد) · «للخبير» المرفوض بعد ما العميل خد فلوسه بكلام المنصة ·
+     وضع الخدمة (التجربة) ورفضها بكلامها.
 """
 import copy
 import datetime
@@ -37,6 +40,8 @@ NON_ADMIN_ROLES = ['employee', 'trainer', 'investor', 'viewer', 'pending']
 FID = fx.F1['id']
 CID = fx.D2['id']
 UCID = fx.U1['consultation_id']
+RID = fx.R1['id']            # الجولة ٨: رأي مستني مراجعة المؤسس
+LID = fx.L1['id']            # الجولة ٨: استشارة قديمة محتاجة قرار
 ADMIN = 'ef-admin@x.test'
 
 ROUTES = [
@@ -49,6 +54,10 @@ ROUTES = [
     ('POST', '/api/platform-expert-files/%s/resolve' % FID, {'action': 'release', 'confirmed': True}),
     ('GET', '/api/platform-consultation-disputes', None),
     ('POST', '/api/platform-consultation-disputes/%s/resolve' % CID, {'action': 'refund', 'confirmed': True}),
+    # الجولة ٨
+    ('POST', '/api/platform-expert-files/%s/review' % RID, {'action': 'approve', 'confirmed': True}),
+    ('GET', '/api/platform-legacy-consultations', None),
+    ('POST', '/api/platform-legacy-consultations/%s/decide' % LID, {'action': 'release', 'confirmed': True}),
 ]
 
 
@@ -98,7 +107,7 @@ class Platform(object):
     """المنصة المزيّفة: `EFPlatform` من الأداة + سجل لكل نداء بالحرف + ردود مفروضة لاختبار الأخطاء."""
 
     def __init__(self):
-        self.ef = fx.EFPlatform()
+        self.ef = fx.EFPlatform(r8=True)          # الجولة ٨: فيها «مستنية مراجعتك» و«استشارات قديمة»
         self.seen = []
         self.blocked = []
         self.forced = {}      # (method, path) -> (status, payload) | Exception
@@ -387,8 +396,8 @@ def test_resolve_forwards_action_and_note_for_a_consultation(ctx, plat):
 
 def test_second_click_reaches_the_platform_once_more_and_its_guard_answers(ctx, plat):
     """الضغطة التانية (تاب تاني مثلًا) بتوصل المنصة **مرة واحدة** بس، وحارسها هو اللي بيرد —
-    والداشبورد ما بيسجّلش فعل ما حصلش."""
-    did = fx.D3['id']
+    والداشبورد ما بيسجّلش فعل ما حصلش. (الجولة ٨: على D2 — D3 فلوسه رجعت يدوي و«للخبير» فيه مرفوض من الأول.)"""
+    did = fx.D2['id']
     _call(ctx, 'POST', '/api/platform-consultation-disputes/%s/resolve' % did, {'action': 'release', 'confirmed': True})
     r = _call(ctx, 'POST', '/api/platform-consultation-disputes/%s/resolve' % did, {'action': 'release', 'confirmed': True})
     assert len(plat.seen) == 2
@@ -580,8 +589,10 @@ def test_not_configured_is_a_plain_refusal_not_no_reply(ctx, plat, monkeypatch):
 def test_detail_reaches_the_browser_without_client_data(ctx, plat):
     r = _call(ctx, 'GET', '/api/platform-expert-files/' + fx.D1['id'])
     body = r.get_json()
-    assert sorted(body) == ['dispute', 'file_no', 'id', 'opinion', 'revision', 'status', 'title']
+    assert sorted(body) == ['based_on', 'dispute', 'file_no', 'id', 'opinion', 'pending_opinion', 'review',
+                            'revision', 'status', 'title']
     assert body['file_no'] == 1042
+    assert body['based_on'] is None and body['pending_opinion'] is None   # «مبني على» للرأي اللي مستني مراجعة بس
     raw = r.get_data(as_text=True)
     for leak in (fx.CLIENT_EMAILS['D1'], 'ريم عبد الله', 'pay-'):
         assert leak not in raw, leak
@@ -717,3 +728,328 @@ def test_reassign_audit_names_the_previous_expert_from_the_platform_reply(ctx, p
     _call(ctx, 'POST', '/api/platform-expert-files/%s/reassign' % fid, {'expert_email': 'faisal@experts.test'})
     (_a, _t, meta), = _audits('expert_file.reassign', fid)
     assert meta['previous_expert'] == meta['previous_expert_email'] == 'sami@experts.test'
+
+
+# ---------------------------------------------------------------- ٩) الجولة ٨ — قرارات المؤسس (SPEC §١٧)
+# م٩ مراجعة أول ملفات الخبير الجديد · م١٠/م١١ «استشارات قديمة محتاجة قرارك» · «للخبير» مقفول بسبب المنصة ·
+# وضع الخدمة (open | allowlist | closed). الأشكال من `ef_fixtures` (كود المنصة على فرع الجولة ٨ بالحرف).
+
+def test_review_list_is_forwarded_and_verbatim_with_the_service_mode(ctx, plat):
+    r = _call(ctx, 'GET', '/api/platform-expert-files?status=review')
+    assert plat.seen[-1]['params'] == {'status': 'review'}
+    body = r.get_json()
+    assert body.pop('enabled') is True
+    assert body == fx.list_payload('review', [fx.R1, fx.R2])
+    assert body['service_mode'] == 'open' and body['allowlist_size'] == 0
+    r1 = body['files'][0]
+    assert r1['status'] == 'in_review' and r1['status_label'] == 'بنراجع رأيك قبل ما يوصلك'
+    assert r1['review']['submitted_at'] and r1['review']['returns'] == 0
+    assert r1['pending_opinion']['answers'][0]['question'] == fx.R1_OPINION['answers'][0]['question']
+    assert r1['expert_delivered_count'] == 0 and body['files'][1]['expert_delivered_count'] == 1
+
+
+@pytest.mark.parametrize('body', [{'action': 'approve'}, {'action': 'approve', 'confirmed': 'true'},
+                                  {'action': 'approve', 'confirmed': 1}])
+def test_review_approve_needs_the_confirm_window(ctx, plat, body):
+    r = _call(ctx, 'POST', '/api/platform-expert-files/%s/review' % RID, body)
+    assert r.status_code == 400 and r.get_json() == {'error': 'لازم تأكّد الأول من الشاشة'}
+    assert plat.seen == [] and _audits('expert_file.review_approve') == []
+
+
+@pytest.mark.parametrize('note', [None, '', '   ', 5, ['x'], {'t': 'x'}])
+def test_review_return_needs_a_note_for_the_expert(ctx, plat, note):
+    r = _call(ctx, 'POST', '/api/platform-expert-files/%s/review' % RID, {'action': 'return', 'note': note})
+    assert r.status_code == 400 and r.get_json() == {'error': 'اكتب ملاحظة للخبير'}
+    assert plat.seen == [] and _audits('expert_file.review_return') == []
+
+
+@pytest.mark.parametrize('action', [None, '', 'reject', 'APPROVE', 'release', 'approve '])
+def test_review_action_is_validated_locally(ctx, plat, action):
+    r = _call(ctx, 'POST', '/api/platform-expert-files/%s/review' % RID,
+              {'action': action, 'confirmed': True, 'note': 'x'})
+    assert r.status_code == 400 and r.get_json() == {'error': 'اختار: وافق ولا رجّعه للخبير'}
+    assert plat.seen == []
+
+
+def test_review_approve_forwards_the_bridge_model_and_audits_the_platform_numbers(ctx, plat):
+    r = _call(ctx, 'POST', '/api/platform-expert-files/%s/review' % RID,
+              {'action': 'approve', 'confirmed': True, 'note': ' ', 'amount': 1, 'by': 'x@evil.test'})
+    assert r.status_code == 200, r.get_json()
+    assert r.get_json() == {'ok': True, 'status': 'delivered'}
+    sent = plat.seen[-1]
+    assert sent['url'] == PLATFORM + '/api/bridge/expert-files/%s/review' % RID
+    assert sent['json'] == {'action': 'approve', 'note': '', 'by': ADMIN}      # ⛔ ولا confirmed ولا مبلغ
+    assert sent['timeout'] >= 25 and len(plat.seen) == 1
+    (actor, target, meta), = _audits('expert_file.review_approve', RID)
+    assert actor == ADMIN and target == RID
+    assert meta['title'] == fx.R1['title'] and meta['amount'] == 500.0 and meta['currency'] == 'EGP'
+    assert meta['expert_name'] == 'أ. رنا عادل' and meta['status'] == 'delivered' and meta['review_round'] == 1
+    assert 'note' not in meta
+
+
+def test_review_return_sends_the_note_to_the_expert_and_audits_it(ctx, plat):
+    note = 'الإجابة الأولى محتاجة تذكر المادة اللي بتحدد مدة سقوط الدعوى.'
+    r = _call(ctx, 'POST', '/api/platform-expert-files/%s/review' % RID, {'action': 'return', 'note': '  ' + note})
+    assert r.status_code == 200 and r.get_json() == {'ok': True, 'status': 'writing'}
+    assert plat.seen[-1]['json'] == {'action': 'return', 'note': note, 'by': ADMIN}
+    (_a, _t, meta), = _audits('expert_file.review_return', RID)
+    assert meta['note'] == note and meta['review_returns'] == 1 and meta['status'] == 'writing'
+    assert _audits('expert_file.review_approve') == []
+
+
+def test_review_note_is_clipped_to_the_bridge_limit(ctx, plat):
+    _call(ctx, 'POST', '/api/platform-expert-files/%s/review' % RID, {'action': 'return', 'note': 'ن' * 1500})
+    assert plat.seen[-1]['json']['note'] == 'ن' * 1000
+
+
+@pytest.mark.parametrize('status,detail', [(409, fx.E_REVIEW_RETURNED), (409, fx.E_REVIEW_SLOTS),
+                                           (409, fx.E_REVIEW_NOT_WAITING), (409, fx.E_MONEY_MOVED),
+                                           (409, fx.E_CLOSED), (422, fx.E_REVIEW_NOTE)])
+def test_review_refusals_reach_the_founder_verbatim_and_are_never_audited(ctx, plat, status, detail):
+    plat.forced[('POST', '/api/bridge/expert-files/%s/review' % RID)] = (status, {'detail': detail})
+    r = _call(ctx, 'POST', '/api/platform-expert-files/%s/review' % RID, {'action': 'approve', 'confirmed': True})
+    assert r.status_code == status and r.get_json() == {'error': detail}
+    assert _audits('expert_file.review_approve') == [] and _audits('expert_file.no_reply') == []
+
+
+def test_a_second_return_is_refused_by_the_platform_in_its_words(ctx, plat):
+    """R2 اترجع للخبير مرة قبل كده ⇒ المنصة بترفض الرجوع التاني بكلامها (والداشبورد ما بيقررش ده لوحده)."""
+    r = _call(ctx, 'POST', '/api/platform-expert-files/%s/review' % fx.R2['id'], {'action': 'return', 'note': 'تاني'})
+    assert r.status_code == 409 and r.get_json() == {'error': fx.E_REVIEW_RETURNED}
+    assert len(plat.seen) == 1 and _audits('expert_file.review_return') == []
+
+
+def test_review_twice_reaches_the_platform_guard(ctx, plat):
+    path = '/api/platform-expert-files/%s/review' % RID
+    _call(ctx, 'POST', path, {'action': 'approve', 'confirmed': True})
+    r = _call(ctx, 'POST', path, {'action': 'approve', 'confirmed': True})
+    assert r.status_code == 409 and r.get_json() == {'error': fx.E_REVIEW_NOT_WAITING}
+    assert len(plat.seen) == 2 and len(_audits('expert_file.review_approve', RID)) == 1
+
+
+def test_review_no_reply_is_said_and_logged(ctx, plat):
+    plat.forced[('POST', '/api/bridge/expert-files/%s/review' % RID)] = _requests.Timeout('slow')
+    r = _call(ctx, 'POST', '/api/platform-expert-files/%s/review' % RID, {'action': 'approve', 'confirmed': True})
+    assert r.status_code == 502 and r.get_json()['no_reply'] is True
+    assert len(plat.seen) == 1                                            # ⛔ ولا إعادة محاولة
+    (_a, target, meta), = _audits('expert_file.no_reply', RID)
+    assert meta == {'attempt': 'review', 'action': 'approve'}
+
+
+@pytest.mark.parametrize('bad', ['x' * 65, 'a.b', '..', 'a b', 'ملف'])
+def test_review_validates_the_id_first(ctx, plat, bad):
+    r = _call(ctx, 'POST', '/api/platform-expert-files/%s/review' % bad, {'action': 'approve', 'confirmed': True})
+    assert r.status_code in (404, 405) and plat.seen == []
+
+
+def test_detail_of_a_file_in_review_carries_the_opinion_and_based_on_without_client_data(ctx, plat):
+    r = _call(ctx, 'GET', '/api/platform-expert-files/' + RID)
+    body = r.get_json()
+    assert r.status_code == 200
+    assert body['pending_opinion'] == fx.R1_OPINION and body['review']['round'] == 1
+    import app as appmod
+    det = fx.REVIEW_DETAIL[RID]
+    expected = 'الرأي ده مبني على الوقائع اللي أكّدها سمر يوم %s، ومستندين، وعلى القانون المصري.' % (
+        appmod._ef_ar_date(det['facts_confirmed_at'], 'eg'))
+    assert body['based_on'] == expected
+    raw = r.get_data(as_text=True)
+    for leak in (fx.CLIENT_EMAILS['R1'], 'سمر ماهر', 'pay-', 'محضر الشرطة.pdf'):
+        assert leak not in raw, leak
+
+
+def test_based_on_counts_additions_and_no_documents_like_the_platform(ctx, plat):
+    body = _call(ctx, 'GET', '/api/platform-expert-files/' + fx.R2['id']).get_json()
+    import app as appmod
+    det = fx.REVIEW_DETAIL[fx.R2['id']]
+    assert body['based_on'] == ('الرأي ده مبني على الوقائع اللي أكّدها دينا يوم %s، من غير مستندات، وردّه يوم %s، '
+                                'وعلى القانون المصري.' % (appmod._ef_ar_date(det['facts_confirmed_at'], 'eg'),
+                                                         appmod._ef_ar_date(det['additions'][0]['at'], 'eg')))
+
+
+def test_based_on_prefers_the_platform_sentence_when_it_is_sent(ctx, plat):
+    plat.ef.review[0]['pending_opinion']['based_on'] = 'جملة المنصة بالحرف.'
+    body = _call(ctx, 'GET', '/api/platform-expert-files/' + plat.ef.review[0]['id']).get_json()
+    assert body['based_on'] == 'جملة المنصة بالحرف.'
+
+
+def test_based_on_mirror_matches_the_platform_rules():
+    """`build_based_on` على المنصة بالحرف: عدّ المستندات · المنطقة الزمنية لبلد السعر · الأسئلة اللي ما اتردّش عليها."""
+    import app as appmod
+    base = {'client_name': 'منى عبد الله', 'law_label': 'القانون المصري', 'price': {'country': 'eg'},
+            'facts_confirmed_at': '2026-10-26T22:30:00+00:00', 'additions': [], 'docs': [], 'info': None}
+    # ٢٢:٣٠ UTC = ٠٠:٣٠ بتوقيت القاهرة ⇒ ٢٧ أكتوبر
+    assert appmod._ef_based_on(base) == 'الرأي ده مبني على الوقائع اللي أكّدها منى يوم ٢٧ أكتوبر ٢٠٢٦، من غير مستندات، وعلى القانون المصري.'
+    for n, phrase in ((1, 'ومستند واحد'), (2, 'ومستندين'), (5, 'و٥ مستندات'), (10, 'و١٠ مستندات'), (11, 'و١١ مستند')):
+        assert phrase in appmod._ef_based_on(dict(base, docs=[{}] * n)), n
+    sa = dict(base, price={'country': 'sa'}, facts_confirmed_at='2026-10-26T21:30:00+00:00')
+    assert 'يوم ٢٧ أكتوبر ٢٠٢٦' in appmod._ef_based_on(sa)                    # +٣ الرياض
+    us = dict(base, price={'country': 'default'}, facts_confirmed_at='2026-10-26T22:30:00+00:00')
+    assert 'يوم ٢٦ أكتوبر ٢٠٢٦' in appmod._ef_based_on(us)                    # من غير منطقة ⇒ UTC
+    exp = dict(base, info={'status': 'expired', 'questions': [{'text': 'العقد مكتوب؟'}, {'text': 'فيه شهود؟'}]})
+    assert appmod._ef_based_on(exp).endswith(' وأسئلة الخبير اللي ما اتردّش عليها: «العقد مكتوب؟»، «فيه شهود؟».')
+    assert 'أكّدها العميل' in appmod._ef_based_on(dict(base, client_name=''))
+    assert 'وعلى القانون.' in appmod._ef_based_on(dict(base, law_label=''))
+
+
+# ---- «استشارات قديمة محتاجة قرارك» (م١٠ · م١١)
+
+def test_legacy_list_is_verbatim_minus_client_email_and_payment_id(ctx, plat):
+    r = _call(ctx, 'GET', '/api/platform-legacy-consultations')
+    assert plat.seen[-1]['url'] == PLATFORM + '/api/bridge/consultations/legacy'
+    body = r.get_json()
+    assert body.pop('enabled') is True
+    expected = fx.legacy_payload([{k: v for k, v in c.items() if k not in ('member_email', 'payment_id')}
+                                  for c in (fx.L1, fx.L2, fx.L3)])
+    assert body == expected
+    assert '@clients.test' not in r.get_data(as_text=True)
+    l2 = body['consultations'][1]
+    assert l2['release_blocked_reason'] == fx.E_RELEASE_MANUAL and l2['refund_blocked_reason'] == fx.E_RESOLVE_MANUAL
+    assert body['consultations'][0]['due'] is True and body['consultations'][2]['due'] is False
+
+
+@pytest.mark.parametrize('legacy_enabled,cons_enabled', [(False, True), (True, False)])
+def test_legacy_list_not_on_the_platform_yet_is_enabled_false(ctx, plat, legacy_enabled, cons_enabled):
+    plat.ef.legacy_enabled = legacy_enabled
+    plat.ef.cons_enabled = cons_enabled
+    r = _call(ctx, 'GET', '/api/platform-legacy-consultations')
+    assert r.status_code == 200
+    assert r.get_json() == {'enabled': False, 'since': None, 'consultations': [], 'count': 0, 'total': 0}
+
+
+def test_legacy_list_real_errors_pass_through(ctx, plat):
+    plat.forced[('GET', '/api/bridge/consultations/legacy')] = (503, {'detail': 'Database not available'})
+    r = _call(ctx, 'GET', '/api/platform-legacy-consultations')
+    assert r.status_code == 503 and r.get_json() == {'error': 'المنصة مش متاحة دلوقتي — جرّب بعد شوية'}
+
+
+@pytest.mark.parametrize('body,err', [({'action': 'release'}, 'لازم تأكّد الأول من الشاشة'),
+                                      ({'action': 'release', 'confirmed': 'true'}, 'لازم تأكّد الأول من الشاشة'),
+                                      ({'action': 'split', 'confirmed': True}, 'اختار: للخبير ولا للعميل'),
+                                      ({'confirmed': True}, 'اختار: للخبير ولا للعميل')])
+def test_legacy_decide_is_validated_locally(ctx, plat, body, err):
+    r = _call(ctx, 'POST', '/api/platform-legacy-consultations/%s/decide' % LID, body)
+    assert r.status_code == 400 and r.get_json() == {'error': err}
+    assert plat.seen == [] and _audits('consultation.legacy') == []
+
+
+@pytest.mark.parametrize('action,status', [('release', 'released'), ('refund', 'refunded')])
+def test_legacy_decide_forwards_and_audits_the_platform_numbers(ctx, plat, action, status):
+    r = _call(ctx, 'POST', '/api/platform-legacy-consultations/%s/decide' % LID,
+              {'action': action, 'confirmed': True, 'note': ' اتأكدت من الشغل ', 'amount': 1})
+    assert r.status_code == 200 and r.get_json() == {'ok': True, 'status': status}
+    sent = plat.seen[-1]
+    assert sent['url'] == PLATFORM + '/api/bridge/consultations/%s/legacy' % LID
+    assert sent['json'] == {'action': action, 'note': 'اتأكدت من الشغل', 'by': ADMIN}
+    assert sent['timeout'] >= 25 and len(plat.seen) == 1
+    (actor, target, meta), = _audits('consultation.legacy', LID)
+    assert actor == ADMIN and target == LID
+    assert meta == {'title': fx.L1['title'], 'kind': 'consultation', 'amount': 600, 'currency': 'EGP',
+                    'expert_amount': 480, 'platform_fee': 120, 'status': status, 'expert_email': 'amr@experts.test',
+                    'expert_name': 'أ. عمرو الشريف', 'action': action, 'note': 'اتأكدت من الشغل'}
+
+
+@pytest.mark.parametrize('action,detail', [('release', fx.E_RELEASE_MANUAL), ('refund', fx.E_RESOLVE_MANUAL)])
+def test_legacy_money_already_back_is_refused_by_the_platform_in_its_words(ctx, plat, action, detail):
+    r = _call(ctx, 'POST', '/api/platform-legacy-consultations/%s/decide' % fx.L2['id'],
+              {'action': action, 'confirmed': True})
+    assert r.status_code == 409 and r.get_json() == {'error': detail}
+    assert _audits('consultation.legacy') == []
+
+
+@pytest.mark.parametrize('detail', [fx.E_LEGACY_SETTLED, fx.E_LEGACY_NOT_LEGACY, fx.E_LEGACY_FILE,
+                                    fx.E_LEGACY_CANCELLED, fx.E_RELEASE_GATEWAY, fx.E_RESOLVE_GATEWAY])
+def test_legacy_refusals_pass_verbatim(ctx, plat, detail):
+    plat.forced[('POST', '/api/bridge/consultations/%s/legacy' % LID)] = (409, {'detail': detail})
+    r = _call(ctx, 'POST', '/api/platform-legacy-consultations/%s/decide' % LID, {'action': 'release', 'confirmed': True})
+    assert r.status_code == 409 and r.get_json() == {'error': detail}
+
+
+def test_legacy_twice_reaches_the_platform_guard_and_is_audited_once(ctx, plat):
+    path = '/api/platform-legacy-consultations/%s/decide' % LID
+    _call(ctx, 'POST', path, {'action': 'release', 'confirmed': True})
+    r = _call(ctx, 'POST', path, {'action': 'release', 'confirmed': True})
+    assert r.status_code == 409 and r.get_json() == {'error': fx.E_LEGACY_SETTLED}
+    assert len(plat.seen) == 2 and len(_audits('consultation.legacy', LID)) == 1
+
+
+def test_legacy_no_reply_is_said_and_logged(ctx, plat):
+    plat.forced[('POST', '/api/bridge/consultations/%s/legacy' % LID)] = _requests.ConnectionError('reset')
+    r = _call(ctx, 'POST', '/api/platform-legacy-consultations/%s/decide' % LID, {'action': 'refund', 'confirmed': True})
+    assert r.status_code == 502 and r.get_json()['no_reply'] is True and len(plat.seen) == 1
+    (_a, target, meta), = _audits('consultation.no_reply', LID)
+    assert meta == {'attempt': 'legacy', 'action': 'refund'}
+
+
+def test_legacy_decide_on_a_platform_without_it_says_so(ctx, plat):
+    plat.ef.legacy_enabled = False
+    r = _call(ctx, 'POST', '/api/platform-legacy-consultations/%s/decide' % LID, {'action': 'release', 'confirmed': True})
+    assert r.status_code == 404
+    assert r.get_json() == {'error': 'القرار على الاستشارات القديمة من هنا لسه مش متاح على المنصة'}
+    plat.ef.legacy_enabled = True
+    r = _call(ctx, 'POST', '/api/platform-legacy-consultations/no-such/decide', {'action': 'release', 'confirmed': True})
+    assert r.status_code == 404 and r.get_json() == {'error': fx.E_LEGACY_MISSING}
+
+
+@pytest.mark.parametrize('bad', ['x' * 65, 'a.b', '..', 'a b', 'ملف'])
+def test_legacy_decide_validates_the_id_first(ctx, plat, bad):
+    r = _call(ctx, 'POST', '/api/platform-legacy-consultations/%s/decide' % bad, {'action': 'release', 'confirmed': True})
+    assert r.status_code in (404, 405) and plat.seen == []
+
+
+# ---- «للخبير» بعد ما العميل خد فلوسه (البند ٥)
+
+def test_release_blocked_reason_reaches_the_browser_on_every_list(ctx, plat):
+    plat.ef.disputed = [fx.release_locked(fx.D1, 'gateway_refund')]
+    files = _call(ctx, 'GET', '/api/platform-expert-files?status=disputed').get_json()['files']
+    assert files[0]['release_blocked'] == 'gateway_refund' and files[0]['release_blocked_reason'] == fx.E_RELEASE_GATEWAY
+    cons = _call(ctx, 'GET', '/api/platform-consultation-disputes').get_json()['consultations']
+    d3 = [c for c in cons if c['id'] == fx.D3['id']][0]
+    assert d3['release_blocked'] == 'manual_refund' and d3['release_blocked_reason'] == fx.E_RELEASE_MANUAL
+    legacy = _call(ctx, 'GET', '/api/platform-legacy-consultations').get_json()['consultations']
+    assert legacy[1]['release_blocked_reason'] == fx.E_RELEASE_MANUAL
+    waiting = _call(ctx, 'GET', '/api/platform-expert-files?status=waiting').get_json()['files']
+    assert {f['release_blocked'] for f in waiting} == {'not_claimed'}       # الفلوس لسه على بريد المنصة
+
+
+@pytest.mark.parametrize('detail', [fx.E_RELEASE_MANUAL, fx.E_RELEASE_GATEWAY])
+def test_release_refused_at_decision_time_reaches_the_founder_verbatim(ctx, plat, detail):
+    for bridge, mine in (('/api/bridge/expert-files/%s/resolve' % fx.D1['id'],
+                          '/api/platform-expert-files/%s/resolve' % fx.D1['id']),
+                         ('/api/bridge/consultations/%s/resolve' % CID,
+                          '/api/platform-consultation-disputes/%s/resolve' % CID)):
+        plat.forced[('POST', bridge)] = (409, {'detail': detail})
+        r = _call(ctx, 'POST', mine, {'action': 'release', 'confirmed': True})
+        assert r.status_code == 409 and r.get_json() == {'error': detail}
+    assert _audits('expert_file.resolve') == [] and _audits('consultation.resolve') == []
+
+
+def test_release_on_a_manually_refunded_consultation_is_refused_by_the_platform(ctx, plat):
+    r = _call(ctx, 'POST', '/api/platform-consultation-disputes/%s/resolve' % fx.D3['id'],
+              {'action': 'release', 'confirmed': True})
+    assert r.status_code == 409 and r.get_json() == {'error': fx.E_RELEASE_MANUAL}
+
+
+# ---- وضع الخدمة (البند ١٣)
+
+def test_allowlist_mode_reaches_the_browser_and_the_trial_refusal_passes_verbatim(ctx, plat):
+    plat.ef = fx.EFPlatform(r8=True, mode='allowlist')
+    body = _call(ctx, 'GET', '/api/platform-expert-files?status=waiting').get_json()
+    assert body['service_mode'] == 'allowlist' and body['allowlist_size'] == len(fx.ALLOWLIST)
+    assert body['service_open'] is False and len(body['files']) == 5
+    r = _call(ctx, 'POST', '/api/platform-expert-files/%s/assign' % FID, {'expert_email': 'sami@experts.test'})
+    assert r.status_code == 409 and r.get_json() == {'error': fx.E_TRIAL_ONLY}
+    assert _audits('expert_file.assign') == []
+    r = _call(ctx, 'POST', '/api/platform-expert-files/%s/assign' % FID, {'expert_email': 'hala@experts.test'})
+    assert r.status_code == 200 and len(_audits('expert_file.assign', FID)) == 1
+    q = plat.ef.queue()
+    assert q['expert_files_service_mode'] == 'allowlist' and q['expert_files_allowlist_size'] == len(fx.ALLOWLIST)
+
+
+def test_the_new_queue_keys_pass_through_untouched(ctx, plat):
+    body = _call(ctx, 'GET', '/api/platform-ops-queue').get_json()
+    for key in ('expert_files_in_review', 'expert_files_service_mode', 'expert_files_allowlist_size',
+                'consultations_legacy', 'escrow_auto_release_since'):
+        assert key in body, key
+    assert body['expert_files_in_review'] == 2 and body['consultations_legacy'] == 3
+    assert '🔎 2 رأي مستني مراجعتك قبل ما يوصل للعميل' in body['alerts']
+    assert '🗂️ 3 استشارة قديمة اتسلّمت ومستنية قرارك — للخبير ولا للعميل' in body['alerts']

@@ -2332,8 +2332,10 @@ def platform_verify_reassign(req_id):
 #     يكتب اسمه بدل «dashboard». ⛔ `by` للسجل بس — الصلاحية هي السرّ.
 _EF_ID_RE = re.compile(r'[A-Za-z0-9_-]{1,64}')
 # `blocked` (فلوس اتوقّفت) و`unactivated` (اتدفع وما وصلش لقايمة التوزيع) — الجولة ٧ (ب٢ · ب٩).
-_EF_LIST_STATUSES = ('waiting', 'late', 'disputed', 'blocked', 'unactivated')
+# `review` (أول ملفات الخبير الجديد مستنية مراجعة المؤسس قبل العميل) — الجولة ٨ (البند ٧).
+_EF_LIST_STATUSES = ('waiting', 'late', 'disputed', 'blocked', 'unactivated', 'review')
 _EF_ACTIONS = ('release', 'refund')
+_EF_REVIEW_ACTIONS = ('approve', 'return')
 # ٤٠٤ `Not Found` من جسر الملفات: من الجولة ٧ الجسر شغّال بالسرّ حتى والخدمة مقفولة، فالـ٤٠٤ معناه إن
 # الجسر نفسه مش على المنصة لسه (الإنتاج قبل نشر الفروع).
 EF_OFF_AR = 'ملفات «ملف للخبير» مش واصلة للداشبورد لسه'
@@ -2347,6 +2349,8 @@ _EF_ERRORS_AR = {
 }
 # جسر نزاعات الاستشارات مش ورا مفتاح «ملف للخبير» — ٤٠٤ عنده معناه «لسه مش منشور».
 _CONS_ERRORS_AR = dict(_EF_ERRORS_AR, **{'Not Found': 'حسم النزاعات من هنا لسه مش متاح على المنصة'})
+# «استشارات قديمة محتاجة قرارك» (الجولة ٨ البند ١٤) — جسر أحدث من النزاعات: ٤٠٤ = لسه مش على المنصة.
+_LEGACY_ERRORS_AR = dict(_EF_ERRORS_AR, **{'Not Found': 'القرار على الاستشارات القديمة من هنا لسه مش متاح على المنصة'})
 
 
 def _ef_bridge(method, path, params=None, json_body=None, timeout=12, errors=None):
@@ -2400,7 +2404,8 @@ def _ef_meta(f, **extra):
 # ⛔ بيانات العميل ما توصلش للمتصفح من غير لازمة. قراية الملف كله من الجسر (`GET /bridge/expert-files/{id}`)
 # لسه بترجّع إيميل العميل واسمه كامل والوقائع ورقم الدفع (مقصود — للمؤسس)، والشاشة محتاجة الرأيين بس.
 # ردود الكتابة بقت نضيفة من المنصة نفسها (الجولة ٧ ب٨)، والمتصفح بياخد منها نجح + الحالة بس.
-_EF_DETAIL_KEYS = ('id', 'title', 'status', 'file_no', 'dispute', 'opinion', 'revision')
+# الجولة ٨: درج «مستنية مراجعتك» محتاج الرأي اللي مستني (`pending_opinion`) وحالة المراجعة (`review`) و«مبني على».
+_EF_DETAIL_KEYS = ('id', 'title', 'status', 'file_no', 'dispute', 'opinion', 'revision', 'pending_opinion', 'review')
 _CONS_LIST_HIDDEN = ('member_email', 'payment_id')
 
 
@@ -2408,7 +2413,83 @@ def _ef_detail_out(resp):
     if not _resp_ok(resp):
         return resp
     f = _proxy_json(resp)
-    return jsonify({k: f.get(k) for k in _EF_DETAIL_KEYS})
+    out = {k: f.get(k) for k in _EF_DETAIL_KEYS}
+    out['based_on'] = None
+    if f.get('status') == 'in_review':
+        po = f.get('pending_opinion') if isinstance(f.get('pending_opinion'), dict) else {}
+        out['based_on'] = po.get('based_on') or _ef_based_on(f)
+    return jsonify(out)
+
+
+# «مبني على» للرأي اللي مستني مراجعة المؤسس (الجولة ٨ البند ٧). المنصة بتبني الجملة دي وقت ما الرأي يتسلّم
+# (`expert_files.build_based_on`) وما بتبعتهاش مع `pending_opinion` — فالداشبورد بيبنيها **بنفس القاعدة بالحرف**
+# (نفس الجملة · نفس المنطقة الزمنية لبلد السعر · نفس عدّ المستندات) عشان المؤسس يشوف الرأي زي ما العميل هيشوفه.
+# لو المنصة بعتتها بعد كده (`pending_opinion.based_on`) بتتقري هي زي ما هي. ⛔ الاسم الأول بس (بيانات العميل ما
+# توصلش المتصفح) — العميل بيشوف اسمه كامل.
+_EF_AR_DIGITS = str.maketrans('0123456789', '٠١٢٣٤٥٦٧٨٩')
+_EF_MONTHS = ('يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو', 'يوليو', 'أغسطس', 'سبتمبر',
+              'أكتوبر', 'نوفمبر', 'ديسمبر')
+# البلد ⇒ (المنطقة، إزاحة احتياطية لو tzdata مش موجودة) — نفس `expert_files.ZONES`.
+_EF_ZONES = {'eg': ('Africa/Cairo', 2), 'sa': ('Asia/Riyadh', 3), 'ae': ('Asia/Dubai', 4), 'kw': ('Asia/Kuwait', 3),
+             'qa': ('Asia/Qatar', 3), 'bh': ('Asia/Bahrain', 3), 'om': ('Asia/Muscat', 4), 'jo': ('Asia/Amman', 3)}
+
+
+def _ef_ar(value):
+    return str(value if value is not None else '').translate(_EF_AR_DIGITS)
+
+
+def _ef_ar_date(iso, country):
+    """«٢٦ أكتوبر ٢٠٢٦» بالمنطقة الزمنية للبلد — نفس `expert_files._ar_date`."""
+    try:
+        dt = datetime.datetime.fromisoformat(str(iso)) if iso else None
+    except (TypeError, ValueError):
+        dt = None
+    if dt is None:
+        return ''
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=datetime.timezone.utc)
+    zone = _EF_ZONES.get(country)
+    if not zone:
+        dt = dt.astimezone(datetime.timezone.utc)
+    else:
+        try:
+            from zoneinfo import ZoneInfo
+            dt = dt.astimezone(ZoneInfo(zone[0]))
+        except Exception:
+            dt = dt.astimezone(datetime.timezone(datetime.timedelta(hours=zone[1])))
+    return '%s %s %s' % (_ef_ar(dt.day), _EF_MONTHS[dt.month - 1], _ef_ar(dt.year))
+
+
+def _ef_docs_phrase(n):
+    if n <= 0:
+        return 'من غير مستندات'
+    if n == 1:
+        return 'ومستند واحد'
+    if n == 2:
+        return 'ومستندين'
+    if n <= 10:
+        return 'و%s مستندات' % _ef_ar(n)
+    return 'و%s مستند' % _ef_ar(n)
+
+
+def _ef_based_on(f):
+    """`expert_files.build_based_on` بالحرف على قراية الملف كله من الجسر (`bridge_view`)، بالاسم الأول."""
+    country = str((f.get('price') or {}).get('country') or 'default') if isinstance(f.get('price'), dict) else 'default'
+    parts = str(f.get('client_name') or '').strip().split()
+    who = parts[0] if parts else 'العميل'
+    confirmed = _ef_ar_date(f.get('facts_confirmed_at'), country)
+    additions = ''.join('، وردّه يوم %s' % _ef_ar_date(a.get('at'), country)
+                        for a in (f.get('additions') or []) if isinstance(a, dict))
+    law = f.get('law_label') or 'القانون'
+    docs = f.get('docs') if isinstance(f.get('docs'), list) else []
+    text = 'الرأي ده مبني على الوقائع اللي أكّدها %s يوم %s، %s%s، وعلى %s.' % (
+        who, confirmed, _ef_docs_phrase(len(docs)), additions, law)
+    info = f.get('info') if isinstance(f.get('info'), dict) else {}
+    if info.get('status') == 'expired':
+        asked = '، '.join('«%s»' % q.get('text') for q in (info.get('questions') or []) if isinstance(q, dict))
+        if asked:
+            text += ' وأسئلة الخبير اللي ما اتردّش عليها: %s.' % asked
+    return text
 
 
 def _ef_done(f):
@@ -2450,7 +2531,8 @@ def platform_expert_files():
 @token_required
 @roles_required('admin')
 def platform_expert_file_detail(file_id):
-    """م٢ — الملف كله (الرأي الأصلي + تعديل الخبير للنزاع). ⛔ من غير بايتات المستندات (د١٣)."""
+    """م٢ — الملف كله (الرأي الأصلي + تعديل الخبير للنزاع · والرأي اللي مستني مراجعتك + «مبني على» — الجولة ٨).
+    ⛔ من غير بايتات المستندات (د١٣)، ومن غير بيانات العميل (المتصفح بياخد المفاتيح دي بس)."""
     if _ef_bad_id(file_id):
         return jsonify({'error': 'الملف ده مش موجود'}), 404
     return _ef_detail_out(_ef_bridge('GET', f'/api/bridge/expert-files/{file_id}'))
@@ -2628,6 +2710,97 @@ def platform_consultation_dispute_resolve(consultation_id):
         return _ef_done(c)
     elif _ef_no_reply(resp):
         return _ef_no_reply_resp('consultation', consultation_id, 'resolve', action)
+    return resp
+
+
+# --------------------------------------------------------------------------- الجولة ٨ (قرارات المؤسس)
+# docs/EXPERT-FILES-DASHBOARD-SPEC.md §١٧ · ريبو المنصة docs/expert-files/SPEC-R8-DECISIONS.md §٣ (والكود هو الحَكَم).
+#   م٩  مراجعة أول ملفات الخبير الجديد: «اعتمده وابعته للعميل» (approve) / «رجّعه للخبير» بملاحظة (return).
+#   م١٠ «استشارات قديمة محتاجة قرارك»: القايمة.
+#   م١١ قرار المؤسس على استشارة قديمة: للخبير (release) ولا للعميل (refund).
+# نفس نمط الجولة ٦: أدمن بس · تحقق محلي قبل أي نداء · `by` من التوكن · ولا إعادة محاولة · السجل بعد النجاح بأرقام المنصة.
+_CONS_META_KEYS = ('title', 'kind', 'amount', 'currency', 'expert_amount', 'platform_fee', 'status',
+                   'expert_email', 'expert_name')
+
+
+@app.route('/api/platform-expert-files/<file_id>/review', methods=['POST'])
+@token_required
+@roles_required('admin')
+def platform_expert_file_review(file_id):
+    """م٩ — رأي من أول ملفات الخبير الجديد مستني المؤسس قبل العميل (`in_review`). `approve` بيوصّل الرأي للعميل
+    بنفس مسار التسليم على المنصة (ومهلة الـ٣ أيام بتبدأ) ⇒ محتاج تأكيد الشاشة. `return` بيرجّعه للخبير بملاحظة
+    **بتوصله زي ما هي** ⇒ الملاحظة لازمة. رسايل رفض المنصة (رجّعته قبل كده · المواعيد قربت · اتقفل) بتعدّي زي ما هي."""
+    if _ef_bad_id(file_id):
+        return jsonify({'error': 'الملف ده مش موجود'}), 404
+    body = request.get_json(silent=True) or {}
+    action = body.get('action')
+    if action not in _EF_REVIEW_ACTIONS:
+        return jsonify({'error': 'اختار: وافق ولا رجّعه للخبير'}), 400
+    note = _ef_note(body.get('note'), 1000)
+    if action == 'approve' and body.get('confirmed') is not True:
+        return jsonify({'error': 'لازم تأكّد الأول من الشاشة'}), 400
+    if action == 'return' and not note:
+        return jsonify({'error': 'اكتب ملاحظة للخبير'}), 400
+    resp = _ef_bridge('POST', f'/api/bridge/expert-files/{file_id}/review',
+                      json_body={'action': action, 'note': note, 'by': _actor_email()}, timeout=25)
+    if _resp_ok(resp):
+        f = _proxy_json(resp)
+        review = f.get('review') if isinstance(f.get('review'), dict) else {}
+        _audit('expert_file.review_' + action, target=file_id,
+               meta=_ef_meta(f, note=note, review_round=review.get('round'), review_returns=review.get('returns')))
+        return _ef_done(f)
+    elif _ef_no_reply(resp):
+        return _ef_no_reply_resp('expert_file', file_id, 'review', action)
+    return resp
+
+
+@app.route('/api/platform-legacy-consultations', methods=['GET'])
+@token_required
+@roles_required('admin')
+def platform_legacy_consultations():
+    """م١٠ — الاستشارات اللي اتسلّمت وفلوسها اتمسكت قبل بداية التحويل التلقائي: المنصة ما بتحرّكهاش لوحدها،
+    فبتستنى قرار المؤسس. الحمولة بالحرف + `enabled` (من غير إيميل العميل ولا رقم الدفع). ٤٠٤ = الجسر لسه مش على
+    المنصة ⇒ ٢٠٠ فاضي `enabled: false` (مش عطل — د٩)."""
+    resp = _ef_bridge('GET', '/api/bridge/consultations/legacy', errors=_LEGACY_ERRORS_AR)
+    if isinstance(resp, tuple) and int(resp[1]) == 404:
+        return jsonify({'enabled': False, 'since': None, 'consultations': [], 'count': 0, 'total': 0})
+    if _resp_ok(resp):
+        body = _proxy_json(resp)
+        rows = body.get('consultations') if isinstance(body.get('consultations'), list) else []
+        body['consultations'] = [{k: v for k, v in c.items() if k not in _CONS_LIST_HIDDEN}
+                                 for c in rows if isinstance(c, dict)]
+        return jsonify({**body, 'enabled': True})
+    return resp
+
+
+@app.route('/api/platform-legacy-consultations/<consultation_id>/decide', methods=['POST'])
+@token_required
+@roles_required('admin')
+def platform_legacy_consultation_decide(consultation_id):
+    """م١١ — قرار المؤسس على استشارة قديمة واحدة: للخبير (`release`) ولا للعميل (`refund`). فعل فلوس ⇒ تأكيد
+    الشاشة لازم. المنصة محروسة (مرة واحدة · من `delivered` بس · ⛔ «للخبير» بعد ما العميل خد فلوسه)."""
+    if _ef_bad_id(consultation_id):
+        return jsonify({'error': 'الاستشارة دي مش موجودة'}), 404
+    body = request.get_json(silent=True) or {}
+    action = body.get('action')
+    if action not in _EF_ACTIONS:
+        return jsonify({'error': 'اختار: للخبير ولا للعميل'}), 400
+    if body.get('confirmed') is not True:
+        return jsonify({'error': 'لازم تأكّد الأول من الشاشة'}), 400
+    note = _ef_note(body.get('note'), 2000)
+    resp = _ef_bridge('POST', f'/api/bridge/consultations/{consultation_id}/legacy',
+                      json_body={'action': action, 'note': note, 'by': _actor_email()}, timeout=25,
+                      errors=_LEGACY_ERRORS_AR)
+    if _resp_ok(resp):
+        c = _proxy_json(resp)
+        meta = {k: c.get(k) for k in _CONS_META_KEYS if c.get(k) not in (None, '')}
+        meta['action'] = action
+        if note:
+            meta['note'] = note
+        _audit('consultation.legacy', target=consultation_id, meta=meta)
+        return _ef_done(c)
+    elif _ef_no_reply(resp):
+        return _ef_no_reply_resp('consultation', consultation_id, 'legacy', action)
     return resp
 
 
