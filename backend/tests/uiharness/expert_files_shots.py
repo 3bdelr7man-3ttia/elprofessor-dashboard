@@ -667,6 +667,9 @@ def round8(browser, h):
     shot(page, 'r8-19-file-release-locked-desktop.png')
     if page.is_enabled('#drawer [data-a="dsp_rel"]') or fx.E_RELEASE_MANUAL not in page.inner_text('#drawer'):
         PROBLEMS.append('r8-19: «للخبير» على نزاع ملف فلوسه رجعت يدوي مش مقفول بسببه')
+    # r8-19b — آخر الدرج: الزرارين مقفولين والسبب تحت كل واحد بكلام المنصة
+    page.evaluate("() => { const b = document.querySelector('#drawer .acts'); if (b) b.scrollIntoView({block: 'end'}); }")
+    shot(page, 'r8-19b-file-release-locked-actions-desktop.png')
     browser.close()
 
     # r8-20/21 — وضع التجربة: سطر «الخدمة مفتوحة للتجربة بس (٤ حساب)» فوق الصفوف · التوزيع لخبير برّه القايمة ⇒ رفض المنصة
