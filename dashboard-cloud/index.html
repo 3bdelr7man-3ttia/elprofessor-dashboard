@@ -211,7 +211,7 @@ body{font-family:'IBM Plex Sans Arabic',sans-serif;background:var(--bg);color:va
 .mc-tab td:first-child{color:var(--muted);font-weight:800;font-size:12px;width:34%;white-space:nowrap}
 .mc-tab td b{font-family:Cairo;font-size:15px;color:var(--navy)}
 .mc-lead{font-size:13.5px;line-height:1.95;color:var(--ink)}
-.mc-lead b{color:var(--navy)}
+.mc-lead b{color:var(--navy);display:inline-block}   /* المبلغ ورمز عملته (والاسم) ما يتقسموش على سطرين على الموبايل */
 .modal.wide{max-width:960px}
 .cmp2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
 .cmp2 h4{font-family:Cairo;font-size:14px;font-weight:800;color:var(--navy);margin:0 0 8px}
@@ -1369,9 +1369,13 @@ function drawReview(el,i){
   const client=f.client_first_name||'العميل',expert=f.expert_name||f.expert_email||'الخبير';
   const returned=Number(rv.returns||0)>0;
   const back=!!(E.efMoneyAlreadyBack&&E.efMoneyAlreadyBack(f));
+  // وافقت عليه خلاص (`review.approved_at`) والتوصيل لسه ما خلصش (مثلًا الفلوس وقفت — ختم `approval_blocked_at`) ⇒
+  // ولا «اعتمده» ولا «رجّعه» (المنصة بترفض الاتنين) — المنصة بتكمّل التوصيل لوحدها، والختم فوق بيقول لو فيه مشكلة.
+  const approved=!!rv.approved_at;
   let strips=efBlockedStrips(f);
-  strips+=efStrip('info','الرأي ده مش هيوصل لـ'+client+' لحد ما توافق عليه، والفلوس محجوزة زي ما هي.');
-  if(returned)strips+=efStrip('warn','رجّعته للخبير قبل كده'+(rv.note?' بملاحظة: «'+rv.note+'»':'')+'، والرأي اتعدّل واتبعت تاني. الرجوع للخبير مرة واحدة بس — لو لسه مش تمام، رجّع الفلوس للعميل.');
+  if(approved)strips+=efStrip('info','وافقت على الرأي ده '+(efRel(rv.approved_at)||'')+' — المنصة بتكمّل توصيله لـ'+client+'.');
+  else strips+=efStrip('info','الرأي ده مش هيوصل لـ'+client+' لحد ما توافق عليه، والفلوس محجوزة زي ما هي.');
+  if(returned&&!approved)strips+=efStrip('warn','رجّعته للخبير قبل كده'+(rv.note?' بملاحظة: «'+rv.note+'»':'')+'، والرأي اتعدّل واتبعت تاني. الرجوع للخبير مرة واحدة بس — لو لسه مش تمام، رجّع الفلوس للعميل.');
   const n=Number(f.expert_delivered_count||0);
   // بيانات الملف في شبكة عمودين (مش حقل في كل سطر) — المهم في الدرج ده الرأي نفسه، فيبان من غير تمرير طويل.
   const meta=(lab,val,sub,cls)=>`<div><div class="lab">${esc(lab)}</div><div class="val${cls?' '+cls:''}">${esc(val)}</div>${sub?`<div class="sub">${esc(sub)}</div>`:''}</div>`;
@@ -1401,8 +1405,8 @@ function drawReview(el,i){
     ${strips}${fields}
     <div class="field"><div class="lab">الرأي زي ما هيوصل لـ${esc(client)}</div><div class="ef-rv">${op}</div></div>
     <div class="acts">
-      <button class="btn btn-primary ef-full" data-a="rv_ok">${svg('check')}اعتمده وابعته للعميل</button>
-      <button class="btn btn-human ef-full" data-a="rv_back">${svg('back')}رجّعه للخبير</button>
+      ${approved?'':`<button class="btn btn-primary ef-full" data-a="rv_ok">${svg('check')}اعتمده وابعته للعميل</button>
+      <button class="btn btn-human ef-full" data-a="rv_back">${svg('back')}رجّعه للخبير</button>`}
       ${back?'':`<button class="btn btn-warn" data-a="ef_refund">${svg('back')}رجّع الفلوس</button>`}
       <button class="btn btn-ghost" data-a="ef_close">إغلاق</button>
     </div></div>`;

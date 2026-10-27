@@ -937,6 +937,24 @@ def test_r8_audit_lines_name_the_action_the_file_and_the_admin(open_page):
     assert txt.count('admin@local.test') >= 2
 
 
-def test_zero_real_requests_after_round8(harness):
+def test_an_approved_review_still_delivering_offers_no_second_decision(open_page):
+    """وافقت عليه خلاص والتوصيل وقف (`review.approved_at` + ختم `approval_blocked_at`) ⇒ من غير «اعتمده»/«رجّعه» (المنصة
+    بترفض الاتنين)، والدرج بيقول إن المنصة بتكمّل التوصيل وسبب الوقوف بكلامها."""
+    ef = _r8()
+    r1 = [f for f in ef.review if f['id'] == fx.R1['id']][0]
+    r1['review']['approved_at'] = fx.iso(-0.5)
+    r1['approval_blocked_at'] = fx.iso(-0.4)
+    r1['blocked'] = fx.blocked_of(r1)
+    r1['needs_attention'] = True
+    page = open_page(ef=ef)
+    _row(page, fx.R1['id'])
+    drawer = page.inner_text('#drawer')
+    assert 'وافقت على الرأي ده' in drawer and fx.BLOCK_LABELS['approval_blocked_at'] in drawer
+    assert page.query_selector('#drawer [data-a="rv_ok"]') is None
+    assert page.query_selector('#drawer [data-a="rv_back"]') is None
+    assert page.evaluate("id => INBOX.find(r => r.apiId === id).needsAttention", fx.R1['id']) is True
+
+
+def test_zero_real_requests_at_the_very_end(harness):
     """آخر اختبار في الملف (بعد اختبارات الجولة ٨): ولا طلب حقيقي من المتصفح ولا من جوه العملية."""
     assert harness.unexpected_blocked() == []
