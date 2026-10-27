@@ -1,12 +1,17 @@
 # -*- coding: utf-8 -*-
 """صور «ملف للخبير» في الداشبورد (الجولة ٦ · SPEC §١١ + الجولة ٧ · §١٥) — كمبيوتر ١٤٤٠×٩٠٠ وموبايل ٣٩٠×٨٤٤.
 
-    cd backend && python3 tests/uiharness/expert_files_shots.py <out_dir> [--only-r7]
+    cd backend && python3 tests/uiharness/expert_files_shots.py <out_dir> [--only-r7 | --only-r8]
 
 `--only-r7` = صور الجولة ٧ بس (`r7-*` · `mr7-*`): «اتدفعت وما وصلتش» ورجوع فلوسها · شارة «محتاج تدخّلك» ·
 عدّادات الطابور الجديدة ونزاعات الاستشارات · الخدمة مقفولة والصفوف ظاهرة · السجل باسم الأدمن · ومراجعة الجولة ٧:
 الخدمة مقفولة من غير أي وعد إن الفلوس ترجع لوحدها والملف اللي اتبعت بند (`r7-09`/`r7-10`/`mr7-05`/`mr7-06`) ·
 فلوس رجعت للعميل قبل كده من غير «رجّع الفلوس» (`r7-11`).
+
+`--only-r8` = صور الجولة ٨ بس (`r8-*` · `mr8-*`): «مستنية مراجعتك» (الصفوف · الدرج بالرأي زي ما العميل هيشوفه و«مبني
+على» · اعتمده وابعته بتأكيد · رجّعه للخبير بملاحظة لازمة · رفض الرجوع التاني بكلام المنصة) · «للخبير» مقفول بسبب المنصة
+(نزاع ملف · نزاع استشارة · رفض وقت الحسم) · «استشارات قديمة محتاجة قرارك» (الصفوف · الدرج · تأكيد التحويل · مقفولة بسبب) ·
+وضع التجربة (السطر فوق الصفوف · رفض التوزيع بكلام المنصة) · السجل.
 
 ⛔ صفر طلبات حقيقية: الداشبورد بيتنفّذ جوه العملية (`app.test_client()`) والمنصة جدول في الذاكرة
 (`ef_fixtures.EFPlatform`)، وأي أصل تاني بيتقفل ويتسجّل. آخر السكربت بيطبع اللي اتقفل لكل أصل، وبيفشل لو
@@ -24,6 +29,7 @@ from ef_route_harness import Harness, DASH   # noqa: E402
 
 _ARGS = [a for a in sys.argv[1:] if not a.startswith('--')]
 ONLY_R7 = '--only-r7' in sys.argv[1:]
+ONLY_R8 = '--only-r8' in sys.argv[1:]
 OUT = os.path.abspath(_ARGS[0] if _ARGS else os.path.join(os.getcwd(), 'r7-shots'))
 os.makedirs(OUT, exist_ok=True)
 
@@ -227,13 +233,10 @@ def desktop(browser, h):
     shot(page, '14-manual-refunded-disabled-desktop.png')
     if page.is_enabled('#drawer [data-a="dsp_ref"]'):
         PROBLEMS.append('D3: «للعميل — رجّع فلوسه» مش مقفول مع إن الفلوس رجعت يدوي')
-    # ١٤ب — «للخبير» بعد ما الفلوس رجعت يدوي: المنصة هي اللي هتدفع الأجر
-    page.click('#drawer [data-a="dsp_rel"]')
-    page.wait_for_selector('#mc_go')
-    shot(page, '14b-release-after-manual-desktop.png')
-    if 'الباقي' in page.inner_text('#epModal') or 'المنصة هتدفع' not in page.inner_text('#epModal'):
-        PROBLEMS.append('D3: تأكيد «للخبير» بعد الرجوع اليدوي لسه بيقول «الباقي للمنصة»')
-    page.click('#mc_x')
+    # ١٤ب — «للخبير» بعد ما الفلوس رجعت يدوي: ممنوع من الجولة ٨ (البند ٥) — مقفول والسبب تحته بكلام المنصة
+    shot(page, '14b-release-locked-after-manual-desktop.png', el='#drawer')
+    if page.is_enabled('#drawer [data-a="dsp_rel"]') or fx.E_RELEASE_MANUAL not in page.inner_text('#drawer'):
+        PROBLEMS.append('D3: «للخبير» بعد الرجوع اليدوي مش مقفول بسبب المنصة')
     # ١٥ — «الضمان والنزاعات» ← «النزاعات» بسطر التحويل
     page.evaluate("() => { go('escrow'); escTab='disputes'; viewEscrow(document.getElementById('view')); }")
     page.wait_for_selector('.ef-esc-ptr', timeout=15000)
@@ -490,17 +493,272 @@ def round7_mobile(browser, h):
     browser.close()
 
 
+# --------------------------------------------------------------------------- الجولة ٨ (SPEC §١٧)
+def _has(page, sel, name):
+    if not page.query_selector(sel):
+        PROBLEMS.append('%s: مش لاقي %s' % (name, sel))
+
+
+def _wait_based_on(page):
+    page.wait_for_function("() => /الرأي ده مبني على/.test((document.getElementById('drawer')||{}).innerText||'')",
+                           timeout=15000)
+
+
+def round8(browser, h):
+    """الجولة ٨ على الكمبيوتر — قرارات المؤسس على أشكال جسر المنصة الجديدة."""
+    h.ef = fx.EFPlatform(r8=True)
+    ctx = browser.context(h, 'admin', DESK)
+    page = open_inbox(ctx, h)
+    since = len(h.ef.calls)
+    # r8-01 — «كل اللي مستنيك»: «آراء مستنية مراجعتك» و«استشارات قديمة محتاجة قرارك» (والتنبيهين ما بيتكرروش)
+    scroll_to(page, '.opsq')
+    shot(page, 'r8-01-queue-counters-desktop.png')
+    for k in ('expert_files_in_review', 'consultations_legacy'):
+        _has(page, '.opsq[data-k="%s"]' % k, 'r8-01')
+    panel = page.inner_text('section.panel >> nth=0')
+    if 'رأي مستني مراجعتك قبل ما يوصل للعميل' in panel or 'استشارة قديمة اتسلّمت' in panel:
+        PROBLEMS.append('r8-01: تنبيه المراجعة/القديمة اتكرر مع إن عدّاده ظاهر')
+    # r8-02 — العدّاد بيفتح شريحة «مستنية مراجعتك»: اسم الملف والخبير والقانون والمبلغ ومن إمتى
+    page.click('.opsq[data-k="expert_files_in_review"]')
+    page.wait_for_timeout(300)
+    if page.evaluate("() => activeFilter") != 'review':
+        PROBLEMS.append('r8-02: عدّاد المراجعة ما فتحش شريحتها')
+    shot(page, 'r8-02-review-rows-desktop.png')
+    rows = page.inner_text('#rows')
+    for t in (fx.R1['title'], 'أ. رنا عادل', 'القانون المصري', '٥٠٠ ج', 'اتبعت للمراجعة'):
+        if t not in rows:
+            PROBLEMS.append('r8-02: «%s» مش على الصفوف' % t)
+    # r8-03 — درج R1: الرأي زي ما العميل هيشوفه (كل سؤال وتحته الرد · الخطوة الجاية · «مبني على»)
+    row_by_id(page, fx.R1['id'])
+    _wait_based_on(page)
+    scroll_to(page, '#filters')
+    shot(page, 'r8-03-review-drawer-desktop.png')
+    # الدرج بيتمرّر لوحده جنب القايمة (`.ef-scroll`) — آخره: «مبني على» والأزرار
+    page.evaluate("() => { const d = document.getElementById('drawer'); d.scrollTop = d.scrollHeight; }")
+    shot(page, 'r8-03b-review-drawer-bottom-desktop.png')
+    if not page.evaluate("() => { const d = document.getElementById('drawer'), b = d.querySelector('[data-a=\"rv_ok\"]').getBoundingClientRect(); return b.bottom <= window.innerHeight && b.top >= 0; }"):
+        PROBLEMS.append('r8-03b: زرار «اعتمده وابعته» مش قدّام العين بعد تمرير الدرج')
+    page.evaluate("() => { document.getElementById('drawer').scrollTop = 0; }")
+    drawer = page.inner_text('#drawer')
+    for t in [a['question'] for a in fx.R1_OPINION['answers']] + ['الخطوة الجاية: محتاج حد متخصص يكمّل معاك',
+                                                                   'مبني على', 'ومستندين، وعلى القانون المصري']:
+        if t not in drawer:
+            PROBLEMS.append('r8-03: «%s» مش في الدرج' % t)
+    # r8-04 — تأكيد «اعتمده وابعته للعميل» بالمبلغ والعملة والأسماء (من غير ما نبعت)
+    page.click('#drawer [data-a="rv_ok"]')
+    page.wait_for_selector('#mc_go')
+    shot(page, 'r8-04-review-approve-confirm-desktop.png')
+    body = page.inner_text('#epModal')
+    for t in ('٥٠٠', 'جنيه مصري', 'سمر', 'أ. رنا عادل', '٣٠٠ ج'):
+        if t not in body:
+            PROBLEMS.append('r8-04: «%s» مش في التأكيد' % t)
+    page.click('#mc_x')
+    # r8-05 — «رجّعه للخبير»: الزرار مقفول لحد ما الملاحظة تتكتب، وبعدها بيتبعت
+    page.click('#drawer [data-a="rv_back"]')
+    page.wait_for_selector('#mc_go')
+    if page.is_enabled('#mc_go'):
+        PROBLEMS.append('r8-05: «رجّعه» شغّال من غير ملاحظة')
+    page.fill('#mc_note', 'الإجابة الأولى محتاجة تذكر مدة سقوط الدعوى من القانون المدني بالظبط.')
+    shot(page, 'r8-05-review-return-note-desktop.png')
+    page.click('#mc_go')
+    page.wait_for_selector('#epModal', state='detached', timeout=15000)
+    wait_gone(page, fx.R1['id'])
+    # r8-06 — بعد الرجوع: R1 خرج من «مستنية مراجعتك» + رسالة النجاح
+    page.evaluate("() => { activeFilter='review'; renderInbox(); }")
+    scroll_to(page, '#filters')
+    shot(page, 'r8-06-after-return-desktop.png')
+    # r8-07 — درج R2: اترجع للخبير مرة قبل كده + مواعيد الجلسة
+    row_by_id(page, fx.R2['id'])
+    _wait_based_on(page)
+    scroll_to(page, '#filters')
+    shot(page, 'r8-07-review-drawer-returned-desktop.png')
+    if 'رجّعته للخبير قبل كده' not in page.inner_text('#drawer'):
+        PROBLEMS.append('r8-07: سطر «رجّعته قبل كده» مش في الدرج')
+    # r8-08 — الرجوع التاني: المنصة بترفض بكلامها جوه النافذة
+    page.click('#drawer [data-a="rv_back"]')
+    page.wait_for_selector('#mc_go')
+    page.fill('#mc_note', 'محتاج توضيح تاني.')
+    page.click('#mc_go')
+    page.wait_for_selector('#epModal .ef-err', timeout=15000)
+    shot(page, 'r8-08-review-return-refused-desktop.png')
+    if fx.E_REVIEW_RETURNED not in page.inner_text('#epModal .ef-err'):
+        PROBLEMS.append('r8-08: رفض المنصة مش بكلامها')
+    page.click('#mc_x')
+    # r8-09 — «اعتمده وابعته» على R2 (رأي + جلسة) — وبعدين بيتبعت فعلًا
+    page.click('#drawer [data-a="rv_ok"]')
+    page.wait_for_selector('#mc_go')
+    shot(page, 'r8-09-review-approve-session-desktop.png')
+    page.click('#mc_go')
+    page.wait_for_selector('#epModal', state='detached', timeout=15000)
+    wait_gone(page, fx.R2['id'])
+    # r8-10 — بعد الاعتماد: مفيش آراء مستنية (الشريحة اختفت) + رسالة النجاح
+    page.evaluate("() => { activeFilter='all'; renderInbox(); }")
+    scroll_to(page, '#filters')
+    shot(page, 'r8-10-after-approve-desktop.png')
+    if page.query_selector('#filters .chip[data-f="review"]'):
+        PROBLEMS.append('r8-10: شريحة «مستنية مراجعتك» لسه ظاهرة والآراء خلصت')
+    # r8-11 — «استشارات قديمة»: الصفوف
+    chip(page, 't:legacy')
+    scroll_to(page, '#filters')
+    shot(page, 'r8-11-legacy-rows-desktop.png')
+    # r8-12 — درج L1 (ميعاد التحويل عدّى) — وتأكيد «حوّل للخبير»
+    row_by_id(page, fx.L1['id'])
+    scroll_to(page, '#filters')
+    shot(page, 'r8-12-legacy-drawer-desktop.png')
+    page.click('#drawer [data-a="lg_rel"]')
+    page.wait_for_selector('#mc_go')
+    shot(page, 'r8-13-legacy-release-confirm-desktop.png')
+    if page.inner_text('#mc_go') != 'حوّل ٤٨٠ ج لـأ. عمرو الشريف':
+        PROBLEMS.append('r8-13: زرار التحويل «%s»' % page.inner_text('#mc_go'))
+    page.click('#mc_go')
+    page.wait_for_selector('#epModal', state='detached', timeout=15000)
+    wait_gone(page, fx.L1['id'])
+    chip(page, 't:legacy')
+    scroll_to(page, '#filters')
+    shot(page, 'r8-14-after-legacy-release-desktop.png')
+    # r8-15 — L2: الفلوس رجعت يدوي ⇒ الزرارين مقفولين والسبب تحت كل واحد بكلام المنصة
+    row_by_id(page, fx.L2['id'])
+    scroll_to(page, '#filters')
+    shot(page, 'r8-15-legacy-locked-desktop.png')
+    whys = page.evaluate("() => [...document.querySelectorAll('#drawer .ef-why')].map(e => e.innerText)")
+    if whys != [fx.E_RELEASE_MANUAL, fx.E_RESOLVE_MANUAL]:
+        PROBLEMS.append('r8-15: أسباب القفل %r' % whys)
+    # r8-16 — نزاع استشارة D3: «للخبير» مقفول بكلام المنصة (العميل خد فلوسه يدوي)
+    chip(page, 't:disputes')
+    row_by_id(page, fx.D3['id'])
+    scroll_to(page, '#filters')
+    shot(page, 'r8-16-consultation-release-locked-desktop.png')
+    if fx.E_RELEASE_MANUAL not in page.inner_text('#drawer'):
+        PROBLEMS.append('r8-16: سبب قفل «للخبير» مش تحت الزرار')
+    # r8-17 — رفض وقت الحسم: D2 صفّه ما كانش مقفول، والمنصة رفضت «للخبير» (البوابة رجّعت) ⇒ نفس الكلام جوه النافذة
+    for c in h.ef.cons:
+        if c['id'] == fx.D2['id']:
+            c.update({'release_blocked': 'gateway_refund', 'release_blocked_reason': fx.E_RELEASE_GATEWAY})
+    row_by_id(page, fx.D2['id'])
+    page.click('#drawer [data-a="dsp_rel"]')
+    page.wait_for_selector('#mc_go')
+    page.click('#mc_go')
+    page.wait_for_selector('#epModal .ef-err', timeout=15000)
+    shot(page, 'r8-17-release-refused-at-decision-desktop.png')
+    if fx.E_RELEASE_GATEWAY not in page.inner_text('#epModal .ef-err'):
+        PROBLEMS.append('r8-17: رفض «للخبير» وقت الحسم مش بكلام المنصة')
+    page.click('#mc_x')
+    # r8-18 — السجل: اعتماد الرأي · رجوعه بملاحظة · القرار على القديمة — باسم الأدمن
+    page.evaluate("() => auditModal()")
+    page.wait_for_function("() => document.getElementById('auditRows') && !/جارٍ التحميل/.test(document.getElementById('auditRows').innerText)",
+                           timeout=15000)
+    shot(page, 'r8-18-audit-desktop.png')
+    au = page.inner_text('#auditRows')
+    for t in ('اعتماد رأي وبعته للعميل', 'رجوع رأي للخبير بملاحظة', 'قرار على استشارة قديمة', 'admin@local.test'):
+        if t not in au:
+            PROBLEMS.append('r8-18: «%s» مش في السجل' % t)
+    _writes_carry_the_admin(h, since)
+    browser.close()
+
+    # r8-19 — نزاع ملف العميل خد فلوسه فيه يدوي ⇒ «للخبير» مقفول والسبب تحته (والرأيين ظاهرين)
+    h.ef = fx.EFPlatform(r8=True)
+    h.ef.disputed = [fx.release_locked(f, 'manual_refund') for f in h.ef.disputed]
+    ctx = browser.context(h, 'admin', DESK)
+    page = open_inbox(ctx, h)
+    chip(page, 't:disputes')
+    row_by_id(page, fx.D1['id'])
+    page.wait_for_selector('#drawer [data-a="dsp_cmp"]', timeout=15000)
+    scroll_to(page, '#filters')
+    shot(page, 'r8-19-file-release-locked-desktop.png')
+    if page.is_enabled('#drawer [data-a="dsp_rel"]') or fx.E_RELEASE_MANUAL not in page.inner_text('#drawer'):
+        PROBLEMS.append('r8-19: «للخبير» على نزاع ملف فلوسه رجعت يدوي مش مقفول بسببه')
+    browser.close()
+
+    # r8-20/21 — وضع التجربة: سطر «الخدمة مفتوحة للتجربة بس (٤ حساب)» فوق الصفوف · التوزيع لخبير برّه القايمة ⇒ رفض المنصة
+    h.ef = fx.EFPlatform(r8=True, mode='allowlist')
+    ctx = browser.context(h, 'admin', DESK)
+    page = open_inbox(ctx, h)
+    chip(page, 't:files')
+    scroll_to(page, '#filters')
+    shot(page, 'r8-20-allowlist-rows-desktop.png')
+    line = page.inner_text('#rows .ef-trial-line') if page.query_selector('#rows .ef-trial-line') else ''
+    if 'الخدمة مفتوحة للتجربة بس (%s حساب)' % '٤' not in line:
+        PROBLEMS.append('r8-20: سطر وضع التجربة «%s»' % line)
+    if page.query_selector('#rows .ef-off-line'):
+        PROBLEMS.append('r8-20: وضع التجربة بيتعرض كأنه مقفول')
+    row_by_id(page, fx.F1['id'])
+    page.click('#drawer [data-a="ef_pick"]')
+    page.wait_for_selector('#epModal .ef-cand')
+    idx = page.evaluate("() => [...document.querySelectorAll('#epModal .ef-cand')].findIndex(c => c.innerText.includes('م. سامي فؤاد'))")
+    page.click('#epModal .ef-cand >> nth=%d' % idx)
+    page.click('#ep_go')
+    page.wait_for_selector('#epModal .ef-err', timeout=15000)
+    shot(page, 'r8-21-allowlist-trial-refused-desktop.png')
+    if fx.E_TRIAL_ONLY not in page.inner_text('#epModal .ef-err'):
+        PROBLEMS.append('r8-21: رفض وضع التجربة مش بكلام المنصة')
+    browser.close()
+
+
+def round8_mobile(browser, h):
+    h.ef = fx.EFPlatform(r8=True)
+    ctx = browser.context(h, 'admin', MOB, mobile=True)
+    page = open_inbox(ctx, h)
+    scroll_to(page, '.opsq')
+    shot(page, 'mr8-01-queue-counters-mobile.png')
+    page.click('.opsq[data-k="expert_files_in_review"]')
+    page.wait_for_timeout(400)
+    shot(page, 'mr8-02-review-rows-mobile.png')
+    row_by_id(page, fx.R1['id'])
+    _wait_based_on(page)
+    page.evaluate("() => document.getElementById('drawer').scrollIntoView({block:'start'})")
+    shot(page, 'mr8-03-review-drawer-mobile.png')
+    page.evaluate("() => { const b = document.querySelector('#drawer .acts'); if (b) b.scrollIntoView({block:'end'}); }")
+    shot(page, 'mr8-03b-review-drawer-actions-mobile.png')
+    page.click('#drawer [data-a="rv_ok"]')
+    page.wait_for_selector('#mc_go')
+    shot(page, 'mr8-04-review-approve-confirm-mobile.png')
+    page.click('#mc_x')
+    page.click('#drawer [data-a="rv_back"]')
+    page.wait_for_selector('#mc_go')
+    page.fill('#mc_note', 'الإجابة الأولى محتاجة تذكر مدة سقوط الدعوى بالظبط.')
+    shot(page, 'mr8-05-review-return-note-mobile.png')
+    page.click('#mc_x')
+    chip(page, 't:legacy')
+    row_by_id(page, fx.L2['id'])
+    page.wait_for_timeout(300)
+    page.evaluate("() => { const b = document.querySelector('#drawer .acts'); if (b) b.scrollIntoView({block:'end'}); }")
+    shot(page, 'mr8-06-legacy-locked-mobile.png')
+    row_by_id(page, fx.L1['id'])
+    page.wait_for_timeout(300)
+    page.click('#drawer [data-a="lg_rel"]')
+    page.wait_for_selector('#mc_go')
+    shot(page, 'mr8-07-legacy-release-confirm-mobile.png')
+    page.click('#mc_x')
+    chip(page, 't:disputes')
+    row_by_id(page, fx.D3['id'])
+    page.wait_for_timeout(300)
+    page.evaluate("() => { const b = document.querySelector('#drawer .acts'); if (b) b.scrollIntoView({block:'end'}); }")
+    shot(page, 'mr8-08-consultation-release-locked-mobile.png')
+    browser.close()
+    h.ef = fx.EFPlatform(r8=True, mode='allowlist')
+    ctx = browser.context(h, 'admin', MOB, mobile=True)
+    page = open_inbox(ctx, h)
+    chip(page, 't:files')
+    scroll_to(page, '#filters')
+    shot(page, 'mr8-09-allowlist-rows-mobile.png')
+    browser.close()
+
+
 def main():
     from playwright.sync_api import sync_playwright
     h = Harness(fx.EFPlatform())
     with sync_playwright() as p:
         browser = Browsers(p)
         try:
-            if not ONLY_R7:
+            if not (ONLY_R7 or ONLY_R8):
                 desktop(browser, h)
                 mobile(browser, h)
-            round7(browser, h)
-            round7_mobile(browser, h)
+            if not ONLY_R8:
+                round7(browser, h)
+                round7_mobile(browser, h)
+            if not ONLY_R7:
+                round8(browser, h)
+                round8_mobile(browser, h)
         finally:
             browser.close()
     rep = h.blocked_report()
