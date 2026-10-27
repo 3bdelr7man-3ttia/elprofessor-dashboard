@@ -23,11 +23,14 @@ NEW_UI_FUNCS = ('drawExpertFile', 'drawDispute', 'drawUnactivated', 'expertPickM
                 'efBlockedStrips', 'efPayee',
                 # الجولة ٨
                 'drawReview', 'efReviewApproveModal', 'efReviewReturnModal', 'drawLegacy', 'efLegacyModal',
-                'efLockedBtn', 'efReleaseLock', 'efTrialLine', 'efSlot')
+                'efLockedBtn', 'efReleaseLock', 'efTrialLine', 'efSlot',
+                # مراجعة الجولة ٨
+                'efRowKey', 'efReloadKeep')
 NEW_API_FUNCS = ('EP.expertFileDetail', 'EP.expertFileSend', 'EP.expertFileRefund', 'EP.expertFileUnactivatedRefund',
                  'EP.disputeDecide', 'EP.expertFileReview', 'EP.legacyDecide')
 NEW_ROW_FUNCS = ('efFileRow', 'efDisputeRow', 'consDisputeRow', 'efFlagBadges', 'efUnactivatedRow', 'efUnactWhy',
-                 'efAttentionBadge', 'efReviewRow', 'legacyRow', 'efReleaseWhy', 'efRefundWhy', 'efMoneyBackBadge')
+                 'efAttentionBadge', 'efReviewRow', 'legacyRow', 'efReleaseWhy', 'efRefundWhy', 'efMoneyBackBadge',
+                 'efApprovalStuck')
 
 
 @pytest.fixture(scope='module')
@@ -341,7 +344,7 @@ def test_review_counter_and_its_landing_read_the_real_key(html):
 def test_review_drawer_shows_the_opinion_like_the_client_and_has_the_two_decisions(html):
     d = _body(html, 'function drawReview(')
     for t in ('po.answers.map(', 'الخطوة الجاية: ', 'مبني على', 'det.based_on', 'رأي خبير معتمد لدى البروفيسور',
-              'اعتمده وابعته للعميل', 'رجّعه للخبير', 'data-a="rv_ok"', 'data-a="rv_back"'):
+              'اعتمده وابعته للعميل', 'رجّعه للخبير', "efLockedBtn('btn-primary','rv_ok'", 'data-a="rv_back"'):
         assert t in d, t
     assert 'EP.expertFileDetail(id)' in d                                    # «مبني على» من قراية الملف كله
     assert "el.classList.add('ef-scroll')" in d
@@ -425,6 +428,53 @@ def test_r8_audit_labels(html):
     a = html[html.index('const AUDIT_LABEL={'):html.index('function auditModal(')]
     for key in ('expert_file.review_approve', 'expert_file.review_return', 'consultation.legacy'):
         assert "'%s':" % key in a, key
+
+
+def test_an_approved_review_whose_delivery_stopped_never_says_the_platform_will_finish_it(apijs, html):
+    """مراجعة الجولة ٨ (١): ختم `approval_blocked_at` بعد الموافقة ⇒ حارة الشفاء على المنصة بتستبعده، فالدرج والصفّ بيقولوا
+    إن التوصيل وقف ومش هيكمّل لوحده (والحل «رجّع الفلوس») — «المنصة بتكمّل توصيله» للموافقة من غير ختم بس."""
+    stuck = _body(apijs, 'function efApprovalStuck(')
+    assert 'f.approval_blocked_at' in stuck and 'b.key === "approval_blocked_at"' in stuck
+    row = _body(apijs, 'function efReviewRow(')
+    assert 'stuck = approved && efApprovalStuck(f)' in row and '"رأي وافقت عليه وتوصيله وقف"' in row
+    d = _body(html, 'function drawReview(')
+    assert 'const stuck=approved&&!!(E.efApprovalStuck&&E.efApprovalStuck(f));' in d
+    assert d.index("if(stuck)") < d.index("else if(approved)") < d.index("المنصة بتكمّل توصيله")
+    assert 'وقف ومش هيكمّل لوحده' in d and 'الحل من هنا: «رجّع الفلوس»' in d
+
+
+def test_a_final_refusal_keeps_the_money_button_locked_and_redraws_the_same_row(apijs, html):
+    """مراجعة الجولة ٨ (٢): ٤٠٩ من المنصة = رفض نهائي ⇒ زرار التأكيد يفضل مقفول، والوارد يتحدّث والدرج يترسم على نفس الصفّ."""
+    failed = _body(apijs, 'function efFailed(')
+    assert 'final: !noReply && status === 409' in failed
+    m = _body(html, 'function moneyConfirmModal(')
+    assert 'const key=efRowKey(INBOX[selected]);' in m
+    assert m.index('if(res.final){') < m.index('delete go.dataset.busy;go.disabled=needNote();')
+    final = m[m.index('if(res.final){'):m.index('}', m.index('if(res.final){'))]
+    assert 'efReloadKeep(key)' in final and 'return' in final and 'delete go.dataset.busy' not in final
+    keep = _body(html, 'function efReloadKeep(')
+    assert "EP.reload('inbox',re)" in keep and "EP.reload('opsQueue',re)" in keep and 'efRowKey(r)===key' in keep
+    # نافذة اختيار الخبير مش نافذة فلوس: رفض «ابعته لخبير من قايمة التجربة» بيسيبها تختار حد تاني.
+    assert 'res.final' not in _body(html, 'function expertPickModal(')
+
+
+def test_review_slots_use_the_clients_zone_from_the_server_and_name_it(html):
+    """مراجعة الجولة ٨ (٣): مواعيد الجلسة بمنطقة العميل (`client_tz` من الخادم) و«بتوقيت …» جنب كل ميعاد."""
+    s = _body(html, 'function efSlot(')
+    assert 'if(tz)o.timeZone=tz;' in s
+    d = _body(html, 'function drawReview(')
+    assert 'det.client_tz' in d and 'det.client_tz_label' in d and 'efSlot(s.start_at,tz)' in d
+    assert "'بتوقيت جهازك'" in d
+
+
+def test_approve_is_locked_while_the_service_is_closed(html):
+    """مراجعة الجولة ٨ (٤): الخدمة مقفولة ⇒ «اعتمده» مقفول والسبب تحته، والنافذة نفسها ما بتتفتحش."""
+    d = _body(html, 'function drawReview(')
+    assert "const offWhy=efServiceClosed()?" in d and "efLockedBtn('btn-primary','rv_ok',svg('check')+'اعتمده وابعته للعميل',offWhy)" in d
+    assert "if(a==='rv_ok'){if(offWhy)return;" in d
+    ok = _body(html, 'function efReviewApproveModal(')
+    assert ok.index('if(efServiceClosed())return;') < ok.index('moneyConfirmModal(')
+    assert 'efServiceClosed()' in _body(html, 'function efReviewReturnModal(')
 
 
 def test_the_menu_still_has_thirteen_items(html):

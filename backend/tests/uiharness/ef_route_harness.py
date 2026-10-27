@@ -208,8 +208,11 @@ class Harness(object):
             self._api(r)
         return len(held)
 
-    def context(self, browser, role='admin', viewport=None, mobile=False):
+    def context(self, browser, role='admin', viewport=None, mobile=False, tz=None):
+        """`tz` = توقيت جهاز المؤسس في المتصفح (مثلًا `Africa/Cairo`) — من غيره توقيت الجهاز اللي بيشغّل الاختبار."""
         opts = {'viewport': viewport or {'width': 1440, 'height': 900}, 'locale': 'ar-EG'}
+        if tz:
+            opts['timezone_id'] = tz
         if mobile:
             opts.update({'device_scale_factor': 2, 'is_mobile': True, 'has_touch': True})
         ctx = browser.new_context(**opts)

@@ -589,10 +589,11 @@ def test_not_configured_is_a_plain_refusal_not_no_reply(ctx, plat, monkeypatch):
 def test_detail_reaches_the_browser_without_client_data(ctx, plat):
     r = _call(ctx, 'GET', '/api/platform-expert-files/' + fx.D1['id'])
     body = r.get_json()
-    assert sorted(body) == ['based_on', 'dispute', 'file_no', 'id', 'opinion', 'pending_opinion', 'review',
-                            'revision', 'status', 'title']
+    assert sorted(body) == ['based_on', 'client_tz', 'client_tz_label', 'dispute', 'file_no', 'id', 'opinion',
+                            'pending_opinion', 'review', 'revision', 'status', 'title']
     assert body['file_no'] == 1042
     assert body['based_on'] is None and body['pending_opinion'] is None   # «مبني على» للرأي اللي مستني مراجعة بس
+    assert body['client_tz'] is None and body['client_tz_label'] is None  # توقيت العميل لدرج المراجعة بس
     raw = r.get_data(as_text=True)
     for leak in (fx.CLIENT_EMAILS['D1'], 'ريم عبد الله', 'pay-'):
         assert leak not in raw, leak
@@ -864,6 +865,21 @@ def test_based_on_counts_additions_and_no_documents_like_the_platform(ctx, plat)
     assert body['based_on'] == ('الرأي ده مبني على الوقائع اللي أكّدها دينا يوم %s، من غير مستندات، وردّه يوم %s، '
                                 'وعلى القانون المصري.' % (appmod._ef_ar_date(det['facts_confirmed_at'], 'eg'),
                                                          appmod._ef_ar_date(det['additions'][0]['at'], 'eg')))
+
+
+@pytest.mark.parametrize('country,tz,label', [('eg', 'Africa/Cairo', 'بتوقيت مصر'),
+                                              ('sa', 'Asia/Riyadh', 'بتوقيت السعودية'),
+                                              ('ae', 'Asia/Dubai', 'بتوقيت الإمارات'),
+                                              ('default', None, None)])
+def test_review_detail_names_the_clients_time_zone_from_the_price_country(ctx, plat, monkeypatch, country, tz, label):
+    """مراجعة الجولة ٨: مواعيد الجلسة في درج المراجعة بتوقيت العميل — المنطقة واسمها من بلد السعر (`price.country`) بنفس
+    `expert_files.ZONES` (العميل بيشوفها بـ`price.tz`). بلد برّه القايمة ⇒ فاضي (المنصة بتعرضها بتوقيت جهازه).
+    ⛔ بلد العميل نفسه وسعره ما بيوصلوش المتصفح — المنطقة واسمها بس."""
+    rid = fx.R2['id']
+    monkeypatch.setitem(fx.REVIEW_DETAIL, rid, dict(fx.REVIEW_DETAIL[rid], price={'country': country, 'currency': 'EGP'}))
+    body = _call(ctx, 'GET', '/api/platform-expert-files/' + rid).get_json()
+    assert body['client_tz'] == tz and body['client_tz_label'] == label
+    assert 'price' not in body and 'country' not in json.dumps(body)
 
 
 def test_based_on_prefers_the_platform_sentence_when_it_is_sent(ctx, plat):

@@ -604,9 +604,15 @@
   // ——— الجولة ٨ (البند ٧): «مستنية مراجعتك» — أول ملفات الخبير الجديد بتعدّي على المؤسس قبل العميل ———
   // بند لازم فعل منك (مش «للعلم»): الرأي مش هيوصل للعميل لحد ما توافق، والفلوس محجوزة زي ما هي.
   // من إمتى مستني = `review.submitted_at` من المنصة (ولا ساعة بتتحسب هنا).
+  // رأي وافقت عليه والتوصيل وقف (ختم `approval_blocked_at`): حارة الشفاء على المنصة بتستبعد الملف المختوم، و«اعتمده» و«رجّعه»
+  // و«ابعته لحد تاني» بيترفضوا بعد الموافقة ⇒ التوصيل **مش** هيكمّل لوحده (مراجعة الجولة ٨).
+  function efApprovalStuck(f) {
+    return !!(f && (f.approval_blocked_at || efBlocked(f).some(function (b) { return b.key === "approval_blocked_at"; })));
+  }
   function efReviewRow(f) {
     var rv = f.review || {};
     var returned = Number(rv.returns || 0) > 0;
+    var approved = !!rv.approved_at, stuck = approved && efApprovalStuck(f);
     var attn = efAttentionBadge(f);
     var badges = efFlagBadges(f);
     if (attn) badges.unshift(attn);
@@ -615,7 +621,8 @@
     var since = relTime(rv.submitted_at);
     return {
       apiKind: "expert_file", apiId: f.id, efLane: "review", ef: f, fyi: false, needsAttention: !!attn,
-      out: returned ? "رأي اتعدّل ومستني مراجعتك تاني" : "رأي مستني مراجعتك قبل ما يوصل للعميل",
+      out: stuck ? "رأي وافقت عليه وتوصيله وقف" : approved ? "رأي وافقت عليه ولسه بيتوصّل للعميل"
+        : returned ? "رأي اتعدّل ومستني مراجعتك تاني" : "رأي مستني مراجعتك قبل ما يوصل للعميل",
       from: "ملف للخبير", src: "doc", dest: "inbox",
       triage: attn ? "late" : "human", triLabel: attn ? "فلوسه واقفة" : "مستني مراجعتك",
       sla: since ? "اتبعت للمراجعة " + since : "مستني مراجعتك", slaWarn: !!attn,
@@ -625,7 +632,9 @@
       warnLine: efBlocked(f).map(function (b) { return b.label; }).join(" · "),
       amountLabel: efMoney(f.amount, f.currency),
       amountSub: "أجر الخبير " + efMoney(f.expert_amount, f.currency),
-      note: "الرأي مستني مراجعتك قبل ما يوصل لـ" + (f.client_first_name || "العميل"),
+      note: stuck ? "وافقت على الرأي وتوصيله لـ" + (f.client_first_name || "العميل") + " وقف — مش هيكمّل لوحده"
+        : approved ? "وافقت على الرأي والمنصة بتكمّل توصيله لـ" + (f.client_first_name || "العميل")
+        : "الرأي مستني مراجعتك قبل ما يوصل لـ" + (f.client_first_name || "العميل"),
       badges: badges,
       ref: "RV-" + String(f.id || "").slice(0, 8),
       searchText: [f.title, f.expert_name, f.client_first_name, f.counterparty_name,
@@ -700,6 +709,7 @@
   EP.EF = { NEXT_STEP_AR: NEXT_STEP_AR, CUR_AR: CUR_AR, CUR_NAME_AR: CUR_NAME_AR, efMoney: efMoney,
             KIND_AR: KIND_AR, efHours: efHours, efBlocked: efBlocked, efUnactWhy: efUnactWhy,
             efMoneyAlreadyBack: efMoneyAlreadyBack, efReleaseWhy: efReleaseWhy, efRefundWhy: efRefundWhy,
+            efApprovalStuck: efApprovalStuck,
             PRE: EF_PRE, WORK: EF_WORK, relTime: relTime, arDate: arDate };
 
   var LOADERS = {
@@ -2716,7 +2726,10 @@
     else msg = serverMsg || "تعذّر تنفيذ العملية";
     quietToast(msg);
     if (noReply) { EP.reload("opsQueue", after); EP.reload("inbox", after); }
-    return { ok: false, error: msg, noReply: noReply };
+    // ٤٠٩ = رفض نهائي: الحالة اتغيّرت على المنصة بعد ما الصفّ اتحمّل (العميل خد فلوسه فـ«للخبير» اتقفل · الفلوس رجعت قبل
+    // كده · اتحسم/اتسوّى · رجّعته قبل كده …) — الضغطة التانية هتترفض بنفس الكلام. نافذة الفلوس بتسيب زرارها مقفول وبتحدّث
+    // الوارد على نفس الصفّ (مراجعة الجولة ٨).
+    return { ok: false, error: msg, noReply: noReply, final: !noReply && status === 409 };
   }
   // الملف كله لدرج النزاع — ⛔ من غير كاش: كل فتحة للدرج بتجيب آخر نسخة (تعديل الخبير ممكن يوصل بعد
   // أول فتحة)، والفشل ما يتحفظش.

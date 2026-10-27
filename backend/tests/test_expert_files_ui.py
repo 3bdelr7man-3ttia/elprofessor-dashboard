@@ -42,7 +42,7 @@ def pw():
 def open_page(pw, harness):
     browsers = []
 
-    def _open(role='admin', ef=None, hash_='#inbox', wait_ready=True, mobile=False):
+    def _open(role='admin', ef=None, hash_='#inbox', wait_ready=True, mobile=False, tz=None):
         harness.ef = ef or fx.EFPlatform()
         try:
             br = pw.chromium.launch(args=['--single-process'])
@@ -50,7 +50,7 @@ def open_page(pw, harness):
             pytest.skip('chromium غير متاح لـplaywright: %s' % exc)
         browsers.append(br)
         ctx = harness.context(br, role, {'width': 390, 'height': 844} if mobile else {'width': 1440, 'height': 900},
-                              mobile)
+                              mobile, tz=tz)
         page = ctx.new_page()
         page.goto(DASH + '/' + hash_, wait_until='domcontentloaded')
         if wait_ready:
@@ -174,7 +174,19 @@ def test_pick_expert_excludes_the_current_one_and_assigns(open_page, harness):
     assert len(sent) == 1 and sent[0][3]['expert_email'] != 'hala@experts.test'
 
 
-def test_platform_refusal_shows_inside_the_window_and_the_button_comes_back(open_page, harness):
+def _drawer_btn_locked(page, act):
+    """الدرج ورا النافذة اترسم تاني على نفس الصفّ بحالته الجديدة: الزرار ده مقفول."""
+    page.wait_for_function("a => { const b = document.querySelector('#drawer [data-a=\"' + a + '\"]'); return !!b && b.disabled; }",
+                           arg=act, timeout=15000)
+
+
+def _whys(page):
+    return page.evaluate("() => [...document.querySelectorAll('#drawer .ef-why')].map(e => e.innerText)")
+
+
+def test_platform_refusal_shows_inside_the_window_and_the_button_stays_locked(open_page, harness):
+    """رفض نهائي من المنصة (٤٠٩ — الحالة اتغيّرت بعد ما الصفّ اتحمّل): الكلام جوه النافذة، والزرار **يفضل مقفول** (الضغطة
+    التانية كانت هتترفض بنفس الكلام)، والدرج ورا بيترسم على نفس الصفّ بحالته الجديدة (الزرار مقفول والسبب تحته)."""
     page = open_page()
     _row(page, fx.D3['id'])                                        # «للعميل» مقفول: الفلوس رجعت يدوي
     assert page.is_disabled('#drawer [data-a="dsp_ref"]')
@@ -186,7 +198,14 @@ def test_platform_refusal_shows_inside_the_window_and_the_button_comes_back(open
     page.click('#mc_go')
     page.wait_for_selector('#epModal .ef-err', timeout=15000)
     assert 'الفلوس دي رجعت للعميل يدوي قبل كده' in page.inner_text('#epModal .ef-err')
-    assert page.is_enabled('#mc_go')
+    assert page.is_disabled('#mc_go') and page.inner_text('#mc_go') == 'رجّع ٧٥٠ ج لـسارة'
+    _drawer_btn_locked(page, 'dsp_ref')
+    page.click('#mc_x')
+    page.wait_for_selector('#epModal', state='detached')
+    assert page.evaluate("() => INBOX[selected] && INBOX[selected].apiId") == fx.D2['id']
+    assert 'الفلوس دي رجعت للعميل يدوي قبل كده' in _whys(page)
+    sent = [c for c in harness.ef.calls if c[0] == 'POST' and c[1].endswith(fx.D2['id'] + '/resolve')]
+    assert len(sent) == 1
 
 
 def test_both_opinions_side_by_side_and_no_official_choice(open_page):
@@ -743,7 +762,8 @@ def test_review_return_needs_a_note_and_the_note_reaches_the_expert(open_page, h
     assert len(sent) == 1 and sent[0][3] == {'action': 'return', 'note': note, 'by': 'admin@local.test'}
 
 
-def test_a_second_return_is_refused_in_the_platform_words_and_the_button_comes_back(open_page):
+def test_a_second_return_is_refused_in_the_platform_words_and_the_button_stays_locked(open_page, harness):
+    """الرجوع التاني: المنصة بترفض بكلامها (٤٠٩ نهائي) ⇒ الزرار يفضل مقفول حتى لو الملاحظة اتعدّلت، والدرج فاضل على الملف."""
     page = open_page(ef=_r8())
     _row(page, fx.R2['id'])
     page.click('#drawer [data-a="rv_back"]')
@@ -752,7 +772,14 @@ def test_a_second_return_is_refused_in_the_platform_words_and_the_button_comes_b
     page.click('#mc_go')
     page.wait_for_selector('#epModal .ef-err', timeout=15000)
     assert page.inner_text('#epModal .ef-err') == fx.E_REVIEW_RETURNED
-    assert page.is_enabled('#mc_go')
+    assert page.is_disabled('#mc_go')
+    page.fill('#mc_note', 'تاني — بملاحظة أطول')                           # الكتابة ما بترجّعش الزرار
+    assert page.is_disabled('#mc_go')
+    sent = [c for c in harness.ef.calls if c[0] == 'POST' and c[1].endswith(fx.R2['id'] + '/review')]
+    assert len(sent) == 1
+    page.wait_for_function("() => EP.state.inbox==='ready'", timeout=15000)
+    page.click('#mc_x')
+    assert page.evaluate("() => INBOX[selected] && INBOX[selected].apiId") == fx.R2['id']
 
 
 def test_release_is_locked_with_the_platform_words_in_file_and_consultation_disputes(open_page, harness):
@@ -777,8 +804,9 @@ def test_release_is_locked_with_the_platform_words_in_file_and_consultation_disp
 
 
 @pytest.mark.parametrize('key,text', [('gateway_refund', fx.E_RELEASE_GATEWAY), ('manual_refund', fx.E_RELEASE_MANUAL)])
-def test_release_refused_at_decision_time_shows_the_same_words(open_page, harness, key, text):
-    """الصفّ ما كانش مقفول (اتحمّل قبل ما الفلوس ترجع للعميل)، والمنصة رفضت «للخبير» وقت الحسم ⇒ نفس الكلام جوه النافذة."""
+def test_release_refused_at_decision_time_shows_the_same_words_and_stays_locked(open_page, harness, key, text):
+    """الصفّ ما كانش مقفول (اتحمّل قبل ما الفلوس ترجع للعميل)، والمنصة رفضت «للخبير» وقت الحسم ⇒ نفس الكلام جوه النافذة،
+    وزرار «حوّل …» يفضل مقفول (ضغطة تانية = ولا طلب)، والدرج ورا بيتحدّث: «للخبير» مقفول والسبب تحته من غير تحديث يدوي."""
     ef = _r8()
     page = open_page(ef=ef)
     _row(page, fx.D2['id'])
@@ -792,6 +820,51 @@ def test_release_refused_at_decision_time_shows_the_same_words(open_page, harnes
     page.click('#mc_go')
     page.wait_for_selector('#epModal .ef-err', timeout=15000)
     assert page.inner_text('#epModal .ef-err') == text
+    assert page.is_disabled('#mc_go') and page.inner_text('#mc_go') == 'حوّل ٦٠٠ ج لـأ. عمرو الشريف'
+    page.evaluate("() => document.getElementById('mc_go').click()")        # ولا حتى ضغطة بالكود
+    page.wait_for_timeout(300)
+    sent = [c for c in ef.calls if c[0] == 'POST' and c[1].endswith(fx.D2['id'] + '/resolve')]
+    assert len(sent) == 1
+    _drawer_btn_locked(page, 'dsp_rel')
+    page.click('#mc_x')
+    page.wait_for_selector('#epModal', state='detached')
+    assert _whys(page)[0] == text
+    page.evaluate("() => { document.querySelector('#drawer [data-a=\"dsp_rel\"]').click(); }")
+    page.wait_for_timeout(200)
+    assert page.query_selector('#epModal') is None
+
+
+@pytest.mark.parametrize('where', ['file_dispute', 'legacy'])
+def test_release_refused_at_decision_time_locks_file_disputes_and_legacy_too(open_page, where):
+    """نفس الرفض وقت الحسم في نزاع الملف و«حوّل للخبير» في القديمة: الكلام جوه النافذة · الزرار مقفول · طلب واحد بس ·
+    والدرج بيترسم بـ«للخبير» مقفول والسبب تحته."""
+    ef = _r8()
+    page = open_page(ef=ef)
+    if where == 'file_dispute':
+        rid, act, text = fx.D1['id'], 'dsp_rel', fx.E_RELEASE_MANUAL
+        _row(page, rid)
+        page.wait_for_selector('#drawer [data-a="dsp_cmp"]', timeout=15000)
+        ef.disputed = [fx.release_locked(f, 'manual_refund') for f in ef.disputed]
+    else:
+        rid, act, text = fx.L1['id'], 'lg_rel', fx.E_RELEASE_GATEWAY
+        _row(page, rid)
+        for c in ef.legacy:
+            if c['id'] == rid:
+                c.update({'release_blocked': 'gateway_refund', 'release_blocked_reason': text})
+    assert page.is_enabled('#drawer [data-a="%s"]' % act)
+    page.click('#drawer [data-a="%s"]' % act)
+    page.wait_for_selector('#mc_go')
+    page.click('#mc_go')
+    page.wait_for_selector('#epModal .ef-err', timeout=15000)
+    assert page.inner_text('#epModal .ef-err') == text
+    assert page.is_disabled('#mc_go')
+    page.evaluate("() => document.getElementById('mc_go').click()")
+    page.wait_for_timeout(300)
+    assert len([c for c in ef.calls if c[0] == 'POST' and rid in c[1]]) == 1
+    _drawer_btn_locked(page, act)
+    page.click('#mc_x')
+    page.wait_for_selector('#epModal', state='detached')
+    assert _whys(page)[0] == text
 
 
 def test_legacy_rows_and_drawer_name_who_what_and_since(open_page):
@@ -823,6 +896,7 @@ def test_legacy_release_confirms_amount_currency_and_payee_and_posts_once(open_p
         assert t in body, t
     assert page.inner_text('#mc_go') == 'حوّل ٤٨٠ ج لـأ. عمرو الشريف'
     path = '/api/platform-legacy-consultations/%s/decide' % fx.L1['id']
+    before = sum(1 for c in harness.dash_calls if c == ('POST', path))   # الأداة مشتركة في الملف (اختبار الرفض قبله)
     harness.hold.add(('POST', path))
     try:
         page.locator('#mc_go').dblclick()
@@ -830,7 +904,7 @@ def test_legacy_release_confirms_amount_currency_and_payee_and_posts_once(open_p
         assert page.is_disabled('#mc_go') and page.inner_text('#mc_go') == 'بيتحوّل…'
     finally:
         harness.hold.discard(('POST', path))
-    assert sum(1 for c in harness.dash_calls if c == ('POST', path)) == 1
+    assert sum(1 for c in harness.dash_calls if c == ('POST', path)) - before == 1
     harness.release_held()
     page.wait_for_selector('#epModal', state='detached', timeout=15000)
     page.wait_for_function("id => EP.state.inbox==='ready' && !INBOX.some(r => r.apiId === id)", arg=fx.L1['id'],
@@ -937,9 +1011,10 @@ def test_r8_audit_lines_name_the_action_the_file_and_the_admin(open_page):
     assert txt.count('admin@local.test') >= 2
 
 
-def test_an_approved_review_still_delivering_offers_no_second_decision(open_page):
+def test_an_approved_review_whose_delivery_stopped_says_it_will_not_finish_and_offers_the_refund(open_page):
     """وافقت عليه خلاص والتوصيل وقف (`review.approved_at` + ختم `approval_blocked_at`) ⇒ من غير «اعتمده»/«رجّعه» (المنصة
-    بترفض الاتنين)، والدرج بيقول إن المنصة بتكمّل التوصيل وسبب الوقوف بكلامها."""
+    بترفض الاتنين). وحارة الشفاء على المنصة بتستبعد الملف المختوم بالاسم، فالدرج **ما بيقولش** إن المنصة بتكمّل التوصيل:
+    بيقول إن التوصيل وقف ومش هيكمّل لوحده، والحل من هنا «رجّع الفلوس» — وعنوان الصفّ مش «مستني مراجعتك»."""
     ef = _r8()
     r1 = [f for f in ef.review if f['id'] == fx.R1['id']][0]
     r1['review']['approved_at'] = fx.iso(-0.5)
@@ -950,9 +1025,100 @@ def test_an_approved_review_still_delivering_offers_no_second_decision(open_page
     _row(page, fx.R1['id'])
     drawer = page.inner_text('#drawer')
     assert 'وافقت على الرأي ده' in drawer and fx.BLOCK_LABELS['approval_blocked_at'] in drawer
+    assert 'توصيله لـسمر وقف ومش هيكمّل لوحده' in drawer and 'الحل من هنا: «رجّع الفلوس»' in drawer
+    assert 'المنصة بتكمّل' not in drawer
+    assert 'ملف للخبير · وافقت عليه' in drawer and 'مستني مراجعتك' not in drawer
     assert page.query_selector('#drawer [data-a="rv_ok"]') is None
     assert page.query_selector('#drawer [data-a="rv_back"]') is None
-    assert page.evaluate("id => INBOX.find(r => r.apiId === id).needsAttention", fx.R1['id']) is True
+    assert page.is_enabled('#drawer [data-a="ef_refund"]')
+    row = page.evaluate("id => INBOX.find(r => r.apiId === id)", fx.R1['id'])
+    assert row['needsAttention'] is True and row['out'] == 'رأي وافقت عليه وتوصيله وقف'
+    assert 'مستني مراجعتك' not in row['out'] + row['note']
+
+
+def test_an_approved_review_still_delivering_offers_no_second_decision(open_page):
+    """وافقت عليه والتوصيل لسه ما خلصش **من غير ختم** (المنصة لسه هتكمّله في حارة الشفاء) ⇒ «المنصة بتكمّل توصيله»."""
+    ef = _r8()
+    r1 = [f for f in ef.review if f['id'] == fx.R1['id']][0]
+    r1['review']['approved_at'] = fx.iso(-0.2)
+    page = open_page(ef=ef)
+    _row(page, fx.R1['id'])
+    drawer = page.inner_text('#drawer')
+    assert 'المنصة بتكمّل توصيله لـسمر' in drawer and 'مش هيكمّل لوحده' not in drawer
+    assert page.query_selector('#drawer [data-a="rv_ok"]') is None
+    assert page.query_selector('#drawer [data-a="rv_back"]') is None
+    assert page.evaluate("id => INBOX.find(r => r.apiId === id).out", fx.R1['id']) == 'رأي وافقت عليه ولسه بيتوصّل للعميل'
+
+
+# ميعاد ثابت: ١٥:٠٠ UTC يوم ٣ نوفمبر ٢٠٢٦ = ٥:٠٠ م القاهرة (جهاز المؤسس) · ٦:٠٠ م الرياض · ٧:٠٠ م دبي.
+_SLOT = {'start_at': '2026-11-03T15:00:00+00:00', 'end_at': '2026-11-03T15:30:00+00:00'}
+
+
+def _slots_block(page):
+    return page.evaluate("() => (document.querySelector('#drawer .ef-slots') || {}).innerText || ''")
+
+
+@pytest.mark.parametrize('country,hour,label', [('sa', '٦:٠٠', 'بتوقيت السعودية'), ('ae', '٧:٠٠', 'بتوقيت الإمارات')])
+def test_review_slots_are_in_the_clients_time_and_say_so(open_page, monkeypatch, country, hour, label):
+    """مراجعة الجولة ٨: مواعيد الجلسة في درج المراجعة بتوقيت العميل (بلد السعر — زي ما المنصة هتعرضها له) والتوقيت
+    مكتوب جنب كل ميعاد، مش بتوقيت جهاز المؤسس من غير ما يتقال."""
+    ef = _r8()
+    r2 = [f for f in ef.review if f['id'] == fx.R2['id']][0]
+    r2['pending_opinion']['slots'] = [dict(_SLOT)]
+    monkeypatch.setitem(fx.REVIEW_DETAIL, fx.R2['id'],
+                        dict(fx.REVIEW_DETAIL[fx.R2['id']], price={'country': country, 'currency': 'EGP'}))
+    page = open_page(ef=ef, tz='Africa/Cairo')
+    _row(page, fx.R2['id'])
+    page.wait_for_function("() => /الرأي ده مبني على/.test(document.getElementById('drawer').innerText)", timeout=15000)
+    block = _slots_block(page)
+    assert 'مواعيد الجلسة اللي هتتعرض على دينا' in block
+    assert hour in block and label in block and '٥:٠٠' not in block, block
+    assert 'بتوقيت جهازك' not in block
+
+
+def test_review_slots_for_a_client_outside_the_zones_say_whose_clock_it_is(open_page, monkeypatch):
+    """بلد السعر برّه القايمة ⇒ المنصة بتعرض المواعيد للعميل بتوقيت جهازه، والدرج بيكتبها بتوقيت جهاز المؤسس **ومكتوب كده**."""
+    ef = _r8()
+    r2 = [f for f in ef.review if f['id'] == fx.R2['id']][0]
+    r2['pending_opinion']['slots'] = [dict(_SLOT)]
+    monkeypatch.setitem(fx.REVIEW_DETAIL, fx.R2['id'],
+                        dict(fx.REVIEW_DETAIL[fx.R2['id']], price={'country': 'default', 'currency': 'USD'}))
+    page = open_page(ef=ef, tz='Africa/Cairo')
+    _row(page, fx.R2['id'])
+    page.wait_for_function("() => /الرأي ده مبني على/.test(document.getElementById('drawer').innerText)", timeout=15000)
+    block = _slots_block(page)
+    assert '٥:٠٠' in block and 'بتوقيت جهازك' in block and 'بلد العميل مش معروف' in block, block
+
+
+def test_service_closed_locks_approve_with_the_reason_and_the_return_window_says_so(open_page, harness):
+    """مراجعة الجولة ٨: الخدمة مقفولة (`service_mode: closed`) ⇒ كل صفحات العميل مقفولة على المنصة، فالرأي لو اتبعت مش
+    هيتفتح عنده ⇒ «اعتمده» مقفول والسبب تحته (ولا نافذة ولا طلب). «رجّعه» و«رجّع الفلوس» شغّالين، ونافذة الرجوع بتقول إن
+    الملف مش هيتفتح عند الخبير لحد ما الخدمة تتفتح."""
+    page = open_page(ef=_r8(service_open=False))
+    assert page.evaluate("() => efServiceClosed()") is True
+    _row(page, fx.R1['id'])
+    page.wait_for_function("() => /الرأي ده مبني على/.test(document.getElementById('drawer').innerText)", timeout=15000)
+    assert page.is_disabled('#drawer [data-a="rv_ok"]')
+    assert _whys(page) == ['الخدمة مقفولة للناس دلوقتي، فالرأي مش هيتفتح عند سمر لو اتبعت — اعتمده لما الخدمة تتفتح.']
+    page.evaluate("() => { document.querySelector('#drawer [data-a=\"rv_ok\"]').click(); efReviewApproveModal(INBOX[selected]); }")
+    page.wait_for_timeout(200)
+    assert page.query_selector('#epModal') is None
+    assert page.is_enabled('#drawer [data-a="rv_back"]') and page.is_enabled('#drawer [data-a="ef_refund"]')
+    page.click('#drawer [data-a="rv_back"]')
+    page.wait_for_selector('#mc_go')
+    assert 'الخدمة مقفولة للناس دلوقتي، فالملف مش هيتفتح عند أ. رنا عادل لحد ما الخدمة تتفتح.' in page.inner_text('#epModal')
+    page.click('#mc_x')
+    assert not [c for c in harness.ef.calls if c[0] == 'POST']
+
+
+def test_open_and_trial_modes_keep_approve_open(open_page):
+    for ef in (_r8(), _r8(mode='allowlist')):
+        page = open_page(ef=ef)
+        _row(page, fx.R1['id'])
+        assert page.is_enabled('#drawer [data-a="rv_ok"]') and _whys(page) == []
+        page.click('#drawer [data-a="rv_back"]')
+        page.wait_for_selector('#mc_go')
+        assert 'الخدمة مقفولة' not in page.inner_text('#epModal')
 
 
 def test_r8_platform_text_is_escaped_in_the_new_drawers_and_windows(open_page):

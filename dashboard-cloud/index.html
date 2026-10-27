@@ -1187,6 +1187,14 @@ function efCur(cur){return ((efX().CUR_AR||{})[cur])||cur||'';}
 function efRel(iso){const E=efX();return E.relTime?E.relTime(iso):'';}
 function efDate(iso){const E=efX();return E.arDate?E.arDate(iso):'';}
 function efRefreshInbox(){selected=null;viewInbox(document.getElementById('view'));}
+// مفتاح الصفّ (نوعه · مصدره · معرّفه) — `selected` رقم في `INBOX` بيتغيّر بعد كل تحميل.
+function efRowKey(r){return r?[r.apiKind,r.dsrc||'',r.apiId].join('|'):'';}
+// بعد رفض نهائي من المنصة (٤٠٩): الوارد والعدّادات بيتحدّثوا والدرج بيترسم على **نفس الصفّ** بحالته الجديدة (مثلًا «للخبير»
+// مقفول والسبب تحته) — من غير ما المؤسس يحدّث بإيده. الصفّ اختفى (اتسوّى) ⇒ الدرج فاضي.
+function efReloadKeep(key){
+  const re=()=>{const n=key?INBOX.findIndex(r=>efRowKey(r)===key):-1;selected=n>-1?n:null;viewInbox(document.getElementById('view'));};
+  EP.reload('opsQueue',re);EP.reload('inbox',re);
+}
 // اسم العملة بالكلام (جنيه مصري …) لنوافذ تأكيد الفلوس — مش الكود الإنجليزي.
 function efCurName(cur){return ((efX().CUR_NAME_AR||{})[cur])||efCur(cur);}
 // الخدمة مقفولة للناس؟ (الجولة ٧ ب١) — من القوايم نفسها، `null` = مش معروف (الجسر مش على المنصة).
@@ -1352,9 +1360,12 @@ function drawUnactivated(el,i){
    الدرج بيعرض الرأي **زي ما العميل هيشوفه**: كل سؤال وتحته الرد · الخطوة الجاية · «مبني على» · (جلسة) المواعيد.
    الأزرار: «اعتمده وابعته للعميل» (بتأكيد بالمبلغ والعملة والأسماء) · «رجّعه للخبير» (الملاحظة لازمة وبتوصل للخبير) ·
    «رجّع الفلوس» (قبل التسليم — المنصة بتقبله في المراجعة، وده الطريق لو الرجوع للخبير خلص). */
-function efSlot(iso){
+// ميعاد جلسة بتوقيت `tz` (منطقة بلد العميل من الخادم — زي ما المنصة بتعرضه له)، ومن غيره بتوقيت جهازك.
+function efSlot(iso,tz){
   if(!iso)return '—';
-  try{return new Intl.DateTimeFormat('ar-EG',{weekday:'long',day:'numeric',month:'long',hour:'numeric',minute:'2-digit'}).format(new Date(iso));}
+  const o={weekday:'long',day:'numeric',month:'long',hour:'numeric',minute:'2-digit'};
+  if(tz)o.timeZone=tz;
+  try{return new Intl.DateTimeFormat('ar-EG',o).format(new Date(iso));}
   catch(e){return String(iso).slice(0,16);}
 }
 function drawReview(el,i){
@@ -1369,12 +1380,20 @@ function drawReview(el,i){
   const client=f.client_first_name||'العميل',expert=f.expert_name||f.expert_email||'الخبير';
   const returned=Number(rv.returns||0)>0;
   const back=!!(E.efMoneyAlreadyBack&&E.efMoneyAlreadyBack(f));
-  // وافقت عليه خلاص (`review.approved_at`) والتوصيل لسه ما خلصش (مثلًا الفلوس وقفت — ختم `approval_blocked_at`) ⇒
-  // ولا «اعتمده» ولا «رجّعه» (المنصة بترفض الاتنين) — المنصة بتكمّل التوصيل لوحدها، والختم فوق بيقول لو فيه مشكلة.
+  // وافقت عليه خلاص (`review.approved_at`) ⇒ ولا «اعتمده» ولا «رجّعه» (المنصة بترفض الاتنين). والتوصيل وقف (ختم
+  // `approval_blocked_at` — الفلوس ما اتحرّكتش) ⇒ المنصة **مش** هتكمّله لوحدها (حارة الشفاء بتستبعد المختوم، و«ابعته لحد
+  // تاني» بيترفض بعد الموافقة) ⇒ الحل من هنا «رجّع الفلوس». من غير ختم ⇒ المنصة لسه بتكمّل التوصيل.
   const approved=!!rv.approved_at;
+  const stuck=approved&&!!(E.efApprovalStuck&&E.efApprovalStuck(f));
+  const okWhen=efRel(rv.approved_at);
   let strips=efBlockedStrips(f);
-  if(approved)strips+=efStrip('info','وافقت على الرأي ده '+(efRel(rv.approved_at)||'')+' — المنصة بتكمّل توصيله لـ'+client+'.');
+  if(stuck)strips+=efStrip('warn','وافقت على الرأي ده'+(okWhen?' '+okWhen:'')+'، بس توصيله لـ'+client+' وقف ومش هيكمّل لوحده.'
+    +(back?'':' الفلوس محجوزة زي ما هي — الحل من هنا: «رجّع الفلوس».'));
+  else if(approved)strips+=efStrip('info','وافقت على الرأي ده'+(okWhen?' '+okWhen:'')+' — المنصة بتكمّل توصيله لـ'+client+'.');
   else strips+=efStrip('info','الرأي ده مش هيوصل لـ'+client+' لحد ما توافق عليه، والفلوس محجوزة زي ما هي.');
+  // الخدمة مقفولة للناس: كل صفحات العميل مقفولة على المنصة، فالرأي لو اتبعت مش هيتفتح عنده (ومهلة «تمام» بتبدأ من التسليم)
+  // ⇒ «اعتمده» مقفول والسبب تحته. المنصة بتقبل الاعتماد في كل الأوضاع — القفل ده من هنا (مراجعة الجولة ٨).
+  const offWhy=efServiceClosed()?'الخدمة مقفولة للناس دلوقتي، فالرأي مش هيتفتح عند '+client+' لو اتبعت — اعتمده لما الخدمة تتفتح.':'';
   if(returned&&!approved)strips+=efStrip('warn','رجّعته للخبير قبل كده'+(rv.note?' بملاحظة: «'+rv.note+'»':'')+'، والرأي اتعدّل واتبعت تاني. الرجوع للخبير مرة واحدة بس — لو لسه مش تمام، رجّع الفلوس للعميل.');
   const n=Number(f.expert_delivered_count||0);
   // بيانات الملف في شبكة عمودين (مش حقل في كل سطر) — المهم في الدرج ده الرأي نفسه، فيبان من غير تمرير طويل.
@@ -1397,16 +1416,22 @@ function drawReview(el,i){
       +`<div class="ef-op"><div class="q">الخطوة الجاية: ${esc(po.next_step_label||(E.NEXT_STEP_AR||{})[po.next_step]||'—')}</div>${po.next_step_note?esc(po.next_step_note):''}</div>`
       +`<div class="ef-op ef-based"><div class="q">مبني على</div>${esc(based)}</div>`;
     if(Array.isArray(po.slots)&&po.slots.length){
-      op+=`<div class="ef-op"><div class="q">مواعيد الجلسة اللي هتتعرض على ${esc(client)}</div>${po.slots.map(s=>esc(efSlot(s.start_at))).join('<br>')}`
+      // بتوقيت العميل (منطقة بلد السعر من الخادم — نفس اللي المنصة بتعرض بيه للعميل)، والتوقيت مكتوب جنب كل ميعاد.
+      // لسه بنجيب ⇒ «…» · بلده مش في القايمة أو القراية وقعت ⇒ بتوقيت جهازك ومكتوب كده.
+      const ok=det&&!det.__error,tz=ok?(det.client_tz||null):null;
+      const tzl=tz?(det.client_tz_label||''):'بتوقيت جهازك';
+      const lines=det===undefined?esc('…بنجيب المواعيد'):po.slots.map(s=>esc(efSlot(s.start_at,tz)+(tzl?' · '+tzl:''))).join('<br>');
+      op+=`<div class="ef-op ef-slots"><div class="q">مواعيد الجلسة اللي هتتعرض على ${esc(client)}</div>${lines}`
+        +(ok&&!tz?`<div class="meta">${esc('بلد العميل مش معروف — المنصة بتعرض المواعيد للعميل بتوقيت جهاز العميل نفسه.')}</div>`:'')
         +(po.meeting_url?`<div class="meta">لينك الجلسة: <span dir="ltr">${esc(po.meeting_url)}</span></div>`:'')+`</div>`;
     }
   }
-  el.innerHTML=`<div class="dh"><div class="k">${esc(efKindLine('ملف للخبير · مستني مراجعتك',f))}</div><h3>${esc(f.title||i.out)}</h3></div><div class="db">
+  el.innerHTML=`<div class="dh"><div class="k">${esc(efKindLine(approved?'ملف للخبير · وافقت عليه':'ملف للخبير · مستني مراجعتك',f))}</div><h3>${esc(f.title||i.out)}</h3></div><div class="db">
     ${strips}${fields}
     <div class="field"><div class="lab">الرأي زي ما هيوصل لـ${esc(client)}</div><div class="ef-rv">${op}</div></div>
     <div class="acts">
-      ${approved?'':`<button class="btn btn-primary ef-full" data-a="rv_ok">${svg('check')}اعتمده وابعته للعميل</button>
-      <button class="btn btn-human ef-full" data-a="rv_back">${svg('back')}رجّعه للخبير</button>`}
+      ${approved?'':efLockedBtn('btn-primary','rv_ok',svg('check')+'اعتمده وابعته للعميل',offWhy)
+        +`<button class="btn btn-human ef-full" data-a="rv_back">${svg('back')}رجّعه للخبير</button>`}
       ${back?'':`<button class="btn btn-warn" data-a="ef_refund">${svg('back')}رجّع الفلوس</button>`}
       <button class="btn btn-ghost" data-a="ef_close">إغلاق</button>
     </div></div>`;
@@ -1414,7 +1439,7 @@ function drawReview(el,i){
     const a=b.dataset.a;
     if(a==='ef_close'){selected=null;renderInbox();return;}
     if(!window.EP){toast('الربط غير متاح');return;}
-    if(a==='rv_ok'){efReviewApproveModal(i);return;}
+    if(a==='rv_ok'){if(offWhy)return;efReviewApproveModal(i);return;}
     if(a==='rv_back'){efReviewReturnModal(i);return;}
     if(a==='ef_refund'){efRefundModal(i);return;}
   });
@@ -1430,12 +1455,11 @@ function drawReview(el,i){
   }
 }
 function efReviewApproveModal(i){
+  if(efServiceClosed())return;                      // الخدمة مقفولة ⇒ «اعتمده» مقفول والسبب تحته في الدرج
   const f=i.ef||{};
   const client=f.client_first_name||'العميل',expert=f.expert_name||f.expert_email||'الخبير';
   const session=f.tier==='written_session';
-  const money_=efServiceClosed()
-    ?'الفلوس فاضلة محجوزة — الخدمة مقفولة للناس دلوقتي، فمش هتتحرّك لوحدها.'
-    :`الفلوس فاضلة محجوزة، وأجر <b>${esc(efM(f.expert_amount,f.currency))}</b> لـ<b>${esc(expert)}</b> بيتحوّل بعد «تمام» من ${esc(client)} أو لما مهلة الـ٣ أيام${session?' اللي بعد الجلسة':''} تخلص من غير ملاحظة.`;
+  const money_=`الفلوس فاضلة محجوزة، وأجر <b>${esc(efM(f.expert_amount,f.currency))}</b> لـ<b>${esc(expert)}</b> بيتحوّل بعد «تمام» من ${esc(client)} أو لما مهلة الـ٣ أيام${session?' اللي بعد الجلسة':''} تخلص من غير ملاحظة.`;
   moneyConfirmModal({
     title:'تبعت الرأي للعميل؟',
     lead:`رأي <b>${esc(expert)}</b> في «${esc(f.title||'')}» هيوصل لـ<b>${esc(client)}</b> دلوقتي${session?' ومعاه مواعيد الجلسة للاختيار':''}. `+money_
@@ -1452,6 +1476,8 @@ function efReviewReturnModal(i){
   moneyConfirmModal({
     title:'ترجّعه للخبير؟',
     lead:`الرأي هيرجع لـ<b>${esc(expert)}</b> بملاحظتك، ومش هيوصل لـ<b>${esc(client)}</b> لحد ما يتعدّل ويرجعلك تراجعه تاني. الفلوس فاضلة محجوزة.`
+      // الخدمة مقفولة: صفحات الخبير مقفولة على المنصة كمان — الملاحظة بتوصله بس مش هيقدر يفتح الملف ويعدّل.
+      +(efServiceClosed()?`<br>الخدمة مقفولة للناس دلوقتي، فالملف مش هيتفتح عند <b>${esc(expert)}</b> لحد ما الخدمة تتفتح.`:'')
       +(Number(rv.returns||0)>0
         ?'<br><b>رجّعته قبل كده مرة</b> — المنصة بتسمح بالرجوع مرة واحدة بس، إلا لو مواعيد الجلسة قربت أو عدّت.'
         :'<br>الرجوع للخبير مرة واحدة بس.'),
@@ -1693,9 +1719,10 @@ function efResolveModal(i,action){
   });
 }
 
-/* نافذة تأكيد فلوس — o = {title, lead(HTML متأمَّن), rows:[[label,value]], noteLabel, btn, btnCls, busy, run(note) ⇒ Promise<{ok,error,noReply}>}.
+/* نافذة تأكيد فلوس — o = {title, lead(HTML متأمَّن), rows:[[label,value]], noteLabel, btn, btnCls, busy, run(note) ⇒ Promise<{ok,error,noReply,final}>}.
    التأكيد = قراية المبلغ والاسم + ضغطة واحدة على زرار اسمه فيه المبلغ. أول ضغطة بتقفل الزرار والإغلاق لحد
-   ما المنصة ترد: نجاح ⇒ النافذة تقفل · رفض ⇒ الزرار يرجع والرسالة جوه النافذة · «ما وصلناش رد» ⇒ الزرار
+   ما المنصة ترد: نجاح ⇒ النافذة تقفل · رفض نهائي (٤٠٩ — الحالة اتغيّرت) ⇒ الرسالة جوه النافذة والزرار يفضل مقفول
+   والدرج ورا يترسم على نفس الصفّ · رفض تاني (ملاحظة ناقصة مثلًا) ⇒ الزرار يرجع · «ما وصلناش رد» ⇒ الزرار
    يفضل مقفول (الفعل ممكن يكون اتنفّذ) والوارد بيتحدّث ورا. */
 function moneyConfirmModal(o){
   // `o.noteRequired` (الجولة ٨ — «رجّعه للخبير»): الملاحظة لازمة وبتوصل للخبير — الزرار مقفول لحد ما تتكتب.
@@ -1707,6 +1734,7 @@ function moneyConfirmModal(o){
     `<div class="acts"><button class="btn ${o.btnCls||'btn-primary'}" id="mc_go">${esc(o.btn)}</button><button class="btn btn-ghost" id="mc_x">رجوع</button></div>`);
   const go=s.querySelector('#mc_go'),x=s.querySelector('#mc_x'),err=s.querySelector('#mc_err'),xTop=s.querySelector('[data-x]');
   const note=s.querySelector('#mc_note');
+  const key=efRowKey(INBOX[selected]);              // الصفّ اللي النافذة اتفتحت من درجه
   const tryClose=()=>{if(!s.dataset.busy)closeModal();};
   xTop.onclick=tryClose;x.onclick=tryClose;s.onclick=e=>{if(e.target===s)tryClose();};
   const needNote=()=>!!o.noteRequired&&!String(note.value||'').trim();
@@ -1721,6 +1749,9 @@ function moneyConfirmModal(o){
       delete s.dataset.busy;x.disabled=false;
       err.innerHTML=`<div class="ef-err">${esc(res.error||'تعذّر تنفيذ العملية')}</div>`;
       if(res.noReply){go.textContent='حدّث الأول وشوف حصل إيه';return;}   // ⛔ ولا ضغطة تانية من هنا
+      // ⛔ رفض نهائي (٤٠٩ — الحالة اتغيّرت على المنصة): الضغطة التانية هتترفض بنفس الكلام ⇒ الزرار يفضل مقفول، والوارد
+      // بيتحدّث ورا فالدرج يترسم على نفس الصفّ بحالته الجديدة (الزرار مقفول والسبب تحته).
+      if(res.final){go.textContent=o.btn;efReloadKeep(key);return;}
       delete go.dataset.busy;go.disabled=needNote();go.textContent=o.btn;
     });
   };

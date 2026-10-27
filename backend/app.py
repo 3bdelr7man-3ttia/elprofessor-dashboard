@@ -2415,9 +2415,15 @@ def _ef_detail_out(resp):
     f = _proxy_json(resp)
     out = {k: f.get(k) for k in _EF_DETAIL_KEYS}
     out['based_on'] = None
+    # مواعيد الجلسة في درج المراجعة بتوقيت العميل (مراجعة الجولة ٨): المنصة بتعرضها له بمنطقة بلد السعر (`price.tz` ·
+    # «بتوقيت …»)، فالدرج بياخد المنطقة واسمها بس — مش بلد العميل ولا سعره. بلد مش في القايمة ⇒ فاضي (توقيت جهازه).
+    out['client_tz'] = out['client_tz_label'] = None
     if f.get('status') == 'in_review':
         po = f.get('pending_opinion') if isinstance(f.get('pending_opinion'), dict) else {}
         out['based_on'] = po.get('based_on') or _ef_based_on(f)
+        zone = _EF_ZONES.get(_ef_price_country(f))
+        if zone:
+            out['client_tz'], out['client_tz_label'] = zone[0], zone[2]
     return jsonify(out)
 
 
@@ -2429,9 +2435,17 @@ def _ef_detail_out(resp):
 _EF_AR_DIGITS = str.maketrans('0123456789', '٠١٢٣٤٥٦٧٨٩')
 _EF_MONTHS = ('يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو', 'يوليو', 'أغسطس', 'سبتمبر',
               'أكتوبر', 'نوفمبر', 'ديسمبر')
-# البلد ⇒ (المنطقة، إزاحة احتياطية لو tzdata مش موجودة) — نفس `expert_files.ZONES`.
-_EF_ZONES = {'eg': ('Africa/Cairo', 2), 'sa': ('Asia/Riyadh', 3), 'ae': ('Asia/Dubai', 4), 'kw': ('Asia/Kuwait', 3),
-             'qa': ('Asia/Qatar', 3), 'bh': ('Asia/Bahrain', 3), 'om': ('Asia/Muscat', 4), 'jo': ('Asia/Amman', 3)}
+# البلد ⇒ (المنطقة، إزاحة احتياطية لو tzdata مش موجودة، «بتوقيت …») — نفس `expert_files.ZONES`.
+_EF_ZONES = {'eg': ('Africa/Cairo', 2, 'بتوقيت مصر'), 'sa': ('Asia/Riyadh', 3, 'بتوقيت السعودية'),
+             'ae': ('Asia/Dubai', 4, 'بتوقيت الإمارات'), 'kw': ('Asia/Kuwait', 3, 'بتوقيت الكويت'),
+             'qa': ('Asia/Qatar', 3, 'بتوقيت قطر'), 'bh': ('Asia/Bahrain', 3, 'بتوقيت البحرين'),
+             'om': ('Asia/Muscat', 4, 'بتوقيت عُمان'), 'jo': ('Asia/Amman', 3, 'بتوقيت الأردن')}
+
+
+def _ef_price_country(f):
+    """بلد السعر (`price.country`) — منه توقيت العميل اللي المنصة بتعرض بيه مواعيد الجلسة وتواريخ «مبني على»."""
+    price = f.get('price') if isinstance(f.get('price'), dict) else {}
+    return str(price.get('country') or 'default')
 
 
 def _ef_ar(value):
@@ -2477,7 +2491,7 @@ def _ef_docs_phrase(n):
 
 def _ef_based_on(f):
     """`expert_files.build_based_on` بالحرف على قراية الملف كله من الجسر (`bridge_view`)، بالاسم الأول."""
-    country = str((f.get('price') or {}).get('country') or 'default') if isinstance(f.get('price'), dict) else 'default'
+    country = _ef_price_country(f)
     parts = str(f.get('client_name') or '').strip().split()
     who = parts[0] if parts else 'العميل'
     confirmed = _ef_ar_date(f.get('facts_confirmed_at'), country)
