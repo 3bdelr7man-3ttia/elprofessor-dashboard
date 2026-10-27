@@ -692,3 +692,20 @@ def _ef_meta(f, **extra):
 والجسر شغّال (`service_open=False`) والجسر مش منشور (`deployed=False`).
 **الصور:** `python3 tests/uiharness/expert_files_shots.py <dir> [--only-r7]` ⇒ `r7-01`…`r7-10` (كمبيوتر) و`mr7-01`…`mr7-05`
 (موبايل)، وفحص إن كل كتابة وصلت المنصة المزيّفة فيها `by` = إيميل الأدمن.
+
+---
+
+## ١٦ — مراجعة الجولة ٧ (2026-10-27): اللي اتغيّر
+
+| # | الملاحظة | اللي اتعمل | فين | الاختبار |
+|---|---|---|---|---|
+| م١ | والخدمة مقفولة، الصفّ والدرج كانوا بيقولوا «فاضل ٤١ ساعة وفلوسه ترجع لوحدها» و«لو ما اتستلمش قبل الميعاد، فلوس العميل بترجع لوحدها»، والملف اللي اتبعت ولسه في الـ١٢ ساعة كان بيستخبى تحت «للعلم … مش محتاج منك حاجة» — مع إن كنسة الملفات على المنصة **واقفة** وهي مقفولة (`ops_bridge.py`: `if expert_files_enabled()`) وصفحات الخبير ٤٠٤، فمحدّش هيستلم ومفيش حاجة هترجع لوحدها. | `efFileRow(f, lane, closed)`: `fyi` بقى `false` والخدمة مقفولة (الملف بند) · الـ`sla` ⇒ «الخدمة مقفولة، فالفلوس مش هترجع لوحدها — رجّعها من هنا» (`EF_OFF_MONEY_AR`) · شارة «⏳ فاضل أقل من ١٢ ساعة» ما بتطلعش · `slaWarn`. `efFyiLine()` ⇒ `''` والخدمة مقفولة. الدرج: السطر «الخدمة مقفولة للناس دلوقتي، فالفلوس مش هترجع لوحدها — تقدر ترجّعها من هنا، بس ما ينفعش تبعته لخبير.» و«ميعاد الاستلام: واقف — الخدمة مقفولة» من غير «بترجع لوحدها». `EF_SERVICE_OFF_AR` زاد «والفلوس مش بتتحرّك لوحدها»، و«للعلم» بتاع «كل اللي مستنيك» ما بيعدّش «اتبعت لخبير ولسه ما اتستلمش» والخدمة مقفولة (صفّه في الوارد). | `dashboard-api.js` · `index.html` (`EF_SERVICE_OFF_AR` · `efFyiLine` · `drawExpertFile` · `opsQueuePanel`) | `test_service_closed_never_promises_money_back_on_its_own` (ثابت) · `test_service_closed_never_promises_money_back_and_a_sent_file_stays_an_item` (متصفح) |
+| م٢ | ختم `refund_blocked_at` كان بيقول «رجّعها بإيدك» حتى لو الفلوس رجعت من البوابة أو يدوي (العميل ياخدها مرتين). | المنصة بقت بتبعت كود السبب `refund_blocked` وجملته `refund_blocked_reason` (= `blocked[].label`؛ SPEC المنصة §١٨-و — نفس نمط `release_blocked*` في الجولة ٨)، والشاشة بتقرا الجملة زي ما هي والكود للقرار بس. سبب «الفلوس رجعت قبل كده» (`gateway_refund` · `gateway_partial` · `manual_refund` — `efMoneyAlreadyBack`) ⇒ عنوان الصفّ «فلوس ملف رجعت للعميل قبل كده» · ولا زرار «رجّع الفلوس» في الدرج (المنصة بترفضه) · ولا سطر «لو الفلوس ما رجعتش لوحدها، رجّعها من هنا». والبوابة لو رجّعت كله، المنصة بتقفل الملف لوحدها فما بيوصلش هنا. | `dashboard-api.js` (`EF_ALREADY_BACK` · `efMoneyAlreadyBack`) · `index.html` (`drawExpertFile`) · `uiharness/ef_fixtures.py` (`REFUND_BLOCK_LABELS` · `block_label` · F7 بالكود `not_held` · `money_already_back` · `sent_inside_12h`) | `test_money_that_already_went_back_is_never_offered_a_second_refund` (ثابت) · `test_money_that_already_went_back_has_no_refund_button_and_says_so` (متصفح) · المعدّل `test_needs_attention_badge_names_the_platform_reason_on_the_row_and_the_drawer` |
+| م٣ | (المنصة) رد حسم الاستشارة و«رجّع الفلوس» لفلوس من غير ملف كانوا بيرجّعوا اسم الملف خام. | اتصلّح في المنصة (العنوان متقنّع) — والسجل هنا بيكتب العنوان اللي جه في الرد، فبقى متقنّع لوحده. | — | (المنصة) `test_resolve_and_unactivated_replies_hide_the_clients_name_and_phone_in_the_title` |
+
+**الصور:** `python3 tests/uiharness/expert_files_shots.py <dir> --only-r7` ⇒ `r7-09`/`r7-10`/`mr7-05`/`mr7-06` (الخدمة مقفولة وفيها ملف
+اتبعت من ساعتين — بند ومن غير أي وعد برجوع لوحده) و`r7-11` (فلوس رجعت يدوي قبل كده — من غير «رجّع الفلوس»)، وفحص في الأداة إن
+الصفحة والتلميحات من غير «ترجع لوحدها» والخدمة مقفولة.
+**لسه مفتوح:** فلوس رجعت يدوي (`manual_refund`) أو جزء منها من البوابة (`gateway_partial`) ⇒ الصفّ بيفضل «محتاج تدخّلك» ومفيش فعل
+يقفله هنا (محتاج قرار المؤسس: إمتى الملف يتقفل «فلوسك رجعت» من غير ما المنصة تحرّك فلوس). وملف عند خبير ولسه في ميعاد الرأي
+والخدمة مقفولة مالوش صفّ في الوارد (القوايم حارات: مستني توزيع · متأخر · نزاع · واقف) — بيتعدّ في «ملف مفتوح» بس.

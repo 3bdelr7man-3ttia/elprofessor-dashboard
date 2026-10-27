@@ -851,7 +851,8 @@ const EF_QUEUE_ALERTS=[[/ملف مستني توزيع$/,'expert_files_awaiting_a
   [/نزاع على استشارة مستني قرارك$/,'consultation_disputes'],[/ملف اتدفع وما وصلش لقايمة التوزيع/,'expert_files_unactivated']];
 // الخدمة مقفولة للناس والجسر شغّال (الجولة ٧ ب١): الصفوف المفتوحة لسه في الوارد، والفعل الوحيد اللي اتقفل
 // «ابعته لـ…». نفس الجملة فوق الصفوف (`efServiceLine`).
-const EF_SERVICE_OFF_AR='خدمة «ملف للخبير» مقفولة للناس دلوقتي — الملفات المفتوحة لسه هنا: تقدر ترجّع فلوسها أو تحسم نزاعها، بس ما ينفعش تبعتها لخبير.';
+// ⛔ وهي مقفولة كنسة الملفات واقفة على المنصة: ولا رجوع بعد ٤٨ ساعة ولا تحويل بعد ٣ أيام — الجملة بتقولها (مراجعة الجولة ٧).
+const EF_SERVICE_OFF_AR='خدمة «ملف للخبير» مقفولة للناس دلوقتي، والفلوس مش بتتحرّك لوحدها — الملفات المفتوحة لسه هنا: تقدر ترجّع فلوسها أو تحسم نزاعها، بس ما ينفعش تبعتها لخبير.';
 function efQueueAlerts(Q){
   const raw=Array.isArray(Q.alerts)?Q.alerts:[];
   const out=[];
@@ -884,7 +885,8 @@ function opsQueuePanel(){
       : '<div style="padding:18px 22px;color:var(--muted);font-size:13px">لا شيء ينتظرك في طابور المنصة الآن.</div>';
     const al=alerts.length?'<div style="padding:0 16px 12px">'+alerts.map(a=>`<div style="font-size:12.5px;color:var(--conflict);font-weight:700;padding:3px 0">${esc(a)}</div>`).join('')+'</div>':'';
     // «للعلم» (د١٤): مش شغل مستنيك — فمش شريحة. الأرقام من الطابور زي ما هي (ولا رقم بيتحسب هنا).
-    const efSent=Number(Q.expert_files_assigned_unclaimed)||0, efPay=Number(Q.expert_files_awaiting_payment)||0, efOpen=Number(Q.expert_files_open_total)||0;
+    // الخدمة مقفولة ⇒ الملف اللي اتبعت محدّش هيستلمه وفلوسه مش هترجع لوحدها، فمش «للعلم» (مراجعة الجولة ٧ — صفّه في الوارد).
+    const efSent=Q.expert_files_service_open===false?0:(Number(Q.expert_files_assigned_unclaimed)||0), efPay=Number(Q.expert_files_awaiting_payment)||0, efOpen=Number(Q.expert_files_open_total)||0;
     const fyiParts=[efSent?money(efSent)+' ملف اتبعت لخبير ولسه ما اتستلمش':'',efPay?money(efPay)+' ملف مستني الدفع':'',efOpen?money(efOpen)+' ملف مفتوح إجمالًا':''].filter(Boolean);
     const fyi=fyiParts.length?`<div class="ef-fyi" style="padding:0 16px 12px;font-size:12px;color:var(--muted)">للعلم: ${fyiParts.join(' · ')}</div>`:'';
     body=chips+fyi+al;
@@ -1163,6 +1165,8 @@ function efExpertLoad(email,exceptId){
 }
 // سطر «للعلم» فوق صفوف الوارد: الملفات اللي اتبعتت ولسه في مهلتها — مش بنود، بس ما تستخباش.
 function efFyiLine(){
+  // الخدمة مقفولة ⇒ محدّش هيستلم الملف اللي اتبعت، فمفيش «للعلم … مش محتاج منك حاجة» (الصفّ بند عادي).
+  if(efServiceClosed())return '';
   const n=inboxFyi().length;
   if(!n)return '';
   if(activeFilter==='fyi')return `<div class="ef-fyi-line">${svg('inbox','ic')}<div>دول الملفات اللي اتبعتت لخبير ولسه في الـ١٢ ساعة بتوعه — مش محتاجين منك حاجة دلوقتي. <b data-a="ef_fyi">رجوع للوارد</b></div></div>`;
@@ -1228,8 +1232,11 @@ function drawExpertFile(el,i){
     if(fl==='country_mismatch')strips+=efStrip('warn','بلد تسجيل العميل مختلف عن بلد رقم تليفونه — السعر اتحسب على بلد الرقم. بُصّ عليه قبل ما تبعته.');
     if(fl==='phone_ambiguous')strips+=efStrip('warn','رقم تليفون العميل مكتوب من غير كود البلد، فالسعر اتحسب بالسعر العام.');
   });
-  if(off&&(pre||work))strips+=efStrip('info','الخدمة مقفولة للناس دلوقتي — تقدر ترجّع فلوس الملف ده، بس ما ينفعش تبعته لخبير.');
-  else if(expired)strips+=efStrip('late','ميعاد الاستلام عدّى، فمش هينفع يتبعت لخبير. لو الفلوس ما رجعتش لوحدها، رجّعها من هنا.');
+  const back=!!(E.efMoneyAlreadyBack&&E.efMoneyAlreadyBack(f));
+  if(off&&(pre||work)&&!back)strips+=efStrip('info','الخدمة مقفولة للناس دلوقتي، فالفلوس مش هترجع لوحدها — تقدر ترجّعها من هنا، بس ما ينفعش تبعته لخبير.');
+  else if(off&&(pre||work))strips+=efStrip('info','الخدمة مقفولة للناس دلوقتي — ما ينفعش تبعته لخبير.');
+  // فلوس رجعت قبل كده (البوابة/يدوي) ⇒ ولا «رجّعها من هنا»: سطر الختم فوق بيقول «ما ترجّعهاش تاني».
+  else if(expired){if(!back)strips+=efStrip('late','ميعاد الاستلام عدّى، فمش هينفع يتبعت لخبير. لو الفلوس ما رجعتش لوحدها، رجّعها من هنا.');}
   else if((pre||work)&&!others.length)strips+=efStrip('info','ما فيش خبير معتمد تاني تقدر تبعتله الملف ده دلوقتي.');
   // رأي اتسلّم وتحويل أجر الخبير وقف (أو الملف في حالة تانية بعد التسليم): الجسر ما عندوش فعل ليها لسه.
   if(!pre&&!work)strips+=efStrip('info','الرأي اتسلّم، فرجوع الفلوس مش من هنا — ومفيش زرار هنا يحوّلها للخبير لسه.');
@@ -1240,18 +1247,22 @@ function drawExpertFile(el,i){
     // تنبيه «الطرف التاني» للي هيختار خبير بس — ملف ما ينفعش يتبعت (الخدمة مقفولة · الميعاد عدّى · اتسلّم) من غيره.
     +efField('الطرف التاني',esc(f.counterparty_name||'ما اتكتبش'),((pre&&!expired)||work)&&others.length?'اتأكد إن الخبير اللي هتختاره مالوش علاقة بيه':'');
   if(f.paid_at)fields+=efField('اتدفع',esc(efRel(f.paid_at)));
-  if(pre)fields+=efField('ميعاد الاستلام',esc(hl>0?'فاضل '+(E.efHours?E.efHours(hl):money(Math.floor(hl))+' ساعة'):'عدّى'),
-    hl>0?'لو ما اتستلمش قبل الميعاد، فلوس العميل بترجع لوحدها':'',(hl<=12)?'color:var(--conflict)':'');
+  // الخدمة مقفولة ⇒ الكنسة واقفة: مفيش ميعاد شغّال ولا «فلوس العميل بترجع لوحدها» (مراجعة الجولة ٧) — «الفلوس مش
+  // هترجع لوحدها» مكتوبة مرة في السطر اللي فوق وفي ملخّص الصفّ، فمش هنا تالت مرة.
+  if(pre)fields+=efField('ميعاد الاستلام',esc(off?'واقف — الخدمة مقفولة':(hl>0?'فاضل '+(E.efHours?E.efHours(hl):money(Math.floor(hl))+' ساعة'):'عدّى')),
+    !off&&hl>0&&!back?'لو ما اتستلمش قبل الميعاد، فلوس العميل بترجع لوحدها':'',
+    (off||hl<=12)?'color:var(--conflict)':'');
   if(f.status==='assigned')fields+=efField('اتبعت لـ',esc((f.assigned_name||f.assigned_to||'—')+(f.assigned_at?' · '+efRel(f.assigned_at):'')+(f.assign_overdue?' — الملف ما اتستلمش من ١٢ ساعة':'')),'',f.assign_overdue?'color:var(--conflict)':'');
   if(f.expert_name||f.expert_email)fields+=efField('الخبير',esc(f.expert_name||f.expert_email));
   if(work&&f.writing_due_at){const late=i.efLane==='late';fields+=efField('ميعاد الرأي',esc(efDate(f.writing_due_at)+(late?' — عدّى':'')),'',late?'color:var(--conflict)':'');}
   if(f.release_amount!=null&&f.release_amount!==''&&!pre&&!work)fields+=efField('لو اتحوّل للخبير',esc(efM(f.release_amount,f.currency)+' لـ'+(f.expert_name||f.expert_email||'الخبير')));
   if(declined.length)fields+=efField('اعتذروا',declined.map(d=>`<div>${esc((d.name||d.email||'—')+' — '+(d.reason||'من غير سبب'))}</div>`).join(''));
-  // الأزرار (SPEC §٦-د): الأساسي «ابعته لـ…»/«ابعته لحد تاني» لو ينفع (والخدمة مفتوحة)، و«رجّع الفلوس» دايمًا قبل التسليم.
+  // الأزرار (SPEC §٦-د): الأساسي «ابعته لـ…»/«ابعته لحد تاني» لو ينفع (والخدمة مفتوحة)، و«رجّع الفلوس» قبل التسليم —
+  // إلا لو الفلوس رجعت للعميل قبل كده (المنصة بترفضه، والعميل ما ياخدهاش مرتين).
   let primary='';
   if(pre&&!expired&&others.length)primary=`<button class="btn btn-human" data-a="ef_pick">${svg('cap')}${f.status==='assigned'?'ابعته لحد تاني':'ابعته لـ…'}</button>`;
   else if(work&&others.length)primary=`<button class="btn btn-human" data-a="ef_pick">${svg('cap')}ابعته لحد تاني</button>`;
-  const canRefund=pre||work;
+  const canRefund=(pre||work)&&!back;
   el.innerHTML=`<div class="dh"><div class="k">${esc(efKindLine('ملف للخبير',f))}</div><h3>${esc(f.title||i.out)}</h3></div><div class="db">
     ${strips}
     <div class="note-ai">${svg('doc','ic')}<div><b>${esc(i.out)}</b>${i.sla?' — '+esc(i.sla):''}</div></div>

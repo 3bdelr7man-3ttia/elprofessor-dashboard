@@ -268,3 +268,30 @@ def test_service_closed_hides_sending_and_says_so(html):
 def test_the_consultation_note_label_no_longer_warns_it_reaches_both_sides(html):
     b = _body(html, 'function efResolveModal(')
     assert 'كأن الطرفين ممكن يقروها' not in b and 'ما بتوصلش للعميل ولا للخبير' in b
+
+
+# --------------------------------------------------------------------------- مراجعة الجولة ٧ (SPEC §١٦)
+def test_service_closed_never_promises_money_back_on_its_own(apijs, html):
+    """م١: وهي مقفولة كنسة الملفات واقفة على المنصة — ولا «فلوسه ترجع لوحدها» ولا «للعلم … مش محتاج منك حاجة»."""
+    row = _body(apijs, 'function efFileRow(')
+    assert 'var fyi = !closed && ' in row
+    assert 'else if (pre && closed) sla = EF_OFF_MONEY_AR;' in row
+    assert row.index('else if (pre && closed) sla') < row.index('وفلوسه ترجع لوحدها')
+    assert 'if (pre && !closed && hl > 0 && hl <= 12) badges.unshift' in row
+    assert 'مش هترجع لوحدها' in apijs[apijs.index('var EF_OFF_MONEY_AR'):][:120]
+    fyi = _body(html, 'function efFyiLine(')
+    assert fyi.index("if(efServiceClosed())return '';") < fyi.index('const n=inboxFyi().length;')
+    d = _body(html, 'function drawExpertFile(')
+    assert "off?'واقف — الخدمة مقفولة'" in d and "!off&&hl>0&&!back?'لو ما اتستلمش قبل الميعاد" in d
+    assert 'الفلوس مش بتتحرّك لوحدها' in html[html.index("const EF_SERVICE_OFF_AR="):][:200]
+    assert "const efSent=Q.expert_files_service_open===false?0:" in _body(html, 'function opsQueuePanel(')
+
+
+def test_money_that_already_went_back_is_never_offered_a_second_refund(apijs, html):
+    """م٢: الختم بسبب «الفلوس رجعت قبل كده» (البوابة/يدوي) ⇒ ولا زرار «رجّع الفلوس» ولا «رجّعها من هنا»."""
+    assert 'var EF_ALREADY_BACK = { gateway_refund: true, gateway_partial: true, manual_refund: true };' in apijs
+    assert 'EF_ALREADY_BACK[f.refund_blocked]' in _body(apijs, 'function efMoneyAlreadyBack(')
+    assert 'efMoneyAlreadyBack(f)) out = "فلوس ملف رجعت للعميل قبل كده"' in _body(apijs, 'function efFileRow(')
+    d = _body(html, 'function drawExpertFile(')
+    assert 'const canRefund=(pre||work)&&!back;' in d
+    assert "else if(expired){if(!back)strips+=" in d

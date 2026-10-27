@@ -425,7 +425,14 @@
     approval_blocked_at: "رأي اتعتمد والملف ما اتحرّكش",
     file_activation_blocked_at: "فلوس وصلت ومش لاقيين ملفها",
   };
-  // `closed` = الخدمة مقفولة للناس (`service_open:false` من نفس القايمة): «ابعته لـ…» مش متاح، فالشارة ما تقولش «مستني توزيعك».
+  // فلوس رجعت للعميل قبل كده (البوابة أو يدوي — كود `refund_blocked` من المنصة، مراجعة الجولة ٧): «رجّع الفلوس»
+  // من هنا المنصة بترفضه، والكلام ما يقولش «ما رجعتش» — العميل ما ياخدهاش مرتين.
+  var EF_ALREADY_BACK = { gateway_refund: true, gateway_partial: true, manual_refund: true };
+  function efMoneyAlreadyBack(f) { return !!(f && f.refund_blocked_at && EF_ALREADY_BACK[f.refund_blocked]); }
+  // الخدمة مقفولة للناس (`service_open:false`): كنسة الملفات على المنصة واقفة، فمفيش فلوس بترجع لوحدها — ولا وعد بده.
+  var EF_OFF_MONEY_AR = "الخدمة مقفولة، فالفلوس مش هترجع لوحدها — رجّعها من هنا";
+  // `closed` = الخدمة مقفولة للناس (`service_open:false` من نفس القايمة): «ابعته لـ…» مش متاح، فالشارة ما تقولش «مستني توزيعك»،
+  // ومفيش «فلوسه ترجع لوحدها» ولا «للعلم» (الملف اللي اتبعت محدّش هيستلمه وهي مقفولة ⇒ بند).
   function efFileRow(f, lane, closed) {
     var pre = EF_PRE.indexOf(f.status) > -1;
     var hl = Number(f.hours_left || 0);
@@ -434,10 +441,11 @@
     var attn = efAttentionBadge(f);
     // «للعلم» مش بند: ملف اتبعت لخبير ولسه جوه الـ١٢ ساعة بتوعه وميعاد الـ٤٨ لسه بعيد ⇒ مش محتاج من
     // المؤسس حاجة دلوقتي. بيفضل في `INBOX` (عشان الدرج يفتح لو حب) بس برّه كل عدّ وكل شريحة — سطر
-    // «للعلم» واحد بيقول عليه. لو عدّى ١٢ ساعة (`assign_overdue`) أو قرب الميعاد أو عليه ختم ⇒ بند عادي.
-    var fyi = !attn && lane !== "late" && f.status === "assigned" && !f.assign_overdue && hl > 12;
+    // «للعلم» واحد بيقول عليه. لو عدّى ١٢ ساعة (`assign_overdue`) أو قرب الميعاد أو عليه ختم أو الخدمة مقفولة ⇒ بند عادي.
+    var fyi = !closed && !attn && lane !== "late" && f.status === "assigned" && !f.assign_overdue && hl > 12;
     var out;
-    if (attn) out = EF_BLOCK_OUT[(blocked[0] || {}).key] || "ملف فلوسه واقفة";
+    if (attn && (blocked[0] || {}).key === "refund_blocked_at" && efMoneyAlreadyBack(f)) out = "فلوس ملف رجعت للعميل قبل كده";
+    else if (attn) out = EF_BLOCK_OUT[(blocked[0] || {}).key] || "ملف فلوسه واقفة";
     else if (lane === "late") out = "رأي متأخر";
     else if (pre && hl <= 0) out = "فات ميعاد الاستلام";
     else if (f.status === "assigned" && f.assign_overdue) out = "ملف ما اتستلمش من ١٢ ساعة";
@@ -447,12 +455,13 @@
     var sla;
     if (attn && blocked.length) sla = "اتوقّفت " + (relTime(blocked[0].at) || "");
     else if (lane === "late") sla = "ميعاد الرأي عدّى " + (relTime(f.writing_due_at) || "");
+    else if (pre && closed) sla = EF_OFF_MONEY_AR;
     else if (pre && hl > 0) sla = "فاضل " + efHours(hl) + " وفلوسه ترجع لوحدها";
     else if (pre) sla = "الميعاد عدّى — لو الفلوس ما رجعتش لوحدها رجّعها من هنا";
     else sla = f.status_label || "";
     var badges = efFlagBadges(f);
-    // «قرب الـ٤٨ ساعة»: آخر ١٢ ساعة قبل ما الفلوس ترجع لوحدها — نفس حدّ `slaWarn` تحت.
-    if (pre && hl > 0 && hl <= 12) badges.unshift({ w: true, t: "⏳ فاضل أقل من ١٢ ساعة", tip: "لو ما اتستلمش قبل الميعاد، فلوس العميل بترجع لوحدها" });
+    // «قرب الـ٤٨ ساعة»: آخر ١٢ ساعة قبل ما الفلوس ترجع لوحدها — نفس حدّ `slaWarn` تحت. والخدمة مقفولة مفيش ميعاد شغّال.
+    if (pre && !closed && hl > 0 && hl <= 12) badges.unshift({ w: true, t: "⏳ فاضل أقل من ١٢ ساعة", tip: "لو ما اتستلمش قبل الميعاد، فلوس العميل بترجع لوحدها" });
     if (attn) badges.unshift(attn);
     if (declined.length) {
       badges.push({ t: declined.length === 1 ? "خبير اعتذر" : "اعتذر " + money(declined.length) + " خبراء",
@@ -476,7 +485,7 @@
       out: out, from: "ملف للخبير", src: "doc", dest: "inbox",
       triage: (attn || lane === "late" || (pre && hl <= 0)) ? "late" : "human",
       triLabel: triLabel,
-      sla: sla, slaWarn: !!attn || lane === "late" || (pre && hl <= 12) || !!f.assign_overdue,
+      sla: sla, slaWarn: !!attn || lane === "late" || (pre && (closed || hl <= 12)) || !!f.assign_overdue,
       who: f.client_first_name || "عميل",
       sub: [f.title, f.law_label, f.tier_label].filter(Boolean).join(" · "),
       sub2: "الطرف التاني: " + (f.counterparty_name || "ما اتكتبش") + (since ? " · " + since : ""),
@@ -601,6 +610,7 @@
   }
   EP.EF = { NEXT_STEP_AR: NEXT_STEP_AR, CUR_AR: CUR_AR, CUR_NAME_AR: CUR_NAME_AR, efMoney: efMoney,
             KIND_AR: KIND_AR, efHours: efHours, efBlocked: efBlocked, efUnactWhy: efUnactWhy,
+            efMoneyAlreadyBack: efMoneyAlreadyBack,
             PRE: EF_PRE, WORK: EF_WORK, relTime: relTime, arDate: arDate };
 
   var LOADERS = {

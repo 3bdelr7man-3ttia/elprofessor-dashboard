@@ -41,12 +41,22 @@ LAW_LABELS = {"eg": "القانون المصري", "sa": "القانون الس�
 REASON_LABELS = {"unclear": "فيه حاجة مش فاهمها", "not_answered": "الرأي ما ردّش على سؤالي",
                  "wrong_facts": "فيه غلط في الوقائع"}
 BLOCK_LABELS = {
-    "refund_blocked_at": "عدّت ٤٨ ساعة وما حدّش استلم الملف، والفلوس ما رجعتش لوحدها — راجعها ورجّعها بإيدك",
+    "refund_blocked_at": "عدّت ٤٨ ساعة وما حدّش استلم الملف، والفلوس ما رجعتش لوحدها — راجع الدفع قبل ما ترجّعها",
     "release_blocked_at": "عدّت الـ٣ أيام والفلوس ما اتحوّلتش للخبير لوحدها — راجعها",
     "approval_blocked_at": "الخبير اعتمد الرأي والملف ما اتحرّكش — راجعه",
     "file_activation_blocked_at": "الفلوس وصلت ومش لاقيين الملف بتاعها — رجّعها للعميل",
 }
 FILE_BLOCK_STAMPS = ("refund_blocked_at", "release_blocked_at", "approval_blocked_at")
+# مراجعة الجولة ٧ (SPEC المنصة §١٨-و): كود سبب وقوف الرجوع بيتخزّن مع الختم (`refund_blocked`)، وكل سبب ليه جملته
+# (`refund_blocked_reason` على الصفّ = نفس `blocked[].label`).
+REFUND_BLOCK_LABELS = {
+    "missing": "عدّت ٤٨ ساعة وما حدّش استلم الملف، ومش لاقيين فلوسه على المنصة — راجع الدفع قبل ما ترجّع أي حاجة",
+    "not_held": "عدّت ٤٨ ساعة وما حدّش استلم الملف، والفلوس مش محجوزة على المنصة — راجع الدفع قبل ما ترجّع أي حاجة",
+    "mismatch": "عدّت ٤٨ ساعة والملف حالته مش متسقة مع فلوسه — راجعه قبل ما ترجّع أي حاجة",
+    "gateway_refund": "الفلوس رجعت للعميل من بوابة الدفع — ما ترجّعهاش تاني",
+    "gateway_partial": "بوابة الدفع رجّعت جزء من الفلوس للعميل — راجع اللي رجع قبل ما ترجّع أي حاجة",
+    "manual_refund": "الفلوس رجعت للعميل يدوي قبل كده — ما ترجّعهاش تاني",
+}
 UNACTIVATED_LABEL = "اتدفع وما وصلش لقايمة التوزيع"
 PRE_CLAIM = ("awaiting_assignment", "assigned")
 EXPERT_WORK = ("claimed", "writing", "needs_info")
@@ -100,9 +110,16 @@ def _release_amount(status, expert_email, expert_amount, amount):
     return expert_amount if expert_amount is not None else amount
 
 
+def block_label(row, key):
+    """`_block_label` بالحرف: ختم الرجوع بجملة سببه، وسبب مش معروف ⇒ الجملة العامة."""
+    if key == "refund_blocked_at":
+        return REFUND_BLOCK_LABELS.get(row.get("refund_blocked") or "", BLOCK_LABELS[key])
+    return BLOCK_LABELS[key]
+
+
 def blocked_of(row, cons_stamp=None):
     """`_blocked` بالحرف — أختام الملف بالترتيب + ختم «مش لاقيين الملف» من الاستشارة."""
-    out = [{"key": k, "at": row.get(k), "label": BLOCK_LABELS[k]} for k in FILE_BLOCK_STAMPS if row.get(k)]
+    out = [{"key": k, "at": row.get(k), "label": block_label(row, k)} for k in FILE_BLOCK_STAMPS if row.get(k)]
     if cons_stamp:
         out.append({"key": "file_activation_blocked_at", "at": cons_stamp,
                     "label": BLOCK_LABELS["file_activation_blocked_at"]})
@@ -138,13 +155,16 @@ def _file(fid, *, title, status, law, tier, amount, currency, expert_amount, pai
         "followup": None,
         "dispute": ({**dispute, "reason_label": reason_label} if dispute else None),
         "reason_label": reason_label,
-        "refund_blocked_at": stamps.get("refund_blocked_at"), "release_blocked_at": stamps.get("release_blocked_at"),
+        "refund_blocked_at": stamps.get("refund_blocked_at"), "refund_blocked": stamps.get("refund_blocked"),
+        "refund_blocked_reason": None, "release_blocked_at": stamps.get("release_blocked_at"),
         "approval_blocked_at": stamps.get("approval_blocked_at"), "file_activation_blocked_at": None,
         "blocked": [], "needs_attention": False,
         "candidates": candidates(law, [e for e, _ in declined], pool) if in_work else [],
     }
     row["blocked"] = blocked_of(row)
     row["needs_attention"] = bool(row["blocked"])
+    if row["refund_blocked_at"]:
+        row["refund_blocked_reason"] = block_label(row, "refund_blocked_at")
     return row
 
 
@@ -172,10 +192,28 @@ F6 = _file("ef-f6-5a6b7c8d", title="نفقة متجمدة من سنتين", stat
            amount=500.0, currency="EGP", expert_amount=300.0, paid_h=-170.0, deadline_h=-122.0, client="نور",
            counterparty="", expert_email="hala@experts.test", file_no=1037,
            stamps={"release_blocked_at": iso(-4.0)})
-# F7 — عدّى ٤٨ ساعة وما حدّش استلمه، والرجوع التلقائي اتوقّف: في حارة `waiting` (الميعاد عدّى) وفي `blocked`.
+# F7 — عدّى ٤٨ ساعة وما حدّش استلمه، والرجوع التلقائي اتوقّف (الفلوس مش محجوزة): في حارة `waiting` (الميعاد عدّى) وفي `blocked`.
 F7 = _file("ef-f7-6b7c8d9e", title="حدود أرض مع الجار", status="awaiting_assignment", law="eg", tier="written",
            amount=500.0, currency="EGP", expert_amount=300.0, paid_h=-54.0, deadline_h=-6.0, client="وليد",
-           counterparty="", stamps={"refund_blocked_at": iso(-5.0)})
+           counterparty="", stamps={"refund_blocked_at": iso(-5.0), "refund_blocked": "not_held"})
+
+
+def sent_inside_12h(row, expert="hala@experts.test", hours_ago=2.0):
+    """نسخة من صفّ «مستني توزيع» اتبعت لخبير من ساعتين (لسه في الـ١٢ ساعة بتوعه) — شكل المنصة بعد `assign`."""
+    out = copy.deepcopy(row)
+    out.update({"status": "assigned", "assigned_to": expert, "assigned_name": _name(expert),
+                "assigned_at": iso(-hours_ago), "assign_overdue": False, "status_label": STATUS_LABELS["assigned"]})
+    return out
+
+
+def money_already_back(row, reason="manual_refund", hours_ago=5.0):
+    """نسخة من صفّ قبل الاستلام الكنسة ختمته لأن الفلوس رجعت للعميل قبل كده (يدوي/البوابة) — بجملة سببه."""
+    out = copy.deepcopy(row)
+    out.update({"refund_blocked_at": iso(-hours_ago), "refund_blocked": reason})
+    out["refund_blocked_reason"] = block_label(out, "refund_blocked_at")
+    out["blocked"] = blocked_of(out)
+    out["needs_attention"] = bool(out["blocked"])
+    return out
 
 D1 = _file("ef-d1-5f6a7b8c", title="حضانة بعد الطلاق", status="disputed", law="eg", tier="written",
            amount=500.0, currency="EGP", expert_amount=300.0, paid_h=-120.0, deadline_h=-72.0, client="ريم",

@@ -520,7 +520,7 @@ def test_needs_attention_badge_names_the_platform_reason_on_the_row_and_the_draw
     assert 'مفيش زرار هنا يحوّلها للخبير لسه' in drawer
     assert page.query_selector('#drawer [data-a="ef_refund"]') is None   # بعد التسليم الرجوع مش من هنا
     _row(page, fx.F7['id'])                                              # قبل الاستلام: الرجوع موجود
-    assert fx.BLOCK_LABELS['refund_blocked_at'] in page.inner_text('#drawer')
+    assert fx.REFUND_BLOCK_LABELS['not_held'] in page.inner_text('#drawer')   # جملة السبب من المنصة
     assert page.query_selector('#drawer [data-a="ef_refund"]') is not None
 
 
@@ -589,3 +589,48 @@ def test_every_write_reaches_the_platform_with_the_admins_email(open_page, harne
 def test_zero_real_requests(harness):
     """آخر اختبار في الملف: كل اللي اتقفل في المتصفح خطوط جوجل بس، وجوه العملية ولا عنوان اتمنع."""
     assert harness.unexpected_blocked() == []
+
+
+# --------------------------------------------------------------------------- مراجعة الجولة ٧ (SPEC §١٦)
+def test_service_closed_never_promises_money_back_and_a_sent_file_stays_an_item(open_page):
+    """م١: الخدمة مقفولة ⇒ الكنسة واقفة على المنصة. الملف اللي اتبعت ولسه في الـ١٢ ساعة **بند** مش «للعلم»، ومفيش
+    «فلوسه ترجع لوحدها» على الصفّ ولا في التلميح ولا في الدرج — الكلام بيقول «الفلوس مش هترجع لوحدها — رجّعها من هنا»."""
+    ef = fx.EFPlatform(service_open=False)
+    ef.waiting = [fx.sent_inside_12h(f) if f['id'] == fx.F1['id'] else f for f in ef.waiting]
+    page = open_page(ef=ef)
+    row = page.evaluate("id => INBOX.find(r => r.apiId === id)", fx.F1['id'])
+    assert row['fyi'] is False and row['slaWarn'] is True
+    assert 'مش هترجع لوحدها' in row['sla']
+    assert page.evaluate("() => inboxFyi().length") == 0
+    page.click('#filters .chip[data-f="t:files"]')
+    rows = page.inner_text('#rows')
+    assert fx.F1['title'] in rows and 'للعلم' not in rows and 'مش هترجع لوحدها' in rows
+    assert 'ترجع لوحدها' not in rows.replace('مش هترجع لوحدها', '')
+    tips = page.evaluate("() => [...document.querySelectorAll('#rows [title]')].map(e => e.title).join(' | ')")
+    assert 'بترجع لوحدها' not in tips
+    assert page.query_selector('#rows .ef-fyi-line:not(.ef-off-line)') is None
+    panel = page.inner_text('section.panel >> nth=0')                  # «للعلم» بتاع الطابور كمان
+    assert 'اتبعت لخبير ولسه ما اتستلمش' not in panel and 'مش بتتحرّك لوحدها' in panel
+    _row(page, fx.F1['id'])
+    drawer = page.inner_text('#drawer')
+    assert 'بترجع لوحدها' not in drawer and 'ترجع لوحدها' not in drawer.replace('مش هترجع لوحدها', '')
+    assert 'واقف — الخدمة مقفولة' in drawer and 'مش هترجع لوحدها' in drawer
+    assert page.query_selector('#drawer [data-a="ef_refund"]') is not None
+    assert page.query_selector('#drawer [data-a="ef_pick"]') is None
+
+
+def test_money_that_already_went_back_has_no_refund_button_and_says_so(open_page):
+    """م٢: الكنسة ختمت الملف لأن الفلوس رجعت للعميل قبل كده (يدوي) ⇒ الصفّ بيقول كده، والدرج من غير «رجّع الفلوس»
+    ومن غير «رجّعها من هنا» — العميل ما ياخدهاش مرتين."""
+    ef = fx.EFPlatform()
+    back = fx.money_already_back(fx.F7)
+    ef.waiting = [back if f['id'] == fx.F7['id'] else f for f in ef.waiting]
+    page = open_page(ef=ef)
+    page.click('#filters .chip[data-f="attn"]')
+    idx = page.evaluate("id => INBOX.findIndex(r => r.apiId === id)", fx.F7['id'])
+    row = page.inner_text('#rows .row[data-i="%d"]' % idx)
+    assert 'فلوس ملف رجعت للعميل قبل كده' in row and fx.REFUND_BLOCK_LABELS['manual_refund'] in row
+    _row(page, fx.F7['id'])
+    drawer = page.inner_text('#drawer')
+    assert fx.REFUND_BLOCK_LABELS['manual_refund'] in drawer and 'رجّعها من هنا' not in drawer
+    assert page.query_selector('#drawer [data-a="ef_refund"]') is None

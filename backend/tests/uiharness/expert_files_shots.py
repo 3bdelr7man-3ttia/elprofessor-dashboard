@@ -4,7 +4,9 @@
     cd backend && python3 tests/uiharness/expert_files_shots.py <out_dir> [--only-r7]
 
 `--only-r7` = صور الجولة ٧ بس (`r7-*` · `mr7-*`): «اتدفعت وما وصلتش» ورجوع فلوسها · شارة «محتاج تدخّلك» ·
-عدّادات الطابور الجديدة ونزاعات الاستشارات · الخدمة مقفولة والصفوف ظاهرة · السجل باسم الأدمن.
+عدّادات الطابور الجديدة ونزاعات الاستشارات · الخدمة مقفولة والصفوف ظاهرة · السجل باسم الأدمن · ومراجعة الجولة ٧:
+الخدمة مقفولة من غير أي وعد إن الفلوس ترجع لوحدها والملف اللي اتبعت بند (`r7-09`/`r7-10`/`mr7-05`/`mr7-06`) ·
+فلوس رجعت للعميل قبل كده من غير «رجّع الفلوس» (`r7-11`).
 
 ⛔ صفر طلبات حقيقية: الداشبورد بيتنفّذ جوه العملية (`app.test_client()`) والمنصة جدول في الذاكرة
 (`ef_fixtures.EFPlatform`)، وأي أصل تاني بيتقفل ويتسجّل. آخر السكربت بيطبع اللي اتقفل لكل أصل، وبيفشل لو
@@ -407,20 +409,54 @@ def round7(browser, h):
     _writes_carry_the_admin(h, 0)
     browser.close()
 
-    # r7-09/10 — الخدمة مقفولة للناس والجسر شغّال: الصفوف ظاهرة + سطر «مقفولة» + من غير «ابعته لـ…»
-    h.ef = fx.EFPlatform(service_open=False)
+    # r7-09/10 — الخدمة مقفولة للناس والجسر شغّال: الصفوف ظاهرة + سطر «مقفولة» + من غير «ابعته لـ…». ومراجعة الجولة ٧:
+    # F1 اتبعت لخبير من ساعتين (كان هيبقى «للعلم») ⇒ بند، ومفيش «فلوسه ترجع لوحدها» في أي حتة (الكنسة واقفة).
+    h.ef = _closed_with_a_sent_file()
     ctx = browser.context(h, 'admin', DESK)
     page = open_inbox(ctx, h)
     chip(page, 't:files')
     shot(page, 'r7-09-service-closed-rows-desktop.png')
     if not page.query_selector('#rows .ef-off-line'):
         PROBLEMS.append('الخدمة مقفولة ومفيش سطر يقول كده فوق الصفوف')
+    _no_auto_money_promise(page, 'r7-09')
     row_by_id(page, fx.F1['id'])
     scroll_to(page, '#filters')
     shot(page, 'r7-10-service-closed-drawer-desktop.png')
     if page.query_selector('#drawer [data-a="ef_pick"]'):
         PROBLEMS.append('الخدمة مقفولة وزرار «ابعته لـ…» لسه ظاهر')
+    _no_auto_money_promise(page, 'r7-10')
     browser.close()
+
+    # r7-11 — مراجعة الجولة ٧: الكنسة ختمت F7 لأن الفلوس رجعت للعميل يدوي قبل كده ⇒ الصفّ بيقول كده، والدرج من غير
+    # «رجّع الفلوس» ومن غير «رجّعها من هنا» (العميل ما ياخدهاش مرتين).
+    h.ef = fx.EFPlatform()
+    h.ef.waiting = [fx.money_already_back(f) if f['id'] == fx.F7['id'] else f for f in h.ef.waiting]
+    ctx = browser.context(h, 'admin', DESK)
+    page = open_inbox(ctx, h)
+    chip(page, 'attn')
+    row_by_id(page, fx.F7['id'])
+    scroll_to(page, '#filters')
+    shot(page, 'r7-11-money-already-back-drawer-desktop.png')
+    if page.query_selector('#drawer [data-a="ef_refund"]'):
+        PROBLEMS.append('F7: الفلوس رجعت قبل كده وزرار «رجّع الفلوس» لسه ظاهر')
+    if fx.REFUND_BLOCK_LABELS['manual_refund'] not in page.inner_text('#drawer'):
+        PROBLEMS.append('F7: جملة «الفلوس رجعت يدوي قبل كده» مش في الدرج')
+    browser.close()
+
+
+def _closed_with_a_sent_file():
+    ef = fx.EFPlatform(service_open=False)
+    ef.waiting = [fx.sent_inside_12h(f) if f['id'] == fx.F1['id'] else f for f in ef.waiting]
+    return ef
+
+
+def _no_auto_money_promise(page, name):
+    """الخدمة مقفولة ⇒ ولا «فلوسه ترجع لوحدها» ولا «للعلم» في الصفحة ولا في التلميحات (مراجعة الجولة ٧)."""
+    txt = page.evaluate("() => document.body.innerText + ' ' + [...document.querySelectorAll('[title]')].map(e => e.title).join(' ')")
+    if 'ترجع لوحدها' in txt.replace('مش هترجع لوحدها', ''):
+        PROBLEMS.append('%s: الخدمة مقفولة والشاشة بتقول إن الفلوس ترجع لوحدها' % name)
+    if 'للعلم' in page.inner_text('#rows'):
+        PROBLEMS.append('%s: الخدمة مقفولة وسطر «للعلم» ظاهر' % name)
 
 
 def round7_mobile(browser, h):
@@ -440,12 +476,17 @@ def round7_mobile(browser, h):
     shot(page, 'mr7-04-unactivated-refund-confirm-mobile.png')
     page.click('#mc_x')
     browser.close()
-    h.ef = fx.EFPlatform(service_open=False)
+    h.ef = _closed_with_a_sent_file()
     ctx = browser.context(h, 'admin', MOB, mobile=True)
     page = open_inbox(ctx, h)
     chip(page, 't:files')
     scroll_to(page, '#filters')
     shot(page, 'mr7-05-service-closed-rows-mobile.png')
+    _no_auto_money_promise(page, 'mr7-05')
+    row_by_id(page, fx.F1['id'])
+    page.wait_for_timeout(300)
+    shot(page, 'mr7-06-service-closed-drawer-mobile.png')
+    _no_auto_money_promise(page, 'mr7-06')
     browser.close()
 
 
