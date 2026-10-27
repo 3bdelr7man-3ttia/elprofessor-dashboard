@@ -715,8 +715,8 @@ def _ef_meta(f, **extra):
 ## ١٧ — الجولة ٨ (2026-10-27): قرارات المؤسس على أشكال جسر المنصة الجديدة
 
 **القرار:** المؤسس جاوب على صفحة القرارات («تمام خلصت وقفل المرحلة كلها يلا ونشر» · «عايزين نخلص كله في خلال ساعات»).
-المنصة اتعدّلت على `expert-file-r8-decisions` (worktree `elprofessor-wt-r8`) — المصدر: `docs/expert-files/SPEC-R8-DECISIONS.md` §٣ +
-الكود (هو الحَكَم): `routes/expert_files.py` (`bridge_list_files` · `_bridge_row` · `bridge_review` · `_review_view` · `_pending_opinion` ·
+المنصة اتعدّلت على `expert-file-r8-decisions` (worktree `elprofessor-wt-r8`، آخر قراية على `83f03f9`) — المصدر: `docs/expert-files/SPEC-R8-DECISIONS.md` §٣ +
+`docs/expert-files/SPEC.md` §١٩-ح + الكود (هو الحَكَم): `routes/expert_files.py` (`bridge_list_files` · `_bridge_row` · `bridge_review` · `_review_view` · `_pending_opinion` ·
 `bridge_view` · `service_mode` · `_require_can_assign` · `E_TRIAL_ONLY` · `E_REVIEW_*` · `ops_queue_snapshot`) · `routes/consultations.py`
 (`_dispute_rows` · `release_block_full` · `E_RELEASE_*` · `bridge_list_legacy` · `decide_legacy` · `E_LEGACY_*`) · `routes/ops_bridge.py`
 (`bridge_consultations_legacy` · `bridge_decide_legacy` · `bridge_expert_file_review` · `bridge_ops_queue`). الداشبورد على `expert-file-r6-dashboard`.
@@ -760,7 +760,7 @@ def _ef_meta(f, **extra):
 - `tests/test_expert_files_dashboard.py` (+٩٤ ⇒ ٢٥٧): المسارات التلاتة في مصفوفة الصلاحية/السرّ/المهلة/`by` · الاعتماد من غير تأكيد ⇒ ٤٠٠ · الرجوع من غير ملاحظة ⇒ ٤٠٠ · الجسم للمنصة بالحرف والسجل بأرقامها · الرفض بالحرف ومن غير سجل · `no_reply` · «مبني على» = قاعدة المنصة (المستندات ١/٢/٥/١٠/١١ · المنطقة الزمنية · ردود العميل · الأسئلة اللي ما اتردّش عليها · جملة المنصة لو جت) · القديمة (القايمة من غير بيانات العميل · ٤٠٤ ⇒ `enabled:false` · القرار مرة واحدة · الرفض بالحرف) · `release_blocked_reason` على كل القوايم · رفض «للخبير» وقت الحسم · وضع التجربة ورفضه · مفاتيح الطابور الجديدة.
 - `tests/test_expert_files_ui_static.py` (+٢٢ ⇒ ٦٤) · `tests/test_expert_files_ui.py` (+٢٠ ⇒ ٥٣، Playwright من غير منافذ): الصفوف والشرايح والعدّادات · الدرج بالرأي و«مبني على» · الاعتماد (ضغطتين ⇒ طلب واحد) · الرجوع (الزرار مقفول لحد الملاحظة) · الرجوع التاني بكلام المنصة · «للخبير» مقفول بالسبب (ملف · استشارة) · الرفض وقت الحسم · القديمة (الدرج · التحويل مرة واحدة · الرجوع · المقفولة · فاضية ⇒ ولا حاجة) · التجربة (السطر · المرشّحين زي ما هم · الرفض) · السجل · صفر طلبات حقيقية.
 - اتعدّل عن قصد (قرار المؤسس): `test_release_after_a_manual_refund_is_locked_with_the_platform_reason` بدل «المنصة هتدفع» · `test_a_release_after_the_client_got_the_money_back_is_never_offered` · ضغطتين على الحسم بقت على D2 (D3 «للخبير» مرفوض من الأول) · صورة `14b` بقت «مقفول بسببه».
-- الـfixtures (`uiharness/ef_fixtures.py`): أشكال الجولة ٨ بالحرف (`r8=True` ⇒ R1/R2 مراجعة و L1–L3 قديمة · `mode='allowlist'` · `release_locked()`) — ومعاها سبب ختم الرجوع من `expert-file-r7-polish` (`f03ae6d`) اللي فرع الجولة ٨ لسه ما فيهوش (١٧-هـ بند ٥).
+- الـfixtures (`uiharness/ef_fixtures.py`): أشكال الجولة ٨ بالحرف على `83f03f9` (`r8=True` ⇒ R1/R2 مراجعة و L1–L3 قديمة · `mode='allowlist'` · `release_locked()`) — اتقارنت بالكود: مفاتيح `_bridge_row` (٥٢) · `bridge_reply` · `_dispute_rows` (٣٠) + مفاتيح «القديمة» · كل رسايل `E_*` اللي في الأداة · `BLOCK_LABELS`/`REFUND_BLOCK_LABELS`/`STATUS_LABELS`.
 - الصور: `python3 tests/uiharness/expert_files_shots.py <dir> --only-r8` ⇒ `r8-01`…`r8-21` (كمبيوتر، منهم `r8-03b`) و`mr8-01`…`mr8-09` (`mr8-03b`) — ٣٢ صورة، صفر طلبات حقيقية، وفحوص جوه الأداة (العدّادات · الأسباب بكلام المنصة · زرار الدرج قدّام العين بعد التمرير · السجل · `by` الأدمن).
 
 ### ١٧-هـ ناقص في جسر المنصة / مفتوح
@@ -768,5 +768,5 @@ def _ef_meta(f, **extra):
 2. استشارة قديمة فلوسها رجعت للعميل يدوي ⇒ الزرارين مقفولين ومفيش فعل يقفلها — هتفضل في الشريحة (نفس فجوة م٢ في الجولة ٧: إمتى تتقفل «اتسوّت» من غير حركة فلوس — قرار مؤسس).
 3. وضع التجربة: `_candidates` ما بيفلترش بالقايمة، والداشبورد ما يعرفش مين فيها ⇒ المؤسس ممكن يختار خبير برّه القايمة ويتقاله الرفض بعدها. وصفّ ملف لعميل برّه القايمة (من قبل التجربة) بيتعرض «فلوسه ترجع لوحدها» مع إن الكنسة في التجربة بتمشي على ملفات القايمة بس.
 4. ⛔ **ترتيب النشر:** المنصة (`expert-file-r8-decisions`) قبل الداشبورد أو معاه — جسر الجولة ٧ بيرفض `status=review` بـ٤٢٢ ⇒ «تعذّر جلب: آراء مستنية مراجعتك» (عن قصد، زي `blocked`/`unactivated` في الجولة ٧)، و«القديمة» ٤٠٤ ⇒ فاضية بهدوء.
-5. فرع الجولة ٨ على المنصة متفرّع قبل مراجعة الجولة ٧ (`aef748c` · `f03ae6d` على `expert-file-r7-polish`) ⇒ لازم الاتنين يندمجوا قبل النشر (من غيرهم `refund_blocked`/`refund_blocked_reason` مش هيوصلوا، والشاشة بترجع لسلوك ما قبل مراجعة الجولة ٧ على الختم ده).
+5. ✅ مراجعة الجولة ٧ (`aef748c` · `f03ae6d`) اتدمجت فوق الجولة ٨ على المنصة (`83f03f9` — وقت التنفيذ ده)، ومعاها مراجعة الجولة ٨: الـfixtures على `83f03f9` بالحرف (جملة ختم الجلسة «… — راجع الدفع قبل ما ترجّع الفرق» · `fee_accepted.written_only_amount` لدرجة الجلسة — الشاشة ما بتعرضهوش). اللي يتنشر = `83f03f9` أو بعده.
 6. لسه زي ما هو: «الشغل اللي اتسلّم» في نزاع الاستشارة (§١٤ بند ٨) — وكمان في القديمة («بتقرر من غير ما تشوفه»).

@@ -25,9 +25,9 @@ routes/consultations.py `_dispute_rows` · `release_block_full` · `E_RELEASE_*`
     واختبارات الجولات ٦–٧ زي ما هي).
   * `mode='allowlist'` + `allowlist=` — الخدمة مفتوحة للتجربة بس: التوزيع لخبير **وعميل** من القايمة، وإلا ٤٠٩
     `E_TRIAL_ONLY`.
-  ⚑ فرع الجولة ٨ على المنصة متفرّع قبل مراجعة الجولة ٧ (`aef748c` · `f03ae6d` على `expert-file-r7-polish`): كود سبب
-    ختم الرجوع (`refund_blocked` · `refund_blocked_reason` · `REFUND_BLOCK_LABELS`) من هناك — الأشكال هنا = الاتنين مع بعض
-    (اللي هيتنشر بعد الدمج).
+  ⚑ مراجعة الجولة ٧ (`aef748c` · `f03ae6d`: كود سبب ختم الرجوع `refund_blocked` · `refund_blocked_reason` ·
+    `REFUND_BLOCK_LABELS`) اتدمجت فوق الجولة ٨ على المنصة (`83f03f9`)، ومعاها مراجعة الجولة ٨ (`fee_accepted.written_only_amount`
+    · جملة ختم الجلسة «راجع الدفع قبل ما ترجّع الفرق») — الأشكال هنا على `83f03f9` بالحرف.
 """
 import copy
 import datetime
@@ -61,7 +61,7 @@ BLOCK_LABELS = {
     "approval_blocked_at": "الخبير اعتمد الرأي والملف ما اتحرّكش — راجعه",
     "file_activation_blocked_at": "الفلوس وصلت ومش لاقيين الملف بتاعها — رجّعها للعميل",
     # الجولة ٨ (البند ٦)
-    "lapse_blocked_at": "الجلسة ما اتعملتش والفرق ما رجعش للعميل لوحده — راجعه ورجّعه بإيدك",
+    "lapse_blocked_at": "الجلسة ما اتعملتش والفرق ما رجعش للعميل لوحده — راجع الدفع قبل ما ترجّع الفرق",
 }
 FILE_BLOCK_STAMPS = ("refund_blocked_at", "release_blocked_at", "approval_blocked_at", "lapse_blocked_at")
 # مراجعة الجولة ٧ (SPEC المنصة §١٨-و): كود سبب وقوف الرجوع بيتخزّن مع الختم (`refund_blocked`)، وكل سبب ليه جملته
@@ -189,6 +189,21 @@ def release_block(status, expert_email, money_back=None):
     return None, None
 
 
+# أجر الرأي المكتوب لوحده في درجة الجلسة (من السعر المتثبّت — جدول المؤسس: مصر ٥٠٠/٣٠٠ · السعودية والإمارات وقطر ٣٠٠/١٨٠ ·
+# الدولار ٥٠/٣٠) — مراجعة الجولة ٨ (م٧): `fee_accepted.written_only_amount` بيتختم وقت الاستلام.
+WRITTEN_EXPERT_FEE = {"EGP": 300.0, "SAR": 180.0, "AED": 180.0, "QAR": 180.0, "USD": 30.0}
+
+
+def _fee_accepted(tier, expert_amount, currency, paid_h, expert_email):
+    """`fee_accepted` على الملف (الجولة ٨ البند ١٢ + مراجعتها م٧): الأجر الثابت اللي وافق عليه وقت الاستلام."""
+    if not expert_email:
+        return None
+    out = {"amount": expert_amount, "currency": currency, "at": iso(paid_h + 6)}
+    if tier == "written_session" and currency in WRITTEN_EXPERT_FEE:
+        out["written_only_amount"] = WRITTEN_EXPERT_FEE[currency]
+    return out
+
+
 def review_view(review):
     """`_review_view` بالحرف."""
     if not review:
@@ -215,8 +230,7 @@ def _file(fid, *, title, status, law, tier, amount, currency, expert_amount, pai
         "pending_opinion": copy.deepcopy(pending_opinion) if status == "in_review" else None,
         "expert_delivered_count": delivered_count if expert_email else 0,
         "release_blocked": block_key, "release_blocked_reason": block_text,
-        "session_refund": None, "fee_accepted": ({"amount": expert_amount, "currency": currency, "at": iso(paid_h + 6)}
-                                                 if expert_email else None),
+        "session_refund": None, "fee_accepted": _fee_accepted(tier, expert_amount, currency, paid_h, expert_email),
         "lapse_blocked_at": stamps.get("lapse_blocked_at"),
         "price_source": "ip", "price_ip_country": law, "price_phone_country": law,
         "id": fid, "title": title, "status": status,
