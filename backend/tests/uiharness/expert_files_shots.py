@@ -11,7 +11,9 @@
 `--only-r8` = صور الجولة ٨ بس (`r8-*` · `mr8-*`): «مستنية مراجعتك» (الصفوف · الدرج بالرأي زي ما العميل هيشوفه و«مبني
 على» · اعتمده وابعته بتأكيد · رجّعه للخبير بملاحظة لازمة · رفض الرجوع التاني بكلام المنصة) · «للخبير» مقفول بسبب المنصة
 (نزاع ملف · نزاع استشارة · رفض وقت الحسم) · «استشارات قديمة محتاجة قرارك» (الصفوف · الدرج · تأكيد التحويل · مقفولة بسبب) ·
-وضع التجربة (السطر فوق الصفوف · رفض التوزيع بكلام المنصة) · السجل.
+وضع التجربة (السطر فوق الصفوف · رفض التوزيع بكلام المنصة) · السجل. ومراجعة الجولة ٨: الرفض النهائي بيسيب الزرار مقفول والدرج
+بيتحدّث لوحده (`r8-17`/`r8-17b`/`mr8-11`) · رأي اتوافق عليه والتوصيل وقف (`r8-22`/`mr8-12`) · مواعيد الجلسة بتوقيت العميل
+(`r8-23`) · الخدمة مقفولة ⇒ «اعتمده» مقفول بسببه (`r8-24`/`r8-24b`/`mr8-10`).
 
 ⛔ صفر طلبات حقيقية: الداشبورد بيتنفّذ جوه العملية (`app.test_client()`) والمنصة جدول في الذاكرة
 (`ef_fixtures.EFPlatform`)، وأي أصل تاني بيتقفل ويتسجّل. آخر السكربت بيطبع اللي اتقفل لكل أصل، وبيفشل لو
@@ -84,10 +86,10 @@ class Browsers(object):
         self.p = p
         self.current = None
 
-    def context(self, h, role='admin', viewport=None, mobile=False):
+    def context(self, h, role='admin', viewport=None, mobile=False, tz=None):
         self.close()
         self.current = self.p.chromium.launch(args=['--single-process'])
-        return h.context(self.current, role, viewport, mobile)
+        return h.context(self.current, role, viewport, mobile, tz=tz)
 
     def close(self):
         if self.current is not None:
@@ -504,6 +506,99 @@ def _wait_based_on(page):
                            timeout=15000)
 
 
+def _wait_drawer_locked(page, act, name):
+    """بعد رفض نهائي من المنصة الدرج ورا النافذة بيترسم تاني على نفس الصفّ والزرار ده مقفول (مراجعة الجولة ٨)."""
+    try:
+        page.wait_for_function("a => { const b = document.querySelector('#drawer [data-a=\"' + a + '\"]'); return !!b && b.disabled; }",
+                               arg=act, timeout=15000)
+    except Exception:
+        PROBLEMS.append('%s: الدرج ما اتحدّثش بعد الرفض — «%s» لسه شغّال' % (name, act))
+
+
+# ميعاد ثابت للصور: ١٥:٠٠ UTC يوم ٣ نوفمبر ٢٠٢٦ = ٥:٠٠ م القاهرة · ٦:٠٠ م الرياض (+ ميعادين تانيين).
+SA_SLOTS = [{'start_at': '2026-11-03T15:00:00+00:00', 'end_at': '2026-11-03T15:30:00+00:00'},
+            {'start_at': '2026-11-04T17:00:00+00:00', 'end_at': '2026-11-04T17:30:00+00:00'},
+            {'start_at': '2026-11-05T09:30:00+00:00', 'end_at': '2026-11-05T10:00:00+00:00'}]
+
+
+def _stuck_review():
+    """منصة فيها R1 اتوافق عليه والتوصيل وقف (`review.approved_at` + ختم `approval_blocked_at`) — مراجعة الجولة ٨."""
+    ef = fx.EFPlatform(r8=True)
+    r1 = [f for f in ef.review if f['id'] == fx.R1['id']][0]
+    r1['review']['approved_at'] = fx.iso(-0.5)
+    r1['approval_blocked_at'] = fx.iso(-0.4)
+    r1['blocked'] = fx.blocked_of(r1)
+    r1['needs_attention'] = True
+    return ef
+
+
+def round8_review_fixes(browser, h):
+    """مراجعة الجولة ٨ على الكمبيوتر: رأي اتوافق عليه والتوصيل وقف · مواعيد الجلسة بتوقيت العميل · الخدمة مقفولة ⇒ «اعتمده» مقفول."""
+    # r8-22 — اتوافق عليه والتوصيل وقف ⇒ «وقف ومش هيكمّل لوحده» والحل «رجّع الفلوس» (مش «المنصة بتكمّل توصيله»)
+    h.ef = _stuck_review()
+    ctx = browser.context(h, 'admin', DESK)
+    page = open_inbox(ctx, h)
+    chip(page, 'review')
+    row_by_id(page, fx.R1['id'])
+    _wait_based_on(page)
+    scroll_to(page, '#filters')
+    shot(page, 'r8-22-approved-delivery-stopped-desktop.png')
+    d = page.inner_text('#drawer')
+    if 'وقف ومش هيكمّل لوحده' not in d or 'المنصة بتكمّل' in d or 'الحل من هنا: «رجّع الفلوس»' not in d:
+        PROBLEMS.append('r8-22: الدرج ما بيقولش إن التوصيل وقف ومش هيكمّل لوحده')
+    if page.query_selector('#drawer [data-a="rv_ok"]') or not page.query_selector('#drawer [data-a="ef_refund"]'):
+        PROBLEMS.append('r8-22: أزرار الدرج غلط (لازم «رجّع الفلوس» بس من غير «اعتمده»)')
+    if 'رأي وافقت عليه وتوصيله وقف' not in page.inner_text('#rows'):
+        PROBLEMS.append('r8-22: عنوان الصفّ لسه «مستني مراجعتك»')
+    browser.close()
+
+    # r8-23 — مواعيد الجلسة لعميل في السعودية وجهاز المؤسس على توقيت القاهرة ⇒ «٦:٠٠ م · بتوقيت السعودية»
+    h.ef = fx.EFPlatform(r8=True)
+    r2 = [f for f in h.ef.review if f['id'] == fx.R2['id']][0]
+    r2['pending_opinion']['slots'] = [dict(s) for s in SA_SLOTS]
+    saved = fx.REVIEW_DETAIL[fx.R2['id']]
+    fx.REVIEW_DETAIL[fx.R2['id']] = dict(saved, price={'country': 'sa', 'currency': 'EGP'})
+    try:
+        ctx = browser.context(h, 'admin', DESK, tz='Africa/Cairo')
+        page = open_inbox(ctx, h)
+        chip(page, 'review')
+        row_by_id(page, fx.R2['id'])
+        _wait_based_on(page)
+        scroll_to(page, '#filters')
+        page.evaluate("() => { const s = document.querySelector('#drawer .ef-slots'); if (s) s.scrollIntoView({block: 'center'}); }")
+        shot(page, 'r8-23-review-slots-client-time-desktop.png')
+        block = page.evaluate("() => (document.querySelector('#drawer .ef-slots') || {}).innerText || ''")
+        if 'بتوقيت السعودية' not in block or '٦:٠٠' not in block or '٥:٠٠' in block:
+            PROBLEMS.append('r8-23: المواعيد مش بتوقيت العميل «%s»' % block)
+    finally:
+        fx.REVIEW_DETAIL[fx.R2['id']] = saved
+    browser.close()
+
+    # r8-24 — الخدمة مقفولة ⇒ «اعتمده» مقفول والسبب تحته · «رجّعه للخبير» بيقول إن الملف مش هيتفتح عند الخبير
+    h.ef = fx.EFPlatform(r8=True, service_open=False)
+    ctx = browser.context(h, 'admin', DESK)
+    page = open_inbox(ctx, h)
+    chip(page, 'review')
+    row_by_id(page, fx.R1['id'])
+    _wait_based_on(page)
+    scroll_to(page, '#filters')
+    page.evaluate("() => { const d = document.getElementById('drawer'); d.scrollTop = d.scrollHeight; }")
+    shot(page, 'r8-24-service-closed-approve-locked-desktop.png')
+    whys = page.evaluate("() => [...document.querySelectorAll('#drawer .ef-why')].map(e => e.innerText)")
+    if not page.is_disabled('#drawer [data-a="rv_ok"]') or not whys or 'الخدمة مقفولة للناس دلوقتي' not in whys[0]:
+        PROBLEMS.append('r8-24: «اعتمده» مش مقفول بسببه والخدمة مقفولة (%r)' % whys)
+    page.click('#drawer [data-a="rv_back"]')
+    page.wait_for_selector('#mc_go')
+    page.fill('#mc_note', 'الإجابة الأولى محتاجة تذكر مدة سقوط الدعوى بالظبط.')
+    shot(page, 'r8-24b-service-closed-return-window-desktop.png')
+    if 'فالملف مش هيتفتح عند أ. رنا عادل لحد ما الخدمة تتفتح' not in page.inner_text('#epModal'):
+        PROBLEMS.append('r8-24b: نافذة الرجوع ما بتقولش إن الخبير مش هيقدر يفتح الملف')
+    page.click('#mc_x')
+    if [c for c in h.ef.calls if c[0] == 'POST']:
+        PROBLEMS.append('r8-24: طلب كتابة اتبعت والخدمة مقفولة')
+    browser.close()
+
+
 def round8(browser, h):
     """الجولة ٨ على الكمبيوتر — قرارات المؤسس على أشكال جسر المنصة الجديدة."""
     h.ef = fx.EFPlatform(r8=True)
@@ -639,10 +734,23 @@ def round8(browser, h):
     page.wait_for_selector('#mc_go')
     page.click('#mc_go')
     page.wait_for_selector('#epModal .ef-err', timeout=15000)
+    # مراجعة الجولة ٨: الرفض نهائي ⇒ زرار «حوّل …» يفضل مقفول، والدرج ورا بيتحدّث لوحده («للخبير» مقفول والسبب تحته)
+    _wait_drawer_locked(page, 'dsp_rel', 'r8-17')
     shot(page, 'r8-17-release-refused-at-decision-desktop.png')
     if fx.E_RELEASE_GATEWAY not in page.inner_text('#epModal .ef-err'):
         PROBLEMS.append('r8-17: رفض «للخبير» وقت الحسم مش بكلام المنصة')
+    if page.is_enabled('#mc_go'):
+        PROBLEMS.append('r8-17: زرار التأكيد رجع يشتغل بعد رفض المنصة النهائي')
     page.click('#mc_x')
+    page.wait_for_selector('#epModal', state='detached', timeout=15000)
+    # r8-17b — بعد «رجوع»: نفس الدرج و«للخبير» مقفول والسبب تحته بكلام المنصة — من غير تحديث يدوي
+    page.evaluate("() => { const b = document.querySelector('#drawer .acts'); if (b) b.scrollIntoView({block: 'end'}); }")
+    shot(page, 'r8-17b-release-refused-drawer-locked-desktop.png')
+    whys = page.evaluate("() => [...document.querySelectorAll('#drawer .ef-why')].map(e => e.innerText)")
+    if not whys or whys[0] != fx.E_RELEASE_GATEWAY:
+        PROBLEMS.append('r8-17b: الدرج بعد الرفض من غير «للخبير» مقفول بسببه (%r)' % whys)
+    if page.evaluate("() => INBOX[selected] && INBOX[selected].apiId") != fx.D2['id']:
+        PROBLEMS.append('r8-17b: الدرج ما فضلش على نفس النزاع بعد التحديث')
     # r8-18 — السجل: اعتماد الرأي · رجوعه بملاحظة · القرار على القديمة — باسم الأدمن
     page.evaluate("() => auditModal()")
     page.wait_for_function("() => document.getElementById('auditRows') && !/جارٍ التحميل/.test(document.getElementById('auditRows').innerText)",
@@ -746,6 +854,52 @@ def round8_mobile(browser, h):
     shot(page, 'mr8-09-allowlist-rows-mobile.png')
     browser.close()
 
+    # ——— مراجعة الجولة ٨ على الموبايل ———
+    # mr8-10 — الخدمة مقفولة: «اعتمده» مقفول والسبب تحته
+    h.ef = fx.EFPlatform(r8=True, service_open=False)
+    ctx = browser.context(h, 'admin', MOB, mobile=True)
+    page = open_inbox(ctx, h)
+    chip(page, 'review')
+    row_by_id(page, fx.R1['id'])
+    _wait_based_on(page)
+    page.evaluate("() => { const b = document.querySelector('#drawer .acts'); if (b) b.scrollIntoView({block:'end'}); }")
+    shot(page, 'mr8-10-service-closed-approve-locked-mobile.png')
+    if not page.is_disabled('#drawer [data-a="rv_ok"]'):
+        PROBLEMS.append('mr8-10: «اعتمده» شغّال والخدمة مقفولة')
+    browser.close()
+    # mr8-11 — رفض «للخبير» وقت الحسم: الكلام جوه النافذة والزرار مقفول
+    h.ef = fx.EFPlatform(r8=True)
+    ctx = browser.context(h, 'admin', MOB, mobile=True)
+    page = open_inbox(ctx, h)
+    chip(page, 't:disputes')
+    row_by_id(page, fx.D2['id'])
+    for c in h.ef.cons:
+        if c['id'] == fx.D2['id']:
+            c.update({'release_blocked': 'manual_refund', 'release_blocked_reason': fx.E_RELEASE_MANUAL,
+                      'manual_refund_settled_at': fx.iso(-1)})
+    page.click('#drawer [data-a="dsp_rel"]')
+    page.wait_for_selector('#mc_go')
+    page.click('#mc_go')
+    page.wait_for_selector('#epModal .ef-err', timeout=15000)
+    _wait_drawer_locked(page, 'dsp_rel', 'mr8-11')
+    page.evaluate("() => { const e = document.querySelector('#epModal .ef-err'); if (e) e.scrollIntoView({block:'center'}); }")
+    shot(page, 'mr8-11-release-refused-locked-mobile.png')
+    if page.is_enabled('#mc_go') or fx.E_RELEASE_MANUAL not in page.inner_text('#epModal .ef-err'):
+        PROBLEMS.append('mr8-11: بعد الرفض الزرار رجع يشتغل أو الكلام مش بكلام المنصة')
+    browser.close()
+    # mr8-12 — اتوافق عليه والتوصيل وقف
+    h.ef = _stuck_review()
+    ctx = browser.context(h, 'admin', MOB, mobile=True)
+    page = open_inbox(ctx, h)
+    chip(page, 'review')
+    row_by_id(page, fx.R1['id'])
+    _wait_based_on(page)
+    page.evaluate("() => document.getElementById('drawer').scrollIntoView({block:'start'})")
+    shot(page, 'mr8-12-approved-delivery-stopped-mobile.png')
+    if 'وقف ومش هيكمّل لوحده' not in page.inner_text('#drawer'):
+        PROBLEMS.append('mr8-12: الدرج ما بيقولش إن التوصيل وقف')
+    browser.close()
+
 
 def main():
     from playwright.sync_api import sync_playwright
@@ -761,6 +915,7 @@ def main():
                 round7_mobile(browser, h)
             if not ONLY_R7:
                 round8(browser, h)
+                round8_review_fixes(browser, h)
                 round8_mobile(browser, h)
         finally:
             browser.close()
