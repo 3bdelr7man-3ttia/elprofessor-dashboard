@@ -1158,6 +1158,97 @@ def test_r8_platform_text_is_escaped_in_the_new_drawers_and_windows(open_page):
     assert page.evaluate("() => document.querySelectorAll('img[src=\"x\"]').length") == 0
 
 
+# ---- الجولة ١٢: رسالة الخبير الصوتية في درج المراجعة (docs/expert-files/SPEC-R12-VOICE.md §٣)
+
+def _voice_calls(harness):
+    return [c for c in harness.platform_calls if c[0] == 'GET' and c[1].endswith('/voice')]
+
+
+def test_review_drawer_offers_the_voice_and_loads_it_only_on_play(open_page, harness):
+    harness.platform_calls.clear()
+    page = open_page(ef=_r8())
+    _row(page, fx.R1['id'])
+    page.wait_for_selector('#drawer .ef-voice')
+    box = page.inner_text('#drawer .ef-voice')
+    assert 'رسالة الخبير الصوتية' in box and '١:٤٢' in box                      # المدة بأرقام عربية (102 ثانية)
+    assert 'اسمعها قبل الاعتماد — لو فيها رقم تليفون أو وسيلة تواصل رجّع الملف.' in box
+    assert page.query_selector('#drawer .ef-voice audio') is None              # لسه ما اتحمّلش
+    assert _voice_calls(harness) == []                                          # ولا نداء للصوت قبل الضغط
+    page.click('#drawer [data-voice]')
+    page.wait_for_selector('#drawer .ef-voice audio')
+    a = page.evaluate("() => { const a = document.querySelector('#drawer .ef-voice audio');"
+                      " return {src: a.src, controls: a.controls, preload: a.preload}; }")
+    assert a['src'].startswith('blob:') and a['controls'] is True and a['preload'] == 'none'
+    assert page.query_selector('#drawer [data-voice]') is None
+    assert len(_voice_calls(harness)) == 1
+    assert _voice_calls(harness)[0][1] == '/api/bridge/expert-files/%s/voice' % fx.R1['id']
+    # المراجعة نفسها ما اتأثرتش: «اعتمده» و«رجّعه» لسه شغّالين
+    assert page.is_enabled('#drawer [data-a="rv_ok"]') and page.is_enabled('#drawer [data-a="rv_back"]')
+
+
+def test_review_drawer_of_an_old_file_has_no_voice_card(open_page, harness):
+    harness.platform_calls.clear()
+    page = open_page(ef=_r8())
+    _row(page, fx.R2['id'])
+    page.wait_for_function("() => /الرأي ده مبني على/.test(document.getElementById('drawer').innerText)", timeout=15000)
+    assert page.query_selector('#drawer .ef-voice') is None
+    assert 'رسالة الخبير الصوتية' not in page.inner_text('#drawer')
+    assert _voice_calls(harness) == []
+
+
+def test_voice_failure_says_so_and_lets_the_founder_try_again(open_page, harness):
+    ef = _r8()
+    real = ef.handle
+    state = {'fail': True}
+
+    def handle(method, path, params=None, body=None):
+        if path.endswith('/voice') and state['fail']:
+            return 502, {'detail': 'boom'}
+        return real(method, path, params, body)
+
+    ef.handle = handle
+    page = open_page(ef=ef)
+    _row(page, fx.R1['id'])
+    page.wait_for_selector('#drawer [data-voice]')
+    page.click('#drawer [data-voice]')
+    page.wait_for_function("() => /تعذّر تشغيل الرسالة — حاول مرة أخرى/.test(document.getElementById('drawer').innerText)",
+                           timeout=15000)
+    assert page.is_enabled('#drawer [data-voice]') and page.query_selector('#drawer .ef-voice audio') is None
+    state['fail'] = False
+    page.click('#drawer [data-voice]')
+    page.wait_for_selector('#drawer .ef-voice audio')
+    assert 'تعذّر' not in page.inner_text('#drawer .ef-voice')
+
+
+def test_voice_player_is_dropped_when_another_file_is_opened(open_page):
+    page = open_page(ef=_r8())
+    _row(page, fx.R1['id'])
+    page.wait_for_selector('#drawer [data-voice]')
+    page.click('#drawer [data-voice]')
+    page.wait_for_selector('#drawer .ef-voice audio')
+    assert page.evaluate("() => !!efVoice.url") is True
+    _row(page, fx.R2['id'])
+    page.wait_for_function("() => /الرأي ده مبني على/.test(document.getElementById('drawer').innerText)", timeout=15000)
+    assert page.evaluate("() => efVoice.url === null && efVoice.id === null") is True
+    assert page.query_selector('#drawer .ef-voice') is None
+
+
+def test_dispute_drawer_shows_the_voice_without_the_review_hint(open_page, monkeypatch):
+    monkeypatch.setattr(fx, 'VOICE_FILES', set(fx.VOICE_FILES) | {fx.D1['id']})
+    page = open_page(ef=_r8())
+    _row(page, fx.D1['id'])
+    page.wait_for_selector('#drawer .ef-voice')
+    box = page.inner_text('#drawer .ef-voice')
+    assert 'رسالة الخبير الصوتية' in box and '١:٤٢' in box
+    assert 'اسمعها قبل الاعتماد' not in box
+
+
+def test_voice_duration_is_formatted_in_arabic_digits(open_page):
+    page = open_page(ef=_r8())
+    got = page.evaluate("() => [0, 5, 59, 60, 102, 180, 'x', null, -3].map(efVoiceDur)")
+    assert got == ['٠:٠٠', '٠:٠٥', '٠:٥٩', '١:٠٠', '١:٤٢', '٣:٠٠', '٠:٠٠', '٠:٠٠', '٠:٠٠']
+
+
 def test_zero_real_requests_at_the_very_end(harness):
     """آخر اختبار في الملف (بعد اختبارات الجولة ٨): ولا طلب حقيقي من المتصفح ولا من جوه العملية."""
     assert harness.unexpected_blocked() == []

@@ -394,6 +394,11 @@ R2 = _file("ef-r2-0b1c2d3e", title="فسخ خطوبة واسترداد الشب�
                    "note": "الإجابة التانية محتاجة توضّح مين اللي فسخ الخطوبة وده بيفرق إزاي في الشبكة.",
                    "approved_at": None},
            pending_opinion=R2_OPINION, delivered_count=1)
+# رسالة الخبير الصوتية (الجولة ١٢) — بايتات webm مزيّفة (EBML في الأول بس، ولا مزوّد ولا تحويل). R1 فيها صوت،
+# و R2 «ملف قديم» من غير صوت (بيتسلّم عادي ومفيش مشغّل). شكل `voice` في تفاصيل الجسر بالحرف من مواصفة R12 §١-د.
+VOICE_BYTES = b"\x1aE\xdf\xa3" + b"fake-voice-bytes-for-tests" * 20
+VOICE_META = {"duration_sec": 102, "size": len(VOICE_BYTES), "content_type": "audio/webm"}
+VOICE_FILES = {R1["id"]}
 # اللي الدرج محتاجه من قراية الملف كله (`bridge_view`) عشان «مبني على» — نفس `build_based_on` على المنصة.
 REVIEW_DETAIL = {
     R1["id"]: {"facts_confirmed_at": iso(-74.0), "client_name": "سمر ماهر", "additions": [], "info": None,
@@ -468,7 +473,8 @@ def detail_view(row, client_email):
         out["approval"] = {"answers": copy.deepcopy(po["answers"]), "next_step": po["next_step"],
                            "next_step_note": po["next_step_note"], "slots": copy.deepcopy(po["slots"]),
                            "meeting_url": po["meeting_url"], "at": (row.get("review") or {}).get("submitted_at")}
-    out.update(copy.deepcopy(REVIEW_DETAIL.get(row["id"], {})))
+    out["voice"] = copy.deepcopy(VOICE_META) if row["id"] in VOICE_FILES else None
+    out.update(copy.deepcopy(REVIEW_DETAIL.get(row["id"], {})))      # (REVIEW_DETAIL ممكن يفرض `voice` تاني لاختبار شكل غلط)
     return out
 
 
@@ -840,6 +846,11 @@ class EFPlatform(object):
                 self.detail_fail = False
                 return 500, {"detail": "Internal Server Error"}
             return 200, self._detail(f)
+        if method == "GET" and parts[1:] == ["voice"]:
+            # `GET /bridge/expert-files/{id}/voice` — بايتات الصوت (مفيش صوت ⇒ نفس ٤٠٤ بتاع باقي الملف).
+            if fid not in VOICE_FILES:
+                return 404, {"detail": E_NOT_FOUND}
+            return 200, VOICE_BYTES
         act = parts[1] if len(parts) > 1 else ""
         if act in ("assign", "reassign") and self.mode == "closed":
             return 409, {"detail": E_SERVICE_OFF}

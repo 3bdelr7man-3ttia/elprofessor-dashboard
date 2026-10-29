@@ -239,6 +239,12 @@ body{font-family:'IBM Plex Sans Arabic',sans-serif;background:var(--bg);color:va
 .ef-rv-h{display:flex;flex-direction:column;gap:2px;padding:2px 4px 10px;margin-bottom:8px;border-bottom:1px dashed var(--line);font-size:12px;color:var(--muted)}
 .ef-rv-h b{font-family:Cairo;font-size:13.5px;color:var(--navy)}
 .ef-op.ef-based{background:var(--agree-bg)}
+/* الجولة ١٢: رسالة الخبير الصوتية في الدرج — زرار «اسمعها» ثم مشغّل المتصفح نفسه (الصوت ما بيتحمّلش قبل الضغط) */
+.ef-voice audio{width:100%;height:40px;display:block}
+.ef-voice .ef-voice-msg{font-size:11.5px;line-height:1.7;color:var(--muted);margin-top:4px}
+.ef-voice .ef-voice-msg:empty{display:none}
+.ef-voice .ef-voice-msg.err{color:#a8401a;font-weight:700}
+.ef-voice .meta{font-size:11.5px;line-height:1.7;color:var(--muted);margin-top:6px}
 .ef-fyi-line.ef-trial-line{background:var(--agree-bg);color:var(--ink)}
 .note-ai.ef-trial-note{background:var(--agree-bg);border-color:#BFE3CE;color:var(--ink)}
 .ef-meta{display:grid;grid-template-columns:1fr 1fr;gap:10px 14px;margin:0 0 14px}
@@ -406,7 +412,8 @@ const ICONS={
   sparkles:'<path d="M12 3l1.9 4.6L18.5 9.5 13.9 11.4 12 16l-1.9-4.6L5.5 9.5l4.6-1.9z"/>',
   scale:'<path d="M12 3v18M5 21h14M7 7l-4 7h8zM17 7l-4 7h8zM7 7l5-2 5 2"/>',
   back:'<path d="M5 12h14M5 12l6-6M5 12l6 6"/>',
-  mail:'<rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/>'
+  mail:'<rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/>',
+  play:'<path d="M7 4v16l13-8z"/>'
 };
 function svg(n,c){return '<svg class="icon '+(c||'')+'" viewBox="0 0 24 24">'+(ICONS[n]||'')+'</svg>';}
 
@@ -1041,7 +1048,7 @@ function renderInbox(){
   el.insertAdjacentHTML('afterbegin',efServiceLine()+efFyiLine());
   const fy=el.querySelector('[data-a="ef_fyi"]');
   if(fy)fy.onclick=()=>{activeFilter=activeFilter==='fyi'?'all':'fyi';selected=null;renderInbox();};
-  el.querySelectorAll('.row').forEach(r=>r.onclick=()=>{selected=+r.dataset.i;efDspOpen.id=null;renderInbox();drawInbox();efDrawerIntoView();});
+  el.querySelectorAll('.row').forEach(r=>r.onclick=()=>{selected=+r.dataset.i;efDspOpen.id=null;efVoiceDrop();renderInbox();drawInbox();efDrawerIntoView();});
   drawInbox();
 }
 // أزرار الإجراء في درج الوارد — مبنية على قدرات البند (R1): اعتماد/رفض، تأكيد دفعة، تحويل توثيق لخبير، إنهاء.
@@ -1100,7 +1107,7 @@ function inboxActs(i,m){
 function drawInbox(){
   const el=document.getElementById('drawer');if(!el)return;
   el.classList.remove('ef-scroll');   // درج «مستنية مراجعتك» بس اللي بيتمرّر لوحده (drawReview)
-  if(selected===null){efDspOpen.id=null;el.innerHTML=`<div class="empty">${svg('inbox','ic')}<p>اختر بندًا من الوارد لرؤية مساره الكامل والإجراء.</p></div>`;return;}
+  if(selected===null){efDspOpen.id=null;efVoiceDrop();el.innerHTML=`<div class="empty">${svg('inbox','ic')}<p>اختر بندًا من الوارد لرؤية مساره الكامل والإجراء.</p></div>`;return;}
   const i=INBOX[selected];
   // صفّ اختفى بعد إعادة تحميل (اتوزّع/اترجعت فلوسه) ⇒ الدرج يرجع فاضي بدل ما يقع.
   if(!i){selected=null;el.innerHTML=`<div class="empty">${svg('inbox','ic')}<p>اختر بندًا من الوارد لرؤية مساره الكامل والإجراء.</p></div>`;return;}
@@ -1368,6 +1375,50 @@ function efSlot(iso,tz){
   try{return new Intl.DateTimeFormat('ar-EG',o).format(new Date(iso));}
   catch(e){return String(iso).slice(0,16);}
 }
+// رسالة الخبير الصوتية (الجولة ١٢): الصوت ما بيتحمّلش غير أول ما المؤسس يدوس «اسمع الرسالة» (التوكن في الرأس ⇒ blob).
+// رابط الـblob واحد في المرة: بيتلغي لما نفتح ملف تاني أو نقفل الدرج. ⛔ البايتات ما بتتخزّنش في أي مكان تاني.
+var efVoice={id:null,url:null,busy:false};
+function efVoiceDrop(){
+  if(efVoice.url){try{URL.revokeObjectURL(efVoice.url);}catch(e){}}
+  efVoice.id=null;efVoice.url=null;efVoice.busy=false;
+}
+function efVoiceDur(sec){
+  const s=Math.max(0,Math.round(Number(sec)||0));
+  return (Math.floor(s/60)+':'+String(s%60).padStart(2,'0')).replace(/\d/g,d=>'٠١٢٣٤٥٦٧٨٩'[d]);
+}
+function efVoiceField(id,v,hint){
+  if(!v||!id)return '';
+  if(efVoice.id&&efVoice.id!==id)efVoiceDrop();
+  const have=efVoice.id===id&&efVoice.url;
+  return `<div class="field ef-voice"><div class="lab">رسالة الخبير الصوتية (<span dir="ltr">${esc(efVoiceDur(v.duration_sec))}</span>)</div>`
+    +(have?`<audio controls preload="none" src="${esc(efVoice.url)}"></audio>`
+          :`<button class="btn btn-ghost ef-full" data-voice="${esc(id)}">${svg('play')}اسمع الرسالة</button>`)
+    +`<div class="ef-voice-msg" aria-live="polite"></div>`
+    +(hint?`<div class="meta">اسمعها قبل الاعتماد — لو فيها رقم تليفون أو وسيلة تواصل رجّع الملف.</div>`:'')+`</div>`;
+}
+function efVoiceWire(el){
+  const b=el.querySelector('[data-voice]');if(!b)return;
+  b.onclick=()=>{
+    if(efVoice.busy||!window.EP||!EP.expertFileVoice)return;
+    const id=b.dataset.voice,msg=el.querySelector('.ef-voice-msg');
+    efVoice.busy=true;b.disabled=true;
+    if(msg){msg.className='ef-voice-msg';msg.textContent='جارٍ التحميل…';}
+    EP.expertFileVoice(id).then(function(blob){
+      efVoice.busy=false;
+      if(efDspOpen.id!==id)return;                    // المؤسس فتح ملف تاني وهو بيحمّل ⇒ نسيب الرسالة دي
+      efVoiceDrop();
+      efVoice.id=id;efVoice.url=URL.createObjectURL(blob);
+      if(msg)msg.textContent='';
+      const a=document.createElement('audio');
+      a.controls=true;a.preload='none';a.src=efVoice.url;
+      b.replaceWith(a);
+      const p=a.play();if(p&&p.catch)p.catch(function(){});   // المتصفح ممكن يمنع التشغيل التلقائي — المشغّل ظاهر والمؤسس يدوس
+    },function(){
+      efVoice.busy=false;b.disabled=false;
+      if(msg){msg.className='ef-voice-msg err';msg.textContent='تعذّر تشغيل الرسالة — حاول مرة أخرى';}
+    });
+  };
+}
 function drawReview(el,i){
   const f=i.ef||{},rv=f.review||{},E=efX();
   // الدرج ده طويل (الرأي كله): على الكمبيوتر بيتمرّر لوحده جنب القايمة بدل ما زراره يستخبى تحت آخر الصفوف.
@@ -1429,6 +1480,7 @@ function drawReview(el,i){
   el.innerHTML=`<div class="dh"><div class="k">${esc(efKindLine(approved?'ملف للخبير · وافقت عليه':'ملف للخبير · مستني مراجعتك',f))}</div><h3>${esc(f.title||i.out)}</h3></div><div class="db">
     ${strips}${fields}
     <div class="field"><div class="lab">الرأي زي ما هيوصل لـ${esc(client)}</div><div class="ef-rv">${op}</div></div>
+    ${efVoiceField(i.apiId,det&&!det.__error?det.voice:null,!approved)}
     <div class="acts">
       ${approved?'':efLockedBtn('btn-primary','rv_ok',svg('check')+'اعتمده وابعته للعميل',offWhy)
         +`<button class="btn btn-human ef-full" data-a="rv_back">${svg('back')}رجّعه للخبير</button>`}
@@ -1443,6 +1495,7 @@ function drawReview(el,i){
     if(a==='rv_back'){efReviewReturnModal(i);return;}
     if(a==='ef_refund'){efRefundModal(i);return;}
   });
+  efVoiceWire(el);
   if(fresh&&window.EP&&EP.expertFileDetail){
     const id=i.apiId,tok=efDspOpen.tok;
     EP.expertFileDetail(id).then(function(d){return d||{};},function(){return {__error:'ما قدرناش نجيب «مبني على» دلوقتي — اقفل الدرج وافتحه تاني'};})
@@ -1636,7 +1689,7 @@ function drawDispute(el,i){
     ops=`<div class="note-ai">${svg('inbox','ic')}<div>النزاع اتفتح قبل ما الشغل يتسلّم.</div></div>`;
   }
   el.innerHTML=`<div class="dh" style="background:var(--conflict)"><div class="k">${esc(efKindLine('نزاع · '+kindLabel,isFile?r:null))}</div><h3>${esc(r.title||i.out)}</h3></div><div class="db">
-    ${strips}${fields}${ops}
+    ${strips}${fields}${ops}${isFile&&det&&!det.__error?efVoiceField(i.apiId,det.voice,false):''}
     <div class="acts">
       ${efLockedBtn('btn-primary','dsp_rel',svg('check')+'للخبير — حوّل أجره',relWhy)}
       ${efLockedBtn('btn-human','dsp_ref',svg('back')+'للعميل — رجّع فلوسه',refWhy)}
@@ -1650,6 +1703,7 @@ function drawDispute(el,i){
     if(a==='dsp_rel'){if(relWhy)return;efResolveModal(i,'release');return;}
     if(a==='dsp_ref'){if(refWhy)return;efResolveModal(i,'refund');return;}
   });
+  efVoiceWire(el);
   // فتحة جديدة لنزاع ملف: نجيب الرأيين، ونعيد رسم الدرج **لو لسه نفس الفتحة** (مش فتحة أحدث). الفشل
   // للفتحة دي بس — ما بيتحفظش، والفتحة الجاية بتجرّب تاني.
   if(fresh&&window.EP&&EP.expertFileDetail){

@@ -47,6 +47,8 @@
       headers: headers,
       body: opts.body != null ? (typeof opts.body === "string" ? opts.body : JSON.stringify(opts.body)) : undefined,
     }).then(function (r) {
+      // `blob: true` (رسالة الخبير الصوتية): الرد الناجح بايتات — الفاشل لسه نص بيتقرا تحت.
+      if (opts.blob && r.ok) return r.blob();
       return r.json().catch(function () { return {}; }).then(function (data) {
         if (r.status === 401) {
           // توكن مفقود/منتهٍ -> امسح واعرض الدخول.
@@ -2735,6 +2737,11 @@
   // أول فتحة)، والفشل ما يتحفظش.
   EP.expertFileDetail = function (id) {
     return get("/platform-expert-files/" + encodeURIComponent(id)).then(function (d) { return d || {}; });
+  };
+  // رسالة الخبير الصوتية (الجولة ١٢): بايتات مش نص، والمسار محمي بالتوكن (مفيش كوكي) ⇒ نفس `api()` بالرأس ⇒ Blob.
+  // يرجّع Blob أو يرفض بـ`Error` رسالته عربي. ⛔ من غير كاش هنا — الدرج هو اللي بيمسك الرابط ويلغيه.
+  EP.expertFileVoice = function (id) {
+    return api("/platform-expert-files/" + encodeURIComponent(id) + "/voice", { blob: true });
   };
   // قبل الاستلام ⇒ assign (وتغيير الخبير المختار) · بعد الاستلام ⇒ reassign (د٢). الحالة من صفّ المنصة.
   EP.expertFileSend = function (i, email, name, noteText, after) {

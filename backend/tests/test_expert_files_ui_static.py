@@ -25,9 +25,11 @@ NEW_UI_FUNCS = ('drawExpertFile', 'drawDispute', 'drawUnactivated', 'expertPickM
                 'drawReview', 'efReviewApproveModal', 'efReviewReturnModal', 'drawLegacy', 'efLegacyModal',
                 'efLockedBtn', 'efReleaseLock', 'efTrialLine', 'efSlot',
                 # مراجعة الجولة ٨
-                'efRowKey', 'efReloadKeep')
+                'efRowKey', 'efReloadKeep',
+                # الجولة ١٢ (رسالة الخبير الصوتية)
+                'efVoiceField', 'efVoiceWire', 'efVoiceDrop', 'efVoiceDur')
 NEW_API_FUNCS = ('EP.expertFileDetail', 'EP.expertFileSend', 'EP.expertFileRefund', 'EP.expertFileUnactivatedRefund',
-                 'EP.disputeDecide', 'EP.expertFileReview', 'EP.legacyDecide')
+                 'EP.disputeDecide', 'EP.expertFileReview', 'EP.legacyDecide', 'EP.expertFileVoice')
 NEW_ROW_FUNCS = ('efFileRow', 'efDisputeRow', 'consDisputeRow', 'efFlagBadges', 'efUnactivatedRow', 'efUnactWhy',
                  'efAttentionBadge', 'efReviewRow', 'legacyRow', 'efReleaseWhy', 'efRefundWhy', 'efMoneyBackBadge',
                  'efApprovalStuck')
@@ -482,3 +484,52 @@ def test_the_menu_still_has_thirteen_items(html):
     mods = _modules(html)
     assert len([m for m, g in mods.items() if g and g != 'co']) == 12
     assert not any('legacy' in k or 'review' in k for k in mods)
+
+
+# ---- الجولة ١٢: رسالة الخبير الصوتية (docs/expert-files/SPEC-R12-VOICE.md §٣)
+
+def test_voice_is_fetched_with_the_token_as_a_blob_through_the_one_api_helper(apijs):
+    """المسار محمي بالتوكن (مفيش كوكي) ⇒ مفيش `<audio src=مسار>`: نفس `api()` بالرأس ⇒ Blob. وfetch واحد في الملف
+    (حارس CSP في test_xss_hardening) — فالصوت بيعدّي من `api()` نفسها مش من fetch تاني."""
+    s = _body(apijs, 'EP.expertFileVoice = function')
+    assert '"/platform-expert-files/" + encodeURIComponent(id) + "/voice"' in s and '{ blob: true }' in s
+    assert 'fetch(' not in s
+    assert 'if (opts.blob && r.ok) return r.blob();' in apijs
+    assert apijs.count('fetch(') == 1
+
+
+def test_voice_player_loads_lazily_and_releases_the_blob(html):
+    f = _body(html, 'function efVoiceField(')
+    assert '<audio controls preload="none"' in f and 'data-voice=' in f
+    assert 'اسمع الرسالة' in f and 'رسالة الخبير الصوتية' in f
+    assert 'اسمعها قبل الاعتماد — لو فيها رقم تليفون أو وسيلة تواصل رجّع الملف.' in f
+    assert '<audio' not in f.split('data-voice=')[0].split('have?')[0]        # من غير رابط يتحمّل قبل الضغط
+    w = _body(html, 'function efVoiceWire(')
+    assert 'EP.expertFileVoice(id)' in w and 'URL.createObjectURL(blob)' in w
+    assert 'تعذّر تشغيل الرسالة — حاول مرة أخرى' in w and 'جارٍ التحميل…' in w
+    assert 'efDspOpen.id!==id' in w                                           # الدرج اتغيّر وهو بيحمّل
+    d = _body(html, 'function efVoiceDrop(')
+    assert 'URL.revokeObjectURL(efVoice.url)' in d
+    assert "efDspOpen.id=null;efVoiceDrop();" in html                         # قفل الدرج / فتح صفّ تاني
+
+
+def test_voice_card_is_in_the_review_and_dispute_drawers_only_from_the_detail(html):
+    r = _body(html, 'function drawReview(')
+    assert 'efVoiceField(i.apiId,det&&!det.__error?det.voice:null,!approved)' in r and 'efVoiceWire(el);' in r
+    d = _body(html, 'function drawDispute(')
+    assert 'efVoiceField(i.apiId,det.voice,false)' in d and 'efVoiceWire(el);' in d
+
+
+def test_there_is_no_read_the_message_text_button_and_no_transcript(html, apijs):
+    """قرار المؤسس: الصوت صوت — ⛔ مفيش «اقرأ نص الرسالة» ولا تحويل لنص (في كود الصوت بالذات)."""
+    voice = ''.join(_body(html, 'function ' + n + '(') for n in ('efVoiceField', 'efVoiceWire', 'efVoiceDrop', 'efVoiceDur'))
+    voice += _body(apijs, 'EP.expertFileVoice = function')
+    assert 'اقرأ نص' not in voice and 'نص الرسالة' not in voice and 'transcri' not in voice.lower()
+
+
+def test_csp_lets_the_blob_audio_play(html):
+    """من غير `media-src` الصوت بيقع على `default-src 'self'` والمتصفح بيرفض blob: — الرسالة ما تتشغّلش."""
+    app_py = os.path.join(_ROOT, 'backend', 'app.py')
+    with open(app_py, encoding='utf-8') as fh:
+        src = fh.read()
+    assert '"media-src \'self\' blob:; "' in src

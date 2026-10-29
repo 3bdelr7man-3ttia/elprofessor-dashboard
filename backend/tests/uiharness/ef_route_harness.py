@@ -56,12 +56,19 @@ class _Resp(object):
     def __init__(self, status, payload):
         self.status_code = status
         self._p = payload
-        self.content = json.dumps(payload, ensure_ascii=False).encode('utf-8')
-        self.text = self.content.decode('utf-8')
-        self.headers = {'Content-Type': 'application/json'}
+        if isinstance(payload, bytes):         # رسالة الخبير الصوتية (الجولة ١٢): بايتات مش JSON
+            self.content = payload
+            self.text = ''
+            self.headers = {'Content-Type': 'audio/webm'}
+        else:
+            self.content = json.dumps(payload, ensure_ascii=False).encode('utf-8')
+            self.text = self.content.decode('utf-8')
+            self.headers = {'Content-Type': 'application/json'}
         self.ok = 200 <= status < 300
 
     def json(self):
+        if isinstance(self._p, bytes):
+            raise ValueError('not json')
         return self._p
 
 

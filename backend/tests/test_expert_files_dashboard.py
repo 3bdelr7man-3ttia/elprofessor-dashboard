@@ -17,6 +17,8 @@ Run:  cd backend && python3 -m pytest -q tests/test_expert_files_dashboard.py
   ٧. الجولة ٨ (§١٧): مراجعة أول ملفات الخبير (اعتمد بتأكيد · رجّع بملاحظة لازمة) + «مبني على» بنفس قاعدة المنصة ·
      «استشارات قديمة محتاجة قرارك» (القايمة والقرار بتأكيد) · «للخبير» المرفوض بعد ما العميل خد فلوسه بكلام المنصة ·
      وضع الخدمة (التجربة) ورفضها بكلامها.
+  ٨. الجولة ١٢ (رسالة الخبير الصوتية): بروكسي `GET /platform-expert-files/<id>/voice` — أدمن بس · بايتات الجسر بنفس النوع
+     (قايمة بيضا) وترويسات `no-store` + `nosniff` + CSP محبوس · `voice` في التفاصيل ثلاث مفاتيح بس · صفر بيانات تانية.
 """
 import copy
 import datetime
@@ -47,6 +49,7 @@ ADMIN = 'ef-admin@x.test'
 ROUTES = [
     ('GET', '/api/platform-expert-files', None),
     ('GET', '/api/platform-expert-files/' + FID, None),
+    ('GET', '/api/platform-expert-files/%s/voice' % RID, None),     # الجولة ١٢: رسالة الخبير الصوتية
     ('POST', '/api/platform-expert-files/%s/assign' % FID, {'expert_email': 'hala@experts.test'}),
     ('POST', '/api/platform-expert-files/%s/reassign' % FID, {'expert_email': 'hala@experts.test'}),
     ('POST', '/api/platform-expert-files/%s/refund' % FID, {'confirmed': True}),
@@ -65,9 +68,16 @@ class _Resp(object):
     def __init__(self, status, payload):
         self.status_code = status
         self._p = payload
-        self.content = json.dumps(payload).encode() if payload is not None else b''
+        if isinstance(payload, bytes):         # رسالة الخبير الصوتية (الجولة ١٢): بايتات مش JSON
+            self.content = payload
+            self.headers = {'Content-Type': 'audio/webm'}
+        else:
+            self.content = json.dumps(payload).encode() if payload is not None else b''
+            self.headers = {'Content-Type': 'application/json'}
 
     def json(self):
+        if isinstance(self._p, bytes):
+            raise ValueError('not json')
         return self._p
 
 
@@ -590,7 +600,7 @@ def test_detail_reaches_the_browser_without_client_data(ctx, plat):
     r = _call(ctx, 'GET', '/api/platform-expert-files/' + fx.D1['id'])
     body = r.get_json()
     assert sorted(body) == ['based_on', 'client_tz', 'client_tz_label', 'dispute', 'file_no', 'id', 'opinion',
-                            'pending_opinion', 'review', 'revision', 'status', 'title']
+                            'pending_opinion', 'review', 'revision', 'status', 'title', 'voice']
     assert body['file_no'] == 1042
     assert body['based_on'] is None and body['pending_opinion'] is None   # «مبني على» للرأي اللي مستني مراجعة بس
     assert body['client_tz'] is None and body['client_tz_label'] is None  # توقيت العميل لدرج المراجعة بس
@@ -1071,3 +1081,128 @@ def test_the_new_queue_keys_pass_through_untouched(ctx, plat):
     assert body['expert_files_in_review'] == 2 and body['consultations_legacy'] == 3
     assert '🔎 2 رأي مستني مراجعتك قبل ما يوصل للعميل' in body['alerts']
     assert '🗂️ 3 استشارة قديمة اتسلّمت ومستنية قرارك — للخبير ولا للعميل' in body['alerts']
+
+
+# ---- الجولة ١٢: رسالة الخبير الصوتية (docs/expert-files/SPEC-R12-VOICE.md §٣) — صفر نداء حقيقي، الجسر متزيّف
+
+VOICE_PATH = '/api/platform-expert-files/%s/voice' % RID
+
+
+def test_voice_proxy_returns_the_bridge_bytes_with_a_locked_down_response(ctx, plat):
+    r = _call(ctx, 'GET', VOICE_PATH)
+    assert r.status_code == 200
+    assert r.data == fx.VOICE_BYTES                                          # البايتات زي ما هي
+    assert r.mimetype == 'audio/webm'
+    assert r.headers['Cache-Control'] == 'private, no-store'
+    assert r.headers['X-Content-Type-Options'] == 'nosniff'
+    assert r.headers['Content-Security-Policy'] == "default-src 'none'; sandbox"
+    assert r.headers['Content-Disposition'] == 'inline; filename="voice-%s.webm"' % RID
+    sent, = plat.seen
+    assert sent['method'] == 'GET' and sent['url'] == PLATFORM + '/api/bridge/expert-files/%s/voice' % RID
+    assert sent['params'] is None and sent['json'] is None                   # ولا حاجة تانية بتتبعت
+    assert sent['headers'] == {'X-ELP-Metrics-Secret': SECRET}               # السرّ في الرأس بس
+    assert _audits('expert_file.voice') == []                                # قراية بس — مفيش سجل
+
+
+@pytest.mark.parametrize('ctype,ext', [('audio/webm', 'webm'), ('audio/ogg', 'ogg'), ('audio/mp4', 'm4a'),
+                                       ('audio/webm; codecs=opus', 'webm'), ('Audio/MP4', 'm4a')])
+def test_voice_proxy_keeps_the_allowed_audio_types(ctx, plat, monkeypatch, ctype, ext):
+    class R(object):
+        status_code = 200
+        content = fx.VOICE_BYTES
+        headers = {'Content-Type': ctype}
+    import app as appmod
+    monkeypatch.setattr(appmod.requests, 'request', lambda *a, **k: R())
+    r = _call(ctx, 'GET', VOICE_PATH)
+    assert r.status_code == 200 and r.mimetype == ctype.split(';')[0].strip().lower()
+    assert r.headers['Content-Disposition'].endswith('.%s"' % ext)
+
+
+@pytest.mark.parametrize('ctype', ['text/html', 'application/json', 'image/png', 'audio/mpeg', 'video/webm', ''])
+def test_voice_proxy_refuses_any_type_that_is_not_the_voice_whitelist(ctx, plat, monkeypatch, ctype):
+    """النوع من القايمة البيضا بس — HTML أو صورة جاية من المنصة ما بتتقدّمش من أصل الداشبورد."""
+    class R(object):
+        status_code = 200
+        content = b'<script>alert(1)</script>'
+        headers = {'Content-Type': ctype}
+    import app as appmod
+    monkeypatch.setattr(appmod.requests, 'request', lambda *a, **k: R())
+    r = _call(ctx, 'GET', VOICE_PATH)
+    assert r.status_code == 502 and r.get_json() == {'error': 'تعذّر تشغيل الرسالة'}
+    assert b'script' not in r.data
+
+
+def test_voice_proxy_refuses_an_empty_or_oversized_body(ctx, plat, monkeypatch):
+    import app as appmod
+    for body in (b'', b'x' * (appmod._EF_VOICE_MAX_BYTES + 1)):
+        class R(object):
+            status_code = 200
+            content = body
+            headers = {'Content-Type': 'audio/webm'}
+        monkeypatch.setattr(appmod.requests, 'request', lambda *a, **k: R())
+        assert _call(ctx, 'GET', VOICE_PATH).status_code == 502
+
+
+def test_voice_proxy_of_a_file_without_voice_is_the_platforms_arabic_404(ctx, plat):
+    r = _call(ctx, 'GET', '/api/platform-expert-files/%s/voice' % fx.R2['id'])    # ملف قديم من غير صوت
+    assert r.status_code == 404 and r.get_json() == {'error': fx.E_NOT_FOUND}
+    assert len(plat.seen) == 1
+
+
+def test_voice_proxy_when_the_bridge_is_not_published_says_so(ctx, plat):
+    plat.forced[('GET', '/api/bridge/expert-files/%s/voice' % RID)] = (404, {'detail': 'Not Found'})
+    r = _call(ctx, 'GET', VOICE_PATH)
+    assert r.status_code == 404 and r.get_json() == {'error': 'ملفات «ملف للخبير» مش واصلة للداشبورد لسه'}
+
+
+@pytest.mark.parametrize('status', [500, 502, 503])
+def test_voice_proxy_maps_a_platform_crash_to_502_without_a_retry(ctx, plat, status):
+    plat.forced[('GET', '/api/bridge/expert-files/%s/voice' % RID)] = (status, {'detail': 'boom'})
+    r = _call(ctx, 'GET', VOICE_PATH)
+    assert r.status_code == 502
+    assert len(plat.seen) == 1                                                # ⛔ ولا إعادة محاولة
+
+
+def test_voice_proxy_connection_failure_is_502_in_arabic(ctx, plat):
+    plat.forced[('GET', '/api/bridge/expert-files/%s/voice' % RID)] = _requests.Timeout('slow')
+    r = _call(ctx, 'GET', VOICE_PATH)
+    assert r.status_code == 502 and r.get_json() == {'error': 'تعذر الاتصال بالمنصة'}
+
+
+def test_voice_proxy_without_the_secret_never_calls_the_platform(ctx, plat, monkeypatch):
+    import app as appmod
+    monkeypatch.setattr(appmod, 'PLATFORM_METRICS_SECRET', '')
+    r = _call(ctx, 'GET', VOICE_PATH)
+    assert r.status_code == 503 and plat.seen == []
+
+
+@pytest.mark.parametrize('bad', ['x' * 65, 'a.b', 'a b', 'ملف'])
+def test_voice_proxy_validates_the_id_first(ctx, plat, bad):
+    r = _call(ctx, 'GET', '/api/platform-expert-files/%s/voice' % bad)
+    assert r.status_code == 404 and plat.seen == []
+
+
+def test_detail_carries_the_voice_card_with_three_keys_only(ctx, plat):
+    body = _call(ctx, 'GET', '/api/platform-expert-files/' + RID).get_json()
+    assert body['voice'] == fx.VOICE_META
+    assert sorted(body['voice']) == ['content_type', 'duration_sec', 'size']
+    old = _call(ctx, 'GET', '/api/platform-expert-files/' + fx.R2['id']).get_json()
+    assert old['voice'] is None                                               # الملف القديم: ولا مشغّل
+
+
+@pytest.mark.parametrize('voice', [None, 'x', [], {}, {'duration_sec': 5},
+                                   {'duration_sec': 'ab', 'size': 9, 'content_type': 'audio/webm'},
+                                   {'duration_sec': True, 'size': 9, 'content_type': 'audio/webm'},
+                                   {'duration_sec': 60, 'size': 9, 'content_type': 'text/html'}])
+def test_detail_drops_a_malformed_voice_instead_of_passing_it_on(ctx, plat, monkeypatch, voice):
+    rid = fx.R2['id']
+    monkeypatch.setitem(fx.REVIEW_DETAIL, rid, dict(fx.REVIEW_DETAIL[rid], voice=voice))
+    assert _call(ctx, 'GET', '/api/platform-expert-files/' + rid).get_json()['voice'] is None
+
+
+def test_detail_never_carries_voice_bytes_or_extra_keys(ctx, plat, monkeypatch):
+    monkeypatch.setattr(fx, 'VOICE_META', dict(fx.VOICE_META, data_b64='AAAA', expert_email='rana@experts.test'))
+    body = _call(ctx, 'GET', '/api/platform-expert-files/' + RID).get_json()
+    assert sorted(body['voice']) == ['content_type', 'duration_sec', 'size']
+    raw = json.dumps(body)
+    assert 'data_b64' not in raw and 'AAAA' not in raw

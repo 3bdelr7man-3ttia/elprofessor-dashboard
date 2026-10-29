@@ -183,6 +183,9 @@ def _security_headers(resp):
         "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
         "font-src 'self' https://fonts.gstatic.com data:; "
         "img-src 'self' data:; "
+        # الجولة ١٢: رسالة الخبير الصوتية في درج المراجعة بتتشغّل من blob (fetch بالتوكن ⇒ blob) — من غير media-src
+        # بتقع على default-src 'self' والمتصفح بيرفض blob:.
+        "media-src 'self' blob:; "
         "connect-src 'self'; "
         "object-src 'none'; "
         "base-uri 'none'; "
@@ -2336,6 +2339,10 @@ _EF_ID_RE = re.compile(r'[A-Za-z0-9_-]{1,64}')
 _EF_LIST_STATUSES = ('waiting', 'late', 'disputed', 'blocked', 'unactivated', 'review')
 _EF_ACTIONS = ('release', 'refund')
 _EF_REVIEW_ACTIONS = ('approve', 'return')
+# رسالة الخبير الصوتية (الجولة ١٢): الأنواع المسموحة هي نفس قايمة المنصة البيضا (`_sniff_voice`)، والسقف أعلى من
+# `MAX_VOICE_BYTES` (٣ ميجا) بهامش — اللي يعدّي ده مش صوت الخبير.
+_EF_VOICE_TYPES = {'audio/webm': 'webm', 'audio/ogg': 'ogg', 'audio/mp4': 'm4a'}
+_EF_VOICE_MAX_BYTES = 4_000_000
 # ٤٠٤ `Not Found` من جسر الملفات: من الجولة ٧ الجسر شغّال بالسرّ حتى والخدمة مقفولة، فالـ٤٠٤ معناه إن
 # الجسر نفسه مش على المنصة لسه (الإنتاج قبل نشر الفروع).
 EF_OFF_AR = 'ملفات «ملف للخبير» مش واصلة للداشبورد لسه'
@@ -2406,7 +2413,21 @@ def _ef_meta(f, **extra):
 # ردود الكتابة بقت نضيفة من المنصة نفسها (الجولة ٧ ب٨)، والمتصفح بياخد منها نجح + الحالة بس.
 # الجولة ٨: درج «مستنية مراجعتك» محتاج الرأي اللي مستني (`pending_opinion`) وحالة المراجعة (`review`) و«مبني على».
 _EF_DETAIL_KEYS = ('id', 'title', 'status', 'file_no', 'dispute', 'opinion', 'revision', 'pending_opinion', 'review')
+# الجولة ١٢: `voice` بيتفلتر لثلاث مفاتيح بس (مدة · حجم · نوع) — ⛔ البايتات ما بتعدّيش في التفاصيل أصلًا.
 _CONS_LIST_HIDDEN = ('member_email', 'payment_id')
+
+
+def _ef_voice_meta(v):
+    """رسالة الخبير الصوتية (الجولة ١٢): {duration_sec, size, content_type} أو None. أرقام ونوع من القايمة البيضا بس —
+    أي شكل تاني (أو نوع مش صوت) ⇒ None والدرج ما بيعرضش مشغّل."""
+    if not isinstance(v, dict):
+        return None
+    ctype = str(v.get('content_type') or '').split(';')[0].strip().lower()
+    dur, size = v.get('duration_sec'), v.get('size')
+    if ctype not in _EF_VOICE_TYPES or isinstance(dur, bool) or not isinstance(dur, (int, float)) \
+            or isinstance(size, bool) or not isinstance(size, (int, float)):
+        return None
+    return {'duration_sec': int(dur), 'size': int(size), 'content_type': ctype}
 
 
 def _ef_detail_out(resp):
@@ -2415,6 +2436,7 @@ def _ef_detail_out(resp):
     f = _proxy_json(resp)
     out = {k: f.get(k) for k in _EF_DETAIL_KEYS}
     out['based_on'] = None
+    out['voice'] = _ef_voice_meta(f.get('voice'))
     # مواعيد الجلسة في درج المراجعة بتوقيت العميل (مراجعة الجولة ٨): المنصة بتعرضها له بمنطقة بلد السعر (`price.tz` ·
     # «بتوقيت …»)، فالدرج بياخد المنطقة واسمها بس — مش بلد العميل ولا سعره. بلد مش في القايمة ⇒ فاضي (توقيت جهازه).
     out['client_tz'] = out['client_tz_label'] = None
@@ -2553,6 +2575,44 @@ def platform_expert_file_detail(file_id):
     if _ef_bad_id(file_id):
         return jsonify({'error': 'الملف ده مش موجود'}), 404
     return _ef_detail_out(_ef_bridge('GET', f'/api/bridge/expert-files/{file_id}'))
+
+
+@app.route('/api/platform-expert-files/<file_id>/voice', methods=['GET'])
+@token_required
+@roles_required('admin')
+def platform_expert_file_voice(file_id):
+    """رسالة الخبير الصوتية (الجولة ١٢) — البايتات من الجسر زي ما هي بنفس النوع. نداء واحد وبنفس السرّ (`_platform_proxy`)،
+    بس الرد بايتات مش JSON فبيتعامل هنا: النوع من القايمة البيضا (غيرها ⇒ ٥٠٢)، والترويسات `no-store` + `nosniff` +
+    CSP محبوس، ومفيش ولا بيانات تانية بتعدّي. المتصفح بيجيبها بالتوكن ⇒ blob (مفيش كوكي)."""
+    if _ef_bad_id(file_id):
+        return jsonify({'error': 'الملف ده مش موجود'}), 404
+    if not PLATFORM_METRICS_SECRET:
+        return jsonify({'error': _EF_NOT_CONFIGURED_AR}), 503
+    try:
+        r = requests.request('GET', f"{PLATFORM_API_URL}/api/bridge/expert-files/{file_id}/voice",
+                             headers={'X-ELP-Metrics-Secret': PLATFORM_METRICS_SECRET}, timeout=12)
+    except Exception:
+        return jsonify({'error': 'تعذر الاتصال بالمنصة'}), 502
+    if r.status_code != 200:
+        try:
+            detail = (r.json() if r.content else {}).get('detail')
+        except Exception:
+            detail = None
+        if isinstance(detail, dict):
+            detail = detail.get('message') or detail.get('error')
+        msg = detail if isinstance(detail, str) else None
+        status = r.status_code if r.status_code in (400, 401, 403, 404, 409) else 502
+        return jsonify({'error': _EF_ERRORS_AR.get(msg, msg) or 'تعذّر تشغيل الرسالة'}), status
+    ctype = str((getattr(r, 'headers', None) or {}).get('Content-Type') or '').split(';')[0].strip().lower()
+    data = r.content or b''
+    if ctype not in _EF_VOICE_TYPES or not data or len(data) > _EF_VOICE_MAX_BYTES:
+        return jsonify({'error': 'تعذّر تشغيل الرسالة'}), 502
+    return Response(data, status=200, mimetype=ctype, headers={
+        'Cache-Control': 'private, no-store',
+        'X-Content-Type-Options': 'nosniff',
+        'Content-Security-Policy': "default-src 'none'; sandbox",
+        'Content-Disposition': f'inline; filename="voice-{file_id}.{_EF_VOICE_TYPES[ctype]}"',
+    })
 
 
 @app.route('/api/platform-expert-files/<file_id>/assign', methods=['POST'])
