@@ -247,7 +247,8 @@ def test_reason_names_and_fee_come_from_the_platform(html, apijs):
         assert gone not in html and gone not in apijs, gone
     assert 'f.reason_label || d.reason_label' in _body(apijs, 'function efDisputeRow(')
     assert 'd.name || d.email' in _body(apijs, 'function efFileRow(')
-    assert 'd.name||d.email' in _body(html, 'function drawExpertFile(')
+    assert 'efDeclinedHtml(declined)' in _body(html, 'function drawExpertFile(')       # الجولة ١٤: الاعتذارات بسببها في دالة
+    assert 'd.name||d.email' in _body(html, 'function efDeclinedHtml(')
 
 
 def test_needs_attention_badge_reads_the_platform_reason(apijs, html):

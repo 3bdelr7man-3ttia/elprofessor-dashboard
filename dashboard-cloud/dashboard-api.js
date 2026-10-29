@@ -471,6 +471,76 @@
     var u = f && f.urgent;
     return (u && typeof u === "object" && u.state === "fell_back") ? u : null;
   }
+  // ——— الجولة ١٤: مراجعة العقود + التخصص + التوزيع التلقائي (SPEC-R14 §٤) ———
+  // المنصة بتبعت حقول جديدة على الملف (`kind` · `contract_pages` · `specialty` · `assign_log` · `declined[].reason_code` ·
+  // `no_candidate_alerted_at`) وعلى المرشّح (`specialties` · `reviews_contracts` · `available`). كله هنا بيتقري بحذر: نوع غلط
+  // أو مفتاح مش معروف بيتسقط، وملف قديم من غير الحقول دي بيتصرّف زي ما كان بالحرف (سؤال عادي · من غير تخصص · من غير سجل).
+  // قايمة التخصصات = `SPECIALTIES` على المنصة (مفتاح ⇒ الاسم الظاهر) — اختبار بيطابقها.
+  var EF_SPECIALTIES = {
+    real_estate: "عقارات وإيجارات", civil: "مدني وعقود", commercial: "تجاري وشركات", labor: "عمالي",
+    family: "أحوال شخصية", criminal: "جنائي", administrative: "إداري", ip: "ملكية فكرية", tax: "ضرائب",
+    marketing: "تسويق ومحتوى", other: "أخرى"
+  };
+  var EF_DECLINE_AR = { busy: "مشغول دلوقتي", not_my_field: "مش تخصصه", conflict: "عنده تعارض مصالح", other: "سبب تاني" };
+  var EF_ASSIGN_WHEN_AR = { paid: "بعد الدفع", declined: "بعد اعتذار الخبير اللي قبله", timeout: "عدّت مهلة الاستلام",
+                              manual: "بإيدك" };
+  var EF_VERDICT_AR = { sign_ok: "ممكن يوقّع زي ما هو", sign_after_changes: "يوقّع بعد تعديل البنود",
+                        dont_sign: "ما ينصحش بالتوقيع" };
+  var EF_RISK_AR = { high: "خطر مرتفع", medium: "خطر متوسط", low: "خطر منخفض" };
+  function efIsContract(f) { return !!f && f.kind === "contract"; }
+  // عدد صفحات العقد: رقم صحيح موجب بس.
+  function efPagesOf(f) {
+    var n = Number(f && f.contract_pages);
+    return (isFinite(n) && n > 0) ? Math.floor(n) : 0;
+  }
+  // «عقد · ٨ صفحات» — الصفحات اختيارية (لو المنصة ما بعتتهاش بيبقى «عقد» بس).
+  function efKindLabel(f) {
+    if (!efIsContract(f)) return "";
+    var n = efPagesOf(f);
+    return "عقد" + (n ? " · " + money(n) + (n === 1 ? " صفحة" : n <= 10 ? " صفحات" : " صفحة") : "");
+  }
+  // اسم تخصص من مفتاحه؛ «أخرى» بنصها الحر لو اتكتب. مفتاح مش معروف ⇒ "" (ما بيتعرضش).
+  function efSpecName(key, other) {
+    if (!Object.prototype.hasOwnProperty.call(EF_SPECIALTIES, key)) return "";
+    if (key === "other") { var o = typeof other === "string" ? other.trim().slice(0, 40) : ""; return o ? "أخرى: " + o : EF_SPECIALTIES.other; }
+    return EF_SPECIALTIES[key];
+  }
+  function efSpecOf(f) { return f ? efSpecName(f.specialty, f.specialty_other) : ""; }
+  // تخصصات المرشّح (لحد ٣) كأسماء، وبيراجع عقود، وإجازة (`available` الغايب = متاح).
+  function efCandSpecs(c) {
+    var keys = (c && Array.isArray(c.specialties)) ? c.specialties : [];
+    return keys.slice(0, 3).map(function (k) { return efSpecName(k, c.specialty_other); }).filter(Boolean);
+  }
+  function efCandReviewsContracts(c) { return !!c && c.reviews_contracts === true; }
+  function efCandAway(c) { return !!c && c.available === false; }
+  function efDeclineWhy(d) {
+    d = d || {};
+    var code = EF_DECLINE_AR[d.reason_code] || "";
+    var text = typeof d.reason === "string" ? d.reason.trim().slice(0, 300) : "";
+    return [code, text].filter(Boolean).join(" — ");
+  }
+  // «مين اتبعتله الملف»: سجل التوزيع بالترتيب اللي المنصة بعتته. الاسم من المرشّحين/المكلَّف/الخبير، وإلا الإيميل.
+  function efAssignLog(f) {
+    var log = (f && Array.isArray(f.assign_log)) ? f.assign_log : [];
+    var names = {};
+    (Array.isArray(f && f.candidates) ? f.candidates : []).forEach(function (c) { if (c && c.email) names[String(c.email).toLowerCase()] = c.name; });
+    (Array.isArray(f && f.declined) ? f.declined : []).forEach(function (d) { if (d && d.email && d.name) names[String(d.email).toLowerCase()] = d.name; });
+    if (f && f.assigned_to && f.assigned_name) names[String(f.assigned_to).toLowerCase()] = f.assigned_name;
+    if (f && f.expert_email && f.expert_name) names[String(f.expert_email).toLowerCase()] = f.expert_name;
+    return log.filter(function (e) { return e && typeof e === "object" && typeof e.to === "string" && e.to; }).slice(0, 30).map(function (e) {
+      return { at: typeof e.at === "string" ? e.at : "", who: names[e.to.toLowerCase()] || e.to, auto: e.by === "auto",
+               reason: EF_ASSIGN_WHEN_AR[e.reason] || "",
+               why: typeof e.why === "string" ? e.why.trim().slice(0, 300) : "" };
+    });
+  }
+  // ملف قبل الاستلام ومفيش مؤهَّل ليه (المنصة نبّهت مرة): ختم `no_candidate_alerted_at` بيتصفّر مع أي توزيع ناجح أو
+  // اعتذار أو استلام. ⛔ مش بس `awaiting_assignment`: الكنسة لو ملقتش خبير بعد ١٢ ساعة بتسيب الملف `assigned` عند
+  // اللي اتبعتله وتنبّه المؤسس مرة. المنصة بتبعت `no_candidate` جاهزة (ختم + قبل الاستلام) — وده نفس الحساب للصفوف القديمة.
+  function efNoCandidate(f) {
+    if (!f || EF_PRE.indexOf(f.status) < 0) return false;
+    if (f.no_candidate === true) return true;
+    return typeof f.no_candidate_alerted_at === "string" && !!f.no_candidate_alerted_at;
+  }
   // «السبت ٣ نوفمبر ٨:٣٠ م» — الوقت لازم يبان (ساعات مش أيام)، بتوقيت جهاز المؤسس.
   function efWhen(iso) {
     if (!iso) return "";
@@ -500,16 +570,18 @@
     var blocked = efBlocked(f);
     var attn = efAttentionBadge(f);
     var urg = efUrgentOf(f);
+    var noCand = efNoCandidate(f);
     // «للعلم» مش بند: ملف اتبعت لخبير ولسه جوه الـ١٢ ساعة بتوعه وميعاد الـ٤٨ لسه بعيد ⇒ مش محتاج من
     // المؤسس حاجة دلوقتي. بيفضل في `INBOX` (عشان الدرج يفتح لو حب) بس برّه كل عدّ وكل شريحة — سطر
     // «للعلم» واحد بيقول عليه. لو عدّى ١٢ ساعة (`assign_overdue`) أو قرب الميعاد أو عليه ختم أو الخدمة مقفولة ⇒ بند عادي.
-    var fyi = !closed && !attn && lane !== "late" && f.status === "assigned" && !f.assign_overdue && hl > 12;
+    var fyi = !closed && !attn && !noCand && lane !== "late" && f.status === "assigned" && !f.assign_overdue && hl > 12;
     var out;
     if (attn && (blocked[0] || {}).key === "refund_blocked_at" && efMoneyAlreadyBack(f)) out = "فلوس ملف رجعت للعميل قبل كده";
     else if (attn) out = EF_BLOCK_OUT[(blocked[0] || {}).key] || "ملف فلوسه واقفة";
     else if (lane === "late") out = "رأي متأخر";
     else if (pre && hl <= 0) out = "فات ميعاد الاستلام";
     else if (f.status === "assigned" && f.assign_overdue) out = "ملف ما اتستلمش من ١٢ ساعة";
+    else if (noCand) out = "ملف مالوش خبير متاح";
     else if (urg && urg.state === "waiting" && pre) out = "ملف مستعجل مستني خبير";
     else if (f.status === "awaiting_assignment" && declined.length) out = "خبير اعتذر — الملف مستني خبير تاني";
     else if (f.status === "assigned") out = "ملف مستني الخبير يستلمه";
@@ -523,6 +595,10 @@
     else sla = f.status_label || "";
     var badges = efFlagBadges(f);
     efUrgentBadges(f).forEach(function (b) { badges.push(b); });
+    // الجولة ١٤: نوع الملف والتخصص على الصفّ، و«مالوش خبير متاح» (التوزيع التلقائي ما لقاش مؤهَّل ونبّهنا على تليجرام).
+    if (efIsContract(f)) badges.push({ t: efKindLabel(f), tip: "مراجعة عقد قبل التوقيع" });
+    if (efSpecOf(f)) badges.push({ t: efSpecOf(f), tip: "التخصص اللي اختاره «بروف» من موضوع الملف" });
+    if (noCand) badges.push({ w: true, t: "مالوش خبير متاح", tip: "مفيش خبير مؤهَّل دلوقتي — ابعته بإيدك، وإلا هيترد للعميل بعد ٤٨ ساعة من الدفع" });
     // «قرب الـ٤٨ ساعة»: آخر ١٢ ساعة قبل ما الفلوس ترجع لوحدها — نفس حدّ `slaWarn` تحت. والخدمة مقفولة مفيش ميعاد شغّال.
     if (pre && !closed && hl > 0 && hl <= 12) badges.unshift({ w: true, t: "⏳ فاضل أقل من ١٢ ساعة", tip: "لو ما اتستلمش قبل الميعاد، فلوس العميل بترجع لوحدها" });
     if (attn) badges.unshift(attn);
@@ -545,12 +621,12 @@
     }
     return {
       apiKind: "expert_file", apiId: f.id, efLane: lane, ef: f, fyi: fyi && !(urg && urg.state === "waiting"),
-      needsAttention: !!attn, urgent: !!urg,
+      needsAttention: !!attn, urgent: !!urg, noCandidate: noCand, contract: efIsContract(f),
       out: out, from: "ملف للخبير", src: "doc", dest: "inbox",
       triage: (attn || lane === "late" || (pre && hl <= 0)) ? "late" : "human",
       triLabel: triLabel,
       sla: sla, slaWarn: !!attn || lane === "late" || (pre && (closed || hl <= 12)) || !!f.assign_overdue
-        || !!(urg && urg.state === "waiting"),
+        || !!(urg && urg.state === "waiting") || noCand,
       who: f.client_first_name || "عميل",
       sub: [f.title, f.law_label, f.tier_label].filter(Boolean).join(" · "),
       sub2: "الطرف التاني: " + (f.counterparty_name || "ما اتكتبش") + (since ? " · " + since : ""),
@@ -562,7 +638,7 @@
       badges: badges,
       ref: "EF-" + String(f.id || "").slice(0, 8),
       searchText: [f.title, f.counterparty_name, f.assigned_name, f.expert_name, f.client_first_name,
-                   f.file_no != null ? String(f.file_no) : ""].filter(Boolean).join(" "),
+                   f.file_no != null ? String(f.file_no) : "", efIsContract(f) ? "عقد" : "", efSpecOf(f)].filter(Boolean).join(" "),
       candidates: Array.isArray(f.candidates) ? f.candidates : [],
     };
   }
@@ -692,6 +768,8 @@
     var attn = efAttentionBadge(f);
     var badges = efFlagBadges(f);
     efUrgentBadges(f).forEach(function (b) { badges.push(b); });
+    if (efIsContract(f)) badges.push({ t: efKindLabel(f), tip: "مراجعة عقد قبل التوقيع" });
+    if (efSpecOf(f)) badges.push({ t: efSpecOf(f), tip: "التخصص اللي اختاره «بروف» من موضوع الملف" });
     if (attn) badges.unshift(attn);
     if (returned) badges.push({ w: true, t: "رجّعته للخبير مرة", tip: rv.note ? "ملاحظتك: " + rv.note : "رجّعته للخبير قبل كده" });
     var n = Number(f.expert_delivered_count || 0);
@@ -699,6 +777,7 @@
     return {
       apiKind: "expert_file", apiId: f.id, efLane: "review", ef: f, fyi: false, needsAttention: !!attn,
       urgent: !!efUrgentOf(f),
+      contract: efIsContract(f),
       out: stuck ? "رأي وافقت عليه وتوصيله وقف" : approved ? "رأي وافقت عليه ولسه بيتوصّل للعميل"
         : returned ? "رأي اتعدّل ومستني مراجعتك تاني" : "رأي مستني مراجعتك قبل ما يوصل للعميل",
       from: "ملف للخبير", src: "doc", dest: "inbox",
@@ -794,6 +873,10 @@
             efApprovalStuck: efApprovalStuck,
             efUrgentOf: efUrgentOf, efFellBackOf: efFellBackOf, efWhen: efWhen,
             efCaseMilestones: efCaseMilestones, efCaseDisputed: efCaseDisputed,
+            SPECIALTIES: EF_SPECIALTIES, VERDICT_AR: EF_VERDICT_AR, RISK_AR: EF_RISK_AR,
+            efIsContract: efIsContract, efPagesOf: efPagesOf, efKindLabel: efKindLabel, efSpecName: efSpecName,
+            efSpecOf: efSpecOf, efCandSpecs: efCandSpecs, efCandReviewsContracts: efCandReviewsContracts,
+            efCandAway: efCandAway, efDeclineWhy: efDeclineWhy, efAssignLog: efAssignLog, efNoCandidate: efNoCandidate,
             PRE: EF_PRE, WORK: EF_WORK, relTime: relTime, arDate: arDate };
 
   var LOADERS = {
@@ -1924,6 +2007,10 @@
             failUnless403(L[1])(e);
           }));
         });
+        // الجولة ١٤: مفتاح «التوزيع تلقائي». ٤٠٤ (منصة قبل الجولة) أو أي عطل ⇒ من غير مفتاح — مش «تعذّر» (مش بند شغل).
+        jobs.push(get("/platform-expert-files/settings").then(function (r) {
+          EP.data.efSettings = (r && r.enabled !== false && typeof r.auto_assign === "boolean") ? { auto_assign: r.auto_assign } : null;
+        }).catch(function () { EP.data.efSettings = null; }));
         jobs.push(get("/platform-consultation-disputes").then(function (r) {
           if (!r || r.enabled === false) return;
           consDisputes = Array.isArray(r.consultations) ? r.consultations : [];
@@ -2829,6 +2916,19 @@
   // يرجّع Blob أو يرفض بـ`Error` رسالته عربي. ⛔ من غير كاش هنا — الدرج هو اللي بيمسك الرابط ويلغيه.
   EP.expertFileVoice = function (id) {
     return api("/platform-expert-files/" + encodeURIComponent(id) + "/voice", { blob: true });
+  };
+  // الجولة ١٤: شغّل/اقفل التوزيع التلقائي. القفل بتأكيد الشاشة (`confirmed: true`) — الخادم بيرفض القفل من غيره.
+  // نجح ⇒ المفتاح بيتحدّث في الذاكرة فورًا (من رد المنصة)، والوارد بيتحدّث ورا.
+  EP.expertFileAutoAssign = function (value, after) {
+    return api("/platform-expert-files/settings", { method: "PUT", body: { auto_assign: !!value, confirmed: true } })
+      .then(function (r) {
+        var on = (r && typeof r.auto_assign === "boolean") ? r.auto_assign : !!value;
+        EP.data.efSettings = { auto_assign: on };
+        note(on ? "التوزيع التلقائي اشتغل ✓" : "التوزيع التلقائي اتقفل ✓");
+        EP.reload("inbox", after);
+        return { ok: true, auto_assign: on };
+      })
+      .catch(function (e) { return efFailed(e, after); });
   };
   // قبل الاستلام ⇒ assign (وتغيير الخبير المختار) · بعد الاستلام ⇒ reassign (د٢). الحالة من صفّ المنصة.
   EP.expertFileSend = function (i, email, name, noteText, after) {

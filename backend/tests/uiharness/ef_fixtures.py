@@ -49,7 +49,7 @@ STATUS_LABELS = {
     "needs_info": "محتاجين ردّك", "in_review": "بنراجع رأيك قبل ما يوصلك", "delivered": "رأيك جاهز",
     "disputed": "بنراجعها معاك", "closed": "خلص", "refunded": "فلوسك رجعت", "cancelled": "اتلغى",
 }
-TIER_LABELS = {"written": "رأي مكتوب", "written_session": "رأي مكتوب + جلسة ٣٠ دقيقة"}
+TIER_LABELS = {"written": "رأي مكتوب", "written_session": "رأي مكتوب + جلسة ٣٠ دقيقة", "contract": "مراجعة عقد"}
 LAW_LABELS = {"eg": "القانون المصري", "sa": "القانون السعودي"}
 NEXT_STEP_LABELS = {"self": "تقدر تكمّلها بنفسك", "specialist": "محتاج حد متخصص يكمّل معاك",
                     "none": "مش محتاج حاجة دلوقتي"}
@@ -786,6 +786,105 @@ CS2 = _r13(_file("ef-cs2-5e6f7a8b", title="نزاع ملكية على أرض", s
 CASE_FILES = {CS1["id"]: "CS1", CS2["id"]: "CS2"}
 
 
+# --------------------------------------------------------------------------- الجولة ١٤ (SPEC-R14 §٤): عقد · تخصص · توزيع تلقائي
+# شكل الجسر الجديد (الجسر نفسه بيتبني على المنصة بالتوازي — الأسماء من المواصفة، والداشبورد بيقرا كل شيء بحذر):
+#   الملف: `kind` · `contract_pages` · `specialty` · `specialty_other` · `assign_log` [{at,to,by,reason,why}] ·
+#          `declined[].reason_code` · `no_candidate_alerted_at`
+#   المرشّح: `specialties` · `specialty_other` · `reviews_contracts` · `available` — **بترتيب `_pick_expert`** (الأنسب الأول).
+SPECIALTY_KEYS = ("real_estate", "civil", "commercial", "labor", "family", "criminal", "administrative", "ip", "tax",
+                  "marketing", "other")
+EXPERT_PROFILES = {
+    "hala@experts.test": {"specialties": ["real_estate", "civil"], "specialty_other": None, "reviews_contracts": True,
+                          "available": True},
+    "nada@experts.test": {"specialties": ["civil", "other"], "specialty_other": "عقود التأمين", "reviews_contracts": False,
+                          "available": True},
+    "karim@experts.test": {"specialties": ["labor"], "specialty_other": None, "reviews_contracts": False, "available": False},
+}
+
+
+def candidates_r14(emails):
+    """مرشّحين بترتيب المنصة (`_pick_expert`)، كل واحد بحقول الجولة ١٤ فوق حقول `candidates`."""
+    out = []
+    for e in emails:
+        name, country = EXPERTS[e]
+        out.append({"email": e, "name": name, "declined": False, "same_country": country == "eg",
+                    **copy.deepcopy(EXPERT_PROFILES[e])})
+    return out
+
+
+def assign_entry(h, to, *, by="auto", reason="paid", why=""):
+    return {"at": iso(h), "to": to, "by": by, "reason": reason, "why": why}
+
+
+def _r14(row, *, kind="question", pages=None, specialty=None, specialty_other=None, assign_log=(), codes=None,
+         no_candidate_h=None, candidates=None):
+    out = copy.deepcopy(row)
+    out.update({"kind": kind, "contract_pages": pages, "specialty": specialty, "specialty_other": specialty_other,
+                "assign_log": list(assign_log),
+                "no_candidate_alerted_at": iso(no_candidate_h) if no_candidate_h is not None else None})
+    for d in out["declined"]:
+        d["reason_code"] = (codes or {}).get(d["email"], "other")
+    if candidates is not None:
+        out["candidates"] = copy.deepcopy(candidates)
+    return out
+
+
+# K1 — عقد إيجار محل (٨ صفحات) مستني توزيع، والتخصص عقارات: الجسر رتّب هالة الأول (بتراجع عقود وتخصصها نفسه)، وكريم في إجازة.
+K1 = _r14(_file("ef-k1-6a7b8c9d", title="مراجعة عقد إيجار محل تجاري", status="awaiting_assignment", law="eg",
+                tier="contract", amount=750.0, currency="EGP", expert_amount=450.0, paid_h=-1.0, deadline_h=47.0,
+                client="لبنى", counterparty="مالك العقار"),
+          kind="contract", pages=8, specialty="real_estate",
+          candidates=candidates_r14(["hala@experts.test", "nada@experts.test", "karim@experts.test"]))
+# K2 — اتوزّع تلقائي مرتين: هالة اعتذرت («مش تخصصي») فاتبعت لندى.
+K2 = _r14(_file("ef-k2-7b8c9d0e", title="فصل تعسفي وإنهاء خدمة", status="assigned", law="eg", tier="written",
+                amount=500.0, currency="EGP", expert_amount=300.0, paid_h=-5.0, deadline_h=43.0, client="هالة",
+                counterparty="شركة النيل", assigned_to="nada@experts.test", assigned_h=-2.0,
+                declined=[("hala@experts.test", "ده مش مجال تخصصي")]),
+          specialty="labor",
+          assign_log=[assign_entry(-5.0, "hala@experts.test", reason="paid", why="نفس بلد القانون · أقل حمل"),
+                      assign_entry(-2.0, "nada@experts.test", reason="declined", why="نفس بلد القانون · أقل حمل")],
+          codes={"hala@experts.test": "not_my_field"},
+          candidates=candidates_r14(["nada@experts.test", "karim@experts.test"]))
+# K3 — التوزيع التلقائي ما لقاش مؤهَّل (التلاتة اعتذروا) والمنصة نبّهت مرة: «ملفات مالهاش خبير متاح».
+K3 = _r14(_file("ef-k3-8c9d0e1f", title="نزاع على شحنة بحرية", status="awaiting_assignment", law="eg", tier="written",
+                amount=500.0, currency="EGP", expert_amount=300.0, paid_h=-30.0, deadline_h=18.0, client="باسم",
+                counterparty="شركة الشحن",
+                declined=[("hala@experts.test", "مشغولة"), ("nada@experts.test", ""), ("karim@experts.test", "عندي تعارض")]),
+          specialty="other", specialty_other="قانون بحري", no_candidate_h=-1.0,
+          assign_log=[assign_entry(-30.0, "hala@experts.test", reason="paid", why="نفس بلد القانون"),
+                      assign_entry(-20.0, "nada@experts.test", reason="declined", why="نفس بلد القانون"),
+                      assign_entry(-10.0, "karim@experts.test", reason="declined", why="أقل حمل")],
+          codes={"hala@experts.test": "busy", "nada@experts.test": "other", "karim@experts.test": "conflict"},
+          candidates=[])
+# KR — مراجعة عقد (٦ صفحات) من أول ملفات خبير جديد: الحكم «وقّع بعد التعديل» وثلاث بنود (مخلوطة الخطر) ونقط القلق مربوطة.
+KR_OPINION = {
+    "answers": [], "next_step": None, "next_step_label": "", "next_step_note": "", "slots": [], "meeting_url": "",
+    "verdict": "sign_after_changes",
+    "clauses": [
+        {"ref": "البند ٩: التجديد التلقائي", "risk": "low", "why": "العقد بيتجدد سنة كل مرة لو ما اتبلّغش قبل شهر.",
+         "suggestion": "", "answers": []},
+        {"ref": "البند ٥: الغرامة", "risk": "high",
+         "why": "غرامة التأخير يومية بنسبة كبيرة من الإيجار وتتراكم من غير سقف.",
+         "suggestion": "تُحتسب غرامة التأخير بنسبة ١٪ من القسط المتأخر، بحد أقصى ١٠٪ من قيمة العقد.", "answers": [1]},
+        {"ref": "البند ٧: الصيانة", "risk": "medium", "why": "الصيانة الكبرى على المستأجر.",
+         "suggestion": "تكون الصيانة الجوهرية على المؤجر.", "answers": [2]},
+    ],
+    "todo": ["اطلب تعديل البند ٥ والبند ٧ كتابةً قبل التوقيع.", "ما توقّعش قبل ما تستلم النسخة المعدّلة."],
+}
+KR = _r14(_file("ef-kr-9d0e1f2a", title="مراجعة عقد توريد أثاث", status="in_review", law="eg", tier="contract",
+                amount=750.0, currency="EGP", expert_amount=450.0, paid_h=-40.0, deadline_h=8.0, client="يوسف",
+                counterparty="مصنع الشروق", expert_email="rana@experts.test", writing_due_h=20.0,
+                review={"submitted_at": iso(-2.0), "round": 1, "returns": 0, "returned_at": None, "note": "",
+                        "approved_at": None},
+                pending_opinion=KR_OPINION, delivered_count=0),
+          kind="contract", pages=6, specialty="civil",
+          assign_log=[assign_entry(-39.0, "rana@experts.test", by="founder", reason="manual", why="")])
+KR_DETAIL = {"facts_confirmed_at": iso(-38.0), "client_name": "يوسف حسن", "additions": [], "info": None,
+             "docs": [{"id": "doc-kr-1", "name": "عقد توريد الأثاث.pdf", "content_type": "application/pdf", "size": 300000,
+                       "stage": "draft", "created_at": iso(-39.0), "reading": "", "is_contract": True, "pages": 6}]}
+REVIEW_DETAIL[KR["id"]] = KR_DETAIL
+
+
 
 class EFPlatform(object):
     """منصّة «ملف للخبير» صغيرة في الذاكرة. `handle(method, path, params, body)` ⇒ (status, payload).
@@ -796,7 +895,7 @@ class EFPlatform(object):
     `delay[(method, path)]` ثواني تأخير. `calls` = كل اللي اتطلب، بالترتيب (والجسم بالحرف — فيه `by`)."""
 
     def __init__(self, deployed=True, empty=False, cons_enabled=True, service_open=True, r8=False, mode=None,
-                 allowlist=None, legacy_enabled=True, r13=False):
+                 allowlist=None, legacy_enabled=True, r13=False, r14=False):
         self.deployed = deployed
         # `service_open` = المفتاح نفسه (`expert_files_enabled`) — في وضع التجربة المفتاح مقفول. الوضع من غير ما يتحدد
         # بيمشي ورا المفتاح (اختبارات الجولة ٧ بتقفله بعد الإنشاء).
@@ -830,6 +929,17 @@ class EFPlatform(object):
             self.waiting = sorted(self.waiting + [copy.deepcopy(X1), copy.deepcopy(X2)], key=lambda f: f["claim_deadline_at"])
             self.late = self.late + [copy.deepcopy(X3)]
         self.case_files = [copy.deepcopy(CS1), copy.deepcopy(CS2)] if seed13 else []
+        # الجولة ١٤: عقد · تخصص · توزيع تلقائي (K1 عقد مستني · K2 اتوزّع تلقائي مرتين · K3 مالوش خبير · KR مراجعة عقد) + مفتاح
+        # `auto_assign`. من غير `r14=True` الجسر `/settings` ٤٠٤ (منصة قبل الجولة) والصفوف القديمة زي ما هي بالحرف.
+        seed14 = r14 and not empty
+        self.settings_enabled = bool(r14)
+        self.auto_assign = True
+        self.settings_puts = []
+        self.settings_fail = None          # (status, payload) — الـPUT الجاي يرفض بيه
+        if seed14:
+            self.waiting = sorted(self.waiting + [copy.deepcopy(K1), copy.deepcopy(K2), copy.deepcopy(K3)],
+                                  key=lambda f: f["claim_deadline_at"])
+            self.review = self.review + [copy.deepcopy(KR)]
         self.review_stale = set()          # ملفات درجة الجلسة مواعيدها قربت/عدّت (`_review_slots_stale`)
         self.next_file_no = 1100
         self.unact_done = set()
@@ -881,7 +991,8 @@ class EFPlatform(object):
     @staticmethod
     def _key(f):
         for k, v in (("F1", F1), ("F2", F2), ("F3", F3), ("F4", F4), ("F5", F5), ("F6", F6), ("F7", F7),
-                     ("D1", D1), ("R1", R1), ("R2", R2), ("X1", X1), ("X2", X2), ("X3", X3), ("CS1", CS1), ("CS2", CS2)):
+                     ("D1", D1), ("R1", R1), ("R2", R2), ("X1", X1), ("X2", X2), ("X3", X3), ("CS1", CS1), ("CS2", CS2),
+                     ("K1", K1), ("K2", K2), ("K3", K3), ("KR", KR)):
             if v["id"] == f["id"]:
                 return k
         return ""
@@ -938,8 +1049,27 @@ class EFPlatform(object):
             return 409, {"detail": E_TRIAL_ONLY}
         return 409, {"detail": E_SERVICE_OFF}
 
+    def _settings(self, method, body):
+        """`GET/PUT /bridge/expert-files/settings` (الجولة ١٤): `auto_assign` بولين، الغايب = true."""
+        if not self.settings_enabled:
+            return 404, NOT_FOUND
+        if method == "GET":
+            return 200, {"auto_assign": self.auto_assign}
+        if method == "PUT":
+            if self.settings_fail:
+                return self.settings_fail
+            v = body.get("auto_assign")
+            if not isinstance(v, bool):
+                return 422, {"detail": "auto_assign لازم true أو false"}
+            self.auto_assign = v
+            self.settings_puts.append(copy.deepcopy(body))
+            return 200, {"auto_assign": v}
+        return 404, NOT_FOUND
+
     def _files(self, method, path, params, body):
         parts = path[len("/api/bridge/expert-files"):].strip("/").split("/")
+        if parts == ["settings"]:
+            return self._settings(method, body)
         if method == "GET" and parts == [""]:
             s = params.get("status") or "waiting"
             if s == "unactivated":
@@ -988,6 +1118,9 @@ class EFPlatform(object):
             f.update({"status": "assigned", "assigned_to": target, "assigned_name": EXPERTS[target][0],
                       "assigned_at": iso(0), "assign_overdue": False,
                       "status_label": STATUS_LABELS["assigned"]})
+            if "assign_log" in f:      # الجولة ١٤: التوزيع اليدوي بيتسجّل كمان، وأي توزيع ناجح بيصفّر تنبيه «مفيش مؤهَّل»
+                f["assign_log"].append(assign_entry(0, target, by="founder", reason="manual", why=""))
+                f["no_candidate_alerted_at"] = None
             return 200, bridge_reply(f)
         if act == "reassign":
             reviewing = f["status"] == "in_review" and not (f.get("review") or {}).get("approved_at")

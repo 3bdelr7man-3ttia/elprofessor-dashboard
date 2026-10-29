@@ -2519,6 +2519,64 @@ def _ef_case_out(c):
             'milestones': [m for m in (_ef_milestone_out(x) for x in miles[:4]) if m]}
 
 
+# ——— الجولة ١٤ (مراجعة العقود + التخصص + التوزيع التلقائي — SPEC-R14 §٤) ———
+# المنصة بتبني حقول جديدة على الملف (`kind` · `contract_pages` · `specialty` · وثيقة العقد). نفس مبدأ الجولة ١٣: مفاتيح معروفة
+# بأنواعها بس — أي شكل تاني بيتسقط، فمفيش بيانات عميل بتعدّي مع وثيقة العقد. ملف قديم من غير الحقول دي ⇒ سؤال عادي بالحرف.
+# القايمة دي نسخة من `SPECIALTIES` في المنصة (مفتاح ⇒ الاسم الظاهر) — اختبار بيطابقها بالأصل لو موجود جنب الريبو.
+_EF_KINDS = ('question', 'contract')
+_EF_SPECIALTIES = {
+    'real_estate': 'عقارات وإيجارات', 'civil': 'مدني وعقود', 'commercial': 'تجاري وشركات', 'labor': 'عمالي',
+    'family': 'أحوال شخصية', 'criminal': 'جنائي', 'administrative': 'إداري', 'ip': 'ملكية فكرية', 'tax': 'ضرائب',
+    'marketing': 'تسويق ومحتوى', 'other': 'أخرى',
+}
+_EF_VERDICTS = ('sign_ok', 'sign_after_changes', 'dont_sign')
+_EF_RISKS = ('high', 'medium', 'low')
+_EF_CLAUSES_MAX = 15
+_EF_CLAUSE_KEYS = ('clauses', 'items', 'points')     # اسم قايمة البنود لسه بيستقر على المنصة — بنقبل الأسماء دي بالترتيب
+
+
+def _ef_pages(v):
+    """عدد صفحات العقد: رقم صحيح موجب معقول (السقف على المنصة ٢٠) — أي شكل تاني ⇒ None."""
+    n = _ef_n(v)
+    return int(n) if n is not None and 0 < n <= 500 else None
+
+
+def _ef_clause_out(c):
+    """بند من وثيقة العقد: {ref, risk, why, suggestion, answers}. بند من غير نص (لا `ref` ولا `why`) ⇒ None."""
+    if not isinstance(c, dict):
+        return None
+    ref, why = _ef_s(c.get('ref'), 120), _ef_s(c.get('why'), 800)
+    if not ref and not why:
+        return None
+    answers = c.get('answers') if isinstance(c.get('answers'), list) else []
+    return {'ref': ref, 'risk': c.get('risk') if c.get('risk') in _EF_RISKS else None, 'why': why,
+            'suggestion': _ef_s(c.get('suggestion'), 1200),
+            'answers': [int(a) for a in answers[:10] if _ef_n(a) is not None and a >= 0]}
+
+
+def _ef_contract_out(*sources):
+    """وثيقة مراجعة العقد من أول مصدر فيه `verdict` صحيح (الرأي المستني ثم المعتمد): {verdict, clauses, todo} أو None.
+    البنود بترتيب المنصة (الدرج هو اللي بيرتّبها بالخطر)، وبحدّ ١٥."""
+    for src in sources:
+        for d in ((src, src.get('contract')) if isinstance(src, dict) else ()):
+            if not isinstance(d, dict) or d.get('verdict') not in _EF_VERDICTS:
+                continue
+            raw = next((d[k] for k in _EF_CLAUSE_KEYS if isinstance(d.get(k), list)), [])
+            todo = d.get('todo') if isinstance(d.get('todo'), list) else []
+            return {'verdict': d['verdict'],
+                    'clauses': [c for c in (_ef_clause_out(x) for x in raw[:_EF_CLAUSES_MAX]) if c],
+                    'todo': [t for t in (_ef_s(x, 400) for x in todo[:10]) if t]}
+    return None
+
+
+def _ef_contract_name(f):
+    """اسم ملف العقد (المستند المعلَّم `is_contract`) — اسم بس، ولا بايتات."""
+    for d in (f.get('docs') if isinstance(f.get('docs'), list) else []):
+        if isinstance(d, dict) and d.get('is_contract'):
+            return _ef_s(d.get('name'), 120)
+    return _ef_s(f.get('contract_name'), 120)
+
+
 def _ef_detail_out(resp):
     if not _resp_ok(resp):
         return resp
@@ -2530,6 +2588,14 @@ def _ef_detail_out(resp):
     out['speed'] = 'urgent' if f.get('speed') == 'urgent' else 'normal'
     out['urgent'] = _ef_urgent_out(f.get('urgent'))
     out['case'] = _ef_case_out(f.get('case'))
+    # الجولة ١٤: النوع (عقد/سؤال — الغايب سؤال) · صفحات العقد · التخصص · وثيقة العقد (الحكم والبنود).
+    out['kind'] = 'contract' if f.get('kind') == 'contract' else 'question'
+    out['contract_pages'] = _ef_pages(f.get('contract_pages'))
+    out['contract_name'] = _ef_contract_name(f)
+    spec = f.get('specialty') if isinstance(f.get('specialty'), str) and f.get('specialty') in _EF_SPECIALTIES else None
+    out['specialty'] = spec
+    out['specialty_other'] = _ef_s(f.get('specialty_other'), 40) if spec == 'other' else None
+    out['contract'] = _ef_contract_out(f.get('pending_opinion'), f.get('opinion'), f.get('contract_review'))
     # مواعيد الجلسة في درج المراجعة بتوقيت العميل (مراجعة الجولة ٨): المنصة بتعرضها له بمنطقة بلد السعر (`price.tz` ·
     # «بتوقيت …»)، فالدرج بياخد المنطقة واسمها بس — مش بلد العميل ولا سعره. بلد مش في القايمة ⇒ فاضي (توقيت جهازه).
     out['client_tz'] = out['client_tz_label'] = None
@@ -2656,6 +2722,45 @@ def platform_expert_files():
         return jsonify({'enabled': False, 'status': s, 'files': [], 'count': 0, 'total': 0})
     if _resp_ok(resp):
         return jsonify({**_proxy_json(resp), 'enabled': True})
+    return resp
+
+
+@app.route('/api/platform-expert-files/settings', methods=['GET'])
+@token_required
+@roles_required('admin')
+def platform_expert_files_settings():
+    """الجولة ١٤ — مفتاح «التوزيع تلقائي» (`auto_assign`): القراية. ٤٠٤ (الجسر لسه مش على المنصة) ⇒ ٢٠٠ `enabled: false`
+    من غير مفتاح — الشاشة ما بتعرضش المفتاح. الرد `auto_assign` بولين أو None (الرد الغريب ما بيتخمّنش)."""
+    resp = _ef_bridge('GET', '/api/bridge/expert-files/settings')
+    if isinstance(resp, tuple) and int(resp[1]) == 404:
+        return jsonify({'enabled': False, 'auto_assign': None})
+    if _resp_ok(resp):
+        v = _proxy_json(resp).get('auto_assign')
+        return jsonify({'enabled': True, 'auto_assign': v if isinstance(v, bool) else None})
+    return resp
+
+
+@app.route('/api/platform-expert-files/settings', methods=['PUT'])
+@token_required
+@roles_required('admin')
+def platform_expert_files_settings_set():
+    """الجولة ١٤ — شغّل/اقفل التوزيع التلقائي. القفل بتأكيد الشاشة (`confirmed: true`): الملفات المدفوعة بعدها بتستنى
+    توزيعك بإيدك. نداء واحد ولا إعادة محاولة، و`by` من التوكن. التشغيل عادي من غير تأكيد."""
+    body = request.get_json(silent=True) or {}
+    value = body.get('auto_assign')
+    if not isinstance(value, bool):
+        return jsonify({'error': 'اختار: التوزيع التلقائي شغّال ولا مقفول'}), 400
+    if value is False and body.get('confirmed') is not True:
+        return jsonify({'error': 'لازم تأكّد الأول من الشاشة'}), 400
+    resp = _ef_bridge('PUT', '/api/bridge/expert-files/settings',
+                      json_body={'auto_assign': value, 'by': _actor_email()})
+    if _resp_ok(resp):
+        got = _proxy_json(resp).get('auto_assign')
+        now = got if isinstance(got, bool) else value
+        _audit('expert_file.auto_assign', target='settings', meta={'auto_assign': now})
+        return jsonify({'ok': True, 'auto_assign': now})
+    elif _ef_no_reply(resp):
+        return _ef_no_reply_resp('expert_file', 'settings', 'auto_assign', 'on' if value else 'off')
     return resp
 
 
