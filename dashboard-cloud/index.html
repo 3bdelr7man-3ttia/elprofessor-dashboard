@@ -239,6 +239,41 @@ body{font-family:'IBM Plex Sans Arabic',sans-serif;background:var(--bg);color:va
 .ef-rv-h{display:flex;flex-direction:column;gap:2px;padding:2px 4px 10px;margin-bottom:8px;border-bottom:1px dashed var(--line);font-size:12px;color:var(--muted)}
 .ef-rv-h b{font-family:Cairo;font-size:13.5px;color:var(--navy)}
 .ef-op.ef-based{background:var(--agree-bg)}
+/* الجولة ١٣: المستعجل + القضية في الدرج — جنب مشغّل الصوت. المرحلة كارت: اسمها وحالتها · يدفع/للخبير/للمنصة · التأكيد جوه الدرج */
+.ef-urgent{border:1px solid #EAD9A8;background:var(--gold-bg);border-radius:12px;padding:10px 12px}
+.ef-urgent.fell{background:var(--surface-2);border-color:var(--line)}
+.ef-urgent .ef-u-h{font-family:Cairo;font-weight:900;font-size:13.5px;color:#8a5d06;margin-bottom:6px}
+.ef-urgent.fell .ef-u-h{color:var(--ink-2)}
+.ef-urgent .ef-u-r{display:flex;justify-content:space-between;gap:10px;font-size:12.5px;line-height:1.8;color:var(--ink)}
+.ef-urgent .ef-u-r b{font-weight:800;text-align:end}
+.ef-urgent .meta{font-size:11.5px;line-height:1.7;color:var(--muted);margin-top:6px}
+.ef-case{border:1px solid var(--line);border-radius:12px;padding:10px;background:var(--surface)}
+.ef-case>.lab{padding:0 2px 8px;border-bottom:1px dashed var(--line);margin-bottom:8px}
+.ef-pill{display:inline-block;font-size:10.5px;font-weight:800;border-radius:999px;padding:2px 9px;background:var(--surface-2);color:var(--ink-2);line-height:1.6}
+.ef-pill.ok{background:var(--agree-bg);color:var(--agree)}
+.ef-pill.warn{background:var(--conflict-bg);color:#b04a22}
+.ef-pill.wait{background:var(--gold-bg);color:#8a5d06}
+.ef-qh,.ef-msh{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:6px}
+.ef-qh b,.ef-msh b{font-family:Cairo;font-size:13.5px;color:var(--navy)}
+.ef-quote,.ef-ms{background:var(--surface-2);border-radius:10px;padding:10px 12px;margin-bottom:8px;font-size:12.5px;line-height:1.85;color:var(--ink)}
+.ef-quote .fee{font-family:Cairo;font-weight:900;font-size:20px;color:var(--navy)}
+.ef-quote .row2,.ef-ms .row2{margin-top:5px;white-space:pre-wrap}
+.ef-quote .row2 span,.ef-ms .row2 span{display:block;font-size:11px;font-weight:800;color:var(--muted)}
+.ef-money{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin:4px 0 6px}
+.ef-money div{background:var(--surface);border:1px solid var(--line);border-radius:9px;padding:6px 8px;text-align:center}
+.ef-money span{display:block;font-size:10.5px;font-weight:800;color:var(--muted)}
+.ef-money b{font-family:Cairo;font-size:13.5px;color:var(--navy)}
+.ef-money .to-expert b{color:var(--agree)}
+.ef-ms.disputed{border:1px solid #E9C9BB;background:var(--conflict-bg)}
+.ef-conf{margin-top:8px;border:1px solid var(--line);background:var(--surface);border-radius:10px;padding:10px 12px}
+.ef-conf .lead{font-size:13px;line-height:1.9;color:var(--ink)}
+.ef-conf .lead b{color:var(--navy);display:inline-block}
+.ef-conf label{display:block;font-size:11.5px;font-weight:800;color:var(--muted);margin:8px 0 3px}
+.ef-conf textarea{width:100%;box-sizing:border-box;border:1px solid var(--line);border-radius:9px;padding:8px 10px;font:inherit;font-size:13px;background:var(--surface);color:var(--ink);resize:vertical}
+.ef-conf .ef-conf-err{font-size:12px;font-weight:700;color:#a8401a;line-height:1.7;margin-top:6px}
+.ef-conf .ef-conf-err:empty{display:none}
+.ef-conf .btn,.ef-ms .ef-ms-acts .btn{min-height:44px}
+.ef-ms .ef-ms-acts{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}
 /* الجولة ١٢: رسالة الخبير الصوتية في الدرج — زرار «اسمعها» ثم مشغّل المتصفح نفسه (الصوت ما بيتحمّلش قبل الضغط) */
 .ef-voice audio{width:100%;height:40px;display:block}
 .ef-voice .ef-voice-msg{font-size:11.5px;line-height:1.7;color:var(--muted);margin-top:4px}
@@ -995,6 +1030,9 @@ function inboxMatches(i,f){
   if(f==='attn')return !!i.needsAttention;
   // «مستنية مراجعتك» (الجولة ٨ البند ٧): آراء أول ملفات الخبير الجديد — جوه «ملفات للخبير».
   if(f==='review')return i.efLane==='review';
+  // الجولة ١٣: «مستعجل» (ملف العميل دفع فيه للمستعجل) و«قضايا فيها ملاحظة» (دفعة مرحلة واقفة لحد حسمك).
+  if(f==='urgent')return !!i.urgent;
+  if(f==='case')return i.efLane==='case_disputed';
   if(f==='late')return inboxIsLate(i);
   if(f==='human'||f==='auto')return i.triage===f;
   if(f.indexOf('t:')===0)return inboxType(i)===f.slice(2);
@@ -1012,6 +1050,10 @@ function renderInbox(){
   if(attnN)fe.insertAdjacentHTML('beforeend',mk('attn','محتاج تدخّلك ('+money(attnN)+')','var(--conflict)'));
   const reviewN=act.filter(i=>i.efLane==='review').length;
   if(reviewN)fe.insertAdjacentHTML('beforeend',mk('review','مستنية مراجعتك ('+money(reviewN)+')','var(--agree)'));
+  const urgentN=act.filter(i=>i.urgent).length;
+  if(urgentN)fe.insertAdjacentHTML('beforeend',mk('urgent','⚡ مستعجل ('+money(urgentN)+')','var(--gold)'));
+  const caseN=act.filter(i=>i.efLane==='case_disputed').length;
+  if(caseN)fe.insertAdjacentHTML('beforeend',mk('case','قضايا فيها ملاحظة ('+money(caseN)+')','var(--conflict)'));
   [['files','ملفات للخبير','var(--human)'],['disputes','نزاعات','var(--conflict)'],['legacy','استشارات قديمة','var(--gold)'],['decisions','قرارات','var(--ai)'],['messages','رسائل','var(--ai)'],['money','فلوس','var(--agree)'],['verify','توثيق','var(--gold)'],['other','أخرى','var(--muted)']]
     .forEach(t=>{const n=cnt(t[0]);if(n)fe.insertAdjacentHTML('beforeend',mk('t:'+t[0],t[1]+' ('+money(n)+')',t[2]));});
   if(lateN)fe.insertAdjacentHTML('beforeend',mk('late','متأخّر ('+money(lateN)+')','var(--conflict)'));
@@ -1048,7 +1090,7 @@ function renderInbox(){
   el.insertAdjacentHTML('afterbegin',efServiceLine()+efFyiLine());
   const fy=el.querySelector('[data-a="ef_fyi"]');
   if(fy)fy.onclick=()=>{activeFilter=activeFilter==='fyi'?'all':'fyi';selected=null;renderInbox();};
-  el.querySelectorAll('.row').forEach(r=>r.onclick=()=>{selected=+r.dataset.i;efDspOpen.id=null;efVoiceDrop();renderInbox();drawInbox();efDrawerIntoView();});
+  el.querySelectorAll('.row').forEach(r=>r.onclick=()=>{selected=+r.dataset.i;efDspOpen.id=null;efVoiceDrop();efCaseUiReset();renderInbox();drawInbox();efDrawerIntoView();});
   drawInbox();
 }
 // أزرار الإجراء في درج الوارد — مبنية على قدرات البند (R1): اعتماد/رفض، تأكيد دفعة، تحويل توثيق لخبير، إنهاء.
@@ -1107,11 +1149,12 @@ function inboxActs(i,m){
 function drawInbox(){
   const el=document.getElementById('drawer');if(!el)return;
   el.classList.remove('ef-scroll');   // درج «مستنية مراجعتك» بس اللي بيتمرّر لوحده (drawReview)
-  if(selected===null){efDspOpen.id=null;efVoiceDrop();el.innerHTML=`<div class="empty">${svg('inbox','ic')}<p>اختر بندًا من الوارد لرؤية مساره الكامل والإجراء.</p></div>`;return;}
+  if(selected===null){efDspOpen.id=null;efVoiceDrop();efCaseUiReset();el.innerHTML=`<div class="empty">${svg('inbox','ic')}<p>اختر بندًا من الوارد لرؤية مساره الكامل والإجراء.</p></div>`;return;}
   const i=INBOX[selected];
   // صفّ اختفى بعد إعادة تحميل (اتوزّع/اترجعت فلوسه) ⇒ الدرج يرجع فاضي بدل ما يقع.
   if(!i){selected=null;el.innerHTML=`<div class="empty">${svg('inbox','ic')}<p>اختر بندًا من الوارد لرؤية مساره الكامل والإجراء.</p></div>`;return;}
   // «ملف للخبير» (الجولة ٦): درجين خاصين — الدرج العام تحت ما اتغيّرش.
+  if(i.apiKind==='expert_file'&&i.efLane==='case_disputed'){drawCase(el,i);return;}
   if(i.apiKind==='expert_file'){drawExpertFile(el,i);return;}
   if(i.apiKind==='dispute'){drawDispute(el,i);return;}
   if(i.apiKind==='legacy'){drawLegacy(el,i);return;}
@@ -1328,7 +1371,7 @@ function drawExpertFile(el,i){
   el.innerHTML=`<div class="dh"><div class="k">${esc(efKindLine('ملف للخبير',f))}</div><h3>${esc(f.title||i.out)}</h3></div><div class="db">
     ${strips}
     <div class="note-ai">${svg('doc','ic')}<div><b>${esc(i.out)}</b>${i.sla?' — '+esc(i.sla):''}</div></div>
-    ${fields}
+    ${fields}${efUrgentField(f)}${efCaseHtml(i)}
     <div class="acts">${primary}${canRefund?`<button class="btn btn-warn" data-a="ef_refund">${svg('back')}رجّع الفلوس</button>`:''}<button class="btn btn-ghost" data-a="ef_close">إغلاق</button></div></div>`;
   el.querySelectorAll('[data-a]').forEach(b=>b.onclick=()=>{
     const a=b.dataset.a;
@@ -1337,6 +1380,7 @@ function drawExpertFile(el,i){
     if(a==='ef_pick'){expertPickModal(i,mode);return;}
     if(a==='ef_refund'){efRefundModal(i);return;}
   });
+  efCaseWire(el,i,()=>drawExpertFile(el,i));
 }
 
 /* «اتدفع وما وصلش لقايمة التوزيع» (الجولة ٧ ب٢) — الصفّ هو الفلوس. الفعل الوحيد «رجّع الفلوس» (نفس التأكيد). */
@@ -1419,6 +1463,159 @@ function efVoiceWire(el){
     });
   };
 }
+/* الجولة ١٣ — المستعجل وعرض سعر القضية في الدرج (docs/EXPERT-FILES-DASHBOARD-SPEC.md §١٩).
+   ⛔ `speed` مش `urgent_deadline` (ميعاد جلسة المحكمة بتاع العميل). كله من المنصة زي ما هو: المواعيد والمبالغ والنسبة والحالة.
+   حسم مرحلة فيها ملاحظة (حوّل للخبير / ردّ للعميل) بتأكيد جوه الدرج — مش نافذة ولا confirm() — والرد لمحفظة العميل. */
+const EF_MS_AR={due:'لسه ما اتفتحتش للدفع',awaiting_payment:'بانتظار دفع العميل',held:'الدفعة محفوظة لدى المنصة · الخبير شغّال عليها',
+  expert_done:'الخبير أكّد الإنجاز · بانتظار تأكيد العميل',released:'اتحوّلت للخبير',disputed:'العميل عنده ملاحظة · مستني حسمك',refunded:'اترجعت للعميل'};
+const EF_MS_CLS={released:'ok',held:'wait',expert_done:'wait',awaiting_payment:'wait',disputed:'warn'};
+const EF_QUOTE_AR={sent:'أُرسل العرض · بانتظار رد العميل',accepted:'العميل قبل العرض',rejected:'العميل رفض العرض'};
+const EF_QUOTE_CLS={sent:'wait',accepted:'ok',rejected:'warn'};
+var efCaseUi={id:null,n:null,action:'',busy:false,err:'',final:false,note:''};
+function efCaseUiReset(){efCaseUi={id:null,n:null,action:'',busy:false,err:'',final:false,note:''};}
+// الأحدث: التفاصيل لو اتجابت، وإلا اللي على صفّ القايمة.
+function efNewest(f,det){return (det&&!det.__error&&det.speed!==undefined)?det:f;}
+function efUrgentField(f,det){
+  const E=efX(),src=efNewest(f,det);
+  const u=E.efUrgentOf?E.efUrgentOf(src):null,fb=E.efFellBackOf?E.efFellBackOf(src):null;
+  if(fb){
+    return `<div class="field ef-urgent fell"><div class="ef-u-h">كان مستعجل واتحوّل عادي</div>`
+      +`<div class="ef-u-r"><span>اللي رجع للعميل</span><b>${esc(fb.refunded!=null?efM(fb.refunded,f.currency):'—')}</b></div>`
+      +(fb.fell_back_at?`<div class="ef-u-r"><span>اتحوّل</span><b>${esc(efSlot(fb.fell_back_at))}</b></div>`:'')
+      +`<div class="meta">ما بدأش خبير خلال ٦ ساعات، فرجع الفرق لمحفظة العميل على المنصة والملف كمّل عادي.</div></div>`;
+  }
+  if(!u)return '';
+  const waiting=u.state==='waiting';
+  return `<div class="field ef-urgent"><div class="ef-u-h">⚡ مستعجل · الرأي خلال ٢٤ ساعة</div>`
+    +(u.start_by?`<div class="ef-u-r"><span>${waiting?'ابدأ قبل':'الخبير بدأ'}</span><b>${esc(waiting?efSlot(u.start_by):(u.started_at?efSlot(u.started_at):'—'))}</b></div>`:'')
+    +(u.due_at?`<div class="ef-u-r"><span>الرأي قبل</span><b>${esc(efSlot(u.due_at))}</b></div>`:'')
+    +(waiting?`<div class="meta">لو ما بدأش خبير قبل الميعاد ده، الملف يتحوّل عادي ويرجع الفرق لمحفظة العميل لوحده.</div>`:'')+`</div>`;
+}
+function efPlanLine(q,cur){
+  if(!q)return '';
+  if(q.plan==='one')return 'دفعة واحدة';
+  if(q.plan==='two')return 'دفعتان: ٥٠٪ الآن و٥٠٪ '+(q.second_label||'عند رفع الدعوى');
+  return '';
+}
+function efCaseOf(f,det){return ((det&&!det.__error&&det.case)||f.case)||null;}
+function efQuoteHtml(c,f){
+  const q=c.quote;if(!q)return '';
+  const cur=q.currency||f.currency,old=(c.quotes||[]).length;
+  const row=(lab,val)=>val?`<div class="row2"><span>${esc(lab)}</span>${esc(val)}</div>`:'';
+  const qs=q.question;
+  return `<div class="ef-quote"><div class="ef-qh"><b>عرض سعر${q.n?' · رقم '+efFileNo(q.n):''}</b><span class="ef-pill ${EF_QUOTE_CLS[q.status]||''}">${esc(EF_QUOTE_AR[q.status]||'—')}</span></div>`
+    +`<div>الأتعاب <span class="fee">${esc(q.fee!=null?efM(q.fee,cur):'—')}</span></div>`
+    +row('طريقة الدفع',efPlanLine(q,cur))+row('يشمل',q.includes)+row('لا يشمل',q.excludes)+row('المدة المتوقعة',q.duration)
+    +(qs&&qs.text?row('سؤال العميل عن العرض',qs.text)+(qs.answer?row('رد الخبير',qs.answer):`<div class="row2"><span>رد الخبير</span>لسه ما ردّش</div>`):'')
+    +(old?`<div class="row2"><span>عروض قبل كده</span>${esc(efFileNo(old))}</div>`:'')+`</div>`;
+}
+function efMsReady(m){return !!m&&m.expert_amount!=null&&m.platform_fee!=null&&m.amount!=null;}
+function efMsHtml(i,m,cur){
+  const f=i.ef||{},ui=efCaseUi,open=ui.id===i.apiId&&ui.n===m.n;
+  const pct=(m.amount&&m.platform_fee!=null)?' · '+efFileNo(Math.round(m.platform_fee/m.amount*100))+'٪':'';
+  const row=(lab,val)=>val?`<div class="row2"><span>${esc(lab)}</span>${esc(val)}</div>`:'';
+  let h=`<div class="ef-ms ${esc(m.status||'')}" data-ms="${esc(m.n)}"><div class="ef-msh"><b>${esc(m.label||'مرحلة '+efFileNo(m.n))}</b><span class="ef-pill ${EF_MS_CLS[m.status]||''}">${esc(EF_MS_AR[m.status]||'—')}</span></div>`
+    +`<div class="ef-money"><div><span>يدفع العميل</span><b>${esc(efM(m.amount,cur))}</b></div>`
+    +`<div class="to-expert"><span>للخبير</span><b>${esc(efM(m.expert_amount,cur))}</b></div>`
+    +`<div><span>للمنصة${esc(pct)}</span><b>${esc(efM(m.platform_fee,cur))}</b></div></div>`
+    +row('دفع العميل',m.paid_at?efRel(m.paid_at):'')
+    +row('ملاحظة الخبير عن الإنجاز',m.done_note)+row('الخبير أكّد الإنجاز',m.done_at?efRel(m.done_at):'')
+    +(m.status==='expert_done'&&m.auto_release_at?row('التحويل التلقائي للخبير',efSlot(m.auto_release_at)):'')
+    +row('ملاحظة العميل',m.problem)
+    +(m.status==='released'?row(m.auto?'اتحوّلت تلقائيًا':'العميل أكّد وتحوّلت',m.released_at?efRel(m.released_at):''):'');
+  if(m.status==='disputed'){
+    // أرقام الحسم وملاحظة العميل بتيجي من تفاصيل الملف (سطر القايمة فيه المبلغ بس) ⇒ لحد ما توصل ما فيش زراري حسم
+    // (كان ممكن يتأكد تحويل وكل مبلغ فيه «—»).
+    if(!efMsReady(m)){
+      h+=`<div class="ef-ms-acts"><span class="ef-op none">…بنجيب الأرقام وملاحظة العميل</span></div>`;
+    }else if(open){
+      const client=f.client_first_name||'العميل',expert=f.expert_name||f.expert_email||'الخبير',rel=ui.action==='release';
+      const lead=rel
+        ?`هتحوّل <b>${esc(efM(m.expert_amount,cur))}</b> لـ<b>${esc(expert)}</b> عن «${esc(m.label||'')}»، والباقي <b>${esc(efM(m.platform_fee,cur))}</b> للمنصة. الفلوس مش هترجع لـ<b>${esc(client)}</b>. الخطوة دي ما ينفعش ترجع فيها.`
+        :`هترجّع <b>${esc(efM(m.amount,cur))}</b> كاملين لمحفظة <b>${esc(client)}</b> على المنصة عن «${esc(m.label||'')}»، ومش هيتحوّل أجر لـ<b>${esc(expert)}</b>. الخطوة دي ما ينفعش ترجع فيها.`;
+      h+=`<div class="ef-conf" role="group" aria-label="تأكيد الحسم"><div class="lead">${lead}</div>`
+        +`<label for="cs_note">ملاحظة لينا (اختياري)</label><textarea id="cs_note" rows="2" maxlength="1000"${ui.busy?' disabled':''}>${esc(ui.note||'')}</textarea>`
+        +`<div class="ef-conf-err" aria-live="polite">${esc(ui.err||'')}</div>`
+        +`<div class="ef-ms-acts"><button class="btn ${rel?'btn-primary':'btn-refund'}" data-cs="go"${(ui.busy||ui.final)?' disabled':''}>${esc(ui.busy?(rel?'بيتحوّل…':'بيرجع…'):(rel?'حوّل '+efM(m.expert_amount,cur)+' لـ'+expert:'رجّع '+efM(m.amount,cur)+' لـ'+client))}</button>`
+        +`<button class="btn btn-ghost" data-cs="x"${ui.busy?' disabled':''}>رجوع</button></div></div>`;
+    }else{
+      h+=`<div class="ef-ms-acts"><button class="btn btn-primary" data-cs="rel" data-n="${esc(m.n)}">${svg('check')}حوّل للخبير</button>`
+        +`<button class="btn btn-human" data-cs="ref" data-n="${esc(m.n)}">${svg('back')}ردّ للعميل</button></div>`;
+    }
+  }
+  return h+`</div>`;
+}
+function efCaseHtml(i,det){
+  const f=i.ef||{},c=efCaseOf(f,det);
+  if(!c)return '';
+  const ms=Array.isArray(c.milestones)?c.milestones:[];
+  if(!c.quote&&!ms.length)return '';
+  const cur=(c.quote&&c.quote.currency)||f.currency;
+  return `<div class="field ef-case"><div class="lab">القضية</div>${efQuoteHtml(c,f)}${ms.map(m=>efMsHtml(i,m,cur)).join('')}</div>`;
+}
+// الأزرار والتأكيد جوه الدرج. `redraw` بيرسم الدرج من تاني (حالة التأكيد في efCaseUi).
+function efCaseWire(el,i,redraw){
+  const det=efDspOpen.id===i.apiId?efDspOpen.det:undefined,c=efCaseOf(i.ef||{},det);
+  const ms=n=>((c&&c.milestones)||[]).find(m=>m.n===n);
+  const note=el.querySelector('#cs_note');
+  if(note)note.oninput=()=>{efCaseUi.note=note.value;};
+  el.querySelectorAll('[data-cs]').forEach(b=>b.onclick=()=>{
+    const a=b.dataset.cs;
+    if(a==='rel'||a==='ref'){
+      if(!window.EP){toast('الربط غير متاح');return;}
+      efCaseUi={id:i.apiId,n:Number(b.dataset.n),action:a==='rel'?'release':'refund',busy:false,err:'',final:false,note:''};
+      redraw();
+      const t=el.querySelector('#cs_note');if(t){try{t.focus();}catch(e){}}
+      return;
+    }
+    if(a==='x'){if(efCaseUi.busy)return;efCaseUiReset();redraw();return;}
+    if(a==='go'){
+      const ui=efCaseUi,m=ms(ui.n);
+      if(ui.busy||ui.final||!m||!efMsReady(m)||!window.EP||!EP.caseResolve)return;
+      ui.note=(el.querySelector('#cs_note')||{}).value||ui.note||'';
+      ui.busy=true;ui.err='';redraw();
+      const key=efRowKey(i);
+      // نفس نمط نوافذ الفلوس: الوارد يتحدّث والدرج يفضل على نفس الصفّ (يختفي لو اتسوّى).
+      const keep=()=>{const n=key?INBOX.findIndex(r=>efRowKey(r)===key):-1;selected=n>-1?n:null;viewInbox(document.getElementById('view'));};
+      EP.caseResolve(i,m,ui.action,ui.note,keep).then(r=>{
+        if(r&&r.ok){efCaseUiReset();efDspOpen.id=null;return;}   // نجح: الدرج يتجاب من جديد بحالة المراحل الجديدة
+        ui.busy=false;ui.err=(r&&r.error)||'تعذّر تنفيذ العملية';
+        if(r&&(r.final||r.noReply))ui.final=true;               // رفض نهائي / الرد ضاع ⇒ الزرار يفضل مقفول والوارد بيتحدّث
+        if(r&&r.final)efReloadKeep(key);
+        const cur=INBOX[selected];if(cur&&efRowKey(cur)===key)redraw();
+      });
+    }
+  });
+}
+// درج «قضايا فيها ملاحظة»: العرض والمراحل كلها + حسم المرحلة اللي فيها ملاحظة. التفاصيل بتتجاب كل فتحة (من غير كاش).
+function drawCase(el,i){
+  el.classList.add('ef-scroll');
+  const f=i.ef||{};
+  const fresh=efDspOpen.id!==i.apiId;
+  if(fresh){efDspOpen.id=i.apiId;efDspOpen.det=undefined;efDspOpen.tok++;}
+  const det=efDspOpen.det;
+  let body='';
+  if(det&&det.__error)body=`<div class="ef-err">${esc(det.__error)}</div>`;
+  else if(!det&&!f.case)body=`<div class="field"><div class="lab">القضية</div><div class="ef-op none">…بنجيب العرض والمراحل</div></div>`;
+  else body=efCaseHtml(i,det);
+  el.innerHTML=`<div class="dh" style="background:var(--conflict)"><div class="k">${esc(efKindLine('قضية · ملف للخبير',f))}</div><h3>${esc(f.title||i.out)}</h3></div><div class="db">`
+    +efStrip('info','العميل كتب ملاحظة على مرحلة من القضية. دفعة المرحلة محفوظة لدى المنصة لحد قرارك: للخبير ولا للعميل.')
+    +efField('العميل',esc(f.client_first_name||'—'))+efField('الخبير',esc(f.expert_name||f.expert_email||'—'))
+    +efUrgentField(f,det)+body
+    +`<div class="acts"><button class="btn btn-ghost" data-a="cs_close">إغلاق</button></div></div>`;
+  el.querySelectorAll('[data-a]').forEach(b=>b.onclick=()=>{if(b.dataset.a==='cs_close'){efCaseUiReset();selected=null;renderInbox();}});
+  efCaseWire(el,i,()=>drawCase(el,i));
+  if(fresh&&window.EP&&EP.expertFileDetail){
+    const id=i.apiId,tok=efDspOpen.tok;
+    EP.expertFileDetail(id).then(function(d){return d||{};},function(){return {__error:'ما قدرناش نجيب القضية دلوقتي — اقفل الدرج وافتحه تاني'};})
+      .then(function(d){
+        if(efDspOpen.tok!==tok||efDspOpen.id!==id)return;
+        efDspOpen.det=d;
+        const cur=INBOX[selected];
+        if(cur&&cur.apiKind==='expert_file'&&cur.apiId===id&&cur.efLane==='case_disputed'){const dr=document.getElementById('drawer');if(dr)drawCase(dr,cur);}
+      });
+  }
+}
 function drawReview(el,i){
   const f=i.ef||{},rv=f.review||{},E=efX();
   // الدرج ده طويل (الرأي كله): على الكمبيوتر بيتمرّر لوحده جنب القايمة بدل ما زراره يستخبى تحت آخر الصفوف.
@@ -1480,7 +1677,7 @@ function drawReview(el,i){
   el.innerHTML=`<div class="dh"><div class="k">${esc(efKindLine(approved?'ملف للخبير · وافقت عليه':'ملف للخبير · مستني مراجعتك',f))}</div><h3>${esc(f.title||i.out)}</h3></div><div class="db">
     ${strips}${fields}
     <div class="field"><div class="lab">الرأي زي ما هيوصل لـ${esc(client)}</div><div class="ef-rv">${op}</div></div>
-    ${efVoiceField(i.apiId,det&&!det.__error?det.voice:null,!approved)}
+    ${efUrgentField(f,det)}${efVoiceField(i.apiId,det&&!det.__error?det.voice:null,!approved)}
     <div class="acts">
       ${approved?'':efLockedBtn('btn-primary','rv_ok',svg('check')+'اعتمده وابعته للعميل',offWhy)
         +`<button class="btn btn-human ef-full" data-a="rv_back">${svg('back')}رجّعه للخبير</button>`}
@@ -1689,7 +1886,7 @@ function drawDispute(el,i){
     ops=`<div class="note-ai">${svg('inbox','ic')}<div>النزاع اتفتح قبل ما الشغل يتسلّم.</div></div>`;
   }
   el.innerHTML=`<div class="dh" style="background:var(--conflict)"><div class="k">${esc(efKindLine('نزاع · '+kindLabel,isFile?r:null))}</div><h3>${esc(r.title||i.out)}</h3></div><div class="db">
-    ${strips}${fields}${ops}${isFile&&det&&!det.__error?efVoiceField(i.apiId,det.voice,false):''}
+    ${strips}${fields}${isFile?efUrgentField(r,det):''}${ops}${isFile&&det&&!det.__error?efVoiceField(i.apiId,det.voice,false):''}${isFile?efCaseHtml(i,det):''}
     <div class="acts">
       ${efLockedBtn('btn-primary','dsp_rel',svg('check')+'للخبير — حوّل أجره',relWhy)}
       ${efLockedBtn('btn-human','dsp_ref',svg('back')+'للعميل — رجّع فلوسه',refWhy)}
@@ -1704,6 +1901,7 @@ function drawDispute(el,i){
     if(a==='dsp_ref'){if(refWhy)return;efResolveModal(i,'refund');return;}
   });
   efVoiceWire(el);
+  if(isFile)efCaseWire(el,i,()=>drawDispute(el,i));
   // فتحة جديدة لنزاع ملف: نجيب الرأيين، ونعيد رسم الدرج **لو لسه نفس الفتحة** (مش فتحة أحدث). الفشل
   // للفتحة دي بس — ما بيتحفظش، والفتحة الجاية بتجرّب تاني.
   if(fresh&&window.EP&&EP.expertFileDetail){
@@ -5566,7 +5764,9 @@ const AUDIT_LABEL={'user.role_change':'تغيير دور مستخدم','user.pla
   'consultation.resolve':'حسم نزاع استشارة','consultation.no_reply':'حسم نزاع ما وصلش رده',
   // الجولة ٨
   'expert_file.review_approve':'اعتماد رأي وبعته للعميل','expert_file.review_return':'رجوع رأي للخبير بملاحظة',
-  'consultation.legacy':'قرار على استشارة قديمة'};
+  'consultation.legacy':'قرار على استشارة قديمة',
+  // الجولة ١٣
+  'expert_file.case_resolve':'حسم ملاحظة على مرحلة من قضية'};
 function auditWhen(iso){if(!iso)return'—';try{return new Intl.DateTimeFormat('ar-EG',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'}).format(new Date(iso));}catch(e){return String(iso).slice(0,16);}}
 function auditEfDetail(r){
   var a=String(r.action||'');
@@ -5579,6 +5779,7 @@ function auditEfDetail(r){
   else if(m.action==='refund'||a==='expert_file.refund'||a==='expert_file.refund_unactivated')parts.push('رجع '+mm(m.amount)+' للعميل');
   else if(m.amount!=null&&m.amount!=='')parts.push(mm(m.amount));
   // الجولة ٨: مراجعة الرأي — اسم الخبير، والملاحظة اللي اترجع بيها.
+  if(a==='expert_file.case_resolve'&&m.milestone_label)parts.push('مرحلة: '+m.milestone_label);
   if(a==='expert_file.review_approve')parts.push('اتبعت للعميل'+(m.expert_name?' باسم '+m.expert_name:''));
   if(a==='expert_file.review_return')parts.push('رجع لـ'+(m.expert_name||'الخبير')+(m.note?' — «'+m.note+'»':''));
   if(a==='expert_file.assign'||a==='expert_file.reassign'){var to=m.assigned_name||m.assigned_to;if(to)parts.push('لـ'+to);}

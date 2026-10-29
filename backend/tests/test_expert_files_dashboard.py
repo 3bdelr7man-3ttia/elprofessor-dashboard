@@ -599,9 +599,10 @@ def test_not_configured_is_a_plain_refusal_not_no_reply(ctx, plat, monkeypatch):
 def test_detail_reaches_the_browser_without_client_data(ctx, plat):
     r = _call(ctx, 'GET', '/api/platform-expert-files/' + fx.D1['id'])
     body = r.get_json()
-    assert sorted(body) == ['based_on', 'client_tz', 'client_tz_label', 'dispute', 'file_no', 'id', 'opinion',
-                            'pending_opinion', 'review', 'revision', 'status', 'title', 'voice']
+    assert sorted(body) == ['based_on', 'case', 'client_tz', 'client_tz_label', 'dispute', 'file_no', 'id', 'opinion',
+                            'pending_opinion', 'review', 'revision', 'speed', 'status', 'title', 'urgent', 'voice']
     assert body['file_no'] == 1042
+    assert body['speed'] == 'normal' and body['urgent'] is None and body['case'] is None   # ملف قديم من غير الجولة ١٣
     assert body['based_on'] is None and body['pending_opinion'] is None   # «مبني على» للرأي اللي مستني مراجعة بس
     assert body['client_tz'] is None and body['client_tz_label'] is None  # توقيت العميل لدرج المراجعة بس
     raw = r.get_data(as_text=True)

@@ -688,6 +688,104 @@ def cons_payload(rows):
 
 NOT_FOUND = {"detail": "Not Found"}
 
+# --------------------------------------------------------------------------- الجولة ١٣: المستعجل + عرض سعر القضية
+# أشكال الجسر الجديدة (ريبو المنصة docs/expert-files/SPEC-R13-URGENT-CASE.md §١ و§٣): `speed` و`urgent` على صفّ الملف،
+# و`case` {quote, quotes[], milestones[]} على الملف، و`POST …/case/milestones/{n}/resolve`، وفلاتر القايمة
+# `urgent` · `case_disputed` · `case_open`. الأسماء والأرقام متخيّلة. `EFPlatform(r13=True)` بيزرعهم.
+E_CASE_MS_MISSING = "المرحلة دي مش موجودة"
+E_CASE_NOT_DISPUTED = "المرحلة دي مفيهاش ملاحظة مستنية قرار — يمكن اتحسمت قبل كده، حدّث الصفحة"
+E_CASE_RELEASE_MANUAL = "العميل خد فلوس المرحلة دي قبل كده، فمفيش تحويل للخبير من هنا"
+
+
+def urgent_view(state, *, start_h, due_h, refunded=None, fell_back_h=None, started_h=None):
+    """`urgent` على الملف (SPEC-R13 §١)."""
+    return {"start_by": iso(start_h), "due_at": iso(due_h), "state": state, "refunded": refunded,
+            "fell_back_at": iso(fell_back_h) if fell_back_h is not None else None,
+            "started_at": iso(started_h) if started_h is not None else None}
+
+
+def _quote(**kw):
+    q = {"n": 1, "fee": 15000, "currency": "EGP", "includes": "رفع الدعوى وحضور الجلسات لحد الحكم الابتدائي.",
+         "excludes": "الاستئناف ومصاريف الخبراء والرسوم القضائية.", "duration": "٦ أشهر تقريبًا", "plan": "two",
+         "second_label": "عند رفع الدعوى", "status": "accepted", "sent_at": iso(-70.0), "accepted_at": iso(-60.0),
+         "rejected_at": None, "question": None}
+    q.update(kw)
+    return q
+
+
+def _milestones(amounts, labels, statuses, *, consult_prefix, notes=None):
+    """مراحل القضية بالقسمة ٢٥٪ (`platform_fee = round(amount * 0.25)`)."""
+    out = []
+    for k, (amount, label, status) in enumerate(zip(amounts, labels, statuses), start=1):
+        fee = int(round(amount * 0.25))
+        done = status in ("expert_done", "disputed", "released")
+        out.append({"n": k, "label": label, "amount": amount, "expert_amount": amount - fee, "platform_fee": fee,
+                    "consultation_id": (consult_prefix + str(k)) if status not in ("due",) else None,
+                    "status": status,
+                    "paid_at": iso(-50.0) if status not in ("due", "awaiting_payment") else None,
+                    "done_at": iso(-30.0) if done else None,
+                    "done_note": (notes or {}).get(k) if done else None,
+                    "confirmed_at": iso(-20.0) if status == "released" else None,
+                    "released_at": iso(-20.0) if status == "released" else None,
+                    "auto": False,
+                    "auto_release_at": iso(4 * 24.0) if status == "expert_done" else None,
+                    "problem": ({"text": "الخبير ما رفعش الدعوى زي ما اتفقنا، والتاريخ اتأخر.", "at": iso(-6.0)}
+                                if status == "disputed" else None),
+                    "disputed_at": iso(-6.0) if status == "disputed" else None})
+    return out
+
+
+def case_view(quote, milestones, quotes=()):
+    return {"quote": quote, "quotes": list(quotes), "milestones": milestones}
+
+
+def _r13(row, *, speed="normal", urgent=None, case=None):
+    out = copy.deepcopy(row)
+    out["speed"] = speed
+    out["urgent"] = urgent
+    if case is not None:
+        out["case"] = case
+    return out
+
+
+# مستعجل مستني خبير (٨٠٠ يدفع، ٥٠٠ للخبير) — لازم يبدأ قبل بعد ٤ ساعات.
+X1 = _r13(_file("ef-x1-1a2b3c4d", title="شيك بدون رصيد — محتاج رأي النهارده", status="awaiting_assignment", law="eg",
+                tier="written", amount=800.0, currency="EGP", expert_amount=500.0, paid_h=-2.0, deadline_h=46.0,
+                client="هبة", counterparty="مصنع الأمل",
+                pool=["hala@experts.test", "nada@experts.test", "sami@experts.test"]),
+          speed="urgent", urgent=urgent_view("waiting", start_h=4.0, due_h=22.0))
+# ملف اتحوّل لعادي (ما بدأش خبير في ٦ ساعات) ورجع ٣٠٠.
+X2 = _r13(_file("ef-x2-2b3c4d5e", title="فسخ عقد توريد بسبب التأخير", status="awaiting_assignment", law="eg",
+                tier="written", amount=500.0, currency="EGP", expert_amount=300.0, paid_h=-7.0, deadline_h=41.0,
+                client="سلمى", counterparty="شركة الواحة",
+                pool=["hala@experts.test", "nada@experts.test"]),
+          speed="normal", urgent=urgent_view("fell_back", start_h=-1.0, due_h=17.0, refunded=300, fell_back_h=-1.0))
+# مستعجل بدأه الخبير وميعاد رأيه عدّى (متأخر).
+X3 = _r13(_file("ef-x3-3c4d5e6f", title="إنذار بالإخلاء من المالك", status="writing", law="eg", tier="written",
+                amount=800.0, currency="EGP", expert_amount=500.0, paid_h=-26.0, deadline_h=0.0, client="رامي",
+                counterparty="المالك — عادل نصر", expert_email="hala@experts.test", writing_due_h=-2.0,
+                file_no=1160),
+          speed="urgent", urgent=urgent_view("started", start_h=-20.0, due_h=-2.0, started_h=-24.0))
+
+# قضية: المرحلة الأولى فيها ملاحظة من العميل، والتانية لسه ما اتفتحتش للدفع.
+CS1 = _r13(_file("ef-cs1-4d5e6f7a", title="دعوى تعويض عن فسخ عقد", status="closed", law="eg", tier="written",
+                 amount=500.0, currency="EGP", expert_amount=300.0, paid_h=-200.0, deadline_h=0.0, client="دعاء",
+                 counterparty="شركة المقاولات الحديثة", expert_email="nada@experts.test", file_no=1150),
+           case=case_view(_quote(),
+                          _milestones([7500, 7500], ["الدفعة الأولى: بدء العمل", "الدفعة الثانية: عند رفع الدعوى"],
+                                      ["disputed", "due"], consult_prefix="cm-cs1-",
+                                      notes={1: "جهّزت صحيفة الدعوى وسلّمتها للعميلة للمراجعة."})))
+# قضية لسه العرض مبعوت (ومعاه سؤال من العميل) — بتظهر في فلتر `case_open` بس.
+CS2 = _r13(_file("ef-cs2-5e6f7a8b", title="نزاع ملكية على أرض", status="closed", law="eg", tier="written",
+                 amount=500.0, currency="EGP", expert_amount=300.0, paid_h=-100.0, deadline_h=0.0, client="مروة",
+                 counterparty="ورثة السيد", expert_email="hala@experts.test", file_no=1151),
+           case=case_view(_quote(plan="one", second_label=None, status="sent", accepted_at=None,
+                                 question={"text": "هل الأتعاب بتشمل الخبير الهندسي؟", "asked_at": iso(-3.0),
+                                           "answer": None, "answered_at": None}),
+                          _milestones([15000], ["القضية كاملة"], ["due"], consult_prefix="cm-cs2-")))
+CASE_FILES = {CS1["id"]: "CS1", CS2["id"]: "CS2"}
+
+
 
 class EFPlatform(object):
     """منصّة «ملف للخبير» صغيرة في الذاكرة. `handle(method, path, params, body)` ⇒ (status, payload).
@@ -698,7 +796,7 @@ class EFPlatform(object):
     `delay[(method, path)]` ثواني تأخير. `calls` = كل اللي اتطلب، بالترتيب (والجسم بالحرف — فيه `by`)."""
 
     def __init__(self, deployed=True, empty=False, cons_enabled=True, service_open=True, r8=False, mode=None,
-                 allowlist=None, legacy_enabled=True):
+                 allowlist=None, legacy_enabled=True, r13=False):
         self.deployed = deployed
         # `service_open` = المفتاح نفسه (`expert_files_enabled`) — في وضع التجربة المفتاح مقفول. الوضع من غير ما يتحدد
         # بيمشي ورا المفتاح (اختبارات الجولة ٧ بتقفله بعد الإنشاء).
@@ -725,6 +823,13 @@ class EFPlatform(object):
         self.review.sort(key=lambda f: (f["review"] or {}).get("submitted_at") or "")
         self.legacy = [copy.deepcopy(L1), copy.deepcopy(L2), copy.deepcopy(L3)] if seed else []
         self.legacy_done = set()
+        # الجولة ١٣: مستعجل (X1 مستني خبير · X2 اتحوّل لعادي) في «مستني توزيع»، X3 مستعجل متأخر، وقضايا (CS1 فيها ملاحظة
+        # · CS2 عرضها مبعوت). من غير `r13=True` الصفوف القديمة زي ما هي بالحرف.
+        seed13 = r13 and not empty
+        if seed13:
+            self.waiting = sorted(self.waiting + [copy.deepcopy(X1), copy.deepcopy(X2)], key=lambda f: f["claim_deadline_at"])
+            self.late = self.late + [copy.deepcopy(X3)]
+        self.case_files = [copy.deepcopy(CS1), copy.deepcopy(CS2)] if seed13 else []
         self.review_stale = set()          # ملفات درجة الجلسة مواعيدها قربت/عدّت (`_review_slots_stale`)
         self.next_file_no = 1100
         self.unact_done = set()
@@ -734,13 +839,24 @@ class EFPlatform(object):
         self.detail_fail = False
 
     @property
+    def case_disputed(self):
+        """فلتر `case_disputed`: فيه مرحلة `disputed`."""
+        return [f for f in self.case_files if any(m["status"] == "disputed" for m in f["case"]["milestones"])]
+
+    @property
+    def case_open(self):
+        """فلتر `case_open`: عرض مبعوت أو مراحل لسه ما خلصتش."""
+        return [f for f in self.case_files if (f["case"]["quote"] or {}).get("status") == "sent"
+                or any(m["status"] not in ("released", "refunded") for m in f["case"]["milestones"])]
+
+    @property
     def mode(self):
         """`service_mode()` بالحرف: open | allowlist | closed."""
         return self._mode or ("open" if self.service_open else "closed")
 
     # ---------------------------------------------------------------- مساعدات
     def _lanes(self):
-        return (self.waiting, self.late, self.disputed, self.delivered, self.review)
+        return (self.waiting, self.late, self.disputed, self.delivered, self.review, self.case_files)
 
     def _find(self, fid):
         for lane in self._lanes():
@@ -765,7 +881,7 @@ class EFPlatform(object):
     @staticmethod
     def _key(f):
         for k, v in (("F1", F1), ("F2", F2), ("F3", F3), ("F4", F4), ("F5", F5), ("F6", F6), ("F7", F7),
-                     ("D1", D1), ("R1", R1), ("R2", R2)):
+                     ("D1", D1), ("R1", R1), ("R2", R2), ("X1", X1), ("X2", X2), ("X3", X3), ("CS1", CS1), ("CS2", CS2)):
             if v["id"] == f["id"]:
                 return k
         return ""
@@ -830,8 +946,12 @@ class EFPlatform(object):
                 return 200, self._list(s, self.unact)
             if s == "blocked":
                 return 200, self._list(s, self._blocked_rows())
+            if s == "urgent":
+                rows = [f for lane_ in (self.waiting, self.late) for f in lane_ if f.get("speed") == "urgent"]
+                return 200, self._list(s, rows)
             lane = {"waiting": self.waiting, "late": self.late, "disputed": self.disputed,
-                    "review": self.review}.get(s)
+                    "review": self.review, "case_disputed": self.case_disputed,
+                    "case_open": self.case_open}.get(s)
             if lane is None:
                 return 422, {"detail": [{"loc": ["query", "status"], "msg": "bad"}]}
             return 200, self._list(s, lane)
@@ -912,7 +1032,27 @@ class EFPlatform(object):
                                      closed_by="founder_release" if action == "release" else None)
         if act == "review":
             return self._review(lane, f, body)
+        if act == "case" and len(parts) == 5 and parts[2] == "milestones" and parts[4] == "resolve" and method == "POST":
+            return self._case_resolve(lane, f, parts[3], body)
         return 404, NOT_FOUND
+
+    def _case_resolve(self, lane, f, n, body):
+        """`POST …/case/milestones/{n}/resolve` (SPEC-R13 §٣): المرحلة لازم `disputed`؛ «للخبير» ⇒ `released`، «للعميل» ⇒
+        `refunded` (رصيد محفظة — مفيش رد على بوابة الدفع). مرة واحدة: التانية ⇒ ٤٠٩."""
+        action = body.get("action")
+        if action not in ("release", "refund"):
+            return 422, {"detail": E_RESOLVE_ACTION}
+        case = f.get("case") or {}
+        ms = next((m for m in case.get("milestones") or [] if str(m["n"]) == str(n)), None)
+        if ms is None:
+            return 404, {"detail": E_CASE_MS_MISSING}
+        if ms["status"] != "disputed":
+            return 409, {"detail": E_CASE_NOT_DISPUTED}
+        if action == "release" and ms.get("release_blocked"):
+            return 409, {"detail": E_CASE_RELEASE_MANUAL}
+        ms["status"] = "released" if action == "release" else "refunded"
+        ms["released_at"] = iso(0) if action == "release" else None
+        return 200, dict(bridge_reply(f), case=copy.deepcopy(case))
 
     def _review(self, lane, f, body):
         """`bridge_review` بالحرف (الترتيب والرسايل): الفعل ⇒ اتقفل ⇒ مش مستني مراجعة ⇒ approve / return."""

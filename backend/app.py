@@ -2336,7 +2336,9 @@ def platform_verify_reassign(req_id):
 _EF_ID_RE = re.compile(r'[A-Za-z0-9_-]{1,64}')
 # `blocked` (فلوس اتوقّفت) و`unactivated` (اتدفع وما وصلش لقايمة التوزيع) — الجولة ٧ (ب٢ · ب٩).
 # `review` (أول ملفات الخبير الجديد مستنية مراجعة المؤسس قبل العميل) — الجولة ٨ (البند ٧).
-_EF_LIST_STATUSES = ('waiting', 'late', 'disputed', 'blocked', 'unactivated', 'review')
+# الجولة ١٣: `urgent` (مستعجل لسه ما خلصش) · `case_disputed` (مرحلة قضية فيها ملاحظة من العميل) · `case_open` (قضية لسه ما خلصتش).
+_EF_LIST_STATUSES = ('waiting', 'late', 'disputed', 'blocked', 'unactivated', 'review',
+                     'urgent', 'case_disputed', 'case_open')
 _EF_ACTIONS = ('release', 'refund')
 _EF_REVIEW_ACTIONS = ('approve', 'return')
 # رسالة الخبير الصوتية (الجولة ١٢): الأنواع المسموحة هي نفس قايمة المنصة البيضا (`_sniff_voice`)، والسقف أعلى من
@@ -2430,6 +2432,93 @@ def _ef_voice_meta(v):
     return {'duration_sec': int(dur), 'size': int(size), 'content_type': ctype}
 
 
+# الجولة ١٣ (المستعجل + عرض سعر القضية): الدرج بيقرا `speed` و`urgent` و`case` من قراية الملف كله. نفس مبدأ `voice`: مفاتيح
+# معروفة بس وبأنواعها (نص بحدّ · رقم · قايمة) — أي شكل تاني بيتسقط، فمفيش بيانات العميل (إيميل · تليفون · رقم دفع) بتعدّي
+# مع القضية. ⛔ `consultation_id` للمرحلة بيعدّي (المؤسس بيشوف الفلوس باتجاه أي استشارة).
+_EF_URGENT_STATES = ('waiting', 'started', 'fell_back')
+_EF_QUOTE_STATUSES = ('sent', 'accepted', 'rejected')
+_EF_MS_STATUSES = ('due', 'awaiting_payment', 'held', 'expert_done', 'released', 'disputed', 'refunded')
+_EF_CASE_PLANS = ('one', 'two')
+
+
+def _ef_s(v, limit):
+    """نص بحدّ أقصى — أي نوع تاني ⇒ None."""
+    return v.strip()[:limit] if isinstance(v, str) and v.strip() else None
+
+
+def _ef_n(v):
+    """رقم (مش bool) — أي نوع تاني ⇒ None."""
+    return v if isinstance(v, (int, float)) and not isinstance(v, bool) else None
+
+
+def _ef_urgent_out(u):
+    """`urgent` على الملف: {start_by, due_at, state, refunded, fell_back_at, started_at} أو None."""
+    if not isinstance(u, dict):
+        return None
+    state = u.get('state') if u.get('state') in _EF_URGENT_STATES else None
+    return {'start_by': _ef_s(u.get('start_by'), 40), 'due_at': _ef_s(u.get('due_at'), 40), 'state': state,
+            'refunded': _ef_n(u.get('refunded')), 'fell_back_at': _ef_s(u.get('fell_back_at'), 40),
+            'started_at': _ef_s(u.get('started_at'), 40)}
+
+
+def _ef_question_out(q):
+    if not isinstance(q, dict):
+        return None
+    return {'text': _ef_s(q.get('text'), 1000), 'asked_at': _ef_s(q.get('asked_at'), 40),
+            'answer': _ef_s(q.get('answer'), 2000), 'answered_at': _ef_s(q.get('answered_at'), 40)}
+
+
+def _ef_quote_out(q):
+    """عرض سعر القضية للمؤسس — الأتعاب والخطة والنصوص والحالة والسؤال/الرد."""
+    if not isinstance(q, dict):
+        return None
+    return {'n': _ef_n(q.get('n')), 'fee': _ef_n(q.get('fee')), 'currency': _ef_s(q.get('currency'), 8),
+            'includes': _ef_s(q.get('includes'), 1000), 'excludes': _ef_s(q.get('excludes'), 600),
+            'duration': _ef_s(q.get('duration'), 80),
+            'plan': q.get('plan') if q.get('plan') in _EF_CASE_PLANS else None,
+            'second_label': _ef_s(q.get('second_label'), 60),
+            'status': q.get('status') if q.get('status') in _EF_QUOTE_STATUSES else None,
+            'sent_at': _ef_s(q.get('sent_at'), 40), 'accepted_at': _ef_s(q.get('accepted_at'), 40),
+            'rejected_at': _ef_s(q.get('rejected_at'), 40), 'question': _ef_question_out(q.get('question'))}
+
+
+def _ef_problem_text(m):
+    """ملاحظة العميل على المرحلة: نص أو {text} تحت `problem` (أو `dispute`)."""
+    for key in ('problem', 'dispute'):
+        v = m.get(key)
+        if isinstance(v, dict):
+            v = v.get('text') or v.get('note')
+        text = _ef_s(v, 1000)
+        if text:
+            return text
+    return _ef_s(m.get('problem_text'), 1000)
+
+
+def _ef_milestone_out(m):
+    if not isinstance(m, dict):
+        return None
+    return {'n': _ef_n(m.get('n')), 'label': _ef_s(m.get('label'), 120), 'amount': _ef_n(m.get('amount')),
+            'expert_amount': _ef_n(m.get('expert_amount')), 'platform_fee': _ef_n(m.get('platform_fee')),
+            'consultation_id': _ef_s(m.get('consultation_id'), 64),
+            'status': m.get('status') if m.get('status') in _EF_MS_STATUSES else None,
+            'paid_at': _ef_s(m.get('paid_at'), 40), 'done_at': _ef_s(m.get('done_at'), 40),
+            'done_note': _ef_s(m.get('done_note'), 1000), 'confirmed_at': _ef_s(m.get('confirmed_at'), 40),
+            'released_at': _ef_s(m.get('released_at'), 40), 'auto': bool(m.get('auto')),
+            'auto_release_at': _ef_s(m.get('auto_release_at'), 40),
+            'problem': _ef_problem_text(m), 'disputed_at': _ef_s(m.get('disputed_at'), 40)}
+
+
+def _ef_case_out(c):
+    """`case` على الملف: {quote, quotes[], milestones[]} أو None (ملف قديم من غير قضية)."""
+    if not isinstance(c, dict):
+        return None
+    quotes = c.get('quotes') if isinstance(c.get('quotes'), list) else []
+    miles = c.get('milestones') if isinstance(c.get('milestones'), list) else []
+    return {'quote': _ef_quote_out(c.get('quote')),
+            'quotes': [q for q in (_ef_quote_out(x) for x in quotes[:10]) if q],
+            'milestones': [m for m in (_ef_milestone_out(x) for x in miles[:4]) if m]}
+
+
 def _ef_detail_out(resp):
     if not _resp_ok(resp):
         return resp
@@ -2437,6 +2526,10 @@ def _ef_detail_out(resp):
     out = {k: f.get(k) for k in _EF_DETAIL_KEYS}
     out['based_on'] = None
     out['voice'] = _ef_voice_meta(f.get('voice'))
+    # الجولة ١٣: المستعجل والقضية (ملف قديم من غير الحقلين ⇒ عادي / None).
+    out['speed'] = 'urgent' if f.get('speed') == 'urgent' else 'normal'
+    out['urgent'] = _ef_urgent_out(f.get('urgent'))
+    out['case'] = _ef_case_out(f.get('case'))
     # مواعيد الجلسة في درج المراجعة بتوقيت العميل (مراجعة الجولة ٨): المنصة بتعرضها له بمنطقة بلد السعر (`price.tz` ·
     # «بتوقيت …»)، فالدرج بياخد المنطقة واسمها بس — مش بلد العميل ولا سعره. بلد مش في القايمة ⇒ فاضي (توقيت جهازه).
     out['client_tz'] = out['client_tz_label'] = None
@@ -2735,6 +2828,46 @@ def platform_expert_file_resolve(file_id):
         return _ef_done(f)
     elif _ef_no_reply(resp):
         return _ef_no_reply_resp('expert_file', file_id, 'resolve', action)
+    return resp
+
+
+@app.route('/api/platform-expert-files/<file_id>/case/milestones/<n>/resolve', methods=['POST'])
+@token_required
+@roles_required('admin')
+def platform_expert_file_case_resolve(file_id, n):
+    """الجولة ١٣ — حسم «عندي ملاحظة» على مرحلة من قضية: للخبير (release) أو للعميل (refund). الفلوس بس: دفعة المرحلة
+    متحفوظة على المنصة، والرد لمحفظة العميل (مفيش رد على بوابة الدفع). فعل فلوس ⇒ تأكيد الشاشة لازم. المنصة محروسة
+    (مرة واحدة · من `disputed` بس) ورسايل رفضها بتعدّي زي ما هي."""
+    if _ef_bad_id(file_id):
+        return jsonify({'error': 'الملف ده مش موجود'}), 404
+    if n not in ('1', '2'):
+        return jsonify({'error': 'المرحلة دي مش موجودة'}), 404
+    body = request.get_json(silent=True) or {}
+    action = body.get('action')
+    if action not in _EF_ACTIONS:
+        return jsonify({'error': 'اختار: للخبير ولا للعميل'}), 400
+    if body.get('confirmed') is not True:
+        return jsonify({'error': 'لازم تأكّد الأول من الشاشة'}), 400
+    note = _ef_note(body.get('note'), 2000)
+    resp = _ef_bridge('POST', f'/api/bridge/expert-files/{file_id}/case/milestones/{n}/resolve',
+                      json_body={'action': action, 'note': note, 'by': _actor_email()}, timeout=25)
+    if _resp_ok(resp):
+        f = _proxy_json(resp)
+        case = _ef_case_out(f.get('case')) or {}
+        ms = next((m for m in case.get('milestones') or [] if m.get('n') == int(n)), None) \
+            or _ef_milestone_out(f.get('milestone')) or {}
+        meta = _ef_meta(f, note=note, milestone=int(n), milestone_label=ms.get('label'),
+                        milestone_status=ms.get('status'), milestone_consultation=ms.get('consultation_id'),
+                        action=action)
+        # أرقام المرحلة نفسها (مش الملف كله) — الدفعة هي اللي اتحرّكت.
+        for k in ('amount', 'expert_amount', 'platform_fee'):
+            if ms.get(k) is not None:
+                meta[k] = ms[k]
+        _audit('expert_file.case_resolve', target=file_id, meta=meta)
+        return jsonify({'ok': True, 'status': f.get('status'),
+                        'milestone': {'n': int(n), 'status': ms.get('status')}})
+    elif _ef_no_reply(resp):
+        return _ef_no_reply_resp('expert_file', file_id, 'case_resolve', action)
     return resp
 
 

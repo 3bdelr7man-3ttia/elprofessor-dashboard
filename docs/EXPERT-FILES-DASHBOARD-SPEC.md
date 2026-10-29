@@ -798,3 +798,54 @@ def _ef_meta(f, **extra):
 - **الدرج:** `efVoiceField` في `drawReview` (مع سطر «اسمعها قبل الاعتماد — لو فيها رقم تليفون أو وسيلة تواصل رجّع الملف.» قبل الموافقة) وفي `drawDispute` (من غير السطر). الصوت **ما بيتحمّلش** غير أول ما المؤسس يدوس «اسمع الرسالة»: `EP.expertFileVoice` = `api(..., {blob: true})` (التوكن في الرأس ⇒ Blob، وfetch واحد في الملف زي حارس CSP) ⇒ `<audio controls preload="none">` بـblob URL. الرابط واحد في المرة وبيتلغي (`efVoiceDrop`) لما يتفتح صفّ تاني أو الدرج يتقفل. فشل ⇒ «تعذّر تشغيل الرسالة — حاول مرة أخرى» والزرار يرجع. ملف قديم من غير صوت ⇒ ولا كارت.
 - **CSP:** اتزاد `media-src 'self' blob:` (من غيرها الصوت بيقع على `default-src 'self'` ويتحجب).
 - **الاختبارات:** `test_expert_files_dashboard.py` (٢٦١ ⇒ ٣٠٢: البروكسي · الأنواع · الأخطاء · `voice` في التفاصيل · الصلاحية والسرّ من `ROUTES`) · `test_expert_files_ui_static.py` (٧٠ ⇒ ٨٠) · `test_expert_files_ui.py` (٦٣ ⇒ ٦٩، Playwright من غير منافذ) = ٤٥١ اختبار «ملف للخبير». الأدوات: `ef_fixtures.py` (`VOICE_BYTES` · `VOICE_META` · `VOICE_FILES` و`GET …/voice`) و`ef_route_harness.py` (رد بايتات).
+
+## ١٩ — الجولة ١٣ (2026-10-29): المستعجل، وعرض سعر القضية، والدفعات على مراحل
+
+مواصفة المنصة: `docs/expert-files/SPEC-R13-URGENT-CASE.md` §٥ (قرار المؤسس 2026-10-29: «تمام - توكل على الله»). الفرع: `expert-file-r13`. ⛔ ولا push ولا commit من الوكيل ولا طلب حقيقي. ⛔ ولا نداء رد على بوابة دفع: كل رد = **رصيد في محفظة العميل على المنصة**.
+الداشبورد بيعرض ويبعت قرار الحسم للجسر بس؛ الفلوس بتتحرك على المنصة بدوالّها المحروسة (مرة واحدة · من `disputed` بس).
+
+**الاسم:** `speed` (`normal` | `urgent`) هو سرعة الطلب. ⛔ مش `urgent_deadline` (ميعاد جلسة المحكمة بتاع العميل) — الاتنين ما بيتلخبطوش في أي مكان في الكود (اختبار ثابت).
+
+### ١٩-أ الأشكال اللي الداشبورد بيقراها من الجسر
+
+- صفّ الملف / `GET /bridge/expert-files/{id}`: `speed` · `urgent: {start_by, due_at, state: waiting|started|fell_back, refunded, fell_back_at, started_at}` · `case: {quote, quotes[], milestones[]}`.
+  - `quote`: `n · fee · currency · includes · excludes · duration · plan (one|two) · second_label · status (sent|accepted|rejected) · sent_at · accepted_at · rejected_at · question {text, asked_at, answer, answered_at}`.
+  - المرحلة: `n · label · amount · expert_amount · platform_fee · consultation_id · status (due|awaiting_payment|held|expert_done|released|disputed|refunded) · paid_at · done_at · done_note · confirmed_at · released_at · auto · auto_release_at · problem · disputed_at`.
+- `POST /bridge/expert-files/{id}/case/milestones/{n}/resolve {action: release|refund, note, by}` ⇒ ملف (فيه `case`) أو `{milestone}`.
+- فلاتر القايمة: `urgent` · `case_disputed` · `case_open`.
+
+### ١٩-ب الخادم (`backend/app.py`)
+
+- **البروكسي الجديد:** `POST /api/platform-expert-files/<id>/case/milestones/<n>/resolve` (`platform_expert_file_case_resolve`) — أدمن بس، نفس `_ef_bridge` والسرّ (رأس بس) ومهلة ٢٥ ثانية.
+  - تحقق محلي قبل أي نداء: المعرّف · رقم المرحلة `1` أو `2` (غيرهم ٤٠٤ «المرحلة دي مش موجودة») · `action` ∈ `release|refund` (٤٠٠ «اختار: للخبير ولا للعميل») · `confirmed === true` (٤٠٠ «لازم تأكّد الأول من الشاشة»).
+  - جسم النداء **بالحرف** `{action, note (≤٢٠٠٠), by: إيميل الأدمن من التوكن}` — ⛔ ولا مبلغ ولا إيميل من المتصفح. نداء واحد، ولا إعادة محاولة. الرد الضايع (٥٠٠/٥٠٢/٥٠٣/اتصال) ⇒ «ما وصلناش رد» + سطر `expert_file.no_reply` (`attempt: case_resolve`). رسايل رفض المنصة بتعدّي زي ما هي.
+  - السجل بعد النجاح: `expert_file.case_resolve` بأرقام **المرحلة** (`amount · expert_amount · platform_fee · milestone · milestone_label · milestone_status · milestone_consultation`) + `action` + `note`.
+  - رد المتصفح: `{ok, status, milestone: {n, status}}` بس.
+- **القوايم:** `_EF_LIST_STATUSES` زادت `urgent` · `case_disputed` · `case_open` (غيرهم ⇒ `waiting` زي ما كان).
+- **التفاصيل:** `_ef_detail_out` بيزوّد `speed` (`urgent` أو `normal`) و`urgent` و`case` من مصفّيات بمفاتيح معروفة بأنواعها (`_ef_urgent_out` · `_ef_case_out` · `_ef_quote_out` · `_ef_milestone_out`): نص بحدّ · رقم (مش bool) · حالات من قايمة بيضا — أي شيء تاني بيتسقط. ⛔ ولا إيميل عميل ولا رقم دفع ولا تليفون بيعدّي. ملف قديم ⇒ `speed: normal · urgent: null · case: null`.
+
+### ١٩-ج الواجهة
+
+- **الصفوف (`dashboard-api.js`):** `efUrgentBadges` شارة «⚡ مستعجل» (صفرا لو لسه مستني خبير، والتلميح بالميعاد) وشارة «اتحوّل لعادي» (ورجع {x}). الملف المستعجل المستني **مش «للعلم»** أبدًا (ميعاده ٦ ساعات) وعنوانه «ملف مستعجل مستني خبير». صفّ جديد `efCaseRow` (`efLane: case_disputed` · `dsrc: case` · عنوانه «ملاحظة من العميل على مرحلة من قضية» · المبلغ = مبلغ المرحلة اللي فيها الملاحظة) بيتحمّل من حارة `case_disputed` (أدمن بس). منصة قبل الجولة ١٣ بترد ٤٢٢ على الفلتر ⇒ بهدوء (مش «تعذّر جلب»).
+- **الفلاتر (شرايح الوارد):** «⚡ مستعجل (n)» و«قضايا فيها ملاحظة (n)» — بتتعد من الصفوف الحقيقية وما بتظهرش من غير صفوف. (`case_open` و`urgent` متقبولين في البروكسي وجاهزين، بس الوارد ما بيحمّلهمش: ملف في شغله مش «بند» على المؤسس.)
+- **الدرج (`index.html`):**
+  - `efUrgentField` — «⚡ مستعجل · الرأي خلال ٢٤ ساعة» + «ابدأ قبل» (قبل الاستلام) أو «الخبير بدأ» + «الرأي قبل» + سطر «لو ما بدأش خبير قبل الميعاد ده، الملف يتحوّل عادي ويرجع الفرق لمحفظة العميل لوحده». لو حصل التحويل: «كان مستعجل واتحوّل عادي» + «اللي رجع للعميل» + وقت التحويل. في `drawExpertFile` و`drawReview` (**قبل مشغّل الصوت**) و`drawDispute`.
+  - `efCaseHtml` — قسم «القضية»: العرض (الأتعاب بخط كبير · طريقة الدفع «دفعة واحدة» / «دفعتان: ٥٠٪ الآن و٥٠٪ {second_label}» · يشمل · لا يشمل · المدة · الحالة · سؤال العميل ورد الخبير · «عروض قبل كده») والمراحل (الاسم · الحالة · **يدفع العميل / للخبير / للمنصة + النسبة** · دفع العميل · ملاحظة الخبير عن الإنجاز · وقت التحويل التلقائي · ملاحظة العميل). كل النصوص بتتعرض نص (`esc`) مش HTML.
+  - `drawCase` — درج صفوف «قضايا فيها ملاحظة»: التفاصيل بتتجاب كل فتحة (من غير كاش) ولو فشلت «ما قدرناش نجيب القضية دلوقتي — اقفل الدرج وافتحه تاني» من غير أزرار.
+  - **الحسم:** المرحلة `disputed` فيها زرارين «حوّل للخبير» و«ردّ للعميل» ⇒ **تأكيد جوه الدرج** (`.ef-conf` · `role=group` · `aria-live`) — ⛔ مش `confirm()` ولا نافذة. التأكيد بيقول: الاتجاه · المبلغ بالاسم (حوّل {expert_amount} لـ{الخبير} والباقي {platform_fee} للمنصة · أو رجّع {amount} كاملين لمحفظة {العميل}) · «ما ينفعش ترجع فيها» + ملاحظة اختيارية. الضغطة الأولى بتقفل الزرار والرجوع («بيتحوّل…» / «بيرجع…»)؛ رفض المنصة ٤٠٩ أو «ما وصلناش رد» ⇒ الرسالة جوه التأكيد والزرار يفضل مقفول والوارد بيتحدّث على نفس الصفّ؛ النجاح ⇒ الدرج بيتجاب من جديد (أو بيختفي الصفّ لو آخر مرحلة).
+  - السجل: `expert_file.case_resolve` ⇒ «حسم ملاحظة على مرحلة من قضية» + «مرحلة: {label}».
+- **أدوات الصور/الاختبار:** `uiharness/ef_fixtures.py` — `EFPlatform(r13=True)` بيزرع X1 (مستعجل مستني خبير) · X2 (اتحوّل لعادي ورجع ٣٠٠) · X3 (مستعجل متأخر) وقضيتين: CS1 (المرحلة ١ فيها ملاحظة) و CS2 (عرض مبعوت وسؤال من العميل)، وفلاتر `urgent · case_disputed · case_open` و`…/case/milestones/{n}/resolve` (مرة واحدة ⇒ التانية ٤٠٩).
+
+### ١٩-د الاختبارات (`cd backend && python3 -m pytest -q tests/test_expert_files_*.py`)
+
+- `test_expert_files_r13_dashboard.py` (البروكسي · الصلاحية · التحقق المحلي · جسم النداء بالحرف · السجل · الرد الضايع بلا إعادة · الفلاتر · مصفّيات `speed/urgent/case`).
+- `test_expert_files_r13_ui.py` (Playwright، من غير منافذ: الشارات · الفلاتر · كارت المستعجل جنب الصوت · قسم القضية · التأكيد جوه الدرج · ضغطتين = نداء واحد · رفض المنصة · الموبايل ٤٤px · ولا نافذة متصفح).
+- `test_expert_files_r13_static.py` (مصدر: ولا `confirm()` · `confirmed: true` · الاسم `speed` مش `urgent_deadline` · أدمن بس · نصوص عربي بسيط من غير كلام تقني ولا «يقوّم»).
+- `test_expert_files_dashboard.py`: اختبار مفاتيح التفاصيل اتحدّث (`case · speed · urgent`).
+
+### ١٩-هـ مفتوح / افتراضات على شكل الجسر (الكود على المنصة هو الحَكَم)
+
+1. صفّ القايمة ممكن ييجي من غير `case` — الدرج بيجيبه من التفاصيل (مختبر). ولو القايمة ما بعتتش `speed`/`urgent` على الصفوف، الشارة والشريحة بيظهروا من غير بعض بس الدرج (من التفاصيل) بيبقى صح.
+2. نص ملاحظة العميل على المرحلة: بيتقرا من `problem` (نص أو `{text}`) أو `dispute` أو `problem_text` — لو المنصة سمّته غير كده، المفتاح يتضاف في `_ef_problem_text` (سطر واحد).
+3. رد حسم المرحلة: بيتقري `case.milestones[n].status` من رد المنصة أو `milestone`؛ لو الاتنين غايبين الرد للمتصفح `milestone.status` بيبقى `null` (الشاشة بتتحدّث من الوارد على أي حال).
+4. ترتيب النشر: المنصة (`founder-test-r13`) قبل الداشبورد أو معاه. الداشبورد الأحدث على منصة أقدم آمن: ٤٢٢ على `case_disputed` بهدوء، والتفاصيل من غير `speed/urgent/case` ⇒ عادي.
