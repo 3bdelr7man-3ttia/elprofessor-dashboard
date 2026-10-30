@@ -35,6 +35,7 @@ COPY dashboard-cloud/index.html dashboard-cloud/dashboard-api.js dashboard-cloud
 # D1-B · الهيكل الجديد (قوائم الأقسام والتبويبات).
 COPY dashboard-cloud/v2-logic.js dashboard-cloud/v2-home.js dashboard-cloud/v2-home.css dashboard-cloud/v2-shell.js dashboard-cloud/v2-shell.css dashboard-cloud/v2-d2.js dashboard-cloud/v2-d2.css dashboard-cloud/v2-d3.js dashboard-cloud/v2-d3.css /app/dist/
 COPY dashboard-cloud/v2/img /app/dist/v2/img
+COPY dashboard-cloud/v2s /app/dist/v2s
 
 EXPOSE 8080
 

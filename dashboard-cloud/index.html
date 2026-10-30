@@ -463,6 +463,11 @@ body{font-family:'IBM Plex Sans Arabic',sans-serif;background:var(--bg);color:va
 <script src="v2-home.js"></script>
 <script src="v2-shell.js"></script>
 <script src="v2-d2.js"></script>
+<!-- v2 sections begin -->
+<link rel="stylesheet" href="v2s/home.css">
+<script src="v2s/home.js"></script>
+<script src="v2s/home_copy.js"></script>
+<!-- v2 sections end -->
 <script src="v2-d3.js"></script>
 <script>
 const ICONS={
@@ -1027,6 +1032,7 @@ function opsQueuePanel(){
   return `<section class="panel" style="margin-bottom:14px"><div class="ph"><h3>كل اللي مستنيك — من المنصة</h3><span class="hint">أرقام المنصة نفسها (نفس ما يطبعه الدايجست)</span></div>${body}</section>`;
 }
 function viewInbox(v){
+  if(window.V2SEC&&V2SEC.home&&V2SEC.home.inbox&&V2SEC.home.inbox(v))return;
   if(window.EP){EP.ensure('inbox',()=>viewInbox(v));EP.ensure('opsQueue',()=>viewInbox(v));EP.ensure('dashboard',()=>viewInbox(v));EP.ensure('escrow',()=>viewInbox(v));EP.ensure('pendingUsers',()=>viewInbox(v));}
   const failedQ=inboxFailedList();
   v.innerHTML=`
@@ -1101,6 +1107,7 @@ function inboxMatches(i,f){
   return i.dest===f;
 }
 function renderInbox(){
+  if(window.V2SEC&&V2SEC.home&&V2SEC.home.list&&V2SEC.home.list())return;
   const fe=document.getElementById('filters');
   fe.querySelectorAll('.chip').forEach(c=>c.remove());
   const mk=(f,label,color)=>`<div class="chip${activeFilter===f?' on':''}" data-f="${f}">${color?`<span class="dotc" style="background:${color}"></span>`:''}${label}</div>`;
@@ -7760,7 +7767,7 @@ function v2LoadFlag(cb){
   function fin(on){if(done)return;done=true;if(on){try{v2Enable();}catch(e){window.V2_ON=false;}}cb(!!window.V2_ON);}
   try{EP.api('/v2/config').then(function(r){
     // D1-B: تذكّر آخر رد حاسم (مفتوح/مقفول) فيُخفى الشريط القديم من أول إطار في الفتحة الجاية. فشل أو تأخير = لا يُمسّ التذكّر.
-    try{if(r&&r.enabled===true)localStorage.setItem('ep_v2_shell','1');else localStorage.removeItem('ep_v2_shell');}catch(e){}
+    try{if(r&&r.enabled===true)localStorage.setItem('ep_v2_shell','1');else localStorage.setItem('ep_v2_shell','0');}catch(e){}
     fin(!!(r&&r.enabled===true));}).catch(function(){fin(false);});}catch(e){fin(false);}
   setTimeout(function(){fin(false);},3000);
 }
