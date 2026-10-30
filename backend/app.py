@@ -2702,6 +2702,7 @@ __import__('v2_marketing_routes').register(app, globals())   # v2s:marketing
 import v2_reports_routes as _v2r; _v2r.register(app, globals())  # v2s:reports
 from v2_brain_routes import register as _v2_brain_register; _v2_brain_register(app, globals())
 __import__('v2_company_routes').register(app, globals())  # v2s:company
+__import__('v2_roles_routes').register(app)   # v2s:roles
 # ---- v2 section routes end
 
 
@@ -7925,7 +7926,7 @@ def notifications():
         items.append({
             'id': f'withdrawal:{w.id}',
             'title': 'طلب سحب بانتظار المراجعة',
-            'detail': f'{(wallet.investor_name if wallet else "مستثمر")} — {round(w.amount or 0, 2)} USD',
+            'detail': f'{(wallet.investor_name if wallet else "مستثمر")} — {round(w.amount or 0, 2):g} دولار',
             'kind': 'withdrawal',
             'route': '/investors',
             'when': w.requested_at.isoformat() if w.requested_at else None,
