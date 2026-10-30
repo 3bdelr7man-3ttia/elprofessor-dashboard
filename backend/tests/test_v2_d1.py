@@ -737,6 +737,7 @@ def test_a_suspicious_visitor_and_an_unlicensed_applicant_are_opened_not_approve
     flagged = [c for c in visitors if c['warn']]
     plain = [c for c in visitors if not c['warn']]
     assert flagged and all(c['primary']['act']['do'] == 'open' for c in flagged)
+    assert all(c['warn'].startswith('يحتاج مراجعة: ') and 'مشبوه' not in c['warn'] for c in flagged)   # «الناس والدعوات»: كلمة «مشبوه» ممنوعة في النص الظاهر
     assert plain and all(c['primary']['act'] == {'do': 'decide', 'action': 'approve'} for c in plain)
     row = {'apiKind': 'join', 'apiId': 'j', 'ref': 'JR-j', 'who': 'م', 'licenceMissing': True, 'licensed': True, 'note': 'x'}
     c = v2_node.logic('v2Card', row, {'now': NOW})

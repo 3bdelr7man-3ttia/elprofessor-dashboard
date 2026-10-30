@@ -28,7 +28,8 @@ DC = os.path.join(ROOT, 'dashboard-cloud')
 NODE = __import__('shutil').which('node')
 needs_node = pytest.mark.skipif(not NODE, reason='needs node')
 PSEUDO_MODS = {'v2files', 'v2disputes', 'v2person',                       # D2: موديولات وهمية يرسمها V2D2 تحت الغلاف الجديد فقط
-               'v2m_overview', 'v2m_payouts', 'v2m_receipts', 'v2m_prices', 'v2m_shares', 'v2m_ads', 'v2b_offers', 'v2b_requests'}   # D3: يرسمها V2D3
+               'v2m_overview', 'v2m_payouts', 'v2m_receipts', 'v2m_prices', 'v2m_shares', 'v2m_ads', 'v2b_offers', 'v2b_requests',   # D3: يرسمها V2D3
+               'v2p_invites'}                                                                                         # الناس: «الدعوات» يرسمها v2s/people.js
 
 
 def _read(*parts):
@@ -87,7 +88,8 @@ def test_the_tabs_match_the_approved_table():
         'market': [['requests', 'الطلبات', 'market']],
         # D3: مراجعة العروض وطلبات القرّاء أولًا (موديولان وهميان ورا الغلاف)، والشاشة القديمة آخرًا
         'books': [['offers', 'مراجعة العروض', 'v2b_offers'], ['requests', 'طلبات القرّاء', 'v2b_requests'], ['books', 'الكتب والأعمال', 'knowledge']],
-        'people': [['users', 'المستخدمون', 'users'], ['invites', 'الدعوات', 'invites'], ['messages', 'الرسائل', 'inbox'],
+        # الناس والدعوات (نهائي): الطلبات والدعوات (موديول وهمي v2p_invites) والمستخدمون والرسائل، وصفحة الشخص مخفية
+        'people': [['invites', 'الطلبات', 'invites'], ['pipeline', 'الدعوات', 'v2p_invites'], ['users', 'المستخدمون', 'users'], ['messages', 'الرسائل', 'inbox'],
                    ['person', 'صفحة الشخص', 'v2person']],
         # D3: «الفلوس» بهيكلها الجديد، والشاشتان القديمتان (المالية والباقات) في آخر تبويب «كل السجلات» + تبويب مخفي للإيصالات القديمة
         'money': [['overview', 'نظرة', 'v2m_overview'], ['payouts', 'التحويلات', 'v2m_payouts'], ['receipts', 'الإيصالات والمدفوعات العالقة', 'v2m_receipts'],
@@ -187,7 +189,7 @@ def test_an_unknown_module_is_not_mapped():
 def test_section_addresses_round_trip():
     res = _node("""const out=[];L.SECTIONS.forEach(s=>s.tabs.forEach(t=>{const h=L.sectionHash(s.key,t.key);
       out.push([s.key,t.key,h,L.parseSectionHash(h),L.parseSectionHash(h.slice(1)),L.routeFor(h)]);}));console.log(JSON.stringify(out))""")
-    assert len(res) == 35                      # ٢٥ + «كل الملفات» و«كل النزاعات» + صفحة الشخص (مخفية) + D3: الفلوس ٨ (واحد مخفي) بدل ٣، والكتب ٣ بدل ١
+    assert len(res) == 36                      # ٢٥ + «كل الملفات» و«كل النزاعات» + صفحة الشخص (مخفية) + D3: الفلوس ٨ (واحد مخفي) بدل ٣، والكتب ٣ بدل ١ + الناس: «الدعوات» الجديدة
     for sec, tab, h, p1, p2, r in res:
         if (sec, tab) in (('people', 'person'), ('money', 'manual')):
             continue                           # تبويب مخفي بلا بريد: يرجع لأول تبويب (يُختبر في test_v2_d2)

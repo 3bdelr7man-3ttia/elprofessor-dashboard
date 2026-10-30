@@ -676,7 +676,7 @@
         card.sub = clean([str(r.puRole), str(r.puCountry)]).join(' · ');
         card.brain = clean([who || 'زائر', str(r.puCountry), card.ageText]).join(' · ');
         if (flags.length) {
-          card.warn = 'مشبوه: ' + flags.join(' · ');
+          card.warn = 'يحتاج مراجعة: ' + flags.join(' · ');
           card.reason = 'يُفتح الطلب للمراجعة قبل فتح المنصة';
           card.primary = { label: 'افتح وراجع', act: OPEN };
         } else {
@@ -1243,9 +1243,10 @@
       T('requests', 'طلبات القرّاء', 'v2b_requests'),
       T('books', 'الكتب والأعمال', 'knowledge')
     ] },
-    { key: 'people', label: 'الناس والدعوات', img: 'people', desc: 'الأعضاء والدعوات والرسائل', tabs: [
+    { key: 'people', label: 'الناس والدعوات', img: 'people', desc: 'من ينتظر الدخول، والدعوات، والأعضاء، والرسائل', tabs: [
+      T('invites', 'الطلبات', 'invites'),
+      T('pipeline', 'الدعوات', 'v2p_invites'),
       T('users', 'المستخدمون', 'users'),
-      T('invites', 'الدعوات', 'invites'),
       T('messages', 'الرسائل', 'inbox', { activeFilter: 't:messages' }, { activeFilter: ['t:messages'] }),
       hiddenTab(T('person', 'صفحة الشخص', 'v2person'))
     ] },
@@ -1954,3 +1955,543 @@
   root.V2L = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })(typeof window !== 'undefined' ? window : (typeof globalThis !== 'undefined' ? globalThis : this));
+
+// ===== v2s:people =====
+// «الناس والدعوات» (نهائي): طلبات الدخول · خط الدعوات · قائمة الحسابات · تذاكر الرسائل. ⛔ نقي: لا DOM ولا شبكة ولا ساعة خفية (`now` يُمرَّر).
+// ⛔ الرقم المجهول `null` لا صفر. ⛔ لا نص من الذكاء الاصطناعي: سطر العقل يُبنى من حقول موجودة فقط. نصوص التذاكر الواردة من الوارد
+// تُنسخ من `v2Card` بالحرف (فتقرأ «ابدأ القرارات» و«الطلبات» نفس الجملة).
+(function (root) {
+  'use strict';
+  var L = root.V2L; if (!L) return;
+  var UT = L.util, ar = UT.ar, UF = UT.U, agoText = UT.agoText, dateText = UT.dateText;
+  var HOUR = 3600e3, DAY = 86400e3, NA = L.NA;
+
+  function str(v) { return typeof v === 'string' ? v.trim() : ''; }
+  function ms(v) {
+    if (typeof v === 'number') return isFinite(v) && v > 0 ? v : NaN;
+    var t = Date.parse(v || ''); return isNaN(t) ? NaN : t;
+  }
+  function shorten(s, n) { s = String(s == null ? '' : s).replace(/\s+/g, ' ').trim(); return s.length > n ? s.slice(0, n) + '…' : s; }
+  function clean(a) { return a.filter(function (x) { return x; }); }
+  function digitsOf(p) { return String(p == null ? '' : p).replace(/\D/g, ''); }
+  function hasEmail(set, email) {
+    if (!set) return false;
+    email = String(email || '').toLowerCase();
+    if (!email) return false;
+    if (typeof set.has === 'function') return set.has(email);
+    return Array.isArray(set) && set.indexOf(email) > -1;
+  }
+  function byOld(a, b) { var x = isNaN(a.ts) ? Infinity : a.ts, y = isNaN(b.ts) ? Infinity : b.ts; return x - y; }
+
+  // ---------------------------------------------------------------- ألفاظ ثابتة
+  var STAGE = { pending: 'لم تُفتح بعد', opened: 'فتح الرابط', roles_chosen: 'اختيار الصفة', pain_seen: 'مشاهدة التعريف', exercised: 'تجربة مثال',
+                declared: 'الموافقة على الشروط', registered: 'الانضمام', expired: 'انتهت مهلتها', revoked: 'سُحبت', awaiting_approval: 'تنتظر موافقتك', rejected: 'رُفضت' };
+  function stageLabel(stage) { return STAGE[stage] || ''; }
+  var JOURNEY = ['opened', 'roles_chosen', 'pain_seen', 'exercised', 'declared'];
+
+  function waText(kind, name, link) {
+    var n = str(name), head = n ? 'أهلًا ' + n + '،' : 'أهلًا،';
+    if (kind === 'remind') return head + '\nدعوتك إلى منصة البروفيسور ما زالت بانتظارك، ويمكنك إكمالها من الرابط نفسه:\n' + link;
+    return head + '\nهذه دعوتك إلى منصة البروفيسور، وهي باسمك وحدك:\n' + link;
+  }
+  function waUrl(phone, text) {
+    var d = digitsOf(phone);
+    return (d.length >= 8 ? 'https://wa.me/' + d : 'https://wa.me/') + '?text=' + encodeURIComponent(text);
+  }
+  function inviterKey(r) {
+    var id = r && typeof r.invitedByUserId === 'string' ? r.invitedByUserId.trim() : '';
+    if (id) return 'u:' + id;
+    var g = r ? r.generation : null;
+    // المؤسس بلا معرّف مستخدم: جيله صفر/غائب، أو الجسر سمّاه «المؤسس» (نوع الداعي founder يصل إلى المحمّل كهذه التسمية). غير ذلك ⇒ بلا داعٍ محدد.
+    return (g == null || g === 0 || (r && r.invitedByLabel === 'المؤسس')) ? 'founder' : 'none';
+  }
+  var PLAN_FALLBACK = { free: 'مجانية', pro: 'احترافية', premium: 'بريميوم' };
+  function planLabel(planId, packages) {
+    var id = str(planId);
+    if (Array.isArray(packages)) for (var i = 0; i < packages.length; i++) if (packages[i] && packages[i].id === id && str(packages[i].name)) return packages[i].name;
+    return PLAN_FALLBACK[id] || 'الباقة غير متاحة بعد';
+  }
+  var SEG = { individual: 'أفراد', employee: 'موظفون', government: 'حكومي', student: 'طلاب', lawyer: 'محامون', senior: 'محامٍ خبير', prof: 'أستاذ جامعة',
+              trainer: 'مدرّبون', company: 'شركات', firm: 'شركة محاماة', grad: 'خريج جديد', influencer: 'مؤثر أو رائد أعمال', researcher: 'باحثون', prosecutor: 'وكلاء نيابة' };
+  var ROLE = { admin: 'إدارة', staff: 'فريق العمل', member: 'عضو', investor: 'مستثمر' };
+
+  // ---------------------------------------------------------------- الدعوات: خط الرحلة
+  function stageOf(r) {
+    var st = str(r.stage) || str(r.status) || 'pending';
+    if (r.status === 'awaiting_approval' || r.status === 'rejected') st = r.status;
+    else if (r.revoked && st !== 'registered') st = 'revoked';
+    return st;
+  }
+  function expiryText(r, now) {
+    var e = ms(r.expiresAt);
+    if (isNaN(e)) return '';
+    if (e <= now) return 'انتهت مهلتها';
+    return 'تنتهي بعد ' + UF(Math.ceil((e - now) / DAY), ['يوم واحد', 'يومين', 'أيام', 'يومًا']);
+  }
+  function inviteItem(r, col, now) {
+    var st = stageOf(r), at = ms(r.at), email = str(r.email), name = str(r.name);
+    var link = str(r.link), phone = str(r.phone);
+    var it = { id: String(r.id || ''), stage: st, name: name || 'بلا اسم', title: name || 'بلا اسم', email: email, phone: phone, inviteUrl: link, ts: at, ref: r,
+               strip: st === 'rejected' ? 'رُفضت' : (stageLabel(st) || ''), ageText: isNaN(at) ? '' : 'أُرسلت ' + agoText(at, now),
+               sub: clean([str(r.invitedByLabel) && r.invitedByLabel !== '—' ? 'الداعي: ' + r.invitedByLabel : '', r.rolesLabel && r.rolesLabel !== '—' ? r.rolesLabel : '',
+                           r.specialtyLabel && r.specialtyLabel !== '—' ? r.specialtyLabel : '']).join(' · '),
+               expiry: (col === 'waiting' || col === 'journey') ? expiryText(r, now) : '', docRequested: !!r.docRequested,
+               teamNote: st === 'rejected' && str(r.approvalNote) ? 'ملاحظة الفريق: ' + str(r.approvalNote) : '', person: null, primary: null, secondary: [] };
+    if (col === 'joined' && email) it.person = email;
+    var detail = { label: 'التفاصيل', act: { do: 'sheet', sheet: 'invite' } }, revoke = { label: 'اسحب الدعوة', act: { do: 'sheet', sheet: 'revoke' } };
+    if (col === 'waiting') {
+      if (link) { it.primary = { label: 'انسخ الرابط', act: { do: 'copy' } }; it.secondary = [{ label: 'أرسل عبر واتساب', act: { do: 'wa', kind: 'invite' } }, revoke]; }
+      else { it.primary = { label: 'الرابط غير متاح من المنصة', act: { do: 'none' }, disabled: true }; it.secondary = [revoke]; }
+    } else if (col === 'journey') {
+      if (link) { it.primary = { label: 'ذكّر عبر واتساب', act: { do: 'wa', kind: 'remind' } }; it.secondary = [detail, revoke]; }
+      else { it.primary = detail; it.secondary = [revoke]; }
+    } else if (col === 'joined') {
+      it.primary = email ? { label: 'افتح صفحة الشخص', act: { do: 'person', email: email } } : detail;
+    } else {
+      it.primary = { label: 'أعِد إصدارها', act: { do: 'sheet', sheet: 'reissue' } }; it.secondary = [detail];
+    }
+    return it;
+  }
+  // pipeline(invData, invState, now, inviter) ⇒ بطاقات وأعمدة الدعوات. الحالة المجهولة ⇒ null لا صفر.
+  function pipeline(inv, invState, now, inviter) {
+    var empty = { state: 'loading', cards: { sent: null, opened: null, joined: null, awaiting: null }, pct: { opened: null, joined: null }, steps: [],
+                  cols: { waiting: { items: [], total: 0, shown: 0 }, journey: { items: [], total: 0, shown: 0 }, joined: { items: [], total: 0, shown: 0 }, stopped: { items: [], total: 0, shown: 0 } },
+                  inviters: [], stalled: null, expiring: null, brain: [], partial: null, awaitingRows: [] };
+    var stepDefs = [['roles_chosen', 'اختيار الصفة'], ['exercised', 'تجربة مثال'], ['declared', 'الشروط']];
+    empty.steps = stepDefs.map(function (d) { return { key: d[0], label: d[1], n: null }; });
+    if (invState === 'idle' || invState === 'loading' || (!inv && invState !== 'error')) return empty;
+    if (invState === 'error' || !inv || inv.missing) { empty.state = (inv && inv.missing) ? 'missing' : 'failed'; return empty; }
+    var rows = Array.isArray(inv.rows) ? inv.rows : [];
+    var counts = inv.counts || null;
+    var out = empty; out.state = 'ready';
+    var awaiting = [], board = [];
+    rows.forEach(function (r) { var st = stageOf(r); if (st === 'awaiting_approval') awaiting.push(r); else board.push(r); });
+    var rejected = board.filter(function (r) { return stageOf(r) === 'rejected'; }).length;
+    var sent = rows.length - awaiting.length - rejected;
+    var opened = rows.filter(function (r) { return r.opened; }).length, joined = rows.filter(function (r) { return r.registered; }).length;
+    out.cards = { sent: sent, opened: opened, joined: joined, awaiting: awaiting.length };
+    out.pct = { opened: sent > 0 ? ar(Math.round(opened * 100 / sent)) + '٪ مما أُرسل' : null, joined: sent > 0 ? ar(Math.round(joined * 100 / sent)) + '٪ مما أُرسل' : null };
+    out.steps = stepDefs.map(function (d) { return { key: d[0], label: d[1], n: counts && counts[d[0]] != null ? counts[d[0]] : null }; });
+    out.awaitingRows = awaiting;
+    // الداعي
+    var tally = {}, order = [];
+    board.forEach(function (r) {
+      var k = inviterKey(r);
+      if (!tally[k]) { tally[k] = { key: k, n: 0, name: str(r.invitedByLabel) }; order.push(k); }
+      tally[k].n++;
+    });
+    var members = order.filter(function (k) { return k.indexOf('u:') === 0; }).map(function (k) { return tally[k]; }).sort(function (a, b) { return b.n - a.n; });
+    out.inviters = [{ key: 'all', label: 'كل الداعين (' + ar(board.length) + ')', n: board.length }];
+    if (tally.founder) out.inviters.push({ key: 'founder', label: 'المؤسس (' + ar(tally.founder.n) + ')', n: tally.founder.n });
+    members.forEach(function (m) { out.inviters.push({ key: m.key, label: (m.name && m.name !== '—' ? m.name : 'عضو') + ' (' + ar(m.n) + ')', n: m.n }); });
+    if (tally.none) out.inviters.push({ key: 'none', label: 'بلا داعٍ محدد (' + ar(tally.none.n) + ')', n: tally.none.n });
+    var pick = inviter && inviter !== 'all' ? inviter : '';
+    var shownRows = pick ? board.filter(function (r) { return inviterKey(r) === pick; }) : board;
+    var cols = { waiting: [], journey: [], joined: [], stopped: [] };
+    shownRows.forEach(function (r) {
+      var st = stageOf(r);
+      if (st === 'pending') cols.waiting.push(r);
+      else if (JOURNEY.indexOf(st) > -1) cols.journey.push(r);
+      else if (st === 'registered') cols.joined.push(r);
+      else if (st === 'expired' || st === 'revoked' || st === 'rejected') cols.stopped.push(r);
+    });
+    var newest = function (a, b) { var x = isNaN(ms(a.at)) ? 0 : ms(a.at), y = isNaN(ms(b.at)) ? 0 : ms(b.at); return y - x; };
+    Object.keys(cols).forEach(function (c) {
+      var list = cols[c].slice().sort(newest);
+      var total = list.length;
+      if (c === 'joined') {
+        list = list.filter(function (r) { var t = ms(r.registeredAt); if (isNaN(t)) t = ms(r.at); return !isNaN(t) && now - t <= 7 * DAY; });
+      }
+      var items = list.map(function (r) { return inviteItem(r, c, now); });
+      out.cols[c] = { items: items, total: c === 'joined' ? cols.joined.length : total, shown: (c === 'joined' || c === 'stopped') ? 3 : 6 };
+      if (c === 'joined') out.cols.joined.all = cols.joined.slice().sort(newest).map(function (r) { return inviteItem(r, 'joined', now); });
+    });
+    // الواقف والمنتهي قريبًا (على كل الصفوف لا على الفلتر)
+    var stalled = 0, expiring = 0;
+    board.forEach(function (r) {
+      var st = stageOf(r), at = ms(r.at), ex = ms(r.expiresAt);
+      if (JOURNEY.indexOf(st) > -1 && !isNaN(at) && now - at > 72 * HOUR) stalled++;
+      if ((st === 'pending' || JOURNEY.indexOf(st) > -1) && !isNaN(ex) && ex > now && ex - now <= 48 * HOUR) expiring++;
+    });
+    out.stalled = stalled; out.expiring = expiring;
+    out.brain = ['أُرسلت ' + ar(sent) + '، فُتح منها ' + ar(opened) + ' وانضمّ ' + ar(joined) + '.'];
+    if (stalled > 0) out.brain.push(UF(stalled, ['دعوة واحدة فُتحت ولم تكتمل وقد مرّ على إرسالها أكثر من ٣ أيام', 'دعوتان فُتحتا ولم تكتملا وقد مرّ على إرسالهما أكثر من ٣ أيام',
+      'دعوات فُتحت ولم تكتمل وقد مرّ على إرسالها أكثر من ٣ أيام', 'دعوة فُتحت ولم تكتمل وقد مرّ على إرسالها أكثر من ٣ أيام']) + ' — ذكّر أصحابها عبر واتساب.');
+    if (expiring > 0) out.brain.push(UF(expiring, ['دعوة واحدة تنتهي مهلتها خلال يومين', 'دعوتان تنتهي مهلتهما خلال يومين', 'دعوات تنتهي مهلتها خلال يومين', 'دعوة تنتهي مهلتها خلال يومين']) + '.');
+    out.partial = (inv.count != null && inv.count > rows.length) ? { shown: rows.length, total: inv.count } : null;
+    return out;
+  }
+
+  // ---------------------------------------------------------------- الطلبات: من ينتظر الدخول
+  var LBL_VISIT = 'زوّار ينتظرون الفتح', LBL_JOIN = 'طلبات تقديم الخدمة', LBL_FOUND = 'ليدات خبير مؤسس';
+  function waDigits(row) {
+    var d = Array.isArray(row.details) ? row.details : [];
+    for (var i = 0; i < d.length; i++) if (d[i] && d[i].k === 'واتساب') { var s = String(d[i].v || '').replace(/[^\d+]/g, ''); return digitsOf(s).length >= 8 ? s : ''; }
+    return '';
+  }
+  function inboxHalf(inp, label) {
+    var st = inp.inboxState;
+    if (st === 'idle' || st === 'loading' || (!inp.inbox && st !== 'error')) return 'loading';
+    if (st === 'error' || !inp.inbox) return 'failed';
+    if ((inp.failed || []).indexOf(label) > -1) return 'failed';
+    return 'ready';
+  }
+  function hasTrunc(inp, label) {
+    return (inp.trunc || []).some(function (t) { return String(t).split(':')[0].trim() === label; });
+  }
+  function cardTicket(row, kind, now, userEmails) {
+    var card = L.v2Card(row, { now: now });
+    if (!card) return null;
+    var t = { id: kind + ':' + (row.apiId != null ? row.apiId : row.ref), kind: kind, tag: card.tag, age: card.ageText, title: card.title, sub: card.sub, brain: card.brain,
+              reason: card.reason, warn: card.warn, extra: [], link: null, primary: null, secondary: [], ref: row, ts: card.ts };
+    var email = str(row.personEmail) || str(row.email);
+    if (kind === 'visitor' || (kind === 'join' && email) || (kind === 'founding' && hasEmail(userEmails, email))) t.link = email.toLowerCase() || null;
+    return { ticket: t, card: card };
+  }
+  function requests(inp, now) {
+    inp = inp || {};
+    var out = { cols: {}, later: { state: 'loading', rows: [], shown: 0, total: null }, head: { text: '', failedLabels: [], invitesLine: null } };
+    var defs = { visitors: ['ينتظرون فتح المنصة', 'الزوّار', 'amber'], approval: ['دعوات تنتظر موافقتك', 'الدعوات', 'amber'],
+                 join: ['طلبات تقديم خدمة', 'الخدمات', 'ink'], founding: ['خبراء مؤسسون', 'المؤسسون', 'green'] };
+    Object.keys(defs).forEach(function (k) {
+      out.cols[k] = { state: 'loading', count: null, countText: '…', partial: false, items: [], retry: [], label: defs[k][0], short: defs[k][1], tone: defs[k][2] };
+    });
+    var rows = Array.isArray(inp.inbox) ? inp.inbox : [];
+    var failedLabels = [];
+    function setState(col, state, items, extra) {
+      var c = out.cols[col]; c.state = state; c.items = items || [];
+      if (state === 'ready') { c.count = c.items.length; c.countText = ar(c.count); }
+      else if (state === 'mixed') { c.count = c.items.length; c.countText = ar(c.count) + '+؟'; }
+      else if (state === 'loading') { c.count = null; c.countText = '…'; }
+      else { c.count = null; c.countText = '—'; }
+      if (extra) Object.keys(extra).forEach(function (x) { c[x] = extra[x]; });
+    }
+    // —— العمود ١: زوّار (الوارد) + قائمة الانتظار
+    var half1 = inboxHalf(inp, LBL_VISIT);
+    var wlState = inp.waitlistState, wl = inp.waitlist;
+    var half2 = (wlState === 'idle' || wlState === 'loading' || (!wl && wlState !== 'error')) ? 'loading' : (wlState === 'error' || !wl ? 'failed' : (wl.missing ? 'missing' : 'ready'));
+    var visTickets = [], notePending = [];
+    if (half1 === 'ready') {
+      rows.filter(function (r) { return r && r.apiKind === 'pending_user'; }).forEach(function (r) {
+        var x = cardTicket(r, 'visitor', now, inp.userEmails); if (!x) return;
+        var t = x.ticket, flagged = !!(r.flagLabels && r.flagLabels.length);
+        t.primary = flagged ? { label: x.card.primary.label, act: { do: 'sheet', sheet: 'visitor' } } : { label: x.card.primary.label, act: { do: 'decide', action: 'approve' } };
+        t.secondary = flagged ? [] : [{ label: 'التفاصيل', act: { do: 'sheet', sheet: 'visitor' } }];
+        visTickets.push(t);
+      });
+    }
+    if (half2 === 'ready') {
+      (wl.rows || []).filter(function (w) { return w && (w.status || 'new') === 'new'; }).forEach(function (w) {
+        var at = ms(w.at);
+        var sub = clean([w.roleLabel !== '—' ? w.roleLabel : '', w.specialtyLabel !== '—' ? w.specialtyLabel : '', w.countryLabel !== '—' ? w.countryLabel : '']).join(' · ');
+        var extra = str(w.note) ? ['سبب الطلب: ' + shorten(w.note, 140)] : [];
+        visTickets.push({ id: 'waitlist:' + w.id, kind: 'waitlist', tag: 'من قائمة الانتظار', age: isNaN(at) ? '' : agoText(at, now), title: str(w.name) || 'بلا اسم', sub: sub,
+          brain: 'طلب دعوة من الموقع ولا يملك حسابًا بعد', reason: '', warn: '', extra: extra, link: null, ts: at, ref: w,
+          primary: { label: 'أرسل دعوة', act: { do: 'sheet', sheet: 'phone' } }, secondary: [{ label: 'التفاصيل', act: { do: 'sheet', sheet: 'waitlist' } }] });
+      });
+    }
+    visTickets.sort(byOld);
+    var retry1 = [];
+    if (half1 === 'failed') retry1.push({ key: 'inbox', label: 'الزوّار' });
+    if (half2 === 'failed') retry1.push({ key: 'waitlist', label: 'قائمة الانتظار' });
+    if (half2 === 'missing') retry1.push({ key: 'waitlist', label: 'قائمة الانتظار', missing: true });
+    var s1;
+    if (half1 === 'loading' || half2 === 'loading') s1 = 'loading';
+    else if (half1 === 'ready' && half2 === 'ready') s1 = 'ready';
+    else if (half1 !== 'ready' && half2 !== 'ready') s1 = 'failed';
+    else s1 = 'mixed';
+    if (s1 === 'loading') setState('visitors', 'loading', []);
+    else setState('visitors', s1, visTickets, { retry: retry1 });
+    out.cols.visitors.partial = hasTrunc(inp, LBL_VISIT);
+    if (half1 === 'failed') failedLabels.push('الزوّار');
+    if (half2 === 'failed') failedLabels.push('قائمة الانتظار');
+    if (half2 === 'missing') failedLabels.push('قائمة الانتظار');
+    // —— العمود ٢: دعوات تنتظر الموافقة
+    var inv = inp.invites, invSt = inp.invitesState;
+    var invHalf = (invSt === 'idle' || invSt === 'loading' || (!inv && invSt !== 'error')) ? 'loading' : (invSt === 'error' || !inv ? 'failed' : (inv.missing ? 'missing' : 'ready'));
+    if (invHalf === 'ready') {
+      var gen = inp.settings && inp.settings.invite_approval_from_generation != null ? inp.settings.invite_approval_from_generation : null;
+      var items = [];
+      (inv.rows || []).filter(function (r) { return stageOf(r) === 'awaiting_approval'; }).forEach(function (r) {
+        var at = ms(r.at);
+        var brain = gen != null ? 'دعوات الجيل ' + ar(gen) + ' وما بعده تحتاج موافقتك قبل أن يعمل رابطها' : 'تحتاج موافقتك قبل أن يعمل رابطها';
+        items.push({ id: 'invite:' + r.id, kind: 'approval', tag: 'دعوة من عضو', age: isNaN(at) ? '' : agoText(at, now), title: str(r.name) || 'بلا اسم',
+          sub: 'الداعي: ' + (str(r.invitedByLabel) || '—') + (r.generation != null ? ' · الجيل ' + ar(r.generation) : ''), brain: brain, reason: '', warn: '',
+          extra: str(r.note) ? ['ملاحظة الداعي: ' + str(r.note)] : [], link: r.registered && r.email ? String(r.email).toLowerCase() : null, ts: at, ref: r,
+          primary: { label: 'وافق على الدعوة', act: { do: 'approve_invite' } }, secondary: [{ label: 'ارفض', act: { do: 'sheet', sheet: 'reject_invite' } }] });
+      });
+      items.sort(byOld);
+      setState('approval', 'ready', items);
+      out.cols.approval.partial = inv.count != null && inv.count > (inv.rows || []).length;
+    } else {
+      setState('approval', invHalf, []);
+      if (invHalf !== 'loading') failedLabels.push('الدعوات');
+    }
+    if (invHalf === 'failed') out.cols.approval.retry = [{ key: 'invites', label: 'الدعوات' }];
+    // —— العمودان ٣ و٤ (الوارد)
+    function inboxCol(col, kind, label, shortLabel, build) {
+      var h = inboxHalf(inp, label);
+      if (h === 'ready') {
+        var items = [];
+        rows.filter(function (r) { return r && r.apiKind === kind; }).forEach(function (r) {
+          var x = cardTicket(r, col, now, inp.userEmails); if (!x) return; build(x.ticket, x.card, r); items.push(x.ticket);
+        });
+        items.sort(byOld);
+        setState(col, 'ready', items);
+        out.cols[col].partial = hasTrunc(inp, label);
+      } else {
+        setState(col, h, []);
+        if (h === 'failed') { failedLabels.push(shortLabel); out.cols[col].retry = [{ key: 'inbox', label: shortLabel }]; }
+      }
+    }
+    inboxCol('join', 'join', LBL_JOIN, 'طلبات تقديم الخدمة', function (t, card, r) {
+      t.id = 'join:' + r.apiId;
+      if (r.infoRequest) t.extra.push('طُلب من صاحب الطلب: ' + r.infoRequest + ' — بانتظار رده');
+      t.primary = r.licenceMissing ? { label: card.primary.label, act: { do: 'sheet', sheet: 'join' } } : { label: card.primary.label, act: { do: 'decide', action: 'approve' } };
+      t.secondary = [{ label: 'ارفض', act: { do: 'sheet', sheet: 'reject_join' } }, { label: 'اطلب استكمالًا', act: { do: 'sheet', sheet: 'info_join' } }];
+    });
+    inboxCol('founding', 'founding', LBL_FOUND, 'الخبراء المؤسسون', function (t, card, r) {
+      t.id = 'founding:' + r.apiId;
+      var exp = ''; (r.details || []).forEach(function (d) { if (d && d.k === 'الخبرة') exp = str(String(d.v)).replace(/\d/g, function (x) { return '٠١٢٣٤٥٦٧٨٩'.charAt(+x); }); });
+      t.sub = exp ? 'الخبرة: ' + exp : '';       // نص الملاحظة القديم عامي («كلّمه على…») فلا يُعرض؛ والباقي في سطر العقل
+      t.primary = { label: card.primary.label, act: { do: 'decide', action: 'approve' } };
+      var wa = waDigits(r);
+      t.secondary = clean([wa ? { label: 'واتساب', act: { do: 'link', url: 'https://wa.me/' + digitsOf(wa) } } : null, { label: 'ليس مناسبًا', act: { do: 'sheet', sheet: 'reject_founding' } }]);
+    });
+    // —— «سجّلوا ولم يطلبوا الفتح بعد»
+    var pend = inp.pending, pst = inp.pendingState;
+    var pHalf = (pst === 'idle' || pst === 'loading' || (!pend && pst !== 'error')) ? 'loading' : (pst === 'error' || !pend ? 'failed' : (pend.missing ? 'missing' : 'ready'));
+    out.later.state = pHalf;
+    if (pHalf === 'ready') {
+      var list = (pend.rows || []).filter(function (u) { return !u.requested; });
+      out.later.rows = list.map(function (u) {
+        var at = ms(u.at);
+        return { id: u.id, name: str(u.name) || str(u.email) || 'بلا اسم', email: str(u.email), rejected: !!u.rejected, signedText: isNaN(at) ? '' : 'سجّل ' + agoText(at, now),
+                 lastText: u.lastLoginAt ? 'آخر دخول ' + agoText(u.lastLoginAt, now) : (str(u.lastLogin) ? 'آخر دخول ' + u.lastLogin : 'لم يُسجَّل دخول بعد'),
+                 aiText: 'الأسئلة المستعملة: ' + (u.aiUsed != null ? ar(u.aiUsed) : NA), ref: u };
+      });
+      out.later.shown = out.later.rows.length;
+      out.later.total = pend.count != null ? pend.count : null;
+    }
+    // —— الترويسة (B1)
+    var colsK = ['visitors', 'approval', 'join', 'founding'];
+    var allLoaded = colsK.every(function (k) { return out.cols[k].state === 'ready'; });
+    var total = 0, oldest = Infinity;
+    colsK.forEach(function (k) { out.cols[k].items.forEach(function (t) { total++; if (!isNaN(t.ts) && t.ts < oldest) oldest = t.ts; }); });
+    var parts = [];
+    var cnt = function (k) { return out.cols[k].items.length; };
+    var vis = out.cols.visitors.items.filter(function (t) { return t.kind === 'visitor'; }).length, wlN = out.cols.visitors.items.length - vis;
+    if (vis > 0) parts.push(UF(vis, ['زائر واحد ينتظر الفتح', 'زائران ينتظران الفتح', 'زوّار ينتظرون الفتح', 'زائرًا ينتظر الفتح']));
+    if (wlN > 0) parts.push(UF(wlN, ['واحد من قائمة الانتظار', 'اثنان من قائمة الانتظار', 'من قائمة الانتظار', 'من قائمة الانتظار']));
+    if (cnt('approval') > 0) parts.push(UF(cnt('approval'), ['دعوة واحدة تنتظر موافقتك', 'دعوتان تنتظران موافقتك', 'دعوات تنتظر موافقتك', 'دعوة تنتظر موافقتك']));
+    if (cnt('join') > 0) parts.push(UF(cnt('join'), ['طلب تقديم خدمة واحد', 'طلبا تقديم خدمة', 'طلبات تقديم خدمة', 'طلب تقديم خدمة']));
+    if (cnt('founding') > 0) parts.push(UF(cnt('founding'), ['خبير مؤسس واحد', 'خبيران مؤسسان', 'خبراء مؤسسون', 'خبيرًا مؤسسًا']));
+    var uniqF = failedLabels.filter(function (l, i) { return failedLabels.indexOf(l) === i; });
+    out.head.failedLabels = uniqF;
+    if (total > 0) {
+      out.head.text = 'ينتظر قرارك ' + ar(total) + ': ' + parts.join('، ') + '.' + (isFinite(oldest) ? ' أقدمها ' + agoText(oldest, now) + '.' : '');
+    } else if (allLoaded) out.head.text = 'لا أحد ينتظر قرارك الآن.';
+    else if (!uniqF.length) out.head.text = '…جارٍ الجلب';
+    if (uniqF.length) out.head.text += (out.head.text ? ' ' : '') + 'تعذّر جلب: ' + uniqF.join('، ') + ' — العدد ناقص.';
+    // —— B1-g: دعوات واقفة أو تنتهي قريبًا ⇒ رابط إلى «الدعوات»
+    if (invHalf === 'ready') {
+      var pl = pipeline(inv, invSt, now, '');
+      var bits = [];
+      if (pl.stalled > 0) bits.push(UF(pl.stalled, ['دعوة واحدة واقفة', 'دعوتان واقفتان', 'دعوات واقفة', 'دعوة واقفة']));
+      if (pl.expiring > 0) bits.push(UF(pl.expiring, ['دعوة واحدة تنتهي مهلتها قريبًا', 'دعوتان تنتهي مهلتهما قريبًا', 'دعوات تنتهي مهلتها قريبًا', 'دعوة تنتهي مهلتها قريبًا']));
+      if (bits.length) out.head.invitesLine = { text: bits.join(' و') + ' — انظر «الدعوات»', href: '#s/people/pipeline' };
+    }
+    return out;
+  }
+
+  // ---------------------------------------------------------------- الحسابات
+  function adminGuard(user, metrics, raw, truncated) {
+    if (!user || user.role !== 'admin') return { locked: false, note: '' };
+    var n = null;
+    if (metrics && typeof metrics.admins === 'number') n = metrics.admins;
+    else if (!truncated && Array.isArray(raw)) n = raw.filter(function (u) { return u && u.role === 'admin'; }).length;
+    var LINE = 'هذا آخر حساب إدارة، فلا يمكن تغيير دوره';
+    if (n == null) return { locked: true, note: LINE + ' (تعذّر التأكد من عدد حسابات الإدارة)' };
+    return n <= 1 ? { locked: true, note: LINE } : { locked: false, note: '' };
+  }
+  function userChips(u, pendingEmails, packages) {
+    var c = [];
+    if (u.role === 'admin') c.push({ key: 'admin', label: 'إدارة' });
+    else if (u.role === 'staff') c.push({ key: 'staff', label: 'فريق العمل' });
+    else if (u.role === 'investor') c.push({ key: 'investor', label: 'مستثمر' });
+    else c.push({ key: 'member', label: 'عضو' });
+    if (u.trainer_status === 'approved') c.push({ key: 'trainer', label: 'مدرّب' });
+    else if (u.trainer_status === 'pending') c.push({ key: 'trainer_pending', label: 'طلب مدرّب' });
+    if (hasEmail(pendingEmails, u.email)) c.push({ key: 'visitor', label: 'زائر' });
+    if (u.is_test) c.push({ key: 'test', label: 'تجريبي' });
+    if (u.is_active === false) c.push({ key: 'off', label: 'موقوف' });
+    if (SEG[u.segment]) c.push({ key: 'seg', label: SEG[u.segment] });
+    (Array.isArray(u.tags) ? u.tags : []).forEach(function (t) { if (str(t)) c.push({ key: 'tag', label: str(t), gold: true }); });
+    return c;
+  }
+  function users(raw, o) {
+    o = o || {};
+    var out = { state: 'ready', rows: [], chips: [], filterOptions: { roles: [], segs: [] }, activeFilters: [], searchLine: null, empty: null, shown: 0, total: null, truncated: false, more: 0, head: '' };
+    var st = o.usersState || (raw ? 'ready' : 'loading');
+    if (st === 'idle' || st === 'loading') { out.state = 'loading'; return out; }
+    if (st === 'error' || !Array.isArray(raw)) { out.state = 'failed'; return out; }
+    var metrics = o.metrics || null;
+    var pendingEmails = [];
+    if (o.pending && Array.isArray(o.pending.rows)) pendingEmails = o.pending.rows.map(function (p) { return String(p.email || '').toLowerCase(); }).filter(Boolean);
+    var total = metrics && typeof metrics.total === 'number' ? metrics.total : null;
+    var truncated = total != null ? total > raw.length : raw.length >= 500;
+    out.truncated = truncated; out.total = total;
+    var cnt = function (key, fn) {
+      if (metrics && typeof metrics[key] === 'number') return metrics[key];
+      return truncated ? null : raw.filter(fn).length;
+    };
+    out.chips = [
+      { key: 'all', label: 'الكل', n: total != null ? total : (truncated ? null : raw.length) },
+      { key: 'member', label: 'أعضاء', n: cnt('members', function (u) { return u.role === 'member'; }) },
+      { key: 'trainer', label: 'مدرّبون', n: cnt('trainers_approved', function (u) { return u.trainer_status === 'approved'; }) },
+      { key: 'staff', label: 'فريق العمل', n: cnt('staff', function (u) { return u.role === 'staff'; }) },
+      { key: 'visitor', label: 'زوّار', n: o.pending && o.pending.count != null ? o.pending.count : (o.pending ? (o.pending.rows || []).length : null) }
+    ];
+    out.filterOptions.roles = [
+      { key: 'admin', label: 'الإدارة', n: cnt('admins', function (u) { return u.role === 'admin'; }) },
+      { key: 'investor', label: 'مستثمرون', n: cnt('investors', function (u) { return u.role === 'investor'; }) },
+      { key: 'trainer_pending', label: 'طلبات مدرّب', n: truncated ? null : raw.filter(function (u) { return u.trainer_status === 'pending'; }).length },
+      { key: 'test', label: 'حسابات تجريبية', n: truncated ? null : raw.filter(function (u) { return u.is_test; }).length }
+    ];
+    var segCount = {};
+    raw.forEach(function (u) { if (SEG[u.segment]) segCount[u.segment] = (segCount[u.segment] || 0) + 1; });
+    Object.keys(segCount).forEach(function (k) { out.filterOptions.segs.push({ key: 's:' + k, label: SEG[k], n: segCount[k] }); });
+    var tagCount = {};
+    raw.forEach(function (u) { (Array.isArray(u.tags) ? u.tags : []).forEach(function (t) { if (str(t)) tagCount[str(t)] = (tagCount[str(t)] || 0) + 1; }); });
+    Object.keys(tagCount).forEach(function (k) { out.filterOptions.segs.push({ key: 't:' + k, label: k, n: tagCount[k] }); });
+    var f = o.filter || {}, chip = o.chip || 'all', q = String(o.q || '').trim().toLowerCase();
+    if (f.role) { var ro = out.filterOptions.roles.filter(function (r) { return r.key === f.role; })[0]; if (ro) out.activeFilters.push({ key: 'role', label: ro.label }); }
+    if (f.seg) { var sg = out.filterOptions.segs.filter(function (r) { return r.key === f.seg; })[0]; out.activeFilters.push({ key: 'seg', label: sg ? sg.label : String(f.seg).slice(2) }); }
+    if (o.sort === 'login') out.activeFilters.push({ key: 'sort', label: 'آخر دخول' });
+    var all = raw.slice();
+    var seen = {}; raw.forEach(function (u) { seen[u.id] = 1; });
+    (Array.isArray(o.searchExtra) ? o.searchExtra : []).forEach(function (u) { if (u && !seen[u.id]) { seen[u.id] = 1; all.push(Object.assign({}, u, { fromSearch: true })); } });
+    var rows = all.filter(function (u) {
+      if (chip === 'member' && u.role !== 'member') return false;
+      if (chip === 'trainer' && u.trainer_status !== 'approved') return false;
+      if (chip === 'staff' && u.role !== 'staff') return false;
+      if (chip === 'visitor' && !hasEmail(pendingEmails, u.email)) return false;
+      if (f.role === 'admin' && u.role !== 'admin') return false;
+      if (f.role === 'investor' && u.role !== 'investor') return false;
+      if (f.role === 'trainer_pending' && u.trainer_status !== 'pending') return false;
+      if (f.role === 'test' && !u.is_test) return false;
+      if (f.seg) {
+        if (f.seg.indexOf('s:') === 0 && u.segment !== f.seg.slice(2)) return false;
+        if (f.seg.indexOf('t:') === 0 && (!Array.isArray(u.tags) || u.tags.indexOf(f.seg.slice(2)) < 0)) return false;
+      }
+      if (q && (String(u.full_name || '').toLowerCase().indexOf(q) < 0 && String(u.email || '').toLowerCase().indexOf(q) < 0 && String(u.phone || '').toLowerCase().indexOf(q) < 0)) return false;
+      return true;
+    });
+    var key = o.sort === 'login' ? 'last_login_at' : 'created_at';
+    rows.sort(function (a, b) { var x = ms(a[key]), y = ms(b[key]); return (isNaN(y) ? 0 : y) - (isNaN(x) ? 0 : x); });
+    var now = o.now || 0, limit = o.limit || 50;
+    out.shown = Math.min(rows.length, limit);
+    out.more = Math.max(0, Math.min(50, rows.length - limit));
+    out.rows = rows.slice(0, limit).map(function (u) {
+      var chips = userChips(u, pendingEmails, o.packages);
+      var more = chips.length > 4 ? chips.length - 4 : 0;
+      chips = chips.slice(0, 4);
+      if (more) chips.push({ key: 'more', label: '+' + ar(more) });
+      var name = str(u.full_name) || str(u.email) || '—';
+      var last = ms(u.last_login_at);
+      return { id: u.id, email: str(u.email), name: name, initial: name.charAt(0).toUpperCase(), chips: chips, role: u.role, trainer: u.trainer_status,
+               planText: planLabel(u.plan_id, o.packages), joinedText: dateText(u.created_at) || NA, lastText: isNaN(last) ? 'غير متاح' : agoText(last, now),
+               active: u.is_active !== false, isTest: !!u.is_test, segment: u.segment || '', tags: Array.isArray(u.tags) ? u.tags : [], fromSearch: !!u.fromSearch, ref: u };
+    });
+    if (o.searching) out.searchLine = '…نبحث في كل الحسابات';
+    else if (o.searchFailed) out.searchLine = 'تعذّر البحث في كل الحسابات الآن — النتائج من المعروض فقط';
+    if (!rows.length) {
+      if (q && !o.searching) out.empty = { text: 'لا حساب يطابق «' + shorten(String(o.q).trim(), 40) + '»', hint: 'اكتب البريد كاملًا واضغط إدخال لفتح صفحة الشخص' };
+      else if (!q && !f.role && !f.seg && chip === 'all' && !all.length) out.state = 'empty';
+      else if (!q) out.empty = { text: 'لا حسابات في هذا التصنيف', hint: '' };
+    }
+    var m = metrics || {};
+    var slot = function (v) { return typeof v === 'number' ? ar(v) : NA; };
+    out.head = 'الحسابات ' + (total != null ? ar(total) : (truncated ? NA : ar(raw.length))) + ' · انضمّ هذا الأسبوع ' + slot(m.signups_7d) + ' · اليوم ' + slot(m.signups_today)
+      + ' · مدرّبون معتمدون ' + slot(m.trainers_approved) + ' · باقات مدفوعة ' + slot(m.paid_plan);
+    return out;
+  }
+
+  // ---------------------------------------------------------------- الرسائل
+  function mailUrl(email, subject) {
+    return 'mailto:' + encodeURIComponent(email).replace(/%40/g, '@') + '?subject=' + encodeURIComponent(subject);
+  }
+  function msgBrain(at, now) {
+    var t = 'وصلت ' + agoText(at, now);
+    return !isNaN(ms(at)) && now - ms(at) > DAY ? t + ' · مرّ عليها أكثر من يوم' : t;
+  }
+  function msgState(rows, st) {
+    if (st === 'idle' || st === 'loading' || (!rows && st !== 'error')) return 'loading';
+    return (st === 'error' || !Array.isArray(rows)) ? 'failed' : 'ready';
+  }
+  function messages(site, siteState, chat, chatState, follow, followState, now) {
+    var out = { cols: {}, replied: [], head: { text: '' } };
+    var defs = { site: ['رسائل الموقع', 'الموقع'], chat: ['رسائل من المحادثة', 'المحادثة'], follow: ['طلبات تواصل', 'تواصل'] };
+    Object.keys(defs).forEach(function (k) { out.cols[k] = { state: 'loading', count: null, items: [], label: defs[k][0], short: defs[k][1] }; });
+    var s1 = msgState(site, siteState), s2 = msgState(chat, chatState), s3 = msgState(follow, followState);
+    out.cols.site.state = s1; out.cols.chat.state = s2; out.cols.follow.state = s3;
+    if (s1 === 'ready') {
+      out.cols.site.items = site.filter(function (m) { return m && m.status !== 'replied'; }).map(function (m) {
+        var at = ms(m.at);
+        return { id: 'site:' + m.id, src: 'site', rid: m.id, strip: 'من نموذج التواصل', old: !isNaN(at) && now - at > DAY, ageText: isNaN(at) ? '' : agoText(at, now), ts: at,
+                 title: str(m.name) || 'زائر بلا اسم', sub: str(m.topic), body: str(m.body), email: str(m.email), phone: str(m.phone), brain: isNaN(at) ? '' : msgBrain(at, now),
+                 primary: { label: 'ردّ', act: { do: 'sheet', sheet: 'reply' } }, secondary: [{ label: 'احذف', act: { do: 'sheet', sheet: 'delete' } }], ref: m };
+      }).sort(byOld);
+      out.replied = site.filter(function (m) { return m && m.status === 'replied'; }).sort(function (a, b) { return (ms(b.at) || 0) - (ms(a.at) || 0); }).slice(0, 20).map(function (m) {
+        return { id: 'site:' + m.id, rid: m.id, name: str(m.name) || 'زائر بلا اسم', topic: str(m.topic), dateText: dateText(m.at) || '', ref: m };
+      });
+    }
+    if (s2 === 'ready') {
+      out.cols.chat.items = chat.filter(Boolean).map(function (m) {
+        var at = ms(m.created_at != null ? m.created_at : m.at), email = str(m.from_email) || str(m.email) || str(m.user_email), phone = str(m.contact_phone) || str(m.phone);
+        var subject = str(m.subject) || str(m.topic), id = m.id != null ? m.id : m._id;
+        var it = { id: 'chat:' + id, src: 'chat', rid: id, strip: 'من المحادثة على المنصة', old: !isNaN(at) && now - at > DAY, ageText: isNaN(at) ? '' : agoText(at, now), ts: at,
+                   title: str(m.from_name) || str(m.name) || str(m.user_name) || 'زائر بلا اسم', sub: subject, body: str(m.body) || str(m.text) || str(m.summary),
+                   email: email, phone: phone, brain: isNaN(at) ? '' : msgBrain(at, now), secondary: [], ref: m };
+        var resolve = { label: 'علّمها منتهية', act: { do: 'resolve' } };
+        if (email) { it.primary = { label: 'ردّ بالبريد', act: { do: 'sent', url: mailUrl(email, 'ردًّا على رسالتك — البروفيسور') } }; it.secondary = [resolve]; }
+        else if (digitsOf(phone).length >= 8) { it.primary = { label: 'واتساب', act: { do: 'sent', url: 'https://wa.me/' + digitsOf(phone) } }; it.secondary = [resolve]; }
+        else it.primary = resolve;
+        return it;
+      }).sort(byOld);
+    }
+    if (s3 === 'ready') {
+      out.cols.follow.items = follow.filter(Boolean).map(function (m) {
+        var at = ms(m.created_at != null ? m.created_at : m.at), email = str(m.from_email) || str(m.email), phone = str(m.phone), id = m.id != null ? m.id : m._id;
+        var want = str(m.want) || str(m.need) || str(m.topic) || str(m.summary);
+        var it = { id: 'follow:' + id, src: 'follow', rid: id, strip: 'طلب تواصل من المحادثة', old: false, ageText: isNaN(at) ? '' : agoText(at, now), ts: at,
+                   title: str(m.full_name) || str(m.name) || 'بلا اسم', sub: want ? 'يريد: ' + want : '', body: str(m.experience) ? 'الخبرة: ' + str(m.experience) : '',
+                   email: email, phone: phone, brain: 'طلب التواصل دون إنشاء حساب', secondary: [], ref: m };
+        var done = { label: 'تمت المتابعة', act: { do: 'resolve' } };
+        if (digitsOf(phone).length >= 8) { it.primary = { label: 'واتساب', act: { do: 'sent', url: 'https://wa.me/' + digitsOf(phone) } }; it.secondary = [done]; }
+        else if (email) { it.primary = { label: 'ردّ بالبريد', act: { do: 'sent', url: mailUrl(email, 'ردًّا على طلبك — البروفيسور') } }; it.secondary = [done]; }
+        else it.primary = done;
+        return it;
+      }).sort(byOld);
+    }
+    ['site', 'chat', 'follow'].forEach(function (k) { var c = out.cols[k]; c.count = c.state === 'ready' ? c.items.length : null; });
+    var all = [].concat(out.cols.site.items, out.cols.chat.items, out.cols.follow.items);
+    var loaded = ['site', 'chat', 'follow'].every(function (k) { return out.cols[k].state === 'ready'; });
+    var failed = [];
+    if (s1 === 'failed') failed.push('رسائل الموقع');
+    if (s2 === 'failed') failed.push('رسائل المحادثة');
+    if (s3 === 'failed') failed.push('طلبات التواصل');
+    out.head.failedLabels = failed;
+    var oldest = Infinity; all.forEach(function (t) { if (!isNaN(t.ts) && t.ts < oldest) oldest = t.ts; });
+    if (all.length) out.head.text = 'تنتظر الرد ' + ar(all.length) + ': ' + ar(out.cols.site.items.length) + ' من الموقع · ' + ar(out.cols.chat.items.length) + ' من المحادثة · '
+      + ar(out.cols.follow.items.length) + ' طلبات تواصل.' + (isFinite(oldest) ? ' أقدمها ' + agoText(oldest, now) + '.' : '');
+    else if (loaded) out.head.text = 'لا رسائل تنتظر الرد.';
+    else if (!failed.length) out.head.text = '…جارٍ الجلب';
+    if (failed.length) out.head.text += (out.head.text ? ' ' : '') + 'تعذّر جلب: ' + failed.join('، ') + ' — العدد ناقص.';
+    return out;
+  }
+
+  L.v2p = { requests: requests, pipeline: pipeline, users: users, messages: messages, stageLabel: stageLabel, waText: waText, waUrl: waUrl, adminGuard: adminGuard,
+            planLabel: planLabel, inviterKey: inviterKey, SEG: SEG, ROLE: ROLE, STAGE: STAGE, mailUrl: mailUrl };
+})(typeof window !== 'undefined' ? window : (typeof globalThis !== 'undefined' ? globalThis : this));
+// ===== /v2s:people =====

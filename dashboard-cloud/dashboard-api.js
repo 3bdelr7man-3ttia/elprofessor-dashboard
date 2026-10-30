@@ -1117,6 +1117,7 @@
               when: relTime(at) || arDate(at),
               openedWhen: i.opened_at ? (relTime(i.opened_at) || arDate(i.opened_at)) : "",
               regWhen: i.registered_at ? (relTime(i.registered_at) || arDate(i.registered_at)) : "",
+              registeredAt: i.registered_at ? (Date.parse(i.registered_at) || 0) : 0,
               at: at ? (Date.parse(at) || 0) : 0,
               // ---- «الدعوة رحلةً» (2026-09-06 §٧.٣): عمود المحطة + العدّادات ----
               stage: stage,
@@ -1241,6 +1242,7 @@
               signupFlags: Array.isArray(u.signup_flags) ? u.signup_flags : [],
               flagLabels: Array.isArray(u.flag_labels) ? u.flag_labels.filter(Boolean).map(String) : [],
               lastLogin: u.last_login_at ? (relTime(u.last_login_at) || arDate(u.last_login_at)) : "",
+              lastLoginAt: u.last_login_at ? (Date.parse(u.last_login_at) || 0) : 0,
               when: relTime(at) || arDate(at),
               signedAt: arDate(at) || "",
               requestedWhen: reqAt ? (relTime(reqAt) || arDate(reqAt)) : "",
