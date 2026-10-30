@@ -2340,6 +2340,340 @@ def platform_wallet_payout_reject(payout_id):
     return _v2_payout_call(payout_id, 'reject', {'reason': reason}, {'reason': reason})
 
 
+# ---------------------------------------------------------------------------- D3 · «الفلوس» على الهيكل الجديد
+# بروكسيات رفيعة فوق جسور المنصة (`routes/money_bridge.py` · `routes/books_bridge.py` · `routes/scheduling.py`). كلها:
+#   * أدمن بس + المفتاح (`DASH_V2_ENABLED`) مفتوح، وإلا ٤٠٤ (المفتاح مقفول = كأن المسار مش موجود).
+#   * `Cache-Control: no-store` على كل رد.
+#   * الكتابة (PUT/POST) تطلب `confirmed: true` بالظبط من نافذة التأكيد (غير كده ٤٠٠ قبل أي رحلة للمنصة).
+#   * `by` ما بيجيش من المتصفح أبدًا: الفاعل من التوكن (`_actor_email`) — حقل `by` في جسم الطلب بيتجاهل.
+#   * ⛔ نداء واحد ولا إعادة محاولة. مصدر فاشل = خطأ بحالته (٥٠٢/٤٠٤…) والشاشة تكتب «غير متاح بعد»، ولا جسم مخترع ولا صفر.
+#   * ⛔ نداء الكتابة اللي ضاع رده (٥٠٠/٥٠٢/٥٠٣/٥٠٤) = «ما وصلناش رد» + سطر سجل، مش «اترفض».
+#   * الجسم اللي بيتبعت للمنصة مبني من قايمة بيضا بالحقول، مش الجسم اللي جه كما هو.
+V2_ID_RE = re.compile(r'^[^\s$/\\?#%]{1,200}$')
+V2_MONTH_RE = re.compile(r'^\d{4}-(0[1-9]|1[0-2])$')
+V2_PRICE_KINDS = ('book', 'course')
+V2_OFFER_STATUSES = ('in_review', 'live', 'rejected', 'draft', 'all')
+V2_NOTE_MAX = 300
+V2_REASON_MAX = 2000
+
+
+def _v2_closed():
+    """المفتاح مقفول ⇒ ٤٠٤ (نفس رد `/api/v2/person`)، وإلا None."""
+    if not _v2_enabled():
+        return _v2_ns((jsonify({'error': 'غير متاح'}), 404))
+    return None
+
+
+def _v2_ns(resp):
+    """`Cache-Control: no-store` على أي رد (Response أو (Response, status))."""
+    try:
+        r = resp[0] if isinstance(resp, tuple) else resp
+        r.headers['Cache-Control'] = 'no-store'
+    except Exception:
+        pass
+    return resp
+
+
+def _v2_body():
+    b = request.get_json(silent=True)
+    return b if isinstance(b, dict) else {}
+
+
+def _v2_confirmed(body):
+    """None لو التأكيد صريح `true` (القيمة المنطقية بالظبط)، وإلا ردّ ٤٠٠."""
+    if body.get('confirmed') is not True:
+        return _v2_ns((jsonify({'error': V2_CONFIRM_AR}), 400))
+    return None
+
+
+def _v2_get(path, params=None):
+    return _v2_ns(_platform_proxy('GET', path, params=params))
+
+
+def _v2_write(method, path, platform_body, audit_action, target, meta, params=None):
+    """كتابة واحدة على المنصة: `by` من التوكن، ونداء واحد، ولو الرد ضاع ⇒ «ما وصلناش رد». تدقيق عند النجاح بس."""
+    body = dict(platform_body)
+    body['by'] = _actor_email()
+    resp = _platform_proxy(method, path, params=params, json_body=body, timeout=25)
+    if _resp_ok(resp):
+        _audit(audit_action, target=target, meta=meta)
+        return _v2_ns(resp)
+    if _ef_no_reply(resp):
+        return _v2_ns(_ef_no_reply_resp(audit_action.split('.')[0], target, audit_action))
+    return _v2_ns(resp)
+
+
+def _v2_money_int(v):
+    """رقم صحيح من الجسم (لا منطقي ولا كسر ولا نص)، وإلا None."""
+    if isinstance(v, bool):
+        return None
+    if isinstance(v, int):
+        return v
+    if isinstance(v, float) and v == int(v):
+        return int(v)
+    return None
+
+
+@app.route('/api/v2/money/settings', methods=['GET'])
+@token_required
+@roles_required('admin')
+def v2_money_settings_get():
+    closed = _v2_closed()
+    return closed or _v2_get('/api/bridge/settings/money')
+
+
+@app.route('/api/v2/money/settings', methods=['PUT'])
+@token_required
+@roles_required('admin')
+def v2_money_settings_put():
+    closed = _v2_closed()
+    if closed:
+        return closed
+    body = _v2_body()
+    bad = _v2_confirmed(body)
+    if bad:
+        return bad
+    value = _v2_money_int(body.get('withdraw_min'))
+    if value is None:
+        return _v2_ns((jsonify({'error': 'اكتب الحد الأدنى للسحب رقمًا صحيحًا بالجنيه'}), 400))
+    out = {'withdraw_min': value, 'confirmed': True}
+    rev = _v2_money_int(body.get('rev'))
+    if rev is not None:
+        out['rev'] = rev
+    return _v2_write('PUT', '/api/bridge/settings/money', out, 'money_settings.update', 'withdraw_min',
+                     {'withdraw_min': value, 'rev': rev})
+
+
+@app.route('/api/v2/shares', methods=['GET'])
+@token_required
+@roles_required('admin')
+def v2_shares_get():
+    closed = _v2_closed()
+    return closed or _v2_get('/api/bridge/shares')
+
+
+@app.route('/api/v2/shares', methods=['PUT'])
+@token_required
+@roles_required('admin')
+def v2_shares_put():
+    closed = _v2_closed()
+    if closed:
+        return closed
+    body = _v2_body()
+    bad = _v2_confirmed(body)
+    if bad:
+        return bad
+    changes = body.get('changes')
+    version = _v2_money_int(body.get('version'))
+    if not isinstance(changes, dict) or not changes:
+        return _v2_ns((jsonify({'error': 'مفيش تعديل'}), 400))
+    if version is None or version < 0:
+        return _v2_ns((jsonify({'error': 'حدّث الشاشة وجرّب تاني'}), 400))
+    return _v2_write('PUT', '/api/bridge/shares', {'changes': changes, 'version': version, 'confirmed': True},
+                     'shares.update', 'shares', {'keys': sorted(changes.keys())[:10], 'version': version})
+
+
+@app.route('/api/v2/ads-ledger', methods=['GET'])
+@token_required
+@roles_required('admin')
+def v2_ads_ledger_overview():
+    closed = _v2_closed()
+    return closed or _v2_get('/api/bridge/ads-ledger')
+
+
+@app.route('/api/v2/ads-ledger/<owner_id>', methods=['GET'])
+@token_required
+@roles_required('admin')
+def v2_ads_ledger_owner(owner_id):
+    closed = _v2_closed()
+    if closed:
+        return closed
+    if not V2_ID_RE.match(owner_id or ''):
+        return _v2_ns((jsonify({'error': 'العمل ده مش موجود'}), 404))
+    month = (request.args.get('month') or '').strip()
+    if month and not V2_MONTH_RE.match(month):
+        return _v2_ns((jsonify({'error': 'الشهر مش صالح'}), 400))
+    return _v2_get('/api/bridge/ads-ledger/%s' % quote(owner_id, safe=''), {'month': month} if month else None)
+
+
+@app.route('/api/v2/payments/stuck', methods=['GET'])
+@token_required
+@roles_required('admin')
+def v2_payments_stuck():
+    closed = _v2_closed()
+    return closed or _v2_get('/api/bridge/payments/stuck')
+
+
+@app.route('/api/v2/income/by-service', methods=['GET'])
+@token_required
+@roles_required('admin')
+def v2_income_by_service():
+    closed = _v2_closed()
+    if closed:
+        return closed
+    month = (request.args.get('month') or '').strip()
+    if month and not V2_MONTH_RE.match(month):
+        return _v2_ns((jsonify({'error': 'الشهر مش صالح'}), 400))
+    return _v2_get('/api/bridge/income/by-service', {'month': month} if month else None)
+
+
+@app.route('/api/v2/refunds/pending', methods=['GET'])
+@token_required
+@roles_required('admin')
+def v2_refunds_pending():
+    closed = _v2_closed()
+    if closed:
+        return closed
+    cursor = (request.args.get('cursor') or '').strip()
+    return _v2_get('/api/bridge/refunds/pending', {'cursor': cursor[:300]} if cursor else None)
+
+
+@app.route('/api/v2/prices/<kind>', methods=['GET'])
+@token_required
+@roles_required('admin')
+def v2_prices_list(kind):
+    closed = _v2_closed()
+    if closed:
+        return closed
+    if kind not in V2_PRICE_KINDS:
+        return _v2_ns((jsonify({'error': 'النوع لازم كتاب أو دورة'}), 404))
+    return _v2_get('/api/bridge/prices/%s' % kind)
+
+
+@app.route('/api/v2/prices/<kind>/<item_id>', methods=['GET'])
+@token_required
+@roles_required('admin')
+def v2_prices_get(kind, item_id):
+    closed = _v2_closed()
+    if closed:
+        return closed
+    if kind not in V2_PRICE_KINDS or not V2_ID_RE.match(item_id or ''):
+        return _v2_ns((jsonify({'error': 'مش موجود'}), 404))
+    return _v2_get('/api/bridge/prices/%s/%s' % (kind, quote(item_id, safe='')))
+
+
+@app.route('/api/v2/prices/<kind>/<item_id>', methods=['PUT'])
+@token_required
+@roles_required('admin')
+def v2_prices_put(kind, item_id):
+    closed = _v2_closed()
+    if closed:
+        return closed
+    if kind not in V2_PRICE_KINDS or not V2_ID_RE.match(item_id or ''):
+        return _v2_ns((jsonify({'error': 'مش موجود'}), 404))
+    body = _v2_body()
+    bad = _v2_confirmed(body)
+    if bad:
+        return bad
+    versions, visible = body.get('versions'), body.get('visible')
+    if not isinstance(versions, dict):
+        return _v2_ns((jsonify({'error': 'الأسعار مش صالحة'}), 400))
+    if not isinstance(visible, bool):
+        return _v2_ns((jsonify({'error': 'حدّد ظاهر للناس ولا لأ'}), 400))
+    out = {'versions': versions, 'visible': visible, 'confirmed': True,
+           'note': _ef_note(body.get('note'), V2_NOTE_MAX)}
+    title = _ef_note(body.get('title'), 300)
+    if title:
+        out['title'] = title
+    rev = _v2_money_int(body.get('rev'))
+    if rev is not None:
+        out['rev'] = rev
+    return _v2_write('PUT', '/api/bridge/prices/%s/%s' % (kind, quote(item_id, safe='')), out, 'prices.update',
+                     '%s:%s' % (kind, item_id), {'kind': kind, 'visible': visible, 'rev': rev})
+
+
+@app.route('/api/v2/book-offers', methods=['GET'])
+@token_required
+@roles_required('admin')
+def v2_book_offers():
+    closed = _v2_closed()
+    if closed:
+        return closed
+    status = (request.args.get('status') or 'in_review').strip().lower()
+    if status not in V2_OFFER_STATUSES:
+        status = 'in_review'
+    return _v2_get('/api/bridge/book-offers', {'status': status})
+
+
+@app.route('/api/v2/book-offers/<offer_id>/approve', methods=['POST'])
+@token_required
+@roles_required('admin')
+def v2_book_offer_approve(offer_id):
+    closed = _v2_closed()
+    if closed:
+        return closed
+    if not V2_ID_RE.match(offer_id or ''):
+        return _v2_ns((jsonify({'error': 'العرض مش موجود'}), 404))
+    body = _v2_body()
+    bad = _v2_confirmed(body)
+    if bad:
+        return bad
+    versions = body.get('versions')
+    if not isinstance(versions, dict):
+        return _v2_ns((jsonify({'error': 'الأسعار مش صالحة'}), 400))
+    return _v2_write('POST', '/api/bridge/book-offers/%s/approve' % quote(offer_id, safe=''),
+                     {'versions': versions, 'note': _ef_note(body.get('note'), 1000)},
+                     'book_offer.approve', offer_id, {})
+
+
+@app.route('/api/v2/book-offers/<offer_id>/reject', methods=['POST'])
+@token_required
+@roles_required('admin')
+def v2_book_offer_reject(offer_id):
+    closed = _v2_closed()
+    if closed:
+        return closed
+    if not V2_ID_RE.match(offer_id or ''):
+        return _v2_ns((jsonify({'error': 'العرض مش موجود'}), 404))
+    body = _v2_body()
+    bad = _v2_confirmed(body)
+    if bad:
+        return bad
+    reason = _ef_note(body.get('reason'), V2_REASON_MAX)
+    if not reason:
+        return _v2_ns((jsonify({'error': 'اكتب سبب الرفض — بيوصل لصاحب العرض'}), 400))
+    return _v2_write('POST', '/api/bridge/book-offers/%s/reject' % quote(offer_id, safe=''), {'reason': reason},
+                     'book_offer.reject', offer_id, {})
+
+
+@app.route('/api/v2/book-requests', methods=['GET'])
+@token_required
+@roles_required('admin')
+def v2_book_requests():
+    closed = _v2_closed()
+    return closed or _v2_get('/api/bridge/book-requests')
+
+
+@app.route('/api/v2/book-requests/<request_id>', methods=['PATCH'])
+@token_required
+@roles_required('admin')
+def v2_book_request_patch(request_id):
+    closed = _v2_closed()
+    if closed:
+        return closed
+    if not V2_ID_RE.match(request_id or ''):
+        return _v2_ns((jsonify({'error': 'الطلب مش موجود'}), 404))
+    body = _v2_body()
+    out = {}
+    status = body.get('status')
+    if status is not None:
+        if status not in ('new', 'seeking'):
+            return _v2_ns((jsonify({'error': 'حالة غير معروفة'}), 400))
+        out['status'] = status
+    if 'hidden' in body:
+        if not isinstance(body.get('hidden'), bool):
+            return _v2_ns((jsonify({'error': 'حدّد إخفاء ولا إظهار'}), 400))
+        out['hidden'] = body['hidden']
+    if 'public_text' in body:
+        out['public_text'] = _ef_note(body.get('public_text'), 400)
+    if body.get('apply_to_group') is True:
+        out['apply_to_group'] = True
+    if not out:
+        return _v2_ns((jsonify({'error': 'مفيش تعديل'}), 400))
+    return _v2_write('PATCH', '/api/bridge/book-requests/%s' % quote(request_id, safe=''), out,
+                     'book_request.update', request_id, {k: v for k, v in out.items() if k != 'public_text'})
+
+
 @app.route('/api/platform-pnl', methods=['GET'])
 @token_required
 @roles_required('admin')
