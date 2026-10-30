@@ -547,13 +547,14 @@ def flow_inbox(browser, h, pre, vp, mobile):
     page.wait_for_function("() => document.querySelector('.v2h[data-ctx=\"disputes\"]')", timeout=15000)
     page.wait_for_timeout(400)
     hshot(page, pre + '21-disputes-all.jpg')
+    # بعد الدمج: تبويب «الرسائل» في قسم الناس يرسمه قسم الناس نفسه (محادثات + «هل أرسلت الرد؟») لا رسّام الوارد؛ نتأكد أنه هو الظاهر
     page.evaluate("() => { location.hash = '#s/people/messages'; }")
-    page.wait_for_function("() => document.querySelector('.v2h[data-ctx=\"messages\"]')", timeout=15000)
+    page.wait_for_function("() => document.querySelector('#view [class*=\"v2p\"]')", timeout=15000)
     page.wait_for_timeout(400)
-    ch = page.evaluate("() => document.querySelectorAll('.v2h-chips .v2h-chip').length")
-    if ch:
-        PROBLEMS.append(pre + '22: شرائح في شاشة الرسائل (المطلوب بلا شرائح)')
-    hshot(page, pre + '22-messages.jpg')
+    if page.evaluate("() => !!document.querySelector('#view .v2h')"):
+        PROBLEMS.append(pre + '22: شاشة «الرسائل» رُسمت برسّام الوارد بدل قسم الناس')
+    base.shot(page, pre + '22-messages.jpg')
+    shell_check(page, pre + '22-messages.jpg')
     # ٢٠) أرقام المنصة
     page.evaluate("() => { location.hash = '#s/home/inbox'; }")
     page.wait_for_function("() => document.querySelector('.v2h[data-ctx=\"home\"]')", timeout=15000)

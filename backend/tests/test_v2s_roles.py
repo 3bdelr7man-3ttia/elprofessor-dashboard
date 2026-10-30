@@ -650,7 +650,13 @@ def test_bell_items_fallback_never_changes_the_admin_bell():
     assert 'isAdmin' in seg and 'r.notifications || (isAdmin ? null : r.items)' in seg
 
 
-def test_staff_bell_withdrawal_text_says_dollars_in_arabic(ctx):
+def test_staff_bell_withdrawal_text_says_dollars_in_arabic(ctx, monkeypatch):
+    # ⛔ صفر شبكة حقيقية: /api/notifications ينادي جسور المنصة؛ نقفل كل نداء خارجي فيعود «المنصة غير متاحة» ويبقى الاختبار على بيانات الاختبار المحلية
+    import requests
+
+    def _no_net(self, method, url, *a, **k):
+        raise requests.ConnectionError('no network in tests')
+    monkeypatch.setattr(requests.sessions.Session, 'request', _no_net)
     r = ctx['client'].get('/api/notifications', headers=ctx['heads']['employee'])
     assert r.status_code == 200
     items = [i for i in r.get_json()['items'] if i['kind'] == 'withdrawal']
