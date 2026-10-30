@@ -1241,7 +1241,9 @@
       T('all', 'كل السجلات', 'courses', { courseTab: 'courses' }, { courseTab: { not: [] } })
     ] },
     { key: 'market', label: 'سوق الخدمات', img: 'market', desc: 'طلبات الأعضاء وعروض الخبراء', tabs: [
-      T('requests', 'الطلبات', 'market')
+      T('requests', 'الطلبات', 'market'),
+      T('all', 'كل الطلبات', 'v2s_market_all'),
+      T('demand', 'ماذا يطلب الناس', 'v2s_market_demand')
     ] },
     { key: 'books', label: 'الكتب', img: 'books', desc: 'عروض الكتب بانتظار المراجعة وطلبات القرّاء والمتجر', tabs: [
       T('offers', 'مراجعة العروض', 'v2b_offers'),
@@ -2691,3 +2693,372 @@
                     TYPE_LABEL: TYPE_LABEL, STATE_LABEL: STATE_LABEL, SOURCE_LABEL: SOURCE_LABEL, SEG_LABEL: SEG_LABEL, LIVE_STATUS: LIVE_STATUS, NA: NA, WARN_H: WARN_H, LATE_H: LATE_H };
 })(typeof window !== 'undefined' ? window : (typeof globalThis !== 'undefined' ? globalThis : this));
 // ===== /v2s:courses =====
+// ===== v2s:market ===== «سوق الخدمات» (الجولة النهائية): منطق نقي لتذاكر الطلبات وسطر العقل والفلاتر وأرقام «ماذا يطلب الناس».
+// ⛔ لا DOM ولا شبكة ولا ساعة خفية (`now` يُمرَّر). كل رقم من حقل في الصف؛ المجهول `undefined` لا صفر. المواصفة: docs/v2/final/SPEC-market.md
+(function (root) {
+  'use strict';
+  var V = root.V2L;
+  if (!V) return;
+  var U = V.util, ar = U.ar, agoText = U.agoText, dateText = U.dateText, moneyText = U.moneyText;
+  var HOUR = 3600e3, DAY = 86400e3;
+  var STALE_REQUEST_DAYS = 7;          // = STALE_REQUEST_DAYS في marketplace.py (المنصة تُخفي من صفحة السوق العامة بعد ٧ أيام بلا أي نشاط)
+  var DONE_WINDOW = 7 * DAY;
+  var PAGE = 8;                        // تذاكر كل عمود قبل «اعرض الباقي»
+  var COLS = ['new', 'waiting', 'offered', 'done'];
+  var COL_LABEL = { 'new': 'طلب جديد', waiting: 'ينتظر خبيرًا', offered: 'وصله عرض', done: 'انتهى هذا الأسبوع' };
+  var COL_EMPTY = { 'new': 'لا طلبات جديدة اليوم', waiting: 'لا طلب ينتظر خبيرًا', offered: 'لا طلبات عليها عروض الآن', done: 'لم يُغلق أي طلب هذا الأسبوع' };
+  var NEED_LABEL = { expert: 'خبير', service: 'خدمة', course: 'دورة أو تدريب', book: 'كتاب أو معرفة', training_offer: 'عرض مدرّب', other: 'غير مصنّف' };
+  var NEED_LANE = { course: 'course_request', service: 'public_service', expert: 'request', book: 'request', other: 'request' };   // = _NEED_KIND_LANE في marketplace.py
+  var LANE_PLURAL = { request: 'طلبات الخبرة', course_request: 'طلبات الدورات', public_service: 'خدمات للجمهور', training_offer: 'عروض المدرّبين' };
+  var LANE_ONE = { request: 'طلب خبرة', course_request: 'طلب دورة', public_service: 'خدمة للجمهور', training_offer: 'عرض مدرّب' };
+  var DEMAND_LANES = ['request', 'course_request', 'public_service'];
+  var EXTRA_KEYS = ['author_kind', 'open_demand', 'join_goal', 'joined_count', 'goal_reached_at', 'last_offer_at', 'updated_at', 'stale_unanswered',
+                    'linked_course_id', 'linked_course_slug', 'source', 'catalog_name', 'last_activity_at', 'member_phone'];
+
+  function ms(v) { var t = typeof v === 'number' ? v : Date.parse(v || ''); return isNaN(t) || !isFinite(t) || t <= 0 ? NaN : t; }
+  function isNum(n) { return typeof n === 'number' && isFinite(n); }
+  function arDigits(t) { return String(t == null ? '' : t).replace(/\d/g, function (d) { return '٠١٢٣٤٥٦٧٨٩'.charAt(+d); }); }
+  function needLabel(k) { return NEED_LABEL[k] || NEED_LABEL.other; }
+  function laneOf(need) { return NEED_LANE[need] || ''; }
+  function lanePlural(k) { return LANE_PLURAL[k] || 'طلبات'; }
+  function isOpen(r) { var s = r && r.status; return s === undefined || s === null || s === '' || s === 'open'; }
+  function isDone(r) { return r && (r.status === 'matched' || r.status === 'closed'); }
+  function offers(r) { return Number(r && r.offer_count) || 0; }
+  function activityAt(r) { return (r && (r.last_activity_at || r.created_at)) || ''; }
+  function joinText(r) {
+    var j = r.joined_count, g = r.join_goal;
+    if (!isNum(j)) return '';
+    return g > 0 ? 'انضم ' + ar(j) + ' من ' + ar(g) : 'انضم ' + ar(j);
+  }
+  function sameDay(a, b) { var x = new Date(a), y = new Date(b); return x.getFullYear() === y.getFullYear() && x.getMonth() === y.getMonth() && x.getDate() === y.getDate(); }
+  function hhmm(t) { var d = new Date(t), h = d.getHours(), m = d.getMinutes(), ap = h >= 12 ? 'م' : 'ص'; h = h % 12; if (h === 0) h = 12; return ar(h) + ':' + (m < 10 ? '٠' : '') + ar(m) + ' ' + ap; }
+  function timerText(pre, ts, now) { var a = agoText(ts, now); return a ? (pre ? pre + a : a) : ''; }
+
+  // الصف من محمّل الداشبورد ناقص حقولًا يرسلها الجسر: نكمّلها بالمعرّف من `raw` (الصفوف مرتّبة، فلا مطابقة بالموضع). غائب ⇒ undefined.
+  function merge(rows, raw) {
+    var by = {};
+    (Array.isArray(raw) ? raw : []).forEach(function (q) { if (q && q.id != null) by[String(q.id)] = q; });
+    return (Array.isArray(rows) ? rows : []).map(function (r) {
+      var out = {}, q = by[String(r && r.id)];
+      Object.keys(r || {}).forEach(function (k) { out[k] = r[k]; });
+      if (q) EXTRA_KEYS.forEach(function (k) { if (q[k] !== undefined && q[k] !== null) out[k] = q[k]; });
+      return out;
+    });
+  }
+
+  // صف الجسر الخام (قائمة «كل الطلبات») على شكل صف لوحة السوق نفسه: نفس القيم الافتراضية التي يضعها المحمّل القديم + حقول الجسر الإضافية.
+  var NEED_FOR_KIND = { request: 'expert', course_request: 'course', public_service: 'service', training_offer: 'training_offer', knowledge: 'book' };
+  function norm(q) {
+    q = q || {};
+    var kind = q.kind || 'request';
+    var r = { id: q.id || '', kind: kind, need_kind: q.need_kind || NEED_FOR_KIND[kind] || 'other', title: q.title || '', body: q.body || '', specialty: q.specialty || '',
+              service: q.service || '', status: q.status || 'open', visibility: q.visibility || 'private', member_alias: q.member_alias || 'عضو', member_email: q.member_email || '',
+              member_name: q.member_name || '', preferred_expert_email: q.preferred_expert_email || '', budget: q.budget || 0, currency: q.currency || '',
+              offer_count: (q.offer_count != null ? q.offer_count : (q.offers_count || 0)) | 0, accepted_offer_id: q.accepted_offer_id || null,
+              consultation_id: q.consultation_id || null, is_test: !!q.is_test, hidden: !!q.hidden, hidden_reason: q.hidden_reason || '', created_at: q.created_at || '' };
+    EXTRA_KEYS.forEach(function (k) { if (q[k] !== undefined && q[k] !== null) r[k] = q[k]; });
+    return r;
+  }
+
+  // ------------------------------------------------------------------ العقل: سطر وزرّ واحد لكل طلب
+  function brain(r, now, opts) {
+    var ro = !!(opts && opts.readOnly);
+    var line, primary = null;
+    function open(label) { return { label: label || 'افتح الطلب', act: 'open' }; }
+    var cnt = offers(r), ago;
+    if (r.status === 'matched') {
+      ago = agoText(r.updated_at, now);
+      return { line: 'اختار صاحب الطلب عرضًا' + (ago ? ' ' + ago : ''), primary: null };
+    }
+    if (r.status === 'closed') {
+      ago = agoText(r.updated_at, now);
+      return { line: 'أُغلق' + (ago ? ' ' + ago : ''), primary: null };
+    }
+    if (!isOpen(r)) return { line: 'حالته على المنصة غير معروفة؛ افتحه للتأكد', primary: open() };
+    if (r.hidden) {
+      return { line: 'مخفي عن صفحة السوق العامة' + (r.hidden_reason ? ' بسبب: «' + arDigits(r.hidden_reason) + '»' : '') + '؛ صاحبه ما زال يراه', primary: open() };
+    }
+    if (r.open_demand) {
+      var jt = joinText(r);
+      if (r.goal_reached_at && !r.linked_course_id) {
+        ago = agoText(r.goal_reached_at, now);
+        line = 'اكتمل العدد' + (ago ? ' ' + ago : '') + (jt ? ': ' + jt : '') + '، ولم تُربط دورة بعد';
+        primary = ro ? open() : { label: 'اربط دورة', act: 'link' };
+        return { line: line, primary: primary };
+      }
+      if (r.linked_course_id) {
+        return { line: 'رُبطت به دورة، والحجز مفتوح لمن انضم' + (isNum(r.joined_count) ? ' (' + ar(r.joined_count) + ')' : ''), primary: open() };
+      }
+      return { line: 'طلب مفتوح من المنصة يجمع المنضمّين' + (jt ? ': ' + (r.join_goal > 0 ? ar(r.joined_count) + ' من ' + ar(r.join_goal) : jt) : ''), primary: open() };
+    }
+    var target = laneOf(r.need_kind);
+    if (!cnt && target && DEMAND_LANES.indexOf(r.kind) > -1 && target !== r.kind) {
+      line = 'نوعه «' + needLabel(r.need_kind) + '» لكنه معروض مع ' + lanePlural(r.kind);
+      primary = ro ? open() : { label: 'انقله إلى ' + lanePlural(target), act: 'relane', target: target };
+      return { line: line, primary: primary };
+    }
+    if (!cnt && r.stale_unanswered === true) {
+      return { line: 'بلا أي عرض ' + agoText(activityAt(r), now) + '، لذلك لم يعد يظهر على صفحة السوق العامة', primary: open() };
+    }
+    if (cnt > 0) {
+      ago = agoText(r.last_offer_at, now);
+      return { line: 'وصله ' + U.U(cnt, ['عرض واحد', 'عرضان', 'عروض', 'عرضًا']) + (ago ? '، آخرها ' + ago : '') + '. الاختيار لصاحب الطلب',
+               primary: { label: 'اعرض العروض', act: 'offers' } };
+    }
+    var created = ms(r.created_at), age = isNaN(created) ? NaN : (now || 0) - created;
+    var isPublic = r.visibility === 'public';
+    if (isPublic && age >= DAY) {
+      var a2 = agoText(activityAt(r), now);
+      if (!(r.join_goal > 0) && !(r.joined_count > 0) && !r.open_demand) {
+        line = 'بلا عرض ' + a2 + '. يختفي من صفحة السوق العامة بعد ' + ar(STALE_REQUEST_DAYS) + ' أيام بلا عرض';
+      } else {
+        line = 'بلا عرض ' + a2 + '، ويبقى على صفحة السوق العامة ما دام يجمع المنضمّين' + (isNum(r.joined_count) ? ' (' + ar(r.joined_count) + ')' : '');
+      }
+      return { line: line, primary: open() };
+    }
+    if (!isPublic) {
+      var when = agoText(r.created_at, now);
+      return { line: (r.preferred_expert_email ? 'طلب خاص موجَّه إلى خبير بعينه' : 'طلب خاص لا يظهر على صفحة السوق العامة') + '، بلا عرض' + (when ? ' ' + when : ''), primary: open() };
+    }
+    if (age >= 0) return { line: 'وصل ' + agoText(r.created_at, now) + '، وهو ظاهر للخبراء على صفحة السوق العامة', primary: open() };
+    return { line: 'لم يصله عرض بعد', primary: open() };
+  }
+
+  // ------------------------------------------------------------------ التذاكر
+  function typeLabel(r) {
+    var base = r.open_demand ? 'طلب مفتوح من المنصة' : (LANE_ONE[r.kind] || 'طلب');
+    return base + (r.catalog_name ? ' · ' + r.catalog_name : '');
+  }
+  function whoOf(r) {
+    var isPlat = r.author_kind === 'platform';
+    return { name: r.member_name || r.member_alias || (isPlat ? 'المنصة' : 'صاحب الطلب'), email: isPlat ? '' : (r.member_email || '') };
+  }
+  function badgesOf(r) {
+    var b = [];
+    if (r.visibility !== undefined && r.visibility !== 'public') b.push({ k: 'private', label: 'خاص' });
+    if (r.hidden) b.push({ k: 'hidden', label: 'مخفي عن صفحة السوق العامة' });
+    if (r.is_test) b.push({ k: 'test', label: 'تجريبي' });
+    if (r.source === 'chat') b.push({ k: 'chat', label: 'من محادثة بروف' });
+    return b;
+  }
+  function ticketOf(r, col, now, opts) {
+    var created = ms(r.created_at);
+    var t = { id: String(r.id), col: col, row: r, title: r.title || 'طلب بلا عنوان', typeLabel: typeLabel(r), timer: null, text: '', tone: 'new', unknown: false };
+    t.who = whoOf(r);
+    t.specialty = r.specialty || '';
+    t.badges = badgesOf(r);
+    t.progress = null;
+    if (r.open_demand && isNum(r.joined_count)) t.progress = { joined: r.joined_count, goal: r.join_goal > 0 ? r.join_goal : 0, pct: r.join_goal > 0 ? Math.max(0, Math.min(100, Math.round(r.joined_count * 100 / r.join_goal))) : 0 };
+    if (col === 'done') {
+      t.tone = 'done';
+      t.typeLabel = r.status === 'matched' ? 'تمّت المطابقة' : 'أُغلق';
+      var u = ms(r.updated_at); if (isNaN(u)) u = created;
+      if (!isNaN(u)) t.text = sameDay(u, now) ? hhmm(u) : dateText(new Date(u).toISOString());
+    } else if (col === 'offered') {
+      t.tone = 'ok';
+      var lo = ms(r.last_offer_at);
+      if (!isNaN(lo)) { t.timer = { pre: 'آخر عرض ', ts: lo }; t.text = timerText('آخر عرض ', lo, now); } else t.text = 'وصله عرض';
+    } else if (col === 'waiting') {
+      var red = r.stale_unanswered === true || (!!r.goal_reached_at && !r.linked_course_id);
+      t.tone = red ? 'late' : (r.open_demand && r.linked_course_id ? 'ok' : 'wait');
+      if (!isOpen(r)) { t.unknown = true; t.typeLabel = 'حالة غير معروفة'; t.tone = 'wait'; }
+      else if (r.open_demand && r.goal_reached_at && !isNaN(ms(r.goal_reached_at))) { t.timer = { pre: 'اكتمل العدد ', ts: ms(r.goal_reached_at) }; }
+      else if (!isNaN(ms(activityAt(r)))) { t.timer = { pre: 'بلا عرض ', ts: ms(activityAt(r)) }; }
+      if (t.timer) t.text = timerText(t.timer.pre, t.timer.ts, now);
+    } else {
+      t.tone = 'new';
+      if (!isNaN(created)) { t.timer = { pre: '', ts: created }; t.text = timerText('', created, now); }
+    }
+    t.brain = brain(r, now, opts);
+    return t;
+  }
+  function tileCount(rows) {
+    return (rows || []).filter(function (r) { return r && r.status === 'open' && !r.hidden && !r.is_test && r.kind !== 'training_offer' && !r.offer_count; }).length;
+  }
+  // opts = {now, lane:'all'|…, showTest, expanded:{col:true}, readOnly}
+  function tickets(rows, opts) {
+    opts = opts || {};
+    var now = opts.now || 0, lane = opts.lane || 'all';
+    var cols = { 'new': [], waiting: [], offered: [], done: [] };
+    var key = {}; // مفاتيح الترتيب
+    var testCount = 0, hiddenCount = 0, doneOlder = 0;
+    (rows || []).forEach(function (r) {
+      if (!r || r.kind === 'training_offer') return;
+      if (r.is_test) { testCount++; if (!opts.showTest) return; }
+      if (lane !== 'all' && r.kind !== lane) return;
+      if (r.hidden) hiddenCount++;
+      var col, created = ms(r.created_at);
+      if (isDone(r)) {
+        var u = ms(r.updated_at); if (isNaN(u)) u = created;
+        if (isNaN(u) || now - u > DONE_WINDOW) { doneOlder++; return; }
+        col = 'done'; key[r.id] = -u;
+      } else if (!isOpen(r)) { col = 'waiting'; key[r.id] = Infinity; }
+      else if (offers(r) > 0) { col = 'offered'; var lo = ms(r.last_offer_at); key[r.id] = isNaN(lo) ? Infinity : lo; }
+      else if (isNaN(created)) { col = 'waiting'; key[r.id] = Infinity; }
+      else if (r.open_demand || now - created >= DAY) { col = 'waiting'; var a = ms(activityAt(r)); key[r.id] = isNaN(a) ? Infinity : a; }
+      else { col = 'new'; key[r.id] = created; }
+      cols[col].push(ticketOf(r, col, now, opts));
+    });
+    cols.waiting.sort(function (a, b) {
+      var ra = a.tone === 'late' ? 0 : 1, rb = b.tone === 'late' ? 0 : 1;
+      return ra - rb || (key[a.id] - key[b.id]) || 0;
+    });
+    ['new', 'offered', 'done'].forEach(function (c) { cols[c].sort(function (a, b) { return (key[a.id] - key[b.id]) || 0; }); });
+    var counts = {}, shown = {}, more = {};
+    COLS.forEach(function (c) {
+      counts[c] = cols[c].length;
+      var lim = opts.expanded && opts.expanded[c] ? cols[c].length : PAGE;
+      shown[c] = cols[c].slice(0, lim);
+      more[c] = cols[c].length - shown[c].length;
+    });
+    return { cols: cols, counts: counts, shown: shown, more: more, doneOlder: doneOlder, testCount: testCount, hiddenCount: hiddenCount, tileCount: tileCount(rows) };
+  }
+  // بطاقات القرار الجاهزة للعقل/اللوحة لاحقًا (اربط دورة · انقل الطلب)
+  function cards(rows, now) {
+    var out = [];
+    (rows || []).forEach(function (r) {
+      if (!r || r.kind === 'training_offer' || r.is_test || r.hidden) return;
+      var b = brain(r, now, null);
+      if (b.primary && (b.primary.act === 'link' || b.primary.act === 'relane')) out.push({ kind: 'market', id: String(r.id), title: r.title || 'طلب بلا عنوان', line: b.line, primary: b.primary });
+    });
+    return out;
+  }
+
+  // ------------------------------------------------------------------ رأس اللوحة
+  function header(rows, counts, total, now) {
+    var open = (rows || []).filter(function (r) { return r && r.kind !== 'training_offer' && !r.is_test; });
+    var N = tileCount(rows), oldest = NaN;
+    (rows || []).forEach(function (r) {
+      if (r && r.status === 'open' && !r.hidden && !r.is_test && r.kind !== 'training_offer' && !r.offer_count) { var c = ms(r.created_at); if (!isNaN(c) && (isNaN(oldest) || c < oldest)) oldest = c; }
+    });
+    var pre, text;
+    var openCount = open.filter(function (r) { return isOpen(r); }).length;
+    if (N > 0) {
+      pre = 'العقل: ' + U.U(N, ['طلب واحد بلا عرض', 'طلبان بلا عرض', 'طلبات بلا عرض', 'طلبًا بلا عرض']);
+      if (!isNaN(oldest)) { pre += '، أقدمها '; text = pre + agoText(oldest, now); } else text = pre;
+    } else if (openCount > 0) { text = 'العقل: كل طلب مفتوح وصله عرض أو يجمع المنضمّين'; pre = text; oldest = NaN; }
+    else { text = 'العقل: لا طلبات مفتوحة الآن'; pre = text; oldest = NaN; }
+    var bs = counts && counts.by_status ? counts.by_status : null, totals;
+    if (bs) totals = 'في السوق الآن: ' + ar(bs.open || 0) + ' مفتوح · ' + ar(bs.matched || 0) + ' تمّت مطابقته · ' + ar(bs.closed || 0) + ' أُغلق' + ((rows || []).some(function (r) { return r && r.is_test && r.kind !== 'training_offer'; }) ? ' (يشمل التجريبي)' : '');
+    else {
+      var c = { open: 0, matched: 0, closed: 0 };
+      open.forEach(function (r) { if (isOpen(r)) c.open++; else if (r.status === 'matched') c.matched++; else if (r.status === 'closed') c.closed++; });
+      totals = 'في السوق الآن: ' + ar(c.open) + ' مفتوح · ' + ar(c.matched) + ' تمّت مطابقته · ' + ar(c.closed) + ' أُغلق (من المعروض فقط)';
+    }
+    var bl = counts && counts.by_lane ? counts.by_lane : null, lanes;
+    if (bl) lanes = { request: bl.request || 0, course_request: bl.course_request || 0, public_service: bl.public_service || 0, training_offer: bl.training_offer || 0 };
+    else {
+      lanes = { request: 0, course_request: 0, public_service: 0, training_offer: 0 };
+      (rows || []).forEach(function (r) { if (r && lanes[r.kind] !== undefined) lanes[r.kind]++; });
+    }
+    lanes.all = lanes.request + lanes.course_request + lanes.public_service;
+    return { brainText: text, brainPre: pre, brainTs: isNaN(oldest) ? null : oldest, N: N, totals: totals, lanes: lanes,
+             truncated: isNum(total) && total > (rows || []).length, shownRows: (rows || []).length, total: total };
+  }
+
+  // ------------------------------------------------------------------ كل الطلبات: الاستعلام وحالة الفلاتر
+  function query(s) {
+    s = s || {};
+    var parts = [];
+    function add(k, v) { parts.push(k + '=' + encodeURIComponent(v)); }
+    if (s.lane && s.lane !== 'all') add('lane', s.lane);
+    if (s.status && s.status !== 'all') add('status', s.status);
+    if (s.need && s.need !== 'all') add('need_kind', s.need);
+    if (s.author && s.author !== 'all') add('author_kind', s.author);
+    var q = String(s.q == null ? '' : s.q).trim().slice(0, 80);
+    if (q) add('q', q);
+    add('include_test', s.showTest ? '1' : '0');
+    add('limit', String(s.limit || 50));
+    add('skip', String(s.skip || 0));
+    return parts.join('&');
+  }
+  function activeFilters(s) {
+    var out = [];
+    if (s.status && s.status !== 'all') out.push({ k: 'status', label: { open: 'مفتوح', matched: 'تمّت المطابقة', closed: 'أُغلق' }[s.status] || s.status });
+    if (s.need && s.need !== 'all') out.push({ k: 'need', label: needLabel(s.need) });
+    if (s.author && s.author !== 'all') out.push({ k: 'author', label: s.author === 'platform' ? 'المنصة' : 'الأعضاء' });
+    if (s.showTest) out.push({ k: 'test', label: 'يظهر التجريبي' });
+    return out;
+  }
+  function allRow(r, now) {
+    return { id: String(r.id), row: r, title: r.title || 'طلب بلا عنوان', lane: LANE_ONE[r.kind] || 'طلب', who: whoOf(r), badges: badgesOf(r), offersText: r.open_demand ? (isNum(r.joined_count) ? 'انضم ' + ar(r.joined_count) : '') : ar(offers(r)),
+             status: r.status === 'matched' ? 'تمّت المطابقة' : r.status === 'closed' ? 'أُغلق' : (isOpen(r) ? 'مفتوح' : 'حالة غير معروفة'), statusKey: isOpen(r) ? 'open' : (r.status === 'matched' ? 'matched' : r.status === 'closed' ? 'closed' : 'unknown'),
+             date: dateText(r.created_at), ago: agoText(r.created_at, now) };
+  }
+
+  // ------------------------------------------------------------------ أخطاء الربط
+  var LINK_GENERIC = 'تعذّر ربط الدورة، حاول مرة أخرى';
+  function linkErr(status, data) {
+    var m = data && (data.error || data.detail);
+    if (m && typeof m === 'object') m = m.message || m.error || '';
+    m = typeof m === 'string' ? m : '';
+    if (status === 404) return m.indexOf('الدورة') > -1 ? 'الدورة غير موجودة على المنصة' : 'هذا الطلب لم يعد موجودًا على المنصة';
+    if (status === 422) {
+      var t = arDigits(m);
+      return /[؀-ۿ]/.test(t) ? t : LINK_GENERIC;
+    }
+    return LINK_GENERIC;
+  }
+
+  // ------------------------------------------------------------------ ماذا يطلب الناس
+  function demand(d) {
+    if (!d || d.missing) return null;
+    var sg = d.signals || {}, out = { brain: '', platform: '', byNeed: [], specs: { title: 'حسب التخصص', fallback: false, items: [] }, courses: [], topBrain: '' };
+    var parts = [];
+    if (isNum(sg.unanswered_requests)) parts.push(U.U(sg.unanswered_requests, ['طلب مفتوح بلا عرض', 'طلبان مفتوحان بلا عرض', 'طلبات مفتوحة بلا عرض', 'طلبًا مفتوحًا بلا عرض']));
+    if (parts.length) {
+      out.brain = 'العقل: ' + parts[0] + (isNum(sg.total_requests) ? ' من ' + ar(sg.total_requests) : '') + (isNum(d.window_days) ? ' خلال آخر ' + ar(d.window_days) + ' يومًا' : '');
+    } else if (isNum(sg.total_requests)) {
+      out.brain = 'العقل: وصل ' + U.U(sg.total_requests, ['طلب واحد', 'طلبان', 'طلبات', 'طلبًا']) + (isNum(d.window_days) ? ' خلال آخر ' + ar(d.window_days) + ' يومًا' : '');
+    }
+    if (isNum(sg.open_demand_cards)) {
+      out.platform = 'طلبات المنصة المفتوحة: ' + ar(sg.open_demand_cards) + (isNum(sg.open_demand_joins) ? '، انضم إليها ' + ar(sg.open_demand_joins) : '') + (isNum(sg.open_demand_goal_reached) ? '، واكتمل عدد ' + ar(sg.open_demand_goal_reached) : '');
+    }
+    var maxN = 0;
+    var needs = Array.isArray(d.by_need_kind) ? d.by_need_kind : [];
+    needs.forEach(function (n) { maxN = Math.max(maxN, Number(n.count) || 0); });
+    out.byNeed = needs.map(function (n) {
+      return { key: n.need_kind, label: needLabel(n.need_kind), count: Number(n.count) || 0, countText: ar(Number(n.count) || 0), zero: isNum(n.zero_offer) ? n.zero_offer : undefined,
+               withOffers: isNum(n.with_offers) ? n.with_offers : undefined, total: isNum(n.total) ? n.total : undefined, pct: maxN ? Math.round((Number(n.count) || 0) * 100 / maxN) : 0 };
+    });
+    var courses = Array.isArray(d.suggested_courses) ? d.suggested_courses : [];
+    var spec = {}, order = [];
+    courses.forEach(function (c) { if (c.specialty) { if (spec[c.specialty] === undefined) { spec[c.specialty] = 0; order.push(c.specialty); } spec[c.specialty] += Number(c.signal_count) || 0; } });
+    var items = order.map(function (k) { return { label: k, count: spec[k] }; });
+    if (!items.length) {
+      out.specs.title = 'مواضيع تتكرر'; out.specs.fallback = true;
+      items = (Array.isArray(d.top_topics) ? d.top_topics : []).filter(function (t) { return t && t.term; }).map(function (t) { return { label: t.term, count: Number(t.count) || 0 }; });
+    }
+    items.sort(function (a, b) { return b.count - a.count; });
+    items = items.slice(0, 8);
+    var mx = items.length ? items[0].count : 0;
+    out.specs.items = items.map(function (i) { return { label: i.label, count: i.count, countText: ar(i.count), pct: mx ? Math.round(i.count * 100 / mx) : 0 }; });
+    var SRC = [['market_requests', 'طلب في السوق'], ['training_interests', 'اهتمام بالتدريب'], ['course_interests', 'اهتمام بدورة'], ['chat', 'من المحادثات'], ['open_demand_joins', 'انضمام لطلبات المنصة']];
+    out.courses = courses.map(function (c) {
+      var s = c.sources || {}, rs = [];
+      SRC.forEach(function (p) { if (Number(s[p[0]]) > 0) rs.push(ar(s[p[0]]) + ' ' + p[1]); });
+      var title = String(c.title_hint || '').trim();
+      return { title: title || 'بلا عنوان', hint: title, explicit: c.origin === 'explicit', originLabel: c.origin === 'explicit' ? 'طلبها شخص صراحة' : 'مستنتجة من المحادثات',
+               count: Number(c.signal_count) || 0, countText: ar(Number(c.signal_count) || 0) + ' إشارة', reason: rs.length ? rs.join(' · ') : (Array.isArray(c.samples) && c.samples[0] ? String(c.samples[0]) : ''),
+               canCreate: !!title };
+    });
+    var top = out.courses[0];
+    if (top && top.explicit && top.hint) out.topBrain = 'العقل: أكثر ما طُلب صراحةً «' + top.hint + '» (' + top.countText + ')';
+    return out;
+  }
+  function training(resp) {
+    if (!resp || resp.missing) return null;
+    var rows = Array.isArray(resp.rows) ? resp.rows : [];
+    var out = rows.map(function (t) {
+      return { id: t.id, name: t.name || '', email: t.email || '', course: t.wanted_course || '', when: t.when || '', phone: String(t.phone || '').replace(/[^\d+]/g, '') };
+    });
+    return { rows: out, count: isNum(resp.count) ? resp.count : out.length, truncated: isNum(resp.count) && resp.count > out.length,
+             noContact: rows.every(function (t) { return !t.status || t.status === 'new'; }) };
+  }
+
+  V.v2sMarket = { COLS: COLS, COL_LABEL: COL_LABEL, COL_EMPTY: COL_EMPTY, NEED_LABEL: NEED_LABEL, NEED_LANE: NEED_LANE, LANE_PLURAL: LANE_PLURAL, LANE_ONE: LANE_ONE,
+                  STALE_REQUEST_DAYS: STALE_REQUEST_DAYS, PAGE: PAGE, merge: merge, norm: norm, brain: brain, tickets: tickets, cards: cards, header: header, tileCount: tileCount,
+                  query: query, activeFilters: activeFilters, allRow: allRow, linkErr: linkErr, demand: demand, training: training, activityAt: activityAt,
+                  needLabel: needLabel, laneOf: laneOf, lanePlural: lanePlural, timerText: timerText, arDigits: arDigits };
+})(typeof window !== 'undefined' ? window : (typeof globalThis !== 'undefined' ? globalThis : this));
+// ===== /v2s:market =====
