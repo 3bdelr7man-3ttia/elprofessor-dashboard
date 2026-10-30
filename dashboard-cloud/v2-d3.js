@@ -821,6 +821,7 @@
   };
   D3.sig = function () { return ['stuck', 'offers', 'pricesBook'].map(function (k) { return srcOf(k).state; }).join(','); };
   D3.openApprove = openApprove;
+  D3.openSheet = openSheet; D3.twoStage = twoStage;
   D3.openReject = openReject;
   D3._state = S;
   D3._src = SRC;

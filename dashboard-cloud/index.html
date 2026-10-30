@@ -463,6 +463,10 @@ body{font-family:'IBM Plex Sans Arabic',sans-serif;background:var(--bg);color:va
 <script src="v2-home.js"></script>
 <script src="v2-shell.js"></script>
 <script src="v2-d2.js"></script>
+<!-- v2 sections begin -->
+<link rel="stylesheet" href="v2s/reports.css">
+<script src="v2s/reports.js"></script>
+<!-- v2 sections end -->
 <script src="v2-d3.js"></script>
 <script>
 const ICONS={
@@ -703,12 +707,14 @@ function renderView(){
   { const ap=document.querySelector('.app'); const sh=!!(window.V2SHELL&&V2SHELL.on);
     if(ap)ap.classList.toggle('v2-home',current==='home'&&!!window.V2_ON&&!sh);
     // D1-B: صنف الغلاف على `.app` (لوحة بلا إطار · بحث الوارد · وضع التركيز) — الترويسة خارج #view فلا تمسحها الشاشات القديمة.
-    if(ap&&sh){ap.classList.toggle('v2-bare',current==='home'||!!(window.V2D2&&V2D2.owns(current)));ap.classList.toggle('v2-inbox',current==='inbox');if(current!=='home')ap.classList.remove('v2-focus');if(window.V2D3&&V2D3.owns(current))ap.classList.add('v2-bare');V2SHELL.head();} }
+    if(ap&&sh){ap.classList.toggle('v2-bare',current==='home'||!!(window.V2D2&&V2D2.owns(current)));ap.classList.toggle('v2-inbox',current==='inbox');if(current!=='home')ap.classList.remove('v2-focus');if(window.V2D3&&V2D3.owns(current))ap.classList.add('v2-bare');
+    if(window.V2SEC&&Object.keys(V2SEC).some(function(k){return V2SEC[k].owns(current);}))ap.classList.add('v2-bare');V2SHELL.head();} }
   if(current==='home'&&window.V2_ON&&window.V2)return V2.render(v);
   // D2: لوحات التذاكر وصفحة الشخص (موديولات وهمية `v2files`/`v2disputes`/`v2person` لا وجود لها إلا تحت الغلاف الجديد).
   if(window.V2_ON&&window.V2D2&&V2D2.owns(current))return V2D2.render(current,v);
   // D3: شاشات «الفلوس» الجديدة و«الكتب» (موديولات وهمية `v2m_*`/`v2b_*` لا وجود لها إلا تحت الغلاف الجديد).
   if(window.V2_ON&&window.V2D3&&V2D3.owns(current))return V2D3.render(current,v);
+  if(window.V2_ON&&window.V2SEC){const _k=Object.keys(V2SEC).find(function(k){return V2SEC[k].owns(current);});if(_k)return V2SEC[_k].render(current,v);}
   // موديولات «قريبًا» (لا واجهة خلفية حقيقية بعد) — لا تعرض بياناتها التصميمية.
   if(MODULES_LOOKUP[current]&&MODULES_LOOKUP[current].soon)return viewSoon(v);
   if(current==='inbox')return viewInbox(v);
@@ -7638,7 +7644,7 @@ window.V2_HOST={
   },
   logout:function(){var b=document.getElementById('logoutBtn');if(b)b.click();},
   // D1-B (الهيكل الجديد): تنقّل صريح لقسم/تبويب · الحالي · اسم المستخدم.
-  openSection:function(key,tab){v2OpenSection(key,tab);},
+  openSection:function(key,tab,opts){v2OpenSection(key,tab,opts);},
   state:function(){return V2S||{section:'home',tab:'board'};},
   userName:function(){var u=(window.EP&&EP.user)||{};return u.name||u.full_name||u.email||'المؤسس';},
   // D2: الشاشة الحالية · فتح درج صفّ في تبويب «الكل» التابع لقسمه (التذكرة تفتح نفس الدرج القديم) · صفحة شخص.
@@ -7672,7 +7678,7 @@ const V2_SETTERS={
 // يكتب العنوان #s/<قسم>/<تبويب>: how='push' لتنقّل المستخدم (فيشتغل زر الرجوع)، 'replace' لتصحيح الترويسة بعد هبوط داخلي.
 function v2Commit(how){
   if(!V2S)return;
-  const h=V2L.sectionHash(V2S.section,V2S.tab,V2S.person);
+  const h=V2L.sectionHash(V2S.section,V2S.tab,V2S.person,V2S.q);
   try{if(String(location.hash)!==h){if(how==='push')history.pushState(null,'',h);else history.replaceState(null,'',h);}}catch(e){try{location.hash=h;}catch(e2){}}
   const t=document.getElementById('pageTitle');
   const sec=V2L.sectionByKey(V2S.section);
@@ -7688,7 +7694,7 @@ function v2OpenSection(key,tabKey,opts){
   Object.keys(tab.st).forEach(function(k){const f=V2_SETTERS[k];if(f)f(tab.st[k]);});
   if(opts&&opts.st)Object.keys(opts.st).forEach(function(k){const f=V2_SETTERS[k];if(f)f(opts.st[k]);});   // حالة الاسم القديم (#foundation → tgTab)
   current=tab.mod;
-  V2S={section:sec.key,tab:tab.key};
+  V2S={section:sec.key,tab:tab.key,q:(opts&&opts.q)||null};
   v2Commit(opts&&opts.replace?'replace':'push');
   renderView();
 }
@@ -7737,10 +7743,10 @@ function v2Reconcile(){
 function v2OnHash(){
   if(!(window.V2SHELL&&V2SHELL.on)||role!=='admin')return;
   const h=String(location.hash||'');
-  if(V2S&&h===V2L.sectionHash(V2S.section,V2S.tab,V2S.person))return;
+  if(V2S&&h===V2L.sectionHash(V2S.section,V2S.tab,V2S.person,V2S.q))return;
   const rt=V2L.routeFor(h,{});
   if(rt&&rt.person)v2OpenPerson(rt.person,{replace:true});
-  else if(rt)v2OpenSection(rt.section,rt.tab,{replace:true,st:rt.st});
+  else if(rt)v2OpenSection(rt.section,rt.tab,{replace:true,st:rt.st,q:rt.q});
 }
 function v2ShellBoot(){
   if(!(window.V2SHELL&&window.V2L&&V2SHELL.boot&&V2L.routeFor))return false;
@@ -7750,7 +7756,7 @@ function v2ShellBoot(){
   window.addEventListener('popstate',v2OnHash);window.addEventListener('hashchange',v2OnHash);
   // الرابط الأول: عنوان جديد #s/… أو رابط قديم (#finance · #packages …) يهبط على قسمه وتبويبه، وأي غيره على اللوحة.
   const rt=V2L.routeFor(String(location.hash||''),{})||V2L.routeFor('home');
-  if(rt.person)v2OpenPerson(rt.person,{replace:true});else v2OpenSection(rt.section,rt.tab,{replace:true,st:rt.st});
+  if(rt.person)v2OpenPerson(rt.person,{replace:true});else v2OpenSection(rt.section,rt.tab,{replace:true,st:rt.st,q:rt.q});
   return true;
 }
 // مرة واحدة عند الإقلاع. ⛔ الإقلاع القديم بيترسم فورًا من غير ما ينتظر المفتاح (مقفول = نفس التوقيت بالحرف).
