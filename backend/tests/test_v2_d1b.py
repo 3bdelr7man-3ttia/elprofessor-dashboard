@@ -27,6 +27,7 @@ ROOT = os.path.dirname(os.path.dirname(_HERE))
 DC = os.path.join(ROOT, 'dashboard-cloud')
 NODE = __import__('shutil').which('node')
 needs_node = pytest.mark.skipif(not NODE, reason='needs node')
+PSEUDO_MODS = {'v2files', 'v2disputes', 'v2person'}     # D2: موديولات وهمية يرسمها V2D2 تحت الغلاف الجديد فقط
 
 
 def _read(*parts):
@@ -78,12 +79,14 @@ def test_the_tabs_match_the_approved_table():
     got = _node("console.log(JSON.stringify(L.SECTIONS.map(s=>[s.key,s.tabs.map(t=>[t.key,t.label,t.mod])])))")
     want = {
         'home': [['board', 'اللوحة والقرارات', 'home'], ['inbox', 'كل الوارد', 'inbox']],
-        'files': [['files', 'الملفات', 'inbox'], ['experts', 'الخبراء', 'team']],
-        'disputes': [['disputes', 'النزاعات', 'inbox'], ['escrow', 'الضمان', 'escrow']],
+        # D2: «الملفات» و«النزاعات» لوحتا تذاكر (موديولان وهميان ورا الغلاف)، والوارد القديم في تبويب «كل …» (لا شاشة اتفقدت)
+        'files': [['files', 'الملفات', 'v2files'], ['experts', 'الخبراء', 'team'], ['all', 'كل الملفات', 'inbox']],
+        'disputes': [['disputes', 'النزاعات', 'v2disputes'], ['escrow', 'الضمان', 'escrow'], ['all', 'كل النزاعات', 'inbox']],
         'courses': [['courses', 'الدورات', 'courses'], ['trainers', 'المدرّبون', 'team']],
         'market': [['requests', 'الطلبات', 'market']],
         'books': [['books', 'الكتب والأعمال', 'knowledge']],
-        'people': [['users', 'المستخدمون', 'users'], ['invites', 'الدعوات', 'invites'], ['messages', 'الرسائل', 'inbox']],
+        'people': [['users', 'المستخدمون', 'users'], ['invites', 'الدعوات', 'invites'], ['messages', 'الرسائل', 'inbox'],
+                   ['person', 'صفحة الشخص', 'v2person']],
         'money': [['finance', 'المالية', 'finance'], ['packages', 'الباقات والأسعار', 'finance'], ['receipts', 'الإيصالات', 'escrow']],
         'content': [['topics', 'المحتوى', 'topics'], ['tutorials', 'دليل الاستخدام', 'topics']],
         'marketing': [['campaigns', 'الحملات', 'marketing']],
@@ -112,7 +115,7 @@ def test_every_old_module_key_lands_on_a_section_and_a_tab():
 
 @needs_node
 def test_no_orphan_tab_each_tab_names_a_real_module_and_recognises_itself():
-    keys = set(_module_keys()) | {'home'}
+    keys = set(_module_keys()) | {'home'} | PSEUDO_MODS
     res = _node("""const out=[];L.SECTIONS.forEach(s=>s.tabs.forEach(t=>{const m=L.sectionFor(t.mod,t.st);
       out.push([s.key,t.key,t.mod,m&&m.section,m&&m.tab]);}));console.log(JSON.stringify(out))""")
     for sec, tab, mod, gs, gt in res:
@@ -143,9 +146,9 @@ def test_the_redirect_aliases_carry_the_same_inner_state_as_REDIRECTS():
 @needs_node
 def test_inner_screen_state_picks_the_right_tab_and_unknown_state_stays_put():
     cases = [
-        ('inbox', {'activeFilter': 't:files'}, 'files', 'files'), ('inbox', {'activeFilter': 'attn'}, 'files', 'files'),
-        ('inbox', {'activeFilter': 'review'}, 'files', 'files'), ('inbox', {'activeFilter': 'nocand'}, 'files', 'files'),
-        ('inbox', {'activeFilter': 't:disputes'}, 'disputes', 'disputes'), ('inbox', {'activeFilter': 't:legacy'}, 'disputes', 'disputes'),
+        ('inbox', {'activeFilter': 't:files'}, 'files', 'all'), ('inbox', {'activeFilter': 'attn'}, 'files', 'all'),
+        ('inbox', {'activeFilter': 'review'}, 'files', 'all'), ('inbox', {'activeFilter': 'nocand'}, 'files', 'all'),
+        ('inbox', {'activeFilter': 't:disputes'}, 'disputes', 'all'), ('inbox', {'activeFilter': 't:legacy'}, 'disputes', 'all'),
         ('inbox', {'activeFilter': 't:messages'}, 'people', 'messages'), ('inbox', {'activeFilter': 'all'}, 'home', 'inbox'),
         ('inbox', {'activeFilter': 'human'}, 'home', 'inbox'), ('inbox', {'activeFilter': 't:money'}, 'home', 'inbox'),
         ('team', {'teamTab': 'trainers'}, 'courses', 'trainers'), ('team', {'teamTab': 'experts'}, 'files', 'experts'),
@@ -179,8 +182,10 @@ def test_an_unknown_module_is_not_mapped():
 def test_section_addresses_round_trip():
     res = _node("""const out=[];L.SECTIONS.forEach(s=>s.tabs.forEach(t=>{const h=L.sectionHash(s.key,t.key);
       out.push([s.key,t.key,h,L.parseSectionHash(h),L.parseSectionHash(h.slice(1)),L.routeFor(h)]);}));console.log(JSON.stringify(out))""")
-    assert len(res) == 25
+    assert len(res) == 28                      # ٢٥ + «كل الملفات» و«كل النزاعات» + صفحة الشخص (الأخيرة مخفية)
     for sec, tab, h, p1, p2, r in res:
+        if (sec, tab) == ('people', 'person'):
+            continue                           # تبويب مخفي بلا بريد: يرجع لأول تبويب (يُختبر في test_v2_d2)
         assert h == '#s/%s/%s' % (sec, tab)
         assert p1 == {'section': sec, 'tab': tab, 'exact': True} == p2
         assert (r['section'], r['tab']) == (sec, tab)
@@ -369,12 +374,12 @@ def test_old_foundation_link_keeps_its_inner_tab_state():
 
 @needs_node
 def test_inbox_chips_do_not_move_the_user_out_of_files():
-    res = _node("""const h={section:'files',tab:'files'};
+    res = _node("""const h={section:'files',tab:'all'};
       console.log(JSON.stringify(['all','late','human','fyi','t:money','t:verify'].map(f=>{const m=L.sectionFor('inbox',{activeFilter:f},h);return [m.section,m.tab];})
         .concat([L.sectionFor('inbox',{activeFilter:'all'},null)].map(m=>[m.section,m.tab]))
         .concat([L.sectionFor('inbox',{activeFilter:'t:disputes'},h)].map(m=>[m.section,m.tab]))))""")
-    assert res[:6] == [['files', 'files']] * 6
-    assert res[6] == ['home', 'inbox'] and res[7] == ['disputes', 'disputes']
+    assert res[:6] == [['files', 'all']] * 6
+    assert res[6] == ['home', 'inbox'] and res[7] == ['disputes', 'all']
 
 
 def test_inbox_search_stays_until_the_phone_width_and_copy_is_neutral():
