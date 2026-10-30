@@ -469,6 +469,8 @@ body{font-family:'IBM Plex Sans Arabic',sans-serif;background:var(--bg);color:va
 <script src="v2s/home_copy.js"></script>
 <link rel="stylesheet" href="v2s/market.css">
 <script src="v2s/market.js"></script>
+<link rel="stylesheet" href="v2s/books.css">
+<script src="v2s/books.js"></script>
 <!-- v2 sections end -->
 <script src="v2-d3.js"></script>
 <!-- v2 sections begin -->
@@ -722,6 +724,7 @@ function renderView(){
   if(window.V2_ON&&window.V2D3&&V2D3.owns(current))return V2D3.render(current,v);
   // v2 sections (final round): كل قسم يسجّل نفسه في window.V2SEC = [{owns(mod), render(mod, view)}].
   if(window.V2_ON&&window.V2SEC){for(var _i=0;_i<V2SEC.length;_i++){if(V2SEC[_i].owns(current)){var _ap=document.querySelector('.app');if(_ap)_ap.classList.add('v2-bare');return V2SEC[_i].render(current,v);}}}
+  if(window.V2_ON&&window.V2SX&&V2SX.owns(current)){const ap2=document.querySelector('.app');if(ap2)ap2.classList.add('v2-bare');return V2SX.render(current,v);}
   // موديولات «قريبًا» (لا واجهة خلفية حقيقية بعد) — لا تعرض بياناتها التصميمية.
   if(MODULES_LOOKUP[current]&&MODULES_LOOKUP[current].soon)return viewSoon(v);
   if(current==='inbox')return viewInbox(v);

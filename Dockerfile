@@ -30,6 +30,7 @@ COPY backend/prerender.py /app/prerender.py
 COPY backend/refresh_rules.py /app/refresh_rules.py
 # v2_<قسم>_routes.py: مسارات أقسام الجولة النهائية — app.py يستوردها عند الإقلاع (غيابها = الحاوية لا تقوم)
 COPY backend/v2_market_routes.py /app/v2_market_routes.py
+COPY backend/v2_books_routes.py /app/v2_books_routes.py
 # The new cloud-design dashboard becomes the served frontend (Flask serves /app/dist).
 # Only the live app files are shipped — the standalone prototype HTMLs
 # (Dashboard-Outputs.html / Dashboard-State.html) are unreferenced and not deployed.
