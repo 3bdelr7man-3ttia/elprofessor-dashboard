@@ -2240,11 +2240,15 @@
     if (title !== row.title) { lines.push({ label: 'العنوان', from: row.title, to: title }); body.title = title; }
     if (row.forSale) {
       var n = Un.parseAmount(input.priceText);
-      if (n === null || isNaN(n)) return { ok: false, error: PRICE_ERR, changed: false, lines: [], body: {} };
-      if (!(n > 0)) return { ok: false, error: 'اكتب سعرًا أكبر من صفر', changed: false, lines: [], body: {} };
-      if (row.priceAmount == null || Math.abs(n - row.priceAmount) > 1e-9) {
-        lines.push({ label: 'السعر', from: row.priceAmount == null ? NA : Un.moneyText(row.priceAmount, row.priceCurrency), to: Un.moneyText(n, row.priceCurrency) });
-        body.price_egp = n;
+      // سعر غير معروف الآن وحقل السعر فارغ: لا بند سعر (العنوان و«اعرض سعرك» يمرّان)؛ وإن كتب المؤسس سعرًا فيُفحص كالمعتاد
+      var skipPrice = row.priceAmount == null && n === null;
+      if (!skipPrice) {
+        if (n === null || isNaN(n)) return { ok: false, error: PRICE_ERR, changed: false, lines: [], body: {} };
+        if (!(n > 0)) return { ok: false, error: 'اكتب سعرًا أكبر من صفر', changed: false, lines: [], body: {} };
+        if (row.priceAmount == null || Math.abs(n - row.priceAmount) > 1e-9) {
+          lines.push({ label: 'السعر', from: row.priceAmount == null ? NA : Un.moneyText(row.priceAmount, row.priceCurrency), to: Un.moneyText(n, row.priceCurrency) });
+          body.price_egp = n;
+        }
       }
       var bid = !!input.bid;
       if (bid !== !!row.bid) { lines.push({ label: '«اعرض سعرك»', from: bidText(row.bid), to: bidText(bid) }); body.bid_enabled = bid; }

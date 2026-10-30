@@ -53,7 +53,8 @@
 .v2s-books .bk-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px 18px;align-items:center;background:#fff;border:1px solid var(--line);border-radius:14px;padding:12px 16px}
 .v2s-books .bk-main{display:grid;gap:2px;min-width:0}
 .v2s-books .bk-meta{display:flex;flex-wrap:wrap;align-items:center;gap:2px 12px}
-.v2s-books .bk-row .v3-person{padding:6px 0}
+.v2s-books .bk-item .v3-person{display:inline-flex;align-items:center;min-height:44px;padding:0 2px;line-height:1.4;border-bottom:0;text-decoration:underline dashed rgba(158,43,78,.5);text-underline-offset:5px}
+.v2s-books .bk-pending{margin:0 0 12px}
 .v2s-books .bk-main h3{font:800 16.5px/1.55 'Cairo',sans-serif;overflow-wrap:anywhere}
 .v2s-books .bk-addrow{margin:4px 0 14px}
 .v2s-books .bk-libline{margin:6px 0 0;font-size:13.5px;color:var(--mute);line-height:1.8;border-top:1px solid var(--line);padding-top:10px}
@@ -92,7 +93,11 @@
 
 /* —— ورقة التعديل والإضافة (فوق أنماط v2-d3.css للأوراق) */
 .v2s-bm .fld{display:grid;gap:6px}
-.v2s-bm .fld label{font:700 14px 'Cairo',sans-serif}
+.v2s-bm .fld label{font:700 14.5px 'Cairo',sans-serif;color:var(--ink)}
+#epModal .v2s-bm .fld label{color:#21262E}
+#epModal .v2s-bm .fld input,#epModal .v2s-bm .fld select,#epModal .v2s-bm .fld textarea{border-color:#E9E1D6}
+#epModal .v2s-bm .fld input:focus,#epModal .v2s-bm .fld select:focus,#epModal .v2s-bm .fld textarea:focus{outline:3px solid rgba(158,43,78,.3);outline-offset:1px;border-color:#9E2B4E}
+#epModal .v2s-bm .v3-fine{color:#5C574E}
 .v2s-bm .fld select,.v2s-bm .fld input,.v2s-bm .fld textarea{width:100%;border:1px solid var(--line);border-radius:10px;padding:0 12px;min-height:48px;font-size:16px;background:#fff;color:var(--ink)}
 .v2s-bm .fld textarea{padding:10px 12px;line-height:1.7}
 .v2s-bm [hidden]{display:none}
@@ -116,6 +121,7 @@
   .v2s-books .bk-fold{min-height:52px}
   .v2s-books .bk-row{grid-template-columns:minmax(0,1fr)}
   .v2s-books .bk-row .v3-btn2{width:100%}
+  .v2s-books .bk-addrow .v3-btn2,.v2s-books .v3-empty .v3-btn1,.v2s-books .v3-empty .v3-btn2{width:100%}
   .v2s-books .bk-acts{flex-direction:column;align-items:stretch}
   .v2s-books .bk-acts .v3-btn1,.v2s-books .bk-acts .v3-btn2,.v2s-books .bk-acts .v3-link{width:100%;flex:none}
   .v2s-books .bk-whead{padding:14px 16px}

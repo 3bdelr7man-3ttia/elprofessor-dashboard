@@ -24,13 +24,13 @@
   var FAIL_AR = 'تعذّر تنفيذ العملية';
   var NOTFOUND_AR = 'هذا العمل غير موجود';
   var S = { view: null, q: '', open: null, rejOpen: false, note: null, noteT: null, sheetBusy: false, saved: null, away: false, dirty: false,
-            res: null, nowOverride: 0, retryT: null, minute: null, poll: null };
+            res: null, retryT: null, minute: null, poll: null, hashFn: null };
 
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
   function host() { return window.V2_HOST || {}; }
   function ep() { return window.EP || null; }
   function img(name) { return 'v2/img/' + name + '.jpg'; }
-  function now() { return S.nowOverride || Date.now(); }
+  function now() { return Date.now(); }
   function q(sel, root) { return (root || document).querySelector(sel); }
   function qa(sel, root) { return Array.prototype.slice.call((root || document).querySelectorAll(sel)); }
   function arDigits(t) { return String(t).replace(/\d/g, function (d) { return '٠١٢٣٤٥٦٧٨٩'.charAt(+d); }); }
@@ -51,7 +51,10 @@
     ads: '/v2/ads-ledger'
   };
   var LIST = ['knowledge', 'revPending', 'revRejected', 'prices', 'offers', 'store'];
-  var STALE_MS = 60000;
+  var STALE_MS = 60000, LATE_MS = 8000;
+  // المصادر التي تحسم رسم القائمة؛ الباقي يلحق بها بلا حجب
+  var CORE = ['knowledge', 'prices', 'offers'];
+  var LATE_LABEL = { revPending: 'حالة المراجعة', revRejected: 'حالة المراجعة', store: 'بيانات المتجر' };
   function srcOf(k) { return SRC[k] || (SRC[k] = { state: 'idle', data: null, status: 0, seq: 0, at: 0 }); }
   function load(k, force) {
     var s = srcOf(k), E = ep();
@@ -59,6 +62,9 @@
     if (!force && s.state !== 'idle') return;
     if (s.state === 'idle') s.state = 'loading';          // أول جلب بس؛ التحديث بيسيب القديم ظاهرًا لحد ما يوصل الجديد
     var seq = ++s.seq;
+    if (s.state === 'loading') {                          // مصدر متأخر لا يحجب الشاشة: بعد ٨ ثوانٍ يصير «غير متاح بعد» وإن وصل لاحقًا يحلّ محلّه
+      setTimeout(function () { if (seq === s.seq && s.state === 'loading') { s.state = 'error'; s.status = 0; s.data = null; s.at = Date.now(); changed(); } }, LATE_MS);
+    }
     E.api(PATHS[k]).then(function (d) {
       if (seq !== s.seq) return;
       s.state = 'ready'; s.data = d; s.at = Date.now(); changed();
@@ -235,7 +241,7 @@
   function drawList(v, res) {
     var total = res.rows.length;
     var onlyOffers = total === 0 && res.offersWaiting > 0;
-    var html = '<div class="v3 v2s-books" data-board="works">' + noteStrip() + warnStrip(res.failed) + (res.storeClosed ? '<p class="v3-fine bk-closed">متجر الكتب لم يُفتح بعد، فتظهر هنا أعمال السوق وحدها.</p>' : '');
+    var html = '<div class="v3 v2s-books" data-board="works">' + noteStrip() + warnStrip(res.failed) + (res.pending ? '<p class="v3-fine bk-pending" role="status">…جارٍ جلب بقية البيانات</p>' : '') + (res.storeClosed ? '<p class="v3-fine bk-closed">متجر الكتب لم يُفتح بعد، فتظهر هنا أعمال السوق وحدها.</p>' : '');
     html += brainCard(res);
     if (total === 0 && !onlyOffers) {
       html += res.failed.length
@@ -307,13 +313,24 @@
   function draw(v) {
     var focusSearch = document.activeElement && document.activeElement.id === 'bkSearch';
     var caret = focusSearch ? document.activeElement.selectionStart : 0;
-    var all = LIST.every(settled);
+    var all = CORE.every(settled);
     if (!all) {
       v.innerHTML = '<div class="v3 v2s-books" data-board="works">' + noteStrip() + '<div class="v3-empty"><b>…جارٍ جلب الكتب والأعمال</b></div></div>';
       S.res = null; return;
     }
     var res = L.v2kWorks(srcAll(), now());
+    var late = LIST.filter(function (k) { return !settled(k); });
+    if (res && late.length) {                              // ما لم يصل بعد ليس «تعذّر»؛ يُذكر كجلب جارٍ ويلحق بالرسم حين يصل
+      var lateNames = late.map(function (k) { return LATE_LABEL[k]; });
+      res.failed = res.failed.filter(function (f) { return lateNames.indexOf(f) < 0; });
+      if (!res.rows.length) res = { loadingOnly: true };
+    }
+    if (res && res.loadingOnly) {
+      v.innerHTML = '<div class="v3 v2s-books" data-board="works">' + noteStrip() + '<div class="v3-empty"><b>…جارٍ جلب الكتب والأعمال</b></div></div>';
+      S.res = null; return;
+    }
     S.res = res;
+    if (res) res.pending = late.length > 0;
     if (!res) {
       v.innerHTML = '<div class="v3 v2s-books" data-board="works">' + noteStrip() + '<div class="v3-empty"><b>الكتب والأعمال: غير متاح بعد</b><p>تعذّر الجلب الآن، فلا تعتبر الشاشة فارغة.</p>' + retryBtn() + '</div></div>';
       wire(v); return;
@@ -598,14 +615,29 @@
     S.view = v;
     ensureAll();
     redraw();
-    if (!S.poll) {
-      S.poll = setInterval(function () {
-        var cur = host().current && host().current();
-        if (!(cur && R.owns(cur))) S.away = true;
-        if (!modalOpen()) dockHide(false);
-      }, 500);
+    startTimers();
+  }
+  // المؤقّتات تعيش ما دام التبويب حاضرًا؛ عند مغادرته (تغيّر الرابط) تتوقف كلها وتبدأ من جديد مع أول رسم.
+  function leftTab() {
+    var cur = host().current && host().current();
+    return !(cur && R.owns(cur));
+  }
+  function checkAway() {
+    if (!S.minute && !S.retryT) return;
+    if (leftTab()) stopTimers();
+  }
+  function stopTimers() {
+    S.away = true;
+    if (S.minute) { clearInterval(S.minute); S.minute = null; }
+    if (S.retryT) { clearInterval(S.retryT); S.retryT = null; }
+    if (S.hashFn) { window.removeEventListener('hashchange', S.hashFn); window.removeEventListener('popstate', S.hashFn); S.hashFn = null; }
+  }
+  function startTimers() {
+    if (!S.minute) S.minute = setInterval(function () { if (leftTab()) { stopTimers(); return; } if (isCurrent() && !modalOpen()) redraw(); }, 60000);
+    if (!S.hashFn) {
+      S.hashFn = function () { setTimeout(function () { checkAway(); if (!modalOpen()) dockHide(false); }, 0); };
+      window.addEventListener('hashchange', S.hashFn); window.addEventListener('popstate', S.hashFn);
     }
-    if (!S.minute) S.minute = setInterval(function () { if (isCurrent() && !modalOpen()) redraw(); }, 60000);
   }
   R.mods.knowledge = {
     owns: function () { return !!(window.V2SHELL && V2SHELL.on); },
@@ -613,5 +645,4 @@
     summary: function () { return L.v2kSummary(S.res); },
     library: openLibrary
   };
-  window.V2SX_BOOKS = { _state: S, _src: SRC, _tick: function (t) { S.nowOverride = t || 0; redraw(); } };
 })();

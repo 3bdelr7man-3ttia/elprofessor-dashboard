@@ -43,7 +43,7 @@ def bk_check(page, name):
     """أهداف ≥ ٤٤px (والأزرار ≥ ٥٢px في الموبايل) · لا تمرير أفقي · لا «٠/null/NaN» ولا أرقام لاتينية · لا أثر للقديم · صور مسموحة بس · خانات ≥ ١٦px."""
     w = page.viewport_size['width']
     small = page.evaluate("""() => [...document.querySelectorAll('.v2s-books button, .v2s-books a[href], .v2s-books input, #epModal .v2s-bm button, #epModal .v2s-bm input, #epModal .v2s-bm textarea, #epModal .v2s-bm select')]
-      .filter(b => b.offsetParent && !b.classList.contains('v3-person'))
+      .filter(b => b.offsetParent)
       .map(b => [b.className || b.tagName, Math.round((b.type === 'checkbox' && b.closest('label') ? b.closest('label') : b).getBoundingClientRect().height)])
       .filter(x => x[1] < 44)""")
     if small:
@@ -58,6 +58,12 @@ def bk_check(page, name):
           .filter(b => b.offsetParent).map(b => [b.className, Math.round(b.getBoundingClientRect().height)]).filter(x => x[1] < 52)""")
         if big:
             PROBLEMS.append('%s: أزرار أقل من ٥٢px في الموبايل: %r' % (name, big[:4]))
+        narrow = page.evaluate("""() => { const W = window.innerWidth;
+          return [...document.querySelectorAll('.v2s-books .v3-btn1, .v2s-books .v3-btn2, #epModal .v2s-bm .btn')]
+            .filter(b => b.offsetParent && !b.closest('.bk-pills') && b.getBoundingClientRect().width < (b.closest('#epModal') ? 120 : W * 0.6))
+            .map(b => [b.className, Math.round(b.getBoundingClientRect().width)]); }""")
+        if narrow:
+            PROBLEMS.append('%s: أزرار ليست بعرض الشاشة في الموبايل: %r' % (name, narrow[:4]))
         sw = page.evaluate("() => Math.max(document.documentElement.scrollWidth, document.body.scrollWidth, (document.querySelector('.content')||{}).scrollWidth||0)")
         if sw > w + 1:
             PROBLEMS.append('%s: تمرير أفقي في الموبايل (%s > %s)' % (name, sw, w))

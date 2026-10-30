@@ -236,16 +236,18 @@ def test_a_platform_error_is_its_status_and_only_an_error_message(ctx, plat):
     assert r2.status_code == 502 and set(r2.get_json()) == {'error'}, 'شكل غير مفهوم ⇒ خطأ لا قايمة فاضية'
 
 
-def test_registration_is_one_line_right_before_the_marker():
+def test_registration_is_one_line_before_the_marker():
+    # يخصّ هذا القسم وحده: سطره موجود مرة واحدة وقبل علامة نهاية المسارات. بعد دمج الأقسام سيجاوره سطر كل قسم آخر، ولا يهمّه ذلك.
     src = _read('backend', 'app.py')
     marker = '# ---- v2 section routes end'
     line = "__import__('v2_books_routes').register(app, globals())"
-    assert src.count(marker) == 1 and src.count(line) == 1
-    lines = src.split('\n')
-    i = lines.index(marker)
-    assert lines[i - 1] == line
+    assert src.count(marker) >= 1 and src.count(line) == 1
+    assert src.index(line) < src.index(marker)
     assert src.index(marker) < src.index("@app.route('/api/platform-pnl'")
     assert src.index("def v2_book_request_patch") < src.index(line)
+    block = src[src.index(line):src.index(marker)]
+    assert all(ln.strip() == '' or 'v2_' in ln and '.register(app, globals())' in ln or ln.lstrip().startswith('#') for ln in block.split('\n')), \
+        'بين سطر الكتب والعلامة سطور تسجيل أقسام أخرى فقط'
 
 
 def test_the_proxy_is_looked_up_at_request_time_not_at_registration(ctx, plat, monkeypatch):
@@ -556,6 +558,28 @@ def test_edit_diff_shows_only_what_changes_and_sends_only_what_changed():
 
 
 @needs_node
+def test_a_for_sale_work_with_an_unknown_price_can_still_change_its_title_and_bid():
+    row = dict(_rowmap(W())['kn:kn-4'], priceAmount=None, priceText='غير متاح بعد')
+    assert row['forSale'] is True
+    d = L('v2kEditDiff', row, {'title': 'عنوان جديد', 'priceText': '', 'bid': True})
+    assert d['ok'] and d['body'] == {'title': 'عنوان جديد', 'bid_enabled': True} and [x['label'] for x in d['lines']] == ['العنوان', '«اعرض سعرك»']
+    d = L('v2kEditDiff', row, {'title': row['title'], 'priceText': '', 'bid': bool(row['bid'])})
+    assert d['ok'] and d['changed'] is False
+    d = L('v2kEditDiff', row, {'title': row['title'], 'priceText': '120', 'bid': bool(row['bid'])})
+    assert d['body'] == {'price_egp': 120} and d['lines'][0]['from'] == 'غير متاح بعد'
+    for bad in ('abc', '0', '-3'):
+        assert L('v2kEditDiff', row, {'title': row['title'], 'priceText': bad, 'bid': False})['ok'] is False, bad
+
+
+@needs_node
+def test_a_decimal_amount_uses_the_arabic_decimal_mark_never_a_latin_comma():
+    row = _rowmap(W())['kn:kn-4']
+    d = L('v2kEditDiff', row, {'title': row['title'], 'priceText': '299.5', 'bid': bool(row['bid'])})
+    to = d['lines'][0]['to']
+    assert '\u066b' in to and ',' not in to and '.' not in to, to
+
+
+@needs_node
 def test_add_book_builds_exactly_the_eight_fields_the_endpoint_takes():
     ok = {'title': ' دليل ', 'author': ' أ ', 'description': 'وصف', 'priceText': '١٢٠', 'currency': 'USD', 'fileUrl': 'https://x.test/a.pdf', 'coverUrl': '', 'active': True}
     r = L('v2kAddBook', ok)
@@ -629,7 +653,10 @@ def test_the_files_are_wired_in_the_sections_block_and_shipped():
     assert '<link rel="stylesheet" href="v2s/books.css">' in block and '<script src="v2s/books.js"></script>' in block
     assert html.index('v2-d2.js') < html.index(begin) < html.index(end) < html.index('v2-d3.js'), 'الكتلة بعد v2-d2 وقبل v2-d3'
     refs = re.findall(r'(?:href|src)="(v2s/[^"]+)"', block)
-    assert refs == ['v2s/books.css', 'v2s/books.js'], refs
+    assert refs.count('v2s/books.css') == 1 and refs.count('v2s/books.js') == 1, refs
+    assert refs.index('v2s/books.css') < refs.index('v2s/books.js'), 'الأنماط قبل السكربت'
+    keys = [re.match(r'v2s/([a-z0-9_-]+)\.', r).group(1) for r in refs]
+    assert keys == sorted(keys), 'الكتلة مرتّبة أبجديًا بمفتاح القسم'
     for df in ('Dockerfile', os.path.join('deploy', 'Dockerfile.coolify')):
         txt = _read(df)
         assert 'COPY dashboard-cloud/v2s /app/dist/v2s' in txt and 'COPY backend/v2_*_routes.py /app/' in txt, df
@@ -776,3 +803,29 @@ def test_the_docs_status_file_lists_the_founder_decisions():
     st = _read('docs', 'v2', 'final', 'STATUS-books.md')
     for need in ('قرارات تحتاج المؤسس', 'D-1', 'D-8', 'مكتبة المراجع', 'العقل'):
         assert need in st, need
+
+
+def test_no_test_hook_or_time_override_ships_in_the_screen():
+    assert 'V2SX_BOOKS' not in CODE and 'nowOverride' not in CODE and '_tick' not in CODE and '_state' not in CODE
+    assert 'function now() { return Date.now(); }' in CODE
+
+
+def test_the_list_draws_once_the_three_deciding_sources_settle_and_a_slow_source_times_out():
+    assert "var CORE = ['knowledge', 'prices', 'offers'];" in CODE and 'CORE.every(settled)' in CODE and 'LIST.every(settled)' not in CODE
+    assert 'LATE_MS = 8000' in CODE and "s.state = 'error'" in CODE, 'مصدر متأخر ينقلب «غير متاح بعد» بعد ٨ ثوانٍ'
+    assert '…جارٍ جلب بقية البيانات' in CODE and 'res.failed = res.failed.filter(' in CODE, 'ما لم يصل بعد ليس «تعذّر»'
+
+
+def test_the_periodic_timers_stop_when_the_tab_is_left_and_restart_on_render():
+    assert 'setInterval' in CODE and 'S.poll' not in CODE, 'لا استطلاع كل نصف ثانية'
+    assert 'function stopTimers()' in CODE and 'clearInterval(S.minute)' in CODE and "addEventListener('hashchange', S.hashFn)" in CODE
+    assert 'startTimers();' in CODE[CODE.index('function render(v) {'):CODE.index('function leftTab()')]
+
+
+def test_the_owner_link_is_a_44px_target_on_every_width_and_the_edge_fixes_are_in_the_css():
+    assert re.search(r'\.bk-item \.v3-person\{[^}]*min-height:44px', CSS)
+    assert not re.search(r'\.bk-row \.v3-person\{[^}]*padding:6px', CSS)
+    mob = CSS[CSS.index('@media(max-width:760px)'):]
+    assert re.search(r'\.bk-addrow \.v3-btn2,[^{]*\.v3-empty \.v3-btn1,[^{]*\.v3-empty \.v3-btn2\{width:100%\}', mob), 'كل الأزرار بعرض الشاشة في الموبايل'
+    assert re.search(r'#epModal \.v2s-bm \.fld label\{color:#21262E\}', CSS), 'عناوين الخانات بحبر لا رمادي بارد'
+    assert re.search(r'#epModal \.v2s-bm \.fld input,[^{]*\{border-color:#E9E1D6\}', CSS)
