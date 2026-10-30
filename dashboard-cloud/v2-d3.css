@@ -95,6 +95,8 @@
 .v3-floor{font:700 14px/1.7 'Cairo',sans-serif;color:#3A3730;background:var(--amber-bg);border-radius:12px;padding:8px 14px;margin-bottom:10px}
 .v3-sh{grid-template-columns:minmax(0,1fr) auto}
 .v3-lad{align-items:start}
+.v3-notes,.v3m .v3-notes{margin:6px 0 0;padding:0 18px 0 0;font-size:13px;line-height:1.85;color:var(--mute)}
+.v3m .v3-notes{background:var(--amber-bg);border-radius:12px;padding:8px 30px 8px 14px;color:#6B4A00;margin-top:10px}
 .v3-ladder{width:100%;border-collapse:collapse;margin-top:6px;font-size:13.5px}
 .v3-ladder th,.v3-ladder td{padding:6px 8px;border-bottom:1px solid #EEE7DA;text-align:start}
 .v3-ladder th{color:var(--mute);font-weight:700;font-size:12.5px}

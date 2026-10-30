@@ -267,7 +267,7 @@
     v.innerHTML = '<div class="v3" data-board="receipts">' + noteStrip() + warnStrip(failed)
       + '<div class="v3-twocol"><section class="v3-colbox"><h2 class="v3-h2">إيصالات تنتظر التأكيد <span class="v3-cnt">' + esc(cards ? U.ar(cards.length) : '—') + '</span></h2>' + colA + '</section>'
       + '<section class="v3-colbox"><h2 class="v3-h2">مدفوعات بالبطاقة عالقة <span class="v3-cnt">' + esc(stuck ? U.ar(stuck.count) : '—') + '</span></h2>'
-      + (stuck ? '<p class="v3-fine">دفعات بدأها أصحابها ولم تكتمل منذ أكثر من ' + esc(U.ar(stuck.afterHours)) + ' ساعة</p>' : '') + colB + '</section></div></div>';
+      + (stuck ? '<p class="v3-fine">دفعات بدأها أصحابها ولم تكتمل منذ أكثر من ' + esc(U.ar(stuck.afterHours)) + ' ساعة</p>' + (stuck.deliveryNote ? '<p class="v3-fine">' + esc(stuck.deliveryNote) + '</p>' : '') : '') + colB + '</section></div></div>';
     wire(v);
   }
 
@@ -316,7 +316,7 @@
     }).join('') + '</ul>' : '<p class="v3-none">لا تعديلات بعد</p>';
     var minBody;
     if (!info) minBody = srcState('settings') === 'loading' || srcState('settings') === 'idle' ? loadingBlock('الحد الأدنى للسحب') : unavailable('الحد الأدنى للسحب');
-    else minBody = '<div class="v3-sh"><div class="v3-pid"><b>الحد الأدنى للسحب</b><span>' + esc(info.text) + '</span><small>ويسحب صاحب الحساب رصيده كاملًا في أي وقت</small></div><button type="button" class="v3-btn2" data-a="minpay">غيّر</button></div>';
+    else minBody = '<div class="v3-sh"><div class="v3-pid"><b>الحد الأدنى للسحب</b><span>' + esc(info.text) + '</span><small>ويسحب صاحب الحساب رصيده كاملًا في أي وقت</small>' + notesHtml(info.notes) + '</div><button type="button" class="v3-btn2" data-a="minpay">غيّر</button></div>';
     var mh = info && info.history.length ? '<ul class="v3-log">' + info.history.slice(0, 5).map(function (h) {
       return '<li><div><b>' + esc(h.by || 'الإدارة') + '</b><time>' + esc(h.when) + '</time></div><ul><li>الحد الأدنى للسحب: <s>' + esc(h.from) + '</s> ← <b>' + esc(h.to) + '</b></li></ul></li>'; }).join('') + '</ul>' : '';
     v.innerHTML = '<div class="v3" data-board="shares">' + noteStrip()
@@ -502,7 +502,7 @@
         review: function (p) { var d = L.v2PriceDiff(form, p.built); return { lines: d.lines, changed: d.changed, lead: 'ستغيّر أسعار <b>' + esc(form.title) + '</b>. راجع ما سيتغير:' }; },
         busy: 'جارٍ الحفظ…', btnConfirm: 'أكّد التعديل',
         send: function (p) {
-          return E.api('/v2/prices/' + kind + '/' + encodeURIComponent(id), { method: 'PUT', body: { versions: p.built.versions, visible: p.built.visible, note: p.note, rev: form.rev, confirmed: true } });
+          return E.api('/v2/prices/' + kind + '/' + encodeURIComponent(id), { method: 'PUT', body: { versions: p.built.versions, visible: p.built.visible, note: p.note, rev: form.rev, title: form.title, confirmed: true } });
         },
         onOk: function () { setNote('حُفظت أسعار «' + form.title + '»'); load(kind === 'book' ? 'pricesBook' : 'pricesCourse', true); redraw(); },
         onStale: function () { load(kind === 'book' ? 'pricesBook' : 'pricesCourse', true); }
@@ -582,6 +582,9 @@
   }
 
   // —— الحد الأدنى للسحب
+  function notesHtml(list) {
+    return list && list.length ? '<ul class="v3-notes">' + list.map(function (n) { return '<li>' + esc(n) + '</li>'; }).join('') + '</ul>' : '';
+  }
   function openMinPay() {
     var E = ep(), info = L.v2MinPayout(data('settings'), now());
     if (!info) { load('settings', true); notifyFail('تعذّر جلب الحد الأدنى الآن'); return; }
@@ -592,7 +595,8 @@
       collect: function (s) { var r = L.v2MinPayoutInput(q('#v3_min', s).value, info); return r.ok ? { ok: true, payload: r.value } : { ok: false, error: r.error }; },
       snapshot: function (s) { return { cells: {}, min: q('#v3_min', s).value }; },
       fill: function (s, vals) { var i = q('#v3_min', s); if (i && vals.min != null) i.value = vals.min; },
-      review: function (v) { return { changed: v !== info.value, lines: [{ label: 'الحد الأدنى للسحب', from: info.text, to: U.moneyText(v, 'EGP') }], lead: 'ستغيّر الحد الأدنى للسحب. يسري على الطلبات الجديدة فقط:' }; },
+      review: function (v) { return { changed: v !== info.value, lines: [{ label: 'الحد الأدنى للسحب', from: info.text, to: U.moneyText(v, 'EGP') }], lead: 'ستغيّر الحد الأدنى للسحب. يسري على الطلبات الجديدة فقط:',
+                                      extra: notesHtml(info.notes) }; },
       busy: 'جارٍ الحفظ…',
       send: function (v) { return E.api('/v2/money/settings', { method: 'PUT', body: { withdraw_min: v, rev: info.rev, confirmed: true } }); },
       onOk: function () { setNote('تغيّر الحد الأدنى للسحب'); load('settings', true); redraw(); },

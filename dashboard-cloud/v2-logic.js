@@ -1576,7 +1576,9 @@
     if (!resp || !Array.isArray(resp.items)) return null;
     var rows = resp.items.filter(function (o) { return o && typeof o === 'object'; }).map(function (o) { return stuckRow(o, now); });
     rows.sort(function (a, b) { return (b.ageHours || 0) - (a.ageHours || 0); });
-    return { rows: rows, count: rows.length, partial: rows.length >= STUCK_CAP, afterHours: Number(resp.after_hours) || 2 };
+    // «مدفوع والتسليم ما وصلش»: المنصة بتقول صراحة `null` (مفيش علامة تسليم مسجّلة) ⇒ نكتبها «غير متاح بعد» بدل ما نسكت عنها.
+    return { rows: rows, count: rows.length, partial: rows.length >= STUCK_CAP, afterHours: Number(resp.after_hours) || 2,
+             deliveryNote: resp.paid_without_delivery === null ? 'دفعات تمّ سدادها ولم يصل تسليمها: غير متاح بعد' : '' };
   }
   // احتياط للوحة القرارات: طابور المنصة يحمل نفس الطلبات العالقة (بلا اسم) لو جسر التفصيل تعذّر.
   function v2StuckFromQueue(Q) {
@@ -1629,7 +1631,7 @@
     });
     return { rows: rows, countries: order, currencies: resp.currencies || {} };
   }
-  var VERSION_LABEL = { read: 'القراءة على المنصة', pdf: 'نسخة PDF' };
+  var VERSION_LABEL = { read: 'القراءة على المنصة', pdf: 'نسخة PDF', standard: 'السعر العادي' };
   function digitsToLatin(s) {
     return String(s == null ? '' : s).replace(/[٠-٩]/g, function (d) { return String(d.charCodeAt(0) - 0x660); })
       .replace(/[۰-۹]/g, function (d) { return String(d.charCodeAt(0) - 0x6F0); });
@@ -1651,7 +1653,7 @@
       return { key: c, label: COUNTRY_LABEL[c] || c, currency: cur, currencyName: curLong(cur) };
     });
     var keys = Array.isArray(resp.versions_allowed) && resp.versions_allowed.length ? resp.versions_allowed.slice() : Object.keys(p.versions || {});
-    if (!keys.length) keys = ['read'];
+    if (!keys.length) keys = [p.kind === 'course' ? 'standard' : 'read'];
     var versions = keys.map(function (k) {
       var row = (p.versions && p.versions[k]) || {}, cells = {};
       countries.forEach(function (c) { cells[c.key] = row[c.key] ? amountField(row[c.key].amount) : ''; });
@@ -1808,7 +1810,14 @@
       var at = ms(r.at), b = r.before && r.before.withdraw_min, a = r.after && r.after.withdraw_min;
       return { by: str(r.by), when: isNaN(at) ? '' : dateText(new Date(at).toISOString()) + ' · ' + agoText(at, now), from: b == null ? '' : moneyText(b, 'EGP'), to: a == null ? '' : moneyText(a, 'EGP') };
     });
-    return { value: resp.withdraw_min, text: moneyText(resp.withdraw_min, 'EGP'), rev: typeof resp.rev === 'number' ? resp.rev : 0,
+    // ملاحظات تأثير التغيير: نصوصنا بفصحى، والمنصة بس بتقول إنها موجودة (`notes`) وبتبعت الثواني — ⛔ نصها العامي ما يُعرض.
+    var nt = resp.notes && typeof resp.notes === 'object' ? resp.notes : null, notes = [];
+    if (nt) {
+      if (nt.agreement) notes.push('الحد الأدنى يظهر في اتفاقية المدرّبين. تغييره يغيّر نص الاتفاقية عند من وقّعها قبل ذلك أيضًا، ولا يُطلب منهم التوقيع من جديد.');
+      if (nt.full_balance) notes.push('سحب الرصيد كاملًا في طلب واحد مسموح دائمًا مهما كان الحد.');
+      if (nt.propagation) notes.push('يسري التعديل فورًا' + (typeof nt.cache_seconds === 'number' ? '، وقد يتأخر في بعض الحالات حتى ' + U(nt.cache_seconds, ['ثانية واحدة', 'ثانيتين', 'ثوانٍ', 'ثانية']) : '') + '.');
+    }
+    return { value: resp.withdraw_min, text: moneyText(resp.withdraw_min, 'EGP'), rev: typeof resp.rev === 'number' ? resp.rev : 0, notes: notes,
              min: typeof al.min === 'number' ? al.min : 50, max: typeof al.max === 'number' ? al.max : 20000, history: hist, updatedBy: str(resp.updated_by) };
   }
   function v2MinPayoutInput(text, info) {

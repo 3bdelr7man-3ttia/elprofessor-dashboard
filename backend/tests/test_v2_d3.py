@@ -561,7 +561,10 @@ def test_books_are_never_refundable_and_say_why():
     assert [r['id'] for r in stuck['rows']] == ['b', 'a'], 'الأقدم أولًا'
     assert byid['b']['name'] == 'n@x.test' and byid['b']['person'] == {'email': 'n@x.test', 'name': 'n@x.test'}, 'بلا اسم ⇒ البريد، لا اسم مخترع'
     assert byid['a']['kindText'] == 'كتاب' and byid['b']['kindText'] == 'دورة' and byid['b']['provider'] == 'بطاقة بنكية' and byid['b']['ageText'] == 'منذ ٢٦ ساعة'
-    assert byid['a']['amountText'] == '١٤٩ جنيه' and stuck['partial'] is False
+    assert byid['a']['amountText'] == '١٤٩ جنيه' and stuck['partial'] is False and stuck['deliveryNote'] == ''
+    # المنصة بتقول صراحة إن نوع «مدفوع ولم يصل تسليمه» مش مسجَّل (null) ⇒ سطر «غير متاح بعد»، لا سكوت
+    nul = L('v2Stuck', {'items': [], 'paid_without_delivery': None}, NOW)
+    assert nul['rows'] == [] and nul['deliveryNote'] == 'دفعات تمّ سدادها ولم يصل تسليمها: غير متاح بعد'
     # لا زرّ استرداد في أي صف عالق (قراءة فقط): مفيش act ولا button
     assert all('act' not in r and 'button' not in r for r in stuck['rows'])
 
@@ -608,6 +611,14 @@ def test_price_form_has_versions_by_countries_with_each_currency_next_to_the_box
     cur = {c['key']: (c['currency'], c['currencyName']) for c in f['countries']}
     assert cur['eg'] == ('EGP', 'جنيه مصري') and cur['sa'] == ('SAR', 'ريال سعودي') and cur['qa'] == ('QAR', 'ريال قطري') and cur['default'] == ('USD', 'دولار أمريكي')
     assert f['versions'][0]['cells'] == {'eg': '150', 'sa': '', 'ae': '', 'kw': '', 'qa': '', 'default': '9'} and f['versions'][1]['cells']['eg'] == '220'
+
+
+@needs_node
+def test_a_course_with_no_prices_yet_gets_one_standard_version_not_the_book_ones():
+    resp = {'countries': PRICES_LIST['countries'], 'currencies': d3fx.CURRENCIES, 'versions_allowed': None,
+            'prices': {'kind': 'course', 'id': 'c1', 'title': 'دورة', 'visible': False, 'rev': 0, 'versions': {}}}
+    f = L('v2PriceForm', resp)
+    assert [(v['key'], v['label']) for v in f['versions']] == [('standard', 'السعر العادي')]
 
 
 @needs_node
@@ -686,6 +697,12 @@ def test_minimum_payout_view_and_input_rules():
     for bad in ('', 'abc', '10.5', '49', '20001', '-3'):
         assert L('v2MinPayoutInput', bad, v)['ok'] is False, bad
     assert L('v2MinPayout', {'withdraw_min': '500'}, NOW) is None
+    # ملاحظات التأثير بفصحى من عندنا (نص المنصة العامي ما بيتعرضش)، وبتظهر بس لو المنصة بعتت `notes`
+    assert v['notes'] == []
+    got = L('v2MinPayout', dict(resp, notes=d3fx.MONEY_NOTES), NOW)['notes']
+    assert got == ['الحد الأدنى يظهر في اتفاقية المدرّبين. تغييره يغيّر نص الاتفاقية عند من وقّعها قبل ذلك أيضًا، ولا يُطلب منهم التوقيع من جديد.',
+                   'سحب الرصيد كاملًا في طلب واحد مسموح دائمًا مهما كان الحد.', 'يسري التعديل فورًا، وقد يتأخر في بعض الحالات حتى ٣٠ ثانية.'], got
+    assert 'بيظهر' not in ' '.join(got) and 'بتلحق' not in ' '.join(got), 'نص المنصة العامي ما بيتعرضش'
 
 
 @needs_node

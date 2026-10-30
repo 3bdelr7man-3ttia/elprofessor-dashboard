@@ -441,8 +441,8 @@ def go_section(page, key, tab=None):
 
 
 SECTION_FIRST = [('home', 'board', 'اللوحة'), ('files', 'files', 'ملفات الخبراء'), ('disputes', 'disputes', 'النزاعات والاستردادات'),
-                 ('courses', 'courses', 'الدورات والمدرّبون'), ('market', 'requests', 'سوق الخدمات'), ('books', 'books', 'الكتب'),
-                 ('people', 'users', 'الناس والدعوات'), ('money', 'finance', 'الفلوس'), ('content', 'topics', 'المحتوى'),
+                 ('courses', 'courses', 'الدورات والمدرّبون'), ('market', 'requests', 'سوق الخدمات'), ('books', 'offers', 'الكتب'),          # D3: مراجعة العروض أولًا
+                 ('people', 'users', 'الناس والدعوات'), ('money', 'overview', 'الفلوس'), ('content', 'topics', 'المحتوى'),
                  ('marketing', 'campaigns', 'التسويق'), ('reports', 'demand', 'التقارير'), ('brain', 'log', 'العقل'),
                  ('company', 'invest', 'الشركة ورأس المال')]
 
@@ -492,7 +492,7 @@ def flow_d1b(browser, h, pre, viewport, mobile):
             PROBLEMS.append('%s%02d: ترويسة %s من غير سطر وصف' % (pre, i, key))
         sshot(page, '%s%02d-section-%s.jpg' % (pre, i, key))
     # تبويبات: ملفات ⇐ الخبراء · الفلوس ⇐ الباقات · الناس ⇐ الدعوات · الشركة ⇐ الإعدادات
-    for n, (key, tab, expect_hash) in enumerate([('files', 'experts', '#s/files/experts'), ('money', 'packages', '#s/money/packages'),
+    for n, (key, tab, expect_hash) in enumerate([('files', 'experts', '#s/files/experts'), ('money', 'shares', '#s/money/shares'),
                                                   ('people', 'invites', '#s/people/invites'), ('company', 'settings', '#s/company/settings'),
                                                   ('brain', 'helpers', '#s/brain/helpers'), ('content', 'tutorials', '#s/content/tutorials')]):
         go_section(page, key, tab)
@@ -501,17 +501,18 @@ def flow_d1b(browser, h, pre, viewport, mobile):
             PROBLEMS.append('%s2%d: تبويب %s/%s: %r' % (pre, n, key, tab, st))
         sshot(page, '%s2%d-tab-%s-%s.jpg' % (pre, n, key, tab))
     # شاشة قديمة بتغيّر تبويبها الداخلي ⇒ الترويسة والعنوان يتبعوها (من غير ما نكرّر الشاشة)
-    go_section(page, 'money')
+    go_section(page, 'money', 'all')           # D3: الشاشتان القديمتان (المالية والباقات) في آخر تبويب «كل السجلات»
+    page.wait_for_selector('#finTabs')
     page.click('#finTabs .tab[data-t="packages"]')
     page.wait_for_timeout(300)
     st = sec_state(page)
-    if st['hash'] != '#s/money/packages' or st['on'] != 'الباقات والأسعار':
-        PROBLEMS.append(pre + '26: تبويب داخلي (الباقات) ما حرّكش الترويسة: %r' % st)
+    if st['hash'] != '#s/money/all' or st['on'] != 'كل السجلات' or not page.query_selector('#finTabs'):
+        PROBLEMS.append(pre + '26: تبويب داخلي (الباقات) غيّر الترويسة أو اختفت الشاشة القديمة: %r' % st)
     page.evaluate("() => goEscrowManual()")
     page.wait_for_timeout(300)
     st = sec_state(page)
-    if st['hash'] != '#s/money/receipts' or st['h1'] != 'الفلوس' or st['on'] != 'الإيصالات':
-        PROBLEMS.append(pre + '26: دفعات يدوية (goEscrowManual) ما هبطتش على «الإيصالات»: %r' % st)
+    if st['hash'] != '#s/money/manual' or st['h1'] != 'الفلوس':
+        PROBLEMS.append(pre + '26: دفعات يدوية (goEscrowManual) ما هبطتش على قسم «الفلوس»: %r' % st)
     sshot(page, pre + '26-money-receipts.jpg')
     page.evaluate("() => { location.hash = '#invites'; }")
     page.wait_for_timeout(400)
@@ -542,7 +543,7 @@ def flow_d1b(browser, h, pre, viewport, mobile):
     sshot(page, pre + '31-home-all-inbox.jpg')
     # مربّع من اللوحة بيهبط على قسمه وتبويبه (بنفس الدالة القديمة)
     go_section(page, 'home', 'board')
-    for tile, expect in (('money', '#s/money/finance'), ('disputes', '#s/disputes/disputes'), ('files', '#s/files/files'),
+    for tile, expect in (('money', '#s/money/overview'), ('disputes', '#s/disputes/disputes'), ('files', '#s/files/files'),
                          ('people', '#s/people/invites'), ('courses', '#s/courses/courses')):
         go_section(page, 'home', 'board')
         page.wait_for_selector('[data-tile="%s"]' % tile)
@@ -567,11 +568,11 @@ def flow_d1b(browser, h, pre, viewport, mobile):
     browser.close()
 
     # رابط قديم بيهبط على قسمه وتبويبه
-    for old, expect, label, on_tab in (('#finance', '#s/money/finance', 'الفلوس', 'المالية'), ('#packages', '#s/money/packages', 'الفلوس', 'الباقات والأسعار'),
+    for old, expect, label, on_tab in (('#finance', '#s/money/all', 'الفلوس', 'كل السجلات'), ('#packages', '#s/money/all', 'الفلوس', 'كل السجلات'),
                                        ('#messages', '#s/people/messages', 'الناس والدعوات', 'الرسائل'), ('#invites', '#s/people/invites', 'الناس والدعوات', 'الدعوات'),
                                        ('#escrow', '#s/disputes/escrow', 'النزاعات والاستردادات', 'الضمان'), ('#tutorials', '#s/content/tutorials', 'المحتوى', 'دليل الاستخدام'),
                                        ('#partners', '#s/company/invest', 'الشركة ورأس المال', 'الاستثمار والشركاء'), ('#inbox', '#s/home/inbox', 'اللوحة', 'كل الوارد'),
-                                       ('#team', '#s/files/experts', 'ملفات الخبراء', 'الخبراء'), ('#s/money/receipts', '#s/money/receipts', 'الفلوس', 'الإيصالات')):
+                                       ('#team', '#s/files/experts', 'ملفات الخبراء', 'الخبراء'), ('#s/money/receipts', '#s/money/receipts', 'الفلوس', 'الإيصالات والمدفوعات العالقة')):
         ctx = browser.context(h, 'admin', viewport, mobile)
         page = open_shell(ctx, old)
         st = sec_state(page)
@@ -1068,6 +1069,8 @@ def flow_d3(browser, h, pre, viewport, mobile):
     r = page.evaluate("() => ({rec: document.querySelectorAll('.v3-colbox:first-child .v3-t').length, stuck: document.querySelectorAll('.v3-stuck').length, norefund: document.querySelectorAll('.v3-stuck .v3-norefund').length, btns: [...document.querySelectorAll('.v3-stuck button')].length, open: [...document.querySelectorAll('.v3-stuck a[data-person]')].length})")
     if r['rec'] != 2 or r['stuck'] != 3 or r['norefund'] != 1 or r['btns']:
         PROBLEMS.append('%s05: الإيصالات والعالقة %r' % (pre, r))
+    if not page.evaluate("() => document.body.innerText.indexOf('دفعات تمّ سدادها ولم يصل تسليمها: غير متاح بعد') > -1"):
+        PROBLEMS.append(pre + '05: سطر «مدفوع ولم يصل تسليمه: غير متاح بعد» مش ظاهر')
     d3_shot(page, pre + '05-receipts-stuck.jpg')
     page.click('[data-a="rconfirm"] >> nth=0')
     page.wait_for_selector('#epModal #v2m_go')

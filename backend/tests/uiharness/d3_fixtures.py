@@ -71,6 +71,9 @@ REFUNDS = [
      "currency": "EGP", "escrow_state": "held", "payment_id": "pay-2", "cancelled_at": iso(-8), "settled_at": "", "full_refund": False, "cancelled_by": "expert"},
 ]
 
+MONEY_NOTES = {"agreement": "الحدّ الأدنى بيظهر في اتفاقية المدرّبين.", "full_balance": "سحب الرصيد كاملًا في طلب واحد مسموح دايمًا مهما كان الحدّ.",
+               "cache_seconds": 30, "propagation": "التعديل بيسري فورًا على العملية اللي استقبلته، وباقي العمليات بتلحق خلال 30 ثانية."}
+
 REJECTED_PAYOUTS = [
     {"id": "po-rej-1", "user_email": "faisal@experts.test", "user_name": "أ. فيصل العتيبي", "amount": 500.0, "currency": "EGP", "status": "rejected", "method": "إنستاباي",
      "destination": "faisal@instapay", "created_at": iso(-30), "rejected_at": iso(-3), "reject_reason": "رقم الحساب غير مطابق للاسم"},
@@ -215,7 +218,8 @@ class D3Platform(v2fx.V2Platform):
     def _money(self, method, path, body):
         if method == "GET":
             out = {"ok": True, "withdraw_min": self.money["withdraw_min"], "rev": self.money["rev"], "updated_at": self.money["updated_at"],
-                   "updated_by": self.money["updated_by"], "allowed": {"withdraw_min": {"min": 50, "max": 20000}}, "history": copy.deepcopy(self.money["history"])}
+                   "updated_by": self.money["updated_by"], "allowed": {"withdraw_min": {"min": 50, "max": 20000}}, "notes": copy.deepcopy(MONEY_NOTES),
+                   "history": copy.deepcopy(self.money["history"])}
             return 200, out
         if method == "PUT":
             if body.get("confirmed") is not True:
