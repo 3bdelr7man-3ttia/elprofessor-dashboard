@@ -505,10 +505,10 @@
         if (late) {
           var from = r.efLane === 'late' ? f.writing_due_at : (f.assigned_at || f.paid_at);
           var h = Math.max(1, hoursBetween(from, now));
-          card.brain = (r.efLane === 'late' ? 'متأخر ' + hoursWord(h) + ' عند ' + cur : 'لم يستلمه ' + cur + ' منذ ' + hoursWord(h))
+          card.brain = (r.efLane === 'late' ? 'متأخر ' + hoursWord(h) + ' عند ' + cur : 'لم يُستلم لدى ' + cur + ' منذ ' + hoursWord(h))
             + (cand ? '. أقترح نقله إلى ' + cand.name : '. لا يوجد خبير آخر متاح');
         } else if (!pre && f.status === 'assigned') {
-          card.brain = 'أُرسل إلى ' + cur + ' ولم يستلمه بعد' + (cand ? '. أقترح نقله إلى ' + cand.name : '. لا يوجد خبير آخر متاح');
+          card.brain = 'أُرسل إلى ' + cur + ' ولم يُستلم بعد' + (cand ? '. أقترح نقله إلى ' + cand.name : '. لا يوجد خبير آخر متاح');
         } else {
           card.brain = cand ? 'أقترح ' + cand.name : 'لا يوجد خبير متاح';
         }
@@ -823,7 +823,7 @@
   // ⛔ نقي: نفس صفوف الوارد (`window.INBOX` بما فيها صفوف «للعلم») + أعداد الطابور. لا مصدر جديد ولا حساب ثانٍ للأعداد.
   // كل ملف في عمود واحد بالضبط، وأي صف لا نعرف نوعه يذهب إلى «ينتظر مراجعتك» بجملة عامة — لا يسقط بصمت.
   var COLS = ['late', 'review', 'with', 'done'];
-  var COL_LABEL = { late: 'متأخر', review: 'ينتظر مراجعتك', with: 'عند الخبراء', done: 'خلص اليوم' };
+  var COL_LABEL = { late: 'متأخر', review: 'ينتظر مراجعتك', with: 'عند الخبراء', done: 'اعتُمد اليوم' };
   var WITH_SHOWN = 3;
   var EMAIL_RE = /^[^@\s]{1,120}@[^@\s.]+(?:\.[^@\s.]+)+$/;
 
@@ -841,6 +841,7 @@
     if (!t || t.at == null || isNaN(ms(t.at))) return '';
     var at = ms(t.at), d = (now || 0) - at;
     if (t.mode === 'since') return d < MIN ? 'الآن' : 'منذ ' + durShort(d);
+    if (t.mode === 'over' && d < 0) return 'متأخر';                       // موعد في المستقبل (فرق ساعة الجهاز): لا نكتب الباقي كأنه تأخير
     if (t.mode === 'over' || d >= 0) return 'متأخر ' + durShort(Math.abs(d));
     return 'باقٍ ' + durShort(-d);
   }
@@ -875,9 +876,9 @@
       case 'review': {
         var rv = f.review || {}, ap = ms(rv.approved_at);
         if (!isNaN(ap) && !r.needsAttention && sameLocalDay(ap, now))
-          return { col: 'done', strip: { label: 'اعتُمد اليوم', tone: 'done' }, timer: timerOf('since', ap), brain: 'اعتمدت الرأي ويصل إلى صاحب الطلب', reason: '' };
+          return { col: 'done', strip: { label: 'اعتُمد اليوم', tone: 'done' }, timer: timerOf('since', ap), brain: 'اعتُمد الرأي ويصل إلى صاحب الطلب', reason: '' };
         if (!isNaN(ap))
-          return { col: 'review', strip: { label: 'توصيل الرأي متوقف', tone: 'wait' }, timer: timerOf('since', ap), brain: 'اعتمدت الرأي لكن توصيله إلى صاحب الطلب توقف', reason: 'افتح الملف لمعرفة السبب' };
+          return { col: 'review', strip: { label: 'توصيل الرأي متوقف', tone: 'wait' }, timer: timerOf('since', ap), brain: 'اعتُمد الرأي لكن توصيله إلى صاحب الطلب توقف', reason: 'افتح الملف لمعرفة السبب' };
         return { col: 'review', strip: { label: Number(rv.returns) > 0 ? 'رأي معدّل ينتظر مراجعتك' : 'رأي ينتظر مراجعتك', tone: 'wait' },
                  timer: timerOf('since', rv.submitted_at) };
       }
@@ -890,12 +891,12 @@
         return { col: 'late', strip: { label: 'لم يُستلم', tone: 'late' }, timer: timerOf('since', f.assigned_at || f.paid_at) };
       }
       case 'file_waiting': {
-        if (st === 'claimed' || st === 'writing')
+        if (st === 'claimed' || st === 'writing' || st === 'needs_info')
           return { col: 'with', strip: { label: 'عند الخبير', tone: 'ok' }, timer: timerOf('left', due) };
         if (st === 'delivered' || st === 'closed') {
           var dt = ms(f.delivered_at || f.closed_at);
           if (!isNaN(dt) && sameLocalDay(dt, now)) return { col: 'done', strip: { label: 'سُلّم اليوم', tone: 'done' }, timer: timerOf('since', dt) };
-          return null;
+          return { col: 'review', strip: { label: FILE_STATUS[st] || 'ملف', tone: 'wait' }, timer: timerOf('since', dt), brain: 'لا قرار مطلوب', reason: '', noAction: true };
         }
         if (!isNaN(claim) && claim <= now)
           return { col: 'late', strip: { label: 'فات ميعاد الاستلام', tone: 'late' }, timer: timerOf('over', claim) };
@@ -924,10 +925,10 @@
         // «عند الخبراء»: لا نقترح نقلًا قبل الموعد — الزرّ يفتح الملف فقط.
         if (pl.col === 'with') {
           var who = ex.name || 'الخبير';
-          t.brain = str(f.status) === 'assigned' ? 'أُرسل إلى ' + who + ' ولم يستلمه بعد' : 'يعمل عليه ' + who;
+          t.brain = str(f.status) === 'assigned' ? 'ما زال بانتظار الاستلام لدى ' + who : str(f.status) === 'needs_info' ? 'بانتظار إجابة صاحب الطلب' : 'قيد العمل لدى ' + who;
           t.reason = 'ضمن الموعد';
         }
-        t.primary = (pl.col === 'late' || pl.col === 'review') && card && card.primary ? card.primary : { label: 'افتح الملف', act: { do: 'open' } };
+        t.primary = !pl.noAction && (pl.col === 'late' || pl.col === 'review') && card && card.primary ? card.primary : { label: 'افتح الملف', act: { do: 'open' } };
         if (pl.col === 'done') t.primary = { label: 'افتح الملف', act: { do: 'open' } };
       } else {
         // نوع غير معروف: لا يسقط — ينتظر مراجعتك بجملة عامة وزرّ فتح.
@@ -963,6 +964,8 @@
       if (rLate < qLate) notes.late = 'معروض ' + ar(rLate) + ' من ' + ar(qLate);
       if (rRev < qRev) notes.review = 'معروض ' + ar(rRev) + ' من ' + ar(qRev);
     }
+    // العمود يعدّ ما في الوارد فقط (المُرسَل ولم يُستلم)، فلا يُقرأ رقمه كإجمالي ما عند الخبراء.
+    notes.with = 'المعروض هنا ما أُرسل ولم يُستلم بعد فقط';
     var autoOn = opts.autoAssign === true ? true : opts.autoAssign === false ? false : (Q && typeof Q.expert_files_auto_assign === 'boolean' ? Q.expert_files_auto_assign : null);
     var today = Number(opts.brainToday) || 0;
     var header = autoOn === true ? 'التوزيع التلقائي يعمل · ' + (today ? 'وزّع ' + U(today, ['ملفًا واحدًا', 'ملفين', 'ملفات', 'ملفًا']) + ' اليوم' : 'لم يوزّع شيئًا اليوم')
@@ -1050,7 +1053,7 @@
     });
     Object.keys(cols).forEach(function (k) { cols[k].sort(function (a, b) { return a.sortAt - b.sortAt; }); });
     // استردادات يدوية: عدّاد من الطابور فقط (لا قايمة في الداشبورد) ⇒ بطاقة بالعدد. الطابور ناقص ⇒ null (لا صفر).
-    var manual = Q ? qn(Q, 'manual_refunds_pending') : null;
+    var manual = Q ? (Q.manual_refunds_pending == null ? null : qn(Q, 'manual_refunds_pending')) : null;
     var counts = { disputes: cols.disputes.length, refunds: cols.refunds.length + (manual || 0), legacy: cols.legacy.length };
     return { cols: cols, manualRefunds: manual, counts: counts, total: counts.disputes + counts.refunds + counts.legacy };
   }
@@ -1097,7 +1100,7 @@
     var line = join ? 'الانضمام في ' + join : 'تاريخ الانضمام: ' + NA;
     if (id.invited_by && id.invited_by.name) line += ' · بدعوة من ' + id.invited_by.name;
     else if (id.invited_by && id.invited_by.kind === 'founder') line += ' · بدعوة من الإدارة';
-    else if (src.invites === 'failed') line += ' · الداعي: ' + NA;
+    else if ((src.invites === 'failed' || src.invites === 'partial')) line += ' · الداعي: ' + NA;
     vm.joinLine = line;
     vm.lastLogin = id.last_login_at ? agoText(id.last_login_at, now || 0) : '';
 
@@ -1145,8 +1148,8 @@
     }
     // —— ما تعلّمه
     var le = resp.learner, c4 = { key: 'learning', title: 'التعلّم', rows: [] };
-    c4.rows.push(le === null || le === undefined ? { k: 'التسجيل في الدورات', v: NA, na: true }
-      : { k: 'التسجيل في الدورات', v: le.enrollments_count ? U(le.enrollments_count, ['دورة واحدة', 'دورتان', 'دورات', 'دورة']) : 'لا تسجيلات' });
+    c4.rows.push(le === null || le === undefined ? { k: 'دورات سجّل فيها أو دفع ثمنها', v: NA, na: true }
+      : { k: 'دورات سجّل فيها أو دفع ثمنها', v: le.enrollments_count ? U(le.enrollments_count, ['دورة واحدة', 'دورتان', 'دورات', 'دورة']) : 'لا تسجيلات' });
     c4.rows.push(resp.books === null || resp.books === undefined ? { k: 'الكتب المشتراة', v: NA, na: true } : { k: 'الكتب المشتراة', v: String(resp.books) });
     vm.cards = [c1, c2, c3, c4];
     // —— السجل

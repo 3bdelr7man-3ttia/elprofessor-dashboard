@@ -2104,6 +2104,9 @@ def _v2_person_build(email, S):
     pend = _v2_rows(S.get('pending'), 'users')
     prow = next((p for p in pend if _v2_low(p.get('email')) == email), None) if pend is not None else None
     country = (str(prow.get('country') or '').strip() or None) if prow else None
+    pending_partial = prow is None and pend is not None and len(pend) >= 500    # نفس الحدّ: أحدث ٥٠٠ فقط
+    if pending_partial:
+        sources['pending'] = 'partial'
 
     # الداعي والخط الزمني للدعوة: صفوف الدعوات اللي بريد مدعوّها = بريده.
     invs = _v2_rows(S.get('invites'), 'invites')
@@ -2113,6 +2116,9 @@ def _v2_person_build(email, S):
         mine = [i for i in invs if _v2_low(i.get('email')) == email]
         mine.sort(key=lambda i: str(i.get('created_at') or ''))
         inv = mine[-1] if mine else None
+        # الطلب يرجّع أحدث ٥٠٠ دعوة فقط: لو ما لقيناه وهي ممتلئة، غياب الداعي ليس دليلًا ⇒ «جزئي» والشاشة تقول «غير متاح بعد».
+        if inv is None and len(invs) >= 500:
+            sources['invites'] = 'partial'
         if inv is not None:
             ib = inv.get('invited_by') if isinstance(inv.get('invited_by'), dict) else {}
             nm = str(ib.get('name') or '').strip()
@@ -2187,7 +2193,7 @@ def _v2_person_build(email, S):
         roles.append('learner')
     if prow is not None:
         roles.append('visitor')
-    if not roles:
+    if not roles and not pending_partial:
         roles.append('member')
 
     # —— السجل: أحداث من المصادر المتاحة، الأحدث أولًا

@@ -5,7 +5,7 @@
  * ========================================================================== */
 .v2-sbar{max-width:1360px;margin:10px auto 0;font-family:'IBM Plex Sans Arabic','Cairo',sans-serif;color:#21262E}
 .v2-sbar[hidden]{display:none}
-.v2d{--wine:#9E2B4E;--paper:#FBFAF7;--paper2:#F6F1EA;--ink:#21262E;--red:#C8102E;--line:#E9E1D6;--amber:#B0760C;--amber-bg:#FFF6DD;--green:#187E4E;--mute:#6B665C;
+.v2d{--wine:#9E2B4E;--paper:#FBFAF7;--paper2:#F6F1EA;--ink:#21262E;--red:#C8102E;--line:#E9E1D6;--amber:#8F5F00;--amber-bg:#FFF6DD;--green:#187E4E;--mute:#6B665C;
   font-family:'IBM Plex Sans Arabic','Cairo',sans-serif;color:var(--ink);max-width:1360px;margin:0 auto;position:relative}
 .v2d *,.v2-sbar *{box-sizing:border-box}
 .v2d button,.v2-sbar button,.v2-sbar input{font-family:inherit}
@@ -48,7 +48,7 @@
 .v2d-col.tone-wait{border-top-color:#E0A100}
 .v2d-col.tone-ok{border-top-color:#1C9A5B}
 .v2d-col.tone-done{border-top-color:#B5AEA2}
-.v2d-col.tone-done .v2d-list{opacity:.78}
+.v2d-col.tone-done .v2d-list{opacity:.94}
 .v2d-ch{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:2px 4px 10px}
 .v2d-ch b{font:800 17px 'Cairo',sans-serif}
 .v2d-n{min-width:34px;height:34px;padding:0 10px;border-radius:999px;background:#fff;border:1px solid var(--line);display:grid;place-items:center;font:800 15px 'Cairo',sans-serif}
@@ -64,9 +64,9 @@
 .v2d-t:hover{box-shadow:0 8px 20px rgba(33,38,46,.12);transform:translateY(-1px)}
 .v2d-strip{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 12px;min-height:40px;color:#fff;background:var(--ink)}
 .v2d-t.tone-late .v2d-strip{background:var(--red)}
-.v2d-t.tone-wait .v2d-strip{background:var(--amber)}
+.v2d-t.tone-wait .v2d-strip{background:#8F5F00}
 .v2d-t.tone-ok .v2d-strip{background:var(--green)}
-.v2d-t.tone-done .v2d-strip{background:#8C867A}
+.v2d-t.tone-done .v2d-strip{background:#6F6A5F}
 .v2d-type{font:800 13.5px/1.4 'Cairo',sans-serif}
 .v2d-time{font:800 13.5px/1.4 'Cairo',sans-serif;background:rgba(255,255,255,.2);border-radius:999px;padding:1px 10px;white-space:nowrap}
 .v2d-body{padding:10px 14px 14px;display:grid;gap:8px}
@@ -78,7 +78,7 @@
 .v2d-mute{color:var(--mute)}
 .v2d-person{color:var(--wine);font-weight:700;text-decoration:none;border-bottom:1px dashed rgba(158,43,78,.5);padding:12px 0;display:inline-block;line-height:1.4}
 .v2d-person:hover{background:rgba(158,43,78,.07)}
-.v2d-inline{padding:0;position:relative;z-index:2}   /* داخل جدول الشاشات القديمة: فوق الخلايا المجاورة */
+.v2d-inline{display:inline-flex;align-items:center;min-height:44px;padding:0;position:relative;z-index:2}   /* داخل جدول الشاشات القديمة: فوق الخلايا المجاورة */
 .v2d-amount{font:800 18px 'Cairo',sans-serif;color:var(--ink)}
 .v2d-brain{display:flex;gap:9px;align-items:flex-start;background:var(--paper);border-radius:12px;padding:8px 10px;font-size:13.5px;line-height:1.7}
 .v2d-brain p{margin:0}
@@ -139,7 +139,7 @@
 .v2d-log li:first-child{border-top:0}
 .v2d-log time{color:var(--mute);font-size:13px}
 .v2d-log small{color:var(--mute);font-size:12.5px}
-.center{text-align:center;padding:14px}
+.v2d .center{text-align:center;padding:14px}
 
 /* —— بحث الناس */
 .v2d-search{background:#fff;border:1px solid var(--line);border-radius:16px;padding:10px 14px 12px;display:grid;gap:6px;position:relative}

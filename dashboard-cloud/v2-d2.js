@@ -23,7 +23,7 @@
   function plainLabels(list) { return list.map(function (l) { return LABEL_AR[l] || l; }); }
   var S = {
     view: null, mod: '', sig: '', poll: null, minute: null,
-    col: { files: '', disputes: '' },          // العمود الظاهر في الموبايل
+    col: { files: '', disputes: '' }, picked: { files: false, disputes: false },          // العمود الظاهر في الموبايل
     busy: {}, err: {}, done: {}, locked: {},   // حالة أزرار التذاكر
     person: { email: '', state: 'idle', resp: null, seq: 0 }
   };
@@ -112,22 +112,25 @@
       who = '<p class="v2d-who">' + parts + '</p>';
     }
     var amount = t.amount ? '<p class="v2d-amount">' + esc(t.amount) + '</p>' : '';
-    var brain = board === 'files'
-      ? '<div class="v2d-brain">' + BRAIN + '<div><p>' + esc(t.brain) + '</p>' + (t.reason ? '<p class="v2d-why">' + esc(t.reason) + '</p>' : '') + '</div></div>'
+    // ب٤: شريط + طرفان + سطر واحد للعقل + زرّ واحد. «عند الخبراء» و«اعتُمد اليوم» شريط وطرفان فقط (الضغط على البطاقة يفتح الدرج).
+    var slim = board === 'files' && (t.col === 'with' || t.col === 'done');
+    var brain = slim ? '' : board === 'files'
+      ? '<div class="v2d-brain">' + BRAIN + '<p>' + esc(t.brain) + '</p></div>'
       : '<p class="v2d-reason">' + esc(t.reason) + '</p>';
     var label = t.primary ? t.primary.label : 'افتح';
     var isOpen = !t.primary || !t.primary.act || t.primary.act.do === 'open' || t.primary.act.do === 'goto';
     var btn;
     if (done) btn = '<p class="v2d-ok" role="status">' + esc(done) + '</p>';
     else if (S.locked[id]) btn = '<button class="v2d-btn1" data-a="refresh" data-id="' + esc(id) + '">حدّث الآن</button>';
+    else if (slim) btn = '';
     else btn = '<button class="v2d-btn1' + (isOpen ? '' : ' act') + '" data-a="primary" data-id="' + esc(id) + '"' + (busy ? ' disabled' : '') + '>' + esc(busy ? 'جارٍ التنفيذ…' : label) + '</button>';
     return '<article class="v2d-t tone-' + esc(t.strip.tone) + '" data-id="' + esc(id) + '">'
       + '<div class="v2d-strip"><span class="v2d-type">' + esc(t.strip.label) + '</span>'
-      + '<time class="v2d-time tone-' + esc(t.tone) + '" data-tid="' + esc(id) + '">' + esc(t.text) + '</time></div>'
+      + (t.text ? '<time class="v2d-time tone-' + esc(t.tone) + '" data-tid="' + esc(id) + '">' + esc(t.text) + '</time>' : '') + '</div>'
       + '<div class="v2d-body"><h3><button class="v2d-open" data-a="open" data-id="' + esc(id) + '">' + esc(t.title) + '</button></h3>'
       + who + amount + brain
       + (err ? '<div class="v2d-err" role="alert">' + esc(err) + '</div>' : '')
-      + '<div class="v2d-acts">' + btn + '</div></div></article>';
+      + (btn ? '<div class="v2d-acts">' + btn + '</div>' : '') + '</div></article>';
   }
 
   // ------------------------------------------------------------------ لوحة الملفات
@@ -138,7 +141,8 @@
     var T = L.v2Tickets(fileRows(g.rows), { now: g.now, queue: g.Q, autoAssign: g.auto, brainToday: g.brainToday });
     S.tickets = T;
     var active = S.col.files;
-    if (L.COLS.indexOf(active) < 0 || !T.counts[active]) {
+    // اختيار الشخص يبقى حتى لو العمود فاضي (لازم يقدر يشوف «لا شيء هنا»)؛ الاختيار التلقائي لأول عمود فيه شيء قبل أن يختار.
+    if (L.COLS.indexOf(active) < 0 || (!S.picked.files && !T.counts[active])) {
       active = L.COLS.filter(function (c) { return T.counts[c]; })[0] || 'late';
     }
     S.col.files = active;
@@ -147,9 +151,9 @@
       var n = T.counts[c];
       seg += '<button type="button" class="v2d-segb tone-' + FILE_COL_TONE[c] + (c === active ? ' on' : '') + '" role="tab" aria-selected="' + (c === active) + '" data-a="col" data-col="' + c + '"><span>' + esc(L.COL_LABEL[c]) + '</span><b>' + esc(U.ar(n)) + '</b></button>';
       var list = T.shown[c].map(function (t) { return ticketHtml(t, 'files'); }).join('');
-      if (!list) list = '<p class="v2d-none">' + (c === 'done' ? 'لا شيء بعد اليوم' : c === 'with' ? 'لا ملفات عند الخبراء الآن' : 'لا شيء هنا') + '</p>';
+      if (!list) list = '<p class="v2d-none">' + (c === 'done' ? 'لا رأي معتمد اليوم' : c === 'with' ? 'لا ملفات عند الخبراء الآن' : 'لا شيء هنا') + '</p>';
       var more = c === 'with' && T.withMore ? '<p class="v2d-more">و ' + esc(U.ar(T.withMore)) + ' في موعدها</p>' : '';
-      var note = T.notes[c] ? '<p class="v2d-colnote">' + esc(T.notes[c]) + ' — العدد ناقص</p>' : '';
+      var note = T.notes[c] ? '<p class="v2d-colnote">' + esc(T.notes[c]) + (c === 'with' ? '' : ' — العدد ناقص') + '</p>' : '';
       var hint = c === 'done' ? '<p class="v2d-colnote">يظهر هنا ما اعتمدته من آراء اليوم</p>' : '';
       cols += '<section class="v2d-col tone-' + FILE_COL_TONE[c] + '" data-col="' + c + '" aria-label="' + esc(L.COL_LABEL[c]) + '">'
         + '<header class="v2d-ch"><b>' + esc(L.COL_LABEL[c]) + '</b><span class="v2d-n">' + esc(U.ar(n)) + '</span></header>'
@@ -182,7 +186,7 @@
     var T = L.v2DisputeTickets(g.rows ? g.rows.filter(function (r) { return r && !r.fyi; }) : [], { now: g.now, queue: g.Q });
     S.dtickets = T;
     var active = S.col.disputes;
-    if (DCOLS.indexOf(active) < 0 || !T.counts[active]) active = DCOLS.filter(function (c) { return T.counts[c]; })[0] || 'disputes';
+    if (DCOLS.indexOf(active) < 0 || (!S.picked.disputes && !T.counts[active])) active = DCOLS.filter(function (c) { return T.counts[c]; })[0] || 'disputes';
     S.col.disputes = active;
     var seg = '', cols = '';
     DCOLS.forEach(function (c) {
@@ -238,7 +242,7 @@
     if (re) re.onclick = function () { var E = ep(); if (E) { E.reload('inbox'); E.reload('opsQueue'); } };
     if (!board) return;
     v.querySelectorAll('[data-a="col"]').forEach(function (b) {
-      b.onclick = function () { S.col[board] = b.getAttribute('data-col'); redraw(); };
+      b.onclick = function () { S.col[board] = b.getAttribute('data-col'); S.picked[board] = true; redraw(); };
     });
     v.querySelectorAll('.v2d-t').forEach(function (art) {
       var id = art.getAttribute('data-id');
@@ -265,8 +269,22 @@
   }
 
   // ------------------------------------------------------------------ العدّاد (كل دقيقة)
+  function tickDisputes(now) {
+    var g = gather();
+    if (!g.rows) return;
+    var T = L.v2DisputeTickets(g.rows.filter(function (r) { return r && !r.fyi; }), { now: now || g.now, queue: g.Q });
+    S.dtickets = T;
+    Object.keys(T.cols).forEach(function (c) {
+      T.cols[c].forEach(function (t) {
+        var el = S.view.querySelector('.v2d-time[data-tid="' + (window.CSS && CSS.escape ? CSS.escape(t.id) : t.id) + '"]');
+        if (el) el.textContent = t.text;
+      });
+    });
+  }
   function tick(now) {
-    if (!S.view || !isCurrent('v2files')) return;
+    if (!S.view) return;
+    if (isCurrent('v2disputes')) { S.nowOverride = now || 0; tickDisputes(now); return; }
+    if (!isCurrent('v2files')) return;
     S.nowOverride = now || 0;        // للاختبار فقط: ساعة مفروضة
     var g = gather();
     if (!g.rows) return;

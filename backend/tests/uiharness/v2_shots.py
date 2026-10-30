@@ -728,6 +728,16 @@ def flow_d2(browser, h, pre, viewport, mobile):
             if vis != [col]:
                 PROBLEMS.append('%s02: عمود ظاهر واحد بس متوقّع (%s) لكن %r' % (pre, col, vis))
             d2_shot(page, '%s02%s-files-%s.jpg' % (pre, 'abcd'[i], label))
+        # —— مراجعة D2 (١): عمود فاضي يفضل ظاهر لما الشخص يختاره (ما يرجعش لأول عمود فيه شيء)
+        page.click('.v2d-segb[data-col="done"]')
+        page.evaluate("() => { window.__inbox0 = window.INBOX; window.INBOX = []; V2D2._tick(Date.now() + 1000); }")
+        page.wait_for_timeout(300)
+        emp = page.evaluate("() => ({on: (document.querySelector('.v2d-segb.on') || {}).dataset ? document.querySelector('.v2d-segb.on').dataset.col : null,"
+                            " none: [...document.querySelectorAll('.v2d-col')].filter(c => c.offsetParent).map(c => (c.querySelector('.v2d-none') || {}).innerText)})")
+        if emp['on'] != 'done' or emp['none'] != ['لا رأي معتمد اليوم']:
+            PROBLEMS.append('%s02: عمود فاضي اختاره الشخص ارتدّ أو نصه غلط: %r' % (pre, emp))
+        d2_shot(page, pre + '02e-files-empty-column.jpg')
+        page.evaluate("() => { window.INBOX = window.__inbox0; V2D2._tick(Date.now() + 2000); }")
         page.click('.v2d-segb[data-col="late"]')
         page.wait_for_timeout(200)
     d2_shot(page, pre + '01-files-board.jpg')
@@ -764,6 +774,13 @@ def flow_d2(browser, h, pre, viewport, mobile):
         PROBLEMS.append('%s04: تبويبات النزاعات: %r' % (pre, dinfo['tabs']))
     if not any(b == 'افتح وقرّر' for b in dinfo['btns']):
         PROBLEMS.append('%s04: زرّ «افتح وقرّر» غايب: %r' % (pre, dinfo['btns'][:4]))
+    # —— مراجعة D2 (١٠): عدّاد «مفتوح منذ …» في النزاعات بيتحرّك مع الساعة
+    d0 = page.evaluate("() => [...document.querySelectorAll('.v2d-time')].map(e => e.textContent).join('|')")
+    page.evaluate("() => V2D2._tick(Date.now() + 5 * 3600 * 1000)")
+    d1 = page.evaluate("() => [...document.querySelectorAll('.v2d-time')].map(e => e.textContent).join('|')")
+    page.evaluate("() => V2D2._tick()")
+    if not d0 or d0 == d1:
+        PROBLEMS.append('%s04: عدّاد النزاعات ما اتحدّثش مع الساعة (%r ⇒ %r)' % (pre, d0, d1))
     if w <= 760:
         for i, col in enumerate(('disputes', 'refunds', 'legacy')):
             page.click('.v2d-segb[data-col="%s"]' % col)

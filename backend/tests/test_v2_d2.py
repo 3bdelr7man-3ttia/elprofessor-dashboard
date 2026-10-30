@@ -219,7 +219,7 @@ def test_tickets_carry_type_timer_parties_brain_line_and_one_button(real):
     c, t = _by_id(T, 'ef-r1-9a0b1c2d')
     assert t['strip']['label'] == 'رأي ينتظر مراجعتك' and t['text'].startswith('منذ ') and t['primary']['act']['do'] == 'open'
     c, t = _by_id(T, 'ef-w1-aa11bb22')
-    assert t['text'].startswith('باقٍ ') and t['primary']['act']['do'] == 'open' and 'أُرسل إلى' in t['brain']
+    assert t['text'].startswith('باقٍ ') and t['primary']['act']['do'] == 'open' and t['brain'].startswith('ما زال بانتظار الاستلام لدى ')
     c, t = _by_id(T, 'ef-dn-1a1a2b2b')
     assert t['strip']['label'] == 'اعتُمد اليوم' and t['primary']['act']['do'] == 'open'
 
@@ -308,7 +308,7 @@ def test_the_header_line_reads_the_auto_assign_switch(real):
 def test_a_queue_count_larger_than_the_rows_is_announced_not_hidden(real):
     q = dict(real['data']['opsQueue'])
     ok = v2_node.logic('v2Tickets', list(real['inbox']), {'now': NOW, 'queue': q})
-    assert ok['notes'] == {'late': '', 'review': '', 'with': '', 'done': ''}, ok['notes']
+    assert ok['notes'] == {'late': '', 'review': '', 'with': 'المعروض هنا ما أُرسل ولم يُستلم بعد فقط', 'done': ''}, ok['notes']
     q['expert_files_in_review'] = q['expert_files_in_review'] + 4
     q['expert_files_late'] = q['expert_files_late'] + 2
     bad = v2_node.logic('v2Tickets', list(real['inbox']), {'now': NOW, 'queue': q})
@@ -447,7 +447,7 @@ def test_person_view_model_from_a_full_response():
     assert rows['طلبات سحب معلقة']['v'] == 'طلب واحد — ١٬٢٠٠ جنيه' and rows['ما حُوّل من قبل']['v'] == 'طلبان — ٣٬٣٥٠٫٥ جنيه'
     assert rows['رصيد المحفظة']['na'] is True and rows['رصيد المحفظة']['v'] == 'غير متاح بعد'
     lrows = {r['k']: r for r in learn['rows']}
-    assert lrows['التسجيل في الدورات']['v'] == 'لا تسجيلات' and lrows['الكتب المشتراة']['na'] is True
+    assert lrows['دورات سجّل فيها أو دفع ثمنها']['v'] == 'لا تسجيلات' and lrows['الكتب المشتراة']['na'] is True
     assert [e['text'] for e in vm['log']] == ['آخر دخول', 'إسناد ملف «عقد إيجار»']
     assert vm['countryText'] == 'غير متاح بعد' and vm['photo'] is None
 
@@ -462,7 +462,7 @@ def test_a_failed_source_is_na_never_zero():
     for c in (files, courses, money):
         assert c['na'] is True and c['text'] == 'غير متاح بعد'
     lrows = {r['k']: r for r in learn['rows']}
-    assert lrows['التسجيل في الدورات'] == {'k': 'التسجيل في الدورات', 'v': 'غير متاح بعد', 'na': True}
+    assert lrows['دورات سجّل فيها أو دفع ثمنها'] == {'k': 'دورات سجّل فيها أو دفع ثمنها', 'v': 'غير متاح بعد', 'na': True}
     assert vm['log'] is None and 'files' in ' '.join(vm['failed']) and vm['failed']
     shown = json.dumps(vm['cards'], ensure_ascii=False)
     assert not re.search(r'(?<![\w])(0|٠)(?![\w٠-٩])', shown), shown
@@ -813,3 +813,114 @@ def test_rendered_texts_are_clean_and_no_headline_starts_with_ai(real):
         assert not re.match(r'^\s*(AI|ذكاء|الذكاء)', t)
     # لا مصطلح تقني ولا أرقام لاتينية في نصوص التذاكر (إلا داخل بريد)
     assert not re.search(r'[A-Za-z]', joined)
+
+
+
+# ---------------------------------------------------------------- مراجعة D2: إصلاحات
+
+@needs_node
+def test_review_fix_copy_is_gender_neutral_and_the_approval_is_the_founders(real):
+    T = _tickets(real)
+    texts = []
+    for c in T['cols']:
+        for t in T['cols'][c]:
+            texts += [t['brain'], t.get('reason', ''), t['strip']['label']]
+    j = ' | '.join(texts)
+    for bad in ('يستلمه', 'اعتمدت', 'يعمل عليه'):
+        assert bad not in j, bad
+    assert 'لم يُستلم لدى ' in j and 'اعتُمد الرأي' in j
+    src = _read('dashboard-cloud', 'v2-logic.js')
+    assert 'ولم يستلمه' not in src and 'لم يستلمه' not in src and 'اعتمدت الرأي' not in src
+
+
+@needs_node
+def test_review_fix_the_done_column_is_named_for_what_it_can_see():
+    assert v2_node.logic('COL_LABEL')['done'] == 'اعتُمد اليوم'
+    js = _read('dashboard-cloud', 'v2-d2.js')
+    assert 'لا شيء بعد اليوم' not in js and 'لا رأي معتمد اليوم' in js
+
+
+@needs_node
+def test_review_fix_the_with_column_says_it_counts_only_sent_and_not_received(real):
+    T = _tickets(real)
+    assert 'أُرسل ولم يُستلم' in T['notes']['with']
+    js = _read('dashboard-cloud', 'v2-d2.js')
+    assert "(c === 'with' ? '' : ' — العدد ناقص')" in js
+
+
+@needs_node
+def test_review_fix_a_missing_manual_refunds_key_is_unknown_not_zero(real):
+    q = dict(real['data']['opsQueue']); q.pop('manual_refunds_pending', None)
+    D = v2_node.logic('v2DisputeTickets', [r for r in real['inbox'] if not r.get('fyi')], {'now': NOW, 'queue': q})
+    assert D['manualRefunds'] is None and D['counts']['refunds'] == 2
+
+
+@needs_node
+def test_review_fix_a_future_deadline_is_never_printed_as_lateness():
+    # ساعة الجهاز متأخرة عن الخادم: الموعد في المستقبل لكن الوضع «متأخر» ⇒ نكتب «متأخر» بلا مدة.
+    assert v2_node.logic('v2TimerText', {'mode': 'over', 'at': NOW + 5 * 3600e3}, NOW) == 'متأخر'
+    assert v2_node.logic('v2TimerText', {'mode': 'over', 'at': NOW - 3 * 3600e3 - 1000}, NOW) == 'متأخر ٣ س'
+
+
+def test_review_fix_a_ticket_without_a_deadline_has_no_empty_pill():
+    js = _read('dashboard-cloud', 'v2-d2.js')
+    assert "(t.text ? '<time class=\"v2d-time" in js
+
+
+@needs_node
+def test_review_fix_odd_file_statuses_land_where_they_belong():
+    def row(i, st, **extra):
+        ef = {'id': i, 'status': st, 'title': 'ملف ' + i, 'assigned_to': 'a@b.test', 'assigned_name': 'أ. فلان'}
+        ef.update(extra)
+        return {'apiKind': 'expert_file', 'apiId': i, 'efLane': 'waiting', 'who': 'منى', 'ef': ef}
+    past = datetime.datetime.utcfromtimestamp((NOW - 30 * 3600e3) / 1000).isoformat() + 'Z'
+    rows = [row('d1', 'delivered', delivered_at=past), row('c1', 'closed', closed_at=past), row('n1', 'needs_info', claim_deadline_at=past)]
+    T = v2_node.logic('v2Tickets', rows, {'now': NOW})
+    assert T['total'] == 3
+    by = {t['row']['apiId']: (c, t) for c in T['cols'] for t in T['cols'][c]}
+    for i in ('d1', 'c1'):
+        c, t = by[i]
+        assert c == 'review' and t['strip']['label'] in ('سُلّم', 'مغلق') and t['brain'] == 'لا قرار مطلوب' and t['primary']['act']['do'] == 'open'
+    c, t = by['n1']
+    assert c == 'with' and t['strip']['label'] == 'عند الخبير' and t['brain'] == 'بانتظار إجابة صاحب الطلب'
+
+
+def test_review_fix_empty_columns_stay_selectable_and_disputes_tick():
+    js = _read('dashboard-cloud', 'v2-d2.js')
+    assert 'picked: { files: false, disputes: false }' in js
+    assert '(!S.picked.files && !T.counts[active])' in js and '(!S.picked.disputes && !T.counts[active])' in js
+    assert "S.picked[board] = true" in js
+    assert 'function tickDisputes' in js and "isCurrent('v2disputes')" in js
+
+
+def test_review_fix_slim_cards_and_one_brain_line():
+    js = _read('dashboard-cloud', 'v2-d2.js')
+    assert "t.col === 'with' || t.col === 'done'" in js
+    assert 'v2d-why' not in js and "esc(t.reason)" in js    # الإيضاح الثاني اتشال من تذاكر الملفات؛ سبب النزاع بس لسه ظاهر في اللوحة التانية
+
+
+def test_review_fix_css_contrast_touch_and_scope():
+    css = _read('dashboard-cloud', 'v2-d2.css')
+    assert '.v2d-t.tone-wait .v2d-strip{background:#8F5F00}' in css and '.v2d-t.tone-done .v2d-strip{background:#6F6A5F}' in css
+    assert re.search(r'\.v2d-inline\{[^}]*min-height:44px', css)
+    assert not re.search(r'(^|\n)\.center\{', css) and '.v2d .center{' in css
+
+
+def test_review_fix_a_full_invite_or_pending_list_without_a_match_is_partial_not_empty():
+    import app as appmod
+    base = {k: None for k in ('users', 'invites', 'experts', 'courses', 'files', 'payouts_pending', 'payouts_paid', 'pending', 'enrollments')}
+    user = {'email': HALA, 'full_name': 'هالة سمير', 'id': 'u1', 'created_at': '2026-01-01T00:00:00Z', 'is_active': True, 'role': 'user'}
+    many = [{'email': 'x%d@example.test' % i, 'created_at': '2026-02-01T00:00:00Z'} for i in range(500)]
+    out = appmod._v2_person_build(HALA, dict(base, users={'users': [user]}, invites={'invites': many}, pending={'users': many}))
+    assert out['sources']['invites'] == 'partial' and out['sources']['pending'] == 'partial'
+    assert out['identity']['invited_by'] is None and out['roles'] == []
+    short = appmod._v2_person_build(HALA, dict(base, users={'users': [user]}, invites={'invites': many[:3]}, pending={'users': many[:3]}))
+    assert short['sources']['invites'] == 'ok' and short['sources']['pending'] == 'ok' and short['roles'] == ['member']
+
+
+@needs_node
+def test_review_fix_a_partial_invite_source_prints_inviter_unavailable():
+    resp = copy.deepcopy(FULL)
+    resp['identity']['invited_by'] = None
+    resp['sources'] = dict(resp.get('sources') or {}, invites='partial')
+    assert 'الداعي: غير متاح بعد' in v2_node.logic('v2Person', resp, NOW, HALA)['joinLine']
