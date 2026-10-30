@@ -334,7 +334,7 @@ def test_comment_verdict_states_only_what_the_platform_check_said():
 def test_suggest_labels_for_every_kind_and_an_undecided_comment_is_never_approve():
     S = lambda it: _logic('v2ContentSuggest', it)
     assert S({'kind': 'memberTopic'}) == {'label': 'اعتمد وبلّغ', 'act': 'approveMemberTopic'}
-    assert S({'kind': 'testimonial'})['label'] == 'اعتمد'
+    assert S({'kind': 'testimonial'}) == {'label': 'افتح واقرأ', 'act': 'openTestimonial'}     # لا اعتماد مباشر لنص متعلّم لم يُقرأ
     assert S({'kind': 'comment', 'moderation': None})['label'] == 'افتح واقرأ'
     assert S({'kind': 'comment', 'moderation': {'abusive': True}}) == {'label': 'ارفض', 'act': 'rejectComment'}
     assert S({'kind': 'comment', 'moderation': {'on_topic': False}})['label'] == 'ارفض'
@@ -358,7 +358,7 @@ def test_ticket_lines_carry_only_facts_and_the_testimonial_consent_line_follows_
     assert T['t:t1']['brain'] == 'دورة · التقييم ٥ من ٥ · وافق كاتبه على النشر باسمه'
     assert T['c:c1']['brain'] == 'لم يحسمه الفحص الآلي' and T['c:c1']['who']['text'] == 'على: موضوع'
     assert T['w:w1']['brain'] == 'قصيدة · بلا رابط'
-    for consent, tail in ((True, ' · وافق كاتبه على النشر باسمه'), (False, ' · لم يوافق على ذكر اسمه'), (None, '')):
+    for consent, tail in ((True, ' · وافق كاتبه على النشر باسمه'), (False, ''), (None, '')):
         r = {'id': 't9', 'text': 'x', 'course_title': 'دورة', 'rating': None, 'created_at': ago(1)}
         if consent is not None:
             r['consent_public'] = consent
@@ -409,8 +409,8 @@ def test_topic_chips_equal_the_old_split_and_the_pending_count_never_borrows_fro
     old = json.loads(subprocess.run([NODE, '-e', OLD_TOPIC_TAB + "const t=%s;const c={ideas:0,incoming:0,working:0,board:0,rejected:0};t.forEach(x=>{const k=topicTabOf(x);if(c[k]!=null)c[k]++;});console.log(JSON.stringify(c))" % json.dumps(topics)],
                                     capture_output=True, text=True).stdout)
     # القديمة كانت تضع «المؤرشف» تحت «أفكار» فيُعرض للاعتماد؛ هنا يخرج من القوائم (انحراف مقصود وموثّق في STATUS)
-    assert old['ideas'] - 1 == byk['ideas'] and old['incoming'] == byk['incoming'] and old['working'] == byk['working'] and old['board'] == byk['board'] and old['rejected'] == byk['rejected']
-    assert byk['pending'] == 3 and [c['label'] for c in got] == ['من الأعضاء', 'أفكار', 'من الخبراء', 'يُكتب', 'على اللوحة', 'مرفوضة']
+    assert old['ideas'] - 1 == byk['ideas'] and byk['archived'] == 1 and old['incoming'] == byk['incoming'] and old['working'] == byk['working'] and old['board'] == byk['board'] and old['rejected'] == byk['rejected']
+    assert byk['pending'] == 3 and [c['label'] for c in got] == ['من الأعضاء', 'أفكار', 'من الخبراء', 'يُكتب', 'على اللوحة', 'مرفوضة', 'مؤرشفة']
     # مصدر الأعضاء فاشل ⇒ null (لا الرقم الموجود في القائمة العامة وهو ١ معلّق)
     assert {c['key']: c['count'] for c in _logic('v2ContentTopicChips', topics, None, 'ideas', {})}['pending'] is None
     # القائمة العامة فاشلة ⇒ باقي العدّات null
@@ -421,6 +421,10 @@ def test_topic_chips_equal_the_old_split_and_the_pending_count_never_borrows_fro
     none_rej = [t for t in topics if t['status'] != 'rejected']
     assert 'rejected' not in [c['key'] for c in _logic('v2ContentTopicChips', none_rej, pend, 'pending', {})]
     assert 'rejected' in [c['key'] for c in _logic('v2ContentTopicChips', none_rej, pend, 'rejected', {})]
+    # «مؤرشفة» شريحة تظهر حين يكون عددها فوق صفر فقط (وإلا لا يمكن الوصول للمؤرشف ولا حذفه)
+    none_arch = [t for t in topics if t['status'] != 'archived']
+    assert 'archived' not in [c['key'] for c in _logic('v2ContentTopicChips', none_arch, pend, 'pending', {})]
+    assert 'archived' in [c['key'] for c in _logic('v2ContentTopicChips', none_arch, pend, 'archived', {})]
 
 
 @needs_node
@@ -454,6 +458,10 @@ def test_copy_guard_over_the_section_files_and_the_reworded_strings():
     # النصوص المعاد صياغتها في dashboard-api.js
     for good in ('الكتابة الآلية تعمل الآن بالفعل.', 'بدأت الكتابة الآلية. تظهر المسودات بعد انتهائها.', 'سُحب " + n + " مقال جاهز من المنصة إلى الموقع.', 'لا مقالات جاهزة جديدة على المنصة الآن.'):
         assert good in API_JS, good
+    for good in ('لم تُكتب مسودة صالحة — حاول مرّة أخرى', 'تعذّرت كتابة المقال — حاول مرّة أخرى', 'فريق البروفيسور — تحليل قانوني'):
+        assert good in API_JS, good
+    for gone in ('الوكيل الذكي — تحليل قانوني', 'لم يُنشئ الذكاء مقالًا صالحًا', 'تعذّر توليد المقال بالذكاء', 'سيظهر الرأي بلا اسم', 'لم يوافق على ذكر اسمه'):
+        assert gone not in API_JS + JS + _block(), gone
     for gone in ('فيه توليد شغّال بالفعل — استنّاه.', 'بدأ التوليد بالذكاء', 'اتسحب " + n + " مقال من الذكاء', 'مفيش مقالات جديدة من الذكاء'):
         assert gone not in API_JS, gone
 
@@ -462,7 +470,7 @@ VERBATIM = [
     'ينتظرك', 'مسودات', 'أفكار', 'نُشر هذا الأسبوع', 'أصحابها ينتظرون قرارك', 'لم تُنشر بعد', 'مادة خام تنتظر أن تتحول إلى نقاش أو خبر منشور', 'ما نُشر أو اعتُمد خلال ٧ أيام',
     'لا شيء هنا الآن', 'العدد ناقص — تعذّر جلب بعض المصادر', 'أعد المحاولة', 'غير متاح بعد', '…جارٍ جمع المحتوى', 'اعتمد وبلّغ', 'افتح واقرأ', 'افتح وراجع',
     'سيظهر على اللوحة العامة، ويصل القرار إلى صاحبه.', 'لن يظهر على اللوحة، ويبقى محفوظًا بلا حذف.', 'سيظهر على اللوحة العامة.', 'سيظهر على اللوحة العامة بنصه الحالي.', 'سيُحذف الموضوع نهائيًا.',
-    'سيظهر الرأي بلا اسم على صفحة الدورة.', 'سيظهر الرأي باسم كاتبه على صفحة الدورة.', 'سيظهر الرأي على صفحة الدورة.', 'لن يظهر الرأي على صفحة الدورة.',
+    'سيظهر الرأي باسم كاتبه على صفحة الدورة.', 'سيظهر الرأي على صفحة الدورة.', 'لن يظهر الرأي على صفحة الدورة.',
     'لن يظهر التعليق على المنصة.', 'سيظهر التعليق للجميع تحت الموضوع.', 'يُحذف التعليق من المنصة نهائيًا.', 'سيظهر العمل للجميع في ركن الإبداع.', 'اكتب سبب الرفض، ويصل إلى صاحب العمل.',
     'ستُحذف هذه المسودة نهائيًا ولا يمكن استرجاعها.', 'سيختفي «', 'سيظهر «', 'يظهر التعديل على الموقع فور الحفظ.', 'لحذف مقال منشور: أوقف نشره أولًا، ثم احذفه من المسودات.',
     'سيظهر في صفحة المقالات داخل المنصة.', 'سيختفي من صفحة المقالات داخل المنصة.', 'يظهر التعديل على اللوحة العامة فور الحفظ.', 'سيظهر الخبر للأعضاء على المنصة.', 'سيختفي الخبر من المنصة.',
@@ -641,6 +649,148 @@ def test_run_daily_content_polls_while_is_open_and_the_old_path_still_checks_the
     assert sync['toasts'] == ['سُحب ٢ مقال جاهز من المنصة إلى الموقع.'.replace('٢', '2')]
     sync0 = _api("""await new Promise(r => EP.syncContent(r)); return 1;""", {'/content/sync-from-platform': {'status': 200, 'body': {'imported': 0}}})
     assert sync0['toasts'] == ['لا مقالات جاهزة جديدة على المنصة الآن.']
+
+
+# ====================================================================== ٨ب) شاشة القسم في حاضنة node (window/EP مزيّفة، صفر شبكة)
+STUB = os.path.join(_HERE, 'uiharness', 'content_dom_stub.js')
+
+
+def _screen(tab='pipeline', state=None, data=None, call=None, args=None, finish=False, globals_=None, redraw=False):
+    payload = {'redraw': redraw, 'dc': DC, 'tab': tab, 'state': state or {}, 'data': data or {}, 'call': call, 'args': args or [], 'finish': finish, 'globals': globals_ or {}}
+    p = subprocess.run([NODE, STUB], input=json.dumps(payload, ensure_ascii=False), capture_output=True, text=True, timeout=60)
+    assert p.returncode == 0, p.stderr[-1500:]
+    out = json.loads(p.stdout)
+    out['text'] = re.sub(r'\s+', ' ', re.sub(r'<[^>]+>', ' ', out['html']))
+    return out
+
+
+@needs_node
+def test_data_links_open_only_http_and_https_never_javascript():
+    for good in ('https://a.test/x', 'http://a.test', ' HTTPS://A.TEST/p '):
+        assert _screen(call='safeHref', args=[good])['ret'] == good.strip(), good
+    for bad in ('javascript:alert(1)', ' JaVaScript:alert(1)', 'data:text/html;base64,AAAA', 'vbscript:x', '//evil.test/x', '/relative', 'mailto:a@b.c', '', None, 5):
+        assert _screen(call='safeHref', args=[bad])['ret'] == '', bad
+    assert _screen(call='safeHref', args=['/blog/topic/x', True])['ret'] == '/blog/topic/x'
+    assert _screen(call='safeHref', args=['//evil.test/x', True])['ret'] == ''
+    # ورقة العمل الإبداعي: media_url خطر ⇒ لا <a href> ولا <img>، وصورة الغلاف حقيقة نصّية
+    w = {'id': 'w9', 'title': 'عمل', 'kind': 'video', 'creator_email': 'a@x.test', 'creator_name': 'فلان', 'media_url': 'javascript:alert(1)', 'cover_url': 'https://img.test/c.jpg', 'body': ''}
+    m = _screen(call='creativeSheet', args=[w])['modals'][0]['html']
+    assert not re.search(r'href="\s*(javascript|data|vbscript):', m, re.I) and not re.search(r'<a\b', re.sub(r'<a class="v2ct-person[^>]*>.*?</a>', '', m))
+    assert not re.search(r'<a [^>]*href="(?!https?://|#s/)', m) and '<img' not in m
+    assert 'الرابط غير صالح للفتح' in m and 'صورة الغلاف: موجودة' in m
+    ok = _screen(call='creativeSheet', args=[dict(w, media_url='https://media.test/v')])['modals'][0]['html']
+    assert 'href="https://media.test/v"' in ok and 'rel="noopener noreferrer"' in ok
+    none = _screen(call='creativeSheet', args=[dict(w, media_url='', cover_url='')])['modals'][0]['html']
+    assert 'افتح الرابط' not in none and 'صورة الغلاف' not in none
+    # كل href مبني من بيانات في الملف يمرّ من safeHref/safeLink أو رابط داخلي معروف
+    for m_ in re.finditer(r"href=\"'\s*\+\s*([^+]*)", JS):
+        assert re.match(r"esc\((L\.sectionHash|SEC_SOURCE|safeHref|h\b)", m_.group(1).strip()), m_.group(0)
+    assert '<img class="v2ct-cover"' not in JS and 'src="\' + esc(raw.image_url' not in JS
+
+
+@needs_node
+def test_missing_numbers_show_the_unavailable_words_never_a_made_up_zero():
+    c = _screen(tab='comments', state={'platformOpinionsNumbers': 'ready'}, data={'platformOpinionsNumbers': {}})['text']
+    assert c.count('غير متاح بعد') >= 3 and '٠' not in c.split('أرقام التعليقات')[1], c
+    full = _screen(tab='comments', state={'platformOpinionsNumbers': 'ready'}, data={'platformOpinionsNumbers': {'status_counts': {'pending': 0, 'approved': 4, 'rejected': 0}}})['text']
+    seg = full.split('أرقام التعليقات')[1]
+    assert '٠ تنتظر' in seg.replace('  ', ' ') or '٠ تنتظر' in seg, seg      # صفر حقيقي من المصدر يبقى صفرًا
+    t = _screen(tab='ideas', state={'platformTopicsAnalysis': 'ready'}, data={'platformTopicsAnalysis': {'top_topics': [{'title': 'س', 'source': 'human'}]}})['text']
+    seg = t.split('أرقام الموضوعات')[1]
+    assert seg.count('غير متاح بعد') >= 3 and '٠' not in seg, seg
+    t2 = _screen(tab='ideas', state={'platformTopicsAnalysis': 'ready'}, data={'platformTopicsAnalysis': {'total_topics': 12, 'total_comments': 0}})['text']
+    assert '١٢' in t2 and '٠' in t2.split('أرقام الموضوعات')[1]
+
+
+@needs_node
+def test_the_board_reloads_the_waiting_sources_without_flicker_and_has_a_refresh_button():
+    keys = {'platformPendingTopics': 'ready', 'testimonials': 'ready', 'platformOpinions': 'ready', 'platformCreative': 'ready', 'contentOverview': 'ready'}
+    g = {'PTOPICS_PENDING': base_src()['memberTopics']}
+    r = _screen(state=keys, globals_=g)
+    assert sorted(r['reloads']) == sorted(keys), 'دخول التبويب يعيد جلب الجانب المنتظِر كله'
+    assert sorted(r['bg']) == sorted(keys), 'التحديث في الخلفية يُعلَّم'
+    assert 'جارٍ التحديث' in r['text'], 'أثناء الجلب الزرّ يقول إنه يحدّث'
+    r2 = _screen(state=dict(keys), globals_=g, finish=True, redraw=True)
+    assert '<button type="button" class="v2ct-b2 sm v2ct-refresh" data-a="refreshBoard"' in r2['html2']
+    assert 'حدّث' in re.sub(r'<[^>]+>', ' ', r2['html2']) and 'جارٍ التحديث' not in r2['html2']
+    # الكود: عند الدخول وكل ٦٠ ثانية على الجانب المنتظِر، والزرّ يعيد كل مصادر الخط
+    assert "WAITING = ['platformPendingTopics', 'testimonials', 'platformOpinions', 'platformCreative', 'contentOverview']" in JS
+    assert "refreshKeys(NEED.pipeline)" in JS and "entered && tab === 'pipeline'" in JS and "S.lastRefresh >= 55000" in JS
+    assert JS.count("tab === 'pipeline'") >= 2 or "currentTab() === 'pipeline'" in JS
+    # لا يحدّث تحت ورقة مفتوحة
+    assert re.search(r"S\.minute = setInterval\(function \(\) \{\s*if \(!isCurrent\(\) \|\| modalOpen\(\)\) return;", JS)
+
+
+@needs_node
+def test_a_background_reload_keeps_member_topics_on_the_board():
+    st = {'platformPendingTopics': 'ready', 'testimonials': 'ready', 'platformOpinions': 'ready', 'platformCreative': 'ready'}
+    g = {'PTOPICS_PENDING': base_src()['memberTopics']}
+    assert 'موضوع عضو قديم' in _screen(state=st, globals_=g)['text']
+    # بعد refreshKeys بلا إنهاء (الحالة loading) وإعادة الرسم: الموضوعات ما زالت ظاهرة، لا «جارٍ جلب» بدلها
+    r = _screen(state=st, globals_=g, call='refreshKeys', args=[['platformPendingTopics']], redraw=True)
+    assert 'platformPendingTopics' in r['bg']
+    txt2 = re.sub(r'\s+', ' ', re.sub(r'<[^>]+>', ' ', r['html2']))
+    assert 'موضوع عضو قديم' in txt2 and 'جارٍ جلب موضوعات' not in txt2
+    # مصدر لم يكن جاهزًا أصلًا لا يُخفى وراء قناع التحديث (لا بيانات ⇒ لا ادّعاء)
+    r3 = _screen(state={'platformPendingTopics': 'idle'}, globals_=g, call='refreshKeys', args=[['platformPendingTopics']], redraw=True)
+    assert r3['bg'] == []
+
+
+@needs_node
+def test_testimonial_sheet_and_confirm_state_only_facts_and_show_the_full_text():
+    r = {'id': 't9', 'text': 'نص الرأي الكامل الذي كتبه المتعلّم بالتفصيل', 'name': 'منى', 'user_email': 'm@x.test', 'course_title': 'دورة', 'rating': 4, 'consent_public': False}
+    sh = _screen(call='testimonialSheet', args=[r])['modals'][0]['html']
+    assert 'لم يوافق' not in sh and 'بلا اسم' not in sh and 'نص الرأي الكامل' in sh
+    yes = _screen(call='testimonialSheet', args=[dict(r, consent_public=True)])['modals'][0]['html']
+    assert 'وافق كاتبه على النشر باسمه' in yes
+    ap = _screen(call='approveTestimonial', args=[r])['modals'][0]['html']
+    assert 'نص الرأي الكامل الذي كتبه المتعلّم بالتفصيل' in ap and 'سيظهر الرأي على صفحة الدورة.' in ap and 'بلا اسم' not in ap
+    ap2 = _screen(call='approveTestimonial', args=[dict(r, consent_public=True)])['modals'][0]['html']
+    assert 'سيظهر الرأي باسم كاتبه على صفحة الدورة.' in ap2
+
+
+@needs_node
+def test_a_done_testimonial_has_a_plain_heading_not_a_dead_button():
+    st = {k: 'ready' for k in ('platformPendingTopics', 'testimonials', 'platformOpinions', 'platformCreative', 'testimonialsApproved', 'contentOverview', 'platformArticles',
+                               'platformTopics', 'platformNews', 'content', 'platformOpinionsApproved', 'opsQueue')}
+    data = {'testimonialsApproved': {'raw': [{'id': 'ta1', 'text': 'رأي معتمد حديث', 'course_title': 'دورة', 'decided_at': '2026-10-30T10:00:00Z'}]}}
+    out = _screen(state=st, data=data, globals_={'PTOPICS_PENDING': [], 'PTOPICS': [], 'POPINIONS': [], 'PNEWS': [], 'TUTORIALS': []})
+    if 'رأي معتمد حديث' in out['html']:
+        assert '<span class="v2ct-open static">رأي معتمد حديث</span>' in out['html']
+        assert 'data-a="open" data-id="dt:ta1"' not in out['html']
+
+
+@needs_node
+def test_archived_topics_stay_reachable_with_restore_and_delete():
+    assert _logic('v2ContentTopicTabOf', {'status': 'archived', 'source': 'human'}) == 'archived'
+    assert "archived: 'أعد للأفكار'" in JS and 'function restoreArchived' in JS and "status: 'draft'" in JS
+    assert "chip === 'archived'" in JS and "'احذف نهائيًا'" in JS
+    st = {'platformTopics': 'ready', 'platformPendingTopics': 'ready'}
+    tp = [{'id': 'a1', 'title': 'موضوع مؤرشف', 'status': 'archived', 'source': 'human'}, {'id': 'i1', 'title': 'فكرة', 'status': 'draft', 'source': 'human'}]
+    r = _screen(tab='archived', state=st, globals_={'PTOPICS': tp, 'PTOPICS_PENDING': []})
+    assert 'موضوع مؤرشف' in r['text'] and 'أعد للأفكار' in r['text'] and 'مؤرشفة' in r['text']
+    r2 = _screen(tab='ideas', state=st, globals_={'PTOPICS': tp[1:], 'PTOPICS_PENDING': []})
+    assert 'مؤرشفة' not in r2['text'], 'الشريحة تختفي عند الصفر'
+
+
+@needs_node
+def test_display_byline_never_prints_the_old_machine_byline():
+    f = lambda x: _logic('v2ContentByText', x)
+    assert f('الوكيل الذكي — تحليل قانوني') == 'فريق البروفيسور' and f('كتابة آلية') == 'فريق البروفيسور'
+    assert f('نادية') == 'نادية' and f('') == 'الإدارة' and f(None) == 'الإدارة'
+    B = board(base_src(siteArticles=[{'id': 9, 'title': 'مسودة', 'status': 'draft', 'by': 'الوكيل الذكي — تحليل قانوني', 'words': 300, 'has_image': True, 'has_meta': True, 'created_at': ago(2)}]))
+    item = [i for i in B['cols']['draft'] if i['id'].endswith('9')][0]
+    assert item['who']['text'] == 'فريق البروفيسور'
+
+
+@needs_node
+def test_write_now_says_so_when_the_platform_was_already_writing():
+    res = _api("""let got = null; EP.runDailyContent((r) => { got = r || null; }); await flush(); return got;""",
+               {'/platform-articles/daily-run': {'status': 200, 'body': {'already_running': True}}})
+    assert res['out'] == {'alreadyRunning': True}
+    ok = _api("""let got = 'unset'; EP.runDailyContent((r) => { got = r === undefined ? 'none' : r; }); await flush(); return got;""", {'/platform-articles/daily-run': {'status': 200, 'body': {'started': True}}})
+    assert ok['out'] == 'none'
+    assert "already ? 'الكتابة الآلية تعمل الآن بالفعل. لم يُستهلك رصيد جديد.'" in JS
 
 
 # ====================================================================== ٩) بطاقة المربّع والملفات

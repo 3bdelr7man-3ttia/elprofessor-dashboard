@@ -1262,7 +1262,7 @@
     { key: 'content', label: 'المحتوى', img: 'content', desc: 'المقالات والموضوعات والأخبار والتعليقات ودليل الاستخدام', tabs: [
       T('pipeline',  'خط النشر',       'topics', { topicsTab: 'pipeline' },  { topicsTab: ['pipeline'] }),
       T('articles',  'المقالات',        'topics', { topicsTab: 'articles' },  { topicsTab: ['articles', 'blog', 'auto'] }),
-      T('topics',    'الموضوعات',       'topics', { topicsTab: 'pending' },   { topicsTab: ['pending', 'ideas', 'incoming', 'working', 'board', 'rejected'] }),
+      T('topics',    'الموضوعات',       'topics', { topicsTab: 'pending' },   { topicsTab: ['pending', 'ideas', 'incoming', 'working', 'board', 'rejected', 'archived'] }),
       T('news',      'الأخبار',         'topics', { topicsTab: 'news' },      { topicsTab: ['news'] }),
       T('comments',  'التعليقات',       'topics', { topicsTab: 'comments' },  { topicsTab: ['comments'] }),
       T('tutorials', 'دليل الاستخدام', 'topics', { topicsTab: 'tutorials' }, { topicsTab: ['tutorials'] })
@@ -1994,7 +1994,7 @@
   function since(at, now) { var t = ms(at); return isNaN(t) ? '' : (now - t < 60e3 ? 'الآن' : 'منذ ' + ageCore(now - t)); }
 
   var TAB_OF = { pipeline: 'pipeline', articles: 'articles', blog: 'articles', auto: 'articles',
-                 pending: 'topics', ideas: 'topics', incoming: 'topics', working: 'topics', board: 'topics', rejected: 'topics',
+                 pending: 'topics', ideas: 'topics', incoming: 'topics', working: 'topics', board: 'topics', rejected: 'topics', archived: 'topics',
                  news: 'news', comments: 'comments', tutorials: 'tutorials' };
   function v2ContentTabFor(topicsTab) { return TAB_OF[topicsTab] || 'pipeline'; }
 
@@ -2046,7 +2046,7 @@
     it = it || {};
     switch (it.kind) {
       case 'memberTopic': return { label: 'اعتمد وبلّغ', act: 'approveMemberTopic' };
-      case 'testimonial': return { label: 'اعتمد', act: 'approveTestimonial' };
+      case 'testimonial': return { label: 'افتح واقرأ', act: 'openTestimonial' };
       case 'comment': return v2ContentCommentVerdict(it.moderation).suggest === 'reject'
         ? { label: 'ارفض', act: 'rejectComment' } : { label: 'افتح واقرأ', act: 'openComment' };
       case 'creative': return { label: 'افتح وراجع', act: 'openCreative' };
@@ -2060,6 +2060,13 @@
     }
   }
 
+  // اسم الكاتب كما يظهر: ما فيه «الذكي/الذكاء» (مقالات قديمة خُزّنت بهذا النص) يظهر «فريق البروفيسور».
+  function v2ContentByText(by) {
+    var t = String(by == null ? '' : by).trim();
+    if (!t) return 'الإدارة';
+    return /الذكي|الذكاء|الآلي|آلي/.test(t) ? 'فريق البروفيسور' : t;
+  }
+
   // ------------------------------------------------------------ موضوعات: نفس قاعدة topicTabOf القديمة بالحرف
   function topicTabOf(t) {
     var st = t.status || 'draft', src = t.source || 'human';
@@ -2067,28 +2074,28 @@
     if (st === 'rejected') return 'rejected';
     if (st === 'published' || st === 'open') return 'board';
     if (st === 'merged') return 'working';
-    if (st === 'archived') return 'archived';          // المؤرشف لا يظهر في أي قائمة (القديمة كانت تضعه تحت «أفكار» فيُعرَض للاعتماد)
+    if (st === 'archived') return 'archived';          // المؤرشف له شريحة «مؤرشفة» (تظهر حين يكون عددها فوق صفر)، لا يُعرض تحت «أفكار» للاعتماد
     if (src === 'expert') return 'incoming';
     return 'ideas';
   }
-  var CHIP_LABELS = [['pending', 'من الأعضاء'], ['ideas', 'أفكار'], ['incoming', 'من الخبراء'], ['working', 'يُكتب'], ['board', 'على اللوحة'], ['rejected', 'مرفوضة']];
+  var CHIP_LABELS = [['pending', 'من الأعضاء'], ['ideas', 'أفكار'], ['incoming', 'من الخبراء'], ['working', 'يُكتب'], ['board', 'على اللوحة'], ['rejected', 'مرفوضة'], ['archived', 'مؤرشفة']];
   // PTOPICS_PENDING === null ⇒ عدّ «من الأعضاء» null (لا يؤخذ من PTOPICS أبدًا) · PTOPICS === null ⇒ باقي العدّات null.
   function v2ContentTopicChips(topics, pending, active, generating) {
-    var c = { pending: null, ideas: null, incoming: null, working: null, board: null, rejected: null };
+    var c = { pending: null, ideas: null, incoming: null, working: null, board: null, rejected: null, archived: null };
     if (isArr(pending)) c.pending = pending.length;
     if (isArr(topics)) {
-      ['ideas', 'incoming', 'working', 'board', 'rejected'].forEach(function (k) { c[k] = 0; });
+      ['ideas', 'incoming', 'working', 'board', 'rejected', 'archived'].forEach(function (k) { c[k] = 0; });
       var gen = generating || {}, seen = {};
       topics.forEach(function (t) {
         var k = topicTabOf(t);
-        if (k === 'pending' || k === 'archived') return;   // المعلّق يُعدّ من طابوره الخاص فقط · المؤرشف خارج القوائم
+        if (k === 'pending') return;   // المعلّق يُعدّ من طابوره الخاص فقط
         if (k === 'working') seen[t.id] = 1;
         c[k]++;
       });
       Object.keys(gen).forEach(function (id) { if (!seen[id]) c.working++; });
     }
     return CHIP_LABELS.map(function (p) {
-      return { key: p[0], label: p[1], count: c[p[0]], active: p[0] === active, hidden: p[0] === 'rejected' && !(c.rejected > 0) && p[0] !== active };
+      return { key: p[0], label: p[1], count: c[p[0]], active: p[0] === active, hidden: (p[0] === 'rejected' || p[0] === 'archived') && !(c[p[0]] > 0) && p[0] !== active };
     }).filter(function (x) { return !x.hidden; });
   }
   // الحارات بترتيب المنصة المقفول، والأصفار تبقى. gap = أول حارة عددها صفر · low = أقل حارة (أول الأقل في الترتيب).
@@ -2145,7 +2152,6 @@
       var b = [];
       b.push((r.course_title || 'دورة') + (r.rating != null && r.rating !== '' ? ' · التقييم ' + ar(r.rating) + ' من ٥' : ''));
       if (r.consent_public === true) b.push('وافق كاتبه على النشر باسمه');
-      else if (r.consent_public === false) b.push('لم يوافق على ذكر اسمه');
       wait.push(mk({ id: 't:' + r.id, kind: 'testimonial', col: 'wait', order: 1, ref: r, title: shortText(r.text, 80) || 'رأي بلا نص', at: r.created_at,
         strip: 'رأي متعلّم', who: { text: r.name || 'متعلّم', email: r.user_email || '' }, brain: b.join(' · '), go: null }, now, 'wait'));
     });
@@ -2182,7 +2188,7 @@
       if (a.status !== 'draft') return;
       var f = v2ContentFacts(a, siteTitlesPub);
       draft.push(mk({ id: 's:' + a.id, kind: 'siteDraft', col: 'draft', order: 1, ref: a, dup: f.dupTitle, facts: f, title: a.title || 'مقال بلا عنوان', at: a.created_at,
-        strip: 'مقال للموقع', who: { text: a.by || 'الإدارة' }, brain: f.line, go: { tab: 'articles', st: 'articles', filter: 'draft' } }, now, 'amber'));
+        strip: 'مقال للموقع', who: { text: v2ContentByText(a.by) }, brain: f.line, go: { tab: 'articles', st: 'articles', filter: 'draft' } }, now, 'amber'));
     });
     if (isArr(src.platformArticles)) src.platformArticles.forEach(function (a) {
       if (a.status === 'published') return;
@@ -2227,7 +2233,7 @@
     var done = [];
     if (isArr(src.siteArticles)) src.siteArticles.forEach(function (a) {
       if (a.status !== 'published' || !within(a.published_at, now, WEEK)) return;
-      done.push(mk({ id: 'ds:' + a.id, kind: 'doneArticle', col: 'done', ref: a, title: a.title || 'مقال', at: a.published_at, strip: 'مقال نُشر', who: { text: a.by || 'الإدارة' }, brain: '',
+      done.push(mk({ id: 'ds:' + a.id, kind: 'doneArticle', col: 'done', ref: a, title: a.title || 'مقال', at: a.published_at, strip: 'مقال نُشر', who: { text: v2ContentByText(a.by) }, brain: '',
         go: { tab: 'articles', st: 'articles', filter: 'published' } }, now, 'green'));
     });
     if (isArr(src.news)) src.news.forEach(function (n) {
@@ -2303,6 +2309,6 @@
 
   L.v2ContentTabFor = v2ContentTabFor; L.v2ContentBoard = v2ContentBoard; L.v2ContentFacts = v2ContentFacts; L.v2ContentSuggest = v2ContentSuggest;
   L.v2ContentCommentVerdict = v2ContentCommentVerdict; L.v2ContentPrerender = v2ContentPrerender; L.v2ContentPublishLead = v2ContentPublishLead;
-  L.v2ContentTopicChips = v2ContentTopicChips; L.v2ContentSegments = v2ContentSegments; L.v2ContentTopicTabOf = topicTabOf;
+  L.v2ContentTopicChips = v2ContentTopicChips; L.v2ContentSegments = v2ContentSegments; L.v2ContentTopicTabOf = topicTabOf; L.v2ContentByText = v2ContentByText;
 })(typeof window !== 'undefined' ? window : (typeof globalThis !== 'undefined' ? globalThis : this));
 // ===== /v2s:content =====

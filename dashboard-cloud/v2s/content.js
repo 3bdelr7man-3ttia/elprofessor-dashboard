@@ -22,7 +22,7 @@
     view: null, sig: '', poll: null, minute: null, active: false,
     col: '', picked: false, expand: {}, cat: 'all', afilter: 'draft', nfilter: 'draft',
     note: null, noteT: null, generating: {}, summary: null, highlight: null, openArticle: null, afterPublish: false,
-    items: {}, nowOverride: 0, busy: {}, lastTab: ''
+    items: {}, nowOverride: 0, busy: {}, lastTab: '', bg: {}, lastRefresh: 0
   };
   var KEYS = ['content', 'contentOverview', 'platformArticles', 'platformTopics', 'platformPendingTopics', 'platformTopicSegments', 'platformTopicsAnalysis',
               'platformOpinions', 'platformOpinionsApproved', 'platformNews', 'platformNewsSources', 'platformCreative', 'testimonials', 'testimonialsApproved',
@@ -43,6 +43,17 @@
 
   // ------------------------------------------------------------------ أدوات
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
+  // رابط قادم من بيانات: يُقبل http/https فقط (وللمسار الداخلي مرّر rel). غيره (javascript: وغيره) ⇒ نص بلا رابط.
+  function safeHref(u, rel) {
+    var v = String(u == null ? '' : u).trim();
+    if (/^https?:\/\//i.test(v)) return v;
+    if (rel && /^\/(?!\/)/.test(v)) return v;
+    return '';
+  }
+  function safeLink(u, label, cls) {
+    var h = safeHref(u);
+    return h ? '<a class="' + (cls || 'v2ct-link') + '" href="' + esc(h) + '" target="_blank" rel="noopener noreferrer">' + esc(label) + '</a>' : '';
+  }
   function host() { return window.V2_HOST || {}; }
   function ep() { return window.EP || null; }
   function now() { return S.nowOverride || Date.now(); }
@@ -57,6 +68,10 @@
   function isCurrent() { return !!(host().current && host().current() === 'topics' && S.view && document.body.contains(S.view)); }
   function modalOpen() { return !!document.getElementById('epModal'); }
   function arDigits(t) { return String(t).replace(/\d/g, function (d) { return '٠١٢٣٤٥٦٧٨٩'.charAt(+d); }); }
+  // رقم قادم من بيانات: غير الرقم ⇒ «غير متاح بعد» (لا صفر مخترع).
+  function isNum(v) { return typeof v === 'number' && isFinite(v); }
+  function numTxt(v) { return isNum(v) ? ar(v) : NA; }
+  function numBox(v, label) { return '<div><b' + (isNum(v) ? '' : ' class="na"') + '>' + esc(numTxt(v)) + '</b><span>' + esc(label) + '</span></div>'; }
   function dateOf(iso) { return U.dateText ? U.dateText(iso) : ''; }
   function person(name, email) {
     if (!email) return esc(name);
@@ -68,7 +83,7 @@
   function srcList(key, get) {
     var s = st(key);
     if (s === 'error') return null;
-    if (s !== 'ready') return undefined;
+    if (s !== 'ready' && !(s === 'loading' && S.bg[key])) return undefined;   // تحديث في الخلفية: نبقي ما عندنا ظاهرًا بلا وميض
     var v;
     try { v = get(); } catch (e) { v = null; }
     return Array.isArray(v) ? v : null;
@@ -101,6 +116,20 @@
              siteArticles: siteArticles(), platformArticles: platformRaw(), topics: topicsList(), news: newsList(),
              approvedComments: approvedRaw(), approvedTestimonials: testimonialsApprovedList(), generating: S.generating, queueTestimonials: qt };
   }
+  // تحديث خط النشر: الجانب الذي يصل منه الجديد (موضوعات الأعضاء · الآراء · التعليقات · الأعمال · نظرة المقالات) كل ٦٠ ثانية وعند الدخول،
+  // والزرّ «حدّث» يعيد كل مصادر الخط. المصدر الجاهز يبقى ظاهرًا أثناء إعادة جلبه (S.bg).
+  var WAITING = ['platformPendingTopics', 'testimonials', 'platformOpinions', 'platformCreative', 'contentOverview'];
+  function refreshKeys(keys) {
+    var E = ep();
+    if (!E || !E.authed) return;
+    S.lastRefresh = Date.now();
+    keys.forEach(function (k) {
+      if (st(k) === 'loading') return;
+      if (st(k) === 'ready') S.bg[k] = true;
+      E.reload(k, function () { if (st(k) !== 'loading') { delete S.bg[k]; if (isCurrent() && !modalOpen()) redraw(); } });
+    });
+  }
+  function refreshing() { return Object.keys(S.bg).length > 0 || NEED.pipeline.some(function (k) { return st(k) === 'loading'; }); }
   function ensureTab(tab) {
     var E = ep();
     if (!E || !E.authed) return;
@@ -238,8 +267,10 @@
     if (!S.view || !isCurrent()) return;
     if (modalOpen()) return;                      // لا نعيد الرسم وتحت نافذة مفتوحة تكتب فيها
     var tab = currentTab();
-    if (S.lastTab !== tab) { S.lastTab = tab; }
+    var entered = S.lastTab !== tab;
+    if (entered) { S.lastTab = tab; }
     ensureTab(tab);
+    if (entered && tab === 'pipeline' && Date.now() - S.lastRefresh > 15000) refreshKeys(WAITING);
     var html;
     try {
       if (tab === 'pipeline') html = drawPipeline();
@@ -270,6 +301,8 @@
   var COL_NOTE = { wait: 'أصحابها ينتظرون قرارك', draft: 'لم تُنشر بعد', idea: 'مادة خام تنتظر أن تتحول إلى نقاش أو خبر منشور', done: 'ما نُشر أو اعتُمد خلال ٧ أيام' };
   var COL_TONE = { wait: 'wine', draft: 'amber', idea: 'ink', done: 'green' };
 
+  var SHEET_KINDS = ['memberTopic', 'testimonial', 'comment', 'creative', 'siteDraft', 'platformDraft', 'working', 'idea', 'newsDraft'];
+  function hasDest(it) { return !!it.go || SHEET_KINDS.indexOf(it.kind) > -1; }
   function ticketHtml(it) {
     var slim = it.col === 'done';
     var sg = L.v2ContentSuggest(it);
@@ -286,7 +319,7 @@
       + '<div class="v2ct-strip"><span class="v2ct-type">' + esc(it.strip) + '</span>' + (it.text ? '<time class="v2ct-time" data-since="' + esc(it.at || '') + '">' + esc(it.text) + '</time>' : '') + '</div>'
       + '<div class="v2ct-body">'
       + (big ? '<h3 class="v2ct-bignum"><b>' + esc(ar(it.n)) + '</b><span>رأي متعلّم ينتظر المراجعة</span></h3>'
-             : '<h3><button type="button" class="v2ct-open" data-a="open" data-id="' + esc(it.id) + '">' + esc(it.title) + '</button></h3>')
+             : '<h3>' + (hasDest(it) ? '<button type="button" class="v2ct-open" data-a="open" data-id="' + esc(it.id) + '">' + esc(it.title) + '</button>' : '<span class="v2ct-open static">' + esc(it.title) + '</span>') + '</h3>')
       + who + brain + (btn ? '<div class="v2ct-acts">' + btn + '</div>' : '') + '</div></article>';
   }
   function placeholder() { return '<div class="v2ct-t ph"><div class="v2ct-strip"></div><div class="v2ct-body"><i></i><i></i></div></div>'; }
@@ -329,6 +362,7 @@
     if (so === 'ready' && B.top.today !== null) facts += '<span class="v2ct-fact">نُشر على الموقع اليوم: ' + esc(ar(B.top.today)) + '</span><span class="v2ct-fact">هذا الأسبوع: ' + esc(ar(B.top.week)) + '</span>';
     else if (so === 'error') facts += '<span class="v2ct-fact na">نُشر على الموقع اليوم: ' + NA + '</span>';
     facts += prerenderPill();
+    facts += '<button type="button" class="v2ct-b2 sm v2ct-refresh" data-a="refreshBoard"' + (refreshing() ? ' disabled' : '') + '>' + (refreshing() ? '…جارٍ التحديث' : 'حدّث') + '</button>';
     var hero = '<div class="v2ct-hero" style="background-image:url(' + img('content') + ')"><div class="v2ct-hero-in">' + BRAIN + '<p>' + esc(B.top.line) + '</p></div></div>';
     return hero + '<div class="v2ct-facts">' + facts + '</div>' + warnStrip(failedLabels('pipeline'))
       + '<div class="v2ct-seg" role="tablist" aria-label="أعمدة خط النشر">' + seg + '</div>'
@@ -383,7 +417,7 @@
       if (f.dupTitle) chipsHtml += pill('عنوانه مطابق لمقال منشور', 'amber');
       var pub = a.status === 'published';
       return '<button type="button" class="v2ct-card art" data-a="sread" data-id="' + esc(a.id) + '"><span class="v2ct-ct">' + esc(a.title) + '</span>'
-        + '<span class="v2ct-cm">' + esc((a.by || 'الإدارة') + (a.date ? ' · ' + arDigits(a.date) : '')) + '</span>'
+        + '<span class="v2ct-cm">' + esc(L.v2ContentByText(a.by) + (a.date ? ' · ' + arDigits(a.date) : '')) + '</span>'
         + '<span class="v2ct-pills">' + pill(pub ? 'منشور' : 'مسودة', pub ? 'green' : 'amber') + chipsHtml + '</span></button>';
     }).join('') + '</div>';
     return strip + chips + cards;
@@ -441,7 +475,7 @@
         + '<p class="v2ct-pills">' + pill(pub ? 'منشور' : 'مسودة', pub ? 'green' : 'amber') + '</p>'
         + (f.factsLine ? '<p class="v2ct-line">' + esc(f.factsLine) + '</p>' : '') + (f.dupTitle ? dupHit : '')
         + (raw.excerpt ? '<p class="v2ct-exb">' + esc(raw.excerpt) + '</p>' : '')
-        + (raw.image_url ? '<img class="v2ct-cover" src="' + esc(raw.image_url) + '" alt="">' : '')
+        + (String(raw.image_url || '').trim() ? '<p class="v2ct-pills">' + pill('صورة الغلاف: موجودة', 'green') + '</p>' : '')
         + '<div class="v2ct-article">' + bodyHtml(raw.body) + '</div>'
         + '<div class="v2ct-acts2">' + prim + sec + '</div>'
         + (pub ? '<p class="v2ct-fine">لحذف مقال منشور: أوقف نشره أولًا، ثم احذفه من المسودات.</p>' : '');
@@ -467,7 +501,7 @@
       + '<div class="v2ct-two">' + fld('ae_cat', 'التصنيف', e.cat || '', '<input id="ae_cat" value="{v}" placeholder="قانون الشركات">') + fld('ae_k', 'الوسم', e.kicker || '', '<input id="ae_k" value="{v}" placeholder="تشريعات">') + '</div>'
       + fld('ae_ex', 'المقتطف', e.excerpt || '', '<textarea id="ae_ex" rows="2" placeholder="ملخص قصير يظهر في بطاقة المقالات">{v}</textarea>')
       + fld('ae_body', 'نص المقال', bodyText, '<textarea id="ae_body" rows="9" placeholder="افصل بين الفقرات بسطر فارغ، وابدأ العنوان الفرعي بـ ##">{v}</textarea>')
-      + fld('ae_by', 'الكاتب', isNew ? 'فريق البروفيسور' : (e.by || ''), '<input id="ae_by" value="{v}">')
+      + fld('ae_by', 'الكاتب', isNew ? 'فريق البروفيسور' : (e.by ? L.v2ContentByText(e.by) : ''), '<input id="ae_by" value="{v}">')
       + fld('ae_img', 'رابط صورة المقال', e.image_url || '', '<input id="ae_img" dir="ltr" value="{v}" placeholder="https://...">')
       + fld('ae_meta', 'وصف محركات البحث', e.meta_description || '', '<textarea id="ae_meta" rows="2" placeholder="الجملة التي تظهر تحت العنوان في جوجل، وتبدأ بالإجابة المختصرة">{v}</textarea>')
       + fld('ae_rev', 'راجعه (اختياري)', e.reviewed_by || '', '<input id="ae_rev" value="{v}" placeholder="اسم من راجع المقال فعلًا، واتركه فارغًا إن لم يُراجَع">')
@@ -623,9 +657,10 @@
       okLabel: 'ابدأ الكتابة', run: function (done) {
         var E = ep(), fin = false;
         E.lastError = '';
-        E.runDailyContent(function () {
+        E.runDailyContent(function (r) {
           if (fin) return; fin = true;
-          done({ ok: noErr(), error: E.lastError || 'تعذّر بدء الكتابة', note: 'تمّ: بدأت الكتابة الآلية. تظهر المسودات بعد انتهائها.' });
+          var already = !!(r && r.alreadyRunning);
+          done({ ok: noErr(), error: E.lastError || 'تعذّر بدء الكتابة', note: already ? 'الكتابة الآلية تعمل الآن بالفعل. لم يُستهلك رصيد جديد.' : 'تمّ: بدأت الكتابة الآلية. تظهر المسودات بعد انتهائها.' });
         }, { isOpen: function () { return host().current && host().current() === 'topics'; } });
       } });
   }
@@ -640,10 +675,10 @@
       if (!rows.length) { box.textContent = 'لا موضوعات بعد'; return; }
       box.className = '';
       box.innerHTML = rows.map(function (t, i) {
-        return '<div class="v2ct-bt" data-i="' + i + '"><p class="v2ct-ltr" dir="ltr">/blog/topic/' + esc(t.slug) + '</p><span class="v2ct-line">' + esc(ar(t.count || 0)) + ' مقال منشور</span>'
+        return '<div class="v2ct-bt" data-i="' + i + '"><p class="v2ct-ltr" dir="ltr">/blog/topic/' + esc(t.slug) + '</p><span class="v2ct-line">' + (isNum(t.count) ? esc(ar(t.count)) + ' مقال منشور' : 'عدد المقالات: ' + NA) + '</span>'
           + '<div class="v2ct-fld"><label>العنوان</label><input data-f="label" maxlength="120" value="' + esc(t.label) + '"></div>'
           + '<div class="v2ct-fld"><label>الوصف</label><textarea data-f="description" rows="2" maxlength="400">' + esc(t.description || '') + '</textarea></div>'
-          + '<div class="v2ct-rowacts"><button type="button" class="v2ct-b2" data-save="' + i + '">احفظ</button>' + (t.count ? '<a class="v2ct-link" target="_blank" rel="noopener noreferrer" href="' + esc(t.url) + '">اعرض الصفحة</a>' : '') + '</div>'
+          + '<div class="v2ct-rowacts"><button type="button" class="v2ct-b2" data-save="' + i + '">احفظ</button>' + (t.count && safeHref(t.url, true) ? '<a class="v2ct-link" target="_blank" rel="noopener noreferrer" href="' + esc(safeHref(t.url, true)) + '">اعرض الصفحة</a>' : '') + '</div>'
           + '<div class="v2ct-rowerr"></div></div>';
       }).join('');
       qa('[data-save]', box).forEach(function (b) {
@@ -702,11 +737,11 @@
     if (!Array.isArray(tops)) return tops;
     return tops.filter(function (t) { return L.v2ContentTopicTabOf(t) === chip; });
   }
-  var TOPIC_MAIN = { pending: 'اعتمد وبلّغ', ideas: 'اعتمد للنقاش', incoming: 'اعتمد للنقاش', working: 'انشر على اللوحة', rejected: 'اعتمد بعد المراجعة' };
+  var TOPIC_MAIN = { pending: 'اعتمد وبلّغ', ideas: 'اعتمد للنقاش', incoming: 'اعتمد للنقاش', working: 'انشر على اللوحة', rejected: 'اعتمد بعد المراجعة', archived: 'أعد للأفكار' };
   function topicMainLabel(chip, t) { return chip === 'board' ? (t.linked_article_id ? 'افتح المقال' : 'اكتب منه مقالًا') : TOPIC_MAIN[chip]; }
   function drawTopics() {
     var chip = topicsTabNow();
-    if (['pending', 'ideas', 'incoming', 'working', 'board', 'rejected'].indexOf(chip) < 0) chip = 'pending';
+    if (['pending', 'ideas', 'incoming', 'working', 'board', 'rejected', 'archived'].indexOf(chip) < 0) chip = 'pending';
     var chips = topicChipList();
     var chipHtml = chips.map(function (c) {
       var na = c.count === null;
@@ -725,6 +760,7 @@
     var pendN = memberTopics(), ideasN = topicsList();
     if (chip === 'pending' && Array.isArray(pendN)) brain = ar(pendN.length) + ' موضوعًا كتبه أعضاء، وهو مخفي عن اللوحة حتى تقرّر. القرار يصل إلى صاحبه.';
     else if (chip === 'ideas' && Array.isArray(ideasN)) brain = ar(topicsForChip('ideas').length) + ' فكرة. الاعتماد يضعها على اللوحة العامة، والرفض يحذفها.';
+    else if (chip === 'archived' && Array.isArray(ideasN)) brain = 'موضوعات مؤرشفة لا تظهر للناس. أعدها إلى الأفكار أو احذفها.';
     else if (chip === 'board' && st('platformTopicsAnalysis') === 'ready') { var sg = L.v2ContentSegments(an); if (sg && sg.low) brain = 'أقل الفئات موضوعات: ' + sg.low.label + ' (' + ar(sg.low.count) + ').'; }
     var brainHtml = brain ? '<div class="v2ct-brain wide">' + BRAIN + '<p>' + esc(brain) + '</p></div>' : '';
     var body;
@@ -754,10 +790,10 @@
       + '<p class="v2ct-pills">' + pills + '</p>' + (meta ? '<p class="v2ct-cm">' + esc(meta) + '</p>' : '') + '<div class="v2ct-acts">' + btn + '</div></article>';
   }
   function bars(list, labelKey, valueKey, max) {
-    var top = Math.max.apply(null, list.map(function (x) { return Number(x[valueKey]) || 0; }).concat([1]));
+    var top = Math.max.apply(null, list.map(function (x) { return isNum(x[valueKey]) ? x[valueKey] : 0; }).concat([1]));
     return '<ul class="v2ct-bars">' + list.slice(0, max || 8).map(function (x) {
-      var v = Number(x[valueKey]) || 0;
-      return '<li><div class="v2ct-bl"><span>' + esc(x[labelKey] || 'غير مصنّف') + '</span><b>' + esc(ar(v)) + '</b></div><div class="v2ct-bar2"><i style="width:' + Math.round(v / top * 100) + '%"></i></div></li>';
+      var v = isNum(x[valueKey]) ? x[valueKey] : 0;
+      return '<li><div class="v2ct-bl"><span>' + esc(x[labelKey] || 'غير مصنّف') + '</span><b>' + esc(numTxt(x[valueKey])) + '</b></div><div class="v2ct-bar2"><i style="width:' + Math.round(v / top * 100) + '%"></i></div></li>';
     }).join('') + '</ul>';
   }
   function numbersCard() {
@@ -768,12 +804,12 @@
     else {
       var tops = (an.top_topics || []).slice(0, 5);
       var sg = L.v2ContentSegments(an);
-      inner = '<div class="v2ct-nums"><div><b>' + esc(ar(an.total_topics || 0)) + '</b><span>موضوعات</span></div><div><b>' + esc(ar(an.total_comments || 0)) + '</b><span>تعليقات معتمدة</span></div></div>'
+      inner = '<div class="v2ct-nums">' + numBox(an.total_topics, 'موضوعات') + numBox(an.total_comments, 'تعليقات معتمدة') + '</div>'
         + (tops.length ? '<h4>الأكثر تعليقًا</h4><ul class="v2ct-top">' + tops.map(function (t) {
-          return '<li><b>' + esc(t.title) + '</b>' + pill(SRC_AR[t.source] || SRC_AR.human) + '<span>' + esc(ar(t.engagement ? t.engagement.comments : 0)) + ' تعليق</span></li>'; }).join('') + '</ul>' : '')
+          return '<li><b>' + esc(t.title) + '</b>' + pill(SRC_AR[t.source] || SRC_AR.human) + '<span>' + (t.engagement && isNum(t.engagement.comments) ? esc(ar(t.engagement.comments)) + ' تعليق' : 'التعليقات: ' + NA) + '</span></li>'; }).join('') + '</ul>' : '')
         + (sg ? '<h4>حسب الفئة المستهدفة</h4>' + bars(sg.lanes, 'label', 'count', 12) : '')
         + (an.by_category && an.by_category.length ? '<h4>حسب التخصص</h4>' + bars(an.by_category, 'category', 'count', 8) : '')
-        + (an.categories_in_demand && an.categories_in_demand.length ? '<h4>ما يسأل عنه الناس في المحادثة</h4><div class="v2ct-pills">' + an.categories_in_demand.map(function (c) { return pill((c.category || c.name || '') + ' · ' + ar(c.count || 0)); }).join('') + '</div>' : '');
+        + (an.categories_in_demand && an.categories_in_demand.length ? '<h4>ما يسأل عنه الناس في المحادثة</h4><div class="v2ct-pills">' + an.categories_in_demand.map(function (c) { return pill((c.category || c.name || '') + (isNum(c.count) ? ' · ' + ar(c.count) : '')); }).join('') + '</div>' : '');
     }
     return '<section class="v2ct-box"><header><h2>أرقام الموضوعات</h2><button type="button" class="v2ct-b2 sm" data-a="reloadNums">حدّث</button></header>' + inner + '</section>';
   }
@@ -889,6 +925,13 @@
     if (chip === 'working') return (t.merged_article || t.ai_answer) ? publishToBoard(t) : openTopicSheet(chip, t);
     if (chip === 'board') return t.linked_article_id ? openLinkedArticle(t) : makeArticle(t);
     if (chip === 'rejected') return approveRejected(t);
+    if (chip === 'archived') return restoreArchived(t);
+  }
+  function restoreArchived(t) {
+    confirmSheet({ title: 'إعادة الموضوع للأفكار', lead: 'يعود الموضوع إلى قائمة الأفكار، ولا يظهر للناس قبل اعتمادك.', okLabel: 'أعده للأفكار', run: function (done) {
+      perform(function (cb) { ep().updateTopic(t.id, { title: t.title, status: 'draft' }, cb); }, ['platformTopics'], function () { return noErr() && topicStatus(t.id) === 'draft'; },
+        function (ok, err) { done({ ok: ok, error: err, note: 'تمّ: عاد «' + t.title + '» إلى الأفكار.' }); });
+    } });
   }
   function approveRejected(t) {
     confirmSheet({ title: 'اعتماد بعد المراجعة', lead: 'سيظهر على اللوحة العامة، ويصل القرار إلى صاحبه.', okLabel: 'اعتمد بعد المراجعة', run: function (done) {
@@ -919,9 +962,10 @@
     var main, others = '';
     if (chip === 'ideas' || chip === 'incoming') { main = '<button type="button" class="v2ct-b1" id="v2ctMain">اعتمد للنقاش</button>'; if (chip === 'incoming') others += '<button type="button" class="v2ct-b2" id="v2ctToWrite">حوّله للكتابة</button>'; }
     else if (chip === 'working') { main = '<button type="button" class="v2ct-b1" id="v2ctMain">انشر على اللوحة</button>'; others += (t.linked_article_id ? '<button type="button" class="v2ct-b2" id="v2ctArt">افتح المقال</button>' : '') + '<button type="button" class="v2ct-b2" id="v2ctMk">اكتب منه مقالًا</button>'; }
+    else if (chip === 'archived') main = '<button type="button" class="v2ct-b1" id="v2ctMain">أعد للأفكار</button>';
     else if (chip === 'board') { main = t.linked_article_id ? '<button type="button" class="v2ct-b1" id="v2ctArt">افتح المقال</button>' : '<button type="button" class="v2ct-b1" id="v2ctMk">اكتب منه مقالًا</button>'; if (t.linked_article_id) others += '<button type="button" class="v2ct-b2" id="v2ctMk">اكتب منه مقالًا</button>'; }
     else main = '<button type="button" class="v2ct-b1" id="v2ctMain">اعتمد بعد المراجعة</button>';
-    var isRej = chip === 'rejected';
+    var isRej = chip === 'rejected' || chip === 'archived';
     s = openSheet('مراجعة الموضوع', (isRej ? '<div class="v2ct-fld"><label>العنوان</label><p class="v2ct-val">' + esc(t.title) + '</p></div><div class="v2ct-fld"><label>السؤال</label><p class="v2ct-val pre">' + esc(t.question || '—') + '</p></div>' :
       '<div class="v2ct-fld"><label for="tr_t">العنوان</label><input id="tr_t" value="' + esc(t.title) + '"></div>'
       + '<div class="v2ct-two"><div class="v2ct-fld"><label for="tr_sp">التخصص</label><input id="tr_sp" value="' + esc(t.category || t.specialty || '') + '"></div>'
@@ -939,7 +983,7 @@
     q('#v2ctNo', s).onclick = closeSheet;
     var bind = function (sel, fn) { var b = q(sel, s); if (b) b.onclick = function () { closeSheet(); fn(); }; };
     bind('#v2ctMain', function () {
-      if (chip === 'working') publishToBoard(t); else if (isRej) approveRejected(t); else approveToBoard(t);
+      if (chip === 'working') publishToBoard(t); else if (chip === 'archived') restoreArchived(t); else if (isRej) approveRejected(t); else approveToBoard(t);
     });
     bind('#v2ctToWrite', function () {
       // مستثنى من التأكيد: نقل داخلي إلى قائمة الكتابة، لا يظهر منه شيء للناس.
@@ -986,7 +1030,7 @@
     return bar + chips + body;
   }
   function newsCard(n) {
-    var srcs = (n.sources || []).length ? (n.sources || []).map(function (s) { return '<a class="v2ct-src" href="' + esc(s.url) + '" target="_blank" rel="noopener noreferrer">' + esc(s.title || s.url) + '</a>'; }).join(' ') : '<span class="v2ct-mute">بلا مصدر</span>';
+    var srcs = (n.sources || []).length ? (n.sources || []).map(function (s) { return safeLink(s.url, s.title || s.url, 'v2ct-src') || '<span class="v2ct-src">' + esc(s.title || s.url) + '</span>'; }).join(' ') : '<span class="v2ct-mute">بلا مصدر</span>';
     var pub = n.status === 'published', complete = (n.sources || []).length >= 1 && !!String(n.summary || '').trim();
     var label = pub ? 'عدّل' : (complete ? 'انشر' : 'أكمل الخبر');
     return '<article class="v2ct-card news" data-id="n:' + esc(n.id) + '"><h3><button type="button" class="v2ct-open" data-a="nopen" data-id="' + esc(n.id) + '">' + esc(n.title) + '</button></h3>'
@@ -1113,8 +1157,8 @@
     else if (s0 !== 'ready' || !an) inner = loadingBlock('أرقام التعليقات');
     else {
       var sc = an.status_counts || {}, tops = (an.top_topics || []).slice(0, 5);
-      inner = '<div class="v2ct-nums"><div><b>' + esc(ar(sc.pending || 0)) + '</b><span>تنتظر</span></div><div><b>' + esc(ar(sc.approved || 0)) + '</b><span>معتمدة</span></div><div><b>' + esc(ar(sc.rejected || 0)) + '</b><span>مرفوضة</span></div></div>'
-        + (tops.length ? '<h4>الأكثر تعليقًا</h4><ul class="v2ct-top">' + tops.map(function (t) { return '<li><b>' + esc(t.title) + '</b><span>' + esc(ar(t.count)) + ' تعليق</span></li>'; }).join('') + '</ul>' : '')
+      inner = '<div class="v2ct-nums">' + numBox(sc.pending, 'تنتظر') + numBox(sc.approved, 'معتمدة') + numBox(sc.rejected, 'مرفوضة') + '</div>'
+        + (tops.length ? '<h4>الأكثر تعليقًا</h4><ul class="v2ct-top">' + tops.map(function (t) { return '<li><b>' + esc(t.title) + '</b><span>' + (isNum(t.count) ? esc(ar(t.count)) + ' تعليق' : 'التعليقات: ' + NA) + '</span></li>'; }).join('') + '</ul>' : '')
         + (an.by_category && an.by_category.length ? '<h4>حسب التخصص</h4>' + bars(an.by_category, 'category', 'count', 8) : '')
         + (S.summary ? '<div class="v2ct-sumbox"><h4>خلاصة مكتوبة آليًا من آخر التعليقات المعتمدة</h4><p>' + esc(S.summary.insights || S.summary.note || '') + '</p></div>' : '')
         + '<div class="v2ct-acts"><button type="button" class="v2ct-b2" data-a="csummary">اكتب خلاصة</button></div>';
@@ -1272,9 +1316,9 @@
     var kindText = ({ song: 'أغنية', video: 'فيديو', poem: 'قصيدة' })[w.kind] || 'عمل آخر';
     var s = openSheet('عمل من ركن الإبداع', '<h2 class="v2ct-rt">' + esc(w.title || 'عمل بلا عنوان') + '</h2><p class="v2ct-pills">' + pill(kindText) + '</p>'
       + '<p class="v2ct-cm">' + person(w.creator_name || w.creator_email || 'صاحب العمل', w.creator_email) + '</p>'
-      + (w.cover_url ? '<img class="v2ct-cover" src="' + esc(w.cover_url) + '" alt="">' : '')
+      + (String(w.cover_url || '').trim() ? '<p class="v2ct-pills">' + pill('صورة الغلاف: موجودة', 'green') + '</p>' : '')
       + (w.body ? '<p class="v2ct-val pre tall">' + esc(w.body) + '</p>' : '')
-      + (w.media_url ? '<p><a class="v2ct-link" href="' + esc(w.media_url) + '" target="_blank" rel="noopener noreferrer">افتح الرابط</a></p>' : '')
+      + (String(w.media_url || '').trim() ? '<p>' + (safeLink(w.media_url, 'افتح الرابط') || '<span class="v2ct-mute">الرابط غير صالح للفتح: <span class="v2ct-ltr" dir="ltr">' + esc(w.media_url) + '</span></span>') + '</p>' : '')
       + '<div id="v2ctErr"></div><div class="v2ct-acts2"><button type="button" class="v2ct-b1" id="v2ctOk">اعتمد وانشر</button><button type="button" class="v2ct-b2" id="v2ctRej">ارفض</button><button type="button" class="v2ct-b2" id="v2ctNo">إغلاق</button></div>', true);
     if (!s) return;
     q('#v2ctNo', s).onclick = closeSheet;
@@ -1315,7 +1359,7 @@
     };
   }
   function testimonialSheet(r) {
-    var consent = r.consent_public === true ? 'وافق كاتبه على النشر باسمه' : r.consent_public === false ? 'لم يوافق على ذكر اسمه' : '';
+    var consent = r.consent_public === true ? 'وافق كاتبه على النشر باسمه' : '';
     var s = openSheet('رأي متعلّم', '<p class="v2ct-kick">' + esc(r.course_title || 'دورة') + '</p><p class="v2ct-cm">' + person(r.name || 'متعلّم', r.user_email) + (r.rating != null && r.rating !== '' ? ' · التقييم ' + esc(ar(r.rating)) + ' من ٥' : '') + '</p>'
       + '<p class="v2ct-val pre tall">' + esc(r.text || '') + '</p>' + (consent ? '<p class="v2ct-line">' + esc(consent) + '</p>' : '')
       + '<div class="v2ct-acts2"><button type="button" class="v2ct-b1" id="v2ctOk">اعتمد</button><button type="button" class="v2ct-b2" id="v2ctRej">ارفض</button><button type="button" class="v2ct-b2" id="v2ctNo">إغلاق</button></div>');
@@ -1344,8 +1388,8 @@
     }).catch(function (e) { done({ ok: false, error: apiErr(e) }); });
   }
   function approveTestimonial(r) {
-    var lead = r.consent_public === true ? 'سيظهر الرأي باسم كاتبه على صفحة الدورة.' : r.consent_public === false ? 'سيظهر الرأي بلا اسم على صفحة الدورة.' : 'سيظهر الرأي على صفحة الدورة.';
-    confirmSheet({ title: 'اعتماد الرأي', lead: lead, okLabel: 'اعتمد', run: function (done) { decideTestimonial(r, 'approve', done); } });
+    var lead = r.consent_public === true ? 'سيظهر الرأي باسم كاتبه على صفحة الدورة.' : 'سيظهر الرأي على صفحة الدورة.';
+    confirmSheet({ title: 'اعتماد الرأي', lead: lead, extra: '<p class="v2ct-val pre tall">' + esc(r.text || '') + '</p>', okLabel: 'اعتمد', run: function (done) { decideTestimonial(r, 'approve', done); } });
   }
 
   // ================================================================== الأحداث
@@ -1356,6 +1400,7 @@
     var ref = it.ref;
     switch (sg.act) {
       case 'approveMemberTopic': approvePending(ref); break;
+      case 'openTestimonial': testimonialSheet(ref); break;
       case 'approveTestimonial': approveTestimonial(ref); break;
       case 'rejectComment': rejectOpinion(ref); break;
       case 'openComment': commentSheet(ref); break;
@@ -1393,6 +1438,7 @@
     // #view مشترك بين كل الشاشات: لا نتصرف إلا في عناصر هذا القسم وهو الظاهر (شاشات D2/D3 تستعمل data-a أيضًا).
     if (!b || !S.view || !S.view.contains(b) || !isCurrent() || !b.closest('.v2ct')) return;
     var a = b.getAttribute('data-a'), id = b.getAttribute('data-id'), v = b.getAttribute('data-v');
+    if (a === 'refreshBoard') { refreshKeys(NEED.pipeline); return redraw(); }
     if (a === 'retry') { retryFailed(); return redraw(); }
     if (a === 'col') { S.col = b.getAttribute('data-col'); S.picked = true; return redraw(); }
     if (a === 'more') {
@@ -1453,6 +1499,7 @@
     activate();
     view.onclick = onClick;
     view.onchange = onChange;
+    S.lastTab = '';          // دخول جديد للقسم ⇒ تحديث الجانب المنتظِر
     redraw();
     if (!S.poll) {
       S.poll = setInterval(function () {
@@ -1462,8 +1509,13 @@
         if (signature() !== S.sig) redraw();
       }, 400);
     }
-    if (!S.minute) S.minute = setInterval(function () { if (isCurrent() && !modalOpen()) redraw(); }, 60000);   // العدّاد: نصوص الأزمنة تتجدّد بلا إعادة تحميل
+    if (!S.minute) S.minute = setInterval(function () {
+      if (!isCurrent() || modalOpen()) return;
+      if (currentTab() === 'pipeline' && Date.now() - S.lastRefresh >= 55000) refreshKeys(WAITING);
+      redraw();
+    }, 60000);   // العدّاد: نصوص الأزمنة تتجدّد بلا إعادة تحميل
   };
   API._state = S;
+  API._t = { safeHref: safeHref, safeLink: safeLink, creativeSheet: creativeSheet, testimonialSheet: testimonialSheet, approveTestimonial: approveTestimonial, refreshKeys: refreshKeys, WAITING: WAITING };   // خطّاف اختبار فقط
   API._tick = function (t) { S.nowOverride = t || 0; redraw(); };
 })();

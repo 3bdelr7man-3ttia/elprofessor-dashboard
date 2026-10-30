@@ -3538,7 +3538,7 @@
     post("/platform-topics/" + encodeURIComponent(t.id) + "/generate-article", {})
       .then(function (art) {
         if (!art || !art.title || !Array.isArray(art.body) || !art.body.length)
-          throw new Error("لم يُنشئ الذكاء مقالًا صالحًا — حاول مرّة أخرى");
+          throw new Error("لم تُكتب مسودة صالحة — حاول مرّة أخرى");
         // store the FRESH article (not the topic text) as a draft in the blog CMS
         return post("/content/articles", {
           title: art.title,
@@ -3549,7 +3549,7 @@
           keywords: art.keywords || [],
           faq: art.faq || [],
           target_audience: art.target_audience || "عام",   // «الفئوية» → site audience filter
-          by: "الوكيل الذكي — تحليل قانوني",
+          by: "فريق البروفيسور — تحليل قانوني",
           body: art.body,                 // list[str]: paragraphs + '## ' headings
           image_url: "",
         });
@@ -3564,7 +3564,7 @@
       .catch(function (e) {
         // honest failure: hand the real reason to the caller (which shows a LOUD error) — no fake
         // success, no draft created, and the topic is reset by the caller (not stuck «الوكيل يكتب»).
-        var msg = (e && e.message) || "تعذّر توليد المقال بالذكاء";
+        var msg = (e && e.message) || "تعذّرت كتابة المقال — حاول مرّة أخرى";
         if (done) done(false, null, msg);
       });
   };
@@ -3617,7 +3617,7 @@
   EP.runDailyContent = function (after, opts) {
     post("/platform-articles/daily-run", { articles: 3, topics: 2, publish: false })
       .then(function (r) {
-        if (r && r.already_running) { note("الكتابة الآلية تعمل الآن بالفعل."); if (after) after(); return; }
+        if (r && r.already_running) { note("الكتابة الآلية تعمل الآن بالفعل."); if (after) after({ alreadyRunning: true }); return; }
         note("بدأت الكتابة الآلية. تظهر المسودات بعد انتهائها.");
         if (after) after();
         var tries = 0;

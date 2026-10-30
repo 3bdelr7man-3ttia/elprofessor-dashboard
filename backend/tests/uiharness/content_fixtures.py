@@ -101,8 +101,9 @@ PLATFORM_ARTICLES = [
     {"id": "pa-3", "title": "مقال منشور على المنصة", "category": "law", "excerpt": "ملخص", "status": "published", "created_at": iso(-100.0), "published_at": iso(-90.0), "body": "نص."},
 ]
 CREATIVE = [
-    {"id": "cr-1", "title": "أغنية العدالة", "kind": "song", "creator_email": "artist@example.test", "creator_name": "سلمى الفنانة", "media_url": "https://example.test/song", "body": "", "cover_url": "", "status": "pending_review", "created_at": iso(-12.0)},
+    {"id": "cr-1", "title": "أغنية العدالة", "kind": "song", "creator_email": "artist@example.test", "creator_name": "سلمى الفنانة", "media_url": "https://example.test/song", "body": "", "cover_url": "https://img.example.test/cover-song.jpg", "status": "pending_review", "created_at": iso(-12.0)},
     {"id": "cr-2", "title": "قصيدة الميزان", "kind": "poem", "creator_email": "poet@example.test", "creator_name": "", "media_url": "", "body": "يا ميزانَ الحقّ…\nيا ميزانَ الحقّ يا ميزان\nأنصفْ مَن ضاق به الزمان", "cover_url": "", "status": "pending_review", "created_at": iso(-52.0)},
+    {"id": "cr-3", "title": "عمل برابط غير صالح", "kind": "video", "creator_email": "video@example.test", "creator_name": "كريم المصوّر", "media_url": "javascript:alert(1)", "body": "", "cover_url": "https://img.example.test/cover-video.jpg", "status": "pending_review", "created_at": iso(-70.0)},
 ]
 TESTIMONIALS = [
     {"id": "TST_A1", "course_slug": "contract-basics", "course_title": "أساسيات صياغة العقود", "user_email": "learner1@example.test", "name": "منى سعيد", "text": "دورة مرتبة وأفادتني كثيرًا في عملي اليومي.",
@@ -371,7 +372,7 @@ def seed_site(appmod):
         for title, status, words, img, meta, rev, created_h, pub_h in BLOG_POSTS:
             paras = ["## عنوان فرعي"] + [" ".join(["كلمة"] * 40) for _ in range(max(1, words // 40))]
             a = m.Article(title=title, excerpt="مقتطف قصير عن " + title, cat="قانون الشركات", kicker="تشريعات", date="٣٠ أكتوبر ٢٠٢٦", by="الإدارة", status=status,
-                          body=json.dumps(paras, ensure_ascii=False), image_url=("https://dash.test/v2/img/content.jpg" if img else None),
+                          body=json.dumps(paras, ensure_ascii=False), image_url=("https://img.example.test/article-cover.jpg" if img else None),
                           meta_description=("وصف لمحركات البحث يبدأ بالإجابة." if meta else None), reviewed_by=rev,
                           created_at=now + datetime.timedelta(hours=created_h),
                           published_at=(now + datetime.timedelta(hours=pub_h)) if pub_h is not None else None)

@@ -11,7 +11,7 @@
 .v2ct button,.v2ct input,.v2ct select,.v2ct-m button,.v2ct-m input,.v2ct-m textarea,.v2ct-m select{font-family:inherit}
 .v2ct button:focus-visible,.v2ct a:focus-visible,.v2ct select:focus-visible,.v2ct-m button:focus-visible,.v2ct-m a:focus-visible,.v2ct-m input:focus-visible,.v2ct-m textarea:focus-visible,.v2ct-m select:focus-visible{outline:3px solid rgba(158,43,78,.45);outline-offset:2px}
 .v2ct p,.v2ct h2,.v2ct h3,.v2ct h4,.v2ct-m p,.v2ct-m h2,.v2ct-m h3{margin:0}
-.v2ct-ltr{direction:ltr;display:inline-block;unicode-bidi:plaintext}
+.v2ct-ltr{direction:ltr;display:inline-block;unicode-bidi:plaintext;max-width:100%;overflow-wrap:anywhere}
 
 /* —— أزرار: واحد أساسي في كل بطاقة وورقة */
 .v2ct-b1,.v2ct-b2,.v2ct-b3{display:inline-flex;align-items:center;justify-content:center;min-height:48px;padding:0 20px;border-radius:14px;font:800 15.5px 'Cairo',sans-serif;cursor:pointer;text-decoration:none;border:0;max-width:100%;text-align:center;line-height:1.4}
@@ -143,6 +143,7 @@
 .v2ct-nums{display:flex;flex-wrap:wrap;gap:12px}
 .v2ct-nums>div{background:var(--paper);border-radius:14px;padding:10px 18px;display:grid;gap:2px;min-width:120px}
 .v2ct-nums b{font:800 28px/1.2 'Cairo',sans-serif}
+.v2ct-nums b.na{font-size:15px;font-weight:700;color:var(--mute)}
 .v2ct-nums span{font-size:13.5px;color:var(--mute)}
 .v2ct-top{list-style:none;margin:0;padding:0;display:grid;gap:8px}
 .v2ct-top li{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;background:var(--paper);border-radius:12px;padding:8px 12px}
@@ -249,3 +250,5 @@
 @media(prefers-reduced-motion:reduce){
   .v2ct-t.ph .v2ct-body i{animation:none}
 }
+.v2ct-open.static{cursor:default;min-height:0;padding:6px 0}
+.v2ct-open.static:hover{color:var(--ink);text-decoration:none}
