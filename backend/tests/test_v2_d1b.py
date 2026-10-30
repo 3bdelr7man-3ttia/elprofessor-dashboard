@@ -83,7 +83,9 @@ def test_the_tabs_match_the_approved_table():
         # D2: «الملفات» و«النزاعات» لوحتا تذاكر (موديولان وهميان ورا الغلاف)، والوارد القديم في تبويب «كل …» (لا شاشة اتفقدت)
         'files': [['files', 'الملفات', 'v2files'], ['experts', 'الخبراء', 'team'], ['all', 'كل الملفات', 'inbox']],
         'disputes': [['disputes', 'النزاعات', 'v2disputes'], ['escrow', 'الضمان', 'escrow'], ['all', 'كل النزاعات', 'inbox']],
-        'courses': [['courses', 'الدورات', 'courses'], ['trainers', 'المدرّبون', 'team']],
+        # الجولة الأخيرة: «الدورات والمدرّبون» بشاشاته الجديدة (تبويب مخفي لصفحة الدورة)، والشاشة القديمة آخرًا في «كل السجلات»
+        'courses': [['courses', 'الدورات', 'courses'], ['trainers', 'المدرّبون', 'team'], ['live', 'الدورات الحيّة', 'courses'], ['demand', 'ما يطلبه الناس', 'courses'],
+                    ['offers', 'عروض الأسعار', 'courses'], ['course', 'صفحة الدورة', 'courses'], ['all', 'كل السجلات', 'courses']],
         'market': [['requests', 'الطلبات', 'market']],
         # D3: مراجعة العروض وطلبات القرّاء أولًا (موديولان وهميان ورا الغلاف)، والشاشة القديمة آخرًا
         'books': [['offers', 'مراجعة العروض', 'v2b_offers'], ['requests', 'طلبات القرّاء', 'v2b_requests'], ['books', 'الكتب والأعمال', 'knowledge']],
@@ -160,7 +162,7 @@ def test_inner_screen_state_picks_the_right_tab_and_unknown_state_stays_put():
         ('escrow', {'escTab': 'manual'}, 'money', 'manual'), ('escrow', {'escTab': 'disputes'}, 'disputes', 'escrow'),
         ('finance', {'finTab': 'packages'}, 'money', 'all'), ('finance', {'finTab': 'withdrawals'}, 'money', 'all'),
         ('topics', {'topicsTab': 'tutorials'}, 'content', 'tutorials'), ('topics', {'topicsTab': 'news'}, 'content', 'topics'),
-        ('courses', {'courseTab': 'demand'}, 'courses', 'courses'), ('home', {'v2mode': 'brain'}, 'brain', 'log'),
+        ('courses', {'courseTab': 'demand'}, 'courses', 'demand'), ('home', {'v2mode': 'brain'}, 'brain', 'log'),
         ('home', {'v2mode': 'focus'}, 'home', 'board'), ('targets', {'tgTab': 'foundation'}, 'company', 'targets'),
         ('investment', {'invTab': 'opps'}, 'company', 'invest'),
     ]
@@ -187,9 +189,9 @@ def test_an_unknown_module_is_not_mapped():
 def test_section_addresses_round_trip():
     res = _node("""const out=[];L.SECTIONS.forEach(s=>s.tabs.forEach(t=>{const h=L.sectionHash(s.key,t.key);
       out.push([s.key,t.key,h,L.parseSectionHash(h),L.parseSectionHash(h.slice(1)),L.routeFor(h)]);}));console.log(JSON.stringify(out))""")
-    assert len(res) == 35                      # ٢٥ + «كل الملفات» و«كل النزاعات» + صفحة الشخص (مخفية) + D3: الفلوس ٨ (واحد مخفي) بدل ٣، والكتب ٣ بدل ١
+    assert len(res) == 40                      # الجولة الأخيرة: «الدورات والمدرّبون» ٧ تبويبات بدل ٢ (٣٥ + ٥) — ٢٥ + «كل الملفات» و«كل النزاعات» + صفحة الشخص (مخفية) + D3: الفلوس ٨ (واحد مخفي) بدل ٣، والكتب ٣ بدل ١
     for sec, tab, h, p1, p2, r in res:
-        if (sec, tab) in (('people', 'person'), ('money', 'manual')):
+        if (sec, tab) in (('people', 'person'), ('money', 'manual'), ('courses', 'course')):
             continue                           # تبويب مخفي بلا بريد: يرجع لأول تبويب (يُختبر في test_v2_d2)
         assert h == '#s/%s/%s' % (sec, tab)
         assert p1 == {'section': sec, 'tab': tab, 'exact': True} == p2

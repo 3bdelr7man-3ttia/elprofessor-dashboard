@@ -21,12 +21,15 @@ RUN apt-get update \
     && mkdir -p /data
 
 COPY backend/app.py /app/app.py
+# مسارات الأقسام (الجولة الأخيرة): ملف لكل قسم، يسجّله app.py بسطر واحد.
+COPY backend/v2_courses_routes.py /app/v2_courses_routes.py
 # The cloud-design dashboard is the served frontend (Flask serves /app/dist).
 COPY dashboard-cloud/index.html dashboard-cloud/dashboard-api.js dashboard-cloud/site-content.js /app/dist/
 # D1 · اللوحة الجديدة (ورا مفتاح DASH_V2_ENABLED): منطقها النقي + رسمها + تنسيقها + صور المربّعات.
 # D1-B · الهيكل الجديد (قوائم الأقسام والتبويبات).
 COPY dashboard-cloud/v2-logic.js dashboard-cloud/v2-home.js dashboard-cloud/v2-home.css dashboard-cloud/v2-shell.js dashboard-cloud/v2-shell.css dashboard-cloud/v2-d2.js dashboard-cloud/v2-d2.css dashboard-cloud/v2-d3.js dashboard-cloud/v2-d3.css /app/dist/
 COPY dashboard-cloud/v2/img /app/dist/v2/img
+COPY dashboard-cloud/v2s /app/dist/v2s
 
 EXPOSE 8080
 
