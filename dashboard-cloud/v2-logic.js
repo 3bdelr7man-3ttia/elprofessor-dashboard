@@ -320,11 +320,15 @@
     // —— العقل: ما وزّعه اليوم من صفوف الوارد.
     (function (t) {
       t.dest = 'brain'; t.internal = true;
-      if (!rows) return failTile(t);
-      var n = v2BrainLog(rows, now).length;
+      // v2s:brain — الرقم الواحد للمربّع والقائمة والشاشة: لو جاء من سجل اليوم الكامل (عدد) نستعمله، وفشله (null) فشل للمربّع،
+      // وغيابه (undefined) يبقي العدّ القديم من صفوف الوارد. ⛔ لا حساب ثانٍ.
+      var n, fromLog = typeof extras.brainToday === 'number';
+      if (fromLog) n = extras.brainToday;
+      else if (extras.brainToday === null) return failTile(t);
+      else { if (!rows) return failTile(t); n = v2BrainLog(rows, now).length; }
       t.count = n;
       t.next = n ? 'وزّع ' + U(n, ['ملفًا واحدًا', 'ملفين', 'ملفات', 'ملفًا']) + ' وحده اليوم' : 'لم يوزّع شيئًا اليوم';
-      if (hasTrunc(extras)) markPartial(t);
+      if (fromLog ? extras.brainTodayPartial === true : hasTrunc(extras)) markPartial(t);
     })(T.brain);
 
     return TILE_DEFS.map(function (d) { return T[d.key]; });
@@ -1285,8 +1289,8 @@
       T('demand', 'ما يسأل عنه الناس', 'v2r_demand'),
       T('sunday', 'تقرير الأحد', 'v2r_sunday')
     ] },
-    { key: 'brain', label: 'العقل', img: 'brain', desc: 'ما قرّره العقل اليوم ومساعدوه', tabs: [
-      T('log', 'سجل اليوم', 'home', { v2mode: 'brain' }, { v2mode: ['brain'] }),
+    { key: 'brain', label: 'العقل', img: 'brain', desc: 'ما يفعله العقل وحده، وما ينتظر قرارك. ما له مفتاح تغيّره من هنا.', tabs: [
+      T('log', 'القواعد وسجل اليوم', 'v2s_brain'),
       T('helpers', 'المساعدون', 'ai')
     ] },
     { key: 'company', label: 'الشركة ورأس المال', img: 'company', desc: 'الشركاء والأهداف والإعدادات', tabs: [
@@ -1998,6 +2002,334 @@
     util: { ar: ar, fmt: fmt, U: U, agoText: agoText, curName: curName, moneyText: moneyText, kindOf: kindOf, pickCandidate: pickCandidate,
             dateText: dateText, durShort: durShort, parseAmount: parseAmount, curLong: curLong, sumByCurrency: sumByCurrency }
   };
+  // ===== v2s:brain =====
+  // الجولة الأخيرة · قسم «العقل» (قواعده وسجل اليوم ومساعدوه). ⛔ نقي: لا DOM ولا شبكة ولا ساعة خفية (`now` يُمرَّر صراحةً).
+  // مصدر فاشل = null (لا صفر). كل نص ظاهر فصحى بسيطة بلا مصطلحات تقنية ولا «اعكس» (لا تراجع حقيقي عن أي فعل تلقائي بعد).
+  var BR_ZONE_RE = /(Z|[+-]\d\d:?\d\d)$/i;
+  // وقت ISO ⇒ ميلي ثانية. بلا منطقة (SQLite) = UTC دائمًا؛ وإلا قرأه المتصفح بتوقيت الجهاز فيقع في يوم خطأ.
+  function v2sBrainTime(s) {
+    if (typeof s === 'number') return isFinite(s) && s > 0 ? s : null;
+    if (typeof s !== 'string' || !s.trim()) return null;
+    var t = s.trim();
+    if (/^\d{4}-\d\d-\d\d$/.test(t)) t += 'T00:00:00Z';
+    else if (!BR_ZONE_RE.test(t)) t += 'Z';
+    var v = Date.parse(t);
+    return isNaN(v) ? null : v;
+  }
+  function v2sBrainSince(now) { var d = new Date(now); d.setHours(0, 0, 0, 0); return d.getTime(); }
+  function brClock(t) {
+    var d = new Date(t), h = d.getHours(), m = d.getMinutes();
+    return ar(h) + ':' + (m < 10 ? '٠' : '') + ar(m);
+  }
+  function brArDigits(t) { return String(t == null ? '' : t).replace(/\d/g, function (d) { return DIG.charAt(+d); }); }   // نص الخادم بأرقام عربية (لا أرقام لاتينية في الشاشة)
+  function brLocal(email) { return String(email || '').split('@')[0]; }
+  function brFile(n, forms) { return U(n, forms || ['ملف واحد', 'ملفان', 'ملفات', 'ملفًا']); }
+
+  // مدخلات السجل: {file_id,title,status,atMs,by,reason,why,to_email,to_name,pre_claim,current,afterAuto}
+  function brFinish(list, since, partial, missing, fromInbox) {
+    var seen = {}, out = [], sinceMs = v2sBrainTime(since);
+    list.forEach(function (e) {
+      if (e.atMs == null || (sinceMs != null && e.atMs < sinceMs)) return;
+      var key = [e.file_id, e.atMs, e.to_email].join('|');
+      if (seen[key]) return;
+      seen[key] = true;
+      out.push(e);
+    });
+    out.sort(function (a, b) { return b.atMs - a.atMs; });
+    var firstAuto = {};
+    out.slice().reverse().forEach(function (e) { if (e.by === 'auto' && firstAuto[e.file_id] == null) firstAuto[e.file_id] = e.atMs; });
+    var changed = {}, autoCount = 0;
+    out.forEach(function (e) {
+      e.afterAuto = e.by !== 'auto' && firstAuto[e.file_id] != null && e.atMs >= firstAuto[e.file_id];
+      if (e.by === 'auto') autoCount++;
+      if (e.afterAuto) changed[e.file_id] = true;
+    });
+    return { entries: out, autoCount: autoCount, changedCount: Object.keys(changed).length, partial: !!partial, missing: !!missing, fromInbox: !!fromInbox };
+  }
+  // ردّ B1 ⇒ {entries, autoCount, changedCount, partial, missing}، أو null إن فشل المصدر (والجسر غير ناقص).
+  function v2sBrainEntries(resp, since) {
+    if (!resp || typeof resp !== 'object') return null;
+    if (resp.files_ok !== true) {
+      if (resp.missing === true) return { entries: [], autoCount: null, changedCount: null, partial: false, missing: true, fromInbox: false };
+      return null;
+    }
+    if (!Array.isArray(resp.entries)) return null;
+    var list = resp.entries.filter(function (e) { return e && typeof e === 'object'; }).map(function (e) {
+      return { file_id: str(e.file_id), title: str(e.title), status: str(e.status), atMs: v2sBrainTime(e.at), by: e.by === 'auto' ? 'auto' : 'founder',
+               reason: str(e.reason), why: str(e.why), to_email: str(e.to_email).toLowerCase(), to_name: str(e.to_name) || null,
+               pre_claim: e.pre_claim === true, current: e.current === true };
+    });
+    return brFinish(list, since, resp.partial === true, false, false);
+  }
+  // احتياط حين يفشل B1: من صفوف الوارد **بما فيها «للعلم»** (ملف وُزّع قبل ساعة ما زال في مهلة الاستلام). ناقص دائمًا (partial).
+  function v2sBrainLogFromInbox(rows, since) {
+    if (!Array.isArray(rows)) return null;
+    var list = [];
+    rows.forEach(function (r) {
+      var f = r && r.ef;
+      if (!f || !Array.isArray(f.assign_log) || !f.assign_log.length) return;
+      var names = {};
+      (Array.isArray(f.candidates) ? f.candidates : []).forEach(function (c) { if (c && c.email && c.name) names[String(c.email).toLowerCase()] = c.name; });
+      (Array.isArray(f.declined) ? f.declined : []).forEach(function (d) { if (d && d.email && d.name && !names[String(d.email).toLowerCase()]) names[String(d.email).toLowerCase()] = d.name; });
+      if (f.assigned_to && f.assigned_name) names[String(f.assigned_to).toLowerCase()] = f.assigned_name;
+      if (f.expert_email && f.expert_name) names[String(f.expert_email).toLowerCase()] = f.expert_name;
+      var last = f.assign_log[f.assign_log.length - 1], assignedTo = str(f.assigned_to).toLowerCase();
+      f.assign_log.forEach(function (e) {
+        if (!e || typeof e !== 'object' || typeof e.to !== 'string' || !e.to) return;
+        var to = e.to.toLowerCase();
+        list.push({ file_id: str(f.id), title: shorten(f.title, 80), status: str(f.status), atMs: v2sBrainTime(e.at), by: e.by === 'auto' ? 'auto' : 'founder',
+                    reason: str(e.reason), why: shorten(e.why, 300), to_email: to, to_name: str(e.to_name) || names[to] || null,
+                    pre_claim: str(f.status) === 'assigned', current: e === last && to === assignedTo });
+      });
+    });
+    return brFinish(list, since, true, false, true);
+  }
+  function brName(e) { return e.to_name || brLocal(e.to_email) || 'خبير'; }
+  // جملة السجل لمدخل ملف، مقسومة [قبل الاسم، الاسم، بعده] ليُرسم الاسم رابطًا لصفحة صاحبه.
+  function v2sBrainLogParts(e) {
+    var t = '«' + (e.title || 'ملف') + '»', n = brName(e);
+    if (e.by !== 'auto') return ['أُرسل ' + t + ' يدويًا إلى ', n, ''];
+    if (e.reason === 'declined') return ['وزّع ' + t + ' على ', n, ' بعد اعتذار خبير'];
+    if (e.reason === 'timeout') return ['نقل ' + t + ' إلى ', n, ' لأن الملف لم يُستلم في وقته'];
+    return ['وزّع ' + t + ' على ', n, ''];
+  }
+  function v2sBrainLogText(e) { return v2sBrainLogParts(e).join(''); }
+  // اسم المساعد وصورته ووصفه بالعربية البسيطة (أسماء الخادم فيها SEO وMaster وn8n).
+  var BR_AGENTS = {
+    master: ['الصورة الكاملة', 'يجمع ما كتبه المساعدون في صورة واحدة وأهم ثلاث خطوات', 'brain-avatar'],
+    articles: ['المقالات', 'المسودات التي تنتظر الاعتماد، وما لم نكتب عنه بعد', 'content'],
+    seo: ['الظهور في البحث', 'هل تظهر مقالاتنا لمن يبحث عنها، وهل ننشر بانتظام', 'reports'],
+    automation: ['الأعمال المتكرّرة', 'ما يتكرّر كل يوم في اللوحة ويمكن أن يعمل وحده', 'files'],
+    sales: ['المبيعات', 'من سأل ولم يشترِ بعد، والخطوة التالية مع كل واحد', 'market'],
+    marketing: ['التسويق', 'أي بلد وأي فئة نخاطب، بناءً على ما يطلبه الناس', 'marketing'],
+    platform: ['المنصة', 'ما ينتظر الاعتماد، وما يبدو غير معتاد في الأرقام', 'company'],
+    topics: ['الموضوعات', 'ما نكتب عنه بعد ذلك، من أسئلة الناس الحقيقية', 'books'],
+    incoming: ['ما يطلبه الزوار', 'من أين يأتي الناس وماذا يسألون', 'people'],
+    dev: ['سلامة الأنظمة', 'الأعطال وما يحتاج إصلاحًا', 'disputes'],
+    finance: ['المالية', 'الدخل والمصروف وما قد يتأخر', 'money']
+  };
+  function v2sBrainAgentInfo(id, serverLabel, serverDesc) {
+    var a = BR_AGENTS[id];
+    return a ? { label: a[0], desc: a[1], img: a[2] } : { label: str(serverLabel) || str(id), desc: str(serverDesc), img: 'reports' };
+  }
+  // سجل اليوم كاملًا: مدخلات التوزيع (التي وزّعها العقل + تغيير المؤسس اللاحق) وتقارير المساعدين المكتوبة اليوم، الأحدث أولًا.
+  function v2sBrainLogRows(ent, agents, since) {
+    var rows = [], sinceMs = v2sBrainTime(since);
+    ((ent && ent.entries) || []).forEach(function (e) {
+      if (e.by !== 'auto' && !e.afterAuto) return;
+      var act = e.by === 'auto' && e.pre_claim && e.current ? { kind: 'send', label: 'أرسله لخبير آخر' } : { kind: 'open', label: 'اعرض' };
+      rows.push({ kind: 'file', atMs: e.atMs, time: brClock(e.atMs), text: v2sBrainLogText(e), parts: v2sBrainLogParts(e), why: e.by === 'auto' ? brArDigits(shorten(e.why, 160)) : '', muted: e.by !== 'auto',
+                  entry: e, action: act, name: brName(e), email: e.to_email });
+    });
+    (Array.isArray(agents) ? agents : []).forEach(function (a) {
+      var t = v2sBrainTime(a && a.created_at);
+      if (t == null || (sinceMs != null && t < sinceMs) || !str(a.summary)) return;
+      var id = str(a.agent || a.id), info = v2sBrainAgentInfo(id, a.label, a.desc);
+      rows.push({ kind: 'report', atMs: t, time: brClock(t), text: 'كتب مساعد «' + info.label + '» تقريره', why: '', muted: false, agent: id, action: { kind: 'report', label: 'اعرض' } });
+    });
+    rows.sort(function (a, b) { return b.atMs - a.atMs; });
+    return rows;
+  }
+
+  // —— القواعد
+  var BR_PLATFORM_LABEL = { sla: 'حارس المهلة والاسترداد', remind: 'تذكيرات المواعيد', tick: 'ساعة الدورات الحيّة', invite_reminders: 'تذكير أصحاب الدعوات', coach: 'متابعة المتدرّبين المتوقّفين' };
+  var BR_HB = { sla: 'sla_last', remind: 'remind_last', tick: 'tick_last', invite_reminders: 'invite_reminders_last', coach: 'coach_stalled_last' };
+  var BR_GROUPS = [['files', 'ملفات الخبراء والاستشارات'], ['courses', 'الدورات'], ['people', 'الناس والدعوات'], ['content', 'المحتوى']];
+  // الصفوف بالترتيب: [المفتاح، المجموعة، العنوان، التشغيل (run)، الوجهة]
+  var BR_ROWS = [
+    ['assign', 'files', 'توزيع الملفات على الخبراء', 'sla', 'files'],
+    ['move', 'files', 'نقل الملف إن لم يُستلم', 'sla', 'files'],
+    ['unclaimed_refund', 'files', 'ردّ مبلغ الملف الذي لا يستلمه أحد', 'sla', 'files'],
+    ['consult_refund', 'files', 'ردّ مبلغ الاستشارة عند تأخر الرد', 'sla', 'disputes'],
+    ['release', 'files', 'تحرير أجر الخبير بعد التسليم', 'sla', 'disputes'],
+    ['case_release', 'files', 'تحرير مراحل القضية', 'sla', 'files'],
+    ['urgent', 'files', 'الملف المستعجل الذي لم يُستلم في وقته', 'sla', 'files'],
+    ['reminders', 'files', 'تذكيرات الملفات', 'sla', 'files'],
+    ['first_review', 'files', 'مراجعة أول ملفات الخبير الجديد', null, 'files'],
+    ['offer_accept', 'courses', 'عروض الأسعار على الدورات', null, 'courses'],
+    ['live', 'courses', 'الدورات المباشرة', 'tick', 'courses'],
+    ['session_remind', 'courses', 'تذكير مواعيد الجلسات', 'remind', 'courses'],
+    ['coach', 'courses', 'متابعة المتعلّمين المتوقّفين', 'coach', 'courses'],
+    ['invite_remind', 'people', 'تذكير الدعوات المنتظرة', 'invite_reminders', 'invites'],
+    ['invite_approval', 'people', 'دعوات الأجيال البعيدة', null, 'invites'],
+    ['comments', 'content', 'التعليقات على الموضوعات', null, 'content']
+  ];
+  var BR_LINK = { files: ['افتح ملفات الخبراء', 'files', null], disputes: ['افتح النزاعات والاستردادات', 'disputes', null], courses: ['افتح الدورات', 'courses', null],
+                  invites: ['افتح الدعوات', 'people', 'invites'], content: ['افتح المحتوى', 'content', null] };
+  var BR_PLAIN_SENT = {
+    unclaimed_refund: 'عندما تمر مهلة الاستلام بعد الدفع دون أن يستلم أي خبير الملف، يُردّ المبلغ كاملًا إلى صاحب الطلب.',
+    consult_refund: 'عندما لا يرد الخبير على الاستشارة في المهلة الموعودة، يُردّ المبلغ إلى محفظة صاحب الطلب.',
+    case_release: 'عندما تمر مهلة المرحلة دون اعتراض، يتحرّر أجرها.',
+    urgent: 'عندما لا يُستلم الملف المستعجل في وقته، يصبح عاديًا ويُردّ فرق السعر إلى صاحب الطلب.',
+    reminders: 'عندما يتأخر الدفع، أو تنقص معلومات، أو يقترب موعد جلسة، يصل تذكير إلى صاحبه.',
+    first_review: 'عندما يسلّم خبير جديد أحد ملفاته الأولى، ينتظر الرأي مراجعتك قبل أن يصل إلى صاحب الطلب.',
+    offer_accept: 'عندما يعرض متعلّم السعر العادل أو أكثر، يُقبل العرض وحده. وما هو أقل ينتظر قرارك.',
+    live: 'عندما يكتمل العدد في موعده، تُفتح مهلة الدفع وحدها. وإن لم يكتمل، تنتظر الدورة قرارك.',
+    session_remind: 'عندما تقترب جلسة، يصل تذكير إلى كل مشارك.',
+    coach: 'عندما يتوقف متعلّم عن دورته مدة، تصله رسالة تشجيع وحدها، ولا تتكرر له قبل مهلة.',
+    invite_remind: 'عندما يطول انتظار دعوة، يصل تذكير إلى المدعو أو إلى صاحب الدعوة.',
+    comments: 'عندما يكون التعليق في الموضوع وبلا إساءة، يُنشر وحده. وغير ذلك ينتظر مراجعة.'
+  };
+  var BR_ALWAYS = { unclaimed_refund: 1, consult_refund: 1, release: 1, case_release: 1, urgent: 1 };
+  var BR_STATIC_LINE = { first_review: 'في ملفات الخبراء', offer_accept: 'يعمل لحظة العرض', comments: 'يعمل لحظة التعليق' };
+
+  function v2sBrainRunText(at, now, unavailable) {
+    if (unavailable) return 'آخر تشغيل: غير متاح بعد';
+    var t = v2sBrainTime(at);
+    if (t == null) return 'لم يعمل حتى الآن';
+    var d = Math.max(0, (now || 0) - t);
+    return 'آخر تشغيل: ' + (d < MIN ? 'الآن' : 'منذ ' + durShort(d));
+  }
+  // التنبيه المبسَّط لتشغيل بعينه (باسمه في المنصة) أو null. ⛔ نص المنصة الخام لا يُعرض: من `v2Health`.
+  function v2sBrainStopped(queue, platformLabel) {
+    if (!queue) return null;
+    var al = v2Health(queue).alerts;
+    for (var i = 0; i < al.length; i++) if (al[i].indexOf(platformLabel + ':') === 0) return al[i];
+    return null;
+  }
+  function v2sBrainStoppedAll(queue) {
+    var out = [];
+    Object.keys(BR_PLATFORM_LABEL).forEach(function (k) { var a = v2sBrainStopped(queue, BR_PLATFORM_LABEL[k]); if (a && out.indexOf(a) < 0) out.push(a); });
+    return out;
+  }
+  function brReleaseWord(h) {
+    if (h >= 48 && h % 24 === 0) return U(h / 24, ['يوم', 'يومان', 'أيام', 'يومًا']);
+    return U(h, ['ساعة', 'ساعتان', 'ساعات', 'ساعة']);
+  }
+  // input = {settings: ردّ B2|null, queue: opsQueue|null, invite: inviteSettings|null, now}
+  function v2sBrainRules(input) {
+    input = input || {};
+    var S = input.settings && typeof input.settings === 'object' ? input.settings : null, Q = input.queue || null, now = input.now || 0;
+    var inv = input.invite && !input.invite.missing ? input.invite : null;
+    var A = S && S.auto_assign && typeof S.auto_assign.value === 'boolean' ? S.auto_assign : null;
+    var missingAuto = !!(S && S.auto_assign_missing);
+    var hb = Q && Q.heartbeats && typeof Q.heartbeats === 'object' ? Q.heartbeats : {};
+    var hours = S && typeof S.release_hours === 'number' && S.release_hours > 0 ? S.release_hours : null;
+    var gen = inv && inv.invite_approval_from_generation != null && isFinite(Number(inv.invite_approval_from_generation)) ? Number(inv.invite_approval_from_generation) : null;
+    var groups = BR_GROUPS.map(function (g) { return { key: g[0], title: g[1], rows: [] }; }), flat = [];
+    BR_ROWS.forEach(function (d) {
+      var key = d[0], run = d[3], lk = BR_LINK[d[4]];
+      var alert = run ? v2sBrainStopped(Q, BR_PLATFORM_LABEL[run]) : null;
+      var runLine = run ? v2sBrainRunText(hb[BR_HB[run]], now, !Q) : (BR_STATIC_LINE[key] || '');
+      var row = { key: key, group: d[1], title: d[2], sentence: BR_PLAIN_SENT[key] || '', control: null, line: runLine,
+                  run: { text: runLine, stopped: !!alert, alert: alert }, runKey: run, stopped: alert,
+                  link: { label: lk[0], section: lk[1], tab: lk[2] } };
+      if (key === 'assign') {
+        row.sentence = 'عندما يُدفع ملف، يُرسل وحده إلى أنسب خبير متاح: حسب التخصص، ثم بلد القانون، ثم الأقل انشغالًا.';
+        if (A) {
+          row.control = { type: 'switch', value: A.value, label: A.value ? 'وحده' : 'يسألني', tone: A.value ? 'auto' : 'ask' };
+          if (A.explicit === true) {
+            var when = A.updated_at ? agoText(v2sBrainTime(A.updated_at), now) : '';
+            row.line = 'آخر تغيير: ' + (when || 'غير متاح بعد') + (A.updated_by ? ' بواسطة ' + A.updated_by : '');
+          } else if (A.explicit === false) row.line = 'لم يُغيَّر من قبل';
+        } else {
+          row.control = { type: 'chip', value: null, label: 'غير متاح بعد', tone: 'na' };
+          row.line = missingAuto ? 'التوزيع التلقائي غير موجود على المنصة بعد' : 'تعذّر جلب حالة التوزيع';
+        }
+      } else if (key === 'move') {
+        var on = A ? A.value : null;
+        row.sentence = on === false ? 'عندما لا يستلم الخبير الملف في مهلته، يصلك تنبيه لترسله بنفسك.' : 'عندما لا يستلم الخبير الملف في مهلته، يُرسل وحده إلى الخبير التالي.';
+        row.control = on === null ? { type: 'chip', value: null, label: 'غير متاح بعد', tone: 'na' } : { type: 'chip', value: on, label: on ? 'وحده' : 'يسألني', tone: on ? 'auto' : 'ask' };
+        if (on === null) row.line = 'تعذّر جلب حالة التوزيع';
+      } else if (key === 'release') {
+        row.sentence = hours != null ? 'عندما تمر ' + brReleaseWord(hours) + ' على التسليم دون اعتراض، يتحرّر أجر الخبير.' : 'عندما تمر مهلة الاعتراض بعد التسليم دون اعتراض، يتحرّر أجر الخبير.';
+        row.hours = hours;
+        row.control = { type: 'chip', value: null, label: 'وحده دائمًا', tone: 'auto' };
+      } else if (key === 'invite_approval') {
+        row.sentence = gen != null ? 'عندما يدعو عضو من الجيل ' + ar(gen) + ' أو بعده، تنتظر الدعوة موافقتك.' : 'عندما تأتي دعوة من جيل بعيد، تنتظر موافقتك.';
+        row.line = gen != null ? 'من الجيل ' + ar(gen) : 'الجيل: غير متاح بعد';
+        row.control = { type: 'chip', value: null, label: 'يسألني', tone: 'ask' };
+        row.link = { label: 'غيّرها من الدعوات', section: 'people', tab: 'invites' };
+      } else if (key === 'first_review') {
+        row.control = { type: 'chip', value: null, label: 'يسألني', tone: 'ask' };
+      } else {
+        row.control = { type: 'chip', value: null, label: BR_ALWAYS[key] ? 'وحده دائمًا' : 'وحده', tone: 'auto' };
+      }
+      // تنبيه المنصة باسم التشغيل يحلّ محلّ الشارة فقط (المفتاح الحقيقي يبقى ظاهرًا)، ونصّه هو سطر الحالة.
+      if (alert) {
+        if (row.control.type === 'chip') row.control = { type: 'chip', value: null, label: 'متوقّف', tone: 'stop' };
+        row.line = alert;
+      }
+      groups.filter(function (g) { return g.key === d[1]; })[0].rows.push(row);
+      flat.push(row);
+    });
+    return { groups: groups, rows: flat, autoAssign: A ? A.value : null };
+  }
+  // سطر العقل في التبويب الأول: أول حالة صحيحة. ctx = {queue, settings, entries (ناتج v2sBrainEntries|null), rulesOk}
+  function v2sBrainLine(ctx) {
+    ctx = ctx || {};
+    var Q = ctx.queue || null, S = ctx.settings || null, ent = ctx.entries || null;
+    var stopped = v2sBrainStoppedAll(Q);
+    if (stopped.length) return { text: stopped[0], button: null };
+    var A = S && S.auto_assign && typeof S.auto_assign.value === 'boolean' ? S.auto_assign.value : null;
+    var waiting = Q ? qn(Q, 'expert_files_awaiting_assignment') : 0;
+    if (A === false && waiting > 0) return { text: 'التوزيع التلقائي متوقّف، وينتظر توزيعك: ' + brFile(waiting), button: { label: 'افتح الملفات', section: 'files' } };
+    var n = ent && typeof ent.autoCount === 'number' ? ent.autoCount : null;
+    var least = ent && (ent.partial || ent.fromInbox) ? 'على الأقل ' : '';
+    if (n != null && n > 0) {
+      var m = ent.changedCount || 0;
+      return { text: 'وُزّع اليوم ' + least + brFile(n) + ' وحده' + (m > 0 ? '، وغُيّر خبير ' + brFile(m, ['ملف واحد', 'ملفين', 'ملفات', 'ملفًا']) + ' منها يدويًا' : '') + '.', button: null };
+    }
+    var failed = [];
+    if (!ent || n == null) failed.push('الملفات');
+    if (!Q) failed.push('حالة ما يعمل وحده');
+    if (!S || S.auto_assign == null && !S.auto_assign_missing) failed.push('القواعد');
+    if (!failed.length) {
+      var noAlerts = !(Array.isArray(Q.alerts) && Q.alerts.length);
+      return { text: 'لم يوزّع العقل شيئًا اليوم' + (noAlerts ? '، وكل ما يعمل وحده يعمل' : '') + '.', button: null };
+    }
+    return { text: 'تعذّر جلب بعض ما يفعله العقل: ' + failed.join('، ') + '. لا نعرف الصورة كاملة.', button: null };
+  }
+
+  // —— المساعدون
+  // agentsResp = EP.data.aiAgents {agents, ai_configured}|null · status = ردّ B3|null · running = معرّف المساعد قيد الكتابة|null
+  function v2sBrainHelpers(agentsResp, status, running) {
+    if (!agentsResp || !Array.isArray(agentsResp.agents)) return null;
+    var list = agentsResp.agents.filter(function (a) { return a && typeof a === 'object'; });
+    var blocked = !!(status && status.blocked === true);
+    var remaining = status && typeof status.remaining === 'number' ? status.remaining : null;
+    var count = list.length, busy = !!running;
+    var cards = list.map(function (a) {
+      var id = str(a.agent || a.id), info = v2sBrainAgentInfo(id, a.label, a.desc), t = v2sBrainTime(a.created_at);
+      return { id: id, label: info.label, desc: info.desc, img: info.img, summary: str(a.summary), bullets: Array.isArray(a.bullets) ? a.bullets : [],
+               actions: Array.isArray(a.actions) ? a.actions : [], createdMs: t, hasReport: !!str(a.summary),
+               dataOnly: a.source === 'data' || a.ai_unavailable === true || /بلا تحليل نصّي\.?$/.test(str(a.summary)), canRun: !busy && !blocked, running: running === id };
+    });
+    cards.sort(function (a, b) { return (a.id === 'master' ? 0 : 1) - (b.id === 'master' ? 0 : 1); });
+    var short = remaining !== null && remaining < count;
+    var remText = !status ? 'غير متاح بعد' : status.cap == null ? 'بلا سقف' : remaining == null ? 'غير متاح بعد' : remaining === 0 ? 'لا شيء' : ar(remaining);
+    return { cards: cards, master: cards.filter(function (c) { return c.id === 'master'; })[0] || null, count: count, remaining: remaining, remainingText: remText, blocked: blocked,
+             canRunAll: !busy && !blocked && !short && count > 0, runAllReason: short ? 'لا يكفي المتبقي من تحديثات اليوم' : '',
+             configured: status && typeof status.configured === 'boolean' ? status.configured : (typeof agentsResp.ai_configured === 'boolean' ? agentsResp.ai_configured : null) };
+  }
+  // قرص «تحديثات اليوم» في تبويب المساعدين.
+  function v2sBrainCap(status) {
+    if (!status || typeof status !== 'object') return 'غير متاح بعد';
+    if (status.cap == null) return 'بلا سقف';
+    if (status.used == null) return 'غير متاح بعد';
+    return ar(status.used) + ' من ' + ar(status.cap);
+  }
+  function v2sBrainHelpersLine(H, status, now) {
+    if (status && status.blocked === true) return 'وصلت تحديثات اليوم إلى حدّها، وتعود بعد منتصف الليل بتوقيت غرينتش.';
+    if (status && status.configured === false) return 'التحليل المكتوب غير مفعّل الآن، فيكتب المساعدون الأرقام وحدها.';
+    var m = H && H.master;
+    if (m && m.hasReport && m.createdMs != null) return 'آخر صورة كاملة كُتبت ' + agoText(m.createdMs, now) + '.';
+    return 'لم تُكتب الصورة الكاملة بعد.';
+  }
+  function v2sBrainConfirmAll(H) {
+    var n = H.count;
+    return 'سيكتب المساعدون ' + U(n, ['مساعد واحد', 'مساعدان', 'مساعدين', 'مساعدًا']) + ' تقاريرهم الآن، وتُحسب ' + U(n, ['تحديث واحد', 'تحديثان', 'تحديثات', 'تحديثًا'])
+      + ' من تحديثات اليوم (المتبقي: ' + H.remainingText + ').';
+  }
+
+  Object.assign(api, {
+    v2sBrainTime: v2sBrainTime, v2sBrainSince: v2sBrainSince, v2sBrainEntries: v2sBrainEntries, v2sBrainLogFromInbox: v2sBrainLogFromInbox,
+    v2sBrainLogText: v2sBrainLogText, v2sBrainLogParts: v2sBrainLogParts, v2sBrainLogRows: v2sBrainLogRows, v2sBrainRules: v2sBrainRules, v2sBrainRunText: v2sBrainRunText,
+    v2sBrainStopped: v2sBrainStopped, v2sBrainStoppedAll: v2sBrainStoppedAll, v2sBrainLine: v2sBrainLine, v2sBrainHelpers: v2sBrainHelpers,
+    v2sBrainAgentInfo: v2sBrainAgentInfo, v2sBrainCap: v2sBrainCap, v2sBrainHelpersLine: v2sBrainHelpersLine, v2sBrainConfirmAll: v2sBrainConfirmAll
+  });
+  // ===== /v2s:brain =====
+
   root.V2L = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
 

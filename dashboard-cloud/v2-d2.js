@@ -55,7 +55,7 @@
     return {
       now: now, Q: Q, rows: rows, failed: (window.INBOX_FAILED || []).slice(), trunc: (window.INBOX_TRUNCATED || []).slice(),
       inboxState: stateOf('inbox'), queueState: stateOf('opsQueue'), auto: auto,
-      brainToday: live ? L.v2BrainLog(live, now).length : 0
+      brainToday: (function () { var n = window.V2SEC && V2SEC.brain && V2SEC.brain.tileCount ? V2SEC.brain.tileCount() : undefined; return typeof n === 'number' ? n : (live ? L.v2BrainLog(live, now).length : 0); })()
     };
   }
   function fileRows(rows) {
@@ -65,7 +65,7 @@
     var E = ep();
     var n = (window.INBOX || []).length;
     return SOURCES.map(stateOf).join(',') + '|' + n + '|' + (window.INBOX_FAILED || []).length + '|' + (window.INBOX_TRUNCATED || []).length
-      + '|' + (E && E.data && E.data.efSettings ? String(E.data.efSettings.auto_assign) : '');
+      + '|' + (E && E.data && E.data.efSettings ? String(E.data.efSettings.auto_assign) : '') + (window.V2SEC && V2SEC.brain && V2SEC.brain.sig ? '|' + V2SEC.brain.sig() : '');
   }
 
   // ------------------------------------------------------------------ شرائح تحذير مشتركة

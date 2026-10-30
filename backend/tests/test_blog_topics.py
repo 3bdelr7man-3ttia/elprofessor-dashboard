@@ -162,7 +162,8 @@ def test_dockerfile_ships_every_backend_module_the_app_imports():
     for m in re.findall(r'^\s*import (\w+)|^\s*from (\w+) import', src, re.M):
         name = m[0] or m[1]
         if name in local and name not in ('app', 'conftest'):
-            assert 'COPY backend/%s.py ' % name in docker, name
+            # ملفات مسارات أقسام الجولة الأخيرة (v2_<key>_routes.py) تُنسخ بسطر واحد مشترك (glob).
+            assert ('COPY backend/%s.py ' % name in docker) or (re.fullmatch(r'v2_\w+_routes', name) and 'COPY backend/v2_*_routes.py ' in docker), name
 
 
 # ——— ٣) طرفي: prerender.py + القوالب الحقيقية ⇒ صفحات على القرص ———

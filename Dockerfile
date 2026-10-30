@@ -44,6 +44,8 @@ COPY backend/v2_content_routes.py /app/v2_content_routes.py
 COPY backend/v2_marketing_routes.py /app/v2_marketing_routes.py
 COPY dashboard-cloud/v2s /app/dist/v2s
 COPY backend/v2_reports_routes.py /app/v2_reports_routes.py
+COPY backend/v2_brain_routes.py /app/v2_brain_routes.py
+# الجولة الأخيرة · أقسام الداشبورد (كل قسم ملفاته: v2s/<key>.js|css ومساراته v2_<key>_routes.py) — سطران مشتركان لكل الأقسام.
 
 EXPOSE 8080
 
