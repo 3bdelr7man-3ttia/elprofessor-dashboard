@@ -2692,6 +2692,13 @@ def v2_book_request_patch(request_id):
                      'book_request.update', request_id, {k: v for k, v in out.items() if k != 'public_text'})
 
 
+# ---- v2 section routes: كل قسم في الجولة الأخيرة ملف مسارات مستقل يُسجَّل بسطر واحد (guarded) قبل العلامة التالية ----
+try:
+    from v2_brain_routes import register as _v2_brain_register; _v2_brain_register(app, globals())
+except Exception: logger.exception('v2 brain routes not loaded')
+# ---- v2 section routes end
+
+
 @app.route('/api/platform-pnl', methods=['GET'])
 @token_required
 @roles_required('admin')

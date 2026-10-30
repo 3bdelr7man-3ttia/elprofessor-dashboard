@@ -65,6 +65,8 @@
     // D3: عروض الكتب في الطابور الجديد (رقم من الجسر؛ تعذّر ⇒ null؛ لم يُحمَّل بعد ⇒ غير موجود فلا يتغيّر العدّ).
     var d3 = window.V2D3 && window.V2SHELL && V2SHELL.on ? V2D3.cardSources() : null;
     if (d3 && d3.offersCount !== undefined) extras.bookOffers = d3.offersCount;
+    // العقل: رقم واحد للمربّع والقائمة والشاشة من سجل اليوم الكامل (عدد · null عند الفشل · undefined قبل الوصول ⇒ العدّ القديم).
+    if (window.V2SEC && V2SEC.brain && V2SEC.brain.tileCount) { extras.brainToday = V2SEC.brain.tileCount(); extras.brainTodayPartial = !!(V2SEC.brain.tilePartial && V2SEC.brain.tilePartial()); }
     return { E: E, D: D, now: now, Q: Q, rows: rows, inboxFailed: inboxFailed, payouts: payouts, inboxTrunc: inboxTrunc, extras: extras, d3: d3 };
   }
   function compute() {
@@ -89,7 +91,7 @@
   function signature() {
     var E = ep();
     return SOURCES.map(stateOf).join(',') + '|' + ((window.INBOX || []).length) + '|' + (E && E.data.walletPayouts ? E.data.walletPayouts.count : '')
-      + (window.V2D3 ? '|' + V2D3.sig() : '');
+      + (window.V2D3 ? '|' + V2D3.sig() : '') + (window.V2SEC && V2SEC.brain && V2SEC.brain.sig ? '|' + V2SEC.brain.sig() : '');
   }
 
   // ------------------------------------------------------------------ الرسم

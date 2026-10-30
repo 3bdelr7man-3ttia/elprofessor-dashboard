@@ -35,6 +35,9 @@ COPY dashboard-cloud/index.html dashboard-cloud/dashboard-api.js dashboard-cloud
 # D1-B · الهيكل الجديد (قوائم الأقسام والتبويبات).
 COPY dashboard-cloud/v2-logic.js dashboard-cloud/v2-home.js dashboard-cloud/v2-home.css dashboard-cloud/v2-shell.js dashboard-cloud/v2-shell.css dashboard-cloud/v2-d2.js dashboard-cloud/v2-d2.css dashboard-cloud/v2-d3.js dashboard-cloud/v2-d3.css /app/dist/
 COPY dashboard-cloud/v2/img /app/dist/v2/img
+# الجولة الأخيرة · أقسام الداشبورد (كل قسم ملفاته: v2s/<key>.js|css ومساراته v2_<key>_routes.py) — سطران مشتركان لكل الأقسام.
+COPY backend/v2_*_routes.py /app/
+COPY dashboard-cloud/v2s /app/dist/v2s
 
 EXPOSE 8080
 

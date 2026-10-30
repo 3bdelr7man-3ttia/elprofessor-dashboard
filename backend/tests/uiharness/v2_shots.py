@@ -153,9 +153,12 @@ def flow(browser, h, pre, viewport, mobile):
     page.wait_for_timeout(100)
     # سجل العقل
     page.click('[data-tile="brain"]')
-    page.wait_for_selector('.v2-log, .v2-empty')
+    page.wait_for_selector('.v2-log, .v2-empty, .v2sb')
     shot(page, p + '03-brain-log.jpg')
-    page.click('[data-a="back"]')
+    if page.query_selector('[data-a="back"]'):
+        page.click('[data-a="back"]')
+    else:
+        page.go_back()        # قسم «العقل» الجديد (تبويب القواعد وسجل اليوم) ليس فيه «العودة»: الرجوع بزر المتصفح
     page.wait_for_selector('.v2-tile')
     # التركيز لكل نوع
     start(page)
@@ -294,7 +297,7 @@ def flow(browser, h, pre, viewport, mobile):
     txt = page.inner_text('.v2-next')
     if 'معروض جزء فقط من: نزاعات الملفات' not in txt:
         PROBLEMS.append(p + '04: تحذير القائمة المقصوصة مش ظاهر: %r' % txt)
-    for key in ('books', 'people', 'brain'):
+    for key in ('books', 'people'):       # «العقل»: رقمه من سجل اليوم الكامل (v2s:brain) لا من الوارد المقصوص، فلا يُعلَن ناقصًا بسبب القائمة
         t = page.inner_text('[data-tile="%s"]' % key)
         if 'العدد ناقص' not in t:
             PROBLEMS.append(p + '04: مربّع %s من غير «العدد ناقص» والقائمة مقصوصة' % key)
@@ -554,7 +557,7 @@ def flow_d1b(browser, h, pre, viewport, mobile):
             PROBLEMS.append('%s32: مربّع %s هبط على %s (المتوقع %s)' % (pre, tile, hh, expect))
     go_section(page, 'home', 'board')
     page.click('[data-tile="brain"]')
-    page.wait_for_selector('.v2-log, .v2-empty')
+    page.wait_for_selector('.v2-log, .v2-empty, .v2sb')
     if sec_state(page)['hash'] != '#s/brain/log':
         PROBLEMS.append(pre + '33: مربّع العقل ما فتحش «سجل اليوم»')
     sshot(page, pre + '33-brain-log.jpg')

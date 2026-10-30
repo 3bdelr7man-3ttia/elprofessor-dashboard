@@ -536,4 +536,5 @@ def test_dockerfile_ships_every_local_module_app_imports():
              if os.path.exists(os.path.join(BACKEND, m + '.py'))}
     assert 'refresh_rules' in local
     for m in local:
-        assert ('COPY backend/%s.py /app/%s.py' % (m, m)) in docker, m
+        # ملفات مسارات أقسام الجولة الأخيرة (v2_<key>_routes.py) تُنسخ بسطر واحد مشترك (glob).
+        assert ('COPY backend/%s.py /app/%s.py' % (m, m)) in docker or (re.fullmatch(r'v2_\w+_routes', m) and 'COPY backend/v2_*_routes.py /app/' in docker), m

@@ -463,6 +463,10 @@ body{font-family:'IBM Plex Sans Arabic',sans-serif;background:var(--bg);color:va
 <script src="v2-home.js"></script>
 <script src="v2-shell.js"></script>
 <script src="v2-d2.js"></script>
+<!-- v2 sections begin -->
+<link rel="stylesheet" href="v2s/brain.css">
+<script src="v2s/brain.js"></script>
+<!-- v2 sections end -->
 <script src="v2-d3.js"></script>
 <script>
 const ICONS={
@@ -709,6 +713,8 @@ function renderView(){
   if(window.V2_ON&&window.V2D2&&V2D2.owns(current))return V2D2.render(current,v);
   // D3: شاشات «الفلوس» الجديدة و«الكتب» (موديولات وهمية `v2m_*`/`v2b_*` لا وجود لها إلا تحت الغلاف الجديد).
   if(window.V2_ON&&window.V2D3&&V2D3.owns(current))return V2D3.render(current,v);
+  // الجولة الأخيرة: أقسام v2s/<key>.js — كل قسم يسجّل نفسه في V2SEC ويقرر بـ`owns` أي موديول يرسمه (تحت الغلاف الجديد فقط).
+  if(window.V2_ON&&window.V2SHELL&&V2SHELL.on&&window.V2SEC){for(const k in V2SEC){const s=V2SEC[k];if(s&&s.owns&&s.owns(current)){const ap=document.querySelector('.app');if(ap)ap.classList.add('v2-bare');return s.render(current,v);}}}
   // موديولات «قريبًا» (لا واجهة خلفية حقيقية بعد) — لا تعرض بياناتها التصميمية.
   if(MODULES_LOOKUP[current]&&MODULES_LOOKUP[current].soon)return viewSoon(v);
   if(current==='inbox')return viewInbox(v);
