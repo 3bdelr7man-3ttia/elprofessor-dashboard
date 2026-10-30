@@ -411,7 +411,7 @@ def test_person_address_round_trip_and_the_hidden_tab():
     # بلا بريد صالح ⇒ أول تبويب (لا صفحة فاضية)
     for bad in ('#s/people/person', '#s/people/person/', '#s/people/person/zzz', '#s/people/person/%E0%A4%A'):
         r = v2_node.logic('routeFor', bad)
-        assert (r['section'], r['tab']) == ('people', 'users') and 'person' not in r, bad
+        assert (r['section'], r['tab']) == ('people', 'invites') and 'person' not in r, bad     # أول تبويب في «الناس والدعوات» صار «الطلبات»
     assert v2_node.logic('personEmailOf', 'a%40b.com') == 'a@b.com' and v2_node.logic('personEmailOf', 'x') == ''
     hidden = v2_node.logic('SECTIONS')
     tabs = [t for s in hidden if s['key'] == 'people' for t in s['tabs']]

@@ -29,7 +29,8 @@ NODE = __import__('shutil').which('node')
 needs_node = pytest.mark.skipif(not NODE, reason='needs node')
 PSEUDO_MODS = {'v2files', 'v2disputes', 'v2person',                       # D2: موديولات وهمية يرسمها V2D2 تحت الغلاف الجديد فقط
                'v2m_overview', 'v2m_payouts', 'v2m_receipts', 'v2m_prices', 'v2m_shares', 'v2m_ads', 'v2b_offers', 'v2b_requests',   # D3: يرسمها V2D3
-               'v2s_market_all', 'v2s_market_demand'}   # الجولة النهائية · سوق الخدمات: يرسمها V2S_MARKET
+               'v2s_market_all', 'v2s_market_demand',   # الجولة النهائية · سوق الخدمات: يرسمها V2S_MARKET
+               'v2p_invites'}    # الناس: «الدعوات» يرسمها v2s/people.js
 
 
 def _read(*parts):
@@ -90,7 +91,8 @@ def test_the_tabs_match_the_approved_table():
         'market': [['requests', 'الطلبات', 'market']],
         # D3: مراجعة العروض وطلبات القرّاء أولًا (موديولان وهميان ورا الغلاف)، والشاشة القديمة آخرًا
         'books': [['offers', 'مراجعة العروض', 'v2b_offers'], ['requests', 'طلبات القرّاء', 'v2b_requests'], ['books', 'الكتب والأعمال', 'knowledge']],
-        'people': [['users', 'المستخدمون', 'users'], ['invites', 'الدعوات', 'invites'], ['messages', 'الرسائل', 'inbox'],
+        # الناس والدعوات (نهائي): الطلبات والدعوات (موديول وهمي v2p_invites) والمستخدمون والرسائل، وصفحة الشخص مخفية
+        'people': [['invites', 'الطلبات', 'invites'], ['pipeline', 'الدعوات', 'v2p_invites'], ['users', 'المستخدمون', 'users'], ['messages', 'الرسائل', 'inbox'],
                    ['person', 'صفحة الشخص', 'v2person']],
         # D3: «الفلوس» بهيكلها الجديد، والشاشتان القديمتان (المالية والباقات) في آخر تبويب «كل السجلات» + تبويب مخفي للإيصالات القديمة
         'money': [['overview', 'نظرة', 'v2m_overview'], ['payouts', 'التحويلات', 'v2m_payouts'], ['receipts', 'الإيصالات والمدفوعات العالقة', 'v2m_receipts'],

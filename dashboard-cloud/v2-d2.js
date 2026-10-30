@@ -347,7 +347,7 @@
     v.innerHTML = '<div class="v2d" data-board="person">' + back + warn
       + '<header class="v2d-ph">' + av + '<div class="v2d-pid"><h1 class="v2d-name">' + esc(vm.name) + '</h1><div class="v2d-chips">' + chips + (vm.active ? '' : '<span class="v2d-chip chip-off">الحساب موقوف</span>') + '</div>'
       + '<p class="v2d-join">' + esc(vm.joinLine) + '</p>' + (meta.length ? '<p class="v2d-meta">' + esc(meta.join(' · ')) + '</p>' : '') + '</div>'
-      + '<div class="v2d-pact"><a class="v2d-btn1" href="' + esc(mail) + '" data-a="mail">مراسلة</a></div></header>'
+      + '<div class="v2d-pact"><a class="v2d-btn1" href="' + esc(mail) + '" data-a="mail">مراسلة</a>' + (window.V2SECT&&V2SECT.people&&V2SECT.people.manageBtn?V2SECT.people.manageBtn(email):'') + '</div></header>'
       + '<div class="v2d-pgrid">' + vm.cards.map(personCard).join('') + '</div>'
       + '<section class="v2d-plog"><h3>السجل' + (vm.logPartial ? ' <small>(جزء منه — تعذّر جلب بعض المصادر)</small>' : '') + '</h3>' + log + '</section></div>';
     wirePerson(v);
