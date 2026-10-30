@@ -93,7 +93,9 @@ def test_the_tabs_match_the_approved_table():
         'money': [['overview', 'نظرة', 'v2m_overview'], ['payouts', 'التحويلات', 'v2m_payouts'], ['receipts', 'الإيصالات والمدفوعات العالقة', 'v2m_receipts'],
                   ['prices', 'الأسعار', 'v2m_prices'], ['shares', 'النسب والإعدادات', 'v2m_shares'], ['ads', 'إعلانات الأعمال', 'v2m_ads'],
                   ['all', 'كل السجلات', 'finance'], ['manual', 'الإيصالات (الشاشة القديمة)', 'escrow']],
-        'content': [['topics', 'المحتوى', 'topics'], ['tutorials', 'دليل الاستخدام', 'topics']],
+        # الجولة الأخيرة: «المحتوى» بست تبويبات كلها على الموديول القديم `topics` (تُميَّز بـ`topicsTab`) وبلا «كل السجلات»
+        'content': [['pipeline', 'خط النشر', 'topics'], ['articles', 'المقالات', 'topics'], ['topics', 'الموضوعات', 'topics'], ['news', 'الأخبار', 'topics'],
+                    ['comments', 'التعليقات', 'topics'], ['tutorials', 'دليل الاستخدام', 'topics']],
         'marketing': [['campaigns', 'الحملات', 'marketing']],
         'reports': [['demand', 'تحليل الطلب', 'analysis']],
         'brain': [['log', 'سجل اليوم', 'home'], ['helpers', 'المساعدون', 'ai']],
@@ -159,7 +161,7 @@ def test_inner_screen_state_picks_the_right_tab_and_unknown_state_stays_put():
         ('team', {'teamTab': 'trainers'}, 'courses', 'trainers'), ('team', {'teamTab': 'experts'}, 'files', 'experts'),
         ('escrow', {'escTab': 'manual'}, 'money', 'manual'), ('escrow', {'escTab': 'disputes'}, 'disputes', 'escrow'),
         ('finance', {'finTab': 'packages'}, 'money', 'all'), ('finance', {'finTab': 'withdrawals'}, 'money', 'all'),
-        ('topics', {'topicsTab': 'tutorials'}, 'content', 'tutorials'), ('topics', {'topicsTab': 'news'}, 'content', 'topics'),
+        ('topics', {'topicsTab': 'tutorials'}, 'content', 'tutorials'), ('topics', {'topicsTab': 'news'}, 'content', 'news'),
         ('courses', {'courseTab': 'demand'}, 'courses', 'courses'), ('home', {'v2mode': 'brain'}, 'brain', 'log'),
         ('home', {'v2mode': 'focus'}, 'home', 'board'), ('targets', {'tgTab': 'foundation'}, 'company', 'targets'),
         ('investment', {'invTab': 'opps'}, 'company', 'invest'),
@@ -187,7 +189,7 @@ def test_an_unknown_module_is_not_mapped():
 def test_section_addresses_round_trip():
     res = _node("""const out=[];L.SECTIONS.forEach(s=>s.tabs.forEach(t=>{const h=L.sectionHash(s.key,t.key);
       out.push([s.key,t.key,h,L.parseSectionHash(h),L.parseSectionHash(h.slice(1)),L.routeFor(h)]);}));console.log(JSON.stringify(out))""")
-    assert len(res) == 35                      # ٢٥ + «كل الملفات» و«كل النزاعات» + صفحة الشخص (مخفية) + D3: الفلوس ٨ (واحد مخفي) بدل ٣، والكتب ٣ بدل ١
+    assert len(res) == 39                      # ٢٥ + «كل الملفات» و«كل النزاعات» + صفحة الشخص (مخفية) + D3: الفلوس ٨ (واحد مخفي) بدل ٣، والكتب ٣ بدل ١ + المحتوى: ٦ بدل ٢
     for sec, tab, h, p1, p2, r in res:
         if (sec, tab) in (('people', 'person'), ('money', 'manual')):
             continue                           # تبويب مخفي بلا بريد: يرجع لأول تبويب (يُختبر في test_v2_d2)
@@ -211,7 +213,7 @@ def test_old_links_land_on_their_section_with_the_right_tab():
     links = {'#finance': ('money', 'all'), '#packages': ('money', 'all'), '#messages': ('people', 'messages'),
              '#invites': ('people', 'invites'), '#users': ('people', 'users'), '#escrow': ('disputes', 'escrow'),
              '#courses': ('courses', 'courses'), '#team': ('files', 'experts'), '#market': ('market', 'requests'),
-             '#knowledge': ('books', 'books'), '#topics': ('content', 'topics'), '#tutorials': ('content', 'tutorials'),
+             '#knowledge': ('books', 'books'), '#topics': ('content', 'pipeline'), '#tutorials': ('content', 'tutorials'),
              '#marketing': ('marketing', 'campaigns'), '#analysis': ('reports', 'demand'), '#ai': ('brain', 'helpers'),
              '#investment': ('company', 'invest'), '#partners': ('company', 'invest'), '#targets': ('company', 'targets'),
              '#foundation': ('company', 'targets'), '#settings': ('company', 'settings'), '#inbox': ('home', 'inbox'),

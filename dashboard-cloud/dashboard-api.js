@@ -69,8 +69,10 @@
   var post = function (p, d) { return api(p, { method: "POST", body: d || {} }); };
 
   // مساعدات صغيرة آمنة (تستخدم أدوات الصفحة عند توافرها).
-  function note(msg) { try { (window.notify || window.toast || function () {})(msg); } catch (e) {} }
-  function quietToast(msg) { try { (window.toast || function () {})(msg); } catch (e) {} }
+  // v2s:content — شاشة «المحتوى» الجديدة تكتم التوست وتقرأ آخر خطأ من `EP.lastError` (شريط الملاحظة عندها هو الصوت الوحيد).
+  // خارجها `EP.muteNotes` تظل false فيعمل التوست بالحرف كما كان.
+  function note(msg) { if (EP.muteNotes) return; try { (window.notify || window.toast || function () {})(msg); } catch (e) {} }
+  function quietToast(msg) { EP.lastError = String(msg == null ? "" : msg); if (EP.muteNotes) return; try { (window.toast || function () {})(msg); } catch (e) {} }
 
   // ============================================================
   // طبقة بيانات الشاشات: حالة + تخزين + محمّلات
@@ -90,6 +92,8 @@
             invites: null, waitlist: null, pendingUsers: null, founding: null, inviteSettings: null, inviteVideos: null,
             aiAgents: null, dashUsers: null, audit: null, usage: null },
     state: {}, // 'idle' | 'loading' | 'ready' | 'error'
+    muteNotes: false, // v2s:content — true أثناء شاشة «المحتوى» الجديدة فقط
+    lastError: "",    // آخر رسالة فشل من الإجراءات (تُقرأ بعد كل محاولة)
     _started: {}, // منع التحميل المزدوج
     api: api, get: get, post: post,
     requireAuth: true,
@@ -1558,6 +1562,38 @@
         EP.data.platformOpinionsAnalysis = r || {};
         window.POPINIONS_ANALYSIS = r || {};
       });
+    },
+
+    // ===== v2s:content — مصادر شاشة «المحتوى» الجديدة (كل مصدر بحالته؛ الفشل يُرمى فتصير الحالة 'error') =====
+    // حالة مقالات الموقع من SQLite الداشبورد نفسها (لا نداء للمنصة): كلمات · صورة · وصف · مراجع · حالة صفحات محركات البحث.
+    contentOverview: function () {
+      return get("/v2/content/overview").then(function (r) { EP.data.contentOverview = r || {}; });
+    },
+    // أعمال ركن الإبداع بانتظار المراجعة (كانت تُجلب داخل `inbox` فقط).
+    platformCreative: function () {
+      return get("/platform-creative?status=pending_review").then(function (r) {
+        var list = (r && Array.isArray(r.items)) ? r.items : [];
+        EP.data.platformCreative = { raw: list };
+        window.PCREATIVE = list;
+      });
+    },
+    // آراء متعلّمي الدورات (بروكسي الداشبورد على جسر المنصة): المعلّقة ثم المعتمدة.
+    testimonials: function () {
+      return get("/v2/testimonials?status=pending").then(function (r) {
+        var list = (r && Array.isArray(r.testimonials)) ? r.testimonials : [];
+        EP.data.testimonials = { raw: list };
+        window.PTESTIMONIALS = list;
+      });
+    },
+    testimonialsApproved: function () {
+      return get("/v2/testimonials?status=approved").then(function (r) {
+        var list = (r && Array.isArray(r.testimonials)) ? r.testimonials : [];
+        EP.data.testimonialsApproved = { raw: list };
+      });
+    },
+    // أرقام التعليقات بلا كتابة خلاصة (summarize=false): الخلاصة المكتوبة نداء مدفوع، لا تُطلب إلا بتأكيد صريح.
+    platformOpinionsNumbers: function () {
+      return get("/platform-opinions-analysis?summarize=false").then(function (r) { EP.data.platformOpinionsNumbers = r || {}; });
     },
 
     // أتمتة المقالات: /api/platform-articles -> [ {id,title,category,excerpt,status,created_at,...} ]
@@ -3577,14 +3613,26 @@
 
   // «ولّد بالذكاء»: trigger a generation run on the platform, then poll-sync the new drafts into the
   // blog (this SQLite, which feeds elprofessor.net). Features publish; news/legal come in as drafts.
-  EP.runDailyContent = function (after) {
+  // opts.isOpen (شاشة «المحتوى» الجديدة): دالة تقول هل الشاشة ما زالت مفتوحة؛ تحلّ محل فحص #ctRows/#artRows. بلا opts المسار القديم بالحرف.
+  EP.runDailyContent = function (after, opts) {
     post("/platform-articles/daily-run", { articles: 3, topics: 2, publish: false })
       .then(function (r) {
-        if (r && r.already_running) { note("فيه توليد شغّال بالفعل — استنّاه."); if (after) after(); return; }
-        note("بدأ التوليد بالذكاء — المقالات هتظهر خلال دقائق وتتسحب للمدونة تلقائيًّا.");
+        if (r && r.already_running) { note("الكتابة الآلية تعمل الآن بالفعل."); if (after) after(); return; }
+        note("بدأت الكتابة الآلية. تظهر المسودات بعد انتهائها.");
         if (after) after();
         var tries = 0;
         var iv = setInterval(function () {
+          if (opts && typeof opts.isOpen === "function") {
+            if (++tries > 6 || !opts.isOpen()) { clearInterval(iv); return; }
+            post("/content/sync-from-platform", {})
+              .then(function () {
+                EP.reload("content", null);
+                EP.reload("platformArticles", null);
+                EP.reload("contentOverview", function () { if (opts.isOpen() && after) after(); });
+              })
+              .catch(function () {});
+            return;
+          }
           var onBlog = !!document.getElementById("ctRows");   // viewContent (blog)
           var onAuto = !!document.getElementById("artRows");  // viewArticlesAuto (platform stream)
           if (++tries > 6 || (!onBlog && !onAuto)) { clearInterval(iv); return; } // ~3 min / left view
@@ -3604,7 +3652,7 @@
     post("/content/sync-from-platform", {})
       .then(function (r) {
         var n = (r && r.imported) || 0;
-        note(n ? ("اتسحب " + n + " مقال من الذكاء للمدونة") : "مفيش مقالات جديدة من الذكاء دلوقتي");
+        note(n ? ("سُحب " + n + " مقال جاهز من المنصة إلى الموقع.") : "لا مقالات جاهزة جديدة على المنصة الآن.");
         EP.reload("content", after);
       })
       .catch(function (e) { quietToast((e && e.message) || "تعذّر الجلب"); if (after) after(); });

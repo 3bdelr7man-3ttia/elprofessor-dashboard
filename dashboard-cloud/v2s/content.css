@@ -1,0 +1,251 @@
+/* ============================================================================
+ * v2s/content.css — قسم «المحتوى» بالشكل الجديد. كل القواعد تحت `.v2ct` (الصفحة) أو `.v2ct-m` (داخل ورقة نافذة الداشبورد).
+ * ⛔ المفتاح مقفول ⇒ الملف بيتحمّل ومفيش عنصر في الصفحة بيحمل الأصناف دي فمفيش أثر على أي شاشة.
+ * الألوان من هوية البروفيسور: عنّابي #9E2B4E · ورق #FBFAF7/#F6F1EA · حبر #21262E · أحمر #C8102E للمتأخر والمرفوض بس.
+ * لون القسم (من مربّع المحتوى) rgb(190,88,48) يُستعمل في رؤوس الأعمدة وشريط الصورة فقط.
+ * ========================================================================== */
+.v2ct,.v2ct-m{--wine:#9E2B4E;--paper:#FBFAF7;--paper2:#F6F1EA;--ink:#21262E;--red:#C8102E;--line:#E9E1D6;--amber:#8F5F00;--amber-bg:#FFF6DD;--green:#187E4E;--mute:#6B665C;--accent:rgb(190,88,48);
+  font-family:'IBM Plex Sans Arabic','Cairo',sans-serif;color:var(--ink)}
+.v2ct{max-width:1360px;margin:0 auto;position:relative}
+.v2ct *,.v2ct-m *{box-sizing:border-box}
+.v2ct button,.v2ct input,.v2ct select,.v2ct-m button,.v2ct-m input,.v2ct-m textarea,.v2ct-m select{font-family:inherit}
+.v2ct button:focus-visible,.v2ct a:focus-visible,.v2ct select:focus-visible,.v2ct-m button:focus-visible,.v2ct-m a:focus-visible,.v2ct-m input:focus-visible,.v2ct-m textarea:focus-visible,.v2ct-m select:focus-visible{outline:3px solid rgba(158,43,78,.45);outline-offset:2px}
+.v2ct p,.v2ct h2,.v2ct h3,.v2ct h4,.v2ct-m p,.v2ct-m h2,.v2ct-m h3{margin:0}
+.v2ct-ltr{direction:ltr;display:inline-block;unicode-bidi:plaintext}
+
+/* —— أزرار: واحد أساسي في كل بطاقة وورقة */
+.v2ct-b1,.v2ct-b2,.v2ct-b3{display:inline-flex;align-items:center;justify-content:center;min-height:48px;padding:0 20px;border-radius:14px;font:800 15.5px 'Cairo',sans-serif;cursor:pointer;text-decoration:none;border:0;max-width:100%;text-align:center;line-height:1.4}
+.v2ct-b1{background:var(--wine);color:#fff;width:100%}
+.v2ct-b1:hover{background:#85233F}
+.v2ct-b1.ink{background:var(--ink)}.v2ct-b1.ink:hover{background:#0F1217}
+.v2ct-b1.danger{background:var(--red)}.v2ct-b1.danger:hover{background:#A80D26}
+.v2ct-b1.auto{width:auto}
+.v2ct-b1.lnk{width:auto}
+.v2ct-b1:disabled,.v2ct-b2:disabled,.v2ct-b3:disabled{opacity:.6;cursor:wait}
+.v2ct-b2{background:#fff;color:var(--wine);border:1px solid var(--line);min-height:44px;font-size:14.5px;font-weight:700}
+.v2ct-b2:hover{background:#FBF0F3}
+.v2ct-b2.sm{min-height:44px;padding:0 14px;font-size:13.5px}
+.v2ct-b2.more{width:100%;margin-top:2px;color:var(--ink)}
+.v2ct-b3{background:transparent;color:var(--red);min-height:44px;font-size:14px;font-weight:700;padding:0 12px}
+.v2ct-b3:hover{background:#FDECEF}
+.v2ct-link{color:var(--wine);font:800 14.5px 'Cairo',sans-serif;display:inline-flex;align-items:center;min-height:44px;text-decoration:underline;text-underline-offset:3px}
+.v2ct-person{color:var(--wine);font-weight:700;text-decoration:none;border-bottom:1px dashed rgba(158,43,78,.5);padding:12px 0;display:inline-block;line-height:1.4}
+.v2ct-person:hover{background:rgba(158,43,78,.07)}
+.v2ct-mute{color:var(--mute)}
+
+/* —— شريط الصورة وسطر العقل */
+.v2ct-hero{border-radius:22px;background-size:cover;background-position:center 38%;position:relative;overflow:hidden;margin-bottom:12px;background-color:var(--accent)}
+.v2ct-hero::before{content:"";position:absolute;inset:0;background:linear-gradient(to left,rgba(33,38,46,.9) 0%,rgba(33,38,46,.72) 48%,rgba(190,88,48,.55) 100%)}
+.v2ct-hero-in{position:relative;display:flex;align-items:center;gap:14px;padding:18px 22px;min-height:96px;color:#fff}
+.v2ct-hero-in p{font:800 19px/1.65 'Cairo',sans-serif;text-shadow:0 1px 8px rgba(0,0,0,.35)}
+.v2ct-bav{width:44px;height:44px;border-radius:50%;object-fit:cover;flex:none;background:#fff;border:2px solid #fff}
+.v2ct-facts{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px}
+.v2ct-fact{display:inline-flex;align-items:center;min-height:36px;padding:0 14px;border-radius:999px;background:#fff;border:1px solid var(--line);font:700 14px 'Cairo',sans-serif;color:var(--ink)}
+.v2ct-fact.ok{background:#E8F6EE;border-color:#A9DDC1;color:#0F5A37}
+.v2ct-fact.bad{background:#FDECEF;border-color:#F2B5C0;color:#8E1228}
+.v2ct-fact.na{background:var(--amber-bg);border-color:#EBD38E;color:#6B4A00}
+.v2ct-brain{display:flex;gap:9px;align-items:flex-start;background:var(--paper);border-radius:12px;padding:8px 10px;font-size:13.5px;line-height:1.7}
+.v2ct-brain .v2ct-bav{width:30px;height:30px;border-width:2px;border-color:var(--line)}
+.v2ct-brain.wide{background:#fff;border:1px solid var(--line);margin-bottom:12px;padding:10px 14px;font-size:14.5px}
+
+/* —— تنبيهات */
+.v2ct-warn{background:#FFF8E6;border:1px solid #EBD38E;color:#6B4A00;border-radius:12px;padding:10px 14px;margin-bottom:12px;font-size:14px;line-height:1.7}
+.v2ct-warn .v2ct-b2{margin-inline-start:10px}
+.v2ct-ok{background:#E8F6EE;border:1px solid #A9DDC1;color:#0F5A37;border-radius:12px;padding:10px 14px;margin-bottom:12px;font:700 14.5px/1.7 'Cairo',sans-serif}
+.v2ct-err,.v2ct-m .v2ct-err{background:#FDECEF;border:1px solid #F2B5C0;color:#8E1228;border-radius:10px;padding:9px 12px;font-size:14px;line-height:1.75;margin:8px 0}
+.v2ct-err.big{padding:14px 16px;font-size:15px}
+.v2ct-empty{background:#fff;border:1px dashed #D9CFC0;border-radius:18px;padding:28px 20px;text-align:center;color:var(--mute);display:grid;gap:10px;justify-items:center}
+.v2ct-empty b{color:var(--ink);font:800 16.5px/1.7 'Cairo',sans-serif}
+.v2ct-none{text-align:center;color:var(--mute);font-size:14px;padding:22px 8px}
+.v2ct-line{font-size:14.5px;color:var(--mute);line-height:1.8}
+.v2ct-fine{font-size:12.5px;color:var(--mute);line-height:1.7;margin-top:6px}
+.v2ct-lead-line{display:grid;gap:2px;margin-bottom:10px}
+
+/* —— مبدّل الأعمدة (الموبايل) والأعمدة */
+.v2ct-seg{display:none}
+.v2ct-segb{flex:1;min-width:0;min-height:60px;border:1px solid var(--line);background:#fff;border-radius:14px;padding:6px 4px;display:grid;place-items:center;gap:2px;color:var(--ink);cursor:pointer;font:700 12.5px/1.35 'Cairo',sans-serif}
+.v2ct-segb b{font:800 17px/1 'Cairo',sans-serif}
+.v2ct-segb.on{background:var(--ink);color:#fff;border-color:var(--ink)}
+.v2ct-segb.tone-wine b{color:var(--wine)}.v2ct-segb.on b{color:#fff}
+.v2ct-cols{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px;align-items:start}
+.v2ct-col{background:var(--paper2);border-radius:22px;padding:12px;min-width:0;border-top:5px solid var(--accent)}
+.v2ct-col.tone-wine{border-top-color:var(--wine)}
+.v2ct-col.tone-green{border-top-color:#B5AEA2}
+.v2ct-col.tone-green .v2ct-list{opacity:.95}
+.v2ct-ch{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:2px 4px 2px}
+.v2ct-ch b{font:800 17px 'Cairo',sans-serif;color:var(--accent)}
+.v2ct-col.tone-wine .v2ct-ch b{color:var(--wine)}.v2ct-col.tone-green .v2ct-ch b{color:var(--ink)}
+.v2ct-n{min-width:34px;height:34px;padding:0 10px;border-radius:999px;background:#fff;border:1px solid var(--line);display:inline-grid;place-items:center;font:800 14.5px 'Cairo',sans-serif;white-space:nowrap}
+.v2ct-colnote{font-size:12.5px;color:var(--mute);padding:0 4px 10px;line-height:1.6}
+.v2ct-list{display:grid;gap:12px}
+
+/* —— التذكرة */
+.v2ct-t{background:#fff;border:1px solid var(--line);border-radius:18px;overflow:hidden;box-shadow:0 2px 8px rgba(33,38,46,.06)}
+.v2ct-strip{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 12px;min-height:40px;color:#fff;background:var(--ink)}
+.v2ct-t.tone-wait .v2ct-strip{background:var(--wine)}
+.v2ct-t.tone-late .v2ct-strip{background:var(--red)}
+.v2ct-t.tone-amber .v2ct-strip{background:#8F5F00}
+.v2ct-t.tone-green .v2ct-strip{background:#6F6A5F}
+.v2ct-type{font:800 13.5px/1.4 'Cairo',sans-serif}
+.v2ct-time{font:800 13.5px/1.4 'Cairo',sans-serif;background:rgba(255,255,255,.2);border-radius:999px;padding:1px 10px;white-space:nowrap}
+.v2ct-body{padding:10px 14px 14px;display:grid;gap:8px}
+.v2ct-body h3{font:800 16px/1.55 'Cairo',sans-serif}
+.v2ct-open{border:0;background:transparent;padding:0;min-height:44px;width:100%;display:block;text-align:start;color:var(--ink);font:inherit;cursor:pointer;overflow-wrap:anywhere}
+.v2ct-open:hover{color:var(--wine);text-decoration:underline}
+.v2ct-who{font-size:14px;color:var(--ink);overflow-wrap:anywhere}
+.v2ct-acts{margin-top:2px}
+.v2ct-status{background:var(--amber-bg);border:1px solid #EBD38E;color:#6B4A00;border-radius:12px;padding:10px 12px;font:700 14px/1.6 'Cairo',sans-serif;text-align:center}
+.v2ct-t.slim .v2ct-body{padding:8px 14px 10px;gap:2px}
+.v2ct-t.ph .v2ct-strip{background:#E9E1D6;min-height:34px}
+.v2ct-t.ph .v2ct-body i{display:block;height:16px;border-radius:8px;background:linear-gradient(90deg,#F1EBE0,#F8F4EC,#F1EBE0);background-size:200% 100%;animation:v2ctsk 1.4s linear infinite}
+.v2ct-t.ph .v2ct-body i+i{width:60%}
+@keyframes v2ctsk{from{background-position:200% 0}to{background-position:-200% 0}}
+.v2ct-bignum{display:flex;align-items:baseline;gap:10px}
+.v2ct-bignum b{font:800 34px/1 'Cairo',sans-serif;color:var(--wine)}
+.v2ct-bignum span{font:700 15px/1.5 'Cairo',sans-serif}
+
+/* —— صفحات القوائم */
+.v2ct-narrow{max-width:880px;margin:0 auto}
+.v2ct-narrow.wide{max-width:1000px}
+.v2ct-sw{display:inline-flex;background:var(--paper2);border:1px solid var(--line);border-radius:999px;padding:4px;gap:4px;margin-bottom:10px}
+.v2ct-sw button{min-height:44px;min-width:110px;padding:0 20px;border-radius:999px;border:0;background:transparent;color:var(--ink);font:800 15px 'Cairo',sans-serif;cursor:pointer}
+.v2ct-sw button.on{background:var(--ink);color:#fff}
+.v2ct-bar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin:4px 0 14px}
+.v2ct-chips{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px}
+.v2ct-chip{min-height:44px;padding:0 18px;border-radius:999px;border:1px solid var(--line);background:#fff;color:var(--ink);font:800 14.5px 'Cairo',sans-serif;cursor:pointer;display:inline-flex;align-items:center;gap:8px}
+.v2ct-chip b{font-weight:800;color:var(--wine)}
+.v2ct-chip.on{background:var(--ink);color:#fff;border-color:var(--ink)}.v2ct-chip.on b{color:#fff}
+.v2ct-catf{display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap}
+.v2ct-catf label{font:700 14px 'Cairo',sans-serif;color:var(--mute)}
+.v2ct-sel{min-height:48px;border:1px solid #D9CFC0;border-radius:12px;padding:0 12px;background:#fff;color:var(--ink);font-size:15px;min-width:200px;max-width:100%}
+.v2ct-stack{display:grid;gap:12px}
+.v2ct-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;margin-bottom:16px}
+.v2ct-card{background:#fff;border:1px solid var(--line);border-radius:18px;padding:14px 16px;display:grid;gap:8px;align-content:start;min-width:0;box-shadow:0 2px 8px rgba(33,38,46,.05);text-align:start}
+.v2ct-card.hl{outline:3px solid var(--wine);outline-offset:2px}
+.v2ct-card.art{cursor:pointer;width:100%;font:inherit;color:inherit;border:1px solid var(--line)}
+.v2ct-card.art:hover{box-shadow:0 8px 20px rgba(33,38,46,.12)}
+.v2ct-card h3{font:800 16.5px/1.55 'Cairo',sans-serif}
+.v2ct-ct{font:800 17px/1.55 'Cairo',sans-serif;overflow-wrap:anywhere}
+.v2ct-cm{font-size:13.5px;color:var(--mute);line-height:1.7;display:block;overflow-wrap:anywhere}
+.v2ct-ex{font-size:14px;line-height:1.75;color:#3A3730;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.v2ct-sum{font-size:14px;line-height:1.75;color:#3A3730;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.v2ct-srcs{display:flex;flex-wrap:wrap;gap:6px 12px;font-size:13.5px}
+.v2ct-src{color:var(--wine);max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:inline-flex;align-items:center;min-height:44px;text-decoration:underline}
+.v2ct-pills{display:flex;flex-wrap:wrap;gap:6px}
+.v2ct-pill{display:inline-flex;align-items:center;min-height:26px;padding:0 12px;border-radius:999px;background:var(--paper2);border:1px solid var(--line);font:700 12.5px/1.4 'Cairo',sans-serif;color:var(--ink)}
+.v2ct-pill.amber{background:var(--amber-bg);border-color:#EBD38E;color:#6B4A00}
+.v2ct-pill.green{background:#E8F6EE;border-color:#A9DDC1;color:#0F5A37}
+.v2ct-pill.wine{background:#FBF0F3;border-color:#E9C4D0;color:var(--wine)}
+.v2ct-box{background:#fff;border:1px solid var(--line);border-radius:18px;padding:16px 18px;margin-bottom:16px;display:grid;gap:12px;min-width:0}
+.v2ct-box>header{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.v2ct-box h2{font:800 19px/1.5 'Cairo',sans-serif}
+.v2ct-box h4{font:800 15px 'Cairo',sans-serif;color:var(--wine);margin:6px 0 2px}
+.v2ct-nums{display:flex;flex-wrap:wrap;gap:12px}
+.v2ct-nums>div{background:var(--paper);border-radius:14px;padding:10px 18px;display:grid;gap:2px;min-width:120px}
+.v2ct-nums b{font:800 28px/1.2 'Cairo',sans-serif}
+.v2ct-nums span{font-size:13.5px;color:var(--mute)}
+.v2ct-top{list-style:none;margin:0;padding:0;display:grid;gap:8px}
+.v2ct-top li{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;background:var(--paper);border-radius:12px;padding:8px 12px}
+.v2ct-top li b{flex:1;min-width:160px;font:700 14.5px/1.55 'Cairo',sans-serif}
+.v2ct-top li span{font-size:13px;color:var(--mute)}
+.v2ct-bars{list-style:none;margin:0;padding:0;display:grid;gap:8px}
+.v2ct-bl{display:flex;justify-content:space-between;gap:10px;font:700 14px 'Cairo',sans-serif}
+.v2ct-bar2{height:12px;border-radius:999px;background:var(--paper2);overflow:hidden}
+.v2ct-bar2 i{display:block;height:100%;border-radius:999px;background:var(--accent)}
+.v2ct-row{background:var(--paper);border-radius:16px;padding:12px 14px;display:grid;gap:8px}
+.v2ct-rowbody{background:transparent;border:0;padding:0;text-align:start;cursor:pointer;display:grid;gap:4px;min-height:44px;color:var(--ink)}
+.v2ct-body3{display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;font-size:15px;line-height:1.8;overflow-wrap:anywhere}
+.v2ct-row .v2ct-acts .v2ct-b1,.v2ct-box .v2ct-acts .v2ct-b2{width:auto;min-width:200px}
+.v2ct-reply{background:#fff;border:1px solid var(--line);border-radius:12px;padding:8px 12px;display:grid;gap:2px;font-size:14px;line-height:1.75}
+.v2ct-sumbox{background:var(--amber-bg);border-radius:14px;padding:10px 14px;line-height:1.85;font-size:14.5px}
+
+/* —— الأوراق (داخل نافذة الداشبورد الموجودة) */
+#epModal .modal:has(.v2ct-m){max-width:640px;border-radius:22px}
+#epModal .modal:has(.v2ct-m.wide){max-width:920px}
+#epModal .modal:has(.v2ct-m) .mh{background:var(--paper,#FBFAF7);color:#9E2B4E;border-bottom:1px solid #E9E1D6;font-family:'Cairo',sans-serif;font-weight:800;font-size:18px;padding:14px 20px}
+#epModal .modal:has(.v2ct-m) .mh button{background:#fff;border:1px solid #E9E1D6;color:#21262E;width:44px;height:44px;border-radius:12px;font-size:16px}
+#epModal .modal:has(.v2ct-m) .mb{max-height:82vh;background:#fff}
+.v2ct-m .v2ct-lead{font-size:15px;line-height:1.95;margin-bottom:12px}
+.v2ct-m .v2ct-fld{margin-bottom:12px;display:grid;gap:5px}
+.v2ct-m .v2ct-fld label{font:700 13.5px 'Cairo',sans-serif;color:var(--mute)}
+.v2ct-m .v2ct-fld input,.v2ct-m .v2ct-fld textarea,.v2ct-m .v2ct-fld select{width:100%;min-height:48px;border:1px solid #D9CFC0;border-radius:12px;padding:10px 12px;font-size:16px;background:#fff;color:var(--ink);line-height:1.7}
+.v2ct-m .v2ct-fld textarea{resize:vertical}
+.v2ct-m .v2ct-two{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.v2ct-m .v2ct-val{background:var(--paper);border-radius:12px;padding:10px 14px;font-size:15px;line-height:1.85;overflow-wrap:anywhere}
+.v2ct-m .v2ct-val.pre{white-space:pre-wrap;max-height:40vh;overflow:auto}
+.v2ct-m .v2ct-val.tall{max-height:46vh}
+.v2ct-m .v2ct-chk{display:flex;align-items:center;gap:10px;min-height:52px;font:700 15px 'Cairo',sans-serif;margin-bottom:8px}
+.v2ct-m .v2ct-chk input{width:22px;height:22px}
+.v2ct-m .v2ct-acts2{display:flex;flex-wrap:wrap;gap:10px;margin-top:14px;position:sticky;bottom:-18px;background:#fff;padding:10px 0 4px;z-index:2;align-items:center}
+.v2ct-m .v2ct-acts2 .v2ct-b1{width:auto;flex:1 1 auto;min-width:160px}
+.v2ct-m .v2ct-kick{font:700 13.5px 'Cairo',sans-serif;color:var(--wine);margin-bottom:4px}
+.v2ct-m .v2ct-rt{font:800 22px/1.5 'Cairo',sans-serif;margin-bottom:8px}
+.v2ct-m .v2ct-exb{font:700 15px/1.9 'Cairo',sans-serif;margin:10px 0}
+.v2ct-m .v2ct-cover{width:100%;max-height:260px;border-radius:14px;margin:8px 0;object-fit:cover;display:block}
+.v2ct-m .v2ct-article{background:var(--paper);border-radius:14px;padding:14px 16px;max-height:44vh;overflow:auto;margin:10px 0}
+.v2ct-m .v2ct-article h3{font:800 17px/1.6 'Cairo',sans-serif;margin:12px 0 4px}
+.v2ct-m .v2ct-article p{font-size:15px;line-height:2;margin:0 0 10px}
+.v2ct-m .v2ct-cmp{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:6px 14px;background:var(--amber-bg);border-radius:12px;padding:8px 14px;margin:8px 0;font-size:14px;line-height:1.7}
+.v2ct-m .v2ct-brain{margin:8px 0}
+.v2ct-m .v2ct-cm{margin:4px 0}
+.v2ct-m .v2ct-line{margin:6px 0}
+.v2ct-m .v2ct-pills{margin:6px 0}
+.v2ct-tools{display:grid;gap:10px}
+.v2ct-tool{display:flex;align-items:center;justify-content:space-between;gap:12px;background:var(--paper);border-radius:14px;padding:12px 14px}
+.v2ct-tool div{display:grid;gap:2px;min-width:0}
+.v2ct-tool b{font:800 15.5px 'Cairo',sans-serif}
+.v2ct-tool span{font-size:13.5px;color:var(--mute);line-height:1.7}
+.v2ct-bt{border-top:1px solid var(--line);padding:12px 0;display:grid;gap:6px}
+.v2ct-bt:first-child{border-top:0}
+.v2ct-rowacts{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+.v2ct-inconf{display:block}
+
+/* —— تابلت: عمودان */
+@media(max-width:1179px){
+  .v2ct-cols{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+/* —— موبايل: شريط أزرار الأعمدة وعمود واحد ظاهر، وكل هدف ٥٢px، وبلا تمرير أفقي */
+@media(max-width:760px){
+  .v2ct-seg{display:flex;gap:6px;margin-bottom:12px}
+  .v2ct-cols{grid-template-columns:minmax(0,1fr)}
+  .v2ct-cols .v2ct-col{display:none}
+  .v2ct-cols[data-active="wait"] .v2ct-col[data-col="wait"],.v2ct-cols[data-active="draft"] .v2ct-col[data-col="draft"],
+  .v2ct-cols[data-active="idea"] .v2ct-col[data-col="idea"],.v2ct-cols[data-active="done"] .v2ct-col[data-col="done"]{display:block}
+  .v2ct-col{padding:10px}
+  .v2ct-hero-in{padding:14px 16px;min-height:84px;gap:10px}
+  .v2ct-hero-in p{font-size:16.5px}
+  .v2ct-bav{width:40px;height:40px}
+  .v2ct-b1{min-height:52px}
+  .v2ct-row .v2ct-acts .v2ct-b1,.v2ct-box .v2ct-acts .v2ct-b2{width:100%}
+  .v2ct-b2,.v2ct-b2.sm{min-height:52px}
+  .v2ct-b3{min-height:52px}
+  .v2ct-warn .v2ct-b2{display:flex;margin:8px 0 0;width:100%}
+  .v2ct-bar .v2ct-b1.auto,.v2ct-bar .v2ct-b2{flex:1 1 100%;width:100%}
+  .v2ct-sw{display:flex;width:100%}
+  .v2ct-sw button{flex:1;min-width:0;min-height:52px;padding:0 6px}
+  .v2ct-chip{min-height:52px}
+  .v2ct-chips.wrap{display:grid;grid-template-columns:repeat(3,minmax(0,1fr))}
+  .v2ct-chips.wrap .v2ct-chip{padding:0 6px;justify-content:center;font-size:13.5px;gap:4px}
+  .v2ct-grid{grid-template-columns:minmax(0,1fr)}
+  .v2ct-sel{min-height:52px;width:100%}
+  .v2ct-catf{display:grid}
+  .v2ct-box{padding:14px}
+  .v2ct-nums>div{flex:1 1 40%}
+  .v2ct-link,.v2ct-src{min-height:52px}
+  /* الأوراق القصيرة (تأكيد · رأي · تعليق) تطلع من أسفل الشاشة بحجم محتواها؛ النماذج والقراءة والأدوات تملأ الشاشة */
+  #epModal.scrim:has(.v2ct-m){padding:0;align-items:end;place-items:end stretch}
+  #epModal .modal:has(.v2ct-m){max-width:none;width:100%;border-radius:22px 22px 0 0;max-height:94vh;max-height:94dvh;display:flex;flex-direction:column}
+  #epModal .modal:has(.v2ct-m) .mb{max-height:none;flex:1;overflow-y:auto;padding-bottom:calc(18px + env(safe-area-inset-bottom))}
+  #epModal .modal:has(.v2ct-fld),#epModal .modal:has(.v2ct-article),#epModal .modal:has(.v2ct-tools){height:94vh;height:94dvh}
+  .v2ct-m .v2ct-two{grid-template-columns:minmax(0,1fr)}
+  .v2ct-m .v2ct-acts2{flex-direction:column;align-items:stretch}
+  .v2ct-m .v2ct-acts2:has(>:nth-child(3)){position:static}      /* ثلاثة أزرار فأكثر تأخذ نصف الشاشة: تبقى في آخر النموذج بدل أن تغطّيه */
+  .v2ct-m .v2ct-acts2 .v2ct-b1,.v2ct-m .v2ct-acts2 .v2ct-b2,.v2ct-m .v2ct-acts2 .v2ct-b3{width:100%;min-height:52px;flex:none}
+  .v2ct-m .v2ct-b1.lnk{width:100%}
+  .v2ct-tool{flex-direction:column;align-items:stretch}
+  .v2ct-tool .v2ct-b2{width:100%}
+  .v2ct-m .v2ct-rt{font-size:19px}
+}
+@media(prefers-reduced-motion:reduce){
+  .v2ct-t.ph .v2ct-body i{animation:none}
+}
