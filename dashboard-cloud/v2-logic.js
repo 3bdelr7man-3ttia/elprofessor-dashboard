@@ -506,7 +506,7 @@
         var cand = pickCandidate(f.candidates || r.candidates, f);
         card.tag = late ? 'ملف متأخر' : 'ملف ينتظر خبيرًا';
         card.title = str(f.title) || 'ملف';
-        card.sub = clean([who && ('العميل: ' + who), str(f.law_label), amountLabel]).join(' · ');
+        card.sub = clean([who && ('صاحب الطلب: ' + who), str(f.law_label), amountLabel]).join(' · ');
         card.brainHead = 'اقتراح العقل';
         var cur = expertNameOf(f);
         if (late) {
@@ -535,7 +535,7 @@
       case 'file_attention': {
         card.tag = 'أموال ملف متوقفة';
         card.title = str(f.title) || 'ملف';
-        card.sub = clean([who && ('العميل: ' + who), amountLabel]).join(' · ');
+        card.sub = clean([who && ('صاحب الطلب: ' + who), amountLabel]).join(' · ');
         card.brain = 'أموال هذا الملف لم تتحرك وحدها وتحتاج تدخّلك';
         card.reason = 'القرار هنا يخص الأموال، فيُفتح الملف للمراجعة أولًا';
         card.primary = { label: 'افتح وراجع', act: OPEN };
@@ -544,9 +544,9 @@
       case 'review': {
         card.tag = 'أول رأي لخبير جديد';
         card.title = str(f.title) || 'رأي ينتظر المراجعة';
-        card.sub = clean([who && ('العميل: ' + who), amountLabel]).join(' · ');
+        card.sub = clean([who && ('صاحب الطلب: ' + who), amountLabel]).join(' · ');
         card.brain = 'رأي ' + (str(f.expert_name) || 'الخبير') + ' في «' + (str(f.title) || 'الملف') + '» ينتظر مراجعتك';
-        card.reason = 'العميل ينتظر؛ لا يصله الرأي قبل موافقتك';
+        card.reason = 'صاحب الطلب ينتظر؛ لا يصله الرأي قبل موافقتك';
         card.primary = { label: 'افتح وراجع', act: OPEN };
         break;
       }
@@ -555,7 +555,7 @@
         card.tag = isCase ? 'ملاحظة على قضية' : 'نزاع';
         card.title = str(f.title) || str(c.title) || 'نزاع';
         card.sub = clean([(str(f.expert_name) || str(c.expert_name)) && ('الخبير: ' + (str(f.expert_name) || str(c.expert_name)))]).join(' · ');
-        card.brain = 'اعتراض من ' + (who || 'العميل') + ' على ' + (card.title ? '«' + card.title + '»' : 'الخدمة') + (amountLabel ? ' · ' + amountLabel : '');
+        card.brain = 'اعتراض من ' + (who || 'صاحب الطلب') + ' على ' + (card.title ? '«' + card.title + '»' : 'الخدمة') + (amountLabel ? ' · ' + amountLabel : '');
         card.reason = 'الأموال محجوزة لحين قرارك، والحسم من صفحة البند بعد قراءة الرأيين';
         card.primary = { label: 'افتح النزاع', act: OPEN };
         break;
@@ -563,7 +563,7 @@
       case 'unactivated': {
         card.tag = 'دفع بلا ملف';
         card.title = str(f.title) || 'دفعة لم يصل ملفها';
-        card.sub = who ? 'العميل: ' + who : '';
+        card.sub = who ? 'صاحب الطلب: ' + who : '';
         card.brain = (amountLabel ? 'دُفع ' + amountLabel : 'دُفع مبلغ') + ' ولم يصل ملف';
         card.reason = 'الأموال وصلت ولم يصل الملف إلى قائمة التوزيع';
         card.primary = { label: 'افتح', act: OPEN };
@@ -572,7 +572,7 @@
       case 'legacy': {
         card.tag = 'استشارة قديمة';
         card.title = str(c.title) || 'استشارة قديمة';
-        card.sub = clean([who && ('العميل: ' + who), amountLabel]).join(' · ');
+        card.sub = clean([who && ('صاحب الطلب: ' + who), amountLabel]).join(' · ');
         card.brain = 'استشارة سُلّمت قبل التحويل التلقائي وأموالها تنتظر قرارك';
         card.reason = 'للخبير أم للعميل؟ القرار من صفحة البند';
         card.primary = { label: 'افتح وراجع', act: OPEN };
@@ -2013,7 +2013,30 @@
     if (Array.isArray(row.flagLabels) && row.flagLabels.length) out.push({ t: 'حساب عليه علامات', tip: row.flagLabels.join(' · ') });
     if (row.msgSource === 'site') out.push({ t: 'من الموقع' });
     else if (row.msgSource) out.push({ t: 'من المنصة' });
+    // شارات الصف القديم (أعلام السعر · «أقل من ١٢ ساعة» · «خبير اعتذر» · التخصص): كانت تظهر في القائمة فلا تضيع منها.
+    // ما كررته أعلام الصف أعلاه (مستعجل · مراجعة عقد · لا خبير متاح · يحتاج تدخّلك) يُحذف، والتحذيرية (`w`) تأخذ نبرة التحذير.
+    if (Array.isArray(row.badges)) {
+      row.badges.forEach(function (b) {
+        var t = b && str(b.t).replace(/^[^؀-ۿA-Za-z0-9]+/, '').trim();
+        if (!t || b.attn) return;
+        if (row.urgent && t.indexOf('مستعجل') > -1) return;
+        if (row.noCandidate && t.indexOf('خبير متاح') > -1) return;
+        if (row.contract && /عقد/.test(t + ' ' + str(b.tip))) return;
+        t = copyOr(t);
+        if (out.some(function (o) { return o.t === t; })) return;
+        var f = { t: t };
+        if (b.tip) f.tip = copyOr(str(b.tip));
+        if (b.w) f.w = true;
+        out.push(f);
+      });
+    }
     return out;
+  }
+  // سبب وقوف الفلوس (سطر أحمر في الصف القديم) — نص المنصة كما وصل، يُعرض في التذكرة سطرًا واحدًا.
+  function v2hWarn(row) {
+    var t = row ? str(row.warnLine) : '';
+    var c = t && L.v2hCopy ? L.v2hCopy(t, true) : null;       // جمل المنصة المعروفة تُترجم بالعبارات الطويلة وحدها
+    return c == null ? t : c;
   }
   var GROUP_LABEL = { late: 'متأخر', wait: 'ينتظر قرارك', auto: 'عولجت تلقائيًا' };
   var GROUP_ORDER = ['late', 'wait', 'auto'];
@@ -2235,7 +2258,7 @@
 
   L.V2H_COLLOQUIAL = V2H_COLLOQUIAL;
   L.V2H_ACT_TO_DRAWER = V2H_ACT_TO_DRAWER;
-  L.v2hChips = v2hChips; L.v2hChipKeys = v2hChipKeys; L.v2hTone = v2hTone; L.v2hFlags = v2hFlags; L.v2hGroups = v2hGroups; L.v2hSegs = v2hSegs;
+  L.v2hChips = v2hChips; L.v2hChipKeys = v2hChipKeys; L.v2hTone = v2hTone; L.v2hFlags = v2hFlags; L.v2hWarn = v2hWarn; L.v2hGroups = v2hGroups; L.v2hSegs = v2hSegs;
   L.v2hTicketBtn = v2hTicketBtn; L.v2hNorm = v2hNorm; L.v2hSearchText = v2hSearchText; L.v2hBrainLine = v2hBrainLine;
   L.v2hQueueLabel = v2hQueueLabel; L.v2hAlertSection = v2hAlertSection; L.v2hNotif = v2hNotif; L.v2hNotifList = v2hNotifList;
   L.v2hBellBadge = v2hBellBadge; L.v2hHealthLine = v2hHealthLine; L.v2hServiceLine = v2hServiceLine; L.v2hAutoLine = v2hAutoLine;

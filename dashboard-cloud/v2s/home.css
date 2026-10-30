@@ -107,6 +107,8 @@ body:has(> .app.v2-shell) .v2-pill{z-index:75}
 .app.v2-shell .v2h-sub{font-size:14.5px;color:var(--h-mute);line-height:1.7;overflow-wrap:anywhere}
 .app.v2-shell .v2h-flags{display:flex;flex-wrap:wrap;gap:6px}
 .app.v2-shell .v2h-flag{background:var(--h-paper2);border:1px solid var(--h-line);border-radius:999px;padding:2px 12px;font:700 12.5px/1.6 'Cairo',sans-serif;color:#4B463E}
+.app.v2-shell .v2h-flag.w{background:#FFF8E6;border-color:#EBD38E;color:#6B4A00}
+.app.v2-shell .v2h-warn{font:700 13.5px/1.7 'Cairo',sans-serif;color:#8E1228;background:#FCEDEF;border:1px solid #F0B9C1;border-radius:10px;padding:4px 12px;overflow-wrap:anywhere}
 .app.v2-shell .v2h-brain{display:flex;align-items:flex-start;gap:10px;background:var(--h-paper);border:1px solid var(--h-line);border-radius:12px;padding:8px 12px;font-size:14px;line-height:1.75}
 .app.v2-shell .v2h-brain img{width:32px;height:32px;border-radius:50%;object-fit:cover;flex:none}
 .app.v2-shell .v2h-brain span{overflow-wrap:anywhere;min-width:0}
@@ -153,14 +155,24 @@ body:has(> .app.v2-shell) .v2-pill{z-index:75}
   .app.v2-shell .v2h-dw .drawer .dh{border-radius:0}
 }
 @media(max-width:760px){
-  .app.v2-shell .v2h-top{flex-wrap:wrap;gap:8px}
-  .app.v2-shell .v2h-search{flex:1 1 100%}
+  .app.v2-shell .v2h-top{flex-wrap:nowrap;gap:8px;margin-bottom:10px}
+  .app.v2-shell .v2h-search{flex:1 1 auto;min-width:0;padding:0 12px}
   .app.v2-shell .v2h-search input{font-size:16px}
-  .app.v2-shell .v2h-qlink{min-height:52px;flex:none}
+  .app.v2-shell .v2h-qlink{min-height:52px;flex:none;padding:0 12px;font-size:14px}
+  /* الرأس مضغوط: كل شريط سطر واحد حتى تظهر أول تذكرة فوق ٦٠٠px */
+  .app.v2-shell .v2h-bl{align-items:center;padding:6px 12px;margin-bottom:8px}
+  .app.v2-shell .v2h-bl img{width:32px;height:32px}
+  .app.v2-shell .v2h-bl span{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+  .app.v2-shell .v2h-auto{flex-wrap:wrap;padding:6px 12px;margin-bottom:8px;gap:4px 10px}
+  .app.v2-shell .v2h-autot{flex:1 1 0}
+  .app.v2-shell .v2h-autot span{display:none}
+  .app.v2-shell .v2h-strip{padding:6px 12px;margin-bottom:8px}
+  .app.v2-shell .v2h-strip.info>span{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden;flex:1 1 0}
+  .app.v2-shell .v2h-strip.fyi>span{-webkit-line-clamp:1}
   .app.v2-shell .v2h-chips{display:none}
-  .app.v2-shell .v2h-mbar{display:grid;gap:10px}
+  .app.v2-shell .v2h-mbar{display:grid;gap:8px}
   .app.v2-shell .v2h-seg{display:flex;gap:6px}
-  .app.v2-shell .v2h-segb{flex:1;min-width:0;min-height:60px;border:1px solid var(--h-line);background:#fff;border-radius:14px;padding:6px 4px;display:grid;place-items:center;gap:2px;color:var(--h-ink);font:700 12.5px/1.35 'Cairo',sans-serif}
+  .app.v2-shell .v2h-segb{flex:1;min-width:0;min-height:56px;border:1px solid var(--h-line);background:#fff;border-radius:14px;padding:6px 4px;display:grid;place-items:center;gap:2px;color:var(--h-ink);font:700 12.5px/1.35 'Cairo',sans-serif}
   .app.v2-shell .v2h-segb b{font:800 18px/1 'Cairo',sans-serif}
   .app.v2-shell .v2h-segb.on{background:var(--h-wine);border-color:var(--h-wine);color:#fff}
   .app.v2-shell .v2h-segb.tone-late:not(.on) b{color:var(--h-red)}
@@ -183,7 +195,7 @@ body:has(> .app.v2-shell) .v2-pill{z-index:75}
   .app.v2-shell .v2h-trow.on{background:var(--h-wine);border-color:var(--h-wine);color:#fff}
   .app.v2-shell .v2h-trow.on b{color:#fff}
   .app.v2-shell .v2h-qgrid{grid-template-columns:minmax(0,1fr)}
-  .app.v2-shell .v2h-bl{padding:10px 12px;font-size:14.5px}
+  .app.v2-shell .v2h-bl{font-size:14.5px}
   .app.v2-shell .v2h-more{width:100%;min-height:52px}
 }
 @media(min-width:761px){
@@ -291,7 +303,8 @@ body:has(> .app.v2-shell) #bellBtn .v2h-bn{position:absolute;top:-6px;inset-inli
 body:has(> .app.v2-shell) #bellBtn .v2h-bn:empty{display:none}
 body:has(> .app.v2-shell) #bellBtn .v2h-bn.tone-warn{background:#E0A526;color:#21262E}
 body:has(> .app.v2-shell) #bellBtn .v2h-bn.dot:empty{display:block;min-width:0;width:12px;height:12px;padding:0;border:2px solid #fff;background:#E0A526;top:-3px;inset-inline-start:-3px}
-body:has(> .app.v2-shell) #bellBtn .v2h-bn.dot:not(:empty)::after{content:"";position:absolute;bottom:-4px;inset-inline-end:-4px;width:10px;height:10px;border-radius:50%;background:#E0A526;border:2px solid #fff}
+/* العدّ والصحة معًا: العدّ دائرة عنّابية مقروءة في الزاوية العليا، والنقطة الكهرمانية على زاوية الزر السفلى المقابلة (لا تتقاطعان) */
+body:has(> .app.v2-shell) #bellBtn.v2h-hd::after{content:"";position:absolute;bottom:3px;inset-inline-end:3px;width:10px;height:10px;border-radius:50%;background:#E0A526;border:2px solid #fff;box-sizing:content-box;transform:translate(2px,2px)}
 body:has(> .app.v2-shell) .v2h-bscrim{display:none;position:fixed;inset:0;z-index:77;background:transparent}
 body:has(> .app.v2-shell) .v2h-bscrim.open{display:block}
 body:has(> .app.v2-shell) .v2h-bell{display:none;position:fixed;z-index:78;top:62px;inset-inline-end:28px;width:420px;max-height:70vh;overflow-y:auto;background:#FBFAF7;border:1px solid #E9E1D6;border-radius:18px;box-shadow:0 18px 44px rgba(33,38,46,.22);font-family:'IBM Plex Sans Arabic','Cairo',sans-serif;color:#21262E}

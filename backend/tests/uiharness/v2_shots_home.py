@@ -39,6 +39,7 @@ MARKERS = ['مش ', 'دلوقتي', 'اتبعت', 'اتدفع', 'اتستلم', 
 CAPTURE = set()
 OPENED = set()
 SEED_IDS = {}
+RECEIPT_IDX = [0]
 
 GRAB_JS = """() => { const c = window.V2SEC && V2SEC.home && V2SEC.home.copy; if (!c || !c.log) return []; const out = [...c.log]; c.log.clear(); return out; }"""
 
@@ -352,6 +353,20 @@ def flow_board_bell(browser, h, pre, vp, mobile):
     hshot(page, pre + '02-board-health-alerts.jpg', 'board')
     # ٠٣) الجرس: حالة المنصة + ٣ إشعارات (واحد مقروء) + النبضات
     page.wait_for_function("() => V2SEC.home.bell.notif.state === 'ready'", timeout=15000)
+    page.wait_for_timeout(300)
+    bx = page.evaluate("""() => { const bb = document.getElementById('bellBtn'), n = bb.querySelector('.v2h-bn'); if (!n) return null;
+      const r = bb.getBoundingClientRect(), nr = n.getBoundingClientRect(), cs = getComputedStyle(bb, '::after');
+      const dot = cs.content && cs.content !== 'none' ? {l: r.left + bb.clientLeft + parseFloat(cs.left), t: r.top + bb.clientTop + parseFloat(cs.top), w: parseFloat(cs.width) + 4, h: parseFloat(cs.height) + 4} : null;
+      return {num: n.textContent, hd: bb.classList.contains('v2h-hd'), n: [nr.left, nr.top, nr.right, nr.bottom], dot, btn: [r.left, r.top, r.right, r.bottom]}; }""")
+    if not bx or not bx['num'] or not bx['hd'] or not bx['dot']:
+        PROBLEMS.append('%s02: شارة الجرس: المطلوب عدّ + نقطة صحة معًا: %r' % (pre, bx))
+    else:
+        d = bx['dot']; n = bx['n']
+        if d['l'] < n[2] and d['l'] + d['w'] > n[0] and d['t'] < n[3] and d['t'] + d['h'] > n[1]:
+            PROBLEMS.append('%s02: نقطة الصحة تغطي رقم الجرس: %r' % (pre, bx))
+    bc = bx['btn'] if bx else [0, 0, 60, 60]
+    page.screenshot(path=os.path.join(OUT, pre + '03b-bell-badge-crop.jpg'), type='jpeg', quality=88,
+                    clip={'x': max(0, bc[0] - 20), 'y': max(0, bc[1] - 14), 'width': 90, 'height': 74})
     page.click('#bellBtn')
     page.wait_for_selector('#v2HBell.open')
     page.wait_for_timeout(400)
@@ -393,6 +408,34 @@ def flow_board_bell(browser, h, pre, vp, mobile):
     del h.ef.forced[('GET', '/api/bridge/ops/queue')]
 
 
+def settle(page):
+    """ينتظر انتهاء التمرير السلس قبل اللقطة."""
+    prev = None
+    for _ in range(25):
+        cur = page.evaluate("""() => { const c = document.querySelector('.content'); const q = document.getElementById('v2hQueue');
+          return [Math.round(scrollY), c ? Math.round(c.scrollTop) : 0, q ? Math.round(q.getBoundingClientRect().top) : 0]; }""")
+        if cur == prev:
+            return
+        prev = cur
+        page.wait_for_timeout(150)
+
+
+def queue_shot(page, name, need=None):
+    """لقطة «أرقام المنصة» وهي في مجال الرؤية فعلًا (لا نعود إلى أعلى الصفحة كما يفعل hshot)."""
+    settle(page)
+    page.evaluate("() => { const d = document.getElementById('v2hQueue'); if (d) d.scrollIntoView({block: 'start', behavior: 'auto'}); }")
+    page.wait_for_timeout(250)
+    r = page.evaluate("""() => { const d = document.getElementById('v2hQueue').getBoundingClientRect(); return [Math.round(d.top), Math.round(d.bottom), innerHeight, document.getElementById('v2hQueue').innerText]; }""")
+    if not (0 <= r[0] < r[2]) or r[1] <= 0:
+        PROBLEMS.append('%s: لوحة «أرقام المنصة» ليست في مجال الرؤية (%s..%s من %s)' % (name, r[0], r[1], r[2]))
+    if need and need not in r[3]:
+        PROBLEMS.append('%s: النص المتوقع «%s» غير موجود: %r' % (name, need, r[3][:80]))
+    base.shot(page, name)
+    shell_check(page, name)
+    home_check(page, name, 'inbox', True)
+    grab(page)
+
+
 # ----------------------------------------------------------------- كل الوارد
 def flow_inbox(browser, h, pre, vp, mobile):
     w = vp['width']
@@ -400,12 +443,37 @@ def flow_inbox(browser, h, pre, vp, mobile):
     page = open_page(ctx, '#s/home/inbox', INBOX_READY)
     # ٠٥) كله
     hshot(page, pre + '05-inbox-all.jpg')
+    if w <= 400:
+        top = page.evaluate("() => { const t = document.querySelector('.v2h-t'); return t ? Math.round(t.getBoundingClientRect().top) : null; }")
+        if top is None or top > 600:
+            PROBLEMS.append('%s05: أول تذكرة تبدأ عند %s px في الموبايل (المطلوب أقل من ٦٠٠)' % (pre, top))
     info = page.evaluate("""() => ({bl: !!document.querySelector('.v2h-bl'), auto: !!document.querySelector('.v2h-auto'), fyi: document.querySelectorAll('.v2h-strip').length,
       groups: [...document.querySelectorAll('.v2h-g')].map(g => g.dataset.grp), top: document.getElementById('inboxN').textContent, queue: !!document.getElementById('v2hQueue')})""")
     if not (info['bl'] and info['auto'] and info['queue']):
         PROBLEMS.append('%s05: عناصر الشاشة الناقصة %r' % (pre, info))
     if w > 760 and info['groups'][:2] != ['late', 'wait']:
         PROBLEMS.append('%s05: ترتيب المجموعات %r' % (pre, info['groups']))
+    # ٠٥ب) شارات الصف القديم وسطر وقوف الأموال ظاهرة في التذكرة نفسها
+    fl = None
+    for g in (('late', 'wait', 'auto') if mobile else (None,)):
+        if g:
+            page.click('.v2h-segb[data-g="%s"]' % g)
+            page.wait_for_timeout(150)
+        fl = page.evaluate("""() => { const e = document.querySelector('.v2h-warn') || document.querySelector('.v2h-flag.w'); if (!e) return null;
+          e.closest('.v2h-t').scrollIntoView({block: 'center', behavior: 'auto'});
+          return {warn: document.querySelectorAll('.v2h-warn').length, w: document.querySelectorAll('.v2h-flag.w').length, flags: document.querySelectorAll('.v2h-flag').length}; }""")
+        if fl:
+            break
+    if not fl or not fl['warn'] or not fl['w']:
+        PROBLEMS.append('%s05b: شارات التذكرة (تحذيرية) أو سطر وقوف الأموال لم تظهر: %r' % (pre, fl))
+    else:
+        page.wait_for_timeout(250)
+        base.shot(page, pre + '05b-ticket-flags.jpg')
+        shell_check(page, pre + '05b-ticket-flags.jpg')
+        grab(page)
+    if mobile:
+        page.click('.v2h-segb[data-g="late"]')
+        page.evaluate("() => { const c = document.querySelector('.content'); if (c) c.scrollTop = 0; window.scrollTo(0, 0); }")
     # شريط الموبايل: كل جزء مرة (٢٧) ثم ورقة النوع (٢٨)
     if mobile:
         for g, nm in (('late', 'a'), ('wait', 'b'), ('auto', 'c')):
@@ -491,13 +559,18 @@ def flow_inbox(browser, h, pre, vp, mobile):
     page.wait_for_function("() => document.querySelector('.v2h[data-ctx=\"home\"]')", timeout=15000)
     page.wait_for_timeout(300)
     page.click('.v2h-qlink')
-    page.wait_for_timeout(450)
     if not page.evaluate("() => document.getElementById('v2hQueue').open"):
         PROBLEMS.append(pre + '20: «أرقام المنصة» ما فتحتش')
     nq = page.evaluate("() => document.querySelectorAll('.v2h-qb').length")
     if not nq:
         PROBLEMS.append(pre + '20: «أرقام المنصة» فاضية')
-    hshot(page, pre + '20-queue-open.jpg')
+    queue_shot(page, pre + '20-queue-open.jpg')
+    # حالتا الصفر والفشل (تُفرضان في الصفحة نفسها لأن الطابور قراءة فقط)
+    page.evaluate("() => { window.__qc = window.opsQueueCounters; window.opsQueueCounters = () => []; V2SEC.home.list(); }")
+    queue_shot(page, pre + '20b-queue-zero.jpg', need='لا أرقام تنتظرك الآن')
+    page.evaluate("() => { window.opsQueueCounters = window.__qc; EP.state.opsQueue = 'error'; V2SEC.home.list(); }")
+    queue_shot(page, pre + '20c-queue-failed.jpg', need='تعذّر جلب أرقام المنصة')
+    page.evaluate("() => { EP.state.opsQueue = 'ready'; V2SEC.home.list(); }")
     # ١٨) أوقفه: التأكيد داخل الصفحة (بلا إرسال)
     page.evaluate("() => { document.getElementById('v2hQueue').open = false; window.scrollTo(0, 0); }")
     page.click('[data-a="auto_off"]')
@@ -729,15 +802,27 @@ def flow_ticket_btn(browser, h, pre, vp, mobile):
     for kind, expect, pred in (("manual_payment", 'approve', "r.apiKind === 'manual_payment'"),
                                ("expert_file", 'ef_pick', "r.apiKind === 'expert_file' && r.efLane === 'waiting' && r.triage === 'human' && !r.fyi")):
         idx = page.evaluate("(src) => { const f = new Function('r', 'return (' + src + ')'); return INBOX.findIndex(r => f(r)); }", pred)
+        if kind == 'manual_payment':
+            RECEIPT_IDX[0] = idx
         sel = reveal_btn(page, idx, mobile)
         page.click(sel)
         page.wait_for_timeout(700)
-        got = page.evaluate("() => { const a = document.activeElement; return [a && a.getAttribute('data-a'), !!(a && a.classList.contains('v2h-hl')), selected]; }")
-        if got[0] != expect:
-            PROBLEMS.append('%s13b: زر التذكرة (%s) ركّز على %r والمتوقع %s' % (pre, kind, got, expect))
-        hshot(page, pre + ('13b-ticket-btn-receipt.jpg' if kind == 'manual_payment' else '13b-ticket-btn-file.jpg'), 'inbox')
-        if page.query_selector('#epModal'):
-            PROBLEMS.append(pre + '13b: ضغط زر التذكرة فتح نافذة (المفروض يفتح الدرج فقط)')
+        if kind == 'expert_file':
+            # «انقله/أرسله إلى فلان»: قائمة الاختيار الموجودة تُفتح والخبير المقترح محدَّد فيها (الإرسال بزرّها هي، لا من هنا)
+            sug = page.evaluate("(i) => { const c = V2L.v2Card(INBOX[i], {now: Date.now()}); return c && c.primary && c.primary.act && (c.primary.act.name || c.primary.act.email) || null; }", idx)
+            pk = page.evaluate("() => { const m = document.getElementById('epModal'); if (!m) return null; const on = m.querySelector('.ef-cand input:checked');"
+                               " const go = m.querySelector('#ep_go'); return {pick: on ? on.closest('.ef-cand').querySelector('.nm').textContent.trim() : null, go: go && go.textContent.trim(), dis: go && go.disabled}; }")
+            if not sug or not pk or pk['pick'] != sug or pk['dis'] or sug not in (pk['go'] or ''):
+                PROBLEMS.append('%s13b: زر التذكرة (ملف) ما حدّدش الخبير المقترح في القائمة: مقترح=%r قائمة=%r' % (pre, sug, pk))
+            hshot(page, pre + '13b-ticket-btn-file.jpg', 'drawer', check_targets=False)
+            page.evaluate("() => { const m = document.getElementById('epModal'); if (m) m.remove(); }")
+        else:
+            got = page.evaluate("() => { const a = document.activeElement; return [a && a.getAttribute('data-a'), !!(a && a.classList.contains('v2h-hl')), selected]; }")
+            if got[0] != expect:
+                PROBLEMS.append('%s13b: زر التذكرة (%s) ركّز على %r والمتوقع %s' % (pre, kind, got, expect))
+            hshot(page, pre + '13b-ticket-btn-receipt.jpg', 'inbox')
+            if page.query_selector('#epModal'):
+                PROBLEMS.append(pre + '13b: ضغط زر الإيصال فتح نافذة (المفروض يفتح الدرج فقط)')
         if kind == 'manual_payment':
             # «أكّد» في الدرج ⇒ ورقة التأكيد الموجودة (لا إرسال مباشر)
             page.click('#drawer [data-a="approve"]')
@@ -748,7 +833,7 @@ def flow_ticket_btn(browser, h, pre, vp, mobile):
         close_drawer(page)
     # الإغلاق بالزر ثم Escape يرجعان التركيز
     if w < 1180:
-        page.click('.v2h-btn1 >> nth=0')
+        page.click(reveal_btn(page, RECEIPT_IDX[0], mobile))       # زر الإيصال يفتح الدرج فقط (زر الملف يفتح القائمة أيضًا)
         page.wait_for_timeout(500)
         page.keyboard.press('Escape')
         page.wait_for_timeout(250)

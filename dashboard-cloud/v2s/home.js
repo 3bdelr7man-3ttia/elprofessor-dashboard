@@ -121,7 +121,7 @@
     S.lastCtx = ctx;
     v.innerHTML = '<div class="v2h" data-ctx="' + ctx + '">'
       + '<div class="v2h-top"><label class="v2h-search">' + SEARCH_ICON
-      + '<input id="v2hq" type="search" autocomplete="off" placeholder="ابحث باسم صاحب الطلب أو بريده أو الخدمة" aria-label="ابحث في الوارد"></label>'
+      + '<input id="v2hq" type="search" autocomplete="off" placeholder="' + (mobile() ? 'ابحث في الوارد' : 'ابحث باسم صاحب الطلب أو بريده أو الخدمة') + '" aria-label="ابحث في الوارد"></label>'
       + '<button type="button" class="v2h-qlink" data-a="queue">أرقام المنصة</button></div>'
       + '<div id="v2hHead"></div>'
       + '<div class="filterbar v2h-fb" id="filters"></div>'
@@ -227,9 +227,9 @@
     var nf = fyiRows().length;
     if (f === 'fyi') {
       var back = ctx === 'files' ? 't:files' : 'all';
-      html += strip('info', '<span>' + esc(L.v2hFyiLine(nf, null, true)) + '</span><button type="button" class="v2h-lnk" data-a="fyi_back" data-f="' + back + '">رجوع إلى الكل</button>');
+      html += strip('info fyi', '<span>' + esc(L.v2hFyiLine(nf, null, true)) + '</span><button type="button" class="v2h-lnk" data-a="fyi_back" data-f="' + back + '">رجوع إلى الكل</button>');
     } else if (nf > 0 && mode !== 'closed' && ((ctx === 'home' && f === 'all') || (ctx === 'files' && f === 't:files'))) {
-      html += strip('info', '<span>' + esc(L.v2hFyiLine(nf, call('efAutoOn'), false)) + '</span><button type="button" class="v2h-lnk" data-a="fyi_on">اعرضها</button>');
+      html += strip('info fyi', '<span>' + esc(L.v2hFyiLine(nf, call('efAutoOn'), false)) + '</span><button type="button" class="v2h-lnk" data-a="fyi_on">اعرضها</button>');
     }
     el.innerHTML = html;
   }
@@ -283,20 +283,19 @@
   }
 
   // ------------------------------------------------------------------ التذاكر
-  // تسمية محايدة لصاحب الطلب في سطور التذكرة (نصوص البطاقات المشتركة مع اللوحة تقول «العميل»)
-  function neutral(t) { return String(t == null ? '' : t).replace(/للعميل/g, 'لصاحب الطلب').replace(/العميل/g, 'صاحب الطلب'); }
   function ticketHtml(it, sel) {
     var c = it.card || { tag: 'بند', title: str(it.row.who) || 'بند ينتظر قرارك', sub: '', brain: '', ageText: '' };
     var btn = L.v2hTicketBtn(it.card);
-    var flags = L.v2hFlags(it.row);
+    var flags = L.v2hFlags(it.row), warn = L.v2hWarn(it.row);
     var title = esc(c.title);
     if (c.person && window.V2D2 && window.V2D2.link) title = window.V2D2.link(c.title, c.person.email);
     var h = '<article class="v2h-t tone-' + it.tone + (sel ? ' sel' : '') + '" data-i="' + it.idx + '"' + (sel ? ' aria-current="true"' : '') + '>'
       + '<div class="v2h-ttop"><span>' + esc(c.tag) + '</span><span class="v2h-age">' + esc(c.ageText || 'غير معروف الوقت') + '</span></div>'
       + '<div class="v2h-tbody"><b class="v2h-ttl">' + title + '</b>'
-      + (c.sub ? '<p class="v2h-sub">' + esc(neutral(c.sub)) + '</p>' : '')
-      + (flags.length ? '<div class="v2h-flags">' + flags.map(function (f) { return '<span class="v2h-flag"' + (f.tip ? ' title="' + esc(f.tip) + '"' : '') + '>' + esc(f.t) + '</span>'; }).join('') + '</div>' : '')
-      + (c.brain && c.brain !== c.tag && c.brain !== c.sub ? '<p class="v2h-brain"><img src="' + img('brain-avatar') + '" alt=""><span>' + esc(neutral(c.brain)) + '</span></p>' : '')
+      + (c.sub ? '<p class="v2h-sub">' + esc(c.sub) + '</p>' : '')
+      + (flags.length ? '<div class="v2h-flags">' + flags.map(function (f) { return '<span class="v2h-flag' + (f.w ? ' w' : '') + '"' + (f.tip ? ' title="' + esc(f.tip) + '"' : '') + '>' + esc(f.t) + '</span>'; }).join('') + '</div>' : '')
+      + (warn ? '<p class="v2h-warn">' + esc(warn) + '</p>' : '')
+      + (c.brain && c.brain !== c.tag && c.brain !== c.sub ? '<p class="v2h-brain"><img src="' + img('brain-avatar') + '" alt=""><span>' + esc(c.brain) + '</span></p>' : '')
       + (it.row.amountLabel ? '<span class="v2h-amt">' + esc(it.row.amountLabel) + '</span>' : '')
       + '</div><div class="v2h-tfoot"><button type="button" class="v2h-btn1" data-a="t1" data-i="' + it.idx + '" aria-label="' + esc(btn.label + ': ' + c.title) + '">' + esc(btn.label) + '</button></div></article>';
     return h;
@@ -402,6 +401,23 @@
     if (!narrow()) { try { dr.scrollTop = 0; } catch (e) {} }
     if (drawerA !== undefined) focusTarget(dr, drawerA);
   }
+  // زر التذكرة «أرسله/انقله إلى فلان»: يفتح قائمة الاختيار الموجودة والخبير المقترح محدَّد فيها، ولا يُرسل شيئًا:
+  // الإرسال نفسه يبقى بزر القائمة («ابعته لـ…») ومن غير تغيير في مساره. لو لم يُعثر على الاسم تُترك القائمة بلا تحديد ليختار المؤسس.
+  function openPicker(card) {
+    var a = card && card.primary && card.primary.act;
+    var name = a && String(a.name || a.email || '').trim();
+    var dr = document.getElementById('drawer');
+    var b = dr && qs('.acts [data-a="ef_pick"]', dr);
+    if (!name || !b) return;
+    b.click();
+    var m = document.getElementById('epModal'); if (!m) return;
+    var hit = qsa('.ef-cand', m).filter(function (lb) { var n = qs('.nm', lb); return n && n.textContent.trim() === name; })[0];
+    var inp = hit && qs('input[type=radio]', hit);
+    if (!inp) return;
+    inp.checked = true;
+    try { if (typeof inp.onchange === 'function') inp.onchange(); else inp.dispatchEvent(new Event('change', { bubbles: true })); } catch (e) {}
+    var go = qs('#ep_go', m); if (go) { try { go.focus({ preventScroll: true }); } catch (e2) {} }
+  }
   function focusTarget(dr, drawerA) {
     var acts = qs('.acts', dr), t = null;
     if (drawerA) t = qs('.acts [data-a="' + drawerA + '"]', dr);
@@ -432,7 +448,12 @@
       var el = t.closest && t.closest('[data-a],[data-f],[data-g],.v2h-t');
       if (!el || !root.contains(el)) return;
       var act = el.getAttribute('data-a');
-      if (act === 't1') { openTicket(+el.getAttribute('data-i'), L.v2hTicketBtn(cardForIdx(+el.getAttribute('data-i'))).drawerA); return; }
+      if (act === 't1') {
+        var ti = +el.getAttribute('data-i'), tc = cardForIdx(ti), tb = L.v2hTicketBtn(tc);
+        openTicket(ti, tb.drawerA);
+        if (tb.drawerA === 'ef_pick') openPicker(tc);
+        return;
+      }
       if (el.classList.contains('v2h-t') && !act) { if (t.closest('a')) return; openTicket(+el.getAttribute('data-i')); return; }
       if (el.hasAttribute('data-g') && !act) { S.seg = el.getAttribute('data-g'); drawAll(false); return; }
       if (act === 'more') { S.page += 60; drawAll(false); return; }
@@ -550,6 +571,7 @@
     if (!em) { em = document.createElement('em'); em.className = 'v2h-bn'; bb.appendChild(em); }
     em.textContent = b.text;
     em.className = 'v2h-bn tone-' + b.tone + (b.dot ? ' dot' : '');
+    bb.classList.toggle('v2h-hd', !!(b.dot && b.text));        // عدّ + صحة معًا: النقطة على زاوية الزر لا فوق الرقم
     var label = 'التنبيهات';
     if (b.text && b.text !== '!') label = 'التنبيهات · ' + b.text + ' جديدة';
     else if (b.dot || b.text === '!') label = 'التنبيهات · حالة المنصة تحتاج نظرة';
@@ -698,7 +720,9 @@
   // ------------------------------------------------------------------ طبقة النصوص (الدرج ونافذة التأكيد والتنبيهات)
   var C = H.copy = { missed: new Set ? new Set() : null, installed: false, log: window.__v2hCap && window.Set ? new Set() : null };   // `log`: التقاط النصوص الأصلية لسكربت اللقطات فقط
   var MARKERS = L.V2H_COLLOQUIAL;
-  var SCOPE = '.drawer,#epModal,#toasts';
+  // ⛔ الدرج: درج الوارد وحده (`.v2h .drawer`). غيره من الأقسام (جهات الاتصال · المستثمرون · الأسواق · المستخدمون · الدورات …) يشارك
+  // نفس صنف `.drawer` وفيه أسماء وكلام كتبه الناس، فلا تُلمس أبدًا. النافذة والتنبيهات المنبثقة تعمل خارج الوارد بالعبارات الطويلة وحدها.
+  var SCOPE = '.v2h .drawer,#epModal,#toasts';
   // «بقى» (عامية: إذن) لا تُطابَق داخل «يبقى/تبقى»: تُقرأ كلمةً كاملة.
   function hasMarker(t) {
     for (var i = 0; i < MARKERS.length; i++) {
@@ -711,7 +735,8 @@
   // تُطبَّق العبارات الطويلة وحدها (جمل الداشبورد نفسها) ولا يُسجَّل فائتًا · غير ذلك ⇒ نص الداشبورد: كل القاموس ويُسجَّل الفائت.
   function zoneOf(el) {
     if (!el || !el.closest) return 'skip';
-    if (el.closest('.ef-quote .row2,.ef-ms .row2,.ef-voice-msg,script,style,[data-nocopy]')) return 'skip';
+    if (el.closest('.ef-quote .row2,.ef-ms .row2,.ef-voice-msg,.ef-cand .nm,script,style,[data-nocopy]')) return 'skip';       // `.ef-cand .nm` = اسم خبير
+    if (el.closest('.note-ai b')) return 'data';                                                                  // اسم الطرف الآخر / الخبير الحالي داخل جملة الداشبورد
     if (el.closest('.ef-op') && !el.closest('.ef-op .meta')) return 'data';       // `.meta` تحت الرأي سطر كتبه الداشبورد («اتبعت …» · «+ ١ إجابة…»)
     return '';
   }
@@ -777,7 +802,7 @@
       var tt = t.trim(), pre = tt.indexOf('فتح ') === 0 ? 'فتح ' : '', nm = pm[pre ? tt.slice(4) : tt];
       if (nm) { node.nodeValue = t.replace(tt, (pre ? 'افتح ' : '') + nm); return; }
     }
-    var strict = zone === 'data' || !!(own && own.has(t.trim()));
+    var strict = zone === 'data' || !!(own && own.has(t.trim())) || (!par.closest('.drawer') && !mounted());   // نافذة/تنبيه خارج الوارد: عبارات طويلة فقط
     var out = L.v2hCopy(t, strict);
     if (out != null) { node.nodeValue = out; return; }
     if (!strict && C.missed && C.missed.size < 500 && hasMarker(t)) C.missed.add(t.trim());
@@ -791,9 +816,10 @@
       var v = el.getAttribute && el.getAttribute(a);
       if (!v) return;
       if (C.log) C.log.add(v.trim());
-      var out = L.v2hCopy(v, zone === 'data');
+      var strictA = zone === 'data' || (!el.closest('.drawer') && !mounted());
+      var out = L.v2hCopy(v, strictA);
       if (out != null) el.setAttribute(a, out);
-      else if (zone !== 'data' && C.missed && C.missed.size < 500 && hasMarker(v)) C.missed.add(v.trim());
+      else if (!strictA && C.missed && C.missed.size < 500 && hasMarker(v)) C.missed.add(v.trim());
     });
   }
   function processTree(root) {

@@ -437,7 +437,8 @@ def test_copy_is_idempotent_and_never_outputs_a_colloquial_marker_or_the_banned_
 def test_copy_keys_exist_verbatim_in_the_source_or_in_the_captured_run():
     d = _node("console.log(JSON.stringify({e: Object.keys(L.__copyDict.EXACT), p: L.__copyDict.PHRASES.map(x => x[0])}))") if NODE else {'e': [], 'p': []}
     cap = _capture()
-    blob = HTML + _read('dashboard-cloud', 'dashboard-api.js') + '\n'.join(cap)
+    # جمل وقوف الأموال تأتي من المنصة حرفيًا (فيكستشر المنصة يعكسها)، فهي مصدر مفاتيحها
+    blob = HTML + _read('dashboard-cloud', 'dashboard-api.js') + _read('backend', 'tests', 'uiharness', 'ef_fixtures.py') + '\n'.join(cap)
     dead = [k for k in d['e'] + d['p'] if k.strip() not in blob]
     assert not dead, dead[:8]
 
@@ -509,6 +510,99 @@ def test_old_screen_names_in_the_drawer_become_the_new_place_names():
       h.ctx.selected = 1; const d = mk('الخبراء والمدربون', scope); C.processText(d);
       console.log(JSON.stringify([a.nodeValue, b.nodeValue, c.nodeValue, d.nodeValue]))"""))
     assert r == ['الفلوس', 'افتح الفلوس', 'الخبراء والمدربون', 'الدورات والمدرّبون']      # لكل صف مكانه (الصف الأول لا يغيّر اسم «الخبراء»)
+
+
+# محاكاة أصدق لـ`closest`: `own` = أصناف العنصر نفسه، `anc` = أصناف الأسلاف. يدعم القائمة بفاصلة وعلاقة «سليل» بمسافة.
+_FAKE_DOM = """
+const mk2 = (txt, own, anc, tag) => {
+  const el = { nodeType: 1, tagName: tag || 'DIV', value: '', defaultValue: '',
+    closest(sel) {
+      return sel.split(',').some(one => {
+        const toks = one.trim().split(/\\s+/), last = toks.pop();
+        if (!own.includes(last)) return false;
+        return toks.every(t => anc.includes(t));
+      }) ? this : null;
+    } };
+  return { nodeType: 3, nodeValue: txt, parentNode: el };
+};
+"""
+
+
+@needs_node
+def test_drawer_outside_the_inbox_view_is_never_rewritten():
+    """درج جهات الاتصال والمستثمرين والأسواق والمستخدمين والدورات يشارك صنف `.drawer`: أسماء الناس فيه لا تُمسّ أبدًا."""
+    r = _vm(_fake_node_vm(_FAKE_DOM + """
+      const names = ['شركة الشغل للمقاولات', 'أريد استرجاع فلوس الدورة', 'العميل المميز', 'رجّع الفلوس'];
+      const outside = names.map(t => mk2(t, ['.drawer'], []));              // درج قسم آخر: لا `.v2h` فوقه
+      const inside = names.map(t => mk2(t, ['.drawer'], ['.v2h']));        // درج الوارد
+      outside.forEach(n => C.processText(n)); inside.forEach(n => C.processText(n));
+      console.log(JSON.stringify({out: outside.map(n => n.nodeValue), inn: inside.map(n => n.nodeValue), missed: [...C.missed]}))"""))
+    assert r['out'] == ['شركة الشغل للمقاولات', 'أريد استرجاع فلوس الدورة', 'العميل المميز', 'رجّع الفلوس']
+    assert r['inn'][3] == 'أعد الأموال إلى صاحب الطلب'                      # وفي الوارد تعمل الطبقة كما كانت
+    assert r['missed'] == []
+
+
+@needs_node
+def test_modal_and_toasts_outside_the_inbox_use_long_phrases_only():
+    r = _vm(_fake_node_vm(_FAKE_DOM + """
+      const a = mk2('شركة الشغل', ['#epModal'], []), b = mk2('ما قدرناش نجيب القضية دلوقتي — اقفل الدرج وافتحه تاني', ['#toasts'], []);
+      C.processText(a); C.processText(b);
+      console.log(JSON.stringify([a.nodeValue, b.nodeValue]))"""))
+    assert r[0] == 'شركة الشغل' and r[1].startswith('تعذّر جلب القضية')
+
+
+def test_scope_selector_pins_the_drawer_to_the_inbox_mount():
+    assert "var SCOPE = '.v2h .drawer,#epModal,#toasts';" in HOME_JS
+    assert "'.drawer,#epModal" not in HOME_JS                                # الصيغة القديمة (كل الأقسام) ممنوعة
+
+
+@needs_node
+def test_row_badges_and_warn_line_reach_the_ticket_without_duplicates():
+    r = _node("""const row = {urgent: 1, contract: 1, noCandidate: 1, needsAttention: 1, warnLine: 'فلوس الملف لم تتحرك',
+      badges: [{w: true, attn: true, t: 'محتاج تدخّلك'}, {w: true, t: '⚡ مستعجل'}, {w: true, t: 'مالوش خبير متاح'}, {t: 'مراجعة عقد', tip: 'مراجعة عقد قبل التوقيع'},
+               {w: true, t: '⏳ فاضل أقل من ١٢ ساعة', tip: 'لو ما اتستلمش قبل الميعاد، فلوس العميل بترجع لوحدها'}, {t: 'خبير اعتذر'}, {t: 'قانون العمل'}, {w: true, t: '⚠️ البلد مختلف'}]};
+      console.log(JSON.stringify({f: L.v2hFlags(row), w: L.v2hWarn(row), none: L.v2hFlags({badges: [{t: ''}, null]}), nowarn: L.v2hWarn({})}))""")
+    t = [x['t'] for x in r['f']]
+    assert t[:4] == ['مستعجل', 'مراجعة عقد', 'لا خبير متاح', 'يحتاج تدخّلك']
+    assert len(t) == len(set(t))                                           # لا تكرار
+    assert not any('محتاج تدخّلك' in x or 'مالوش' in x for x in t)
+    assert any('أقل من' in x and 'ساعة' in x for x in t)
+    warn = [x for x in r['f'] if 'ساعة' in x['t']][0]
+    assert warn.get('w') is True and 'العميل' not in warn.get('tip', '')    # التلميح بالنص المبسّط
+    assert 'خبير اعتذر' in t and 'قانون العمل' in t and 'البلد مختلف' in t and not any(x.startswith('⚠') or x.startswith('⏳') for x in t)
+    assert r['w'] == 'فلوس الملف لم تتحرك' and r['none'] == [] and r['nowarn'] == ''
+
+
+def test_ticket_renders_flags_with_warning_tone_and_the_stuck_money_line():
+    assert "L.v2hWarn(it.row)" in HOME_JS and "(f.w ? ' w' : '')" in HOME_JS and 'class="v2h-warn"' in HOME_JS
+    assert '.v2h-flag.w' in HOME_CSS and '.v2h-warn' in HOME_CSS
+
+
+def test_card_texts_say_the_requester_not_the_customer_at_the_source():
+    """التسمية المحايدة في مصدر البطاقات المشتركة، لا بنص استبدال وقت العرض."""
+    src = LOGIC[LOGIC.index('function v2Card'):LOGIC.index('// ===== v2s:home =====')] if 'function v2Card' in LOGIC else LOGIC
+    assert "'العميل: '" not in src and "'العميل ينتظر" not in src
+    assert 'صاحب الطلب: ' in src
+    assert 'function neutral' not in HOME_JS and 'neutral(' not in HOME_JS
+
+
+def test_ticket_button_for_a_file_preselects_the_suggested_expert_in_the_existing_picker():
+    assert 'function openPicker(card)' in HOME_JS
+    assert "if (tb.drawerA === 'ef_pick') openPicker(tc);" in HOME_JS
+    body = HOME_JS[HOME_JS.index('function openPicker(card)'):HOME_JS.index('function focusTarget(')]
+    assert 'expertFileSend' not in body and 'confirmed' not in body       # لا إرسال من هنا: يبقى بزر القائمة نفسها
+    assert "'.ef-cand .nm'" in HOME_JS or '.ef-cand .nm' in HOME_JS      # اسم الخبير لا تلمسه طبقة النصوص
+
+
+def test_bell_dot_sits_on_the_button_corner_not_on_the_count():
+    assert '.v2h-bn.dot:not(:empty)::after' not in HOME_CSS
+    assert '#bellBtn.v2h-hd::after' in HOME_CSS and "classList.toggle('v2h-hd'" in HOME_JS
+
+
+def test_mobile_header_is_compacted_so_the_first_ticket_is_near_the_top():
+    m = HOME_CSS[HOME_CSS.index('@media(max-width:760px){\n  .app.v2-shell .v2h-top'):]
+    m = m[:m.index('@media(min-width:761px)')]
+    assert '.v2h-top{flex-wrap:nowrap' in m and '.v2h-autot span{display:none}' in m and '.v2h-bl span{display:block;white-space:nowrap' in m
 
 
 # ---------------------------------------------------------------- ٥) الكتابة المرئية في home.js
