@@ -415,6 +415,7 @@ body{font-family:'IBM Plex Sans Arabic',sans-serif;background:var(--bg);color:va
 .ep-login .bd .hint{font-size:12px;color:var(--muted);margin-bottom:18px}
 </style>
 <link rel="stylesheet" href="v2-home.css">
+<link rel="stylesheet" href="v2-shell.css">
 </head>
 <body>
 <div class="app" data-screen-label="الداش بورد الجديدة">
@@ -458,6 +459,7 @@ body{font-family:'IBM Plex Sans Arabic',sans-serif;background:var(--bg);color:va
 <script src="dashboard-api.js"></script>
 <script src="v2-logic.js"></script>
 <script src="v2-home.js"></script>
+<script src="v2-shell.js"></script>
 <script>
 const ICONS={
   grid:'<path d="M3 3h7v7H3zM14 3h7v7h-7zM14 14h7v7h-7zM3 14h7v7H3z"/>',
@@ -625,6 +627,8 @@ function itemHTML(id,m){
 // ترتيب المجموعات الخمس الظاهرة — هو نفسه ترتيب رسمها، ومصدر الحقيقة الوحيد للاختبار.
 const NAV_GROUPS={today:'nav-today',people:'nav-people',money:'nav-money',demand:'nav-demand',content:'nav-content'};
 function renderNav(){
+  // D1-B: الهيكل الجديد (مفتاح مفتوح) يرسم قائمته بنفسه ولا يلمس القائمة القديمة.
+  if(window.V2_ON&&window.V2SHELL&&V2SHELL.on&&role==='admin'){V2SHELL.nav();return;}
   Object.values(NAV_GROUPS).forEach(id=>{const el=document.getElementById(id);if(el)el.innerHTML='';});
   const coNav=document.getElementById('nav-co'),coPin=document.getElementById('coPin');
   if(coNav)coNav.innerHTML='';
@@ -663,7 +667,14 @@ function roleNavFor(r){
   }catch(e){}}
   return base;
 }
+function resetViewState(){
+  selected=null;activeFilter='all';escTab='sessions';finTab='summary';usersFilter='all';usersTag='all';teamTab='experts';topicsTab='ideas';topicsCat='all';courseTab='platform';invTab='owners';tgTab='goals';foundationTab='assets';contentTab='pending';anFilters={seg:'all',country:'all',cat:'all',ne:'all',time:'all'};
+  mkLane='all';mkNeed='all';mkStatus='all';mkSel=null;
+  invSel=null;invGroupBy=false;
+}
 function go(mod){
+  // D1-B: الهيكل الجديد يحوّل أي موديول قديم إلى قسمه وتبويبه (مفتاح مقفول = السطر ده مش بيتنفّذ).
+  if(window.V2_ON&&window.V2SHELL&&V2SHELL.on&&role==='admin')return v2GoShell(mod);
   // D1: مغادرة اللوحة الجديدة (لو شغّالة) — عشان الرجوع إليها من القائمة يبدأ من اللوحة لا من بطاقة قديمة.
   if(window.V2_ON&&current==='home'&&mod!=='home'&&window.V2&&V2.leave)V2.leave();
   // شاشة مبتلعة ⇒ وريثها (نظرة عامة ⇐ الوارد · الرسائل ⇐ شريحة «رسائل» · الباقات ⇐ تبويب المالية).
@@ -671,9 +682,7 @@ function go(mod){
   // رابط/إشعار قديم قد يشير إلى موديول حُذف («النوادي») — نهبط على الشاشة
   // الافتراضية بدل أن نرمي على تعريف غير موجود ونُفرغ اللوحة.
   if(!moduleDef(mod))mod=(role==='admin')?(window.V2_ON?'home':'inbox'):(roleNavFor(role)[0]||'v_pending');
-  current=mod;selected=null;activeFilter='all';escTab='sessions';finTab='summary';usersFilter='all';usersTag='all';teamTab='experts';topicsTab='ideas';topicsCat='all';courseTab='platform';invTab='owners';tgTab='goals';foundationTab='assets';contentTab='pending';anFilters={seg:'all',country:'all',cat:'all',ne:'all',time:'all'};
-  mkLane='all';mkNeed='all';mkStatus='all';mkSel=null;
-  invSel=null;invGroupBy=false;
+  current=mod;resetViewState();
   // حالة الوريث تُضبَط **بعد** التصفير أعلاه، وإلا مسحناها بأيدينا.
   if(rd&&rd[1])rd[1]();
   // رابط مباشر بالهاش (م٧): كل تنقّل بيحدّث #mod عشان يترسل كرابط جاهز («ابعتلي رابط عشان
@@ -687,7 +696,10 @@ function go(mod){
 function renderView(){
   const v=document.getElementById('view');
   // D1: اللوحة الجديدة (ورا مفتاح مقفول) — صنف على `.app` يخفي بحث الشريط العلوي ويظهر فقط عليها.
-  { const ap=document.querySelector('.app'); if(ap)ap.classList.toggle('v2-home',current==='home'&&!!window.V2_ON); }
+  { const ap=document.querySelector('.app'); const sh=!!(window.V2SHELL&&V2SHELL.on);
+    if(ap)ap.classList.toggle('v2-home',current==='home'&&!!window.V2_ON&&!sh);
+    // D1-B: صنف الغلاف على `.app` (لوحة بلا إطار · بحث الوارد · وضع التركيز) — الترويسة خارج #view فلا تمسحها الشاشات القديمة.
+    if(ap&&sh){ap.classList.toggle('v2-bare',current==='home');ap.classList.toggle('v2-inbox',current==='inbox');if(current!=='home')ap.classList.remove('v2-focus');V2SHELL.head();} }
   if(current==='home'&&window.V2_ON&&window.V2)return V2.render(v);
   // موديولات «قريبًا» (لا واجهة خلفية حقيقية بعد) — لا تعرض بياناتها التصميمية.
   if(MODULES_LOOKUP[current]&&MODULES_LOOKUP[current].soon)return viewSoon(v);
@@ -891,7 +903,7 @@ function opsQueueCounters(Q){
 // الهبوط الكامل: افتح الموديول ثم اضبط تبويبه. تُنادى من شريحة «كل اللي مستنيك» ومن نقر
 // بند الشريط — لا من `go()` نفسها: `go()` مسارٌ عامّ (هاش · تحويلات · روابط قديمة) وله
 // تبويباته الخاصّة (`REDIRECTS`)، فحقنُ الهبوط فيه يدهسها.
-function goOps(mod,land){if(!mod)return;go(mod);if(typeof land==='function')land();}
+function goOps(mod,land){if(!mod)return;go(mod);if(typeof land==='function')land();if(window.V2SHELL&&V2SHELL.on)v2Reconcile();}
 // شارات العدّ على صفوف الشريط: من **نفس** طابور المنصّة الذي تحته في «كل اللي مستنيك» —
 // لا عدٌّ ثانٍ في المتصفّح يخالفه. صفرٌ لا يُرسم (الشارة تعني «فيه مستنّي»)، و«تنبيه»
 // (أحمر) حين يقول الطابور إن أقدم بندٍ فيه تعدّى ٢٤ ساعة.
@@ -7616,7 +7628,11 @@ window.V2_HOST={
     viewInbox(document.getElementById('view'));
     try{var d=document.getElementById('drawer');if(d&&d.scrollIntoView)d.scrollIntoView({block:'start'});}catch(e){}
   },
-  logout:function(){var b=document.getElementById('logoutBtn');if(b)b.click();}
+  logout:function(){var b=document.getElementById('logoutBtn');if(b)b.click();},
+  // D1-B (الهيكل الجديد): تنقّل صريح لقسم/تبويب · الحالي · اسم المستخدم.
+  openSection:function(key,tab){v2OpenSection(key,tab);},
+  state:function(){return V2S||{section:'home',tab:'board'};},
+  userName:function(){var u=(window.EP&&EP.user)||{};return u.name||u.full_name||u.email||'المؤسس';}
 };
 // «اللوحة» أول بند في «شغل النهاردة» — بتتدخل هنا لما المفتاح يفتح (مش في إعلان MODULES): اختبارات بنية القائمة
 // بتقرا الإعلان كما هو، والمفتاح المقفول يساوي قائمة بنفس الترتيب والعدد بالحرف.
@@ -7630,19 +7646,97 @@ function v2Enable(){
   var h=String(location.hash||'').replace(/^#/,'').trim();
   if(!h||h==='home')current='home';
 }
+/* ===== D1-B · الهيكل الجديد: كل موديول قديم يقع في قسم وتبويب (الخريطة في v2-logic.js، والرسم في v2-shell.js) ===== */
+var V2S=null;   // القسم والتبويب الحاليان {section, tab}
+function v2Snapshot(){
+  return {activeFilter:activeFilter,escTab:escTab,finTab:finTab,teamTab:teamTab,topicsTab:topicsTab,courseTab:courseTab,invTab:invTab,tgTab:tgTab,
+    v2mode:(window.V2&&V2.mode)?V2.mode():'board'};
+}
+const V2_SETTERS={
+  activeFilter:function(v){activeFilter=v;},escTab:function(v){escTab=v;},finTab:function(v){finTab=v;},teamTab:function(v){teamTab=v;},
+  topicsTab:function(v){topicsTab=v;},courseTab:function(v){courseTab=v;},invTab:function(v){invTab=v;},tgTab:function(v){tgTab=v;},
+  v2mode:function(v){if(window.V2&&V2.setMode)V2.setMode(v);}
+};
+// يكتب العنوان #s/<قسم>/<تبويب>: how='push' لتنقّل المستخدم (فيشتغل زر الرجوع)، 'replace' لتصحيح الترويسة بعد هبوط داخلي.
+function v2Commit(how){
+  if(!V2S)return;
+  const h=V2L.sectionHash(V2S.section,V2S.tab);
+  try{if(String(location.hash)!==h){if(how==='push')history.pushState(null,'',h);else history.replaceState(null,'',h);}}catch(e){try{location.hash=h;}catch(e2){}}
+  const t=document.getElementById('pageTitle');
+  const sec=V2L.sectionByKey(V2S.section);
+  if(t&&sec)t.textContent=sec.label;
+  if(window.V2SHELL){V2SHELL.nav();V2SHELL.closeSheet();}
+}
+// افتح قسمًا (وتبويبًا): التنقّل الصريح من القائمة والتبويبات والعنوان.
+function v2OpenSection(key,tabKey,opts){
+  const sec=V2L.sectionByKey(key); if(!sec)return;
+  const tab=(tabKey&&V2L.tabByKey(key,tabKey))||sec.tabs[0];
+  if(current==='home'&&tab.mod!=='home'&&window.V2&&V2.leave)V2.leave();
+  resetViewState();
+  Object.keys(tab.st).forEach(function(k){const f=V2_SETTERS[k];if(f)f(tab.st[k]);});
+  current=tab.mod;
+  V2S={section:sec.key,tab:tab.key};
+  v2Commit(opts&&opts.replace?'replace':'push');
+  renderView();
+}
+// go() القديمة بعد تشغيل الهيكل: موديول قديم ⇒ قسمه وتبويبه (REDIRECTS تُحلّ بحالتها الداخلية أولًا).
+function v2GoShell(mod){
+  if(current==='home'&&mod!=='home'&&window.V2&&V2.leave)V2.leave();
+  const rd=REDIRECTS[mod]; if(rd)mod=rd[0];
+  if(!moduleDef(mod))mod='home';
+  resetViewState(); current=mod;
+  if(rd&&rd[1])rd[1]();
+  const m=V2L.sectionFor(mod,v2Snapshot(),null)||V2L.routeFor('home');
+  V2S={section:m.section,tab:m.tab};
+  v2Commit('push');
+  renderView();
+}
+// بعد أي هبوط داخلي (شريحة · تبويب داخل الشاشة القديمة): الترويسة تتبع الشاشة الظاهرة فعلًا.
+function v2Reconcile(){
+  if(!(window.V2SHELL&&V2SHELL.on)||role!=='admin'||!window.V2L)return;
+  const m=V2L.sectionFor(current,v2Snapshot(),V2S);
+  if(!m||(V2S&&m.section===V2S.section&&m.tab===V2S.tab))return;
+  V2S={section:m.section,tab:m.tab};
+  v2Commit('replace');
+}
+function v2OnHash(){
+  if(!(window.V2SHELL&&V2SHELL.on)||role!=='admin')return;
+  const h=String(location.hash||'');
+  if(V2S&&h===V2L.sectionHash(V2S.section,V2S.tab))return;
+  const rt=V2L.routeFor(h,{});
+  if(rt)v2OpenSection(rt.section,rt.tab,{replace:true});
+}
+function v2ShellBoot(){
+  if(!(window.V2SHELL&&window.V2L&&V2SHELL.boot&&V2L.routeFor))return false;
+  V2SHELL.boot(window.V2_HOST);
+  const view=document.getElementById('view');
+  try{if(view)new MutationObserver(function(){v2Reconcile();}).observe(view,{childList:true});}catch(e){}
+  window.addEventListener('popstate',v2OnHash);window.addEventListener('hashchange',v2OnHash);
+  // الرابط الأول: عنوان جديد #s/… أو رابط قديم (#finance · #packages …) يهبط على قسمه وتبويبه، وأي غيره على اللوحة.
+  const rt=V2L.routeFor(String(location.hash||''),{})||V2L.routeFor('home');
+  v2OpenSection(rt.section,rt.tab,{replace:true});
+  return true;
+}
 // مرة واحدة عند الإقلاع. ⛔ الإقلاع القديم بيترسم فورًا من غير ما ينتظر المفتاح (مقفول = نفس التوقيت بالحرف).
 // لما الرد يوصل بـenabled:true بس: القائمة تتعاد وبنفتح اللوحة. أي فشل/تأخير (> ٣ ثواني)/٤٠٣ = مقفول.
 function v2LoadFlag(cb){
   var done=false;
   function fin(on){if(done)return;done=true;if(on){try{v2Enable();}catch(e){window.V2_ON=false;}}cb(!!window.V2_ON);}
-  try{EP.api('/v2/config').then(function(r){fin(!!(r&&r.enabled===true));}).catch(function(){fin(false);});}catch(e){fin(false);}
+  try{EP.api('/v2/config').then(function(r){
+    // D1-B: تذكّر آخر رد حاسم (مفتوح/مقفول) فيُخفى الشريط القديم من أول إطار في الفتحة الجاية. فشل أو تأخير = لا يُمسّ التذكّر.
+    try{if(r&&r.enabled===true)localStorage.setItem('ep_v2_shell','1');else localStorage.removeItem('ep_v2_shell');}catch(e){}
+    fin(!!(r&&r.enabled===true));}).catch(function(){fin(false);});}catch(e){fin(false);}
   setTimeout(function(){fin(false);},3000);
 }
 window.EP_BOOT=function(){
+  // D1-B: الأدمن اللي المفتاح كان مفتوح عنده آخر مرة: الشريط القديم مخفي لحد ما الرد يوصل (مفيش ومضة قائمة قديمة).
+  try{if(window.EP&&EP.role==='admin'&&window.V2&&localStorage.getItem('ep_v2_shell')==='1')document.querySelector('.app').classList.add('v2-pre');}catch(e){}
   epBootCore();
   if(window.EP&&EP.role==='admin'&&EP.api&&window.V2){
     v2LoadFlag(function(on){
+      try{document.querySelector('.app').classList.remove('v2-pre');}catch(e){}
       if(!on)return;
+      if(v2ShellBoot())return;     // D1-B: الهيكل الجديد (لو الملف محمّل) وإلا ترجع اللوحة وحدها كما في D1
       renderNav();
       if(current==='home')go('home');
     });

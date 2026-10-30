@@ -1,0 +1,129 @@
+/* ============================================================================
+ * v2-shell.css — الهيكل الجديد (D1-B). كل القواعد تحت `.app.v2-shell` أو أصناف `v2s-*`/`v2c-*`/`v2-side`/`v2-sheet`/`v2-sec`:
+ * ⛔ المفتاح مقفول ⇒ الصنف `v2-shell` ما بيتحطّش على `.app` ولا بيتبني أي عنصر من دول ⇒ مفيش أثر على أي شاشة.
+ * الألوان من هوية البروفيسور: عنّابي #9E2B4E · ورق #FBFAF7/#F6F1EA · حبر #21262E · أحمر #C8102E للأعداد المتأخرة بس.
+ * ========================================================================== */
+.v2-side,.v2-sheet,.v2-sec,.v2-tb-logo{display:none}
+html.v2-noscroll,html.v2-noscroll body{overflow:hidden}
+
+/* —— قبل وصول رد المفتاح (لو كان مفتوحًا في آخر فتحة): لا ومضة للقائمة القديمة */
+.app.v2-pre .rail,.app.v2-pre #coPin,.app.v2-pre .railscrim{display:none!important}
+.app.v2-pre .main{visibility:hidden}
+
+/* —— القالب العام: القائمة القديمة وكتلة الشركة المثبّتة مخفيّتان تمامًا */
+.app.v2-shell{background:#FBFAF7}
+.app.v2-shell .rail,.app.v2-shell #coPin,.app.v2-shell .railscrim{display:none!important}
+.app.v2-shell .main{background:#FBFAF7}
+.app.v2-shell .content{background:#FBFAF7;padding:4px 28px 56px}
+.app.v2-shell .topbar{height:56px;background:#FBFAF7;border-bottom:0;padding:0 28px;gap:12px}
+.app.v2-shell .topbar .ttl{display:none}
+.app.v2-shell .topbar .search{display:none;margin-inline-start:auto}
+.app.v2-shell.v2-inbox .topbar .search{display:flex;background:#fff;border-color:#E9E1D6}
+.app.v2-shell .topbar #bellBtn{margin-inline-start:auto;background:#fff;border-color:#E9E1D6;width:42px;height:42px;border-radius:12px}
+.app.v2-shell.v2-inbox .topbar .search + #bellBtn{margin-inline-start:0}
+.app.v2-shell .menu-btn{display:none}
+.app.v2-shell .robanner{display:none}
+
+/* —— القائمة الجانبية (الحاسوب) */
+@media(min-width:1180px){
+  .v2-side{display:flex;flex-direction:column;width:264px;flex:none;background:#F6F1EA;border-inline-end:1px solid #E9E1D6;color:#21262E;height:100vh;
+    font-family:'IBM Plex Sans Arabic','Cairo',sans-serif}
+}
+.v2s-brand{display:flex;align-items:center;gap:12px;padding:18px 18px 14px}
+.v2s-mark{width:42px;height:42px;border-radius:12px;background:#9E2B4E;color:#fff;display:grid;place-items:center;flex:none}
+.v2s-mark svg{width:60%;height:60%}
+.v2s-bt b{display:block;font:700 22px/1.25 'Aref Ruqaa','Cairo',serif;color:#9E2B4E}
+.v2s-bt small{display:block;font-size:12px;color:#7A7468}
+.v2s-nav{flex:1;overflow-y:auto;padding:4px 10px 10px;display:grid;align-content:start;gap:2px;scrollbar-width:thin}
+.v2s-item{display:flex;align-items:center;gap:12px;min-height:52px;padding:7px 10px;border-radius:14px;color:#21262E;text-decoration:none;border:1px solid transparent;position:relative}
+.v2s-item:hover{background:#fff}
+.v2s-item.on{background:#fff;border-color:#E9E1D6;box-shadow:0 2px 8px rgba(33,38,46,.06)}
+.v2s-item.on::before{content:"";position:absolute;inset-block:10px;inset-inline-start:-1px;width:4px;border-radius:4px;background:#9E2B4E}
+.v2s-item.on .v2s-name{color:#9E2B4E}
+.v2s-item:focus-visible,.v2s-tile:focus-visible,.v2c-tab:focus-visible,.v2s-out:focus-visible,.v2s-x:focus-visible{outline:3px solid rgba(158,43,78,.45);outline-offset:2px}
+.v2s-ph{width:38px;height:38px;border-radius:50%;flex:none;background-color:#E9E1D6;background-size:cover;background-position:center;border:2px solid #fff;box-shadow:0 1px 4px rgba(33,38,46,.18)}
+.v2s-ph-home{background:#9E2B4E;color:#fff;display:grid;place-items:center}
+.v2s-ic{width:20px;height:20px;stroke:currentColor;fill:none;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round;flex:none}
+.v2s-name{flex:1;min-width:0;font:700 15px/1.4 'Cairo',sans-serif}
+.v2s-badge{min-width:26px;height:26px;padding:0 8px;border-radius:999px;background:#fff;border:1px solid #D9CFC0;color:#21262E;display:grid;place-items:center;font:800 13px/1 'Cairo',sans-serif;flex:none}
+.v2s-badge.hot{background:#C8102E;border-color:#C8102E;color:#fff}
+.v2s-badge.fail{background:#FFF3D1;border-color:#EBD38E;color:#8A5A00}
+.v2s-me{display:flex;align-items:center;gap:10px;padding:12px 16px;border-top:1px solid #E9E1D6}
+.v2s-av{width:38px;height:38px;border-radius:50%;background:#21262E;color:#fff;display:grid;place-items:center;font:800 16px 'Cairo',sans-serif;flex:none}
+.v2s-who{flex:1;min-width:0;display:grid}
+.v2s-who b{font:700 14px/1.4 'Cairo',sans-serif;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.v2s-who small{font-size:12px;color:#7A7468}
+.v2s-out,.v2s-x{width:44px;height:44px;border-radius:12px;border:1px solid #E9E1D6;background:#fff;color:#21262E;display:grid;place-items:center;cursor:pointer;flex:none}
+.v2s-out:hover,.v2s-x:hover{background:#FBF0F3;color:#9E2B4E}
+
+/* —— ترويسة القسم + التبويبات */
+.app.v2-shell .v2-sec{display:block;max-width:1360px;margin:0 auto 14px;font-family:'IBM Plex Sans Arabic','Cairo',sans-serif;color:#21262E}
+.app.v2-shell.v2-focus .v2-sec{display:none}
+.v2c-h{padding:6px 2px 12px}
+.v2c-h h1{margin:0;font:800 32px/1.35 'Cairo',sans-serif}
+.v2c-h p{margin:2px 0 0;font-size:15px;line-height:1.7;color:#6B665C}
+.v2c-tabs{display:flex;gap:6px;overflow-x:auto;max-width:100%;border-bottom:1px solid #E9E1D6;scrollbar-width:none;-webkit-overflow-scrolling:touch}
+.v2c-tabs::-webkit-scrollbar{display:none}
+.v2c-tab{flex:none;min-height:48px;padding:0 20px;border:0;border-bottom:4px solid transparent;margin-bottom:-1px;background:transparent;color:#6B665C;
+  font:700 16px 'Cairo',sans-serif;cursor:pointer;white-space:nowrap;border-radius:10px 10px 0 0}
+.v2c-tab:hover{color:#21262E;background:rgba(158,43,78,.05)}
+.v2c-tab.on{color:#9E2B4E;border-bottom-color:#9E2B4E;font-weight:800}
+
+/* —— إطار خفيف حول الشاشات القديمة (بطاقة على ورق) */
+.app.v2-shell #view{max-width:1360px;margin:0 auto}
+.app.v2-shell:not(.v2-bare) #view{background:#fff;border:1px solid #E9E1D6;border-radius:18px;padding:20px 22px;margin-top:16px;box-shadow:0 4px 18px rgba(33,38,46,.05)}
+.app.v2-shell.v2-bare #view{margin-top:16px}
+.app.v2-shell.v2-focus #view{margin-top:0}
+
+/* —— اللوحة داخل الغلاف: الشعار والمستخدم والجرس في الغلاف نفسه، وتبقى الصحة فقط */
+.app.v2-shell .v2 .v2-head .v2-logo,.app.v2-shell .v2 .v2-head [data-a="user"],.app.v2-shell .v2 .v2-head button[aria-label="التنبيهات"]{display:none}
+.app.v2-shell .v2 .v2-head{justify-content:flex-start;margin-bottom:12px}
+.app.v2-shell.v2-focus .v2 .v2-head{justify-content:space-between}
+
+/* —— أضيق من ١١٨٠ والموبايل: شريط علوي رفيع + ورقة الأقسام */
+@media(max-width:1179px){
+  .app.v2-shell .content{padding:2px 20px 48px}
+  .app.v2-shell .topbar{padding:0 16px;gap:10px;height:58px;border-bottom:1px solid #E9E1D6}
+  .app.v2-shell .topbar .v2-tb-logo{display:grid;order:1;width:36px;height:36px;border-radius:10px;background:#9E2B4E;color:#fff;place-items:center;flex:none}
+  .v2-tb-logo svg{width:60%;height:60%}
+  .app.v2-shell .topbar .ttl{display:block;order:2;min-width:0;overflow:hidden}
+  .app.v2-shell .topbar .ttl h2{font:800 18px/1.4 'Cairo',sans-serif;color:#21262E;display:block;overflow:hidden;text-overflow:ellipsis}
+  .app.v2-shell .topbar .ttl h2::after{display:none}
+  .app.v2-shell .topbar #bellBtn{order:3;margin-inline-start:auto}
+  .app.v2-shell .menu-btn{display:grid;order:4;width:44px;height:44px;border-radius:12px;background:#fff;border-color:#E9E1D6;color:#21262E}
+  .app.v2-shell.v2-inbox .topbar .search{display:none}
+  .v2-sheet{display:block;position:fixed;inset:0;z-index:80;visibility:hidden;pointer-events:none;font-family:'IBM Plex Sans Arabic','Cairo',sans-serif}
+  .v2-sheet.open{visibility:visible;pointer-events:auto}
+  .v2s-scrim{position:absolute;inset:0;background:rgba(33,38,46,.55);opacity:0;transition:opacity .2s}
+  .v2-sheet.open .v2s-scrim{opacity:1}
+  .v2s-box{position:absolute;inset-inline:0;top:0;max-height:100vh;max-height:100dvh;overflow-y:auto;background:#FBFAF7;border-radius:0 0 22px 22px;box-shadow:0 18px 44px rgba(33,38,46,.3);
+    transform:translateY(-14px);opacity:0;transition:transform .2s,opacity .2s}
+  .v2-sheet.open .v2s-box{transform:none;opacity:1}
+  .v2s-bh{display:flex;align-items:center;justify-content:space-between;padding:10px 16px 6px}
+  .v2s-bh b{font:800 20px 'Cairo',sans-serif;color:#9E2B4E}
+  .v2s-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;padding:8px 16px 14px}
+  .v2s-tile{position:relative;display:block;height:104px;border-radius:16px;overflow:hidden;color:#fff;text-decoration:none;background-color:rgb(var(--rgb));background-size:cover;background-position:center;
+    box-shadow:0 4px 12px rgba(33,38,46,.16)}
+  .v2s-tile::before{content:"";position:absolute;inset:0;background:linear-gradient(to top,rgba(var(--rgb),.96) 0%,rgba(var(--rgb),.7) 38%,rgba(var(--rgb),0) 72%)}
+  .v2s-tile.home{background:rgb(var(--rgb));display:grid;place-items:center}
+  .v2s-tile.home .v2s-ic{width:30px;height:30px;position:relative}
+  .v2s-tile.on{outline:3px solid #9E2B4E;outline-offset:-3px}
+  .v2s-tn{position:absolute;inset-inline:9px;bottom:8px;font:800 14.5px/1.35 'Cairo',sans-serif;text-shadow:0 1px 6px rgba(0,0,0,.35)}
+  .v2s-tile .v2s-badge{position:absolute;top:8px;left:8px;min-width:28px;height:28px;border-color:#fff;color:#21262E}
+  .v2s-tile .v2s-badge.hot{color:#fff}
+  .v2-sheet .v2s-me{border-top:1px solid #E9E1D6;padding:10px 16px calc(14px + env(safe-area-inset-bottom))}
+}
+@media(max-width:600px){
+  .app.v2-shell .content{padding:2px 16px 48px}
+  .app.v2-shell .topbar{padding:0 16px}
+  .v2s-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+  .v2s-tile{height:84px;border-radius:14px}
+  .v2s-tn{font-size:14px;inset-inline:8px;bottom:6px}
+  .v2c-h h1{font-size:26px}
+  .v2c-h p{font-size:14px}
+  .v2c-tab{padding:0 16px;font-size:15.5px}
+  .app.v2-shell:not(.v2-bare) #view{padding:14px 12px;border-radius:14px}
+}
+@media(prefers-reduced-motion:reduce){
+  .v2s-scrim,.v2s-box{transition:none}
+}
