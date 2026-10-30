@@ -1,0 +1,200 @@
+/* ============================================================================
+ * v2s/marketing.css — «التسويق» (الجولة النهائية): الحملات · السوشيال ميديا · خطة النشر.
+ * قواعد `.mk-*` فقط، وتعيد استخدام أصناف الفلوس المحمّلة عالميًا (`.v3-card .v3-nums .v3-num .v3-btn1 .v3-btn2 .v3-link .v3-seg .v3-warn …`).
+ * ⛔ لا تعدّل v2-d3.css. الألوان: عنّابي #9E2B4E · ورق #FBFAF7/#F6F1EA · حبر #21262E · أحمر #C8102E للنسبة < ١ والعطل فقط.
+ * ========================================================================== */
+.mk,.v3m{--mk-ok:#187E4E}
+
+/* —— الرأس */
+.mk .v3-top{align-items:center}
+.mk-new{margin-inline-start:auto}
+.mk-hint{font-size:13.5px;color:#8E1228;margin:-6px 0 12px}
+.mk .v3-nums{margin-bottom:14px}
+.mk .v3-num.k-spent{border-top-color:var(--wine)}
+.mk .v3-num.k-revenue{border-top-color:var(--green)}
+.mk .v3-num.k-organic{border-top-color:#B5AEA2}
+.mk .v3-num.k-cost{border-top-color:#E0A100}
+.mk-legacy{display:flex;flex-wrap:wrap;align-items:center;gap:8px 14px;justify-content:space-between}
+.mk-legacy span{flex:1 1 320px}
+
+/* —— شريط العقل (حبر، صورة مستديرة، زرّ رئيسي واحد) */
+.mk-brainstrip{display:flex;align-items:center;gap:16px;background:var(--ink);color:#fff;border-radius:22px;padding:14px 18px;margin-bottom:16px}
+.mk-bav{width:50px;height:50px;border-radius:50%;object-fit:cover;flex:none;border:2px solid var(--wine);background:#fff}
+.mk-bt{flex:1 1 auto;min-width:0;display:grid;gap:2px}
+.mk-bt small{font:700 12.5px 'Cairo',sans-serif;color:rgba(255,255,255,.66)}
+.mk-bs{font:800 16.5px/1.7 'Cairo',sans-serif;overflow-wrap:anywhere}
+.mk-bl{font-size:14px;color:rgba(255,255,255,.82);line-height:1.7}
+.mk-bb{display:flex;gap:10px;flex:none;align-items:center}
+.mk-brainstrip .v3-btn1{box-shadow:0 0 0 1px rgba(255,255,255,.3)}
+.mk-brainstrip .v3-btn1:hover{background:#B2335A}
+.mk-later{min-height:48px;padding:0 18px;border-radius:14px;background:transparent;color:#fff;border:1px solid rgba(255,255,255,.4);font:700 14.5px 'Cairo',sans-serif;cursor:pointer}
+.mk-later:hover{background:rgba(255,255,255,.12)}
+.mk-brainstrip button:focus-visible{outline:2px solid #fff;outline-offset:2px}
+
+/* —— بطاقة الحملات والجدول */
+.mk-card{margin-bottom:16px}
+.mk-tw{overflow:hidden}
+.mk-table{width:100%;border-collapse:collapse;table-layout:fixed;font-size:14px}
+.mk-table th{font:700 12.5px/1.5 'Cairo',sans-serif;color:var(--mute);text-align:end;padding:6px 8px;border-bottom:1px solid var(--line);vertical-align:bottom}
+.mk-table th:first-child{text-align:start}
+.mk-table th small{display:block;font-weight:600;font-size:11.5px;color:#8A8478}
+.mk-table td{padding:8px 8px;border-bottom:1px solid #F0EADF;text-align:end;vertical-align:middle;overflow-wrap:anywhere}
+.mk-table td:first-child{text-align:start}
+.mk-row{cursor:pointer;height:56px}
+.mk-row:hover td{background:#FBF0F3}
+.mk-name{display:grid;gap:2px}
+.mk-name b{font:800 15px/1.5 'Cairo',sans-serif}
+.mk-namebtn{background:none;border:0;padding:0;margin:0;font:inherit;color:inherit;text-align:start;cursor:pointer;min-height:44px;display:inline-flex;align-items:center;max-width:100%;overflow-wrap:anywhere}
+.mk-namebtn:focus-visible{outline:3px solid rgba(158,43,78,.45);outline-offset:2px;border-radius:6px}
+.mk-ml{display:grid;gap:2px}
+.mk-ml span{white-space:nowrap}
+.v3m .mk-fc{min-width:0}
+.mk-sub{font-size:12.5px;color:var(--mute);line-height:1.6}
+.mk-chip{display:inline-block;font:800 12.5px/1.6 'Cairo',sans-serif;border-radius:999px;padding:1px 12px;white-space:nowrap}
+.mk-chip.st-active{background:#E8F6EE;color:#0F5A37}
+.mk-chip.st-paused{background:#EEEAE2;color:var(--mute)}
+.mk-chip.st-completed{background:#fff;color:var(--ink);border:1px solid var(--ink)}
+.mk-chip.st-draft{background:var(--paper);color:var(--mute);border:1px dashed #C9BFAE}
+.mk-chip.nores{background:var(--amber-bg);color:#6B4A00;white-space:normal;text-align:center}
+.mk-r.bad{color:var(--red);font-weight:800}
+.mk-r.good{color:var(--green);font-weight:800}
+.mk-via-c{background:var(--paper2)}
+.mk-via{display:none;background:var(--paper2);border-radius:10px;padding:3px 10px;font-size:12.5px;color:#3A3730;justify-self:start}
+.mk-fold{display:none}
+.mk-organic td{background:var(--paper2);cursor:default}
+.mk-organic .mk-na{color:#8A5A00;font-size:13.5px;text-align:start}
+
+/* —— نسخة التابلت (جدول مختصر) والموبايل (بطاقات) */
+.mk-tab{display:none}
+.mk-cards{display:none;gap:10px}
+.mk-ccard{background:#fff;border:1px solid var(--line);border-radius:16px;padding:12px 14px;display:grid;gap:8px;cursor:pointer;min-height:52px}
+.mk-ch{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.mk-ch b{font:800 15.5px/1.5 'Cairo',sans-serif;overflow-wrap:anywhere}
+.mk-mg{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px 10px}
+.mk-mg div{display:grid;gap:0;min-width:0}
+.mk-mg span{font-size:12px;color:var(--mute)}
+.mk-mg b{font:800 14.5px/1.5 'Cairo',sans-serif;overflow-wrap:anywhere}
+.mk-ccard .mk-nores-row{grid-column:1/-1}
+.mk-ccard.mk-organic{background:var(--paper2);cursor:default}
+.mk-viarow{background:var(--paper2);border-radius:10px;padding:6px 10px;font-size:13px;color:#3A3730}
+
+/* —— سطر أرصدة الإعلانات + ذيل العقل */
+.mk-adsline{display:flex;flex-wrap:wrap;align-items:center;gap:4px 14px;margin-top:12px;padding-top:10px;border-top:1px solid var(--line);font-size:14px;color:#3A3730}
+.mk-adsline p{flex:1 1 280px}
+.mk-tail{margin-top:14px;padding-top:14px;border-top:1px solid var(--line);display:grid;gap:12px}
+.mk-seen,.mk-needs{display:grid;gap:8px}
+.mk-seen>b,.mk-needs>b{font:800 13.5px 'Cairo',sans-serif;color:var(--mute)}
+.mk-srcs,.mk-needlist{list-style:none;margin:0;padding:0;display:flex;flex-wrap:wrap;gap:6px 8px;align-items:center}
+.mk-src{display:inline-flex;align-items:center;gap:7px;min-height:32px;padding:0 12px;border-radius:999px;background:var(--paper);border:1px solid var(--line);font-size:12.5px;color:#3A3730;white-space:nowrap}
+.mk-src i{width:8px;height:8px;border-radius:50%;background:#B5AEA2;flex:none}
+.mk-src.s-ready i{background:var(--green)}
+.mk-src.s-error i{background:#E0A100}
+.mk-src.s-loading i{background:#D9CFC0}
+.mk-needlist{display:grid;gap:6px}
+.mk-need{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1.2fr) auto;gap:4px 12px;align-items:center;background:var(--paper);border-radius:12px;padding:6px 12px;font-size:13px}
+.mk-nt{font-weight:800}
+.mk-nw{color:var(--mute)}
+.mk-nc{justify-self:start;background:#fff;border:1px solid var(--line);border-radius:999px;padding:0 10px;font-size:12px;color:#6B4A00;white-space:nowrap}
+.mk-needs .v3-link{justify-self:start}
+
+/* —— السوشيال */
+.mk-madar{display:grid;grid-template-columns:minmax(0,260px) minmax(0,1fr);gap:0;background:#fff;border:1px solid var(--line);border-radius:18px;overflow:hidden;margin-bottom:16px}
+.mk-madar img{width:100%;height:100%;min-height:150px;object-fit:cover;display:block}
+.mk-madar-b{padding:18px 20px;display:grid;gap:10px;align-content:center;justify-items:start}
+.mk-madar-b p{font-size:15px;line-height:1.9;color:#3A3730}
+.mk-soon{display:inline-block;font:800 12.5px 'Cairo',sans-serif;background:var(--amber-bg);color:#6B4A00;border-radius:999px;padding:2px 12px}
+.mk-social{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}
+.mk-sc{background:#fff;border:1px solid var(--line);border-radius:18px;padding:16px 18px;display:grid;gap:8px;align-content:start;min-width:0}
+.mk-sh{display:flex;align-items:center;gap:10px}
+.mk-sh b{font:800 17px 'Cairo',sans-serif}
+.mk-mark{width:40px;height:40px;border-radius:50%;background:var(--paper2);color:var(--wine);display:grid;place-items:center;font:800 18px 'Cairo',sans-serif;flex:none;border:1px solid var(--line)}
+.mk-sbig{font:800 26px/1.3 'Cairo',sans-serif;overflow-wrap:anywhere}
+.mk-sbig.na{font-size:17px;color:#8A8478;font-weight:700}
+.mk-fact{font-size:14px;color:#3A3730;line-height:1.7}
+.mk-mute{font-size:12.5px;color:var(--mute);line-height:1.6}
+.mk-shared{font-size:12.5px;color:var(--mute)}
+
+/* —— خطة النشر */
+.mk-pub{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:6px 14px;align-items:center;background:var(--paper);border-radius:14px;padding:10px 14px}
+.mk-pub b{font:800 15.5px/1.6 'Cairo',sans-serif;overflow-wrap:anywhere}
+.mk-pub time{font-size:12.5px;color:var(--mute)}
+.mk-drafts{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px 14px;margin-top:12px;padding-top:10px;border-top:1px solid var(--line);font-size:14px}
+.mk-planbox{display:grid;gap:12px;justify-items:start}
+.mk-planbox p{font-size:15px;line-height:1.9;color:#3A3730}
+
+/* —— الأوراق */
+.v3m .mk-dl{display:grid;grid-template-columns:96px minmax(0,1fr);gap:6px 14px;margin:0 0 12px;font-size:14px}
+.v3m .mk-dl dt{color:var(--mute);font-weight:700}
+.v3m .mk-dl dd{margin:0;overflow-wrap:anywhere}
+.v3m .mk-h{font:800 14.5px 'Cairo',sans-serif;color:var(--mute);margin:10px 0 6px}
+.v3m .mk-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.v3m .mk-grid div{background:var(--paper);border-radius:12px;padding:8px 12px;display:grid;gap:0;min-width:0}
+.v3m .mk-grid span{font-size:12px;color:var(--mute)}
+.v3m .mk-grid b{font:800 15px/1.5 'Cairo',sans-serif;overflow-wrap:anywhere}
+.v3m .mk-viabox{background:var(--paper2);border-radius:12px;padding:8px 12px;font-size:13.5px;margin-top:8px;line-height:1.8}
+.v3m .mk-linkrow{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;align-items:center}
+.v3m .mk-linkrow input{width:100%;min-height:48px;border:1px solid var(--line);border-radius:10px;padding:0 12px;font-size:13px;background:var(--paper);direction:ltr;text-align:left}
+.v3m .mk-f2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0 12px}
+.v3m .fld select{min-height:48px;font-size:16px}
+.v3m .mk-hintline{font-size:12.5px;color:var(--mute);margin:-6px 0 10px;line-height:1.7}
+.v3m .mk-leg{list-style:none;margin:8px 0;padding:0;display:grid;gap:6px}
+.v3m .mk-leg li{display:flex;justify-content:space-between;gap:10px;background:var(--paper);border-radius:10px;padding:8px 12px;font-size:14px}
+.v3m .mk-leg span{color:var(--mute);font-size:12.5px;white-space:nowrap}
+.v3m .mk-how{display:grid;gap:10px;margin:0 0 6px}
+.v3m .mk-how h4{margin:0;font:800 15px 'Cairo',sans-serif}
+.v3m .mk-how p{margin:2px 0 0;font-size:14px;line-height:1.9;color:#3A3730}
+.v3m .mk-madlist{margin:6px 0 4px;padding:0 20px 0 0;font-size:14.5px;line-height:2}
+
+/* —— تابلت: الجدول المختصر */
+@media(max-width:1179px){
+  .mk-desk{display:none}
+  .mk-tab{display:table}
+  .mk-via{display:inline-block}
+  .mk-fold{display:inline}
+  .mk-brainstrip{flex-wrap:wrap}
+  .mk-bt{flex:1 1 calc(100% - 80px)}
+  .mk-bb{flex:1 1 100%}
+  .mk-bb .v3-btn1,.mk-bb .mk-later{flex:1 1 auto}
+  .mk-social{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+/* —— موبايل: بطاقات، وكل هدف ٥٢px، وبلا تمرير أفقي */
+@media(max-width:760px){
+  .mk-tw .mk-tab,.mk-tw .mk-desk{display:none}
+  .mk-cards{display:grid}
+  .mk-new{width:100%;margin-inline-start:0}
+  .mk-brainstrip{padding:14px}
+  .mk-bb{flex-direction:column;align-items:stretch}
+  .mk-bb .v3-btn1,.mk-later{min-height:52px;width:100%}
+  .mk-need{grid-template-columns:minmax(0,1fr)}
+  .mk-madar{grid-template-columns:minmax(0,1fr)}
+  .mk-madar img{aspect-ratio:16/9;min-height:0;height:auto}
+  .mk-social{grid-template-columns:minmax(0,1fr)}
+  .mk-pub{grid-template-columns:minmax(0,1fr)}
+  .mk-pub .v3-btn2{width:100%}
+  .mk-legacy .v3-btn2{width:100%}
+  .mk-drafts .v3-btn2{width:100%}
+  .v3m .mk-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .v3m .mk-f2{grid-template-columns:minmax(0,1fr)}
+  .v3m .mk-linkrow{grid-template-columns:minmax(0,1fr)}
+  .v3m .mk-linkrow .v3-btn2{width:100%}
+}
+@media(min-width:761px){
+  .mk-ccard,.mk-cards{display:none}
+}
+@media(prefers-reduced-motion:reduce){
+  .mk-row,.mk-ccard{transition:none}
+}
+
+/* —— أوراق التسويق بهوية البروفيسور (الشريط حبر والزرّ الرئيسي عنّابي) — مقيّدة بـ`.mkm` فلا تمسّ أوراق الأقسام الأخرى */
+#epModal .modal:has(.mkm) .mh{background:var(--ink,#21262E)}
+.mkm .btn-primary{background:var(--wine);color:#fff;border:0}
+.mkm .btn-primary:hover{background:#85233F;filter:none}
+.mkm .btn-primary:disabled{opacity:.6}
+.mkm .acts .btn{border-radius:14px;font-weight:800}
+
+/* —— أوراق التسويق على الموبايل: الأزرار زوجين جنب بعض (٥٢px) والتفاصيل بلا شريط ثابت يغطّي الأرقام */
+.mkm .mk-acts4{position:static}
+@media(max-width:760px){
+  #epModal .modal:has(.mkm) .mb{max-height:84vh}
+  .mkm .acts .btn{flex:1 1 calc(50% - 6px)}
+}

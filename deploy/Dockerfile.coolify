@@ -26,6 +26,10 @@ COPY backend/v2_courses_routes.py /app/v2_courses_routes.py
 COPY backend/v2_market_routes.py /app/v2_market_routes.py
 COPY backend/v2_books_routes.py /app/v2_books_routes.py
 COPY backend/v2_content_routes.py /app/v2_content_routes.py
+COPY backend/v2_marketing_routes.py /app/v2_marketing_routes.py
+COPY backend/prerender.py /app/prerender.py
+# refresh_rules.py: المُتحقِّق المشترك مع المنصّة — app.py يستورده عند الإقلاع (غيابه = الحاوية لا تقوم)
+COPY backend/refresh_rules.py /app/refresh_rules.py
 # The cloud-design dashboard is the served frontend (Flask serves /app/dist).
 COPY dashboard-cloud/index.html dashboard-cloud/dashboard-api.js dashboard-cloud/site-content.js /app/dist/
 # D1 · اللوحة الجديدة (ورا مفتاح DASH_V2_ENABLED): منطقها النقي + رسمها + تنسيقها + صور المربّعات.

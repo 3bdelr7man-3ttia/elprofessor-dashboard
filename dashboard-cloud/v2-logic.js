@@ -1275,8 +1275,10 @@
       T('comments',  'التعليقات',       'topics', { topicsTab: 'comments' },  { topicsTab: ['comments'] }),
       T('tutorials', 'دليل الاستخدام', 'topics', { topicsTab: 'tutorials' }, { topicsTab: ['tutorials'] })
     ] },
-    { key: 'marketing', label: 'التسويق', img: 'marketing', desc: 'الحملات والنشر على المنصات', tabs: [
-      T('campaigns', 'الحملات', 'marketing')
+    { key: 'marketing', label: 'التسويق', img: 'marketing', desc: 'الحملات من الإعلان حتى الدفع، والسوشيال، وخطة النشر', tabs: [
+      T('campaigns', 'الحملات', 'marketing'),
+      T('social', 'السوشيال ميديا', 'v2mk_social'),
+      T('plan', 'خطة النشر', 'v2mk_plan')
     ] },
     { key: 'reports', label: 'التقارير', img: 'reports', desc: 'ما يطلبه الناس وأين الفرصة', tabs: [
       T('demand', 'تحليل الطلب', 'analysis')
@@ -4311,3 +4313,475 @@
   L.v2ContentTopicChips = v2ContentTopicChips; L.v2ContentSegments = v2ContentSegments; L.v2ContentTopicTabOf = topicTabOf; L.v2ContentByText = v2ContentByText;
 })(typeof window !== 'undefined' ? window : (typeof globalThis !== 'undefined' ? globalThis : this));
 // ===== /v2s:content =====
+
+// ===== v2s:marketing =====
+// «التسويق» (الجولة النهائية): الجزء النقي. ⛔ لا DOM ولا شبكة ولا ساعة خفية — التاريخ يُمرَّر صراحةً (todayISO).
+// يربط نفسه بـV2L.mk (المتصفح وnode معًا: module.exports هو نفس كائن V2L).
+(function (root) {
+  'use strict';
+  var L = root.V2L;
+  if (!L || !L.util) return;
+  var U = L.util, Un = U.U;
+  var NA = 'غير متاح بعد';
+  var DAYMS = 86400e3;
+
+  var STATUS_LABEL = { active: 'نشطة', paused: 'موقوفة', completed: 'انتهت', draft: 'مسودة' };
+  var PLATFORM_LABEL = { facebook: 'فيسبوك', instagram: 'إنستجرام', facebook_instagram: 'فيسبوك وإنستجرام', google_ads: 'جوجل', linkedin: 'لينكدإن',
+                         youtube: 'يوتيوب', tiktok: 'تيك توك' };
+  var UTM_SRC = { facebook: 'facebook', instagram: 'instagram', facebook_instagram: 'meta', google_ads: 'google', linkedin: 'linkedin', youtube: 'youtube', tiktok: 'tiktok' };
+  var UNIT = { EGP: 'جنيه', SAR: 'ريال', USD: 'دولار' };
+  var PLATFORM_OPTS = [['facebook_instagram', 'فيسبوك وإنستجرام'], ['facebook', 'فيسبوك'], ['instagram', 'إنستجرام'], ['google_ads', 'جوجل'], ['linkedin', 'لينكدإن'],
+                       ['youtube', 'يوتيوب'], ['tiktok', 'تيك توك'], ['other', 'أخرى']];
+  var CURRENCY_OPTS = [['EGP', 'جنيه مصري'], ['SAR', 'ريال سعودي'], ['USD', 'دولار'], ['other', 'أخرى']];
+  var SOCIAL = [{ key: 'facebook', label: 'فيسبوك', mark: 'ف', mate: 'إنستجرام' }, { key: 'instagram', label: 'إنستجرام', mark: 'إ', mate: 'فيسبوك' },
+                { key: 'linkedin', label: 'لينكدإن', mark: 'ل' }, { key: 'youtube', label: 'يوتيوب', mark: 'ي' }, { key: 'tiktok', label: 'تيك توك', mark: 'ت' }];
+
+  // كل النصوص الثابتة الظاهرة في مكان واحد (اختبار النص يقرأه). ⛔ بلا حروف لاتينية.
+  var STR = {
+    na: NA,
+    tabCampaigns: 'الحملات', tabSocial: 'السوشيال ميديا', tabPlan: 'خطة النشر',
+    segActive: 'النشطة الآن', segAll: 'كل الحملات', segLabel: 'عرض الحملات',
+    newCampaign: 'حملة جديدة',
+    newBlocked: 'تعذّر جلب الحملات — أعد المحاولة أولًا حتى لا تتكرر حملة',
+    topNote: 'أرقام الحملات منذ بدايتها كما سُجّلت، ودخل المنصة بالشهر. لا يصل إلى هنا شيء من حسابات الإعلانات قبل ربط «مدار».',
+    retry: 'أعد المحاولة',
+    failedCampaigns: 'تعذّر جلب: الحملات — ما يظهر ناقص، وليس معناه أنه لا شيء',
+    noCampaigns: 'لا حملات مسجّلة', noSpend: 'لم يُسجَّل صرف بعد', noRevenue: 'لم يُسجَّل دخل بعد',
+    sincePeriod: 'منذ بداية كل حملة', campaignsFailedNote: 'تعذّر جلب الحملات',
+    n1: 'صُرف على الإعلانات', n2: 'دخل جاء من الإعلانات', n3: 'دخل جاء بلا إعلانات', n4: 'كلفة العميل الواحد',
+    n3NotReady: 'هذا الشهر: المنصة لا تسجّل بعد من أين جاء كل دافع.',
+    n3Channels: 'من البحث والسوشيال والدعوات والدخول المباشر',
+    n3NoIncome: 'لا دخل بعد هذا الشهر',
+    n4Note: 'من الحملات التي سُجّل لها من دفع، منذ بدايتها',
+    n4None: 'لم يُسجَّل بعد من دفع عن طريق حملة',
+    othersPrefix: 'وبعملة أخرى: ',
+    legacyText: 'سُجّلت من الشاشة القديمة، وكانت تلك الشاشة تحفظ كل حملة بعملة «دولار» مهما كُتب.',
+    legacyBtn: 'راجع العملة', legacyTitle: 'عملة الحملات القديمة',
+    legacyLead: 'هذه الحملات محفوظة بعملة «دولار». لا يُحوَّل أي رقم؛ تتغيّر العملة فقط.',
+    legacyAllEgp: 'اجعلها كلها بالجنيه', legacyKeep: 'هي بالدولار فعلًا', legacyLater: 'سأراجعها واحدة واحدة',
+    brainLabel: 'العقل يقترح', later: 'لاحقًا',
+    brainEmpty: 'لا حملات مسجّلة. سجّل أول حملة لأرى ما صُرف وما جاء.',
+    brainYoung: 'الحملات الجديدة ما زالت في أيامها الأولى، فلا اقتراح عليها الآن.',
+    brainNone: 'لا اقتراح الآن. الحملات النشطة تسير كما سُجّلت.',
+    sugEnded: 'أقترح تسجيلها منتهية.', sugStop: 'أقترح إيقافها.', sugNoResults: 'أقترح نقل نتائجها من حساب الإعلانات.', sugBudget: 'راجع الميزانية أو أوقفها.',
+    btnEnded: 'سجّلها منتهية', btnStop: 'أوقفها', btnResults: 'سجّل النتائج', btnEdit: 'عدّل الحملة', btnOpen: 'افتح الحملة',
+    confirmStopTitle: 'إيقاف حملة', confirmEndTitle: 'تسجيل حملة منتهية', confirmRunTitle: 'تشغيل حملة',
+    confirmNoAd: 'هذا لا يوقف الإعلان نفسه. أوقفه من حساب الإعلانات حتى يُربط «مدار».',
+    confirmNoAdRun: 'هذا لا يشغّل الإعلان نفسه. شغّله من حساب الإعلانات حتى يُربط «مدار».',
+    confirm: 'أكّد', cancel: 'إلغاء', back: 'رجوع', ok: 'تمام', close: 'إغلاق',
+    saveFailed: 'تعذّر الحفظ — أعد المحاولة',
+    seenTitle: 'العقل يرى من', needsTitle: 'العقل يحتاج:',
+    howLink: 'كيف تُربط هذه المصادر؟', howTitle: 'كيف تُربط هذه المصادر',
+    srcCampaigns: 'الحملات المسجّلة هنا', srcIncome: 'دخل المنصة', srcAds: 'أرصدة إعلانات أصحاب الأعمال', srcAttr: 'من أين جاء كل شخص',
+    srcMeta: 'إعلانات ميتا', srcGoogle: 'إعلانات جوجل', srcSocial: 'صفحات السوشيال', srcVisits: 'زيارات الموقع',
+    cardTitle: 'الحملات: من الإعلان حتى الدفع', cardHint: 'اضغط أي حملة لتفاصيلها وأزرارها',
+    colCampaign: 'الحملة', colPlatform: 'المنصة', colStatus: 'الحالة', colSpent: 'صُرف', colVisits: 'زيارات', colLeads: 'سجّلوا', colPaid: 'دفعوا', colRev: 'الدخل', colRatio: 'رجع',
+    colVia: 'عبر الرابط', colAsTyped: 'كما سُجّل', colViaSub: 'من المنصة · هذا الشهر',
+    typedTitle: 'الرقم كما كتبته في الحملة',
+    noResultsChip: 'لم تُسجَّل نتائج',
+    organicName: 'بلا إعلان', organicSub: 'من المنصة · هذا الشهر · البحث والسوشيال والدعوات والدخول المباشر',
+    organicNa: 'غير متاح بعد — المنصة لا تسجّل بعد من أين جاء كل دافع', organicRatio: 'بلا صرف',
+    emptyActive: 'لا حملات نشطة الآن.', showAll: 'اعرض كل الحملات', emptyAll: 'لا حملات مسجّلة بعد',
+    loadingCampaigns: '…جارٍ جلب الحملات', unavailableCampaigns: 'الحملات: غير متاح بعد', unavailableHint: 'تعذّر الجلب الآن، فلا تعتبر الشاشة فارغة.',
+    adsNone: 'لا أعمال لها رصيد إعلانات بعد', adsFailed: 'أرصدة إعلانات الأعمال: غير متاح بعد', adsLinkAds: 'إعلانات الأعمال', adsLinkClients: 'عملاء الإعلانات',
+    ownerSelf: 'البروفيسور نفسه', ownerForSelf: 'للبروفيسور', ownerCurrent: 'الحالي',
+    ownerAdsHint: 'قائمة الأعمال غير متاحة الآن، فلا يمكن تغيير صاحب الحملة', ownerOwnersHint: 'صاحب الحملة غير متاح الآن، فلا يمكن تغييره',
+    kindCourse: 'دورة', kindBook: 'كتاب',
+    madarTitle: 'بعد ربط مدار', madarBtn: 'ماذا سيظهر هنا؟',
+    madarItems: ['نتائج إعلانات ميتا وجوجل لكل حملة يومًا بيوم', 'أرقام صفحات فيسبوك وإنستجرام ولينكدإن ويوتيوب وتيك توك', 'خطة النشر الأسبوعية وما ينتظر موافقتك',
+                 'كشف «صُرف كم وجاء بماذا» لكل صاحب حملة'],
+    madarCard: 'مدار هو نظام التسويق الذي سيجلب إلى هنا نتائج الإعلانات وأرقام الصفحات وخطة النشر، فلا تكتبها بيدك. الربط في جولة قادمة.',
+    soon: 'قريبًا',
+    detailLines: { platform: 'المنصة', status: 'الحالة', period: 'المدة', owner: 'لمن الحملة', audience: 'الجمهور' },
+    detailNumbers: 'كما سُجّل منذ بداية الحملة',
+    nBudget: 'الميزانية',
+    linkTitle: 'الرابط الذي تضعه في الإعلان', copyLink: 'انسخ الرابط', copiedLink: 'نُسخ الرابط',
+    linkSoon: 'سيُحتسب من جاء عبر هذا الرابط حين تبدأ المنصة تسجيل مصدر كل زائر.',
+    viaLabel: 'من المنصة', viaNobody: 'لم يأتِ عبره أحد هذا الشهر',
+    actEdit: 'عدّل الحملة', actStop: 'أوقفها', actRun: 'شغّلها', actCopyStatement: 'انسخ الكشف', actDelete: 'احذف',
+    statementCopied: 'نُسخ الكشف — أرسله لصاحب الحملة',
+    createTitle: 'حملة جديدة', editTitle: 'تعديل: ', createBtn: 'أنشئ الحملة', saveBtn: 'احفظ', saving: 'جارٍ الحفظ…',
+    fName: 'اسم الحملة', fOwner: 'لمن الحملة', fPlatform: 'المنصة', fPlatformOther: 'اسم المنصة', fCurrency: 'العملة', fCurrencyOther: 'رمز العملة (ثلاثة أحرف)',
+    fStatus: 'الحالة', fStart: 'تاريخ البدء', fEnd: 'تاريخ النهاية', fBudget: 'الميزانية', fSpent: 'صُرف', fClicks: 'الزيارات (النقرات على الإعلان)',
+    fLeads: 'سجّلوا', fPaid: 'دفعوا', fRevenue: 'الدخل الذي جاء منها', fAudience: 'الجمهور',
+    dateNote: 'لا يمكن مسح التاريخ بعد حفظه، غيّره فقط',
+    errName: 'اكتب اسم الحملة', errNameLong: 'اسم الحملة أطول من ٢٥٥ حرفًا', errNeg: 'الأرقام لا تكون سالبة', errNum: 'اكتب رقمًا صحيحًا في خانة: ', errInt: 'اكتب عددًا صحيحًا في خانة: ',
+    errEnd: 'تاريخ النهاية قبل البدء', errPlatform: 'اكتب اسم المنصة', errCur: 'اكتب رمز العملة من ثلاثة أحرف', errAudience: 'الجمهور أطول من ٥٠٠ حرف',
+    ownerNoSave: 'حُفظت الحملة، وتعذّر حفظ صاحبها — أعد المحاولة من «عدّل الحملة»',
+    deleteTitle: 'حذف حملة', deleteWarn: 'لا يمكن التراجع.', deleteBtn: 'احذف نهائيًا',
+    socialCaption: 'صُرف على حملاتها منذ بداية كل حملة', socialNone: 'لا حملات مسجّلة على هذه المنصة', socialFollowers: 'المتابعون والوصول: غير متاح بعد',
+    socialFailedNote: 'تعذّر جلب الحملات',
+    planPublished: 'نُشر على الموقع هذا الأسبوع', planPublishedHint: 'آخر ٧ أيام', planOpenSite: 'افتح على الموقع', planNone: 'لم يُنشر مقال على الموقع في آخر ٧ أيام.',
+    planDrafts: 'مسودات مقالات لم تُنشر بعد: ', planOpenContent: 'افتح المحتوى', planFailed: 'مقالات الموقع: غير متاح بعد', planLoading: '…جارٍ جلب المقالات',
+    planSocial: 'خطة النشر على السوشيال', planSocialText: 'تُجهَّز خطة الأسبوع لكل منصة، وتنتظر موافقتك قبل النشر، بعد ربط «مدار».'
+  };
+
+  // ------------------------------------------------------------------ أدوات
+  function numv(v) { var n = Number(v); return isFinite(n) ? n : 0; }
+  function isoDay(s) { s = String(s == null ? '' : s).slice(0, 10); return /^\d{4}-\d{2}-\d{2}$/.test(s) ? s : ''; }
+  function dayMs(s) { s = isoDay(s); return s ? Date.parse(s + 'T00:00:00Z') : NaN; }
+  function unitOf(cur) { return UNIT[String(cur || '').toUpperCase()] || 'وحدة'; }
+  function sumField(rows, f) { return U.sumByCurrency(rows.map(function (r) { return { currency: r.currency, amount: r[f] }; })); }
+  function pickPrimary(sums) {
+    var pos = sums.filter(function (s) { return s.amount > 0; });
+    if (!pos.length) return null;
+    var p = pos.filter(function (s) { return s.currency === 'EGP'; })[0] || pos.slice().sort(function (a, b) { return b.amount - a.amount; })[0];
+    return { primary: p, others: pos.filter(function (s) { return s !== p; }) };
+  }
+  function othersText(others) { return others.length ? STR.othersPrefix + others.map(function (o) { return U.moneyText(o.amount, o.currency); }).join(' · ') : ''; }
+  function ratio(rev, spent) { rev = numv(rev); spent = numv(spent); if (spent <= 0) return null; return Math.round(rev / spent * 10) / 10; }
+  function ratioNum(r) { return U.fmt(r); }
+  function ratioText(r, cur) { return r == null ? '' : 'كل ' + unitOf(cur) + ' رجع ' + ratioNum(r); }
+  function money(n, cur) { return U.moneyText(n, cur); }
+  function moneyListText(totals) { return (totals || []).map(function (t) { return U.moneyText(t.amount, t.currency); }).filter(Boolean).join(' · '); }
+  function activeRows(rows) { return rows.filter(function (r) { return r.status === 'active'; }); }
+
+  // ------------------------------------------------------------------ مدخل الحملات
+  function norm(raw) {
+    return (Array.isArray(raw) ? raw : []).filter(Boolean).map(function (c) {
+      var status = STATUS_LABEL[c.status] ? c.status : 'paused';
+      var platform = String(c.platform == null ? '' : c.platform).trim();
+      var clicks = numv(c.clicks), leads = numv(c.leads), conv = numv(c.conversions), rev = numv(c.revenue_attributed), spent = numv(c.spent);
+      var allZero = !(clicks || leads || conv || rev);
+      return { id: Number(c.id), name: String(c.name == null ? '' : c.name).trim() || 'حملة بلا اسم', platform: platform,
+               platformLabel: PLATFORM_LABEL[platform] || platform, status: status, statusLabel: STATUS_LABEL[status],
+               currency: String(c.currency || '').trim().toUpperCase() || 'EGP', start: isoDay(c.start_date), end: isoDay(c.end_date),
+               budget: numv(c.budget), spent: spent, clicks: clicks, leads: leads, conversions: conv, revenue: rev,
+               audience: String(c.target_audience == null ? '' : c.target_audience).trim(), allZero: allZero, noResults: spent > 0 && allZero };
+    });
+  }
+
+  // ------------------------------------------------------------------ مدخل المنصة (من أين جاء كل شخص)
+  function attReady(att) { return !!(att && typeof att === 'object' && att.ok !== false && Array.isArray(att.channels)); }
+  function organicChannels(att) { return att.channels.filter(function (c) { return c && c.paid === false; }); }
+  function organicTotals(att) {
+    var items = [];
+    organicChannels(att).forEach(function (c) { (c.totals || []).forEach(function (t) { items.push({ currency: t.currency, amount: t.amount }); }); });
+    return U.sumByCurrency(items);
+  }
+  function organicCount(att, f) { return organicChannels(att).reduce(function (s, c) { return s + numv(c[f]); }, 0); }
+  function viaFor(att, id) {
+    if (!attReady(att) || !Array.isArray(att.campaigns)) return null;
+    var hit = att.campaigns.filter(function (c) { return c && c.campaign === 'c' + id; })[0];
+    return hit ? { signups: numv(hit.signups), paid: numv(hit.paid_people), totals: Array.isArray(hit.totals) ? hit.totals : [] } : null;
+  }
+
+  // ------------------------------------------------------------------ الأرقام الأربعة
+  function numObj(key, label) { return { key: key, label: label, value: '', na: false, primary: null, others: [], othersText: '', note: '' }; }
+  function setMoney(n, sums, emptyText) {
+    var pk = pickPrimary(sums);
+    if (!pk) { n.value = emptyText; n.na = true; return null; }
+    n.primary = pk.primary; n.others = pk.others; n.othersText = othersText(pk.others); n.value = U.moneyText(pk.primary.amount, pk.primary.currency);
+    return pk;
+  }
+  // rows: صفوف norm() أو null لو مصدر الحملات فشل. extra: {income: [{currency,amount}]|null, attribution: ردّ المنصة|null}
+  function board(rows, filter, extra) {
+    extra = extra || {};
+    var n1 = numObj('spent', STR.n1), n2 = numObj('revenue', STR.n2), n3 = numObj('organic', STR.n3), n4 = numObj('cost', STR.n4);
+    var all = filter === 'all';
+    if (!Array.isArray(rows)) {
+      [n1, n2, n4].forEach(function (n) { n.value = NA; n.na = true; n.note = STR.campaignsFailedNote; });
+    } else {
+      var sel = all ? rows : activeRows(rows), cnt = sel.length;
+      var countText = all ? 'من ' + Un(cnt, ['حملة واحدة مسجّلة', 'حملتين مسجّلتين', 'حملات مسجّلة', 'حملة مسجّلة']) : Un(cnt, ['حملة واحدة نشطة', 'حملتان نشطتان', 'حملات نشطة', 'حملة نشطة']);
+      var spentSums = sumField(sel, 'spent'), revSums = sumField(sel, 'revenue');
+      // ١) صُرف
+      if (!cnt) { n1.value = STR.noCampaigns; n1.na = true; n1.note = STR.sincePeriod; }
+      else { setMoney(n1, spentSums, STR.noSpend); n1.note = countText + ' · ' + STR.sincePeriod; }
+      // ٢) دخل جاء من الإعلانات
+      if (!cnt) { n2.value = STR.noCampaigns; n2.na = true; n2.note = STR.sincePeriod; }
+      else {
+        var pk2 = setMoney(n2, revSums, STR.noRevenue);
+        if (!pk2) n2.note = STR.sincePeriod;
+        else {
+          var sp = spentSums.filter(function (s) { return s.currency === pk2.primary.currency; })[0];
+          if (sp && sp.amount > 0) n2.note = 'كل ' + unitOf(pk2.primary.currency) + ' رجع ' + ratioNum(Math.round(pk2.primary.amount / sp.amount * 10) / 10) + ' · ' + STR.sincePeriod;
+          else n2.note = 'كما سُجّل في كل حملة منذ بدايتها';
+        }
+      }
+      // ٤) كلفة العميل
+      var payers = sel.filter(function (r) { return r.conversions > 0; });
+      if (!payers.length) { n4.value = NA; n4.na = true; n4.note = STR.n4None; }
+      else {
+        var per = {};
+        payers.forEach(function (r) { var p = per[r.currency] || (per[r.currency] = { spent: 0, conv: 0 }); p.spent += r.spent; p.conv += r.conversions; });
+        var costs = Object.keys(per).map(function (c) { return { currency: c, amount: Math.round(per[c].spent / per[c].conv), weight: per[c].spent }; });
+        var cpos = costs.filter(function (c) { return c.amount > 0; });
+        var p4 = cpos.filter(function (c) { return c.currency === 'EGP'; })[0] || cpos.slice().sort(function (a, b) { return b.weight - a.weight; })[0];
+        if (!p4) { n4.value = NA; n4.na = true; n4.note = STR.n4None; }
+        else {
+          n4.primary = { currency: p4.currency, amount: p4.amount }; n4.value = U.moneyText(p4.amount, p4.currency);
+          n4.others = cpos.filter(function (c) { return c !== p4; }).map(function (c) { return { currency: c.currency, amount: c.amount }; });
+          n4.othersText = othersText(n4.others); n4.note = STR.n4Note;
+        }
+      }
+    }
+    // ٣) دخل جاء بلا إعلانات (هذا الشهر — من المنصة)
+    var att = extra.attribution;
+    if (attReady(att)) {
+      var pk3 = setMoney(n3, organicTotals(att), STR.n3NoIncome);
+      if (!pk3) n3.na = false;
+      var since = att.captured_since ? U.dateText(att.captured_since) : '';
+      n3.note = 'هذا الشهر' + (since ? '، منذ بدء التسجيل في ' + since : '') + ': ' + STR.n3Channels;
+    } else {
+      n3.value = NA; n3.na = true; n3.note = STR.n3NotReady;
+      var inc = Array.isArray(extra.income) ? moneyListText(extra.income) : '';
+      if (inc) n3.note += ' دخل المنصة كله هذا الشهر: ' + inc + '، ولا نعرف بعد كم منه جاء من إعلان.';
+    }
+    return { numbers: [n1, n2, n3, n4] };
+  }
+
+  // ------------------------------------------------------------------ الحملات القديمة بعملة الدولار
+  function legacyUsd(rows, legacyMaxId) {
+    var max = Number(legacyMaxId) || 0;
+    if (max <= 0 || !Array.isArray(rows)) return [];
+    return rows.filter(function (r) { return r.currency === 'USD' && r.id <= max; });
+  }
+
+  // ------------------------------------------------------------------ نضج الحملة + اقتراح العقل
+  function mature(row, todayISO) {
+    var t = dayMs(todayISO), s = dayMs(row.start);
+    var oldEnough = isNaN(s) || isNaN(t) || s <= t - 7 * DAYMS;
+    var spentEnough = row.budget <= 0 || row.spent >= row.budget * 0.25;
+    return oldEnough && spentEnough;
+  }
+  function isSkipped(skipped, key) {
+    if (!skipped) return false;
+    if (Array.isArray(skipped)) return skipped.indexOf(key) > -1;
+    if (typeof skipped.has === 'function') return skipped.has(key);
+    return !!skipped[key];
+  }
+  function bySpent(a, b) { return b.spent - a.spent || (a.name < b.name ? -1 : 1); }
+  function brain(rows, todayISO, skipped) {
+    rows = Array.isArray(rows) ? rows : [];
+    if (!rows.length) return { state: 'empty', items: [{ kind: 'empty', id: 0, text: STR.brainEmpty, line: '', btn: STR.newCampaign, action: 'create', later: false }], text: STR.brainEmpty };
+    var act = activeRows(rows).slice().sort(bySpent), all = [];
+    function item(kind, r, text, line, btn, action, later) { all.push({ kind: kind, id: r.id, text: text, line: line, btn: btn, action: action, later: later !== false }); }
+    act.forEach(function (r) {
+      if (r.end && r.end < isoDay(todayISO)) item('ended', r, 'حملة «' + r.name + '» انتهى موعدها في ' + U.dateText(r.end) + ' وما زالت «نشطة» هنا.', STR.sugEnded, STR.btnEnded, 'complete');
+    });
+    act.forEach(function (r) {
+      if (mature(r, todayISO) && r.spent > 0 && !r.allZero && r.revenue < r.spent) {
+        var text = r.revenue > 0
+          ? 'حملة «' + r.name + '» صُرف عليها ' + money(r.spent, r.currency) + ' وسُجّل لها دخل ' + money(r.revenue, r.currency) + ': ' + ratioText(ratio(r.revenue, r.spent), r.currency) + '.'
+          : 'حملة «' + r.name + '» صُرف عليها ' + money(r.spent, r.currency) + ' ولم يُسجَّل لها دخل بعد.';
+        item('losing', r, text, STR.sugStop, STR.btnStop, 'pause');
+      }
+    });
+    act.forEach(function (r) {
+      if (mature(r, todayISO) && r.spent > 0 && r.allZero) item('no_results', r, 'حملة «' + r.name + '» صُرف عليها ' + money(r.spent, r.currency) + ' ولم تُسجَّل لها أي نتيجة بعد.', STR.sugNoResults, STR.btnResults, 'edit');
+    });
+    act.forEach(function (r) {
+      if (r.budget > 0 && r.spent > r.budget) item('over_budget', r, 'حملة «' + r.name + '» صُرف عليها ' + money(r.spent, r.currency) + ' وميزانيتها ' + money(r.budget, r.currency) + '.', STR.sugBudget, STR.btnEdit, 'edit');
+    });
+    if (!all.length) {
+      var best = act.filter(function (r) { var x = ratio(r.revenue, r.spent); return r.spent > 0 && x != null && x >= 3; })
+        .sort(function (a, b) { return ratio(b.revenue, b.spent) - ratio(a.revenue, a.spent); })[0];
+      if (best) item('best', best, 'أفضل حملة الآن «' + best.name + '»: ' + ratioText(ratio(best.revenue, best.spent), best.currency) + '.', '', STR.btnOpen, 'detail', false);
+    }
+    var items = all.filter(function (it) { return !isSkipped(skipped, it.kind + '_' + it.id); });
+    if (items.length) return { state: 'items', items: items, text: '' };
+    if (all.length) return { state: 'none', items: [], text: STR.brainNone };           // كلها «بعدين»
+    var young = act.some(function (r) { return !mature(r, todayISO) && r.spent > 0 && ((!r.allZero && r.revenue < r.spent) || r.allZero); });
+    if (young) return { state: 'young', items: [], text: STR.brainYoung };
+    return { state: 'none', items: [], text: STR.brainNone };
+  }
+  function mainButton(state) {
+    if (state === 'items') return { main: 'brain', topHidden: false };
+    if (state === 'empty') return { main: 'brain', topHidden: true };
+    return { main: 'top', topHidden: false };
+  }
+
+  // ------------------------------------------------------------------ العقل يرى من / يحتاج
+  var NEEDS = [
+    { key: 'attribution', title: 'من أين جاء كل شخص يسجّل أو يدفع', why: 'لأعرف كم من الدخل جاء بلا إعلان', chip: 'يحتاج تعديلًا في المنصة',
+      how: 'تحفظ المنصة عند أول زيارة من أين جاء الزائر (إعلان، بحث، سوشيال، دعوة)، وتربطه بحسابه وبكل دفعة. بعدها يظهر هنا الدخل بلا إعلان، ونتيجة كل حملة حتى الدفع.' },
+    { key: 'ads_results', title: 'نتائج إعلانات ميتا وجوجل', why: 'لأرى نتيجة كل حملة دون كتابتها', chip: 'يأتي مع ربط «مدار»',
+      how: 'يجلب «مدار» نتائج الحملات يومًا بيوم من حسابات الإعلانات. إلى أن يُربط، سجّل أرقام كل حملة من زر «عدّل الحملة».' },
+    { key: 'social_pages', title: 'أرقام صفحات السوشيال', why: 'لأعرف أي منصة تجلب الناس', chip: 'يأتي مع ربط «مدار»',
+      how: 'يجلب «مدار» المتابعين والوصول وأفضل منشور لكل منصة.' },
+    { key: 'site_visits', title: 'زيارات الموقع', why: 'لأعرف كم زائرًا صار عميلًا', chip: 'يحتاج تعديلًا في الموقع',
+      how: 'يُضاف عدّاد زيارات للموقع والمنصة يحترم اختيار الكوكيز، ويصل رقمه إلى هنا وإلى «التقارير».' }
+  ];
+  function sources(states) {
+    states = states || {};
+    function st(k) {
+      var s = states[k];
+      if (s === 'ready') return 'ready';
+      if (s === 'error') return 'error';
+      if (s === 'closed') return k === 'attribution' ? 'off' : 'error';
+      return s === 'loading' ? 'loading' : 'off';
+    }
+    var seen = [
+      { key: 'campaigns', label: STR.srcCampaigns, state: st('campaigns') },
+      { key: 'income', label: STR.srcIncome, state: st('income') },
+      { key: 'ads', label: STR.srcAds, state: st('ads') },
+      { key: 'attribution', label: STR.srcAttr, state: st('attribution') },
+      { key: 'meta', label: STR.srcMeta, state: 'off' }, { key: 'google', label: STR.srcGoogle, state: 'off' },
+      { key: 'social', label: STR.srcSocial, state: 'off' }, { key: 'visits', label: STR.srcVisits, state: 'off' }
+    ];
+    var failed = seen.filter(function (s) { return s.state === 'error' && ['campaigns', 'income', 'ads', 'attribution'].indexOf(s.key) > -1; }).map(function (s) { return s.key; });
+    var needs = NEEDS.filter(function (n) { return n.key !== 'attribution' || states.attribution !== 'ready'; });
+    return { seen: seen, needs: needs, failed: failed };
+  }
+
+  // ------------------------------------------------------------------ جدول الحملات
+  function ownerMap(owners) {
+    var m = {};
+    (Array.isArray(owners) ? owners : []).forEach(function (o) { if (o) m[o.campaign_id] = o; });
+    return m;
+  }
+  // «ل» + الاسم بقاعدة العربية: «للإيجار» لا «لالإيجار»، وغير العربي يبقى «لـ».
+  function lam(title) {
+    title = String(title || '').trim();
+    if (/^ال/.test(title)) return 'لل' + title.slice(2);
+    return /^[؀-ۿ]/.test(title) ? 'ل' + title : 'لـ' + title;
+  }
+  function ownerTitleOf(owner) { return owner ? (owner.owner_title || owner.owner_id || '') : ''; }
+  function ownerLine(owner) { return !owner || owner.owner_kind === 'platform' ? STR.ownerForSelf : lam(ownerTitleOf(owner)); }
+  function rowsView(rows, owners, filter, attribution) {
+    rows = Array.isArray(rows) ? rows : [];
+    var sel = filter === 'all' ? rows : activeRows(rows);
+    var om = ownerMap(owners), ownersOk = Array.isArray(owners), ready = attReady(attribution);
+    var list = sel.slice().sort(function (a, b) {
+      return (b.status === 'active') - (a.status === 'active') || b.spent - a.spent || (a.name < b.name ? -1 : a.name > b.name ? 1 : 0);
+    }).map(function (r) {
+      var ra = r.revenue > 0 ? ratio(r.revenue, r.spent) : null, via = ready ? viaFor(attribution, r.id) : null;
+      return { id: r.id, name: r.name, owner: ownersOk ? ownerLine(om[r.id]) : '', platform: r.platformLabel, status: r.status, statusLabel: r.statusLabel,
+               currency: r.currency, spentText: money(r.spent, r.currency), budgetText: money(r.budget, r.currency), clicks: U.ar(r.clicks), leads: U.ar(r.leads), conversions: U.ar(r.conversions),
+               revenueText: money(r.revenue, r.currency), ratio: ra, ratioText: ra == null ? '—' : ratioNum(ra), ratioTone: ra == null ? '' : ra < 1 ? 'bad' : ra >= 3 ? 'good' : '',
+               noResults: r.noResults, via: via, viaText: via ? 'سجّلوا ' + U.ar(via.signups) + ' · دفعوا ' + U.ar(via.paid) : (ready ? '—' : '') };
+    });
+    var organic = { name: STR.organicName, sub: STR.organicSub, na: !ready, naText: STR.organicNa, signups: '', paid: '', revenueText: '', ratioText: STR.organicRatio };
+    if (ready) {
+      organic.signups = U.ar(organicCount(attribution, 'signups')); organic.paid = U.ar(organicCount(attribution, 'paid_people'));
+      organic.revenueText = moneyListText(organicTotals(attribution)) || '—';
+    }
+    return { rows: list, organic: organic, viaColumn: ready };
+  }
+
+  // ------------------------------------------------------------------ بطاقات السوشيال
+  function byPlatform(rows) {
+    var out = {};
+    SOCIAL.forEach(function (p) {
+      var mine = (Array.isArray(rows) ? rows : []).filter(function (r) { return r.platform === p.key || (r.platform === 'facebook_instagram' && (p.key === 'facebook' || p.key === 'instagram')); });
+      var shared = mine.some(function (r) { return r.platform === 'facebook_instagram'; });
+      var spent = sumField(mine, 'spent'), rev = sumField(mine, 'revenue');
+      var conv = mine.reduce(function (s, r) { return s + r.conversions; }, 0);
+      var o = { key: p.key, label: p.label, mark: p.mark, n: mine.length, spent: spent, revenue: rev, conversions: conv, shared: shared, sharedText: shared && p.mate ? '(مشتركة مع ' + p.mate + ')' : '',
+                big: '', na: false, others: [], othersText: '', caption: STR.socialCaption, fact: '' };
+      if (!mine.length) { o.big = STR.socialNone; o.na = true; o.caption = ''; }
+      else {
+        var pk = pickPrimary(spent);
+        if (!pk) { o.big = STR.noSpend; o.na = true; }
+        else { o.big = U.moneyText(pk.primary.amount, pk.primary.currency); o.others = pk.others; o.othersText = othersText(pk.others); }
+        var fact = Un(mine.length, ['حملة واحدة', 'حملتان', 'حملات', 'حملة']) + ' · دفعوا ' + U.ar(conv);
+        if (pk) {
+          var rv = rev.filter(function (s) { return s.currency === pk.primary.currency; })[0];
+          if (rv && rv.amount > 0) fact += ' · ' + ratioText(Math.round(rv.amount / pk.primary.amount * 10) / 10, pk.primary.currency);
+          else fact += ' · ' + STR.noRevenue;
+        }
+        o.fact = fact;
+      }
+      out[p.key] = o;
+    });
+    return out;
+  }
+
+  // ------------------------------------------------------------------ صاحب الحملة (قائمة الاختيار)
+  function ownerValue(o) { return !o || o.owner_kind === 'platform' || !o.owner_kind ? 'platform' : o.owner_kind + ':' + o.owner_id; }
+  function kindWord(k) { return k === 'course' ? STR.kindCourse : STR.kindBook; }
+  // adsState: حالة مصدر الأرصدة · adsItems: items[] · loadedOwner: {owner_kind, owner_id, owner_title}|null · ownersReady (افتراضي true)
+  function ownerChoices(adsState, adsItems, loadedOwner, ownersReady) {
+    var loaded = ownerValue(loadedOwner), hasOwner = loaded !== 'platform';
+    var cur = hasOwner ? { value: loaded, label: (loadedOwner.owner_title || loadedOwner.owner_id) + ' — ' + STR.ownerCurrent, title: loadedOwner.owner_title || '' } : { value: 'platform', label: STR.ownerSelf, title: '' };
+    if (ownersReady === false) return { disabled: true, options: [cur], selected: loaded, hint: STR.ownerOwnersHint };
+    if (adsState !== 'ready') return { disabled: true, options: [cur], selected: loaded, hint: STR.ownerAdsHint };
+    var opts = [{ value: 'platform', label: STR.ownerSelf, title: '' }];
+    (Array.isArray(adsItems) ? adsItems : []).forEach(function (it) {
+      if (!it) return;
+      var val = it.owner_kind + ':' + it.owner_id;
+      var title = String(it.title || '').trim() || (hasOwner && val === loaded ? String(loadedOwner.owner_title || '').trim() : '');
+      opts.push({ value: val, label: (title || 'عمل بلا عنوان (' + it.owner_id + ')') + ' — ' + kindWord(it.owner_kind), title: title });
+    });
+    if (hasOwner && !opts.some(function (o) { return o.value === loaded; })) opts.push(cur);
+    return { disabled: false, options: opts, selected: loaded, hint: '' };
+  }
+
+  // ------------------------------------------------------------------ الرابط والكشف
+  function link(id, platform) {
+    var src = UTM_SRC[String(platform || '')] || 'other';
+    return 'https://elprofessor.net/?utm_source=' + src + '&utm_medium=paid&utm_campaign=c' + id;
+  }
+  function duration(r) {
+    if (r.start && r.end) return 'من ' + U.dateText(r.start) + ' إلى ' + U.dateText(r.end);
+    if (r.start) return 'من ' + U.dateText(r.start) + ' حتى الآن';
+    return 'بلا تاريخ';
+  }
+  function statement(r, owner, todayISO) {
+    var lines = [];
+    lines.push('كشف حملة «' + r.name + '» — ' + ownerLine(owner && owner.owner_kind ? owner : null));
+    lines.push([r.platformLabel ? 'المنصة: ' + r.platformLabel : '', duration(r)].filter(Boolean).join(' · '));
+    lines.push('صُرف: ' + money(r.spent, r.currency) + ' من ميزانية ' + money(r.budget, r.currency));
+    lines.push('زيارات: ' + U.ar(r.clicks) + ' · سجّلوا: ' + U.ar(r.leads) + ' · دفعوا: ' + U.ar(r.conversions));
+    lines.push('الدخل المسجّل: ' + money(r.revenue, r.currency));
+    lines.push('الأرقام كما سُجّلت في لوحة البروفيسور بتاريخ ' + U.dateText(todayISO) + '.');
+    return lines.filter(Boolean).join('\n');
+  }
+
+  // ------------------------------------------------------------------ التحقق من نموذج الحملة
+  function validate(form, loadedOwner) {
+    form = form || {};
+    var fail = function (e) { return { ok: false, error: e, body: null, ownerChanged: false }; };
+    var name = String(form.name == null ? '' : form.name).trim();
+    if (!name) return fail(STR.errName);
+    if (name.length > 255) return fail(STR.errNameLong);
+    var platform = String(form.platform || '').trim();
+    if (platform === 'other') { platform = String(form.platformOther || '').trim(); if (!platform) return fail(STR.errPlatform); }
+    var currency = String(form.currency || 'EGP').trim();
+    if (currency === 'other') { currency = String(form.currencyOther || '').trim().toUpperCase(); if (!/^[A-Z]{3}$/.test(currency)) return fail(STR.errCur); }
+    var start = isoDay(form.start), end = isoDay(form.end);
+    if (start && end && end < start) return fail(STR.errEnd);
+    var audience = String(form.audience == null ? '' : form.audience).trim();
+    if (audience.length > 500) return fail(STR.errAudience);
+    var out = {}, fields = [['budget', STR.fBudget, false], ['spent', STR.fSpent, false], ['clicks', STR.fClicks, true], ['leads', STR.fLeads, true],
+                            ['conversions', STR.fPaid, true], ['revenue', STR.fRevenue, false]];
+    for (var i = 0; i < fields.length; i++) {
+      var f = fields[i], raw = String(form[f[0]] == null ? '' : form[f[0]]).trim();
+      if (/^[-−–]/.test(raw)) return fail(STR.errNeg);
+      var v = U.parseAmount(raw);
+      if (v === null) v = 0;
+      if (typeof v !== 'number' || isNaN(v)) return fail((f[2] ? STR.errInt : STR.errNum) + f[1]);
+      if (f[2] && Math.floor(v) !== v) return fail(STR.errInt + f[1]);
+      out[f[0]] = v;
+    }
+    var body = { name: name, platform: platform, status: STATUS_LABEL[form.status] ? form.status : 'active', budget: out.budget, spent: out.spent, currency: currency,
+                 clicks: out.clicks, leads: out.leads, conversions: out.conversions, revenue_attributed: out.revenue, target_audience: audience };
+    if (!form.edit) body.impressions = 0;
+    if (start) body.start_date = start;
+    if (end) body.end_date = end;
+    var loaded = ownerValue(loadedOwner), chosen = String(form.ownerValue || 'platform');
+    var ownerChanged = !form.ownerDisabled && (chosen !== loaded || !form.edit);   // الإنشاء يرسل الصاحب دائمًا فيُستبدل أي صف قديم بنفس الرقم
+    var owner = null;
+    if (ownerChanged) {
+      if (chosen === 'platform') owner = { owner_kind: 'platform' };
+      else { var ix = chosen.indexOf(':'); owner = { owner_kind: chosen.slice(0, ix), owner_id: chosen.slice(ix + 1), owner_title: String(form.ownerTitle || '').slice(0, 200) }; }
+    }
+    return { ok: true, error: '', body: body, ownerChanged: ownerChanged, owner: owner };
+  }
+
+  // اقتراحات العقل بشكل بطاقة القرار (للوحة الرئيسية لاحقًا).
+  function cards(rows, todayISO, skipped) {
+    var b = brain(rows, todayISO, skipped);
+    return b.items.filter(function (it) { return it.kind !== 'empty'; }).map(function (it) { return { kind: 'mk_' + it.kind, id: it.id, title: it.text, line: it.line, btn: it.btn, action: it.action }; });
+  }
+
+  L.mk = {
+    STR: STR, NA: NA, norm: norm, board: board, legacyUsd: legacyUsd, mature: mature, ratio: ratio, ratioText: ratioText, brain: brain, mainButton: mainButton,
+    sources: sources, rows: rowsView, byPlatform: byPlatform, ownerChoices: ownerChoices, ownerValue: ownerValue, link: link, statement: statement, validate: validate,
+    via: viaFor, attReady: attReady, organicTotals: organicTotals, organicCount: organicCount, duration: duration, cards: cards, unitOf: unitOf,
+    PLATFORM_OPTS: PLATFORM_OPTS, CURRENCY_OPTS: CURRENCY_OPTS, PLATFORM_LABEL: PLATFORM_LABEL, STATUS_LABEL: STATUS_LABEL, SOCIAL: SOCIAL, NEEDS: NEEDS,
+    ownerLine: ownerLine, ownerTitleOf: ownerTitleOf, lam: lam, ownerMap: ownerMap, kindWord: kindWord, moneyListText: moneyListText
+  };
+})(typeof window !== 'undefined' ? window : (typeof globalThis !== 'undefined' ? globalThis : this));
+// ===== /v2s:marketing =====

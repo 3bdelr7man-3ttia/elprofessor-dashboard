@@ -41,6 +41,7 @@ COPY dashboard-cloud/v2-logic.js dashboard-cloud/v2-home.js dashboard-cloud/v2-h
 COPY dashboard-cloud/v2/img /app/dist/v2/img
 # الجولة الأخيرة · أقسام v2s (المحتوى…): واجهة كل قسم في ملفاته + مسارات الخادم في وحدة مستقلة (app.py يستوردها عند الإقلاع — غيابها = الحاوية لا تقوم).
 COPY backend/v2_content_routes.py /app/v2_content_routes.py
+COPY backend/v2_marketing_routes.py /app/v2_marketing_routes.py
 COPY dashboard-cloud/v2s /app/dist/v2s
 
 EXPOSE 8080

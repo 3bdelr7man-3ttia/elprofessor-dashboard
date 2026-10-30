@@ -30,7 +30,7 @@ needs_node = pytest.mark.skipif(not NODE, reason='needs node')
 PSEUDO_MODS = {'v2files', 'v2disputes', 'v2person',                       # D2: موديولات وهمية يرسمها V2D2 تحت الغلاف الجديد فقط
                'v2m_overview', 'v2m_payouts', 'v2m_receipts', 'v2m_prices', 'v2m_shares', 'v2m_ads', 'v2b_offers', 'v2b_requests',   # D3: يرسمها V2D3
                'v2s_market_all', 'v2s_market_demand',   # الجولة النهائية · سوق الخدمات: يرسمها V2S_MARKET
-               'v2p_invites'}    # الناس: «الدعوات» يرسمها v2s/people.js
+               'v2p_invites', 'v2mk_social', 'v2mk_plan'}  # + أقسام الجولة النهائية
 
 
 def _read(*parts):
