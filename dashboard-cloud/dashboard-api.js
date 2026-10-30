@@ -1732,7 +1732,8 @@
               triage: "human", sla: "بوابة التوثيق", slaWarn: false,
               note: (ap.headline || "طلب مدرّب جديد") + " — اعتمد الصفة وحدّد نسبة الإيراد.",
               ref: "TRN-" + ap.id, who: ap.user_name || ap.full_name || ap.user_email || ap.email || "—",
-              apiKind: "trainer", apiId: ap.id,
+              apiKind: "trainer", apiId: ap.id, ts: Date.parse(ap.created_at || ap.submitted_at || "") || 0,
+              trHeadline: ap.headline || "", trSpec: ap.specialty || ap.specialization || "", trYears: ap.years_experience || "", trAttach: Array.isArray(ap.attachments) ? ap.attachments.length : 0,
             });
           });
         }).catch(fail("طلبات المدرّبين"))
@@ -1769,7 +1770,7 @@
                 { k: "البلد", v: country },
                 { k: "لينكدإن", v: l.linkedin_url || "" },
               ].filter(function (d) { return d.v; }),
-              apiKind: "founding", apiId: l.id, canReject: true,
+              apiKind: "founding", apiId: l.id, canReject: true, ts: Date.parse(at) || 0, fSpec: spec, fCountry: country,
               approveLabel: nxt[1], nextStatus: nxt[0],
             });
           });
@@ -1812,7 +1813,7 @@
                 { k: "أسئلة بروف المستعملة", v: (u.ai_used != null) ? String(u.ai_used) : "" },
                 { k: "مشبوه", v: flagLabels.join(" · ") },
               ].filter(function (d) { return d.v; }),
-              apiKind: "pending_user", apiId: u.id, canReject: true,
+              apiKind: "pending_user", apiId: u.id, canReject: true, ts: Date.parse(reqAt) || 0, puCountry: u.country || "", puRole: roleLabel,
               approveLabel: "افتح له المنصّة",
               // «مسح» من الدرج: نفس مسار المسح النهائي (الفحص على المنصّة أوّلًا)، والشارة
               // «⚠️ مشبوه» على الصفّ بتلميح الأعلام — للمؤسس فقط، لا تصل للزائر أبدًا.
@@ -1876,7 +1877,7 @@
                 ? ("طُلب منه: " + shortNote(jr.info_request || "استكمال بياناته") + " — الصفّ مفتوح لحدّ ما يبعت.")
                 : (shortNote(jr.note) || "بلا ملاحظة مكتوبة من المتقدّم — القرار من الاستمارة تحت."),
               ref: "JR-" + jr.id, who: jr.user_name || jr.user_email || "—",
-              apiKind: "join", apiId: jr.id,
+              apiKind: "join", apiId: jr.id, ts: Date.parse(when) || 0,
               // «رفض بسبب»: المنصة تعرض `admin_note` لصاحب الطلب حرفًا كسبب رفضه، فالرفض هنا
               // لا يمرّ بلا سبب مكتوب (محروس في الواجهة وفي البروكسي معًا).
               canReject: true, rejectNeedsReason: true,
@@ -1914,6 +1915,9 @@
               amount: (typeof p.amount === "number") ? p.amount : (parseFloat(p.amount) || 0),
               currency: p.currency || "EGP",
               approveLabel: "تأكيد الدفعة", proofUrl: p.screenshot_url || "",
+              // D1: حقول للّوحة الجديدة بس (طريقة الدفع · المنتج · المرجع · وقت الطلب) — الشاشة القديمة ما بتقراهاش.
+              payMethod: p.method || "", payWhat: p.product_label || p.product_type || "", payRef: p.reference_number || "",
+              ts: Date.parse(p.created_at || "") || 0,
             });
           });
         }).catch(fail("الدفعات اليدوية"))
@@ -2036,7 +2040,7 @@
               ref: "MSG-" + m.id, who: m.name || m.email || "—",
               // ⛔ الردّ صار من درج الوارد نفسه (لا «فتح الرسائل» ثم بحثٌ عن الصفّ): الصفّ
               // يحمل ما يحتاجه الردّ والحذف — فلا يبقى فعلٌ وحيدٌ خلف شاشةٍ مبتلَعة.
-              msgSource: "site", msgId: m.id, email: m.email || "",
+              msgSource: "site", msgId: m.id, email: m.email || "", ts: Date.parse(m.created_at || "") || 0,
               body: m.body || "", topic: m.topic || "", phone: m.phone || "",
             });
           });
@@ -2053,7 +2057,7 @@
               triage: "human", sla: "متابعة", slaWarn: false,
               note: shortNote(l.need || l.topic || l.summary || "عميل محتمل من محادثة الشات"),
               ref: "LEAD-" + (lid || "?"), who: l.name || l.full_name || l.email || "—",
-              apiKind: lid ? "lead" : undefined, apiId: lid, resolve: !!lid, viewOnly: !lid,
+              apiKind: lid ? "lead" : undefined, apiId: lid, resolve: !!lid, viewOnly: !lid, ts: Date.parse(l.created_at || "") || 0,
             });
           });
         }).catch(function () {})
@@ -2069,7 +2073,7 @@
               triage: "human", sla: "بانتظار الرد", slaWarn: false,
               note: shortNote(m.body || m.text || m.summary || m.topic),
               ref: "PMSG-" + (pmid || "?"), who: m.name || m.user_name || m.email || "—",
-              apiKind: pmid ? "message" : undefined, apiId: pmid, resolve: !!pmid, viewOnly: !pmid,
+              apiKind: pmid ? "message" : undefined, apiId: pmid, resolve: !!pmid, viewOnly: !pmid, ts: Date.parse(m.created_at || "") || 0,
               // وسم المصدر ظاهرٌ على الصفّ: «من المنصة» مقابل «من الموقع» — سلوكان مختلفان
               // (هذه تُنهى على المنصة، وتلك يُردّ عليها من هنا) فلا بدّ أن يُقرأ أيّهما هو.
               msgSource: "platform", email: m.email || m.user_email || "",
@@ -2748,7 +2752,9 @@
   // `adminNote` = سبب القرار كما يكتبه المراجِع. ⛔ كان مثبَّتًا على "" فكان كل رفض يصل صاحبه
   // بلا سبب — والمنصة تعرض هذا الحقل نفسه لصاحب الطلب («سبب الرفض»). النداءات القديمة بثلاثة
   // معاملات تبقى كما هي (سبب فارغ) بلا كسر.
-  EP.decideInboxItem = function (i, action, after, adminNote) {
+  // D1: يرجّع Promise بـ{ok, error} (النداءات القديمة بتتجاهله) و`extra` اختياري يتدمج في جسم الطلب —
+  // اللوحة الجديدة بتبعت `confirmed:true` على أزرار الفلوس. ⛔ مفيش قرار جديد هنا: نفس المسارات بالحرف.
+  EP.decideInboxItem = function (i, action, after, adminNote, extra) {
     var reason = String(adminNote == null ? "" : adminNote).trim().slice(0, 1000);
     var path, body = { admin_note: reason };
     // مفتاحٌ ثانٍ يُعاد تحميله بعد القرار: الصفّ له لوحةٌ خارج الوارد تقرأ من EP.data مباشرةً
@@ -2757,10 +2763,9 @@
     // القرار الثالث «اطلب عيّنة/مستندًا» — طابور تقديم الخدمة وحده يملكه اليوم. مش قرار نهائي:
     // الصفّ يفضل مفتوح، والنصّ ده هو اللي بيقراه المقدّم حرفًا.
     if (action === "request_info") {
-      post("/platform-join-requests/" + i.apiId + "/request_info", body)
-        .then(function () { note("اتبعت المطلوب لصاحب الطلب — الصفّ لسه مفتوح ✓"); EP.reload("inbox", after); })
-        .catch(function (e) { quietToast((e && e.message) || "تعذّر إرسال الطلب"); if (after) after(); });
-      return;
+      return post("/platform-join-requests/" + i.apiId + "/request_info", body)
+        .then(function () { note("اتبعت المطلوب لصاحب الطلب — الصفّ لسه مفتوح ✓"); EP.reload("inbox", after); return { ok: true }; })
+        .catch(function (e) { quietToast((e && e.message) || "تعذّر إرسال الطلب"); if (after) after(); return { ok: false, error: (e && e.message) || "تعذّر إرسال الطلب" }; });
     }
     switch (i.apiKind) {
       case "trainer":  path = "/platform-trainer-applications/" + i.apiId + "/" + action; break;
@@ -2786,15 +2791,17 @@
         body = { decision: action, admin_note: reason }; break;
       default:         path = "/platform-program-requests/" + i.apiId + "/" + action;
     }
-    post(path, body)
+    if (extra && typeof extra === "object") { for (var xk in extra) if (Object.prototype.hasOwnProperty.call(extra, xk)) body[xk] = extra[xk]; }
+    return post(path, body)
       .then(function () {
         note(i.apiKind === "pending_user"
           ? (action === "approve" ? "اتفتحت له المنصّة ✓" : "اترفض — فضل زائرًا")
           : (action === "approve" ? "تم الاعتماد ✓" : "تم الرفض"));
         if (alsoReload) EP.reload(alsoReload);
         EP.reload("inbox", after);
+        return { ok: true };
       })
-      .catch(function (e) { quietToast((e && e.message) || "تعذّر تنفيذ العملية"); if (after) after(); });
+      .catch(function (e) { quietToast((e && e.message) || "تعذّر تنفيذ العملية"); if (after) after(); return { ok: false, error: (e && e.message) || "تعذّر تنفيذ العملية" }; });
   };
 
   // ---- «زوّار مسجَّلون ينتظرون الفتح»: الزرّان من لوحة «الدعوات» (نفس قرار الوارد بالحرف) ----
@@ -2865,9 +2872,9 @@
     var path = i.apiKind === "message"
       ? "/platform-messages/" + encodeURIComponent(i.apiId) + "/resolve"
       : "/platform-leads/" + encodeURIComponent(i.apiId) + "/resolve";
-    post(path, {})
-      .then(function () { note("اتقفل البند ✓"); EP.reload("inbox", after); })
-      .catch(function (e) { quietToast((e && e.message) || "تعذّر تنفيذ العملية"); if (after) after(); });
+    return post(path, {})
+      .then(function () { note("اتقفل البند ✓"); EP.reload("inbox", after); return { ok: true }; })
+      .catch(function (e) { quietToast((e && e.message) || "تعذّر تنفيذ العملية"); if (after) after(); return { ok: false, error: (e && e.message) || "تعذّر تنفيذ العملية" }; });
   };
 
   // توثيق: تحويل طلب بلا خبير إلى خبير معتمد محدَّد (يعيد فتحه ويُشعره).

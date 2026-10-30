@@ -414,6 +414,7 @@ body{font-family:'IBM Plex Sans Arabic',sans-serif;background:var(--bg);color:va
 .ep-login .bd .ttl{font-family:Cairo;font-weight:800;font-size:17px;color:var(--navy);margin-bottom:4px}
 .ep-login .bd .hint{font-size:12px;color:var(--muted);margin-bottom:18px}
 </style>
+<link rel="stylesheet" href="v2-home.css">
 </head>
 <body>
 <div class="app" data-screen-label="الداش بورد الجديدة">
@@ -455,6 +456,8 @@ body{font-family:'IBM Plex Sans Arabic',sans-serif;background:var(--bg);color:va
 
 <script src="site-content.js"></script>
 <script src="dashboard-api.js"></script>
+<script src="v2-logic.js"></script>
+<script src="v2-home.js"></script>
 <script>
 const ICONS={
   grid:'<path d="M3 3h7v7H3zM14 3h7v7h-7zM14 14h7v7h-7zM3 14h7v7H3z"/>',
@@ -661,11 +664,13 @@ function roleNavFor(r){
   return base;
 }
 function go(mod){
+  // D1: مغادرة اللوحة الجديدة (لو شغّالة) — عشان الرجوع إليها من القائمة يبدأ من اللوحة لا من بطاقة قديمة.
+  if(window.V2_ON&&current==='home'&&mod!=='home'&&window.V2&&V2.leave)V2.leave();
   // شاشة مبتلعة ⇒ وريثها (نظرة عامة ⇐ الوارد · الرسائل ⇐ شريحة «رسائل» · الباقات ⇐ تبويب المالية).
   const rd=REDIRECTS[mod]; if(rd)mod=rd[0];
   // رابط/إشعار قديم قد يشير إلى موديول حُذف («النوادي») — نهبط على الشاشة
   // الافتراضية بدل أن نرمي على تعريف غير موجود ونُفرغ اللوحة.
-  if(!moduleDef(mod))mod=(role==='admin')?'inbox':(roleNavFor(role)[0]||'v_pending');
+  if(!moduleDef(mod))mod=(role==='admin')?(window.V2_ON?'home':'inbox'):(roleNavFor(role)[0]||'v_pending');
   current=mod;selected=null;activeFilter='all';escTab='sessions';finTab='summary';usersFilter='all';usersTag='all';teamTab='experts';topicsTab='ideas';topicsCat='all';courseTab='platform';invTab='owners';tgTab='goals';foundationTab='assets';contentTab='pending';anFilters={seg:'all',country:'all',cat:'all',ne:'all',time:'all'};
   mkLane='all';mkNeed='all';mkStatus='all';mkSel=null;
   invSel=null;invGroupBy=false;
@@ -681,6 +686,9 @@ function go(mod){
 }
 function renderView(){
   const v=document.getElementById('view');
+  // D1: اللوحة الجديدة (ورا مفتاح مقفول) — صنف على `.app` يخفي بحث الشريط العلوي ويظهر فقط عليها.
+  { const ap=document.querySelector('.app'); if(ap)ap.classList.toggle('v2-home',current==='home'&&!!window.V2_ON); }
+  if(current==='home'&&window.V2_ON&&window.V2)return V2.render(v);
   // موديولات «قريبًا» (لا واجهة خلفية حقيقية بعد) — لا تعرض بياناتها التصميمية.
   if(MODULES_LOOKUP[current]&&MODULES_LOOKUP[current].soon)return viewSoon(v);
   if(current==='inbox')return viewInbox(v);
@@ -7593,7 +7601,47 @@ function setRole(r){
 // Expose the boot so the auth layer can run it only after a valid login.
 // الدور الحقيقي للمستخدم (من /auth/me) يحكم أي لوحة تظهر: أدمن = كل شيء؛
 // موظف = قراءة فقط (مستخدمون/دورات)؛ مدرّب/مستثمر = لوحته الشخصية؛ غير ذلك = بانتظار التفعيل.
+/* ===== D1 · اللوحة الجديدة — ⛔ ورا مفتاح DASH_V2_ENABLED (مقفول افتراضيًا): مقفول = ولا شيء من ده بيشتغل ===== */
+window.V2_ON=false;
+window.V2_HOST={
+  go:function(m){go(m);},
+  goOps:function(mod,landKey){goOps(mod,landKey?OPSQ_LANDINGS[landKey]:null);},
+  isHome:function(){return current==='home'&&!!window.V2_ON;},
+  // «افتح» على نفس البند: الوارد بالدرج مفتوح على الصفّ (نفس نمط efReloadKeep).
+  openRow:function(row){
+    go('inbox');
+    var n=INBOX.indexOf(row);
+    if(n<0){var k=efRowKey(row);n=INBOX.findIndex(function(r){return efRowKey(r)===k;});}
+    selected=n>-1?n:null;
+    viewInbox(document.getElementById('view'));
+    try{var w=document.querySelector('.inboxwrap');if(w&&w.scrollIntoView)w.scrollIntoView({block:'start'});}catch(e){}
+  },
+  logout:function(){var b=document.getElementById('logoutBtn');if(b)b.click();}
+};
+// «اللوحة» أول بند في «شغل النهاردة» — بتتدخل هنا لما المفتاح يفتح (مش في إعلان MODULES): اختبارات بنية القائمة
+// بتقرا الإعلان كما هو، والمفتاح المقفول يساوي قائمة بنفس الترتيب والعدد بالحرف.
+function v2Enable(){
+  window.V2_ON=true;
+  var old=Object.assign({},MODULES);
+  Object.keys(MODULES).forEach(function(k){delete MODULES[k];});
+  MODULES.home={label:'اللوحة',ic:'grid',c:'var(--human)',bg:'var(--human-bg)',grp:'today'};
+  Object.assign(MODULES,old);
+  // افتراضي الأدمن = اللوحة، بس لما مفيش # في الرابط (أو #home).
+  var h=String(location.hash||'').replace(/^#/,'').trim();
+  if(!h||h==='home')current='home';
+}
+// مرة واحدة عند الإقلاع، قبل renderNav. أي فشل/تأخير/٤٠٣ = مقفول (السلوك القديم بالحرف).
+function v2LoadFlag(cb){
+  var done=false;
+  function fin(on){if(done)return;done=true;if(on){try{v2Enable();}catch(e){window.V2_ON=false;}}cb();}
+  try{EP.api('/v2/config').then(function(r){fin(!!(r&&r.enabled===true));}).catch(function(){fin(false);});}catch(e){fin(false);}
+  setTimeout(function(){fin(false);},3000);
+}
 window.EP_BOOT=function(){
+  if(window.EP&&EP.role==='admin'&&EP.api&&window.V2){v2LoadFlag(epBootCore);return;}
+  epBootCore();
+};
+function epBootCore(){
   var r=(window.EP&&EP.role)?EP.role:null;
   if(r){
     if(!ROLE_NAV[r]&&r!=='admin')r='viewer'; // أي دور غير معروف يهبط على شاشة الانتظار
@@ -7603,7 +7651,7 @@ window.EP_BOOT=function(){
     return;
   }
   renderNav();renderView();renderNotifPanel();bootNavCounts();
-};
+}
 // شارات العدّ لا تنتظر زيارة «الوارد»: رابطٌ مباشر إلى #escrow كان يفتح لوحةً بلا أرقامٍ
 // على الشريط لأن الطابور لم يُطلَب بعد. يُطلَب مرّة عند الإقلاع، وتُكتب الشارات عند جهوزه.
 // ⛔ ثلاثة مصادرَ لا واحد: الطابور وحده كان يكتب أربع شارات، وشارتا «الوارد» و«الدعوات»

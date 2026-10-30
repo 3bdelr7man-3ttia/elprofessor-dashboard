@@ -31,6 +31,9 @@ COPY backend/refresh_rules.py /app/refresh_rules.py
 # Only the live app files are shipped — the standalone prototype HTMLs
 # (Dashboard-Outputs.html / Dashboard-State.html) are unreferenced and not deployed.
 COPY dashboard-cloud/index.html dashboard-cloud/dashboard-api.js dashboard-cloud/site-content.js /app/dist/
+# D1 · اللوحة الجديدة (ورا مفتاح DASH_V2_ENABLED): منطقها النقي + رسمها + تنسيقها + صور المربّعات.
+COPY dashboard-cloud/v2-logic.js dashboard-cloud/v2-home.js dashboard-cloud/v2-home.css /app/dist/
+COPY dashboard-cloud/v2/img /app/dist/v2/img
 
 EXPOSE 8080
 

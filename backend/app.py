@@ -1974,6 +1974,90 @@ def platform_wallet_payouts():
     return _platform_proxy('GET', '/api/bridge/wallet-payouts', params={'status': status})
 
 
+# ---------------------------------------------------------------------------- D1 · اللوحة الجديدة
+# المفتاح مقفول افتراضيًا (`DASH_V2_ENABLED`). المتصفح بيسأل هنا مرة عند الإقلاع: غير الأدمن ⇒ ٤٠٣ والمتصفح
+# بيعتبرها «مقفول». ⛔ يُقرأ وقت الطلب مش وقت الاستيراد، فتغيير المتغيّر في Coolify ما يحتاجش غير إعادة تشغيل.
+def _v2_enabled():
+    return (os.environ.get('DASH_V2_ENABLED') or '').strip().lower() in ('true', '1')
+
+
+@app.route('/api/v2/config', methods=['GET'])
+@token_required
+@roles_required('admin')
+def v2_config():
+    return jsonify({'enabled': _v2_enabled()})
+
+
+# تسجيل تحويل أرباح محفظة / رفضه (D1). المنصة هي اللي بتحرّك الفلوس (`ops_bridge.py`: settle يختم «مدفوع» ويبلّغ
+# صاحب الطلب، reject يرجّع المبلغ لمحفظته مرة واحدة) — هنا بروكسي رفيع:
+#   * أدمن بس، و`confirmed: true` من نافذة التأكيد (نداء من غيرها يترفض قبل أي رحلة).
+#   * `by` ما بيتبعتش من المتصفح: الفاعل في السجل من التوكن، ومن رد المنصة نفسها المبلغ والعملة.
+#   * ⛔ نداء واحد ولا إعادة محاولة: رد ضاع = «ما وصلناش رد»؛ الضغطة التانية على سحب اتحسم المنصة ترد عليها ٤٠٩.
+# أسماء الحقول من المنصة بالحرف (`PayoutSettleBody.reference` · `PayoutRejectBody.reason`).
+V2_PAYOUT_REF_MAX = 120
+V2_PAYOUT_REASON_MAX = 500
+V2_CONFIRM_AR = 'لازم تأكّد الأول من الشاشة'
+
+
+def _v2_payout_call(payout_id, action, platform_body, audit_extra):
+    resp = _ef_bridge('POST', f"/api/bridge/wallet-payouts/{quote(payout_id, safe='')}/{action}",
+                      json_body=platform_body, timeout=25)
+    if _resp_ok(resp):
+        payout = _proxy_json(resp).get('payout')
+        payout = payout if isinstance(payout, dict) else {}
+        meta = {k: payout.get(k) for k in ('amount', 'currency', 'user_email', 'method', 'status')
+                if payout.get(k) not in (None, '')}
+        meta.update(audit_extra)
+        _audit(f'wallet_payout.{action}', target=payout_id, meta=meta)
+        return resp
+    msg = _proxy_json(resp).get('error')
+    # رفض سُجّل ورجوع المبلغ وقع: رسالة المنصة نفسها بتقول «أعد الرفض» — ما تتبدّلش بـ«ما وصلناش رد».
+    if isinstance(msg, str) and 'أعد تنفيذ الرفض' in msg:
+        _audit(f'wallet_payout.{action}_incomplete', target=payout_id, meta=dict(audit_extra))
+        return resp
+    if _ef_no_reply(resp):
+        return _ef_no_reply_resp('wallet_payout', payout_id, action)
+    return resp
+
+
+@app.route('/api/platform-wallet-payouts/<payout_id>/settle', methods=['POST'])
+@token_required
+@roles_required('admin')
+def platform_wallet_payout_settle(payout_id):
+    if _ef_bad_id(payout_id):
+        return jsonify({'error': 'طلب السحب ده مش موجود'}), 404
+    body = request.get_json(silent=True)
+    body = body if isinstance(body, dict) else {}
+    if body.get('confirmed') is not True:
+        return jsonify({'error': V2_CONFIRM_AR}), 400
+    reference = body.get('reference')
+    reference = reference.strip() if isinstance(reference, str) else ''
+    if not reference:
+        return jsonify({'error': 'اكتب رقم أو مرجع التحويل'}), 400
+    if len(reference) > V2_PAYOUT_REF_MAX:
+        return jsonify({'error': 'مرجع التحويل طويل — الحد الأقصى %d حرفًا' % V2_PAYOUT_REF_MAX}), 400
+    return _v2_payout_call(payout_id, 'settle', {'reference': reference}, {'reference': reference})
+
+
+@app.route('/api/platform-wallet-payouts/<payout_id>/reject', methods=['POST'])
+@token_required
+@roles_required('admin')
+def platform_wallet_payout_reject(payout_id):
+    if _ef_bad_id(payout_id):
+        return jsonify({'error': 'طلب السحب ده مش موجود'}), 404
+    body = request.get_json(silent=True)
+    body = body if isinstance(body, dict) else {}
+    if body.get('confirmed') is not True:
+        return jsonify({'error': V2_CONFIRM_AR}), 400
+    reason = body.get('reason')
+    reason = reason.strip() if isinstance(reason, str) else ''
+    if not reason:
+        return jsonify({'error': 'اكتب سبب الرفض — بيوصل لصاحب الطلب'}), 400
+    if len(reason) > V2_PAYOUT_REASON_MAX:
+        return jsonify({'error': 'سبب الرفض طويل — الحد الأقصى %d حرفًا' % V2_PAYOUT_REASON_MAX}), 400
+    return _v2_payout_call(payout_id, 'reject', {'reason': reason}, {'reason': reason})
+
+
 @app.route('/api/platform-pnl', methods=['GET'])
 @token_required
 @roles_required('admin')
