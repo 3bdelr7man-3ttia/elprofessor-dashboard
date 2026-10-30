@@ -76,9 +76,11 @@ def co_check(page, name, legacy=False):
     bad = [t for t in re.findall(r'\S*\d\S*', re.sub(r'[٠-٩]', '', txt)) if '@' not in t and not re.search(r'[A-Za-z]-?\d', t)]
     if bad:
         PROBLEMS.append('%s: أرقام لاتينية ظاهرة: %r' % (name, bad[:3]))
-    for word in ('Zoom', 'Titch', 'API', 'slug', 'يقوّم'):
-        if re.search(r'(?<![A-Za-z])%s(?![A-Za-z])' % word, txt):
+    for word in ('Zoom', 'Titch', 'API', 'slug', 'يقوّم', 'EGP', 'USD', 'YouTube', 'Google Drive', 'app.elprofessor.net', 'مزايدة', 'المزايدة'):
+        if re.search(r'(?<![A-Za-z])%s(?![A-Za-z])' % re.escape(word), txt):
             PROBLEMS.append('%s: كلمة ممنوعة ظاهرة «%s»' % (name, word))
+    if re.search(r'[٠-٩\d]\s*ج(?![\u0621-\u064A])', txt) or re.search(r'(?<![A-Za-z])Drive(?![A-Za-z])', txt):
+        PROBLEMS.append('%s: رمز عملة «ج» أو كلمة Drive ظاهرة' % name)
     # لا أثر لشكل قديم برّه إطار «كل السجلات»
     old = page.evaluate("""() => [...document.querySelectorAll('.kpis, .tabbar, .inboxwrap, .rail')].filter(e => e.offsetParent && !e.closest('.v2co-legacy')).map(e => e.className)""")
     if old:
@@ -271,10 +273,34 @@ def flow_main(browser, h, pre, vp, mobile):
     page.wait_for_selector('#epModal .v2co-will')
     co_shot(page, pre + '07b-hide-sheet.jpg')
     close_sheet(page)
+    # مفتاح «يقبل عروض الأسعار»: دورة مفعّلة ⇒ ورقة «إيقاف» وجسم bid_enabled:false · دورة غير مفعّلة ⇒ «تفعيل» وtrue
+    if not page.is_checked('#co_bid'):
+        PROBLEMS.append(pre + '07c: مفتاح العروض غير معلَّم على دورة مفعّلة')
     page.click('#co_bid')
     sheet(page)
+    if 'إيقاف عروض الأسعار' not in page.inner_text('#epModal .v2co-m'):
+        PROBLEMS.append(pre + '07c: ورقة العروض لدورة مفعّلة لا تسأل عن «إيقاف»')
     co_shot(page, pre + '07c-bid-sheet.jpg')
-    close_sheet(page)
+    n0 = len(h.platform_calls)
+    page.click('#co_go')
+    page.wait_for_function("() => !document.getElementById('epModal')", timeout=15000)
+    page.wait_for_timeout(700)
+    bd = [c for c in h.platform_calls[n0:] if c[0] == 'PUT' and c[1].endswith('/pc-01') and c[3] and 'bid_enabled' in c[3]]
+    if len(bd) != 1 or bd[0][3].get('bid_enabled') is not False:
+        PROBLEMS.append('%s07c: إيقاف العروض أرسل %r' % (pre, bd))
+    nav(page, '#s/courses/course/pc-03')
+    page.click('#co_bid')
+    sheet(page)
+    if 'تفعيل عروض الأسعار' not in page.inner_text('#epModal .v2co-m'):
+        PROBLEMS.append(pre + '07d: ورقة العروض لدورة غير مفعّلة لا تسأل عن «تفعيل»')
+    n0 = len(h.platform_calls)
+    page.click('#co_go')
+    page.wait_for_function("() => !document.getElementById('epModal')", timeout=15000)
+    page.wait_for_timeout(700)
+    bd = [c for c in h.platform_calls[n0:] if c[0] == 'PUT' and c[1].endswith('/pc-03') and c[3] and 'bid_enabled' in c[3]]
+    if len(bd) != 1 or bd[0][3].get('bid_enabled') is not True:
+        PROBLEMS.append('%s07d: تفعيل العروض أرسل %r' % (pre, bd))
+    nav(page, '#s/courses/course/pc-01')
     # —— ٠٨) الأرشفة والحذف
     page.click('[data-a="archive"]')
     sheet(page)

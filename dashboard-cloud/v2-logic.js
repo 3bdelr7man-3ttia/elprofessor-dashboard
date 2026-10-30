@@ -2012,6 +2012,8 @@
     var n = num(c && c.lesson_count);
     return n == null ? 0 : n;
   }
+  // دورة منشورة لا تظهر للناس بعد: مسجّلة (مدفوعة أو مجانية) بلا درس واحد. الحيّة والتفاعلية لها طريقها.
+  function hiddenFromPublic(c) { return !!c && c.type !== 'live_upcoming' && !c.story && lessonsOf(c) === 0; }
   function lessonsPhrase(n) { return n > 0 ? U.U(n, ['درس واحد', 'درسان', 'دروس', 'درسًا']) : 'لا دروس بعد'; }
   function trainerOf(c) {
     if (c && c.platform_owned === true) return 'البروفيسور';
@@ -2373,7 +2375,7 @@
 
   L.v2s.courses = { tone: tone, reviewTimer: reviewTimer, cover: cover, board: board, summaryLine: summaryLine, courseFacts: courseFacts, appTickets: appTickets,
                     trainerRows: trainerRows, liveTickets: liveTickets, offerTickets: offerTickets, demand: demand, pageModel: pageModel, stateOf: stateOf,
-                    lessonsOf: lessonsOf, lessonsPhrase: lessonsPhrase, trainerOf: trainerOf, priceOf: priceOf, statFor: statFor, liveTimeText: liveTimeText,
+                    lessonsOf: lessonsOf, hiddenFromPublic: hiddenFromPublic, lessonsPhrase: lessonsPhrase, trainerOf: trainerOf, priceOf: priceOf, statFor: statFor, liveTimeText: liveTimeText,
                     TYPE_LABEL: TYPE_LABEL, STATE_LABEL: STATE_LABEL, SOURCE_LABEL: SOURCE_LABEL, SEG_LABEL: SEG_LABEL, LIVE_STATUS: LIVE_STATUS, NA: NA, WARN_H: WARN_H, LATE_H: LATE_H };
 })(typeof window !== 'undefined' ? window : (typeof globalThis !== 'undefined' ? globalThis : this));
 // ===== /v2s:courses =====

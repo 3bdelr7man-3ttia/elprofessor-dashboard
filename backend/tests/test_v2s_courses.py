@@ -494,6 +494,30 @@ def test_course_facts_cases():
     assert 'غير متاح' not in f['line']
 
 
+def test_free_recorded_course_without_lessons_is_hidden_from_the_public():
+    h = lambda c: _co('hiddenFromPublic', c)
+    assert h({'type': 'recorded_free', 'lesson_count': 0}) is True
+    assert h({'type': 'recorded_paid', 'lesson_count': 0}) is True
+    assert h({'type': 'recorded_free', 'lesson_count': 3}) is False
+    assert h({'type': 'live_upcoming', 'lesson_count': 0}) is False
+    assert h({'type': 'recorded_paid', 'lesson_count': 0, 'story': {'lessons': 39}}) is False
+
+
+def test_legacy_frame_words_and_the_fixes_of_the_last_round_are_in_the_screen_file():
+    js = _read('dashboard-cloud', 'v2s', 'courses.js')
+    # المفتاح يأخذ الحالة الجديدة، لا معكوسها
+    assert "openBid(el.getAttribute('data-id'), !!el.checked)" in js and ", !el.checked" not in js
+    # قبول العرض تحت الحد الأدنى متاح دائمًا، والعدّاد لا يحمرّ قبل فوات المهلة
+    assert 'belowFloor ?' not in js and "t.timer.at < now() ? 'late' : 'warn'" in js
+    # شريط النجاح مربوط بالشاشة (وبمعرّف الدورة)
+    assert 'noteKey()' in js and 'S.noteScr = scr || noteKey()' in js
+    # لا عملة مخترعة في الاستردادات
+    assert "r.currency || 'EGP'" not in js
+    # كلمات الإطار القديم
+    for w in ('EGP', 'Titch', 'Google', 'YouTube', 'app\\.elprofessor', 'مزايدة'):
+        assert w in js.split('LEGACY_WORDS = [')[1].split('];')[0], w
+
+
 APPS = cfx.base_apps()
 
 

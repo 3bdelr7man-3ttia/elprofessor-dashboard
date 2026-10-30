@@ -97,9 +97,11 @@
     if (!labels.length) return '';
     return '<div class="v2co-warn" role="status">تعذّر جلب: ' + esc(labels.join(' · ')) + ' — ' + esc(tail || 'ما يظهر ناقص، وليس معناه أنه لا شيء') + '</div>';
   }
-  function noteStrip() { return S.note ? '<div class="v2co-ok" role="status">' + esc(S.note) + '</div>' : ''; }
-  function setNote(text) {
-    S.note = text; clearTimeout(S.noteT);
+  // شريط النجاح يظهر في الشاشة (وفي صفحة الدورة نفسها) التي وقع فيها الحدث فقط، لا في كل ما بعدها.
+  function noteKey() { return S.screen === 'course' ? 'course:' + ((host().state && host().state().course) || '') : S.screen; }
+  function noteStrip() { return S.note && (!S.noteScr || S.noteScr === noteKey()) ? '<div class="v2co-ok" role="status">' + esc(S.note) + '</div>' : ''; }
+  function setNote(text, scr) {
+    S.note = text; S.noteScr = scr || noteKey(); clearTimeout(S.noteT);
     S.noteT = setTimeout(function () { S.note = null; redraw(); }, 12000);
   }
   function retryBtn() { return '<button type="button" class="v2co-btn2" data-a="retry">أعد المحاولة</button>'; }
@@ -292,7 +294,7 @@
   }
   function publishedRow(c) {
     var learners = U.U(c.total_enrolled || 0, ['متعلّم واحد', 'متعلّمان', 'متعلّمين', 'متعلّمًا']);
-    var hidden = c.type !== 'recorded_free' && c.type !== 'live_upcoming' && !c.story && C.lessonsOf(c) === 0;
+    var hidden = C.hiddenFromPublic(c);
     var st = data('stats') ? C.statFor(data('stats'), c) : null;
     var l2;
     if (st && Array.isArray(st.sales)) {
@@ -459,7 +461,7 @@
 
   // ------------------------------------------------------------------ الدورات الحيّة
   function liveTicketHtml(t) {
-    var strip = t.timer ? timeHtml(t.timerText, 'late', t.timer.at) : '<time class="v2co-time tone-none">' + esc(t.label) + '</time>';
+    var strip = t.timer ? timeHtml(t.timerText, (t.timer.at < now() ? 'late' : 'warn'), t.timer.at) : '<time class="v2co-time tone-none">' + esc(t.label) + '</time>';
     var sec = t.secondary.map(function (x) { return '<button type="button" class="v2co-btn2' + (x.key === 'cancel' ? ' red' : '') + '" data-a="live-' + x.key + '" data-slug="' + esc(t.slug) + '">' + esc(x.label) + '</button>'; }).join('');
     return '<article class="v2co-t tone-late" data-slug="' + esc(t.slug) + '"><div class="v2co-strip"><span class="v2co-type">دورة حيّة تحتاج قرارك</span>' + strip + '</div>'
       + '<div class="v2co-body"><h3><button type="button" class="v2co-open" data-a="live-open" data-slug="' + esc(t.slug) + '">' + esc(t.title) + '</button></h3>'
@@ -528,7 +530,7 @@
     var amounts = '<dl class="v2co-amt">' + o.amounts.map(function (a) { return '<div><dt>' + esc(a.k) + '</dt><dd>' + esc(a.v) + '</dd></div>'; }).join('') + '</dl>';
     var acceptMain = o.suggestion === 'approve';
     var main = acceptMain ? '<button type="button" class="v2co-btn1" data-a="offer-accept" data-id="' + esc(o.id) + '">اقبل العرض</button>' : '<button type="button" class="v2co-btn1" data-a="offer-counter" data-id="' + esc(o.id) + '">اعرض سعرًا آخر</button>';
-    var other = acceptMain ? '<button type="button" class="v2co-btn2" data-a="offer-counter" data-id="' + esc(o.id) + '">اعرض سعرًا آخر</button>' : (o.belowFloor ? '' : '<button type="button" class="v2co-btn2" data-a="offer-accept" data-id="' + esc(o.id) + '">اقبل العرض</button>');
+    var other = acceptMain ? '<button type="button" class="v2co-btn2" data-a="offer-counter" data-id="' + esc(o.id) + '">اعرض سعرًا آخر</button>' : '<button type="button" class="v2co-btn2" data-a="offer-accept" data-id="' + esc(o.id) + '">اقبل العرض</button>';
     return '<article class="v2co-t tone-wait" data-id="' + esc(o.id) + '"><div class="v2co-strip"><span class="v2co-type">عرض سعر</span>' + timeHtml(o.text, 'ok', o.timer && o.timer.at) + '</div>'
       + '<div class="v2co-body"><h3>' + esc(o.course) + '</h3><p class="v2co-who">' + (o.buyerEmail ? personLink(o.buyer, o.buyerEmail) : esc(o.buyer)) + ' · ' + esc(o.segment) + '</p>' + amounts
       + (o.message ? '<blockquote class="v2co-q">سبب العرض: ' + esc(o.message) + '</blockquote>' : '')
@@ -636,14 +638,37 @@
   // ------------------------------------------------------------------ «كل السجلات» (الشاشة القديمة بشكل جديد)
   var LEGACY_NOTE = 'هنا ما بقي من الشاشة السابقة للدورات: تعديل الدروس والمنهج، وإنشاء منهج مكتوب، وسجلّ الإدارة للاطلاع. القرارات كلها في التبويبات الجديدة.';
   // أرقام الشاشة القديمة لاتينية في أماكن (عدّاد التبويبات مثلًا)؛ نعرضها بالأرقام العربية كباقي اللوحة، دون المساس بالنص نفسه ولا بالروابط والمعرّفات.
+  // كلمات منعها قانون المؤسس تظهر في الشاشة القديمة (رموز العملة والأسماء اللاتينية والنطاق ووسم «مزايدة»): نبدّلها بنص عربي بسيط داخل إطار «كل السجلات» وأوراقه فقط.
+  var LEGACY_WORDS = [
+    [/EGP\s*([\d٠-٩][\d٠-٩.,٬]*)/g, function (m, n) { return n + ' جنيه مصري'; }], [/([\d٠-٩][\d٠-٩.,٬]*)\s*EGP/g, function (m, n) { return n + ' جنيه مصري'; }], [/\bEGP\b/g, 'جنيه مصري'],
+    [/\bUSD\b/g, 'دولار'], [/\bSAR\b/g, 'ريال سعودي'], [/\bAED\b/g, 'درهم إماراتي'],
+    [/([\d٠-٩][\d٠-٩.,٬]*)\s*ج(?![\u0621-\u064A])/g, function (m, n) { return n + ' جنيه'; }],
+    [/بمنهج\s+Titch/g, 'بمنهج مكتوب'], [/Titch\s*/g, 'المنهج المكتوب '],
+    [/Google\s*Drive/g, 'جوجل درايف'], [/YouTube/g, 'يوتيوب'], [/\bDrive\b/g, 'درايف'],
+    [/app\.elprofessor\.net/g, 'المنصة'],
+    [/المزايدة/g, 'عروض الأسعار'], [/مزايدة/g, 'عروض الأسعار']
+  ];
+  var LEGACY_TEST = /EGP|USD|SAR|AED|Titch|Google|YouTube|Drive|app\.elprofessor|مزايدة|ج(?![\u0621-\u064A])/;
+  function legacyWords(str) {
+    if (!LEGACY_TEST.test(str)) return str;
+    LEGACY_WORDS.forEach(function (r) { str = str.replace(r[0], r[1]); });
+    return str.replace(/\s{2,}/g, ' ');
+  }
+  // أرقام الشاشة القديمة لاتينية في أماكن (عدّاد التبويبات مثلًا)؛ نعرضها بالأرقام العربية كباقي اللوحة، دون المساس بالروابط والمعرّفات.
   function arabize(root) {
     if (!root || !document.createTreeWalker) return;
     var w = document.createTreeWalker(root, 4, null), n, list = [];
-    while ((n = w.nextNode())) { if (/\d/.test(n.nodeValue)) list.push(n); }
+    while ((n = w.nextNode())) { list.push(n); }
     list.forEach(function (t) {
       var p = t.parentNode;
-      if (!p || /^(SCRIPT|STYLE|TEXTAREA|INPUT|OPTION)$/.test(p.nodeName) || (p.closest && p.closest('[dir="ltr"],a'))) return;
-      t.nodeValue = t.nodeValue.replace(/\d/g, function (d) { return '٠١٢٣٤٥٦٧٨٩'.charAt(+d); });
+      if (!p || /^(SCRIPT|STYLE|TEXTAREA|INPUT|OPTION)$/.test(p.nodeName)) return;
+      var v = t.nodeValue, o = v;
+      if (!(p.closest && p.closest('[dir="ltr"],a')) && /\d/.test(v)) v = v.replace(/\d/g, function (d) { return '٠١٢٣٤٥٦٧٨٩'.charAt(+d); });
+      v = legacyWords(v);
+      if (v !== o) t.nodeValue = v;
+    });
+    if (root.querySelectorAll) Array.prototype.forEach.call(root.querySelectorAll('[placeholder],[title],[aria-label]'), function (e) {
+      ['placeholder', 'title', 'aria-label'].forEach(function (a) { var x = e.getAttribute(a); if (x && /Titch|YouTube|Google|EGP/.test(x)) e.setAttribute(a, legacyWords(x)); });
     });
   }
   function watchDigits(el, key) {
@@ -664,8 +689,8 @@
   }
 
   // ------------------------------------------------------------------ الأوراق: دورة
-  function afterCourseWrite(text) {
-    setNote(text);
+  function afterCourseWrite(text, scr) {
+    setNote(text, scr);
     load('courses', true); load('stats', true);
     var E = ep(); if (E && E.authed) { E.reload('opsQueue', null); }
     redraw();
@@ -775,7 +800,7 @@
       onOk: function (res) {
         var deleted = res && res.deleted === true;
         S.list = true; S.keepList = true;
-        afterCourseWrite(deleted ? 'حُذفت الدورة نهائيًا' : 'أُرشفت الدورة');
+        afterCourseWrite(deleted ? 'حُذفت الدورة نهائيًا' : 'أُرشفت الدورة', 'board');
         goSection('courses', 'courses');
       },
       onStale: function () { load('courses', true); }
@@ -872,7 +897,7 @@
     return '<p class="v2co-lead">أُلغيت الدورة.</p><p class="v2co-lead strong">' + esc(U.U(need, ['شخص واحد يحتاج', 'شخصان يحتاجان', 'أشخاص يحتاجون', 'شخصًا يحتاجون']) + ' استردادًا يدويًا') + '</p>'
       + '<ul class="v2co-refunds">' + rows.map(function (r) {
         var who = r.email ? personLink(r.name || r.email, r.email) : esc(r.name || 'صاحب الدفع');
-        var amt = r.no_payment_found ? '<span class="v2co-mute">لم نجد دفعة</span>' : (r.amount != null ? '<b>' + esc(U.moneyText(r.amount, r.currency || 'EGP')) + '</b>' : '<span class="v2co-mute">المبلغ: ' + NA + '</span>');
+        var amt = r.no_payment_found ? '<span class="v2co-mute">لم نجد دفعة</span>' : (r.amount != null && r.currency ? '<b>' + esc(U.moneyText(r.amount, r.currency)) + '</b>' : '<span class="v2co-mute">المبلغ: ' + NA + '</span>');
         return '<li><div>' + who + (r.phone ? ' <span class="v2co-ph" dir="ltr">' + esc(r.phone) + '</span>' : '') + '</div><div>' + amt + '</div></li>';
       }).join('') + '</ul><div class="v2co-macts"><button type="button" class="v2co-btn1" id="co_done">تمّ</button></div>';
   }
@@ -1066,7 +1091,7 @@
       },
       onOk: function (res, p) {
         load('courses', true);
-        setNote('أُنشئت الدورة مسودة.' + (p.type === 'recorded_paid' ? ' حدّد سعرها من «الفلوس › الأسعار».' : ''));
+        setNote('أُنشئت الدورة مسودة.' + (p.type === 'recorded_paid' ? ' حدّد سعرها من «الفلوس › الأسعار».' : ''), res && res.platform_course_id ? 'course:' + res.platform_course_id : undefined);
         if (res && res.platform_course_id) goPage(res.platform_course_id); else redraw();
       }
     });
@@ -1110,7 +1135,7 @@
     publishNow: function (el) { openVisibility(el.getAttribute('data-id'), 'publishNow'); },
     show: function (el) { openVisibility(el.getAttribute('data-id'), 'show'); },
     hide: function (el) { openVisibility(el.getAttribute('data-id'), 'hide'); },
-    bid: function (el, e) { e.preventDefault(); openBid(el.getAttribute('data-id'), !el.checked); },
+    bid: function (el, e) { e.preventDefault(); openBid(el.getAttribute('data-id'), !!el.checked); },
     archive: function (el) { openArchive(el.getAttribute('data-id'), false); },
     'delete': function (el) { openArchive(el.getAttribute('data-id'), true); },
     refetch: function (el) { load('checklist:' + el.getAttribute('data-id'), true); redraw(); },
