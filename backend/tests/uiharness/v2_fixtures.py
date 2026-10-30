@@ -9,6 +9,7 @@
 """
 import copy
 import os
+import re
 import sys
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
@@ -91,10 +92,116 @@ def enrich_candidates(files):
     return files
 
 
+
+# ======================================================================= D2 — الشخص في مكان واحد
+# ⛔ كله مخترع في الذاكرة (صفر شبكة): الأشكال بالحرف من جسور المنصة (`admin_bridge._user_row` · `invites._public_invite` ·
+# `experts` · `wallet-payouts` · `purge-check` · `expert-files`).
+HALA = "hala@example.test"                 # هالة: مدرّبة معتمدة + خبيرة ولها طلب سحب معلّق (PAYOUT_OK) وتحويل سابق
+PERSON_INVITER = {"kind": "member", "user_id": "u-nadia", "name": "أ. نادية فؤاد", "roles": ["expert"], "video_url": None}
+
+
+def _u(uid, name, email, **kw):
+    row = {"id": uid, "full_name": name, "email": email, "phone": kw.pop("phone", ""), "role": kw.pop("role", "member"),
+           "trainer_status": kw.pop("trainer_status", "none"), "plan_id": kw.pop("plan_id", "free"), "is_active": True,
+           "created_at": iso(kw.pop("joined_h", -400)), "last_login_at": iso(kw.pop("login_h", -30)), "segment": kw.pop("segment", ""),
+           "tags": kw.pop("tags", [])}
+    row.update(kw)
+    return row
+
+
+PEOPLE = [
+    _u("u-hala", "د. هالة سمير", HALA, trainer_status="approved", plan_id="pro", joined_h=-24 * 190, login_h=-2, tags=["خبيرة مؤسسة"]),
+    _u("u-mona", "منى سعيد", "mona.s@example.test", joined_h=-24 * 60, login_h=-5, segment="طالب"),
+    _u("u-salma", "سلمى عبد الله", "salma@example.test", plan_id="pro", joined_h=-24 * 45, login_h=-50),
+    _u("u-faisal", "أ. فيصل العتيبي", "faisal@experts.test", trainer_status="approved", joined_h=-24 * 120, login_h=-8),
+    _u("u-nour", "نور الهدى سالم", "nour.pending@example.test", joined_h=-31, login_h=-1),
+    _u("u-karim", "كريم عادل", "karim.pending@example.test", joined_h=-6, login_h=-3),
+    _u("u-nadia", "أ. نادية فؤاد", "nadia@example.test", trainer_status="approved", joined_h=-24 * 300, login_h=-1),
+]
+
+
+def _hala_invite():
+    return {"id": "inv-hala", "name": "د. هالة سمير", "email": HALA, "status": "registered", "stage": "registered",
+            "created_at": iso(-24 * 192), "opened_at": iso(-24 * 191), "email_bound_at": iso(-24 * 191),
+            "approved_at": iso(-24 * 191), "registered_at": iso(-24 * 190), "generation": 2, "invited_by": dict(PERSON_INVITER),
+            "link": "https://example.test/i/hala"}
+
+
+PERSON_EXPERTS = {"experts": [
+    {"email": HALA, "full_name": "د. هالة سمير", "expertise": ["civil"], "bio": "", "trainer_status": "approved", "rating_avg": 4.7,
+     "rating_count": 12, "online": True, "last_seen_at": iso(-0.5), "referral_count": 9, "courses_count": 2, "students_count": 31},
+    {"email": "faisal@experts.test", "full_name": "أ. فيصل العتيبي", "expertise": [], "bio": "", "trainer_status": "approved",
+     "rating_avg": None, "rating_count": 0, "online": False, "last_seen_at": None, "referral_count": 0, "courses_count": 0,
+     "students_count": 0},
+], "count": 2}
+
+PERSON_COURSES = {"courses": [
+    {"id": "pc-h1", "slug": "contract-basics", "title": "أساسيات صياغة العقود", "type": "recorded_paid", "is_active": True, "bid_enabled": False,
+     "price_amount": 450, "price_currency": "EGP", "total_enrolled": 24, "approval_status": "approved", "source": "native",
+     "created_at": iso(-24 * 100), "archived_at": "", "short_description": "", "instructor_name": "د. هالة سمير", "lesson_count": 12, "story": None},
+    {"id": "pc-h2", "slug": "lease-review", "title": "مراجعة عقود الإيجار", "type": "recorded_paid", "is_active": False, "bid_enabled": False,
+     "price_amount": 300, "price_currency": "EGP", "total_enrolled": 7, "approval_status": "pending", "source": "native",
+     "created_at": iso(-24 * 9), "archived_at": "", "short_description": "", "instructor_name": "د. هالة سمير", "lesson_count": 5, "story": None},
+], "count": 2}
+
+PERSON_PAID = [
+    {"id": "po-h-old1", "user_email": HALA, "user_name": "د. هالة سمير", "amount": 2400.0, "currency": "EGP", "status": "paid", "method": "إنستاباي",
+     "destination": "hala@instapay", "created_at": iso(-24 * 40), "settled_at": iso(-24 * 39), "reference": "IP-7781"},
+    {"id": "po-h-old2", "user_email": HALA, "user_name": "د. هالة سمير", "amount": 950.5, "currency": "EGP", "status": "paid", "method": "إنستاباي",
+     "destination": "hala@instapay", "created_at": iso(-24 * 12), "settled_at": iso(-24 * 11), "reference": "IP-8120"},
+]
+
+# الأقسام اللي بتتحسب من فحص الحساب (عدّ فقط): تسجيلات الدورات لكل حساب.
+PERSON_LINKED = {"u-hala": {"payments": 2, "wallet_payouts": 3, "courses": 2, "consultations": 4, "expert_files": 4},
+                 "u-mona": {"enrollments": 3, "payments": 3, "course_reservations": 1}}
+
+
+def person_files():
+    """ملفات هالة كخبيرة: واحد بيكتب · واحد متسلّم من ساعتين · اتنين اتسلّموا — شكل `bridge_list_files(all)`."""
+    rows = []
+    for fid, title, status, amt, a_h, deadline in (
+            ("ef-ph-1a2b3c4d", "عقد إيجار تجاري — بند الإخلاء", "writing", 500.0, -20.0, 12.0),
+            ("ef-ph-2b3c4d5e", "إنذار بسداد متأخرات الإيجار", "assigned", 500.0, -2.0, 40.0),
+            ("ef-ph-3c4d5e6f", "نفقة زوجة بعد الانفصال", "delivered", 1000.0, -90.0, -40.0),
+            ("ef-ph-4d5e6f7a", "اعتراض على قرار فصل", "delivered", 500.0, -300.0, -250.0)):
+        f = fx._file(fid, title=title, status=status, law="eg", tier="written", amount=amt, currency="EGP",
+                     expert_amount=round(amt * 0.6, 2), paid_h=a_h - 3, deadline_h=deadline, client="عميل",
+                     expert_email=HALA if status != "assigned" else None, assigned_to=HALA if status == "assigned" else None,
+                     assigned_h=a_h, writing_due_h=(deadline if status == "writing" else None),
+                     file_no=(1200 + len(rows) if status == "delivered" else None))
+        f["assign_log"] = [fx.assign_entry(a_h - 0.5, HALA, by="founder", reason="manual", why="")]
+        rows.append(f)
+    return rows
+
+
+# —— ملفات جديدة لشاشة «ملفات الخبراء» (D2): بتتضاف بس لو `d2=True` (غيره الأعداد القديمة زي ما هي بالحرف).
+def d2_files():
+    """٤ ملفات اتبعتت لخبراء من ساعات (في موعدها ⇒ عمود «عند الخبراء») + رأيين اتعتمدوا النهارده (عمود «خلص اليوم»)."""
+    sent = []
+    spec = (("ef-w1-aa11bb22", "عقد شراكة بين ثلاثة أطراف", "hala@experts.test", "طارق", -3.0, 44.0, "مؤسسة الندى"),
+            ("ef-w2-bb22cc33", "إخلاء محل تجاري", "nada@experts.test", "ليلى", -5.0, 40.0, "مالك العقار"),
+            ("ef-w3-cc33dd44", "ميراث وتقسيم تركة", "karim@experts.test", "عمر", -1.0, 46.0, ""),
+            ("ef-w4-dd44ee55", "تأخر تسليم وحدة سكنية", "hala@experts.test", "رنا", -6.5, 30.5, "شركة التطوير"))
+    for fid, title, expert, client, a_h, left, cp in spec:
+        f = fx._file(fid, title=title, status="assigned", law="eg", tier="written", amount=500.0, currency="EGP", expert_amount=300.0,
+                     paid_h=a_h - 1, deadline_h=left, client=client, counterparty=cp, assigned_to=expert, assigned_h=a_h,
+                     pool=["hala@experts.test", "nada@experts.test", "karim@experts.test"])
+        sent.append(f)
+    done = []
+    for fid, title, expert, client, ap_h in (("ef-dn-1a1a2b2b", "تعويض عن تأخر شحنة", "rana@experts.test", "هبة", -1.2),
+                                              ("ef-dn-2b2b3c3c", "مراجعة وصية", "wael@experts.test", "أيمن", -3.5)):
+        f = fx._file(fid, title=title, status="in_review", law="eg", tier="written", amount=500.0, currency="EGP", expert_amount=300.0,
+                     paid_h=-60.0, deadline_h=-12.0, client=client, expert_email=expert, writing_due_h=12.0,
+                     review={"submitted_at": iso(ap_h - 1.0), "round": 1, "returns": 0, "returned_at": None, "note": "",
+                             "approved_at": iso(ap_h)}, pending_opinion=fx.R1_OPINION, delivered_count=0)
+        done.append(f)
+    return sent, done
+
+
 class V2Platform(fx.EFPlatform):
     """`EFPlatform` + باقي جسور اللوحة. `forced[(method, path)] = (status, payload)` يفرض ردًّا لاختبار الأخطاء."""
 
-    def __init__(self, empty=False, **kw):
+    def __init__(self, empty=False, d2=False, **kw):
         kw.setdefault("r8", True)
         kw.setdefault("r13", True)
         kw.setdefault("r14", True)
@@ -115,6 +222,15 @@ class V2Platform(fx.EFPlatform):
         self.topics = [] if empty else copy.deepcopy(TOPICS_PENDING["topics"])
         self.leads = [] if empty else copy.deepcopy(LEADS["leads"])
         self.market = [] if empty else copy.deepcopy(MARKET["items"])
+        # D2: الأشخاص + ملفاتهم + سحوباتهم (لا تمس الأعداد القديمة: قوائم منفصلة تتقدّم بس في ردود الشخص)
+        self.people = [] if empty else copy.deepcopy(PEOPLE)
+        self.person_invites = [] if empty else [_hala_invite()]
+        self.person_paid = [] if empty else copy.deepcopy(PERSON_PAID)
+        self.person_files = [] if empty else person_files()
+        if d2 and not empty:
+            sent, done = d2_files()
+            self.waiting = sorted(self.waiting + sent, key=lambda f: f["claim_deadline_at"])
+            self.review = self.review + done
 
     # —— الملفات: المرشّحين بحقول المنصة الحقيقية
     def _list(self, status, rows):
@@ -172,8 +288,28 @@ class V2Platform(fx.EFPlatform):
         method = method.upper()          # `requests.get` بتعدّي 'get' صغيرة عبر Session
         if method == "GET":
             if path == "/api/bridge/wallet-payouts":
-                rows = [p for p in self.payouts if p["status"] == (params.get("status") or "pending")]
+                st = params.get("status") or "pending"
+                rows = [p for p in self.payouts if p["status"] == st]
+                if st == "paid":
+                    rows = rows + [p for p in self.person_paid if p["status"] == "paid"]
                 return 200, {"payouts": copy.deepcopy(rows), "count": len(rows)}
+            if path == "/api/bridge/users":
+                q = str(params.get("search") or "").strip().lower()
+                rows = [u for u in self.people if not q or q in u["email"].lower() or q in u["full_name"].lower()]
+                rows = rows[: int(params.get("limit") or 500)]
+                return 200, {"users": copy.deepcopy(rows), "count": len(rows)}
+            if path == "/api/bridge/experts":
+                return 200, ({"experts": [], "count": 0} if self.empty else copy.deepcopy(PERSON_EXPERTS))
+            if path == "/api/bridge/courses":
+                return 200, ({"courses": [], "count": 0} if self.empty else copy.deepcopy(PERSON_COURSES))
+            m_pc = re.match(r"^/api/bridge/users/([^/]+)/purge-check$", path)
+            if m_pc:
+                linked = PERSON_LINKED.get(m_pc.group(1), {})
+                return 200, {"purgeable": not linked, "reason": ("عنده مدفوعات" if linked else None), "linked": dict(linked)}
+            if path == "/api/bridge/expert-files" and params.get("status") == "all":
+                rows = [f for lane in self._lanes() for f in lane] + list(self.person_files)
+                return 200, {"status": "all", "files": copy.deepcopy(rows), "count": len(rows), "total": len(rows),
+                             "service_open": self.service_open, "service_mode": self.mode, "allowlist_size": len(self.allowlist)}
             if path == "/api/bridge/manual-payments":
                 return 200, {"payments": copy.deepcopy(self.payments)}
             if path == "/api/bridge/trainer-applications":
@@ -181,7 +317,8 @@ class V2Platform(fx.EFPlatform):
             if path == "/api/bridge/pending-users":
                 return 200, {"users": copy.deepcopy(self.pending_users), "count": len(self.pending_users)}
             if path == "/api/bridge/invites":
-                return 200, {"invites": copy.deepcopy(self.invites), "count": len(self.invites)}
+                rows = self.invites + self.person_invites
+                return 200, {"invites": copy.deepcopy(rows), "count": len(rows)}
             if path == "/api/bridge/founding-expert-leads":
                 return 200, copy.deepcopy(self.founding)
             if path == "/api/bridge/join-requests":

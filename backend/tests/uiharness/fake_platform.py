@@ -225,6 +225,37 @@ ROUTES = {
 }
 
 
+# D2 — الشخص في مكان واحد (`GET /api/v2/person`): المصادر الجديدة اللي بيقراها الخادم. ⛔ كلها بحثٌ/حالةٌ مخصوصة فلا تلمس ردود الاختبارات
+# القديمة: `users` بـ`search` فقط · `expert-files` بـ`status=all` فقط · `wallet-payouts` بـ`status=paid` فقط · وفحص الحساب لهالة بس.
+# (دليل الخبراء `/bridge/experts` فاضل فاضيًا هنا عمدًا: ردّه القديم بيتقراه شاشات تانية، والمدرّب بيبان من `trainer_status` وحده.)
+PERSON_EMAIL = "hala@example.test"
+PERSON_USER = {"id": "u-hala", "full_name": "د. هالة سمير", "email": PERSON_EMAIL, "phone": "", "role": "member",
+               "trainer_status": "approved", "plan_id": "pro", "is_active": True, "created_at": _iso(24 * 190),
+               "last_login_at": _iso(2), "segment": "", "tags": []}
+PERSON_FILES = {"status": "all", "count": 1, "total": 1, "files": [
+    {"id": "ef-ph-1", "title": "عقد إيجار تجاري", "status": "writing", "status_label": "قيد الكتابة", "amount": 500.0, "currency": "EGP",
+     "expert_email": PERSON_EMAIL, "assigned_to": None, "paid_at": _iso(30), "assigned_at": _iso(20),
+     "assign_log": [{"at": _iso(21), "to": PERSON_EMAIL, "by": "founder", "reason": "manual", "why": ""}]}]}
+PERSON_PAID = {"count": 1, "payouts": [{"id": "po-p1", "user_email": PERSON_EMAIL, "amount": 950.5, "currency": "EGP", "status": "paid",
+                                        "created_at": _iso(24 * 12), "settled_at": _iso(24 * 11)}]}
+PERSON_LINKED = {"u-hala": {"enrollments": 3, "payments": 2}}
+
+
+def person_response(path, query):
+    """ردّ المصدر الجديد لو الطلب منها، وإلا None (فيرجع الرد القديم بالحرف)."""
+    q = urllib.parse.parse_qs(query or "")
+    first = lambda k: (q.get(k) or [""])[0]
+    if path == "/api/bridge/users" and first("search"):
+        term = first("search").lower()
+        rows = [PERSON_USER] if term in PERSON_USER["email"] or term in PERSON_USER["full_name"] else []
+        return {"users": rows, "count": len(rows)}
+    if path == "/api/bridge/expert-files" and first("status") == "all":
+        return PERSON_FILES
+    if path == "/api/bridge/wallet-payouts" and first("status") == "paid":
+        return PERSON_PAID
+    return None
+
+
 _PURGE_CHECK_RE = re.compile(r"^/api/bridge/users/([^/]+)/purge-check$")
 _PURGE_RE = re.compile(r"^/api/bridge/users/([^/]+)/purge$")
 
@@ -239,10 +270,16 @@ class H(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
     def do_GET(self):
-        path = urllib.parse.urlparse(self.path).path
+        parsed = urllib.parse.urlparse(self.path)
+        path = parsed.path
         m = _PURGE_CHECK_RE.match(path)
         if m:
+            if m.group(1) in PERSON_LINKED:
+                return self._send({"purgeable": False, "reason": "عنده مدفوعات", "linked": dict(PERSON_LINKED[m.group(1)])})
             return self._send(purge_check(m.group(1)))
+        person = person_response(path, parsed.query)
+        if person is not None:
+            return self._send(person)
         if path in ROUTES:
             return self._send(ROUTES[path])
         # أي جسرٍ آخر: فارغٌ صادق (لا صفوف مخترعة) — الشاشات تعرض «مفيش» لا بيانات وهمية.

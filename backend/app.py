@@ -1988,6 +1988,282 @@ def v2_config():
     return jsonify({'enabled': _v2_enabled()})
 
 
+# ---------------------------------------------------------------------------- D2 · الشخص في مكان واحد
+# `GET /api/v2/person?email=` (أدمن بس + المفتاح مفتوح): يجمع صفحة الشخص من **مصادر موجودة فعلًا** عبر `_platform_proxy`، كل
+# مصدر نداء واحد (ولا إعادة محاولة)، والمصادر بالتوازي. ⛔ ما فيه مصدر ⇒ `null` — ولا صفر ولا تخمين:
+#   users (الهوية) · invites (الداعي والخط الزمني) · experts (عدّاد المدرّب بالبريد) · courses (عناوين دورات المدرّب) ·
+#   expert-files?status=all (ملفاته كخبير) · wallet-payouts (pending/paid) · pending-users (البلد والزائر) ·
+#   users/<id>/purge-check (عدد التسجيلات في الدورات — عدّ فقط، لا مسح).
+# مفيش مصدر أصلًا: الصورة · أي ملف كان صاحبه عميلًا (الجسر ما يرجّعش بريد العميل) · مشتريات الكتب · رصيد المحفظة.
+# ⛔ الخصوصية: أدمن بس، `Cache-Control: no-store`، ولا سطر سجل ولا تدقيق بأي حاجة من بيانات الشخص، ولا بريد غير المطلوب في الرد.
+V2_PERSON_EMAIL_RE = re.compile(r'^[^@\s]{1,120}@[^@\s.]+(?:\.[^@\s.]+)+$')
+V2_PERSON_TIMEOUT = 8
+V2_PERSON_LOG_MAX = 12
+V2_PAYOUT_LIST_CAP = 300       # سقف قايمة السحوبات على المنصة (`.to_list(300)`): الوصول إليه = القايمة ممكن تكون مقصوصة
+
+
+def _v2_json(resp):
+    """جسم ردّ `_platform_proxy` الناجح (أي نوع JSON)، أو None لو فشل/ما رجعش جسم."""
+    if not _resp_ok(resp):
+        return None
+    try:
+        r = resp[0] if isinstance(resp, tuple) else resp
+        return r.get_json(silent=True)
+    except Exception:
+        return None
+
+
+def _v2_pull(path, params=None):
+    with app.app_context():
+        try:
+            return _v2_json(_platform_proxy('GET', path, params=params, timeout=V2_PERSON_TIMEOUT))
+        except Exception:
+            return None
+
+
+def _v2_low(v):
+    return v.strip().lower() if isinstance(v, str) else ''
+
+
+def _v2_rows(body, *keys):
+    """قايمة الصفوف من ردّ المصدر: قايمة مباشرة أو داخل أحد المفاتيح. شكل غير معروف ⇒ None (يُعامل كمصدر فاشل)."""
+    if isinstance(body, list):
+        return [x for x in body if isinstance(x, dict)]
+    if isinstance(body, dict):
+        for k in keys:
+            if isinstance(body.get(k), list):
+                return [x for x in body[k] if isinstance(x, dict)]
+    return None
+
+
+def _v2_num(v):
+    try:
+        n = float(v)
+    except (TypeError, ValueError):
+        return None
+    return n if math.isfinite(n) else None
+
+
+def _v2_amounts(rows):
+    """مجاميع بالعملة (لا تُجمع عملات مختلفة): [{currency, amount}] بترتيب العملة."""
+    tot = {}
+    for r in rows:
+        a = _v2_num(r.get('amount'))
+        if a is None:
+            continue
+        cur = (str(r.get('currency') or 'EGP').strip().upper() or 'EGP')
+        tot[cur] = round(tot.get(cur, 0.0) + a, 2)
+    return [{'currency': c, 'amount': tot[c]} for c in sorted(tot)]
+
+
+def _v2_course_state(c):
+    if c.get('archived_at'):
+        return 'archived'
+    ap = c.get('approval_status')
+    if ap == 'pending':
+        return 'pending'
+    if ap == 'rejected':
+        return 'rejected'
+    return 'published' if c.get('is_active') else 'draft'
+
+
+_V2_ANY_EMAIL_RE = re.compile(r'[^@\s]+@[^@\s.]+(?:\.[^@\s.]+)+')
+
+
+def _v2_scrub(obj, keep):
+    """⛔ ولا بريد غير المطلوب يخرج في الرد (اسم داعٍ أو عنوان ملف كتبه أحد ممكن يحمل بريدًا): يُستبدل بنقاط."""
+    if isinstance(obj, str):
+        return _V2_ANY_EMAIL_RE.sub(lambda m: m.group(0) if m.group(0).lower() == keep else '…', obj)
+    if isinstance(obj, list):
+        return [_v2_scrub(x, keep) for x in obj]
+    if isinstance(obj, dict):
+        return {k: _v2_scrub(v, keep) for k, v in obj.items()}
+    return obj
+
+
+def _v2_person_build(email, S):
+    """يبني ردّ الصفحة من نتائج المصادر `S` (None = المصدر فشل/غير موجود). نقية: لا شبكة."""
+    sources = {k: ('ok' if S.get(k) is not None else 'failed') for k in
+               ('users', 'invites', 'experts', 'courses', 'files', 'payouts_pending', 'payouts_paid', 'pending', 'enrollments')}
+    sources.update({'photo': 'none', 'books': 'none', 'client_files': 'none', 'balance': 'none'})
+    out = {'email': email, 'found': None, 'sources': sources, 'roles': [], 'identity': None, 'expert': None,
+           'trainer': None, 'money': None, 'learner': None, 'books': None, 'log': None, 'log_partial': False}
+
+    users = _v2_rows(S.get('users'), 'users')
+    if users is None:
+        sources['users'] = 'failed'
+        return out
+    user = next((u for u in users if _v2_low(u.get('email')) == email), None)
+    out['found'] = user is not None
+    if user is None:
+        return out
+    name = str(user.get('full_name') or '').strip()
+    ts = str(user.get('trainer_status') or 'none').strip().lower()
+    sysrole = str(user.get('role') or '').strip().lower()
+
+    pend = _v2_rows(S.get('pending'), 'users')
+    prow = next((p for p in pend if _v2_low(p.get('email')) == email), None) if pend is not None else None
+    country = (str(prow.get('country') or '').strip() or None) if prow else None
+
+    # الداعي والخط الزمني للدعوة: صفوف الدعوات اللي بريد مدعوّها = بريده.
+    invs = _v2_rows(S.get('invites'), 'invites')
+    inv = None
+    invited_by = None
+    if invs is not None:
+        mine = [i for i in invs if _v2_low(i.get('email')) == email]
+        mine.sort(key=lambda i: str(i.get('created_at') or ''))
+        inv = mine[-1] if mine else None
+        if inv is not None:
+            ib = inv.get('invited_by') if isinstance(inv.get('invited_by'), dict) else {}
+            nm = str(ib.get('name') or '').strip()
+            invited_by = {'name': nm or None, 'kind': 'member' if ib.get('kind') == 'member' else 'founder'}
+
+    # —— ملفاته كخبير (الجسر ما بيرجّعش بريد العميل ⇒ ملفاته كعميل مالهاش مصدر)
+    frows = _v2_rows(S.get('files'), 'files')
+    expert = None
+    mine_files = []
+    if frows is not None:
+        mine_files = [f for f in frows if _v2_low(f.get('expert_email')) == email or _v2_low(f.get('assigned_to')) == email]
+        mine_files.sort(key=lambda f: str(f.get('assigned_at') or f.get('paid_at') or ''), reverse=True)
+        total = S['files'].get('total') if isinstance(S.get('files'), dict) else None
+        expert = {
+            'files_count': len(mine_files),
+            'partial': isinstance(total, int) and total > len(frows),
+            'latest': [{'id': f.get('id'), 'title': str(f.get('title') or ''), 'status': f.get('status'),
+                        'status_label': str(f.get('status_label') or ''), 'amount': _v2_num(f.get('amount')),
+                        'currency': f.get('currency') or None, 'at': f.get('assigned_at') or f.get('paid_at') or None}
+                       for f in mine_files[:3]],
+        }
+
+    # —— كمدرّب: عدّاد الدليل بالبريد (المرجع)، وعناوين الدورات بمطابقة الاسم كما هو ولا تُعرض إلا لو العدد يوافق عدّاد الدليل
+    trainer = None
+    if ts in ('approved', 'pending'):
+        trainer = {'status': ts, 'courses_count': None, 'students_count': None, 'rating_avg': None, 'rating_count': None,
+                   'courses': None}
+        exps = _v2_rows(S.get('experts'), 'experts')
+        erow = next((e for e in exps if _v2_low(e.get('email')) == email), None) if exps is not None else None
+        if erow is not None:
+            trainer['courses_count'] = int(erow.get('courses_count') or 0)
+            trainer['students_count'] = int(erow.get('students_count') or 0)
+            trainer['rating_avg'] = _v2_num(erow.get('rating_avg'))
+            trainer['rating_count'] = int(erow.get('rating_count') or 0)
+        crs = _v2_rows(S.get('courses'), 'courses')
+        if crs is not None and trainer['courses_count'] is not None and name:
+            hit = [c for c in crs if str(c.get('instructor_name') or '').strip().lower() == name.lower()]
+            if len(hit) == trainer['courses_count']:
+                trainer['courses'] = [{'title': str(c.get('title') or ''), 'state': _v2_course_state(c)} for c in hit]
+
+    # —— الفلوس: سحوبات معلّقة ومدفوعة بالبريد
+    def _payouts(key):
+        rows = _v2_rows(S.get(key), 'payouts')
+        if rows is None:
+            return None
+        mine = [r for r in rows if _v2_low(r.get('user_email')) == email]
+        return {'count': len(mine), 'amounts': _v2_amounts(mine), 'partial': len(rows) >= V2_PAYOUT_LIST_CAP, '_rows': mine}
+    pp, pd = _payouts('payouts_pending'), _payouts('payouts_paid')
+    money = None
+    if pp is not None or pd is not None:
+        money = {'pending': {k: v for k, v in pp.items() if k != '_rows'} if pp else None,
+                 'paid': {k: v for k, v in pd.items() if k != '_rows'} if pd else None, 'balance': None}
+
+    # —— كمتعلّم: عدّ التسجيلات من فحص الحساب (عدّ فقط)
+    pc = S.get('enrollments')
+    learner = None
+    if isinstance(pc, dict) and isinstance(pc.get('linked'), dict):
+        learner = {'enrollments_count': int(pc['linked'].get('enrollments') or 0),
+                   'reservations_count': int(pc['linked'].get('course_reservations') or 0)}
+
+    # —— الأدوار: حقائق مؤكدة فقط
+    roles = []
+    if sysrole in ('admin', 'staff', 'investor'):
+        roles.append(sysrole)
+    if ts == 'approved':
+        roles += ['expert', 'trainer']
+    elif ts == 'pending':
+        roles.append('trainer_pending')
+    if ts != 'approved' and mine_files:
+        roles.append('expert')
+    if learner and learner['enrollments_count'] > 0:
+        roles.append('learner')
+    if prow is not None:
+        roles.append('visitor')
+    if not roles:
+        roles.append('member')
+
+    # —— السجل: أحداث من المصادر المتاحة، الأحدث أولًا
+    ev = []
+
+    def add(at, kind, title=None):
+        if isinstance(at, str) and at.strip():
+            ev.append({'at': at.strip(), 'kind': kind, 'title': title})
+    add(user.get('created_at'), 'joined')
+    add(user.get('last_login_at'), 'login')
+    if inv is not None:
+        add(inv.get('created_at'), 'invite_sent')
+        add(inv.get('opened_at'), 'invite_opened')
+        add(inv.get('approved_at'), 'invite_approved')
+        add(inv.get('registered_at'), 'invite_registered')
+    for f in mine_files:
+        for e in (f.get('assign_log') or []):
+            if isinstance(e, dict) and _v2_low(e.get('to')) == email:
+                add(e.get('at'), 'file_assigned', str(f.get('title') or ''))
+    for blk, paid in ((pp, False), (pd, True)):
+        for r in (blk or {}).get('_rows', []):
+            add(r.get('created_at'), 'payout_requested')
+            if paid:
+                add(r.get('settled_at'), 'payout_paid')
+    ev.sort(key=lambda e: e['at'], reverse=True)
+    contributing = ('invites', 'files', 'payouts_pending', 'payouts_paid')
+
+    out.update({
+        'roles': roles,
+        'identity': {'name': name or None, 'system_role': sysrole or None, 'trainer_status': ts, 'plan_id': user.get('plan_id') or None,
+                     'is_active': bool(user.get('is_active', True)), 'joined_at': user.get('created_at') or None,
+                     'last_login_at': user.get('last_login_at') or None, 'segment': user.get('segment') or None,
+                     'tags': [str(t) for t in (user.get('tags') or []) if str(t).strip()],
+                     'photo': None, 'country': country, 'invited_by': invited_by,
+                     'invite_checked': invs is not None},
+        'expert': expert, 'trainer': trainer, 'money': money, 'learner': learner, 'books': None,
+        'log': ev[:V2_PERSON_LOG_MAX], 'log_partial': any(sources[k] == 'failed' for k in contributing),
+    })
+    return out
+
+
+@app.route('/api/v2/person', methods=['GET'])
+@token_required
+@roles_required('admin')
+def v2_person():
+    if not _v2_enabled():
+        return jsonify({'error': 'غير متاح'}), 404
+    email = _v2_low(request.args.get('email'))
+    if not email or len(email) > 200 or not V2_PERSON_EMAIL_RE.match(email):
+        return jsonify({'error': 'اكتب بريدًا صحيحًا'}), 400
+    if not PLATFORM_METRICS_SECRET:
+        return jsonify({'error': 'لم يتم ضبط الربط بعد'}), 503
+    from concurrent.futures import ThreadPoolExecutor
+    jobs = {
+        'users': ('/api/bridge/users', {'search': email, 'limit': 50}),
+        'invites': ('/api/bridge/invites', {'limit': 500}),
+        'experts': ('/api/bridge/experts', None),
+        'courses': ('/api/bridge/courses', None),
+        'files': ('/api/bridge/expert-files', {'status': 'all'}),
+        'payouts_pending': ('/api/bridge/wallet-payouts', {'status': 'pending'}),
+        'payouts_paid': ('/api/bridge/wallet-payouts', {'status': 'paid'}),
+        'pending': ('/api/bridge/pending-users', {'limit': 500}),
+    }
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        futs = {k: pool.submit(_v2_pull, p, q) for k, (p, q) in jobs.items()}
+        S = {k: f.result() for k, f in futs.items()}
+    # فحص الحساب يحتاج معرّفه ⇒ بعد ما الهوية ترجع (عدّ فقط — ولا مسح).
+    rows = _v2_rows(S.get('users'), 'users') or []
+    me = next((u for u in rows if _v2_low(u.get('email')) == email), None)
+    uid = str(me.get('id') or '') if me else ''
+    S['enrollments'] = _v2_pull('/api/bridge/users/%s/purge-check' % quote(uid, safe='')) if uid and not _ef_bad_id(uid) else None
+    resp = jsonify(_v2_scrub(_v2_person_build(email, S), email))
+    resp.headers['Cache-Control'] = 'no-store'
+    return resp
+
+
 # تسجيل تحويل أرباح محفظة / رفضه (D1). المنصة هي اللي بتحرّك الفلوس (`ops_bridge.py`: settle يختم «مدفوع» ويبلّغ
 # صاحب الطلب، reject يرجّع المبلغ لمحفظته مرة واحدة) — هنا بروكسي رفيع:
 #   * أدمن بس، و`confirmed: true` من نافذة التأكيد (نداء من غيرها يترفض قبل أي رحلة).
