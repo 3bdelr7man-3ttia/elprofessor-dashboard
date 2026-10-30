@@ -464,8 +464,8 @@ def test_brain_rules_b0_to_b11_exact_lines_and_buttons():
     assert B(R(status='matched'))['line'] == 'اختار صاحب الطلب عرضًا'
     assert B(R(status='closed', updated_at=_iso(50)))['line'] == 'أُغلق منذ يومين' and B(R(status='closed'))['primary'] is None
     b2 = B(R(hidden=True, hidden_reason='محتوى ترويجي'))
-    assert b2['line'] == 'مخفي عن البورد العام بسبب: «محتوى ترويجي»؛ صاحبه ما زال يراه' and b2['primary'] == {'label': 'افتح الطلب', 'act': 'open'}
-    assert B(R(hidden=True))['line'] == 'مخفي عن البورد العام؛ صاحبه ما زال يراه'
+    assert b2['line'] == 'مخفي عن صفحة السوق العامة بسبب: «محتوى ترويجي»؛ صاحبه ما زال يراه' and b2['primary'] == {'label': 'افتح الطلب', 'act': 'open'}
+    assert B(R(hidden=True))['line'] == 'مخفي عن صفحة السوق العامة؛ صاحبه ما زال يراه'
     dem = dict(open_demand=True, author_kind='platform', join_goal=20, joined_count=20)
     b3 = B(R(goal_reached_at=_iso(30), **dem))
     assert b3['line'] == 'اكتمل العدد منذ يوم: انضم ٢٠ من ٢٠، ولم تُربط دورة بعد' and b3['primary'] == {'label': 'اربط دورة', 'act': 'link'}
@@ -478,22 +478,22 @@ def test_brain_rules_b0_to_b11_exact_lines_and_buttons():
     b6 = B(R(kind='request', need_kind='course'))
     assert b6['line'] == 'نوعه «دورة أو تدريب» لكنه معروض مع طلبات الخبرة' and b6['primary'] == {'label': 'انقله إلى طلبات الدورات', 'act': 'relane', 'target': 'course_request'}
     b7 = B(R(created_at=_iso(300), stale_unanswered=True))
-    assert b7['line'] == 'بلا أي عرض منذ ١٢ يومًا، لذلك لم يعد يظهر على البورد العام' and b7['primary'] == {'label': 'افتح الطلب', 'act': 'open'}
+    assert b7['line'] == 'بلا أي عرض منذ ١٢ يومًا، لذلك لم يعد يظهر على صفحة السوق العامة' and b7['primary'] == {'label': 'افتح الطلب', 'act': 'open'}
     b8 = B(R(offer_count=3, last_offer_at=_iso(4)))
     assert b8['line'] == 'وصله ٣ عروض، آخرها منذ ٤ ساعات. الاختيار لصاحب الطلب' and b8['primary'] == {'label': 'اعرض العروض', 'act': 'offers'}
     assert B(R(offer_count=1))['line'] == 'وصله عرض واحد. الاختيار لصاحب الطلب'
     assert B(R(offer_count=2))['line'].startswith('وصله عرضان')
     assert B(R(offer_count=11))['line'].startswith('وصله ١١ عرضًا')
     b9 = B(R(created_at=_iso(24 * 3)))
-    assert b9['line'] == 'بلا عرض منذ ٣ أيام. يختفي من البورد العام بعد ٧ أيام بلا عرض' and b9['primary']['act'] == 'open'
+    assert b9['line'] == 'بلا عرض منذ ٣ أيام. يختفي من صفحة السوق العامة بعد ٧ أيام بلا عرض' and b9['primary']['act'] == 'open'
     b9b = B(R(created_at=_iso(240), joined_count=1, join_goal=0))
-    assert b9b['line'] == 'بلا عرض منذ ١٠ أيام، ويبقى على البورد العام ما دام يجمع المنضمّين (١)' and 'يختفي' not in b9b['line']
+    assert b9b['line'] == 'بلا عرض منذ ١٠ أيام، ويبقى على صفحة السوق العامة ما دام يجمع المنضمّين (١)' and 'يختفي' not in b9b['line']
     b9c = B(R(created_at=_iso(240), join_goal=5))
-    assert b9c['line'] == 'بلا عرض منذ ١٠ أيام، ويبقى على البورد العام ما دام يجمع المنضمّين' and '(' not in b9c['line'] and '(٠)' not in b9c['line']
+    assert b9c['line'] == 'بلا عرض منذ ١٠ أيام، ويبقى على صفحة السوق العامة ما دام يجمع المنضمّين' and '(' not in b9c['line'] and '(٠)' not in b9c['line']
     assert B(R(created_at=_iso(240), last_activity_at=_iso(24), joined_count=0, join_goal=0))['line'].startswith('بلا عرض منذ يوم. يختفي')
     assert B(R(visibility='private', preferred_expert_email='x@y.z', created_at=_iso(9)))['line'] == 'طلب خاص موجَّه إلى خبير بعينه، بلا عرض منذ ٩ ساعات'
-    assert B(R(visibility='private', created_at=_iso(30)))['line'] == 'طلب خاص لا يظهر على البورد العام، بلا عرض منذ يوم'
-    assert B(R(created_at=_iso(2)))['line'] == 'وصل منذ ساعتين، وهو ظاهر للخبراء على البورد العام'
+    assert B(R(visibility='private', created_at=_iso(30)))['line'] == 'طلب خاص لا يظهر على صفحة السوق العامة، بلا عرض منذ يوم'
+    assert B(R(created_at=_iso(2)))['line'] == 'وصل منذ ساعتين، وهو ظاهر للخبراء على صفحة السوق العامة'
 
 
 @needs_node
@@ -705,3 +705,46 @@ def test_index_markup_text_has_no_forbidden_visible_copy():
     for bad in ('يقوّم', 'الذكاء الاصطناعي', 'api.elprofessor.net', 'native'):
         # مسموح فقط داخل تعليقات الكود
         assert bad not in _strip(js).replace('V2L.v2sMarket', ''), bad
+
+
+def test_the_create_course_modal_hooks_the_restyle_depends_on_still_exist():
+    """تلبيس «إنشاء دورة» يعتمد على معرّفات ونصوص النافذة القديمة؛ لو غيّرها قسم الدورات يفشل هذا الاختبار بصوت عالٍ عند الدمج."""
+    html = _read('dashboard-cloud', 'index.html')
+    body = html[html.index('function createCourseModal('):html.index('function editCourseModal(')]
+    owner = html[html.index('function courseOwnerBlockHtml('):html.index('function bindCourseOwner(')]
+    for needle in ('id="m_title"', 'id="m_head"', 'id="m_titch"', '<details', '<summary', 'id="m_save"'):
+        assert needle in body, 'تلبيس نافذة الدورة: ' + needle
+    for needle in ('id="m_plat"', 'id="m_email"'):
+        assert needle in owner, 'تلبيس نافذة الدورة: ' + needle
+    js = _read('dashboard-cloud', 'v2s', 'market.js')
+    for sel in ('#m_head', '#m_titch', '#m_plat', '#m_email', 'details > div > div', '#m_title'):
+        assert sel in js, sel
+
+
+def test_all_requests_reloads_when_any_filter_changed_since_the_last_load():
+    js = _read('dashboard-cloud', 'v2s', 'market.js')
+    assert "A.loadedSig = allSig()" in js and "S.all.loadedSig !== allSig()" in js
+    sig = js[js.index('function allSig()'):js.index('function laneNumbers()')]
+    assert 'filterSig()' in sig and 'S.all.lane' in sig and 'S.showTest' in sig
+
+
+def test_a_401_clears_the_all_requests_skeleton():
+    js = _read('dashboard-cloud', 'v2s', 'market.js')
+    i = js.index('e.status === 401) {')
+    assert "A.state = 'error'" in js[i:i + 200]
+
+
+def test_plain_copy_has_no_board_loanword():
+    for rel in (('dashboard-cloud', 'v2s', 'market.js'), ('dashboard-cloud', 'v2s', 'market.css')):
+        assert 'بورد' not in re.sub(r'داشبورد', '', _strip(_read(*rel))), rel
+    logic = _read('dashboard-cloud', 'v2-logic.js')
+    blk = logic[logic.index('// ===== v2s:market ====='):]
+    assert 'بورد' not in _strip(blk)
+
+
+@needs_node
+def test_header_totals_say_when_test_rows_are_included():
+    rows = [R('a', created_at=_iso(50)), R('t', is_test=True, created_at=_iso(5))]
+    counts = {'by_status': {'open': 2}}
+    assert L('header', rows, counts, 2, NOW)['totals'].endswith('(يشمل التجريبي)')
+    assert '(يشمل التجريبي)' not in L('header', rows[:1], counts, 1, NOW)['totals']

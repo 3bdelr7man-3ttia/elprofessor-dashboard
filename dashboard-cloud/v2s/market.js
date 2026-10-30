@@ -74,6 +74,12 @@
   function readOnlyLine() { return M.canWrite() ? '' : '<p class="v2s-mk-ro" role="status">عرض فقط: القرارات في هذا القسم للإدارة</p>'; }
 
   // ------------------------------------------------------------------ التذكرة
+  // اسم الكتالوج في سطر ثانٍ صغير تحت نوع الطلب، فلا يتكدّس الشريط مع العدّاد.
+  function typeHtml(t) {
+    var cat = t.row && t.row.catalog_name ? String(t.row.catalog_name) : '', lbl = String(t.typeLabel || '');
+    if (cat && lbl.slice(-cat.length - 3) === ' · ' + cat) return esc(lbl.slice(0, -cat.length - 3)) + '<small class="v2s-mk-cat">' + esc(cat) + '</small>';
+    return esc(lbl);
+  }
   function ticketHtml(t) {
     var id = t.id, busy = !!S.busy[id], err = S.err[id] || '', done = S.done[id] || '';
     var who = '<p class="v2d-who"><span>' + personLink(t.who.name, t.who.email) + '</span>'
@@ -89,7 +95,7 @@
     var p = t.brain.primary;
     if (p) btn = '<button type="button" class="v2d-btn1" data-a="primary" data-id="' + esc(id) + '"' + (busy ? ' disabled' : '') + '>' + esc(busy ? 'جارٍ التنفيذ…' : p.label) + '</button>';
     var timer = t.text ? '<time class="v2d-time"' + (t.timer ? ' data-ts="' + t.timer.ts + '" data-pre="' + esc(t.timer.pre) + '"' : '') + '>' + esc(t.text) + '</time>' : '';
-    return '<article class="v2d-t tone-' + esc(t.tone) + '" data-id="' + esc(id) + '"><div class="v2d-strip"><span class="v2d-type">' + esc(t.typeLabel) + '</span>' + timer + '</div>'
+    return '<article class="v2d-t tone-' + esc(t.tone) + '" data-id="' + esc(id) + '"><div class="v2d-strip"><span class="v2d-type">' + typeHtml(t) + '</span>' + timer + '</div>'
       + '<div class="v2d-body"><h3><button type="button" class="v2d-open" data-a="open" data-id="' + esc(id) + '">' + esc(t.title) + '</button></h3>' + who + prog + line
       + (done ? '<p class="v2d-ok" role="status">' + esc(done) + '</p>' : '')
       + (err ? '<div class="v2d-err" role="alert">' + esc(err) + '</div>' : '')
@@ -272,13 +278,15 @@
       + (String(r.body).split('\n').length > 12 || String(r.body).length > 700 ? '<button type="button" class="v2s-mk-link" data-a="dbody" data-id="' + esc(r.id) + '">' + (S.bodyOpen[r.id] ? 'اعرض أقل' : 'اعرض النص كاملًا') + '</button>' : '')
       : '<p class="v2d-none">لم يكتب صاحب الطلب نصًا</p>';
     var who = isPlat ? 'المنصة' : (personLink(r.member_name || r.member_alias || 'صاحب الطلب', r.member_email)
-      + (r.member_email ? '<span class="v2s-mk-ltr sub">' + esc(r.member_email) + '</span>' : '') + (r.member_alias ? '<span class="sub">يظهر على البورد العام باسم: ' + esc(r.member_alias) + '</span>' : ''));
+      + (r.member_email ? '<span class="v2s-mk-ltr sub">' + esc(r.member_email) + '</span>' : '') + (r.member_alias ? '<span class="sub">يظهر على صفحة السوق العامة باسم: ' + esc(r.member_alias) + '</span>' : ''));
     var facts = fact('صاحب الطلب', who);
     if (!isPlat) facts += fact('الهاتف', r.member_phone === undefined ? naText() : telLink(r.member_phone));
-    facts += fact('التخصص', r.specialty ? esc(r.specialty) : '<span class="v2d-mute">لم يُحدَّد</span>');
-    var money = Number(r.budget) > 0 ? esc(U.moneyText(r.budget, r.currency || 'EGP')) : '<span class="v2d-mute">لم يحدّد صاحب الطلب ميزانية</span>';
-    facts += fact('الميزانية', money);
-    facts += fact('الظهور', (r.visibility === 'public' ? 'عام على البورد' : 'خاص، لا يظهر على البورد العام') + (r.hidden ? '<span class="sub warn">مخفي بقرار إشراف' + (r.hidden_reason ? ': ' + esc(X.arDigits(r.hidden_reason)) : '') + '</span>' : ''));
+    if (r.specialty || !isPlat) facts += fact('التخصص', r.specialty ? esc(r.specialty) : '<span class="v2d-mute">لم يُحدَّد</span>');
+    if (!isPlat) {
+      var money = Number(r.budget) > 0 ? esc(U.moneyText(r.budget, r.currency || 'EGP')) : '<span class="v2d-mute">لم يحدّد صاحب الطلب ميزانية</span>';
+      facts += fact('الميزانية', money);
+    }
+    facts += fact('الظهور', (r.visibility === 'public' ? 'عام في صفحة السوق' : 'خاص، لا يظهر على صفحة السوق العامة') + (r.hidden ? '<span class="sub warn">مخفي بقرار إشراف' + (r.hidden_reason ? ': ' + esc(X.arDigits(r.hidden_reason)) : '') + '</span>' : ''));
     facts += fact('وصل في', !isNaN(created) ? esc(U.dateText(r.created_at)) + '<span class="sub">' + esc(U.agoText(created, now)) + '</span>' : naText());
     facts += fact('المصدر', r.source === 'chat' ? 'محادثة بروف' : (isPlat ? 'المنصة' : (r.source === undefined && r.author_kind === undefined ? 'صفحة السوق' : 'صفحة السوق')));
     if (r.preferred_expert_email) facts += fact('موجَّه إلى', '<span class="v2s-mk-ltr">' + esc(r.preferred_expert_email) + '</span>');
@@ -292,8 +300,8 @@
       var tgt = X.laneOf(r.need_kind), openR = r.status === undefined || r.status === '' || r.status === 'open';
       var btns = [];
       if (openR) btns.push('<button type="button" class="v2d-btn2" data-a="dclose" data-id="' + esc(r.id) + '">أغلق الطلب</button>');
-      btns.push(r.hidden ? '<button type="button" class="v2d-btn2" data-a="dshow" data-id="' + esc(r.id) + '"' + (S.busy[r.id] ? ' disabled' : '') + '>' + (S.busy[r.id] ? 'جارٍ التنفيذ…' : 'أظهره على البورد العام') + '</button>'
-        : '<button type="button" class="v2d-btn2" data-a="dhide" data-id="' + esc(r.id) + '">أخفِه عن البورد العام</button>');
+      btns.push(r.hidden ? '<button type="button" class="v2d-btn2" data-a="dshow" data-id="' + esc(r.id) + '"' + (S.busy[r.id] ? ' disabled' : '') + '>' + (S.busy[r.id] ? 'جارٍ التنفيذ…' : 'أظهره على صفحة السوق العامة') + '</button>'
+        : '<button type="button" class="v2d-btn2" data-a="dhide" data-id="' + esc(r.id) + '">أخفِه عن صفحة السوق العامة</button>');
       if (openR && !(Number(r.offer_count) > 0) && tgt && tgt !== r.kind && ['request', 'course_request', 'public_service'].indexOf(r.kind) > -1)
         btns.push('<button type="button" class="v2d-btn2" data-a="drelane" data-id="' + esc(r.id) + '">انقله إلى ' + esc(X.lanePlural(tgt)) + '</button>');
       if (r.open_demand && openR) btns.push('<button type="button" class="v2d-btn2" data-a="dlink" data-id="' + esc(r.id) + '">' + (r.linked_course_id ? 'غيّر الدورة المرتبطة' : 'اربط دورة') + '</button>');
@@ -436,10 +444,10 @@
   function openHide(r) {
     if (!r) return;
     confirmSheet({
-      id: r.id, title: 'إخفاء عن البورد العام', ok: 'أخفِه', field: 'السبب (اختياري، يُحفظ في السجل)',
-      lead: 'يختفي ' + qtitle(r) + ' من كل بورد عام ولا يقبل عروضًا جديدة، ويبقى ظاهرًا لصاحبه وهنا. يمكنك إظهاره في أي وقت.',
+      id: r.id, title: 'إخفاء عن صفحة السوق العامة', ok: 'أخفِه', field: 'السبب (اختياري، يُحفظ في السجل)',
+      lead: 'يختفي ' + qtitle(r) + ' من صفحة السوق العامة ولا يقبل عروضًا جديدة، ويبقى ظاهرًا لصاحبه وهنا. يمكنك إظهاره في أي وقت.',
       send: function (reason) { return api('/platform-market-requests/' + encodeURIComponent(r.id) + '/hide', { hidden: true, reason: reason }); },
-      success: function () { return 'أُخفي «' + (r.title || 'الطلب') + '» عن البورد العام'; },
+      success: function () { return 'أُخفي «' + (r.title || 'الطلب') + '» عن صفحة السوق العامة'; },
       errs: { 404: 'هذا الطلب لم يعد موجودًا على المنصة', other: 'تعذّر الإخفاء، حاول مرة أخرى' }
     });
   }
@@ -447,7 +455,7 @@
     if (!r || S.busy[r.id]) return;
     S.busy[r.id] = true; S.err[r.id] = ''; drawDrawer();
     api('/platform-market-requests/' + encodeURIComponent(r.id) + '/hide', { hidden: false, reason: '' }).then(function () {
-      S.busy[r.id] = false; afterWrite(r.id, 'رجع الطلب إلى البورد العام');
+      S.busy[r.id] = false; afterWrite(r.id, 'رجع الطلب إلى صفحة السوق العامة');
     }).catch(function (e) {
       S.busy[r.id] = false; S.err[r.id] = plainErr(e, { 404: 'هذا الطلب لم يعد موجودًا على المنصة', other: 'تعذّر تنفيذ العملية، حاول مرة أخرى' }); drawDrawer(); redraw();
     });
@@ -616,7 +624,7 @@
     var E = ep(), A = S.all;
     if (!E || !E.api) { A.state = 'error'; return; }
     var seq = ++A.seq;
-    if (!append) { A.state = 'loading'; }
+    if (!append) { A.state = 'loading'; A.loadedSig = allSig(); }
     else A.more = true;
     var qs = X.query({ lane: A.lane, status: A.status, need: A.need, author: A.author, q: A.q, showTest: S.showTest, limit: 50, skip: append ? A.items.length : 0 });
     redrawAll();
@@ -631,13 +639,14 @@
       A.state = 'ready'; A.more = false; redrawAll();
     }).catch(function (e) {
       if (seq !== A.seq) return;
-      if (e && e.status === 401) return;
       A.more = false;
+      if (e && e.status === 401) { if (append) { A.state = 'ready'; A.appendErr = true; } else A.state = 'error'; redrawAll(); return; }
       if (append) { A.state = 'ready'; A.appendErr = true; }
       else { A.state = e && e.status === 404 && e.data && e.data.bridge_missing ? 'missing' : 'error'; }
       redrawAll();
     });
   }
+  function allSig() { return filterSig() + '|' + S.all.lane; }
   function filterSig() { var A = S.all; return [A.status, A.need, A.author, A.q, S.showTest ? 1 : 0].join('|'); }
   function laneNumbers() {
     var A = S.all, bl = A.counts && A.counts.by_lane ? A.counts.by_lane : null;
@@ -702,7 +711,8 @@
     inp.addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); clearTimeout(S.qTimer); applyQ(inp.value); } });
     v.onclick = allClick;
     redrawAll();
-    if (S.all.state === 'idle') loadAll(false);
+    // يعاد الجلب إذا تغيّر أي فلتر (النوع/الحالة/الاحتياج/الكاتب/البحث/التجريبي) منذ آخر جلب، لا عند أول دخول فقط.
+    if (S.all.state === 'idle' || S.all.loadedSig !== allSig()) loadAll(false);
   }
   function applyQ(val) { var q = String(val || '').trim().slice(0, 80); if (q === S.all.q && S.all.state !== 'error') return; S.all.q = q; loadAll(false); }
   function redrawAll() {
@@ -781,10 +791,16 @@
       return (tr.noContact ? fine('لم يُسجَّل تواصل مع أحد منهم بعد') : '') + (tr.truncated ? fine('معروض ' + ar(tr.rows.length) + ' من ' + ar(tr.count)) : '') + tb + cards;
     });
     var trTitle = 'من طلب التدريب' + (tr ? ' (' + ar(tr.rows.length) + ')' : '');
-    v.innerHTML = '<div class="v2d v2s-mk v2s-mk-dem" data-board="market-demand">' + head + '<div class="v2s-mk-grid">'
+    // مصدر «أرقام الطلب» واحد لثلاث بطاقات: إن فشل أو غاب يظهر تنبيه واحد فوقها، ولا تتكرر الرسالة في كل بطاقة.
+    var dD = E && E.data && E.data.marketDemand, dBan = '', dCards;
+    if (dD && dD.missing) dBan = '<p class="v2d-none">أرقام الطلب غير متاحة بعد على المنصة</p>';
+    else if (stateOf('marketDemand') === 'error') dBan = '<div class="v2d-warn" role="alert">تعذّر جلب أرقام الطلب<button type="button" class="v2d-btn2" data-a="dretry" data-src="marketDemand">أعد المحاولة</button></div>';
+    if (dBan) dCards = dBan;
+    else dCards = '<div class="v2s-mk-grid">'
       + '<section class="v2s-mk-cardbox"><h2>الطلب حسب النوع</h2>' + needHtml + '</section>'
       + '<section class="v2s-mk-cardbox"><h2>' + esc(d ? d.specs.title : 'حسب التخصص') + '</h2>' + specHtml + '</section>'
-      + '<section class="v2s-mk-cardbox wide"><h2>دورات يطلبها الناس</h2>' + crsHtml + '</section>'
+      + '<section class="v2s-mk-cardbox wide"><h2>دورات يطلبها الناس</h2>' + crsHtml + '</section></div>';
+    v.innerHTML = '<div class="v2d v2s-mk v2s-mk-dem" data-board="market-demand">' + head + dCards + '<div class="v2s-mk-grid">'
       + '<section class="v2s-mk-cardbox wide"><h2>' + esc(trTitle) + '</h2>' + trHtml + '</section></div></div>';
     wire(v);
   }

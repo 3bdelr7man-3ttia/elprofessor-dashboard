@@ -1965,7 +1965,7 @@
   if (!V) return;
   var U = V.util, ar = U.ar, agoText = U.agoText, dateText = U.dateText, moneyText = U.moneyText;
   var HOUR = 3600e3, DAY = 86400e3;
-  var STALE_REQUEST_DAYS = 7;          // = STALE_REQUEST_DAYS في marketplace.py (المنصة تُخفي من البورد العام بعد ٧ أيام بلا أي نشاط)
+  var STALE_REQUEST_DAYS = 7;          // = STALE_REQUEST_DAYS في marketplace.py (المنصة تُخفي من صفحة السوق العامة بعد ٧ أيام بلا أي نشاط)
   var DONE_WINDOW = 7 * DAY;
   var PAGE = 8;                        // تذاكر كل عمود قبل «اعرض الباقي»
   var COLS = ['new', 'waiting', 'offered', 'done'];
@@ -2040,7 +2040,7 @@
     }
     if (!isOpen(r)) return { line: 'حالته على المنصة غير معروفة؛ افتحه للتأكد', primary: open() };
     if (r.hidden) {
-      return { line: 'مخفي عن البورد العام' + (r.hidden_reason ? ' بسبب: «' + arDigits(r.hidden_reason) + '»' : '') + '؛ صاحبه ما زال يراه', primary: open() };
+      return { line: 'مخفي عن صفحة السوق العامة' + (r.hidden_reason ? ' بسبب: «' + arDigits(r.hidden_reason) + '»' : '') + '؛ صاحبه ما زال يراه', primary: open() };
     }
     if (r.open_demand) {
       var jt = joinText(r);
@@ -2062,7 +2062,7 @@
       return { line: line, primary: primary };
     }
     if (!cnt && r.stale_unanswered === true) {
-      return { line: 'بلا أي عرض ' + agoText(activityAt(r), now) + '، لذلك لم يعد يظهر على البورد العام', primary: open() };
+      return { line: 'بلا أي عرض ' + agoText(activityAt(r), now) + '، لذلك لم يعد يظهر على صفحة السوق العامة', primary: open() };
     }
     if (cnt > 0) {
       ago = agoText(r.last_offer_at, now);
@@ -2074,17 +2074,17 @@
     if (isPublic && age >= DAY) {
       var a2 = agoText(activityAt(r), now);
       if (!(r.join_goal > 0) && !(r.joined_count > 0) && !r.open_demand) {
-        line = 'بلا عرض ' + a2 + '. يختفي من البورد العام بعد ' + ar(STALE_REQUEST_DAYS) + ' أيام بلا عرض';
+        line = 'بلا عرض ' + a2 + '. يختفي من صفحة السوق العامة بعد ' + ar(STALE_REQUEST_DAYS) + ' أيام بلا عرض';
       } else {
-        line = 'بلا عرض ' + a2 + '، ويبقى على البورد العام ما دام يجمع المنضمّين' + (isNum(r.joined_count) ? ' (' + ar(r.joined_count) + ')' : '');
+        line = 'بلا عرض ' + a2 + '، ويبقى على صفحة السوق العامة ما دام يجمع المنضمّين' + (isNum(r.joined_count) ? ' (' + ar(r.joined_count) + ')' : '');
       }
       return { line: line, primary: open() };
     }
     if (!isPublic) {
       var when = agoText(r.created_at, now);
-      return { line: (r.preferred_expert_email ? 'طلب خاص موجَّه إلى خبير بعينه' : 'طلب خاص لا يظهر على البورد العام') + '، بلا عرض' + (when ? ' ' + when : ''), primary: open() };
+      return { line: (r.preferred_expert_email ? 'طلب خاص موجَّه إلى خبير بعينه' : 'طلب خاص لا يظهر على صفحة السوق العامة') + '، بلا عرض' + (when ? ' ' + when : ''), primary: open() };
     }
-    if (age >= 0) return { line: 'وصل ' + agoText(r.created_at, now) + '، وهو ظاهر للخبراء على البورد العام', primary: open() };
+    if (age >= 0) return { line: 'وصل ' + agoText(r.created_at, now) + '، وهو ظاهر للخبراء على صفحة السوق العامة', primary: open() };
     return { line: 'لم يصله عرض بعد', primary: open() };
   }
 
@@ -2100,7 +2100,7 @@
   function badgesOf(r) {
     var b = [];
     if (r.visibility !== undefined && r.visibility !== 'public') b.push({ k: 'private', label: 'خاص' });
-    if (r.hidden) b.push({ k: 'hidden', label: 'مخفي عن البورد العام' });
+    if (r.hidden) b.push({ k: 'hidden', label: 'مخفي عن صفحة السوق العامة' });
     if (r.is_test) b.push({ k: 'test', label: 'تجريبي' });
     if (r.source === 'chat') b.push({ k: 'chat', label: 'من محادثة بروف' });
     return b;
@@ -2203,7 +2203,7 @@
     } else if (openCount > 0) { text = 'العقل: كل طلب مفتوح وصله عرض أو يجمع المنضمّين'; pre = text; oldest = NaN; }
     else { text = 'العقل: لا طلبات مفتوحة الآن'; pre = text; oldest = NaN; }
     var bs = counts && counts.by_status ? counts.by_status : null, totals;
-    if (bs) totals = 'في السوق الآن: ' + ar(bs.open || 0) + ' مفتوح · ' + ar(bs.matched || 0) + ' تمّت مطابقته · ' + ar(bs.closed || 0) + ' أُغلق';
+    if (bs) totals = 'في السوق الآن: ' + ar(bs.open || 0) + ' مفتوح · ' + ar(bs.matched || 0) + ' تمّت مطابقته · ' + ar(bs.closed || 0) + ' أُغلق' + ((rows || []).some(function (r) { return r && r.is_test && r.kind !== 'training_offer'; }) ? ' (يشمل التجريبي)' : '');
     else {
       var c = { open: 0, matched: 0, closed: 0 };
       open.forEach(function (r) { if (isOpen(r)) c.open++; else if (r.status === 'matched') c.matched++; else if (r.status === 'closed') c.closed++; });

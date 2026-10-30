@@ -578,6 +578,39 @@ def flow(browser, h, pre, vp, mobile):
     mshot(page, pre + '10-all-supply.jpg')
     browser.close()
 
+    # قائمة «كل الطلبات» لا تبقى قديمة: ندخلها أولًا ثم نرجع إلى اللوحة ونضغط «عروض المدرّبين» (ومرة بزرّ التجريبي)
+    h.ef = mfx.MarketPlatform()
+    ctx = browser.context(h, 'admin', vp, mobile)
+    page = open_at(ctx, '#s/market/all', ALL_READY)
+    page.wait_for_selector('.v2s-mk-res .v2s-mk-rl')
+    page.evaluate("() => V2_HOST.openSection('market', 'requests')")
+    page.wait_for_function(BOARD_READY, timeout=20000)
+    if w >= 761:
+        page.click('.v2s-mk-desk [data-a="supply"]')
+    else:
+        page.click('.v2s-mk-fbtn[data-a="fopen"]')
+        page.wait_for_selector('#mkOv.v2s-mk-fs')
+        page.click('#mkOv [data-a="fsupply"]')
+    page.wait_for_function(ALL_READY, timeout=20000)
+    page.wait_for_selector('.v2s-mk-res .v2s-mk-rl')
+    page.wait_for_function("() => V2S_MARKET._state.all.state === 'ready'", timeout=20000)
+    page.wait_for_timeout(200)
+    if not page.evaluate("() => { const A = V2S_MARKET._state.all; return A.items.length > 0 && A.items.every(i => i.kind === 'training_offer'); }"):
+        PROBLEMS.append(pre + '10: بعد زيارة «كل الطلبات» ثم الرجوع، عروض المدرّبين ما غيّرتش القائمة (قائمة قديمة)')
+    page.evaluate("() => V2_HOST.openSection('market', 'requests')")
+    page.wait_for_function(BOARD_READY, timeout=20000)
+    if w >= 761 and page.query_selector('.v2s-mk-desk .v2s-mk-chip.tog'):
+        page.evaluate("() => { V2S_MARKET._state.all.lane = 'all'; }")
+        page.click('.v2s-mk-desk .v2s-mk-chip.tog')
+        page.evaluate("() => V2_HOST.openSection('market', 'all')")
+        page.wait_for_function(ALL_READY, timeout=20000)
+        page.wait_for_selector('.v2s-mk-res .v2s-mk-rl')
+        page.wait_for_function("() => V2S_MARKET._state.all.state === 'ready'", timeout=20000)
+        page.wait_for_timeout(200)
+        if 'تجريبي مخفي' in page.inner_text('.v2s-mk-rl') or 'طلب تجريبي للفحص' not in page.inner_text('.v2s-mk-res'):
+            PROBLEMS.append(pre + '10: بعد «أظهر التجريبي» في اللوحة، «كل الطلبات» ما أظهرتش التجريبي (قائمة قديمة)')
+    browser.close()
+
     # ================================================================ ماذا يطلب الناس
     h.ef = mfx.MarketPlatform()
     ctx = browser.context(h, 'admin', vp, mobile)

@@ -10,6 +10,10 @@
 .v2s-mk button{font-family:inherit}
 
 /* —— ألوان التذاكر والأعمدة (أصلها في v2-d2.css بدرجات تانية) */
+.v2s-mk .v2d-strip{flex-wrap:wrap;row-gap:4px;align-items:flex-start}
+.v2s-mk .v2d-type{flex:1 1 140px;min-width:0}
+.v2s-mk .v2d-time{flex:none}
+.v2s-mk .v2s-mk-cat{display:block;font:600 12px/1.4 'Cairo',sans-serif;opacity:.88}
 .v2s-mk .v2d-t.tone-new .v2d-strip{background:var(--ink);color:#fff}
 .v2s-mk .v2d-t.tone-wait .v2d-strip{background:var(--amber);color:var(--ink)}
 .v2s-mk .v2d-t.tone-late .v2d-strip{background:var(--red);color:#fff}
