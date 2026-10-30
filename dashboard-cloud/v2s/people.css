@@ -185,7 +185,11 @@ div.v2p-lh{cursor:default}
   .v2p-brain{border-radius:16px}
   .v2p-topacts{justify-content:space-between}
   .v2p-topacts .v2p-btn1.inline{flex:1}
-  .v2p-top > .v2p-btn2{align-self:flex-start;min-width:132px}
+  /* «حدّث» على سطر العقل نفسه بدل صفٍّ كامل، ويختفي بحث الأشخاص العام ليظهر أول بند في الشاشة الأولى */
+  .v2p-top:has(> .v2p-btn2){flex-direction:row;flex-wrap:nowrap;align-items:center;gap:8px}
+  .v2p-top:has(> .v2p-btn2) > .v2p-brain{flex:1;min-width:0}
+  .v2p-top > .v2p-btn2{align-self:center;min-width:64px;padding-inline:12px;flex:none}
+  .app.v2-shell:has(.v2p) #v2sbar{display:none}
   .v2p-nums{grid-template-columns:repeat(2,minmax(0,1fr))}
   .v2p-num{padding:12px 14px}
   .v2p-big{font-size:26px}

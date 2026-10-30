@@ -257,7 +257,7 @@ def test_the_head_line_B1_and_the_pipeline_pointer_B1g():
     rows = [inv('a', 'opened', hours=80, exp=NOW + 100 * H), inv('b', 'declared', hours=90, exp=NOW + 100 * H), inv('c', 'pending', hours=5, exp=NOW + 30 * H)]
     R = v2p('requests', inp(invites={'rows': rows, 'count': 3}), NOW)
     ln = R['head']['invitesLine']
-    assert ln['href'] == '#s/people/pipeline' and 'دعوتان واقفتان' in ln['text'] and 'دعوة واحدة تنتهي مهلتها قريبًا' in ln['text'] and '«الدعوات»' in ln['text']
+    assert ln['href'] == '#s/people/pipeline' and 'دعوتان متوقفتان' in ln['text'] and 'دعوة واحدة تنتهي مهلتها قريبًا' in ln['text'] and '«الدعوات»' in ln['text']
     R = v2p('requests', inp(invites={'rows': rows[:2], 'count': 2}), NOW)
     assert 'تنتهي' not in R['head']['invitesLine']['text']
     R = v2p('requests', inp(invites=None, invitesState='error'), NOW)
@@ -514,6 +514,53 @@ def test_stage_labels_wa_texts_and_urls_are_exact():
     t = 'نص'
     assert v2p('waUrl', '+20 100 123 4567', t) == 'https://wa.me/201001234567?text=' + quote(t, safe='')
     assert v2p('waUrl', '12', t) == 'https://wa.me/?text=' + quote(t, safe='') and v2p('waUrl', '', t) == 'https://wa.me/?text=' + quote(t, safe='')
+
+
+def test_toasts_and_errors_reachable_from_people_js_are_standard_arabic():
+    """الرسائل التي تخرجها دوال الداشبورد التي يناديها القسم (قرار الزائر · طلب الاستكمال · إنهاء الرسالة · فشل الرد) بفصحى بلا عامية."""
+    def body(start, end):
+        i = API_JS.index(start)
+        return API_JS[i:API_JS.index(end, i)]
+    chunks = [body('EP.decideInboxItem = function', 'EP.setPendingUserAccess'), body('EP.setPendingUserAccess = function', 'EP.purgeCheck = function'),
+              body('EP.resolveInboxItem = function', 'EP.reassignVerify'), body('var EF_NO_REPLY_AR', 'EP.expertFileDetail')]
+    strings = []
+    for c in chunks:
+        # الثابتان `EF_NO_REPLY_AR` و`EF_SESSION_AR` يبقيان كما هما في `error` (اختبارات نوافذ الفلوس تثبّتهما)؛ ما يخرج للمؤسس هو التوست الفصيح بجانبهما
+        c = '\n'.join(l for l in c.split('\n') if 'EF_NO_REPLY_AR =' not in l and 'EF_SESSION_AR =' not in l and 'status === 401' not in l)
+        strings += [t for t in re.findall(r'"([^"\n]*[؀-ۿ][^"\n]*)"', re.sub(r'//[^\n]*', '', c))]
+    assert any('فُتحت المنصة للزائر' in t for t in strings) and any('لم يصلنا رد' in t for t in strings)
+    bad = r'(?<![؀-ۿ])(اتفتحت|اترفض|اترفضت|اتبعت|اتقفل|اتحوّل|فضل|ما وصلناش|وشوف|حصل إيه|دوس|تاني|لسه|مش|عشان|دلوقتي|اتعمدت)(?![؀-ۿ])'
+    for t in strings:
+        assert not re.search(bad, t), t
+
+
+@needs_node
+def test_whatsapp_links_need_an_international_number_else_copy_the_number_or_use_email():
+    wn = lambda p: v2p('waNumber', p)
+    assert wn('+20 100 123 4567') == '201001234567' and wn('00966501234567') == '966501234567' and wn('+966-50-123-4567') == '966501234567'
+    assert wn('01098765432') == '' and wn('0098') == '' and wn('+12') == '' and wn('') == '' and wn('+1234567890123456') == ''
+    from urllib.parse import quote
+    assert v2p('waUrl', '01098765432', 'x') == 'https://wa.me/?text=' + quote('x', safe='') and v2p('waUrl', '00201098765432', 'x') == 'https://wa.me/201098765432?text=' + quote('x', safe='')
+    chat = [{'id': 'a', 'name': 'محلي', 'phone': '01098765432', 'created_at': pf.iso(-1)}, {'id': 'b', 'name': 'محلي وبريد', 'phone': '01098765432', 'email': 'q@x.test', 'created_at': pf.iso(-1)},
+            {'id': 'c', 'name': 'دولي', 'phone': '0020 109 876 5432', 'created_at': pf.iso(-1)}]
+    lead = [{'id': 'l', 'name': 'محلي', 'phone': '01098765432', 'created_at': pf.iso(-1)}, {'id': 'm', 'name': 'محلي وبريد', 'phone': '01098765432', 'email': 'q@x.test', 'created_at': pf.iso(-1)}]
+    M = v2p('messages', [], 'ready', chat, 'ready', lead, 'ready', NOW)
+    c = {t['rid']: t for t in M['cols']['chat']['items']}
+    assert c['a']['primary'] == {'label': 'انسخ الرقم', 'act': {'do': 'copy', 'text': '01098765432'}} and c['b']['primary']['label'] == 'ردّ بالبريد'
+    assert c['c']['primary']['act']['url'] == 'https://wa.me/00201098765432'.replace('0020', '20', 1)
+    f = {t['rid']: t for t in M['cols']['follow']['items']}
+    assert f['l']['primary']['act'] == {'do': 'copy', 'text': '01098765432'} and f['m']['primary']['label'] == 'ردّ بالبريد'
+    assert not any('wa.me' in json.dumps(t, ensure_ascii=False) for t in (c['a'], c['b'], f['l'], f['m']))
+
+
+@needs_node
+def test_messages_head_line_uses_correct_counts_grammar():
+    def head(n):
+        lead = [{'id': 'l%d' % i, 'name': 'ن', 'created_at': pf.iso(-1)} for i in range(n)]
+        return v2p('messages', [], 'ready', [], 'ready', lead, 'ready', NOW)['head']['text']
+    assert 'طلب تواصل واحد.' in head(1) and 'طلبا تواصل.' in head(2) and '٣ طلبات تواصل.' in head(3) and '١١ طلب تواصل.' in head(11)
+    assert '٢ طلبات' not in head(2)
+    assert 'متوقفة' in LOGIC and 'واقفة' not in BLOCK and 'واقفتان' not in BLOCK
 
 
 def test_the_visitor_reject_label_and_the_reason_wording():

@@ -2766,7 +2766,7 @@
     // الصفّ يفضل مفتوح، والنصّ ده هو اللي بيقراه المقدّم حرفًا.
     if (action === "request_info") {
       return post("/platform-join-requests/" + i.apiId + "/request_info", body)
-        .then(function () { note("اتبعت المطلوب لصاحب الطلب — الصفّ لسه مفتوح ✓"); EP.reload("inbox", after); return { ok: true }; })
+        .then(function () { note("أُرسل الطلب إلى صاحبه، ويبقى الطلب مفتوحًا ✓"); EP.reload("inbox", after); return { ok: true }; })
         .catch(function (e) { var r = efFailed(e, null); if (after) after(); return r; });
     }
     switch (i.apiKind) {
@@ -2800,7 +2800,7 @@
     return post(path, body)
       .then(function () {
         note(i.apiKind === "pending_user"
-          ? (action === "approve" ? "اتفتحت له المنصّة ✓" : "اترفض — فضل زائرًا")
+          ? (action === "approve" ? "فُتحت المنصة للزائر ✓" : "رُفض الطلب وبقي زائرًا")
           : (action === "approve" ? "تم الاعتماد ✓" : "تم الرفض"));
         if (alsoReload) EP.reload(alsoReload);
         EP.reload("inbox", after);
@@ -2821,14 +2821,14 @@
     post("/pending-users/" + encodeURIComponent(row.id) + "/access", body)
       .then(function () {
         note(body.access === "member"
-          ? "اتفتحت المنصّة لـ" + (row.name || row.email || "") + " ✓"
-          : "اترفض طلب " + (row.name || row.email || "") + " — فضل زائرًا");
+          ? "فُتحت المنصة لـ" + (row.name || row.email || "") + " ✓"
+          : "رُفض طلب " + (row.name || row.email || "") + " وبقي زائرًا");
         EP.reload("inbox");
         EP.reload("pendingUsers", after);
       })
       .catch(function (e) {
         quietToast(e && e.status === 404
-          ? "جسر الزوّار لسه مش منشور على المنصة"
+          ? "جسر الزوّار غير منشور على المنصة بعد"
           : ((e && e.message) || "تعذّر تغيير حالة الحساب"));
         if (after) after();
       });
@@ -2879,7 +2879,7 @@
       ? "/platform-messages/" + encodeURIComponent(i.apiId) + "/resolve"
       : "/platform-leads/" + encodeURIComponent(i.apiId) + "/resolve";
     return post(path, {})
-      .then(function () { note("اتقفل البند ✓"); EP.reload("inbox", after); return { ok: true }; })
+      .then(function () { note("أُغلق البند ✓"); EP.reload("inbox", after); return { ok: true }; })
       .catch(function (e) { quietToast((e && e.message) || "تعذّر تنفيذ العملية"); if (after) after(); return { ok: false, error: (e && e.message) || "تعذّر تنفيذ العملية" }; });
   };
 
@@ -2904,6 +2904,7 @@
   // اللي قدّام الداشبورد ردّت من غير رسالة · الداشبورد نفسه وقع) بيتعامل زي «ما وصلناش رد»: الفعل ممكن
   // يكون اتنفّذ، فالزرار يفضل مقفول والوارد يتحدّث بدل ما المؤسس يدوس تاني على عمى.
   var EF_NO_REPLY_AR = "ما وصلناش رد — حدّث الصفحة وشوف حصل إيه قبل ما تضغط تاني";
+  var EF_SESSION_AR = "انتهت الجلسة — سجّل دخول تاني وبعدين جرّب";
   function efFailed(e, after) {
     var status = e && e.status;
     var data = (e && e.data) || {};
@@ -2911,9 +2912,11 @@
     var noReply = !!data.no_reply || !status || (status >= 500 && !serverMsg);
     var msg;
     if (noReply) msg = serverMsg || EF_NO_REPLY_AR;
-    else if (status === 401) msg = "انتهت الجلسة — سجّل دخول تاني وبعدين جرّب";
+    else if (status === 401) msg = EF_SESSION_AR;
     else msg = serverMsg || "تعذّر تنفيذ العملية";
-    quietToast(msg);
+    // نص الرسالة في `error` يبقى كما هو (اختبارات نوافذ الفلوس تثبّته)، أما التوست الظاهر للمؤسس فبفصحى.
+    quietToast(msg === EF_NO_REPLY_AR ? "لم يصلنا رد. حدّث الصفحة وتحقق مما حدث قبل أن تضغط مرة أخرى"
+      : msg === EF_SESSION_AR ? "انتهت الجلسة. سجّل الدخول من جديد ثم أعد المحاولة" : msg);
     if (noReply) { EP.reload("opsQueue", after); EP.reload("inbox", after); }
     // ٤٠٩ = رفض نهائي: الحالة اتغيّرت على المنصة بعد ما الصفّ اتحمّل (العميل خد فلوسه فـ«للخبير» اتقفل · الفلوس رجعت قبل
     // كده · اتحسم/اتسوّى · رجّعته قبل كده …) — الضغطة التانية هتترفض بنفس الكلام. نافذة الفلوس بتسيب زرارها مقفول وبتحدّث

@@ -280,7 +280,10 @@
   function drawPipeline(v) {
     var inv = readyData('invites'), st = eff('invites');
     var PL = S.pl = P.pipeline(inv, st, now(), S.inviter);
-    PIPE_ORDER.forEach(function (k) { var c = PL.cols[k]; c.label = PIPE_DEF[k][0]; c.short = PIPE_DEF[k][1]; c.tone = PIPE_DEF[k][2]; c.count = c.total; c.countText = PL.state === 'ready' ? ar(c.total) : (PL.state === 'loading' ? '…' : '—'); });
+    PIPE_ORDER.forEach(function (k) { var c = PL.cols[k]; c.label = PIPE_DEF[k][0]; c.short = PIPE_DEF[k][1]; c.tone = PIPE_DEF[k][2]; c.count = c.total;
+      // عمود «انضمّ — آخر ٧ أيام»: الرقم على الشارة هو ما يظهر فعلًا (آخر ٧ أيام)، والعدد الكلي داخل «اعرض الكل» فقط.
+      if (k === 'joined' && PL.state === 'ready' && !S.expanded['pipeline:joined']) c.count = c.items.length;
+      c.countText = PL.state === 'ready' ? ar(c.count) : (PL.state === 'loading' ? '…' : '—'); });
     var brain = PL.state === 'ready' ? PL.brain : [PL.state === 'loading' ? '…جارٍ الجلب' : NA];
     var head = '<div class="v2p-top"><div class="v2p-brain tall">' + BRAIN + '<div class="v2p-bl">' + brain.map(function (l, i) { return '<span' + (i ? ' class="s"' : '') + '>' + esc(l) + '</span>'; }).join('') + '</div></div>'
       + '<div class="v2p-topacts"><button type="button" class="v2p-btn1 inline" data-a="new-invite">+ دعوة جديدة</button><button type="button" class="v2p-gear" data-a="settings" aria-label="إعدادات الدعوة" title="إعدادات الدعوة">' + GEAR + '</button></div></div>';
@@ -1115,7 +1118,7 @@
       case 'decide': return decideTicket(t, act.action, OK_TEXT[t.kind] || 'تم');
       case 'approve_invite': return approveInvite(t);
       case 'person': return host().openPerson && host().openPerson(act.email);
-      case 'copy': return copyText(t.inviteUrl || '', function (ok) { finishTicket(t.id, ok ? 'نُسخ الرابط' : 'تعذّر النسخ — انسخه يدويًا'); redraw(true); });
+      case 'copy': return copyText(act.text || t.inviteUrl || '', function (ok) { finishTicket(t.id, ok ? (act.text ? 'نُسخ الرقم' : 'نُسخ الرابط') : 'تعذّر النسخ — انسخه يدويًا'); redraw(true); });
       case 'sheet': return openSheetFor(t, act.sheet);
     }
   }

@@ -180,6 +180,12 @@ def flow_requests(browser, h, pre, vp, mobile):
     expect(any(w.startswith('يحتاج مراجعة: إيميل بنقط') for w in info['warn']), pre + '01: تحذير الزائر %r' % info['warn'])
     expect(info['seg'] == ['الزوّار', 'الدعوات', 'الخدمات', 'المؤسسون'], pre + '01: عناوين الأعمدة القصيرة %r' % info['seg'])
     if mobile:
+        # الشاشة الأولى: بحث الأشخاص العام مخفي، و«حدّث» على سطر العقل نفسه، وأول تذكرة تبدأ فوق منتصف الشاشة
+        fs = page.evaluate("""() => { const r = e => e ? e.getBoundingClientRect() : null, sb = document.querySelector('#v2sbar'), t = document.querySelector('.v2p-col.on .v2p-t'),
+          br = document.querySelector('.v2p-brain'), rf = document.querySelector('[data-a="refresh"]');
+          return {sbar: !!sb && getComputedStyle(sb).display !== 'none', ticket: t ? Math.round(r(t).top) : null, sameRow: !!(br && rf) && Math.abs(r(br).top - r(rf).top) < 60, h: innerHeight}; }""")
+        expect(not fs['sbar'] and fs['sameRow'] and fs['ticket'] is not None and fs['ticket'] < fs['h'] - 250, pre + '01: الشاشة الأولى في الموبايل %r' % fs)
+    if mobile:
         for i, (k, nm) in enumerate((('visitors', 'a'), ('approval', 'b'), ('join', 'c'), ('founding', 'd'))):
             page.click('.v2d-segb[data-col="%s"]' % k)
             page.wait_for_timeout(250)
@@ -291,7 +297,7 @@ def flow_pipeline(browser, h, pre, vp, mobile):
       all: [...document.querySelectorAll('.v2p-col[data-col="joined"] .v2p-all')].map(b => b.textContent.trim())})""")
     expect([n[0] for n in info['nums']] == ['أُرسلت', 'فُتحت', 'انضمّ', 'تنتظر موافقتك'], pre + '07: أرقام الدعوات %r' % info['nums'])
     expect([n[1] for n in info['nums']] == ['٩', '٥', '٢', '٢'], pre + '07: قيم الأرقام %r' % info['nums'])
-    expect([c[0] for c in info['cols']] == ['waiting', 'journey', 'joined', 'stopped'] and [c[1] for c in info['cols']] == ['٢', '٣', '٢', '٣'], pre + '07: أعمدة الدعوات %r' % info['cols'])
+    expect([c[0] for c in info['cols']] == ['waiting', 'journey', 'joined', 'stopped'] and [c[1] for c in info['cols']] == ['٢', '٣', '١', '٣'], pre + '07: أعمدة الدعوات %r' % info['cols'])
     expect(dict((c[0], c[2]) for c in info['cols'])['joined'] == 1 and info['all'] == ['اعرض الكل (٢)'], pre + '07: «انضمّ» آخر ٧ أيام فقط %r %r' % (info['cols'], info['all']))
     expect(info['main'] == ['+ دعوة جديدة'] and info['gear'] and not info['refresh'], pre + '07: زرّ واحد رئيسي وترس بلا «حدّث» %r' % info['main'])
     expect('اختيار الصفة ٤' in info['steps'] and 'الشروط ٣' in info['steps'], pre + '07: سطر الخطوات %r' % info['steps'])

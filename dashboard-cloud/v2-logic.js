@@ -1994,9 +1994,18 @@
     if (kind === 'remind') return head + '\nدعوتك إلى منصة البروفيسور ما زالت بانتظارك، ويمكنك إكمالها من الرابط نفسه:\n' + link;
     return head + '\nهذه دعوتك إلى منصة البروفيسور، وهي باسمك وحدك:\n' + link;
   }
+  // رقم واتساب صالح للرابط: يبدأ بـ«+» أو «00» (رمز الدولة موجود) وطوله ٨–١٥ رقمًا. الرقم المحلي (٠١٠…) يُعطي رابطًا ميتًا
+  // فلا يُبنى له رابط واتساب أبدًا — يرجع '' ويُعرض الرقم للنسخ أو يُستخدم البريد.
+  function waNumber(phone) {
+    var raw = String(phone == null ? '' : phone).replace(/[\s\-().]/g, '');
+    if (raw.indexOf('00') === 0) raw = '+' + raw.slice(2);
+    if (raw.charAt(0) !== '+') return '';
+    var d = digitsOf(raw);
+    return d.length >= 8 && d.length <= 15 ? d : '';
+  }
   function waUrl(phone, text) {
-    var d = digitsOf(phone);
-    return (d.length >= 8 ? 'https://wa.me/' + d : 'https://wa.me/') + '?text=' + encodeURIComponent(text);
+    var d = waNumber(phone);
+    return (d ? 'https://wa.me/' + d : 'https://wa.me/') + '?text=' + encodeURIComponent(text);
   }
   function inviterKey(r) {
     var id = r && typeof r.invitedByUserId === 'string' ? r.invitedByUserId.trim() : '';
@@ -2106,7 +2115,7 @@
       out.cols[c] = { items: items, total: c === 'joined' ? cols.joined.length : total, shown: (c === 'joined' || c === 'stopped') ? 3 : 6 };
       if (c === 'joined') out.cols.joined.all = cols.joined.slice().sort(newest).map(function (r) { return inviteItem(r, 'joined', now); });
     });
-    // الواقف والمنتهي قريبًا (على كل الصفوف لا على الفلتر)
+    // المتوقف والمنتهي قريبًا (على كل الصفوف لا على الفلتر)
     var stalled = 0, expiring = 0;
     board.forEach(function (r) {
       var st = stageOf(r), at = ms(r.at), ex = ms(r.expiresAt);
@@ -2126,7 +2135,7 @@
   var LBL_VISIT = 'زوّار ينتظرون الفتح', LBL_JOIN = 'طلبات تقديم الخدمة', LBL_FOUND = 'ليدات خبير مؤسس';
   function waDigits(row) {
     var d = Array.isArray(row.details) ? row.details : [];
-    for (var i = 0; i < d.length; i++) if (d[i] && d[i].k === 'واتساب') { var s = String(d[i].v || '').replace(/[^\d+]/g, ''); return digitsOf(s).length >= 8 ? s : ''; }
+    for (var i = 0; i < d.length; i++) if (d[i] && d[i].k === 'واتساب') { return waNumber(d[i].v); }
     return '';
   }
   function inboxHalf(inp, label) {
@@ -2256,7 +2265,7 @@
       t.sub = exp ? 'الخبرة: ' + exp : '';       // نص الملاحظة القديم عامي («كلّمه على…») فلا يُعرض؛ والباقي في سطر العقل
       t.primary = { label: card.primary.label, act: { do: 'decide', action: 'approve' } };
       var wa = waDigits(r);
-      t.secondary = clean([wa ? { label: 'واتساب', act: { do: 'link', url: 'https://wa.me/' + digitsOf(wa) } } : null, { label: 'ليس مناسبًا', act: { do: 'sheet', sheet: 'reject_founding' } }]);
+      t.secondary = clean([wa ? { label: 'واتساب', act: { do: 'link', url: 'https://wa.me/' + wa } } : null, { label: 'ليس مناسبًا', act: { do: 'sheet', sheet: 'reject_founding' } }]);
     });
     // —— «سجّلوا ولم يطلبوا الفتح بعد»
     var pend = inp.pending, pst = inp.pendingState;
@@ -2293,11 +2302,11 @@
     } else if (allLoaded) out.head.text = 'لا أحد ينتظر قرارك الآن.';
     else if (!uniqF.length) out.head.text = '…جارٍ الجلب';
     if (uniqF.length) out.head.text += (out.head.text ? ' ' : '') + 'تعذّر جلب: ' + uniqF.join('، ') + ' — العدد ناقص.';
-    // —— B1-g: دعوات واقفة أو تنتهي قريبًا ⇒ رابط إلى «الدعوات»
+    // —— B1-g: دعوات متوقفة أو تنتهي قريبًا ⇒ رابط إلى «الدعوات»
     if (invHalf === 'ready') {
       var pl = pipeline(inv, invSt, now, '');
       var bits = [];
-      if (pl.stalled > 0) bits.push(UF(pl.stalled, ['دعوة واحدة واقفة', 'دعوتان واقفتان', 'دعوات واقفة', 'دعوة واقفة']));
+      if (pl.stalled > 0) bits.push(UF(pl.stalled, ['دعوة واحدة متوقفة', 'دعوتان متوقفتان', 'دعوات متوقفة', 'دعوة متوقفة']));
       if (pl.expiring > 0) bits.push(UF(pl.expiring, ['دعوة واحدة تنتهي مهلتها قريبًا', 'دعوتان تنتهي مهلتهما قريبًا', 'دعوات تنتهي مهلتها قريبًا', 'دعوة تنتهي مهلتها قريبًا']));
       if (bits.length) out.head.invitesLine = { text: bits.join(' و') + ' — انظر «الدعوات»', href: '#s/people/pipeline' };
     }
@@ -2455,7 +2464,8 @@
                    email: email, phone: phone, brain: isNaN(at) ? '' : msgBrain(at, now), secondary: [], ref: m };
         var resolve = { label: 'علّمها منتهية', act: { do: 'resolve' } };
         if (email) { it.primary = { label: 'ردّ بالبريد', act: { do: 'sent', url: mailUrl(email, 'ردًّا على رسالتك — البروفيسور') } }; it.secondary = [resolve]; }
-        else if (digitsOf(phone).length >= 8) { it.primary = { label: 'واتساب', act: { do: 'sent', url: 'https://wa.me/' + digitsOf(phone) } }; it.secondary = [resolve]; }
+        else if (waNumber(phone)) { it.primary = { label: 'واتساب', act: { do: 'sent', url: 'https://wa.me/' + waNumber(phone) } }; it.secondary = [resolve]; }
+        else if (digitsOf(phone).length >= 6) { it.primary = { label: 'انسخ الرقم', act: { do: 'copy', text: phone } }; it.secondary = [resolve]; }
         else it.primary = resolve;
         return it;
       }).sort(byOld);
@@ -2468,8 +2478,9 @@
                    title: str(m.full_name) || str(m.name) || 'بلا اسم', sub: want ? 'يريد: ' + want : '', body: str(m.experience) ? 'الخبرة: ' + str(m.experience) : '',
                    email: email, phone: phone, brain: 'طلب التواصل دون إنشاء حساب', secondary: [], ref: m };
         var done = { label: 'تمت المتابعة', act: { do: 'resolve' } };
-        if (digitsOf(phone).length >= 8) { it.primary = { label: 'واتساب', act: { do: 'sent', url: 'https://wa.me/' + digitsOf(phone) } }; it.secondary = [done]; }
+        if (waNumber(phone)) { it.primary = { label: 'واتساب', act: { do: 'sent', url: 'https://wa.me/' + waNumber(phone) } }; it.secondary = [done]; }
         else if (email) { it.primary = { label: 'ردّ بالبريد', act: { do: 'sent', url: mailUrl(email, 'ردًّا على طلبك — البروفيسور') } }; it.secondary = [done]; }
+        else if (digitsOf(phone).length >= 6) { it.primary = { label: 'انسخ الرقم', act: { do: 'copy', text: phone } }; it.secondary = [done]; }
         else it.primary = done;
         return it;
       }).sort(byOld);
@@ -2484,14 +2495,14 @@
     out.head.failedLabels = failed;
     var oldest = Infinity; all.forEach(function (t) { if (!isNaN(t.ts) && t.ts < oldest) oldest = t.ts; });
     if (all.length) out.head.text = 'تنتظر الرد ' + ar(all.length) + ': ' + ar(out.cols.site.items.length) + ' من الموقع · ' + ar(out.cols.chat.items.length) + ' من المحادثة · '
-      + ar(out.cols.follow.items.length) + ' طلبات تواصل.' + (isFinite(oldest) ? ' أقدمها ' + agoText(oldest, now) + '.' : '');
+      + (out.cols.follow.items.length ? UF(out.cols.follow.items.length, ['طلب تواصل واحد', 'طلبا تواصل', 'طلبات تواصل', 'طلب تواصل']) : '٠ طلبات تواصل') + '.' + (isFinite(oldest) ? ' أقدمها ' + agoText(oldest, now) + '.' : '');
     else if (loaded) out.head.text = 'لا رسائل تنتظر الرد.';
     else if (!failed.length) out.head.text = '…جارٍ الجلب';
     if (failed.length) out.head.text += (out.head.text ? ' ' : '') + 'تعذّر جلب: ' + failed.join('، ') + ' — العدد ناقص.';
     return out;
   }
 
-  L.v2p = { requests: requests, pipeline: pipeline, users: users, messages: messages, stageLabel: stageLabel, waText: waText, waUrl: waUrl, adminGuard: adminGuard,
+  L.v2p = { requests: requests, pipeline: pipeline, users: users, messages: messages, stageLabel: stageLabel, waText: waText, waUrl: waUrl, waNumber: waNumber, adminGuard: adminGuard,
             planLabel: planLabel, inviterKey: inviterKey, SEG: SEG, ROLE: ROLE, STAGE: STAGE, mailUrl: mailUrl };
 })(typeof window !== 'undefined' ? window : (typeof globalThis !== 'undefined' ? globalThis : this));
 // ===== /v2s:people =====
