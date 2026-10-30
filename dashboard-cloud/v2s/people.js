@@ -631,7 +631,7 @@
     var sc = { title: row.who || 'خبير', build: function () {
       var det = (row.details || []).map(function (d) {
         if (d.k === 'لينكدإن') { var u = safeHttps(d.v); return [d.k, u ? '<a href="' + esc(u) + '" target="_blank" rel="noopener">فتح الرابط</a>' : '', true, true]; }
-        return [d.k, String(d.v), d.k === 'واتساب'];
+        return [d.k, d.k === 'واتساب' ? String(d.v) : String(d.v).replace(/\d/g, function (x) { return '٠١٢٣٤٥٦٧٨٩'.charAt(+x); }), d.k === 'واتساب'];
       });
       var wa = ''; (row.details || []).forEach(function (d) { if (d.k === 'واتساب') wa = d.v; });
       var h = kvRows([['البريد', row.email, true]].concat(det.map(function (d) { return d[3] ? [d[0], d[1], false, true] : d; }))) + '<p class="v2pm-lead">' + esc(L.v2Card(row, { now: now() }).reason) + '</p>' + errBox()

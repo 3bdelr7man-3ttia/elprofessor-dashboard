@@ -271,7 +271,7 @@ def flow_requests(browser, h, pre, vp, mobile):
     page.click('.v2p-later .v2p-lh')
     page.wait_for_selector('.v2p-lrow')
     rows = page.evaluate("() => [...document.querySelectorAll('.v2p-lrow')].map(r => r.innerText.replace(/\\s+/g, ' '))")
-    expect(len(rows) == 3 and any('رُفض طلب سابق' in r for r in rows), pre + '06: قائمة «لم يطلبوا» %r' % rows)
+    expect(len(rows) == 4 and sum('رُفض طلب سابق' in r for r in rows) == 2, pre + '06: قائمة «لم يطلبوا» %r' % rows)
     expect(any('لم يُسجَّل دخول بعد' in r for r in rows) and any('غير متاح بعد' in r for r in rows), pre + '06: لا «لم يدخل» كاذبة ولا صفر %r' % rows)
     pshot(page, pre + '06-not-requested.jpg')
     browser.close()
