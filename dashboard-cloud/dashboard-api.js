@@ -2572,7 +2572,7 @@
         return ROUTE_ALIAS[k] || k;
       }
       return get("/notifications").then(function (r) {
-        var list = Array.isArray(r) ? r : ((r && r.notifications) || []);
+        var list = Array.isArray(r) ? r : ((r && (r.notifications || r.items)) || []);   // الخادم يرد {count,total,items}
         EP.data.notifications = list.map(function (n) {
           var title = n.title || n.detail || "إشعار";
           return {

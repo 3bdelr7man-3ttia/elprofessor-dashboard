@@ -1954,3 +1954,407 @@
   root.V2L = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })(typeof window !== 'undefined' ? window : (typeof globalThis !== 'undefined' ? globalThis : this));
+
+// ===== v2s:roles =====
+/* ============================================================================
+ * شاشات غير الأدمن (المدرّب · المستثمر · فريق المتابعة · الحساب بانتظار التفعيل) — الجزء النقي. ⛔ لا DOM ولا شبكة ولا ساعة خفية (`now` يُمرَّر).
+ * كل مصدر مُدخَل بشكل `{state:'idle'|'loading'|'ready'|'error', data}`؛ ما ليس `ready` ⇒ `null` (لا صفر مختلق). والصفر الحقيقي يُكتب «٠».
+ * ========================================================================== */
+(function (root) {
+  'use strict';
+  var L = root.V2L;
+  if (!L) return;
+  var U = L.util, ar = U.ar, fmt = U.fmt, uu = U.U, moneyText = U.moneyText, dateText = U.dateText;
+  var NA = 'غير متاح بعد';
+  var DAY = 86400e3;
+
+  var NAV = {
+    t_home: { label: 'لوحتي', img: null, desc: 'دوراتك ومستحقاتك كما سجّلتها الإدارة' },
+    t_courses: { label: 'دوراتي', img: 'courses', desc: 'الدورات المربوطة باسمك وحالة كل دورة' },
+    t_earnings: { label: 'أرباحي', img: 'money', desc: 'مستحقاتك من الدورات، ومحفظتك إن كانت لك استثمارات' },
+    i_home: { label: 'محفظتي', img: null, desc: 'رصيدك وما استثمرته وعوائدك' },
+    i_market: { label: 'فرص الاستثمار', img: 'company', desc: 'الفرص المفتوحة الآن وما جُمع لكل فرصة' },
+    i_invest: { label: 'استثماراتي', img: 'money', desc: 'كل استثمار باسمك وحالته' },
+    users: { label: 'الأعضاء', img: 'people', desc: 'أعضاء المنصة للاطلاع فقط' },
+    courses: { label: 'الدورات', img: 'courses', desc: 'دورات المنصة وحالتها للاطلاع فقط' },
+    topics: { label: 'الموضوعات', img: 'content', desc: 'موضوعات المنصة وحالتها للاطلاع فقط' },
+    tutorials: { label: 'دليل الاستخدام', img: 'books', desc: 'شروحات المنصة كما يراها الأعضاء' },
+    v_pending: { label: 'حسابك', img: null, desc: '' }
+  };
+  var ROLE_SUB = { trainer: 'لوحة المدرّب', investor: 'لوحة المستثمر', employee: 'فريق المتابعة', viewer: 'حسابك' };
+  var ROLE_LINE = { trainer: 'مدرّب', investor: 'مستثمر', employee: 'فريق المتابعة · للاطلاع فقط', viewer: 'بانتظار التفعيل' };
+  var COUNT = {
+    course: ['دورة واحدة', 'دورتان', 'دورات', 'دورة'],
+    opp: ['فرصة واحدة', 'فرصتان', 'فرص', 'فرصة'],
+    invest: ['استثمار واحد', 'استثماران', 'استثمارات', 'استثمارًا'],
+    member: ['عضو واحد', 'عضوان', 'أعضاء', 'عضوًا'],
+    request: ['طلب واحد', 'طلبان', 'طلبات', 'طلبًا'],
+    topic: ['موضوع واحد', 'موضوعان', 'موضوعات', 'موضوعًا'],
+    badge: ['شارة واحدة', 'شارتان', 'شارات', 'شارة']
+  };
+  var LEVELS = { bronze: 'برونزي', silver: 'فضي', gold: 'ذهبي', platinum: 'بلاتيني' };
+
+  // ------------------------------------------------------------------ أدوات
+  function str(v) { return typeof v === 'string' ? v.trim() : ''; }
+  function num(v) { var n = Number(v); return isFinite(n) ? n : 0; }
+  function isNum(v) { return typeof v === 'number' && isFinite(v); }
+  function ready(s) { return !!s && s.state === 'ready'; }
+  function list(d, key) {
+    if (Array.isArray(d)) return d;
+    if (d && Array.isArray(d[key])) return d[key];
+    return [];
+  }
+  function ms(iso) { var t = Date.parse(iso || ''); return isNaN(t) ? NaN : t; }
+  function arDigits(s) {
+    return String(s == null ? '' : s).replace(/[0-9]/g, function (d) { return '٠١٢٣٤٥٦٧٨٩'.charAt(+d); });
+  }
+  function toLatin(s) {
+    return String(s == null ? '' : s).replace(/[٠-٩]/g, function (d) { return String('٠١٢٣٤٥٦٧٨٩'.indexOf(d)); })
+      .replace(/[۰-۹]/g, function (d) { return String('۰۱۲۳۴۵۶۷۸۹'.indexOf(d)); });
+  }
+  function greeting(user) {
+    var n = str(user && user.name);
+    if (n && n.indexOf('@') > -1) n = '';
+    return n ? 'أهلًا، ' + n : 'أهلًا بك';
+  }
+  function navFor(role, base, perms) {
+    var b = (base || []).slice();
+    var p = perms;
+    if (typeof p === 'string') { try { p = JSON.parse(p); } catch (e) { p = null; } }
+    var ids = b;
+    if (p && typeof p === 'object') {
+      var entry = p[role];
+      var mods = entry && (entry.modules || entry);
+      if (Array.isArray(mods)) ids = b.filter(function (id) { return mods.indexOf(id) > -1; });
+    }
+    return ids.filter(function (id) { return NAV[id]; }).map(function (id) {
+      return { id: id, label: NAV[id].label, img: NAV[id].img, desc: NAV[id].desc };
+    });
+  }
+
+  // ------------------------------------------------------------------ المدرّب
+  var COURSE_CHIP = { active: { t: 'مفتوحة', tone: 'green' }, draft: { t: 'مسودة', tone: 'grey' }, completed: { t: 'انتهت', tone: 'wine' },
+                      archived: { t: 'مؤرشفة', tone: 'grey' } };
+  function courseRow(c) {
+    c = c || {};
+    var chip = COURSE_CHIP[c.status] || { t: 'غير معروفة', tone: 'grey' };
+    var price = num(c.price_egp) > 0 ? fmt(c.price_egp) + ' جنيه' : (num(c.price_usd) > 0 ? fmt(c.price_usd) + ' دولار' : 'مجانية');
+    var meta = ['المسجّلون: ' + ar(c.students_count), price];
+    var sd = dateText(c.start_date);
+    if (sd) meta.push('تبدأ ' + sd);
+    var pc = num(c.revenue_split && c.revenue_split.trainer_percent);
+    return { title: str(c.title) || 'دورة', chip: { t: chip.t, tone: chip.tone }, meta: meta.join(' · '),
+             share: 'نصيبك من الدورة: ' + (pc > 0 ? fmt(pc) + '٪' : 'غير محدد بعد') };
+  }
+  function payBucket(p) { var s = p && p.status; return s === 'paid' ? 'paid' : (s === 'waived' ? 'waived' : 'due'); }
+  function sumPay(rows, pred) {
+    var t = 0;
+    rows.forEach(function (p) { if (pred(p)) t += num(p.total_egp); });
+    return t;
+  }
+  function trainerNext(src, nums, linked) {
+    if (nums.due != null && nums.due > 0) {
+      return { text: 'لك في دفتر الإدارة ' + fmt(nums.due) + ' جنيه لم تُحوَّل بعد.', link: { label: 'التفاصيل', go: 't_earnings' } };
+    }
+    if (ready(src.courses) && list(src.courses.data).length === 0 && linked === true) {
+      return { text: 'لا توجد دورات مربوطة بحسابك بعد. تواصل مع الإدارة لربط دوراتك.', link: null };
+    }
+    return null;
+  }
+  function trainerView(src, now) {
+    src = src || {};
+    var linked = ready(src.me) ? (src.me.data && src.me.data.linked !== false) : null;
+    if (ready(src.me) && src.me.data && src.me.data.linked === false) linked = false;
+    var unl = linked === false;
+    var cs = ready(src.courses) ? list(src.courses.data) : null;
+    var ps = ready(src.payouts) ? list(src.payouts.data) : null;
+    var nums = {
+      courses: unl || !cs ? null : cs.length,
+      students: unl || !cs ? null : cs.reduce(function (t, c) { return t + num(c.students_count); }, 0),
+      due: unl || !ps ? null : sumPay(ps, function (p) { return payBucket(p) === 'due'; })
+    };
+    return { linked: linked, nums: nums, rows: cs ? cs.map(courseRow) : [], next: unl ? null : trainerNext(src, nums, linked) };
+  }
+
+  var PAY_CHIP = { due: { t: 'مستحق', tone: 'amber' }, paid: { t: 'حُوّل', tone: 'green' }, waived: { t: 'أُسقط', tone: 'grey' } };
+  var WD_MIN_USD = 50;
+  function walletRate(w) {
+    var pairs = [['balance_egp', 'balance'], ['total_invested_egp', 'total_invested'], ['total_returns_egp', 'total_returns']];
+    for (var i = 0; i < pairs.length; i++) {
+      var e = num(w[pairs[i][0]]), d = num(w[pairs[i][1]]);
+      if (e !== 0 && d !== 0) return e / d;
+    }
+    return null;
+  }
+  function walletView(w) {
+    if (!w || typeof w !== 'object') return null;
+    if (w.id == null) return { linked: false };
+    var rate = walletRate(w);
+    var bal = num(w.balance_egp);
+    var pend = num(w.pending_withdrawals);
+    var pending;
+    if (pend === 0) pending = { value: '٠ جنيه', note: 'لا طلبات قيد المراجعة' };
+    else if (rate) pending = { value: 'نحو ' + fmt(Math.round(pend * rate)) + ' جنيه', note: moneyText(pend, 'USD') + ' · تراجعه الإدارة' };
+    else pending = { value: moneyText(pend, 'USD'), note: 'تراجعه الإدارة' };
+    return {
+      linked: true, rate: rate, balanceEgp: bal, investedEgp: num(w.total_invested_egp), returnsEgp: num(w.total_returns_egp),
+      pending: pending, pendingUsd: pend, level: LEVELS[w.level] || str(w.level) || LEVELS.bronze, canWithdraw: bal > 0,
+      minEgp: rate ? Math.round(WD_MIN_USD * rate) : null
+    };
+  }
+  function trainerEarnings(src, now) {
+    src = src || {};
+    var ps = ready(src.payouts) ? list(src.payouts.data) : null;
+    var out = { due: null, paid: null, last30: null, list: [], wallet: null, activeRows: [] };
+    if (ps) {
+      out.due = sumPay(ps, function (p) { return payBucket(p) === 'due'; });
+      out.paid = sumPay(ps, function (p) { return payBucket(p) === 'paid'; });
+      out.last30 = sumPay(ps, function (p) {
+        if (payBucket(p) === 'waived') return false;
+        var t = ms(p.date);
+        return !isNaN(t) && t <= (now || 0) + DAY && (now || 0) - t <= 30 * DAY;
+      });
+      out.list = ps.slice().sort(function (a, b) { return (ms(b.date) || 0) - (ms(a.date) || 0); }).map(function (p) {
+        var ch = PAY_CHIP[payBucket(p)];
+        return { title: str(p.related_to) || 'مستحق', date: dateText(p.date), amountText: fmt(p.total_egp) + ' جنيه', chip: { t: ch.t, tone: ch.tone } };
+      });
+    }
+    out.wallet = ready(src.wallet) ? walletView(src.wallet.data) : null;
+    if (ready(src.active)) out.activeRows = list(src.active.data).map(function (x) { return investmentRow(x, 'active'); });
+    return out;
+  }
+
+  // ------------------------------------------------------------------ المستثمر
+  function openOppCount(opps) {
+    return list(opps).filter(function (o) { return ['open', 'hot', 'invite_only'].indexOf(o.status) > -1; }).length;
+  }
+  function investorNext(src) {
+    src = src || {};
+    if (ready(src.wallet)) {
+      var w = walletView(src.wallet.data);
+      if (w && w.linked) {
+        if (w.pendingUsd > 0) {
+          var t = w.rate ? 'طلب سحب بقيمة نحو ' + fmt(Math.round(w.pendingUsd * w.rate)) + ' جنيه (' + moneyText(w.pendingUsd, 'USD') + ') قيد المراجعة لدى الإدارة.'
+                         : 'طلب سحب بقيمة ' + moneyText(w.pendingUsd, 'USD') + ' قيد المراجعة لدى الإدارة.';
+          return { text: t, link: null };
+        }
+        if (w.balanceEgp > 0) return { text: 'لك ' + fmt(w.balanceEgp) + ' جنيه متاحة للسحب.', link: { label: 'اطلب السحب', act: 'withdraw' } };
+      }
+    }
+    if (ready(src.opps)) {
+      var n = openOppCount(src.opps.data);
+      if (n > 0) return { text: 'الفرص المفتوحة الآن: ' + uu(n, COUNT.opp) + '.', link: { label: 'اعرضها', go: 'i_market' } };
+    }
+    return null;
+  }
+  var OPP_CHIP = { open: { t: 'مفتوحة', tone: 'green' }, hot: { t: 'إقبال مرتفع', tone: 'wine' }, invite_only: { t: 'بدعوة', tone: 'amber' },
+                   funded: { t: 'اكتمل التمويل', tone: 'grey' } };
+  function oppCard(o) {
+    o = o || {};
+    var target = num(o.target_amount), funded = num(o.current_funded);
+    var pct = Math.max(0, Math.min(100, num(o.funding_percent)));
+    var showBar = target > 0;
+    var ch = OPP_CHIP[o.status] || { t: 'غير معروفة', tone: 'grey' };
+    var roi = num(o.expected_roi), min = num(o.min_investment);
+    return {
+      title: str(o.course_title) || 'فرصة استثمار', trainer: str(o.trainer_name), students: ar(o.students_count),
+      fundedText: moneyText(funded, 'USD'), targetText: showBar ? moneyText(target, 'USD') : '', pct: pct, showBar: showBar,
+      progressText: showBar ? 'جُمع ' + moneyText(funded, 'USD') + ' من ' + moneyText(target, 'USD') + ' · ' + ar(pct) + '٪'
+                            : 'جُمع ' + moneyText(funded, 'USD') + ' · الهدف غير محدد بعد',
+      roiText: roi > 0 ? fmt(roi) + '٪' : 'غير محدد بعد', roiNote: roi > 0 ? 'رقم تقديري حدّدته الإدارة' : '',
+      minText: min > 0 ? moneyText(min, 'USD') : 'غير محدد بعد',
+      start: dateText(o.expected_start), end: dateText(o.expected_end), chip: { t: ch.t, tone: ch.tone }
+    };
+  }
+  var INV_CHIP = { active: { t: 'جارٍ', tone: 'green' }, pending: { t: 'بانتظار', tone: 'amber' }, accrued: { t: 'قيد الاحتساب', tone: 'amber' },
+                   completed: { t: 'مكتمل', tone: 'wine' }, paid: { t: 'صُرف', tone: 'green' }, loss: { t: 'خسارة', tone: 'red' } };
+  function investmentRow(x, tab) {
+    x = x || {};
+    var title = str(x.course_title);
+    var ch = INV_CHIP[x.status] || { t: 'غير معروفة', tone: 'grey' };
+    var meta = ['استثمرت ' + fmt(x.invested_total_egp) + ' جنيه'];
+    var d = dateText(x.created_at);
+    if (d) meta.push(d);
+    var out = { title: title || 'استثمار', meta: meta.join(' · '), chip: { t: ch.t, tone: ch.tone },
+                second: title ? 'العائد المحسوب حتى الآن: ' + fmt(x.roi_percent) + '٪' : 'العائد: ' + NA, actual: '' };
+    if (tab === 'history' && num(x.actual_return) > 0) out.actual = 'العائد الفعلي: ' + moneyText(x.actual_return, 'USD');
+    return out;
+  }
+  function badgesView(b) {
+    if (!b) return null;
+    var rows = list(b);
+    var earned = rows.filter(function (x) { return x.earned; });
+    return { earned: earned.map(function (x) { return str(x.label) || 'شارة'; }), line: 'الشارات: ' + ar(earned.length) + ' من ' + ar(rows.length) };
+  }
+  function withdrawCheck(input, wallet) {
+    var bad = { ok: false, error: 'اكتب مبلغًا صحيحًا لا يزيد على رصيدك المتاح.' };
+    var s = toLatin(str(input)).replace(/[\s,٬]/g, '');
+    if (!/^\d+$/.test(s)) return bad;
+    var n = Number(s);
+    var max = Math.floor(num(wallet && (wallet.balanceEgp != null ? wallet.balanceEgp : wallet.balance_egp)));
+    if (!(n > 0) || n > max) return bad;
+    return { ok: true, amount: n };
+  }
+
+  // ------------------------------------------------------------------ فريق المتابعة
+  var PLAN = { free: 'مجانية', pro: 'احترافية', premium: 'بريميوم' };
+  function peopleRows(d) { return list(d, 'users'); }
+  function peopleFilter(rows, chip, q) {
+    var needle = str(q).toLowerCase();
+    return (rows || []).filter(function (u) {
+      if (chip === 'trainer' && u.trainer_status !== 'approved') return false;
+      if (chip === 'pending' && u.trainer_status !== 'pending') return false;
+      if (chip === 'admin' && ['admin', 'staff'].indexOf(u.role) < 0) return false;
+      if (chip === 'investor' && u.role !== 'investor') return false;
+      if (chip === 'test' && !u.is_test) return false;
+      if (!needle) return true;
+      return [u.full_name, u.name, u.email, u.phone].some(function (f) { return String(f || '').toLowerCase().indexOf(needle) > -1; });
+    });
+  }
+  function peopleCounts(rows) {
+    var c = { all: 0, trainer: 0, pending: 0, admin: 0, investor: 0, test: 0 };
+    (rows || []).forEach(function (u) {
+      c.all++;
+      if (u.trainer_status === 'approved') c.trainer++;
+      if (u.trainer_status === 'pending') c.pending++;
+      if (u.role === 'admin' || u.role === 'staff') c.admin++;
+      if (u.role === 'investor') c.investor++;
+      if (u.is_test) c.test++;
+    });
+    return c;
+  }
+  function peopleCapped(reply) {
+    var users = peopleRows(reply), count = num(reply && reply.count);
+    var capped = count > users.length;
+    return { capped: capped, count: count,
+             note: capped ? 'المعروض أحدث ' + ar(users.length) + ' من ' + uu(count, COUNT.member) + '؛ ابحث بالاسم أو البريد لعرض غيرهم.' : '' };
+  }
+  function personRow(u, segLabels) {
+    u = u || {};
+    var name = str(u.full_name) || str(u.name) || str(u.email) || 'عضو';
+    var chips = [];
+    var roleChip = u.role === 'admin' ? 'إدارة' : (u.role === 'staff' ? 'فريق' : (u.role === 'investor' ? 'مستثمر' : 'عضو'));
+    chips.push({ t: roleChip, tone: 'grey' });
+    if (u.trainer_status === 'approved') chips.push({ t: 'مدرّب', tone: 'green' });
+    else if (u.trainer_status === 'pending') chips.push({ t: 'طلب تدريب', tone: 'amber' });
+    if (u.is_test) chips.push({ t: 'تجريبي', tone: 'grey' });
+    var meta = [];
+    var j = dateText(u.created_at);
+    if (j) meta.push('انضم ' + j);
+    var plan = str(u.plan_id);
+    if (plan) meta.push(PLAN[plan] || plan);
+    var seg = str(u.segment);
+    var pub = u.public_ready;
+    return {
+      name: name, email: str(u.email), initial: name.charAt(0) || '—', chips: chips, meta: meta.join(' · '),
+      details: [
+        { k: 'الهاتف', v: str(u.phone) || '—' },
+        { k: 'الفئة', v: seg ? ((segLabels && segLabels[seg]) || seg) : '—' },
+        { k: 'الوسوم', v: Array.isArray(u.tags) && u.tags.length ? u.tags.map(str).filter(Boolean) : [] },
+        { k: 'يظهر في الدليل العام', v: pub === true ? 'نعم' : (pub === false ? 'لا' : NA) }
+      ]
+    };
+  }
+  var TYPE_AR = { recorded_paid: 'مسجّلة مدفوعة', recorded_free: 'مسجّلة مجانية', live_upcoming: 'مباشرة' };
+  function courseKind(c) {
+    c = c || {};
+    if (c.approval_status === 'pending') return 'pending';
+    if (c.approval_status === 'rejected') return 'rejected';
+    if (!c.is_active && c.archived_at) return 'archived';
+    return c.is_active ? 'published' : 'draft';
+  }
+  var KIND_CHIP = { pending: { t: 'بانتظار الاعتماد', tone: 'amber' }, rejected: { t: 'مرفوضة', tone: 'red' }, archived: { t: 'مؤرشفة', tone: 'grey' },
+                    published: { t: 'منشورة', tone: 'green' }, draft: { t: 'مسودة', tone: 'grey' } };
+  function courseStatus(c) { var k = KIND_CHIP[courseKind(c)]; return { t: k.t, tone: k.tone }; }
+  function pcourseRow(c) {
+    c = c || {};
+    var price = num(c.price_amount) > 0 ? moneyText(c.price_amount, c.price_currency) : (c.type === 'recorded_free' ? 'مجانية' : '—');
+    var lessons = c.story && num(c.story.lessons) > 0 ? c.story.lessons : c.lesson_count;
+    var meta = [str(c.instructor_name) || 'بلا مدرّب', TYPE_AR[c.type] || str(c.type), price, 'المسجّلون: ' + ar(c.total_enrolled), 'الدروس: ' + ar(lessons)];
+    return { title: str(c.title) || 'دورة', chip: courseStatus(c), meta: meta.filter(Boolean).join(' · '), kind: courseKind(c) };
+  }
+  function pcourseFilter(rows, chip) {
+    return (rows || []).filter(function (c) {
+      var k = courseKind(c);
+      if (chip === 'published') return k === 'published';
+      if (chip === 'pending') return k === 'pending';
+      if (chip === 'draft') return k === 'draft';
+      return true;
+    });
+  }
+  function pcourseCounts(rows) {
+    var c = { all: 0, published: 0, pending: 0, draft: 0 };
+    (rows || []).forEach(function (x) { c.all++; var k = courseKind(x); if (c[k] != null) c[k]++; });
+    return c;
+  }
+  var TOPIC_STATUS = { published: ['منشور', 'green'], open: ['على البورد', 'green'], merged: ['قيد العمل', 'amber'], pending_review: ['بانتظار المراجعة', 'amber'],
+                       rejected: ['مرفوض', 'red'], archived: ['مؤرشف', 'grey'], draft: ['مسودة', 'grey'] };
+  var TOPIC_SRC = { news: 'خبر', expert: 'خبير', idea: 'فكرة', human: 'عضو' };
+  function topicKey(t) { return TOPIC_STATUS[t && t.status] ? t.status : 'draft'; }
+  function topicRow(t) {
+    t = t || {};
+    var st = TOPIC_STATUS[topicKey(t)];
+    var meta = [];
+    if (TOPIC_SRC[t.source]) meta.push(TOPIC_SRC[t.source]);
+    if (str(t.category)) meta.push(str(t.category));
+    var eng = [];
+    if (isNum(t.comments)) eng.push('التعليقات: ' + ar(t.comments));
+    if (isNum(t.reactions)) eng.push('التفاعلات: ' + ar(t.reactions));
+    if (eng.length) meta.push(eng.join(' · '));
+    var d = dateText(t.created_at || t.published_at || t.date);
+    if (d) meta.push(d);
+    var sum = str(t.summary);
+    if (sum.length > 600) sum = sum.slice(0, 600) + '…';
+    return { title: str(t.title) || str(t.question) || 'موضوع', chip: { t: st[0], tone: st[1] }, meta: meta.join(' · '), summary: sum, key: topicKey(t) };
+  }
+  function topicCounts(rows) {
+    var c = { all: 0, published: 0, open: 0, merged: 0, pending_review: 0, draft: 0, rejected: 0, archived: 0 };
+    (rows || []).forEach(function (t) { c.all++; c[topicKey(t)]++; });
+    return c;
+  }
+  function topicFilter(rows, chip) {
+    return (rows || []).filter(function (t) { return chip === 'all' || topicKey(t) === chip; });
+  }
+  function tutorialGroups(rows) {
+    var items = list(rows, 'tutorials').slice();
+    items.sort(function (a, b) { return num(a.order) - num(b.order); });
+    var groups = [], idx = {};
+    items.forEach(function (t) {
+      var s = str(t.section) || 'عام';
+      if (idx[s] == null) { idx[s] = groups.length; groups.push({ section: s, items: [] }); }
+      groups[idx[s]].items.push({
+        title: str(t.title) || 'شرح', published: t.published !== false && t.status !== 'draft' && t.is_published !== false,
+        body: String(t.body == null ? (t.content == null ? '' : t.content) : t.body), video: str(t.video_url)
+      });
+    });
+    return groups;
+  }
+  function staffNext(screen, src) {
+    src = src || {};
+    if (screen === 'users' && ready(src.people)) {
+      var n = peopleCounts(peopleRows(src.people.data)).pending;
+      if (n > 0) return { text: 'طلبات تدريب قيد المراجعة لدى الإدارة: ' + uu(n, COUNT.request) + '.', link: null };
+    }
+    if (screen === 'courses' && ready(src.pcourses)) {
+      var m = pcourseCounts(list(src.pcourses.data, 'courses')).pending;
+      if (m > 0) return { text: 'بانتظار اعتماد الإدارة: ' + uu(m, COUNT.course) + '.', link: null };
+    }
+    if (screen === 'topics' && ready(src.topics)) {
+      var k = topicCounts(list(src.topics.data, 'topics')).pending_review;
+      if (k > 0) return { text: 'مقترحات من الأعضاء بانتظار المراجعة: ' + uu(k, COUNT.topic) + '.', link: null };
+    }
+    return null;
+  }
+
+  L.roles = {
+    NAV: NAV, COUNT: COUNT, ROLE_SUB: ROLE_SUB, ROLE_LINE: ROLE_LINE, NA: NA,
+    arDigits: arDigits, greeting: greeting, navFor: navFor, trainerView: trainerView, trainerEarnings: trainerEarnings, courseRow: courseRow,
+    walletView: walletView, investorNext: investorNext, openOppCount: openOppCount, oppCard: oppCard, investmentRow: investmentRow,
+    badgesView: badgesView, withdrawCheck: withdrawCheck, peopleRows: peopleRows, peopleFilter: peopleFilter, peopleCounts: peopleCounts,
+    peopleCapped: peopleCapped, personRow: personRow, courseStatus: courseStatus, courseKind: courseKind, pcourseRow: pcourseRow,
+    pcourseFilter: pcourseFilter, pcourseCounts: pcourseCounts, topicRow: topicRow, topicCounts: topicCounts, topicFilter: topicFilter,
+    tutorialGroups: tutorialGroups, staffNext: staffNext
+  };
+  if (typeof module !== 'undefined' && module.exports) module.exports.roles = L.roles;
+})(typeof window !== 'undefined' ? window : (typeof globalThis !== 'undefined' ? globalThis : this));
+// ===== /v2s:roles =====
