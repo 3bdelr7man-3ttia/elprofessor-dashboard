@@ -1,0 +1,137 @@
+/* ============================================================================
+ * v2s/books.css — تبويب «الكتب والأعمال» (قسم «الكتب»). كل القواعد تحت `.v2s-books` (الصفحة) أو `.v2s-bm` (داخل الورقة) أو `#epModal`:
+ * ⛔ المفتاح مقفول ⇒ الملف بيتحمّل ومفيش عنصر في الصفحة بيحمل الأصناف دي.
+ * بتعتمد على ألوان وأزرار v2-d3.css (`.v3` · `.v3m`): عنّابي #9E2B4E · ورق #FBFAF7 · حبر #21262E · أحمر #C8102E للمتأخر والمرفوض بس.
+ * ========================================================================== */
+
+/* —— أجزاء عامة */
+.v2s-books .bk-na{color:#8A5A00;font-weight:700}
+.v2s-books .bk-center{text-align:center}
+.v2s-books .bk-closed{margin:0 0 12px}
+
+/* —— كارت العقل: سطر واحد وزرّ واحد، وصورة الكتب على جنبه */
+.v2s-books .bk-brain{display:grid;grid-template-columns:minmax(0,1fr) 220px;background:#fff;border:1px solid var(--line);border-radius:18px;overflow:hidden;margin-bottom:18px;box-shadow:0 2px 10px rgba(33,38,46,.05)}
+.v2s-books .bk-bt{display:flex;gap:14px;align-items:center;padding:18px 22px;min-width:0}
+.v2s-books .bk-av{width:46px;height:46px;border:2px solid var(--line);align-self:flex-start}
+.v2s-books .bk-btx{display:grid;gap:12px;justify-items:start;min-width:0}
+.v2s-books .bk-bsum{font:800 18px/1.7 'Cairo',sans-serif;overflow-wrap:anywhere}
+.v2s-books .bk-photo{width:100%;height:100%;min-height:128px;object-fit:cover;display:block;background:var(--paper2)}
+
+/* —— البحث */
+.v2s-books .bk-search{display:block;width:100%;min-height:48px;padding:0 16px;margin:0 0 18px;border:1px solid var(--line);border-radius:14px;background:#fff;color:var(--ink);font-size:16px;font-family:inherit}
+.v2s-books .bk-search::placeholder{color:#8A8478}
+
+/* —— الممرّات */
+.v2s-books .bk-lane{margin-bottom:26px;scroll-margin-top:12px}
+.v2s-books .bk-lane .v3-h2:focus{outline:none}
+.v2s-books .bk-lane .v3-h2:focus-visible{outline:3px solid rgba(158,43,78,.45);outline-offset:4px;border-radius:8px}
+.v2s-books .bk-offlink{margin:-6px 0 8px}
+.v2s-books .bk-lnone{text-align:start;padding:2px 4px 10px;font-size:14.5px}
+.v2s-books .bk-tgrid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;align-items:start}
+.v2s-books .bk-list{display:grid;gap:10px}
+.v2s-books .bk-list[hidden]{display:none}
+.v2s-books .bk-fold{display:flex;align-items:center;gap:10px;width:100%;min-height:48px;padding:0 4px;background:transparent;border:0;cursor:pointer;color:inherit;font:inherit;text-align:start;border-radius:12px}
+.v2s-books .bk-fold:hover{background:rgba(158,43,78,.05)}
+.v2s-books .bk-ft{font:800 19px/1.5 'Cairo',sans-serif}
+.v2s-books .bk-fx{margin-inline-start:auto;font:800 14px 'Cairo',sans-serif;color:var(--wine);text-decoration:underline;padding:0 8px}
+
+/* —— البند: مكوّن واحد بكثافتين */
+.v2s-books .bk-pills{display:flex;flex-wrap:wrap;gap:6px;align-items:center;min-width:0}
+.v2s-books .bk-type{font:800 12.5px/1.6 'Cairo',sans-serif;border-radius:999px;padding:1px 12px;background:#F1EBE0;color:#3A3730}
+.v2s-books .bk-st{display:inline-block;font:800 12.5px/1.6 'Cairo',sans-serif;border-radius:999px;padding:1px 12px;background:#F1EBE0;color:var(--mute)}
+.v2s-books .bk-st.st-live{background:#E8F6EE;color:#0F5A37}
+.v2s-books .bk-st.st-review,.v2s-books .bk-st.st-noprice{background:var(--amber-bg);color:#6B4A00}
+.v2s-books .bk-st.st-rejected{background:#FDECEF;color:#8E1228}
+.v2s-books .bk-st.st-unknown,.v2s-books .bk-st.st-hidden{background:#F1EBE0;color:var(--mute)}
+.v2s-books .bk-dec .v3-strip{flex-wrap:wrap}
+.v2s-books .bk-dec .bk-type,.v2s-books .bk-dec .bk-st{background:rgba(255,255,255,.22);color:#fff}
+.v2s-books .bk-dec .v3-body{gap:10px}
+.v2s-books .bk-dec h3{font:800 17px/1.55 'Cairo',sans-serif;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.v2s-books .bk-acts{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:2px}
+.v2s-books .bk-acts .v3-btn1{flex:1 1 auto}
+.v2s-books .bk-acts .v3-btn2{flex:0 1 auto}
+.v2s-books .bk-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px 18px;align-items:center;background:#fff;border:1px solid var(--line);border-radius:14px;padding:12px 16px}
+.v2s-books .bk-main{display:grid;gap:2px;min-width:0}
+.v2s-books .bk-meta{display:flex;flex-wrap:wrap;align-items:center;gap:2px 12px}
+.v2s-books .bk-row .v3-person{padding:6px 0}
+.v2s-books .bk-main h3{font:800 16.5px/1.55 'Cairo',sans-serif;overflow-wrap:anywhere}
+.v2s-books .bk-addrow{margin:4px 0 14px}
+.v2s-books .bk-libline{margin:6px 0 0;font-size:13.5px;color:var(--mute);line-height:1.8;border-top:1px solid var(--line);padding-top:10px}
+.v2s-books .bk-libline .v3-link{font-size:13.5px}
+
+/* —— صفحة العمل */
+.v2s-books .bk-back{display:inline-flex;align-items:center;margin:0 0 8px;padding:0 4px}
+.v2s-books .bk-work{display:grid;grid-template-columns:minmax(0,1fr) 360px;grid-template-areas:"head panel" "facts panel";grid-template-rows:auto 1fr;gap:14px 20px;align-items:start}
+.v2s-books .bk-whead{grid-area:head;display:grid;gap:8px;background:#fff;border:1px solid var(--line);border-radius:18px;padding:18px 22px;min-width:0}
+.v2s-books .bk-whead h2{font:800 25px/1.5 'Cairo',sans-serif;overflow-wrap:anywhere}
+.v2s-books .bk-facts{grid-area:facts;margin:0;display:grid;background:#fff;border:1px solid var(--line);border-radius:18px;padding:6px 22px;min-width:0}
+.v2s-books .bk-facts>div{display:grid;grid-template-columns:150px minmax(0,1fr);gap:4px 16px;padding:12px 0;border-bottom:1px solid #F0EADF}
+.v2s-books .bk-facts>div:last-child{border-bottom:0}
+.v2s-books .bk-facts dt{color:var(--mute);font:700 14px/1.7 'Cairo',sans-serif}
+.v2s-books .bk-facts dd{margin:0;font-size:15px;line-height:1.8;overflow-wrap:anywhere;min-width:0}
+.v2s-books .bk-facts dd.na{color:#8A5A00;font-weight:700}
+.v2s-books .bk-sub{display:block;font-size:13.5px;color:var(--mute);line-height:1.7}
+.v2s-books .bk-ref{font-size:12.5px;color:var(--mute)}
+.v2s-books .bk-panel{grid-area:panel;position:sticky;top:16px;display:grid;gap:12px;margin:0;padding:18px;align-self:start}
+.v2s-books .bk-panel .v3-btn1,.v2s-books .bk-panel .v3-btn2{width:100%}
+.v2s-books .bk-panel .v3-brain{margin:0}
+.v2s-books .bk-lead{font:800 16px/1.7 'Cairo',sans-serif}
+.v2s-books .bk-dock{display:none}
+
+/* —— الورقة بهوية البروفيسور: ترويسة عنّابية وزرّ رئيسي عنّابي وأهداف ٤٤px (فوق نافذة الداشبورد الموجودة) */
+#epModal .modal:has(.v2s-bm){max-width:600px;border-radius:20px}
+#epModal .modal:has(.v2s-bm) .mh{background:#9E2B4E;padding:12px 20px;min-height:60px;font-size:17px;line-height:1.5}
+#epModal .modal:has(.v2s-bm) .mh button{width:44px;height:44px;border-radius:12px;font-size:17px}
+.v2s-bm .btn-primary{background:#9E2B4E;border-radius:14px;font-size:15.5px}
+.v2s-bm .btn-primary:hover{background:#85233F;filter:none}
+.v2s-bm .btn-primary:disabled,.v2s-bm .btn-ghost:disabled{opacity:.6;cursor:wait}
+.v2s-bm .btn-ghost{background:#fff;color:#9E2B4E;border-color:var(--line);border-radius:14px;font-size:15px;font-weight:700}
+.v2s-bm .acts .btn{min-height:48px}
+.v2s-bm .mc-lead{font-size:15px;line-height:1.9}
+.v2s-bm .v3-warn{margin:8px 0}
+
+/* —— ورقة التعديل والإضافة (فوق أنماط v2-d3.css للأوراق) */
+.v2s-bm .fld{display:grid;gap:6px}
+.v2s-bm .fld label{font:700 14px 'Cairo',sans-serif}
+.v2s-bm .fld select,.v2s-bm .fld input,.v2s-bm .fld textarea{width:100%;border:1px solid var(--line);border-radius:10px;padding:0 12px;min-height:48px;font-size:16px;background:#fff;color:var(--ink)}
+.v2s-bm .fld textarea{padding:10px 12px;line-height:1.7}
+.v2s-bm [hidden]{display:none}
+.v2s-bm .bk-done{text-align:center;padding:14px 0}
+.v2s-bm .v3-fine{margin-top:0}
+
+@media(max-width:1179px){
+  .v2s-books .bk-brain{grid-template-columns:minmax(0,1fr) 160px}
+  .v2s-books .bk-tgrid{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .v2s-books .bk-work{grid-template-columns:minmax(0,1fr);grid-template-areas:"head" "panel" "facts";grid-template-rows:auto}
+  .v2s-books .bk-panel{position:static}
+}
+@media(max-width:760px){
+  .v2s-books .bk-brain{grid-template-columns:minmax(0,1fr)}
+  .v2s-books .bk-photo{display:none}
+  .v2s-books .bk-bt{padding:14px}
+  .v2s-books .bk-bsum{font-size:16.5px}
+  .v2s-books .bk-btx .v3-btn1{width:100%}
+  .v2s-books .bk-tgrid{grid-template-columns:minmax(0,1fr)}
+  .v2s-books .bk-search{min-height:52px}
+  .v2s-books .bk-fold{min-height:52px}
+  .v2s-books .bk-row{grid-template-columns:minmax(0,1fr)}
+  .v2s-books .bk-row .v3-btn2{width:100%}
+  .v2s-books .bk-acts{flex-direction:column;align-items:stretch}
+  .v2s-books .bk-acts .v3-btn1,.v2s-books .bk-acts .v3-btn2,.v2s-books .bk-acts .v3-link{width:100%;flex:none}
+  .v2s-books .bk-whead{padding:14px 16px}
+  .v2s-books .bk-facts{padding:4px 16px}
+  .v2s-books .bk-whead h2{font-size:21px}
+  .v2s-books .bk-facts>div{grid-template-columns:minmax(0,1fr);gap:0}
+  .v2s-books .bk-panel{padding:14px}
+  .v2s-books[data-dock="1"]{padding-bottom:calc(76px + env(safe-area-inset-bottom))}
+  .v2s-books[data-dock="1"] .bk-panel .bk-mainbtn{display:none}
+  .v2s-books .bk-dock{display:block;position:fixed;inset-inline:0;bottom:0;z-index:60;background:#fff;border-top:1px solid var(--line);box-shadow:0 -6px 18px rgba(33,38,46,.1);padding:8px 16px calc(8px + env(safe-area-inset-bottom))}
+  .v2s-books .bk-dock[hidden]{display:none}
+  .v2s-books .bk-dock .v3-btn1{width:100%}
+  .v2s-bm .fld select,.v2s-bm .fld input,.v2s-bm .fld textarea{min-height:52px}
+  .v2s-bm .fld textarea{min-height:96px}
+}
+body:has(#epModal) .v2s-books .bk-dock{display:none}
+@media(prefers-reduced-motion:reduce){
+  .v2s-books *{transition:none}
+}

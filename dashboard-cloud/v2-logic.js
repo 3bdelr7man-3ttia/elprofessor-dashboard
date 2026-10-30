@@ -1238,7 +1238,7 @@
     { key: 'market', label: 'سوق الخدمات', img: 'market', desc: 'طلبات الأعضاء وعروض الخبراء', tabs: [
       T('requests', 'الطلبات', 'market')
     ] },
-    { key: 'books', label: 'الكتب', img: 'books', desc: 'عروض الكتب بانتظار المراجعة وطلبات القرّاء والمتجر', tabs: [
+    { key: 'books', label: 'الكتب', img: 'books', desc: 'كل كتاب وعمل، وعروض تنتظر المراجعة، وطلبات القرّاء', tabs: [
       T('offers', 'مراجعة العروض', 'v2b_offers'),
       T('requests', 'طلبات القرّاء', 'v2b_requests'),
       T('books', 'الكتب والأعمال', 'knowledge')
@@ -1954,3 +1954,336 @@
   root.V2L = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })(typeof window !== 'undefined' ? window : (typeof globalThis !== 'undefined' ? globalThis : this));
+
+// ===== v2s:books =====
+/* ============================================================================
+ * «الكتب والأعمال» (تبويب الكتب الأخير): المنطق النقي — لا DOM ولا شبكة. المدخل ردود المصادر كما وصلت (أو null لما المصدر فشل)،
+ * والمخرج صفوف جاهزة للرسم: حالتها وممرّها ونص مبيعاتها وسطر العقل. ⛔ كل رقم من مصدر: المصدر الفاشل «غير متاح بعد» لا صفر.
+ * ⛔ نصوص ظاهرة: فصحى بسيطة بلا مصطلحات تقنية، ولا عنوان يبدأ بـ«ذكاء» أو «AI».
+ * ========================================================================== */
+(function (root) {
+  'use strict';
+  var L = root.V2L;
+  if (!L) return;
+  var Un = L.util, ar = Un.ar, U = Un.U, NA = L.NA;
+  var DAY = 86400e3;
+  var EMAIL = /^[^@\s]{1,120}@[^@\s.]+(?:\.[^@\s.]+)+$/;
+  var COPY_FORMS = ['نسخة واحدة', 'نسختان', 'نسخ', 'نسخة'];
+  var WORK_FORMS = ['عمل واحد', 'عملان', 'أعمال', 'عملًا'];
+  var BOOK_FORMS = ['كتاب واحد', 'كتابان', 'كتب', 'كتابًا'];
+  var TYPE_TEXT = { book: 'كتاب', guide: 'دليل', research: 'بحث', memo: 'مذكرة', thesis: 'رسالة', dissertation: 'أطروحة', law: 'قانون', other: 'عمل' };
+  var STATUS_TEXT = { review: 'في المراجعة', live: 'ظاهر للناس', hidden: 'مخفي', noprice: 'بلا سعر', rejected: 'مرفوض', unknown: 'الحالة: ' + NA };
+  var LANES = ['review', 'noprice', 'hiddenSold', 'live', 'hidden', 'unknown', 'rejected'];
+  var SALES_NA = 'المبيعات: ' + NA;
+  var PLATFORM_FLOOR = 35;
+  var PRICE_ERR = 'اكتب السعر رقمًا، مثل ١٥٠ أو ١٥٠٫٥٠';
+
+  function str(v) { return typeof v === 'string' ? v.trim() : ''; }
+  function ms(v) { var t = Date.parse(v || ''); return isNaN(t) ? null : t; }
+  function num(v) { return typeof v === 'number' && isFinite(v) ? v : null; }
+  function dateOf(t) { return t == null ? '' : Un.dateText(new Date(t).toISOString()); }
+  function items(resp) { return resp && Array.isArray(resp.items) ? resp.items.filter(function (x) { return x && typeof x === 'object'; }) : null; }
+  function mapBy(list, key) { var m = {}; (list || []).forEach(function (x) { var k = str(String(x[key] == null ? '' : x[key])); if (k) m[k] = x; }); return m; }
+  function typeText(t) { return TYPE_TEXT[str(t)] || 'عمل'; }
+  function splitText(o, p) { return 'صاحب العمل ' + ar(o) + '٪ · المنصة ' + ar(p) + '٪'; }
+  function agreementOf(a) {
+    if (!a || typeof a !== 'object') return '';
+    var o = num(a.owner_pct), p = num(a.platform_pct);
+    if (o == null || p == null) return '';
+    var lab = str(a.plan_label);
+    return (lab ? lab + ': ' : '') + splitText(o, p);
+  }
+  function ownerOf(name, email) {
+    email = str(email).toLowerCase();
+    var ok = EMAIL.test(email) ? email : '';
+    var nm = str(name) || ok;
+    return { name: nm, email: ok, na: !nm };
+  }
+  function cmpTitle(a, b) { return a.title.localeCompare(b.title, 'ar'); }
+
+  // ------------------------------------------------------------------ نص المبيعات (حقائق فقط)
+  function marketSales(forSale, sold) {
+    if (sold == null) return SALES_NA;
+    if (forSale) return sold > 0 ? 'بيعت منه ' + U(sold, COPY_FORMS) : 'لم تُبع منه نسخة بعد';
+    if (sold === 0) return 'لم يأخذه أحد بعد';
+    return (sold === 2 ? 'نسختان مجانيتان' : U(sold, COPY_FORMS) + ' مجانية');
+  }
+  function storeSales(item) {
+    var n = item ? num(item.paid_owners) : null;
+    if (n == null) return SALES_NA;
+    return n > 0 ? 'بيعت منه ' + U(n, COPY_FORMS) : 'لم تُبع منه نسخة بعد';
+  }
+  function versionLine(item) {
+    var n = item ? num(item.paid_owners) : null, bv = item && item.by_version;
+    if (!(n > 0) || !bv || typeof bv !== 'object') return '';
+    var rd = num(bv.read), pd = num(bv.pdf);
+    if (rd == null || pd == null || (rd === 0 && pd === 0)) return '';
+    var R = U(rd, COPY_FORMS) + ' للقراءة على المنصة', D = U(pd, COPY_FORMS) + ' للتحميل';
+    if (rd > 0 && pd > 0) return 'منها ' + R + ' و' + D;
+    if (rd > 0) return 'منها ' + R + ' ولا نسخة للتحميل';
+    return 'منها ' + D + ' ولا نسخة للقراءة على المنصة';
+  }
+
+  // ------------------------------------------------------------------ سطر العقل لكل عمل (حقيقة واحدة بأساسها)
+  function v2kBrainLine(row, now) {
+    if (!row) return null;
+    var forSale = row.kind === 'market' && row.forSale;
+    var days = row.createdAt != null && now ? Math.floor((now - row.createdAt) / DAY) : null;
+    if (row.kind === 'market' && row.status === 'review' && forSale && row.hasFile === false) {
+      return { id: 'B1', text: 'لا يوجد ملف مرفق، والمنصة لا تنشر عملًا للبيع بلا ملف.', action: 'reject' };
+    }
+    if (row.kind === 'market' && row.status === 'hidden' && forSale && row.sold > 0) {
+      return { id: 'B5', text: 'مخفي الآن. بيعت منه ' + U(row.sold, COPY_FORMS) + '، ولا يستطيع أصحابها تحميلها ما دام مخفيًا.', action: 'show' };
+    }
+    if (row.kind === 'store' && row.status === 'noprice') return { id: 'B3', text: 'لا سعر لهذا الكتاب بعد، فهو غير معروض للبيع.', action: 'price' };
+    if (row.kind === 'store' && row.status === 'hidden') return { id: 'B4', text: 'له أسعار، لكنه مخفي عن الناس.', action: 'price' };
+    if (row.kind === 'market' && row.status === 'review' && row.createdAt != null && now) {
+      return { id: 'B2', text: 'ينتظر المراجعة ' + L.util.agoText(row.createdAt, now) + '.', action: 'approve' };
+    }
+    if (forSale && (row.status === 'live' || row.status === 'hidden') && row.legacySplit === true && row.platformPct != null && row.platformPct < PLATFORM_FLOOR) {
+      return { id: 'B7', text: 'يُباع بالنسبة القديمة (المنصة ' + ar(row.platformPct) + '٪، أقل من الحد ' + ar(PLATFORM_FLOOR) + '٪) إلى أن يُنقل إلى قائمة الأسعار الموحّدة.', action: null };
+    }
+    if (forSale && row.status === 'live' && row.sold === 0 && days != null && days >= 30) {
+      return { id: 'B6', text: 'لم تُبع منه نسخة منذ أُضيف قبل ' + ar(days) + ' يومًا.', action: null };
+    }
+    return null;
+  }
+
+  // ------------------------------------------------------------------ الصفوف والممرّات
+  function marketRow(k, ctx, now) {
+    var id = str(String(k.id == null ? '' : k.id));
+    var rv = (ctx.pendMap && ctx.pendMap[id]) || (ctx.rejMap && ctx.rejMap[id]) || null;
+    var st = str(k.status);
+    var active = k.is_active === true;
+    var status;
+    if (st) status = st === 'pending_review' ? 'review' : (st === 'rejected' ? 'rejected' : (active ? 'live' : 'hidden'));
+    else if (ctx.pendMap && ctx.pendMap[id]) status = 'review';
+    else if (ctx.rejMap && ctx.rejMap[id]) status = 'rejected';
+    else if (ctx.pendMap && ctx.rejMap) status = active ? 'live' : 'hidden';
+    else status = 'unknown';
+    var forSale = k.rights === 'owned_for_sale';
+    var sold = num(k.total_acquired);
+    var created = ms(k.created_at); if (created == null && rv) created = ms(rv.created_at);
+    var updated = ms(k.updated_at); if (updated == null && rv) updated = ms(rv.updated_at);
+    var hasFile = typeof k.has_file === 'boolean' ? k.has_file : (rv && typeof rv.has_file === 'boolean' ? rv.has_file : null);
+    var note = str(k.review_note) || str(rv && rv.review_note);
+    var legacy = typeof k.legacy_split === 'boolean' ? k.legacy_split : null;
+    var ownerPct = num(k.owner_pct), platPct = num(k.platform_pct);
+    var o = ownerOf(k.owner_name, k.owner_email);
+    var agreement;
+    if (!forSale) agreement = 'مجاني، لا بيع فيه';
+    else if (legacy === true && ownerPct != null && platPct != null) agreement = splitText(ownerPct, platPct) + ' — النسبة القديمة، إلى أن يُنقل إلى قائمة الأسعار الموحّدة';
+    else agreement = NA;
+    var priceAmount = num(k.price_amount);
+    var priceText = forSale ? (priceAmount != null ? Un.moneyText(priceAmount, k.price_currency || 'EGP') : NA) : 'مجاني للجميع';
+    var lane = status === 'hidden' ? (forSale && sold > 0 ? 'hiddenSold' : 'hidden') : status;
+    var row = {
+      key: 'kn:' + id, kind: 'market', id: id, title: str(k.title) || 'عمل بلا عنوان', typeText: typeText(k.type),
+      ownerName: o.name, ownerEmail: o.email, ownerNA: o.na, status: status, statusText: STATUS_TEXT[status], lane: lane,
+      salesText: marketSales(forSale, sold), salesNA: sold == null, salesSub: '', priceText: priceText,
+      createdText: dateOf(created), createdAt: created, updatedAt: updated, waitingSince: status === 'review' ? created : null, hasFile: hasFile, reviewNote: note,
+      agreementText: agreement, legacySplit: legacy, platformPct: platPct, catalogId: null, brain: null, forSale: forSale, sold: sold,
+      isActive: active, bid: k.bid_enabled === true, priceAmount: priceAmount, priceCurrency: str(k.price_currency) || 'EGP', slug: str(k.slug), raw: k
+    };
+    row.brain = v2kBrainLine(row, now);
+    return row;
+  }
+  function storeRow(p, ctx, now) {
+    var it = ctx.storeMap ? ctx.storeMap[p.id] || null : null;
+    var off = ctx.liveOffers[p.id] || null;
+    var src = it || off;
+    var o = ownerOf(it ? (it.owner_name || (off && off.owner_name)) : (off && off.owner_name), it ? (it.owner_email || (off && off.owner_email)) : (off && off.owner_email));
+    var status = !p.hasPrices ? 'noprice' : (p.visible ? 'live' : 'hidden');
+    var agreement = '';
+    if (it && it.source === 'ours') agreement = 'كتاب من البروفيسور';
+    if (!agreement && it) agreement = agreementOf({ plan_label: it.plan_label, owner_pct: it.owner_pct, platform_pct: it.platform_pct });
+    if (!agreement && off) agreement = agreementOf(off.agreement);
+    var sold = it ? num(it.paid_owners) : null;
+    var row = {
+      key: 'st:' + p.id, kind: 'store', id: p.id, title: p.title || 'عمل بلا عنوان', typeText: (src && src.type ? typeText(src.type) : 'كتاب') + ' من المتجر',
+      ownerName: o.name, ownerEmail: o.email, ownerNA: o.na, status: status, statusText: STATUS_TEXT[status], lane: status,
+      salesText: storeSales(it), salesNA: sold == null, salesSub: versionLine(it), priceText: p.mins && p.mins.length ? p.minText : 'لا سعر بعد',
+      createdText: '', createdAt: null, updatedAt: null, waitingSince: null, hasFile: null, reviewNote: '', agreementText: agreement || NA, legacySplit: null, platformPct: null,
+      catalogId: (it && it.catalog_id) || (off && off.catalog_id) || null, brain: null, forSale: true, sold: sold, isActive: !!p.visible, bid: false,
+      priceAmount: null, priceCurrency: '', slug: p.id, raw: p
+    };
+    row.brain = v2kBrainLine(row, now);
+    return row;
+  }
+  function offerRow(o) {
+    var ow = ownerOf(o.owner_name, o.owner_email);
+    var sp = o.suggested_price, amount = sp && num(sp.amount) > 0 ? num(sp.amount) : null;
+    var at = ms(o.reviewed_at) || ms(o.decided_at) || ms(o.updated_at) || ms(o.submitted_at);
+    var sub = ms(o.submitted_at);
+    return {
+      key: 'of:' + str(String(o.id)), kind: 'offer', id: str(String(o.id)), title: str(o.title) || 'عمل بلا عنوان', typeText: typeText(o.type),
+      ownerName: ow.name, ownerEmail: ow.email, ownerNA: ow.na, status: 'rejected', statusText: STATUS_TEXT.rejected, lane: 'rejected',
+      salesText: '', salesNA: false, salesSub: '', priceText: amount != null ? Un.moneyText(amount, sp.currency) : 'لم يقترح سعرًا',
+      createdText: dateOf(sub), createdAt: sub, updatedAt: at, waitingSince: null, hasFile: null, reviewNote: str(o.review_note), agreementText: agreementOf(o.agreement) || NA,
+      legacySplit: null, platformPct: null, catalogId: null, brain: null, forSale: false, sold: null, isActive: false, bid: false, priceAmount: amount, priceCurrency: sp ? str(sp.currency) : '',
+      slug: '', raw: o
+    };
+  }
+  function soldDesc(a, b) {
+    var x = a.sold == null ? -1 : a.sold, y = b.sold == null ? -1 : b.sold;
+    return y - x || cmpTitle(a, b);
+  }
+  var SORTS = {
+    review: function (a, b) {
+      var x = a.waitingSince == null ? Infinity : a.waitingSince, y = b.waitingSince == null ? Infinity : b.waitingSince;
+      if (x !== y) return x < y ? -1 : 1;
+      return cmpTitle(a, b);
+    },
+    noprice: cmpTitle, hiddenSold: soldDesc, live: soldDesc, hidden: cmpTitle, unknown: cmpTitle,
+    rejected: function (a, b) { return (b.updatedAt || 0) - (a.updatedAt || 0) || cmpTitle(a, b); }
+  };
+
+  function v2kWorks(src, now) {
+    src = src || {};
+    var kn = items(src.knowledge), pend = items(src.revPending), rej = items(src.revRejected);
+    var pricesClosed = src.prices === 'closed', priceRes = pricesClosed ? null : L.v2Prices(src.prices);
+    var offersClosed = src.offers === 'closed';
+    var offList = !offersClosed && src.offers && Array.isArray(src.offers.offers) ? src.offers.offers.filter(function (o) { return o && o.id; }) : null;
+    var storeClosed = src.store === 'closed', storeList = storeClosed ? null : items(src.store);
+    if (!kn && !priceRes && !offList) return null;
+
+    var ctx = { pendMap: pend ? mapBy(pend, 'id') : null, rejMap: rej ? mapBy(rej, 'id') : null,
+                storeMap: storeList ? mapBy(storeList, 'slug') : null, liveOffers: {} };
+    (offList || []).forEach(function (o) { if (o.status === 'live' && str(o.catalog_slug)) ctx.liveOffers[str(o.catalog_slug)] = o; });
+
+    var rows = [], byKey = {};
+    function add(r) { if (!byKey[r.key]) { byKey[r.key] = r; rows.push(r); } }
+    var base = (kn || []).slice(), have = mapBy(base, 'id');
+    // أعمال في قوائم المراجعة ولم تصل في قائمة السوق: تبقى ظاهرة (لا يضيع عمل ينتظر قرارًا)
+    [pend, rej].forEach(function (lst) { (lst || []).forEach(function (r) { var id = str(String(r.id == null ? '' : r.id)); if (id && !have[id]) { have[id] = r; base.push(r); } }); });
+    base.forEach(function (k) { if (str(String(k.id == null ? '' : k.id))) add(marketRow(k, ctx, now)); });
+    (priceRes ? priceRes.rows : []).forEach(function (p) { add(storeRow(p, ctx, now)); });
+    (offList || []).filter(function (o) { return o.status === 'rejected'; }).forEach(function (o) { add(offerRow(o)); });
+
+    var lanes = {}, counts = {};
+    LANES.forEach(function (l) {
+      lanes[l] = rows.filter(function (r) { return r.lane === l; }).sort(SORTS[l]).map(function (r) { return r.key; });
+      counts[l] = lanes[l].length;
+    });
+    var needsRev = !!(kn && kn.some(function (k) { return !str(k.status); }));
+    var revFail = needsRev && (!pend || !rej);
+    var failedK = !kn;
+    var storeFail = !pricesClosed && !priceRes;
+    var partial = {
+      review: failedK || (needsRev && !pend) || (!kn && !pend),
+      noprice: storeFail, hiddenSold: failedK || revFail, live: failedK || revFail || storeFail, hidden: failedK || revFail || storeFail,
+      unknown: false, rejected: failedK || (needsRev && !rej) || (!offersClosed && !offList)
+    };
+    var failed = [];
+    if (failedK) failed.push('أعمال السوق');
+    if (revFail) failed.push('حالة المراجعة');
+    if (storeFail) failed.push('كتب المتجر');
+    if (!offersClosed && !offList) failed.push('عروض الكتب');
+    if (!storeClosed && !storeList && priceRes) failed.push('بيانات المتجر');
+    var waiting = offList ? offList.filter(function (o) { return o.status === 'in_review'; }).length : null;
+    return { rows: rows, lanes: lanes, counts: counts, partial: partial, offersWaiting: waiting, storeClosed: pricesClosed, failed: failed };
+  }
+
+  // ------------------------------------------------------------------ البحث
+  function v2kKey(text) {
+    return String(text == null ? '' : text).toLowerCase()
+      .replace(/[ً-ٰٟـ]/g, '')
+      .replace(/[أإآٱ]/g, 'ا').replace(/ة/g, 'ه').replace(/ى/g, 'ي')
+      .replace(/[٠-٩]/g, function (d) { return String(d.charCodeAt(0) - 0x660); })
+      .replace(/[۰-۹]/g, function (d) { return String(d.charCodeAt(0) - 0x6F0); })
+      .replace(/\s+/g, ' ').trim();
+  }
+  function v2kSearch(res, q) {
+    if (!res) return {};
+    var k = v2kKey(q);
+    if (!k) return res.lanes;
+    var by = {}; res.rows.forEach(function (r) { by[r.key] = r; });
+    var out = {};
+    LANES.forEach(function (l) {
+      var hit = (res.lanes[l] || []).filter(function (key) { var r = by[key]; return r && v2kKey(r.title + ' ' + r.ownerName).indexOf(k) > -1; });
+      if (hit.length) out[l] = hit;
+    });
+    return out;
+  }
+
+  // ------------------------------------------------------------------ ملخّص العقل
+  function v2kBrainSummary(res) {
+    if (!res) return null;
+    var c = res.counts, p = res.partial, parts = [];
+    if (c.review > 0) parts.push('في انتظار مراجعتك: ' + U(c.review, WORK_FORMS) + ' من السوق');
+    if (c.noprice > 0) parts.push('بلا سعر: ' + U(c.noprice, BOOK_FORMS));
+    if (c.hiddenSold > 0) parts.push('مخفي وبيعت منه نسخ: ' + U(c.hiddenSold, WORK_FORMS));
+    var some = p.review || p.noprice || p.hiddenSold;
+    var tail = ' — وبعض المصادر لم تصل، فقد يكون العدد أكبر';
+    var lane = c.review > 0 ? 'review' : (c.noprice > 0 ? 'noprice' : (c.hiddenSold > 0 ? 'hiddenSold' : null));
+    var label = { review: 'ابدأ المراجعة', noprice: 'اعرض الكتب بلا سعر', hiddenSold: 'اعرض المخفي المبيع' };
+    if (!parts.length) return { text: some ? 'لا شيء ظاهرًا ينتظرك الآن' + tail : 'لا شيء ينتظرك في الكتب والأعمال الآن.', action: null };
+    return { text: parts.join(' · ') + (some ? tail : ''), action: { label: label[lane], lane: lane } };
+  }
+  // ما تقرؤه الأقسام الأخرى بلا جلب: أعداد أو null لما لا يُعرف
+  function v2kSummary(res) {
+    if (!res) return { review: null, noprice: null, hiddenSold: null, legacySplit: null, offersWaiting: null, partial: true };
+    var sale = res.rows.filter(function (r) { return r.kind === 'market' && r.forSale && (r.status === 'live' || r.status === 'hidden'); });
+    var unknownSplit = sale.some(function (r) { return r.legacySplit === null; });
+    var any = res.partial.review || res.partial.noprice || res.partial.hiddenSold;
+    return { review: res.partial.review ? null : res.counts.review, noprice: res.partial.noprice ? null : res.counts.noprice, hiddenSold: res.partial.hiddenSold ? null : res.counts.hiddenSold,
+             legacySplit: unknownSplit ? null : sale.filter(function (r) { return r.legacySplit === true; }).length, offersWaiting: res.offersWaiting, partial: !!any };
+  }
+
+  // ------------------------------------------------------------------ تعديل عمل من السوق (قبل ⇒ بعد)
+  function bidText(b) { return b ? 'مفعّل' : 'غير مفعّل'; }
+  function v2kEditDiff(row, input) {
+    input = input || {};
+    var title = str(input.title);
+    if (!title) return { ok: false, error: 'اكتب عنوان العمل', changed: false, lines: [], body: {} };
+    var lines = [], body = {};
+    if (title !== row.title) { lines.push({ label: 'العنوان', from: row.title, to: title }); body.title = title; }
+    if (row.forSale) {
+      var n = Un.parseAmount(input.priceText);
+      if (n === null || isNaN(n)) return { ok: false, error: PRICE_ERR, changed: false, lines: [], body: {} };
+      if (!(n > 0)) return { ok: false, error: 'اكتب سعرًا أكبر من صفر', changed: false, lines: [], body: {} };
+      if (row.priceAmount == null || Math.abs(n - row.priceAmount) > 1e-9) {
+        lines.push({ label: 'السعر', from: row.priceAmount == null ? NA : Un.moneyText(row.priceAmount, row.priceCurrency), to: Un.moneyText(n, row.priceCurrency) });
+        body.price_egp = n;
+      }
+      var bid = !!input.bid;
+      if (bid !== !!row.bid) { lines.push({ label: '«اعرض سعرك»', from: bidText(row.bid), to: bidText(bid) }); body.bid_enabled = bid; }
+    }
+    return { ok: true, error: '', changed: lines.length > 0, lines: lines, body: body };
+  }
+
+  // ------------------------------------------------------------------ إضافة كتاب
+  function v2kAddBook(input) {
+    input = input || {};
+    var title = str(input.title), file = str(input.fileUrl), cover = str(input.coverUrl);
+    function bad(e) { return { ok: false, error: e, body: null }; }
+    if (!title) return bad('اكتب عنوان الكتاب');
+    if (!/^https:\/\/\S+$/i.test(file)) return bad('الصق رابطًا يبدأ بـ \u2066https://\u2069');
+    if (cover && !/^https:\/\/\S+$/i.test(cover)) return bad('رابط الصورة يجب أن يبدأ بـ \u2066https://\u2069');
+    var price = Un.parseAmount(input.priceText);
+    if (price !== null && isNaN(price)) return bad(PRICE_ERR);
+    var cur = str(input.currency).toUpperCase() === 'USD' ? 'USD' : 'EGP';
+    return { ok: true, error: '', body: { title: title.slice(0, 300), author: str(input.author).slice(0, 200), description: str(input.description).slice(0, 2000),
+                                          price: price || 0, currency: cur, file_url: file, cover_url: cover, is_active: input.active !== false } };
+  }
+
+  // ------------------------------------------------------------------ مجلد Google Drive
+  function v2kFolderId(text) {
+    var t = str(text);
+    if (!t) return '';
+    var m = t.match(/\/folders\/([A-Za-z0-9_-]{10,})/) || t.match(/[?&]id=([A-Za-z0-9_-]{10,})/);
+    if (m) return m[1];
+    return /^[A-Za-z0-9_-]{10,}$/.test(t) ? t : '';
+  }
+
+  // ------------------------------------------------------------------ تحذير الإخفاء
+  function v2kHideWarning(row) {
+    if (!row || row.kind !== 'market' || !row.forSale || !(row.sold > 0)) return '';
+    return 'بيعت منه ' + U(row.sold, COPY_FORMS) + '، ومن اشتراه لا يستطيع تحميله ما دام مخفيًا.';
+  }
+
+  L.v2kLanes = LANES;
+  L.v2kWorks = v2kWorks; L.v2kSearch = v2kSearch; L.v2kKey = v2kKey; L.v2kBrainLine = v2kBrainLine; L.v2kBrainSummary = v2kBrainSummary;
+  L.v2kSummary = v2kSummary; L.v2kEditDiff = v2kEditDiff; L.v2kAddBook = v2kAddBook; L.v2kFolderId = v2kFolderId; L.v2kHideWarning = v2kHideWarning;
+})(typeof window !== 'undefined' ? window : globalThis);
+// ===== /v2s:books =====
