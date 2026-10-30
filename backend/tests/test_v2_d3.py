@@ -381,3 +381,490 @@ def test_no_proxy_moves_money_or_calls_a_provider(ctx, plat):
     paths = {c['path'] for c in plat.seen}
     assert all(p.startswith('/api/bridge/') for p in paths), paths
     assert not [p for p in paths if re.search(r'settle|reject-payout|refund/(settle|execute)|stripe|paymob|telegram|email', p)], paths
+
+
+# ---------------------------------------------------------------- ٢) المنطق النقي (node)
+
+NOW = 1793361600000          # 2026-10-30T12:00:00Z (الجمعة)
+H = 3600e3
+
+
+def _iso(hours_ago):
+    return datetime.datetime.fromtimestamp((NOW - hours_ago * H) / 1000.0, datetime.timezone.utc).isoformat()
+
+
+def L(fn, *args):
+    return v2_node.logic(fn, *args)
+
+
+REV = [
+    {'date': '2026-10-30', 'source': 'consultation', 'amount_egp': 500, 'amount_usd': 0},
+    {'date': '2026-10-30', 'source': 'consultation', 'amount_egp': 500.5, 'amount_usd': 0},
+    {'date': '2026-10-30', 'source': 'course', 'amount_egp': 0, 'amount_usd': 30},
+    {'date': '2026-10-30', 'source': 'course', 'amount_egp': None, 'amount_usd': 0, 'needs_fx': True, 'currency': 'SAR', 'amount_original': 150},
+    {'date': '2026-10-29', 'source': 'book', 'amount_egp': 100, 'amount_usd': 0},
+    {'date': '2026-10-12', 'source': 'knowledge', 'amount_egp': 200, 'amount_usd': 0},
+    {'date': '2026-09-20', 'source': 'sale', 'amount_egp': 900, 'amount_usd': 0},
+    {'date': '2026-01-05', 'source': 'subscription', 'amount_egp': 70, 'amount_usd': 0},
+]
+
+
+def _amt(totals, cur):
+    return next((t['amount'] for t in totals if t['currency'] == cur), None)
+
+
+@needs_node
+def test_periods_are_day_month_year_in_device_time():
+    d, m, y = (L('v2Period', k, NOW) for k in ('day', 'month', 'year'))
+    assert (d['from'], d['until'], d['label']) == ('2026-10-30', '2026-10-31', 'اليوم')
+    assert (m['from'], m['until'], m['label']) == ('2026-10-01', '2026-11-01', 'الشهر')
+    assert (y['from'], y['until'], y['label']) == ('2026-01-01', '2027-01-01', 'السنة')
+    assert L('v2Period', 'nonsense', NOW)['key'] == 'month'
+    assert [p['label'] for p in L('PERIODS')] == ['اليوم', 'الشهر', 'السنة']
+
+
+@needs_node
+def test_income_sums_each_currency_alone_and_never_converts_into_egp():
+    day = L('v2Income', REV, 'day', NOW)
+    assert _amt(day['totals'], 'EGP') == 1000.5, 'الجنيه من amount_egp فقط'
+    assert _amt(day['totals'], 'USD') == 30 and _amt(day['totals'], 'SAR') == 150, 'الدولار والريال منفصلان'
+    assert [t['currency'] for t in day['totals']] == ['EGP', 'SAR', 'USD'] and day['count'] == 4
+    month = L('v2Income', REV, 'month', NOW)
+    assert _amt(month['totals'], 'EGP') == 1300.5 and month['count'] == 6
+    year = L('v2Income', REV, 'year', NOW)
+    assert _amt(year['totals'], 'EGP') == 2270.5 and _amt(year['totals'], 'USD') == 30
+    # الدولار ما بيدخلش في رقم الجنيه حتى لو الصف نفسه فيه الاتنين
+    both = L('v2Income', [{'date': '2026-10-30', 'source': 'course', 'amount_egp': 100, 'amount_usd': 5}], 'day', NOW)
+    assert _amt(both['totals'], 'EGP') == 100 and _amt(both['totals'], 'USD') == 5
+    # total_egp (التحويل بسعر صرف) مش بتتقرأ أبدًا
+    conv = L('v2Income', [{'date': '2026-10-30', 'source': 'course', 'amount_egp': 0, 'amount_usd': 0, 'total_egp': 9999}], 'day', NOW)
+    assert conv['totals'] == [] and conv['count'] == 0
+
+
+@needs_node
+def test_income_by_service_follows_the_source_kind():
+    svc = L('v2Income', REV, 'year', NOW)['services']
+    assert _amt(svc['experts'], 'EGP') == 1000.5
+    assert _amt(svc['courses'], 'USD') == 30 and _amt(svc['courses'], 'SAR') == 150
+    assert _amt(svc['books'], 'EGP') == 300
+    assert _amt(svc['other'], 'EGP') == 970 and [s['label'] for s in L('SERVICES')] == ['ملفات الخبراء', 'الدورات', 'الكتب', 'أخرى']
+
+
+@needs_node
+def test_a_failed_source_is_null_never_zero():
+    assert L('v2Income', None, 'month', NOW) is None
+    assert L('v2Held', None) is None and L('v2Owed', None) is None
+    assert L('v2Stuck', None, NOW) is None and L('v2Stuck', {'items': 'x'}, NOW) is None
+    assert L('v2Prices', None) is None and L('v2SharesView', None) is None and L('v2MinPayout', None, NOW) is None
+    assert L('v2AdsLedger', None, NOW) is None and L('v2OffersQueue', None, None, NOW) is None and L('v2Requests', None, NOW) is None
+    assert L('v2PayoutRows', None, NOW) is None and L('v2PayoutHistory', None, None, NOW) is None
+    assert L('v2IncomeBars', None, None, 'month') is None
+    # الصفر الحقيقي (المصدر وصل وقال لا شيء) شيء تاني: «٠ جنيه» مش «غير متاح»
+    empty = L('v2MoneyBoard', {'revenues': [], 'escrow': [], 'payouts': []}, 'month', NOW)
+    nums = {n['key']: n for n in empty['numbers']}
+    assert nums['income']['na'] is False and nums['income']['text'] == '٠ جنيه'
+    assert nums['held']['na'] is False and nums['owed']['na'] is False
+
+
+@needs_node
+def test_the_four_numbers_with_a_plain_line_each_and_the_net_is_not_available():
+    escrow = [{'amount': 600, 'currency': 'EGP', 'status': 'held'}, {'amount': 1000.25, 'currency': 'EGP', 'status': 'confirm'},
+              {'amount': 200, 'currency': 'USD', 'status': 'dispute'}, {'amount': 77, 'currency': 'EGP', 'status': 'released'}]
+    payouts = [{'pid': 'p1', 'status': 'pending', 'raw': {'amount': 600.5, 'currency': 'EGP'}},
+               {'pid': 'p2', 'status': 'pending', 'raw': {'amount': 3500.5, 'currency': 'SAR'}, 'fx_alert': True}]
+    b = L('v2MoneyBoard', {'revenues': REV, 'escrow': escrow, 'payouts': payouts}, 'month', NOW)
+    n = {x['key']: x for x in b['numbers']}
+    assert [x['key'] for x in b['numbers']] == ['income', 'held', 'owed', 'net']
+    assert [x['label'] for x in b['numbers']] == ['دخل', 'محجوز حتى يُسلَّم العمل', 'مستحق للخبراء والمدرّبين', 'صافي البروفيسور']
+    assert n['income']['text'] == '١٬٣٠٠٫٥ جنيه' and 'بعملة أخرى' in n['income']['others'] and '٣٠ دولار' in n['income']['others']
+    assert n['held']['text'] == '١٬٦٠٠٫٢٥ جنيه' and '٢٠٠ دولار' in n['held']['others'] and n['held']['count'] == 3, 'المحرَّر لا يُحسب'
+    assert n['owed']['text'] == '٦٠٠٫٥ جنيه' and '٣٬٥٠٠٫٥ ريال' in n['owed']['others'], 'الكسور محفوظة والريال لا يدخل الجنيه'
+    assert n['net']['na'] is True and n['net']['text'] == 'غير متاح بعد' and n['net']['why']
+    for x in b['numbers']:
+        assert x['note'] and re.search(r'[؀-ۿ]', x['note'])
+    # فشل مصدر واحد ⇒ رقمه بس «غير متاح بعد» والباقي سليم
+    b2 = L('v2MoneyBoard', {'revenues': REV, 'escrow': None, 'payouts': payouts}, 'day', NOW)
+    n2 = {x['key']: x for x in b2['numbers']}
+    assert n2['held']['na'] is True and n2['held']['text'] == 'غير متاح بعد' and n2['income']['na'] is False and n2['owed']['na'] is False
+
+
+@needs_node
+def test_money_text_formats_each_currency_in_arabic_digits():
+    cases = [((1200, 'EGP'), '١٬٢٠٠ جنيه'), ((600.5, 'EGP'), '٦٠٠٫٥ جنيه'), ((0.25, 'EGP'), '٠٫٢٥ جنيه'), ((30, 'USD'), '٣٠ دولار'),
+             ((3500.5, 'SAR'), '٣٬٥٠٠٫٥ ريال'), ((99, 'AED'), '٩٩ درهم'), ((12, 'KWD'), '١٢ دينار'), ((5, 'XYZ'), '٥ XYZ'), ((1234567, 'EGP'), '١٬٢٣٤٬٥٦٧ جنيه')]
+    got = [L('util.moneyText', a, c) for (a, c), _ in cases]
+    assert got == [w for _, w in cases]
+    line = L('v2MoneyLine', [{'currency': 'EGP', 'amount': 1000}, {'currency': 'USD', 'amount': 30}, {'currency': 'SAR', 'amount': 100}])
+    assert line['main'] == '١٬٠٠٠ جنيه' and line['othersText'] == 'بعملة أخرى: ٣٠ دولار · ١٠٠ ريال'
+    only_foreign = L('v2MoneyLine', [{'currency': 'USD', 'amount': 30}])
+    assert only_foreign['main'] == '٠ جنيه' and only_foreign['othersText'] == 'بعملة أخرى: ٣٠ دولار'
+    assert L('util.curLong', 'SAR') == 'ريال سعودي' and L('util.curLong', 'QAR') == 'ريال قطري' and L('util.curLong', 'KWD') == 'دينار كويتي'
+
+
+@needs_node
+def test_income_bars_use_the_payments_split_for_the_month_and_the_ledger_otherwise():
+    inc = L('v2Income', REV, 'month', NOW)
+    led = L('v2IncomeBars', inc, None, 'month')
+    assert led['source'] == 'ledger' and [r['label'] for r in led['rows']] == ['ملفات الخبراء', 'الدورات', 'الكتب', 'أخرى']
+    assert led['rows'][0]['amount'] == 1000.5 and led['rows'][0]['width'] == 100 and 'الاستشارات العادية' in led['note']
+    assert {f['currency'] for f in led['foreign']} == {'USD', 'SAR'}, 'العملات الأجنبية خارج الأعمدة'
+    bridge = {'services': [{'key': 'expert_files', 'totals': [{'currency': 'EGP', 'amount': 9300}]}, {'key': 'courses', 'totals': [{'currency': 'EGP', 'amount': 2700}, {'currency': 'SAR', 'amount': 300}]},
+                           {'key': 'books', 'totals': [{'currency': 'EGP', 'amount': 1100}]}, {'key': 'other', 'totals': []}]}
+    br = L('v2IncomeBars', inc, bridge, 'month')
+    assert br['source'] == 'payments' and br['rows'][0]['amount'] == 9300 and br['rows'][3]['amount'] == 0 and br['foreign'] == [{'currency': 'SAR', 'amount': 300}]
+    assert L('v2IncomeBars', inc, bridge, 'year')['source'] == 'ledger', 'اليوم والسنة من الدفتر (الجسر شهري)'
+    assert L('v2IncomeBars', None, bridge, 'month')['source'] == 'payments', 'الجسر يكفي لو الدفتر وقع'
+    assert L('v2IncomeBars', None, None, 'month') is None
+
+
+def _payout(pid, name, amount, cur='EGP', hours=9, status='pending'):
+    return {'kind': 'payout', 'who': name, 'email': pid + '@example.test', 'amount': round(amount), 'currency': cur, 'dest': 'إنستاباي', 'status': status,
+            'fx_alert': cur != 'EGP', 'pid': pid, 'raw': {'id': pid, 'amount': amount, 'currency': cur, 'method': 'إنستاباي', 'user_email': pid + '@example.test',
+                                                         'created_at': _iso(hours), 'status': status}}
+
+
+@needs_node
+def test_payout_rows_are_oldest_first_with_exact_amounts_and_a_since_timer():
+    rows = L('v2PayoutRows', [_payout('po-a', 'منى', 600.5, hours=3), _payout('po-b', 'فيصل', 3500.5, 'SAR', hours=30), _payout('po-c', 'نور', 100, status='paid')], NOW)
+    assert [r['id'] for r in rows] == ['po-b', 'po-a'], 'المسدَّد خارج، والأقدم أولًا'
+    b, a = rows
+    assert b['amountText'] == '٣٬٥٠٠٫٥ ريال' and b['fx'] is True and b['since'] == 'منذ ٣٠ س' and b['what'] == 'سحب من المحفظة'
+    assert a['amountText'] == '٦٠٠٫٥ جنيه', 'المبلغ بالكسور مش مقرَّب'
+    assert a['card']['primary']['act'] == {'do': 'payout_settle', 'id': 'po-a'} and a['card']['secondary']['act']['do'] == 'payout_reject'
+    assert a['card']['primary']['money']['amount'] == 600.5 and a['email'] == 'po-a@example.test'
+    assert L('v2PayoutRows', [], NOW) == []
+
+
+@needs_node
+def test_payout_history_is_this_month_only_and_a_failed_half_is_named():
+    paid = [{'id': 'p1', 'user_name': 'هالة', 'user_email': 'h@x.test', 'amount': 950.5, 'currency': 'EGP', 'status': 'paid', 'settled_at': _iso(30), 'reference': 'IP-1'},
+            {'id': 'p2', 'user_name': 'قديم', 'user_email': 'o@x.test', 'amount': 5, 'currency': 'EGP', 'status': 'paid', 'settled_at': _iso(24 * 40)}]
+    rej = [{'id': 'p3', 'user_name': 'سامي', 'user_email': 's@x.test', 'amount': 100, 'currency': 'EGP', 'status': 'rejected', 'rejected_at': _iso(5)}]
+    h = L('v2PayoutHistory', paid, rej, NOW)
+    assert [r['id'] for r in h['rows']] == ['p3', 'p1'] and h['rows'][0]['statusText'] == 'رُفض' and h['rows'][1]['statusText'] == 'حُوِّل' and h['rows'][1]['ref'] == 'IP-1'
+    assert h['rows'][1]['amountText'] == '٩٥٠٫٥ جنيه' and h['failed'] == []
+    half = L('v2PayoutHistory', paid, None, NOW)
+    assert [r['id'] for r in half['rows']] == ['p1'] and half['failed'] == ['التحويلات المرفوضة']
+    assert L('v2PayoutHistory', None, None, NOW) is None
+
+
+@needs_node
+def test_books_are_never_refundable_and_say_why():
+    assert L('v2RefundRule', 'book') == {'refundable': False, 'text': 'الكتب لا تُسترد'}
+    assert L('v2RefundRule', 'knowledge')['refundable'] is False and L('v2RefundRule', 'BOOK')['refundable'] is False
+    for k in ('course', 'consultation', 'plan', '', None):
+        assert L('v2RefundRule', k) == {'refundable': True, 'text': ''}
+    stuck = L('v2Stuck', {'items': [{'order_id': 'a', 'kind': 'book', 'amount': 149, 'currency': 'EGP', 'age_hours': 5, 'buyer_email': 'o@x.test', 'buyer_name': 'عمر', 'provider': 'paymob'},
+                                    {'order_id': 'b', 'kind': 'course', 'amount': 750, 'currency': 'EGP', 'age_hours': 26, 'buyer_email': 'n@x.test', 'buyer_name': '', 'provider': 'stripe'}]}, NOW)
+    byid = {r['id']: r for r in stuck['rows']}
+    assert byid['a']['refundable'] is False and byid['a']['noRefundText'] == 'الكتب لا تُسترد' and byid['b']['refundable'] is True
+    assert [r['id'] for r in stuck['rows']] == ['b', 'a'], 'الأقدم أولًا'
+    assert byid['b']['name'] == 'n@x.test' and byid['b']['person'] == {'email': 'n@x.test', 'name': 'n@x.test'}, 'بلا اسم ⇒ البريد، لا اسم مخترع'
+    assert byid['a']['kindText'] == 'كتاب' and byid['b']['kindText'] == 'دورة' and byid['b']['provider'] == 'بطاقة بنكية' and byid['b']['ageText'] == 'منذ ٢٦ ساعة'
+    assert byid['a']['amountText'] == '١٤٩ جنيه' and stuck['partial'] is False
+    # لا زرّ استرداد في أي صف عالق (قراءة فقط): مفيش act ولا button
+    assert all('act' not in r and 'button' not in r for r in stuck['rows'])
+
+
+@needs_node
+def test_refund_rows_come_from_both_sources_and_fail_separately():
+    bridge = {'refunds': [{'consultation_id': 'c1', 'member_email': 'salma@x.test', 'amount': 450, 'currency': 'EGP', 'cancelled_at': _iso(52), 'full_refund': True, 'cancelled_by': 'member'},
+                          {'consultation_id': 'c2', 'member_email': 'y@x.test', 'amount': 300, 'currency': 'EGP', 'cancelled_at': _iso(8), 'full_refund': False, 'cancelled_by': 'expert'}]}
+    disp = [{'id': 'x|unactivated|1|', 'title': 'عقد إيجار', 'amount': '٥٠٠ جنيه', 'client': 'ليلى', 'text': 'مفتوح منذ ٣ س', 'sortAt': NOW - 3 * H, 'reason': 'دُفع المبلغ ولم يصل الملف',
+             'row': {'ef': {'kind': 'contract'}}}]
+    r = L('v2Refunds', bridge, disp, NOW)
+    assert [x['id'] for x in r['rows']] == ['m|c1', 'm|c2', 'd|x|unactivated|1|'] and r['failed'] == []
+    full, late, unact = r['rows']
+    assert full['brain'].startswith('أُلغي الحجز بالكامل') and 'صاحب الحجز' in full['brain'] and full['act'] == {'do': 'escrow'} and full['button'] == 'افتح وقرّر'
+    assert late['brain'].startswith('إلغاء متأخر') and 'الخبير' in late['brain']
+    assert unact['act'] == {'do': 'row', 'id': 'x|unactivated|1|'} and unact['amountText'] == '٥٠٠ جنيه' and unact['brain'].startswith('دُفع المبلغ')
+    half = L('v2Refunds', None, disp, NOW)
+    assert half['failed'] == ['الاستردادات اليدوية'] and len(half['rows']) == 1
+    both = L('v2Refunds', None, None, NOW)
+    assert both['rows'] == [] and both['failed'] == ['الاستردادات اليدوية', 'الدفعات بلا ملف']
+
+
+PRICES_LIST = {'ok': True, 'kind': 'book', 'countries': ['eg', 'sa', 'ae', 'kw', 'qa', 'default'], 'currencies': d3fx.CURRENCIES, 'count': 2, 'items': [
+    {'id': 'b1', 'title': 'دليل المستأجر', 'visible': True, 'has_prices': True, 'min_price': {'eg': {'amount': 150, 'currency': 'EGP'}, 'default': {'amount': 9, 'currency': 'USD'}}, 'updated_at': _iso(5)},
+    {'id': 'b2', 'title': 'دليل الميراث', 'visible': False, 'has_prices': False, 'min_price': {}, 'updated_at': None}]}
+PRICE_DETAIL = {'ok': True, 'countries': PRICES_LIST['countries'], 'currencies': d3fx.CURRENCIES, 'versions_allowed': ['read', 'pdf'],
+                'prices': {'kind': 'book', 'id': 'b1', 'title': 'دليل المستأجر', 'visible': True, 'rev': 4, 'updated_by': 'f@x.test', 'updated_at': _iso(5), 'history': [],
+                           'versions': {'read': {'eg': {'amount': 150.0, 'currency': 'EGP'}, 'default': {'amount': 9.0, 'currency': 'USD'}}, 'pdf': {'eg': {'amount': 220.0, 'currency': 'EGP'}}}}}
+
+
+@needs_node
+def test_price_rows_show_the_lowest_price_per_country_and_visibility():
+    p = L('v2Prices', PRICES_LIST)
+    a, b = p['rows']
+    assert a['visible'] is True and a['minText'] == 'مصر: ١٥٠ جنيه · باقي البلاد: ٩ دولار' and a['hasPrices'] is True
+    assert b['visible'] is False and b['minText'] == 'لا أسعار بعد' and b['hasPrices'] is False
+
+
+@needs_node
+def test_price_form_has_versions_by_countries_with_each_currency_next_to_the_box():
+    f = L('v2PriceForm', PRICE_DETAIL)
+    assert f['rev'] == 4 and f['visible'] is True and [v['key'] for v in f['versions']] == ['read', 'pdf']
+    assert [c['key'] for c in f['countries']] == ['eg', 'sa', 'ae', 'kw', 'qa', 'default']
+    cur = {c['key']: (c['currency'], c['currencyName']) for c in f['countries']}
+    assert cur['eg'] == ('EGP', 'جنيه مصري') and cur['sa'] == ('SAR', 'ريال سعودي') and cur['qa'] == ('QAR', 'ريال قطري') and cur['default'] == ('USD', 'دولار أمريكي')
+    assert f['versions'][0]['cells'] == {'eg': '150', 'sa': '', 'ae': '', 'kw': '', 'qa': '', 'default': '9'} and f['versions'][1]['cells']['eg'] == '220'
+
+
+@needs_node
+def test_price_diff_shows_exactly_what_changes_before_to_after():
+    f = L('v2PriceForm', PRICE_DETAIL)
+    cells = copy.deepcopy({v['key']: v['cells'] for v in f['versions']})
+    cells['read']['eg'] = '٢٥٠'            # أرقام عربية مقبولة
+    cells['read']['sa'] = '40.5'
+    cells['pdf']['eg'] = ''
+    built = L('v2PriceBuild', f, {'visible': False, 'cells': cells})
+    assert built['ok'] is True and built['visible'] is False
+    assert built['versions']['read']['eg'] == {'amount': 250, 'currency': 'EGP'} and built['versions']['read']['sa'] == {'amount': 40.5, 'currency': 'SAR'}
+    assert built['versions']['pdf'] == {}, 'خانة فاضية = لا سعر'
+    d = L('v2PriceDiff', f, built)
+    got = {x['label']: (x['from'], x['to']) for x in d['lines']}
+    assert got == {'القراءة على المنصة · مصر': ('١٥٠ جنيه', '٢٥٠ جنيه'), 'القراءة على المنصة · السعودية': ('لا سعر', '٤٠٫٥ ريال'),
+                   'نسخة PDF · مصر': ('٢٢٠ جنيه', 'لا سعر'), 'ظاهر للناس': ('نعم', 'لا')}, got
+    assert d['changed'] is True
+    # بلا تغيير ⇒ بلا سطور
+    same = L('v2PriceBuild', f, {'visible': True, 'cells': {v['key']: v['cells'] for v in f['versions']}})
+    assert L('v2PriceDiff', f, same) == {'lines': [], 'changed': False}
+    # رقم غلط ⇒ رسالة بالبلد والنسخة، ولا إرسال
+    bad = L('v2PriceBuild', f, {'visible': True, 'cells': {'read': {'eg': 'abc'}, 'pdf': {}}})
+    assert bad['ok'] is False and 'مصر' in bad['error'] and 'لازم يكون رقمًا' in bad['error']
+    assert L('v2PriceBuild', f, {'visible': True, 'cells': {'read': {'eg': '-5'}}})['ok'] is False
+    assert L('util.parseAmount', '١٬٢٥٠٫٥٠') == 1250.5 and L('util.parseAmount', '') is None and L('util.parseAmount', '1e3') != 1000
+
+
+SHARES = {'ok': True, 'shares': d3fx.DEFAULT_SHARES, 'version': 3, 'history': [
+    {'setting': 'shares', 'by': 'f@x.test', 'at': _iso(30), 'version_before': 2, 'version_after': 3, 'changes': {},
+     'before': {'books': {'normal': {'owner': 55, 'platform': 45}, 'ads': {'owner': 65, 'platform': 35}}}, 'after': {'books': {'normal': {'owner': 60, 'platform': 40}, 'ads': {'owner': 65, 'platform': 35}}}}]}
+
+
+@needs_node
+def test_shares_read_in_plain_arabic_with_the_case_ladder():
+    v = L('v2SharesView', SHARES)
+    lines = {x['key']: x['text'] for x in v['lines']}
+    assert lines['books'] == 'صاحب العمل ٦٠٪ · المنصة ٤٠٪' and lines['books_ads'] == 'صاحب العمل ٦٥٪ · المنصة ٣٥٪'
+    assert 'من قيمة البيع' in lines['affiliate'] and '١٠٪' in lines['affiliate'] and 'الطرفين' in lines['affiliate']
+    assert [x['editable'] for x in v['lines']] == [True, True, False, True], 'الدورات في جولتها'
+    assert [r['upTo'] for r in v['ladder']] == ['أقل من ١٠٬٠٠٠ جنيه', 'من ١٠٬٠٠٠ إلى أقل من ٣٠٬٠٠٠ جنيه', 'من ٣٠٬٠٠٠ إلى أقل من ٥٠٬٠٠٠ جنيه', 'من ٥٠٬٠٠٠ جنيه فأكثر']
+    assert [r['platformText'] for r in v['ladder']] == ['٣٥٪', '٣٠٪', '٢٥٪', '٢٥٪'] and [r['ownerText'] for r in v['ladder']][0] == '٦٥٪'
+    assert v['version'] == 3 and 'لا ينزل عن ٣٥٪' in v['floorText'] and '٢٥٪' in v['floorText']
+    hist = L('v2SharesHistory', SHARES, NOW)
+    assert hist[0]['by'] == 'f@x.test' and hist[0]['lines'] == [{'label': 'الكتب · صاحب العمل', 'from': '٥٥٪', 'to': '٦٠٪'}, {'label': 'الكتب · المنصة', 'from': '٤٥٪', 'to': '٤٠٪'}]
+
+
+@needs_node
+def test_shares_diff_and_changes_send_only_what_changed():
+    t = d3fx.DEFAULT_SHARES
+    r = L('v2SharesChanges', t, {'booksOwner': '٦٢', 'booksAdsOwner': '65', 'ladder': ['35', '28', '25', '25'], 'affiliateRate': '12'})
+    assert r['ok'] is True
+    assert r['changes'] == {'books': {'normal': {'owner': 62, 'platform': 38}}, 'cases': {'ladder': [{'max_egp': 10000, 'platform_pct': 35}, {'max_egp': 30000, 'platform_pct': 28},
+                                                                                                   {'max_egp': 50000, 'platform_pct': 25}, {'max_egp': None, 'platform_pct': 25}]},
+                            'affiliate': {'rate': 12}}
+    d = L('v2SharesDiff', t, r['after'])
+    got = {x['label']: (x['from'], x['to']) for x in d['lines']}
+    assert got == {'الكتب · صاحب العمل': ('٦٠٪', '٦٢٪'), 'الكتب · المنصة': ('٤٠٪', '٣٨٪'), 'القضايا · من ١٠٬٠٠٠ إلى أقل من ٣٠٬٠٠٠ جنيه': ('المنصة ٣٠٪', 'المنصة ٢٨٪'),
+                   'عمولة الإحالة': ('١٠٪', '١٢٪')}, got
+    # لا تغيير ⇒ لا إرسال. رقم برّه ٠–١٠٠ ⇒ رسالة. (الأرضية ٣٥ تحرسها المنصة ورسالتها بتتعرض)
+    same = L('v2SharesChanges', t, {'booksOwner': '60', 'booksAdsOwner': '65', 'ladder': ['35', '30', '25', '25'], 'affiliateRate': '10'})
+    assert same['ok'] is False and same['unchanged'] is True
+    assert L('v2SharesChanges', t, {'booksOwner': '101'})['ok'] is False and L('v2SharesChanges', t, {'booksOwner': 'x'})['ok'] is False
+    below = L('v2SharesChanges', t, {'booksOwner': '70'})
+    assert below['ok'] is True and below['changes']['books']['normal'] == {'owner': 70, 'platform': 30}, 'الشاشة ما تحكمش في الأرضية — المنصة هي اللي ترفض'
+
+
+@needs_node
+def test_minimum_payout_view_and_input_rules():
+    resp = {'ok': True, 'withdraw_min': 500, 'rev': 2, 'updated_at': _iso(30), 'updated_by': 'f@x.test', 'allowed': {'withdraw_min': {'min': 50, 'max': 20000}},
+            'history': [{'by': 'f@x.test', 'at': _iso(30), 'before': {'withdraw_min': 400}, 'after': {'withdraw_min': 500}}]}
+    v = L('v2MinPayout', resp, NOW)
+    assert v['text'] == '٥٠٠ جنيه' and v['rev'] == 2 and v['min'] == 50 and v['max'] == 20000
+    assert v['history'][0]['from'] == '٤٠٠ جنيه' and v['history'][0]['to'] == '٥٠٠ جنيه'
+    assert L('v2MinPayoutInput', '٧٥٠', v) == {'ok': True, 'value': 750}
+    for bad in ('', 'abc', '10.5', '49', '20001', '-3'):
+        assert L('v2MinPayoutInput', bad, v)['ok'] is False, bad
+    assert L('v2MinPayout', {'withdraw_min': '500'}, NOW) is None
+
+
+@needs_node
+def test_ads_ledger_rows_and_entries():
+    resp = {'items': [{'owner_kind': 'book', 'owner_id': 'a', 'balance': [{'currency': 'EGP', 'amount': 1850}], 'last_entry_at': _iso(4), 'owner_email': 'n@x.test', 'entries': 5, 'title': 'دليل المستأجر'},
+                      {'owner_kind': 'course', 'owner_id': 'c', 'balance': [{'currency': 'SAR', 'amount': 600}, {'currency': 'EGP', 'amount': 5}], 'last_entry_at': _iso(200), 'owner_email': '', 'title': ''}]}
+    rows = L('v2AdsLedger', resp, NOW)
+    assert [r['id'] for r in rows] == ['a', 'c'] and rows[0]['balanceText'] == '١٬٨٥٠ جنيه' and rows[0]['last'] == 'منذ ٤ ساعات' and rows[0]['ownerEmail'] == 'n@x.test'
+    assert rows[1]['title'] == 'عمل بلا عنوان' and rows[1]['kindText'] == 'دورة' and rows[1]['balanceText'] == '٥ جنيه · ٦٠٠ ريال' and rows[1]['ownerEmail'] == ''
+    ent = L('v2AdsEntries', {'balance': [{'currency': 'EGP', 'amount': 1850}], 'entries': [
+        {'entry': 'deposit', 'amount': 2000, 'currency': 'EGP', 'at': _iso(24 * 9)}, {'entry': 'spend', 'amount': 150, 'currency': 'EGP', 'at': _iso(24 * 3)}]}, NOW)
+    assert [(e['entry'], e['sign']) for e in ent['rows']] == [('صرف على الإعلانات', '−'), ('إيداع', '+')] and ent['balance']['main'] == '١٬٨٥٠ جنيه'
+
+
+@needs_node
+def test_offer_line_is_facts_only_from_the_offer_fields():
+    avg_eg = {'avg': 200.0, 'n': 3, 'currency': 'EGP'}
+    offer = {'suggested_price': {'amount': 260, 'currency': 'EGP'}, 'agreement': {'platform_pct': 40, 'plan_label': 'نشر عادي'}}
+    assert L('v2OfferLine', offer, {'eg': avg_eg}) == 'السعر أعلى من متوسط الكتب في مصر بـ٣٠٪ · اتفاقية البيع: نصيب المنصة ٤٠٪'
+    assert L('v2OfferLine', dict(offer, suggested_price={'amount': 150, 'currency': 'EGP'}), {'eg': avg_eg}).startswith('السعر أقل من متوسط الكتب في مصر بـ٢٥٪')
+    assert L('v2OfferLine', dict(offer, suggested_price={'amount': 202, 'currency': 'EGP'}), {'eg': avg_eg}).startswith('السعر قريب من متوسط الكتب في مصر')
+    # لا شيء للمقارنة ⇒ لا سطر مقارنة (ولا حكم مخترع)
+    assert L('v2OfferLine', offer, {}) == 'اتفاقية البيع: نصيب المنصة ٤٠٪'
+    assert L('v2OfferLine', dict(offer, suggested_price={'amount': 20, 'currency': 'USD'}), {'eg': avg_eg}) == 'اتفاقية البيع: نصيب المنصة ٤٠٪', 'عملة بلا متوسط مطابق ⇒ لا مقارنة'
+    assert L('v2OfferLine', {'suggested_price': None, 'agreement': None}, {}) == 'لم يقترح صاحب العرض سعرًا · لم يوافق صاحب العرض على اتفاقية البيع بعد'
+    # المتوسط من كتابين ظاهرين على الأقل في نفس البلد
+    one = {'items': [{'visible': True, 'min_price': {'eg': {'amount': 100, 'currency': 'EGP'}}}]}
+    assert L('v2BookAverage', one, 'eg') is None
+    two = {'items': [{'visible': True, 'min_price': {'eg': {'amount': 100, 'currency': 'EGP'}}}, {'visible': True, 'min_price': {'eg': {'amount': 300, 'currency': 'EGP'}}},
+                     {'visible': False, 'min_price': {'eg': {'amount': 9000, 'currency': 'EGP'}}}]}
+    assert L('v2BookAverage', two, 'eg') == {'avg': 200, 'n': 2, 'currency': 'EGP'}
+
+
+@needs_node
+def test_offers_queue_rows_and_the_prefilled_prices():
+    resp = {'offers': d3fx.OFFERS}
+    rows = L('v2OffersQueue', resp, PRICES_LIST, NOW)
+    assert [r['id'] for r in rows] == ['off-1', 'off-2']
+    a = rows[0]
+    assert a['title'].startswith('عقد الوكالة') and a['ownerName'] == 'أ. مي حسن' and a['suggestedText'] == '٣٩٠ جنيه' and a['typeText'] == 'دليل' and a['agreementText'] == 'نشر عادي'
+    assert rows[1]['suggestedText'] == '' and 'لم يقترح' in rows[1]['brain']
+    form = L('v2PriceForm', PRICE_DETAIL)
+    cells = L('v2OfferPrefill', a, form)
+    assert cells['read']['eg'] == '390' and cells['read']['default'] == '' and cells['pdf']['eg'] == ''
+    # يظهر في الطابور فقط ما هو «في المراجعة»
+    done = L('v2OffersQueue', {'offers': [dict(d3fx.OFFERS[0], status='live')]}, None, NOW)
+    assert done == []
+
+
+@needs_node
+def test_reader_requests_group_with_counts_and_state():
+    resp = {'groups': d3fx._groups(d3fx.REQUESTS), 'requests': d3fx.REQUESTS}
+    v = L('v2Requests', resp, NOW)
+    assert [g['key'] for g in v['open']] == ['g-rent', 'g-sole'] and [g['key'] for g in v['approved']] == ['g-data']
+    g = v['open'][0]
+    assert g['countText'] == '٣ طلبات' and g['topic'] == 'كتاب عن قانون الإيجار القديم' and g['typeText'] == 'كتاب' and g['firstId'] == 'rq-1'
+    assert v['approved'][0]['topic'] == 'حماية البيانات الشخصية', 'نص الإدارة المعتمد يغلب'
+    hid = copy.deepcopy(resp)
+    for r in hid['requests']:
+        if r['group_key'] == 'g-sole':
+            r['hidden'] = True
+    assert [x['key'] for x in L('v2Requests', hid, NOW)['open']] == ['g-rent']
+
+
+QUEUE = {'wallet_payouts_pending': {'count': 4, 'total_amount': 9}, 'manual_payments_pending': {'count': 1}, 'stuck_card_payments': {'count': 2},
+         'manual_refunds_pending': 5, 'course_split_pending': {'count': 3}}
+
+
+@needs_node
+def test_the_money_badge_counts_payouts_receipts_stuck_and_refunds():
+    b = L('v2MoneyBadge', QUEUE)
+    assert b['parts'] == {'payouts': 4, 'receipts': 1, 'stuck': 2, 'refunds': 5, 'split': 3}
+    assert L('v2MoneyBadge', {k: v for k, v in QUEUE.items() if k != 'course_split_pending'})['total'] == 4 + 1 + 2 + 5
+    assert L('v2MoneyBadge', None) is None
+    ex = {'inbox': [], 'now': NOW}
+    t = {x['key']: x for x in L('v2Tiles', QUEUE, ex)}['money']
+    assert t['count'] == 15 and t['hot'] is True
+    assert '٥ استردادات تنتظر قرارك' in t['next'] and '٤ تحويلات' in t['next'] and 'إيصال' in t['next'] and 'دفعتان عالقتان' in t['next'], t['next']
+    t2 = {x['key']: x for x in L('v2Tiles', None, ex)}['money']
+    assert t2['count'] is None and t2['failed'] is True, 'الطابور تعذّر ⇒ لا رقم'
+    q0 = {k: {'count': 0} if k != 'manual_refunds_pending' else 0 for k in QUEUE}
+    assert {x['key']: x for x in L('v2Tiles', q0, ex)}['money']['count'] == 0
+
+
+@needs_node
+def test_the_books_tile_adds_the_offers_and_a_failed_offers_source_is_partial_not_zero():
+    ex = {'inbox': [{'apiKind': 'book', 'ref': 'K1'}], 'now': NOW}
+    base = {x['key']: x for x in L('v2Tiles', QUEUE, ex)}['books']
+    assert base['count'] == 1 and base['partial'] is False
+    with_offers = {x['key']: x for x in L('v2Tiles', QUEUE, dict(ex, bookOffers=2))}['books']
+    assert with_offers['count'] == 3 and with_offers['next'].startswith('عرضان ينتظران المراجعة')
+    failed = {x['key']: x for x in L('v2Tiles', QUEUE, dict(ex, bookOffers=None))}['books']
+    assert failed['count'] == 1 and failed['partial'] is True and failed['next'].startswith('العدد ناقص')
+    zero = {x['key']: x for x in L('v2Tiles', QUEUE, dict(ex, bookOffers=0))}['books']
+    assert zero['count'] == 1 and zero['partial'] is False
+
+
+@needs_node
+def test_two_new_decision_cards_a_stuck_payment_and_a_book_offer():
+    stuck = L('v2Stuck', {'items': d3fx.STUCK_ITEMS}, NOW)['rows']
+    offers = L('v2OffersQueue', {'offers': d3fx.OFFERS}, PRICES_LIST, NOW)
+    cards = L('v2Decisions', [], [], None, {'now': NOW, 'stuck': stuck, 'offers': offers})
+    kinds = [c['kind'] for c in cards]
+    assert kinds.count('stuck_payment') == 3 and kinds.count('book_offer') == 2
+    assert kinds.index('stuck_payment') < kinds.index('book_offer'), 'المال قبل مراجعة الكتب'
+    sp = next(c for c in cards if c['kind'] == 'stuck_payment' and c['title'] == 'نور الهدى سالم')
+    assert sp['tag'] == 'دفعة عالقة' and sp['primary'] == {'label': 'افتح الشخص', 'act': {'do': 'person', 'email': 'nour@example.test'}}
+    assert sp['person'] == {'email': 'nour@example.test', 'name': 'نور الهدى سالم'} and 'money' not in json.dumps(sp['primary']) and sp['secondary'] is None
+    book = next(c for c in cards if c['kind'] == 'stuck_payment' and 'دليل' in c['brain'] + c['sub'])
+    assert book['warn'] == 'الكتب لا تُسترد'
+    off = next(c for c in cards if c['kind'] == 'book_offer')
+    assert off['tag'] == 'عرض كتاب للمراجعة' and off['primary']['label'] == 'اعتمد بالأسعار دي' and off['primary']['act'] == {'do': 'offer_approve', 'id': 'off-1'}
+    assert off['secondary']['label'] == 'ارفض' and off['secondary']['act']['do'] == 'offer_reject' and off['open'] == {'do': 'section', 'section': 'books', 'tab': 'offers'}
+    # الاستردادات ما فيهاش زرّ فلوس في بطاقة الدفعة العالقة
+    assert all('money' not in json.dumps(c['primary']) for c in cards if c['kind'] == 'stuck_payment')
+
+
+@needs_node
+def test_the_stuck_source_can_fall_back_to_the_queue_orders():
+    q = {'stuck_card_payments': {'count': 2, 'orders': [{'id': 'o1', 'user_email': 'a@x.test', 'amount': 750, 'currency': 'EGP', 'kind': 'course', 'gateway': 'paytabs', 'created_at': _iso(26)}]}}
+    r = L('v2StuckFromQueue', q)
+    assert r['rows'][0]['id'] == 'o1' and r['rows'][0]['email'] == 'a@x.test' and r['rows'][0]['name'] == 'a@x.test'
+    assert L('v2StuckFromQueue', {'stuck_card_payments': {'count': 2}}) is None and L('v2StuckFromQueue', None) is None
+
+
+# ---------------------------------------------------------------- الأقسام والتبويبات
+
+@needs_node
+def test_the_money_and_books_sections_have_the_new_tabs_and_the_old_ones_last():
+    secs = {s['key']: s for s in L('SECTIONS')}
+    vis = lambda k: [(t['key'], t['label'], t['mod']) for t in secs[k]['tabs'] if not t.get('hidden')]
+    assert vis('money') == [('overview', 'نظرة', 'v2m_overview'), ('payouts', 'التحويلات', 'v2m_payouts'), ('receipts', 'الإيصالات والمدفوعات العالقة', 'v2m_receipts'),
+                            ('prices', 'الأسعار', 'v2m_prices'), ('shares', 'النسب والإعدادات', 'v2m_shares'), ('ads', 'إعلانات الأعمال', 'v2m_ads'), ('all', 'كل السجلات', 'finance')]
+    assert vis('books') == [('offers', 'مراجعة العروض', 'v2b_offers'), ('requests', 'طلبات القرّاء', 'v2b_requests'), ('books', 'الكتب والأعمال', 'knowledge')]
+    assert secs['money']['tabs'][0]['key'] == 'overview' and secs['books']['tabs'][0]['key'] == 'offers'
+
+
+@needs_node
+def test_old_links_still_land_somewhere_sensible():
+    land = lambda mod, st: (lambda r: (r['section'], r['tab']))(L('sectionFor', mod, st))
+    assert land('finance', {'finTab': 'summary'}) == ('money', 'all') and land('finance', {'finTab': 'packages'}) == ('money', 'all')
+    assert land('finance', {'finTab': 'withdrawals'}) == ('money', 'all') and land('finance', {'finTab': 'stuck'}) == ('money', 'all')
+    assert land('escrow', {'escTab': 'manual'}) == ('money', 'manual') and land('escrow', {'escTab': 'sessions'}) == ('disputes', 'escrow')
+    assert land('knowledge', {}) == ('books', 'books')
+    assert L('routeFor', '#s/money', {})['tab'] == 'overview' and L('routeFor', '#s/money/prices', {})['mod'] == 'v2m_prices'
+    assert L('routeFor', '#s/books', {})['mod'] == 'v2b_offers' and L('routeFor', '#packages', {})['section'] == 'money'
+    assert L('parseSectionHash', '#s/money/manual')['tab'] == 'overview', 'التبويب المخفي ما بيتفتحش بالعنوان'
+
+
+# ---------------------------------------------------------------- نصوص ظاهرة
+
+BANNED = ['يقوّم', 'يقوم بتقييم', 'الذكاء الاصطناعي', 'Stripe', 'Paymob', 'endpoint', 'JSON', 'Backend', 'طابور', 'API']
+
+
+@needs_node
+def test_visible_texts_are_plain_and_nothing_starts_with_ai():
+    texts = []
+    b = L('v2MoneyBoard', {'revenues': REV, 'escrow': [{'amount': 5, 'currency': 'USD', 'status': 'held'}], 'payouts': []}, 'month', NOW)
+    for n in b['numbers']:
+        texts += [n['label'], n['note'], n['text'], n['others'], n['why']]
+    texts += [x['label'] for x in L('v2IncomeBars', L('v2Income', REV, 'month', NOW), None, 'month')['rows']]
+    v = L('v2SharesView', SHARES)
+    texts += [x['title'] + x['text'] + x.get('note', '') for x in v['lines']] + [v['floorText']]
+    for t in L('SECTIONS'):
+        if t['key'] in ('money', 'books'):
+            texts += [t['label'], t['desc']] + [x['label'] for x in t['tabs']]
+    for s in L('v2Stuck', {'items': d3fx.STUCK_ITEMS}, NOW)['rows']:
+        texts += [s['kindText'], s['provider'], s['ageText'], s['noRefundText']]
+    for t in texts:
+        for bad in BANNED:
+            assert bad not in t, (bad, t)
+        assert not re.match(r'^\s*(ذكاء|AI)\b', t), t
+        assert not re.search(r'(?<![\w@./-])(null|undefined|NaN)(?![\w@./-])', t), t
+    src = _read('dashboard-cloud', 'v2-logic.js')
+    code = _strip_comments(src[src.index('«الفلوس» على الهيكل الجديد (D3)'):src.index('  var api = {')])
+    for bad in ('يقوّم', 'يقوم'):
+        assert bad not in code
+
+
+def _strip_comments(src):
+    src = re.sub(r'/\*.*?\*/', '', src, flags=re.S)
+    return '\n'.join(re.sub(r'(^|\s)//.*$', '', ln) for ln in src.split('\n'))

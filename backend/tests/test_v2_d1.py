@@ -504,8 +504,8 @@ def test_tile_counts_come_straight_from_the_queue():
     assert t['books']['count'] == 2 and t['books']['dest'] == 'knowledge'
     # الناس: زوّار ٢ + دعوات ٣ + انضمام ١ + خبراء مؤسسون ٩
     assert t['people']['count'] == 15 and t['people']['partial'] is False and t['people']['dest'] == 'invites'
-    # الفلوس: تحويلات ٤ + إيصالات ١ + عالقة ٢ + اقتسام ٣ — الأحمر لما فيه عالق
-    assert t['money']['count'] == 10 and t['money']['hot'] is True and t['money']['dest'] == 'finance'
+    # الفلوس: تحويلات ٤ + إيصالات ١ + عالقة ٢ + استردادات ٥ (D3) + اقتسام ٣ — الأحمر لما فيه عالق
+    assert t['money']['count'] == 15 and t['money']['hot'] is True and t['money']['dest'] == 'finance'
     assert t['content']['count'] == 315 and t['content']['dest'] == 'topics'
     for k, dest in (('marketing', 'marketing'), ('reports', 'analysis'), ('company', 'investment')):
         assert t[k]['count'] is None and t[k]['failed'] is False and t[k]['dest'] == dest

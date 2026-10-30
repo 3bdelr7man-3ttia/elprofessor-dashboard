@@ -254,6 +254,11 @@
       t.count = n;
       t.next = n ? U(n, ['كتاب ينتظر المراجعة', 'كتابان ينتظران المراجعة', 'كتب تنتظر المراجعة', 'كتابًا ينتظر المراجعة']) : 'المتجر والمراجعة';
       if (hasTrunc(extras)) markPartial(t);      // قائمة الوارد مقصوصة ⇒ العدّ من صفوفها ناقص معلَن
+      // D3: عروض الكتب في طابور المراجعة الجديد (رقم من الجسر؛ تعذّر جلبه ⇒ العدد ناقص معلَن لا صفر).
+      if (typeof extras.bookOffers === 'number' && extras.bookOffers > 0) {
+        t.count += extras.bookOffers;
+        t.next = U(extras.bookOffers, ['عرض ينتظر المراجعة', 'عرضان ينتظران المراجعة', 'عروض تنتظر المراجعة', 'عرضًا ينتظر المراجعة']) + (n ? ' · ' + t.next : '');
+      } else if (extras.bookOffers === null) markPartial(t);
     })(T.books);
 
     // —— الناس والدعوات: أربعة مصادر؛ ناقص أحدها ⇒ المجموع جزئي ومعلَن (لا رقم يكذب).
@@ -277,17 +282,17 @@
       if (t.partial || hasTrunc(extras)) markPartial(t);
     })(T.people);
 
-    // —— الفلوس
+    // —— الفلوس: تحويلات + إيصالات + دفعات عالقة + استردادات يدوية (+ اقتسام الدورات المعلّق كما كان).
     (function (t) {
       t.dest = 'finance'; t.land = 'wallet_payouts_pending';
       if (!Q) return failTile(t);
-      var po = qn(Q, 'wallet_payouts_pending'), mp = qn(Q, 'manual_payments_pending');
-      var st = qn(Q, 'stuck_card_payments'), sp = qn(Q, 'course_split_pending');
-      t.count = po + mp + st + sp; t.hot = st > 0;
+      var B = v2MoneyBadge(Q).parts, po = B.payouts, mp = B.receipts, st = B.stuck, sp = B.split, rf = B.refunds;
+      t.count = po + mp + st + rf + sp; t.hot = st > 0;
       var p = [];
       if (po) p.push(U(po, ['تحويل واحد', 'تحويلان', 'تحويلات', 'تحويلًا']));
       if (mp) p.push(U(mp, ['إيصال', 'إيصالان', 'إيصالات', 'إيصالًا']));
       if (st) p.push(U(st, ['دفعة عالقة', 'دفعتان عالقتان', 'دفعات عالقة', 'دفعة عالقة']));
+      if (rf) p.push(U(rf, ['استرداد ينتظر قرارك', 'استردادان ينتظران قرارك', 'استردادات تنتظر قرارك', 'استردادًا ينتظر قرارك']));
       if (sp) p.push(ar(sp) + ' اقتسام معلّق');
       t.next = p.length ? p.join(' · ') : 'التحويلات والإيصالات';
       if (st) { t.dest = 'finance'; t.land = 'stuck_card_payments'; }
@@ -331,18 +336,20 @@
   var IMG_OF = {
     file_waiting: 'files', file_late: 'files', file_attention: 'files', review: 'files', verify: 'files',
     dispute: 'disputes', unactivated: 'disputes', legacy: 'disputes',
-    payout: 'money', manual_payment: 'money',
+    payout: 'money', manual_payment: 'money', stuck_payment: 'money', book_offer: 'books',
     trainer: 'people', join: 'people', pending_user: 'people', founding: 'people', lead: 'people', message: 'people', open_message: 'people',
     book: 'books', program: 'courses', course: 'courses', live: 'courses', topic: 'content', creative: 'content', other: 'people'
   };
   // الترتيب (قرار المؤسس): ملفات مستعجلة/متأخرة ⇐ نزاعات ⇐ استردادات ⇐ تحويلات ⇐ إيصالات ⇐ آراء للمراجعة ⇐
   // مدرّبون وانضمام ⇐ زوّار ⇐ خبراء مؤسسون ⇐ محتوى وكتب وبرامج ⇐ رسائل. الملف العادي المنتظر بين الأولى والثانية.
-  var RANK = { file_urgent: 10, file_waiting: 15, dispute: 20, refund: 30, payout: 40, manual_payment: 50, review: 60,
-               trainer: 70, join: 70, pending_user: 80, founding: 90, content: 100, message: 110 };
+  var RANK = { file_urgent: 10, file_waiting: 15, dispute: 20, refund: 30, payout: 40, stuck_payment: 45, manual_payment: 50, review: 60,
+               trainer: 70, join: 70, pending_user: 80, founding: 90, book_offer: 95, content: 100, message: 110 };
 
   function kindOf(r) {
     if (!r) return null;
     if (r.apiKind === 'payout' || r.kind === 'payout') return 'payout';
+    if (r.apiKind === 'stuck_payment') return 'stuck_payment';
+    if (r.apiKind === 'book_offer') return 'book_offer';
     if (r.apiKind === 'course_q') return 'course';
     if (r.apiKind === 'live_q') return 'live';
     switch (r.apiKind) {
@@ -377,6 +384,8 @@
       case 'dispute': return RANK.dispute;
       case 'unactivated': case 'legacy': return RANK.refund;
       case 'payout': return RANK.payout;
+      case 'stuck_payment': return RANK.stuck_payment;
+      case 'book_offer': return RANK.book_offer;
       case 'manual_payment': return RANK.manual_payment;
       case 'review': return RANK.review;
       case 'trainer': case 'join': return RANK.trainer;
@@ -608,6 +617,32 @@
         card.facts = [{ k: 'المبلغ', v: moneyText(r.amount, r.currency) }, { k: 'الطريقة', v: str(r.payMethod) || '—' }];
         break;
       }
+      case 'stuck_payment': {
+        var sk = r.stuck || {};
+        card.tag = 'دفعة عالقة';
+        card.title = sk.name || 'صاحب الدفع';
+        card.sub = clean([sk.kindText, sk.amountText, sk.provider]).join(' · ');
+        card.brain = 'دفع بالبطاقة لم يكتمل' + (sk.ageText ? ' ' + sk.ageText : '') + (sk.title && sk.title !== sk.kindText ? ' عن «' + sk.title + '»' : '');
+        card.reason = 'لا إجراء مالي من هنا: افتح صفحة صاحب الدفع وتابع معه';
+        if (!sk.refundable) card.warn = sk.noRefundText;
+        card.open = act({ do: 'section', section: 'money', tab: 'receipts' });
+        card.primary = sk.email ? { label: 'افتح الشخص', act: act({ do: 'person', email: sk.email }) } : { label: 'افتح الدفعات العالقة', act: card.open };
+        card.facts = [{ k: 'المبلغ', v: sk.amountText }, { k: 'الطريقة', v: sk.provider }];
+        break;
+      }
+      case 'book_offer': {
+        var of = r.offerRow || {};
+        card.tag = 'عرض كتاب للمراجعة';
+        card.title = of.title || 'عرض كتاب';
+        card.sub = clean([of.typeText, of.ownerName, of.suggestedText && ('السعر المقترح: ' + of.suggestedText)]).join(' · ');
+        card.brain = of.brain || 'عرض جديد ينتظر اعتمادك';
+        card.reason = 'تُراجع الأسعار قبل الاعتماد، والرفض يحتاج سببًا يصل إلى صاحب العرض';
+        card.open = act({ do: 'section', section: 'books', tab: 'offers' });
+        card.primary = { label: 'اعتمد بالأسعار دي', act: act({ do: 'offer_approve', id: of.id }) };
+        card.secondary = { label: 'ارفض', act: act({ do: 'offer_reject', id: of.id }) };
+        card.facts = [{ k: 'النوع', v: of.typeText }, { k: 'السعر المقترح', v: of.suggestedText || 'لم يُقترح' }];
+        break;
+      }
       case 'trainer': {
         var facts = clean([str(r.trSpec), str(r.trYears) && ('الخبرة: ' + str(r.trYears)),
                            r.trAttach ? U(r.trAttach, ['مرفق واحد', 'مرفقان', 'مرفقات', 'مرفقًا']) : '']);
@@ -722,7 +757,7 @@
     if (PERSON_TITLE[kind]) { var pe = personEmailOfRow(r); if (pe) card.person = { email: pe, name: card.title }; }
     return card;
   }
-  var PERSON_TITLE = { payout: 1, manual_payment: 1, trainer: 1, join: 1, pending_user: 1, founding: 1 };
+  var PERSON_TITLE = { payout: 1, manual_payment: 1, stuck_payment: 1, trainer: 1, join: 1, pending_user: 1, founding: 1 };
   function v2Decisions(rows, payouts, queue, opts) {
     opts = opts || {};
     var now = opts.now || 0;
@@ -732,6 +767,15 @@
     (Array.isArray(rows) ? rows : []).forEach(function (r) { if (r && !r.fyi) src.push(r); });
     (Array.isArray(payouts) ? payouts : []).forEach(function (p) {
       if (p && (p.status == null || p.status === 'pending') && p.pid) src.push(Object.assign({}, p, { apiKind: 'payout' }));
+    });
+    // D3: دفعات عالقة (صفوف `stuckRow`) وعروض كتب بانتظار المراجعة (صفوف `v2OffersQueue`) — كلٌّ منهما بطاقة قرار عادية.
+    (Array.isArray(opts.stuck) ? opts.stuck : []).forEach(function (sk) {
+      if (!sk || !sk.id) return;
+      src.push({ apiKind: 'stuck_payment', apiId: sk.id, ref: sk.id, stuck: sk, email: sk.email, who: sk.name, ts: sk.ageHours != null ? now - sk.ageHours * HOUR : undefined });
+    });
+    (Array.isArray(opts.offers) ? opts.offers : []).forEach(function (of) {
+      if (!of || !of.id) return;
+      src.push({ apiKind: 'book_offer', apiId: of.id, ref: of.id, offerRow: of, who: of.ownerName, ts: isFinite(of.at) ? of.at : undefined });
     });
     var Q = queue || null;
     if (Q) {
@@ -1196,7 +1240,9 @@
     { key: 'market', label: 'سوق الخدمات', img: 'market', desc: 'طلبات الأعضاء وعروض الخبراء', tabs: [
       T('requests', 'الطلبات', 'market')
     ] },
-    { key: 'books', label: 'الكتب', img: 'books', desc: 'المتجر وكتب الخبراء بانتظار المراجعة', tabs: [
+    { key: 'books', label: 'الكتب', img: 'books', desc: 'عروض الكتب بانتظار المراجعة وطلبات القرّاء والمتجر', tabs: [
+      T('offers', 'مراجعة العروض', 'v2b_offers'),
+      T('requests', 'طلبات القرّاء', 'v2b_requests'),
       T('books', 'الكتب والأعمال', 'knowledge')
     ] },
     { key: 'people', label: 'الناس والدعوات', img: 'people', desc: 'الأعضاء والدعوات والرسائل', tabs: [
@@ -1205,10 +1251,15 @@
       T('messages', 'الرسائل', 'inbox', { activeFilter: 't:messages' }, { activeFilter: ['t:messages'] }),
       hiddenTab(T('person', 'صفحة الشخص', 'v2person'))
     ] },
-    { key: 'money', label: 'الفلوس', img: 'money', desc: 'التحويلات والإيصالات والباقات', tabs: [
-      T('finance', 'المالية', 'finance', { finTab: 'summary' }, { finTab: { not: ['packages'] } }),
-      T('packages', 'الباقات والأسعار', 'finance', { finTab: 'packages' }, { finTab: ['packages'] }),
-      T('receipts', 'الإيصالات', 'escrow', { escTab: 'manual' }, { escTab: ['manual'] })
+    { key: 'money', label: 'الفلوس', img: 'money', desc: 'كل جنيه دخل، وأين هو الآن، والقرارات المالية', tabs: [
+      T('overview', 'نظرة', 'v2m_overview'),
+      T('payouts', 'التحويلات', 'v2m_payouts'),
+      T('receipts', 'الإيصالات والمدفوعات العالقة', 'v2m_receipts'),
+      T('prices', 'الأسعار', 'v2m_prices'),
+      T('shares', 'النسب والإعدادات', 'v2m_shares'),
+      T('ads', 'إعلانات الأعمال', 'v2m_ads'),
+      T('all', 'كل السجلات', 'finance', { finTab: 'summary' }, { finTab: { not: [] } }),
+      hiddenTab(T('manual', 'الإيصالات (الشاشة القديمة)', 'escrow', { escTab: 'manual' }, { escTab: ['manual'] }))
     ] },
     { key: 'content', label: 'المحتوى', img: 'content', desc: 'المقالات والموضوعات ودليل الاستخدام', tabs: [
       T('topics', 'المحتوى', 'topics', { topicsTab: 'ideas' }, { topicsTab: { not: ['tutorials'] } }),
@@ -1338,16 +1389,557 @@
     return sectionFor(s, state);
   }
 
+  // ------------------------------------------------------------------ «الفلوس» على الهيكل الجديد (D3)
+  // ⛔ نقي: كل دالة تأخذ ردود المصادر كما وصلت وتعيد قيمة. المصدر الذي تعذّر جلبه = `null` (والشاشة تكتب «غير متاح بعد»)،
+  // ولا يتحوّل إلى صفر أبدًا. ⛔ العملات لا تُجمع ولا تُحوَّل: لكل عملة رقمها، وغير الجنيه يظهر منفصلًا «بعملة أخرى».
+  // ⛔ لا حساب لـ«صافي البروفيسور»: لا يوجد مصدر يفصل نصيب المنصة عن نصيب أصحاب الأعمال، فيبقى «غير متاح بعد».
+  var CUR_LONG = { EGP: 'جنيه مصري', USD: 'دولار أمريكي', SAR: 'ريال سعودي', AED: 'درهم إماراتي', KWD: 'دينار كويتي', QAR: 'ريال قطري',
+                   EUR: 'يورو', GBP: 'جنيه إسترليني' };
+  function curLong(c) { c = String(c || 'EGP').trim().toUpperCase(); return CUR_LONG[c] || c; }
+  var COUNTRY_LABEL = { eg: 'مصر', sa: 'السعودية', ae: 'الإمارات', kw: 'الكويت', qa: 'قطر', 'default': 'باقي البلاد' };
+  var PERIODS = [{ key: 'day', label: 'اليوم' }, { key: 'month', label: 'الشهر' }, { key: 'year', label: 'السنة' }];
+  var SERVICES = [{ key: 'experts', label: 'ملفات الخبراء' }, { key: 'courses', label: 'الدورات' }, { key: 'books', label: 'الكتب' }, { key: 'other', label: 'أخرى' }];
+
+  function two(n) { return (n < 10 ? '0' : '') + n; }
+  function ymd(d) { return d.getFullYear() + '-' + two(d.getMonth() + 1) + '-' + two(d.getDate()); }
+  // الفترة بتوقيت الجهاز: day = اليوم · month = من أول الشهر · year = من أول السنة. `until` غير شامل.
+  function v2Period(key, now) {
+    var d = new Date(now || 0), y = d.getFullYear(), m = d.getMonth();
+    var from, until;
+    if (key === 'day') { from = ymd(d); until = ymd(new Date(y, m, d.getDate() + 1)); }
+    else if (key === 'year') { from = y + '-01-01'; until = (y + 1) + '-01-01'; }
+    else { key = 'month'; from = y + '-' + two(m + 1) + '-01'; until = ymd(new Date(y, m + 1, 1)); }
+    return { key: key, label: key === 'day' ? 'اليوم' : key === 'month' ? 'الشهر' : 'السنة', from: from, until: until, month: y + '-' + two(m + 1) };
+  }
+  function numOf(v) { var n = typeof v === 'number' ? v : (typeof v === 'string' && v.trim() !== '' ? Number(v) : NaN); return isFinite(n) ? n : 0; }
+  function cents(n) { return Math.round(n * 100); }
+  // يجمع {currency, amount}[] لكل عملة لوحدها (الجنيه أولًا ثم الباقي أبجديًا). مبالغ بالسنت لتفادي أخطاء الكسور.
+  function sumByCurrency(items) {
+    var acc = {};
+    items.forEach(function (it) {
+      var c = String(it.currency || 'EGP').trim().toUpperCase() || 'EGP', a = numOf(it.amount);
+      if (!a) return;
+      acc[c] = (acc[c] || 0) + cents(a);
+    });
+    return Object.keys(acc).sort(function (x, y) { return x === 'EGP' ? -1 : y === 'EGP' ? 1 : (x < y ? -1 : 1); })
+      .map(function (c) { return { currency: c, amount: acc[c] / 100 }; });
+  }
+  // «١٬٢٠٠ جنيه» + «بعملة أخرى: ٣٠ دولار · ١٠٠ ريال». لا مبلغ أصلًا (والمصدر معروف) ⇒ «٠ جنيه».
+  function v2MoneyLine(totals) {
+    if (!Array.isArray(totals)) return null;
+    var egp = totals.filter(function (t) { return t.currency === 'EGP'; })[0];
+    var others = totals.filter(function (t) { return t.currency !== 'EGP'; }).map(function (t) { return moneyText(t.amount, t.currency); });
+    return { main: moneyText(egp ? egp.amount : 0, 'EGP'), others: others, othersText: others.length ? 'بعملة أخرى: ' + others.join(' · ') : '' };
+  }
+  function serviceOf(source) {
+    var s = String(source || '').trim().toLowerCase();
+    if (s === 'consultation' || s === 'consulting' || s === 'expert_file' || s === 'expert_case') return 'experts';
+    if (s === 'course' || s === 'course_offer' || s === 'program') return 'courses';
+    if (s === 'book' || s === 'knowledge') return 'books';
+    return 'other';
+  }
+  // دخل الفترة من صفوف `/api/revenues` الخام (قبل أي تحويل أو تقريب). ⛔ `total_egp` لا تُستعمل: بتحوّل الدولار للجنيه بسعر صرف.
+  //   الجنيه من `amount_egp` · الدولار من `amount_usd` · أي عملة أخرى من `amount_original` حين `needs_fx`.
+  function v2Income(rows, periodKey, now) {
+    if (!Array.isArray(rows)) return null;
+    var P = v2Period(periodKey, now), all = [], by = { experts: [], courses: [], books: [], other: [] }, n = 0;
+    rows.forEach(function (r) {
+      if (!r) return;
+      var d = String(r.date || '').slice(0, 10);
+      if (!(d >= P.from && d < P.until)) return;
+      var svc = serviceOf(r.source), parts = [];
+      if (numOf(r.amount_egp)) parts.push({ currency: 'EGP', amount: numOf(r.amount_egp) });
+      if (numOf(r.amount_usd)) parts.push({ currency: 'USD', amount: numOf(r.amount_usd) });
+      var oc = String(r.currency || '').trim().toUpperCase();
+      if (r.needs_fx && oc && oc !== 'EGP' && oc !== 'USD' && numOf(r.amount_original)) parts.push({ currency: oc, amount: numOf(r.amount_original) });
+      if (!parts.length) return;
+      n++;
+      parts.forEach(function (p) { all.push(p); by[svc].push(p); });
+    });
+    var services = {};
+    SERVICES.forEach(function (s) { services[s.key] = sumByCurrency(by[s.key]); });
+    return { period: P, count: n, totals: sumByCurrency(all), services: services };
+  }
+  // المحجوز في الضمان: كل جلسة لم تُحرَّر ولم تُردّ (محجوزة · بانتظار التأكيد · عليها نزاع). `null` ⇒ المصدر تعذّر.
+  function v2Held(sessions) {
+    if (!Array.isArray(sessions)) return null;
+    var live = sessions.filter(function (s) { return s && (!s.status || ['held', 'confirm', 'dispute'].indexOf(s.status) > -1); });
+    return { count: live.length, totals: sumByCurrency(live.map(function (s) { return { currency: s.currency, amount: s.amount }; })) };
+  }
+  function payoutAmount(p) { return numOf(p && p.raw && p.raw.amount != null ? p.raw.amount : p && p.amount); }
+  function payoutCurrency(p) { return (p && p.raw && p.raw.currency) || (p && p.currency) || 'EGP'; }
+  // المستحق للخبراء والمدرّبين = طلبات السحب المعلّقة (لم تُحوَّل بعد).
+  function v2Owed(payouts) {
+    if (!Array.isArray(payouts)) return null;
+    var live = payouts.filter(function (p) { return p && (p.status == null || p.status === 'pending'); });
+    return { count: live.length, totals: sumByCurrency(live.map(function (p) { return { currency: payoutCurrency(p), amount: payoutAmount(p) }; })) };
+  }
+  var NA_MONEY = 'غير متاح بعد';
+  var NET_WHY = 'لا يوجد مصدر يفصل نصيب البروفيسور عن نصيب أصحاب الأعمال بعد';
+  // اللوحة: أربعة أرقام بشرح سطر لكل رقم. `src` = {revenues, escrow, payouts, net} (كلٌّ منها null لو مصدره تعذّر).
+  function v2MoneyBoard(src, periodKey, now) {
+    src = src || {};
+    var P = v2Period(periodKey, now), inc = v2Income(src.revenues, P.key, now), held = v2Held(src.escrow), owed = v2Owed(src.payouts);
+    function num(key, label, note, data, extra) {
+      var line = data ? v2MoneyLine(data.totals) : null;
+      return { key: key, label: label, note: note, na: !line, text: line ? line.main : NA_MONEY, others: line ? line.othersText : '', count: data ? data.count : null,
+               why: line ? '' : (extra || '') };
+    }
+    var net = Array.isArray(src.net) ? { totals: src.net, count: null } : null;
+    return { period: P, numbers: [
+      num('income', 'دخل', 'ما دخل دفتر الشركة ' + (P.key === 'day' ? 'اليوم' : P.key === 'month' ? 'هذا الشهر' : 'هذه السنة'), inc, 'تعذّر جلب دفتر الإيرادات'),
+      num('held', 'محجوز حتى يُسلَّم العمل', 'أموال دفعها الناس وتنتظر تسليم العمل لتصل إلى أصحابها', held, 'تعذّر جلب أموال الضمان'),
+      num('owed', 'مستحق للخبراء والمدرّبين', 'طلبات سحب أُرسلت ولم تُحوَّل بعد', owed, 'تعذّر جلب طلبات السحب'),
+      num('net', 'صافي البروفيسور', 'نصيب البروفيسور بعد نصيب أصحاب الأعمال', net, NET_WHY)
+    ] };
+  }
+  // أعمدة «من أين جاء الدخل»: الجنيه فقط (العملات الأخرى سطر منفصل). في الشهر نستعمل مدفوعات المنصة (تفصل ملف الخبير عن الاستشارة
+  // العادية) إن وصلت، وإلا دفتر الإيرادات. `bridge` = رد `/api/v2/income/by-service` أو null.
+  var BRIDGE_KEY = { expert_files: 'experts', courses: 'courses', books: 'books', other: 'other' };
+  function v2IncomeBars(income, bridge, periodKey) {
+    var fromBridge = periodKey === 'month' && bridge && Array.isArray(bridge.services);
+    var perService = {}, foreign = [];
+    if (fromBridge) {
+      bridge.services.forEach(function (s) { if (BRIDGE_KEY[s.key]) perService[BRIDGE_KEY[s.key]] = sumByCurrency(s.totals || []); });
+    } else if (income) {
+      SERVICES.forEach(function (s) { perService[s.key] = income.services[s.key] || []; });
+    } else return null;
+    var rows = SERVICES.map(function (s) {
+      var t = perService[s.key] || [], egp = t.filter(function (x) { return x.currency === 'EGP'; })[0];
+      var oth = t.filter(function (x) { return x.currency !== 'EGP'; });
+      oth.forEach(function (o) { foreign.push(o); });
+      return { key: s.key, label: s.label, amount: egp ? egp.amount : 0, text: moneyText(egp ? egp.amount : 0, 'EGP'), others: oth.map(function (o) { return moneyText(o.amount, o.currency); }) };
+    });
+    var max = Math.max.apply(null, rows.map(function (r) { return r.amount; }).concat([0]));
+    var sum = rows.reduce(function (a, r) { return a + r.amount; }, 0);
+    rows.forEach(function (r) { r.width = max > 0 ? Math.max(r.amount > 0 ? 4 : 0, Math.round(r.amount / max * 100)) : 0; r.share = sum > 0 ? Math.round(r.amount / sum * 100) : 0; });
+    return { rows: rows, source: fromBridge ? 'payments' : 'ledger', total: moneyText(sum, 'EGP'), foreign: sumByCurrency(foreign),
+             note: fromBridge ? 'من مدفوعات المنصة في هذا الشهر' : 'من دفتر الإيرادات — ملفات الخبراء تشمل الاستشارات العادية' };
+  }
+
+  // —— التحويلات المستحقة
+  function v2PayoutRows(pending, now) {
+    if (!Array.isArray(pending)) return null;
+    var rows = pending.filter(function (p) { return p && p.pid && (p.status == null || p.status === 'pending'); }).map(function (p) {
+      var card = v2Card(Object.assign({}, p, { apiKind: 'payout' }), { now: now, inboxRows: null });
+      var m = card.primary.money, at = ms(p.raw && p.raw.created_at);
+      return { id: String(p.pid), name: m.name, email: personEmailOfRow(p), what: 'سحب من المحفظة', method: m.method || m.dest || '', dest: m.dest,
+               amount: m.amount, currency: m.currency, amountText: moneyText(m.amount, m.currency), fx: !!p.fx_alert,
+               timer: timerOf('since', at), since: isNaN(at) ? '' : v2TimerText(timerOf('since', at), now), at: isNaN(at) ? Infinity : at, card: card };
+    });
+    rows.sort(function (a, b) { return a.at - b.at; });
+    return rows;
+  }
+  // المنتهي هذا الشهر (محوَّل أو مرفوض). مصدر فشل ⇒ يُذكر في `failed` ويبقى النصف الآخر.
+  function v2PayoutHistory(paid, rejected, now) {
+    var P = v2Period('month', now), failed = [], out = [];
+    if (!Array.isArray(paid) && !Array.isArray(rejected)) return null;
+    function take(list, status, field) {
+      if (!Array.isArray(list)) { failed.push(status === 'paid' ? 'التحويلات المنفّذة' : 'التحويلات المرفوضة'); return; }
+      list.forEach(function (p) {
+        if (!p) return;
+        var at = ms(p[field] || p.updated_at);
+        if (isNaN(at)) return;
+        var day = ymd(new Date(at));
+        if (!(day >= P.from && day < P.until)) return;
+        out.push({ id: String(p.id || ''), status: status, statusText: status === 'paid' ? 'حُوِّل' : 'رُفض', name: str(p.user_name) || str(p.user_email) || 'صاحب الطلب',
+                   email: str(p.user_email).toLowerCase(), amountText: moneyText(p.amount, p.currency || 'EGP'), at: at, when: agoText(at, now), ref: status === 'paid' ? str(p.reference) : '' });
+      });
+    }
+    take(paid, 'paid', 'settled_at'); take(rejected, 'rejected', 'rejected_at');
+    out.sort(function (a, b) { return b.at - a.at; });
+    return { rows: out, failed: failed };
+  }
+
+  // —— المدفوعات العالقة (قراءة فقط)
+  var STUCK_KIND = { course: 'دورة', course_offer: 'دورة', consultation: 'ملف خبير', plan: 'اشتراك', book: 'كتاب', knowledge: 'عمل معرفي', verify: 'توثيق',
+                     ads_deposit: 'رصيد إعلانات' };
+  var PAY_PROVIDER = { stripe: 'بطاقة بنكية', paymob: 'بطاقة بنكية', paytabs: 'بطاقة بنكية', card: 'بطاقة بنكية', manual: 'تحويل يدوي' };
+  var NO_REFUND_KINDS = ['book', 'knowledge'];
+  // الكتب لا تُسترد (قرار المؤسس): لا زرّ استرداد لعمل من الكتب، ويُكتب السبب مكانه.
+  function v2RefundRule(kind) {
+    var k = String(kind || '').trim().toLowerCase();
+    return NO_REFUND_KINDS.indexOf(k) > -1 ? { refundable: false, text: 'الكتب لا تُسترد' } : { refundable: true, text: '' };
+  }
+  function stuckRow(o, now) {
+    var email = str(o.buyer_email || o.user_email).toLowerCase(), name = str(o.buyer_name) || email, kind = str(o.kind).toLowerCase();
+    var created = ms(o.created_at), age = typeof o.age_hours === 'number' && isFinite(o.age_hours) ? o.age_hours : (isNaN(created) ? NaN : (now - created) / HOUR);
+    var rule = v2RefundRule(kind);
+    return { id: String(o.order_id || o.id || ''), kind: kind, kindText: STUCK_KIND[kind] || 'طلب', title: str(o.title) || STUCK_KIND[kind] || 'طلب',
+             amount: o.amount, currency: o.currency || 'EGP', amountText: moneyText(o.amount, o.currency || 'EGP'),
+             name: name || 'صاحب الدفع', email: EMAIL_RE.test(email) ? email : '', provider: PAY_PROVIDER[str(o.provider || o.gateway).toLowerCase()] || '',
+             ageText: isNaN(age) ? '' : (age < 1 ? 'منذ أقل من ساعة' : 'منذ ' + hoursWord(Math.floor(age))), ageHours: isNaN(age) ? null : age,
+             refundable: rule.refundable, noRefundText: rule.text, person: EMAIL_RE.test(email) ? { email: email, name: name } : null };
+  }
+  var STUCK_CAP = 200;
+  function v2Stuck(resp, now) {
+    if (!resp || !Array.isArray(resp.items)) return null;
+    var rows = resp.items.filter(function (o) { return o && typeof o === 'object'; }).map(function (o) { return stuckRow(o, now); });
+    rows.sort(function (a, b) { return (b.ageHours || 0) - (a.ageHours || 0); });
+    return { rows: rows, count: rows.length, partial: rows.length >= STUCK_CAP, afterHours: Number(resp.after_hours) || 2 };
+  }
+  // احتياط للوحة القرارات: طابور المنصة يحمل نفس الطلبات العالقة (بلا اسم) لو جسر التفصيل تعذّر.
+  function v2StuckFromQueue(Q) {
+    var s = Q && Q.stuck_card_payments;
+    if (!s || !Array.isArray(s.orders)) return null;
+    return v2Stuck({ items: s.orders.map(function (o) { return { order_id: o.id, kind: o.kind, amount: o.amount, currency: o.currency, created_at: o.created_at,
+                                                                  buyer_email: o.user_email, provider: o.gateway }; }) }, Date.now());
+  }
+
+  // —— استردادات تنتظر القرار
+  var CANCEL_BY = { member: 'صاحب الحجز', expert: 'الخبير', admin: 'الإدارة' };
+  // `bridge` = رد `/api/v2/refunds/pending` (أو null)، `disputes` = `v2DisputeTickets(...).cols.refunds` (أو null). كلٌّ منهما يفشل وحده.
+  function v2Refunds(bridge, disputes, now) {
+    var rows = [], failed = [];
+    if (bridge && Array.isArray(bridge.refunds)) {
+      bridge.refunds.forEach(function (r) {
+        if (!r) return;
+        var full = r.full_refund === true, who = CANCEL_BY[str(r.cancelled_by).toLowerCase()];
+        var at = ms(r.cancelled_at);
+        var email = str(r.member_email).toLowerCase();
+        rows.push({ id: 'm|' + str(r.consultation_id), source: 'booking', title: 'استرداد بعد إلغاء حجز', amountText: moneyText(r.amount, r.currency || 'EGP'),
+                    who: EMAIL_RE.test(email) ? email : 'صاحب الحجز', person: EMAIL_RE.test(email) ? { email: email, name: email } : null,
+                    since: isNaN(at) ? '' : agoText(at, now), at: isNaN(at) ? Infinity : at,
+                    brain: (full ? 'أُلغي الحجز بالكامل والمبلغ كله مستحق للاسترداد' : 'إلغاء متأخر: راجع المبلغ المستحق قبل الرد') + (who ? ' · طلب الإلغاء من ' + who : ''),
+                    act: { do: 'escrow' }, button: 'افتح وقرّر', refundable: true });
+      });
+    } else failed.push('الاستردادات اليدوية');
+    if (Array.isArray(disputes)) {
+      disputes.forEach(function (t) {
+        var rule = v2RefundRule(t.row && t.row.ef && t.row.ef.kind);
+        rows.push({ id: 'd|' + t.id, source: 'dispute', title: t.title || 'دفع بلا ملف', amountText: t.amount || '', who: t.client || 'صاحب الطلب', person: null,
+                    since: t.text || '', at: isFinite(t.sortAt) ? t.sortAt : Infinity, brain: t.reason || 'دُفع المبلغ ولم يصل الملف', act: { do: 'row', id: t.id },
+                    button: rule.refundable ? 'افتح وقرّر' : '', noRefundText: rule.text, refundable: rule.refundable, ticket: t });
+      });
+    } else failed.push('الدفعات بلا ملف');
+    rows.sort(function (a, b) { return a.at - b.at; });
+    return { rows: rows, failed: failed };
+  }
+
+  // —— الأسعار
+  function minLine(mins) { return mins.map(function (m) { return m.label + ': ' + m.amountText; }).join(' · '); }
+  function v2Prices(resp) {
+    if (!resp || !Array.isArray(resp.items)) return null;
+    var order = Array.isArray(resp.countries) ? resp.countries : Object.keys(COUNTRY_LABEL);
+    var rows = resp.items.map(function (it) {
+      var mp = it.min_price && typeof it.min_price === 'object' ? it.min_price : {};
+      var mins = order.filter(function (c) { return mp[c]; }).map(function (c) { return { country: c, label: COUNTRY_LABEL[c] || c, amountText: moneyText(mp[c].amount, mp[c].currency) }; });
+      return { id: String(it.id), title: str(it.title) || String(it.id), visible: it.visible === true, hasPrices: it.has_prices === true, mins: mins,
+               minText: mins.length ? minLine(mins) : 'لا أسعار بعد', updatedAt: it.updated_at || null };
+    });
+    return { rows: rows, countries: order, currencies: resp.currencies || {} };
+  }
+  var VERSION_LABEL = { read: 'القراءة على المنصة', pdf: 'نسخة PDF' };
+  function digitsToLatin(s) {
+    return String(s == null ? '' : s).replace(/[٠-٩]/g, function (d) { return String(d.charCodeAt(0) - 0x660); })
+      .replace(/[۰-۹]/g, function (d) { return String(d.charCodeAt(0) - 0x6F0); });
+  }
+  // نص مدخل ⇒ رقم (يقبل الأرقام العربية والفاصلة العربية). فارغ ⇒ null، وغير صالح ⇒ NaN.
+  function parseAmount(text) {
+    var t = digitsToLatin(text).replace(/[٬,\s]/g, '').replace(/٫/g, '.').trim();
+    if (t === '') return null;
+    if (!/^\d+(\.\d{1,2})?$/.test(t)) return NaN;
+    return Number(t);
+  }
+  function amountField(n) { return n == null ? '' : String(n); }
+  // رد `GET /api/v2/prices/<kind>/<id>` ⇒ نموذج التعديل (نسخ × بلاد، وعملة كل بلد بجانب الخانة).
+  function v2PriceForm(resp) {
+    var p = resp && resp.prices;
+    if (!p || typeof p !== 'object') return null;
+    var countries = (Array.isArray(resp.countries) && resp.countries.length ? resp.countries : Object.keys(COUNTRY_LABEL)).map(function (c) {
+      var cur = (resp.currencies && resp.currencies[c]) || '';
+      return { key: c, label: COUNTRY_LABEL[c] || c, currency: cur, currencyName: curLong(cur) };
+    });
+    var keys = Array.isArray(resp.versions_allowed) && resp.versions_allowed.length ? resp.versions_allowed.slice() : Object.keys(p.versions || {});
+    if (!keys.length) keys = ['read'];
+    var versions = keys.map(function (k) {
+      var row = (p.versions && p.versions[k]) || {}, cells = {};
+      countries.forEach(function (c) { cells[c.key] = row[c.key] ? amountField(row[c.key].amount) : ''; });
+      return { key: k, label: VERSION_LABEL[k] || k, cells: cells };
+    });
+    return { kind: p.kind || '', id: p.id, title: str(p.title) || String(p.id), visible: p.visible === true, rev: typeof p.rev === 'number' ? p.rev : 0,
+             countries: countries, versions: versions, updatedBy: str(p.updated_by), updatedAt: p.updated_at || null, history: Array.isArray(p.history) ? p.history.slice(-10).reverse() : [] };
+  }
+  // مدخلات المستخدم ⇒ {ok, versions, visible} بالشكل اللي تقبله المنصة، أو {ok:false, error}. الخانة الفاضية = لا سعر لهذا البلد.
+  function v2PriceBuild(form, input) {
+    var versions = {}, err = '';
+    form.versions.forEach(function (v) {
+      var row = {};
+      form.countries.forEach(function (c) {
+        var raw = input && input.cells && input.cells[v.key] ? input.cells[v.key][c.key] : '';
+        var n = parseAmount(raw);
+        if (n === null) return;
+        if (isNaN(n)) { if (!err) err = 'السعر في ' + c.label + ' (' + v.label + ') لازم يكون رقمًا'; return; }
+        row[c.key] = { amount: n, currency: c.currency };
+      });
+      versions[v.key] = row;
+    });
+    if (err) return { ok: false, error: err };
+    return { ok: true, versions: versions, visible: !!(input && input.visible) };
+  }
+  // before → after لكل خانة تغيّرت: [{label, from, to}] + «ظاهر للناس». `form` = v2PriceForm، `built` = v2PriceBuild.
+  function v2PriceDiff(form, built) {
+    var lines = [];
+    form.versions.forEach(function (v) {
+      form.countries.forEach(function (c) {
+        var before = parseAmount(v.cells[c.key]), after = built.versions[v.key] && built.versions[v.key][c.key] ? built.versions[v.key][c.key].amount : null;
+        before = before === null || isNaN(before) ? null : before;
+        if (before === after) return;
+        lines.push({ label: v.label + ' · ' + c.label, from: before === null ? 'لا سعر' : moneyText(before, c.currency), to: after === null ? 'لا سعر' : moneyText(after, c.currency) });
+      });
+    });
+    if (form.visible !== built.visible) lines.push({ label: 'ظاهر للناس', from: form.visible ? 'نعم' : 'لا', to: built.visible ? 'نعم' : 'لا' });
+    return { lines: lines, changed: lines.length > 0 };
+  }
+
+  // —— النسب
+  var PLATFORM_FLOOR = 35, CASE_FLOOR = 25;
+  function pct(n) { return ar(n) + '٪'; }
+  function ladderRows(ladder) {
+    var out = [], prev = 0;
+    (Array.isArray(ladder) ? ladder : []).forEach(function (s, i) {
+      var cap = s.max_egp, pp = numOf(s.platform_pct), upTo;
+      if (cap == null) upTo = prev ? 'من ' + fmt(prev) + ' جنيه فأكثر' : 'أي قيمة';
+      else upTo = i === 0 ? 'أقل من ' + fmt(cap) + ' جنيه' : 'من ' + fmt(prev) + ' إلى أقل من ' + fmt(cap) + ' جنيه';
+      out.push({ upTo: upTo, platform: pp, owner: 100 - pp, platformText: pct(pp), ownerText: pct(100 - pp), max: cap == null ? null : cap });
+      if (cap != null) prev = cap;
+    });
+    return out;
+  }
+  function v2SharesView(resp) {
+    var t = resp && (resp.shares && typeof resp.shares === 'object' ? resp.shares : null);
+    if (!t || !t.books || !t.courses || !t.cases) return null;
+    var b = t.books, c = t.courses, a = t.affiliate || {};
+    var lines = [
+      { key: 'books', title: 'الكتب', editable: true, text: 'صاحب العمل ' + pct(b.normal.owner) + ' · المنصة ' + pct(b.normal.platform) },
+      { key: 'books_ads', title: 'الكتب مع إعلانات', editable: true, text: 'صاحب العمل ' + pct(b.ads.owner) + ' · المنصة ' + pct(b.ads.platform) },
+      { key: 'courses', title: 'الدورات', editable: false, text: 'صاحب الدورة يبدأ من ' + pct(c.base) + '، ويصل بكوده إلى ' + pct(c.code_max) + '، وبالإعلانات يزيد حتى ' + ar(c.ads_max_bonus) + ' نقطة، بسقف ' + pct(c.owner_cap),
+        note: 'تُعدَّل في جولة الدورات' },
+      { key: 'affiliate', title: 'عمولة الإحالة', editable: true, text: pct(a.rate) + ' من قيمة البيع، تُخصم من الطرفين بنسبة نصيب كلٍّ منهما' }
+    ];
+    return { version: typeof t.version === 'number' ? t.version : (typeof resp.version === 'number' ? resp.version : 0), lines: lines, ladder: ladderRows(t.cases.ladder),
+             floors: { platform: numOf(t.platform_floor) || PLATFORM_FLOOR, cases: numOf(t.case_floor) || CASE_FLOOR },
+             floorText: 'نصيب المنصة لا ينزل عن ' + pct(numOf(t.platform_floor) || PLATFORM_FLOOR) + ' في أي بيع، والقضايا ' + pct(numOf(t.case_floor) || CASE_FLOOR) + ' كحدّ أدنى',
+             table: t, updatedBy: str(t.updated_by), updatedAt: t.updated_at || null };
+  }
+  // كل رقم قابل للقراءة بمسار: يُستعمل للمقارنة قبل/بعد (سجل التعديلات وورقة التأكيد).
+  function flatShares(t) {
+    var out = {};
+    if (!t) return out;
+    if (t.books) ['normal', 'ads'].forEach(function (k) {
+      if (!t.books[k]) return;
+      var n = k === 'normal' ? 'الكتب' : 'الكتب مع إعلانات';
+      out['books.' + k + '.owner'] = { label: n + ' · صاحب العمل', v: pct(t.books[k].owner) };
+      out['books.' + k + '.platform'] = { label: n + ' · المنصة', v: pct(t.books[k].platform) };
+    });
+    if (t.courses) [['base', 'الأساسية'], ['code_max', 'بالكود'], ['ads_max_bonus', 'زيادة الإعلانات'], ['owner_cap', 'السقف']].forEach(function (p) {
+      if (t.courses[p[0]] != null) out['courses.' + p[0]] = { label: 'الدورات · ' + p[1], v: p[0] === 'ads_max_bonus' ? ar(t.courses[p[0]]) + ' نقطة' : pct(t.courses[p[0]]) };
+    });
+    var lad = ladderRows(t.cases && t.cases.ladder);
+    lad.forEach(function (r, i) { out['cases.' + i] = { label: 'القضايا · ' + r.upTo, v: 'المنصة ' + r.platformText }; });
+    if (t.case_floor != null) out.case_floor = { label: 'الحد الأدنى للقضايا', v: pct(t.case_floor) };
+    if (t.platform_floor != null) out.platform_floor = { label: 'الحد الأدنى للمنصة', v: pct(t.platform_floor) };
+    if (t.affiliate && t.affiliate.rate != null) out['affiliate.rate'] = { label: 'عمولة الإحالة', v: pct(t.affiliate.rate) };
+    return out;
+  }
+  function v2SharesDiff(before, after) {
+    var a = flatShares(before), b = flatShares(after), keys = {}, lines = [];
+    Object.keys(a).concat(Object.keys(b)).forEach(function (k) { keys[k] = 1; });
+    Object.keys(keys).forEach(function (k) {
+      var x = a[k], y = b[k];
+      if ((x && x.v) === (y && y.v)) return;
+      lines.push({ label: (y || x).label, from: x ? x.v : 'لا شيء', to: y ? y.v : 'لا شيء' });
+    });
+    return { lines: lines, changed: lines.length > 0 };
+  }
+  function clone(o) { return JSON.parse(JSON.stringify(o)); }
+  // مدخلات النسب ⇒ {ok, changes, after}. input = {booksOwner, booksAdsOwner, ladder:[نصيب المنصة لكل درجة], affiliateRate} (نصوص أو أرقام).
+  // يُرسَل فقط ما تغيّر. ⛔ الأرضيات (٣٥ والقضايا ٢٥) تحرسها المنصة؛ هنا فقط شكل الرقم (٠–١٠٠).
+  function v2SharesChanges(table, input) {
+    var changes = {}, after = clone(table), err = '';
+    function pctIn(v, label) {
+      var n = parseAmount(v);
+      if (n === null || isNaN(n) || n < 0 || n > 100) { if (!err) err = label + ' لازم يكون رقمًا بين ٠ و١٠٠'; return null; }
+      return n;
+    }
+    function bookPlan(plan, raw, label) {
+      if (raw == null || raw === '') return;
+      var o = pctIn(raw, label);
+      if (o == null || o === table.books[plan].owner) return;
+      changes.books = changes.books || {}; changes.books[plan] = { owner: o, platform: 100 - o };
+      after.books[plan] = { owner: o, platform: 100 - o };
+    }
+    bookPlan('normal', input.booksOwner, 'نصيب صاحب العمل في الكتب');
+    bookPlan('ads', input.booksAdsOwner, 'نصيب صاحب العمل في الكتب مع إعلانات');
+    if (Array.isArray(input.ladder)) {
+      var lad = clone(table.cases.ladder), diff = false;
+      input.ladder.forEach(function (raw, i) {
+        if (!lad[i] || raw == null || raw === '') return;
+        var p = pctIn(raw, 'نصيب المنصة في القضايا');
+        if (p == null || p === lad[i].platform_pct) return;
+        lad[i].platform_pct = p; diff = true;
+      });
+      if (diff) { changes.cases = { ladder: lad }; after.cases.ladder = lad; }
+    }
+    if (input.affiliateRate != null && input.affiliateRate !== '') {
+      var r = pctIn(input.affiliateRate, 'عمولة الإحالة');
+      if (r != null && r !== table.affiliate.rate) { changes.affiliate = { rate: r }; after.affiliate = Object.assign({}, table.affiliate, { rate: r }); }
+    }
+    if (err) return { ok: false, error: err };
+    if (!Object.keys(changes).length) return { ok: false, error: 'لم تغيّر أي رقم', unchanged: true };
+    return { ok: true, changes: changes, after: after };
+  }
+  // سجل تعديلات النسب (آخر ٢٠): من، متى، وسطور قبل ⇒ بعد.
+  function v2SharesHistory(resp, now) {
+    var h = resp && (resp.history || resp.log);
+    if (!Array.isArray(h)) return null;
+    return h.filter(function (r) { return r && typeof r === 'object'; }).map(function (r) {
+      var at = ms(r.at);
+      return { by: str(r.by), email: str(r.by).toLowerCase(), at: isNaN(at) ? null : at, when: isNaN(at) ? '' : dateText(new Date(at).toISOString()) + ' · ' + agoText(at, now),
+               lines: v2SharesDiff(r.before, r.after).lines };
+    });
+  }
+
+  // —— الحد الأدنى للسحب
+  function v2MinPayout(resp, now) {
+    if (!resp || typeof resp.withdraw_min !== 'number') return null;
+    var al = resp.allowed && resp.allowed.withdraw_min ? resp.allowed.withdraw_min : {};
+    var hist = (Array.isArray(resp.history) ? resp.history : []).filter(Boolean).map(function (r) {
+      var at = ms(r.at), b = r.before && r.before.withdraw_min, a = r.after && r.after.withdraw_min;
+      return { by: str(r.by), when: isNaN(at) ? '' : dateText(new Date(at).toISOString()) + ' · ' + agoText(at, now), from: b == null ? '' : moneyText(b, 'EGP'), to: a == null ? '' : moneyText(a, 'EGP') };
+    });
+    return { value: resp.withdraw_min, text: moneyText(resp.withdraw_min, 'EGP'), rev: typeof resp.rev === 'number' ? resp.rev : 0,
+             min: typeof al.min === 'number' ? al.min : 50, max: typeof al.max === 'number' ? al.max : 20000, history: hist, updatedBy: str(resp.updated_by) };
+  }
+  function v2MinPayoutInput(text, info) {
+    var n = parseAmount(text);
+    if (n === null || isNaN(n) || n !== Math.floor(n)) return { ok: false, error: 'اكتب رقمًا صحيحًا بالجنيه' };
+    if (n < info.min || n > info.max) return { ok: false, error: 'الحد الأدنى للسحب يكون بين ' + fmt(info.min) + ' و' + fmt(info.max) + ' جنيه' };
+    return { ok: true, value: n };
+  }
+
+  // —— إعلانات الأعمال (قراءة)
+  function v2AdsLedger(resp, now) {
+    if (!resp || !Array.isArray(resp.items)) return null;
+    var rows = resp.items.filter(Boolean).map(function (it) {
+      var bal = Array.isArray(it.balance) ? it.balance.map(function (b) { return { currency: b.currency, amount: b.amount }; }) : [];
+      var line = v2MoneyLine(sumByCurrency(bal)), at = ms(it.last_entry_at), email = str(it.owner_email).toLowerCase();
+      return { id: String(it.owner_id), kind: str(it.owner_kind), kindText: it.owner_kind === 'course' ? 'دورة' : 'كتاب', title: str(it.title) || 'عمل بلا عنوان',
+               ownerEmail: EMAIL_RE.test(email) ? email : '', balanceText: bal.length ? [line.main].concat(line.others).filter(function (x) { return x; }).join(' · ') : '٠ جنيه',
+               balances: bal, last: isNaN(at) ? 'لا حركة' : agoText(at, now), at: isNaN(at) ? 0 : at, entries: Number(it.entries) || 0 };
+    });
+    rows.sort(function (a, b) { return b.at - a.at; });
+    return rows;
+  }
+  var ENTRY_TEXT = { deposit: 'إيداع', spend: 'صرف على الإعلانات', refund: 'رد إلى صاحب العمل' };
+  function v2AdsEntries(resp, now) {
+    if (!resp || !Array.isArray(resp.entries)) return null;
+    var rows = resp.entries.filter(Boolean).map(function (e) {
+      var at = ms(e.at);
+      return { entry: ENTRY_TEXT[e.entry] || 'حركة', amountText: moneyText(e.amount, e.currency || 'EGP'), sign: e.entry === 'deposit' ? '+' : '−', when: isNaN(at) ? '' : dateText(new Date(at).toISOString()), at: isNaN(at) ? 0 : at };
+    });
+    rows.sort(function (a, b) { return b.at - a.at; });
+    return { rows: rows, balance: v2MoneyLine(sumByCurrency((resp.balance || []).map(function (b) { return { currency: b.currency, amount: b.amount }; }))) };
+  }
+
+  // —— الكتب: مراجعة العروض
+  var OFFER_TYPE = { guide: 'دليل', book: 'كتاب', research: 'بحث', other: 'عمل' };
+  var OFFER_COUNTRY = { EGP: 'eg', SAR: 'sa', AED: 'ae', KWD: 'kw', QAR: 'qa', USD: 'default' };
+  // متوسط أقل سعر لكتب بلد معيّن (من قائمة الأسعار): {avg, n, currency} أو null لو أقل من كتابين بسعر في هذا البلد.
+  function v2BookAverage(pricesResp, country) {
+    if (!pricesResp || !Array.isArray(pricesResp.items)) return null;
+    var vals = [], cur = '';
+    pricesResp.items.forEach(function (it) {
+      var m = it.min_price && it.min_price[country];
+      if (m && numOf(m.amount) > 0 && it.visible === true) { vals.push(numOf(m.amount)); cur = m.currency; }
+    });
+    if (vals.length < 2) return null;
+    return { avg: vals.reduce(function (a, b) { return a + b; }, 0) / vals.length, n: vals.length, currency: cur };
+  }
+  // سطر العقل: حقائق من حقول العرض فقط — لا حكم مخترع. لا شيء للمقارنة ⇒ سطر فاضي.
+  function v2OfferLine(offer, avgByCountry) {
+    var bits = [], sp = offer && offer.suggested_price;
+    if (sp && numOf(sp.amount) > 0) {
+      var geo = OFFER_COUNTRY[String(sp.currency).toUpperCase()], base = geo && avgByCountry ? avgByCountry[geo] : null;
+      if (base && base.currency === String(sp.currency).toUpperCase() && base.avg > 0) {
+        var d = Math.round((numOf(sp.amount) - base.avg) / base.avg * 100);
+        var where = geo === 'default' ? 'باقي البلاد' : (COUNTRY_LABEL[geo] === 'مصر' ? 'مصر' : COUNTRY_LABEL[geo]);
+        if (Math.abs(d) < 5) bits.push('السعر قريب من متوسط الكتب في ' + where);
+        else bits.push('السعر ' + (d > 0 ? 'أعلى' : 'أقل') + ' من متوسط الكتب في ' + where + ' بـ' + pct(Math.abs(d)));
+      }
+    } else if (offer) bits.push('لم يقترح صاحب العرض سعرًا');
+    var ag = offer && offer.agreement;
+    if (ag && ag.platform_pct != null) bits.push('اتفاقية البيع: نصيب المنصة ' + pct(ag.platform_pct));
+    else if (offer && !ag) bits.push('لم يوافق صاحب العرض على اتفاقية البيع بعد');
+    return bits.join(' · ');
+  }
+  function v2OffersQueue(resp, pricesResp, now) {
+    if (!resp || !Array.isArray(resp.offers)) return null;
+    var avg = {};
+    Object.keys(COUNTRY_LABEL).forEach(function (g) { avg[g] = v2BookAverage(pricesResp, g); });
+    var rows = resp.offers.filter(function (o) { return o && o.id && (o.status == null || o.status === 'in_review'); }).map(function (o) {
+      var sp = o.suggested_price, at = ms(o.submitted_at), email = str(o.owner_email).toLowerCase();
+      return { id: String(o.id), title: str(o.title) || 'عمل بلا عنوان', about: shorten(o.about, 160), typeText: OFFER_TYPE[str(o.type)] || 'عمل',
+               ownerName: str(o.owner_name) || email || 'صاحب العرض', ownerEmail: EMAIL_RE.test(email) ? email : '',
+               suggestedText: sp && numOf(sp.amount) > 0 ? moneyText(sp.amount, sp.currency) : '', suggested: sp && numOf(sp.amount) > 0 ? { amount: numOf(sp.amount), currency: String(sp.currency).toUpperCase() } : null,
+               brain: v2OfferLine(o, avg), since: isNaN(at) ? '' : agoText(at, now), at: isNaN(at) ? Infinity : at, agreementText: o.agreement && o.agreement.plan_label ? o.agreement.plan_label : '', offer: o };
+    });
+    rows.sort(function (a, b) { return a.at - b.at; });
+    return rows;
+  }
+  // الأسعار المقترحة لورقة الاعتماد: سعر القراءة في بلد عملة العرض (إن عُرفت)، والباقي فاضٍ ليكتبه المؤسس.
+  function v2OfferPrefill(row, form) {
+    var cells = {};
+    form.versions.forEach(function (v) { cells[v.key] = {}; form.countries.forEach(function (c) { cells[v.key][c.key] = ''; }); });
+    if (row && row.suggested) {
+      var geo = OFFER_COUNTRY[row.suggested.currency];
+      if (geo && cells.read && cells.read[geo] != null) cells.read[geo] = amountField(row.suggested.amount);
+    }
+    return cells;
+  }
+  var REQ_TYPE = { book: 'كتاب', guide: 'دليل', research: 'بحث', other: 'غير ذلك' };
+  function v2Requests(resp, now) {
+    if (!resp || !Array.isArray(resp.groups)) return null;
+    var byId = {};
+    (Array.isArray(resp.requests) ? resp.requests : []).forEach(function (r) { if (r && r.id) byId[r.id] = r; });
+    var groups = resp.groups.map(function (g) {
+      var ids = Array.isArray(g.request_ids) ? g.request_ids : [], rs = ids.map(function (i) { return byId[i]; }).filter(Boolean);
+      var hidden = rs.length > 0 && rs.every(function (r) { return r.hidden === true; });
+      var status = rs.some(function (r) { return r.status === 'seeking'; }) ? 'seeking' : (rs.length && rs.every(function (r) { return r.status === 'fulfilled'; }) ? 'fulfilled' : 'new');
+      var last = ms(g.last_at);
+      return { key: str(g.key), topic: str(g.public_text) || str(g.topic), typeText: REQ_TYPE[str(g.type)] || 'غير ذلك', count: Number(g.count) || ids.length,
+               countText: U(Number(g.count) || ids.length, ['طلب واحد', 'طلبان', 'طلبات', 'طلبًا']), lastText: isNaN(last) ? '' : agoText(last, now), at: isNaN(last) ? 0 : last,
+               firstId: ids[0] || '', status: status, hidden: hidden };
+    });
+    groups.sort(function (a, b) { return b.count - a.count || b.at - a.at; });
+    return { groups: groups, open: groups.filter(function (g) { return !g.hidden && g.status === 'new'; }), approved: groups.filter(function (g) { return !g.hidden && g.status === 'seeking'; }) };
+  }
+
+  // —— شارة الفلوس: تحويلات + إيصالات + دفعات عالقة + استردادات (+ اقتسام الدورات المعلّق كما كان). الغائب من الطابور لا يُحسب صفرًا مختلقًا.
+  function v2MoneyBadge(Q) {
+    if (!Q) return null;
+    var parts = { payouts: qn(Q, 'wallet_payouts_pending'), receipts: qn(Q, 'manual_payments_pending'), stuck: qn(Q, 'stuck_card_payments'),
+                  refunds: qn(Q, 'manual_refunds_pending'), split: qn(Q, 'course_split_pending') };
+    return { parts: parts, total: parts.payouts + parts.receipts + parts.stuck + parts.refunds + parts.split };
+  }
+
   var api = {
     v2Tiles: v2Tiles, v2Decisions: v2Decisions, v2Card: v2Card, v2Next: v2Next, v2NextLine: v2NextLine,
     v2Health: v2Health, v2BrainLog: v2BrainLog,
     v2Tickets: v2Tickets, v2DisputeTickets: v2DisputeTickets, v2TimerText: v2TimerText, v2TimerTone: v2TimerTone, v2Person: v2Person,
     personKey: personKey, personEmailOf: personEmailOf, COLS: COLS, COL_LABEL: COL_LABEL, NA: NA,
+    v2Period: v2Period, v2Income: v2Income, v2Held: v2Held, v2Owed: v2Owed, v2MoneyLine: v2MoneyLine, v2MoneyBoard: v2MoneyBoard,
+    v2IncomeBars: v2IncomeBars, v2PayoutRows: v2PayoutRows, v2PayoutHistory: v2PayoutHistory, v2Stuck: v2Stuck, v2StuckFromQueue: v2StuckFromQueue,
+    v2RefundRule: v2RefundRule, v2Refunds: v2Refunds, v2Prices: v2Prices, v2PriceForm: v2PriceForm, v2PriceBuild: v2PriceBuild, v2PriceDiff: v2PriceDiff,
+    v2SharesView: v2SharesView, v2SharesDiff: v2SharesDiff, v2SharesChanges: v2SharesChanges, v2SharesHistory: v2SharesHistory,
+    v2MinPayout: v2MinPayout, v2MinPayoutInput: v2MinPayoutInput, v2AdsLedger: v2AdsLedger, v2AdsEntries: v2AdsEntries,
+    v2BookAverage: v2BookAverage, v2OfferLine: v2OfferLine, v2OffersQueue: v2OffersQueue, v2OfferPrefill: v2OfferPrefill, v2Requests: v2Requests,
+    v2MoneyBadge: v2MoneyBadge, PERIODS: PERIODS, SERVICES: SERVICES, COUNTRY_LABEL: COUNTRY_LABEL,
     SECTIONS: SECTIONS, ALIASES: ALIASES, STATE_DEFAULTS: STATE_DEFAULTS, sectionFor: sectionFor, sectionHash: sectionHash,
     parseSectionHash: parseSectionHash, routeFor: routeFor, sectionByKey: secOf, tabByKey: tabOf,
     TILE_DEFS: TILE_DEFS, FAILED_TEXT: FAILED_TEXT, PARTIAL_TEXT: PARTIAL_TEXT,
     util: { ar: ar, fmt: fmt, U: U, agoText: agoText, curName: curName, moneyText: moneyText, kindOf: kindOf, pickCandidate: pickCandidate,
-            dateText: dateText, durShort: durShort }
+            dateText: dateText, durShort: durShort, parseAmount: parseAmount, curLong: curLong, sumByCurrency: sumByCurrency }
   };
   root.V2L = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;

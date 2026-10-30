@@ -27,7 +27,8 @@ ROOT = os.path.dirname(os.path.dirname(_HERE))
 DC = os.path.join(ROOT, 'dashboard-cloud')
 NODE = __import__('shutil').which('node')
 needs_node = pytest.mark.skipif(not NODE, reason='needs node')
-PSEUDO_MODS = {'v2files', 'v2disputes', 'v2person'}     # D2: موديولات وهمية يرسمها V2D2 تحت الغلاف الجديد فقط
+PSEUDO_MODS = {'v2files', 'v2disputes', 'v2person',                       # D2: موديولات وهمية يرسمها V2D2 تحت الغلاف الجديد فقط
+               'v2m_overview', 'v2m_payouts', 'v2m_receipts', 'v2m_prices', 'v2m_shares', 'v2m_ads', 'v2b_offers', 'v2b_requests'}   # D3: يرسمها V2D3
 
 
 def _read(*parts):
@@ -84,10 +85,14 @@ def test_the_tabs_match_the_approved_table():
         'disputes': [['disputes', 'النزاعات', 'v2disputes'], ['escrow', 'الضمان', 'escrow'], ['all', 'كل النزاعات', 'inbox']],
         'courses': [['courses', 'الدورات', 'courses'], ['trainers', 'المدرّبون', 'team']],
         'market': [['requests', 'الطلبات', 'market']],
-        'books': [['books', 'الكتب والأعمال', 'knowledge']],
+        # D3: مراجعة العروض وطلبات القرّاء أولًا (موديولان وهميان ورا الغلاف)، والشاشة القديمة آخرًا
+        'books': [['offers', 'مراجعة العروض', 'v2b_offers'], ['requests', 'طلبات القرّاء', 'v2b_requests'], ['books', 'الكتب والأعمال', 'knowledge']],
         'people': [['users', 'المستخدمون', 'users'], ['invites', 'الدعوات', 'invites'], ['messages', 'الرسائل', 'inbox'],
                    ['person', 'صفحة الشخص', 'v2person']],
-        'money': [['finance', 'المالية', 'finance'], ['packages', 'الباقات والأسعار', 'finance'], ['receipts', 'الإيصالات', 'escrow']],
+        # D3: «الفلوس» بهيكلها الجديد، والشاشتان القديمتان (المالية والباقات) في آخر تبويب «كل السجلات» + تبويب مخفي للإيصالات القديمة
+        'money': [['overview', 'نظرة', 'v2m_overview'], ['payouts', 'التحويلات', 'v2m_payouts'], ['receipts', 'الإيصالات والمدفوعات العالقة', 'v2m_receipts'],
+                  ['prices', 'الأسعار', 'v2m_prices'], ['shares', 'النسب والإعدادات', 'v2m_shares'], ['ads', 'إعلانات الأعمال', 'v2m_ads'],
+                  ['all', 'كل السجلات', 'finance'], ['manual', 'الإيصالات (الشاشة القديمة)', 'escrow']],
         'content': [['topics', 'المحتوى', 'topics'], ['tutorials', 'دليل الاستخدام', 'topics']],
         'marketing': [['campaigns', 'الحملات', 'marketing']],
         'reports': [['demand', 'تحليل الطلب', 'analysis']],
@@ -106,7 +111,7 @@ def test_every_old_module_key_lands_on_a_section_and_a_tab():
     landed = {k: (m['section'], m['tab']) for k, m in res}
     assert landed['inbox'] == ('home', 'inbox') and landed['overview'] == ('home', 'inbox')
     assert landed['team'] == ('files', 'experts') and landed['escrow'] == ('disputes', 'escrow')
-    assert landed['finance'] == ('money', 'finance') and landed['packages'] == ('money', 'packages')
+    assert landed['finance'] == ('money', 'all') and landed['packages'] == ('money', 'all')
     assert landed['messages'] == ('people', 'messages') and landed['tutorials'] == ('content', 'tutorials')
     assert landed['partners'] == ('company', 'invest') and landed['foundation'] == ('company', 'targets')
     assert landed['knowledge'] == ('books', 'books') and landed['ai'] == ('brain', 'helpers') and landed['home'] == ('home', 'board')
@@ -152,8 +157,8 @@ def test_inner_screen_state_picks_the_right_tab_and_unknown_state_stays_put():
         ('inbox', {'activeFilter': 't:messages'}, 'people', 'messages'), ('inbox', {'activeFilter': 'all'}, 'home', 'inbox'),
         ('inbox', {'activeFilter': 'human'}, 'home', 'inbox'), ('inbox', {'activeFilter': 't:money'}, 'home', 'inbox'),
         ('team', {'teamTab': 'trainers'}, 'courses', 'trainers'), ('team', {'teamTab': 'experts'}, 'files', 'experts'),
-        ('escrow', {'escTab': 'manual'}, 'money', 'receipts'), ('escrow', {'escTab': 'disputes'}, 'disputes', 'escrow'),
-        ('finance', {'finTab': 'packages'}, 'money', 'packages'), ('finance', {'finTab': 'withdrawals'}, 'money', 'finance'),
+        ('escrow', {'escTab': 'manual'}, 'money', 'manual'), ('escrow', {'escTab': 'disputes'}, 'disputes', 'escrow'),
+        ('finance', {'finTab': 'packages'}, 'money', 'all'), ('finance', {'finTab': 'withdrawals'}, 'money', 'all'),
         ('topics', {'topicsTab': 'tutorials'}, 'content', 'tutorials'), ('topics', {'topicsTab': 'news'}, 'content', 'topics'),
         ('courses', {'courseTab': 'demand'}, 'courses', 'courses'), ('home', {'v2mode': 'brain'}, 'brain', 'log'),
         ('home', {'v2mode': 'focus'}, 'home', 'board'), ('targets', {'tgTab': 'foundation'}, 'company', 'targets'),
@@ -182,9 +187,9 @@ def test_an_unknown_module_is_not_mapped():
 def test_section_addresses_round_trip():
     res = _node("""const out=[];L.SECTIONS.forEach(s=>s.tabs.forEach(t=>{const h=L.sectionHash(s.key,t.key);
       out.push([s.key,t.key,h,L.parseSectionHash(h),L.parseSectionHash(h.slice(1)),L.routeFor(h)]);}));console.log(JSON.stringify(out))""")
-    assert len(res) == 28                      # ٢٥ + «كل الملفات» و«كل النزاعات» + صفحة الشخص (الأخيرة مخفية)
+    assert len(res) == 35                      # ٢٥ + «كل الملفات» و«كل النزاعات» + صفحة الشخص (مخفية) + D3: الفلوس ٨ (واحد مخفي) بدل ٣، والكتب ٣ بدل ١
     for sec, tab, h, p1, p2, r in res:
-        if (sec, tab) == ('people', 'person'):
+        if (sec, tab) in (('people', 'person'), ('money', 'manual')):
             continue                           # تبويب مخفي بلا بريد: يرجع لأول تبويب (يُختبر في test_v2_d2)
         assert h == '#s/%s/%s' % (sec, tab)
         assert p1 == {'section': sec, 'tab': tab, 'exact': True} == p2
@@ -195,15 +200,15 @@ def test_section_addresses_round_trip():
 def test_addresses_without_a_tab_or_with_garbage_fall_back_safely():
     res = _node("""console.log(JSON.stringify([L.parseSectionHash('#s/money'),L.parseSectionHash('#s/money/zzz'),L.parseSectionHash('#s/zzz/x'),
       L.parseSectionHash('#money'),L.parseSectionHash(''),L.parseSectionHash(null),L.sectionHash('files')]))""")
-    assert res[0] == {'section': 'money', 'tab': 'finance', 'exact': True}
-    assert res[1] == {'section': 'money', 'tab': 'finance', 'exact': False}
+    assert res[0] == {'section': 'money', 'tab': 'overview', 'exact': True}
+    assert res[1] == {'section': 'money', 'tab': 'overview', 'exact': False}
     assert res[2] is None and res[3] is None and res[4] is None and res[5] is None
     assert res[6] == '#s/files'
 
 
 @needs_node
 def test_old_links_land_on_their_section_with_the_right_tab():
-    links = {'#finance': ('money', 'finance'), '#packages': ('money', 'packages'), '#messages': ('people', 'messages'),
+    links = {'#finance': ('money', 'all'), '#packages': ('money', 'all'), '#messages': ('people', 'messages'),
              '#invites': ('people', 'invites'), '#users': ('people', 'users'), '#escrow': ('disputes', 'escrow'),
              '#courses': ('courses', 'courses'), '#team': ('files', 'experts'), '#market': ('market', 'requests'),
              '#knowledge': ('books', 'books'), '#topics': ('content', 'topics'), '#tutorials': ('content', 'tutorials'),
