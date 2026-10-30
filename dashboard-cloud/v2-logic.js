@@ -2175,8 +2175,15 @@
     var meta = ['استثمرت ' + fmt(x.invested_total_egp) + ' جنيه'];
     var d = dateText(x.created_at);
     if (d) meta.push(d);
-    var out = { title: title || 'استثمار', meta: meta.join(' · '), chip: { t: ch.t, tone: ch.tone },
-                second: title ? 'العائد المحسوب حتى الآن: ' + fmt(x.roi_percent) + '٪' : 'العائد: ' + NA, actual: '' };
+    var out = { title: title || 'استثمار', meta: meta.join(' · '), chip: { t: ch.t, tone: ch.tone }, second: 'العائد: ' + NA, actual: '' };
+    if (title) {
+      // -١٠٠٪ بالحساب يعني «لم يُسجَّل عائد بعد» (عائد صفر) لا خسارة حقيقية: لا نحكم بخسارة إلا لو حالتها «خسارة».
+      // أي نسبة سالبة تُكتب كلمة «خسارة» لا شرطة قبل الأرقام (الشرطة تنقلب اتجاهها في السطر العربي).
+      var roi = Number(x.roi_percent);
+      if (x.roi_percent == null || x.roi_percent === '' || !isFinite(roi)) out.second = 'العائد: ' + NA;
+      else if (roi < 0) out.second = (roi <= -100 && x.status !== 'loss') ? 'العائد: ' + NA : 'العائد المحسوب حتى الآن: خسارة ' + fmt(-roi) + '٪';
+      else out.second = 'العائد المحسوب حتى الآن: ' + fmt(roi) + '٪';
+    }
     if (tab === 'history' && num(x.actual_return) > 0) out.actual = 'العائد الفعلي: ' + moneyText(x.actual_return, 'USD');
     return out;
   }

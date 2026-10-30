@@ -49,9 +49,13 @@
   };
 
   // ------------------------------------------------------------------ الحالة
-  var S = { tab: { i_invest: 'active', courses: 'catalog', topics: 'topics' }, chip: { users: 'all', courses: 'all', topics: 'all' }, q: '', open: {}, lim: {},
-            lastKey: '', baseCapped: null, sheetDirty: false, searchT: null, sseq: 0, wd: null };
+  function freshState() {
+    return { tab: { i_invest: 'active', courses: 'catalog', topics: 'topics' }, chip: { users: 'all', courses: 'all', topics: 'all' }, q: '', open: {}, lim: {},
+             lastKey: '', baseCapped: null, sheetDirty: false, searchT: null, sseq: 0, wd: null };
+  }
+  var S = freshState();
   var SRC = {};
+  var GEN = 0;   // يزيد مع كل تغيّر في الحساب: أي رد متأخر من الحساب السابق يُهمَل
   function src(k) { return SRC[k] || (SRC[k] = { state: 'idle', data: null, status: 0, msg: '', seq: 0 }); }
   function st(k) { return src(k).state; }
   function pack(keys) { var o = {}; keys.forEach(function (k) { o[k] = { state: st(k), data: src(k).data }; }); return o; }
@@ -67,14 +71,14 @@
     if (s.state === 'loading' && !force) return;
     if (!force && s.state !== 'idle') return;
     s.state = 'loading';
-    var seq = ++s.seq;
+    var seq = ++s.seq, gen = GEN;
     E.api(path || PATH[k]).then(function (d) {
-      if (seq !== s.seq) return;
+      if (seq !== s.seq || gen !== GEN) return;
       s.state = 'ready'; s.data = d; s.at = now(); s.status = 0; s.msg = '';
       if (k === 'people' && !path) S.baseCapped = R.peopleCapped(d);
       changed();
     }).catch(function (e) {
-      if (seq !== s.seq) return;
+      if (seq !== s.seq || gen !== GEN) return;
       if (e && e.status === 401) return;
       s.state = 'error'; s.status = (e && e.status) || 0;
       s.msg = e && e.data && typeof e.data.error === 'string' ? e.data.error : '';
@@ -208,7 +212,7 @@
     return '';
   }
   function viewTEarnings() {
-    need('me', 'payouts', 'wallet', 'active', 'history');
+    need('me', 'payouts', 'wallet', 'active');
     var E = R.trainerEarnings(pack(['payouts', 'wallet', 'active']), now());
     var html = '<h2 class="v2r-h2">من الدورات</h2>';
     if (st('payouts') === 'error') html += failStrip('payouts', 'مستحقاتك', true);
@@ -555,6 +559,58 @@
     var a = appEl(); if (a) a.classList.toggle('v2r-legacy', !!on);
     var n = q('#v2rLegacyNote'); if (n) n.hidden = !on;
     V.legacy = !!on;
+    if (on) startLegacyWatch(); else stopLegacyWatch();
+  }
+
+  // نصوص «كل السجلات» القادمة من الشاشات القديمة: كلمات تقنية وأرقام لاتينية وخانة إيراد فاضية. الشاشات القديمة لا تُمَسّ (أقسام أخرى)،
+  // فنصحّح المعروض هنا فقط، ويُعاد التصحيح مع كل إعادة رسم (الشاشة القديمة تعيد كتابة نفسها من ردود التحميل).
+  var DIG_AR = '٠١٢٣٤٥٦٧٨٩';
+  function legacyText(t) {
+    var o = t;
+    t = t.replace(/\s*[·\-]?\s*\b[A-Z]{2,5}-[A-Za-z0-9-]+/g, '').replace(/\s*app\.elprofessor\.net/gi, ' المنصة').replace(/\belprofessor\.net\b/gi, 'الموقع').replace(/\s*\bnative\b\s*/gi, ' ').replace(/\bUSD\b/g, 'دولار').replace(/\bEGP\b/g, 'جنيه');
+    t = t.replace(/من (\d+) دورة(?![\u0600-\u06FF])/g, function (m, n) { return 'من ' + U.U(+n, R.COUNT.course); });
+    t = t.replace(/\d/g, function (d) { return DIG_AR.charAt(+d); });
+    t = t.replace(/([٠-٩]) ج(?![\u0600-\u06FF])/g, '$1 جنيه');
+    t = t.replace(/^(\s*من\s+)?[·—]\s*$/, function (m, a) { return (a || '') + R.NA; });
+    t = t.replace(/ {2,}/g, ' ');
+    return t === o ? o : t;
+  }
+  function cleanLegacy(root) {
+    if (!root) return;
+    qa('.from, .sub', root).forEach(function (el) {
+      // الشاشة القديمة تحسب الإيراد = المسجّلين × سعر غير موجود ⇒ صفر مختلَق. لا نعرض رقمًا لا مصدر له.
+      if (/^\s*إيراد\s*[·—–\-٠0]\s*(ج|جنيه)\s*$/.test(el.textContent)) el.textContent = 'الإيراد: ' + R.NA;
+    });
+    var w = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, null), list = [];
+    while (w.nextNode()) list.push(w.currentNode);
+    list.forEach(function (n) {
+      var p = n.parentNode;
+      if (!p || /^(SCRIPT|STYLE|TEXTAREA|INPUT|OPTION)$/.test(p.nodeName)) return;
+      if (p.closest && p.closest('[dir="ltr"], .v2r-mail, code')) return;
+      var v = n.nodeValue, c = legacyText(v);
+      if (c !== v) n.nodeValue = c;
+    });
+  }
+  var LEG = { obs: null, busy: false };
+  function legacyPass() {
+    var view = q('#view');
+    if (!view || !V.active || !V.legacy || LEG.busy) return;
+    LEG.busy = true;
+    try { cleanLegacy(view); } catch (e) {}
+    if (LEG.obs) LEG.obs.takeRecords();
+    LEG.busy = false;
+  }
+  function startLegacyWatch() {
+    var view = q('#view');
+    if (!view) return;
+    if (!LEG.obs && typeof MutationObserver === 'function') {
+      LEG.obs = new MutationObserver(function () { legacyPass(); });
+      LEG.obs.observe(view, { childList: true, subtree: true, characterData: true });
+    }
+    legacyPass();
+  }
+  function stopLegacyWatch() {
+    if (LEG.obs) { LEG.obs.disconnect(); LEG.obs = null; }
   }
 
   // ------------------------------------------------------------------ الرسم
@@ -740,8 +796,8 @@
   // ------------------------------------------------------------------ التفعيل
   V.activate = function () {
     var app = appEl(); if (!app || V.active) return;
-    var key = ROLEKEY[V.role] || 'viewer';
-    app.classList.add('v2-shell', 'v2-roles', 'v2-bare', 'v2r-' + (key === 'employee' ? 'staff' : key));
+    app.classList.add('v2-shell', 'v2-roles', 'v2-bare');
+    syncRoleClass();
     var rail = q('.rail'), view = q('#view');
     var rb = q('#roBanner'); if (rb) { rb.style.display = 'none'; rb.innerHTML = ''; }   // setRole كتب display:flex بأسلوب مضمّن قبل رد المفتاح
     var side = document.createElement('aside'); side.id = 'v2rSide'; side.className = 'v2-side';
@@ -758,7 +814,16 @@
     if (tb && ttl && !q('.v2-tb-logo', tb)) { var lg = document.createElement('span'); lg.className = 'v2-tb-logo'; lg.innerHTML = LOGO; tb.insertBefore(lg, ttl); }
     var mb = q('#menuBtn');
     if (mb) mb.onclick = function () { if (sheetOpen()) closeSheet(); else openSheet(); };
-    document.addEventListener('keydown', function (e) {
+    if (!V.docWired) {
+      V.docWired = true;
+      document.addEventListener('keydown', trapKeys);
+      window.addEventListener('resize', function () { if (window.innerWidth >= 1180) closeSheet(); });
+    }
+    V.active = true;
+    wireOnce();
+    if (typeof window.renderView === 'function') window.renderView();
+  };
+  function trapKeys(e) {
       if (!V.active || !sheetOpen()) return;
       if (e.key === 'Escape') { closeSheet(); return; }
       if (e.key !== 'Tab') return;
@@ -769,12 +834,35 @@
       if (!box.contains(cur)) { e.preventDefault(); first.focus(); }
       else if (e.shiftKey && cur === first) { e.preventDefault(); last.focus(); }
       else if (!e.shiftKey && cur === last) { e.preventDefault(); first.focus(); }
-    });
-    window.addEventListener('resize', function () { if (window.innerWidth >= 1180) closeSheet(); });
-    V.active = true;
-    wireOnce();
-    if (typeof window.renderView === 'function') window.renderView();
-  };
+  }
+
+  // صنف الدور على الإطار (يتبدّل مع الحساب بلا إعادة تحميل)
+  function syncRoleClass() {
+    var app = appEl(); if (!app) return;
+    ['v2r-trainer', 'v2r-investor', 'v2r-staff', 'v2r-viewer'].forEach(function (c) { app.classList.remove(c); });
+    var key = ROLEKEY[V.role] || 'viewer';
+    app.classList.add('v2r-' + (key === 'employee' ? 'staff' : key));
+  }
+  // يفكّ الشكل الجديد كله (دخل أدمن في نفس الصفحة، أو رجع المفتاح مقفولًا): لا يبقى من الإطار شيء.
+  function deactivate() {
+    if (!V.active) return;
+    V.active = false; V.legacy = false;
+    clearTimeout(S.searchT); clearTimeout(redrawT); redrawT = null;
+    stopLegacyWatch();
+    closeSheet();
+    var app = appEl();
+    if (app) ['v2-shell', 'v2-roles', 'v2-bare', 'v2r-trainer', 'v2r-investor', 'v2r-staff', 'v2r-viewer', 'v2r-legacy', 'v2-pre'].forEach(function (c) { app.classList.remove(c); });
+    ['v2rSide', 'v2rSec', 'v2rSheet', 'v2rLegacyNote'].forEach(function (id) { var n = document.getElementById(id); if (n && n.parentNode) n.parentNode.removeChild(n); });
+    var lg = q('.v2-tb-logo'); if (lg && lg.parentNode) lg.parentNode.removeChild(lg);
+    var rb = q('#roBanner'); if (rb) rb.style.display = '';
+  }
+  // حساب جديد في نفس الصفحة (٤٠١ ثم دخول آخر): لا يبقى رقم من الحساب السابق ولا حالة شاشة.
+  function resetForAccount() {
+    GEN++;
+    clearTimeout(S.searchT); clearTimeout(redrawT); redrawT = null;
+    SRC = {};
+    S = freshState();
+  }
 
   V.loadFlag = function () {
     var E = ep(), done = false;
@@ -784,7 +872,8 @@
       if (decisive) { try { if (on) localStorage.setItem(MEMO, '1'); else localStorage.removeItem(MEMO); } catch (e) {} }
       V.flag = on ? 'on' : 'off';
       var a = appEl(); if (a) a.classList.remove('v2-pre');
-      if (on) V.activate(); else if (typeof window.renderView === 'function') window.renderView();
+      if (on) V.activate();
+      else { if (V.active) deactivate(); if (typeof window.renderView === 'function') window.renderView(); }
     }
     try {
       E.api('/v2/roles/config').then(function (r) { fin(!!(r && r.enabled === true), true); }).catch(function () { fin(false, false); });
@@ -800,20 +889,30 @@
     V.installed = true;
     var origRenderView = window.renderView, origSetRole = window.setRole, origRenderNav = window.renderNav;
     V.hooks.renderView = origRenderView;
+    var lastWho = null;
     window.setRole = function (r) {
+      var u = ep() && ep().user;
+      var who = String(r) + '|' + ((u && (u.id || u.email)) || '');
+      if (lastWho !== null && lastWho !== who) {
+        resetForAccount();
+        if (V.active && r === 'admin') deactivate();
+      }
+      lastWho = who;
       if (r === 'admin') { V.role = ''; return origSetRole.apply(this, arguments); }
       V.role = r;
+      if (V.active) { syncRoleClass(); closeSheet(); }
       V.flag = 'pending';
       var a = appEl();
       if (memoOn() && a) a.classList.add('v2-pre');
       var out = origSetRole.apply(this, arguments);
+      if (V.active) { var rb = q('#roBanner'); if (rb) { rb.style.display = 'none'; rb.innerHTML = ''; } }   // setRole يكتب الشريط القديم من جديد مع كل حساب
       V.loadFlag();
       return out;
     };
     var origGo = window.go;
     window.go = function (mod) {
       // غير الأدمن لا يفتح شاشة خارج قائمته (مثل رابط إشعار إلى «الرسائل»): نتجاهل بدل أن نعرض شاشة غير شاشته.
-      if (V.active && V.role && V.role !== 'admin' && mod !== 'tutorials' && navIds().indexOf(mod) < 0) return;
+      if (V.active && V.role && V.role !== 'admin' && navIds().indexOf(mod) < 0) return;
       return origGo.apply(this, arguments);
     };
     window.renderView = function () {

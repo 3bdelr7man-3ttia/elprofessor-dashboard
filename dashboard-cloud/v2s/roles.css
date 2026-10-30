@@ -33,6 +33,8 @@
 /* —— البانر */
 .v2r-hero{position:relative;height:168px;border-radius:22px;background-color:#3A3730;background-size:cover;background-position:center;overflow:hidden;color:#fff;display:flex;align-items:center}
 .v2r-hero::before{content:"";position:absolute;inset:0;background:linear-gradient(to right,rgba(33,38,46,0) 25%,rgba(33,38,46,.82))}
+@media (max-width:700px){.v2r-hero::before{background:linear-gradient(to top,rgba(33,38,46,.86) 8%,rgba(33,38,46,.55) 55%,rgba(33,38,46,.28))}}
+.v2r-hb h2,.v2r-hb p{text-shadow:0 1px 10px rgba(20,22,28,.7)}
 .v2r-hb{position:relative;padding:0 30px;max-width:620px}
 .v2r-hb h2{font:800 26px/1.5 'Cairo',sans-serif;overflow-wrap:anywhere}
 .v2r-hb p{font-size:15.5px;line-height:1.7;opacity:.95}
@@ -145,7 +147,7 @@
 .v2rm .mc-lead{font-size:15px;line-height:1.9;margin:0 0 12px}
 .v2rm .fld{margin-bottom:12px}
 .v2rm .fld label{font:800 14.5px 'Cairo',sans-serif;color:var(--ink);display:block;margin-bottom:6px}
-.v2rm .fld input{width:100%;min-height:52px;border:1px solid var(--line);border-radius:12px;padding:0 14px;font-size:18px;background:#fff}
+.v2rm .fld input{width:100%;min-height:52px;border:1px solid var(--line);border-radius:12px;padding:0 14px;font:600 18px 'Cairo','IBM Plex Sans Arabic',sans-serif;background:#fff;color:var(--ink)}
 .v2rm .v2r-fine{margin-top:6px}
 .v2rm .mc-tab{width:100%;border-collapse:collapse;margin:6px 0 12px;font-size:15px}
 .v2rm .mc-tab td{padding:10px 8px;border-bottom:1px solid var(--line);text-align:start;vertical-align:middle;font-size:15px}

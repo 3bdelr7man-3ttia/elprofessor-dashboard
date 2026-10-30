@@ -470,6 +470,14 @@ def test_investment_row_roi_and_actual_return():
     assert L('investmentRow', x, 'active')['actual'] == ''
     r = L('investmentRow', dict(x, course_title='', roi_percent=0), 'active')
     assert r['title'] == 'استثمار' and r['second'] == 'العائد: غير متاح بعد'
+    # نسبة سالبة: كلمة «خسارة» لا شرطة قبل الأرقام؛ و-١٠٠٪ (عائد صفر بالحساب) ليست خسارة إلا لو حالتها «خسارة»
+    assert L('investmentRow', dict(x, roi_percent=-20), 'active')['second'] == 'العائد المحسوب حتى الآن: خسارة ٢٠٪'
+    assert L('investmentRow', dict(x, roi_percent=-100, status='active'), 'active')['second'] == 'العائد: غير متاح بعد'
+    assert L('investmentRow', dict(x, roi_percent=-100, status='loss'), 'active')['second'] == 'العائد المحسوب حتى الآن: خسارة ١٠٠٪'
+    assert L('investmentRow', dict(x, roi_percent=None), 'active')['second'] == 'العائد: غير متاح بعد'
+    for bad in ('-', '\u2212'):
+        for ro in (-20, -100, -0.5):
+            assert bad not in L('investmentRow', dict(x, roi_percent=ro, status='loss'), 'active')['second']
     for st, want, tone in (('active', 'جارٍ', 'green'), ('pending', 'بانتظار', 'amber'), ('accrued', 'قيد الاحتساب', 'amber'), ('paid', 'صُرف', 'green'),
                            ('loss', 'خسارة', 'red'), ('zzz', 'غير معروفة', 'grey')):
         c = L('investmentRow', dict(x, status=st), 'active')['chip']
@@ -611,3 +619,44 @@ def test_nav_constants_labels_and_headers_are_exact():
     assert nav['t_home']['label'] == 'لوحتي' and nav['i_market']['label'] == 'فرص الاستثمار' and nav['tutorials']['label'] == 'دليل الاستخدام'
     assert nav['t_earnings']['desc'] == 'مستحقاتك من الدورات، ومحفظتك إن كانت لك استثمارات'
     assert nav['i_invest']['img'] == 'money' and nav['users']['img'] == 'people' and nav['i_home']['img'] is None
+
+
+# =================================================================== د) جولة التصليح
+def test_account_change_resets_cache_and_state_and_ignores_late_replies():
+    js = _strip_comments(_read('dashboard-cloud', 'v2s', 'roles.js'))
+    assert 'function resetForAccount' in js and 'SRC = {};' in js and 'S = freshState();' in js
+    wrapper = js.split('window.setRole = function')[1].split('var origGo')[0]
+    assert 'resetForAccount()' in wrapper and 'syncRoleClass()' in wrapper and 'deactivate()' in wrapper
+    assert "style.display = 'none'" in wrapper   # شريط الدور القديم يُكتب من جديد مع كل حساب
+    load = js.split('function load(')[1].split('function need')[0]
+    assert load.count('gen !== GEN') == 2         # رد متأخر من الحساب السابق يُهمَل (نجاح وفشل)
+
+
+def test_go_wrapper_lets_tutorials_through_only_when_the_role_has_it():
+    js = _strip_comments(_read('dashboard-cloud', 'v2s', 'roles.js'))
+    go = js.split('window.go = function')[1].split('window.renderView')[0]
+    assert "'tutorials'" not in go and 'navIds().indexOf(mod) < 0' in go
+
+
+def test_trainer_earnings_does_not_load_the_history_it_never_shows():
+    js = _strip_comments(_read('dashboard-cloud', 'v2s', 'roles.js'))
+    body = js.split('function viewTEarnings')[1].split('// ----')[0]
+    assert "need('me', 'payouts', 'wallet', 'active')" in body and "'history'" not in body.split('var E =')[0]
+
+
+def test_bell_items_fallback_never_changes_the_admin_bell():
+    js = _read('dashboard-cloud', 'dashboard-api.js')
+    seg = js.split('notifications: function ()')[1].split('goalsAdvisor')[0]
+    assert 'isAdmin' in seg and 'r.notifications || (isAdmin ? null : r.items)' in seg
+
+
+def test_staff_bell_withdrawal_text_says_dollars_in_arabic(ctx):
+    r = ctx['client'].get('/api/notifications', headers=ctx['heads']['employee'])
+    assert r.status_code == 200
+    items = [i for i in r.get_json()['items'] if i['kind'] == 'withdrawal']
+    assert items, 'لازم يكون في طلب سحب معلّق في بيانات الاختبار'
+    for i in items:
+        assert i['detail'].endswith('دولار') and 'USD' not in i['detail']
+    # غير الموظف والأدمن: قائمة فاضية بنفس الشكل
+    r = ctx['client'].get('/api/notifications', headers=ctx['heads']['trainer'])
+    assert r.get_json() == {'count': 0, 'total': 0, 'items': []}

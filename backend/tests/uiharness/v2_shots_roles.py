@@ -146,6 +146,32 @@ def check_calls(run, who):
             PROBLEMS.append('%s: المدرّب طلب فرص الاستثمار' % who)
 
 
+LEGACY_BAD = re.compile(r'native|app\.elprofessor\.net|\bAPI\b|\bn8n\b|\bHTML\b|\bUSD\b|\bEGP\b|prerender|إيراد\s*[·٠0]\s*(ج|جنيه)', re.I)
+
+
+def scan_legacy(page, name, tabs_sel):
+    """«كل السجلات»: لا كلمة تقنية ولا رقم لاتيني ولا خانة إيراد فاضية في أي تبويب فرعي ظاهر (والبريد/الروابط بعلامة dir=ltr مستثناة)."""
+    def one(label):
+        page.wait_for_timeout(700)
+        bad = page.evaluate("""() => { const out = [], w = document.createTreeWalker(document.querySelector('#view'), NodeFilter.SHOW_TEXT);
+          while (w.nextNode()) { const n = w.currentNode, p = n.parentNode;
+            if (!p || /^(SCRIPT|STYLE|TEXTAREA|OPTION)$/.test(p.nodeName) || p.closest('[dir="ltr"], .v2r-mail, code') || !p.offsetParent) continue;
+            const t = n.nodeValue; if (/\d/.test(t) || /[A-Za-z]{2,}/.test(t) || /^\s*[·—]\s*$/.test(t)) out.push(t.trim().slice(0, 60)); }
+          return out; }""")
+        for t in bad[:4]:
+            if t:
+                PROBLEMS.append('%s [%s]: نص تقني أو رقم لاتيني في «كل السجلات»: %r' % (name, label, t))
+        txt = page.evaluate("() => document.querySelector('#view').innerText")
+        m = LEGACY_BAD.search(txt)
+        if m:
+            PROBLEMS.append('%s [%s]: «%s» ظاهرة في «كل السجلات»' % (name, label, m.group(0)))
+    one('أول تبويب')
+    tabs = page.evaluate("(sel) => [...document.querySelectorAll(sel)].filter(n => n.offsetParent).map(n => n.getAttribute('data-t') || n.getAttribute('data-tt'))", tabs_sel)
+    for tid in tabs:
+        page.evaluate("([sel, id]) => { const n = [...document.querySelectorAll(sel)].find(x => (x.getAttribute('data-t') || x.getAttribute('data-tt')) === id); if (n) n.click(); }", [tabs_sel, tid])
+        one(tid)
+
+
 # ----------------------------------------------------------------------------------------------------------------- المدرّب
 def flow_trainer(br, h, run):
     h.ef = rf.RolesPlatform()
@@ -275,6 +301,9 @@ def flow_staff(br, h, run):
     page.wait_for_selector('#cTabs')
     page.wait_for_timeout(600)
     shot(run, page, run.tag('23-staff-courses-legacy.jpg'))
+    scan_legacy(page, run.tag('courses-legacy'), '#cTabs .tab')
+    page.evaluate("() => { const n = [...document.querySelectorAll('#cTabs .tab')].find(x => x.offsetParent); if (n) n.click(); }")
+    page.wait_for_timeout(500)
     vis = page.evaluate("() => [...document.querySelectorAll('#cTabs .tab[data-t=\"platform\"]')].filter(n => n.offsetParent).length")
     if vis:
         PROBLEMS.append('staff-courses-legacy: تبويب الكتالوج القديم ظاهر')
@@ -286,6 +315,9 @@ def flow_staff(br, h, run):
     page.wait_for_selector('#topicsTabs')
     page.wait_for_timeout(600)
     shot(run, page, run.tag('25-staff-topics-legacy.jpg'))
+    scan_legacy(page, run.tag('topics-legacy'), '#topicsTabs .tab')
+    page.evaluate("() => { const n = [...document.querySelectorAll('#topicsTabs .tab')].find(x => x.offsetParent); if (n) n.click(); }")
+    page.wait_for_timeout(500)
     hidden = page.evaluate("""() => [...document.querySelectorAll('#topicsTabs .tab')].filter(n => n.offsetParent && ['pending','ideas','working','board','incoming','rejected','tutorials'].indexOf(n.dataset.tt) > -1).length""")
     if hidden:
         PROBLEMS.append('staff-topics-legacy: %d تبويب مكرّر ظاهر' % hidden)
@@ -411,6 +443,43 @@ def flow_edge(br, h, run):
         _set_perms(h, None)
 
 
+def _swap_account(page, token, ready=True):
+    """يحاكي ٤٠١ ثم دخول حساب آخر في نفس الصفحة بلا إعادة تحميل (نفس ما يفعله الدخول: EP.user + EP.role ثم epBootCore)."""
+    page.evaluate("""(tok) => { try { localStorage.setItem('token', tok); localStorage.setItem('ep_dash_token', tok); } catch (e) {}
+      return EP.api('/auth/me').then(me => { EP.user = me; EP.role = me.role || me.dashboard_role || 'viewer'; epBootCore(); }); }""", token)
+    if ready:
+        page.wait_for_function(READY, timeout=30000)
+        page.wait_for_timeout(400)
+
+
+def flow_switch(br, h, run):
+    """حساب جديد في نفس الصفحة: لا رقم ولا زرّ ولا صنف من الحساب السابق."""
+    h.ef = rf.RolesPlatform()
+    ctx = br.context(h, 'trainer', run.vp, run.mobile)
+    page = open_page(ctx, run)
+    goto(page, 't_earnings')
+    if not page.query_selector('[data-r-act="wd"]'):
+        PROBLEMS.append('switch: المدرّب (أ) لازم يرى زرّ السحب قبل التبديل')
+    before = page.evaluate("() => document.querySelector('#view').innerText")
+    if '٢٬٣٥٠' not in before:
+        PROBLEMS.append('switch: مبلغ المدرّب (أ) مش ظاهر قبل التبديل')
+    _swap_account(page, h.tokens['investor_unlinked'])
+    st = page.evaluate("""() => ({cls: document.querySelector('.app').className, txt: document.querySelector('#view').innerText,
+      wd: !!document.querySelector('[data-r-act="wd"]'), side: document.querySelectorAll('#v2rSide').length})""")
+    if 'v2r-trainer' in st['cls'] or 'v2r-investor' not in st['cls']:
+        PROBLEMS.append('switch: صنف الدور لم يتبدّل: %r' % st['cls'])
+    if st['wd'] or '٢٬٣٥٠' in st['txt'] or 'محفظة الاستثمار' in st['txt'] and 'متاح للسحب' not in st['txt']:
+        PROBLEMS.append('switch: أثر من حساب المدرّب (أ) على المستثمر (ب): %r' % st['txt'][:200])
+    if st['side'] != 1:
+        PROBLEMS.append('switch: عدد القوائم الجانبية %d' % st['side'])
+    got = dict(bigs(page))
+    for lb in ('متاح للسحب', 'إجمالي ما استثمرته'):
+        if got.get(lb) != NA:
+            PROBLEMS.append('switch: «%s» للحساب (ب) غير المربوط لازم «%s» وهي %r' % (lb, NA, got.get(lb)))
+    shot(run, page, run.tag('91-switch-account.jpg'))
+    br.close()
+
+
 def flow_off(br, h, run):
     """المفتاح مقفول (أو مفتاح الأدوار) ⇒ الشاشات القديمة كما هي، ولا أثر للجديد."""
     cases = [('trainer', 'trainer', {'DASH_V2_ENABLED': None}), ('investor', 'investor', {'DASH_V2_ENABLED': None}), ('employee', 'staff', {'DASH_V2_ENABLED': None}),
@@ -463,7 +532,7 @@ def main():
         try:
             for pre, vp, mobile in vps:
                 run = Run(pre, vp, mobile)
-                for name, fn in (('trainer', flow_trainer), ('investor', flow_investor), ('staff', flow_staff), ('viewer', flow_viewer), ('edge', flow_edge), ('off', flow_off)):
+                for name, fn in (('trainer', flow_trainer), ('investor', flow_investor), ('staff', flow_staff), ('viewer', flow_viewer), ('edge', flow_edge), ('switch', flow_switch), ('off', flow_off)):
                     if only and name not in only:
                         continue
                     fn(br, h, run)

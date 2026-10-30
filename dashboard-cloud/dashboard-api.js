@@ -2572,7 +2572,9 @@
         return ROUTE_ALIAS[k] || k;
       }
       return get("/notifications").then(function (r) {
-        var list = Array.isArray(r) ? r : ((r && (r.notifications || r.items)) || []);   // الخادم يرد {count,total,items}
+        // الخادم يرد {count,total,items}. جرس الأدمن القديم يبقى كما كان حرفيًا (لا يقرأ items)؛ جرس غير الأدمن (فريق المتابعة) يقرأها.
+        var isAdmin = String(EP.role || "").trim().toLowerCase() === "admin";
+        var list = Array.isArray(r) ? r : ((r && (r.notifications || (isAdmin ? null : r.items))) || []);
         EP.data.notifications = list.map(function (n) {
           var title = n.title || n.detail || "إشعار";
           return {
