@@ -815,9 +815,153 @@
     return { ok: alerts.length === 0, failed: false, alerts: alerts, heartbeats: beats };
   }
 
+
+  // ------------------------------------------------------------------ خريطة الأقسام (D1-B)
+  // كل شاشة قديمة تقع داخل قسم وتبويب. ⛔ لا نسخ للشاشات: التبويب يسمّي الموديول القديم (`mod`) والحالة الداخلية
+  // التي تُضبط قبل رسمه (`st`)، و`m` شرط التعرّف العكسي (أي حالة داخلية تعني أي تبويب).
+  //   st : {اسم متغيّر الحالة: قيمة}     تُطبَّق عند فتح التبويب
+  //   m  : {اسم متغيّر: [قيم]} أو {اسم: {not:[قيم]}}      بلا m وبلا st = يطابق أي حالة للموديول
+  var STATE_DEFAULTS = { activeFilter: 'all', escTab: 'sessions', finTab: 'summary', teamTab: 'experts', topicsTab: 'ideas',
+                         courseTab: 'platform', invTab: 'owners', tgTab: 'goals', v2mode: 'board' };
+  var FILE_FILTERS = ['t:files', 'attn', 'review', 'urgent', 'nocand', 'contract', 'case'];
+
+  function T(key, label, mod, st, m) { var t = { key: key, label: label, mod: mod, st: st || {} }; if (m) t.m = m; return t; }
+
+  var SECTIONS = [
+    { key: 'home', label: 'اللوحة', img: null, desc: 'الحاجة الجاية وكل ما ينتظر قرارك', tabs: [
+      T('board', 'اللوحة والقرارات', 'home', { v2mode: 'board' }, { v2mode: ['board', 'focus'] }),
+      T('inbox', 'كل الوارد', 'inbox', { activeFilter: 'all' }, {})
+    ] },
+    { key: 'files', label: 'ملفات الخبراء', img: 'files', desc: 'ملفات تنتظر خبيرًا أو مراجعة، وفريق الخبراء', tabs: [
+      T('files', 'الملفات', 'inbox', { activeFilter: 't:files' }, { activeFilter: FILE_FILTERS }),
+      T('experts', 'الخبراء', 'team', { teamTab: 'experts' }, { teamTab: ['experts'] })
+    ] },
+    { key: 'disputes', label: 'النزاعات والاستردادات', img: 'disputes', desc: 'اعتراضات العملاء وأموال محجوزة لحين قرارك', tabs: [
+      T('disputes', 'النزاعات', 'inbox', { activeFilter: 't:disputes' }, { activeFilter: ['t:disputes', 't:legacy'] }),
+      T('escrow', 'الضمان', 'escrow', { escTab: 'sessions' }, { escTab: ['sessions', 'disputes', 'released'] })
+    ] },
+    { key: 'courses', label: 'الدورات والمدرّبون', img: 'courses', desc: 'الدورات المنشورة وطلبات المدرّبين', tabs: [
+      T('courses', 'الدورات', 'courses'),
+      T('trainers', 'المدرّبون', 'team', { teamTab: 'trainers' }, { teamTab: ['trainers'] })
+    ] },
+    { key: 'market', label: 'سوق الخدمات', img: 'market', desc: 'طلبات الأعضاء وعروض الخبراء', tabs: [
+      T('requests', 'الطلبات', 'market')
+    ] },
+    { key: 'books', label: 'الكتب', img: 'books', desc: 'المتجر وكتب الخبراء بانتظار المراجعة', tabs: [
+      T('books', 'الكتب والأعمال', 'knowledge')
+    ] },
+    { key: 'people', label: 'الناس والدعوات', img: 'people', desc: 'الأعضاء والدعوات والرسائل', tabs: [
+      T('users', 'المستخدمون', 'users'),
+      T('invites', 'الدعوات', 'invites'),
+      T('messages', 'الرسائل', 'inbox', { activeFilter: 't:messages' }, { activeFilter: ['t:messages'] })
+    ] },
+    { key: 'money', label: 'الفلوس', img: 'money', desc: 'التحويلات والإيصالات والباقات', tabs: [
+      T('finance', 'المالية', 'finance', { finTab: 'summary' }, { finTab: { not: ['packages'] } }),
+      T('packages', 'الباقات والأسعار', 'finance', { finTab: 'packages' }, { finTab: ['packages'] }),
+      T('receipts', 'الإيصالات', 'escrow', { escTab: 'manual' }, { escTab: ['manual'] })
+    ] },
+    { key: 'content', label: 'المحتوى', img: 'content', desc: 'المقالات والموضوعات ودليل الاستخدام', tabs: [
+      T('topics', 'المحتوى', 'topics', { topicsTab: 'ideas' }, { topicsTab: { not: ['tutorials'] } }),
+      T('tutorials', 'دليل الاستخدام', 'topics', { topicsTab: 'tutorials' }, { topicsTab: ['tutorials'] })
+    ] },
+    { key: 'marketing', label: 'التسويق', img: 'marketing', desc: 'الحملات والنشر على المنصات', tabs: [
+      T('campaigns', 'الحملات', 'marketing')
+    ] },
+    { key: 'reports', label: 'التقارير', img: 'reports', desc: 'ما يطلبه الناس وأين الفرصة', tabs: [
+      T('demand', 'تحليل الطلب', 'analysis')
+    ] },
+    { key: 'brain', label: 'العقل', img: 'brain', desc: 'ما قرّره العقل اليوم ومساعدوه', tabs: [
+      T('log', 'سجل اليوم', 'home', { v2mode: 'brain' }, { v2mode: ['brain'] }),
+      T('helpers', 'المساعدون', 'ai')
+    ] },
+    { key: 'company', label: 'الشركة ورأس المال', img: 'company', desc: 'الشركاء والأهداف والإعدادات', tabs: [
+      T('invest', 'الاستثمار والشركاء', 'investment'),
+      T('targets', 'الأهداف والتأسيس', 'targets'),
+      T('settings', 'الإعدادات', 'settings')
+    ] }
+  ];
+  // مفاتيح قديمة ابتُلعت (REDIRECTS في index.html) — تُحلّ هنا بنفس حالتها الداخلية.
+  var ALIASES = {
+    overview: { mod: 'inbox', state: {} },
+    messages: { mod: 'inbox', state: { activeFilter: 't:messages' } },
+    packages: { mod: 'finance', state: { finTab: 'packages' } },
+    tutorials: { mod: 'topics', state: { topicsTab: 'tutorials' } },
+    partners: { mod: 'investment', state: { invTab: 'owners' } },
+    foundation: { mod: 'targets', state: { tgTab: 'foundation' } }
+  };
+
+  function secOf(key) { for (var i = 0; i < SECTIONS.length; i++) if (SECTIONS[i].key === key) return SECTIONS[i]; return null; }
+  function tabOf(secKey, tabKey) {
+    var s = secOf(secKey); if (!s) return null;
+    for (var i = 0; i < s.tabs.length; i++) if (s.tabs[i].key === tabKey) return s.tabs[i];
+    return null;
+  }
+  function stVal(state, k) { var v = state && state[k]; return (v === undefined || v === null || v === '') ? STATE_DEFAULTS[k] : v; }
+  // درجة مطابقة تبويب لحالة: -1 لا يطابق، وإلا عدد الشروط المتحقّقة (الأخصّ يفوز).
+  function scoreTab(tab, state) {
+    var m = tab.m || (function () { var o = {}; Object.keys(tab.st).forEach(function (k) { o[k] = [tab.st[k]]; }); return o; })();
+    var n = 0, ks = Object.keys(m);
+    for (var i = 0; i < ks.length; i++) {
+      var v = stVal(state, ks[i]), c = m[ks[i]];
+      var ok = Array.isArray(c) ? c.indexOf(v) > -1 : (c && Array.isArray(c.not) ? c.not.indexOf(v) < 0 : true);
+      if (!ok) return -1;
+      n++;
+    }
+    return n;
+  }
+  function pack(sec, tab) { return { section: sec.key, tab: tab.key, mod: tab.mod, st: tab.st }; }
+  // sectionFor(oldModule[, state[, hint]]) ⇒ {section, tab, mod, st} أو null لموديول مجهول.
+  //   hint = {section, tab} الحالي: يُفضَّل عند التعادل أو حين لا يطابق شيء (حالة داخلية بلا تبويب، مثل «الفريق الإداري»).
+  function sectionFor(oldModule, state, hint) {
+    var mod = String(oldModule == null ? '' : oldModule);
+    var st = {};
+    Object.keys(state || {}).forEach(function (k) { st[k] = state[k]; });
+    if (ALIASES[mod]) { var a = ALIASES[mod]; Object.keys(a.state).forEach(function (k) { st[k] = a.state[k]; }); mod = a.mod; }
+    var best = null, bestScore = -2, hintHit = null, any = null;
+    SECTIONS.forEach(function (sec) {
+      sec.tabs.forEach(function (tab) {
+        if (tab.mod !== mod) return;
+        if (!any) any = { sec: sec, tab: tab };
+        var sc = scoreTab(tab, st);
+        if (sc < 0) return;
+        if (hint && hint.section === sec.key && hint.tab === tab.key) hintHit = { sec: sec, tab: tab, sc: sc };
+        if (sc > bestScore) { bestScore = sc; best = { sec: sec, tab: tab }; }
+      });
+    });
+    if (hintHit && hintHit.sc >= bestScore) return pack(hintHit.sec, hintHit.tab);
+    if (best) return pack(best.sec, best.tab);
+    // حالة داخلية بلا تبويب (مثل «الفريق الإداري» داخل شاشة الفريق): ابقَ حيث أنت إن كان تبويبك لنفس الموديول.
+    if (hint) {
+      var ht = tabOf(hint.section, hint.tab);
+      if (ht && ht.mod === mod) return pack(secOf(hint.section), ht);
+    }
+    return any ? pack(any.sec, any.tab) : null;
+  }
+  // العنوان: #s/<قسم>[/<تبويب>] — يقبل بدون # وبدون s/ المسبوقة بشرطة.
+  function sectionHash(key, tab) { return '#s/' + key + (tab ? '/' + tab : ''); }
+  function parseSectionHash(h) {
+    var s = String(h == null ? '' : h).replace(/^#/, '').replace(/^\/+/, '').trim();
+    var parts = s.split('/');
+    if (parts[0] !== 's' || !parts[1]) return null;
+    var sec = secOf(parts[1]);
+    if (!sec) return null;
+    var tab = parts[2] ? tabOf(sec.key, parts[2]) : null;
+    return { section: sec.key, tab: (tab || sec.tabs[0]).key, exact: !!(parts[2] ? tab : true) };
+  }
+  // أي عنوان (جديد أو رابط قديم) ⇒ {section, tab, mod, st} أو null.
+  function routeFor(hash, state) {
+    var s = String(hash == null ? '' : hash).replace(/^#/, '').trim();
+    if (!s || s === 'home') return pack(secOf('home'), secOf('home').tabs[0]);
+    var p = parseSectionHash(s);
+    if (p) { var t = tabOf(p.section, p.tab); return pack(secOf(p.section), t); }
+    return sectionFor(s, state);
+  }
+
   var api = {
     v2Tiles: v2Tiles, v2Decisions: v2Decisions, v2Card: v2Card, v2Next: v2Next, v2NextLine: v2NextLine,
     v2Health: v2Health, v2BrainLog: v2BrainLog,
+    SECTIONS: SECTIONS, ALIASES: ALIASES, STATE_DEFAULTS: STATE_DEFAULTS, sectionFor: sectionFor, sectionHash: sectionHash,
+    parseSectionHash: parseSectionHash, routeFor: routeFor, sectionByKey: secOf, tabByKey: tabOf,
     TILE_DEFS: TILE_DEFS, FAILED_TEXT: FAILED_TEXT, PARTIAL_TEXT: PARTIAL_TEXT,
     util: { ar: ar, fmt: fmt, U: U, agoText: agoText, curName: curName, moneyText: moneyText, kindOf: kindOf, pickCandidate: pickCandidate }
   };

@@ -48,7 +48,8 @@
       return r.status === 'open' && !r.hidden && !r.is_test && r.kind !== 'training_offer' && !r.offer_count;
     }).length;
   }
-  function compute() {
+  // يجمع مدخلات المربّعات من المحمّلات (مرة واحدة لكل استدعاء): تتشاركها اللوحة وقائمة القسم الجانبية فلا عدّ ثانٍ.
+  function gather() {
     var E = ep(), D = (E && E.data) || {}, now = Date.now();
     var Q = stateOf('opsQueue') === 'ready' ? (D.opsQueue || null) : null;
     var rows = stateOf('inbox') === 'ready' ? (window.INBOX || []).filter(function (r) { return !r.fyi; }) : null;
@@ -61,8 +62,12 @@
     // ما قُصَّ من قوائم الوارد («نزاعات الملفات: معروض ١٠٠ من ٣٠٠»): المعروض مش كل الموجود ⇒ بطاقات ناقصة وعدّاد ناقص معلَن.
     var inboxTrunc = rows ? ((window.INBOX_TRUNCATED && window.INBOX_TRUNCATED.length) ? window.INBOX_TRUNCATED.slice() : []) : null;
     var extras = { inbox: rows, inboxFailed: inboxFailed, inboxTruncated: inboxTrunc || [], pendingVisitors: pu, invitesAwaiting: inv, market: marketCount(), now: now };
-    var tiles = L.v2Tiles(Q, extras);
-    var decisions = L.v2Decisions(rows, payouts, Q, { now: now, inboxFailed: inboxFailed, inboxTruncated: inboxTrunc });
+    return { E: E, D: D, now: now, Q: Q, rows: rows, inboxFailed: inboxFailed, payouts: payouts, inboxTrunc: inboxTrunc, extras: extras };
+  }
+  function compute() {
+    var g = gather(), Q = g.Q, rows = g.rows, now = g.now, inboxFailed = g.inboxFailed, inboxTrunc = g.inboxTrunc;
+    var tiles = L.v2Tiles(Q, g.extras);
+    var decisions = L.v2Decisions(rows, g.payouts, Q, { now: now, inboxFailed: inboxFailed, inboxTruncated: inboxTrunc });
     var truncated = (inboxTrunc || []).map(function (t) { return String(t).split(':')[0].trim(); });
     var failed = [];
     if (stateOf('opsQueue') === 'error') failed.push('بيانات المنصة');
@@ -180,7 +185,10 @@
   function openTile(key, d) {
     var t = d.tiles.filter(function (x) { return x.key === key; })[0];
     if (!t) return;
-    if (t.internal) { S.mode = 'brain'; redraw(); return; }
+    if (t.internal) {
+      if (host().openSection) { host().openSection('brain', 'log'); return; }
+      S.mode = 'brain'; redraw(); return;
+    }
     if (host().goOps) host().goOps(t.dest, t.land);
   }
 
@@ -496,6 +504,8 @@
     if (S.mode === 'focus') drawFocus(v, d);
     else if (S.mode === 'brain') drawBrain(v, d);
     else drawBoard(v, d);
+    // الغلاف الجديد يخفي ترويسة القسم وتبويباته أثناء وضع التركيز.
+    try { var ap = document.querySelector('.app'); if (ap) ap.classList.toggle('v2-focus', S.mode === 'focus'); } catch (e) {}
     if (!S.timer) {
       // المحمّلات الأولى بتبدأ من bootNavCounts بدون callback عندنا ⇒ نلاحظ تغيّر الحالة بفحص خفيف، ونعيد الرسم في اللوحة بس.
       S.timer = setInterval(function () {
@@ -508,4 +518,19 @@
   // أول فتح من الهاش/القائمة يبدأ على اللوحة نفسها لا على وضع تركيز قديم.
   V2.leave = function () { S.away = true; if (S.timer) { clearInterval(S.timer); S.timer = null; } };
   V2._state = S;
+
+  // —— للغلاف الجديد (D1-B): نفس المربّعات بنفس الأعداد، وتحميل كل المصادر، وتبديل الوضع من التبويبات.
+  V2.tiles = function () { var g = gather(); return L.v2Tiles(g.Q, g.extras); };
+  V2.tileLoading = function (key) { return tileLoading({ key: key }); };
+  V2.loadAll = function (cb) {
+    var E = ep();
+    if (!E || !E.authed) return;
+    SOURCES.forEach(function (k) { E.ensure(k, cb || null); });
+  };
+  V2.sourcesSignature = function () { return signature() + '|' + SOURCES.map(function (k) { return stateOf(k); }).join(''); };
+  V2.mode = function () { return S.mode; };
+  V2.setMode = function (m) {
+    S.mode = m === 'brain' ? 'brain' : 'board';
+    S.away = false; S.resume = false; S.panel = null; S.err = ''; S.busy = false;
+  };
 })();
