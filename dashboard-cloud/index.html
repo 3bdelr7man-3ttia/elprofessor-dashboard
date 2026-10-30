@@ -463,6 +463,10 @@ body{font-family:'IBM Plex Sans Arabic',sans-serif;background:var(--bg);color:va
 <script src="v2-home.js"></script>
 <script src="v2-shell.js"></script>
 <script src="v2-d2.js"></script>
+<!-- v2 sections begin -->
+<link rel="stylesheet" href="v2s/company.css">
+<script src="v2s/company.js"></script>
+<!-- v2 sections end -->
 <script src="v2-d3.js"></script>
 <script>
 const ICONS={
@@ -709,6 +713,7 @@ function renderView(){
   if(window.V2_ON&&window.V2D2&&V2D2.owns(current))return V2D2.render(current,v);
   // D3: شاشات «الفلوس» الجديدة و«الكتب» (موديولات وهمية `v2m_*`/`v2b_*` لا وجود لها إلا تحت الغلاف الجديد).
   if(window.V2_ON&&window.V2D3&&V2D3.owns(current))return V2D3.render(current,v);
+  if(window.V2_ON&&window.V2SEC){for(var _k in V2SEC){var _o=V2SEC[_k];if(_o&&_o.owns&&_o.owns(current)){var _ap=document.querySelector('.app');if(_ap)_ap.classList.add('v2-bare');return _o.render(current,v);}}}
   // موديولات «قريبًا» (لا واجهة خلفية حقيقية بعد) — لا تعرض بياناتها التصميمية.
   if(MODULES_LOOKUP[current]&&MODULES_LOOKUP[current].soon)return viewSoon(v);
   if(current==='inbox')return viewInbox(v);
@@ -7638,7 +7643,7 @@ window.V2_HOST={
   },
   logout:function(){var b=document.getElementById('logoutBtn');if(b)b.click();},
   // D1-B (الهيكل الجديد): تنقّل صريح لقسم/تبويب · الحالي · اسم المستخدم.
-  openSection:function(key,tab){v2OpenSection(key,tab);},
+  openSection:function(key,tab,opts){v2OpenSection(key,tab,opts);},
   state:function(){return V2S||{section:'home',tab:'board'};},
   userName:function(){var u=(window.EP&&EP.user)||{};return u.name||u.full_name||u.email||'المؤسس';},
   // D2: الشاشة الحالية · فتح درج صفّ في تبويب «الكل» التابع لقسمه (التذكرة تفتح نفس الدرج القديم) · صفحة شخص.

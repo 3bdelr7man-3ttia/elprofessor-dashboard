@@ -2691,6 +2691,9 @@ def v2_book_request_patch(request_id):
     return _v2_write('PATCH', '/api/bridge/book-requests/%s' % quote(request_id, safe=''), out,
                      'book_request.update', request_id, {k: v for k, v in out.items() if k != 'public_text'})
 
+__import__('v2_company_routes').register(app, globals())  # v2s:company
+# ---- v2 section routes end
+
 
 @app.route('/api/platform-pnl', methods=['GET'])
 @token_required

@@ -97,7 +97,7 @@ def test_the_tabs_match_the_approved_table():
         'marketing': [['campaigns', 'الحملات', 'marketing']],
         'reports': [['demand', 'تحليل الطلب', 'analysis']],
         'brain': [['log', 'سجل اليوم', 'home'], ['helpers', 'المساعدون', 'ai']],
-        'company': [['invest', 'الاستثمار والشركاء', 'investment'], ['targets', 'الأهداف والتأسيس', 'targets'], ['settings', 'الإعدادات', 'settings']],
+        'company': [['invest', 'نظرة', 'investment'], ['partners', 'الشركاء ورأس المال', 'v2c_partners'], ['assets', 'المعدات والاشتراكات', 'v2c_assets'], ['deals', 'الاتفاقات والرعاة', 'v2c_deals'], ['ads', 'عملاء الإعلانات', 'v2c_ads'], ['settings', 'الإعدادات', 'settings'], ['targets', 'الأهداف', 'targets']],
     }
     assert {k: t for k, t in got} == want
 
