@@ -181,6 +181,7 @@
     else if (!refunds.rows.length) refBody = '<p class="v3-none">لا استردادات تنتظر قرارك</p>';
     else refBody = '<ul class="v3-list">' + refunds.rows.map(refundRow).join('') + '</ul>';
     if (refunds.failed.length === 1) refBody = warnStrip(refunds.failed, 'القائمة ناقصة') + refBody;
+    if (refunds.more) refBody = '<div class="v3-warn" role="status">المعروض أقدم ' + esc(U.ar(refunds.more.shown)) + (refunds.more.total ? ' من ' + esc(U.ar(refunds.more.total)) : '') + ' استردادًا، وبعد البتّ في هذه يظهر الباقي</div>' + refBody;
     v.innerHTML = '<div class="v3" data-board="overview">' + noteStrip() + warnStrip(failed)
       + '<div class="v3-top"><div class="v3-seg" role="tablist" aria-label="الفترة">' + seg + '</div><p class="v3-ptxt">الدخل والمحجوز والمستحق حتى الآن، والأرقام بالجنيه وكل عملة أخرى تظهر لوحدها</p></div>'
       + numbersHtml(board)
@@ -281,7 +282,7 @@
     var st = srcState(key), res = L.v2Prices(data(key));
     var body;
     if (st === 'closed' && kind === 'course') body = '<div class="v3-empty"><b>الدورات لسه مقفولة</b><p>أسعار الدورات تظهر هنا حين تُفتح من المنصة.</p></div>';
-    else if (st === 'closed') body = '<div class="v3-empty"><b>متجر الكتب لسه مقفول</b><p>أسعار الكتب تظهر هنا حين يُفتح المتجر.</p></div>';
+    else if (st === 'closed') body = '<div class="v3-empty"><b>متجر الكتب لم يُفتح بعد</b><p>أسعار الكتب تظهر هنا حين يُفتح المتجر.</p></div>';
     else if (!res) body = st === 'loading' || st === 'idle' ? loadingBlock(title) : unavailable(title);
     else body = res.rows.length ? '<ul class="v3-list">' + res.rows.map(function (r) { return priceRow(kind, r); }).join('') + '</ul>' : '<p class="v3-none">لا أعمال بعد</p>';
     return section(title, kind === 'book' ? 'أقل سعر في كل بلد' : 'أقل سعر في كل بلد، من المنصة', body);
@@ -330,7 +331,7 @@
   function drawAds(v) {
     var rows = L.v2AdsLedger(data('ads'), now());
     var body;
-    if (!rows) body = srcState('ads') === 'closed' ? '<div class="v3-empty"><b>أرصدة الإعلانات لسه غير متاحة</b></div>' : (srcState('ads') === 'loading' || srcState('ads') === 'idle' ? loadingBlock('أرصدة الإعلانات') : unavailable('أرصدة الإعلانات'));
+    if (!rows) body = srcState('ads') === 'closed' ? '<div class="v3-empty"><b>أرصدة الإعلانات غير متاحة بعد</b></div>' : (srcState('ads') === 'loading' || srcState('ads') === 'idle' ? loadingBlock('أرصدة الإعلانات') : unavailable('أرصدة الإعلانات'));
     else if (!rows.length) body = '<div class="v3-empty"><b>لا أرصدة إعلانات بعد</b><p>يظهر هنا كل عمل أودع صاحبه رصيدًا للإعلان.</p></div>';
     else body = '<ul class="v3-list">' + rows.map(function (r) {
       return '<li class="v3-ad"><button type="button" class="v3-adrow" data-a="ad" data-id="' + esc(r.id) + '" data-kind="' + esc(r.kind) + '"><div class="v3-pid"><b>' + esc(r.title) + '</b>'
@@ -355,7 +356,7 @@
     var rows = offerRows();
     S.offerRows = rows || [];
     var body;
-    if (!rows) body = srcState('offers') === 'closed' ? '<div class="v3-empty"><b>متجر الكتب لسه مقفول</b><p>تظهر العروض هنا حين يُفتح المتجر.</p></div>' : (srcState('offers') === 'loading' || srcState('offers') === 'idle' ? loadingBlock('عروض الكتب') : unavailable('عروض الكتب'));
+    if (!rows) body = srcState('offers') === 'closed' ? '<div class="v3-empty"><b>متجر الكتب لم يُفتح بعد</b><p>تظهر العروض هنا حين يُفتح المتجر.</p></div>' : (srcState('offers') === 'loading' || srcState('offers') === 'idle' ? loadingBlock('عروض الكتب') : unavailable('عروض الكتب'));
     else if (!rows.length) body = '<div class="v3-empty"><b>لا عروض تنتظر المراجعة</b><p>كل ما وصل حُسم.</p></div>';
     else body = '<div class="v3-tgrid">' + rows.map(offerCard).join('') + '</div>';
     var noPrices = rows && rows.length && !data('pricesBook') && srcState('pricesBook') !== 'loading' ? warnStrip(['أسعار الكتب'], 'لا مقارنة بمتوسط الأسعار الآن') : '';
@@ -369,7 +370,7 @@
       return '<li class="v3-rq" data-id="' + esc(g.firstId) + '"><div class="v3-pid"><b>' + esc(g.topic) + '</b><span>' + esc(g.typeText) + ' · ' + esc(g.countText) + (g.lastText ? ' · آخر طلب ' + esc(g.lastText) : '') + '</span></div>'
         + (approved ? '<span class="v3-vis on">معتمد</span>' : '<div class="v3-acts two"><button type="button" class="v3-btn1" data-a="rqok" data-key="' + esc(g.key) + '">اعتمد</button><button type="button" class="v3-btn2" data-a="rqhide" data-key="' + esc(g.key) + '">اخفِ</button></div>') + '</li>';
     }
-    if (!res) body = srcState('requests') === 'closed' ? '<div class="v3-empty"><b>متجر الكتب لسه مقفول</b></div>' : (srcState('requests') === 'loading' || srcState('requests') === 'idle' ? loadingBlock('طلبات القرّاء') : unavailable('طلبات القرّاء'));
+    if (!res) body = srcState('requests') === 'closed' ? '<div class="v3-empty"><b>متجر الكتب لم يُفتح بعد</b></div>' : (srcState('requests') === 'loading' || srcState('requests') === 'idle' ? loadingBlock('طلبات القرّاء') : unavailable('طلبات القرّاء'));
     else {
       S.reqGroups = res.open.concat(res.approved);
       body = section('تنتظر قرارك', 'اعتمادها يُظهرها للأعضاء في «المطلوب الآن»', res.open.length ? '<ul class="v3-list">' + res.open.map(function (g) { return gRow(g, false); }).join('') + '</ul>' : '<p class="v3-none">لا طلبات جديدة</p>')
@@ -509,7 +510,7 @@
       });
     }).catch(function (e) {
       if (document.body.contains(s0)) window.closeModal();
-      notifyFail(e && e.status === 404 ? 'هذا النوع لسه مقفول' : 'تعذّر جلب أسعار هذا العمل');
+      notifyFail(e && e.status === 404 ? 'هذا النوع لم يُفتح بعد' : 'تعذّر جلب أسعار هذا العمل');
     });
   }
   function notifyFail(msg) { try { (window.toast || window.notify || function () {})(msg); } catch (e) {} }
@@ -653,9 +654,18 @@
   // —— حركات رصيد عمل
   function openAd(id, kind) {
     var E = ep(), row = (L.v2AdsLedger(data('ads'), now()) || []).filter(function (r) { return r.id === id; })[0];
+    // جسر المنصة لا يعرف إلا الكتب: ردّه لعمل من نوع آخر ٢٠٠ فارغ، وهو صفر كاذب. فلا نسأله عن الدورات أصلًا.
+    if (kind === 'course') {
+      var cs = openSheet('رصيد الإعلانات: ' + (row ? row.title : ''), '<p class="v3-load"></p>');
+      if (!cs) return;
+      q('.v3m', cs).innerHTML = '<div class="v3-err">حركات الدورات غير متاحة بعد</div>' + (row ? '<p class="mc-lead">الرصيد الآن: <b>' + esc(row.balanceText) + '</b></p>' : '')
+        + '<div class="acts"><button type="button" class="btn btn-ghost" id="v3_x">إغلاق</button></div>';
+      q('#v3_x', cs).onclick = function () { window.closeModal(); };
+      return;
+    }
     var s = openSheet('رصيد الإعلانات: ' + (row ? row.title : ''), '<p class="v3-load">…جارٍ جلب الحركات</p>');
     if (!s || !E) return;
-    E.api('/v2/ads-ledger/' + encodeURIComponent(id)).then(function (resp) {
+    E.api('/v2/ads-ledger/' + encodeURIComponent(id) + '?kind=' + encodeURIComponent(kind || 'book')).then(function (resp) {
       if (!document.body.contains(s)) return;
       var res = L.v2AdsEntries(resp, now());
       var b = q('.v3m', s);
@@ -738,10 +748,19 @@
         var g = (S.reqGroups || []).filter(function (x) { return x.key === b.getAttribute('data-key'); })[0], E = ep();
         if (!g || !E || S.busy[g.key]) return;
         var ok = b.getAttribute('data-a') === 'rqok';
-        S.busy[g.key] = true; b.disabled = true; b.textContent = 'جارٍ التنفيذ…';
-        E.api('/v2/book-requests/' + encodeURIComponent(g.firstId), { method: 'PATCH', body: ok ? { status: 'seeking', apply_to_group: true } : { hidden: true, apply_to_group: true } }).then(function () {
-          S.busy[g.key] = false; setNote(ok ? 'اعتُمد الطلب وسيظهر للأعضاء: ' + g.topic : 'أُخفي الطلب: ' + g.topic); load('requests', true); redraw();
-        }).catch(function (e) { S.busy[g.key] = false; setNote(errMsg(e)); redraw(); });
+        function run() {
+          S.busy[g.key] = true; b.disabled = true; b.textContent = 'جارٍ التنفيذ…';
+          E.api('/v2/book-requests/' + encodeURIComponent(g.firstId), { method: 'PATCH', body: ok ? { status: 'seeking', apply_to_group: true } : { hidden: true, apply_to_group: true } }).then(function () {
+            S.busy[g.key] = false; setNote(ok ? 'اعتُمد الطلب وسيظهر للأعضاء: ' + g.topic : 'أُخفي الطلب: ' + g.topic); load('requests', true); redraw();
+          }).catch(function (e) { S.busy[g.key] = false; setNote(errMsg(e)); redraw(); });
+        }
+        if (!ok) return run();
+        // «اعتمد» ينشر الطلب للأعضاء ⇒ سطر تأكيد واحد قبل التنفيذ (الإخفاء يُتراجع عنه فيبقى مباشرًا).
+        var cs = openSheet('اعتماد طلب القرّاء', '<p class="mc-lead">سيظهر «' + esc(g.topic) + '» للأعضاء في «المطلوب الآن». أكّد الاعتماد؟</p>'
+          + '<div class="acts"><button type="button" class="btn btn-primary" id="v3_rqgo">اعتمد وانشر</button><button type="button" class="btn btn-ghost" id="v3_rqno">إلغاء</button></div>');
+        if (!cs) return;
+        q('#v3_rqno', cs).onclick = function () { window.closeModal(); };
+        q('#v3_rqgo', cs).onclick = function () { window.closeModal(); run(); };
       };
     });
   }

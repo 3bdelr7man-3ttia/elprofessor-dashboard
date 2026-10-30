@@ -282,22 +282,20 @@
       if (t.partial || hasTrunc(extras)) markPartial(t);
     })(T.people);
 
-    // —— الفلوس: تحويلات + إيصالات + دفعات عالقة + استردادات يدوية (+ اقتسام الدورات المعلّق كما كان).
+    // —— الفلوس: تحويلات + إيصالات + دفعات عالقة + استردادات يدوية، بالمجموع الذي حدّدته المواصفة وحده.
     (function (t) {
       t.dest = 'finance'; t.land = 'wallet_payouts_pending';
       if (!Q) return failTile(t);
-      var B = v2MoneyBadge(Q).parts, po = B.payouts, mp = B.receipts, st = B.stuck, sp = B.split, rf = B.refunds;
-      t.count = po + mp + st + rf + sp; t.hot = st > 0;
+      var B = v2MoneyBadge(Q).parts, po = B.payouts, mp = B.receipts, st = B.stuck, rf = B.refunds;
+      t.count = po + mp + st + rf; t.hot = st > 0;
       var p = [];
       if (po) p.push(U(po, ['تحويل واحد', 'تحويلان', 'تحويلات', 'تحويلًا']));
       if (mp) p.push(U(mp, ['إيصال', 'إيصالان', 'إيصالات', 'إيصالًا']));
       if (st) p.push(U(st, ['دفعة عالقة', 'دفعتان عالقتان', 'دفعات عالقة', 'دفعة عالقة']));
       if (rf) p.push(U(rf, ['استرداد ينتظر قرارك', 'استردادان ينتظران قرارك', 'استردادات تنتظر قرارك', 'استردادًا ينتظر قرارك']));
-      if (sp) p.push(ar(sp) + ' اقتسام معلّق');
       t.next = p.length ? p.join(' · ') : 'التحويلات والإيصالات';
       if (st) { t.dest = 'finance'; t.land = 'stuck_card_payments'; }
       else if (po) { t.dest = 'finance'; t.land = 'wallet_payouts_pending'; }
-      else if (sp) { t.dest = 'finance'; t.land = 'course_split_pending'; }
       else if (mp) { t.dest = 'escrow'; t.land = 'manual_payments_pending'; }
     })(T.money);
 
@@ -1552,7 +1550,7 @@
   }
 
   // —— المدفوعات العالقة (قراءة فقط)
-  var STUCK_KIND = { course: 'دورة', course_offer: 'دورة', consultation: 'ملف خبير', plan: 'اشتراك', book: 'كتاب', knowledge: 'عمل معرفي', verify: 'توثيق',
+  var STUCK_KIND = { course: 'دورة', course_offer: 'دورة', consultation: 'استشارة أو ملف خبير', plan: 'اشتراك', book: 'كتاب', knowledge: 'عمل معرفي', verify: 'توثيق',
                      ads_deposit: 'رصيد إعلانات' };
   var PAY_PROVIDER = { stripe: 'بطاقة بنكية', paymob: 'بطاقة بنكية', paytabs: 'بطاقة بنكية', card: 'بطاقة بنكية', manual: 'تحويل يدوي' };
   var NO_REFUND_KINDS = ['book', 'knowledge'];
@@ -1592,8 +1590,11 @@
   var CANCEL_BY = { member: 'صاحب الحجز', expert: 'الخبير', admin: 'الإدارة' };
   // `bridge` = رد `/api/v2/refunds/pending` (أو null)، `disputes` = `v2DisputeTickets(...).cols.refunds` (أو null). كلٌّ منهما يفشل وحده.
   function v2Refunds(bridge, disputes, now) {
-    var rows = [], failed = [];
+    var rows = [], failed = [], more = null;
     if (bridge && Array.isArray(bridge.refunds)) {
+      // المنصة تقصّ الصفحة عند حدّ ثابت (الأقدم أولًا) وتعيد `total` الكلي و`next_cursor`: لا نعرض قائمة ناقصة على أنها كاملة.
+      var tot = Number(bridge.total), shown = bridge.refunds.length;
+      if ((isFinite(tot) && tot > shown) || str(bridge.next_cursor)) more = { shown: shown, total: isFinite(tot) && tot > shown ? tot : null };
       bridge.refunds.forEach(function (r) {
         if (!r) return;
         var full = r.full_refund === true, who = CANCEL_BY[str(r.cancelled_by).toLowerCase()];
@@ -1615,7 +1616,7 @@
       });
     } else failed.push('الدفعات بلا ملف');
     rows.sort(function (a, b) { return a.at - b.at; });
-    return { rows: rows, failed: failed };
+    return { rows: rows, failed: failed, more: more };
   }
 
   // —— الأسعار
@@ -1924,12 +1925,12 @@
     return { groups: groups, open: groups.filter(function (g) { return !g.hidden && g.status === 'new'; }), approved: groups.filter(function (g) { return !g.hidden && g.status === 'seeking'; }) };
   }
 
-  // —— شارة الفلوس: تحويلات + إيصالات + دفعات عالقة + استردادات (+ اقتسام الدورات المعلّق كما كان). الغائب من الطابور لا يُحسب صفرًا مختلقًا.
+  // —— شارة الفلوس: تحويلات + إيصالات + دفعات عالقة + استردادات، والمجموع كما في المواصفة بالحرف. الغائب من الطابور لا يُحسب صفرًا مختلقًا.
   function v2MoneyBadge(Q) {
     if (!Q) return null;
     var parts = { payouts: qn(Q, 'wallet_payouts_pending'), receipts: qn(Q, 'manual_payments_pending'), stuck: qn(Q, 'stuck_card_payments'),
-                  refunds: qn(Q, 'manual_refunds_pending'), split: qn(Q, 'course_split_pending') };
-    return { parts: parts, total: parts.payouts + parts.receipts + parts.stuck + parts.refunds + parts.split };
+                  refunds: qn(Q, 'manual_refunds_pending') };
+    return { parts: parts, total: parts.payouts + parts.receipts + parts.stuck + parts.refunds };
   }
 
   var api = {
