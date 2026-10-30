@@ -33,7 +33,7 @@ COPY backend/refresh_rules.py /app/refresh_rules.py
 COPY dashboard-cloud/index.html dashboard-cloud/dashboard-api.js dashboard-cloud/site-content.js /app/dist/
 # D1 · اللوحة الجديدة (ورا مفتاح DASH_V2_ENABLED): منطقها النقي + رسمها + تنسيقها + صور المربّعات.
 # D1-B · الهيكل الجديد (قوائم الأقسام والتبويبات).
-COPY dashboard-cloud/v2-logic.js dashboard-cloud/v2-home.js dashboard-cloud/v2-home.css dashboard-cloud/v2-shell.js dashboard-cloud/v2-shell.css /app/dist/
+COPY dashboard-cloud/v2-logic.js dashboard-cloud/v2-home.js dashboard-cloud/v2-home.css dashboard-cloud/v2-shell.js dashboard-cloud/v2-shell.css dashboard-cloud/v2-d2.js dashboard-cloud/v2-d2.css /app/dist/
 COPY dashboard-cloud/v2/img /app/dist/v2/img
 
 EXPOSE 8080

@@ -416,6 +416,7 @@ body{font-family:'IBM Plex Sans Arabic',sans-serif;background:var(--bg);color:va
 </style>
 <link rel="stylesheet" href="v2-home.css">
 <link rel="stylesheet" href="v2-shell.css">
+<link rel="stylesheet" href="v2-d2.css">
 </head>
 <body>
 <div class="app" data-screen-label="الداش بورد الجديدة">
@@ -460,6 +461,7 @@ body{font-family:'IBM Plex Sans Arabic',sans-serif;background:var(--bg);color:va
 <script src="v2-logic.js"></script>
 <script src="v2-home.js"></script>
 <script src="v2-shell.js"></script>
+<script src="v2-d2.js"></script>
 <script>
 const ICONS={
   grid:'<path d="M3 3h7v7H3zM14 3h7v7h-7zM14 14h7v7h-7zM3 14h7v7H3z"/>',
@@ -699,8 +701,10 @@ function renderView(){
   { const ap=document.querySelector('.app'); const sh=!!(window.V2SHELL&&V2SHELL.on);
     if(ap)ap.classList.toggle('v2-home',current==='home'&&!!window.V2_ON&&!sh);
     // D1-B: صنف الغلاف على `.app` (لوحة بلا إطار · بحث الوارد · وضع التركيز) — الترويسة خارج #view فلا تمسحها الشاشات القديمة.
-    if(ap&&sh){ap.classList.toggle('v2-bare',current==='home');ap.classList.toggle('v2-inbox',current==='inbox');if(current!=='home')ap.classList.remove('v2-focus');V2SHELL.head();} }
+    if(ap&&sh){ap.classList.toggle('v2-bare',current==='home'||!!(window.V2D2&&V2D2.owns(current)));ap.classList.toggle('v2-inbox',current==='inbox');if(current!=='home')ap.classList.remove('v2-focus');V2SHELL.head();} }
   if(current==='home'&&window.V2_ON&&window.V2)return V2.render(v);
+  // D2: لوحات التذاكر وصفحة الشخص (موديولات وهمية `v2files`/`v2disputes`/`v2person` لا وجود لها إلا تحت الغلاف الجديد).
+  if(window.V2_ON&&window.V2D2&&V2D2.owns(current))return V2D2.render(current,v);
   // موديولات «قريبًا» (لا واجهة خلفية حقيقية بعد) — لا تعرض بياناتها التصميمية.
   if(MODULES_LOOKUP[current]&&MODULES_LOOKUP[current].soon)return viewSoon(v);
   if(current==='inbox')return viewInbox(v);
@@ -2970,7 +2974,7 @@ function renderUsers(){
     const trainerBadge=u.trainer==='approved'?'<span class="status s-auto" style="margin-inline-start:6px"><span class="d"></span>مدرّب</span>':u.trainer==='pending'?'<span class="status s-wait" style="margin-inline-start:6px"><span class="d"></span>طلب مدرّب</span>':'';
     const clsPills=(u.segment?`<span style="${segPS}">${SEG_LABEL[u.segment]||esc(u.segment)}</span>`:'')+(u.tags||[]).map(t=>`<span style="${tagPS}">${esc(t)}</span>`).join('');
     el.insertAdjacentHTML('beforeend',`<div class="row esc-row${selected===ui?' sel':''}" data-i="${ui}" style="grid-template-columns:1.7fr 120px 1.2fr 1fr 110px">
-      <div class="c c1"><div class="src-ic" style="background:${r.bg};color:${r.c}">${svg('users')}</div><div><div class="parties">${esc(u.name)}${trainerBadge}</div><div class="from">${esc(u.email)}</div></div></div>
+      <div class="c c1"><div class="src-ic" style="background:${r.bg};color:${r.c}">${svg('users')}</div><div><div class="parties">${window.V2_ON&&window.V2D2?V2D2.link(u.name,u.email):esc(u.name)}${trainerBadge}</div><div class="from">${esc(u.email)}</div></div></div>
       <div class="c"><span class="dest" style="background:${r.bg};color:${r.c}">${r.t}</span></div>
       <div class="c"><div style="display:flex;flex-wrap:wrap;gap:4px">${clsPills||'<span class="from" style="color:var(--muted)">—</span>'}</div></div>
       <div class="c"><span class="status ${vf.cls}" style="${vf.cls?'':'background:var(--surface-2);color:var(--muted)'}"><span class="d" style="${vf.cls?'':'background:var(--muted)'}"></span>${vf.t}</span><div class="from" style="margin-top:4px">${u.plan}</div></div>
@@ -7632,7 +7636,11 @@ window.V2_HOST={
   // D1-B (الهيكل الجديد): تنقّل صريح لقسم/تبويب · الحالي · اسم المستخدم.
   openSection:function(key,tab){v2OpenSection(key,tab);},
   state:function(){return V2S||{section:'home',tab:'board'};},
-  userName:function(){var u=(window.EP&&EP.user)||{};return u.name||u.full_name||u.email||'المؤسس';}
+  userName:function(){var u=(window.EP&&EP.user)||{};return u.name||u.full_name||u.email||'المؤسس';},
+  // D2: الشاشة الحالية · فتح درج صفّ في تبويب «الكل» التابع لقسمه (التذكرة تفتح نفس الدرج القديم) · صفحة شخص.
+  current:function(){return current;},
+  openRowAt:function(sec,tab,row){v2OpenRowAt(sec,tab,row);},
+  openPerson:function(email){v2OpenPerson(email);}
 };
 // «اللوحة» أول بند في «شغل النهاردة» — بتتدخل هنا لما المفتاح يفتح (مش في إعلان MODULES): اختبارات بنية القائمة
 // بتقرا الإعلان كما هو، والمفتاح المقفول يساوي قائمة بنفس الترتيب والعدد بالحرف.
@@ -7660,7 +7668,7 @@ const V2_SETTERS={
 // يكتب العنوان #s/<قسم>/<تبويب>: how='push' لتنقّل المستخدم (فيشتغل زر الرجوع)، 'replace' لتصحيح الترويسة بعد هبوط داخلي.
 function v2Commit(how){
   if(!V2S)return;
-  const h=V2L.sectionHash(V2S.section,V2S.tab);
+  const h=V2L.sectionHash(V2S.section,V2S.tab,V2S.person);
   try{if(String(location.hash)!==h){if(how==='push')history.pushState(null,'',h);else history.replaceState(null,'',h);}}catch(e){try{location.hash=h;}catch(e2){}}
   const t=document.getElementById('pageTitle');
   const sec=V2L.sectionByKey(V2S.section);
@@ -7679,6 +7687,28 @@ function v2OpenSection(key,tabKey,opts){
   V2S={section:sec.key,tab:tab.key};
   v2Commit(opts&&opts.replace?'replace':'push');
   renderView();
+}
+// صفحة الشخص: `#s/people/person/<بريد>` (الموديول الوهمي v2person يرسمه V2D2).
+function v2OpenPerson(email,opts){
+  email=String(email||'').trim().toLowerCase(); if(!email)return;
+  if(current==='home'&&window.V2&&V2.leave)V2.leave();
+  resetViewState();
+  current='v2person';
+  V2S={section:'people',tab:'person',person:email};
+  v2Commit(opts&&opts.replace?'replace':'push');
+  renderView();
+}
+// تذكرة ⇒ نفس الدرج القديم للصف في تبويب «كل الملفات/كل النزاعات» (الحالة الداخلية تتضبط من خريطة التبويب).
+function v2OpenRowAt(sec,tab,row){
+  v2OpenSection(sec,tab);
+  var n=INBOX.indexOf(row);
+  if(n<0){var k=efRowKey(row);n=INBOX.findIndex(function(r){return efRowKey(r)===k;});}
+  // الصف خارج شريحة التبويب (حالة قضية/دفع بلا ملف): نفتح الكل بدل ما يختفي الصف خلف فلتر ما بيعرضوش.
+  if(n>-1&&!inboxMatches(INBOX[n],activeFilter))activeFilter='all';
+  selected=n>-1?n:null;
+  viewInbox(document.getElementById('view'));
+  v2Reconcile();
+  try{var d=document.getElementById('drawer');if(d&&d.scrollIntoView)d.scrollIntoView({block:'start'});}catch(e){}
 }
 // go() القديمة بعد تشغيل الهيكل: موديول قديم ⇒ قسمه وتبويبه (REDIRECTS تُحلّ بحالتها الداخلية أولًا).
 function v2GoShell(mod){
@@ -7703,9 +7733,10 @@ function v2Reconcile(){
 function v2OnHash(){
   if(!(window.V2SHELL&&V2SHELL.on)||role!=='admin')return;
   const h=String(location.hash||'');
-  if(V2S&&h===V2L.sectionHash(V2S.section,V2S.tab))return;
+  if(V2S&&h===V2L.sectionHash(V2S.section,V2S.tab,V2S.person))return;
   const rt=V2L.routeFor(h,{});
-  if(rt)v2OpenSection(rt.section,rt.tab,{replace:true,st:rt.st});
+  if(rt&&rt.person)v2OpenPerson(rt.person,{replace:true});
+  else if(rt)v2OpenSection(rt.section,rt.tab,{replace:true,st:rt.st});
 }
 function v2ShellBoot(){
   if(!(window.V2SHELL&&window.V2L&&V2SHELL.boot&&V2L.routeFor))return false;
@@ -7715,7 +7746,7 @@ function v2ShellBoot(){
   window.addEventListener('popstate',v2OnHash);window.addEventListener('hashchange',v2OnHash);
   // الرابط الأول: عنوان جديد #s/… أو رابط قديم (#finance · #packages …) يهبط على قسمه وتبويبه، وأي غيره على اللوحة.
   const rt=V2L.routeFor(String(location.hash||''),{})||V2L.routeFor('home');
-  v2OpenSection(rt.section,rt.tab,{replace:true,st:rt.st});
+  if(rt.person)v2OpenPerson(rt.person,{replace:true});else v2OpenSection(rt.section,rt.tab,{replace:true,st:rt.st});
   return true;
 }
 // مرة واحدة عند الإقلاع. ⛔ الإقلاع القديم بيترسم فورًا من غير ما ينتظر المفتاح (مقفول = نفس التوقيت بالحرف).

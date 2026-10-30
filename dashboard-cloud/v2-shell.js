@@ -126,10 +126,12 @@
     var oldStrip = q('.v2c-tabs', el), keepLeft = oldStrip ? oldStrip.scrollLeft : 0;
     keepFocus(el, function () { el.innerHTML = '<div class="v2c-h"><h1>' + esc(sec.label) + '</h1><p>' + esc(descOf(sec, T || tiles())) + '</p></div>'
       + '<div class="v2c-tabs" role="tablist" aria-label="' + esc(sec.label) + '">'
-      + sec.tabs.map(function (t) {
+      + sec.tabs.filter(function (t) { return !t.hidden; }).map(function (t) {
           return '<button type="button" role="tab" class="v2c-tab' + (t.key === s.tab ? ' on' : '') + '" aria-selected="' + (t.key === s.tab) + '" data-sec="' + sec.key + '" data-tab="' + t.key + '">' + esc(t.label) + '</button>';
         }).join('')
       + '</div>'; });
+    // D2: صندوق «ابحث عن شخص» فوق شاشات قسم الناس (حاوية ثابتة لا يُعاد رسمها فلا يضيع ما يُكتب فيها).
+    try { var sb = q('#v2sbar'); if (sb) sb.hidden = sec.key !== 'people'; } catch (e) {}
     // شريط التبويبات: يحفظ موضعه عبر إعادة الرسم، ولا يتحرّك إلا حين يتغيّر التبويب (بلا أي تمرير رأسي للصفحة).
     try {
       var strip = q('.v2c-tabs', el), on = q('.v2c-tab.on', el), sig = s.section + '/' + s.tab;
@@ -196,6 +198,10 @@
       sec.id = 'v2sec'; sec.className = 'v2-sec';
       view.parentNode.insertBefore(sec, view);
     }
+    var sbar = document.createElement('div');
+    sbar.id = 'v2sbar'; sbar.className = 'v2-sbar'; sbar.hidden = true;
+    if (view && view.parentNode) view.parentNode.insertBefore(sbar, view);
+    try { if (window.V2D2 && V2D2.mountSearch) V2D2.mountSearch(sbar); } catch (e) {}
     var sheet = document.createElement('div');
     sheet.id = 'v2Sheet'; sheet.className = 'v2-sheet'; sheet.setAttribute('aria-hidden', 'true');
     document.body.appendChild(sheet);

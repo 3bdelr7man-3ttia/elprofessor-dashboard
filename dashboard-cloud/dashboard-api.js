@@ -1732,7 +1732,7 @@
               triage: "human", sla: "بوابة التوثيق", slaWarn: false,
               note: (ap.headline || "طلب مدرّب جديد") + " — اعتمد الصفة وحدّد نسبة الإيراد.",
               ref: "TRN-" + ap.id, who: ap.user_name || ap.full_name || ap.user_email || ap.email || "—",
-              apiKind: "trainer", apiId: ap.id, ts: Date.parse(ap.created_at || ap.submitted_at || "") || 0,
+              apiKind: "trainer", personEmail: ap.user_email || ap.email || "", apiId: ap.id, ts: Date.parse(ap.created_at || ap.submitted_at || "") || 0,
               trHeadline: ap.headline || "", trSpec: ap.specialty || ap.specialization || "", trYears: ap.years_experience || "", trAttach: Array.isArray(ap.attachments) ? ap.attachments.length : 0,
             });
           });
@@ -1770,7 +1770,7 @@
                 { k: "البلد", v: country },
                 { k: "لينكدإن", v: l.linkedin_url || "" },
               ].filter(function (d) { return d.v; }),
-              apiKind: "founding", apiId: l.id, canReject: true, ts: Date.parse(at) || 0, fSpec: spec, fCountry: country,
+              apiKind: "founding", personEmail: l.email || "", apiId: l.id, canReject: true, ts: Date.parse(at) || 0, fSpec: spec, fCountry: country,
               approveLabel: nxt[1], nextStatus: nxt[0],
             });
           });
@@ -1813,7 +1813,7 @@
                 { k: "أسئلة بروف المستعملة", v: (u.ai_used != null) ? String(u.ai_used) : "" },
                 { k: "مشبوه", v: flagLabels.join(" · ") },
               ].filter(function (d) { return d.v; }),
-              apiKind: "pending_user", apiId: u.id, canReject: true, ts: Date.parse(reqAt) || 0, puCountry: u.country || "", puRole: roleLabel,
+              apiKind: "pending_user", personEmail: u.email || "", apiId: u.id, canReject: true, ts: Date.parse(reqAt) || 0, puCountry: u.country || "", puRole: roleLabel,
               approveLabel: "افتح له المنصّة",
               // «مسح» من الدرج: نفس مسار المسح النهائي (الفحص على المنصّة أوّلًا)، والشارة
               // «⚠️ مشبوه» على الصفّ بتلميح الأعلام — للمؤسس فقط، لا تصل للزائر أبدًا.
@@ -1877,7 +1877,7 @@
                 ? ("طُلب منه: " + shortNote(jr.info_request || "استكمال بياناته") + " — الصفّ مفتوح لحدّ ما يبعت.")
                 : (shortNote(jr.note) || "بلا ملاحظة مكتوبة من المتقدّم — القرار من الاستمارة تحت."),
               ref: "JR-" + jr.id, who: jr.user_name || jr.user_email || "—",
-              apiKind: "join", apiId: jr.id, ts: Date.parse(when) || 0,
+              apiKind: "join", personEmail: jr.user_email || "", apiId: jr.id, ts: Date.parse(when) || 0,
               // «رفض بسبب»: المنصة تعرض `admin_note` لصاحب الطلب حرفًا كسبب رفضه، فالرفض هنا
               // لا يمرّ بلا سبب مكتوب (محروس في الواجهة وفي البروكسي معًا).
               canReject: true, rejectNeedsReason: true,
@@ -1909,7 +1909,7 @@
               triage: "human", sla: "طابِق الإيصال وأكّد", slaWarn: true,
               note: (p.product_label || p.product_type || "منتج") + " · " + (p.amount != null ? p.amount : "") + " " + (p.currency || "EGP") + (p.method ? " · " + p.method : "") + (p.reference_number ? " · مرجع " + p.reference_number : "") + " — أكّد بعد مطابقة الإيصال.",
               ref: "PAY-" + p.id, who: p.user_name || p.user_email || p.user_phone || "—",
-              apiKind: "manual_payment", apiId: p.id, canReject: true,
+              apiKind: "manual_payment", personEmail: p.user_email || "", apiId: p.id, canReject: true,
               // المبلغ والعملة على الصفّ نفسه (لا انتزاع من نصّ الملاحظة): تبويب «الدفعات
               // اليدوية» في الضمان يجمعهما في عدّاد «إجمالي المبلغ».
               amount: (typeof p.amount === "number") ? p.amount : (parseFloat(p.amount) || 0),

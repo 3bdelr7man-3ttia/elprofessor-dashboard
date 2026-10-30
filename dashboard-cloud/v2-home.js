@@ -189,6 +189,8 @@
       if (host().openSection) { host().openSection('brain', 'log'); return; }
       S.mode = 'brain'; redraw(); return;
     }
+    // D2: مربّعا الملفات والنزاعات يفتحان لوحة التذاكر (لما الغلاف الجديد شغّال) بدل الوارد القديم.
+    if ((key === 'files' || key === 'disputes') && window.V2SHELL && V2SHELL.on && host().openSection) { host().openSection(key); return; }
     if (host().goOps) host().goOps(t.dest, t.land);
   }
 
@@ -254,7 +256,7 @@
       + '<div class="v2-ftop"><button class="v2-link" data-a="back">' + BACK + 'اللوحة</button><span class="v2-count">' + esc(counter()) + '</span><span class="v2-prog"><i style="width:' + pct + '%"></i></span></div>'
       + '<div class="v2-fgrid' + (done ? '' : ' solo') + '"><article class="v2-card' + (S.leaving === c.id ? ' v2-out' : '') + '" data-id="' + esc(c.id) + '" data-kind="' + esc(c.kind) + '">'
       + '<div class="v2-cimg" style="background-image:url(' + img(c.img) + ')"><span class="v2-tag">' + esc(c.tag) + '</span>' + (c.ageText ? '<span class="v2-age">' + esc(c.ageText) + '</span>' : '') + '</div>'
-      + '<div class="v2-cbody"><h2>' + esc(c.title) + '</h2>' + (c.sub ? '<p class="v2-csub">' + esc(c.sub) + '</p>' : '')
+      + '<div class="v2-cbody"><h2>' + (c.person && window.V2D2 ? V2D2.link(c.title, c.person.email) : esc(c.title)) + '</h2>' + (c.sub ? '<p class="v2-csub">' + esc(c.sub) + '</p>' : '')
       + '<div class="v2-brain"><img src="' + img('brain-avatar') + '" alt=""><div><b>' + esc(c.brainHead) + '</b><p>' + esc(c.brain) + '</p>' + (c.reason ? '<p class="v2-reason">' + esc(c.reason) + '</p>' : '') + '</div></div>'
       + (c.warn ? '<div class="v2-cwarn">' + esc(c.warn) + '</div>' : '')
       + (facts ? '<div class="v2-facts">' + facts + '</div>' : '')
@@ -518,6 +520,7 @@
   // أول فتح من الهاش/القائمة يبدأ على اللوحة نفسها لا على وضع تركيز قديم.
   V2.leave = function () { S.away = true; if (S.timer) { clearInterval(S.timer); S.timer = null; } };
   V2._state = S;
+  V2.plainError = plainError;     // D2: نفس نصوص الخطأ لأزرار التذاكر
 
   // —— للغلاف الجديد (D1-B): نفس المربّعات بنفس الأعداد، وتحميل كل المصادر، وتبديل الوضع من التبويبات.
   V2.tiles = function () { var g = gather(); return L.v2Tiles(g.Q, g.extras); };
