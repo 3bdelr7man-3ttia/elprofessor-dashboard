@@ -1293,10 +1293,14 @@
       T('log', 'القواعد وسجل اليوم', 'v2s_brain'),
       T('helpers', 'المساعدون', 'ai')
     ] },
-    { key: 'company', label: 'الشركة ورأس المال', img: 'company', desc: 'الشركاء والأهداف والإعدادات', tabs: [
-      T('invest', 'الاستثمار والشركاء', 'investment'),
-      T('targets', 'الأهداف والتأسيس', 'targets'),
-      T('settings', 'الإعدادات', 'settings')
+    { key: 'company', label: 'الشركة ورأس المال', img: 'company', desc: 'الشركاء ورأس المال والمعدات والاتفاقات والإعدادات', tabs: [
+      T('invest', 'نظرة', 'investment'),
+      T('partners', 'الشركاء ورأس المال', 'v2c_partners'),
+      T('assets', 'المعدات والاشتراكات', 'v2c_assets'),
+      T('deals', 'الاتفاقات والرعاة', 'v2c_deals'),
+      T('ads', 'عملاء الإعلانات', 'v2c_ads'),
+      T('settings', 'الإعدادات', 'settings'),
+      hiddenTab(T('targets', 'الأهداف', 'targets'))
     ] }
   ];
   // مفاتيح قديمة ابتُلعت (REDIRECTS في index.html) — تُحلّ هنا بنفس حالتها الداخلية.
@@ -2480,6 +2484,330 @@
       weekText: weekText, u: UU, n: nf, SCOPES: SCOPES, PERIODS: PERIODS_R, NA: NA };
   })();
   // ===== /v2s:reports =====
+})(typeof window !== 'undefined' ? window : (typeof globalThis !== 'undefined' ? globalThis : this));
+
+// ===== v2s:company =====
+// «الشركة ورأس المال» — منطق نقي (لا DOM ولا شبكة). المصدر الذي تعذّر ⇒ null، ولا يتحوّل إلى صفر أبدًا. العملات لا تُجمع ولا تُحوَّل.
+(function (root) {
+  'use strict';
+  var L = root.V2L;
+  if (!L) return;
+  var U = L.util, ar = U.ar, fmt = U.fmt, moneyText = U.moneyText;
+  var NA = 'غير متاح بعد';
+  var MONTHS = ['يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو', 'يوليو', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر', 'ديسمبر'];
+  var DAY_FORMS = ['يوم واحد', 'يومين', 'أيام', 'يومًا'];
+  var ROLE_LABEL = { founder: 'مؤسس', cofounder: 'شريك مؤسس', investor: 'مستثمر', partner: 'شريك', pool: 'حصص غير موزّعة' };
+  var CAT_LABEL = { computers: 'أجهزة كمبيوتر', phones: 'هواتف', camera: 'كاميرات', lenses: 'عدسات', microphone: 'صوت', lighting: 'إضاءة', tripod: 'حوامل',
+                    teleprompter: 'جهاز قراءة النص', hardware: 'ملحقات', equipment: 'معدات', subscription: 'اشتراك', software: 'برنامج', tool: 'أداة', other: 'أخرى' };
+  var STATUS_LABEL = { leased_to_company: 'مؤجَّر للشركة', owned_by_company: 'ملك الشركة', in_studio: 'في الاستوديو', with_person: 'مع أحد الفريق',
+                       out_of_service: 'خارج الخدمة', other: 'أخرى' };
+  var KIND_LABEL = { sponsor: 'راعٍ', content: 'اتفاق محتوى', book: 'اتفاق كتاب', company_paper: 'أوراق الشركة', other: 'أخرى' };
+  var CYCLE_LABEL = { monthly: 'شهريًا', yearly: 'سنويًا' };
+  var RESERVE_NAMES = ['غير موزّع', 'Unallocated / Option Pool'];
+  var LEGACY_CATS = ['subscription', 'software', 'tool'];
+
+  function num(v) { var n = typeof v === 'number' ? v : (typeof v === 'string' && v.trim() !== '' ? Number(v) : NaN); return isFinite(n) ? n : null; }
+  function dayText(n) { return U.U(n, DAY_FORMS); }
+  // أيام التقويم المحلي (لا نوافذ ٢٤ ساعة): iso = «YYYY-MM-DD». غير صالح ⇒ null.
+  function daysUntil(iso, now) {
+    var m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(iso || ''));
+    if (!m) return null;
+    var n = new Date(now || 0);
+    var a = Date.UTC(+m[1], +m[2] - 1, +m[3]), b = Date.UTC(n.getFullYear(), n.getMonth(), n.getDate());
+    return Math.round((a - b) / 86400000);
+  }
+  function monthText(period) {
+    var m = /^(\d{4})-(\d{2})/.exec(String(period || ''));
+    if (!m || +m[2] < 1 || +m[2] > 12) return '';
+    return MONTHS[+m[2] - 1] + ' ' + ar(+m[1]);
+  }
+  function monthName(period) { var m = /^(\d{4})-(\d{2})/.exec(String(period || '')); return m && +m[2] >= 1 && +m[2] <= 12 ? MONTHS[+m[2] - 1] : ''; }
+  function nowKey(now) { var d = new Date(now || 0); return d.getFullYear() + '-' + (d.getMonth() + 1 < 10 ? '0' : '') + (d.getMonth() + 1); }
+  function sumLines(list) {
+    return (Array.isArray(list) ? list : []).filter(function (x) { return x && num(x.amount) !== null && num(x.amount) !== 0; })
+      .map(function (x) { return moneyText(x.amount, x.currency); }).join(' · ');
+  }
+  function amountOf(list, cur) {
+    var a = (Array.isArray(list) ? list : []).filter(function (x) { return x.currency === cur; })[0];
+    return a ? num(a.amount) || 0 : 0;
+  }
+  // الباقي لكل عملة عليها دفعة مسجّلة فقط. لا سالب: المدفوع الزائد أو المساوي لا يظهر.
+  function remaining(agreed, paid) {
+    var out = [];
+    (Array.isArray(agreed) ? agreed : []).forEach(function (a) {
+      var p = amountOf(paid, a.currency);
+      if (!p) return;
+      var r = Math.round(((num(a.amount) || 0) - p) * 100) / 100;
+      if (r > 0) out.push({ currency: a.currency, amount: r });
+    });
+    return out;
+  }
+  function partnerChip(row) {
+    if (!row || !Array.isArray(row.paid)) return null;                      // المدفوع مجهول (الملخّص تعذّر) ⇒ لا شارة
+    if (!row.contributions && !row.paid.length) return { text: 'لم تُسجَّل دفعات', tone: 'neutral' };
+    var agreed = Array.isArray(row.agreed) ? row.agreed : [];
+    var rem = remaining(agreed, row.paid);
+    if (rem.length) return { text: 'باقٍ ' + sumLines(rem), tone: 'soon' };
+    var touched = agreed.filter(function (a) { return amountOf(row.paid, a.currency) > 0; });
+    if (touched.length) return { text: 'دفع كاملًا', tone: 'ok' };
+    return { text: 'دفع ' + sumLines(row.paid), tone: 'neutral' };
+  }
+
+  function agreementChip(row, now) {
+    if (!row) return { text: '', tone: 'neutral', days: null };
+    if (row.status === 'ended') return { text: 'انتهى', tone: 'neutral', days: null };
+    if (row.status === 'draft') return { text: 'مسودة', tone: 'neutral', days: null };
+    var d = daysUntil(row.ends_on, now);
+    if (d === null) return { text: 'ساري', tone: 'ok', days: null };
+    if (d < 0) return { text: 'انتهى', tone: 'neutral', days: d };
+    if (d === 0) return { text: 'ينتهي اليوم', tone: 'late', days: 0 };
+    if (d <= 7) return { text: 'ينتهي بعد ' + dayText(d), tone: 'late', days: d };
+    if (d <= 30) return { text: 'ينتهي بعد ' + dayText(d), tone: 'soon', days: d };
+    return { text: 'ساري', tone: 'ok', days: d };
+  }
+  function renewChip(row, now) {
+    if (!row) return { text: '', tone: 'neutral', days: null };
+    if (row.status === 'stopped') return { text: 'متوقف', tone: 'neutral', days: null };
+    var d = daysUntil(row.renews_on, now);
+    if (d === null) return { text: 'بلا موعد تجديد', tone: 'neutral', days: null };
+    if (d < 0) return { text: 'فات موعد التجديد منذ ' + dayText(-d), tone: 'late', days: d };
+    if (d === 0) return { text: 'يتجدد اليوم', tone: 'soon', days: 0 };
+    if (d <= 7) return { text: 'يتجدد بعد ' + dayText(d), tone: 'soon', days: d };
+    return { text: 'يتجدد ' + U.dateText(row.renews_on), tone: 'neutral', days: d };
+  }
+  function dealAction(row, now) {
+    if (!row) return 'edit';
+    if (row.status === 'ended') return 'renew';
+    if (row.status === 'draft') return 'edit';
+    var d = daysUntil(row.ends_on, now);
+    if (d !== null && d <= 30) return 'renew';
+    if (num(row.amount) > 0) return 'receive';
+    return 'edit';
+  }
+  function subsSorted(list, now) {
+    var act = [], stopped = [], undated = [];
+    (Array.isArray(list) ? list : []).forEach(function (s) {
+      if (s.status === 'stopped') stopped.push(s);
+      else if (!s.renews_on) undated.push(s);
+      else act.push(s);
+    });
+    act.sort(function (a, b) { return a.renews_on < b.renews_on ? -1 : a.renews_on > b.renews_on ? 1 : (a.id || 0) - (b.id || 0); });
+    return act.concat(undated, stopped);
+  }
+  function agreementGroups(items, now) {
+    var g = { ending: [], active: [], drafts: [], ended: [] };
+    (Array.isArray(items) ? items : []).forEach(function (a) {
+      if (a.status === 'ended') g.ended.push(a);
+      else if (a.status === 'draft') g.drafts.push(a);
+      else { var d = daysUntil(a.ends_on, now); (d !== null && d <= 30 ? g.ending : g.active).push(a); }
+    });
+    function byEnd(a, b) { var x = a.ends_on || '9999-12-31', y = b.ends_on || '9999-12-31'; return x < y ? -1 : x > y ? 1 : (a.id || 0) - (b.id || 0); }
+    g.ending.sort(byEnd); g.active.sort(byEnd);
+    return g;
+  }
+  function dealText(c) {
+    if (!c) return '';
+    var p = num(c.percent), f = num(c.fixed_amount);
+    if (c.deal === 'percent') return 'نأخذ ' + fmt(p) + '٪ من دخل الحملة';
+    if (c.deal === 'fixed_plus_percent') return 'مبلغ ثابت ' + moneyText(f, c.currency) + ' + ' + fmt(p) + '٪ من دخل الحملة';
+    if (c.deal === 'fixed') return 'مبلغ ثابت ' + moneyText(f, c.currency);
+    return 'أخرى: ' + (c.deal_other || '');
+  }
+  function dueOf(result) {
+    var d = result && Array.isArray(result.due) ? result.due[0] : null;
+    return d && num(d.amount) !== null ? d : null;
+  }
+  function statementText(c, r) {
+    var due = dueOf(r), cnt = r && num(r.count);
+    var lines = ['كشف حساب — ' + c.name, 'الفترة: ' + monthText(r.period), (c.count_label || 'عملاء جاؤوا من الحملة') + ': ' + (cnt === null || cnt === undefined ? 'غير مسجّل' : fmt(cnt))];
+    if (c.deal !== 'fixed') lines.push('دخلكم من الحملة: ' + (num(r.income) === null ? 'غير مسجّل' : moneyText(r.income, c.currency)));
+    lines.push('الاتفاق: ' + dealText(c));
+    lines.push('المستحق للبروفيسور: ' + (due ? moneyText(due.amount, due.currency) : 'غير محسوب بعد'));
+    lines.push('رقم الكشف: CO-' + c.id + '-' + r.period);
+    return lines.join('\n');
+  }
+
+  // —— الشركاء: من الخام فقط (الملخّص تعذّر) ثم الدمج مع الملخّص
+  function isReserve(p) { return p && (p.role === 'pool' || RESERVE_NAMES.indexOf(p.name) > -1); }
+  function agreedOf(p) {
+    var out = [];
+    if (num(p.capital_egp) > 0) out.push({ currency: 'EGP', amount: num(p.capital_egp) });
+    if (num(p.capital_usd) > 0) out.push({ currency: 'USD', amount: num(p.capital_usd) });
+    return out;
+  }
+  function sumCur(pairs) {
+    var acc = {};
+    pairs.forEach(function (x) { if (x.amount) acc[x.currency] = (acc[x.currency] || 0) + Math.round(x.amount * 100); });
+    return Object.keys(acc).sort(function (a, b) { return (a !== 'EGP') - (b !== 'EGP') || (a < b ? -1 : 1); }).map(function (k) { return { currency: k, amount: acc[k] / 100 }; });
+  }
+  function partnersFromRaw(partners) {
+    if (!Array.isArray(partners)) return null;
+    var rows = partners.map(function (p) {
+      return { id: p.id, name: p.name, role: p.role, equity: num(p.equity_percent) || 0, reserve: !!isReserve(p), agreed: agreedOf(p), notes: p.notes || '' };
+    });
+    var all = []; rows.forEach(function (r) { r.agreed.forEach(function (a) { all.push(a); }); });
+    return { rows: rows, equity_total: Math.round(rows.reduce(function (s, r) { return s + r.equity; }, 0) * 100) / 100, agreed_total: sumCur(all) };
+  }
+  // يدمج الخام مع الملخّص: الأسماء والأدوار من الخام، والمدفوع من الملخّص (إن وُجد). المدفوع مجهول ⇒ paidKnown=false ولا حقول مدفوع.
+  function joinPartners(raw, summaryPartners) {
+    var base = partnersFromRaw(raw);
+    var sp = summaryPartners && Array.isArray(summaryPartners.rows) ? summaryPartners : null;
+    if (!base && !sp) return null;
+    if (!sp) { base.paidKnown = false; base.paid_total = null; base.any_contribution = null; return base; }
+    if (!base) { return { rows: sp.rows.slice(), equity_total: sp.equity_total, agreed_total: sp.agreed_total, paid_total: sp.paid_total, any_contribution: !!sp.any_contribution, paidKnown: true }; }
+    var byId = {}; sp.rows.forEach(function (r) { byId[r.id] = r; });
+    base.rows.forEach(function (r) {
+      var s = byId[r.id];
+      r.paid = s ? s.paid : []; r.contributions = s ? s.contributions : 0; r.last_paid_at = s ? s.last_paid_at : null;
+    });
+    base.paid_total = sp.paid_total; base.any_contribution = !!sp.any_contribution; base.paidKnown = true;
+    return base;
+  }
+  function legacySubs(assets) {
+    return (Array.isArray(assets) ? assets : []).filter(function (a) { return LEGACY_CATS.indexOf(a.category) > -1 && num(a.monthly_rent_egp) > 0; });
+  }
+
+  // —— عقل الشركة: سطور من الحقائق فقط (حتى ٣)
+  function brain(summary, now, extra) {
+    var S = summary || {}, out = [];
+    extra = extra || {};
+    // ١) تغطية المصروف
+    var mo = S.money;
+    if (mo && num(mo.expenses) > 0 && num(mo.revenue) !== null) {
+      var t;
+      if (mo.revenue >= mo.expenses) {
+        t = 'مصروف ' + monthText(mo.month) + ' كان ' + moneyText(mo.expenses, 'EGP') + '، والدخل غطّاه';
+        if (mo.covered_since && mo.covered_since < mo.month) t += ' منذ ' + monthText(mo.covered_since);
+        t += '.';
+      } else {
+        t = 'مصروف ' + monthText(mo.month) + ' كان ' + moneyText(mo.expenses, 'EGP') + '، والدخل غطّى ' + ar(Math.floor(mo.revenue / mo.expenses * 100)) + '٪ منه.';
+      }
+      out.push({ key: 'money', text: t, btn: 'افتح الفلوس', act: { section: 'money', tab: 'overview' } });
+    }
+    // ٢) اتفاق ينتهي خلال ٣٠ يومًا
+    var ag = S.agreements && Array.isArray(S.agreements.ending) ? S.agreements.ending : null;
+    var hit = null;
+    if (ag) {
+      ag.forEach(function (a) {
+        var d = daysUntil(a.ends_on, now);
+        if (d === null || d < 0 || d > 30) return;
+        if (!hit || d < hit.d) hit = { a: a, d: d };
+      });
+    }
+    if (hit) {
+      var vis = extra.visits && hit.a.ref_code && num(extra.visits[hit.a.ref_code]) !== null ? num(extra.visits[hit.a.ref_code]) : null;
+      var tx = 'اتفاق «' + hit.a.party + '» ' + (hit.d === 0 ? 'ينتهي اليوم' : 'ينتهي بعد ' + dayText(hit.d));
+      if (vis !== null) tx += '، وجلب ' + U.U(vis, ['زيارة واحدة', 'زيارتين', 'زيارات', 'زيارة']);
+      out.push({ key: 'agreement', text: tx + '.', btn: 'افتح الاتفاق', act: { tab: 'deals', id: hit.a.id } });
+    } else {
+      // ٢ب) اشتراك يتجدد خلال ٧ أيام أو فات موعده
+      var nx = S.subscriptions && Array.isArray(S.subscriptions.next) ? S.subscriptions.next : null;
+      var sh = null;
+      if (nx) {
+        nx.forEach(function (s) {
+          var d = daysUntil(s.renews_on, now);
+          if (d === null || d > 7) return;
+          if (!sh || d < sh.d) sh = { s: s, d: d };
+        });
+      }
+      if (sh) {
+        var txt = sh.d < 0 ? 'فات موعد تجديد «' + sh.s.name + '» منذ ' + dayText(-sh.d) + '.'
+          : 'اشتراك «' + sh.s.name + '» يتجدد ' + (sh.d === 0 ? 'اليوم' : 'بعد ' + dayText(sh.d)) + ' بمبلغ ' + moneyText(sh.s.amount, sh.s.currency) + '.';
+        out.push({ key: 'subscription', text: txt, btn: 'سجّل الدفع', act: { tab: 'assets', id: sh.s.id, do: 'paid' } });
+      }
+    }
+    // ٣) شركاء باقٍ عليهم
+    var P = S.partners && Array.isArray(S.partners.rows) ? S.partners : null;
+    if (P) {
+      var owing = [], rest = [];
+      P.rows.forEach(function (r) {
+        if (r.reserve || !r.contributions) return;
+        var rem = remaining(r.agreed, r.paid);
+        if (rem.length) { owing.push(r); rem.forEach(function (x) { rest.push(x); }); }
+      });
+      if (owing.length) {
+        var n = owing.length, sum = sumLines(sumCur(rest)), tp;
+        if (n === 1) tp = 'شريك واحد باقٍ عليه ' + sum + ' من حصته.';
+        else if (n === 2) tp = 'شريكان باقٍ عليهما ' + sum + ' من حصتيهما.';
+        else tp = (n <= 10 ? ar(n) + ' شركاء' : ar(n) + ' شريكًا') + ' باقٍ عليهم ' + sum + ' من حصصهم.';
+        out.push({ key: 'owing', text: tp, btn: 'سجّل دفعة', act: { tab: 'partners', do: 'contribution' } });
+      } else if (!P.any_contribution && P.rows.some(function (r) { return !r.reserve; })) {
+        out.push({ key: 'nopaid', text: 'لم تُسجَّل دفعات الشركاء بعد، فالمدفوع من رأس المال غير معروف.', btn: 'سجّل دفعة', act: { tab: 'partners', do: 'contribution' } });
+      }
+    }
+    // ٤) كشوف حساب جاهزة
+    var AC = S.ad_clients;
+    if (AC && num(AC.unsent) > 0) {
+      var k = AC.unsent, due = sumLines(AC.due_unsent);
+      var head = k === 1 ? 'كشف حساب واحد جاهز' : k === 2 ? 'كشفا حساب جاهزان' : k <= 10 ? ar(k) + ' كشوف حساب جاهزة' : ar(k) + ' كشف حساب جاهزة';
+      out.push({ key: 'statements', text: head + ' للإرسال' + (due ? '، والمستحق لنا ' + due : '') + '.', btn: 'جهّز الكشوف', act: { tab: 'ads', do: 'statements' } });
+    }
+    // ٥) مجموع الحصص
+    if (P && P.rows.length && num(P.equity_total) !== null && Math.abs(P.equity_total - 100) > 0.05) {
+      out.push({ key: 'equity', text: 'مجموع الحصص المسجّلة ' + fmt(P.equity_total) + '٪.', btn: 'راجع الحصص', act: { tab: 'partners' } });
+    }
+    return out.slice(0, 3);
+  }
+
+  // —— الأهداف الشهرية
+  function fcRows(forecast) { return Array.isArray(forecast) ? forecast.filter(function (f) { return f && /^\d{4}-\d{2}$/.test(f.month || ''); }).sort(function (a, b) { return a.month < b.month ? -1 : 1; }) : null; }
+  function currentTarget(forecast, now) {
+    var rows = fcRows(forecast); if (!rows) return null;
+    var k = nowKey(now), cur = rows.filter(function (r) { return r.month === k; })[0];
+    if (cur) return cur;
+    return rows.filter(function (r) { return r.month > k; })[0] || null;
+  }
+  function dashMonth(dash, key) {
+    var m = dash && Array.isArray(dash.monthly) ? dash.monthly : null;
+    if (!m) return undefined;                                                  // المصدر غير متاح
+    var r = m.filter(function (x) { return x.month === key; })[0];
+    if (!r && m.length >= 12) {                                                // النافذة آخر ١٢ شهرًا: شهر أقدم منها خارج المصدر لا «بلا دخل»
+      var first = m.map(function (x) { return x.month; }).sort()[0];
+      if (key < first) return undefined;
+    }
+    return r ? num(r.revenue) : null;                                          // null = لا صف لهذا الشهر
+  }
+  function monthLine(forecast, dash, now) {
+    var rows = fcRows(forecast), k = nowKey(now);
+    if (!dash || !Array.isArray(dash.monthly)) return { kind: 'na', text: 'دخل هذا الشهر غير متاح بعد.' };
+    if (!rows) return { kind: 'na', text: 'الأهداف الشهرية غير متاحة بعد.' };
+    var row = rows.filter(function (r) { return r.month === k; })[0];
+    var target = row ? num(row.revenue_egp) : null;
+    if (!row || !(target > 0)) return { kind: 'notarget', text: 'لم يُحدَّد هدف دخل لهذا الشهر.' };
+    var actual = dashMonth(dash, k), name = monthName(k);
+    if (actual === null) return { kind: 'target', text: 'لم يُسجَّل دخل في ' + name + ' حتى الآن، وهدفه ' + moneyText(target, 'EGP') + '.' };
+    return { kind: 'target', text: 'دخل ' + name + ' حتى الآن ' + moneyText(actual, 'EGP') + ' من هدف ' + moneyText(target, 'EGP') + ' (' + ar(Math.round(actual / target * 100)) + '٪).' };
+  }
+  function targetRows(forecast, dash, now) {
+    var rows = fcRows(forecast); if (!rows) return null;
+    var k = nowKey(now);
+    return rows.slice().map(function (f) {
+      var future = f.month > k, actual;
+      if (future) actual = undefined;
+      else actual = dashMonth(dash, f.month);                                  // undefined ⇒ المصدر غير متاح · null ⇒ لا دخل مسجّل
+      return { id: f.id, month: f.month, monthText: monthText(f.month), target: num(f.revenue_egp), actual: actual, future: future, na: !future && actual === undefined,
+               courses: num(f.target_courses), students: num(f.target_students), raw: f };
+    });
+  }
+  function monthOptions(now, mode) {
+    var d = new Date(now || 0), y = d.getFullYear(), m = d.getMonth();
+    var def, years;
+    if (mode === 'target') { var nx = new Date(y, m + 1, 1); def = nx.getFullYear() + '-' + (nx.getMonth() + 1 < 10 ? '0' : '') + (nx.getMonth() + 1); years = [y]; if (nx.getFullYear() !== y) years.push(nx.getFullYear()); else years.push(y + 1); }
+    else { var pv = new Date(y, m - 1, 1); def = pv.getFullYear() + '-' + (pv.getMonth() + 1 < 10 ? '0' : '') + (pv.getMonth() + 1); years = [y, y - 1]; }
+    return { months: MONTHS.map(function (t, i) { return { v: (i + 1 < 10 ? '0' : '') + (i + 1), t: t }; }), years: years, def: def };
+  }
+  function currentCounts(dash, target) {
+    var c = dash && dash.courses ? dash.courses : null;
+    return c ? { courses: num(c.total_courses), students: num(c.total_students) } : null;
+  }
+
+  L.co = {
+    NA: NA, naText: NA, MONTHS: MONTHS, ROLE_LABEL: ROLE_LABEL, CAT_LABEL: CAT_LABEL, STATUS_LABEL: STATUS_LABEL, KIND_LABEL: KIND_LABEL, CYCLE_LABEL: CYCLE_LABEL,
+    daysUntil: daysUntil, dayText: dayText, monthText: monthText, monthName: monthName, nowKey: nowKey, sumLines: sumLines, remaining: remaining,
+    partnerChip: partnerChip, agreementChip: agreementChip, renewChip: renewChip, dealAction: dealAction, subsSorted: subsSorted, agreementGroups: agreementGroups,
+    dealText: dealText, statementText: statementText, dueOf: dueOf, partnersFromRaw: partnersFromRaw, joinPartners: joinPartners, isReserve: isReserve,
+    legacySubs: legacySubs, brain: brain, currentTarget: currentTarget, monthLine: monthLine, targetRows: targetRows, monthOptions: monthOptions, currentCounts: currentCounts
+  };
 })(typeof window !== 'undefined' ? window : (typeof globalThis !== 'undefined' ? globalThis : this));
 
 // ===== v2s:home =====

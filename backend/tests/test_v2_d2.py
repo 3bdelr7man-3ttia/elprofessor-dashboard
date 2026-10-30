@@ -415,7 +415,7 @@ def test_person_address_round_trip_and_the_hidden_tab():
     assert v2_node.logic('personEmailOf', 'a%40b.com') == 'a@b.com' and v2_node.logic('personEmailOf', 'x') == ''
     hidden = v2_node.logic('SECTIONS')
     tabs = [t for s in hidden if s['key'] == 'people' for t in s['tabs']]
-    assert [t['key'] for t in tabs if t.get('hidden')] == ['person'] and not any(t.get('hidden') for s in hidden if s['key'] not in ('people', 'money', 'courses') for t in s['tabs'])
+    assert [t['key'] for t in tabs if t.get('hidden')] == ['person'] and not any(t.get('hidden') for s in hidden if s['key'] not in ('people', 'money', 'courses', 'company') for t in s['tabs'])
     assert [t['key'] for s in hidden if s['key'] == 'money' for t in s['tabs'] if t.get('hidden')] == ['manual'], 'D3: تبويب الإيصالات القديمة المخفي'
 
 

@@ -479,6 +479,8 @@ body{font-family:'IBM Plex Sans Arabic',sans-serif;background:var(--bg);color:va
 <script src="v2s/reports.js"></script>
 <link rel="stylesheet" href="v2s/brain.css">
 <script src="v2s/brain.js"></script>
+<link rel="stylesheet" href="v2s/company.css">
+<script src="v2s/company.js"></script>
 <!-- v2 sections end -->
 <script src="v2-d3.js"></script>
 <!-- v2 sections begin -->
@@ -745,6 +747,7 @@ function renderView(){
   if(window.V2_ON&&window.V2SEC){const _k=Object.keys(V2SEC).find(function(k){return V2SEC[k].owns(current);});if(_k)return V2SEC[_k].render(current,v);}
   // الجولة الأخيرة: أقسام v2s/<key>.js — كل قسم يسجّل نفسه في V2SEC ويقرر بـ`owns` أي موديول يرسمه (تحت الغلاف الجديد فقط).
   if(window.V2_ON&&window.V2SHELL&&V2SHELL.on&&window.V2SEC){for(const k in V2SEC){const s=V2SEC[k];if(s&&s.owns&&s.owns(current)){const ap=document.querySelector('.app');if(ap)ap.classList.add('v2-bare');return s.render(current,v);}}}
+  if(window.V2_ON&&window.V2SEC){for(var _k in V2SEC){var _o=V2SEC[_k];if(_o&&_o.owns&&_o.owns(current)){var _ap=document.querySelector('.app');if(_ap)_ap.classList.add('v2-bare');return _o.render(current,v);}}}
   // موديولات «قريبًا» (لا واجهة خلفية حقيقية بعد) — لا تعرض بياناتها التصميمية.
   if(MODULES_LOOKUP[current]&&MODULES_LOOKUP[current].soon)return viewSoon(v);
   if(current==='inbox')return viewInbox(v);

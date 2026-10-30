@@ -30,7 +30,8 @@ needs_node = pytest.mark.skipif(not NODE, reason='needs node')
 PSEUDO_MODS = {'v2files', 'v2disputes', 'v2person',                       # D2: موديولات وهمية يرسمها V2D2 تحت الغلاف الجديد فقط
                'v2m_overview', 'v2m_payouts', 'v2m_receipts', 'v2m_prices', 'v2m_shares', 'v2m_ads', 'v2b_offers', 'v2b_requests',   # D3: يرسمها V2D3
                'v2s_market_all', 'v2s_market_demand',   # الجولة النهائية · سوق الخدمات: يرسمها V2S_MARKET
-               'v2p_invites', 'v2mk_social', 'v2mk_plan', 'v2r_demand', 'v2r_sunday', 'v2s_brain'}  # + أقسام الجولة النهائية
+               'v2p_invites', 'v2mk_social', 'v2mk_plan', 'v2r_demand', 'v2r_sunday', 'v2s_brain',
+               'v2c_partners', 'v2c_assets', 'v2c_deals', 'v2c_ads'}  # + أقسام الجولة النهائية
 
 
 def _read(*parts):
@@ -104,7 +105,7 @@ def test_the_tabs_match_the_approved_table():
         'marketing': [['campaigns', 'الحملات', 'marketing']],
         'reports': [['report', 'التقرير', 'analysis'], ['demand', 'ما يسأل عنه الناس', 'v2r_demand'], ['sunday', 'تقرير الأحد', 'v2r_sunday']],     # الجولة النهائية: التقارير
         'brain': [['log', 'القواعد وسجل اليوم', 'v2s_brain'], ['helpers', 'المساعدون', 'ai']],
-        'company': [['invest', 'الاستثمار والشركاء', 'investment'], ['targets', 'الأهداف والتأسيس', 'targets'], ['settings', 'الإعدادات', 'settings']],
+        'company': [['invest', 'نظرة', 'investment'], ['partners', 'الشركاء ورأس المال', 'v2c_partners'], ['assets', 'المعدات والاشتراكات', 'v2c_assets'], ['deals', 'الاتفاقات والرعاة', 'v2c_deals'], ['ads', 'عملاء الإعلانات', 'v2c_ads'], ['settings', 'الإعدادات', 'settings'], ['targets', 'الأهداف', 'targets']],
     }
     assert {k: t for k, t in got} == want
 
@@ -196,7 +197,7 @@ def test_section_addresses_round_trip():
       out.push([s.key,t.key,h,L.parseSectionHash(h),L.parseSectionHash(h.slice(1)),L.routeFor(h)]);}));console.log(JSON.stringify(out))""")
     assert len(res) == sum(len(sec.get('tabs') or []) for sec in _node("console.log(JSON.stringify(L.SECTIONS))"))   # عدد التبويبات من SECTIONS نفسها، فلا يتعارض مع أقسام تُضاف بالتوازي
     for sec, tab, h, p1, p2, r in res:
-        if (sec, tab) in (('people', 'person'), ('money', 'manual'), ('courses', 'course')):
+        if (sec, tab) in (('people', 'person'), ('money', 'manual'), ('courses', 'course'), ('company', 'targets')):
             continue                           # تبويب مخفي بلا بريد: يرجع لأول تبويب (يُختبر في test_v2_d2)
         assert h == '#s/%s/%s' % (sec, tab)
         assert p1 == {'section': sec, 'tab': tab, 'exact': True} == p2

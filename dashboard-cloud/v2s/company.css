@@ -1,0 +1,298 @@
+/* ============================================================================
+ * v2s/company.css — قسم «الشركة ورأس المال» (نظرة · الشركاء ورأس المال · المعدات والاشتراكات · الاتفاقات والرعاة · عملاء الإعلانات · الإعدادات).
+ * كل القواعد تحت `.co` (الصفحة) أو `.com` (داخل الورقة): ⛔ المفتاح مقفول ⇒ الملف بيتحمّل ومفيش عنصر في الصفحة بيحمل الأصناف دي.
+ * الألوان: عنّابي #9E2B4E · ورق #FBFAF7/#F6F1EA · حبر #21262E · أحمر #C8102E للمنتهي والمتأخر بس.
+ * الأهداف ≥ 44px، والأزرار 52px تحت 700px. لا تمرير أفقي عند 390px: الجداول تتحوّل لبطاقات مكدّسة.
+ * ========================================================================== */
+.co,.com{--wine:#9E2B4E;--wine-d:#85233F;--paper:#FBFAF7;--paper2:#F6F1EA;--ink:#21262E;--red:#C8102E;--line:#E6DED3;--line2:#F3EEE7;--amber:#8A4B00;--amber-bg:#FCF1E3;
+  --green:#1E6B4A;--green-bg:#EEF6F1;--mute:#6B665C;--box:#FBF6F0;font-family:'IBM Plex Sans Arabic','Cairo',sans-serif;color:var(--ink)}
+.co{max-width:1360px;margin:0 auto;position:relative}
+.co *,.com *{box-sizing:border-box}
+.co button,.co input,.co select,.co textarea,.com button,.com input,.com select,.com textarea{font-family:inherit}
+.co button:focus-visible,.co a:focus-visible,.com button:focus-visible,.com input:focus-visible,.com select:focus-visible,.com textarea:focus-visible,.co summary:focus-visible{outline:3px solid rgba(158,43,78,.45);outline-offset:2px}
+.co p,.com p{margin:0}
+.co h2,.co h3,.com h2,.com h3{margin:0}
+.co-na{color:#8A8478;font-weight:700}
+
+/* —— أزرار */
+.co-btn1,.co-btn2{display:inline-flex;align-items:center;justify-content:center;min-height:48px;padding:0 20px;border-radius:14px;font:800 15.5px 'Cairo',sans-serif;cursor:pointer;text-decoration:none;border:0;max-width:100%;text-align:center}
+.co-btn1{background:var(--wine);color:#fff}
+.co-btn1:hover{background:var(--wine-d)}
+.co-btn2{background:#fff;color:var(--wine);border:1px solid var(--line);min-height:44px;font-size:14px;font-weight:700}
+.co-btn2:hover{background:#FBF0F3}
+.co-btn1:disabled,.co-btn2:disabled{opacity:.55;cursor:default}
+.co-btn2.co-dng{color:var(--red)}
+.co-link{border:0;background:transparent;color:var(--wine);font:800 14.5px 'Cairo',sans-serif;min-height:44px;padding:0 6px;cursor:pointer;text-decoration:underline}
+.co-link.co-del{color:var(--red)}
+.co-link:hover{background:rgba(158,43,78,.07);border-radius:8px}
+
+/* —— تنبيهات */
+.co-warn{display:flex;flex-wrap:wrap;gap:8px 14px;align-items:center;justify-content:space-between;background:#FFF8E6;border:1px solid #EBD38E;color:#6B4A00;border-radius:14px;padding:8px 14px;margin-bottom:12px;font-size:14px;line-height:1.7}
+.co-ok{background:#E8F6EE;border:1px solid #A9DDC1;color:#0F5A37;border-radius:12px;padding:10px 14px;margin-bottom:12px;font:700 14.5px/1.7 'Cairo',sans-serif}
+.co-info{background:var(--paper2);border:1px solid var(--line);color:#4A453B;border-radius:12px;padding:10px 14px;margin-bottom:12px;font-size:14px;line-height:1.7}
+.co-amber{background:var(--amber-bg);border:1px solid #EBCB9A;color:var(--amber);border-radius:12px;padding:8px 14px;margin:10px 0;font:700 14px/1.7 'Cairo',sans-serif}
+.co-amber.strip{display:flex;flex-wrap:wrap;gap:10px 16px;align-items:center;justify-content:space-between;margin:0 0 14px;padding:10px 16px}
+.co-empty{background:#fff;border:1px dashed #D9CFC0;border-radius:18px;padding:26px 18px;text-align:center;color:var(--mute);display:grid;gap:10px;justify-items:center}
+.co-empty b{color:var(--ink);font:800 16.5px/1.6 'Cairo',sans-serif}
+.co-none{text-align:center;color:var(--mute);font-size:14px;padding:14px 8px}
+.co-fine{font-size:12.5px;color:var(--mute);line-height:1.7;margin-top:6px}
+.co-lead{font:700 15px/1.8 'Cairo',sans-serif;margin-bottom:10px}
+.co-lead.sm{font-size:14px;color:#3A3730;font-weight:600}
+.co-vis{font-size:13px;color:var(--mute);background:var(--paper2);border-radius:999px;padding:1px 10px;display:inline-block}
+
+/* —— شريط العقل */
+.co-brain{display:grid;grid-template-columns:1fr;gap:10px;background:var(--ink);color:#fff;border-radius:22px;padding:14px 18px;margin-bottom:16px;align-items:center}
+.co-brain.n2{grid-template-columns:repeat(2,minmax(0,1fr))}
+.co-brain.n3{grid-template-columns:repeat(3,minmax(0,1fr))}
+.co-brain:not(.n2):not(.n3){display:flex;align-items:center;gap:14px}
+.co-brain>p{font-size:15px;line-height:1.8;flex:1}
+.co-bl{display:flex;align-items:flex-start;gap:12px;min-width:0}
+.co-bl p{flex:1;font-size:14.5px;line-height:1.8;min-width:0}
+.co-bav{width:50px;height:50px;border-radius:50%;object-fit:cover;flex:none;background:#fff;border:3px solid var(--wine)}
+.co-bav.sm{width:28px;height:28px;border-width:2px}
+.co-blb{align-self:center;flex:none;min-height:44px;padding:0 10px;border:0;background:transparent;color:#fff;font:800 14px 'Cairo',sans-serif;text-decoration:underline;cursor:pointer;border-radius:10px}
+.co-blb:hover{background:rgba(255,255,255,.12)}
+.co-brain.one{background:var(--ink);margin-bottom:14px}
+.co-brain.one .co-bl{width:100%;align-items:center}
+.co-brain.tg{background:var(--paper2);color:var(--ink);padding:10px 14px;margin-bottom:10px;border-radius:16px}
+.co-brain.tg .co-blb{color:var(--wine)}
+
+/* —— بطاقات */
+.co-card{background:#fff;border:1px solid var(--line);border-radius:22px;padding:18px;margin-bottom:16px;min-width:0;align-self:start}
+.co-grid .co-card,.co-two .co-card{margin-bottom:0}
+.co-ch{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px;flex-wrap:wrap}
+.co-ch h2{font:800 19px/1.5 'Cairo',sans-serif}
+.co-cnt{min-width:34px;height:34px;padding:0 10px;border-radius:999px;background:var(--paper2);border:1px solid var(--line);display:inline-grid;place-items:center;font:800 15px 'Cairo',sans-serif}
+.co-sub{font-size:13px;color:var(--mute)}
+.co-card.soon{border-top:5px solid #E0A100}
+.co-grid{display:grid;grid-template-columns:1.15fr 1fr 1fr;grid-template-rows:auto auto;gap:16px;align-items:start;margin-bottom:16px}
+.co-c-partners{grid-column:1;grid-row:1 / span 2}
+.co-c-assets{grid-column:2;grid-row:1}
+.co-c-deals{grid-column:3;grid-row:1}
+.co-c-ads{grid-column:2 / span 2;grid-row:2}
+.co-two{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;align-items:start;margin-bottom:16px}
+.co-col{display:grid;gap:16px;align-content:start;min-width:0}
+.co-col .co-card{margin-bottom:0}
+.co-hd{display:inline-flex}
+.co-btm{display:none}
+
+/* —— صناديق الأرقام */
+.co-stats{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-bottom:12px}
+.co-stats.three{grid-template-columns:repeat(3,minmax(0,1fr));margin-bottom:14px}
+.co-stat{background:var(--box);border-radius:14px;padding:12px 14px;display:grid;gap:3px;align-content:start;min-width:0}
+.co-stat span{font:700 13.5px 'Cairo',sans-serif;color:var(--mute)}
+.co-stat b{font:800 19px/1.5 'Cairo',sans-serif;overflow-wrap:anywhere}
+.co-stat small{font-size:12.5px;color:var(--mute)}
+.co-eq{display:flex;height:14px;border-radius:10px;overflow:hidden;background:#EFE8DD;margin:4px 0 12px;direction:ltr}
+.co-eq i{display:block;height:100%}
+.co-leg{list-style:none;margin:0 0 10px;padding:0;display:flex;flex-wrap:wrap;gap:6px 16px;font-size:13.5px}
+.co-leg i{display:inline-block;width:12px;height:12px;border-radius:4px;margin-inline-end:6px;vertical-align:-1px}
+
+/* —— الشركاء */
+.co-prs{display:grid;gap:8px;margin-bottom:6px}
+.co-pr{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:6px 12px;align-items:center;min-height:56px;padding:6px 0;border-bottom:1px solid var(--line2)}
+.co-av{width:40px;height:40px;border-radius:50%;display:grid;place-items:center;color:#fff;font:800 15px 'Cairo',sans-serif;flex:none}
+.co-pt{display:grid;gap:1px;min-width:0}
+.co-pt b{font:800 15.5px/1.5 'Cairo',sans-serif;overflow-wrap:anywhere}
+.co-pt small{font-size:13px;color:var(--mute);overflow-wrap:anywhere}
+.co-pa{display:grid;gap:3px;justify-items:end;text-align:end}
+.co-pa span{font:700 13.5px 'Cairo',sans-serif}
+.co-foot{border-top:1px solid var(--line);margin-top:10px;padding-top:10px;display:grid;gap:4px;font-size:13.5px}
+.co-foot b{font:800 14px 'Cairo',sans-serif}
+.co-foot p{display:flex;justify-content:space-between;gap:10px}
+.co-foot em{font-style:normal;color:var(--mute);white-space:nowrap}
+.co-foot.one{display:flex;flex-wrap:wrap;gap:4px 14px;border-top:1px solid var(--line);color:#3A3730}
+
+/* —— شارات */
+.co-st{display:inline-flex;align-items:center;border-radius:999px;padding:2px 12px;font:700 12px/1.7 'Cairo',sans-serif;white-space:nowrap}
+.co-st.t-ok{background:var(--green-bg);color:var(--green)}
+.co-st.t-soon{background:var(--amber-bg);color:var(--amber)}
+.co-st.t-late{background:#FBE9EC;color:#A3122A}
+.co-st.t-neutral{background:var(--line2);color:#3D4652}
+.co-bdg{font-style:normal;font:700 12px 'Cairo',sans-serif;background:var(--paper2);border-radius:999px;padding:1px 10px;margin-inline-end:4px;display:inline-block}
+.co-bdg.in{background:var(--green-bg);color:var(--green)}
+.co-bdg.out{background:var(--amber-bg);color:var(--amber)}
+
+/* —— قوائم صغيرة */
+.co-mini{display:grid;gap:8px;margin-bottom:8px}
+.co-mr{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 10px;align-items:center;min-height:52px;padding:6px 0;border-bottom:1px solid var(--line2)}
+.co-mr b{font:800 14.5px/1.6 'Cairo',sans-serif;overflow-wrap:anywhere}
+.co-mr small{grid-column:1 / -1;font-size:12.5px;color:var(--mute)}
+.co-mr span{font:700 13px 'Cairo',sans-serif;white-space:nowrap}
+.co-mr .co-st{grid-column:1 / -1;justify-self:start}
+
+/* —— عملاء الإعلانات (مربعات) */
+.co-adg{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-bottom:10px}
+.co-adm{background:var(--box);border-radius:16px;padding:14px;display:grid;gap:5px;align-content:start;min-width:0}
+.co-adm h3{font:800 16.5px/1.5 'Cairo',sans-serif}
+.co-deal{font-size:13.5px;color:#3A3730;line-height:1.7}
+.co-per{font:700 12.5px 'Cairo',sans-serif;color:var(--mute)}
+.co-kv{display:flex;justify-content:space-between;gap:10px;align-items:baseline;font-size:14px;padding:2px 0}
+.co-kv span{color:var(--mute)}
+.co-kv b{font:800 15px 'Cairo',sans-serif;text-align:end;overflow-wrap:anywhere}
+.co-kv.due b{color:var(--wine)}
+.co-kv.big b{font-size:20px}
+.co-bar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-top:12px}
+.co-ledger{font-size:14px;margin:4px 0 8px;color:#3A3730}
+.co-meta{display:flex;flex-wrap:wrap;gap:6px 12px;font-size:13px;color:#3A3730;align-items:center}
+.co-nowline{font:600 14px/1.8 'Cairo',sans-serif;color:#3A3730;margin:0 0 10px}
+.co-sumline{font:600 14px/1.8 'Cairo',sans-serif;color:#3A3730;margin-bottom:10px}
+
+/* —— رأس التبويب */
+.co-top{display:flex;flex-wrap:wrap;gap:10px 16px;align-items:center;justify-content:space-between;margin-bottom:14px}
+.co-top>p{font-size:14.5px;color:var(--mute);line-height:1.7;flex:1;min-width:220px}
+.co-ta{display:flex;flex-wrap:wrap;gap:10px}
+
+/* —— الجداول (بطاقات مكدّسة على الموبايل) */
+.co-tbl{display:grid;gap:0}
+.co-tr{--cols:1.1fr 1fr 1fr .8fr .8fr auto;display:grid;grid-template-columns:var(--cols);gap:6px 14px;align-items:center;min-height:52px;padding:6px 4px;border-bottom:1px solid var(--line2);font-size:14px}
+.co-tr.head{min-height:36px;font:800 12.5px 'Cairo',sans-serif;color:var(--mute);border-bottom:1px solid var(--line)}
+.co-tr>span{min-width:0;overflow-wrap:anywhere}
+.co-tr small{display:block;font-size:12.5px;color:var(--mute)}
+.co-tr .act{display:flex;flex-wrap:wrap;gap:6px;justify-content:flex-end;align-items:center}
+.co-tbl.pt .co-tr{--cols:1.7fr .6fr 1.2fr 1.2fr 1.1fr auto}
+.co-tbl.ct .co-tr{--cols:.9fr 1fr 1.7fr 1fr 1.2fr auto}
+.co-tbl.mv .co-tr{--cols:.9fr 2fr .7fr 1fr}
+.co-tbl.iv .co-tr{--cols:1.5fr 1fr 1fr}
+.co-tbl.op .co-tr{--cols:1.6fr 1.6fr 1fr auto}
+.co-tbl.rs .co-tr{--cols:1fr .9fr 1.1fr 1.1fr 1.5fr auto}
+.co-tr.res{background:var(--box);border-radius:10px}
+
+/* —— صفوف القوائم (معدات · اشتراكات · اتفاقات · فريق) */
+.co-list{display:grid;gap:10px}
+.co-lr{display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:8px 16px;align-items:center;background:var(--paper);border:1px solid var(--line2);border-radius:16px;padding:10px 14px;min-height:60px}
+.co-lr.stopped{opacity:.65}
+.co-lr.hl{outline:3px solid rgba(158,43,78,.5);outline-offset:2px}
+.co-lm{display:grid;gap:2px;min-width:0}
+.co-lm b{font:800 15.5px/1.6 'Cairo',sans-serif;overflow-wrap:anywhere}
+.co-lm small{font-size:13px;color:var(--mute);overflow-wrap:anywhere}
+.co-la{display:grid;gap:4px;justify-items:end;text-align:end}
+.co-la b{font:800 15.5px 'Cairo',sans-serif;white-space:nowrap}
+.co-la small{font-size:12.5px;color:var(--mute)}
+.co-ra{display:flex;flex-wrap:wrap;gap:6px;align-items:center;justify-content:flex-end}
+.co-prot{font-size:12.5px;color:var(--mute)}
+.co-lr.au{grid-template-columns:minmax(0,1fr) auto;min-height:52px}
+.au-e{direction:ltr;text-align:right}
+.co-fcs{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px}
+.co-fc{min-height:44px;padding:0 16px;border-radius:999px;border:1px solid var(--line);background:#fff;font:700 14px 'Cairo',sans-serif;color:var(--ink);cursor:pointer}
+.co-fc.on{background:var(--ink);border-color:var(--ink);color:#fff}
+.co-det{padding:0}
+.co-det>summary{list-style:none;cursor:pointer;min-height:52px;display:flex;align-items:center;padding:0 18px;font:800 16px 'Cairo',sans-serif}
+.co-det>summary::-webkit-details-marker{display:none}
+.co-det[open]>summary{border-bottom:1px solid var(--line)}
+.co-det>.co-tbl,.co-det>.co-list,.co-det>.co-cl{margin:14px 18px 18px}
+.co-cl{padding:16px}
+.co-det>.co-card{margin:14px}
+
+/* —— الأهداف: لا شيء إضافي (يستعمل الجدول) */
+.co-c-targets{margin-top:16px}
+
+/* —— الإعدادات */
+.co-perms{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:4px 14px}
+.co-perms.one{grid-template-columns:1fr}
+.co-ck{display:flex;align-items:center;gap:12px;min-height:48px;cursor:pointer;font:600 15px 'Cairo',sans-serif}
+.co-ck input{width:22px;height:22px;accent-color:var(--wine);flex:none}
+
+/* —— البطل (أول مرة) */
+.co-hero{display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,1fr);gap:0;background:#fff;border:1px solid var(--line);border-radius:22px;overflow:hidden;margin-bottom:16px}
+.co-hero-ph{min-height:220px;max-height:260px;background-size:cover;background-position:center;background-color:var(--paper2)}
+.co-hero-t{padding:26px 28px;display:grid;gap:12px;align-content:center;justify-items:start}
+.co-hero-t h2{font:800 24px/1.5 'Cairo',sans-serif}
+.co-hero-t p{font-size:15px;line-height:1.9;color:#3A3730}
+
+/* ============ الأوراق (.com) ============ */
+.com{max-width:640px}
+.co-f{display:grid;gap:5px;margin-bottom:12px}
+.co-f[hidden]{display:none}
+.co-f label{font:800 13.5px 'Cairo',sans-serif;color:#3A3730}
+.co-f small{font-size:12.5px;color:var(--mute)}
+.co-f2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0 12px}
+.co input[type=text],.co input[type=email],.co input[type=date],.co select,.co textarea,.com input[type=text],.com input[type=email],.com input[type=date],.com select,.com textarea{width:100%;min-height:48px;border:1px solid #D9CFC0;border-radius:12px;padding:8px 12px;font-size:15px;background:#fff;color:var(--ink)}
+.com textarea,.co textarea{min-height:76px;resize:vertical}
+.co input[readonly],.com input[readonly]{background:var(--paper2)}
+.co-mp{display:grid;grid-template-columns:1.4fr 1fr;gap:10px}
+.co-acts{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-top:14px}
+.co-acts.links{margin-top:6px}
+.co-errbox{background:#FDECEF;border:1px solid #F2B5C0;color:#8E1228;border-radius:12px;padding:9px 12px;font-size:14px;line-height:1.75;margin-top:10px}
+.co-rv{margin:0 0 4px;padding:0 20px 0 0;line-height:2;font-size:15px}
+.co-diff{width:100%;border-collapse:collapse;font-size:14px;margin-bottom:6px}
+.co-diff th,.co-diff td{padding:8px 8px;border-bottom:1px solid var(--line2);text-align:start}
+.co-diff th{color:var(--mute);font-size:12.5px}
+.co-more{display:grid;gap:10px}
+.co-more .co-btn2{width:100%;min-height:52px;font-size:15px}
+.co-stmt{white-space:pre-wrap;font:600 14.5px/2 'IBM Plex Sans Arabic','Cairo',sans-serif;background:var(--paper);border:1px dashed #CFC4B2;border-radius:14px;padding:14px 16px;margin:0 0 10px;direction:rtl;text-align:start;overflow-wrap:anywhere}
+.co-stmts{display:grid;gap:10px;max-height:52vh;overflow:auto}
+#epModal .com .co-btn1,#epModal .com .co-btn2{min-height:48px}
+
+/* —— الطباعة: الكشوف فقط، كشف في كل صفحة */
+#coPrint{display:none}
+@media print{
+  body.co-printing > *:not(#coPrint){display:none!important}
+  body.co-printing #coPrint{display:block!important;direction:rtl;font-family:'IBM Plex Sans Arabic','Cairo',sans-serif}
+  body.co-printing #coPrint .co-stmt{page-break-after:always;border:0;font-size:16pt;line-height:2.1;white-space:pre-wrap}
+}
+
+/* ============ التجاوب ============ */
+@media (max-width:1179px){
+  .co-grid{grid-template-columns:repeat(2,minmax(0,1fr));grid-template-rows:auto}
+  .co-c-partners{grid-column:1 / -1;grid-row:auto}
+  .co-c-assets{grid-column:1;grid-row:auto}
+  .co-c-deals{grid-column:2;grid-row:auto}
+  .co-c-ads{grid-column:1 / -1;grid-row:auto}
+  .co-brain.n2,.co-brain.n3{grid-template-columns:1fr}
+  .co-two{grid-template-columns:1fr}
+}
+@media (max-width:699px){
+  .co-grid{grid-template-columns:1fr}
+  .co-c-assets,.co-c-deals{grid-column:1}
+  .co-btn1,.co-btn2,#epModal .com .co-btn1,#epModal .com .co-btn2,.co-more .co-btn2{min-height:52px}
+  .co-link{min-height:44px}
+  .co-hd{display:none}
+  .co-btm{display:block;margin-top:12px}
+  .co-btm .co-btn2{width:100%}
+  .co-card{padding:14px;border-radius:18px}
+  .co-brain{padding:12px 14px}
+  .co-blb{min-height:52px}
+  .co-stats,.co-stats.three,.co-adg{grid-template-columns:1fr}
+  .co-hero{grid-template-columns:1fr}
+  .co-hero-t{padding:18px}
+  .co-hero-t .co-btn1{width:100%}
+  .co-top .co-ta{width:100%}
+  .co-top .co-ta .co-btn1,.co-top .co-ta .co-btn2{flex:1 1 100%}
+  .co-warn .co-btn2{width:100%}
+  .co-amber.strip .co-btn1{width:100%}
+  .co-bar .co-btn1,.co-bar .co-btn2{flex:1 1 100%}
+  .co-pr{grid-template-columns:auto minmax(0,1fr)}
+  .co-pa{grid-column:1 / -1;justify-items:start;text-align:start;display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+  /* الجدول ⇒ بطاقة مكدّسة */
+  .co-tr{display:block;padding:12px 4px}
+  .co-tr.head{display:none}
+  .co-tr>span{display:flex;justify-content:space-between;align-items:baseline;gap:12px;padding:3px 0;min-height:30px}
+  .co-tr>span[data-l]::before{content:attr(data-l);color:var(--mute);font:700 12.5px 'Cairo',sans-serif;flex:none}
+  .co-tr>span:first-child{font-size:15px}
+  .co-tr .act{justify-content:flex-start;padding-top:8px}
+  .co-tr .act .co-btn2{flex:1 1 auto}
+  .co-tr>span:empty{display:none}
+  .co-lr{grid-template-columns:minmax(0,1fr)}
+  .co-lr .co-la{justify-items:start;text-align:start;grid-auto-flow:column;display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+  .co-lr .co-ra{justify-content:flex-start}
+  .co-lr .co-ra .co-btn1,.co-lr .co-ra .co-btn2{flex:1 1 auto}
+  .co-f2{grid-template-columns:1fr}
+  .co-perms{grid-template-columns:1fr}
+  .co-acts .co-btn1,.co-acts .co-btn2{flex:1 1 100%}
+  .co-acts.links .co-link{flex:1 1 auto}
+  .co-foot p{flex-direction:column;gap:0}
+  .co-det>.co-tbl,.co-det>.co-list,.co-det>.co-cl{margin:10px}
+}
+
+.co [hidden],.com [hidden]{display:none!important}
+
+/* ============ ترويسة الورقة بهوية القسم (بدل الكحلي القديم) — تُطبَّق على الأوراق التي فيها .com فقط ============ */
+#epModal:has(.com){background:rgba(33,38,46,.55)}
+#epModal .modal:has(.com){border-radius:20px;background:#FBFAF7;box-shadow:0 24px 64px rgba(33,38,46,.38)}
+#epModal .modal:has(.com) .mh{background:#21262E;color:#fff;padding:16px 20px;font-size:17px;border-bottom:3px solid #9E2B4E}
+#epModal .modal:has(.com) .mh button{width:44px;height:44px;border-radius:12px;background:rgba(255,255,255,.12);font-size:17px;margin:-8px 0}
+#epModal .modal:has(.com) .mh button:hover{background:#9E2B4E}
+#epModal .modal:has(.com) .mh button:focus-visible{outline:3px solid #fff;outline-offset:2px}
+#epModal .modal:has(.com) .mb{padding:20px}
+@media (max-width:560px){#epModal .modal:has(.com) .mh button{width:52px;height:52px;margin:-12px 0}}

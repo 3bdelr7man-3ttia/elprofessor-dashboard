@@ -39,6 +39,7 @@ COPY dashboard-cloud/v2/img /app/dist/v2/img
 COPY dashboard-cloud/v2s /app/dist/v2s
 COPY backend/v2_reports_routes.py /app/v2_reports_routes.py
 COPY backend/v2_brain_routes.py /app/v2_brain_routes.py
+COPY backend/v2_company_routes.py /app/v2_company_routes.py
 
 EXPOSE 8080
 
