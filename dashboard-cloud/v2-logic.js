@@ -1231,9 +1231,14 @@
       T('escrow', 'الضمان', 'escrow', { escTab: 'sessions' }, { escTab: ['sessions', 'disputes', 'released'] }),
       T('all', 'كل النزاعات', 'inbox', { activeFilter: 't:disputes' }, { activeFilter: ['t:disputes', 't:legacy'] })
     ] },
-    { key: 'courses', label: 'الدورات والمدرّبون', img: 'courses', desc: 'الدورات المنشورة وطلبات المدرّبين', tabs: [
-      T('courses', 'الدورات', 'courses'),
-      T('trainers', 'المدرّبون', 'team', { teamTab: 'trainers' }, { teamTab: ['trainers'] })
+    { key: 'courses', label: 'الدورات والمدرّبون', img: 'courses', desc: 'الدورات وطلبات المدرّبين وما يطلبه الناس', tabs: [
+      T('courses', 'الدورات', 'courses', { courseTab: 'platform' }, { courseTab: ['platform'] }),
+      T('trainers', 'المدرّبون', 'team', { teamTab: 'trainers' }, { teamTab: ['trainers'] }),
+      T('live', 'الدورات الحيّة', 'courses', { courseTab: 'schedules' }, { courseTab: ['schedules'] }),
+      T('demand', 'ما يطلبه الناس', 'courses', { courseTab: 'demand' }, { courseTab: ['demand', 'programs'] }),
+      T('offers', 'عروض الأسعار', 'courses', { courseTab: 'offers' }, { courseTab: ['offers'] }),
+      hiddenTab(T('course', 'صفحة الدورة', 'courses', { courseTab: 'page' }, { courseTab: ['page'] })),
+      T('all', 'كل السجلات', 'courses', { courseTab: 'courses' }, { courseTab: { not: [] } })
     ] },
     { key: 'market', label: 'سوق الخدمات', img: 'market', desc: 'طلبات الأعضاء وعروض الخبراء', tabs: [
       T('requests', 'الطلبات', 'market')
@@ -1349,7 +1354,16 @@
   // العنوان: #s/<قسم>[/<تبويب>] — يقبل بدون # وبدون s/ المسبوقة بشرطة.
   function sectionHash(key, tab, person) {
     if (person && key === 'people' && tab === 'person') return '#s/people/person/' + personKey(person);
+    if (person && key === 'courses' && tab === 'course') return '#s/courses/course/' + courseKey(person);
     return '#s/' + key + (tab ? '/' + tab : '');
+  }
+  // صفحة الدورة: معرّفها في العنوان كما هو (حروف وأرقام وشرطتان فقط)، وغير الصالح ⇒ ''.
+  function courseKey(id) { return encodeURIComponent(String(id == null ? '' : id).trim()); }
+  function courseIdOf(key) {
+    var e;
+    try { e = decodeURIComponent(String(key == null ? '' : key)); } catch (x) { return ''; }
+    e = e.trim();
+    return /^[A-Za-z0-9_-]{1,100}$/.test(e) ? e : '';
   }
   // مفتاح الشخص في العنوان = بريده بحروف صغيرة مُرمَّزًا (لا هاش ولا اسم ولا معرّف داخلي).
   function personKey(email) { return encodeURIComponent(String(email == null ? '' : email).trim().toLowerCase()); }
@@ -1370,7 +1384,8 @@
     if (tab && tab.hidden) {
       // صفحة الشخص: بلا بريد صالح في العنوان ⇒ أول تبويب في القسم (ولا صفحة فاضية).
       var em = sec.key === 'people' && tab.key === 'person' ? personEmailOf(parts[3]) : '';
-      if (em) out.person = em; else { out.tab = sec.tabs[0].key; out.exact = false; }
+      var cid = sec.key === 'courses' && tab.key === 'course' ? courseIdOf(parts[3]) : '';
+      if (em) out.person = em; else if (cid) out.course = cid; else { out.tab = sec.tabs[0].key; out.exact = false; }
     }
     return out;
   }
@@ -1382,6 +1397,7 @@
     if (p) {
       var t = tabOf(p.section, p.tab), r = pack(secOf(p.section), t);
       if (p.person) r.person = p.person;
+      if (p.course) r.course = p.course;
       return r;
     }
     return sectionFor(s, state);
@@ -1937,7 +1953,7 @@
     v2Tiles: v2Tiles, v2Decisions: v2Decisions, v2Card: v2Card, v2Next: v2Next, v2NextLine: v2NextLine,
     v2Health: v2Health, v2BrainLog: v2BrainLog,
     v2Tickets: v2Tickets, v2DisputeTickets: v2DisputeTickets, v2TimerText: v2TimerText, v2TimerTone: v2TimerTone, v2Person: v2Person,
-    personKey: personKey, personEmailOf: personEmailOf, COLS: COLS, COL_LABEL: COL_LABEL, NA: NA,
+    personKey: personKey, personEmailOf: personEmailOf, courseKey: courseKey, courseIdOf: courseIdOf, COLS: COLS, COL_LABEL: COL_LABEL, NA: NA,
     v2Period: v2Period, v2Income: v2Income, v2Held: v2Held, v2Owed: v2Owed, v2MoneyLine: v2MoneyLine, v2MoneyBoard: v2MoneyBoard,
     v2IncomeBars: v2IncomeBars, v2PayoutRows: v2PayoutRows, v2PayoutHistory: v2PayoutHistory, v2Stuck: v2Stuck, v2StuckFromQueue: v2StuckFromQueue,
     v2RefundRule: v2RefundRule, v2Refunds: v2Refunds, v2Prices: v2Prices, v2PriceForm: v2PriceForm, v2PriceBuild: v2PriceBuild, v2PriceDiff: v2PriceDiff,
@@ -2267,3 +2283,411 @@
   // (قاموس النصوص في `v2s/home_copy.js`: بيسجّل مفاتيحه عبر `L.__copyDict`؛ الملف ده ما فيهوش عامية)
 })(typeof window !== 'undefined' ? window : globalThis);
 // ===== /v2s:home =====
+// ===== v2s:courses =====
+// «الدورات والمدرّبون» (الجولة الأخيرة): منطق نقي بلا DOM ولا شبكة. المصدر الذي تعذّر جلبه يصل `null` ويعود `null`/`na` — لا صفرًا.
+// ⛔ لا حكم ولا رقم مخترع: كل سطر للعقل يُبنى من حقول موجودة، وما لا مصدر له يُكتب «غير متاح بعد».
+(function (root) {
+  var L = root.V2L || (typeof module !== 'undefined' && module.exports);
+  if (!L) return;
+  var U = L.util;
+  var HOURMS = 3600e3;
+  var WARN_H = 24, LATE_H = 72;
+  L.v2s = L.v2s || {};
+
+  function s(v) { return typeof v === 'string' ? v.trim() : ''; }
+  function num(v) { var n = typeof v === 'number' ? v : (typeof v === 'string' && v.trim() !== '' ? Number(v) : NaN); return isFinite(n) ? n : null; }
+  function tms(v) { if (typeof v === 'number') return isFinite(v) && v > 0 ? v : NaN; var t = Date.parse(v || ''); return isNaN(t) ? NaN : t; }
+  function arr(v) { return Array.isArray(v) ? v : null; }
+  function cmpAr(a, b) { return String(a || '').localeCompare(String(b || ''), 'ar'); }
+  function nonEmpty(v) { return s(v) !== ''; }
+
+  var NA = 'غير متاح بعد';
+  var TYPE_LABEL = { recorded_paid: 'مسجّلة مدفوعة', recorded_free: 'مسجّلة مجانية', live_upcoming: 'حيّة' };
+  var SOURCE_LABEL = { dashboard: 'أنشأتها الإدارة', native: 'من بناء المدرّب', 'story-seed': 'دورة تفاعلية', titch: 'منهج مكتوب' };
+  var STATE_LABEL = { published: 'منشورة', review: 'في المراجعة', building: 'تحت البناء', rejected: 'أُعيدت', archived: 'مؤرشفة' };
+  var SEG_LABEL = { individual: 'أفراد', employee: 'موظفون', government: 'حكومي', student: 'طلاب', lawyer: 'محامون', senior: 'محامٍ خبير', prof: 'أستاذ جامعة',
+                    trainer: 'مدرّبون', company: 'شركات', firm: 'شركة محاماة', grad: 'خريج جديد', influencer: 'مؤثر/رائد أعمال', researcher: 'باحثون',
+                    prosecutor: 'وكلاء نيابة', unknown: 'فرد' };
+
+  // حالة الدورة على اللوحة (§3.3): review | published | building | rejected | archived
+  function stateOf(c) {
+    if (!c) return 'building';
+    if (c.approval_status === 'pending') return 'review';
+    if (c.is_active === true) return 'published';
+    if (s(c.archived_at)) return 'archived';
+    if (c.approval_status === 'rejected') return 'rejected';
+    return 'building';
+  }
+  function lessonsOf(c) {
+    var st = c && c.story;
+    if (st && num(st.lessons) > 0) return num(st.lessons);
+    var n = num(c && c.lesson_count);
+    return n == null ? 0 : n;
+  }
+  // دورة منشورة لا تظهر للناس بعد: مسجّلة (مدفوعة أو مجانية) بلا درس واحد. الحيّة والتفاعلية لها طريقها.
+  function hiddenFromPublic(c) { return !!c && c.type !== 'live_upcoming' && !c.story && lessonsOf(c) === 0; }
+  function lessonsPhrase(n) { return n > 0 ? U.U(n, ['درس واحد', 'درسان', 'دروس', 'درسًا']) : 'لا دروس بعد'; }
+  function trainerOf(c) {
+    if (c && c.platform_owned === true) return 'البروفيسور';
+    return s(c && c.instructor_name) || 'بلا اسم مدرّب';
+  }
+  function priceOf(c) {
+    if (!c) return { free: false, text: NA, ok: null };
+    if (c.type === 'recorded_free') return { free: true, text: 'مجانية', short: 'مجانية', ok: true };
+    var a = num(c.price_amount);
+    if (a != null && a > 0) return { free: false, text: U.fmt(a) + ' ' + U.curLong(c.price_currency || 'EGP'), short: U.moneyText(a, c.price_currency || 'EGP'), ok: true };
+    return { free: false, text: 'بلا سعر', short: 'بلا سعر', ok: false };
+  }
+  function hoursSince(at, now) { var t = tms(at); return isNaN(t) ? null : Math.max(0, Math.floor(((now || 0) - t) / HOURMS)); }
+
+  function tone(h) { return h < WARN_H ? 'ok' : (h <= LATE_H ? 'warn' : 'late'); }
+  // العدّاد: الوقت المنتظَر لا يُحسب إلا من `submitted_at`؛ عمر الدورة (`created_at`) يُكتب عمرًا بلا لون.
+  function reviewTimer(c, now) {
+    if (!c) return null;
+    var sub = tms(c.submitted_at);
+    if (!isNaN(sub)) return { at: sub, label: L.v2TimerText({ mode: 'since', at: sub }, now), tone: tone(hoursSince(sub, now)) };
+    var cr = tms(c.created_at);
+    if (!isNaN(cr)) return { at: cr, label: 'أُنشئت ' + L.v2TimerText({ mode: 'since', at: cr }, now), tone: 'none' };
+    return null;
+  }
+  function cover(title) {
+    var m = String(title == null ? '' : title).match(/[ء-يٱ-ۓA-Za-z]/);
+    return { letter: m ? m[0] : '؟' };
+  }
+
+  function summaryLine(counts) {
+    if (!counts) return 'الدورات: ' + NA;
+    var wait = counts.review > 0 ? U.U(counts.review, ['دورة واحدة تنتظرك', 'دورتان تنتظرانك', 'دورات تنتظرك', 'دورة تنتظرك']) : 'لا شيء ينتظرك';
+    return [U.U(counts.published, ['دورة واحدة منشورة', 'دورتان منشورتان', 'دورات منشورة', 'دورة منشورة']), U.ar(counts.building) + ' تحت البناء', wait].join(' · ');
+  }
+  function board(courses, opts) {
+    opts = opts || {};
+    if (!arr(courses)) return { na: true, review: [], building: [], published: [], hidden: [], archived: [], rejected: [], counts: null, summary: summaryLine(null) };
+    var out = { review: [], building: [], published: [], hidden: [], archived: [], rejected: [], na: false };
+    courses.forEach(function (c) {
+      if (!c || typeof c !== 'object') return;
+      var st = stateOf(c), item = Object.assign({}, c, { state: st });
+      if (st === 'review') out.review.push(item);
+      else if (st === 'published') out.published.push(item);
+      else if (st === 'archived') out.archived.push(item);
+      else { out.building.push(item); if (st === 'rejected') out.rejected.push(item); }
+      if (!c.is_active && !s(c.archived_at)) out.hidden.push(item);
+    });
+    // «في المراجعة»: الأقدم تقديمًا أولًا، ومن بلا `submitted_at` بعدهم بترتيب العنوان (لا نرتّب بالعمر).
+    out.review.sort(function (a, b) {
+      var x = tms(a.submitted_at), y = tms(b.submitted_at);
+      if (!isNaN(x) && !isNaN(y)) return x - y;
+      if (!isNaN(x)) return -1;
+      if (!isNaN(y)) return 1;
+      return cmpAr(a.title, b.title);
+    });
+    function upd(c) { var t = tms(c.updated_at); if (isNaN(t)) t = tms(c.created_at); return isNaN(t) ? 0 : t; }
+    out.building.sort(function (a, b) { return upd(b) - upd(a); });
+    out.published.sort(function (a, b) { return (num(b.total_enrolled) || 0) - (num(a.total_enrolled) || 0) || cmpAr(a.title, b.title); });
+    out.counts = { review: out.review.length, building: out.building.length, published: out.published.length, hidden: out.hidden.length,
+                   archived: out.archived.length, rejected: out.rejected.length, total: out.review.length + out.building.length + out.published.length + out.archived.length };
+    out.summary = summaryLine(out.counts);
+    return out;
+  }
+
+  // —— فحص النشر: كل بند ok:true|false|null (null = لا مصدر الآن). ctx = {schedule, checklist, now}؛ checklist = ردّ الجسر أو null.
+  function courseFacts(c, ctx) {
+    ctx = ctx || {};
+    var live = c && c.type === 'live_upcoming', sch = ctx.schedule || null;
+    var cl = ctx.checklist && Array.isArray(ctx.checklist.checklist) ? ctx.checklist : null;
+    var items = [];
+    var lessons = lessonsOf(c), pr = priceOf(c);
+    function put(it) { items.push(it); }
+    // المحتوى
+    if (live) put({ key: 'content', ok: sch ? nonEmpty(sch.start_date) : null, label: 'بلا موعد بدء', pos: 'لها موعد بدء', name: 'موعد البدء', own: true });
+    else put({ key: 'content', ok: lessons > 0, label: 'لا دروس فيها', pos: lessons > 0 ? 'فيها ' + lessonsPhrase(lessons) : 'فيها دروس', own: true });
+    // السعر
+    put({ key: 'price', ok: pr.ok, label: 'بلا سعر', pos: pr.free ? 'مجانية' : 'السعر ' + pr.short, own: true });
+    // رابط اللقاء
+    if (live) put({ key: 'zoom', ok: sch ? nonEmpty(sch.zoom_link) : null, label: 'بلا رابط للقاء', pos: 'رابط اللقاء موجود', name: 'رابط اللقاء', own: true });
+    // الاتفاقية
+    if (!(c && c.platform_owned === true)) {
+      var ag = c && typeof c.agreement_signed === 'boolean' ? c.agreement_signed : null;
+      put({ key: 'agreement', ok: ag, label: 'لم يوقّع صاحب الدورة الاتفاقية', pos: 'صاحب الدورة وقّع الاتفاقية', name: 'توقيع الاتفاقية', own: true });
+    }
+    if (cl) {
+      // بنود المنصة تحلّ محل البند المحلي بنفس المفتاح، وما لا مقابل له يُضاف.
+      var map = { pricing: 'price' };
+      cl.checklist.forEach(function (x) {
+        if (!x || !x.key) return;
+        var key = map[x.key] || x.key;
+        var text = s(x.item) || key;
+        var at = -1;
+        for (var i = 0; i < items.length; i++) if (items[i].key === key) at = i;
+        var it = { key: key, ok: x.ok === true ? true : (x.ok === false ? false : null), label: text, pos: text, own: false, platform: true };
+        if (at > -1) items[at] = it; else items.push(it);
+      });
+      if (s(cl.sale_block_reason)) items.push({ key: 'sale', ok: false, label: s(cl.sale_block_reason), pos: s(cl.sale_block_reason), own: false, platform: true });
+    }
+    var missing = items.filter(function (i) { return i.ok === false; }).map(function (i) { return i.label; });
+    var unknown = items.filter(function (i) { return i.ok === null; }).map(function (i) { return i.name || i.label; });
+    if (!cl) unknown.unshift('بنود الفحص');
+    var complete = !!cl && cl.checklist.length > 0 && items.every(function (i) { return i.ok === true; });
+    var parts = [];
+    items.forEach(function (i) { if (i.own && i.ok === true && i.key !== 'agreement') parts.push(i.pos); });
+    if (missing.length) parts.push('ينقصها: ' + missing.join('، '));
+    else if (complete) parts.push('اجتازت الفحص: ' + U.ar(cl.checklist.length) + ' من ' + U.ar(cl.checklist.length));
+    if (!cl && ctx.checklistState !== 'loading') parts.push('بقية بنود الفحص: ' + NA);
+    var suggestion = missing.length ? 'return' : (complete ? 'publish' : 'open');
+    return { items: items, line: parts.join(' · '), suggestion: suggestion, complete: complete, missing: missing, unknown: unknown,
+             returnNote: missing.length ? 'ينقص الدورة قبل النشر: ' + missing.join('، ') + '.' : '' };
+  }
+
+  // —— طلبات المدرّبين
+  function appTickets(apps, opts) {
+    opts = opts || {};
+    var now = opts.now || 0;
+    if (!arr(apps)) return null;
+    return apps.filter(function (a) { return a && typeof a === 'object'; }).map(function (a) {
+      var exp = (Array.isArray(a.expertise) ? a.expertise : []).map(s).filter(Boolean);
+      var summary = s(a.experience_summary);
+      var li = s(a.linkedin_url), cv = s(a.cv_url), pf = s(a.portfolio_url);
+      var facts = [exp.length ? U.U(exp.length, ['مجال واحد', 'مجالان', 'مجالات', 'مجالًا']) : 'بلا مجال محدّد'];
+      var links = [];
+      if (li) links.push('لينكدإن');
+      if (cv) links.push('سيرة ذاتية');
+      if (pf) links.push('نماذج أعمال');
+      if (links.length) facts = facts.concat(links); else facts.push('بلا روابط');
+      if (summary.length < 40) facts.push('نبذة الخبرة قصيرة');
+      if (s(a.founding_lead_id)) facts.push('جاء من دعوة الخبراء المؤسسين');
+      var missing = [];
+      if (!(li || cv)) missing.push('سيرة ذاتية أو لينكدإن');
+      if (summary.length < 40) missing.push('نبذة خبرة كافية');
+      if (!exp.length) missing.push('مجال واحد على الأقل');
+      var ok = !missing.length;
+      var at = tms(a.created_at); if (isNaN(at)) at = tms(a.updated_at);
+      var timer = isNaN(at) ? null : { at: at, mode: 'since' };
+      var h = timer ? hoursSince(at, now) : null;
+      return { id: s(a.id) || String(a.id || ''), name: s(a.user_name) || s(a.user_email) || 'مقدّم الطلب', email: s(a.user_email).toLowerCase(), headline: s(a.headline),
+               expertise: exp, chips: exp.slice(0, 3), moreChips: Math.max(0, exp.length - 3), timer: timer, text: timer ? L.v2TimerText(timer, now) : '', tone: h == null ? 'none' : tone(h),
+               line: facts.join(' · ') + (ok ? '' : ' · ينقص الطلب: ' + missing.join('، ')), suggestion: ok ? 'accept' : 'open', missing: missing,
+               links: { linkedin: li, cv: cv, portfolio: pf }, summary: summary, createdAt: s(a.created_at) };
+    }).sort(function (x, y) { return (x.timer ? x.timer.at : Infinity) - (y.timer ? y.timer.at : Infinity); });
+  }
+
+  // —— المدرّبون: خبراء معتمدون + دوراتهم (بالبريد إن وُجد، وإلا بالاسم كما هو بالتمام). experts فاشل ⇒ null.
+  function trainerRows(experts, courses, opts) {
+    opts = opts || {};
+    var now = opts.now || 0;
+    if (!arr(experts)) return null;
+    var cs = arr(courses);
+    return experts.filter(function (e) { return e && typeof e === 'object'; }).map(function (e) {
+      var email = s(e.email).toLowerCase(), name = s(e.full_name) || email || 'مدرّب';
+      var mine = cs ? cs.filter(function (c) {
+        var ce = s(c && c.instructor_email).toLowerCase();
+        return ce ? ce === email : (name && s(c && c.instructor_name) === name);
+      }) : null;
+      var st = mine ? mine.map(stateOf) : [];
+      var inReview = mine ? st.indexOf('review') > -1 : null, rejected = mine ? st.indexOf('rejected') > -1 : null;
+      var building = mine ? (st.indexOf('building') > -1 || st.indexOf('rejected') > -1) : null;
+      var published = mine ? st.filter(function (x) { return x === 'published'; }).length : null;
+      var cc = num(e.courses_count), sc = num(e.students_count);
+      var line = '', lt = 'none';
+      var due = tms(e.first_course_due_at);
+      if (inReview) { line = 'دورة في المراجعة'; lt = 'warn'; }
+      else if (rejected) { line = 'تُعدَّل ملاحظات المراجعة'; lt = 'warn'; }
+      else if (building) { line = 'دورة تحت البناء'; }
+      else if (e.agreement_signed === false) { line = 'لم يوقّع الاتفاقية بعد'; lt = 'warn'; }
+      else if (!isNaN(due) && !(published > 0)) {
+        if (due > now) { line = 'مهلة أول دورة بعد ' + U.durShort(due - now); lt = 'warn'; } else { line = 'انتهت مهلة أول دورة'; lt = 'late'; }
+      }
+      else if (e.is_test === true) { line = 'حساب تجريبي — مخفي عن الناس'; }
+      else if (e.public_ready === false) { line = 'مخفي عن الدليل: الملف ناقص'; }
+      else if (published != null) line = U.U(published, ['دورة منشورة واحدة', 'دورتان منشورتان', 'دورات منشورة', 'دورة منشورة']);
+      else if (cc != null) line = U.U(cc, ['دورة واحدة', 'دورتان', 'دورات', 'دورة']);
+      var anyBoard = mine ? mine.some(function (c) { return stateOf(c) !== 'archived'; }) : false;
+      return { email: email, name: name, expertise: Array.isArray(e.expertise) ? e.expertise : [], coursesCount: cc, students: sc,
+               countsText: [cc == null ? null : U.U(cc, ['دورة واحدة', 'دورتان', 'دورات', 'دورة']), sc == null ? null : U.U(sc, ['متعلّم واحد', 'متعلّمان', 'متعلّمين', 'متعلّمًا'])].filter(Boolean).join(' · '),
+               statusLine: line, tone: lt, inReview: inReview, building: building, rejected: rejected, published: published,
+               listed: (cc != null && cc > 0) || anyBoard, isTest: e.is_test === true, userId: s(e.user_id) };
+    });
+  }
+
+  // —— الدورات الحيّة
+  function liveTimeText(iso) {
+    var t = tms(iso); if (isNaN(t)) return '';
+    var d = new Date(t), h = d.getHours(), m = d.getMinutes(), ap = h >= 12 ? 'م' : 'ص';
+    h = h % 12; if (h === 0) h = 12;
+    return U.ar(h) + ':' + (m < 10 ? '٠' : '') + U.ar(m) + ' ' + ap;
+  }
+  var LIVE_STATUS = { reserving: 'يجمع الحجوزات', payment_window: 'نافذة الدفع', confirmed: 'مثبّتة', canceled: 'أُلغيت', needs_decision: 'تنتظر قرارك' };
+  function liveTickets(schedules, queue, opts) {
+    opts = opts || {};
+    var now = opts.now || 0;
+    var sc = arr(schedules), q = arr(queue);
+    var by = {};
+    (sc || []).forEach(function (r) { if (r && r.slug) by[r.slug] = r; });
+    var decide = null;
+    if (q) decide = q.filter(function (x) { return x && x.slug; }).map(function (x) {
+      var r = by[x.slug] || null;
+      var reserved = num(x.reserved_count), quorum = num(x.quorum);
+      if (r) { if (reserved == null) reserved = num(r.reserved_count); if (quorum == null) quorum = num(r.quorum); }
+      var status = s(x.live_status) || (r && s(r.live_status)) || 'needs_decision';
+      var zoom = r ? nonEmpty(r.zoom_link) : null;
+      var timer = null, label = 'تنتظر قرارك';
+      if (status === 'payment_window' && r && s(r.payment_deadline)) { timer = { at: tms(r.payment_deadline), mode: 'over' }; label = ''; }
+      else if (status === 'reserving' && r && s(r.registration_deadline)) { timer = { at: tms(r.registration_deadline), mode: 'over' }; label = ''; }
+      var enough = reserved != null && quorum != null && reserved >= quorum;
+      var line, main, second;
+      if (reserved == null || quorum == null) {
+        line = 'الحجوزات: ' + NA; main = { key: 'open', label: 'افتح الدورة' }; second = [{ key: 'cancel', label: 'ألغِ الدورة' }];
+      } else if (enough && zoom === true) {
+        line = 'اكتمل الحد الأدنى: ' + U.ar(reserved) + ' من ' + U.ar(quorum) + ' · رابط اللقاء موجود';
+        main = { key: 'confirm', label: 'ثبّت الدورة' }; second = [{ key: 'cancel', label: 'ألغِ الدورة' }];
+      } else if (enough && zoom === false) {
+        line = 'اكتمل الحد الأدنى، وينقص رابط اللقاء';
+        main = { key: 'zoom', label: 'أضف رابط اللقاء' }; second = [{ key: 'cancel', label: 'ألغِ الدورة' }];
+      } else if (enough) {
+        line = 'اكتمل الحد الأدنى: ' + U.ar(reserved) + ' من ' + U.ar(quorum) + ' · رابط اللقاء: ' + NA;
+        main = { key: 'open', label: 'افتح الدورة' }; second = [{ key: 'cancel', label: 'ألغِ الدورة' }];
+      } else {
+        line = 'حجز ' + U.ar(reserved) + ' من ' + U.ar(quorum) + '، وانتهت مهلة ' + (status === 'payment_window' ? 'الدفع' : 'التسجيل');
+        main = { key: 'extend', label: 'مدّد ٤٨ ساعة' }; second = [{ key: 'confirm', label: 'ثبّت رغم ذلك' }, { key: 'cancel', label: 'ألغِ الدورة' }];
+      }
+      var startIso = r ? s(r.start_date) : '';
+      return { slug: x.slug, id: r ? s(r.id) : '', title: s(x.title) || (r && s(r.title)) || 'دورة حيّة', trainer: (r && s(r.instructor_name)) || '', status: status,
+               reserved: reserved, quorum: quorum, zoom: zoom, timer: timer, timerText: timer ? L.v2TimerText(timer, now) : '', label: label,
+               startText: startIso ? 'تبدأ ' + U.dateText(startIso) : '', line: line, main: main, secondary: second };
+    });
+    var all = null;
+    if (sc) {
+      all = sc.filter(function (r) { return r && typeof r === 'object'; }).map(function (r) {
+        var status = s(r.live_status) || 'reserving';
+        var t = LIVE_STATUS[status] || 'غير معروفة';
+        if (status === 'payment_window' && s(r.payment_deadline)) t += ' حتى ' + U.dateText(r.payment_deadline);
+        var at = tms(r.start_date);
+        return { id: s(r.id), slug: s(r.slug), title: s(r.title) || 'دورة حيّة', trainer: s(r.instructor_name), dateText: isNaN(at) ? 'بلا موعد' : U.dateText(r.start_date),
+                 timeText: isNaN(at) ? '' : liveTimeText(r.start_date), booked: num(r.booked_count), max: num(r.max_seats), quorum: num(r.quorum),
+                 status: status, statusText: t, hasZoom: nonEmpty(r.zoom_link), canceled: status === 'canceled', at: isNaN(at) ? Infinity : at };
+      }).sort(function (a, b) { return (a.canceled ? 1 : 0) - (b.canceled ? 1 : 0) || a.at - b.at; });
+    }
+    return { decide: decide, all: all };
+  }
+
+  // —— عروض الأسعار
+  function offerTickets(offers, opts) {
+    opts = opts || {};
+    var now = opts.now || 0;
+    if (!arr(offers)) return null;
+    return offers.filter(function (o) { return o && typeof o === 'object'; }).map(function (o) {
+      var cur = s(o.currency) || 'EGP';
+      var off = num(o.offered_amount), sit = num(o.situational_amount), floor = num(o.floor_amount);
+      var line, sug;
+      if (off != null && floor != null && off < floor) { line = 'العرض أقل من الحد الأدنى'; sug = 'counter'; }
+      else if (off != null && sit != null && sit > 0) {
+        var pct = Math.round((sit - off) / sit * 100);
+        line = pct > 0 ? 'العرض أقل من السعر المناسب بـ' + U.ar(pct) + '٪' + (floor != null ? '، وفوق الحد الأدنى' : '') : 'العرض يساوي السعر المناسب أو يزيد عليه';
+        sug = 'approve';
+      } else if (off != null) { line = 'السعر المناسب: ' + NA; sug = 'approve'; }
+      else { line = 'مبلغ العرض: ' + NA; sug = 'counter'; }
+      var at = tms(o.created_at), timer = isNaN(at) ? null : { at: at, mode: 'since' };
+      var agreed = off != null ? (floor != null ? Math.max(off, floor) : off) : null;
+      function m(v) { return v == null ? NA : U.moneyText(v, cur); }
+      return { id: s(o.id), course: s(o.course_title) || s(o.course_slug) || 'دورة', buyer: s(o.buyer_email) || 'صاحب العرض', buyerEmail: s(o.buyer_email).toLowerCase(),
+               segment: SEG_LABEL[s(o.segment)] || 'فرد', currency: cur, offered: off, situational: sit, floor: floor, agreed: agreed,
+               amounts: [{ k: 'العرض', v: m(off) }, { k: 'السعر المناسب له', v: m(sit) }, { k: 'الحد الأدنى', v: m(floor) }],
+               line: line, suggestion: sug, message: s(o.message), timer: timer, text: timer ? L.v2TimerText(timer, now) : '', belowFloor: off != null && floor != null && off < floor };
+    }).sort(function (a, b) { return (a.timer ? a.timer.at : Infinity) - (b.timer ? b.timer.at : Infinity); });
+  }
+
+  // —— ما يطلبه الناس: stats = {stats:[{title,count}]} · requests = {requests:[…]} أو قائمة · analysis = ردّ تحليل الشات. المصدر الفاشل null.
+  function demand(stats, requests, analysis, opts) {
+    opts = opts || {};
+    var now = opts.now || 0;
+    var list = stats && arr(stats.stats) ? stats.stats : null;
+    var counts = {};
+    (list || []).forEach(function (x) { if (x && s(x.title)) counts[s(x.title)] = num(x.count) || 0; });
+    var top = null, topLine = '';
+    if (list) {
+      var rows = list.filter(function (x) { return x && s(x.title); }).slice(0, 10);
+      var max = Math.max.apply(null, [1].concat(rows.map(function (x) { return num(x.count) || 0; })));
+      top = rows.map(function (x) { var c = num(x.count) || 0; return { title: s(x.title), count: c, countText: U.U(c, ['طلب واحد', 'طلبان', 'طلبات', 'طلبًا']), width: Math.max(4, Math.round(c / max * 100)) }; });
+      if (top.length) topLine = 'أكثر ما يُطلب: «' + top[0].title + '» (' + U.ar(top[0].count) + ')';
+    }
+    var reqs = requests && !Array.isArray(requests) ? arr(requests.requests) : arr(requests);
+    var programs = null;
+    if (reqs) programs = reqs.filter(function (r) { return r && typeof r === 'object' && (!r.status || r.status === 'pending'); }).map(function (r) {
+      var title = s(r.title) || s(r.program_id) || 'برنامج';
+      var n = counts[title];
+      var at = tms(r.created_at), timer = isNaN(at) ? null : { at: at, mode: 'since' };
+      return { id: s(r.id), title: title, requester: s(r.user_name) || s(r.user_email) || 'صاحب الطلب', email: s(r.user_email).toLowerCase(), timer: timer,
+               text: timer ? L.v2TimerText(timer, now) : '', line: n > 1 ? 'طلبه ' + U.U(n, ['شخص واحد', 'شخصان', 'أشخاص', 'شخصًا']) + ' بنفس العنوان' : 'أول طلب بهذا العنوان' };
+    }).sort(function (a, b) { return (a.timer ? a.timer.at : Infinity) - (b.timer ? b.timer.at : Infinity); });
+    var chat = null;
+    var rq = analysis && arr(analysis.recent_questions);
+    if (rq) {
+      var map = {};
+      rq.forEach(function (r) {
+        if (!r || r.intent !== 'دورة') return;
+        var k = s(r.category) || 'غير مصنّف';
+        if (!map[k]) map[k] = { category: k, count: 0, example: s(r.question).slice(0, 90) };
+        map[k].count++;
+      });
+      var groups = Object.keys(map).map(function (k) { return map[k]; }).sort(function (a, b) { return b.count - a.count; });
+      groups.forEach(function (g) { g.countText = U.U(g.count, ['طلب واحد', 'طلبان', 'طلبات', 'طلبًا']); g.title = 'دورة في ' + g.category; });
+      chat = { sample: rq.length, sampleText: 'من عيّنة آخر ' + U.ar(rq.length) + ' سؤالًا في الشات', groups: groups };
+    }
+    return { top: top, topLine: topLine, programs: programs, chat: chat };
+  }
+
+  // —— صفحة الدورة
+  function statFor(stats, c) {
+    var list = stats && arr(stats.courses);
+    if (!list || !c) return null;
+    for (var i = 0; i < list.length; i++) if (list[i] && (list[i].course_id === c.id || (c.slug && list[i].slug === c.slug))) return list[i];
+    return null;
+  }
+  function pageModel(c, detail, stat, checklist, schedule, opts) {
+    opts = opts || {};
+    var now = opts.now || 0;
+    var st = stateOf(c);
+    var facts = courseFacts(c, { schedule: schedule, checklist: checklist, now: now });
+    var story = c.story && num(c.story.lessons) > 0 ? c.story : null;
+    var pr = priceOf(c);
+    var lessons = story ? U.ar(story.lessons) + ' في ' + U.ar(story.units) + ' أجزاء · نحو ' + U.ar(story.minutes) + ' دقيقة' : U.ar(lessonsOf(c));
+    var sales;
+    if (stat && arr(stat.sales)) {
+      var parts = stat.sales.filter(function (x) { return x && num(x.amount) != null; }).map(function (x) { return U.moneyText(x.amount, x.currency); });
+      sales = { text: parts.length ? parts.join(' + ') : 'لا مبيعات بعد', na: false };
+    } else sales = { text: NA, na: true };
+    var comp = [];
+    var pct = stat ? num(stat.completion_pct) : null;
+    if (pct != null) comp.push('يكملها ' + U.ar(pct) + '٪');
+    if (stat && stat.stall_lesson && num(stat.stall_lesson.index) != null) comp.push('يتوقف أغلبهم عند الدرس ' + U.ar(stat.stall_lesson.index) + (s(stat.stall_lesson.title) ? ': ' + s(stat.stall_lesson.title) : ''));
+    var completion = comp.length ? comp.join(' · ') : 'نسبة الإكمال: ' + NA;
+    var main = null, second = [], block = false;
+    if (st === 'review') {
+      if (opts.checklistState === 'error') { main = { key: 'refetch', label: 'أعد جلب الفحص' }; block = true; }
+      else if (facts.suggestion === 'publish') { main = { key: 'publish', label: 'انشرها' }; second = [{ key: 'return', label: 'أعِدها بملاحظات' }]; }
+      else if (facts.suggestion === 'return') { main = { key: 'return', label: 'أعِدها بملاحظات' }; second = [{ key: 'publish', label: 'انشرها' }]; }
+      else block = true;
+    } else if (st === 'building' || st === 'rejected') second = [{ key: 'publishNow', label: 'انشرها الآن' }];
+    else if (st === 'published') second = [{ key: 'hide', label: 'أوقف ظهورها' }];
+    else if (st === 'archived') main = { key: 'show', label: 'أعِد نشرها' };
+    var canHard = !c.is_active && !s(c.archived_at) && !(num(c.total_enrolled) > 0);
+    var live = null;
+    if (c.type === 'live_upcoming') {
+      var sc = schedule || null;
+      live = sc ? { startText: s(sc.start_date) ? U.dateText(sc.start_date) : 'بلا موعد', timeText: liveTimeText(sc.start_date),
+                    seats: num(sc.booked_count) != null && num(sc.max_seats) != null ? 'المقاعد: ' + U.ar(sc.booked_count) + ' من ' + U.ar(sc.max_seats) : 'المقاعد: ' + NA,
+                    quorum: num(sc.quorum) != null ? 'الحد الأدنى للتشغيل: ' + U.ar(sc.quorum) : 'الحد الأدنى للتشغيل: ' + NA,
+                    status: LIVE_STATUS[s(sc.live_status)] || '', zoom: nonEmpty(sc.zoom_link) ? 'رابط اللقاء: موجود' : 'رابط اللقاء: غير موجود', slug: s(sc.slug) || s(c.slug) } : { na: true, slug: s(c.slug) };
+    }
+    return { id: c.id, title: s(c.title) || 'دورة بلا عنوان', state: st, stateLabel: STATE_LABEL[st], typeLabel: TYPE_LABEL[c.type] || s(c.type), interactive: !!story,
+             sourceLabel: SOURCE_LABEL[s(c.source)] || '', trainer: trainerOf(c), trainerEmail: s(c.instructor_email).toLowerCase(), hero: s(c.thumbnail_url), cover: cover(c.title),
+             tiles: { learners: U.ar(num(c.total_enrolled) || 0), lessons: lessons, price: pr.ok === false ? 'بلا سعر' : pr.text, sales: sales },
+             completion: completion, facts: facts, main: main, secondary: second, decisionBlock: block, bid: { show: st === 'published' && c.type !== 'recorded_free', enabled: c.bid_enabled === true },
+             live: live, danger: st === 'archived' ? null : (canHard ? 'delete' : 'archive'), reviewNote: s(c.review_note), hasPreview: !!(story && s(c.slug)), enrolled: num(c.total_enrolled) || 0 };
+  }
+
+  L.v2s.courses = { tone: tone, reviewTimer: reviewTimer, cover: cover, board: board, summaryLine: summaryLine, courseFacts: courseFacts, appTickets: appTickets,
+                    trainerRows: trainerRows, liveTickets: liveTickets, offerTickets: offerTickets, demand: demand, pageModel: pageModel, stateOf: stateOf,
+                    lessonsOf: lessonsOf, hiddenFromPublic: hiddenFromPublic, lessonsPhrase: lessonsPhrase, trainerOf: trainerOf, priceOf: priceOf, statFor: statFor, liveTimeText: liveTimeText,
+                    TYPE_LABEL: TYPE_LABEL, STATE_LABEL: STATE_LABEL, SOURCE_LABEL: SOURCE_LABEL, SEG_LABEL: SEG_LABEL, LIVE_STATUS: LIVE_STATUS, NA: NA, WARN_H: WARN_H, LATE_H: LATE_H };
+})(typeof window !== 'undefined' ? window : (typeof globalThis !== 'undefined' ? globalThis : this));
+// ===== /v2s:courses =====

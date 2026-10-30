@@ -2692,6 +2692,12 @@ def v2_book_request_patch(request_id):
                      'book_request.update', request_id, {k: v for k, v in out.items() if k != 'public_text'})
 
 
+# ---- v2 section routes begin
+# كل قسم من الجولة الأخيرة بيسجّل مساراته في ملف مستقل `v2_<قسم>_routes.py` بسطر واحد هنا (قبل علامة النهاية).
+import v2_courses_routes; v2_courses_routes.register(app, globals())
+# ---- v2 section routes end
+
+
 @app.route('/api/platform-pnl', methods=['GET'])
 @token_required
 @roles_required('admin')

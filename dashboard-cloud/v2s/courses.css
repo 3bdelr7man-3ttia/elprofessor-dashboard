@@ -1,0 +1,403 @@
+/* ============================================================================
+ * v2s/courses.css — قسم «الدورات والمدرّبون» على الهيكل الجديد. كل القواعد تحت `.v2co` (الشاشة) أو `.v2co-m` (داخل الورقة) أو `.v2co-legacy`
+ * (إطار «كل السجلات»): ⛔ المفتاح مقفول ⇒ الملف بيتحمّل ومفيش عنصر في الصفحة بيحمل الأصناف دي فمفيش أثر على أي شاشة.
+ * ⛔ البادئة `.v2co-` فقط (`v2c-` للتبويبات في الغلاف · `crs-` للشاشة القديمة). الهوية: عنّابي #9E2B4E · ورق #FBFAF7/#F6F1EA · حبر #21262E · أحمر #C8102E للمتأخر بس.
+ * ========================================================================== */
+.v2co,.v2co-m,.v2co-legacy{--wine:#9E2B4E;--wine-d:#85233F;--paper:#FBFAF7;--paper2:#F6F1EA;--ink:#21262E;--red:#C8102E;--line:#E9E1D6;--amber:#8F5F00;--amber-bg:#FFF6DD;--green:#187E4E;--mute:#6B665C;
+  font-family:'IBM Plex Sans Arabic','Cairo',sans-serif;color:var(--ink)}
+.v2co{max-width:1360px;margin:0 auto;position:relative}
+.v2co *,.v2co-m *{box-sizing:border-box}
+.v2co button,.v2co input,.v2co-m button,.v2co-m input,.v2co-m textarea,.v2co-m select,.v2co select{font-family:inherit}
+.v2co button:focus-visible,.v2co a:focus-visible,.v2co summary:focus-visible,.v2co input:focus-visible,.v2co-m button:focus-visible,.v2co-m input:focus-visible,.v2co-m textarea:focus-visible,.v2co-m select:focus-visible{outline:3px solid rgba(158,43,78,.45);outline-offset:2px}
+.v2co p,.v2co-m p,.v2co h1,.v2co h2,.v2co h3{margin:0}
+.v2co-ic{width:20px;height:20px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;flex:none}
+
+/* —— أزرار */
+.v2co-btn1,.v2co-btn2{display:inline-flex;align-items:center;justify-content:center;min-height:48px;padding:0 20px;border-radius:14px;font:800 15.5px 'Cairo',sans-serif;cursor:pointer;text-decoration:none;border:1px solid transparent;max-width:100%;text-align:center;line-height:1.4}
+.v2co-btn1{background:var(--wine);color:#fff;width:100%}
+.v2co-btn1:hover{background:var(--wine-d)}
+.v2co-btn1:disabled{opacity:.55;cursor:not-allowed}
+.v2co-btn1.danger{background:var(--red)}
+.v2co-btn1.danger:hover{background:#A60D26}
+.v2co-btn1.outline{background:#fff;color:var(--wine);border:2px solid var(--wine)}
+.v2co-btn1.outline:hover{background:#FBF0F3}
+.v2co-btn2{background:#fff;color:var(--wine);border-color:var(--line);min-height:44px;font-size:14px;font-weight:700}
+.v2co-btn2:hover{background:#FBF0F3}
+.v2co-btn2.red{color:var(--red)}
+.v2co-btn2.inl{margin-top:8px}
+.v2co-btn2:disabled{opacity:.55;cursor:not-allowed}
+.v2co-link{display:inline-flex;align-items:center;min-height:44px;padding:0 6px;border:0;background:transparent;color:var(--wine);font:700 14.5px 'Cairo',sans-serif;cursor:pointer;text-decoration:underline;text-underline-offset:3px}
+.v2co-link.wide{width:100%;justify-content:center;margin-top:4px}
+.v2co-link.back{text-decoration:none;font-size:15px}
+.v2co-main{display:inline-flex;align-items:center;gap:8px;min-height:48px;padding:0 22px;border:0;border-radius:14px;background:var(--wine);color:#fff;font:800 16px 'Cairo',sans-serif;cursor:pointer}
+.v2co-main:hover{background:var(--wine-d)}
+.v2co-person{color:var(--wine);text-decoration:none;font-weight:700}
+.v2co-person:hover{text-decoration:underline}
+
+/* —— الرأس */
+.v2co-top{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px 20px;margin-bottom:14px}
+.v2co-sum{display:flex;align-items:center;gap:10px;font:700 16px/1.6 'Cairo',sans-serif;color:var(--ink)}
+.v2co-warn{background:#FFF8E6;border:1px solid #EBD38E;color:#6B4A00;border-radius:12px;padding:10px 14px;margin-bottom:10px;font-size:14px;line-height:1.7}
+.v2co-ok{background:#EAF6EF;border:1px solid #B9DEC9;color:#0F5A37;border-radius:12px;padding:10px 14px;margin-bottom:10px;font-size:14.5px;font-weight:700;line-height:1.7}
+.v2co-bav{width:28px;height:28px;border-radius:50%;object-fit:cover;flex:none;background:#fff;border:2px solid var(--line)}
+.v2co-empty{background:#fff;border:1px dashed #D9CFC0;border-radius:16px;padding:26px 18px;text-align:center;display:grid;gap:10px;justify-items:center}
+.v2co-empty b{font:800 17px 'Cairo',sans-serif}
+.v2co-empty p{color:var(--mute);font-size:14px}
+.v2co-empty.sm{padding:14px}
+.v2co-empty.sm b{font-size:15px}
+.v2co-none{text-align:center;color:var(--mute);font-size:14px;padding:22px 8px}
+.v2co-mute{color:var(--mute);font-size:14px}
+.v2co-fine{font-size:13px;color:var(--mute);line-height:1.7}
+.v2co-h2{display:flex;align-items:center;gap:10px;font:800 18px/1.5 'Cairo',sans-serif;margin:0 0 10px;color:var(--ink)}
+.v2co-cnt,.v2co-n{min-width:32px;height:32px;padding:0 10px;border-radius:999px;background:#fff;border:1px solid var(--line);display:inline-grid;place-items:center;font:800 14.5px 'Cairo',sans-serif}
+.v2co-cntx{font-size:13px;color:var(--mute)}
+.v2co-chip{display:inline-flex;align-items:center;border-radius:999px;padding:3px 11px;font:700 12.5px/1.5 'Cairo',sans-serif;background:var(--paper2);color:var(--ink);border:1px solid var(--line);white-space:nowrap}
+.v2co-chip.green{background:#EAF6EF;color:#0F5A37;border-color:#B9DEC9}
+.v2co-chip.amber{background:var(--amber-bg);color:#6B4A00;border-color:#EBD38E}
+.v2co-chip.wine{background:#FBF0F3;color:var(--wine);border-color:#EBC3CE}
+.v2co-chip.grey{background:#F1EDE5;color:#5C574D}
+.v2co-chips{display:flex;flex-wrap:wrap;gap:6px}
+.v2co-st{display:block;font-size:13px;color:var(--mute);line-height:1.6}
+.v2co-st.amber,.v2co-l2.amber{color:#8A4B00}
+.v2co-st.red{color:var(--red)}
+.v2co-sk{border-radius:16px;background:linear-gradient(90deg,#F1EBE0,#F8F4EC,#F1EBE0);background-size:200% 100%;animation:v2cosk 1.4s linear infinite;padding:16px;display:grid;gap:10px;min-height:120px}
+.v2co-sk i{display:block;height:18px;width:60%;border-radius:8px;background:rgba(255,255,255,.7)}
+.v2co-sk i+i{width:40%}
+.v2co-skw{display:grid;gap:12px}
+@keyframes v2cosk{from{background-position:200% 0}to{background-position:-200% 0}}
+
+/* —— مبدّل الأعمدة (الموبايل فقط) */
+.v2co-seg{display:none}
+.v2co-segb{flex:1;min-width:0;min-height:60px;border:1px solid var(--line);background:#fff;border-radius:14px;padding:6px 4px;display:grid;place-items:center;gap:2px;color:var(--ink);cursor:pointer;font:700 13px/1.35 'Cairo',sans-serif}
+.v2co-segb b{font:800 18px/1 'Cairo',sans-serif}
+.v2co-segb.on{background:var(--ink);color:#fff;border-color:var(--ink)}
+
+/* —— الأعمدة */
+.v2co-cols{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:16px;align-items:start}
+.v2co-cols.one{grid-template-columns:minmax(0,3fr) minmax(0,1fr)}
+.v2co-colwide{grid-column:1}
+.v2co-col{background:var(--paper2);border-radius:18px;padding:12px;min-width:0;border-top:5px solid var(--line)}
+.v2co-col.tone-wait{border-top-color:#E0A100}
+.v2co-col.tone-ok{border-top-color:#1C9A5B}
+.v2co-col.tone-grey{border-top-color:#B5AEA2}
+.v2co-col.tone-wine{border-top-color:var(--wine)}
+.v2co-ch{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:2px 4px 10px}
+.v2co-ch b{font:800 17px 'Cairo',sans-serif}
+.v2co-list{display:grid;gap:12px}
+
+/* —— التذكرة */
+.v2co-t{background:#fff;border:1px solid var(--line);border-radius:16px;overflow:hidden;box-shadow:0 2px 8px rgba(33,38,46,.06);min-width:0}
+.v2co-t.first{border:2px solid var(--wine)}
+.v2co-strip{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 12px;min-height:40px;color:#fff;background:var(--ink)}
+.v2co-t.tone-warn .v2co-strip,.v2co-t.tone-wait .v2co-strip{background:#8F5F00}
+.v2co-t.tone-late .v2co-strip{background:var(--red)}
+.v2co-type{font:800 13.5px 'Cairo',sans-serif}
+.v2co-time{font:700 13px 'Cairo',sans-serif;background:rgba(255,255,255,.18);border-radius:999px;padding:2px 10px;white-space:nowrap}
+.v2co-body{padding:12px 14px 14px;display:grid;gap:9px;min-width:0}
+.v2co-body h3{font:800 16px/1.55 'Cairo',sans-serif}
+.v2co-open{border:0;background:transparent;padding:0;min-height:44px;text-align:start;font:inherit;color:var(--ink);cursor:pointer;display:inline-flex;align-items:center}
+.v2co-open:hover{color:var(--wine);text-decoration:underline}
+.v2co-who{font-size:14px;color:var(--mute);line-height:1.6}
+.v2co-brain{display:flex;gap:9px;align-items:flex-start;background:var(--paper);border-radius:12px;padding:8px 10px}
+.v2co-brain p{font-size:14px;line-height:1.7;min-width:0}
+.v2co-acts{display:grid;gap:8px;margin-top:2px}
+.v2co-acts.two{grid-template-columns:minmax(0,1fr);}
+.v2co-acts .v2co-btn2{width:100%}
+.v2co-tgrid{display:grid;gap:14px;align-items:start}
+.v2co-tgrid.two{grid-template-columns:repeat(2,minmax(0,1fr))}
+.v2co-tgrid.three{grid-template-columns:repeat(3,minmax(0,1fr))}
+.v2co-amt{margin:0;display:grid;gap:6px}
+.v2co-amt div{display:flex;justify-content:space-between;gap:10px;background:var(--paper);border-radius:10px;padding:7px 10px}
+.v2co-amt dt{font-size:13px;color:var(--mute)}
+.v2co-amt dd{margin:0;font:800 14.5px 'Cairo',sans-serif}
+.v2co-q{margin:0;border-inline-start:4px solid var(--wine);background:var(--paper);padding:8px 12px;border-radius:0 10px 10px 0;font-size:14px;line-height:1.7}
+
+/* —— غلاف الدورة الورقي */
+.v2co-cover{position:relative;display:grid;place-items:center;background:var(--paper2);border-radius:12px;overflow:hidden;flex:none;border:1px solid var(--line)}
+.v2co-cover::before{content:"";position:absolute;inset-block:0;inset-inline-start:0;width:4px;background:var(--wine)}
+.v2co-cover i{font:800 28px/1 'Cairo',sans-serif;font-style:normal;color:var(--wine);opacity:.85}
+.v2co-cover.big{width:100%;height:110px}
+.v2co-cover.big i{font-size:48px}
+.v2co-cover.thumb{width:72px;height:72px}
+.v2co-cover.sm{width:40px;height:40px;border-radius:9px}
+.v2co-cover.sm i{font-size:20px}
+.v2co-cover .v2co-img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.v2co-cover.has i{display:none}
+.v2co-cover.fail i{display:block}
+
+/* —— بطاقة تحت البناء · صف المنشورة */
+.v2co-bc{display:grid;gap:7px;text-align:start;width:100%;background:#fff;border:1px solid var(--line);border-radius:16px;padding:10px;cursor:pointer;color:var(--ink);box-shadow:0 2px 8px rgba(33,38,46,.05);min-height:52px}
+.v2co-bc:hover,.v2co-pr:hover{box-shadow:0 8px 20px rgba(33,38,46,.12)}
+.v2co-bc b{font:800 15px/1.55 'Cairo',sans-serif}
+.v2co-pr{display:flex;gap:12px;align-items:flex-start;width:100%;background:#fff;border:1px solid var(--line);border-radius:16px;padding:10px;cursor:pointer;text-align:start;color:var(--ink);box-shadow:0 2px 8px rgba(33,38,46,.05);min-height:52px}
+.v2co-prb{display:grid;gap:3px;min-width:0;flex:1}
+.v2co-prb b{font:800 15px/1.5 'Cairo',sans-serif}
+.v2co-l1{font-size:13.5px;color:var(--ink);line-height:1.6}
+.v2co-l2{display:block;font-size:13px;color:var(--mute);line-height:1.6}
+.v2co-l2.mute{color:#8A8478}
+
+/* —— بطاقة المدرّبين */
+.v2co-trfull{display:grid;gap:10px}
+.v2co-trl{list-style:none;margin:0;padding:0;display:grid;gap:10px}
+.v2co-tm{display:flex;gap:10px;align-items:center;background:#fff;border:1px solid var(--line);border-radius:14px;padding:8px 10px;min-height:56px}
+.v2co-tm b{font:700 14.5px 'Cairo',sans-serif}
+.v2co-av{width:44px;height:44px;border-radius:50%;background:#F3DDE4;color:var(--wine);display:grid;place-items:center;font:800 18px 'Cairo',sans-serif;flex:none}
+.v2co-trfoot{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:14px;padding:2px 4px;flex-wrap:wrap}
+.v2co-trrow{display:none}
+
+/* —— «كل الدورات» */
+.v2co-fchips{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px}
+.v2co-fchip{min-height:44px;padding:0 16px;border:1px solid var(--line);background:#fff;border-radius:999px;font:700 14px 'Cairo',sans-serif;cursor:pointer;color:var(--ink)}
+.v2co-fchip b{color:var(--mute);margin-inline-start:4px}
+.v2co-fchip.on{background:var(--ink);color:#fff;border-color:var(--ink)}
+.v2co-fchip.on b{color:#fff}
+.v2co-search{margin-bottom:12px}
+.v2co-search input{width:100%;min-height:48px;border:1px solid #D9CFC0;border-radius:12px;padding:0 14px;font-size:16px;background:#fff;color:var(--ink)}
+.v2co-lhead,.v2co-lrow{display:grid;grid-template-columns:minmax(0,2.6fr) minmax(0,1.4fr) minmax(0,1.2fr) minmax(0,.9fr) minmax(0,1.1fr) minmax(0,1fr);gap:12px;align-items:center}
+.v2co-lhead{background:var(--paper2);border:1px solid var(--line);border-radius:14px 14px 0 0;padding:12px 16px;font:700 13.5px 'Cairo',sans-serif;color:var(--mute)}
+.v2co-lrows{list-style:none;margin:0;padding:0;background:#fff;border:1px solid var(--line);border-top:0;border-radius:0 0 14px 14px;overflow:hidden}
+.v2co-lrow{width:100%;min-height:56px;padding:6px 16px;border:0;border-top:1px solid #F0EADF;background:#fff;cursor:pointer;text-align:start;color:var(--ink);font-size:14.5px}
+.v2co-lrows li:first-child .v2co-lrow{border-top:0}
+.v2co-lrow:hover{background:var(--paper)}
+.v2co-lrow>span{min-width:0}
+.v2co-lc1{display:flex;align-items:center;gap:10px}
+.v2co-lt{display:grid;min-width:0}
+.v2co-lt b{font:700 14.5px/1.5 'Cairo',sans-serif;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.v2co-lt small{display:none;font-size:12.5px;color:var(--mute);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.v2co-lc2,.v2co-lc3,.v2co-lc4,.v2co-lc5{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.v2co-lc4 em,.v2co-vc3 em,.v2co-vc4 em,.v2co-vc6 em{display:none;font-style:normal;color:var(--mute)}
+.v2co-lnone{list-style:none}
+
+/* —— المدرّبون */
+.v2co-two{display:grid;grid-template-columns:minmax(0,3fr) minmax(0,2fr);gap:18px;align-items:start}
+.v2co-colbox{min-width:0}
+.v2co-colbox.card,.v2co-card{background:#fff;border:1px solid var(--line);border-radius:16px;padding:14px 16px;min-width:0}
+.v2co-card{display:grid;gap:10px;align-content:start}
+.v2co-card .v2co-h2{margin:0}
+.v2co-trlist{list-style:none;margin:0;padding:0;display:grid}
+.v2co-trw{display:flex;gap:12px;align-items:center;padding:10px 0;border-top:1px solid #F0EADF;min-height:60px}
+.v2co-trw:first-child{border-top:0}
+.v2co-trt{flex:1;min-width:0;display:grid;gap:1px}
+.v2co-trt b{font:700 15px 'Cairo',sans-serif}
+.v2co-kebab{position:relative;flex:none}
+.v2co-kebab summary{list-style:none;width:44px;height:44px;border-radius:12px;border:1px solid var(--line);background:#fff;display:grid;place-items:center;cursor:pointer;color:var(--ink)}
+.v2co-kebab summary::-webkit-details-marker{display:none}
+.v2co-menu{position:absolute;inset-inline-end:0;top:48px;z-index:20;background:#fff;border:1px solid var(--line);border-radius:14px;box-shadow:0 18px 44px rgba(33,38,46,.18);padding:6px;display:grid;min-width:190px}
+.v2co-mi{display:flex;align-items:center;min-height:44px;padding:0 12px;border:0;background:transparent;border-radius:10px;font:700 14px 'Cairo',sans-serif;color:var(--ink);text-decoration:none;cursor:pointer;text-align:start}
+.v2co-mi:hover{background:#FBF0F3}
+.v2co-mi.red{color:var(--red)}
+
+/* —— الدورات الحيّة */
+.v2co-lvhead,.v2co-lv{display:grid;grid-template-columns:minmax(0,2.4fr) minmax(0,1.5fr) minmax(0,1fr) minmax(0,1fr) minmax(0,1.5fr) minmax(0,1fr) minmax(0,2fr);gap:10px;align-items:center}
+.v2co-lvhead{background:var(--paper2);border:1px solid var(--line);border-radius:14px 14px 0 0;padding:12px 16px;font:700 13.5px 'Cairo',sans-serif;color:var(--mute);margin-top:6px}
+.v2co-lvl{list-style:none;margin:0;padding:0;background:#fff;border:1px solid var(--line);border-top:0;border-radius:0 0 14px 14px}
+.v2co-lv{padding:8px 16px;border-top:1px solid #F0EADF;min-height:64px;font-size:14.5px}
+.v2co-lv:first-child{border-top:0}
+.v2co-lv>span{min-width:0}
+.v2co-vc1{display:grid}
+.v2co-vc1 small{font-size:13px;color:var(--mute)}
+.v2co-lacts{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end}
+.v2co-lacts .v2co-btn2{min-height:44px;padding:0 12px;font-size:13.5px}
+.v2co-acts.stack{grid-template-columns:minmax(0,1fr)}
+
+/* —— ما يطلبه الناس */
+.v2co-dgrid{display:grid;grid-template-columns:minmax(0,2fr) minmax(0,1fr);gap:18px;align-items:start}
+.v2co-dright{display:grid;gap:14px;min-width:0}
+.v2co-bars{list-style:none;margin:0;padding:0;display:grid;gap:12px}
+.v2co-bl{display:flex;justify-content:space-between;gap:10px;font-size:14.5px;margin-bottom:5px}
+.v2co-bl b{font:700 13.5px 'Cairo',sans-serif;color:var(--mute);white-space:nowrap}
+.v2co-bar{height:10px;border-radius:999px;background:#F1EDE5;overflow:hidden}
+.v2co-bar i{display:block;height:100%;background:var(--wine);border-radius:999px}
+.v2co-qs{list-style:none;margin:0;padding:0;display:grid;gap:10px}
+.v2co-qs li{display:grid;gap:4px;background:var(--paper);border-radius:12px;padding:10px 12px}
+.v2co-qs p{font-size:13.5px;color:var(--mute);line-height:1.7}
+
+/* —— صفحة الدورة */
+.v2co-pg{display:grid;grid-template-columns:minmax(0,2fr) minmax(0,1fr);gap:14px 18px;align-items:start}
+.v2co-pg>*{grid-column:1;min-width:0}
+.v2co-pg>.v2co-pgside{grid-column:2;grid-row:1/span 8;display:grid;gap:14px}
+.v2co-nums{display:grid;gap:8px}
+.v2co-hero{background:#fff;border:1px solid var(--line);border-radius:18px;overflow:hidden}
+.v2co-himg{display:block;width:100%;aspect-ratio:16/9;max-height:280px;object-fit:cover;background:var(--paper2)}
+.v2co-hb{padding:14px 18px 16px;display:grid;gap:8px}
+.v2co-hb h1{font:800 28px/1.45 'Cairo',sans-serif}
+.v2co-tiles{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
+.v2co-tile{background:#fff;border:1px solid var(--line);border-radius:14px;padding:12px 14px;display:grid;gap:3px;align-content:start;min-width:0}
+.v2co-tile span{font-size:13px;color:var(--mute)}
+.v2co-tile b{font:800 18px/1.5 'Cairo',sans-serif;overflow-wrap:anywhere}
+.v2co-tile.na b{color:#8A8478;font-weight:600;font-size:15px}
+.v2co-tile .v2co-link{font-size:13px;min-height:44px;padding:0;justify-content:flex-start}
+.v2co-tg{display:flex;align-items:center;gap:10px;min-height:48px;font:700 15px 'Cairo',sans-serif;cursor:pointer}
+.v2co-tg input{width:24px;height:24px;accent-color:var(--wine)}
+.v2co-chk{list-style:none;margin:0;padding:0;display:grid;gap:8px}
+.v2co-chk li{display:flex;gap:9px;align-items:flex-start;font-size:14.5px;line-height:1.6}
+.v2co-chk li span{font-weight:800;flex:none;width:20px}
+.v2co-chk li.ok span{color:var(--green)}
+.v2co-chk li.bad{color:#8A4B00;font-weight:700}
+.v2co-chk li.bad span{color:var(--red)}
+.v2co-chk li.na{color:#8A8478;padding-inline-start:29px}
+.v2co-decide{background:var(--paper2);border-radius:14px;padding:12px 14px;display:grid;gap:10px}
+.v2co-decide h3{font:700 18px 'Cairo',sans-serif}
+.v2co-eq{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.v2co-card.danger{border-color:#F0D2D8}
+.v2co-sec{display:grid;gap:3px;margin-bottom:6px}
+.v2co-sec ul{margin:0;padding:0 18px 0 0;font-size:14px;line-height:1.9}
+.v2co-lvfacts{list-style:none;margin:0;padding:0;display:grid;gap:4px;font-size:14.5px}
+.v2co-card p{font-size:14.5px;line-height:1.8}
+
+/* —— الأوراق (داخل نافذة الداشبورد) */
+#epModal .modal:has(.v2co-m){max-width:640px;border-radius:20px}
+#epModal .modal:has(.v2co-m) .mh{background:var(--paper2,#F6F1EA);color:#9E2B4E;font:800 20px 'Cairo',sans-serif;padding:14px 20px;border-bottom:1px solid #E9E1D6}
+#epModal .modal:has(.v2co-m) .mh button{width:44px;height:44px;border-radius:12px;background:#fff;color:#21262E;border:1px solid #E9E1D6;font-size:16px}
+.v2co-m{font-size:15px;line-height:1.8}
+.v2co-m p{margin:0}
+.v2co-lead{font-size:15.5px;line-height:1.9;margin-bottom:10px}
+.v2co-lead.strong{font-weight:800}
+.v2co-will{margin:0 0 10px;padding:0 20px 0 0;display:grid;gap:4px;font-size:15px;line-height:1.85}
+.v2co-fld{display:grid;gap:5px;margin-bottom:12px}
+.v2co-fld label{font:700 14px 'Cairo',sans-serif}
+.v2co-fld small{color:var(--mute);font-size:13px}
+.v2co-fld input,.v2co-fld textarea,.v2co-fld select{width:100%;min-height:48px;border:1px solid #D9CFC0;border-radius:12px;padding:8px 12px;font-size:16px;background:#fff;color:#21262E}
+.v2co-fld textarea{min-height:110px;line-height:1.8}
+.v2co-radio{border:1px solid var(--line);border-radius:14px;padding:8px 14px 10px;margin:0 0 12px;display:grid;gap:4px}
+.v2co-radio legend{font:700 14px 'Cairo',sans-serif;color:var(--wine);padding:0 6px}
+.v2co-radio label{display:flex;align-items:center;gap:10px;min-height:44px;font-size:15px;cursor:pointer}
+.v2co-radio input{width:22px;height:22px;accent-color:var(--wine)}
+.v2co-facts{margin:0 0 12px;display:grid;gap:6px}
+.v2co-facts div{display:grid;grid-template-columns:120px minmax(0,1fr);gap:10px;background:var(--paper);border-radius:10px;padding:7px 12px;align-items:baseline}
+.v2co-facts dt{font-size:13px;color:var(--mute)}
+.v2co-facts dd{margin:0;font-weight:700;font-size:14.5px;line-height:1.7;overflow-wrap:anywhere}
+.v2co-macts{display:flex;flex-wrap:wrap;gap:10px;margin-top:14px;position:sticky;bottom:-18px;background:#fff;padding:10px 0 4px;z-index:2}
+.v2co-macts .v2co-btn1,.v2co-macts .v2co-btn2{flex:1 1 auto;width:auto;min-height:48px}
+.v2co-errbox{background:#FDECEF;border:1px solid #F2B5C0;color:#8E1228;border-radius:10px;padding:9px 12px;font-size:14px;line-height:1.75;margin:8px 0}
+.v2co-diff{width:100%;border-collapse:collapse;margin:8px 0;font-size:14px}
+.v2co-diff th,.v2co-diff td{padding:8px 10px;border-bottom:1px solid var(--line);text-align:start;vertical-align:top}
+.v2co-diff th{color:var(--mute);font-size:13px;font-weight:700}
+.v2co-diff td:last-child b{color:var(--wine)}
+.v2co-refunds{list-style:none;margin:0 0 6px;padding:0;display:grid;gap:8px}
+.v2co-refunds li{display:flex;justify-content:space-between;gap:10px;align-items:center;background:var(--paper);border-radius:10px;padding:8px 12px;flex-wrap:wrap}
+.v2co-ph{color:var(--mute);font-size:13px}
+
+/* —— «كل السجلات»: الشاشة القديمة بشكل جديد. !important مسموح هنا بس (السطور القديمة مكتوبة inline). */
+.v2co-legacy,html.v2co-legacy-modal #epModal{--navy:#21262E;--gold:#9E2B4E;--memory:#9E2B4E;--human:#9E2B4E;--human-2:#9E2B4E;--human-bg:#F6F1EA;--conflict:#C8102E;--conflict-bg:#FDECEF;--agree:#187E4E;--agree-bg:#EAF6EF;
+  --ink-2:#4B5563;--muted:#6B665C;--line:#E9E1D6;--surface:#fff;--surface-2:#F6F1EA;--ai:#9E2B4E;--ai-bg:#F6F1EA;--gold-bg:#F6F1EA;--memory-bg:#F6F1EA}
+.v2co-legacy{max-width:1360px;margin:0 auto;font-family:'IBM Plex Sans Arabic','Cairo',sans-serif}
+.v2co-legacy-note{background:var(--paper2);border:1px solid var(--line);border-radius:14px;padding:10px 14px;margin:0 0 14px;color:#4F4A41;font-size:14px;line-height:1.8}
+.v2co-legacy .kpis{display:none!important}
+.v2co-legacy #v2coLegacyHost>.policy:first-child{display:none!important}
+.v2co-legacy #cTabs .tab:not([data-t="courses"]):not([data-t="platform"]){display:none!important}
+.v2co-legacy [data-a="pcapprove"],.v2co-legacy [data-a="pcreject"],.v2co-legacy [data-a="pctoggle"],.v2co-legacy [data-a="pcbidtoggle"],.v2co-legacy .pcDel,
+.v2co-legacy [data-a="editc"],.v2co-legacy [data-a="delc"],.v2co-legacy [data-a="pub"],.v2co-legacy [data-a="pubplatform"],.v2co-legacy #cCreate,html.v2co-legacy-modal #epModal #vp_pub{display:none!important}
+.v2co-legacy .policy,.v2co-legacy .policy[style]{background:#F6F1EA!important;border:0!important;border-radius:14px!important;color:#21262E!important;padding:12px 16px!important;font-size:14px!important;line-height:1.8!important}
+.v2co-legacy .policy .ic{color:#9E2B4E!important}
+.v2co-legacy .tabbar{background:transparent!important;border:0!important;border-bottom:1px solid #E9E1D6!important;border-radius:0!important;padding:0!important;gap:6px!important;margin-bottom:14px!important;width:100%!important}
+.v2co-legacy .tabbar .tab{min-height:44px!important;padding:0 20px!important;border-radius:10px 10px 0 0!important;border-bottom:4px solid transparent!important;font:700 16px 'Cairo',sans-serif!important;color:#6B665C!important;display:inline-flex;align-items:center;box-shadow:none!important;background:transparent!important}
+.v2co-legacy .tabbar .tab.on{color:#9E2B4E!important;border-bottom-color:#9E2B4E!important;font-weight:800!important}
+.v2co-legacy .inboxwrap{display:grid;grid-template-columns:minmax(0,1fr) 380px;gap:16px;align-items:start}
+.v2co-legacy .panel,.v2co-legacy .drawer{background:#fff!important;border:1px solid #E9E1D6!important;border-radius:16px!important;overflow:hidden;box-shadow:none!important}
+.v2co-legacy .panel .ph{background:#F6F1EA!important;border-bottom:1px solid #E9E1D6!important;padding:14px 18px!important}
+.v2co-legacy .panel .ph h3{font:800 16px 'Cairo',sans-serif!important;color:#21262E!important}
+.v2co-legacy .panel .ph .n{background:#fff!important;color:#21262E!important;border:1px solid #E9E1D6!important;min-width:32px;height:32px;display:inline-grid;place-items:center;font:800 14px 'Cairo',sans-serif!important;padding:0 8px!important}
+.v2co-legacy .row{min-height:52px!important;padding:14px!important;border-bottom:1px solid #F0EADF!important}
+.v2co-legacy .row:hover{background:#FBFAF7!important}
+.v2co-legacy .row.sel{background:#F6F1EA!important;box-shadow:inset -4px 0 0 #9E2B4E}
+.v2co-legacy .row .c{padding:6px 10px!important}
+.v2co-legacy .row .out,.v2co-legacy .row .parties{font-family:'Cairo',sans-serif!important;color:#21262E!important}
+.v2co-legacy .row .src-ic{background:#F6F1EA!important;color:#9E2B4E!important}
+.v2co-legacy .crs-meta .mchip{background:#F6F1EA!important;border-color:#E9E1D6!important;color:#4F4A41!important}
+.v2co-legacy .drawer .dh,.v2co-legacy .drawer .dh[style]{background:#F6F1EA!important;color:#21262E!important;border-bottom:1px solid #E9E1D6!important;padding:16px 18px!important}
+.v2co-legacy .drawer .dh .k{color:#6B665C!important;font-size:13px!important}
+.v2co-legacy .drawer .dh h3{font:800 18px/1.5 'Cairo',sans-serif!important;color:#21262E!important}
+.v2co-legacy .drawer .db{padding:16px 18px!important}
+.v2co-legacy .field .lab{font-size:13px!important;color:#6B665C!important;font-weight:700!important}
+.v2co-legacy .field .val{font-size:14.5px!important;color:#21262E!important}
+.v2co-legacy .note-ai,.v2co-legacy .note-ai[style]{background:#F6F1EA!important;border:1px solid #E9E1D6!important;border-radius:12px!important;color:#21262E!important;padding:10px 14px!important;font-size:14px!important;line-height:1.8!important}
+.v2co-legacy .btn,html.v2co-legacy-modal #epModal .btn{min-height:44px!important;border-radius:12px!important;font:700 14px 'Cairo',sans-serif!important}
+.v2co-legacy .btn[style]{font-size:14px!important;padding:0 16px!important;min-height:44px!important}
+.v2co-legacy .btn-primary,html.v2co-legacy-modal #epModal .btn-primary{background:#9E2B4E!important;color:#fff!important;border:0!important}
+.v2co-legacy .btn-human,html.v2co-legacy-modal #epModal .btn-human{background:#fff!important;color:#9E2B4E!important;border:2px solid #9E2B4E!important}
+.v2co-legacy .btn-ghost,html.v2co-legacy-modal #epModal .btn-ghost{background:#fff!important;color:#21262E!important;border:1px solid #E9E1D6!important}
+.v2co-legacy .btn-warn,html.v2co-legacy-modal #epModal .btn-warn{background:#fff!important;color:#C8102E!important;border:1px solid #F0D2D8!important}
+.v2co-legacy .status{border-radius:999px!important;font:700 12.5px 'Cairo',sans-serif!important;padding:3px 11px!important}
+.v2co-legacy .s-auto{background:#EAF6EF!important;color:#0F5A37!important}
+.v2co-legacy .s-wait{background:#FFF6DD!important;color:#6B4A00!important}
+.v2co-legacy .s-late{background:#F1EDE5!important;color:#5C574D!important}
+.v2co-legacy [style*="padding:40px"]{padding:32px 16px!important;color:#6B665C!important;font-size:14.5px!important}
+html.v2co-legacy-modal #epModal .modal{border-radius:20px!important}
+html.v2co-legacy-modal #epModal .modal .mh{background:#F6F1EA!important;color:#9E2B4E!important;font:800 20px 'Cairo',sans-serif!important;border-bottom:1px solid #E9E1D6!important}
+html.v2co-legacy-modal #epModal .modal .mh button{width:44px!important;height:44px!important;background:#fff!important;color:#21262E!important;border:1px solid #E9E1D6!important}
+html.v2co-legacy-modal #epModal .note-ai,html.v2co-legacy-modal #epModal .note-ai[style]{background:#F6F1EA!important;border:1px solid #E9E1D6!important;color:#21262E!important}
+html.v2co-legacy-modal #epModal .fld input,html.v2co-legacy-modal #epModal .fld select,html.v2co-legacy-modal #epModal .fld textarea{min-height:48px;font-size:16px!important;border-radius:12px!important;border:1px solid #D9CFC0!important}
+
+/* —— تابلت: عمودان */
+@media(max-width:1179px){
+  .v2co-cols{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .v2co-cols .v2co-col[data-col="published"]{grid-column:1/-1}
+  .v2co-cols .v2co-trcol{grid-column:1/-1}
+  .v2co-cols.one{grid-template-columns:minmax(0,1fr)}
+  .v2co-cols .v2co-col[data-col="published"] .v2co-list{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .v2co-cols .v2co-col[data-col="published"] .v2co-link.wide{grid-column:1/-1}
+  .v2co-two{grid-template-columns:minmax(0,1fr)}
+  .v2co-tgrid.three{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .v2co-dgrid,.v2co-pg{grid-template-columns:minmax(0,1fr)}
+  .v2co-pg>.v2co-pgside{grid-column:1;grid-row:auto}
+  .v2co-lhead,.v2co-lrow{grid-template-columns:minmax(0,3fr) minmax(0,1fr) minmax(0,1.2fr) minmax(0,1.2fr)}
+  .v2co-lhead span:nth-child(2),.v2co-lhead span:nth-child(3){display:none}
+  .v2co-lhead span:nth-child(4){grid-column:2}.v2co-lhead span:nth-child(5){grid-column:3}.v2co-lhead span:nth-child(6){grid-column:4}
+  .v2co-lc2,.v2co-lc3{display:none}
+  .v2co-lt small{display:block}
+  .v2co-lvhead{display:none}
+  .v2co-lvl{border-top:1px solid var(--line);border-radius:14px;background:transparent;border:0;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+  .v2co-lv{display:grid;grid-template-columns:minmax(0,1fr);gap:4px;background:#fff;border:1px solid var(--line);border-radius:16px;padding:12px 14px}
+  .v2co-lv:first-child{border-top:1px solid var(--line)}
+  .v2co-vc3 em,.v2co-vc4 em,.v2co-vc6 em{display:inline}
+  .v2co-lacts{justify-content:flex-start}
+  .v2co-lv .v2co-lacts .v2co-btn2{flex:1 1 auto}
+  .v2co-tiles{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .v2co-legacy .inboxwrap{grid-template-columns:minmax(0,1fr)}
+}
+/* —— موبايل: شريط أزرار الأعمدة وعمود واحد ظاهر */
+@media(max-width:699px){
+  .v2co-seg{display:flex;gap:6px;margin-bottom:12px}
+  .v2co-cols{grid-template-columns:minmax(0,1fr)}
+  .v2co-cols .v2co-col[data-col="review"],.v2co-cols .v2co-col[data-col="building"],.v2co-cols .v2co-col[data-col="published"]{display:none}
+  .v2co-cols[data-active="review"] .v2co-col[data-col="review"],.v2co-cols[data-active="building"] .v2co-col[data-col="building"],.v2co-cols[data-active="published"] .v2co-col[data-col="published"]{display:block}
+  .v2co-cols .v2co-col[data-col="published"] .v2co-list{grid-template-columns:minmax(0,1fr)}
+  .v2co-col{padding:10px}
+  .v2co-trfull{display:none}
+  .v2co-trcol{padding:0;background:transparent;border-top:0}
+  .v2co-trcol .v2co-ch{display:none}
+  .v2co-trrow{display:flex;justify-content:space-between;align-items:center;gap:8px;width:100%;min-height:56px;padding:8px 16px;background:#fff;border:1px solid var(--line);border-radius:14px;cursor:pointer;color:var(--ink);font-size:14.5px}
+  .v2co-trrow b{font:800 16px 'Cairo',sans-serif}
+  .v2co-top{flex-direction:column;align-items:stretch}
+  .v2co-main{width:100%;justify-content:center;min-height:52px}
+  .v2co-btn1{min-height:52px}
+  .v2co-btn2{min-height:52px}
+  .v2co-link{min-height:52px}
+  .v2co-link.wide{min-height:52px}
+  .v2co-two .v2co-colbox{display:none}
+  .v2co-two[data-active="apps"] .v2co-colbox[data-col="apps"],.v2co-two[data-active="list"] .v2co-colbox[data-col="list"]{display:block}
+  .v2co-tgrid.two,.v2co-tgrid.three{grid-template-columns:minmax(0,1fr)}
+  .v2co-lrows{border-radius:0 0 14px 14px}
+  .v2co-lhead{display:none}
+  .v2co-lrows{border-top:1px solid var(--line);border-radius:14px}
+  .v2co-lrow{grid-template-columns:minmax(0,1fr) auto;grid-template-areas:"c1 c1" "c4 c5" "c6 c6";row-gap:4px;padding:12px 14px}
+  .v2co-lrow .v2co-lc1{grid-area:c1}.v2co-lrow .v2co-lc4{grid-area:c4}.v2co-lrow .v2co-lc5{grid-area:c5;text-align:end}.v2co-lrow .v2co-lc6{grid-area:c6}
+  .v2co-lc4 em{display:inline}
+  .v2co-lvl{grid-template-columns:minmax(0,1fr)}
+  .v2co-lacts .v2co-btn2{flex:1 1 100%;min-height:52px}
+  .v2co-hb h1{font-size:22px}
+  .v2co-himg{max-height:200px}
+  .v2co-eq{grid-template-columns:minmax(0,1fr)}
+  .v2co-tiles{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .v2co-open{min-height:44px}
+  .v2co-fchip{min-height:52px}
+  .v2co-tile .v2co-link{min-height:52px}
+  .v2co-mi{min-height:52px}
+  .v2co-macts .v2co-btn1,.v2co-macts .v2co-btn2{flex:1 1 100%;min-height:52px}
+  .v2co-facts div{grid-template-columns:minmax(0,1fr)}
+  #epModal .modal:has(.v2co-m){max-width:none}
+  .v2co-legacy .btn,.v2co-legacy .btn[style]{min-height:52px!important}
+  .v2co-legacy .tabbar .tab{min-height:52px!important}
+}
+@media(prefers-reduced-motion:reduce){.v2co-sk{animation:none}}

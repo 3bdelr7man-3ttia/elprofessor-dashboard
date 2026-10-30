@@ -24,6 +24,7 @@ RUN apt-get update \
     && mkdir -p /data
 
 COPY backend/app.py /app/app.py
+COPY backend/v2_courses_routes.py /app/v2_courses_routes.py
 COPY backend/prerender.py /app/prerender.py
 # refresh_rules.py: المُتحقِّق المشترك مع المنصّة — app.py يستورده عند الإقلاع (غيابه = الحاوية لا تقوم)
 COPY backend/refresh_rules.py /app/refresh_rules.py
