@@ -131,13 +131,12 @@ button.v2r-row:focus-visible{outline:3px solid rgba(158,43,78,.45);outline-offse
 /* —— الصف السفلي في وضع الجسر (رحلة كاملة) */
 .v2r-low{display:grid;grid-template-columns:minmax(0,1fr);gap:0 16px}
 .v2r-low>div>.v3-card{margin-bottom:16px}
-@media(min-width:1024px) and (max-width:1399px){
-  .v2r-low{grid-template-columns:repeat(2,minmax(0,1fr))}
-  .v2r-lc{grid-column:1/-1}
-}
-@media(min-width:1400px){
-  .v2r-low{grid-template-columns:minmax(0,1.25fr) minmax(0,1fr) minmax(0,1.1fr)}
-  /* عمود الأقسام ضيّق هنا: السطر يصير اسمًا فوق وقيمته وحالته تحته */
+@media(min-width:1024px){
+  /* الرسم وأصل الناس جنبًا إلى جنب، و«كل قسم في سطر» تحتهما بعرض الصف كله حتى لا تبقى فراغات */
+  .v2r-low{grid-template-columns:minmax(0,1.4fr) minmax(0,1fr)}
+  .v2r-ls{grid-column:1/-1}
+  .v2r-ls .v2r-rows{grid-template-columns:repeat(2,minmax(0,1fr))}
+  /* العمود ضيّق: السطر يصير اسمًا فوق وقيمته وحالته تحته */
   .v2r-low .v2r-row{grid-template-columns:44px minmax(0,1fr) 16px;grid-template-areas:"ph nm chev" ". vl vl" ". st st";min-height:64px}
   .v2r-low .v2r-row.on{grid-template-columns:44px minmax(0,1fr);grid-template-areas:"ph nm" ". vl" ". st"}
   .v2r-low .v2r-row .v2r-ph{grid-area:ph}
@@ -145,6 +144,9 @@ button.v2r-row:focus-visible{outline:3px solid rgba(158,43,78,.45);outline-offse
   .v2r-low .v2r-row .v2r-vl{grid-area:vl}
   .v2r-low .v2r-row .v2r-st{grid-area:st}
   .v2r-low .v2r-row .v2r-chev{grid-area:chev}
+}
+@media(min-width:1400px){
+  .v2r-ls .v2r-rows{grid-template-columns:repeat(3,minmax(0,1fr))}
 }
 
 /* —— ما يسأل عنه الناس */
@@ -164,7 +166,7 @@ button.v2r-row:focus-visible{outline:3px solid rgba(158,43,78,.45);outline-offse
 .v2r-fp{display:grid;gap:10px}
 .v2r-fr{display:flex;flex-wrap:wrap;gap:8px}
 .v2r-fl2 select{min-height:44px;border:1px solid #E6DED3;border-radius:12px;background:#fff;padding:0 12px;font:600 14px 'Cairo',sans-serif;color:var(--ink)}
-.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+.v2r-sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
 .v2r-ql{list-style:none;margin:0;padding:0;max-height:620px;overflow:auto;border-top:1px solid var(--line)}
 .v2r-q{display:grid;gap:6px;width:100%;min-height:56px;padding:12px 6px;border:0;border-bottom:1px solid #F0EAE1;background:transparent;text-align:start;font-family:inherit;color:var(--ink);cursor:pointer}
 .v2r-q.static{cursor:default}
@@ -207,6 +209,10 @@ button.v2r-dbar:hover{background:#FBF0F3}
 .v2r-sheet .modal .mh button{width:44px;height:44px;border-radius:12px}
 .v2r-sheet .v3m{font-family:'IBM Plex Sans Arabic','Cairo',sans-serif}
 .v2r-sheet .acts .btn{min-height:52px}
+.v2r-sheet .acts .btn-primary{background:#9E2B4E;color:#fff;border:0}
+.v2r-sheet .acts .btn-primary:hover{background:#85233F}
+.v2r-sheet .acts .btn-ghost{background:#fff;color:#9E2B4E;border:1px solid #E4DBCF}
+.v2r-sheet .v3-diff td:nth-child(2){white-space:nowrap}
 .v2r-meta{margin:0 0 12px;display:grid;gap:8px}
 .v2r-meta div{display:grid;gap:2px}
 .v2r-meta dt{font-size:12.5px;color:var(--mute);font-weight:700}
@@ -285,26 +291,26 @@ button.v2r-dbar:hover{background:#FBF0F3}
   .v2r *{transition:none!important}
 }
 
-/* —— الطباعة: ورق أبيض وحبر، بلا غلاف ولا أزرار */
+/* —— الطباعة: ورق أبيض وحبر، بلا غلاف ولا أزرار. كل قاعدة مشروطة بوجود شاشة التقارير في الصفحة (body:has(.v2r)) فلا تمسّ طباعة أي قسم آخر */
 @media print{
-  html,body{background:#fff!important;height:auto!important;overflow:visible!important}
-  .app{display:block!important;height:auto!important}
-  .rail,.v2-side,.v2-sheet,.topbar,.v2-sec,.v2-sbar,.toasts,#v2sbar,#v2sec,.menu-btn,.v2r-top,.v2r-fresh,.v2r-wn,.v2r-wa,.v2r-dp,.v2r-whyt,.v2r-bwhy,.v2r-ftog,.v3-btn1,.v3-btn2,.v2r-bbtn,.v2r-inl,.v2r-chev,.v2r-ptxt,.v2r-copybox,.v3-ok{display:none!important}
-  .main,.content,#view{display:block!important;overflow:visible!important;height:auto!important;padding:0!important;margin:0!important;border:0!important;box-shadow:none!important}
-  .v2r{max-width:none}
-  .v2r-printhead{display:flex!important;flex-direction:column;gap:2px;margin:0 0 12px;padding-bottom:8px;border-bottom:2px solid #21262E;font-size:14pt}
-  .v2r-printhead span{font-size:10pt;color:#555}
-  .v2r-card,.v2r-letter,.v2r-brain,.v2r-lt,.v2r-row,.v2r-origline{break-inside:avoid;page-break-inside:avoid;box-shadow:none!important}
-  .v2r-card{border:1px solid #bbb}
-  .v2r-brain{background:#fff!important;color:#21262E!important;border:1px solid #21262E}
-  .v2r-bl p,.v2r-bs ul,.v2r-bs li b,.v2r-bwin{color:#21262E!important}
-  .v2r-bl.k-working b,.v2r-bs.k-working b{color:#1E6B4A!important}
-  .v2r-bl.k-stalled b,.v2r-bs.k-stalled b{color:#8A4B00!important}
-  .v2r-bl.k-opportunity b,.v2r-bs.k-opportunity b{color:#9E2B4E!important}
-  .v2r-basis,.v2r-basis[hidden]{display:grid!important;border-top-color:#999}
-  .v2r-bgrey{color:#555!important}
-  .v2r-row{border:1px solid #ccc;background:#fff}
-  .v2r-ql{max-height:none!important;overflow:visible!important}
-  .v2r-letter{border:0;padding:0}
-  .v2r-low{grid-template-columns:minmax(0,1fr)!important}
+  html:has(.v2r),body:has(.v2r){background:#fff!important;height:auto!important;overflow:visible!important}
+  body:has(.v2r) .app{display:block!important;height:auto!important}
+  body:has(.v2r) .rail,body:has(.v2r) .v2-side,body:has(.v2r) .v2-sheet,body:has(.v2r) .topbar,body:has(.v2r) .v2-sec,body:has(.v2r) .v2-sbar,body:has(.v2r) .toasts,body:has(.v2r) #v2sbar,body:has(.v2r) #v2sec,body:has(.v2r) .menu-btn,body:has(.v2r) .v2r-top,body:has(.v2r) .v2r-fresh,body:has(.v2r) .v2r-wn,body:has(.v2r) .v2r-wa,body:has(.v2r) .v2r-dp,body:has(.v2r) .v2r-whyt,body:has(.v2r) .v2r-bwhy,body:has(.v2r) .v2r-ftog,body:has(.v2r) .v3-btn1,body:has(.v2r) .v3-btn2,body:has(.v2r) .v2r-bbtn,body:has(.v2r) .v2r-inl,body:has(.v2r) .v2r-chev,body:has(.v2r) .v2r-ptxt,body:has(.v2r) .v2r-copybox,body:has(.v2r) .v3-ok{display:none!important}
+  body:has(.v2r) .main,body:has(.v2r) .content,body:has(.v2r) #view{display:block!important;overflow:visible!important;height:auto!important;padding:0!important;margin:0!important;border:0!important;box-shadow:none!important}
+  body:has(.v2r) .v2r{max-width:none}
+  body:has(.v2r) .v2r-printhead{display:flex!important;flex-direction:column;gap:2px;margin:0 0 12px;padding-bottom:8px;border-bottom:2px solid #21262E;font-size:14pt}
+  body:has(.v2r) .v2r-printhead span{font-size:10pt;color:#555}
+  body:has(.v2r) .v2r-card,body:has(.v2r) .v2r-letter,body:has(.v2r) .v2r-brain,body:has(.v2r) .v2r-lt,body:has(.v2r) .v2r-row,body:has(.v2r) .v2r-origline{break-inside:avoid;page-break-inside:avoid;box-shadow:none!important}
+  body:has(.v2r) .v2r-card{border:1px solid #bbb}
+  body:has(.v2r) .v2r-brain{background:#fff!important;color:#21262E!important;border:1px solid #21262E}
+  body:has(.v2r) .v2r-bl p,body:has(.v2r) .v2r-bs ul,body:has(.v2r) .v2r-bs li b,body:has(.v2r) .v2r-bwin{color:#21262E!important}
+  body:has(.v2r) .v2r-bl.k-working b,body:has(.v2r) .v2r-bs.k-working b{color:#1E6B4A!important}
+  body:has(.v2r) .v2r-bl.k-stalled b,body:has(.v2r) .v2r-bs.k-stalled b{color:#8A4B00!important}
+  body:has(.v2r) .v2r-bl.k-opportunity b,body:has(.v2r) .v2r-bs.k-opportunity b{color:#9E2B4E!important}
+  body:has(.v2r) .v2r-basis,body:has(.v2r) .v2r-basis[hidden]{display:grid!important;border-top-color:#999}
+  body:has(.v2r) .v2r-bgrey{color:#555!important}
+  body:has(.v2r) .v2r-row{border:1px solid #ccc;background:#fff}
+  body:has(.v2r) .v2r-ql{max-height:none!important;overflow:visible!important}
+  body:has(.v2r) .v2r-letter{border:0;padding:0}
+  body:has(.v2r) .v2r-low{grid-template-columns:minmax(0,1fr)!important}
 }

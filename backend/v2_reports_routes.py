@@ -42,6 +42,8 @@ WEEKS_BACK = 12
 SETTING_KEY = 'v2r_weekly_delivery'
 NA = 'غير متاح بعد'
 MARKETING_NA = 'تكتمل مع ربط الحملات في قسم التسويق'
+NO_RULES_NA = 'هذا النطاق لا يقيس الدخل ولا الحسابات ولا الطلبات'
+OPP_NA = 'هذا النطاق لا يقيس الأسئلة ولا طلبات السوق'
 DELIVERY_PATH = '/api/bridge/reports/weekly/deliver'
 DELIVERY_STATE_PATH = '/api/bridge/reports/weekly/delivery'
 FUNNEL_PATH = '/api/bridge/reports/funnel'
@@ -743,14 +745,15 @@ def missing_text(n):
     return '%s %s حين تسجّل المنصة الزيارات' % (_u(n, ['خطوة واحدة', 'خطوتان', 'خطوات', 'خطوة']), verb)
 
 
-def _stage(key, label, cur, prev, prev_stage_cur=None, sub=None):
+def _stage(key, label, cur, prev, prev_stage_cur=None, sub=None, failed=False):
     text, tone, pct = change_of(cur, prev)
     conv_pct = conv_text = None
     if key in STAGE_CONV and cur is not None and prev_stage_cur not in (None, 0):
         conv_pct = _round(cur * 100.0 / prev_stage_cur)
         conv_text = '%s٪ %s' % (_ar(conv_pct), STAGE_CONV[key])
     return {'key': key, 'label': label, 'cur': cur, 'prev': prev, 'change_pct': pct, 'change_text': text, 'trend': tone or 'na',
-            'conv_pct': conv_pct, 'conv_text': conv_text, 'sub': sub}
+            'conv_pct': conv_pct, 'conv_text': conv_text, 'sub': sub,
+            'failed': bool(failed and cur is None)}
 
 
 def build_funnel(facts, scope, mf, uf, mk, ct):
@@ -779,7 +782,8 @@ def build_funnel(facts, scope, mf, uf, mk, ct):
         prev_cur = None
         for k in STAGE_ORDER:
             c, p = cur_vals[k]
-            stages.append(_stage(k, STAGE_LABEL[k], c, p, prev_cur, PAID_SUB if (k == 'paid' and not funnel_ok) else None))
+            failed = (k == 'signed_up' and uf is None) or (k == 'paid' and mf is None)
+            stages.append(_stage(k, STAGE_LABEL[k], c, p, prev_cur, PAID_SUB if (k == 'paid' and not funnel_ok) else None, failed))
             prev_cur = c
         title = 'من الزيارة إلى الدفع'
     elif scope in SCOPE_STAGES:
@@ -811,11 +815,18 @@ def build_funnel(facts, scope, mf, uf, mk, ct):
             vals['signups_from_articles'] = (_num(sec.get('signups_from_articles')), _num(psec.get('signups_from_articles')))
         for k, label in SCOPE_STAGES[scope]:
             c, p = vals.get(k, (None, None))
-            stages.append(_stage(k, label, c, p, None))
+            if scope == 'market':
+                failed = True
+            elif scope == 'content':
+                failed = k == 'published' and ct is None
+            else:
+                failed = k == 'paid' and mf is None
+            stages.append(_stage(k, label, c, p, None, None, failed))
         title = 'رحلة %s' % SECTION_NAME[scope]
     else:
         return None
-    missing = sum(1 for s in stages if s['cur'] is None)
+    # «تكتمل حين تسجّل المنصة…» للخطوات التي لم يُسجَّل مصدرها بعد فقط؛ ما تعذّر جلبه يبقى صفًّا «غير متاح بعد»
+    missing = sum(1 for s in stages if s['cur'] is None and not s['failed'])
     return {'title': title, 'mode': 'full' if funnel_ok else 'compact', 'missing': missing,
             'missing_text': missing_text(missing) if missing else None, 'stages': stages}
 
@@ -1079,7 +1090,10 @@ def build_brain(fig, scope):
                 working['basis'] = [_basis('طلبات السوق الجديدة الآن', _ar(c), 'market'), _basis('طلبات السوق الجديدة قبلها', _ar(p), 'market')]
                 working['action'] = _action('market')
                 hit = True
-    finish(working, hit, 'لا نموّ واضح في هذه الفترة.', failed_labels(*skipped))
+    if not (secs or use_signups or use_market):
+        working['na_reason'] = NO_RULES_NA
+    else:
+        finish(working, hit, 'لا نموّ واضح في هذه الفترة.', failed_labels(*skipped))
 
     # —— واقف
     skipped = []
@@ -1140,7 +1154,10 @@ def build_brain(fig, scope):
                 stalled['basis'] = [_basis('الحسابات الجديدة الآن', _ar(sg['cur']), 'users'), _basis('الحسابات الجديدة قبلها', _ar(sg['prev']), 'users')]
                 stalled['action'] = _action('people')
                 hit = True
-    finish(stalled, hit, 'لا تراجع واضح في هذه الفترة.', failed_labels(*skipped))
+    if not (secs or use_signups or use_market):
+        stalled['na_reason'] = NO_RULES_NA
+    else:
+        finish(stalled, hit, 'لا تراجع واضح في هذه الفترة.', failed_labels(*skipped))
 
     # —— فرصة
     if scope in ('all', 'market', 'courses', 'files'):
@@ -1166,7 +1183,7 @@ def build_brain(fig, scope):
                     hit = True
         finish(opp, hit, 'لا فرصة واضحة في الأسئلة والطلبات حتى الآن.', failed_labels(*skipped))
     else:
-        opp['empty_text'] = 'لا فرصة واضحة في الأسئلة والطلبات حتى الآن.'
+        opp['na_reason'] = OPP_NA
     primary = None
     for k, ln in (('stalled', stalled), ('opportunity', opp), ('working', working)):
         if ln['text'] and ln['action']:
@@ -1360,7 +1377,7 @@ def register(app, G):
             db.session.delete(row)
         db.session.commit()
         G['_audit']('reports.weekly_delivery', target='weekly', meta={'enabled': en})
-        return ns(jsonify({'ok': True, 'delivery': {'setting': en}}))
+        return ns(jsonify({'ok': True, 'delivery': {'setting': en, 'bridge': None, 'platform_enabled': None, 'last_sent_week': None}}))   # بلا نداء للمنصة: ما لم يُقرأ null
 
     @app.route('/api/v2/reports/weekly/send', methods=['POST'])
     @token_required

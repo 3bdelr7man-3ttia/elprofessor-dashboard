@@ -2021,8 +2021,8 @@
     }
     function funnelCompact(stages) {
       var list = Array.isArray(stages) ? stages : [];
-      var rows = list.filter(function (s) { return s && s.cur != null; });
-      var missing = list.length - rows.length;
+      var rows = list.filter(function (s) { return s && (s.cur != null || s.failed); });
+      var missing = list.filter(function (s) { return s && s.cur == null && !s.failed; }).length;
       return { rows: rows, missing: missing, text: missingText(missing) };
     }
     // نقاط الرسم: x موزّعة بالتساوي، وكل سلسلة على مقياسها (الدخل يسارًا والحسابات يمينًا والزوار لوحدهم). سلسلة فيها قيمة مجهولة لا تُرسم.
@@ -2034,13 +2034,15 @@
       function series(key) {
         var vals = rows.map(function (r) { return r[key]; });
         if (!n || vals.some(function (v) { return v == null || !isFinite(v); })) return null;
-        var max = Math.max.apply(null, vals);
+        var max = Math.max.apply(null, vals), min = Math.min.apply(null, vals);
+        // سلسلة ثابتة (كل قيمها واحدة وأكبر من صفر) تُرسم في منتصف الارتفاع لا عند القمة، حتى لا تبدو أعلى من غيرها
+        var constant = n > 1 && max > 0 && min === max;
         var pts = vals.map(function (v, i) {
           var x = n === 1 ? w / 2 : padX + (w - 2 * padX) * i / (n - 1);
-          var y = max > 0 ? padT + inner - (v / max) * inner : padT + inner;
+          var y = constant ? padT + inner / 2 : (max > 0 ? padT + inner - (v / max) * inner : padT + inner);
           return [Math.round(x * 10) / 10, Math.round(y * 10) / 10];
         });
-        return { key: key, pts: pts, max: max, flat: !(max > 0) };
+        return { key: key, pts: pts, max: max, flat: !(max > 0), constant: constant };
       }
       var out = { income: series('income_egp'), signups: series('signups'), visits: series('visits'), n: n, base: padT + inner, top: padT, padX: padX };
       out.grid = [0, 1, 2, 3].map(function (i) { return Math.round((padT + inner * i / 3) * 10) / 10; });
@@ -2052,6 +2054,15 @@
       if (d.ledger !== false) items.push({ key: 'income', label: 'الدخل بالجنيه' }); else notes.push('الدخل بالجنيه: ' + NA);
       if (d.signups_available) items.push({ key: 'signups', label: 'حسابات جديدة' }); else if (!scope || scope === 'all') notes.push('الحسابات الجديدة: ' + NA);
       if (d.visits_available) items.push({ key: 'visits', label: 'الزوار' }); else notes.push('الزوار: ' + NA);
+      // سلسلة بقيمة واحدة في كل الفترة: تُقال صراحة لأن رسمها في المنتصف بلا مقياس
+      var rows = Array.isArray(d.rows) ? d.rows : [], per = d.bucket === 'week' ? 'أسبوعيًا' : 'يوميًا';
+      [['income_egp', 'الدخل', d.ledger !== false], ['signups', 'الحسابات الجديدة', !!d.signups_available], ['visits', 'الزوار', !!d.visits_available]].forEach(function (c) {
+        if (!c[2] || rows.length < 2) return;
+        var vals = rows.map(function (r) { return r[c[0]]; });
+        if (vals.some(function (v) { return v == null || !isFinite(v); })) return;
+        var mx = Math.max.apply(null, vals);
+        if (mx > 0 && Math.min.apply(null, vals) === mx) notes.push(c[1] + ' ثابت: ' + nf(mx) + ' ' + per);
+      });
       return { items: items, notes: notes };
     }
     // تصفية «أحدث الأسئلة»: نفس سلوك الشاشة القديمة بالحرف (f = {seg, country, cat, ne, time}).

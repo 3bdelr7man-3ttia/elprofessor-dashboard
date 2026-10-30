@@ -397,8 +397,9 @@
     s.onclick = function (e) { if (e.target === s && !s.dataset.busy) window.closeModal(); };
     return s;
   }
-  function diffTable(lines) {
-    return '<table class="v3-diff"><thead><tr><th>البند</th><th>الآن</th><th>بعد التعديل</th></tr></thead><tbody>' + lines.map(function (l) {
+  function diffTable(lines, heads) {
+    heads = heads || ['البند', 'الآن', 'بعد التعديل'];
+    return '<table class="v3-diff"><thead><tr><th>' + esc(heads[0]) + '</th><th>' + esc(heads[1]) + '</th><th>' + esc(heads[2]) + '</th></tr></thead><tbody>' + lines.map(function (l) {
       return '<tr><td>' + esc(l.label) + '</td><td>' + esc(l.from) + '</td><td><b>' + esc(l.to) + '</b></td></tr>'; }).join('') + '</tbody></table>';
   }
   // ورقة بمرحلتين: النموذج ثم «راجع التغيير» (قبل ⇒ بعد) ثم «أكّد». o: {title, form(html), wire(s), collect(s)→{ok,payload,error}, review(payload)→{lead,lines,changed},
@@ -420,7 +421,7 @@
         if (!r.changed) { showErr('لم تغيّر أي شيء'); return; }
         payload = c.payload;
         stage.setAttribute('data-stage', 'review');
-        stage.innerHTML = '<p class="mc-lead">' + (r.lead || 'راجع ما سيتغير قبل التأكيد') + '</p>' + diffTable(r.lines) + (r.extra || '') + '<div id="v3err" role="alert"></div>'
+        stage.innerHTML = '<p class="mc-lead">' + (r.lead || 'راجع ما سيتغير قبل التأكيد') + '</p>' + diffTable(r.lines, r.heads) + (r.extra || '') + '<div id="v3err" role="alert"></div>'
           + '<div class="acts"><button type="button" class="btn btn-primary" id="v3_go">' + esc(o.btnConfirm || 'أكّد التعديل') + '</button><button type="button" class="btn btn-ghost" id="v3_back">رجوع للتعديل</button></div>';
         q('#v3_back', s).onclick = function () { stage.setAttribute('data-stage', 'form'); stage.innerHTML = formHtml; restore(); };
         var go = q('#v3_go', s);

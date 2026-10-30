@@ -1131,7 +1131,7 @@ def test_wiring_in_the_shared_files():
     assert 'D3.openSheet = openSheet; D3.twoStage = twoStage;' in d3
     for df in ('Dockerfile', os.path.join('deploy', 'Dockerfile.coolify')):
         t = _read(df)
-        assert 'COPY dashboard-cloud/v2s /app/dist/v2s' in t and 'COPY backend/v2_*_routes.py /app/' in t
+        assert 'COPY dashboard-cloud/v2s /app/dist/v2s' in t and 'COPY backend/v2_reports_routes.py /app/v2_reports_routes.py' in t and 'COPY backend/v2_*_routes.py' not in t
     assert 'v2s/[a-z_]+\\.js' in _read('backend', 'tests', 'test_xss_hardening.py')
     assert 'tzdata==2024.1' in _read('backend', 'requirements.txt')
 
@@ -1149,3 +1149,79 @@ def test_with_the_switch_off_the_old_analysis_screen_is_untouched():
     paths = set(re.findall(r"E\.api\('([^'?]+)", js)) | set(re.findall(r"E\.api\('([^']+)'", js))
     assert paths <= {'/platform-chat-insights/', '/platform-chat-insights/classify', '/v2/reports/weekly/settings', '/v2/reports/weekly/send',
                      '/v2/reports/summary', '/v2/reports/weekly', '/platform-chat-insights/classify?limit=100'}, paths
+
+
+# ---------------------------------------------------------------- جولة التصليح (مراجعة الجودة)
+def test_print_rules_are_scoped_to_the_reports_screen():
+    css = _read('dashboard-cloud', 'v2s', 'reports.css')
+    i = css.index('@media print{')
+    block = css[i + len('@media print{'):].rstrip().rstrip('}')
+    sels = [m.group(1) for m in re.finditer(r'(?m)^\s*([^{}\n]+)\{', block)]
+    assert sels
+    for sel in sels:
+        for part in sel.split(','):
+            assert re.match(r'^(html|body):has\(\.v2r\)(\s|$)', part.strip()), part
+    assert '@media print' not in css[:i]
+    # لا اسم صنف عام بلا بادئة v2r
+    assert not re.search(r'(?m)^\.sr\{', css) and 'class="sr"' not in _read('dashboard-cloud', 'v2s', 'reports.js')
+
+
+def test_scope_without_rules_says_not_available_never_a_judgement():
+    base = {s: M(0.0, 0, 0.0, 0) for s in ('files', 'courses', 'books')}
+    lines, primary = v2r.build_brain(fig(money=base), 'content')
+    assert primary is None
+    for ln in lines:
+        assert ln['text'] is None and ln['empty_text'] is None and ln['na_reason']
+    lines, _ = v2r.build_brain(fig(money=base), 'books')
+    assert line(lines, 'working')['empty_text'] and line(lines, 'opportunity')['empty_text'] is None and line(lines, 'opportunity')['na_reason']
+
+
+def test_failed_source_stage_is_shown_not_counted_as_not_recorded(ctx, plat):
+    plat.ef.rp_force[('GET', '/api/bridge/users')] = (500, {'detail': 'x'})
+    d = summary(ctx, fresh=True)
+    s = stage(d, 'signed_up')
+    assert s['cur'] is None and s['failed'] is True
+    others = [x for x in d['funnel']['stages'] if x['key'] != 'signed_up' and x['cur'] is None]
+    assert all(x['failed'] is False for x in others)
+    assert d['funnel']['missing'] == len(others)
+    plat.ef.rp_force.clear()
+    ok = baseline(ctx)
+    assert all(x['failed'] is False for x in ok['funnel']['stages'])
+
+
+@needs_node
+def test_funnel_compact_keeps_failed_stage_rows():
+    out = v2_node.logic('v2r.funnelCompact', [{'key': 'a', 'cur': 5}, {'key': 'u', 'cur': None, 'failed': True}, {'key': 'v', 'cur': None}])
+    assert [s['key'] for s in out['rows']] == ['a', 'u'] and out['missing'] == 1
+    out = v2_node.logic('v2r.funnelCompact', [{'key': 'u', 'cur': None, 'failed': True}])
+    assert out['missing'] == 0 and out['text'] == '' and len(out['rows']) == 1
+
+
+@needs_node
+def test_constant_series_is_drawn_mid_height_and_named():
+    rows = [{'income_egp': 0, 'signups': 3, 'visits': None, 'label': 'a'} for _ in range(5)]
+    c = v2_node.logic('v2r.chartPoints', rows, 560, 300)
+    mid = (c['top'] + c['base']) / 2
+    assert c['signups']['constant'] is True and {p[1] for p in c['signups']['pts']} == {mid}
+    assert c['income']['flat'] is True and c['income']['constant'] is False
+    moving = v2_node.logic('v2r.chartPoints', [{'income_egp': 1, 'signups': 3}, {'income_egp': 2, 'signups': 4}], 560, 300)
+    assert moving['signups']['constant'] is False
+    leg = v2_node.logic('v2r.legendItems', {'ledger': True, 'signups_available': True, 'visits_available': False, 'bucket': 'day', 'rows': rows}, 'all')
+    assert 'الحسابات الجديدة ثابت: ٣ يوميًا' in leg['notes']
+    wk = v2_node.logic('v2r.legendItems', {'ledger': True, 'signups_available': True, 'visits_available': False, 'bucket': 'week', 'rows': rows}, 'all')
+    assert 'الحسابات الجديدة ثابت: ٣ أسبوعيًا' in wk['notes']
+
+
+def test_sheets_use_the_brand_buttons_and_neutral_wording():
+    js = _read('dashboard-cloud', 'v2s', 'reports.js')
+    assert 'class="v3-btn1" data-a="cgo"' in js and 'class="v3-btn2" data-a="cno"' in js
+    assert 'btn-primary' not in js and 'السائل' not in js and 'من سأل' not in js
+    assert "heads: ['البند', 'الآن', 'بعد الإرسال']" in js and 'last_sent_week === d.week.start' in js
+    d3 = _read('dashboard-cloud', 'v2-d3.js')
+    assert 'diffTable(r.lines, r.heads)' in d3
+
+
+def test_settings_put_returns_the_full_delivery_object(ctx, plat):
+    r = post(ctx, '/api/v2/reports/weekly/settings', {'enabled': True, 'confirmed': True}, method='PUT')
+    dl = r.get_json()['delivery']
+    assert dl == {'setting': True, 'bridge': None, 'platform_enabled': None, 'last_sent_week': None} and plat.seen == []

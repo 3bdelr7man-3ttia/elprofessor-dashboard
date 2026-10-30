@@ -219,7 +219,7 @@
     var rows = c.rows.map(function (s) {
       var idx = fn.stages.indexOf(s), prevKnown = idx > 0 && isNum(fn.stages[idx - 1].cur) ? fn.stages[idx - 1] : null;
       var v = V.stageView(s, prevKnown);
-      return '<li class="v2r-cr"><span class="v2r-fl">' + esc(s.label) + '</span><b class="v2r-fn">' + esc(ar(s.cur)) + '</b>'
+      return '<li class="v2r-cr"><span class="v2r-fl">' + esc(s.label) + '</span><b class="v2r-fn">' + (isNum(s.cur) ? esc(ar(s.cur)) : naText()) + '</b>'
         + (v.changeText ? '<span class="v2r-chg t-' + esc(v.tone) + '">' + esc(v.changeText) + (v.convText ? ' · ' + esc(v.convText) : '') + '</span>' : '')
         + (s.sub ? '<small class="v2r-fsub">' + esc(s.sub) + '</small>' : '') + '</li>';
     }).join('');
@@ -350,6 +350,7 @@
   function secChip(r) {
     var c = ['files', 'courses', 'books'].indexOf(r.key) > -1 && r.trend ? V.trendChip(r.trend) : r.chip;
     var hint = r.chip_hint ? ' title="' + esc(r.chip_hint) + '"' : '';
+    if (c && !r.value && c.text === NA) return '';   // «غير متاح بعد» مرة واحدة في القيمة، لا مرتين
     return c ? '<span class="v2r-st t-' + esc(c.tone) + '"' + hint + '>' + esc(c.text) + '</span>' : '';
   }
   function secRow(r, expanded) {
@@ -443,7 +444,7 @@
     var seg = arr(d.by_segment).filter(function (x) { return (x.segment || '') !== 'unknown' && (x.segment || '') !== ''; }).concat(arr(d.by_segment).filter(function (x) { return !x.segment || x.segment === 'unknown'; }));
     var country = arr(d.by_country), cat = arr(d.by_category);
     function sel(dim, all, items, vf, lf) {
-      return '<label class="v2r-fl2"><span class="sr">' + esc(all) + '</span><select data-f="' + dim + '" aria-label="' + esc(all) + '"><option value="all">' + esc(all) + '</option>' + items.map(function (x) {
+      return '<label class="v2r-fl2"><span class="v2r-sr">' + esc(all) + '</span><select data-f="' + dim + '" aria-label="' + esc(all) + '"><option value="all">' + esc(all) + '</option>' + items.map(function (x) {
         var vv = String(x[vf]); return '<option value="' + esc(vv) + '"' + (f[dim] === vv ? ' selected' : '') + '>' + esc(lf(x[vf])) + '</option>'; }).join('') + '</select></label>';
     }
     function chip(dim, val, label) { return '<button type="button" class="v2r-chip' + (f[dim] === val ? ' on' : '') + '" data-f="' + dim + '" data-v="' + val + '" aria-pressed="' + (f[dim] === val) + '">' + esc(label) + '</button>'; }
@@ -528,7 +529,7 @@
       var c = V.funnelCompact(fn.stages);
       nums = '<section class="v2r-lt"><h3>الأرقام</h3><ul class="v2r-crows">' + c.rows.map(function (s) {
         var idx = fn.stages.indexOf(s), pk = idx > 0 && isNum(fn.stages[idx - 1].cur) ? fn.stages[idx - 1] : null, vw = V.stageView(s, pk);
-        return '<li class="v2r-cr"><span class="v2r-fl">' + esc(s.label) + '</span><b class="v2r-fn">' + esc(ar(s.cur)) + '</b>' + (vw.changeText ? '<span class="v2r-chg t-' + esc(vw.tone) + '">' + esc(vw.changeText) + '</span>' : '') + '</li>'; }).join('')
+        return '<li class="v2r-cr"><span class="v2r-fl">' + esc(s.label) + '</span><b class="v2r-fn">' + (isNum(s.cur) ? esc(ar(s.cur)) : naText()) + '</b>' + (vw.changeText ? '<span class="v2r-chg t-' + esc(vw.tone) + '">' + esc(vw.changeText) + '</span>' : '') + '</li>'; }).join('')
         + '</ul>' + (c.missing ? '<p class="v2r-cmiss">' + esc(c.text) + '</p>' : '') + '</section>';
     }
     var letter = '<article class="v2r-letter">' + printHead({ scope: 'all', window: { label: d.week.label }, generated_at: d.generated_at })
@@ -648,10 +649,10 @@
         var msgs = Array.isArray(d.messages) ? d.messages : [];
         var turns = msgs.length ? msgs.map(function (m) {
           var me = m.role === 'user';
-          return '<div class="v2r-tb ' + (me ? 'me' : 'bot') + '"><b>' + (me ? 'السائل' : 'بروف') + '</b><p>' + esc(m.content || '') + '</p></div>';
+          return '<div class="v2r-tb ' + (me ? 'me' : 'bot') + '"><b>' + (me ? 'صاحب السؤال' : 'بروف') + '</b><p>' + esc(m.content || '') + '</p></div>';
         }).join('') : '<p class="v3-none">لا رسائل محفوظة</p>';
         mb2.innerHTML = (d.truncated ? '<div class="v3-warn">هذه نسخة محفوظة من الرد وليست المحادثة كاملة: جلسة الزائر لا تُحفظ، والأسئلة الأقدم بلا رد محفوظ.</div>' : '')
-          + '<dl class="v2r-meta"><div><dt>من سأل</dt><dd>' + who + '</dd></div>' + (meta ? '<div><dt>التصنيف</dt><dd>' + meta + '</dd></div>' : '')
+          + '<dl class="v2r-meta"><div><dt>صاحب السؤال</dt><dd>' + who + '</dd></div>' + (meta ? '<div><dt>التصنيف</dt><dd>' + meta + '</dd></div>' : '')
           + '<div><dt>التاريخ</dt><dd>' + esc(U.dateText(d.created_at) || NA) + '</dd></div></dl><div class="v2r-turns">' + turns + '</div>'
           + '<button type="button" class="v3-btn2 v2r-close" data-a="sclose">أغلق</button>';
         q('[data-a="sclose"]', mb2).onclick = function () { window.closeModal(); };
@@ -671,7 +672,7 @@
     var sh = sheetApi().openSheet, E = ep(); if (!sh || !E) return;
     var un = (d && d.unclassified) || 0, n = Math.min(un, 100);
     var s = sh('تصنيف الأسئلة الجديدة', '<p class="mc-lead">سيُصنَّف ' + esc(UU(n, ['سؤال واحد', 'سؤالان', 'أسئلة', 'سؤالًا'])) + ' جديدًا (١٠٠ بالكثير في المرة). التصنيف يعمل على المنصة وله تكلفة صغيرة.</p>'
-      + '<div id="v2rcerr" role="alert"></div><div class="acts"><button type="button" class="btn btn-primary" data-a="cgo">صنّف الآن</button><button type="button" class="btn btn-ghost" data-a="cno">إلغاء</button></div>');
+      + '<div id="v2rcerr" role="alert"></div><div class="acts"><button type="button" class="v3-btn1" data-a="cgo">صنّف الآن</button><button type="button" class="v3-btn2" data-a="cno">إلغاء</button></div>');
     if (!s) return;
     s.classList.add('v2r-sheet');
     q('[data-a="cno"]', s).onclick = function () { if (!s.dataset.busy) window.closeModal(); };
@@ -727,7 +728,9 @@
       form: '<p class="mc-lead">سيُرسل تقرير ' + esc(d.week.label) + ' إلى تليجرام الآن.</p>',
       collect: function () { return { ok: true, payload: { week: d.week.start } }; },
       review: function (p) {
-        return { lead: 'راجع ما سيُرسل قبل التأكيد', changed: true, lines: [{ label: 'الأسبوع', from: 'لم يُرسل بعد', to: d.week.label }, { label: 'القناة', from: 'لا شيء', to: 'تليجرام' }],
+        var sentBefore = !!(d.delivery && d.delivery.last_sent_week && d.delivery.last_sent_week === d.week.start);
+        return { lead: 'راجع ما سيُرسل قبل التأكيد', changed: true, heads: ['البند', 'الآن', 'بعد الإرسال'],
+                 lines: [{ label: 'الأسبوع', from: sentBefore ? 'أُرسل من قبل' : 'لم يُرسل بعد', to: d.week.label }, { label: 'القناة', from: 'لا شيء', to: 'تليجرام' }],
                  extra: '<div class="v2r-preview">' + first + '</div>' };
       },
       btnReview: 'راجع', btnConfirm: 'أكّد الإرسال', busy: 'جارٍ الإرسال…',
