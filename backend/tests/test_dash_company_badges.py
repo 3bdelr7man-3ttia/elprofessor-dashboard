@@ -114,11 +114,15 @@ def test_the_dead_withdrawal_decision_branch_left_the_investment_drawer(code):
 def test_go_resets_every_tab_variable_including_the_foundation_one(html):
     """`foundationTab` كان الوحيد الذي لا يصفّره `go()`، فتبويب «حالة الكيان» يبقى لاصقًا
     عبر التنقّل بينما كل أشقّائه يعودون لأوّلهم — حالةٌ تسرّبت بين شاشتين."""
-    line = [ln for ln in html.splitlines() if ln.strip().startswith('current=mod;selected=null;')]
-    assert len(line) == 1, line
+    # D1-B: سطر التصفير اتفصل في `resetViewState()` (نفس الحرف) عشان الهيكل الجديد يستعمله، و`go()` بتناديه.
+    body = html[html.index('function resetViewState(){'):html.index('function go(mod){')]
+    assert body.count('selected=null;') == 1
+    go = html[html.index('function go(mod){'):]
+    go = go[:go.index('\n}\n')]
+    assert 'resetViewState()' in go and 'current=mod;' in go
     for var in ("escTab='sessions'", "finTab='summary'", "invTab='owners'",
                 "tgTab='goals'", "foundationTab='assets'", "topicsTab='ideas'"):
-        assert var in line[0], var
+        assert var in body, var
 
 
 def test_the_two_soon_buttons_left_the_settings_screen(code):

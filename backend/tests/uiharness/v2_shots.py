@@ -572,6 +572,43 @@ def flow_d1b(browser, h, pre, viewport, mobile):
             sshot(page, pre + '41-old-link-messages.jpg')
         browser.close()
 
+    # مراجعة D1-B: الرابط القديم #foundation يهبط على تبويب «التأسيس» الداخلي، وشرائح الوارد داخل «الملفات» ما بتنقلش القسم،
+    # والبحث ظاهر في الوارد حتى عرض ٧٦١ وبيختفي تحت ٧٦٠، والورقة المفتوحة بتحتفظ بالتركيز مع التحديث.
+    ctx = browser.context(h, 'admin', viewport, mobile)
+    page = open_shell(ctx, '#foundation')
+    st = sec_state(page)
+    tg = page.evaluate("() => tgTab")
+    if st['hash'] != '#s/company/targets' or tg != 'foundation':
+        PROBLEMS.append('%s42: #foundation هبط على %r وtgTab=%r (المتوقع foundation)' % (pre, st, tg))
+    sshot(page, pre + '42-old-link-foundation.jpg')
+    browser.close()
+    ctx = browser.context(h, 'admin', viewport, mobile)
+    page = open_shell(ctx)
+    go_section(page, 'files')
+    page.wait_for_selector('.chip[data-f="all"]')
+    page.click('.chip[data-f="all"]')
+    page.wait_for_timeout(500)
+    st = sec_state(page)
+    if st['hash'] != '#s/files/files' or st['h1'] != 'ملفات الخبراء':
+        PROBLEMS.append('%s43: شريحة «الكل» داخل الملفات نقلت المستخدم: %r' % (pre, st))
+    srch = page.evaluate("() => getComputedStyle(document.querySelector('.topbar .search')).display")
+    if (w > 760 and srch == 'none') or (w <= 760 and srch != 'none'):
+        PROBLEMS.append('%s43: البحث في الوارد (عرض %s) display=%s' % (pre, w, srch))
+    sshot(page, pre + '43-inbox-chip-in-files.jpg')
+    if w < 1180:
+        page.click('#menuBtn')
+        page.wait_for_selector('#v2Sheet.open')
+        page.focus('#v2Sheet .v2s-x')
+        page.wait_for_timeout(1500)
+        act = page.evaluate("() => document.activeElement && document.activeElement.className")
+        if 'v2s-x' not in str(act):
+            PROBLEMS.append('%s44: الورقة المفتوحة فقدت التركيز مع التحديث (%r)' % (pre, act))
+        page.keyboard.press('Shift+Tab')
+        inside = page.evaluate("() => !!document.activeElement.closest('#v2Sheet .v2s-box')")
+        if not inside:
+            PROBLEMS.append(pre + '44: Shift+Tab أخرج التركيز من الورقة المفتوحة')
+    browser.close()
+
     # المفتاح مقفول: مفيش غلاف ولا قائمة جديدة
     os.environ.pop('DASH_V2_ENABLED', None)
     try:

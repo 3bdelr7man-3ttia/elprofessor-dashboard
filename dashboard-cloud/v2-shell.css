@@ -91,7 +91,6 @@ html.v2-noscroll,html.v2-noscroll body{overflow:hidden}
   .app.v2-shell .topbar .ttl h2::after{display:none}
   .app.v2-shell .topbar #bellBtn{order:3;margin-inline-start:auto}
   .app.v2-shell .menu-btn{display:grid;order:4;width:44px;height:44px;border-radius:12px;background:#fff;border-color:#E9E1D6;color:#21262E}
-  .app.v2-shell.v2-inbox .topbar .search{display:none}
   .v2-sheet{display:block;position:fixed;inset:0;z-index:80;visibility:hidden;pointer-events:none;font-family:'IBM Plex Sans Arabic','Cairo',sans-serif}
   .v2-sheet.open{visibility:visible;pointer-events:auto}
   .v2s-scrim{position:absolute;inset:0;background:rgba(33,38,46,.55);opacity:0;transition:opacity .2s}
@@ -112,6 +111,9 @@ html.v2-noscroll,html.v2-noscroll body{overflow:hidden}
   .v2s-tile .v2s-badge{position:absolute;top:8px;left:8px;min-width:28px;height:28px;border-color:#fff;color:#21262E}
   .v2s-tile .v2s-badge.hot{color:#fff}
   .v2-sheet .v2s-me{border-top:1px solid #E9E1D6;padding:10px 16px calc(14px + env(safe-area-inset-bottom))}
+}
+@media(max-width:760px){
+  .app.v2-shell.v2-inbox .topbar .search{display:none}
 }
 @media(max-width:600px){
   .app.v2-shell .content{padding:2px 16px 48px}

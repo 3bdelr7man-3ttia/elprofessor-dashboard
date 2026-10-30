@@ -7674,6 +7674,7 @@ function v2OpenSection(key,tabKey,opts){
   if(current==='home'&&tab.mod!=='home'&&window.V2&&V2.leave)V2.leave();
   resetViewState();
   Object.keys(tab.st).forEach(function(k){const f=V2_SETTERS[k];if(f)f(tab.st[k]);});
+  if(opts&&opts.st)Object.keys(opts.st).forEach(function(k){const f=V2_SETTERS[k];if(f)f(opts.st[k]);});   // حالة الاسم القديم (#foundation → tgTab)
   current=tab.mod;
   V2S={section:sec.key,tab:tab.key};
   v2Commit(opts&&opts.replace?'replace':'push');
@@ -7704,7 +7705,7 @@ function v2OnHash(){
   const h=String(location.hash||'');
   if(V2S&&h===V2L.sectionHash(V2S.section,V2S.tab))return;
   const rt=V2L.routeFor(h,{});
-  if(rt)v2OpenSection(rt.section,rt.tab,{replace:true});
+  if(rt)v2OpenSection(rt.section,rt.tab,{replace:true,st:rt.st});
 }
 function v2ShellBoot(){
   if(!(window.V2SHELL&&window.V2L&&V2SHELL.boot&&V2L.routeFor))return false;
@@ -7714,7 +7715,7 @@ function v2ShellBoot(){
   window.addEventListener('popstate',v2OnHash);window.addEventListener('hashchange',v2OnHash);
   // الرابط الأول: عنوان جديد #s/… أو رابط قديم (#finance · #packages …) يهبط على قسمه وتبويبه، وأي غيره على اللوحة.
   const rt=V2L.routeFor(String(location.hash||''),{})||V2L.routeFor('home');
-  v2OpenSection(rt.section,rt.tab,{replace:true});
+  v2OpenSection(rt.section,rt.tab,{replace:true,st:rt.st});
   return true;
 }
 // مرة واحدة عند الإقلاع. ⛔ الإقلاع القديم بيترسم فورًا من غير ما ينتظر المفتاح (مقفول = نفس التوقيت بالحرف).

@@ -828,7 +828,7 @@
   function T(key, label, mod, st, m) { var t = { key: key, label: label, mod: mod, st: st || {} }; if (m) t.m = m; return t; }
 
   var SECTIONS = [
-    { key: 'home', label: 'اللوحة', img: null, desc: 'الحاجة الجاية وكل ما ينتظر قرارك', tabs: [
+    { key: 'home', label: 'اللوحة', img: null, desc: 'ما يحتاج قرارك الآن وكل ما ينتظرك', tabs: [
       T('board', 'اللوحة والقرارات', 'home', { v2mode: 'board' }, { v2mode: ['board', 'focus'] }),
       T('inbox', 'كل الوارد', 'inbox', { activeFilter: 'all' }, {})
     ] },
@@ -909,14 +909,19 @@
     }
     return n;
   }
-  function pack(sec, tab) { return { section: sec.key, tab: tab.key, mod: tab.mod, st: tab.st }; }
+  function pack(sec, tab, extra) {
+    var st = tab.st;
+    if (extra) { st = {}; Object.keys(tab.st).forEach(function (k) { st[k] = tab.st[k]; }); Object.keys(extra).forEach(function (k) { st[k] = extra[k]; }); }
+    return { section: sec.key, tab: tab.key, mod: tab.mod, st: st };
+  }
   // sectionFor(oldModule[, state[, hint]]) ⇒ {section, tab, mod, st} أو null لموديول مجهول.
   //   hint = {section, tab} الحالي: يُفضَّل عند التعادل أو حين لا يطابق شيء (حالة داخلية بلا تبويب، مثل «الفريق الإداري»).
   function sectionFor(oldModule, state, hint) {
     var mod = String(oldModule == null ? '' : oldModule);
     var st = {};
     Object.keys(state || {}).forEach(function (k) { st[k] = state[k]; });
-    if (ALIASES[mod]) { var a = ALIASES[mod]; Object.keys(a.state).forEach(function (k) { st[k] = a.state[k]; }); mod = a.mod; }
+    var aliasState = null;
+    if (ALIASES[mod]) { var a = ALIASES[mod]; aliasState = a.state; Object.keys(a.state).forEach(function (k) { st[k] = a.state[k]; }); mod = a.mod; }
     var best = null, bestScore = -2, hintHit = null, any = null;
     SECTIONS.forEach(function (sec) {
       sec.tabs.forEach(function (tab) {
@@ -928,14 +933,19 @@
         if (sc > bestScore) { bestScore = sc; best = { sec: sec, tab: tab }; }
       });
     });
-    if (hintHit && hintHit.sc >= bestScore) return pack(hintHit.sec, hintHit.tab);
-    if (best) return pack(best.sec, best.tab);
+    if (hintHit && hintHit.sc >= bestScore) return pack(hintHit.sec, hintHit.tab, aliasState);
+    if (best && hint && bestScore === 0 && best.tab.key !== hint.tab) {
+      // أفضل مطابقة هي التبويب العام لـ«كل الوارد» (بلا شرط): لا تُنقل المستخدم من قسمه إن كان تبويبه من نفس الشاشة (شرائح الوارد داخل «الملفات» مثلًا).
+      var gt = tabOf(hint.section, hint.tab);
+      if (gt && gt.mod === mod && mod === 'inbox') return pack(secOf(hint.section), gt, aliasState);
+    }
+    if (best) return pack(best.sec, best.tab, aliasState);
     // حالة داخلية بلا تبويب (مثل «الفريق الإداري» داخل شاشة الفريق): ابقَ حيث أنت إن كان تبويبك لنفس الموديول.
     if (hint) {
       var ht = tabOf(hint.section, hint.tab);
-      if (ht && ht.mod === mod) return pack(secOf(hint.section), ht);
+      if (ht && ht.mod === mod) return pack(secOf(hint.section), ht, aliasState);
     }
-    return any ? pack(any.sec, any.tab) : null;
+    return any ? pack(any.sec, any.tab, aliasState) : null;
   }
   // العنوان: #s/<قسم>[/<تبويب>] — يقبل بدون # وبدون s/ المسبوقة بشرطة.
   function sectionHash(key, tab) { return '#s/' + key + (tab ? '/' + tab : ''); }

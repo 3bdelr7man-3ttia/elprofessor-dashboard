@@ -12,7 +12,7 @@
   if (!L) return;
   var U = L.util;
   var SH = window.V2SHELL = { on: false };
-  var host = null, poll = null, lastSig = '', lastBadge = {};
+  var host = null, poll = null, lastSig = '', lastBadge = {}, sheetDirty = false, lastTabSig = '';
 
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
   function q(sel, root) { return (root || document).querySelector(sel); }
@@ -62,7 +62,7 @@
 
   // ------------------------------------------------------------------ القائمة الجانبية والورقة
   function userName() {
-    try { return (host && host.userName && host.userName()) || 'المؤسس'; } catch (e) { return 'المؤسس'; }
+    try { return (host && host.userName && host.userName()) || 'الإدارة'; } catch (e) { return 'الإدارة'; }
   }
   function activeKey() { var s = host && host.state ? host.state() : null; return s ? s.section : 'home'; }
 
@@ -76,7 +76,7 @@
   function userBlock() {
     var n = userName();
     return '<div class="v2s-me"><span class="v2s-av">' + esc(String(n).trim().charAt(0) || '—') + '</span>'
-      + '<span class="v2s-who"><b>' + esc(n) + '</b><small>المؤسس</small></span>'
+      + '<span class="v2s-who"><b>' + esc(n) + '</b><small>الإدارة</small></span>'
       + '<button type="button" class="v2s-out" data-act="logout" aria-label="تسجيل الخروج" title="تسجيل الخروج">' + OUT + '</button></div>';
   }
   function drawSide(T) {
@@ -103,7 +103,9 @@
   SH.nav = function () {
     if (!SH.on) return;
     var T = tiles();
-    drawSide(T); drawSheet(T); drawHead(T);
+    drawSide(T); drawHead(T);
+    // الورقة المفتوحة لا تُعاد كتابتها (يضيع التركيز والتمرير)؛ تُرسم عند إغلاقها.
+    if (SH.sheetOpen()) sheetDirty = true; else { drawSheet(T); sheetDirty = false; }
     wire();
   };
 
@@ -121,14 +123,25 @@
     var el = q('#v2sec'); if (!el) return;
     var s = host && host.state ? host.state() : { section: 'home', tab: 'board' };
     var sec = L.sectionByKey(s.section) || L.SECTIONS[0];
+    var oldStrip = q('.v2c-tabs', el), keepLeft = oldStrip ? oldStrip.scrollLeft : 0;
     keepFocus(el, function () { el.innerHTML = '<div class="v2c-h"><h1>' + esc(sec.label) + '</h1><p>' + esc(descOf(sec, T || tiles())) + '</p></div>'
       + '<div class="v2c-tabs" role="tablist" aria-label="' + esc(sec.label) + '">'
       + sec.tabs.map(function (t) {
           return '<button type="button" role="tab" class="v2c-tab' + (t.key === s.tab ? ' on' : '') + '" aria-selected="' + (t.key === s.tab) + '" data-sec="' + sec.key + '" data-tab="' + t.key + '">' + esc(t.label) + '</button>';
         }).join('')
       + '</div>'; });
-    var on = q('.v2c-tab.on', el);
-    try { if (on && on.scrollIntoView && el.querySelector('.v2c-tabs').scrollWidth > el.clientWidth + 1) on.scrollIntoView({ block: 'nearest', inline: 'nearest' }); } catch (e) {}
+    // شريط التبويبات: يحفظ موضعه عبر إعادة الرسم، ولا يتحرّك إلا حين يتغيّر التبويب (بلا أي تمرير رأسي للصفحة).
+    try {
+      var strip = q('.v2c-tabs', el), on = q('.v2c-tab.on', el), sig = s.section + '/' + s.tab;
+      if (strip) {
+        strip.scrollLeft = keepLeft;
+        if (sig !== lastTabSig && on && strip.scrollWidth > strip.clientWidth + 1) {
+          var sr = strip.getBoundingClientRect(), orr = on.getBoundingClientRect();
+          strip.scrollLeft += (orr.left + orr.width / 2) - (sr.left + sr.width / 2);
+        }
+      }
+      lastTabSig = sig;
+    } catch (e) {}
   }
   SH.head = function () { if (SH.on) { drawHead(tiles()); wire(); } };
 
@@ -163,6 +176,7 @@
     var el = q('#v2Sheet'); if (!el) return;
     el.classList.remove('open'); el.setAttribute('aria-hidden', 'true');
     document.documentElement.classList.remove('v2-noscroll');
+    if (sheetDirty) { sheetDirty = false; try { drawSheet(tiles()); wire(); } catch (e) {} }
   };
   SH.sheetOpen = function () { var el = q('#v2Sheet'); return !!(el && el.classList.contains('open')); };
 
@@ -193,7 +207,19 @@
     }
     var mb = q('#menuBtn');
     if (mb) mb.onclick = function () { if (SH.sheetOpen()) SH.closeSheet(); else SH.openSheet(); };
-    document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && SH.sheetOpen()) SH.closeSheet(); });
+    document.addEventListener('keydown', function (e) {
+      if (!SH.sheetOpen()) return;
+      if (e.key === 'Escape') { SH.closeSheet(); return; }
+      if (e.key !== 'Tab') return;
+      // حبس التنقّل بـTab داخل الورقة المفتوحة (aria-modal).
+      var box = q('#v2Sheet .v2s-box'); if (!box) return;
+      var f = Array.prototype.slice.call(box.querySelectorAll('a[href],button:not([disabled])')).filter(function (n) { return n.offsetParent !== null; });
+      if (!f.length) return;
+      var first = f[0], last = f[f.length - 1], cur = document.activeElement;
+      if (!box.contains(cur)) { e.preventDefault(); first.focus(); }
+      else if (e.shiftKey && cur === first) { e.preventDefault(); last.focus(); }
+      else if (!e.shiftKey && cur === last) { e.preventDefault(); first.focus(); }
+    });
     window.addEventListener('resize', function () { if (window.innerWidth >= 1180) SH.closeSheet(); });
     // كل المصادر تُحمَّل مرة عند الإقلاع، والشارات تتحدّث حين تتغيّر الأعداد (بلا عدّ ثانٍ ولا طلب إضافي).
     try { if (window.V2 && V2.loadAll) V2.loadAll(function () { SH.refresh(); }); } catch (e) {}

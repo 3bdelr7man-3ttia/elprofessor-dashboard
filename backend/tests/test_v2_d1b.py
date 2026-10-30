@@ -352,3 +352,41 @@ def test_no_flash_of_the_old_rail_hint_is_admin_only_and_never_cleared_by_a_fail
 def test_old_screen_files_were_not_touched_beyond_the_hooks():
     api = _read('dashboard-cloud', 'dashboard-api.js')
     assert 'V2SHELL' not in api and 'v2Reconcile' not in api
+
+
+# ---------------------------------------------------------------- ٦) إصلاحات مراجعة D1-B
+
+@needs_node
+def test_old_foundation_link_keeps_its_inner_tab_state():
+    r = _node("console.log(JSON.stringify(['foundation','packages','messages','tutorials','partners','overview'].map(h=>L.routeFor(h))))")
+    f = r[0]
+    assert (f['section'], f['tab']) == ('company', 'targets') and f['st']['tgTab'] == 'foundation'
+    assert r[1]['st']['finTab'] == 'packages' and r[2]['st']['activeFilter'] == 't:messages' and r[3]['st']['topicsTab'] == 'tutorials'
+    # الحالة المدموجة لا تلوّث تبويبات الخريطة نفسها
+    assert _node("L.routeFor('foundation');console.log(JSON.stringify(L.tabByKey('company','targets').st))") == {}
+    assert "V2_SETTERS" in HTML and "opts.st" in HTML and "st:rt.st" in HTML
+
+
+@needs_node
+def test_inbox_chips_do_not_move_the_user_out_of_files():
+    res = _node("""const h={section:'files',tab:'files'};
+      console.log(JSON.stringify(['all','late','human','fyi','t:money','t:verify'].map(f=>{const m=L.sectionFor('inbox',{activeFilter:f},h);return [m.section,m.tab];})
+        .concat([L.sectionFor('inbox',{activeFilter:'all'},null)].map(m=>[m.section,m.tab]))
+        .concat([L.sectionFor('inbox',{activeFilter:'t:disputes'},h)].map(m=>[m.section,m.tab]))))""")
+    assert res[:6] == [['files', 'files']] * 6
+    assert res[6] == ['home', 'inbox'] and res[7] == ['disputes', 'disputes']
+
+
+def test_inbox_search_stays_until_the_phone_width_and_copy_is_neutral():
+    css = _read('dashboard-cloud', 'v2-shell.css')
+    i = css.index('.app.v2-shell.v2-inbox .topbar .search{display:none}')
+    assert css.rfind('@media', 0, i) == css.rindex('@media(max-width:760px)', 0, i)
+    js = _read('dashboard-cloud', 'v2-shell.js')
+    assert 'المؤسس' not in js
+    assert 'الحاجة الجاية' not in _read('dashboard-cloud', 'v2-logic.js').split('var SECTIONS')[1]
+
+
+def test_header_and_sheet_do_not_steal_scroll_or_focus():
+    js = _read('dashboard-cloud', 'v2-shell.js')
+    assert 'scrollIntoView' not in js
+    assert 'sheetDirty' in js and "e.key !== 'Tab'" in js
