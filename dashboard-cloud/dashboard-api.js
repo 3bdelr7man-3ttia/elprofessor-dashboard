@@ -382,7 +382,7 @@
   // (`payee_name`) وأختام «الفلوس ما اتحرّكتش لوحدها» بسببها (`blocked[].label`) — الشاشة بتقراهم زي ما هم.
   // ============================================================
   var NEXT_STEP_AR = { self: "تقدر تكمّلها بنفسك", specialist: "محتاج حد متخصص يكمّل معاك", none: "مش محتاج حاجة دلوقتي" };
-  var CUR_AR = { EGP: "ج", SAR: "ر.س", AED: "درهم", KWD: "د.ك", QAR: "ر.ق", BHD: "د.ب", OMR: "ر.ع", USD: "$" };
+  var CUR_AR = { EGP: "جنيه", SAR: "ريال", AED: "درهم", KWD: "دينار", QAR: "ريال", BHD: "دينار", OMR: "ريال", USD: "دولار" };   // خريطة العرض الواحدة (نفس V2L.util.cur)
   // اسم العملة بالكلام في نوافذ تأكيد الفلوس (بدل الكود الإنجليزي «EGP»).
   var CUR_NAME_AR = { EGP: "جنيه مصري", SAR: "ريال سعودي", AED: "درهم إماراتي", KWD: "دينار كويتي",
                       QAR: "ريال قطري", BHD: "دينار بحريني", OMR: "ريال عماني", USD: "دولار أمريكي" };
@@ -1022,7 +1022,7 @@
       });
     },
 
-    // «مين ردّ على دعوة المؤسس» — صفوف بوّابة الدعوة (founders.html) عبر
+    // «من ردّ على دعوة المؤسس» — صفوف بوّابة الدعوة (founders.html) عبر
     // /api/founding-leads -> جسر المنصة /api/bridge/founding-expert-leads، أحدثُ أوّلًا.
     // الصفّ من المنصة: {id, name, whatsapp, email, specialization, years_experience,
     //   governorate, linkedin_url, ref_code, referrals_count, status, created_at, updated_at,
@@ -1779,14 +1779,14 @@
       // «خبير مؤسس» — من استمارة «درّب معنا» (founders.html ⇒ db.founding_expert_leads). قرار المؤسس
       // (٢٠٢٦-١٠-٠٧): مدرّب وصل على تليجرام ومظهرش في الداشبورد — الليد كان له لوحة تحت
       // «المستخدمون» وحدها ولا صفّ له هنا. الصفّ يحمل الخطوة التالية نفسها (FL_NEXT في الشاشة):
-      // جديد ⇒ «اتواصلنا» ⇒ «اتدعى» ⇒ «اتحوّل لمدرّب»، والرفض «مش مناسب». المُحوَّل/المرفوض نهاية
+      // جديد ⇒ «تم التواصل» ⇒ «تمت دعوته» ⇒ «صار مدرّبًا»، والرفض «ليس مناسبًا». المُحوَّل/المرفوض نهاية
       // فلا يشغل الوارد. ⛔ نفس جسر لوحة المستخدمين بالحرف (/founding-leads) — لا عدّ ثانٍ.
       jobs.push(
         get("/founding-leads?limit=200").then(function (r) {
           var leads = Array.isArray(r) ? r : ((r && (r.leads || r.items || r.rows)) || []);
-          var NEXT = { new: ["contacted", "اتواصلنا"], resolved: ["contacted", "اتواصلنا"],
-                       contacted: ["invited", "اتدعى"], invited: ["converted", "اتحوّل لمدرّب"] };
-          var LABEL = { new: "جديد", resolved: "اتعالج", contacted: "اتواصلنا", invited: "اتدعى" };
+          var NEXT = { new: ["contacted", "تم التواصل"], resolved: ["contacted", "تم التواصل"],
+                       contacted: ["invited", "تمت دعوته"], invited: ["converted", "صار مدرّبًا"] };
+          var LABEL = { new: "جديد", resolved: "عولج", contacted: "تم التواصل", invited: "تمت دعوته" };
           leads.forEach(function (l) {
             var st = l.status || "new";
             var nxt = NEXT[st];
@@ -2811,7 +2811,7 @@
       case "trainer":  path = "/platform-trainer-applications/" + i.apiId + "/" + action; break;
       case "founding":
         // حالة الليد على المنصة (LEAD_BRIDGE_STATUSES): اعتماد = الخطوة التالية المحمولة على الصفّ،
-        // رفض = «مش مناسب». لا سبب يسافر هنا — الليد لا يقرأ شيئًا على المنصة (لم يسجّل بعد).
+        // رفض = «ليس مناسبًا». لا سبب يسافر هنا — الليد لا يقرأ شيئًا على المنصة (لم يسجّل بعد).
         path = "/founding-leads/" + encodeURIComponent(i.apiId) + "/status";
         body = { status: action === "approve" ? (i.nextStatus || "contacted") : "rejected" }; break;
       case "pending_user":
@@ -3350,13 +3350,15 @@
   // ---- «خبير مؤسس»: تعليم الليد بأنه عُولج ----
   // الحالات معرّفة سلفًا على المنصة (LEAD_BRIDGE_STATUSES) والداشبورد بتتحقق منها سيرفر-سايد
   // قبل ما تكلّم الجسر. الختم بيتحطّ مرة واحدة (أول لمسة هي الحقيقة) — ده سلوك الجسر نفسه.
+  // حالات ردود دعوة المؤسس بأسمائها الظاهرة (المفاتيح حالات المنصة LEAD_BRIDGE_STATUSES). `after(ok)`: ok=false عند الفشل.
+  var LEAD_STATUS_AR = { "new": "جديد", contacted: "تم التواصل", invited: "تمت دعوته", converted: "صار مدرّبًا", rejected: "ليس مناسبًا", resolved: "عولج" };
   EP.setFoundingLeadStatus = function (lead, status, after) {
     post("/founding-leads/" + encodeURIComponent(lead.id) + "/status", { status: status })
       .then(function () {
-        note("اتعلّم «" + (lead.name || "") + "» — " + status);
-        EP.reload("foundingLeads", after);
+        note("تم تسجيل «" + (lead.name || "") + "»: " + (LEAD_STATUS_AR[status] || ""));
+        EP.reload("foundingLeads", function () { if (after) after(true); });
       })
-      .catch(function (e) { quietToast((e && e.message) || "تعذّر تحديث حالة الليد"); if (after) after(); });
+      .catch(function (e) { quietToast((e && e.message) || "تعذّر تحديث حالة الطلب"); if (after) after(false); });
   };
 
   // ---- «الدعوات»: البوّابة الوحيدة لإنشاء حساب ----

@@ -186,7 +186,6 @@
 }
 
 /* —— أوراق التسويق بهوية البروفيسور (الشريط حبر والزرّ الرئيسي عنّابي) — مقيّدة بـ`.mkm` فلا تمسّ أوراق الأقسام الأخرى */
-#epModal .modal:has(.mkm) .mh{background:var(--ink,#21262E)}
 .mkm .btn-primary{background:var(--wine);color:#fff;border:0}
 .mkm .btn-primary:hover{background:#85233F;filter:none}
 .mkm .btn-primary:disabled{opacity:.6}

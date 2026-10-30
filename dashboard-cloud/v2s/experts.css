@@ -1,0 +1,89 @@
+/* ============================================================================
+ * v2s/experts.css — «ملفات الخبراء ‹ الخبراء». كل القواعد تحت `.v2ex` أو `.v2ex-m`: المفتاح مقفول ⇒ لا عنصر يحمل الأصناف ⇒ لا أثر على أي شاشة.
+ * هوية البروفيسور: عنّابي #9E2B4E · ورق #FBFAF7/#F6F1EA · حبر #21262E. أهداف اللمس ٤٤px (والزرّ الرئيسي ٥٢px في الموبايل). لا تمرير أفقي.
+ * ========================================================================== */
+.v2ex{--wine:#9E2B4E;--paper:#FBFAF7;--paper2:#F6F1EA;--ink:#21262E;--red:#C8102E;--line:#E9E1D6;--green:#187E4E;--mute:#6B665C;
+  font-family:'IBM Plex Sans Arabic','Cairo',sans-serif;color:var(--ink);max-width:1360px;margin:0 auto;font-size:15px}
+.v2ex *{box-sizing:border-box}
+.v2ex p{margin:0}
+.v2ex button,.v2ex a{font-family:inherit}
+.v2ex button:focus-visible,.v2ex a:focus-visible{outline:3px solid rgba(158,43,78,.45);outline-offset:2px}
+.v2ex-sum{font:800 17px/1.7 'Cairo',sans-serif;margin:6px 0 18px}
+.v2ex-sec{margin-bottom:30px}
+.v2ex-h2{display:flex;align-items:center;gap:10px;margin:0 0 12px;font:800 20px/1.5 'Cairo',sans-serif}
+.v2ex-n{min-width:34px;height:34px;padding:0 10px;border-radius:999px;background:#fff;border:1px solid var(--line);display:inline-grid;place-items:center;font:800 15px 'Cairo',sans-serif}
+.v2ex-fine{font-size:13.5px;color:var(--mute);margin-top:12px}
+.v2ex-warn{background:#FFF8E6;border:1px solid #EBD38E;color:#6B4A00;border-radius:12px;padding:10px 14px;margin-bottom:10px;font-size:14px;line-height:1.7}
+.v2ex-mute{color:var(--mute)}
+.v2ex-bav{width:30px;height:30px;border-radius:50%;object-fit:cover;flex:none;background:#fff;border:2px solid var(--line)}
+
+/* —— أزرار */
+.v2ex-btn1,.v2ex-btn2{display:inline-flex;align-items:center;justify-content:center;min-height:48px;padding:0 20px;border-radius:14px;font:800 15.5px 'Cairo',sans-serif;cursor:pointer;text-decoration:none;border:0;max-width:100%;text-align:center}
+.v2ex-btn1{background:var(--wine);color:#fff;width:100%}
+.v2ex-btn1:hover{background:#85233F}
+.v2ex-btn1:disabled,.v2ex-btn2:disabled{opacity:.6;cursor:wait}
+.v2ex-btn2{background:#fff;color:var(--wine);border:1px solid var(--line);min-height:44px;font-size:14px;font-weight:700;width:100%}
+.v2ex-btn2:hover{background:#FBF0F3}
+
+/* —— حالات فارغة */
+.v2ex-empty{background:#fff;border:1px dashed #D9CFC0;border-radius:18px;padding:30px 20px;text-align:center;color:var(--mute);display:grid;gap:10px;justify-items:center}
+.v2ex-empty b{color:var(--ink);font:800 17px/1.6 'Cairo',sans-serif}
+.v2ex-empty .v2ex-btn2{width:auto}
+.v2ex-err{background:#FDECEF;border:1px solid #F2B5C0;color:#8E1228;border-radius:10px;padding:8px 10px;font-size:13.5px;line-height:1.7}
+.v2ex-ok{background:#E8F6EE;border:1px solid #A9DDC1;color:#0F5A37;border-radius:12px;padding:10px 12px;font:700 14px/1.6 'Cairo',sans-serif}
+
+/* —— تذاكر ردود الدعوة */
+.v2ex-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;align-items:start}
+.v2ex-t{background:#fff;border:1px solid var(--line);border-radius:16px;overflow:hidden;box-shadow:0 2px 8px rgba(33,38,46,.06)}
+.v2ex-strip{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 12px;min-height:40px;color:#fff;background:var(--ink)}
+.v2ex-t.tone-late .v2ex-strip{background:var(--red)}
+.v2ex-t.tone-wait .v2ex-strip{background:#8F5F00}
+.v2ex-t.tone-ok .v2ex-strip{background:var(--green)}
+.v2ex-type{font:800 13.5px/1.4 'Cairo',sans-serif}
+.v2ex-time{font:800 13.5px/1.4 'Cairo',sans-serif;background:rgba(255,255,255,.2);border-radius:999px;padding:1px 10px;white-space:nowrap}
+.v2ex-body{padding:12px 14px 14px;display:grid;gap:9px}
+.v2ex-body h3{margin:0;font:800 17px/1.55 'Cairo',sans-serif;overflow-wrap:anywhere}
+.v2ex-meta{font-size:14px;color:#3A3730;line-height:1.7}
+.v2ex-contact{display:flex;flex-wrap:wrap;align-items:center;gap:6px 14px;font-size:14px}
+.v2ex-tel{color:var(--wine);font-weight:800;text-decoration:none;min-height:44px;display:inline-flex;align-items:center;border-bottom:1px dashed rgba(158,43,78,.5)}
+.v2ex-mail{color:var(--mute);overflow-wrap:anywhere}
+.v2ex-brain{display:flex;gap:9px;align-items:flex-start;background:var(--paper);border-radius:12px;padding:8px 10px;font-size:13.5px;line-height:1.75}
+.v2ex-acts{display:grid;gap:8px;margin-top:2px}
+
+/* —— بطاقة خبير: صف واحد لكل خبير */
+.v2ex-list{display:grid;gap:12px}
+.v2ex-x{display:grid;grid-template-columns:auto minmax(0,1.3fr) minmax(0,1.5fr) minmax(0,1.6fr) 170px;gap:14px 18px;align-items:center;background:#fff;border:1px solid var(--line);border-radius:18px;padding:14px 18px;box-shadow:0 2px 8px rgba(33,38,46,.05)}
+.v2ex-x.hid{border-inline-start:5px solid #E0A100}
+.v2ex-av{position:relative;width:54px;height:54px;border-radius:50%;background:var(--wine);color:#fff;display:grid;place-items:center;font:800 22px 'Cairo',sans-serif;flex:none}
+.v2ex-on{position:absolute;bottom:0;inset-inline-start:0;width:14px;height:14px;border-radius:50%;background:#1C9A5B;border:3px solid #fff}
+.v2ex-id h3{margin:0;font:800 17px/1.5 'Cairo',sans-serif;overflow-wrap:anywhere}
+.v2ex-onl{font:700 12.5px 'Cairo',sans-serif;color:var(--green);margin-inline-start:6px}
+.v2ex-person{color:var(--ink);text-decoration:none;display:inline-flex;align-items:center;min-height:44px}
+.v2ex-person:hover{color:var(--wine);text-decoration:underline}
+.v2ex-specs{display:flex;flex-wrap:wrap;gap:6px;margin-top:2px}
+.v2ex-chip{background:var(--paper2);border:1px solid var(--line);border-radius:999px;padding:2px 12px;font:700 13px/1.6 'Cairo',sans-serif}
+.v2ex-nums{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin:0}
+.v2ex-nums div{background:var(--paper);border-radius:12px;padding:6px 8px;text-align:center;min-width:0}
+.v2ex-nums dt{font-size:12px;color:var(--mute);margin:0}
+.v2ex-nums dd{margin:0;font:800 14.5px/1.5 'Cairo',sans-serif;overflow-wrap:anywhere}
+.v2ex-btn1.lnk{min-height:48px}
+
+/* —— ورقة التأكيد */
+.v2ex-m{font-family:'IBM Plex Sans Arabic','Cairo',sans-serif;font-size:15px;line-height:1.8}
+.v2ex-m p{margin:0 0 8px}
+.v2ex-lead{font-weight:700}
+
+/* —— تابلت */
+@media(max-width:1179px){
+  .v2ex-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .v2ex-x{grid-template-columns:auto minmax(0,1fr) minmax(0,1.2fr);grid-template-areas:"av id nums" "brain brain brain" "btn btn btn"}
+  .v2ex-x .v2ex-av{grid-area:av}.v2ex-x .v2ex-id{grid-area:id}.v2ex-x .v2ex-nums{grid-area:nums}.v2ex-x .v2ex-brain{grid-area:brain}.v2ex-x .v2ex-btn1{grid-area:btn}
+}
+/* —— موبايل */
+@media(max-width:760px){
+  .v2ex-grid{grid-template-columns:minmax(0,1fr)}
+  .v2ex-x{grid-template-columns:auto minmax(0,1fr);grid-template-areas:"av id" "nums nums" "brain brain" "btn btn";padding:14px}
+  .v2ex-btn1{min-height:52px}
+  .v2ex-btn2{min-height:52px}
+  .v2ex-nums{grid-template-columns:repeat(2,minmax(0,1fr))}
+}

@@ -20,6 +20,21 @@
     return null;
   });
   def('_o', []);
+  // ترويسة القسم: كل قسم يعطي السطر الذي تحت عنوانه من القائمة نفسها التي يرسمها (لا عدّ ثانٍ من مربّع اللوحة).
+  // يرجع نصًّا، أو null فيُستعمل سطر المربّع. القسم الذي تعذّر مصدره يرجع «غير متاح بعد».
+  def('head', function (key) {
+    var cand = [R[key]];
+    for (var i = 0; i < R._o.length; i++) { if (R._o[i] && R._o[i].key === key) cand.push(R._o[i]); }
+    if (key === 'files' || key === 'disputes') cand.push(window.V2D2);
+    if (key === 'books') cand.push(window.V2D3);
+    for (var j = 0; j < cand.length; j++) {
+      var c = cand[j];
+      if (c && typeof c.head === 'function') {
+        try { var h = c.head(key); if (typeof h === 'string' && h) return h; } catch (e) {}
+      }
+    }
+    return null;
+  });
   def('add', function (o) { R._o.push(o); });
   def('take', function (mod, v) {
     if (!window.V2_ON || !(window.V2SHELL && window.V2SHELL.on)) return false;

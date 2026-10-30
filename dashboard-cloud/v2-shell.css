@@ -20,7 +20,7 @@ html.v2-noscroll,html.v2-noscroll body{overflow:hidden}
 .app.v2-shell .topbar .search{display:none;margin-inline-start:auto}
 .app.v2-shell.v2-inbox .topbar .search{display:flex;background:#fff;border-color:#E9E1D6}
 .app.v2-shell .topbar #bellBtn{margin-inline-start:auto;background:#fff;border-color:#E9E1D6;width:42px;height:42px;border-radius:12px}
-.app.v2-shell.v2-inbox .topbar .search + #bellBtn{margin-inline-start:0}
+.app.v2-shell.v2-inbox:not(:has(.v2h)) .topbar .search + #bellBtn{margin-inline-start:0}   /* الجرس يبقى في مكانه حين يُخفى البحث (كل الوارد/الملفات/النزاعات) */
 .app.v2-shell .menu-btn{display:none}
 .app.v2-shell .robanner{display:none}
 
@@ -128,4 +128,18 @@ html.v2-noscroll,html.v2-noscroll body{overflow:hidden}
 }
 @media(prefers-reduced-motion:reduce){
   .v2s-scrim,.v2s-box{transition:none}
+}
+
+/* ============================================================================
+ * ورقة القرار الموحّدة: كل نافذة تأكيد أو تعديل في كل قسم بنفس الشكل (الجولة النهائية).
+ * ترويسة ورقية #F6F1EA وحافة عنّابية ٤px من فوق وعنوان حبري ١٩px، وزرّ إغلاق بإطار ٤٤px (٥٢px في الموبايل).
+ * ⛔ لا تُكتب قاعدة `.mh` في ملف قسم: هذه القاعدة الوحيدة. الزرّ الرئيسي عنّابي أولًا، والثانوي «رجوع».
+ * ========================================================================== */
+body:has(> .app.v2-shell) #epModal .modal .mh{background:#F6F1EA;color:#21262E;border:0;border-top:4px solid #9E2B4E;border-bottom:1px solid #E9E1D6;padding:14px 20px;min-height:64px;gap:10px;font:800 19px/1.5 'Cairo',sans-serif}
+body:has(> .app.v2-shell) #epModal .modal .mh span{overflow-wrap:anywhere}
+body:has(> .app.v2-shell) #epModal .modal .mh button{width:44px;height:44px;margin:0;border-radius:12px;border:1px solid #E9E1D6;background:#fff;color:#21262E;font-size:17px;flex:none}
+body:has(> .app.v2-shell) #epModal .modal .mh button:hover{background:#FBF0F3;color:#9E2B4E}
+body:has(> .app.v2-shell) #epModal .modal .mh button:focus-visible{outline:3px solid rgba(158,43,78,.45);outline-offset:2px}
+@media(max-width:560px){
+  body:has(> .app.v2-shell) #epModal .modal .mh button{width:52px;height:52px}
 }

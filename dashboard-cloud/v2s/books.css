@@ -81,8 +81,6 @@
 
 /* —— الورقة بهوية البروفيسور: ترويسة عنّابية وزرّ رئيسي عنّابي وأهداف ٤٤px (فوق نافذة الداشبورد الموجودة) */
 #epModal .modal:has(.v2s-bm){max-width:600px;border-radius:20px}
-#epModal .modal:has(.v2s-bm) .mh{background:#9E2B4E;padding:12px 20px;min-height:60px;font-size:17px;line-height:1.5}
-#epModal .modal:has(.v2s-bm) .mh button{width:44px;height:44px;border-radius:12px;font-size:17px}
 .v2s-bm .btn-primary{background:#9E2B4E;border-radius:14px;font-size:15.5px}
 .v2s-bm .btn-primary:hover{background:#85233F;filter:none}
 .v2s-bm .btn-primary:disabled,.v2s-bm .btn-ghost:disabled{opacity:.6;cursor:wait}

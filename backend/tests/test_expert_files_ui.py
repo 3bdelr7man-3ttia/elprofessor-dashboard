@@ -121,10 +121,10 @@ def test_refund_window_names_amount_currency_and_client_before_any_post(open_pag
     page.click('#drawer [data-a="ef_refund"]')
     page.wait_for_selector('#mc_go')
     body = page.inner_text('#epModal')
-    assert '٥٠٠ ج' in body and 'ياسمين' in body and fx.F3['title'] in body and 'أ. هالة سمير' in body
+    assert '٥٠٠ جنيه' in body and 'ياسمين' in body and fx.F3['title'] in body and 'أ. هالة سمير' in body
     assert 'جنيه مصري' in body and 'EGP' not in body                  # العملة بالكلام مش بالكود
     assert 'ومش هيتحوّل أجر لـأ. هالة سمير' in body                    # من غير «مش هياخد» بصيغة المذكّر
-    assert page.inner_text('#mc_go') == 'رجّع ٥٠٠ ج'
+    assert page.inner_text('#mc_go') == 'رجّع ٥٠٠ جنيه'
     posts = [c for c in harness.dash_calls[before:] if c[0] == 'POST']
     assert posts == []                                             # التأكيد قبل أي فعل
 
@@ -198,7 +198,7 @@ def test_platform_refusal_shows_inside_the_window_and_the_button_stays_locked(op
     page.click('#mc_go')
     page.wait_for_selector('#epModal .ef-err', timeout=15000)
     assert 'الفلوس دي رجعت للعميل يدوي قبل كده' in page.inner_text('#epModal .ef-err')
-    assert page.is_disabled('#mc_go') and page.inner_text('#mc_go') == 'رجّع ٧٥٠ ج لـسارة'
+    assert page.is_disabled('#mc_go') and page.inner_text('#mc_go') == 'رجّع ٧٥٠ جنيه لـسارة'
     _drawer_btn_locked(page, 'dsp_ref')
     page.click('#mc_x')
     page.wait_for_selector('#epModal', state='detached')
@@ -389,9 +389,9 @@ def test_release_without_an_expert_share_names_the_full_amount_and_the_blind_spo
     page.click('#drawer [data-a="dsp_rel"]')
     page.wait_for_selector('#mc_go')
     body = page.inner_text('#epModal')
-    assert 'هيتحوّل المبلغ كله ٧٥٠ ج' in body and 'نصيب' not in body
+    assert 'هيتحوّل المبلغ كله ٧٥٠ جنيه' in body and 'نصيب' not in body
     assert 'إنت بتحسم من غير ما تشوف الشغل اللي اتسلّم' in body
-    assert page.inner_text('#mc_go') == 'حوّل ٧٥٠ ج لـأ. عمرو الشريف'
+    assert page.inner_text('#mc_go') == 'حوّل ٧٥٠ جنيه لـأ. عمرو الشريف'
 
 
 def test_verify_dispute_on_the_platform_address_names_the_payee_the_platform_sent(open_page):
@@ -407,12 +407,12 @@ def test_verify_dispute_on_the_platform_address_names_the_payee_the_platform_sen
     page = open_page(ef=ef)
     _row(page, fx.D3['id'])
     drawer = page.inner_text('#drawer')
-    assert '١٥٠ ج لـد. ندى حسن' in drawer and 'nada@experts.test' not in drawer
+    assert '١٥٠ جنيه لـد. ندى حسن' in drawer and 'nada@experts.test' not in drawer
     page.click('#drawer [data-a="dsp_rel"]')
     page.wait_for_selector('#mc_go')
     body = page.inner_text('#epModal')
     assert 'محفظة د. ندى حسن' in body and 'حساب المنصة' not in body and 'اللي وثّق) — إلا لو' not in body
-    assert page.inner_text('#mc_go') == 'حوّل ١٥٠ ج لـد. ندى حسن'
+    assert page.inner_text('#mc_go') == 'حوّل ١٥٠ جنيه لـد. ندى حسن'
 
 
 def test_dispute_drawer_refetches_on_every_open_and_never_caches_a_failure(open_page, harness):
@@ -467,7 +467,7 @@ def test_audit_lines_name_the_file_and_the_amount(open_page):
     page.wait_for_selector('#auditRows .au-ef', timeout=15000)
     txt = page.inner_text('#epModal')
     assert 'سجلّ العمليات' in txt and 'Audit Log' not in txt
-    assert '«%s» · ٥٠٠ ج · لـأ. هالة سمير' % fx.F4['title'] in txt
+    assert '«%s» · ٥٠٠ جنيه · لـأ. هالة سمير' % fx.F4['title'] in txt
     assert fx.F4['id'] not in txt                                      # مش الرقم الداخلي
 
 
@@ -510,8 +510,8 @@ def test_unactivated_rows_say_why_and_refund_once_through_the_confirm_window(ope
     page.click('#drawer [data-a="ef_refund"]')
     page.wait_for_selector('#mc_go')
     body = page.inner_text('#epModal')
-    assert '٥٠٠ ج' in body and 'محفظة مها' in body and 'جنيه مصري' in body
-    assert page.inner_text('#mc_go') == 'رجّع ٥٠٠ ج'
+    assert '٥٠٠ جنيه' in body and 'محفظة مها' in body and 'جنيه مصري' in body
+    assert page.inner_text('#mc_go') == 'رجّع ٥٠٠ جنيه'
     path = '/api/platform-expert-files/unactivated/%s/refund' % cid
     harness.hold.add(('POST', path))
     try:
@@ -583,10 +583,10 @@ def test_file_dispute_drawer_reads_the_reason_and_number_from_the_platform(open_
     _row(page, fx.D1['id'])
     page.wait_for_selector('#drawer [data-a="dsp_cmp"]', timeout=15000)
     drawer = page.inner_text('#drawer')
-    assert 'الرأي ما ردّش على سؤالي' in drawer and 'رقم ١٠٤٢' in drawer and '٣٠٠ ج لـد. ندى حسن' in drawer
+    assert 'الرأي ما ردّش على سؤالي' in drawer and 'رقم ١٠٤٢' in drawer and '٣٠٠ جنيه لـد. ندى حسن' in drawer
     page.click('#drawer [data-a="dsp_rel"]')
     page.wait_for_selector('#mc_go')
-    assert page.inner_text('#mc_go') == 'حوّل ٣٠٠ ج لـد. ندى حسن'
+    assert page.inner_text('#mc_go') == 'حوّل ٣٠٠ جنيه لـد. ندى حسن'
 
 
 def test_every_write_reaches_the_platform_with_the_admins_email(open_page, harness):
@@ -673,8 +673,8 @@ def test_review_rows_name_the_file_expert_law_amount_and_since(open_page):
     assert 'مستنية مراجعتك (٢)' in chips and 'ملفات للخبير (١١)' in chips
     page.click('#filters .chip[data-f="review"]')
     rows = page.inner_text('#rows')
-    for t in (fx.R1['title'], fx.R2['title'], 'أ. رنا عادل', 'أ. وائل منصور', 'القانون المصري', '٥٠٠ ج',
-              '١٬٠٠٠ ج', 'اتبعت للمراجعة منذ ٣ س', 'أول ملف على المنصة', 'رجّعته للخبير مرة'):
+    for t in (fx.R1['title'], fx.R2['title'], 'أ. رنا عادل', 'أ. وائل منصور', 'القانون المصري', '٥٠٠ جنيه',
+              '١٬٠٠٠ جنيه', 'اتبعت للمراجعة منذ ٣ س', 'أول ملف على المنصة', 'رجّعته للخبير مرة'):
         assert t in rows, t
     assert _files_order(page) == [fx.R1['id'], fx.R2['id']]                 # الأقدم الأول
     assert page.evaluate("() => INBOX.filter(r => r.efLane === 'review' && !r.fyi).length") == 2
@@ -723,7 +723,7 @@ def test_review_approve_confirms_amount_currency_and_names_and_posts_once(open_p
     page.click('#drawer [data-a="rv_ok"]')
     page.wait_for_selector('#mc_go')
     body = page.inner_text('#epModal')
-    for t in ('٥٠٠', 'جنيه مصري', 'سمر', 'أ. رنا عادل', '٣٠٠ ج', fx.R1['title']):
+    for t in ('٥٠٠', 'جنيه مصري', 'سمر', 'أ. رنا عادل', '٣٠٠ جنيه', fx.R1['title']):
         assert t in body, t
     assert page.inner_text('#mc_go') == 'ابعته لـسمر'
     path = '/api/platform-expert-files/%s/review' % fx.R1['id']
@@ -820,7 +820,7 @@ def test_release_refused_at_decision_time_shows_the_same_words_and_stays_locked(
     page.click('#mc_go')
     page.wait_for_selector('#epModal .ef-err', timeout=15000)
     assert page.inner_text('#epModal .ef-err') == text
-    assert page.is_disabled('#mc_go') and page.inner_text('#mc_go') == 'حوّل ٦٠٠ ج لـأ. عمرو الشريف'
+    assert page.is_disabled('#mc_go') and page.inner_text('#mc_go') == 'حوّل ٦٠٠ جنيه لـأ. عمرو الشريف'
     page.evaluate("() => document.getElementById('mc_go').click()")        # ولا حتى ضغطة بالكود
     page.wait_for_timeout(300)
     sent = [c for c in ef.calls if c[0] == 'POST' and c[1].endswith(fx.D2['id'] + '/resolve')]
@@ -876,13 +876,13 @@ def test_legacy_rows_and_drawer_name_who_what_and_since(open_page):
     page.wait_for_timeout(200)
     assert page.evaluate("() => activeFilter") == 't:legacy'
     rows = page.inner_text('#rows')
-    for t in (fx.L1['title'], 'أ. عمرو الشريف', 'سلمى', '٦٠٠ ج', 'اتسلّمت', 'ميعاد التحويل عدّى'):
+    for t in (fx.L1['title'], 'أ. عمرو الشريف', 'سلمى', '٦٠٠ جنيه', 'اتسلّمت', 'ميعاد التحويل عدّى'):
         assert t in rows, t
     assert 'استشارة قديمة اتسلّمت ومستنية قرارك' not in page.inner_text('section.panel >> nth=0')
     _row(page, fx.L1['id'])
     drawer = page.inner_text('#drawer')
     assert 'استشارة قديمة · استشارة من السوق' in drawer and 'قرارك: للخبير ولا للعميل' in drawer
-    assert '٤٨٠ ج لـأ. عمرو الشريف' in drawer and 'بتقرر من غير ما تشوفه' in drawer
+    assert '٤٨٠ جنيه لـأ. عمرو الشريف' in drawer and 'بتقرر من غير ما تشوفه' in drawer
     assert page.is_enabled('#drawer [data-a="lg_rel"]') and page.is_enabled('#drawer [data-a="lg_ref"]')
 
 
@@ -894,7 +894,7 @@ def test_legacy_release_confirms_amount_currency_and_payee_and_posts_once(open_p
     body = page.inner_text('#epModal')
     for t in ('٤٨٠', 'جنيه مصري', 'محفظة أ. عمرو الشريف', 'سلمى', fx.L1['title'], 'من غير ما تشوف الشغل'):
         assert t in body, t
-    assert page.inner_text('#mc_go') == 'حوّل ٤٨٠ ج لـأ. عمرو الشريف'
+    assert page.inner_text('#mc_go') == 'حوّل ٤٨٠ جنيه لـأ. عمرو الشريف'
     path = '/api/platform-legacy-consultations/%s/decide' % fx.L1['id']
     before = sum(1 for c in harness.dash_calls if c == ('POST', path))   # الأداة مشتركة في الملف (اختبار الرفض قبله)
     harness.hold.add(('POST', path))
@@ -920,7 +920,7 @@ def test_legacy_refund_confirms_the_client_and_the_full_amount(open_page, harnes
     page.click('#drawer [data-a="lg_ref"]')
     page.wait_for_selector('#mc_go')
     assert 'كاملين لمحفظة ياسر' in page.inner_text('#epModal')
-    assert page.inner_text('#mc_go') == 'رجّع ٢٥٠ ج لـياسر'
+    assert page.inner_text('#mc_go') == 'رجّع ٢٥٠ جنيه لـياسر'
     page.click('#mc_go')
     page.wait_for_selector('#epModal', state='detached', timeout=15000)
     sent = [c for c in harness.ef.calls if c[0] == 'POST' and c[1].endswith(fx.L3['id'] + '/legacy')]
@@ -1007,7 +1007,7 @@ def test_r8_audit_lines_name_the_action_the_file_and_the_admin(open_page):
     page.wait_for_selector('#auditRows .au-ef', timeout=15000)
     txt = page.inner_text('#auditRows')
     assert 'رجوع رأي للخبير بملاحظة' in txt and '«ملاحظة للخبير.»' in txt
-    assert 'قرار على استشارة قديمة' in txt and 'اتحوّل ٤٨٠ ج للخبير (أ. عمرو الشريف)' in txt
+    assert 'قرار على استشارة قديمة' in txt and 'اتحوّل ٤٨٠ جنيه للخبير (أ. عمرو الشريف)' in txt
     assert txt.count('admin@local.test') >= 2
 
 

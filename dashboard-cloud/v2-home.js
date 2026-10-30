@@ -139,22 +139,22 @@
     var brainN = d.brainLog ? d.brainLog.length : null;
     var left, btn = '';
     if (d.loading && !nx) {
-      left = '<small>الحاجة الجاية</small><b>…جارٍ جلب القرارات</b>';
+      left = '<small>القرار التالي</small><b>…جارٍ جلب القرارات</b>';
     } else if (nx) {
-      left = '<small>الحاجة الجاية</small><b>' + esc(L.v2NextLine(nx)) + '</b>' + (nx.brain ? '<p>' + esc(nx.brain) + '</p>' : '');
+      left = '<small>القرار التالي</small><b>' + esc(L.v2NextLine(nx)) + '</b>' + (nx.brain ? '<p>' + esc(nx.brain) + '</p>' : '');
       btn = '<button class="v2-start" data-a="start">ابدأ القرارات (' + esc(U.ar(n)) + ')</button>';
     } else if (d.failed.length) {
       // ⛔ لا «العقل يعمل» ولا «لا توجد قرارات» فوق جلب فاشل: لا نعرف إن كان شيء ينتظرك.
-      left = '<small>الحاجة الجاية</small><b>تعذّر جلب القرارات — لا نعرف إن كان شيء ينتظرك</b>';
+      left = '<small>القرار التالي</small><b>تعذّر جلب القرارات — لا نعرف إن كان شيء ينتظرك</b>';
     } else if (d.truncated.length) {
-      left = '<small>الحاجة الجاية</small><b>القائمة ناقصة — معروض جزء من القرارات فقط</b>';
+      left = '<small>القرار التالي</small><b>القائمة ناقصة — معروض جزء من القرارات فقط</b>';
     } else {
-      left = '<small>الحاجة الجاية</small><b>لا توجد قرارات بانتظارك الآن — العقل يعمل</b>';
+      left = '<small>القرار التالي</small><b>لا توجد قرارات بانتظارك الآن — العقل يعمل</b>';
     }
     var sub = (brainN != null && brainN > 0) ? '<span class="v2-brainline">العقل وزّع ' + esc(U.U(brainN, ['ملفًا واحدًا', 'ملفين', 'ملفات', 'ملفًا'])) + ' اليوم</span>' : '';
     var warn = d.failed.length ? '<span class="v2-warnline">تعذّر جلب: ' + esc(d.failed.join(' · ')) + ' — القائمة ناقصة</span>' : '';
     if (d.truncated.length) warn += '<span class="v2-warnline">معروض جزء فقط من: ' + esc(d.truncated.join(' · ')) + ' — القائمة ناقصة</span>';
-    return '<section class="v2-next" aria-label="الحاجة الجاية"><img class="v2-av" src="' + img('brain-avatar') + '" alt="">'
+    return '<section class="v2-next" aria-label="القرار التالي"><img class="v2-av" src="' + img('brain-avatar') + '" alt="">'
       + '<div class="v2-nt">' + left + sub + warn + '</div>' + btn + '</section>';
   }
   function tileHtml(t, d) {

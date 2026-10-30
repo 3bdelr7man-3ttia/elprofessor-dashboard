@@ -247,8 +247,6 @@
 
 /* —— الأوراق (داخل نافذة الداشبورد) */
 #epModal .modal:has(.v2co-m){max-width:640px;border-radius:20px}
-#epModal .modal:has(.v2co-m) .mh{background:var(--paper2,#F6F1EA);color:#9E2B4E;font:800 20px 'Cairo',sans-serif;padding:14px 20px;border-bottom:1px solid #E9E1D6}
-#epModal .modal:has(.v2co-m) .mh button{width:44px;height:44px;border-radius:12px;background:#fff;color:#21262E;border:1px solid #E9E1D6;font-size:16px}
 .v2co-m{font-size:15px;line-height:1.8}
 .v2co-m p{margin:0}
 .v2co-lead{font-size:15.5px;line-height:1.9;margin-bottom:10px}
@@ -324,8 +322,6 @@
 .v2co-legacy .s-late{background:#F1EDE5!important;color:#5C574D!important}
 .v2co-legacy [style*="padding:40px"]{padding:32px 16px!important;color:#6B665C!important;font-size:14.5px!important}
 html.v2co-legacy-modal #epModal .modal{border-radius:20px!important}
-html.v2co-legacy-modal #epModal .modal .mh{background:#F6F1EA!important;color:#9E2B4E!important;font:800 20px 'Cairo',sans-serif!important;border-bottom:1px solid #E9E1D6!important}
-html.v2co-legacy-modal #epModal .modal .mh button{width:44px!important;height:44px!important;background:#fff!important;color:#21262E!important;border:1px solid #E9E1D6!important}
 html.v2co-legacy-modal #epModal .note-ai,html.v2co-legacy-modal #epModal .note-ai[style]{background:#F6F1EA!important;border:1px solid #E9E1D6!important;color:#21262E!important}
 html.v2co-legacy-modal #epModal .fld input,html.v2co-legacy-modal #epModal .fld select,html.v2co-legacy-modal #epModal .fld textarea{min-height:48px;font-size:16px!important;border-radius:12px!important;border:1px solid #D9CFC0!important}
 

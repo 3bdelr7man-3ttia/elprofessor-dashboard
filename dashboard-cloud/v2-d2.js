@@ -39,6 +39,31 @@
 
   D2.owns = function (mod) { return !!MODS[mod]; };
 
+  // سطر ترويسة القسم من القائمة نفسها التي يرسمها اللوح (الملفات والنزاعات): لا رقم ثانٍ من مربّع اللوحة.
+  // null = لم تصل القائمة بعد (يبقى سطر المربّع)، و«غير متاح بعد» = تعذّر مصدرها.
+  D2.head = function (key) {
+    if (key !== 'files' && key !== 'disputes') return null;
+    var g = gather();
+    if (g.inboxState === 'error') return L.NA;
+    if (g.inboxState !== 'ready') return null;
+    var p = [], miss = false;
+    if (key === 'files') {
+      var T = L.v2Tickets(fileRows(g.rows), { now: g.now, queue: g.Q, autoAssign: g.auto, brainToday: g.brainToday }), c = T.counts;
+      if (c.late) p.push(U.ar(c.late) + ' متأخر');
+      if (c.review) p.push(U.ar(c.review) + ' تنتظر مراجعتك');
+      if (c.with) p.push(U.ar(c.with) + ' عند الخبراء');
+      miss = !!(T.notes && (T.notes.late || T.notes.review));
+      if (!p.length) return miss ? 'القائمة ناقصة — لا نعرف كل ما ينتظرك' : 'لا ملفات تنتظرك الآن';
+    } else {
+      var D = L.v2DisputeTickets(g.rows.filter(function (r) { return r && !r.fyi; }), { now: g.now, queue: g.Q }), n = D.counts;
+      if (n.disputes) p.push(U.U(n.disputes, ['نزاع مفتوح', 'نزاعان مفتوحان', 'نزاعات مفتوحة', 'نزاعًا مفتوحًا']));
+      if (n.refunds) p.push(U.U(n.refunds, ['استرداد ينتظرك', 'استردادان ينتظرانك', 'استردادات تنتظرك', 'استردادًا ينتظرك']));
+      if (n.legacy) p.push(U.U(n.legacy, ['استشارة قديمة', 'استشارتان قديمتان', 'استشارات قديمة', 'استشارة قديمة']));
+      if (!p.length) return 'لا نزاعات مفتوحة';
+    }
+    return p.join(' · ') + (miss ? ' — العدد ناقص' : '');
+  };
+
   // ------------------------------------------------------------------ تحميل وجمع
   function loadAll() {
     var E = ep();

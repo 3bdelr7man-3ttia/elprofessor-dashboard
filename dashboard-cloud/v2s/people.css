@@ -208,9 +208,8 @@ div.v2p-lh{cursor:default}
 /* ====================================================================== الأوراق (داخل نافذة الداشبورد: openModal) */
 .scrim.v2pm-wrap{padding:16px}
 .v2pm.modal{max-width:520px;border-radius:20px;background:#fff;display:flex;flex-direction:column;max-height:calc(100vh - 32px)}
-.v2pm.modal .mh{background:#fff;color:var(--ink);border-bottom:1px solid var(--line);padding:10px 16px 10px 12px;font:800 17px/1.5 'Cairo',sans-serif;min-height:60px;gap:10px;position:sticky;top:0;z-index:3}
+.v2pm.modal .mh{position:sticky;top:0;z-index:3}
 .v2pm.modal .mh span{overflow-wrap:anywhere}
-.v2pm.modal .mh button{background:var(--paper2);color:var(--ink);width:44px;height:44px;border-radius:12px;font-size:17px;flex:none}
 .v2pm.modal .mb{padding:16px 18px 18px;max-height:none;overflow-y:auto;flex:1}
 .scrim.v2pm-sidew{padding:0;place-items:stretch;justify-items:end}
 .v2pm.modal.v2pm-side{width:480px;max-width:100%;height:100%;max-height:100%;border-radius:0}

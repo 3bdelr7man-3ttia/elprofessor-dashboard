@@ -110,7 +110,14 @@
   };
 
   // ------------------------------------------------------------------ ترويسة القسم
+  function headOf(key) {
+    try { if (window.V2SEC && typeof V2SEC.head === 'function') return V2SEC.head(key) || null; } catch (e) {}
+    return null;
+  }
   function descOf(sec, T) {
+    // القسم يكتب سطره من القائمة التي يرسمها هو؛ فلا يتناقض الرقم تحت العنوان مع الرقم في الشاشة.
+    var own = headOf(sec.key);
+    if (own) return own;
     var t = T[sec.key];
     if (t && !t.failed && t.next) {
       var loading = false;
@@ -146,6 +153,31 @@
     } catch (e) {}
   }
   SH.head = function () { if (SH.on) { drawHead(tiles()); wire(); } };
+
+  // ------------------------------------------------------------------ أرقام الشاشات القديمة داخل «كل السجلات»
+  // الشاشتان القديمتان (المالية والضمان) تكتبان بعض الأعداد لاتينية ((٣) في عدّاد التبويب مثلًا)؛ تُعرض بالأرقام العربية كباقي اللوحة.
+  // لا تُمسّ الروابط ولا الحقول ولا ما كُتب LTR (بريد · هاتف · معرّف).
+  var legacyObs = null, legacyT = null;
+  function arabize(root) {
+    if (!root || !document.createTreeWalker) return;
+    var w = document.createTreeWalker(root, 4, null), n, list = [];
+    while ((n = w.nextNode())) list.push(n);
+    list.forEach(function (t) {
+      var p = t.parentNode, v = t.nodeValue;
+      if (!p || !/\d/.test(v) || /^(SCRIPT|STYLE|TEXTAREA|INPUT|OPTION)$/.test(p.nodeName)) return;
+      if (p.closest && p.closest('[dir="ltr"],a,input,textarea')) return;
+      // معرّفات مثل ESC-D303 و PAY-1 تبقى كما هي (رقم بعد حرف لاتيني أو شرطة)
+      t.nodeValue = v.replace(/(^|[^A-Za-z\d_\-@.\/:#])(\d+)/g, function (m, pre, d) { return pre + d.replace(/\d/g, function (x) { return '٠١٢٣٤٥٦٧٨٩'.charAt(+x); }); });
+    });
+  }
+  SH.legacyDigits = function (on) {
+    var view = q('#view');
+    if (legacyObs) { try { legacyObs.disconnect(); } catch (e) {} legacyObs = null; }
+    if (!on || !view || !window.MutationObserver) return;
+    legacyObs = new MutationObserver(function () { if (legacyT) return; legacyT = setTimeout(function () { legacyT = null; arabize(view); }, 30); });
+    legacyObs.observe(view, { childList: true, subtree: true });
+    arabize(view);
+  };
 
   // ------------------------------------------------------------------ الأحداث
   function wire() {
@@ -235,7 +267,7 @@
   SH.refresh = function () {
     if (!SH.on) return;
     var T = tiles(), sig;
-    try { sig = (window.V2 && V2.sourcesSignature ? V2.sourcesSignature() : '') + '|' + L.SECTIONS.map(function (s) { var t = T[s.key]; return t ? [t.count, t.failed, t.hot, t.partial, t.next].join(',') : ''; }).join(';') + '|' + userName(); } catch (e) { sig = ''; }
+    try { sig = (window.V2 && V2.sourcesSignature ? V2.sourcesSignature() : '') + '|' + L.SECTIONS.map(function (s) { var t = T[s.key]; return t ? [t.count, t.failed, t.hot, t.partial, t.next].join(',') : ''; }).join(';') + '|' + userName() + '|' + (host && host.state ? (headOf((host.state() || {}).section) || '') : ''); } catch (e) { sig = ''; }
     if (sig === lastSig) return;
     lastSig = sig;
     SH.nav();

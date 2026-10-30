@@ -140,8 +140,6 @@
 
 /* —— ورقة السحب (داخل نافذة الداشبورد الموجودة) */
 #epModal .modal:has(.v2rom){max-width:560px;border-radius:20px}
-#epModal .modal:has(.v2rom) .mh{background:#F6F1EA;color:#9E2B4E;border-bottom:1px solid #E9E1D6;font-family:'Cairo',sans-serif}
-#epModal .modal:has(.v2rom) .mh button{background:#fff;color:#21262E;border:1px solid #E9E1D6;width:44px;height:44px;border-radius:12px}
 .v2rom{font-family:'IBM Plex Sans Arabic','Cairo',sans-serif;color:var(--ink)}
 .v2rom *{box-sizing:border-box}
 .v2rom .mc-lead{font-size:15px;line-height:1.9;margin:0 0 12px}

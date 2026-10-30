@@ -330,7 +330,7 @@ def flow(browser, h, pre, viewport, mobile):
     wait_or_reload(page, "() => window.V2SHELL && V2SHELL.on === true && document.querySelector('.v2r-brain')")
     page.wait_for_timeout(600)
     d = page.evaluate("() => ({warn: [...document.querySelectorAll('.v3-warn')].map(e => e.innerText), txt: document.querySelector('.v2r').innerText})")
-    if not d['warn'] or 'تعذّر جلب' not in d['warn'][0]:
+    if not d['warn'] or 'تعذّر الوصول إلى' not in d['warn'][0]:
         PROBLEMS.append('%s08: شريط التحذير غائب %r' % (pre, d['warn']))
     for lab in ('الحسابات الجديدة', 'طلبات السوق', 'أسئلة المحادثة', 'النزاعات'):
         if d['warn'] and lab not in d['warn'][0]:

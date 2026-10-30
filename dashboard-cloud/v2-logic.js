@@ -72,7 +72,7 @@
   }
   function clean(arr) { return arr.filter(function (x) { return x; }); }
 
-  var CUR_NAME = { EGP: 'جنيه', USD: 'دولار', SAR: 'ريال', EUR: 'يورو', AED: 'درهم', GBP: 'جنيه إسترليني', KWD: 'دينار', QAR: 'ريال' };
+  var CUR_NAME = { EGP: 'جنيه', USD: 'دولار', SAR: 'ريال', EUR: 'يورو', AED: 'درهم', GBP: 'جنيه إسترليني', KWD: 'دينار', QAR: 'ريال', BHD: 'دينار', OMR: 'ريال' };
   function curName(c) {
     c = String(c || 'EGP').trim().toUpperCase();
     return CUR_NAME[c] || c;
@@ -128,7 +128,7 @@
     { key: 'brain', label: 'العقل', img: 'brain' },
     { key: 'company', label: 'الشركة ورأس المال', img: 'company' }
   ];
-  var FAILED_TEXT = 'تعذّر الجلب';
+  var FAILED_TEXT = 'تعذّر الوصول';
 
   function baseTile(def) {
     return { key: def.key, label: def.label, img: def.img, count: null, hot: false, failed: false, partial: false,
@@ -303,11 +303,16 @@
     (function (t) {
       t.dest = 'topics'; t.land = 'topics_drafts';
       if (!Q) return failTile(t);
-      var d = qn(Q, 'topics_drafts'), s = qn(Q, 'testimonials_pending');
-      t.count = d + s;
+      // الشارة تعدّ ما ينتظر قرارًا فقط (موضوعات الأعضاء · آراء المتعلّمين · التعليقات · الأعمال) كأعمدة «ينتظرك»؛
+      // مسودات الأفكار أرشيف يُذكر نصًّا في السطر ولا يدخل العدّاد (٣١١ فكرة ليست ٣١١ قرارًا).
+      var d = qn(Q, 'topics_drafts'), s = qn(Q, 'testimonials_pending'), tp = qn(Q, 'topics_pending_review'), op = qn(Q, 'opinions_pending'), cr = qn(Q, 'creative_pending');
+      t.count = tp + s + op + cr;
       var p = [];
-      if (d) p.push(U(d, ['فكرة واحدة', 'فكرتان', 'أفكار', 'فكرة']));
+      if (tp) p.push(U(tp, ['موضوع من عضو', 'موضوعان من أعضاء', 'موضوعات من أعضاء', 'موضوعًا من أعضاء']));
       if (s) p.push(U(s, ['رأي متعلّم واحد', 'رأيان لمتعلّمَين', 'آراء متعلّمين', 'رأيًا لمتعلّمين']));
+      if (op) p.push(U(op, ['تعليق', 'تعليقان', 'تعليقات', 'تعليقًا']));
+      if (cr) p.push(U(cr, ['عمل إبداعي', 'عملان إبداعيان', 'أعمال إبداعية', 'عملًا إبداعيًا']));
+      if (d) p.push(U(d, ['فكرة في الأرشيف', 'فكرتان في الأرشيف', 'أفكار في الأرشيف', 'فكرة في الأرشيف']));
       t.next = p.length ? p.join(' · ') : 'خط النشر';
       t.land = 'topics_drafts';
     })(T.content);
@@ -640,7 +645,7 @@
         card.brain = of.brain || 'عرض جديد ينتظر اعتمادك';
         card.reason = 'تُراجع الأسعار قبل الاعتماد، والرفض يحتاج سببًا يصل إلى صاحب العرض';
         card.open = act({ do: 'section', section: 'books', tab: 'offers' });
-        card.primary = { label: 'اعتمد بالأسعار دي', act: act({ do: 'offer_approve', id: of.id }) };
+        card.primary = { label: 'اعتمد هذه الأسعار', act: act({ do: 'offer_approve', id: of.id }) };
         card.secondary = { label: 'ارفض', act: act({ do: 'offer_reject', id: of.id }) };
         card.facts = [{ k: 'النوع', v: of.typeText }, { k: 'السعر المقترح', v: of.suggestedText || 'لم يُقترح' }];
         break;
@@ -806,7 +811,7 @@
   function v2Next(decisions) {
     return Array.isArray(decisions) && decisions.length ? decisions[0] : null;
   }
-  // سطر «الحاجة الجاية»: الوسم ثم العنوان؛ وتحته كلام العقل.
+  // سطر «القرار التالي»: الوسم ثم العنوان؛ وتحته كلام العقل.
   function v2NextLine(card) {
     if (!card) return '';
     return clean([card.tag, card.title]).join(' — ');
@@ -1232,8 +1237,8 @@
     ] },
     { key: 'disputes', label: 'النزاعات والاستردادات', img: 'disputes', desc: 'اعتراضات العملاء وأموال محجوزة لحين قرارك', tabs: [
       T('disputes', 'النزاعات', 'v2disputes'),
-      T('escrow', 'الضمان', 'escrow', { escTab: 'sessions' }, { escTab: ['sessions', 'disputes', 'released'] }),
-      T('all', 'كل النزاعات', 'inbox', { activeFilter: 't:disputes' }, { activeFilter: ['t:disputes', 't:legacy'] })
+      T('all', 'كل النزاعات', 'inbox', { activeFilter: 't:disputes' }, { activeFilter: ['t:disputes', 't:legacy'] }),
+      T('escrow', 'كل السجلات', 'escrow', { escTab: 'sessions' }, { escTab: ['sessions', 'disputes', 'released'] })
     ] },
     { key: 'courses', label: 'الدورات والمدرّبون', img: 'courses', desc: 'الدورات وطلبات المدرّبين وما يطلبه الناس', tabs: [
       T('courses', 'الدورات', 'courses', { courseTab: 'platform' }, { courseTab: ['platform'] }),
@@ -1268,8 +1273,7 @@
       T('prices', 'الأسعار', 'v2m_prices'),
       T('shares', 'النسب والإعدادات', 'v2m_shares'),
       T('ads', 'إعلانات الأعمال', 'v2m_ads'),
-      T('all', 'كل السجلات', 'finance', { finTab: 'summary' }, { finTab: { not: [] } }),
-      hiddenTab(T('manual', 'الإيصالات (الشاشة القديمة)', 'escrow', { escTab: 'manual' }, { escTab: ['manual'] }))
+      T('all', 'كل السجلات', 'finance', { finTab: 'summary' }, { finTab: { not: [] } })
     ] },
     { key: 'content', label: 'المحتوى', img: 'content', desc: 'المقالات والموضوعات والأخبار والتعليقات ودليل الاستخدام', tabs: [
       T('pipeline',  'خط النشر',       'topics', { topicsTab: 'pipeline' },  { topicsTab: ['pipeline'] }),
@@ -2003,7 +2007,7 @@
     SECTIONS: SECTIONS, ALIASES: ALIASES, STATE_DEFAULTS: STATE_DEFAULTS, sectionFor: sectionFor, sectionHash: sectionHash,
     parseSectionHash: parseSectionHash, routeFor: routeFor, sectionByKey: secOf, tabByKey: tabOf,
     TILE_DEFS: TILE_DEFS, FAILED_TEXT: FAILED_TEXT, PARTIAL_TEXT: PARTIAL_TEXT,
-    util: { ar: ar, fmt: fmt, U: U, agoText: agoText, curName: curName, moneyText: moneyText, kindOf: kindOf, pickCandidate: pickCandidate,
+    util: { ar: ar, fmt: fmt, U: U, agoText: agoText, curName: curName, cur: curName, moneyText: moneyText, kindOf: kindOf, pickCandidate: pickCandidate,
             dateText: dateText, durShort: durShort, parseAmount: parseAmount, curLong: curLong, sumByCurrency: sumByCurrency }
   };
   // ===== v2s:brain =====
@@ -2822,7 +2826,7 @@
   function toArDigits(s) { return String(s).replace(/\d/g, function (d) { return '٠١٢٣٤٥٦٧٨٩'.charAt(+d); }); }
 
   // ---------------------------------------------------------------- الشرائح
-  var CHIP_LABEL = { all: 'الكل', late: 'متأخر', 't:files': 'ملفات الخبراء', 't:disputes': 'النزاعات', 't:legacy': 'استشارات قديمة',
+  var CHIP_LABEL = { all: 'الكل', late: 'تجاوز المهلة', 't:files': 'ملفات الخبراء', 't:disputes': 'النزاعات', 't:legacy': 'استشارات قديمة',
     't:money': 'إيصالات التحويل', 't:decisions': 'طلبات انضمام واعتماد', 't:verify': 'توثيق', 't:messages': 'الرسائل', 't:other': 'أخرى',
     auto: 'عولجت تلقائيًا', attn: 'يحتاج تدخّلك', review: 'ينتظر مراجعتك', urgent: 'مستعجل', nocand: 'لا خبير متاح',
     contract: 'مراجعة عقود', 'case': 'قضايا عليها ملاحظة' };
@@ -3081,7 +3085,7 @@
   }
 
   // ---------------------------------------------------------------- طبقة النصوص (فصحى بسيطة بدل العامية في الدرج والنوافذ)
-  var V2H_COLLOQUIAL = ['مش ', 'دلوقتي', 'اتبعت', 'اتدفع', 'اتستلم', 'بتاع', 'عايز', 'هيت', 'ابعته', 'رجّع', 'مستني', 'لوحده', 'لوحدها', 'إيه', ' ليه', 'كده', 'اللي', 'تاني', 'مالهاش', 'بقى', 'إزاي', 'خالص', 'يقوّم'];
+  var V2H_COLLOQUIAL = ['مش ', 'دلوقتي', 'اتبعت', 'اتدفع', 'اتستلم', 'بتاع', 'عايز', 'هيت', 'ابعته', 'رجّع', 'مستني', 'لوحده', 'لوحدها', 'إيه', ' ليه', 'كده', 'اللي', 'تاني', 'مالهاش', 'بقى', 'إزاي', 'خالص', 'يقوّم', 'الحاجة الجاية', 'لسه مقفولة'];
   var COPY_EXACT = {};
   var COPY_RULES = [];
   var COPY_PHRASES = [];
@@ -4939,7 +4943,7 @@
 
   // ------------------------------------------------------------ لوحة خط النشر
   var SRC_LABEL = { news: 'من خبر', expert: 'من خبير', idea: 'فكرة', human: 'فكرة' };
-  var IDEA_SRC = { news: 'خبر', expert: 'خبير', idea: 'فكرة', human: 'بشري' };
+  var IDEA_SRC = { news: 'خبر', expert: 'خبير', idea: 'فكرة', human: 'من الفريق' };
   var CREATIVE_KIND = { song: 'أغنية', video: 'فيديو', poem: 'قصيدة' };
   var PART_CAT = { feature: 'شرح المنصة', news: 'تحليل خبر', law: 'قانوني', guide: 'دليل', platform: 'المنصة', other: 'أخرى' };
   var COL_SOURCES = { wait: ['memberTopics', 'testimonials', 'comments', 'creative'], draft: ['siteArticles', 'platformArticles', 'topics'],
@@ -5044,7 +5048,7 @@
       var src2 = t.source || 'human';
       idea.push(mk({ id: 'i:' + t.id, kind: 'idea', col: 'idea', ref: t, hasAnswer: !!str(t.ai_answer), title: t.title || 'موضوع بلا عنوان', at: t.at,
         strip: src2 === 'news' ? 'من خبر' : src2 === 'expert' ? 'من خبير' : 'فكرة', who: { text: t.category || t.specialty || 'بلا تخصص' },
-        brain: [IDEA_SRC[src2] || 'بشري', t.category || t.specialty || 'بلا تخصص', seg].join(' · ') + (str(t.ai_answer) ? ' · معه إجابة مقترحة' : ''),
+        brain: [IDEA_SRC[src2] || 'فكرة', t.category || t.specialty || 'بلا تخصص', seg].join(' · ') + (str(t.ai_answer) ? ' · معه إجابة مقترحة' : ''),
         go: { tab: 'topics', st: topicTabOf(t) } }, now, 'ink'));
     });
     if (isArr(src.news)) src.news.forEach(function (n) {
@@ -5210,7 +5214,7 @@
     organicName: 'بلا إعلان', organicSub: 'من المنصة · هذا الشهر · البحث والسوشيال والدعوات والدخول المباشر',
     organicNa: 'غير متاح بعد — المنصة لا تسجّل بعد من أين جاء كل دافع', organicRatio: 'بلا صرف',
     emptyActive: 'لا حملات نشطة الآن.', showAll: 'اعرض كل الحملات', emptyAll: 'لا حملات مسجّلة بعد',
-    loadingCampaigns: '…جارٍ جلب الحملات', unavailableCampaigns: 'الحملات: غير متاح بعد', unavailableHint: 'تعذّر الجلب الآن، فلا تعتبر الشاشة فارغة.',
+    loadingCampaigns: '…جارٍ جلب الحملات', unavailableCampaigns: 'الحملات: غير متاح بعد', unavailableHint: 'تعذّر الوصول إلى هذه البيانات الآن، فلا تعتبر الشاشة فارغة.',
     adsNone: 'لا أعمال لها رصيد إعلانات بعد', adsFailed: 'أرصدة إعلانات الأعمال: غير متاح بعد', adsLinkAds: 'إعلانات الأعمال', adsLinkClients: 'عملاء الإعلانات',
     ownerSelf: 'البروفيسور نفسه', ownerForSelf: 'للبروفيسور', ownerCurrent: 'الحالي',
     ownerAdsHint: 'قائمة الأعمال غير متاحة الآن، فلا يمكن تغيير صاحب الحملة', ownerOwnersHint: 'صاحب الحملة غير متاح الآن، فلا يمكن تغييره',
@@ -6024,3 +6028,139 @@
   if (typeof module !== 'undefined' && module.exports) module.exports.roles = L.roles;
 })(typeof window !== 'undefined' ? window : (typeof globalThis !== 'undefined' ? globalThis : this));
 // ===== /v2s:roles =====
+
+// ===== v2s:experts =====
+// «الخبراء» (ملفات الخبراء ‹ الخبراء): منطق نقي بلا DOM ولا شبكة. المصدر الذي تعذّر جلبه يصل `null` ويعود `null`/«غير متاح بعد» — لا صفرًا.
+// ⛔ لا حكم ولا رقم مخترع: سطر العقل يُبنى من حقول موجودة فقط. ⛔ لا إنجليزية خام في التخصص: كل مفتاح يمرّ على قاموس عربي.
+(function (root) {
+  var L = root.V2L || (typeof module !== 'undefined' && module.exports);
+  if (!L) return;
+  var U = L.util;
+  L.v2s = L.v2s || {};
+  var NA = 'غير متاح بعد';
+  function s(v) { return typeof v === 'string' ? v.trim() : ''; }
+  function num(v) { var n = typeof v === 'number' ? v : (typeof v === 'string' && v.trim() !== '' ? Number(v) : NaN); return isFinite(n) ? n : null; }
+  function tms(v) { if (typeof v === 'number') return isFinite(v) && v > 0 ? v : NaN; var t = Date.parse(v || ''); return isNaN(t) ? NaN : t; }
+
+  // قاموس التخصصات: مفاتيح المنصة (والأسماء الإنجليزية الشائعة) ⇒ الاسم العربي الظاهر.
+  var SPEC = {
+    criminal: 'جنائي', penal: 'جنائي', civil: 'مدني وعقود', commercial: 'تجاري وشركات', business: 'تجاري وشركات', corporate: 'شركات',
+    company: 'شركات', companies: 'شركات', labor: 'عمالي', labour: 'عمالي', employment: 'عمالي', family: 'أحوال شخصية', personal_status: 'أحوال شخصية',
+    administrative: 'إداري', constitutional: 'دستوري', arbitration: 'تحكيم', ip: 'ملكية فكرية', intellectual_property: 'ملكية فكرية',
+    real_estate: 'عقارات وإيجارات', realty: 'عقارات وإيجارات', notarization: 'توثيق', tax: 'ضرائب', taxes: 'ضرائب', marketing: 'تسويق ومحتوى',
+    general: 'عام', other: 'أخرى'
+  };
+  function specialty(v) {
+    var t = s(v);
+    if (!t) return '';
+    var k = t.toLowerCase().replace(/[\s-]+/g, '_');
+    if (SPEC.hasOwnProperty(k)) return SPEC[k];
+    return /[A-Za-z]/.test(t) ? 'تخصص آخر' : t;     // ما لا نعرفه بالإنجليزية لا يظهر خامًا
+  }
+  // قائمة أو نص واحد («civil, family» أو «مدني، جنائي») ⇒ أسماء عربية بلا تكرار.
+  function specialties(v) {
+    var parts = Array.isArray(v) ? v : String(v == null ? '' : v).split(/[,،؛;\/|]+/);
+    var out = [];
+    parts.forEach(function (p) { var l = specialty(p); if (l && out.indexOf(l) < 0) out.push(l); });
+    return out;
+  }
+
+  var LEAD_STATUS = { 'new': 'جديد', contacted: 'تم التواصل', invited: 'تمت دعوته', converted: 'صار مدرّبًا', rejected: 'ليس مناسبًا', resolved: 'عولج' };
+  var LEAD_TONE = { 'new': 'late', resolved: 'wait', contacted: 'wait', invited: 'ok', converted: 'done', rejected: 'done' };
+  var LEAD_NEXT = { 'new': ['contacted', 'تم التواصل'], resolved: ['contacted', 'تم التواصل'], contacted: ['invited', 'تمت دعوته'], invited: ['converted', 'صار مدرّبًا'] };
+  var LEAD_ORDER = { 'new': 0, resolved: 1, contacted: 2, invited: 3 };
+  function phoneOf(p) { return String(p == null ? '' : p).replace(/[^0-9+]/g, ''); }
+  function adig(t) { return String(t).replace(/\d/g, function (d) { return '٠١٢٣٤٥٦٧٨٩'.charAt(+d); }); }   // أرقام عربية في النص الحر (الخبرة)
+
+  // تذكرة لكل ردّ على دعوة المؤسس: حالة · من هو · سطر العقل · زرّ رئيسي واحد وثانوي «ليس مناسبًا». المحوَّل والمرفوض نهاية فلا تذكرة لهما.
+  function leadTicket(l, now) {
+    if (!l || typeof l !== 'object') return null;
+    var st = s(l.status) || 'new';
+    if (!LEAD_STATUS.hasOwnProperty(st)) st = 'new';
+    var at = tms(l.at), since = isNaN(at) ? '' : L.v2TimerText({ mode: 'since', at: at }, now);
+    var nx = LEAD_NEXT[st] || null;
+    var brain;
+    if (st === 'new') brain = 'لم يتم التواصل معه بعد' + (since ? '. قدّم طلبه ' + since : '') + '.';
+    else if (st === 'resolved') brain = 'عولج طلبه سابقًا دون تسجيل التواصل. سجّل التواصل ليبقى ملفه واضحًا.';
+    else if (st === 'contacted') brain = 'تم التواصل معه. الخطوة التالية دعوته للانضمام.';
+    else if (st === 'invited') brain = 'تمت دعوته. الخطوة التالية اعتماده مدرّبًا بعد تسجيله.';
+    else brain = '';
+    var email = s(l.email).toLowerCase();
+    return {
+      id: s(l.id), name: s(l.name) || 'بلا اسم', status: st, statusLabel: LEAD_STATUS[st], tone: LEAD_TONE[st], since: since, at: isNaN(at) ? null : at,
+      specs: specialties(l.specialization), country: s(l.country) || s(l.governorate), years: adig(s(String(l.years == null ? '' : l.years))),
+      phone: phoneOf(l.whatsapp), phoneText: s(String(l.whatsapp == null ? '' : l.whatsapp)), email: email, brain: brain,
+      primary: nx ? { status: nx[0], label: nx[1] } : null, secondary: nx ? { status: 'rejected', label: 'ليس مناسبًا' } : null, row: l
+    };
+  }
+  // اللوحة: التذاكر المفتوحة (من يحتاج فعلًا أولًا ثم الأقدم) وعدد ما عولج. المصدر الفاشل (null) ⇒ null.
+  function leadBoard(rows, now) {
+    if (!Array.isArray(rows)) return null;
+    var open = [], closed = { converted: 0, rejected: 0 };
+    rows.forEach(function (l) {
+      var t = leadTicket(l, now);
+      if (!t) return;
+      if (t.status === 'converted' || t.status === 'rejected') closed[t.status]++;
+      else open.push(t);
+    });
+    open.sort(function (a, b) {
+      var d = LEAD_ORDER[a.status] - LEAD_ORDER[b.status];
+      if (d) return d;
+      var x = a.at == null ? Infinity : a.at, y = b.at == null ? Infinity : b.at;
+      return x === y ? 0 : x < y ? -1 : 1;
+    });
+    return { open: open, converted: closed.converted, rejected: closed.rejected, total: rows.length };
+  }
+
+  // أسباب إخفاء الخبير عن الدليل العام (الحقول القادمة من المنصة فقط؛ المجهول لا يُحكم عليه).
+  function hiddenReasons(e) {
+    var r = [];
+    if (e.is_test) r.push('الحساب مُعلَّم تجريبيًّا');
+    if (e.public_ready === false) r.push('الملف ناقص: نبذة لا تقل عن ٢٠ حرفًا وسعر للجلسة');
+    else if (e.public_ready == null && (!e.bio || String(e.bio).length < 20)) r.push('النبذة أقصر من ٢٠ حرفًا');
+    return r;
+  }
+  function ratingText(e) {
+    var a = num(e.rating_avg);
+    if (a === null) return 'لا تقييم بعد';
+    var c = num(e.rating_count);
+    return U.fmt(Math.round(a * 10) / 10) + (c ? ' (' + U.ar(c) + ')' : '');
+  }
+  function expertRow(e) {
+    if (!e || typeof e !== 'object') return null;
+    var reasons = hiddenReasons(e), email = s(e.email).toLowerCase();
+    var brain;
+    if (reasons.length) brain = 'لا يظهر في دليل الخبراء للناس: ' + reasons.join('، ') + '.';
+    else if (e.public_ready === true) brain = 'يظهر في دليل الخبراء للناس.';
+    else brain = 'ظهوره في الدليل: ' + NA + '.';
+    return {
+      name: s(e.name) || email || 'بلا اسم', email: email, online: !!e.online, specs: specialties(e.expertise), rating: ratingText(e),
+      referrals: num(e.referral_count), courses: num(e.courses_count), learners: num(e.students_count), hidden: reasons.length > 0, reasons: reasons,
+      brain: brain
+    };
+  }
+  // الخبراء: من لا يظهر للناس أولًا (يحتاج انتباهًا)، ثم الأكثر إحالات، ثم الاسم. المصدر الفاشل ⇒ null.
+  function expertBoard(list) {
+    if (!Array.isArray(list)) return null;
+    var rows = list.map(expertRow).filter(Boolean);
+    rows.sort(function (a, b) {
+      if (a.hidden !== b.hidden) return a.hidden ? -1 : 1;
+      var d = (b.referrals || 0) - (a.referrals || 0);
+      return d || String(a.name).localeCompare(String(b.name), 'ar');
+    });
+    return { rows: rows, online: rows.filter(function (r) { return r.online; }).length, hidden: rows.filter(function (r) { return r.hidden; }).length };
+  }
+  function summaryLine(eb, lb) {
+    if (!eb) return 'الخبراء: ' + NA;
+    var p = [U.U(eb.rows.length, ['خبير معتمد واحد', 'خبيران معتمدان', 'خبراء معتمدون', 'خبيرًا معتمدًا'])];
+    if (eb.online) p.push(U.U(eb.online, ['متصل الآن', 'متصلان الآن', 'متصلون الآن', 'متصلًا الآن']));
+    if (eb.hidden) p.push(U.U(eb.hidden, ['خبير لا يظهر للناس', 'خبيران لا يظهران للناس', 'خبراء لا يظهرون للناس', 'خبيرًا لا يظهر للناس']));
+    if (lb && lb.open.length) p.push(U.U(lb.open.length, ['رد على دعوة المؤسس ينتظرك', 'ردّان على دعوة المؤسس ينتظرانك', 'ردود على دعوة المؤسس تنتظرك', 'ردًّا على دعوة المؤسس ينتظرك']));
+    return p.join(' · ');
+  }
+
+  L.v2s.experts = { NA: NA, SPEC: SPEC, specialty: specialty, specialties: specialties, LEAD_STATUS: LEAD_STATUS, LEAD_NEXT: LEAD_NEXT, leadTicket: leadTicket,
+                    leadBoard: leadBoard, hiddenReasons: hiddenReasons, expertRow: expertRow, expertBoard: expertBoard, summaryLine: summaryLine };
+  if (typeof module !== 'undefined' && module.exports) module.exports.v2s = L.v2s;
+})(typeof window !== 'undefined' ? window : (typeof globalThis !== 'undefined' ? globalThis : this));
+// ===== /v2s:experts =====

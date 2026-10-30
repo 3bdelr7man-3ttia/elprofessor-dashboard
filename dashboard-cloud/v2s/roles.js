@@ -742,7 +742,7 @@
       + '<p class="v2ro-fine">الرصيد المتاح: ' + esc(U.fmt(W.balanceEgp)) + ' جنيه</p>'
       + (rate ? '<p class="v2ro-fine">الحد الأدنى للسحب ٥٠ دولارًا (نحو ' + esc(U.fmt(W.minEgp)) + ' جنيه)</p>' : '') + '</div>'
       + '<div id="v2roWdErr">' + (err ? '<div class="v2ro-err">' + esc(err) + '</div>' : '') + '</div>'
-      + '<div class="v2rom-acts"><button type="button" class="v2ro-btn1" id="v2roRev">راجع الطلب</button><button type="button" class="v2ro-btn2" id="v2roCan">إلغاء</button></div>';
+      + '<div class="v2rom-acts"><button type="button" class="v2ro-btn1" id="v2roRev">راجع الطلب</button><button type="button" class="v2ro-btn2" id="v2roCan">رجوع</button></div>';
     var inp = q('#v2roAmt', box);
     q('#v2roCan', box).onclick = closeIt;
     q('#v2roRev', box).onclick = function () {

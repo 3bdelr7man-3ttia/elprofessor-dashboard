@@ -334,7 +334,7 @@
     S.res = res;
     if (res) res.pending = late.length > 0;
     if (!res) {
-      v.innerHTML = '<div class="v3 v2s-books" data-board="works">' + noteStrip() + '<div class="v3-empty"><b>الكتب والأعمال: غير متاح بعد</b><p>تعذّر الجلب الآن، فلا تعتبر الشاشة فارغة.</p>' + retryBtn() + '</div></div>';
+      v.innerHTML = '<div class="v3 v2s-books" data-board="works">' + noteStrip() + '<div class="v3-empty"><b>الكتب والأعمال: غير متاح بعد</b><p>تعذّر الوصول إلى هذه البيانات الآن، فلا تعتبر الشاشة فارغة.</p>' + retryBtn() + '</div></div>';
       wire(v); return;
     }
     if (S.open) {
@@ -403,7 +403,7 @@
   // ورقة بخطوة واحدة: حقول اختيارية ثم زرّ التنفيذ. o: {title, html, btn, busy, mode, collect(s)→{ok,payload,error}, send(payload), onOk(res, s), onFail(e)}
   function formSheet(o) {
     var s = openSheet(o.title, '<div class="bk-sbody">' + o.html + '<div id="bkerr" role="alert"></div><div class="acts"><button type="button" class="btn btn-primary" id="bk_go">' + esc(o.btn) + '</button>'
-      + '<button type="button" class="btn btn-ghost" id="bk_x">' + esc(o.cancel || 'إلغاء') + '</button></div></div>');
+      + '<button type="button" class="btn btn-ghost" id="bk_x">' + esc(o.cancel || 'رجوع') + '</button></div></div>');
     if (!s) return null;
     S.sheetBusy = false;
     var go = q('#bk_go', s);
@@ -494,7 +494,7 @@
         + '<label class="tg v3-togg"><input type="checkbox" id="bk_b"' + (r.bid ? ' checked' : '') + '> يسمح للأعضاء بأن يعرضوا سعرًا («اعرض سعرك»)</label>';
     }
     var s = openSheet('تعديل: ' + r.title, '<div id="bk_s1">' + form + '<div id="bkerr" role="alert"></div><div class="acts"><button type="button" class="btn btn-primary" id="bk_rev">راجع التغيير</button>'
-      + '<button type="button" class="btn btn-ghost" id="bk_x">إلغاء</button></div></div><div id="bk_s2" hidden></div>');
+      + '<button type="button" class="btn btn-ghost" id="bk_x">رجوع</button></div></div><div id="bk_s2" hidden></div>');
     if (!s) return;
     S.sheetBusy = false;
     var s1 = q('#bk_s1', s), s2 = q('#bk_s2', s);

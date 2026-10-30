@@ -163,8 +163,6 @@
 /* —— الأوراق (داخل نافذة الداشبورد الموجودة) */
 #epModal .modal:has(.v2ct-m){max-width:640px;border-radius:22px}
 #epModal .modal:has(.v2ct-m.wide){max-width:920px}
-#epModal .modal:has(.v2ct-m) .mh{background:var(--paper,#FBFAF7);color:#9E2B4E;border-bottom:1px solid #E9E1D6;font-family:'Cairo',sans-serif;font-weight:800;font-size:18px;padding:14px 20px}
-#epModal .modal:has(.v2ct-m) .mh button{background:#fff;border:1px solid #E9E1D6;color:#21262E;width:44px;height:44px;border-radius:12px;font-size:16px}
 #epModal .modal:has(.v2ct-m) .mb{max-height:82vh;background:#fff}
 .v2ct-m .v2ct-lead{font-size:15px;line-height:1.95;margin-bottom:12px}
 .v2ct-m .v2ct-fld{margin-bottom:12px;display:grid;gap:5px}

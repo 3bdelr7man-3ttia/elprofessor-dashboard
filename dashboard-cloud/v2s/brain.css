@@ -125,7 +125,6 @@
 
 /* —— الأوراق */
 #epModal .modal:has(.v2sbm){max-width:620px}
-#epModal .modal:has(.v2sbm) .mh{background:var(--ink)}
 .v2sbm .v2sb-line{background:#FBFAF7;margin-bottom:12px;padding:10px 14px}
 .v2sbm .v2sb-line p{font:600 15px/1.85 'IBM Plex Sans Arabic','Cairo',sans-serif}
 .v2sbm .v2sb-sec{margin:0 0 14px;display:grid;gap:4px}

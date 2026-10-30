@@ -152,7 +152,7 @@
     S.noteT = setTimeout(function () { S.note = null; redraw(); }, 12000);
   }
   function unavailable(title) {
-    return '<div class="v2ct-empty"><b>' + esc(title) + ': ' + NA + '</b><p>تعذّر الجلب الآن، فلا تعتبر الشاشة فارغة.</p><button type="button" class="v2ct-b2" data-a="retry">أعد المحاولة</button></div>';
+    return '<div class="v2ct-empty"><b>' + esc(title) + ': ' + NA + '</b><p>تعذّر الوصول إلى هذه البيانات الآن، فلا تعتبر الشاشة فارغة.</p><button type="button" class="v2ct-b2" data-a="retry">أعد المحاولة</button></div>';
   }
   function loadingBlock(t) { return '<div class="v2ct-empty"><b>…جارٍ جلب ' + esc(t) + '</b></div>'; }
   function failedLabels(tab) {
@@ -232,7 +232,7 @@
   // call(cb) ⇐ ينادي EP.xxx(..., cb) · keys: المفاتيح التي يمرّ عليها آخر reload · verify(): هل تغيّرت البيانات فعلًا.
   function perform(call, keys, verify, done) {
     var E = ep(), fin = false, called = false, timer, iv;
-    if (!E) { done(false, 'غير متصل بالخادم'); return; }
+    if (!E) { done(false, 'انقطع الاتصال — حدّث الصفحة ثم جرّب'); return; }
     E.lastError = '';
     function ready() { return !keys.some(function (k) { return E.state[k] === 'loading'; }); }
     function finish() {
@@ -294,6 +294,20 @@
       if (rawA) { var oid = S.openArticle; S.openArticle = null; var hit = rawA.filter(function (a) { return String(a.id) === String(oid); })[0]; if (hit) setTimeout(function () { openSiteReader(hit.id); }, 0); else setNote('المقال المرتبط لم يعد موجودًا'); }
     }
   }
+
+  // سطر ترويسة القسم من أعمدة خط النشر نفسها (لا من مربّع اللوحة): ينتظرك · مسودات · أفكار. تعذّر مصدر الانتظار ⇒ «غير متاح بعد».
+  API.head = function () {
+    var B;
+    try { B = L.v2ContentBoard(boardSrc(), now()); } catch (e) { return null; }
+    if (!B || !B.counts) return null;
+    var c = B.counts;
+    if (c.wait === null) return B.loading && B.loading.wait ? null : NA;
+    var p = [];
+    if (c.wait) p.push(U.U(c.wait, ['قرار واحد ينتظرك', 'قراران ينتظرانك', 'قرارات تنتظرك', 'قرارًا ينتظرك']));
+    if (c.draft) p.push(U.U(c.draft, ['مسودة', 'مسودتان', 'مسودات', 'مسودة']));
+    if (c.idea) p.push(U.U(c.idea, ['فكرة', 'فكرتان', 'أفكار', 'فكرة']));
+    return p.length ? p.join(' · ') + (B.partial && (B.partial.wait || B.partial.draft) ? ' — العدد ناقص' : '') : 'لا شيء ينتظر قرارك';
+  };
 
   // ================================================================== ١) خط النشر
   var COL_LABEL = { wait: 'ينتظرك', draft: 'مسودات', idea: 'أفكار', done: 'نُشر هذا الأسبوع' };

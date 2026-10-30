@@ -210,7 +210,7 @@
     function goStage1() {
       stage = 1; s1.hidden = false; s2.hidden = true; showErr('');
       acts.innerHTML = '<button type="button" class="co-btn1" data-s="go">' + esc(o.review ? (o.btnReview || 'راجع') : (o.btnSave || 'احفظ')) + '</button>'
-        + '<button type="button" class="co-btn2" data-s="cancel">إلغاء</button>' + (o.danger ? '<button type="button" class="co-link co-del" data-s="danger">' + esc(o.danger.label) + '</button>' : '');
+        + '<button type="button" class="co-btn2" data-s="cancel">رجوع</button>' + (o.danger ? '<button type="button" class="co-link co-del" data-s="danger">' + esc(o.danger.label) + '</button>' : '');
     }
     function goStage2(r) {
       stage = 2; s1.hidden = true; s2.hidden = false; showErr('');
@@ -783,10 +783,11 @@
       permBody = '<p class="co-lead sm">الأقسام المسموحة لموظف المتابعة (المدير يرى كل شيء).</p><div class="co-perms">' + PERM_MODS.map(function (m) {
         return '<label class="co-ck"><input type="checkbox" class="co-pm" value="' + m[0] + '"' + (allowed.indexOf(m[0]) > -1 ? ' checked' : '') + '><span>' + esc(m[1]) + '</span></label>'; }).join('') + '</div><div class="co-bar">' + btn2('احفظ الصلاحيات', 'savePerms') + '</div>';
     }
-    // خدمة الذكاء
-    var aiBody = models ? (models.length ? '<div class="co-list">' + models.map(function (m) {
-      return '<div class="co-lr"><div class="co-lm"><b>' + esc(m.label || 'خدمة') + '</b></div><div class="co-la">' + chip({ text: m.configured ? 'جاهزة' : 'غير جاهزة', tone: m.configured ? 'ok' : 'neutral' }) + '</div></div>'; }).join('') + '</div>' : '<p class="co-none">لا خدمات مسجّلة.</p>')
-      + '<p class="co-fine">الإعداد من إدارة النظام.</p>' : loadingBlock('حالة الخدمة');
+    // التحليل المكتوب: سطر واحد بالحالة (مفعّل / غير مفعّل) وزرّ واحد إلى «العقل ‹ المساعدون» حيث حالة المساعدين كاملة.
+    var aiBody = models
+      ? '<p class="co-lead sm">التحليل المكتوب: <b>' + (models.some(function (m) { return m && m.configured; }) ? 'مفعّل' : 'غير مفعّل') + '</b></p>'
+        + '<div class="co-bar">' + btn2('افتح المساعدين', 'openHelpers') + '</div>'
+      : (epState('aiModels') === 'error' ? '<p class="co-none">' + na() + '</p>' : loadingBlock('حالة التحليل المكتوب'));
     // الاستخدام
     var useBody;
     if (!usage) useBody = epState('usage') === 'error' ? '<p class="co-none">' + na() + '</p>' : loadingBlock('الاستخدام');
@@ -806,7 +807,7 @@
     }
     S.view.innerHTML = '<div class="co" data-board="settings">' + noteStrip() + warnStrip(fl) + '<div class="co-two">'
       + '<div class="co-col">' + card('بيانات الشركة', '', coBody) + card('العملة', '', fxBody) + card('صلاحيات الموظف', '', permBody) + card('الاستخدام في آخر ٧ أيام', '', useBody) + '</div>'
-      + '<div class="co-col">' + card('فريق الإدارة', '', teamBody) + card('خدمة الذكاء', '', aiBody) + card('سجل العمليات', '', auditBody) + '</div></div></div>';
+      + '<div class="co-col">' + card('فريق الإدارة', '', teamBody) + card('التحليل المكتوب', '', aiBody) + card('سجل العمليات', '', auditBody) + '</div></div></div>';
   }
 
   // ------------------------------------------------------------------ الأوراق
@@ -1424,6 +1425,7 @@
           }).catch(function (x) { setNote(errMsg(x)); redraw(); });
           break;
         }
+        case 'openHelpers': if (host().openSection) host().openSection('brain', 'helpers'); break;
         case 'auditOpen': S.auditOpen = true; S.auditN = 20; if (E) E.reload('audit', null); redraw(); break;
         case 'auditClose': S.auditOpen = false; redraw(); break;
         case 'auditMore': S.auditN = 120; redraw(); break;

@@ -405,7 +405,7 @@
   function confirmSheet(o) {
     var field = o.field ? '<div class="fld"><label for="mkReason">' + esc(o.field) + '</label><textarea id="mkReason" maxlength="300" rows="3"></textarea><div class="v2s-mk-cnt" id="mkCnt" aria-live="polite">' + ar(0) + ' / ' + ar(300) + '</div></div>' : '';
     var s = sheet(o.title, '<p class="mc-lead">' + o.lead + '</p>' + (o.extra || '') + field + '<div id="mkErr" role="alert"></div>'
-      + '<div class="acts"><button type="button" class="btn btn-primary" id="mkGo">' + esc(o.ok) + '</button><button type="button" class="btn btn-ghost" id="mkNo">تراجع</button></div>');
+      + '<div class="acts"><button type="button" class="btn btn-primary" id="mkGo">' + esc(o.ok) + '</button><button type="button" class="btn btn-ghost" id="mkNo">رجوع</button></div>');
     if (!s) return;
     var go = s.querySelector('#mkGo'), no = s.querySelector('#mkNo'), ta = s.querySelector('#mkReason'), err = s.querySelector('#mkErr');
     if (o.after) o.after(s);
@@ -502,7 +502,7 @@
     var notice = isNum(r.joined_count) ? '<p class="v2s-mk-note">سيصل إشعار داخل المنصة لكل من انضم (' + esc(ar(r.joined_count)) + ') بأن الدورة صارت متاحة للحجز.</p>' : '<p class="v2s-mk-note">سيصل إشعار داخل المنصة لكل من انضم بأن الدورة صارت متاحة للحجز.</p>';
     var unlink = r.linked_course_id ? '<button type="button" class="btn btn-ghost" id="mkUnlink">ألغِ ربط الدورة</button>' : '';
     var s = sheet('ربط دورة بالطلب', '<p class="mc-lead">' + lead + '</p>' + body + (courses.length ? notice : '') + '<div id="mkErr" role="alert"></div>'
-      + '<div class="acts">' + (courses.length ? '<button type="button" class="btn btn-primary" id="mkGo" disabled>اربط الدورة</button>' : '') + unlink + '<button type="button" class="btn btn-ghost" id="mkNo">تراجع</button></div>');
+      + '<div class="acts">' + (courses.length ? '<button type="button" class="btn btn-primary" id="mkGo" disabled>اربط الدورة</button>' : '') + unlink + '<button type="button" class="btn btn-ghost" id="mkNo">رجوع</button></div>');
     if (!s) return;
     s.setAttribute('data-link', String(r.id));
     var go = s.querySelector('#mkGo'), no = s.querySelector('#mkNo'), err = s.querySelector('#mkErr');

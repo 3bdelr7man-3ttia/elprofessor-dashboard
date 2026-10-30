@@ -85,7 +85,8 @@ def test_the_tabs_match_the_approved_table():
         'home': [['board', 'اللوحة والقرارات', 'home'], ['inbox', 'كل الوارد', 'inbox']],
         # D2: «الملفات» و«النزاعات» لوحتا تذاكر (موديولان وهميان ورا الغلاف)، والوارد القديم في تبويب «كل …» (لا شاشة اتفقدت)
         'files': [['files', 'الملفات', 'v2files'], ['experts', 'الخبراء', 'team'], ['all', 'كل الملفات', 'inbox']],
-        'disputes': [['disputes', 'النزاعات', 'v2disputes'], ['escrow', 'الضمان', 'escrow'], ['all', 'كل النزاعات', 'inbox']],
+        # «الضمان» لم يعد تبويبًا: الشاشة القديمة صارت آخر تبويب «كل السجلات» بشكل جديد، والإيصالات اليدوية في «الفلوس ‹ الإيصالات»
+        'disputes': [['disputes', 'النزاعات', 'v2disputes'], ['all', 'كل النزاعات', 'inbox'], ['escrow', 'كل السجلات', 'escrow']],
         # الجولة الأخيرة: «الدورات والمدرّبون» بشاشاته الجديدة (تبويب مخفي لصفحة الدورة)، والشاشة القديمة آخرًا في «كل السجلات»
         'courses': [['courses', 'الدورات', 'courses'], ['trainers', 'المدرّبون', 'team'], ['live', 'الدورات الحيّة', 'courses'], ['demand', 'ما يطلبه الناس', 'courses'],
                     ['offers', 'عروض الأسعار', 'courses'], ['course', 'صفحة الدورة', 'courses'], ['all', 'كل السجلات', 'courses']],
@@ -98,7 +99,7 @@ def test_the_tabs_match_the_approved_table():
         # D3: «الفلوس» بهيكلها الجديد، والشاشتان القديمتان (المالية والباقات) في آخر تبويب «كل السجلات» + تبويب مخفي للإيصالات القديمة
         'money': [['overview', 'نظرة', 'v2m_overview'], ['payouts', 'التحويلات', 'v2m_payouts'], ['receipts', 'الإيصالات والمدفوعات العالقة', 'v2m_receipts'],
                   ['prices', 'الأسعار', 'v2m_prices'], ['shares', 'النسب والإعدادات', 'v2m_shares'], ['ads', 'إعلانات الأعمال', 'v2m_ads'],
-                  ['all', 'كل السجلات', 'finance'], ['manual', 'الإيصالات (الشاشة القديمة)', 'escrow']],
+                  ['all', 'كل السجلات', 'finance']],
         # الجولة الأخيرة: «المحتوى» بست تبويبات كلها على الموديول القديم `topics` (تُميَّز بـ`topicsTab`) وبلا «كل السجلات»
         'content': [['pipeline', 'خط النشر', 'topics'], ['articles', 'المقالات', 'topics'], ['topics', 'الموضوعات', 'topics'], ['news', 'الأخبار', 'topics'],
                     ['comments', 'التعليقات', 'topics'], ['tutorials', 'دليل الاستخدام', 'topics']],
@@ -165,7 +166,7 @@ def test_inner_screen_state_picks_the_right_tab_and_unknown_state_stays_put():
         ('inbox', {'activeFilter': 't:messages'}, 'people', 'messages'), ('inbox', {'activeFilter': 'all'}, 'home', 'inbox'),
         ('inbox', {'activeFilter': 'human'}, 'home', 'inbox'), ('inbox', {'activeFilter': 't:money'}, 'home', 'inbox'),
         ('team', {'teamTab': 'trainers'}, 'courses', 'trainers'), ('team', {'teamTab': 'experts'}, 'files', 'experts'),
-        ('escrow', {'escTab': 'manual'}, 'money', 'manual'), ('escrow', {'escTab': 'disputes'}, 'disputes', 'escrow'),
+        ('escrow', {'escTab': 'manual'}, 'disputes', 'escrow'), ('escrow', {'escTab': 'disputes'}, 'disputes', 'escrow'),
         ('finance', {'finTab': 'packages'}, 'money', 'all'), ('finance', {'finTab': 'withdrawals'}, 'money', 'all'),
         ('topics', {'topicsTab': 'tutorials'}, 'content', 'tutorials'), ('topics', {'topicsTab': 'news'}, 'content', 'news'),
         ('courses', {'courseTab': 'demand'}, 'courses', 'demand'), ('home', {'v2mode': 'brain'}, 'home', 'board'),   # سجل العقل القديم لم يعد وضعًا للوحة (صار تبويب v2s_brain)
@@ -197,7 +198,7 @@ def test_section_addresses_round_trip():
       out.push([s.key,t.key,h,L.parseSectionHash(h),L.parseSectionHash(h.slice(1)),L.routeFor(h)]);}));console.log(JSON.stringify(out))""")
     assert len(res) == sum(len(sec.get('tabs') or []) for sec in _node("console.log(JSON.stringify(L.SECTIONS))"))   # عدد التبويبات من SECTIONS نفسها، فلا يتعارض مع أقسام تُضاف بالتوازي
     for sec, tab, h, p1, p2, r in res:
-        if (sec, tab) in (('people', 'person'), ('money', 'manual'), ('courses', 'course'), ('company', 'targets')):
+        if (sec, tab) in (('people', 'person'), ('courses', 'course'), ('company', 'targets')):
             continue                           # تبويب مخفي بلا بريد: يرجع لأول تبويب (يُختبر في test_v2_d2)
         assert h == '#s/%s/%s' % (sec, tab)
         assert p1 == {'section': sec, 'tab': tab, 'exact': True} == p2
@@ -401,7 +402,7 @@ def test_inbox_search_stays_until_the_phone_width_and_copy_is_neutral():
     assert css.rfind('@media', 0, i) == css.rindex('@media(max-width:760px)', 0, i)
     js = _read('dashboard-cloud', 'v2-shell.js')
     assert 'المؤسس' not in js
-    assert 'الحاجة الجاية' not in _read('dashboard-cloud', 'v2-logic.js').split('var SECTIONS')[1]
+    assert 'الحاجة الجاية' not in _read('dashboard-cloud', 'v2-logic.js').split('var SECTIONS')[1].split('var V2H_COLLOQUIAL')[0]
 
 
 def test_header_and_sheet_do_not_steal_scroll_or_focus():

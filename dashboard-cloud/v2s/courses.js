@@ -107,7 +107,7 @@
   function retryBtn() { return '<button type="button" class="v2co-btn2" data-a="retry">أعد المحاولة</button>'; }
   function loadingBlock(t) { return '<div class="v2co-empty"><b>…جارٍ جلب ' + esc(t) + '</b></div>'; }
   function unavailable(t, extra) {
-    return '<div class="v2co-empty"><b>' + esc(t) + ': ' + NA + '</b><p>تعذّر الجلب الآن، فلا تعتبر الشاشة فارغة.</p>' + (extra || '') + retryBtn() + '</div>';
+    return '<div class="v2co-empty"><b>' + esc(t) + ': ' + NA + '</b><p>تعذّر الوصول إلى هذه البيانات الآن، فلا تعتبر الشاشة فارغة.</p>' + (extra || '') + retryBtn() + '</div>';
   }
   function none(t) { return '<p class="v2co-none">' + esc(t) + '</p>'; }
   function skeleton(n) {
@@ -205,7 +205,7 @@
       if (step === 'form') {
         stage.innerHTML = o.form + '<div class="v2co-err"></div><div class="v2co-macts">'
           + (o.review ? '<button type="button" class="v2co-btn1" id="co_next">' + esc(o.btnNext || 'تابع') + '</button>' : finalBtn())
-          + '<button type="button" class="v2co-btn2" id="co_x">إلغاء</button></div>';
+          + '<button type="button" class="v2co-btn2" id="co_x">رجوع</button></div>';
         formHtml = stage.innerHTML;
         q('#co_x', s).onclick = closeSheet;
         if (o.wire) o.wire(s);
@@ -230,7 +230,7 @@
         }
       } else {
         stage.innerHTML = (o.review ? o.review(payload) : '') + '<div class="v2co-err"></div><div class="v2co-macts">' + finalBtn()
-          + (o.form != null ? '<button type="button" class="v2co-btn2" id="co_back">رجوع</button>' : '<button type="button" class="v2co-btn2" id="co_x">إلغاء</button>') + '</div>';
+          + (o.form != null ? '<button type="button" class="v2co-btn2" id="co_back">رجوع</button>' : '<button type="button" class="v2co-btn2" id="co_x">رجوع</button>') + '</div>';
         var go2 = q('#co_go', s);
         bindSend(go2);
         if (o.form != null) q('#co_back', s).onclick = function () { step = 'form'; stage.innerHTML = formHtml; show(); };
@@ -1279,10 +1279,23 @@
     }, 60000);
     return true;
   };
+  // سطر ترويسة القسم من القائمة نفسها التي ترسمها اللوحة (الدورات في المراجعة وطلبات المدرّبين).
+  CO.head = function () {
+    var st = srcState('courses');
+    if (st === 'error' || st === 'closed') return NA;
+    if (st !== 'ready') return null;
+    var b = C.board(rowsOf('courses', 'courses'), { now: now() });
+    if (b.na || !b.counts) return NA;
+    var p = [];
+    if (b.counts.review) p.push(U.U(b.counts.review, ['دورة واحدة تنتظر قرارك', 'دورتان تنتظران قرارك', 'دورات تنتظر قرارك', 'دورة تنتظر قرارك']));
+    var apps = C.appTickets(rowsOf('apps', 'applications'), { now: now() });
+    if (apps && apps.length) p.push(U.U(apps.length, ['طلب مدرّب جديد', 'طلبان من مدرّبين', 'طلبات من مدرّبين', 'طلبًا من مدرّبين']));
+    return p.length ? p.join(' · ') : 'لا شيء ينتظر قرارك';
+  };
   CO.openCourse = function (id) { goPage(id); };
   // «أنشئ دورة» من خارج قسم الدورات (السوق: دورة من طلب): نفس الورقة الجديدة؛ opts.done(res) يُستدعى بعد النجاح بدل الانتقال لصفحة الدورة.
   CO.create = function (title, opts) { load('experts'); openCreate(String(title || ''), opts && opts.done); };
   CO._state = S; CO._src = SRC;
   CO._tick = function (t) { S.nowOverride = t || 0; redraw(); };
-  window.V2SEC.add({ key: 'courses', take: CO.take });
+  window.V2SEC.add({ key: 'courses', take: CO.take, head: CO.head });
 })();

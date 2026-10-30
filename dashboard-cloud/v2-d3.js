@@ -113,7 +113,7 @@
   function retryBtn() { return '<button type="button" class="v3-btn2" data-a="retry">أعد المحاولة</button>'; }
   function loadingBlock(t) { return '<div class="v3-empty"><b>…جارٍ جلب ' + esc(t) + '</b></div>'; }
   function unavailable(t, key) {
-    return '<div class="v3-empty"><b>' + esc(t) + ': غير متاح بعد</b><p>تعذّر الجلب الآن، فلا تعتبر الشاشة فارغة.</p>' + retryBtn() + '</div>';
+    return '<div class="v3-empty"><b>' + esc(t) + ': غير متاح بعد</b><p>تعذّر الوصول إلى هذه البيانات الآن، فلا تعتبر الشاشة فارغة.</p>' + retryBtn() + '</div>';
   }
   function section(title, hint, body, extra) {
     return '<section class="v3-card' + (extra ? ' ' + extra : '') + '"><header class="v3-ch"><h2>' + esc(title) + '</h2>' + (hint ? '<p>' + esc(hint) + '</p>' : '') + '</header>' + body + '</section>';
@@ -281,7 +281,7 @@
   function priceBlock(kind, title, key) {
     var st = srcState(key), res = L.v2Prices(data(key));
     var body;
-    if (st === 'closed' && kind === 'course') body = '<div class="v3-empty"><b>الدورات لسه مقفولة</b><p>أسعار الدورات تظهر هنا حين تُفتح من المنصة.</p></div>';
+    if (st === 'closed' && kind === 'course') body = '<div class="v3-empty"><b>الدورات مغلقة حتى الآن</b><p>أسعار الدورات تظهر هنا حين تُفتح من المنصة.</p></div>';
     else if (st === 'closed') body = '<div class="v3-empty"><b>متجر الكتب لم يُفتح بعد</b><p>أسعار الكتب تظهر هنا حين يُفتح المتجر.</p></div>';
     else if (!res) body = st === 'loading' || st === 'idle' ? loadingBlock(title) : unavailable(title);
     else body = res.rows.length ? '<ul class="v3-list">' + res.rows.map(function (r) { return priceRow(kind, r); }).join('') + '</ul>' : '<p class="v3-none">لا أعمال بعد</p>';
@@ -348,7 +348,7 @@
       + (o.about ? '<p class="v3-line v3-mute">' + esc(o.about) + '</p>' : '')
       + '<p class="v3-amount">' + (o.suggestedText ? 'السعر المقترح: ' + esc(o.suggestedText) : '<span class="v3-mute">لم يقترح سعرًا</span>') + '</p>'
       + (o.brain ? '<div class="v3-brain">' + BRAIN + '<p>' + esc(o.brain) + '</p></div>' : '')
-      + '<div class="v3-acts two"><button type="button" class="v3-btn1" data-a="oapprove" data-id="' + esc(o.id) + '">اعتمد بالأسعار دي</button>'
+      + '<div class="v3-acts two"><button type="button" class="v3-btn1" data-a="oapprove" data-id="' + esc(o.id) + '">اعتمد هذه الأسعار</button>'
       + '<button type="button" class="v3-btn2" data-a="oreject" data-id="' + esc(o.id) + '">ارفض</button></div></div></article>';
   }
   function offerRows() { return L.v2OffersQueue(data('offers'), data('pricesBook'), now()); }
@@ -819,6 +819,23 @@
     if (srcState('offers') === 'error') failed.push('عروض الكتب');
     return { stuck: stuck ? stuck.rows : [], offers: offers || [], failed: failed,
              offersCount: offers ? offers.length : (srcState('offers') === 'error' ? null : undefined) };
+  };
+  // سطر ترويسة «الكتب» من قائمة العروض نفسها التي يرسمها التبويب (لا من عدّ مربّع اللوحة): تعذّر المصدر ⇒ «غير متاح بعد».
+  D3.head = function (key) {
+    if (key !== 'books') return null;
+    var st = srcState('offers');
+    if (st === 'closed') return 'متجر الكتب لم يُفتح بعد';
+    if (st === 'error') return L.NA;
+    if (st !== 'ready') return null;
+    var offers = L.v2OffersQueue(data('offers'), data('pricesBook'), now());
+    if (!offers) return L.NA;
+    var p = [];
+    if (offers.length) p.push(U.U(offers.length, ['عرض ينتظر المراجعة', 'عرضان ينتظران المراجعة', 'عروض تنتظر المراجعة', 'عرضًا ينتظر المراجعة']));
+    if (epState('inbox') === 'ready') {
+      var bk = (window.INBOX || []).filter(function (r) { return r && !r.fyi && r.apiKind === 'book'; }).length;
+      if (bk) p.push(U.U(bk, ['كتاب ينتظر المراجعة', 'كتابان ينتظران المراجعة', 'كتب تنتظر المراجعة', 'كتابًا ينتظر المراجعة']));
+    }
+    return p.length ? p.join(' · ') : 'لا شيء ينتظر مراجعتك';
   };
   D3.sig = function () { return ['stuck', 'offers', 'pricesBook'].map(function (k) { return srcOf(k).state; }).join(','); };
   D3.openApprove = openApprove;

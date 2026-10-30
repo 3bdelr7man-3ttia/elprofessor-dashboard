@@ -136,8 +136,7 @@ def test_shipped_escrow_renderers_escape_bridge_written_names():
     src = open(DASHBOARD_HTML, encoding='utf-8').read()
     fns = '\n'.join([_line_containing(src, 'function esc(s){'),
                      _line_containing(src, 'const money='),
-                     _line_containing(src, 'const STATUS={held:'),
-                     _line_containing(src, 'const COMMISSION=')]
+                     _line_containing(src, 'const STATUS={held:')]
                     + [_extract_function(src, n) for n in ('renderEsc', 'drawEsc')])
 
     harness = _DOM + r"""

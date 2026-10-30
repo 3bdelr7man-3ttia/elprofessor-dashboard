@@ -205,8 +205,6 @@ button.v2r-dbar:hover{background:#FBF0F3}
 .v2r-preview{background:var(--paper);border-radius:12px;padding:10px 14px;font-size:13.5px;line-height:1.9;margin:8px 0}
 
 /* —— الأوراق (D3 sheet) */
-.v2r-sheet .modal .mh{background:var(--ink)}
-.v2r-sheet .modal .mh button{width:44px;height:44px;border-radius:12px}
 .v2r-sheet .v3m{font-family:'IBM Plex Sans Arabic','Cairo',sans-serif}
 .v2r-sheet .acts .btn{min-height:52px}
 .v2r-sheet .acts .btn-primary{background:#9E2B4E;color:#fff;border:0}
@@ -266,7 +264,6 @@ button.v2r-dbar:hover{background:#FBF0F3}
   .v2r-nums{flex:1 1 100%}
 }
 @media(max-width:600px){
-  .v2r-sheet .modal .mh button{width:52px;height:52px}
   .v2r-chh{grid-template-columns:minmax(0,1fr)}
   .v2r-scope{display:none}
   .v2r-sel{display:block}

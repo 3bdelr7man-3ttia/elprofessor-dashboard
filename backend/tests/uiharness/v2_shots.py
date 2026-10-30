@@ -287,7 +287,7 @@ def flow(browser, h, pre, viewport, mobile):
     page.wait_for_selector('.v2-tile')
     page.wait_for_function(READY, timeout=30000)
     shot(page, p + '61-board-after.jpg')
-    # قائمة مقصوصة: العدّادات المبنية من صفوف الوارد «ناقصة» معلَنة، والتحذير على شريط «الحاجة الجاية»
+    # قائمة مقصوصة: العدّادات المبنية من صفوف الوارد «ناقصة» معلَنة، والتحذير على شريط «القرار التالي»
     page.evaluate("""() => { window.INBOX_TRUNCATED = ['نزاعات الملفات: معروض 100 من 300']; V2.render(document.getElementById('view')); }""")
     page.wait_for_selector('.v2-warnline')
     shot(page, p + '04-board-truncated.jpg')
@@ -322,7 +322,7 @@ def flow(browser, h, pre, viewport, mobile):
     shot(page, p + '71-board-failed.jpg')
     txt = page.inner_text('.v2-next')
     if 'تعذّر جلب القرارات' not in txt or 'العقل يعمل' in txt or 'لا توجد قرارات' in txt:
-        PROBLEMS.append(p + '71: شريط «الحاجة الجاية» بيطمّن فوق جلب فاشل: %r' % txt)
+        PROBLEMS.append(p + '71: شريط «القرار التالي» بيطمّن فوق جلب فاشل: %r' % txt)
     page.evaluate("() => { const S = V2._state; S.mode = 'focus'; S.deck = []; S.total = 0; V2.render(document.getElementById('view')); }")
     page.wait_for_selector('.v2-end')
     shot(page, p + '72-end-failed.jpg')
@@ -447,8 +447,89 @@ SECTION_FIRST = [('home', 'board', 'اللوحة'), ('files', 'files', 'ملفا
                  ('company', 'invest', 'الشركة ورأس المال')]
 
 
+
+# ------------------------------------------------------------- الجولة النهائية: لا شاشة قديمة + سطر الترويسة + الشاشات التي كانت ناقصة من اللقطات
+OLD_MARKS = """() => { const v = document.getElementById('view'); const q = s => v ? v.querySelectorAll(s).length : 0;
+  return {kpis: q('.kpis'), tabbar: q('.tabbar'), inboxwrap: q('.inboxwrap'), ph: q('.panel .ph'), teamTabs: q('#teamTabs'), text: v ? v.innerText : ''}; }"""
+LEGACY_OK = {('money', 'all'): '.v2lg-note', ('disputes', 'escrow'): '.v2lg-note', ('courses', 'all'): '.v2co-legacy-note'}
+RAW_BAD = ('Cash Flow', 'حيّ من المالية', 'EGP', '١٥٪', 'مين ردّ', 'لسه محتاج', 'اتواصلنا', 'مش مناسب', 'civil')
+RAW_BAD_LEGACY = ('InstaPay', 'PAY-mp', 'IP-')      # الشاشتان القديمتان فقط: الإيصالات اليدوية صارت في «الفلوس ‹ الإيصالات»
+
+
+def ar_digits(n):
+    return str(n).translate(str.maketrans('0123456789', '٠١٢٣٤٥٦٧٨٩'))
+
+
+def head_matches(page, pre, key, tab):
+    """سطر الترويسة يطابق ما ترسمه القائمة نفسها (لا عدّان مختلفان لشيء واحد)."""
+    d = page.evaluate("() => (document.querySelector('.v2c-h p') || {}).textContent || ''")
+    if key == 'files' and tab == 'files':
+        c = page.evaluate("() => [...document.querySelectorAll('.v2d-segb b')].map(b => b.textContent.trim())")
+        want = [(c[0], 'متأخر'), (c[1], 'تنتظر مراجعتك'), (c[2], 'عند الخبراء')] if len(c) >= 3 else []
+        for n, w in want:
+            if n != ar_digits(0) and (n + ' ' + w) not in d:
+                PROBLEMS.append('%s: سطر ترويسة الملفات «%s» لا يطابق عمود «%s» = %s' % (pre, d, w, n))
+    elif key == 'content' and tab == 'pipeline':
+        c = page.evaluate("() => [...document.querySelectorAll('.v2ct-segb b')].map(b => b.textContent.trim())")
+        for n in c[:3]:
+            t = n.replace('+', '').translate(str.maketrans('٠١٢٣٤٥٦٧٨٩', '0123456789'))
+            if t.isdigit() and int(t) >= 3 and n.replace('+', '') not in d:
+                PROBLEMS.append('%s: سطر ترويسة المحتوى «%s» لا يذكر عدد العمود %s: %r' % (pre, d, n, c))
+    elif key == 'books' and tab == 'offers':
+        r = page.evaluate("() => ({cards: document.querySelectorAll('#view .v3-tgrid > *').length, na: /غير متاح بعد/.test((document.getElementById('view') || {}).innerText || '')})")
+        if r['na'] and 'غير متاح بعد' not in d:
+            PROBLEMS.append('%s: الكتب: التبويب «غير متاح بعد» وسطر الترويسة «%s»' % (pre, d))
+        if r['cards'] and 'غير متاح بعد' in d:
+            PROBLEMS.append('%s: الكتب: التبويب فيه %s عرض وسطر الترويسة «غير متاح بعد»' % (pre, r['cards']))
+    if not d.strip():
+        PROBLEMS.append('%s: ترويسة %s/%s بلا سطر' % (pre, key, tab))
+
+
+def final_walk(page, pre, mobile):
+    tabs = page.evaluate("() => V2L.SECTIONS.map(s => [s.key, s.tabs.filter(t => !t.hidden).map(t => t.key)])")
+    for key, tl in tabs:
+        for tab in tl:
+            go_section(page, key, tab)
+            page.wait_for_timeout(450)
+            m = page.evaluate(OLD_MARKS)
+            name = '%s-walk %s/%s' % (pre, key, tab)
+            legacy = LEGACY_OK.get((key, tab))
+            if legacy:
+                if not page.query_selector(legacy):
+                    PROBLEMS.append('%s: «كل السجلات» بلا السطر التمهيدي %s' % (name, legacy))
+            elif m['kpis'] or m['tabbar'] or m['inboxwrap'] or m['ph'] or m['teamTabs']:
+                PROBLEMS.append('%s: ما زالت شاشة بالشكل القديم (kpis=%s tabbar=%s inboxwrap=%s ph=%s)' % (name, m['kpis'], m['tabbar'], m['inboxwrap'], m['ph']))
+            for bad in RAW_BAD + (RAW_BAD_LEGACY if (key, tab) in (('money', 'all'), ('disputes', 'escrow')) else ()):
+                if bad in m['text']:
+                    PROBLEMS.append('%s: نص غير مقبول «%s»' % (name, bad))
+            head_matches(page, name, key, tab)
+            sw = page.evaluate("() => Math.max(document.documentElement.scrollWidth, document.body.scrollWidth)")
+            if mobile and sw > page.viewport_size['width'] + 1:
+                PROBLEMS.append('%s: تمرير أفقي (%s)' % (name, sw))
+    # لقطات الشاشات التي كانت ناقصة: الضمان (الآن «كل السجلات») · الدعوات · «كل السجلات» في الفلوس بعد الشكل الجديد
+    for key, tab, fn in (('disputes', 'escrow', '45-disputes-escrow'), ('people', 'pipeline', '46-people-pipeline'), ('money', 'all', '47-money-all')):
+        go_section(page, key, tab)
+        page.wait_for_timeout(500)
+        st = sec_state(page)
+        if st['hash'] != '#s/%s/%s' % (key, tab):
+            PROBLEMS.append('%s%s: العنوان %r' % (pre, fn, st))
+        sshot(page, '%s%s.jpg' % (pre, fn))
+    # الخبراء: لا تبويبان مكرّران ولا عنوان قديم، وتذكرة الرد على الدعوة بزرّيها
+    go_section(page, 'files', 'experts')
+    page.wait_for_selector('.v2ex')
+    ex = page.evaluate("""() => ({tabs: document.querySelectorAll('#teamTabs').length, btns: [...document.querySelectorAll('.v2ex-t .v2ex-btn1, .v2ex-t .v2ex-btn2')].map(b => b.textContent.trim()),
+      cards: document.querySelectorAll('.v2ex-x').length, text: document.querySelector('.v2ex').innerText})""")
+    if ex['tabs'] or not ex['cards']:
+        PROBLEMS.append('%sexperts: الشاشة القديمة (%s) أو بلا بطاقات (%s)' % (pre, ex['tabs'], ex['cards']))
+    if ex['btns'] and ('تم التواصل' not in ex['btns'] or 'ليس مناسبًا' not in ex['btns']):
+        PROBLEMS.append('%sexperts: أزرار التذكرة %r' % (pre, ex['btns']))
+    for bad in ('المدربون', 'الفريق الإداري', 'civil', 'مين ردّ'):
+        if bad in ex['text']:
+            PROBLEMS.append('%sexperts: «%s» ظاهر' % (pre, bad))
+
+
 def flow_d1b(browser, h, pre, viewport, mobile):
-    h.ef = v2fx.V2Platform()
+    h.ef = d3fx.D3Platform(d2=True)
     ctx = browser.context(h, 'admin', viewport, mobile)
     page = open_shell(ctx)
     w = viewport['width']
@@ -468,7 +549,7 @@ def flow_d1b(browser, h, pre, viewport, mobile):
     }""")
     for key, txt in badges['tiles'].items():
         mt = badges['menu'].get(key, '')
-        if txt.replace('+', '') != mt.replace('+', '') and not (txt in ('تعذّر الجلب',) and mt == '!'):
+        if txt.replace('+', '') != mt.replace('+', '') and not (txt in ('تعذّر الوصول',) and mt == '!'):
             PROBLEMS.append('%s01: شارة «%s» في القائمة (%s) مش نفس مربّع اللوحة (%s)' % (pre, key, mt, txt))
     if not any(v for v in badges['menu'].values()):
         PROBLEMS.append(pre + '01: مفيش ولا شارة في القائمة')
@@ -511,8 +592,8 @@ def flow_d1b(browser, h, pre, viewport, mobile):
     page.evaluate("() => goEscrowManual()")
     page.wait_for_timeout(300)
     st = sec_state(page)
-    if st['hash'] != '#s/money/manual' or st['h1'] != 'الفلوس':
-        PROBLEMS.append(pre + '26: دفعات يدوية (goEscrowManual) ما هبطتش على قسم «الفلوس»: %r' % st)
+    if st['hash'] != '#s/money/receipts' or st['h1'] != 'الفلوس' or st['on'] != 'الإيصالات والمدفوعات العالقة':
+        PROBLEMS.append(pre + '26: دفعات يدوية (goEscrowManual) ما هبطتش على «الفلوس ‹ الإيصالات»: %r' % st)
     sshot(page, pre + '26-money-receipts.jpg')
     page.evaluate("() => { location.hash = '#invites'; }")
     page.wait_for_timeout(400)
@@ -523,6 +604,7 @@ def flow_d1b(browser, h, pre, viewport, mobile):
         PROBLEMS.append(pre + '26: تذكّر المفتاح المفتوح مش متسجّل')
     if page.evaluate("() => document.querySelector('.app').classList.contains('v2-pre')"):
         PROBLEMS.append(pre + '26: صنف الإخفاء المؤقت فضل بعد الجاهزية')
+    final_walk(page, pre, mobile)
     # رجوع المتصفح ورجوع التحديث
     go_section(page, 'files')
     go_section(page, 'files', 'experts')
@@ -570,7 +652,7 @@ def flow_d1b(browser, h, pre, viewport, mobile):
     # رابط قديم بيهبط على قسمه وتبويبه
     for old, expect, label, on_tab in (('#finance', '#s/money/all', 'الفلوس', 'كل السجلات'), ('#packages', '#s/money/all', 'الفلوس', 'كل السجلات'),
                                        ('#messages', '#s/people/messages', 'الناس والدعوات', 'الرسائل'), ('#invites', '#s/people/invites', 'الناس والدعوات', 'الطلبات'),
-                                       ('#escrow', '#s/disputes/escrow', 'النزاعات والاستردادات', 'الضمان'), ('#tutorials', '#s/content/tutorials', 'المحتوى', 'دليل الاستخدام'),
+                                       ('#escrow', '#s/disputes/escrow', 'النزاعات والاستردادات', 'كل السجلات'), ('#tutorials', '#s/content/tutorials', 'المحتوى', 'دليل الاستخدام'),
                                        ('#partners', '#s/company/invest', 'الشركة ورأس المال', 'نظرة'), ('#inbox', '#s/home/inbox', 'اللوحة', 'كل الوارد'),
                                        ('#team', '#s/files/experts', 'ملفات الخبراء', 'الخبراء'), ('#s/money/receipts', '#s/money/receipts', 'الفلوس', 'الإيصالات والمدفوعات العالقة')):
         ctx = browser.context(h, 'admin', viewport, mobile)
@@ -626,7 +708,7 @@ def flow_d1b(browser, h, pre, viewport, mobile):
     # المفتاح مقفول: مفيش غلاف ولا قائمة جديدة
     os.environ.pop('DASH_V2_ENABLED', None)
     try:
-        h.ef = v2fx.V2Platform()
+        h.ef = d3fx.D3Platform(d2=True)
         ctx = browser.context(h, 'admin', viewport, mobile)
         page = ctx.new_page()
         page.goto(DASH + '/', wait_until='domcontentloaded')
@@ -779,7 +861,7 @@ def flow_d2(browser, h, pre, viewport, mobile):
     for c in ('disputes', 'refunds', 'legacy'):
         if not dc.get(c):
             PROBLEMS.append('%s04: عمود %s فاضي' % (pre, c))
-    if dinfo['tabs'] != ['النزاعات', 'الضمان', 'كل النزاعات']:
+    if dinfo['tabs'] != ['النزاعات', 'كل النزاعات', 'كل السجلات']:
         PROBLEMS.append('%s04: تبويبات النزاعات: %r' % (pre, dinfo['tabs']))
     if not any(b == 'افتح وقرّر' for b in dinfo['btns']):
         PROBLEMS.append('%s04: زرّ «افتح وقرّر» غايب: %r' % (pre, dinfo['btns'][:4]))
@@ -1086,7 +1168,7 @@ def flow_d3(browser, h, pre, viewport, mobile):
     h.ef = d3fx.D3Platform(d2=True)
     ctx = browser.context(h, 'admin', tallvp, mobile)
     page = d3_open(ctx, '#s/money/prices', 'prices')
-    pr = page.evaluate("() => ({rows: document.querySelectorAll('.v3-pr').length, vis: [...document.querySelectorAll('.v3-vis')].map(e => e.textContent), closed: document.body.innerText.indexOf('الدورات لسه مقفولة') > -1})")
+    pr = page.evaluate("() => ({rows: document.querySelectorAll('.v3-pr').length, vis: [...document.querySelectorAll('.v3-vis')].map(e => e.textContent), closed: document.body.innerText.indexOf('الدورات مغلقة حتى الآن') > -1})")
     if pr['rows'] != 4 or not pr['closed']:
         PROBLEMS.append('%s06: الأسعار %r' % (pre, pr))
     d3_shot(page, pre + '06-prices.jpg')
@@ -1326,6 +1408,7 @@ def main():
                 flow_d2(browser, h, 't', TAB, False)
                 flow_d2(browser, h, 'm', MOB, True)
             elif mode == 'd1b':
+                d3fx.seed_dash(h.app)        # الجولة النهائية: عروض الكتب وجلسات الضمان ودفتر الإيراد حاضرة في الهيكل المدموج (لا «غير متاح بعد» مفتعلة)
                 flow_d1b(browser, h, 'd', DESK, False)
                 flow_d1b(browser, h, 't', TAB, False)
                 flow_d1b(browser, h, 'm', MOB, True)

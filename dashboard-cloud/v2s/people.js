@@ -391,7 +391,7 @@
   }
   function usersBodyHtml(UV) {
     if (UV.state === 'loading') return '<div class="v2p-list one">' + skeleton() + skeleton() + skeleton() + '</div><p class="v2p-none">…جارٍ جلب الحسابات</p>';
-    if (UV.state === 'failed') return '<div class="v2p-empty"><b>الحسابات: ' + NA + '</b><p class="v2p-none">تعذّر الجلب الآن، فلا تعتبر الشاشة فارغة.</p><button type="button" class="v2p-btn2" data-a="retry" data-key="users">أعد المحاولة</button></div>';
+    if (UV.state === 'failed') return '<div class="v2p-empty"><b>الحسابات: ' + NA + '</b><p class="v2p-none">تعذّر الوصول إلى هذه البيانات الآن، فلا تعتبر الشاشة فارغة.</p><button type="button" class="v2p-btn2" data-a="retry" data-key="users">أعد المحاولة</button></div>';
     if (UV.state === 'empty') return emptyCard('لا حسابات بعد');
     var h = chipRowHtml(UV);
     if (UV.empty) h += '<div class="v2p-empty small"><b>' + esc(UV.empty.text) + '</b>' + (UV.empty.hint ? '<p class="v2p-none">' + esc(UV.empty.hint) + '</p>' : '') + '</div>';

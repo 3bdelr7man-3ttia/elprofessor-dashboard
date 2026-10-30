@@ -201,7 +201,7 @@ def test_chips_order_labels_zero_hiding_and_contexts():
       const m = L.v2hChips('messages', {'t:messages': 4}, 't:messages'), d = L.v2hChips('disputes', {'t:disputes': 1, 't:legacy': 0}, 't:disputes');
       console.log(JSON.stringify({home: c.row1.map(x => [x.key, x.label, x.n, x.text, x.on, x.tone]), files: [f.row1.map(x => x.key), f.row2.map(x => x.key)], fa: fa.row1.map(x => x.key),
         m: m, d: d.row1.map(x => x.key), labels: L.v2hChips('home', {'t:decisions': 1}, 'all').row1.map(x => x.label)}))""")
-    assert r['home'] == [['all', 'الكل', 34, '٣٤', True, ''], ['late', 'متأخر', 12, '١٢', False, 'late'], ['t:files', 'ملفات الخبراء', 18, '١٨', False, ''],
+    assert r['home'] == [['all', 'الكل', 34, '٣٤', True, ''], ['late', 'تجاوز المهلة', 12, '١٢', False, 'late'], ['t:files', 'ملفات الخبراء', 18, '١٨', False, ''],
                          ['t:legacy', 'استشارات قديمة', 3, '٣', False, ''], ['t:money', 'إيصالات التحويل', 2, '٢', False, ''],
                          ['t:decisions', 'طلبات انضمام واعتماد', 8, '٨', False, '']]
     assert r['files'] == [['t:files'], ['attn']] and r['fa'] == ['t:files', 'late']        # النشطة تظهر ولو صفرًا
@@ -378,7 +378,7 @@ def test_service_auto_and_fyi_lines():
 
 # ---------------------------------------------------------------- ٤) طبقة النصوص
 
-COLLOQ = ['مش ', 'دلوقتي', 'اتبعت', 'اتدفع', 'اتستلم', 'بتاع', 'عايز', 'هيت', 'ابعته', 'رجّع', 'مستني', 'لوحده', 'لوحدها', 'إيه', ' ليه', 'كده', 'اللي', 'تاني', 'مالهاش', 'بقى', 'إزاي', 'خالص', 'يقوّم']
+COLLOQ = ['مش ', 'دلوقتي', 'اتبعت', 'اتدفع', 'اتستلم', 'بتاع', 'عايز', 'هيت', 'ابعته', 'رجّع', 'مستني', 'لوحده', 'لوحدها', 'إيه', ' ليه', 'كده', 'اللي', 'تاني', 'مالهاش', 'بقى', 'إزاي', 'خالص', 'يقوّم', 'الحاجة الجاية', 'لسه مقفولة']
 
 
 def has_marker(t):

@@ -763,7 +763,7 @@ def test_the_only_images_on_the_tab_are_the_books_photo_and_the_brain_avatar():
 
 def test_every_failed_source_has_a_visible_not_available_path():
     assert 'تعذّر جلب: ' in CODE and 'function warnStrip(' in CODE
-    assert 'الكتب والأعمال: غير متاح بعد' in CODE and 'تعذّر الجلب الآن، فلا تعتبر الشاشة فارغة.' in CODE and 'data-a="retry"' in CODE
+    assert 'الكتب والأعمال: غير متاح بعد' in CODE and 'تعذّر الوصول إلى هذه البيانات الآن، فلا تعتبر الشاشة فارغة.' in CODE and 'data-a="retry"' in CODE
     assert 'لم يصل ما نعرضه بعد' in CODE, 'مصدر واقع ولا صفوف ≠ «لا أعمال بعد»'
     assert 'أعمال السوق التي تنتظر المراجعة: ' in CODE, 'ممرّ المراجعة لا يدّعي «لا شيء» والمصدر واقع'
 

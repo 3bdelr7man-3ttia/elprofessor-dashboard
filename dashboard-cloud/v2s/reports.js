@@ -137,7 +137,7 @@
     Object.keys(SRC_LABEL).forEach(function (k) { if (s[k] === 'failed' || s[k] === 'partial') bad.push(SRC_LABEL[k]); });
     var out = '';
     if (s.window === 'failed') out += '<div class="v3-warn" role="status">التوقيت غير متاح، الأيام محسوبة بتوقيت جرينتش</div>';
-    if (bad.length) out += '<div class="v3-warn" role="status">تعذّر جلب: ' + esc(bad.join(' · ')) + ' — ما يظهر ناقص، وليس معناه أنه لا شيء</div>';
+    if (bad.length) out += '<div class="v3-warn" role="status">تعذّر الوصول إلى: ' + esc(bad.join(' · ')) + ' — ما يظهر ناقص، وليس معناه أنه لا شيء</div>';
     return out;
   }
   function noteStrip() { return S.note ? '<div class="v3-ok" role="status">' + esc(S.note) + '</div>' : ''; }
@@ -243,7 +243,7 @@
     if (allZero && dl.ledger !== false && (pts.signups || d.scope !== 'all')) {
       body = '<div class="v3-empty"><b>' + (pts.signups ? 'لا دخل ولا حسابات جديدة في هذه الفترة' : 'لا دخل في هذه الفترة') + '</b></div>';
     } else if (noIncome && !pts.signups && !pts.visits) {
-      body = '<div class="v3-empty"><b>' + NA + '</b><p>تعذّر جلب الأرقام اليومية الآن.</p></div>';
+      body = '<div class="v3-empty"><b>' + NA + '</b><p>تعذّر الوصول إلى الأرقام اليومية الآن.</p></div>';
     } else {
       body = svgChart(d, rows, pts, W, H, leg);
     }
@@ -457,7 +457,7 @@
   function drawDemand(v) {
     var E = ep(), st = (E && E.state && E.state.analysis) || 'idle', d = (E && E.data && E.data.analysis) || {};
     if (st === 'idle' || st === 'loading') { v.innerHTML = '<div class="v3 v2r" data-tab="demand">' + noteStrip() + loadingBlock('جارٍ جلب الأسئلة') + '</div>'; return wire(v, null); }
-    if (st === 'error') { v.innerHTML = '<div class="v3 v2r" data-tab="demand"><div class="v3-empty"><b>أسئلة المحادثة: ' + NA + '</b><p>تعذّر الجلب الآن، فلا تعتبر الشاشة فارغة.</p><button type="button" class="v3-btn2" data-a="dretry">أعد المحاولة</button></div></div>'; return wire(v, null); }
+    if (st === 'error') { v.innerHTML = '<div class="v3 v2r" data-tab="demand"><div class="v3-empty"><b>أسئلة المحادثة: ' + NA + '</b><p>تعذّر الوصول إلى هذه البيانات الآن، فلا تعتبر الشاشة فارغة.</p><button type="button" class="v3-btn2" data-a="dretry">أعد المحاولة</button></div></div>'; return wire(v, null); }
     var arr = function (x) { return Array.isArray(x) ? x : []; };
     if ((d.total || 0) === 0 && !arr(d.recent_questions).length) { v.innerHTML = '<div class="v3 v2r" data-tab="demand">' + noteStrip() + '<div class="v3-empty"><b>لم يصل أي سؤال بعد</b></div></div>'; return wire(v, null); }
     var recent = arr(d.recent_questions), unmet = arr(d.unmet), unclassified = d.unclassified || 0, f = S.d.f;
@@ -672,7 +672,7 @@
     var sh = sheetApi().openSheet, E = ep(); if (!sh || !E) return;
     var un = (d && d.unclassified) || 0, n = Math.min(un, 100);
     var s = sh('تصنيف الأسئلة الجديدة', '<p class="mc-lead">سيُصنَّف ' + esc(UU(n, ['سؤال واحد', 'سؤالان', 'أسئلة', 'سؤالًا'])) + ' جديدًا (١٠٠ بالكثير في المرة). التصنيف يعمل على المنصة وله تكلفة صغيرة.</p>'
-      + '<div id="v2rcerr" role="alert"></div><div class="acts"><button type="button" class="v3-btn1" data-a="cgo">صنّف الآن</button><button type="button" class="v3-btn2" data-a="cno">إلغاء</button></div>');
+      + '<div id="v2rcerr" role="alert"></div><div class="acts"><button type="button" class="v3-btn1" data-a="cgo">صنّف الآن</button><button type="button" class="v3-btn2" data-a="cno">رجوع</button></div>');
     if (!s) return;
     s.classList.add('v2r-sheet');
     q('[data-a="cno"]', s).onclick = function () { if (!s.dataset.busy) window.closeModal(); };

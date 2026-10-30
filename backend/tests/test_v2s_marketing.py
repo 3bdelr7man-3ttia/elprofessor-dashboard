@@ -907,7 +907,7 @@ def test_a_missing_ads_source_says_so_and_failures_are_never_empty_screens():
     h = _html('marketing', _model(src={'ads': {'state': 'error'}, 'income': {'state': 'error'}}))
     assert 'أرصدة إعلانات الأعمال: غير متاح بعد' in h and 'mk-src s-error' in h and h.count('data-a="retry"') >= 1
     d = _html('marketing', _model(src={'campaigns': {'state': 'error'}}))
-    assert 'الحملات: غير متاح بعد' in d and 'تعذّر الجلب الآن، فلا تعتبر الشاشة فارغة.' in d and 'تعذّر جلب: الحملات — ما يظهر ناقص، وليس معناه أنه لا شيء' in d
+    assert 'الحملات: غير متاح بعد' in d and 'تعذّر الوصول إلى هذه البيانات الآن، فلا تعتبر الشاشة فارغة.' in d and 'تعذّر جلب: الحملات — ما يظهر ناقص، وليس معناه أنه لا شيء' in d
     loading = _html('marketing', _model(src={'campaigns': {'state': 'loading'}}))
     assert '…جارٍ جلب الحملات' in loading and 'غير متاح بعد' in loading.replace('الحملات: غير متاح بعد', '')
     emptya = _html('marketing', _model(raw=[C(1, status='paused', spent=5)]))

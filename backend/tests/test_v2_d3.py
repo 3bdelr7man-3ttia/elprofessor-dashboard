@@ -891,7 +891,7 @@ def test_two_new_decision_cards_a_stuck_payment_and_a_book_offer():
     book = next(c for c in cards if c['kind'] == 'stuck_payment' and 'دليل' in c['brain'] + c['sub'])
     assert book['warn'] == 'الكتب لا تُسترد'
     off = next(c for c in cards if c['kind'] == 'book_offer')
-    assert off['tag'] == 'عرض كتاب للمراجعة' and off['primary']['label'] == 'اعتمد بالأسعار دي' and off['primary']['act'] == {'do': 'offer_approve', 'id': 'off-1'}
+    assert off['tag'] == 'عرض كتاب للمراجعة' and off['primary']['label'] == 'اعتمد هذه الأسعار' and off['primary']['act'] == {'do': 'offer_approve', 'id': 'off-1'}
     assert off['secondary']['label'] == 'ارفض' and off['secondary']['act']['do'] == 'offer_reject' and off['open'] == {'do': 'section', 'section': 'books', 'tab': 'offers'}
     # الاستردادات ما فيهاش زرّ فلوس في بطاقة الدفعة العالقة
     assert all('money' not in json.dumps(c['primary']) for c in cards if c['kind'] == 'stuck_payment')
@@ -922,7 +922,7 @@ def test_old_links_still_land_somewhere_sensible():
     land = lambda mod, st: (lambda r: (r['section'], r['tab']))(L('sectionFor', mod, st))
     assert land('finance', {'finTab': 'summary'}) == ('money', 'all') and land('finance', {'finTab': 'packages'}) == ('money', 'all')
     assert land('finance', {'finTab': 'withdrawals'}) == ('money', 'all') and land('finance', {'finTab': 'stuck'}) == ('money', 'all')
-    assert land('escrow', {'escTab': 'manual'}) == ('money', 'manual') and land('escrow', {'escTab': 'sessions'}) == ('disputes', 'escrow')
+    assert land('escrow', {'escTab': 'manual'}) == ('disputes', 'escrow') and land('escrow', {'escTab': 'sessions'}) == ('disputes', 'escrow')   # يدوي ⇒ يحوّله index.html إلى الفلوس ‹ الإيصالات
     assert land('knowledge', {}) == ('books', 'books')
     assert L('routeFor', '#s/money', {})['tab'] == 'overview' and L('routeFor', '#s/money/prices', {})['mod'] == 'v2m_prices'
     assert L('routeFor', '#s/books', {})['mod'] == 'v2b_offers' and L('routeFor', '#packages', {})['section'] == 'money'
@@ -1034,7 +1034,7 @@ def test_touch_targets_and_mobile_rules_are_in_the_css():
         if sel.startswith('@') or re.match(r'^[\d.]+%|^from$|^to$', sel):
             continue
         for part in sel.split(','):
-            assert part.strip().startswith(('.v3', '#epModal')), part
+            assert part.strip().startswith(('.v3', '#epModal', '.app.v2-shell.v2lg #view', '.v2lg-note')), part
 
 
 BANNED_IN_D3 = ['يقوّم', 'يقوم بتقييم', 'طابور', 'Backend', 'endpoint', 'JSON', 'بروف', 'الذكاء الاصطناعي']

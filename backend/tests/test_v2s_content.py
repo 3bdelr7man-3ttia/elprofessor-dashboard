@@ -798,11 +798,11 @@ def test_write_now_says_so_when_the_platform_was_already_writing():
 @needs_node
 def test_home_tile_speaks_the_boards_words_and_always_lands_on_the_ideas_list():
     got = _node("""const T=L.v2Tiles(%s);const t=(T.tiles||T).filter(x=>x.key==='content')[0];console.log(JSON.stringify(t));""" % json.dumps({'topics_drafts': 3, 'testimonials_pending': 2}))
-    assert got['next'] == '٣ أفكار · رأيان لمتعلّمَين' and got['land'] == 'topics_drafts' and got['dest'] == 'topics'
+    assert got['next'] == 'رأيان لمتعلّمَين · ٣ أفكار في الأرشيف' and got['land'] == 'topics_drafts' and got['dest'] == 'topics'
     one = _node("const T=L.v2Tiles(%s);console.log(JSON.stringify((T.tiles||T).filter(x=>x.key==='content')[0]))" % json.dumps({'topics_drafts': 1, 'testimonials_pending': 1}))
-    assert one['next'] == 'فكرة واحدة · رأي متعلّم واحد'
+    assert one['next'] == 'رأي متعلّم واحد · فكرة في الأرشيف'
     many = _node("const T=L.v2Tiles(%s);console.log(JSON.stringify((T.tiles||T).filter(x=>x.key==='content')[0]))" % json.dumps({'topics_drafts': 12, 'testimonials_pending': 4}))
-    assert many['next'] == '١٢ فكرة · ٤ آراء متعلّمين'
+    assert many['next'] == '٤ آراء متعلّمين · ١٢ فكرة في الأرشيف'
     only = _node("const T=L.v2Tiles(%s);console.log(JSON.stringify((T.tiles||T).filter(x=>x.key==='content')[0]))" % json.dumps({'topics_drafts': 0, 'testimonials_pending': 5}))
     assert only['next'] == '٥ آراء متعلّمين' and only['land'] == 'topics_drafts'
     zero = _node("const T=L.v2Tiles(%s);console.log(JSON.stringify((T.tiles||T).filter(x=>x.key==='content')[0]))" % json.dumps({'topics_drafts': 0, 'testimonials_pending': 0}))

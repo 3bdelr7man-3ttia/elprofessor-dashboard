@@ -271,9 +271,6 @@ body:has(> .app.v2-shell) .v2-pill{z-index:75}
 body:has(> .app.v2-shell) #epModal{z-index:72;background:rgba(33,38,46,.5)}
 body:has(> .app.v2-shell) #epModal .modal{background:#fff;border-radius:22px;max-width:560px;box-shadow:0 24px 64px rgba(33,38,46,.34);font-family:'IBM Plex Sans Arabic','Cairo',sans-serif;color:#21262E}
 body:has(> .app.v2-shell) #epModal .modal.wide{max-width:960px}
-body:has(> .app.v2-shell) #epModal .modal .mh{background:#F6F1EA;color:#21262E;border-top:4px solid #9E2B4E;padding:16px 20px;font:800 19px/1.5 'Cairo',sans-serif}
-body:has(> .app.v2-shell) #epModal .modal .mh button{width:44px;height:44px;border-radius:12px;border:1px solid #E9E1D6;background:#fff;color:#21262E;font-size:17px;flex:none}
-body:has(> .app.v2-shell) #epModal .modal .mh button:hover{background:#FBF0F3;color:#9E2B4E}
 body:has(> .app.v2-shell) #epModal .modal .mb{padding:20px;font-size:15px;line-height:1.8}
 body:has(> .app.v2-shell) #epModal .mc-tab td{font-size:15px;padding:10px 12px}
 body:has(> .app.v2-shell) #epModal .mc-tab tr:nth-child(odd){background:#FBFAF7}
@@ -288,7 +285,6 @@ body:has(> .app.v2-shell) #epModal .acts .btn:disabled{opacity:.55}
   body:has(> .app.v2-shell) #epModal .modal{max-width:none;width:100%;border-radius:22px 22px 0 0;max-height:92vh;max-height:92dvh;overflow:auto}
   body:has(> .app.v2-shell) #epModal .modal .mb{max-height:none}
   body:has(> .app.v2-shell) #epModal .acts .btn{min-height:52px}
-  body:has(> .app.v2-shell) #epModal .modal .mh button{width:52px;height:52px}   /* الموبايل: زر الإغلاق ٥٢ (يغلب قاعدة ٤٤ أعلاه) */
 }
 body:has(> .app.v2-shell) .toasts{inset-inline-start:20px;inset-inline-end:auto;left:auto;right:auto}
 body:has(> .app.v2-shell) .toast{background:#21262E;color:#fff;border-radius:14px;font:600 14.5px/1.6 'IBM Plex Sans Arabic','Cairo',sans-serif;padding:12px 18px}

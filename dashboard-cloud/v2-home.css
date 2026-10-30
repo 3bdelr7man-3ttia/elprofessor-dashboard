@@ -40,7 +40,7 @@
 .v2-beats li{display:flex;justify-content:space-between;gap:10px;font-size:12.5px;color:#4B463E}
 .v2-beats b{font-weight:600;color:#7A7468}
 
-/* —— الحاجة الجاية */
+/* —— القرار التالي */
 .v2-next{display:flex;align-items:center;gap:16px;background:var(--v2-ink);color:#fff;border-radius:20px;padding:16px 20px;margin-bottom:18px}
 .v2-av{width:60px;height:60px;border-radius:50%;object-fit:cover;flex:none;background:#fff;border:2px solid rgba(255,255,255,.25)}
 .v2-nt{flex:1;min-width:0;display:grid;gap:3px}

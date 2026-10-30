@@ -1075,7 +1075,7 @@ def test_static_company_js_fix_round_rules():
     assert 'تُضبط من الخادم' not in js
     assert js.count('delSheet({') == 4 and 'confirmSheet({ title: \'حذف' not in js                                            # كل حذف بمرحلتين
     assert "ep: ['users']" in js
-    assert '#epModal .modal:has(.com) .mh' in css and '#21262E' in css
+    assert '.mh' not in css and '#21262E' in css   # ترويسة الأوراق قاعدة واحدة في v2-shell.css (ورقة القرار الموحّدة)
 
 
 def test_static_company_js_rules():

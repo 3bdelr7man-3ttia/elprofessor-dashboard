@@ -250,7 +250,7 @@ def test_the_platform_waiting_queue_is_rendered_in_the_inbox(page, server):
 def test_a_founding_expert_lead_is_a_row_in_the_inbox_with_its_next_step(page, server):
     """المؤسس (٢٠٢٦-١٠-٠٧): «مدرّب عايز ينضم وصل على تليجرام ومظهرش في الداشبورد» — الليد كان
     له لوحة تحت «المستخدمون» وحدها. الآن هو صفٌّ في الوارد باسمه وتخصّصه، ودرجه يحمل الخطوة
-    التالية («اتواصلنا») والرفض. المُحوَّل/المرفوض لا يشغل الوارد."""
+    التالية («تم التواصل») والرفض. المُحوَّل/المرفوض لا يشغل الوارد."""
     _go(page, server, 'inbox')
     rows = page.inner_text('#rows')
     assert 'د. ثابت أبو الروس' in rows, rows[:400]
@@ -260,7 +260,7 @@ def test_a_founding_expert_lead_is_a_row_in_the_inbox_with_its_next_step(page, s
     drawer = page.inner_text('#drawer')
     assert 'تحكيم' in drawer and 'فلسطين' in drawer and '+970599000000' in drawer, drawer[:600]
     acts = page.eval_on_selector_all('#drawer .acts [data-a]', 'els=>els.map(e=>e.dataset.a+":"+e.textContent.trim())')
-    assert any(a.startswith('approve:') and 'اتواصلنا' in a for a in acts), acts
+    assert any(a.startswith('approve:') and 'تم التواصل' in a for a in acts), acts
     assert any(a.startswith('reject:') for a in acts), acts
 
 
@@ -272,12 +272,12 @@ def test_founding_leads_live_on_the_experts_screen_not_under_users(page, server)
     _until(page, "!!(window.EP && EP.state.foundingLeads==='ready')", 30000)
     page.wait_for_timeout(300)
     txt = page.inner_text('#view')
-    assert 'مين ردّ على دعوة المؤسس' in txt and 'د. ثابت أبو الروس' in txt, txt[:500]
+    assert 'من ردّ على دعوة المؤسس' in txt and 'د. ثابت أبو الروس' in txt, txt[:500]
     # فوق التبويبات لا تحتها: اللوحة تسبق شريط التبويب في ترتيب الصفحة
     assert page.evaluate("document.querySelector('#flRefresh').compareDocumentPosition(document.querySelector('#teamTabs')) & Node.DOCUMENT_POSITION_FOLLOWING") != 0
     _go(page, server, 'users')
     page.wait_for_timeout(600)
-    assert 'مين ردّ على دعوة المؤسس' not in page.inner_text('#view')
+    assert 'من ردّ على دعوة المؤسس' not in page.inner_text('#view')
     # الوارد: بند الليد يفتح «الخبراء والمدربون»
     _go(page, server, 'inbox')
     page.click('#rows .row:has-text("د. ثابت أبو الروس")')

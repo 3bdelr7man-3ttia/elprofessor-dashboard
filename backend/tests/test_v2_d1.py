@@ -506,7 +506,7 @@ def test_tile_counts_come_straight_from_the_queue():
     assert t['people']['count'] == 15 and t['people']['partial'] is False and t['people']['dest'] == 'invites'
     # الفلوس: تحويلات ٤ + إيصالات ١ + عالقة ٢ + استردادات ٥ (D3) — كما في المواصفة، بلا اقتسام الدورات المعلّق — الأحمر لما فيه عالق
     assert t['money']['count'] == 12 and t['money']['hot'] is True and t['money']['dest'] == 'finance'
-    assert t['content']['count'] == 315 and t['content']['dest'] == 'topics'
+    assert t['content']['count'] == 4 and t['content']['dest'] == 'topics'
     for k, dest in (('marketing', 'marketing'), ('reports', 'analysis'), ('company', 'investment')):
         assert t[k]['count'] is None and t[k]['failed'] is False and t[k]['dest'] == dest
 
@@ -534,7 +534,7 @@ def test_a_failed_loader_is_unknown_not_zero():
     t = _tiles(None, inbox=None, pendingVisitors=None, invitesAwaiting=None, market=None)
     for k in ('files', 'disputes', 'courses', 'money', 'content', 'books', 'people', 'market', 'brain'):
         assert t[k]['failed'] is True and t[k]['count'] is None, k
-        assert t[k]['next'] == 'تعذّر الجلب', k
+        assert t[k]['next'] == 'تعذّر الوصول', k
         assert t[k]['hot'] is False
 
 
@@ -918,7 +918,7 @@ def test_other_rows_get_their_plain_cards(real):
     assert cards['review']['tag'] == 'أول رأي لخبير جديد'
     assert cards['dispute']['tag'] in ('نزاع', 'ملاحظة على قضية')
     assert cards['unactivated']['tag'] == 'دفع بلا ملف'
-    assert 'منذ' in cards['payout']['ageText'] or cards['payout']['ageText'] == ''
+    assert 'منذ' in cards['payout']['ageText'] or cards['payout']['ageText'] in ('', 'الآن')   # «الآن»: فيكستشر المنصة يؤرّخ بساعة الجهاز و`NOW` ثابت (12:00Z)، فبعد الظهر بتوقيت غرينتش يسبق التاريخ الساعة المفروضة
 
 
 @needs_node
