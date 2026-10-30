@@ -196,8 +196,8 @@
       S.mode = 'brain'; redraw(); return;
     }
     // D2: مربّعا الملفات والنزاعات يفتحان لوحة التذاكر (لما الغلاف الجديد شغّال) بدل الوارد القديم.
-    // D3: «الفلوس» و«الكتب» كذلك (تبويبهما الأول: نظرة · مراجعة العروض).
-    if ((key === 'files' || key === 'disputes' || key === 'money' || key === 'books') && window.V2SHELL && V2SHELL.on && host().openSection) { host().openSection(key); return; }
+    // D3: «الفلوس» و«الكتب» كذلك (تبويبهما الأول: نظرة · مراجعة العروض). المحتوى: «خط النشر».
+    if ((key === 'files' || key === 'disputes' || key === 'money' || key === 'books' || key === 'content') && window.V2SHELL && V2SHELL.on && host().openSection) { host().openSection(key); return; }
     if (host().goOps) host().goOps(t.dest, t.land);
   }
 

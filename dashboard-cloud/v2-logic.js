@@ -299,17 +299,17 @@
       else if (mp) { t.dest = 'escrow'; t.land = 'manual_payments_pending'; }
     })(T.money);
 
-    // —— المحتوى
+    // —— المحتوى (بنفس كلمات لوحة «خط النشر»؛ الطابور لا يحمل غير هذين العددين)
     (function (t) {
       t.dest = 'topics'; t.land = 'topics_drafts';
       if (!Q) return failTile(t);
       var d = qn(Q, 'topics_drafts'), s = qn(Q, 'testimonials_pending');
       t.count = d + s;
       var p = [];
-      if (d) p.push(U(d, ['مسودة', 'مسودتان', 'مسودات', 'مسودة']));
-      if (s) p.push(U(s, ['شهادة تنتظر المراجعة', 'شهادتان تنتظران المراجعة', 'شهادات تنتظر المراجعة', 'شهادة تنتظر المراجعة']));
-      t.next = p.length ? p.join(' · ') : 'المقالات والموضوعات';
-      t.land = d ? 'topics_drafts' : s ? 'testimonials_pending' : 'topics_drafts';
+      if (d) p.push(U(d, ['فكرة واحدة', 'فكرتان', 'أفكار', 'فكرة']));
+      if (s) p.push(U(s, ['رأي متعلّم واحد', 'رأيان لمتعلّمَين', 'آراء متعلّمين', 'رأيًا لمتعلّمين']));
+      t.next = p.length ? p.join(' · ') : 'خط النشر';
+      t.land = 'topics_drafts';
     })(T.content);
 
     // —— بلا رقم في D1
@@ -1267,8 +1267,12 @@
       T('all', 'كل السجلات', 'finance', { finTab: 'summary' }, { finTab: { not: [] } }),
       hiddenTab(T('manual', 'الإيصالات (الشاشة القديمة)', 'escrow', { escTab: 'manual' }, { escTab: ['manual'] }))
     ] },
-    { key: 'content', label: 'المحتوى', img: 'content', desc: 'المقالات والموضوعات ودليل الاستخدام', tabs: [
-      T('topics', 'المحتوى', 'topics', { topicsTab: 'ideas' }, { topicsTab: { not: ['tutorials'] } }),
+    { key: 'content', label: 'المحتوى', img: 'content', desc: 'المقالات والموضوعات والأخبار والتعليقات ودليل الاستخدام', tabs: [
+      T('pipeline',  'خط النشر',       'topics', { topicsTab: 'pipeline' },  { topicsTab: ['pipeline'] }),
+      T('articles',  'المقالات',        'topics', { topicsTab: 'articles' },  { topicsTab: ['articles', 'blog', 'auto'] }),
+      T('topics',    'الموضوعات',       'topics', { topicsTab: 'pending' },   { topicsTab: ['pending', 'ideas', 'incoming', 'working', 'board', 'rejected', 'archived'] }),
+      T('news',      'الأخبار',         'topics', { topicsTab: 'news' },      { topicsTab: ['news'] }),
+      T('comments',  'التعليقات',       'topics', { topicsTab: 'comments' },  { topicsTab: ['comments'] }),
       T('tutorials', 'دليل الاستخدام', 'topics', { topicsTab: 'tutorials' }, { topicsTab: ['tutorials'] })
     ] },
     { key: 'marketing', label: 'التسويق', img: 'marketing', desc: 'الحملات والنشر على المنصات', tabs: [
@@ -1396,6 +1400,8 @@
   function routeFor(hash, state) {
     var s = String(hash == null ? '' : hash).replace(/^#/, '').trim();
     if (!s || s === 'home') return pack(secOf('home'), secOf('home').tabs[0]);
+    // v2s:content — الرابط القديم العاري #topics يفتح الباب الأمامي للقسم (خط النشر)؛ أي نداء بحالة صريحة يمرّ على sectionFor.
+    if (s === 'topics') return pack(secOf('content'), tabOf('content', 'pipeline'));
     var p = parseSectionHash(s);
     if (p) {
       var t = tabOf(p.section, p.tab), r = pack(secOf(p.section), t);
@@ -3953,3 +3959,355 @@
             planLabel: planLabel, inviterKey: inviterKey, SEG: SEG, ROLE: ROLE, STAGE: STAGE, mailUrl: mailUrl };
 })(typeof window !== 'undefined' ? window : (typeof globalThis !== 'undefined' ? globalThis : this));
 // ===== /v2s:people =====
+
+// ===== v2s:content =====
+// «المحتوى» (الجولة الأخيرة): منطق نقي لخط النشر والمقالات والموضوعات. ⛔ بلا DOM وبلا EP وبلا Date.now() (المنادي يمرّر `now`).
+// المصدر الفاشل = `null` (يُكتب «غير متاح بعد» ولا يتحوّل صفرًا) · المصدر الجاري تحميله = `undefined`.
+(function (root) {
+  'use strict';
+  var L = root.V2L;
+  if (!L) return;
+  var Uu = L.util, ar = Uu.ar, UU = Uu.U, DAY = 86400e3, HOUR = 3600e3, WEEK = 7 * DAY;
+  var NA = L.NA;
+
+  function str(v) { return typeof v === 'string' ? v.trim() : ''; }
+  function ms(v) {
+    if (typeof v === 'number') return isFinite(v) && v > 0 ? v : NaN;
+    var t = Date.parse(v || '');
+    return isNaN(t) ? NaN : t;
+  }
+  function shortText(s, n) { s = String(s == null ? '' : s).replace(/\s+/g, ' ').trim(); return s.length > n ? s.slice(0, n) + '…' : s; }
+  function isArr(a) { return Array.isArray(a); }
+  function sameDay(a, b) { var x = new Date(a), y = new Date(b); return x.getFullYear() === y.getFullYear() && x.getMonth() === y.getMonth() && x.getDate() === y.getDate(); }
+  function within(at, now, span) { var t = ms(at); return !isNaN(t) && now - t >= 0 && now - t < span; }
+  // «منذ …» بنحو سليم («منذ يومين» لا «منذ يومان»): دقائق ⇒ د · ساعات (حتى ٤٨) ⇒ س · بعدها أيام.
+  function ageCore(d) {
+    d = Math.max(0, d || 0);
+    var m = Math.floor(d / 60e3);
+    if (m < 60) return ar(Math.max(m, 1)) + ' د';
+    var h = Math.floor(m / 60);
+    if (h < 48) return ar(h) + ' س';
+    return UU(Math.floor(h / 24), ['يوم', 'يومين', 'أيام', 'يومًا']);
+  }
+  function age(at, now) { var t = ms(at); return isNaN(t) ? '' : ageCore(now - t); }
+  function since(at, now) { var t = ms(at); return isNaN(t) ? '' : (now - t < 60e3 ? 'الآن' : 'منذ ' + ageCore(now - t)); }
+
+  var TAB_OF = { pipeline: 'pipeline', articles: 'articles', blog: 'articles', auto: 'articles',
+                 pending: 'topics', ideas: 'topics', incoming: 'topics', working: 'topics', board: 'topics', rejected: 'topics', archived: 'topics',
+                 news: 'news', comments: 'comments', tutorials: 'tutorials' };
+  function v2ContentTabFor(topicsTab) { return TAB_OF[topicsTab] || 'pipeline'; }
+
+  // ------------------------------------------------------------ حالة صفحات محركات البحث
+  function v2ContentPrerender(p, now) {
+    var state = p && p.state;
+    var when = p && p.at ? L.util.agoText(ms(p.at), now) : '';
+    if (state === 'ok') return { text: 'صفحات محركات البحث حُدّثت' + (when ? ' ' + when : ''), tone: 'ok', live: true };
+    if (state === 'running') return { text: 'صفحات محركات البحث تتحدّث الآن', tone: 'neutral', live: true };
+    if (state === 'error') return { text: 'تعذّر آخر تحديث لصفحات محركات البحث' + (when ? ' (' + when + ')' : '') + ' — يُعاد مع أول نشر', tone: 'bad', live: false };
+    return { text: 'تحديث صفحات محركات البحث: ' + NA, tone: 'na', live: false };
+  }
+  function v2ContentPublishLead(title, prerender) {
+    var live = !!(prerender && (prerender.state === 'ok' || prerender.state === 'running'));
+    return 'سيظهر «' + title + '» على الموقع الآن' + (live ? '، وتتحدّث صفحته لمحركات البحث خلال دقائق.' : '.');
+  }
+
+  // ------------------------------------------------------------ حقائق مقال الموقع
+  // articleMeta: صف `contentOverview.articles` (أي حقل ناقص ⇒ null) · publishedTitles: عناوين المنشور على الموقع (تطابق بالتساوي بعد القصّ فقط).
+  function v2ContentFacts(articleMeta, publishedTitles) {
+    var a = articleMeta || {};
+    var title = str(a.title);
+    var dup = a.status !== 'published' && !!title && (publishedTitles || []).some(function (t) { return str(t) === title; });
+    var words = typeof a.words === 'number' ? a.words : null;
+    var hasImage = typeof a.has_image === 'boolean' ? a.has_image : null;
+    var hasMeta = typeof a.has_meta === 'boolean' ? a.has_meta : null;
+    var reviewer = str(a.reviewed_by) || null;
+    var known = a.words !== undefined || a.has_image !== undefined || a.has_meta !== undefined;
+    var parts = [];
+    if (words !== null) parts.push(ar(words) + ' كلمة');
+    if (hasImage !== null) parts.push(hasImage ? 'بصورة' : 'بلا صورة');
+    if (hasMeta !== null) parts.push(hasMeta ? 'بوصف لمحركات البحث' : 'بلا وصف لمحركات البحث');
+    if (known) parts.push(reviewer ? 'راجعه ' + reviewer : 'لم يراجعه أحد');
+    var factsLine = parts.join(' · ');
+    return { words: words, hasImage: hasImage, hasMeta: hasMeta, reviewer: reviewer, dupTitle: dup, factsLine: factsLine,
+             line: dup ? 'عنوانه مطابق لمقال منشور على الموقع' : factsLine };
+  }
+
+  // ------------------------------------------------------------ تعليق: ما قاله الفحص الآلي (حقيقة، لا حكم)
+  function v2ContentCommentVerdict(mod) {
+    mod = mod || {};
+    if (mod.abusive === true) return { key: 'abusive', text: 'الفحص الآلي على المنصة: قد يحوي إساءة', suggest: 'reject' };
+    if (mod.on_topic === false) return { key: 'offtopic', text: 'الفحص الآلي على المنصة: خارج الموضوع', suggest: 'reject' };
+    return { key: 'open', text: 'لم يحسمه الفحص الآلي', suggest: 'read' };
+  }
+
+  // ------------------------------------------------------------ الزرّ الأساسي الواحد لكل عنصر
+  function v2ContentSuggest(it) {
+    it = it || {};
+    switch (it.kind) {
+      case 'memberTopic': return { label: 'اعتمد وبلّغ', act: 'approveMemberTopic' };
+      case 'testimonial': return { label: 'افتح واقرأ', act: 'openTestimonial' };
+      case 'comment': return v2ContentCommentVerdict(it.moderation).suggest === 'reject'
+        ? { label: 'ارفض', act: 'rejectComment' } : { label: 'افتح واقرأ', act: 'openComment' };
+      case 'creative': return { label: 'افتح وراجع', act: 'openCreative' };
+      case 'siteDraft': return { label: it.dup ? 'افتح وقارن' : 'اقرأ وانشر', act: 'openArticle' };
+      case 'platformDraft': return { label: it.dup ? 'افتح وقارن' : 'اقرأ وانشر', act: 'openPlatformArticle' };
+      case 'working': return it.ready ? { label: 'انشر على اللوحة', act: 'publishTopic' } : { label: 'افتح', act: 'openTopic' };
+      case 'idea': return it.hasAnswer ? { label: 'اعتمد للنقاش', act: 'approveIdea' } : { label: 'افتح وراجع', act: 'openTopic' };
+      case 'newsDraft': return it.complete ? { label: 'انشر الخبر', act: 'publishNews' } : { label: 'أكمل الخبر', act: 'openNews' };
+      case 'testimonialCount': return { label: 'أعد المحاولة', act: 'retry' };
+      default: return null;
+    }
+  }
+
+  // اسم الكاتب كما يظهر: ما فيه «الذكي/الذكاء» (مقالات قديمة خُزّنت بهذا النص) يظهر «فريق البروفيسور».
+  function v2ContentByText(by) {
+    var t = String(by == null ? '' : by).trim();
+    if (!t) return 'الإدارة';
+    return /الذكي|الذكاء|الآلي|آلي/.test(t) ? 'فريق البروفيسور' : t;
+  }
+
+  // ------------------------------------------------------------ موضوعات: نفس قاعدة topicTabOf القديمة بالحرف
+  function topicTabOf(t) {
+    var st = t.status || 'draft', src = t.source || 'human';
+    if (st === 'pending_review') return 'pending';
+    if (st === 'rejected') return 'rejected';
+    if (st === 'published' || st === 'open') return 'board';
+    if (st === 'merged') return 'working';
+    if (st === 'archived') return 'archived';          // المؤرشف له شريحة «مؤرشفة» (تظهر حين يكون عددها فوق صفر)، لا يُعرض تحت «أفكار» للاعتماد
+    if (src === 'expert') return 'incoming';
+    return 'ideas';
+  }
+  var CHIP_LABELS = [['pending', 'من الأعضاء'], ['ideas', 'أفكار'], ['incoming', 'من الخبراء'], ['working', 'يُكتب'], ['board', 'على اللوحة'], ['rejected', 'مرفوضة'], ['archived', 'مؤرشفة']];
+  // PTOPICS_PENDING === null ⇒ عدّ «من الأعضاء» null (لا يؤخذ من PTOPICS أبدًا) · PTOPICS === null ⇒ باقي العدّات null.
+  function v2ContentTopicChips(topics, pending, active, generating) {
+    var c = { pending: null, ideas: null, incoming: null, working: null, board: null, rejected: null, archived: null };
+    if (isArr(pending)) c.pending = pending.length;
+    if (isArr(topics)) {
+      ['ideas', 'incoming', 'working', 'board', 'rejected', 'archived'].forEach(function (k) { c[k] = 0; });
+      var gen = generating || {}, seen = {};
+      topics.forEach(function (t) {
+        var k = topicTabOf(t);
+        if (k === 'pending') return;   // المعلّق يُعدّ من طابوره الخاص فقط
+        if (k === 'working') seen[t.id] = 1;
+        c[k]++;
+      });
+      Object.keys(gen).forEach(function (id) { if (!seen[id]) c.working++; });
+    }
+    return CHIP_LABELS.map(function (p) {
+      return { key: p[0], label: p[1], count: c[p[0]], active: p[0] === active, hidden: (p[0] === 'rejected' || p[0] === 'archived') && !(c[p[0]] > 0) && p[0] !== active };
+    }).filter(function (x) { return !x.hidden; });
+  }
+  // الحارات بترتيب المنصة المقفول، والأصفار تبقى. gap = أول حارة عددها صفر · low = أقل حارة (أول الأقل في الترتيب).
+  function v2ContentSegments(analysis) {
+    var list = analysis && isArr(analysis.by_segment) ? analysis.by_segment : null;
+    if (!list) return null;
+    var lanes = list.map(function (s) { return { id: s.segment || s.id || '', label: s.label || '', count: Number(s.count) || 0 }; });
+    var gap = null, low = null;
+    lanes.forEach(function (l) { if (gap === null && l.count === 0) gap = l.label; if (low === null || l.count < low.count) low = l; });
+    return { lanes: lanes, gap: gap, low: low };
+  }
+
+  // ------------------------------------------------------------ لوحة خط النشر
+  var SRC_LABEL = { news: 'من خبر', expert: 'من خبير', idea: 'فكرة', human: 'فكرة' };
+  var IDEA_SRC = { news: 'خبر', expert: 'خبير', idea: 'فكرة', human: 'بشري' };
+  var CREATIVE_KIND = { song: 'أغنية', video: 'فيديو', poem: 'قصيدة' };
+  var PART_CAT = { feature: 'شرح المنصة', news: 'تحليل خبر', law: 'قانوني', guide: 'دليل', platform: 'المنصة', other: 'أخرى' };
+  var COL_SOURCES = { wait: ['memberTopics', 'testimonials', 'comments', 'creative'], draft: ['siteArticles', 'platformArticles', 'topics'],
+                      idea: ['topics', 'news'], done: ['siteArticles', 'news', 'approvedComments', 'approvedTestimonials'] };
+  var COLS4 = ['wait', 'draft', 'idea', 'done'];
+  var MAX_SHOWN = 6;
+  var NO_DATE = 8.64e15;
+
+  function srcState(v) { return v === undefined ? 'loading' : (v === null ? 'failed' : 'ok'); }
+  function byAsc(a, b) { return a.sortAt - b.sortAt; }
+  function byDesc(a, b) { return b.sortAt - a.sortAt; }
+  function mk(o, now, tone) {
+    o.at = isNaN(ms(o.at)) ? null : ms(o.at);
+    o.sortAt = o.at === null ? NO_DATE : o.at;
+    o.timer = o.at === null ? { mode: 'since', at: null } : { mode: 'since', at: o.at };
+    o.text = o.at === null ? '' : since(o.at, now);
+    o.tone = tone || 'ink';
+    return o;
+  }
+  function opinionMod(o) { return (o && (o.ai_moderation || o.moderation)) || null; }
+
+  function v2ContentBoard(src, now) {
+    src = src || {};
+    now = now || 0;
+    var cols = { wait: [], draft: [], idea: [], done: [] };
+    var counts = {}, partial = {}, failed = {}, loading = {};
+    var siteTitlesPub = isArr(src.siteArticles) ? src.siteArticles.filter(function (a) { return a.status === 'published'; }).map(function (a) { return str(a.title); }) : [];
+    var gen = src.generating || {};
+
+    // —— ينتظرك
+    var wait = [];
+    if (isArr(src.memberTopics)) src.memberTopics.forEach(function (t) {
+      var seg = t.segment_label ? 'الفئة: ' + t.segment_label + (t.segment_auto ? ' (اختيار آلي)' : '') : 'بلا فئة';
+      wait.push(mk({ id: 'm:' + t.id, kind: 'memberTopic', col: 'wait', order: 0, ref: t, title: t.title || 'موضوع بلا عنوان', at: t.at,
+        strip: 'موضوع من عضو', who: { text: t.category || t.specialty || 'بلا تخصص' },
+        brain: 'القرار يصل إلى صاحب الموضوع · ' + seg, go: { tab: 'topics', st: 'pending' } }, now, 'wait'));
+    });
+    if (isArr(src.testimonials)) src.testimonials.forEach(function (r) {
+      var b = [];
+      b.push((r.course_title || 'دورة') + (r.rating != null && r.rating !== '' ? ' · التقييم ' + ar(r.rating) + ' من ٥' : ''));
+      if (r.consent_public === true) b.push('وافق كاتبه على النشر باسمه');
+      wait.push(mk({ id: 't:' + r.id, kind: 'testimonial', col: 'wait', order: 1, ref: r, title: shortText(r.text, 80) || 'رأي بلا نص', at: r.created_at,
+        strip: 'رأي متعلّم', who: { text: r.name || 'متعلّم', email: r.user_email || '' }, brain: b.join(' · '), go: null }, now, 'wait'));
+    });
+    if (isArr(src.comments)) src.comments.forEach(function (o) {
+      var v = v2ContentCommentVerdict(o.moderation);
+      var it = mk({ id: 'c:' + o.id, kind: 'comment', col: 'wait', order: 2, ref: o, moderation: o.moderation, title: shortText(o.body, 80) || 'تعليق بلا نص', at: o.at,
+        strip: 'تعليق', who: { text: 'على: ' + (o.topic_title || 'موضوع'), email: o.author_email || '' }, brain: v.text, verdict: v.key, go: { tab: 'comments' } }, now, 'wait');
+      wait.push(it);
+    });
+    if (isArr(src.creative)) src.creative.forEach(function (w) {
+      var kindText = CREATIVE_KIND[w.kind] || 'عمل آخر';
+      wait.push(mk({ id: 'w:' + w.id, kind: 'creative', col: 'wait', order: 3, ref: w, title: w.title || 'عمل بلا عنوان', at: w.created_at,
+        strip: 'عمل إبداعي', who: { text: w.creator_name || w.creator_email || 'صاحب العمل', email: w.creator_email || '' },
+        brain: kindText + ' · ' + (w.media_url ? 'معه رابط' : 'بلا رابط'), go: null }, now, 'wait'));
+    });
+    var fallbackN = src.testimonials === null && typeof src.queueTestimonials === 'number' && src.queueTestimonials > 0 ? src.queueTestimonials : 0;
+    wait.sort(function (a, b) { return a.order - b.order || a.sortAt - b.sortAt; });
+    wait.forEach(function (it) { it.late = it.at !== null && now - it.at > 48 * HOUR; if (it.late) it.tone = 'late'; });
+    if (fallbackN) wait.push({ id: 'tc', kind: 'testimonialCount', col: 'wait', order: 9, n: fallbackN, title: ar(fallbackN) + ' رأي متعلّم ينتظر المراجعة', at: null, sortAt: NO_DATE,
+      text: '', tone: 'wait', strip: 'رأي متعلّم', who: null, brain: 'تعذّر جلب القائمة، وهذا العدد من المنصة مباشرة', go: null });
+    cols.wait = wait;
+
+    // —— مسودات
+    var draft = [];
+    var platTitles = {};
+    Object.keys(gen).forEach(function (id) {
+      var t = isArr(src.topics) ? src.topics.filter(function (x) { return x.id === id; })[0] : null;
+      var item = mk({ id: 'g:' + id, kind: 'generating', col: 'draft', order: 0, ref: t || { id: id }, title: (t && t.title) || 'موضوع', at: gen[id],
+        strip: 'يُكتب المقال الآن', who: { text: (t && (t.category || t.specialty)) || 'بلا تخصص' },
+        brain: 'يكتب النظام مقالًا جديدًا من هذا الموضوع، ويظهر مسودة عند انتهائه', status: 'جارٍ الكتابة…', go: { tab: 'topics', st: 'working' } }, now, 'amber');
+      item.text = 'الآن'; draft.push(item);
+    });
+    if (isArr(src.siteArticles)) src.siteArticles.forEach(function (a) {
+      if (a.status !== 'draft') return;
+      var f = v2ContentFacts(a, siteTitlesPub);
+      draft.push(mk({ id: 's:' + a.id, kind: 'siteDraft', col: 'draft', order: 1, ref: a, dup: f.dupTitle, facts: f, title: a.title || 'مقال بلا عنوان', at: a.created_at,
+        strip: 'مقال للموقع', who: { text: v2ContentByText(a.by) }, brain: f.line, go: { tab: 'articles', st: 'articles', filter: 'draft' } }, now, 'amber'));
+    });
+    if (isArr(src.platformArticles)) src.platformArticles.forEach(function (a) {
+      if (a.status === 'published') return;
+      var dup = !!str(a.title) && siteTitlesPub.indexOf(str(a.title)) > -1;
+      draft.push(mk({ id: 'p:' + a.id, kind: 'platformDraft', col: 'draft', order: 1, ref: a, dup: dup, title: a.title || 'مقال بلا عنوان', at: a.created_at,
+        strip: 'مقال على المنصة', who: { text: PART_CAT[a.category] || PART_CAT.other },
+        brain: dup ? 'عنوانه مطابق لمقال منشور على الموقع' : 'تظهر في صفحة المقالات على المنصة بعد النشر', go: { tab: 'articles', st: 'auto' } }, now, 'amber'));
+    });
+    if (isArr(src.topics)) src.topics.forEach(function (t) {
+      if (t.status !== 'merged' || gen[t.id]) return;
+      var ready = !!(str(t.merged_article) || str(t.ai_answer));
+      draft.push(mk({ id: 'k:' + t.id, kind: 'working', col: 'draft', order: 1, ref: t, ready: ready, title: t.title || 'موضوع بلا عنوان', at: t.at,
+        strip: 'يُكتب من النقاش', who: { text: t.category || t.specialty || 'بلا تخصص' },
+        brain: ready ? 'النص جاهز للمراجعة' : 'لم يُكتب النص بعد', go: { tab: 'topics', st: 'working' } }, now, 'amber'));
+    });
+    draft.sort(function (a, b) { return a.order - b.order || a.sortAt - b.sortAt; });
+    cols.draft = draft;
+
+    // —— أفكار
+    var idea = [];
+    if (isArr(src.topics)) src.topics.forEach(function (t) {
+      if ((t.status || 'draft') !== 'draft') return;
+      var seg = t.segment_label ? 'الفئة: ' + t.segment_label : 'بلا فئة';
+      var src2 = t.source || 'human';
+      idea.push(mk({ id: 'i:' + t.id, kind: 'idea', col: 'idea', ref: t, hasAnswer: !!str(t.ai_answer), title: t.title || 'موضوع بلا عنوان', at: t.at,
+        strip: src2 === 'news' ? 'من خبر' : src2 === 'expert' ? 'من خبير' : 'فكرة', who: { text: t.category || t.specialty || 'بلا تخصص' },
+        brain: [IDEA_SRC[src2] || 'بشري', t.category || t.specialty || 'بلا تخصص', seg].join(' · ') + (str(t.ai_answer) ? ' · معه إجابة مقترحة' : ''),
+        go: { tab: 'topics', st: topicTabOf(t) } }, now, 'ink'));
+    });
+    if (isArr(src.news)) src.news.forEach(function (n) {
+      if (n.status !== 'draft') return;
+      var cnt = isArr(n.sources) ? n.sources.length : 0;
+      idea.push(mk({ id: 'n:' + n.id, kind: 'newsDraft', col: 'idea', ref: n, complete: cnt >= 1 && !!str(n.summary), title: n.title || 'خبر بلا عنوان', at: n.at,
+        strip: 'خبر', who: { text: [n.country, n.specialty].filter(Boolean).join(' · ') || 'بلا دولة' },
+        brain: (cnt ? ar(cnt) + ' ' + (cnt === 1 ? 'مصدر' : cnt === 2 ? 'مصدران' : cnt <= 10 ? 'مصادر' : 'مصدرًا') : 'بلا مصدر') + ' · ' + (str(n.summary) ? 'بملخص' : 'بلا ملخص'),
+        go: { tab: 'news' } }, now, 'ink'));
+    });
+    idea.sort(byDesc);
+    cols.idea = idea;
+
+    // —— نُشر هذا الأسبوع: بتاريخ القرار الحقيقي فقط
+    var done = [];
+    if (isArr(src.siteArticles)) src.siteArticles.forEach(function (a) {
+      if (a.status !== 'published' || !within(a.published_at, now, WEEK)) return;
+      done.push(mk({ id: 'ds:' + a.id, kind: 'doneArticle', col: 'done', ref: a, title: a.title || 'مقال', at: a.published_at, strip: 'مقال نُشر', who: { text: v2ContentByText(a.by) }, brain: '',
+        go: { tab: 'articles', st: 'articles', filter: 'published' } }, now, 'green'));
+    });
+    if (isArr(src.news)) src.news.forEach(function (n) {
+      if (n.status !== 'published' || !within(n.published_at, now, WEEK)) return;
+      done.push(mk({ id: 'dn:' + n.id, kind: 'doneNews', col: 'done', ref: n, title: n.title || 'خبر', at: n.published_at, strip: 'خبر نُشر', who: { text: [n.country, n.specialty].filter(Boolean).join(' · ') }, brain: '', go: { tab: 'news' } }, now, 'green'));
+    });
+    if (isArr(src.approvedComments)) src.approvedComments.forEach(function (o) {
+      var m = opinionMod(o);
+      if (!m || m.decided_by !== 'human' || !within(m.decided_at || o.decided_at, now, WEEK)) return;
+      done.push(mk({ id: 'dc:' + o.id, kind: 'doneComment', col: 'done', ref: o, title: shortText(o.body, 80) || 'تعليق', at: m.decided_at || o.decided_at, strip: 'تعليق اعتُمد',
+        who: { text: 'على: ' + (o.topic_title || 'موضوع') }, brain: '', go: { tab: 'comments' } }, now, 'green'));
+    });
+    if (isArr(src.approvedTestimonials)) src.approvedTestimonials.forEach(function (r) {
+      if (!within(r.decided_at, now, WEEK)) return;
+      done.push(mk({ id: 'dt:' + r.id, kind: 'doneTestimonial', col: 'done', ref: r, title: shortText(r.text, 80) || 'رأي', at: r.decided_at, strip: 'رأي اعتُمد',
+        who: { text: r.course_title || 'دورة' }, brain: '', go: null }, now, 'green'));
+    });
+    done.sort(byDesc);
+    cols.done = done;
+
+    // —— العدّادات وحالة المصادر لكل عمود
+    COLS4.forEach(function (c) {
+      var states = COL_SOURCES[c].map(function (k) { return srcState(src[k]); });
+      var anyFailed = states.indexOf('failed') > -1, anyLoading = states.indexOf('loading') > -1;
+      var allFailed = states.every(function (s) { return s === 'failed'; }) && !(c === 'wait' && fallbackN);
+      var allLoading = states.every(function (s) { return s === 'loading'; });
+      loading[c] = anyLoading;
+      failed[c] = allFailed;
+      partial[c] = anyFailed && !allFailed;
+      counts[c] = allFailed || allLoading ? null : cols[c].reduce(function (n, it) { return n + (it.kind === 'testimonialCount' ? it.n : 1); }, 0);
+    });
+
+    // —— كل المصادر + سطر العقل
+    var allKeys = ['memberTopics', 'testimonials', 'comments', 'creative', 'siteArticles', 'platformArticles', 'topics', 'news', 'approvedComments', 'approvedTestimonials'];
+    var anyLoadingAll = allKeys.some(function (k) { return src[k] === undefined; });
+    var anyFailedAll = allKeys.some(function (k) { return src[k] === null; });
+    var today = null, week = null;
+    if (isArr(src.siteArticles)) {
+      today = 0; week = 0;
+      src.siteArticles.forEach(function (a) {
+        if (a.status !== 'published') return;
+        var t = ms(a.published_at);
+        if (isNaN(t)) return;
+        if (sameDay(t, now)) today++;
+        if (within(t, now, WEEK)) week++;
+      });
+    }
+    var members = isArr(src.memberTopics) ? src.memberTopics : null;
+    var oldestMember = members && members.length ? members.reduce(function (m, t) { var a = ms(t.at); return !isNaN(a) && (m === null || a < m) ? a : m; }, null) : null;
+    var otherWait = wait.filter(function (it) { return it.kind !== 'memberTopic' && it.kind !== 'testimonialCount'; }).length + (fallbackN ? fallbackN : 0);
+    var siteDrafts = isArr(src.siteArticles) ? src.siteArticles.filter(function (a) { return a.status === 'draft'; }).length : null;
+    var rule = 0, line;
+    if (anyLoadingAll) { line = '…جارٍ جمع المحتوى'; }
+    else if (members && members.length > 0) {
+      rule = 1;
+      line = 'ابدأ بموضوعات الأعضاء: ' + ar(members.length) + ' ينتظر صاحبه قرارك' + (oldestMember !== null ? '، أقدمها منذ ' + age(oldestMember, now) : '') + '.';
+    } else if (otherWait > 0) { rule = 2; line = ar(otherWait) + ' ينتظر قرارك من الأعضاء والمتعلّمين.'; }
+    else if (siteDrafts !== null && siteDrafts > 0) { rule = 3; line = ar(siteDrafts) + ' مسودة للموقع جاهزة للقراءة.'; }
+    else if (!anyFailedAll) { rule = 4; line = 'لا شيء ينتظر قرارك الآن.'; }
+    else { line = 'بعض المصادر لم تصل، فلا أستطيع القول إن لا شيء ينتظرك.'; }
+
+    // —— الصفّ الظاهر وباقي القائمة
+    var more = {};
+    COLS4.forEach(function (c) {
+      if (cols[c].length > MAX_SHOWN) {
+        var hidden = cols[c].slice(MAX_SHOWN), first = hidden[0];
+        more[c] = { n: hidden.length, go: first.go || null };
+      }
+    });
+    return { order: COLS4.slice(), cols: cols, counts: counts, partial: partial, failed: failed, loading: loading, more: more, max: MAX_SHOWN,
+             top: { rule: rule, line: line, today: today, week: week, loading: anyLoadingAll, failedAny: anyFailedAll } };
+  }
+
+  L.v2ContentTabFor = v2ContentTabFor; L.v2ContentBoard = v2ContentBoard; L.v2ContentFacts = v2ContentFacts; L.v2ContentSuggest = v2ContentSuggest;
+  L.v2ContentCommentVerdict = v2ContentCommentVerdict; L.v2ContentPrerender = v2ContentPrerender; L.v2ContentPublishLead = v2ContentPublishLead;
+  L.v2ContentTopicChips = v2ContentTopicChips; L.v2ContentSegments = v2ContentSegments; L.v2ContentTopicTabOf = topicTabOf; L.v2ContentByText = v2ContentByText;
+})(typeof window !== 'undefined' ? window : (typeof globalThis !== 'undefined' ? globalThis : this));
+// ===== /v2s:content =====

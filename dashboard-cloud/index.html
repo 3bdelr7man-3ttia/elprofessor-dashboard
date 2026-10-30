@@ -473,6 +473,8 @@ body{font-family:'IBM Plex Sans Arabic',sans-serif;background:var(--bg);color:va
 <script src="v2s/books.js"></script>
 <link rel="stylesheet" href="v2s/people.css">
 <script src="v2s/people.js"></script>
+<link rel="stylesheet" href="v2s/content.css">
+<script src="v2s/content.js"></script>
 <!-- v2 sections end -->
 <script src="v2-d3.js"></script>
 <!-- v2 sections begin -->
@@ -728,6 +730,8 @@ function renderView(){
   if(window.V2_ON&&window.V2SEC){for(var _i=0;_i<V2SEC.length;_i++){if(V2SEC[_i].owns(current)){var _ap=document.querySelector('.app');if(_ap)_ap.classList.add('v2-bare');return V2SEC[_i].render(current,v);}}}
   if(window.V2_ON&&window.V2SX&&V2SX.owns(current)){const ap2=document.querySelector('.app');if(ap2)ap2.classList.add('v2-bare');return V2SX.render(current,v);}
   if(window.V2_ON&&window.V2SECT){for(var _k in V2SECT){if(V2SECT[_k]&&V2SECT[_k].owns&&V2SECT[_k].owns(current)){var _ap=document.querySelector('.app');if(_ap){_ap.classList.add('v2-bare');_ap.classList.remove('v2-inbox');}return V2SECT[_k].render(current,v);}}}
+  // الجولة الأخيرة: أقسام v2s (المحتوى…) — موديول قديم يُرسم بالشكل الجديد تحت الغلاف فقط. الاسم V2SEC لأن V2S محجوز للقسم الحالي.
+  if(window.V2_ON&&window.V2SHELL&&V2SHELL.on&&window.V2SEC){for(var _k in V2SEC){var _s=V2SEC[_k];if(_s&&_s.owns&&_s.owns(current)){var _ap=document.querySelector('.app');if(_ap)_ap.classList.add('v2-bare');return _s.render(current,v);}}}
   // موديولات «قريبًا» (لا واجهة خلفية حقيقية بعد) — لا تعرض بياناتها التصميمية.
   if(MODULES_LOOKUP[current]&&MODULES_LOOKUP[current].soon)return viewSoon(v);
   if(current==='inbox')return viewInbox(v);
@@ -867,6 +871,8 @@ const OPSQ_LANDINGS={
   // «مسودّات مواضيع» = تبويب «أفكار للاعتماد» حرفيًّا: `topicTabOf` يسند كل مسودّةٍ غير
   // خبيرٍ إليه. الصفّ صريحٌ هنا كي لا يُقرأ التطابق كصدفة.
   topics_drafts:function(){topicsTab='ideas';renderView();},
+  // آراء المتعلّمين بانتظار المراجعة: لها قسمها الآن (خط النشر)؛ والشاشة القديمة (المفتاح مقفول) على تبويبها الافتراضي كما كانت.
+  testimonials_pending:function(){if(window.V2SHELL&&V2SHELL.on&&window.v2OpenSection){v2OpenSection('content','pipeline');return;}topicsTab='ideas';renderView();},
   // «ملف للخبير» — الشريحة بتفتح الوارد على شريحة الفرز بتاعتها (مش «الكل»).
   // وبعدها الصفحة بتنزل لحد الشرايح (على الموبايل كانت فاضلة فوق والصفوف برّه الشاشة).
   // الجولة ٧: «مستني توزيع» منفصل عن «ما اتستلمش من ١٢ ساعة» · نزاعات الاستشارات العادية ليها عدّاد ·
@@ -917,7 +923,7 @@ function opsQueueCounters(Q){
     ['اهتمام بالدورات (٢٤س)',n(Q.course_interests_24h),'courses','course_interests_24h'],
     ['مهتمّون بالتدريب (٢٤س)',n(Q.training_interests_24h),'courses','training_interests_24h'],
     ['اقتسام إيراد معلّق',n(Q.course_split_pending),'finance','course_split_pending'],
-    ['شهادات بانتظار المراجعة',n(Q.testimonials_pending),'topics','testimonials_pending'],
+    ['آراء متعلّمين بانتظار المراجعة',n(Q.testimonials_pending),'topics','testimonials_pending'],
     ['مسودّات مواضيع',n(Q.topics_drafts),'topics','topics_drafts'],
     ['ليدات خبير مؤسس',n(Q.founding_leads_new),'team','founding_leads_new'],
     // «زوّار ينتظرون الفتح» (التسجيل المفتوح 2026-10-10): نفس قاعدة سحوبات المحافظ — يُقرأ من

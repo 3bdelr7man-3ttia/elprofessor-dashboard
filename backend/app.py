@@ -2697,6 +2697,7 @@ def v2_book_request_patch(request_id):
 import v2_courses_routes; v2_courses_routes.register(app, globals())
 import v2_market_routes as _v2s_market; _v2s_market.register(app, globals())  # noqa: E402
 __import__('v2_books_routes').register(app, globals())
+import v2_content_routes as _v2s_content; _v2s_content.register(app, globals())
 # ---- v2 section routes end
 
 
