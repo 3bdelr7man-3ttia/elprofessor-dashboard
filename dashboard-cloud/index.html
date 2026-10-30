@@ -3684,7 +3684,7 @@ function knowledgeEditModal(k){
   if(!k)return;var sale=k.rights==='owned_for_sale';
   var s=openModal('تعديل — '+k.title,
     '<div class="fld"><label>العنوان</label><input id="kn_t" value="'+esc(k.title)+'"></div>'+
-    (sale?'<div class="fld"><label>السعر (ج)</label><input id="kn_p" type="number" value="'+(k.price_amount||0)+'"></div>':'')+
+    (sale?'<div class="fld"><label>السعر ('+((!k.price_currency||k.price_currency==='EGP')?'ج':esc(k.price_currency))+')</label><input id="kn_p" type="number" value="'+(k.price_amount||0)+'"></div>':'')+
     '<label class="tg" style="margin:8px 0"><input type="checkbox" id="kn_a" '+(k.is_active?'checked':'')+'> ظاهر في السوق</label>'+
     (sale?'<label class="tg" style="margin-bottom:8px"><input type="checkbox" id="kn_b" '+(k.bid_enabled?'checked':'')+'> مفعّل المزايدة «اعرض سعرك»</label>':'')+
     '<div class="acts"><button class="btn btn-primary" id="kn_s">'+svg('check')+'حفظ</button><button class="btn btn-ghost" id="kn_x">إلغاء</button></div>');
