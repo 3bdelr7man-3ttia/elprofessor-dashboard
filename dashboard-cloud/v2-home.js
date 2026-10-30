@@ -62,18 +62,23 @@
     // ما قُصَّ من قوائم الوارد («نزاعات الملفات: معروض ١٠٠ من ٣٠٠»): المعروض مش كل الموجود ⇒ بطاقات ناقصة وعدّاد ناقص معلَن.
     var inboxTrunc = rows ? ((window.INBOX_TRUNCATED && window.INBOX_TRUNCATED.length) ? window.INBOX_TRUNCATED.slice() : []) : null;
     var extras = { inbox: rows, inboxFailed: inboxFailed, inboxTruncated: inboxTrunc || [], pendingVisitors: pu, invitesAwaiting: inv, market: marketCount(), now: now };
-    return { E: E, D: D, now: now, Q: Q, rows: rows, inboxFailed: inboxFailed, payouts: payouts, inboxTrunc: inboxTrunc, extras: extras };
+    // D3: عروض الكتب في الطابور الجديد (رقم من الجسر؛ تعذّر ⇒ null؛ لم يُحمَّل بعد ⇒ غير موجود فلا يتغيّر العدّ).
+    var d3 = window.V2D3 && window.V2SHELL && V2SHELL.on ? V2D3.cardSources() : null;
+    if (d3 && d3.offersCount !== undefined) extras.bookOffers = d3.offersCount;
+    return { E: E, D: D, now: now, Q: Q, rows: rows, inboxFailed: inboxFailed, payouts: payouts, inboxTrunc: inboxTrunc, extras: extras, d3: d3 };
   }
   function compute() {
     var g = gather(), Q = g.Q, rows = g.rows, now = g.now, inboxFailed = g.inboxFailed, inboxTrunc = g.inboxTrunc;
     var tiles = L.v2Tiles(Q, g.extras);
-    var decisions = L.v2Decisions(rows, g.payouts, Q, { now: now, inboxFailed: inboxFailed, inboxTruncated: inboxTrunc });
+    var decisions = L.v2Decisions(rows, g.payouts, Q, { now: now, inboxFailed: inboxFailed, inboxTruncated: inboxTrunc,
+                                                          stuck: g.d3 ? g.d3.stuck : null, offers: g.d3 ? g.d3.offers : null });
     var truncated = (inboxTrunc || []).map(function (t) { return String(t).split(':')[0].trim(); });
     var failed = [];
     if (stateOf('opsQueue') === 'error') failed.push('بيانات المنصة');
     if (stateOf('inbox') === 'error') failed.push('الوارد');
     if (stateOf('walletPayouts') === 'error') failed.push('تحويلات الأرباح');
     inboxFailed.forEach(function (n) { if (failed.indexOf(n) < 0) failed.push(n); });
+    if (g.d3) g.d3.failed.forEach(function (n) { if (failed.indexOf(n) < 0) failed.push(n); });
     return {
       now: now, Q: Q, rows: rows, tiles: tiles, decisions: decisions, failed: failed, truncated: truncated,
       health: L.v2Health(Q, now), next: L.v2Next(decisions),
@@ -83,7 +88,8 @@
   }
   function signature() {
     var E = ep();
-    return SOURCES.map(stateOf).join(',') + '|' + ((window.INBOX || []).length) + '|' + (E && E.data.walletPayouts ? E.data.walletPayouts.count : '');
+    return SOURCES.map(stateOf).join(',') + '|' + ((window.INBOX || []).length) + '|' + (E && E.data.walletPayouts ? E.data.walletPayouts.count : '')
+      + (window.V2D3 ? '|' + V2D3.sig() : '');
   }
 
   // ------------------------------------------------------------------ الرسم
@@ -190,7 +196,8 @@
       S.mode = 'brain'; redraw(); return;
     }
     // D2: مربّعا الملفات والنزاعات يفتحان لوحة التذاكر (لما الغلاف الجديد شغّال) بدل الوارد القديم.
-    if ((key === 'files' || key === 'disputes') && window.V2SHELL && V2SHELL.on && host().openSection) { host().openSection(key); return; }
+    // D3: «الفلوس» و«الكتب» كذلك (تبويبهما الأول: نظرة · مراجعة العروض).
+    if ((key === 'files' || key === 'disputes' || key === 'money' || key === 'books') && window.V2SHELL && V2SHELL.on && host().openSection) { host().openSection(key); return; }
     if (host().goOps) host().goOps(t.dest, t.land);
   }
 
@@ -288,7 +295,11 @@
       if (stateOf('walletPayouts') !== 'ready' || !E.data.walletPayouts) return true;
       return (E.data.walletPayouts.rows || []).some(function (p) { return p.pid === c.row.pid; });
     }
-    if (c.kind === 'course' || c.kind === 'live') return true;
+    if (c.kind === 'course' || c.kind === 'live' || c.kind === 'stuck_payment') return true;
+    if (c.kind === 'book_offer') {
+      var d3 = window.V2D3 ? V2D3.cardSources() : null;
+      return !d3 || !d3.offers.length || d3.offers.some(function (o) { return o.id === (c.row.offerRow || {}).id; });
+    }
     if (stateOf('inbox') !== 'ready') return true;
     var key = rowKey(c.row);
     return (window.INBOX || []).some(function (r) { return !r.fyi && rowKey(r) === key; });
@@ -318,6 +329,13 @@
   function openCard(c) {
     var a = c.open || { do: 'open' };
     S.err = '';
+    if (a.do === 'section' && host().openSection) { showPill(); host().openSection(a.section, a.tab); return; }
+    if (a.do === 'goto' && window.V2SHELL && V2SHELL.on && host().openSection) {
+      // D3: تحويلات الأرباح والإيصالات لها تبويباتها الجديدة تحت «الفلوس».
+      var dest = a.mod === 'finance' ? (a.land === 'stuck_card_payments' ? 'receipts' : a.land === 'wallet_payouts_pending' ? 'payouts' : null)
+        : (a.mod === 'escrow' && a.land === 'manual_payments_pending') ? 'receipts' : null;
+      if (dest) { showPill(); host().openSection('money', dest); return; }
+    }
     if (a.do === 'goto') { showPill(); if (host().goOps) host().goOps(a.mod, a.land); return; }
     showPill();
     if (host().openRow) host().openRow(c.row);
@@ -340,6 +358,8 @@
 
   function reload() { var E = ep(); if (E) { E.reload('opsQueue'); E.reload('inbox'); E.reload('walletPayouts'); } }
   function finish(c, text) {
+    // D3: الفتح من شاشة «الفلوس» (V2.openMoney): نفس نافذة التأكيد، والنتيجة ترجع لصاحب الشاشة لا لبطاقات اللوحة.
+    if (S.ext && S.ext.id === c.id) { var cb = S.ext.cb; S.ext = null; reload(); if (cb) cb(text); return; }
     S.done.unshift({ text: text, at: Date.now() });
     S.err = ''; S.busy = false; S.lockedId = '';
     var go = function () { S.deck = S.deck.filter(function (x) { return x.id !== c.id; }); S.leaving = ''; S.scrollTop = true; redraw(); };
@@ -372,8 +392,12 @@
     if (S.busy || !a) return;
     var E = ep(); if (!E) return;
     var r = c.row;
+    S.ext = null;
     switch (a.do) {
-      case 'open': case 'goto': return openCard(c);
+      case 'open': case 'goto': case 'section': return openCard(c);
+      case 'person': if (window.V2D2 && V2D2.openPerson) { showPill(); V2D2.openPerson(a.email); } return;
+      case 'offer_approve': return offerAct(c, 'approve');
+      case 'offer_reject': return offerAct(c, 'reject');
       case 'send': return track(c, E.expertFileSend(r, a.email, a.name, '', null), 'أُرسل «' + c.title + '» إلى ' + a.name);
       case 'decide': return track(c, E.decideInboxItem(r, a.action, null, ''), doneVerb(c));
       case 'resolve': return track(c, E.resolveInboxItem(r, null), 'أُنهي: ' + c.title);
@@ -407,11 +431,15 @@
       '<div class="mc-lead">' + o.lead + '</div>'
       + '<table class="mc-tab">' + rows.map(function (r) { return '<tr><td>' + esc(r[0]) + '</td><td>' + (r[0] === 'المبلغ' ? '<b>' + esc(r[1]) + '</b>' : esc(r[1])) + '</td></tr>'; }).join('') + '</table>'
       + field + '<div id="v2m_err"></div>'
-      + '<div class="acts"><button class="btn ' + (o.btnCls || 'btn-primary') + '" id="v2m_go">' + esc(o.btn) + '</button><button class="btn btn-ghost" id="v2m_x">رجوع</button></div>');
+      + '<div class="acts"><button class="btn ' + (o.btnCls || 'btn-primary') + '" id="v2m_go">' + esc(o.btn) + '</button>'
+      + (o.alt ? '<button class="btn btn-ghost v2m-alt" id="v2m_alt">' + esc(o.alt.label) + '</button>' : '')
+      + '<button class="btn btn-ghost" id="v2m_x">رجوع</button></div>');
     var go = s.querySelector('#v2m_go'), x = s.querySelector('#v2m_x'), err = s.querySelector('#v2m_err'), f = s.querySelector('#v2m_f');
     var xTop = s.querySelector('[data-x]');
     var close = function () { if (!s.dataset.busy) window.closeModal(); };
     xTop.onclick = close; x.onclick = close; s.onclick = function (e) { if (e.target === s) close(); };
+    var alt = s.querySelector('#v2m_alt');
+    if (alt) alt.onclick = function () { if (s.dataset.busy) return; window.closeModal(); o.alt.run(); };
     var need = function () { return !!o.field && !String(f.value || '').trim(); };
     var sync = function () { if (!go.dataset.busy) go.disabled = need(); };
     if (f) { f.addEventListener('input', sync); sync(); setTimeout(function () { try { f.focus(); } catch (e) {} }, 30); }
@@ -453,6 +481,7 @@
         lead: 'ستسجّل أنك حوّلت <b>' + esc(amt) + '</b> إلى <b>' + esc(m.name) + '</b>. بعد التسجيل يصل إشعار لصاحب الطلب. الخطوة لا يمكن الرجوع عنها.',
         rows: rows, field: { label: 'رقم أو مرجع التحويل (مطلوب)', max: 120 },
         btn: 'سجّل تحويل ' + amt, busy: 'جارٍ التسجيل…',
+        alt: S.ext ? { label: 'ارفض الطلب', run: function () { payoutModal(c, 'reject'); } } : null,   // D3: «ارفض» جوه ورقة التأكيد مع سببه
         run: function (ref) { return moneyResult(E.post(path, { reference: ref, confirmed: true })); },
         onOk: function () { finish(c, 'سُجّل تحويل ' + amt + ' إلى ' + m.name); }
       });
@@ -493,6 +522,25 @@
     });
   }
 
+  // —— عروض الكتب من بطاقة القرار (D3): نفس ورقتي الاعتماد والرفض في شاشة «مراجعة العروض».
+  function offerAct(c, which) {
+    var of = (c.row && c.row.offerRow) || null;
+    if (!of || !window.V2D3) return;
+    var done = function (text) { finish(c, text); };
+    if (which === 'approve') V2D3.openApprove(of, done); else V2D3.openReject(of, done);
+  }
+  // —— للشاشات الجديدة (D3): افتح نافذة التأكيد القديمة لبطاقة فلوس، والنتيجة تُسلَّم لـ`onDone(text)`.
+  V2.openMoney = function (c, a, onDone) {
+    if (!c || !a) return;
+    S.ext = { id: c.id, cb: onDone || null };
+    switch (a.do) {
+      case 'payout_settle': return payoutModal(c, 'settle');
+      case 'payout_reject': return payoutModal(c, 'reject');
+      case 'pay_confirm': return payConfirm(c);
+      case 'pay_reject': return payReject(c);
+    }
+  };
+
   // ------------------------------------------------------------------ نقطة الدخول
   function redraw() { if (S.view && host().isHome && host().isHome()) V2.render(S.view); }
   V2.render = function (v) {
@@ -529,6 +577,7 @@
     var E = ep();
     if (!E || !E.authed) return;
     SOURCES.forEach(function (k) { E.ensure(k, cb || null); });
+    try { if (window.V2D3 && V2D3.preload) V2D3.preload(); } catch (e) {}      // D3: الدفعات العالقة وعروض الكتب لبطاقات القرار
   };
   V2.sourcesSignature = function () { return signature() + '|' + SOURCES.map(function (k) { return stateOf(k); }).join(''); };
   V2.mode = function () { return S.mode; };

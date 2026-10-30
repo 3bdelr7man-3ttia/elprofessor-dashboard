@@ -417,6 +417,7 @@ body{font-family:'IBM Plex Sans Arabic',sans-serif;background:var(--bg);color:va
 <link rel="stylesheet" href="v2-home.css">
 <link rel="stylesheet" href="v2-shell.css">
 <link rel="stylesheet" href="v2-d2.css">
+<link rel="stylesheet" href="v2-d3.css">
 </head>
 <body>
 <div class="app" data-screen-label="الداش بورد الجديدة">
@@ -462,6 +463,7 @@ body{font-family:'IBM Plex Sans Arabic',sans-serif;background:var(--bg);color:va
 <script src="v2-home.js"></script>
 <script src="v2-shell.js"></script>
 <script src="v2-d2.js"></script>
+<script src="v2-d3.js"></script>
 <script>
 const ICONS={
   grid:'<path d="M3 3h7v7H3zM14 3h7v7h-7zM14 14h7v7h-7zM3 14h7v7H3z"/>',
@@ -701,10 +703,12 @@ function renderView(){
   { const ap=document.querySelector('.app'); const sh=!!(window.V2SHELL&&V2SHELL.on);
     if(ap)ap.classList.toggle('v2-home',current==='home'&&!!window.V2_ON&&!sh);
     // D1-B: صنف الغلاف على `.app` (لوحة بلا إطار · بحث الوارد · وضع التركيز) — الترويسة خارج #view فلا تمسحها الشاشات القديمة.
-    if(ap&&sh){ap.classList.toggle('v2-bare',current==='home'||!!(window.V2D2&&V2D2.owns(current)));ap.classList.toggle('v2-inbox',current==='inbox');if(current!=='home')ap.classList.remove('v2-focus');V2SHELL.head();} }
+    if(ap&&sh){ap.classList.toggle('v2-bare',current==='home'||!!(window.V2D2&&V2D2.owns(current)));ap.classList.toggle('v2-inbox',current==='inbox');if(current!=='home')ap.classList.remove('v2-focus');if(window.V2D3&&V2D3.owns(current))ap.classList.add('v2-bare');V2SHELL.head();} }
   if(current==='home'&&window.V2_ON&&window.V2)return V2.render(v);
   // D2: لوحات التذاكر وصفحة الشخص (موديولات وهمية `v2files`/`v2disputes`/`v2person` لا وجود لها إلا تحت الغلاف الجديد).
   if(window.V2_ON&&window.V2D2&&V2D2.owns(current))return V2D2.render(current,v);
+  // D3: شاشات «الفلوس» الجديدة و«الكتب» (موديولات وهمية `v2m_*`/`v2b_*` لا وجود لها إلا تحت الغلاف الجديد).
+  if(window.V2_ON&&window.V2D3&&V2D3.owns(current))return V2D3.render(current,v);
   // موديولات «قريبًا» (لا واجهة خلفية حقيقية بعد) — لا تعرض بياناتها التصميمية.
   if(MODULES_LOOKUP[current]&&MODULES_LOOKUP[current].soon)return viewSoon(v);
   if(current==='inbox')return viewInbox(v);

@@ -71,6 +71,11 @@ REFUNDS = [
      "currency": "EGP", "escrow_state": "held", "payment_id": "pay-2", "cancelled_at": iso(-8), "settled_at": "", "full_refund": False, "cancelled_by": "expert"},
 ]
 
+REJECTED_PAYOUTS = [
+    {"id": "po-rej-1", "user_email": "faisal@experts.test", "user_name": "أ. فيصل العتيبي", "amount": 500.0, "currency": "EGP", "status": "rejected", "method": "إنستاباي",
+     "destination": "faisal@instapay", "created_at": iso(-30), "rejected_at": iso(-3), "reject_reason": "رقم الحساب غير مطابق للاسم"},
+]
+
 BOOK_PRICES = {
     "bk-tenant-guide": {"title": "دليل المستأجر في عقود الإيجار", "visible": True,
                         "versions": {"read": {"eg": 150.0, "sa": 40.0, "default": 9.0}, "pdf": {"eg": 220.0, "default": 12.0}}},
@@ -178,6 +183,9 @@ class D3Platform(v2fx.V2Platform):
             row = next((a for a in self.ads if a["owner_id"] == oid), None)
             return 200, {"ok": True, "owner_id": oid, "owner_kind": "book", "balance": copy.deepcopy(row["balance"]) if row else [],
                          "report": {}, "entries": copy.deepcopy(ADS_ENTRIES.get(oid, []))}
+        if path == "/api/bridge/wallet-payouts" and method == "GET" and (params or {}).get("status") == "rejected":
+            rows = [] if self.empty else copy.deepcopy(REJECTED_PAYOUTS)
+            return 200, {"payouts": rows, "count": len(rows)}
         if path == "/api/bridge/payments/stuck" and method == "GET":
             return 200, {"ok": True, "count": len(self.stuck), "after_hours": 2, "paid_without_delivery": None, "items": copy.deepcopy(self.stuck)}
         if path == "/api/bridge/income/by-service" and method == "GET":

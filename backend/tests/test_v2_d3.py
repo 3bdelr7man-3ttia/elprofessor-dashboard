@@ -868,3 +868,100 @@ def test_visible_texts_are_plain_and_nothing_starts_with_ai():
 def _strip_comments(src):
     src = re.sub(r'/\*.*?\*/', '', src, flags=re.S)
     return '\n'.join(re.sub(r'(^|\s)//.*$', '', ln) for ln in src.split('\n'))
+
+
+# ---------------------------------------------------------------- ٣) الملفات والخطّافات
+
+DC = os.path.join(ROOT, 'dashboard-cloud')
+
+
+def test_the_files_are_wired_and_shipped():
+    html = _read('dashboard-cloud', 'index.html')
+    assert '<link rel="stylesheet" href="v2-d3.css">' in html and '<script src="v2-d3.js"></script>' in html
+    assert html.index('v2-d2.js') < html.index('v2-d3.js') and html.index('v2-d2.css') < html.index('v2-d3.css')
+    for df in ('Dockerfile', os.path.join('deploy', 'Dockerfile.coolify')):
+        txt = _read(df)
+        assert 'dashboard-cloud/v2-d3.js' in txt and 'dashboard-cloud/v2-d3.css' in txt, df
+    for f in ('v2-d3.js', 'v2-d3.css'):
+        assert os.path.getsize(os.path.join(DC, f)) > 5000
+
+
+def test_the_hooks_do_nothing_when_the_switch_is_off():
+    html = _read('dashboard-cloud', 'index.html')
+    assert "if(window.V2_ON&&window.V2D3&&V2D3.owns(current))return V2D3.render(current,v);" in html
+    assert "if(window.V2D3&&V2D3.owns(current))ap.classList.add('v2-bare');" in html
+    # الموديولات الوهمية ما لها تعريف في القائمة القديمة
+    mods = html[html.index('const MODULES={'):html.index('// موديولات الأدوار غير-الأدمن')]
+    for m in ('v2m_overview', 'v2m_payouts', 'v2m_receipts', 'v2m_prices', 'v2m_shares', 'v2m_ads', 'v2b_offers', 'v2b_requests'):
+        assert m not in mods
+    api = _read('dashboard-cloud', 'dashboard-api.js')
+    assert 'V2D3' not in api and 'v2m_' not in api
+    home = _read('dashboard-cloud', 'v2-home.js')
+    assert "window.V2D3 && window.V2SHELL && V2SHELL.on" in home, 'عدّاد عروض الكتب مشروط بالغلاف'
+    shell = _read('dashboard-cloud', 'v2-shell.js')
+    assert 'V2D3' not in shell
+
+
+def test_the_money_sheets_reuse_the_existing_confirmation_and_add_no_new_decision_path():
+    home = _read('dashboard-cloud', 'v2-home.js')
+    assert 'V2.openMoney = function (c, a, onDone)' in home
+    assert 'alt: S.ext ? { label:' in home, '«ارفض» جوه ورقة التسجيل بس لما الفتح من شاشة الفلوس'
+    assert re.search(r"function run\(c, a\) \{[^}]*?S\.ext = null;", home, re.S), 'الفتح من اللوحة يلغي أي فتح خارجي معلّق'
+    assert "if (S.ext && S.ext.id === c.id)" in home
+    # المسارات الجديدة: كل كتابة PUT/POST بتبعت confirmed:true، والـPATCH (طلبات القرّاء) بلا فلوس
+    js = _strip_comments(_read('dashboard-cloud', 'v2-d3.js'))
+    calls = re.findall(r"E\.api\([^;]*?method: '(PUT|POST|PATCH)'[^;]*?\}\s*\)", js, re.S)
+    assert calls.count('PUT') == 3 and calls.count('POST') == 2 and calls.count('PATCH') == 1, calls
+    for m in re.finditer(r"E\.api\(([^;]*?method: '(PUT|POST)'[^;]*?)\)\.then|E\.api\(([^;]*?method: '(PUT|POST)'[^;]*?)\);\s*\}", js, re.S):
+        assert 'confirmed: true' in (m.group(1) or m.group(3)), m.group(0)[:160]
+    assert 'fetch(' not in js and 'XMLHttpRequest' not in js
+    paths = set(re.findall(r"E\.api\('(/[^'?]*)", js)) | set(re.findall(r"'(/v2/[^'?]*)", js)) | set(re.findall(r"function \(\) \{ return '(/[^'?]*)", js))
+    assert all(p.startswith('/v2/') or p in ('/revenues', '/platform-wallet-payouts') for p in paths), paths
+
+
+def test_no_money_decision_is_made_from_a_row_without_the_sheet():
+    js = _strip_comments(_read('dashboard-cloud', 'v2-d3.js'))
+    # أزرار التحويل والإيصال بتفتح V2.openMoney بس (ورقة التأكيد القديمة)، مفيش E.post مباشر لتحويل أو إيصال
+    assert 'E.post(' not in js and 'platform-wallet-payouts/' not in js and 'decideInboxItem' not in js
+    assert js.count('V2.openMoney(') == 2
+
+
+def test_touch_targets_and_mobile_rules_are_in_the_css():
+    css = _read('dashboard-cloud', 'v2-d3.css')
+    assert re.search(r'\.v3-btn1,\.v3-btn2\{[^}]*min-height:48px', css)
+    mob = css[css.index('@media(max-width:760px)'):]
+    assert 'min-height:52px' in mob and '.v3-nums{grid-template-columns:minmax(0,1fr)}' in mob and '.v3m .acts .btn{min-height:52px' in mob
+    assert '.v3-twocol,.v3-tgrid{grid-template-columns:minmax(0,1fr)}' in mob
+    assert 'prefers-reduced-motion' in css
+    # كل القواعد تحت `.v3`/`.v3m`/`#epModal` (مفيش أثر على أي شاشة قديمة)
+    bare = re.sub(r'/\*.*?\*/', '', css, flags=re.S)
+    for sel in re.findall(r'([^{}]+)\{', bare):
+        sel = sel.strip()
+        if sel.startswith('@') or re.match(r'^[\d.]+%|^from$|^to$', sel):
+            continue
+        for part in sel.split(','):
+            assert part.strip().startswith(('.v3', '#epModal')), part
+
+
+BANNED_IN_D3 = ['يقوّم', 'يقوم بتقييم', 'طابور', 'Backend', 'endpoint', 'JSON', 'بروف', 'الذكاء الاصطناعي']
+
+
+def test_visible_text_in_the_screens_is_plain_and_never_starts_with_ai():
+    code = _strip_comments(_read('dashboard-cloud', 'v2-d3.js'))
+    for bad in BANNED_IN_D3:
+        assert bad not in code, bad
+    for m in re.finditer(r"'([^']*[؀-ۿ][^']*)'", code):
+        assert not re.match(r'^\s*(ذكاء|AI)\b', m.group(1)), m.group(1)
+    for w in ('ملفاته', 'دوراته', 'فلوسه', 'راسله', 'ينشر اسمه', 'عليه نزاع'):
+        assert not re.search(r'(?<![؀-ۿ])%s(?![؀-ۿ])' % w, code), w
+
+
+def test_every_failed_source_has_a_visible_na_path_in_the_screens():
+    js = _read('dashboard-cloud', 'v2-d3.js')
+    assert js.count("غير متاح بعد") >= 1 and "function unavailable(" in js
+    for fn in ('drawOverview', 'drawPayouts', 'drawReceipts', 'drawPrices', 'drawShares', 'drawAds', 'drawOffers', 'drawRequests'):
+        body = js[js.index('function %s(' % fn):]
+        body = body[:body.index('\n  }\n')]
+        if fn == 'drawPrices':
+            body += js[js.index('function priceBlock('):js.index('function drawPrices(')]     # الرسالة في الدالة المشتركة بين الكتب والدورات
+        assert 'unavailable(' in body or 'warnStrip(' in body, fn + ': مصدر ممكن يفشل بلا رسالة'

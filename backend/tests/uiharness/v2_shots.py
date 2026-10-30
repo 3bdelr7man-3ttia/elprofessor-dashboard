@@ -20,6 +20,11 @@
 أفقي في الموبايل، أو هدف أقل من ٤٤px (والأزرار ٥٢px في الموبايل)، أو «0/null/NaN» ظاهرة بدل «غير متاح بعد».
     cd backend && python3 -B tests/uiharness/v2_shots.py <out_dir> d2
 
+الوضع `d3` (SPEC-D3): «الفلوس» (نظرة · نظرة والمصادر واقعة · ورقة تسجيل تحويل · التحويلات · الإيصالات والعالقة · الأسعار وورقة التعديل بقبل ⇒ بعد ·
+النسب ورسالة رفض المنصة · إعلانات الأعمال) و«الكتب» (مراجعة العروض وورقة الاعتماد · طلبات القرّاء) · بطاقتا القرار الجديدتان. السكربت بيفشل لو
+رقم «٠/null/NaN» ظاهر بدل «غير متاح بعد»، أو هدف أقل من ٤٤px (والأزرار ٥٢px في الموبايل)، أو تمرير أفقي، أو نداء كتابة من غير `confirmed:true`.
+    cd backend && python3 -B tests/uiharness/v2_shots.py <out_dir> d3
+
 ⛔ صفر طلبات حقيقية: الداشبورد بيتنفّذ جوه العملية والمنصة جدول في الذاكرة (`v2_fixtures.V2Platform`)، وأي أصل تاني بيتقفل
 ويتسجّل. السكربت بيفشل لو خرج أي طلب غير خطوط جوجل، أو لو فحوص الصور (تمرير أفقي · undefined/NaN/null · زرار أقل من ٥٢) وقعت.
 """
@@ -33,6 +38,7 @@ sys.path.insert(0, _HERE)
 
 import ef_fixtures as fx                        # noqa: E402
 import v2_fixtures as v2fx                      # noqa: E402
+import d3_fixtures as d3fx                      # noqa: E402
 from ef_route_harness import Harness, DASH      # noqa: E402
 
 OUT = os.path.abspath(sys.argv[1] if len(sys.argv) > 1 else os.path.join(os.getcwd(), 'v2-shots'))
@@ -875,6 +881,404 @@ def flow_d2(browser, h, pre, viewport, mobile):
     browser.close()
 
 
+# ======================================================================= D3 — «الفلوس» و«الكتب»
+D3_BOARD_READY = ("() => window.V2SHELL && V2SHELL.on === true && document.querySelector('.v3[data-board=\"%s\"]')"
+                  " && !/…جارٍ جلب/.test(document.querySelector('.v3').innerText)")
+D3_FAIL_EP = ['**/api/revenues', '**/api/escrow', '**/api/platform-wallet-payouts']
+
+
+def d3_check(page, name):
+    """أهداف اللمس ≥ ٤٤px (والأزرار ≥ ٥٢px في الموبايل)، ولا صفر/null/NaN ظاهر، ولا أرقام لاتينية، ولا تمرير أفقي."""
+    w = page.viewport_size['width']
+    small = page.evaluate("""() => [...document.querySelectorAll('.v3 button, .v3 a[href], #epModal .v3m button, #epModal .v3m input, #epModal .v3m textarea')]
+      .filter(b => b.offsetParent && !b.classList.contains('v3-person'))
+      .map(b => [b.className || b.tagName, Math.round((b.type === 'checkbox' && b.closest('label') ? b.closest('label') : b).getBoundingClientRect().height)])
+      .filter(x => x[1] < 44)""")
+    if small:
+        PROBLEMS.append('%s: أهداف أقل من ٤٤px: %r' % (name, small[:4]))
+    if w <= 400:
+        big = page.evaluate("""() => [...document.querySelectorAll('.v3-btn1, .v3-btn2, .v3-pb, .v3-link, #epModal .v3m .btn')]
+          .filter(b => b.offsetParent).map(b => [b.className, Math.round(b.getBoundingClientRect().height)]).filter(x => x[1] < 52)""")
+        if big:
+            PROBLEMS.append('%s: أزرار أقل من ٥٢px في الموبايل: %r' % (name, big[:4]))
+        sw = page.evaluate("() => Math.max(document.documentElement.scrollWidth, document.body.scrollWidth, (document.querySelector('.content')||{}).scrollWidth||0)")
+        if sw > w + 1:
+            PROBLEMS.append('%s: تمرير أفقي في الموبايل (%s > %s)' % (name, sw, w))
+        wide = page.evaluate("() => [...document.querySelectorAll('.v3 *, #epModal .v3m *')].filter(e => e.offsetParent && e.getBoundingClientRect().right > window.innerWidth + 1).length")
+        if wide:
+            PROBLEMS.append('%s: %d عنصر يخرج من عرض الشاشة' % (name, wide))
+    # أرقام الحسابات ومراجع التحويل معرّفات (بتفضل لاتينية وتتنسخ كما هي): `.v3-dest` و`.v3-ref` بره فحص الأرقام.
+    txt = page.evaluate("""() => [...document.querySelectorAll('.v3, #epModal .v3m')].map(e => { const c = e.cloneNode(true);
+      c.querySelectorAll('.v3-dest, .v3-ref').forEach(n => n.remove()); return c.innerText; }).join('\\n')""")
+    if re.search(r'(?<![\w@./-])(0|null|NaN|undefined)(?![\w@./-])', txt):
+        PROBLEMS.append('%s: صفر/null/NaN ظاهر في الشاشة' % name)
+    bad = [t for t in re.findall(r'\S*\d\S*', re.sub(r'[٠-٩]', '', txt)) if '@' not in t and not re.search(r'[A-Za-z]-?\d', t)]
+    if bad:
+        PROBLEMS.append('%s: أرقام لاتينية ظاهرة: %r' % (name, bad[:3]))
+
+
+def d3_shot(page, name, tall=True):
+    page.evaluate("() => { const c = document.querySelector('.content'); if (c) c.scrollTop = 0; window.scrollTo(0, 0); }")
+    shot(page, name, full=False)
+    shell_check(page, name)
+    d3_check(page, name)
+
+
+def d3_open(ctx, hash_, board):
+    page = ctx.new_page()
+    page.goto(DASH + '/' + hash_, wait_until='domcontentloaded')
+    page.wait_for_function(SHELL_READY, timeout=30000)
+    page.wait_for_function(D3_BOARD_READY % board, timeout=30000)
+    page.wait_for_timeout(500)
+    return page
+
+
+def d3_tab(page, tab, board):
+    page.click('.v2c-tab[data-tab="%s"]' % tab)
+    page.wait_for_function(D3_BOARD_READY % board, timeout=30000)
+    page.wait_for_timeout(350)
+
+
+def d3_writes(h, since):
+    return [c for c in h.platform_calls[since:] if c[0] in ('PUT', 'POST', 'PATCH')]
+
+
+def flow_d3(browser, h, pre, viewport, mobile):
+    w = viewport['width']
+    tallvp = dict(viewport, height=viewport['height'] if mobile else 1500)
+    h.ef = d3fx.D3Platform(d2=True)
+    ctx = browser.context(h, 'admin', tallvp, mobile)
+    page = d3_open(ctx, '#s/money/overview', 'overview')
+    # —— ١) نظرة: الأرقام الأربعة · التحويلات · الأعمدة · الاستردادات
+    info = page.evaluate("""() => ({nums: [...document.querySelectorAll('.v3-num')].map(n => [n.querySelector('h3').textContent, n.querySelector('.v3-big').textContent.trim(), n.classList.contains('na')]),
+      pays: document.querySelectorAll('.v3-pay').length, bars: document.querySelectorAll('.v3-bars li').length, refunds: document.querySelectorAll('.v3-rf').length,
+      norefund: !!document.querySelector('.v3-ch p') && document.body.innerText.indexOf('الكتب لا تُسترد') > -1, tabs: [...document.querySelectorAll('.v2c-tab')].map(b => b.textContent.trim()),
+      seg: [...document.querySelectorAll('.v3-pb')].map(b => b.textContent.trim()), h1: document.querySelector('.v2c-h h1').textContent})""")
+    if [n[0] for n in info['nums']] != ['دخل', 'محجوز حتى يُسلَّم العمل', 'مستحق للخبراء والمدرّبين', 'صافي البروفيسور']:
+        PROBLEMS.append('%s01: الأرقام الأربعة %r' % (pre, info['nums']))
+    if not [n for n in info['nums'] if n[0] == 'صافي البروفيسور' and n[2] and n[1] == 'غير متاح بعد']:
+        PROBLEMS.append('%s01: صافي البروفيسور لازم «غير متاح بعد»: %r' % (pre, info['nums']))
+    if any(n[2] for n in info['nums'] if n[0] != 'صافي البروفيسور'):
+        PROBLEMS.append('%s01: رقم غير متاح مع أن كل المصادر شغّالة: %r' % (pre, info['nums']))
+    if info['tabs'] != ['نظرة', 'التحويلات', 'الإيصالات والمدفوعات العالقة', 'الأسعار', 'النسب والإعدادات', 'إعلانات الأعمال', 'كل السجلات']:
+        PROBLEMS.append('%s01: تبويبات الفلوس %r' % (pre, info['tabs']))
+    if info['seg'] != ['اليوم', 'الشهر', 'السنة'] or info['pays'] != 2 or info['bars'] != 4 or info['refunds'] < 3 or not info['norefund']:
+        PROBLEMS.append('%s01: نظرة ناقصة %r' % (pre, {k: info[k] for k in ('seg', 'pays', 'bars', 'refunds', 'norefund')}))
+    d3_shot(page, pre + '01-overview.jpg')
+    # الفترة: اليوم ⇒ رقم الدخل بيتغيّر
+    inc_month = page.inner_text('.v3-num.k-income .v3-big')
+    page.click('.v3-pb[data-p="day"]')
+    page.wait_for_timeout(300)
+    inc_day = page.inner_text('.v3-num.k-income .v3-big')
+    if inc_day == inc_month:
+        PROBLEMS.append('%s01: تبديل الفترة ما غيّرش رقم الدخل (%s)' % (pre, inc_day))
+    d3_shot(page, pre + '01b-overview-day.jpg')
+    page.click('.v3-pb[data-p="month"]')
+    # —— ٣) ورقة تسجيل التحويل (التأكيد القديم) مع «ارفض» جواها
+    page.click('.v3-pay [data-a="settle"] >> nth=1')
+    page.wait_for_selector('#epModal #v2m_go')
+    if not page.is_disabled('#v2m_go'):
+        PROBLEMS.append(pre + '03: زرّ التسجيل شغّال من غير مرجع')
+    if not page.query_selector('#epModal #v2m_alt'):
+        PROBLEMS.append(pre + '03: «ارفض الطلب» مش جوه ورقة التأكيد')
+    shot(page, pre + '03-settle-sheet.jpg'); d3_check(page, pre + '03-settle-sheet.jpg')
+    page.fill('#v2m_f', 'IP-90210')
+    n0 = len(h.platform_calls)
+    page.click('#v2m_go')
+    page.wait_for_function("() => !document.getElementById('epModal')", timeout=15000)
+    page.wait_for_function("() => document.querySelector('.v3-ok')", timeout=10000)
+    sent = [c for c in h.platform_calls[n0:] if c[0] == 'POST' and c[1].endswith('/settle')]
+    if len(sent) != 1 or sent[0][3] != {'reference': 'IP-90210'}:
+        PROBLEMS.append('%s03: نداء settle: %r' % (pre, sent))
+    if [x['reference'] for x in h.ef.settled] != ['IP-90210']:
+        PROBLEMS.append(pre + '03: المنصة ما سجّلتش التحويل')
+    page.wait_for_timeout(500)
+    d3_shot(page, pre + '03b-after-settle.jpg')
+    # «ارفض» من جوه ورقة التسجيل ⇒ ورقة الرفض بسبب
+    page.click('.v3-pay [data-a="settle"] >> nth=0')
+    page.wait_for_selector('#epModal #v2m_alt')
+    page.click('#v2m_alt')
+    page.wait_for_selector('#epModal #v2m_f')
+    if not page.is_disabled('#v2m_go'):
+        PROBLEMS.append(pre + '03: الرفض شغّال من غير سبب')
+    shot(page, pre + '03c-reject-inside.jpg'); d3_check(page, pre + '03c-reject-inside.jpg')
+    page.click('#v2m_x')
+    page.wait_for_timeout(200)
+    browser.close()
+
+    # —— ٢) نظرة والمصادر واقعة: «غير متاح بعد» مش صفر
+    h.ef = d3fx.D3Platform(d2=True)
+    h.ef.down = {'/api/bridge/refunds/pending', '/api/bridge/income/by-service'}
+    ctx = browser.context(h, 'admin', tallvp, mobile)
+    page = ctx.new_page()
+    for pat in D3_FAIL_EP:
+        page.route(pat, lambda route: route.fulfill(status=502, content_type='application/json', body='{"error":"x"}'))
+    page.goto(DASH + '/#s/money/overview', wait_until='domcontentloaded')
+    page.wait_for_function("() => window.V2SHELL && V2SHELL.on === true && document.querySelector('.v2c-tab')", timeout=30000)
+    page.wait_for_function("() => document.querySelector('.v3[data-board=\"overview\"]') && document.querySelectorAll('.v3-num.na').length >= 3", timeout=30000)
+    page.wait_for_timeout(700)
+    down = page.evaluate("() => ({na: document.querySelectorAll('.v3-num.na').length, warn: [...document.querySelectorAll('.v3-warn')].map(e => e.textContent), txt: document.querySelector('.v3').innerText})")
+    if down['na'] != 4 or not down['warn'] or 'غير متاح بعد' not in down['txt']:
+        PROBLEMS.append('%s02: المصادر واقعة والأرقام مش كلها «غير متاح بعد»: %r' % (pre, down['na']))
+    if re.search(r'(?<![\w@./-])(٠ جنيه)', down['txt'].split('التحويلات المستحقة')[0]):
+        PROBLEMS.append(pre + '02: صفر ظاهر بدل «غير متاح بعد»')
+    d3_shot(page, pre + '02-overview-sources-down.jpg')
+    browser.close()
+
+    # —— ٤) التحويلات + الحد الأدنى
+    h.ef = d3fx.D3Platform(d2=True)
+    ctx = browser.context(h, 'admin', tallvp, mobile)
+    page = d3_open(ctx, '#s/money/payouts', 'payouts')
+    t = page.evaluate("() => ({min: document.querySelector('.v3-minbar').innerText, tickets: document.querySelectorAll('.v3-t').length, hist: document.querySelectorAll('.v3-hist li').length, time: !!document.querySelector('.v3-time')})")
+    if '٥٠٠ جنيه' not in t['min'] or t['tickets'] != 2 or not t['time'] or t['hist'] < 2:
+        PROBLEMS.append('%s04: التحويلات %r' % (pre, t))
+    d3_shot(page, pre + '04-payouts.jpg')
+    page.click('[data-a="minpay"]')
+    page.wait_for_selector('#epModal #v3_min')
+    shot(page, pre + '04b-minpay-sheet.jpg'); d3_check(page, pre + '04b-minpay-sheet.jpg')
+    page.fill('#v3_min', '٧٥٠')
+    page.click('#v3_review')
+    page.wait_for_selector('#epModal #v3_go')
+    diff = page.inner_text('#epModal .v3-diff')
+    if '٥٠٠ جنيه' not in diff or '٧٥٠ جنيه' not in diff:
+        PROBLEMS.append('%s04: الفرق قبل⇒بعد مش ظاهر: %r' % (pre, diff))
+    shot(page, pre + '04c-minpay-diff.jpg'); d3_check(page, pre + '04c-minpay-diff.jpg')
+    n0 = len(h.platform_calls)
+    page.click('#v3_go')
+    page.wait_for_function("() => !document.getElementById('epModal')", timeout=15000)
+    w4 = d3_writes(h, n0)
+    if len(w4) != 1 or w4[0][1] != '/api/bridge/settings/money' or w4[0][3].get('withdraw_min') != 750 or w4[0][3].get('confirmed') is not True or w4[0][3].get('by') != 'admin@local.test':
+        PROBLEMS.append('%s04: كتابة الحد الأدنى: %r' % (pre, w4))
+    page.wait_for_function("() => /٧٥٠ جنيه/.test(document.querySelector('.v3-minbar').innerText)", timeout=10000)
+    # خارج المدى ⇒ المنصة ترفض ورسالتها بتظهر
+    page.click('[data-a="minpay"]')
+    page.wait_for_selector('#epModal #v3_min')
+    page.fill('#v3_min', '40')
+    page.click('#v3_review')
+    err = page.inner_text('#epModal #v3err')
+    if 'بين' not in err:
+        PROBLEMS.append('%s04: رسالة المدى: %r' % (pre, err))
+    page.click('#v3_cancel')
+    browser.close()
+
+    # —— ٥) الإيصالات والمدفوعات العالقة
+    h.ef = d3fx.D3Platform(d2=True)
+    ctx = browser.context(h, 'admin', tallvp, mobile)
+    page = d3_open(ctx, '#s/money/receipts', 'receipts')
+    r = page.evaluate("() => ({rec: document.querySelectorAll('.v3-colbox:first-child .v3-t').length, stuck: document.querySelectorAll('.v3-stuck').length, norefund: document.querySelectorAll('.v3-stuck .v3-norefund').length, btns: [...document.querySelectorAll('.v3-stuck button')].length, open: [...document.querySelectorAll('.v3-stuck a[data-person]')].length})")
+    if r['rec'] != 2 or r['stuck'] != 3 or r['norefund'] != 1 or r['btns']:
+        PROBLEMS.append('%s05: الإيصالات والعالقة %r' % (pre, r))
+    d3_shot(page, pre + '05-receipts-stuck.jpg')
+    page.click('[data-a="rconfirm"] >> nth=0')
+    page.wait_for_selector('#epModal #v2m_go')
+    shot(page, pre + '05b-confirm-receipt.jpg'); d3_check(page, pre + '05b-confirm-receipt.jpg')
+    page.click('#v2m_x')
+    page.wait_for_timeout(200)
+    browser.close()
+
+    # —— ٦) الأسعار + ورقة التعديل بقبل ⇒ بعد
+    h.ef = d3fx.D3Platform(d2=True)
+    ctx = browser.context(h, 'admin', tallvp, mobile)
+    page = d3_open(ctx, '#s/money/prices', 'prices')
+    pr = page.evaluate("() => ({rows: document.querySelectorAll('.v3-pr').length, vis: [...document.querySelectorAll('.v3-vis')].map(e => e.textContent), closed: document.body.innerText.indexOf('الدورات لسه مقفولة') > -1})")
+    if pr['rows'] != 4 or not pr['closed']:
+        PROBLEMS.append('%s06: الأسعار %r' % (pre, pr))
+    d3_shot(page, pre + '06-prices.jpg')
+    page.click('.v3-pr [data-a="price"] >> nth=0')
+    page.wait_for_selector('#epModal input[data-v="read"][data-c="eg"]')
+    cur = page.evaluate("() => [...document.querySelectorAll('#epModal .v3-prow')].slice(0, 6).map(r => r.innerText.replace(/\\s+/g, ' '))")
+    if not any('ريال سعودي' in c for c in cur) or not any('جنيه مصري' in c for c in cur):
+        PROBLEMS.append('%s06: العملة جنب الخانة: %r' % (pre, cur))
+    shot(page, pre + '06b-price-sheet.jpg'); d3_check(page, pre + '06b-price-sheet.jpg')
+    page.fill('#epModal input[data-v="read"][data-c="eg"]', '٢٥٠')
+    page.fill('#epModal input[data-v="read"][data-c="qa"]', '35')
+    page.uncheck('#v3_vis')
+    page.click('#v3_review')
+    page.wait_for_selector('#epModal #v3_go')
+    diff = page.inner_text('#epModal .v3-diff')
+    for want in ('١٥٠ جنيه', '٢٥٠ جنيه', 'لا سعر', '٣٥ ريال', 'ظاهر للناس'):
+        if want not in diff:
+            PROBLEMS.append('%s06: «%s» مش في فرق قبل⇒بعد: %r' % (pre, want, diff))
+    shot(page, pre + '06c-price-diff.jpg'); d3_check(page, pre + '06c-price-diff.jpg')
+    n0 = len(h.platform_calls)
+    page.click('#v3_go')
+    page.wait_for_function("() => !document.getElementById('epModal')", timeout=15000)
+    w6 = d3_writes(h, n0)
+    if len(w6) != 1 or w6[0][3].get('confirmed') is not True or w6[0][3].get('rev') != 1 or w6[0][3].get('visible') is not False or w6[0][3]['versions']['read']['eg'] != {'amount': 250, 'currency': 'EGP'}:
+        PROBLEMS.append('%s06: كتابة الأسعار %r' % (pre, w6))
+    page.wait_for_function("() => document.querySelector('.v3-ok')", timeout=10000)
+    d3_shot(page, pre + '06d-after-price.jpg')
+    browser.close()
+
+    # —— ٧) النسب + رفض المنصة للأرضية
+    h.ef = d3fx.D3Platform(d2=True)
+    ctx = browser.context(h, 'admin', tallvp, mobile)
+    page = d3_open(ctx, '#s/money/shares', 'shares')
+    sh = page.evaluate("() => ({lines: [...document.querySelectorAll('.v3-sh .v3-pid')].map(e => e.innerText.replace(/\\s+/g, ' ')), floor: (document.querySelector('.v3-floor') || {}).textContent, ladder: document.querySelectorAll('.v3-ladder tbody tr').length})")
+    if not any('صاحب العمل ٦٠٪ · المنصة ٤٠٪' in l for l in sh['lines']) or sh['ladder'] != 4 or '٣٥٪' not in (sh['floor'] or ''):
+        PROBLEMS.append('%s07: النسب %r' % (pre, sh))
+    d3_shot(page, pre + '07-shares.jpg')
+    page.click('[data-a="share"][data-k="books"]')
+    page.wait_for_selector('#epModal #v3_bo')
+    page.fill('#v3_bo', '70')
+    page.click('#v3_review')
+    page.wait_for_selector('#epModal #v3_go')
+    diff = page.inner_text('#epModal .v3-diff')
+    if '٦٠٪' not in diff or '٧٠٪' not in diff or '٣٠٪' not in diff:
+        PROBLEMS.append('%s07: فرق النسب %r' % (pre, diff))
+    shot(page, pre + '07b-shares-diff.jpg'); d3_check(page, pre + '07b-shares-diff.jpg')
+    n0 = len(h.platform_calls)
+    page.click('#v3_go')
+    page.wait_for_selector('#epModal #v3err .v3-err', timeout=10000)
+    msg = page.inner_text('#epModal #v3err')
+    if 'رفضت المنصة' not in msg or '35' not in msg.replace('٣٥', '35'):
+        PROBLEMS.append('%s07: رسالة رفض الأرضية: %r' % (pre, msg))
+    if h.ef.shares['version'] != 3:
+        PROBLEMS.append(pre + '07: المنصة قبلت نسبة تكسر الأرضية!')
+    shot(page, pre + '07c-shares-refused.jpg'); d3_check(page, pre + '07c-shares-refused.jpg')
+    page.click('#v3_back')
+    page.fill('#v3_bo', '62')
+    page.click('#v3_review')
+    page.wait_for_selector('#epModal #v3_go')
+    n0 = len(h.platform_calls)
+    page.click('#v3_go')
+    page.wait_for_function("() => !document.getElementById('epModal')", timeout=15000)
+    w7 = d3_writes(h, n0)
+    if len(w7) != 1 or w7[0][3].get('version') != 3 or w7[0][3].get('confirmed') is not True or w7[0][3].get('changes') != {'books': {'normal': {'owner': 62, 'platform': 38}}}:
+        PROBLEMS.append('%s07: كتابة النسب %r' % (pre, w7))
+    page.wait_for_function("() => document.querySelector('.v3-log li')", timeout=10000)
+    d3_shot(page, pre + '07d-shares-after.jpg')
+    browser.close()
+
+    # —— ٨) إعلانات الأعمال
+    h.ef = d3fx.D3Platform(d2=True)
+    ctx = browser.context(h, 'admin', tallvp, mobile)
+    page = d3_open(ctx, '#s/money/ads', 'ads')
+    ad = page.evaluate("() => ({rows: document.querySelectorAll('.v3-adrow').length, txt: document.querySelector('.v3').innerText})")
+    if ad['rows'] != 3 or 'عمل بلا عنوان' not in ad['txt']:
+        PROBLEMS.append('%s08: إعلانات الأعمال %r' % (pre, ad['rows']))
+    d3_shot(page, pre + '08-ads.jpg')
+    page.click('.v3-adrow >> nth=0')
+    page.wait_for_selector('#epModal .v3-ent')
+    shot(page, pre + '08b-ads-entries.jpg'); d3_check(page, pre + '08b-ads-entries.jpg')
+    page.click('#v3_x')
+    page.wait_for_timeout(200)
+    browser.close()
+
+    # —— ٩) الكتب: مراجعة العروض + ورقة الاعتماد + الرفض + طلبات القرّاء
+    h.ef = d3fx.D3Platform(d2=True)
+    ctx = browser.context(h, 'admin', tallvp, mobile)
+    page = d3_open(ctx, '#s/books/offers', 'offers')
+    of = page.evaluate("() => ({cards: document.querySelectorAll('.v3-offer').length, tabs: [...document.querySelectorAll('.v2c-tab')].map(b => b.textContent.trim()), brain: [...document.querySelectorAll('.v3-brain')].map(e => e.innerText)})")
+    if of['cards'] != 2 or of['tabs'] != ['مراجعة العروض', 'طلبات القرّاء', 'الكتب والأعمال'] or not any('أعلى من متوسط الكتب في مصر' in b for b in of['brain']):
+        PROBLEMS.append('%s09: مراجعة العروض %r' % (pre, of))
+    d3_shot(page, pre + '09-offers.jpg')
+    page.click('[data-a="oapprove"] >> nth=0')
+    page.wait_for_selector('#epModal input[data-v="read"][data-c="eg"]')
+    pre_fill = page.input_value('#epModal input[data-v="read"][data-c="eg"]')
+    if pre_fill != '390':
+        PROBLEMS.append('%s09: السعر المقترح ما اتعبّاش في ورقة الاعتماد (%r)' % (pre, pre_fill))
+    shot(page, pre + '09b-approve-sheet.jpg'); d3_check(page, pre + '09b-approve-sheet.jpg')
+    page.fill('#epModal input[data-v="read"][data-c="eg"]', '350')
+    page.fill('#epModal input[data-v="read"][data-c="default"]', '9')
+    page.click('#v3_review')
+    page.wait_for_selector('#epModal #v3_go')
+    shot(page, pre + '09c-approve-diff.jpg'); d3_check(page, pre + '09c-approve-diff.jpg')
+    n0 = len(h.platform_calls)
+    page.click('#v3_go')
+    page.wait_for_function("() => !document.getElementById('epModal')", timeout=15000)
+    w9 = d3_writes(h, n0)
+    if len(w9) != 1 or not w9[0][1].endswith('/off-1/approve') or w9[0][3].get('versions', {}).get('read', {}).get('pricing', {}).get('eg') != {'amount': 350, 'currency': 'EGP'} or w9[0][3].get('by') != 'admin@local.test':
+        PROBLEMS.append('%s09: كتابة الاعتماد %r' % (pre, w9))
+    page.wait_for_function("() => document.querySelectorAll('.v3-offer').length === 1", timeout=10000)
+    page.click('[data-a="oreject"] >> nth=0')
+    page.wait_for_selector('#epModal #v3_reason')
+    if not page.is_disabled('#v3_go'):
+        PROBLEMS.append(pre + '09: الرفض شغّال من غير سبب')
+    page.fill('#v3_reason', 'الملف غير مكتمل')
+    shot(page, pre + '09d-reject-sheet.jpg'); d3_check(page, pre + '09d-reject-sheet.jpg')
+    n0 = len(h.platform_calls)
+    page.click('#v3_go')
+    page.wait_for_function("() => !document.getElementById('epModal')", timeout=15000)
+    w9b = d3_writes(h, n0)
+    if len(w9b) != 1 or w9b[0][3] != {'reason': 'الملف غير مكتمل', 'by': 'admin@local.test'}:
+        PROBLEMS.append('%s09: كتابة الرفض %r' % (pre, w9b))
+    page.wait_for_function("() => document.body.innerText.indexOf('لا عروض تنتظر المراجعة') > -1", timeout=10000)
+    page.click('.v2c-tab[data-tab="requests"]')
+    page.wait_for_function(D3_BOARD_READY % 'requests', timeout=30000)
+    page.wait_for_timeout(300)
+    rq = page.evaluate("() => ({open: document.querySelectorAll('.v3-rq').length, txt: document.querySelector('.v3').innerText})")
+    if rq['open'] != 3 or '٣ طلبات' not in rq['txt']:
+        PROBLEMS.append('%s10: طلبات القرّاء %r' % (pre, rq['open']))
+    d3_shot(page, pre + '10-requests.jpg')
+    n0 = len(h.platform_calls)
+    page.click('[data-a="rqok"] >> nth=0')
+    page.wait_for_function("() => document.querySelector('.v3-ok')", timeout=10000)
+    w10 = d3_writes(h, n0)
+    if len(w10) != 1 or w10[0][3] != {'status': 'seeking', 'apply_to_group': True, 'by': 'admin@local.test'}:
+        PROBLEMS.append('%s10: كتابة اعتماد الطلب %r' % (pre, w10))
+    browser.close()
+
+    # —— ١١) اللوحة: شارة «الفلوس» وبطاقتا القرار الجديدتان
+    h.ef = d3fx.D3Platform(d2=True)
+    ctx = browser.context(h, 'admin', viewport, mobile)
+    page = ctx.new_page()
+    page.goto(DASH + '/', wait_until='domcontentloaded')
+    page.wait_for_function(READY, timeout=30000)
+    page.wait_for_function("() => V2.tiles().filter(t => t.key === 'books')[0].count >= 3 && !window.V2D3._src.offers.state.match(/idle|loading/) && !window.V2D3._src.stuck.state.match(/idle|loading/)", timeout=30000)
+    page.wait_for_timeout(500)
+    tiles = page.evaluate("() => V2.tiles().filter(t => ['money', 'books'].indexOf(t.key) > -1).map(t => [t.key, t.count, t.next])")
+    d3_shot(page, pre + '11-home.jpg')
+    page.click('[data-a="start"]')
+    page.wait_for_selector('.v2-card')
+    kinds = page.evaluate("() => V2._state.deck.map(c => c.kind)")
+    if 'stuck_payment' not in kinds or 'book_offer' not in kinds:
+        PROBLEMS.append('%s11: بطاقتا القرار الجديدتان مش في الطابور: %r' % (pre, kinds))
+    for kind, label in (('stuck_payment', '12-focus-stuck'), ('book_offer', '13-focus-offer')):
+        page.evaluate("""(kind) => { const S = V2._state, hit = S.deck.filter(c => c.kind === kind)[0];
+          S.deck = [hit].concat(S.deck.filter(c => c !== hit)); S.err = ''; S.busy = false; S.lockedId = ''; V2.render(document.getElementById('view')); }""", kind)
+        page.wait_for_selector('.v2-card')
+        page.wait_for_timeout(150)
+        shot(page, '%s%s.jpg' % (pre, label))
+    page.click('[data-a="primary"]')
+    page.wait_for_selector('#epModal input[data-v="read"]')
+    shot(page, pre + '13b-offer-approve-from-card.jpg'); d3_check(page, pre + '13b-offer-approve-from-card.jpg')
+    page.click('#v3_cancel')
+    browser.close()
+
+    # —— ١٢) «كل السجلات» = الشاشة القديمة بحالها · والمفتاح مقفول = لا أثر
+    h.ef = d3fx.D3Platform(d2=True)
+    ctx = browser.context(h, 'admin', viewport, mobile)
+    page = d3_open(ctx, '#s/money/overview', 'overview')
+    page.click('.v2c-tab[data-tab="all"]')
+    page.wait_for_selector('#finTabs')
+    old = page.evaluate("() => ({tabs: [...document.querySelectorAll('#finTabs .tab')].map(t => t.textContent.trim()), v3: !!document.querySelector('.v3')})")
+    if len(old['tabs']) < 7 or old['v3'] or not any('الباقات' in t for t in old['tabs']):
+        PROBLEMS.append('%s14: «كل السجلات» مش الشاشة القديمة: %r' % (pre, old))
+    shot(page, pre + '14-all-records.jpg'); shell_check(page, pre + '14-all-records.jpg')
+    browser.close()
+
+    os.environ.pop('DASH_V2_ENABLED', None)
+    try:
+        h.ef = d3fx.D3Platform(d2=True)
+        ctx = browser.context(h, 'admin', viewport, mobile)
+        page = ctx.new_page()
+        page.goto(DASH + '/', wait_until='domcontentloaded')
+        page.wait_for_function("() => window.EP && EP.state.inbox === 'ready' && document.getElementById('rows')", timeout=30000)
+        page.wait_for_timeout(500)
+        st = page.evaluate("() => ({v3: !!document.querySelector('.v3, .v3m'), on: !!window.V2_ON, shell: !!(window.V2SHELL && V2SHELL.on)})")
+        if st['v3'] or st['on'] or st['shell']:
+            PROBLEMS.append(pre + '80: أثر لـD3 والمفتاح مقفول: %r' % st)
+        bad = page.evaluate("""async () => { const t = localStorage.getItem('token'); const out = [];
+          for (const p of ['/api/v2/shares', '/api/v2/money/settings', '/api/v2/payments/stuck', '/api/v2/prices/book', '/api/v2/book-offers']) {
+            const x = await fetch(p, {headers: {Authorization: 'Bearer ' + t}}); if (x.status !== 404) out.push([p, x.status]); } return out; }""")
+        if bad:
+            PROBLEMS.append('%s80: مسارات D3 والمفتاح مقفول لازم ٤٠٤: %r' % (pre, bad))
+    finally:
+        os.environ['DASH_V2_ENABLED'] = 'true'
+    browser.close()
+
+
 def main():
     from playwright.sync_api import sync_playwright
     os.environ['DASH_V2_ENABLED'] = 'true'
@@ -883,7 +1287,12 @@ def main():
         browser = Browsers(p)
         mode = sys.argv[2] if len(sys.argv) > 2 else 'd1'
         try:
-            if mode == 'd2':
+            if mode == 'd3':
+                d3fx.seed_dash(h.app)
+                flow_d3(browser, h, 'd', DESK, False)
+                flow_d3(browser, h, 't', TAB, False)
+                flow_d3(browser, h, 'm', MOB, True)
+            elif mode == 'd2':
                 flow_d2(browser, h, 'd', DESK, False)
                 flow_d2(browser, h, 't', TAB, False)
                 flow_d2(browser, h, 'm', MOB, True)
