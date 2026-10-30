@@ -1166,6 +1166,24 @@ def flow_d3(browser, h, pre, viewport, mobile):
     shot(page, pre + '08b-ads-entries.jpg'); d3_check(page, pre + '08b-ads-entries.jpg')
     page.click('#v3_x')
     page.wait_for_timeout(200)
+    # صف دورة: لا نسأل جسر الكتب، ونكتب «غير متاحة بعد» مع الرصيد الظاهر في الصف، لا «٠ جنيه» كاذبة
+    n0 = len(h.platform_calls)
+    page.click('.v3-adrow[data-kind="course"]')
+    page.wait_for_selector('#epModal .v3-err')
+    ctext = page.inner_text('#epModal')
+    if 'حركات الدورات غير متاحة بعد' not in ctext or 'لا حركات' in ctext or len(h.platform_calls) != n0:
+        PROBLEMS.append('%s08c: صف الدورة %r' % (pre, ctext))
+    shot(page, pre + '08c-ads-course.jpg'); d3_check(page, pre + '08c-ads-course.jpg')
+    page.click('#v3_x')
+    browser.close()
+
+    # —— ٨ب) استردادات أكثر من الصفحة: تنبيه صريح بدل قائمة ناقصة على أنها كاملة
+    h.ef = d3fx.D3Platform(d2=True)
+    h.ef.refunds_total = 130
+    ctx = browser.context(h, 'admin', tallvp, mobile)
+    page = d3_open(ctx, '#s/money/overview', 'overview')
+    page.wait_for_function("() => document.body.innerText.indexOf('استردادًا، وبعد البتّ') > -1", timeout=15000)
+    d3_shot(page, pre + '01c-overview-refunds-more.jpg')
     browser.close()
 
     # —— ٩) الكتب: مراجعة العروض + ورقة الاعتماد + الرفض + طلبات القرّاء
@@ -1216,6 +1234,11 @@ def flow_d3(browser, h, pre, viewport, mobile):
     d3_shot(page, pre + '10-requests.jpg')
     n0 = len(h.platform_calls)
     page.click('[data-a="rqok"] >> nth=0')
+    page.wait_for_selector('#v3_rqgo')
+    if len(d3_writes(h, n0)) != 0:
+        PROBLEMS.append(pre + '10: «اعتمد» كتب قبل التأكيد')
+    shot(page, pre + '10b-approve-confirm.jpg'); d3_check(page, pre + '10b-approve-confirm.jpg')
+    page.click('#v3_rqgo')
     page.wait_for_function("() => document.querySelector('.v3-ok')", timeout=10000)
     w10 = d3_writes(h, n0)
     if len(w10) != 1 or w10[0][3] != {'status': 'seeking', 'apply_to_group': True, 'by': 'admin@local.test'}:

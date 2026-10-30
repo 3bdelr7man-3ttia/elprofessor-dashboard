@@ -587,6 +587,82 @@ def test_refund_rows_come_from_both_sources_and_fail_separately():
     assert both['rows'] == [] and both['failed'] == ['الاستردادات اليدوية', 'الدفعات بلا ملف']
 
 
+@needs_node
+def test_a_truncated_refunds_page_is_flagged_and_a_complete_one_is_not():
+    rows = [{'consultation_id': 'c%d' % i, 'member_email': 'a@x.test', 'amount': 100, 'currency': 'EGP', 'cancelled_at': _iso(5 + i), 'full_refund': True} for i in range(3)]
+    cut = L('v2Refunds', {'refunds': rows, 'count': 3, 'total': 130, 'next_cursor': 'abc'}, [], NOW)
+    assert cut['more'] == {'shown': 3, 'total': 130}
+    only_cursor = L('v2Refunds', {'refunds': rows, 'count': 3, 'next_cursor': 'abc'}, [], NOW)
+    assert only_cursor['more'] == {'shown': 3, 'total': None}
+    full = L('v2Refunds', {'refunds': rows, 'count': 3, 'total': 3, 'next_cursor': ''}, [], NOW)
+    assert full['more'] is None
+    assert L('v2Refunds', None, [], NOW)['more'] is None
+    js = _strip_comments(_read('dashboard-cloud', 'v2-d3.js'))
+    assert 'refunds.more' in js, 'القائمة المقصوصة لازم يظهر لها تنبيه في الشاشة'
+
+
+@needs_node
+def test_a_consultation_stuck_payment_is_not_labelled_as_an_expert_file():
+    r = L('v2Stuck', {'items': [{'order_id': 'k', 'kind': 'consultation', 'amount': 300, 'currency': 'EGP', 'age_hours': 3, 'buyer_email': 'k@x.test'}]}, NOW)['rows'][0]
+    assert r['kindText'] == 'استشارة أو ملف خبير' and r['title'] == 'استشارة أو ملف خبير'
+
+
+def test_a_course_ledger_row_never_asks_the_books_only_bridge(ctx, plat):
+    r = _call(ctx, 'GET', '/api/v2/ads-ledger/c-1?kind=course')
+    assert r.status_code == 404 and 'غير متاحة بعد' in r.get_json()['error'] and r.headers.get('Cache-Control') == 'no-store'
+    assert plat.seen == [], 'الدورة لا تُسأل عنها المنصة أصلًا: رد الجسر لها ٢٠٠ فارغ كاذب'
+    assert _call(ctx, 'GET', '/api/v2/ads-ledger/bk-1?kind=book').status_code == 200
+    assert _call(ctx, 'GET', '/api/v2/ads-ledger/bk-1').status_code == 200
+
+
+def test_the_ledger_drawer_shows_the_row_balance_for_a_course_instead_of_a_false_empty_ledger():
+    js = _strip_comments(_read('dashboard-cloud', 'v2-d3.js'))
+    body = js[js.index('function openAd('):]
+    body = body[:body.index('\n  }\n')]
+    course = body[:body.index("E.api('/v2/ads-ledger/'")]
+    assert "kind === 'course'" in course and 'حركات الدورات غير متاحة بعد' in course and 'row.balanceText' in course
+    assert 'E.api(' not in course, 'ولا نداء للجسر قبل فرع الدورة'
+    assert "'?kind=' + encodeURIComponent(kind || 'book')" in body
+
+
+def test_a_platform_401_or_403_never_logs_the_admin_out(ctx, plat):
+    for status in (401, 403):
+        plat.ef.forced[('GET', '/api/bridge/payments/stuck')] = (status, {'detail': 'bad secret'})
+        r = _call(ctx, 'GET', '/api/v2/payments/stuck')
+        assert r.status_code == 502 and r.get_json() == {'error': 'تعذّر الاتصال بالمنصة'} and r.headers.get('Cache-Control') == 'no-store', (status, r.get_json())
+        plat.ef.forced[('PUT', '/api/bridge/settings/money')] = (status, {'detail': 'bad secret'})
+        n = AuditLog.query.filter_by(action='money_settings.update').count()
+        w = _call(ctx, 'PUT', '/api/v2/money/settings', {'withdraw_min': 800, 'confirmed': True})
+        assert w.status_code == 502 and w.get_json() == {'error': 'تعذّر الاتصال بالمنصة'}, (status, w.get_json())
+        assert AuditLog.query.filter_by(action='money_settings.update').count() == n
+    # رفض حقيقي (٤٢٢/٤٠٩) يبقى بحاله
+    plat.ef.forced[('GET', '/api/bridge/payments/stuck')] = (409, {'detail': 'x'})
+    assert _call(ctx, 'GET', '/api/v2/payments/stuck').status_code == 409
+
+
+def test_dashboard_authored_proxy_errors_are_plain_arabic(ctx, plat):
+    banned = ('مفيش', 'مش ', 'تاني', 'بيوصل', 'لسه', 'ده ')
+    errs = [
+        _call(ctx, 'PUT', '/api/v2/shares', {'changes': {}, 'version': 1, 'confirmed': True}).get_json()['error'],
+        _call(ctx, 'PUT', '/api/v2/shares', {'changes': {'a': 1}, 'version': 'x', 'confirmed': True}).get_json()['error'],
+        _call(ctx, 'GET', '/api/v2/ads-ledger/a%20b').get_json()['error'],
+        _call(ctx, 'GET', '/api/v2/prices/book/a%20b').get_json()['error'],
+        _call(ctx, 'POST', '/api/v2/book-offers/o1/reject', {'confirmed': True, 'reason': ''}).get_json()['error'],
+        _call(ctx, 'PATCH', '/api/v2/book-requests/rq-1', {}).get_json()['error'],
+    ]
+    for e in errs:
+        assert not any(b in e for b in banned), e
+    assert errs[0] == 'لا تعديل' and errs[1] == 'حدّث الصفحة ثم أعد المحاولة' and errs[4] == 'اكتب سبب الرفض، فهو يصل إلى صاحب العرض'
+
+
+def test_the_reader_request_approve_button_asks_one_line_first():
+    js = _strip_comments(_read('dashboard-cloud', 'v2-d3.js'))
+    body = js[js.index("var ok = b.getAttribute('data-a') === 'rqok';"):]
+    body = body[:body.index('// ----')] if '// ----' in body else body[:2500]
+    assert 'if (!ok) return run();' in body and 'v3_rqgo' in body
+    assert body.index('v3_rqgo') < body.rindex('run();'), '«اعتمد» ينشر للأعضاء ⇒ تأكيد قبل النداء'
+
+
 PRICES_LIST = {'ok': True, 'kind': 'book', 'countries': ['eg', 'sa', 'ae', 'kw', 'qa', 'default'], 'currencies': d3fx.CURRENCIES, 'count': 2, 'items': [
     {'id': 'b1', 'title': 'دليل المستأجر', 'visible': True, 'has_prices': True, 'min_price': {'eg': {'amount': 150, 'currency': 'EGP'}, 'default': {'amount': 9, 'currency': 'USD'}}, 'updated_at': _iso(5)},
     {'id': 'b2', 'title': 'دليل الميراث', 'visible': False, 'has_prices': False, 'min_price': {}, 'updated_at': None}]}
@@ -774,12 +850,13 @@ QUEUE = {'wallet_payouts_pending': {'count': 4, 'total_amount': 9}, 'manual_paym
 @needs_node
 def test_the_money_badge_counts_payouts_receipts_stuck_and_refunds():
     b = L('v2MoneyBadge', QUEUE)
-    assert b['parts'] == {'payouts': 4, 'receipts': 1, 'stuck': 2, 'refunds': 5, 'split': 3}
-    assert L('v2MoneyBadge', {k: v for k, v in QUEUE.items() if k != 'course_split_pending'})['total'] == 4 + 1 + 2 + 5
+    # المجموع كما في المواصفة بالحرف: اقتسام الدورات المعلّق (course_split_pending) ليس منه، حتى لو جاء في الطابور
+    assert b['parts'] == {'payouts': 4, 'receipts': 1, 'stuck': 2, 'refunds': 5} and b['total'] == 4 + 1 + 2 + 5
     assert L('v2MoneyBadge', None) is None
     ex = {'inbox': [], 'now': NOW}
     t = {x['key']: x for x in L('v2Tiles', QUEUE, ex)}['money']
-    assert t['count'] == 15 and t['hot'] is True
+    assert t['count'] == 12 and t['hot'] is True
+    assert 'اقتسام' not in t['next'], t['next']
     assert '٥ استردادات تنتظر قرارك' in t['next'] and '٤ تحويلات' in t['next'] and 'إيصال' in t['next'] and 'دفعتان عالقتان' in t['next'], t['next']
     t2 = {x['key']: x for x in L('v2Tiles', None, ex)}['money']
     assert t2['count'] is None and t2['failed'] is True, 'الطابور تعذّر ⇒ لا رقم'

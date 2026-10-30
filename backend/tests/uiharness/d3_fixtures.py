@@ -196,7 +196,9 @@ class D3Platform(v2fx.V2Platform):
             out["month"] = (params or {}).get("month") or datetime.date.today().strftime("%Y-%m")
             return 200, out
         if path == "/api/bridge/refunds/pending" and method == "GET":
-            return 200, {"refunds": copy.deepcopy(self.refunds), "count": len(self.refunds), "total": len(self.refunds), "settled_count": 0, "next_cursor": ""}
+            more = getattr(self, "refunds_total", None)       # صفحة مقصوصة: المنصة تعيد `total` الكلي و`next_cursor`
+            return 200, {"refunds": copy.deepcopy(self.refunds), "count": len(self.refunds), "total": more if more else len(self.refunds), "settled_count": 0,
+                         "next_cursor": "cur-1" if more else ""}
         m = re.match(r"^/api/bridge/prices/(book|course)(?:/([^/]+))?$", path)
         if m:
             return self._prices(method, m.group(1), m.group(2), body)
