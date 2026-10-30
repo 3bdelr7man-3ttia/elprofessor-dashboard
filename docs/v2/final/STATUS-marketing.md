@@ -65,7 +65,7 @@
 - `test_v2_d1` ١٢٩ · `test_v2_d1b` ٢٩ · `test_v2_d2` ٦٧ · `test_v2_d3` ١١٠: كلها نجحت.
 - باقي المجموعة القديمة ملفًا ملفًا: نجحت كلها (`test_dash_ia_structure` ٥٤ · `test_xss_hardening` ١٩ بعد سماح v2s · `test_xss_sinks_round2` · `test_login_lockout` ٢٢ · `test_platform_ops_proxies` ٤٠ · `test_expert_files_*` الخادمية والساكنة · الملفات المسطّحة `test_escrow/test_finance_event/test_founding_leads`…).
 - **ما فشل في الساندبوكس ولازم تعيده الجلسة الرئيسية**: `test_dash_ia_ui` · `test_dash_company_badges` · `test_dash_finance_sources` (ربط منفذ ⇒ PermissionError)، و`test_expert_files_r13_ui` · `r14_ui` · `test_expert_files_ui` (متصفح/منفذ ⇒ علّقت ٩٠ ثانية). لم تتغيّر ملفاتها، لكن `test_dash_ia_ui` يمسّ الواجهة فيُعاد بعد الدمج. الملفات المسطّحة الأخيرة (`test_invites` وما بعده) لم أنتظر آخرها.
-- اللقطات: `python3 -B tests/uiharness/v2_shots_marketing.py ../docs/v2/final/shots-marketing` ⇒ ٥٩ لقطة، `problems: []` و`unexpected: []`.
+- اللقطات: `python3 -B tests/uiharness/v2_shots_marketing.py ../docs/v2/final/shots-marketing` ⇒ ٥٦ لقطة، `problems: []` و`unexpected: []`.
 
 ## ٧) اللقطات (`docs/v2/final/shots-marketing/`، كمبيوتر `d` ١٤٤٠×٩٠٠ · تابلت `t` ٨٢٠×١١٨٠ · موبايل `m` ٣٩٠×٨٤٤)
 
