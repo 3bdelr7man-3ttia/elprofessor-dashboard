@@ -141,6 +141,7 @@ def _audits(action, target=None):
 def _fresh_audits():
     with flask_app.app_context():
         AuditLog.query.filter(AuditLog.action.like('wallet_payout.%')).delete(synchronize_session=False)
+        AuditLog.query.filter(AuditLog.action.like('manual_payment.%')).delete(synchronize_session=False)
         db.session.commit()
     yield
 
@@ -317,6 +318,80 @@ def test_the_read_list_is_untouched(ctx, plat):
     assert plat.seen[0]['params'] == {'status': 'pending'}
 
 
+# ---------------------------------------------------------------- ٢-ب) إيصال الدفع اليدوي: تأكيد / رفض
+
+MP_CONFIRM = '/api/platform-manual-payments/mp-1/confirm'
+MP_REJECT = '/api/platform-manual-payments/mp-1/reject'
+BRIDGE_MP = PLATFORM + '/api/bridge/manual-payments/mp-1/decide'
+
+
+@pytest.mark.parametrize('confirmed', [None, False, 'true', 1, 'yes'])
+def test_confirming_a_receipt_needs_the_confirmation_flag(ctx, plat, confirmed):
+    body = {} if confirmed is None else {'confirmed': confirmed}
+    r = _call(ctx, 'POST', MP_CONFIRM, body)
+    assert r.status_code == 400 and plat.seen == [] and _audits('manual_payment.confirm') == []
+
+
+def test_confirming_a_receipt_proxies_once_and_audits_with_the_actor_and_the_platform_figures(ctx, plat):
+    r = _call(ctx, 'POST', MP_CONFIRM, {'confirmed': True, 'admin_note': 'طابقت الإيصال', 'amount': 1, 'by': 'evil'})
+    assert r.status_code == 200 and r.get_json()['status'] == 'confirmed'
+    assert len(plat.seen) == 1 and plat.seen[0]['url'] == BRIDGE_MP
+    assert plat.seen[0]['json'] == {'decision': 'confirm', 'admin_note': 'طابقت الإيصال'}
+    rows = _audits('manual_payment.confirm', 'mp-1')
+    assert len(rows) == 1
+    actor, target, meta = rows[0]
+    assert actor == 'v2-admin@x.test'
+    assert meta == {'status': 'confirmed', 'amount': 450, 'currency': 'EGP', 'user_email': 'salma@example.test'}, 'من رد المنصة لا من المتصفح'
+
+
+def test_rejecting_a_receipt_needs_no_flag_and_is_audited(ctx, plat):
+    r = _call(ctx, 'POST', MP_REJECT, {'admin_note': 'الإيصال غير واضح'})
+    assert r.status_code == 200 and plat.seen[0]['json'] == {'decision': 'reject', 'admin_note': 'الإيصال غير واضح'}
+    actor, target, meta = _audits('manual_payment.reject', 'mp-1')[0]
+    assert actor == 'v2-admin@x.test' and meta['status'] == 'rejected' and meta['note'] == 'الإيصال غير واضح'
+
+
+def test_a_receipt_already_decided_the_other_way_is_a_409_not_a_success(ctx, plat):
+    # اترفض في تبويب تاني ⇒ المنصة بترد ٢٠٠ بالوثيقة الموجودة (حالتها rejected) — ما نقولش «اتأكد».
+    assert _call(ctx, 'POST', MP_REJECT, {'admin_note': 'x'}).status_code == 200
+    r = _call(ctx, 'POST', MP_CONFIRM, {'confirmed': True})
+    assert r.status_code == 409 and r.get_json() == {'error': 'الدفعة اتحسمت قبل كده (مرفوضة)'}
+    assert _audits('manual_payment.confirm') == [], 'ولا سطر سجل لفعل ما حصلش'
+    # والعكس
+    r = _call(ctx, 'POST', '/api/platform-manual-payments/mp-2/confirm', {'confirmed': True})
+    assert r.status_code == 200
+    r = _call(ctx, 'POST', '/api/platform-manual-payments/mp-2/reject', {'admin_note': 'y'})
+    assert r.status_code == 409 and 'مؤكدة' in r.get_json()['error']
+
+
+def test_an_unknown_receipt_is_the_platforms_404_with_no_audit(ctx, plat):
+    r = _call(ctx, 'POST', '/api/platform-manual-payments/mp-404/confirm', {'confirmed': True})
+    assert r.status_code == 404 and r.get_json() == {'error': 'طلب الدفع غير موجود'}
+    assert _audits('manual_payment.confirm', 'mp-404') == []
+
+
+def test_a_receipt_reply_without_a_status_is_treated_as_no_reply(ctx, plat):
+    plat.ef.forced[('POST', '/api/bridge/manual-payments/mp-1/decide')] = (200, {'ok': True})
+    r = _call(ctx, 'POST', MP_CONFIRM, {'confirmed': True})
+    assert r.status_code == 502 and r.get_json()['no_reply'] is True
+    assert _audits('manual_payment.confirm') == [] and len(_audits('manual_payment.no_reply', 'mp-1')) == 1
+
+
+def test_a_lost_receipt_reply_is_no_reply_and_is_logged_without_a_retry(ctx, plat):
+    plat.raise_exc = __import__('requests').exceptions.ConnectionError('down')
+    r = _call(ctx, 'POST', MP_CONFIRM, {'confirmed': True})
+    out = r.get_json()
+    assert r.status_code == 502 and out['no_reply'] is True and 'ما وصلناش رد' in out['error']
+    assert len(plat.seen) == 1
+    assert _audits('manual_payment.no_reply', 'mp-1')[0][2] == {'attempt': 'confirm'}
+
+
+@pytest.mark.parametrize('weird', ['a%20b', 'x.y', 'a%3Fb'])
+def test_a_malformed_receipt_id_never_reaches_the_platform(ctx, plat, weird):
+    r = _call(ctx, 'POST', '/api/platform-manual-payments/%s/confirm' % weird, {'confirmed': True})
+    assert r.status_code == 404 and plat.seen == []
+
+
 # ---------------------------------------------------------------- ٣) الملفات والنشر
 
 def _read(*parts):
@@ -366,9 +441,12 @@ def test_the_closed_switch_leaves_the_menu_declaration_untouched():
     assert 'window.V2_ON=false;' in html
     assert "EP.api('/v2/config')" in html
     assert 'v2-logic.js' in html and 'v2-home.js' in html and 'v2-home.css' in html
-    # الإقلاع: السؤال قبل renderNav، وفشله/تأخيره/٤٠٣ = مقفول.
+    # الإقلاع القديم بيترسم فورًا (epBootCore أول سطر)، والسؤال بعده: مقفول = نفس التوقيت بالحرف.
     boot = html[html.index('window.EP_BOOT=function(){'):html.index('function epBootCore(){')]
-    assert "EP.role==='admin'" in boot and 'v2LoadFlag(epBootCore)' in boot
+    assert "EP.role==='admin'" in boot and 'v2LoadFlag(' in boot
+    assert boot.index('epBootCore();') < boot.index('v2LoadFlag('), 'الإقلاع القديم ما بينتظرش المفتاح'
+    assert 'v2LoadFlag(epBootCore)' not in boot
+    assert "renderNav();" in boot and "go('home')" in boot
     flag = html[html.index('function v2LoadFlag'):html.index('window.EP_BOOT=function(){')]
     assert 'fin(false)' in flag and 'setTimeout' in flag and 'r.enabled===true' in flag
     assert "if(current==='home'&&window.V2_ON&&window.V2)return V2.render(v);" in html
@@ -418,7 +496,7 @@ def test_tile_counts_come_straight_from_the_queue():
                inbox=[{'apiKind': 'book', 'ref': 'K1'}, {'apiKind': 'book', 'ref': 'K2'}, {'apiKind': 'join', 'ref': 'J1'}])
     # الملفات: متأخر (١+٢) + تنتظر مراجعتك ٣ + تنتظر توزيع ٤ + فلوس واقفة ٥
     assert t['files']['count'] == 15 and t['files']['hot'] is True
-    assert t['files']['next'] == '٣ متأخر · ٣ تنتظر مراجعتك · ٤ تنتظر خبيرًا · ٥ فلوسها واقفة'
+    assert t['files']['next'] == '٣ متأخر · ٣ تنتظر مراجعتك · ٤ تنتظر خبيرًا · ٥ ملفات أموالها متوقفة'
     # النزاعات: ملفات ١ + قضايا ٢ + استشارات ٣ + قديمة ٤ + استرداد ٥ + دفع بلا ملف ٦
     assert t['disputes']['count'] == 21 and t['disputes']['hot'] is True
     assert t['courses']['count'] == 2 + 3 + 1 and t['courses']['dest'] == 'courses'
@@ -691,24 +769,63 @@ DISPUTE_ROW = {'apiKind': 'dispute', 'dsrc': 'file', 'apiId': 'd1', 'ref': 'DSP-
                'ef': {'id': 'd1', 'title': 'عقد', 'expert_email': 'hala@example.test', 'dispute': {'at': _iso(3)}}}
 
 
-def _payout_card(rows, failed):
-    out = v2_node.logic('v2Decisions', rows, [PAYOUT], None, {'now': NOW, 'inboxFailed': failed})
+def _payout_card(rows, failed, trunc=(), payout=None):
+    opts = {'now': NOW, 'inboxFailed': failed}
+    if trunc is not None:
+        opts['inboxTruncated'] = list(trunc)
+    out = v2_node.logic('v2Decisions', rows, [payout or PAYOUT], None, opts)
     return [c for c in out if c['kind'] == 'payout'][0]
 
 
 @needs_node
 def test_the_payout_review_sentence_appears_only_when_it_was_really_checked():
     c = _payout_card([], [])
-    assert 'روجعت مع النزاعات والاستردادات' in c['reason'] and c['warn'] == ''
+    assert c['reason'] == 'روجعت النزاعات المفتوحة: لا نزاع مفتوحًا على صاحب الطلب كخبير' and c['warn'] == ''
+    assert 'الاستردادات' not in c['reason'], 'الفحص ما بيغطّيش الاستردادات — الجملة ما تدّعيهاش'
     # الفحص ماقدرش (الوارد وقع / طابور النزاعات تعذّر / مفيش بيان بالأعطال) ⇒ الجملة تتشال
     for failed in (None, ['نزاعات الملفات'], ['نزاعات الاستشارات'], ['قضايا فيها ملاحظة']):
         c = _payout_card([], failed)
         assert c['reason'] == '', failed
-    out = v2_node.logic('v2Decisions', None, [PAYOUT], None, {'now': NOW, 'inboxFailed': []})
+    out = v2_node.logic('v2Decisions', None, [PAYOUT], None, {'now': NOW, 'inboxFailed': [], 'inboxTruncated': []})
     assert [x for x in out if x['kind'] == 'payout'][0]['reason'] == ''
     # نزاع مفتوح على نفس الشخص ⇒ الجملة تتشال وبيتحذّر
     c = _payout_card([DISPUTE_ROW], [])
     assert 'روجعت' not in c['reason'] and 'نزاع مفتوح' in c['warn']
+
+
+@needs_node
+def test_the_payout_review_sentence_is_dropped_when_a_dispute_list_was_cut():
+    # «معروض ١٠٠ من ٣٠٠»: النزاع ممكن يكون في الـ٢٠٠ اللي ما اتعرضوش ⇒ مفيش «لا نزاع».
+    for label in ('نزاعات الملفات: معروض 100 من 300', 'نزاعات الاستشارات: معروض 100 من 300',
+                  'قضايا فيها ملاحظة: معروض 50 من 80', 'استشارات قديمة: معروض 10 من 30'):
+        c = _payout_card([], [], trunc=[label])
+        assert c['reason'] == '' and c['warn'] == '', label
+    # قصّ مصدر ما بيمسّش النزاعات (رسائل) ما بيشيلش الجملة
+    assert _payout_card([], [], trunc=['رسائل الموقع: معروض 500 من 900'])['reason'] != ''
+    # بيان القصّ ما اتبعتش أصلًا ⇒ مجهول مش «سليم»
+    assert _payout_card([], [], trunc=None)['reason'] == ''
+    # نزاع معروض فعلًا حقيقة: التحذير بيظهر حتى لو القايمة مقصوصة؛ «لا يوجد» وحدها هي اللي بتحتاج اكتمال المصادر
+    c = _payout_card([DISPUTE_ROW], [], trunc=['نزاعات الملفات: معروض 1 من 2'])
+    assert 'نزاع مفتوح' in c['warn'] and c['reason'] == ''
+    c = _payout_card([DISPUTE_ROW], None, trunc=None)
+    assert 'نزاع مفتوح' in c['warn']
+
+
+@needs_node
+def test_the_payout_card_shows_the_exact_amount_that_will_be_transferred():
+    # المحمّل القديم بيقرّب (150.5 ⇒ 151) — البطاقة والنافذة لازم يقروا `raw.amount`.
+    p = dict(PAYOUT, amount=151, raw=dict(PAYOUT['raw'], amount=150.5))
+    c = _payout_card([], [], payout=p)
+    m = c['primary']['money']
+    assert m['amount'] == 150.5 and c['secondary']['money']['amount'] == 150.5
+    assert '١٥٠٫٥' in c['sub'] and '١٥١' not in c['sub'] and '١٥٠٫٥' in c['brain']
+    assert c['facts'][0]['v'] == '١٥٠٫٥ جنيه'
+    # ما فيش raw.amount ⇒ نرجع لـamount
+    p2 = dict(PAYOUT, amount=300, raw={'method': 'x', 'created_at': _iso(1)})
+    assert _payout_card([], [], payout=p2)['primary']['money']['amount'] == 300
+    # التنسيق النهائي اللي بتبنى منه نافذة التأكيد وزرّها
+    assert v2_node.logic('util.fmt', 150.5) == '١٥٠٫٥' and v2_node.logic('util.moneyText', 150.5, 'EGP') == '١٥٠٫٥ جنيه'
+    assert v2_node.logic('util.fmt', 3500.5) == '٣٬٥٠٠٫٥'
 
 
 @needs_node
@@ -721,7 +838,7 @@ def test_a_file_card_suggests_the_auto_pick_with_a_plain_reason():
     c = v2_node.logic('v2Card', row, {'now': NOW})
     assert c['kind'] == 'file_waiting' and c['tag'] == 'ملف ينتظر خبيرًا'
     assert c['brain'] == 'أقترح أ. ثانية'
-    assert c['reason'] == 'يراجع العقود · نفس التخصص · نفس بلد القانون · لديه ملفان مفتوحان'
+    assert c['reason'] == 'يراجع العقود · نفس التخصص · نفس بلد القانون · عدد الملفات المفتوحة: ٢'
     assert c['primary'] == {'label': 'أرسله إلى أ. ثانية', 'act': {'do': 'send', 'email': 'b@x', 'name': 'أ. ثانية'}}
     assert c['secondary']['label'] == 'افتح الملف'
     # مفيش مرشّح مؤهّل ⇒ «لا يوجد خبير متاح» وزرّ الفتح
@@ -739,7 +856,7 @@ def test_a_late_file_suggests_moving_it_and_says_how_late():
     assert c['kind'] == 'file_late' and c['tag'] == 'ملف متأخر' and c['group'] == 10
     assert c['brain'] == 'متأخر ٥ ساعات عند أ. بطيء. أقترح نقله إلى د. ندى'
     assert c['primary']['label'] == 'انقله إلى د. ندى' and c['primary']['act']['do'] == 'send'
-    assert 'ليس لديه ملفات مفتوحة' in c['reason']
+    assert 'لا ملفات مفتوحة' in c['reason']
 
 
 @needs_node
@@ -766,7 +883,8 @@ def test_visible_text_is_plain_arabic_with_no_ai_headline(real):
 @needs_node
 def test_health_lists_the_alerts_and_the_heartbeats():
     h = v2_node.logic('v2Health', QUEUE, NOW)
-    assert h['ok'] is False and h['failed'] is False and h['alerts'] == ['⏰ تنبيه أول', '⚠️ تنبيه ثانٍ']
+    assert h['ok'] is False and h['failed'] is False
+    assert h['alerts'] == ['تنبيه من المنصة يحتاج مراجعتك'], 'النص المجهول ما بيتطبعش كما وصل — جملة ثابتة'
     assert [b['label'] for b in h['heartbeats']] == ['الفحص الدوري', 'النسخ الاحتياطي']
     assert h['heartbeats'][0]['ago'] == 'منذ ساعة' and h['heartbeats'][1]['ago'] == 'لم تعمل بعد'
     assert v2_node.logic('v2Health', {'alerts': [], 'heartbeats': {}}, NOW)['ok'] is True
@@ -791,8 +909,8 @@ def test_nothing_waiting_yields_no_cards():
 @needs_node
 def test_other_rows_get_their_plain_cards(real):
     cards = {c['kind']: c for c in _decisions(real)}
-    assert cards['trainer']['primary']['label'] == 'اقبله' and cards['trainer']['secondary']['label'] == 'افتح الطلب'
-    assert cards['founding']['primary']['label'] == 'تواصلت معه'
+    assert cards['trainer']['primary']['label'] == 'اقبل الطلب' and cards['trainer']['secondary']['label'] == 'افتح الطلب'
+    assert cards['founding']['primary']['label'] == 'تم التواصل'
     assert cards['lead']['primary'] == {'label': 'تم', 'act': {'do': 'resolve'}}
     assert cards['pending_user']['tag'] == 'زائر ينتظر الفتح'
     assert cards['join']['primary']['label'] in ('اقبل', 'افتح وراجع')
@@ -817,3 +935,183 @@ def test_a_dispute_card_reads_gender_neutral():
     c = v2_node.logic('v2Card', DISPUTE_ROW, {'now': NOW})
     assert c['brain'].startswith('اعتراض من منى على «عقد»')
     assert c['primary'] == {'label': 'افتح النزاع', 'act': {'do': 'open'}}
+
+
+# —— المراجعة: عدّادات ناقصة · صحة بفصحى · نص محايد · رد القرار
+
+TRUNC = ['نزاعات الملفات: معروض 100 من 300']
+
+
+@needs_node
+def test_a_cut_inbox_marks_the_row_based_tiles_partial_and_puts_the_warning_first():
+    t = _tiles(QUEUE, inbox=[{'apiKind': 'book', 'ref': 'K1'}], inboxTruncated=TRUNC, pendingVisitors=1, invitesAwaiting=1)
+    for k in ('books', 'people', 'brain'):
+        assert t[k]['partial'] is True and t[k]['failed'] is False and t[k]['next'].startswith('العدد ناقص'), k
+    assert t['books']['count'] == 1, 'الرقم نفسه ما بيتغيّرش — بيتعلّم ناقص'
+    # المربعات اللي من طابور المنصة (مش من صفوف الوارد) ما بتتأثرش
+    for k in ('files', 'disputes', 'money', 'content'):
+        assert t[k]['partial'] is False, k
+    # مفيش قصّ ⇒ ولا علامة
+    t = _tiles(QUEUE, inbox=[{'apiKind': 'book', 'ref': 'K1'}], inboxTruncated=[], pendingVisitors=1, invitesAwaiting=1)
+    assert t['books']['partial'] is False and t['people']['partial'] is False and 'ناقص' not in t['books']['next']
+
+
+@needs_node
+def test_a_failed_source_for_the_people_tile_also_leads_with_the_partial_warning():
+    t = _tiles(QUEUE, pendingVisitors=None, invitesAwaiting=2, inbox=[])
+    assert t['people']['next'].startswith('العدد ناقص')
+
+
+@needs_node
+def test_the_courses_tile_does_not_repeat_its_title_when_empty():
+    t = _tiles({'courses_pending': {'count': 0}, 'trainer_applications_pending': {'count': 0}, 'live_needs_decision': [],
+                'alerts': [], 'heartbeats': {}})
+    assert t['courses']['count'] == 0 and t['courses']['next'] == 'لا شيء ينتظر قرارك'
+
+
+# التنبيهات كما تطبعها المنصة بالحرف (ops_bridge.py · expert_files.py): عامية وإيموجي وأرقام لاتينية وكلمة «الداشبورد».
+PLATFORM_ALERTS = [
+    '⚡ 2 ملف مستعجل مستني خبير يبدأ', '🔎 3 رأي مستني مراجعتك قبل ما يوصل للعميل', '🙋 1 ملف مالوش خبير متاح — ابعته بإيدك',
+    '📁 4 ملف مستني توزيع', '⏰ 2 ملف اتبعت لخبير وما اتستلمش من ١٢ ساعة', '⚠️ 1 رأي متأخر', '🛑 2 ملف فيه ملاحظة مستنية قرارك',
+    '🛑 1 دفعة قضية عليها ملاحظة مستنية قرارك', '⚠️ 5 ملف فلوسه ما اتحرّكتش لوحدها — محتاج تدخّلك',
+    '⚠️ 6 ملف اتدفع وما وصلش لقايمة التوزيع — راجعه من الداشبورد',
+    '⚠️ 7 ملف مدفوع والميزة مقفولة — رجّع الفلوس أو احسم من الداشبورد، أو افتح المفتاح',
+    '🛑 3 نزاع على استشارة مستني قرارك', '🗂️ 4 استشارة قديمة اتسلّمت ومستنية قرارك — للخبير ولا للعميل',
+    '💸 5 حجز اتلغى وفلوسه لسه عندنا — مستني ترجّعها بإيدك (قايمة الاسترداد اليدوي)',
+    '⏰ طلب بلا أول رد منذ 40 ساعة: مراجعة عقد إيجار',
+    '⚠️ ساعة الدورات الحيّة: لم تعمل ولا مرّة حتى الآن — شغّلها اليوم',
+    '⚠️ النسخة الاحتياطية الليلية: متوقّفة منذ 30.5 ساعة، والحدّ المسموح 26 ساعة — أعِد تشغيلها الآن',
+    '⚠️ تعذّر الوصول إلى سجلّ الالتحاق بالدورات — الرقم المعروض غير موثوق، ولا يعني أنّ أحدًا لم يلتحق. تحقّق منه بنفسك قبل أي قرار',
+    '⚠️ تفصيل الالتحاق حسب كل دورة غير مكتمل اليوم — الإجمالي وحده هو الرقم الموثوق',
+]
+DIALECT = ['مستني', 'مستنية', 'اتبعت', 'اتستلمش', 'ابعته', 'بإيدك', 'الداشبورد', 'فلوس', 'اتحرّكتش', 'لوحدها', 'قايمة', 'اتلغى',
+           'اتسلّمت', 'اتدفع', 'وصلش', 'مالوش', 'رجّع', 'احتر', 'ولا ', 'لسه', 'عندنا']
+
+
+@needs_node
+def test_health_alerts_are_rebuilt_in_plain_arabic_and_never_printed_raw():
+    h = v2_node.logic('v2Health', {'alerts': PLATFORM_ALERTS, 'heartbeats': {}}, NOW)
+    assert len(h['alerts']) == len(PLATFORM_ALERTS) and h['ok'] is False
+    emoji = re.compile('[\U0001F000-\U0001FAFF\u2190-\u27BF\u2B00-\u2BFF\u2300-\u23FF\uFE0F]')
+    for raw, a in zip(PLATFORM_ALERTS, h['alerts']):
+        assert a != raw and a != 'تنبيه من المنصة يحتاج مراجعتك', raw
+        assert not emoji.search(a) and not re.search(r'[0-9]', a), a
+        for w in DIALECT:
+            assert w not in a, (w, a)
+    assert 'آراء تنتظر مراجعتك' in h['alerts'][1] and h['alerts'][1].startswith('٣')
+    assert h['alerts'][0] == 'ملفان مستعجلان ينتظران خبيرًا يبدأ'
+    assert h['alerts'][16].endswith('أعد تشغيلها الآن') and '٣٠٫٥ ساعة' in h['alerts'][16] and '٢٦ ساعة' in h['alerts'][16]
+    # نص مجهول ⇒ جملة ثابتة، مش نصّه
+    h = v2_node.logic('v2Health', {'alerts': ['🔥 حاجة غريبة مستنية', '🔥 حاجة تانية'], 'heartbeats': {}}, NOW)
+    assert h['alerts'] == ['تنبيه من المنصة يحتاج مراجعتك']
+
+
+# كلام ظاهر ما يرجعش: عامية المؤسس وتجسيد الجنس واصطلاحات الشاشة.
+BANNED_IN_SOURCE = ['فلوسها واقفة', 'فلوس ملف واقفة', 'الفلوس واقفة', 'بعدين', 'من الدرج', 'طابور المنصة', 'اقبله', 'افتح له المنصة',
+                    "'لديه ", 'تواصلت معه', 'كلّمه على واتساب', 'إلى محفظته', 'عليه نزاع', 'يطلب تقديم', 'قبل فتح المنصة له',
+                    'سجّل ودخل زائرًا', 'ينشر اسمه', 'ليس لديه']
+
+
+def _code_only(src):
+    src = re.sub(r'/\*.*?\*/', '', src, flags=re.S)
+    return '\n'.join(re.sub(r'(^|\s)//.*$', '', ln) for ln in src.split('\n'))
+
+
+def test_removed_dialect_and_gendered_phrases_are_gone_from_the_screen_files():
+    for f in ('v2-logic.js', 'v2-home.js'):
+        src = _code_only(_read('dashboard-cloud', f))
+        for bad in BANNED_IN_SOURCE:
+            assert bad not in src, (f, bad)
+
+
+@needs_node
+def test_no_card_text_is_dialect_or_passes_platform_text_through(real):
+    cards = _decisions(real)
+    texts = []
+    for c in cards:
+        texts += [c['tag'], c['title'], c['sub'], c['brain'], c['reason'], c['warn'], c['primary']['label'], (c['secondary'] or {}).get('label', '')]
+        texts += [f['v'] for f in c['facts']]
+    joined = ' | '.join(t for t in texts if t)
+    for w in ('الرأي ما وصلش', 'قايمة التجربة', 'فلوسها', 'الدرج', 'بعدين', 'اقبله', 'مستني ', 'بإيدك'):
+        assert w not in joined, w
+    for c in cards:
+        if c['kind'] == 'dispute':
+            assert 'ما وصلش' not in c['sub'] and 'ما اتكتبش' not in c['sub']
+
+
+@needs_node
+def test_people_named_on_cards_get_no_gendered_phrases():
+    # خبيرة مرشّحة · مدرّبة · زائرة · مقدّمة طلب — كل جملة ظاهرة جنبها محايدة.
+    row = {'apiKind': 'expert_file', 'apiId': 'f', 'efLane': 'waiting', 'ref': 'EF-f', 'who': 'منى',
+           'ef': {'id': 'f', 'title': 'عقد', 'status': 'awaiting_assignment', 'paid_at': _iso(2),
+                  'candidates': [{'email': 'h@x', 'name': 'أ. هالة سمير', 'auto_pick': True, 'load': 2}]}}
+    c = v2_node.logic('v2Card', row, {'now': NOW})
+    assert c['reason'] == 'عدد الملفات المفتوحة: ٢'
+    assert v2_node.logic('v2Card', {'apiKind': 'trainer', 'apiId': 't', 'ref': 'T', 'who': 'د. هالة سمير'}, {'now': NOW})['primary']['label'] == 'اقبل الطلب'
+    pu = v2_node.logic('v2Card', {'apiKind': 'pending_user', 'apiId': 'p', 'ref': 'P', 'who': 'نور الهدى', 'puCountry': 'مصر'}, {'now': NOW})
+    assert pu['reason'] == 'طلب فتح المنصة بعد التسجيل' and pu['primary']['label'] == 'افتح المنصة للزائر'
+    pu = v2_node.logic('v2Card', {'apiKind': 'pending_user', 'apiId': 'p', 'ref': 'P', 'who': 'نور الهدى', 'flagLabels': ['رقم لا يطابق البلد']}, {'now': NOW})
+    assert pu['reason'] == 'يُفتح الطلب للمراجعة قبل فتح المنصة'
+    jn = v2_node.logic('v2Card', {'apiKind': 'join', 'apiId': 'j', 'ref': 'J', 'who': 'أ. مها', 'serviceLabel': 'مراجعة العقود', 'licensed': True}, {'now': NOW})
+    assert jn['brain'] == 'طلب تقديم الخدمة «مراجعة العقود» — القبول ينشر الاسم على المنصة'
+    fd = v2_node.logic('v2Card', {'apiKind': 'founding', 'apiId': 'x', 'ref': 'X', 'who': 'أ. سلمى', 'nextStatus': 'contacted'}, {'now': NOW})
+    assert fd['primary']['label'] == 'تم التواصل' and fd['reason'] == 'تواصل عبر واتساب ثم علّم الخطوة'
+    d = _payout_card([DISPUTE_ROW], [])
+    assert d['warn'] == 'يوجد نزاع مفتوح على صاحب هذا الطلب — راجعه قبل التحويل'
+
+
+@needs_node
+def test_the_dispute_and_file_attention_sentences_are_written_from_fields_not_the_platforms_text():
+    row = {'apiKind': 'dispute', 'dsrc': 'file', 'apiId': 'd1', 'ref': 'DSP-1', 'who': 'منى', 'sub2': 'الرأي ما وصلش في الميعاد.',
+           'out': '«عندي مشكلة» على ملف', 'ef': {'id': 'd1', 'title': 'عقد', 'expert_name': 'أ. بطيء', 'dispute': {'at': _iso(3)}}}
+    c = v2_node.logic('v2Card', row, {'now': NOW})
+    assert c['sub'] == 'الخبير: أ. بطيء'
+    shown = json.dumps({k: v for k, v in c.items() if k != 'row'}, ensure_ascii=False)
+    assert 'ما وصلش' not in shown and 'عندي مشكلة' not in shown
+    assert c['reason'] == 'الأموال محجوزة لحين قرارك، والحسم من صفحة البند بعد قراءة الرأيين'
+    att = {'apiKind': 'expert_file', 'apiId': 'a', 'efLane': 'blocked', 'needsAttention': True, 'ref': 'EF-a', 'who': 'منى',
+           'warnLine': 'فلوسه ما اتحرّكتش', 'out': 'ملف', 'ef': {'id': 'a', 'title': 'رأي'}}
+    c = v2_node.logic('v2Card', att, {'now': NOW})
+    assert c['tag'] == 'أموال ملف متوقفة' and 'اتحرّكتش' not in c['brain']
+
+
+# —— رد قرار الوارد (EP.decideInboxItem الحقيقي) يوصل للشاشة بـnoReply / final
+
+MP_ROW = {'apiKind': 'manual_payment', 'apiId': 'mp-1'}
+
+
+@needs_node
+def test_decide_inbox_item_reports_a_lost_reply_and_a_final_refusal():
+    lost = v2_node.decide(MP_ROW, 'approve', {'throw': True})['result']
+    assert lost['ok'] is False and lost['noReply'] is True and lost['final'] is False
+    srv = v2_node.decide(MP_ROW, 'approve', {'status': 502, 'body': {'error': 'ما وصلناش رد من المنصة', 'no_reply': True}})['result']
+    assert srv['noReply'] is True and srv['final'] is False
+    gone = v2_node.decide(MP_ROW, 'approve', {'status': 409, 'body': {'error': 'الدفعة اتحسمت قبل كده (مرفوضة)'}})['result']
+    assert gone['final'] is True and gone['noReply'] is False and 'اتحسمت' in gone['error']
+    plain = v2_node.decide(MP_ROW, 'approve', {'status': 400, 'body': {'error': 'لازم تأكّد الأول من الشاشة'}})['result']
+    assert plain['ok'] is False and plain['noReply'] is False and plain['final'] is False
+    assert v2_node.decide(MP_ROW, 'approve', {'status': 200, 'body': {}})['result'] == {'ok': True}
+
+
+@needs_node
+def test_every_receipt_confirm_carries_the_flag_and_a_reject_does_not_need_it():
+    out = v2_node.decide(MP_ROW, 'approve', {'status': 200, 'body': {}})
+    assert out['calls'][0]['url'] == '/api/platform-manual-payments/mp-1/confirm' and out['calls'][0]['body']['confirmed'] is True
+    out = v2_node.decide(MP_ROW, 'reject', {'status': 200, 'body': {}}, reason='غير مطابق')
+    assert out['calls'][0]['url'].endswith('/mp-1/reject') and out['calls'][0]['body'] == {'admin_note': 'غير مطابق'}
+    # وباقي الأنواع ما بتاخدش علم الفلوس
+    out = v2_node.decide({'apiKind': 'trainer', 'apiId': 't1'}, 'approve', {'status': 200, 'body': {}})
+    assert 'confirmed' not in out['calls'][0]['body']
+
+
+def test_the_old_receipt_drawer_goes_through_the_same_flagged_call():
+    html = _read('dashboard-cloud', 'index.html')
+    assert "EP.decideInboxItem(p,a==='pay_ok'?'approve':'reject',back)" in html
+    api = _read('dashboard-cloud', 'dashboard-api.js')
+    assert 'if (action === "approve") body.confirmed = true;' in api
+
+
+def test_opening_a_row_scrolls_to_the_drawer_not_the_top_of_the_list():
+    html = _read('dashboard-cloud', 'index.html')
+    host = html[html.index('openRow:function(row){'):html.index('logout:function(){')]
+    assert "getElementById('drawer')" in host and 'inboxwrap' not in host

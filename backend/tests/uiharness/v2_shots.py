@@ -50,7 +50,7 @@ def check(page, name):
                            " (document.querySelector('.content')||{}).scrollWidth||0)")
         if sw > w + 1:
             PROBLEMS.append('%s: تمرير أفقي في الموبايل (%s > %s)' % (name, sw, w))
-        small = page.evaluate("""() => [...document.querySelectorAll('.v2-btn1, .v2-btn2, .v2-start, .v2-pill')]
+        small = page.evaluate("""() => [...document.querySelectorAll('.v2-btn1, .v2-btn2, .v2-start, .v2-pill, #epModal .acts .btn')]
           .filter(b => b.offsetParent).map(b => b.getBoundingClientRect().height).filter(h => h < 52).length""")
         if small:
             PROBLEMS.append('%s: %d زرار أقل من ٥٢px' % (name, small))
@@ -185,6 +185,9 @@ def flow(browser, h, pre, viewport, mobile):
     page.wait_for_selector('#epModal #v2m_go')
     page.fill('#v2m_f', 'رقم الحساب غير مطابق للاسم')
     shot(page, p + '34-payout-reject-modal.jpg')
+    modal = page.inner_text('#epModal')
+    if '٣٬٥٠٠٫٥' not in modal or '٣٬٥٠١' in modal:
+        PROBLEMS.append(p + '34: المبلغ بالكسور مش ظاهر كما هو في نافذة الرفض (٣٬٥٠٠٫٥)')
     page.click('#v2m_go')
     page.wait_for_function("() => !document.getElementById('epModal')", timeout=15000)
     page.wait_for_timeout(400)
@@ -204,12 +207,41 @@ def flow(browser, h, pre, viewport, mobile):
     fid = page.evaluate("() => V2._state.deck[0].row.apiId")
     h.ef.forced[('POST', '/api/bridge/expert-files/%s/assign' % fid)] = (409, {'detail': fx.E_TRIAL_ONLY})
     before = page.evaluate("() => V2._state.deck.length")
+    locked_id = page.evaluate("() => V2._state.deck[0].id")
     page.click('[data-a="primary"]')
     page.wait_for_selector('.v2-err', timeout=15000)
     shot(page, p + '40-error-on-card.jpg')
     if page.evaluate("() => V2._state.deck.length") != before or fx.E_TRIAL_ONLY not in page.inner_text('.v2-err'):
         PROBLEMS.append(p + '40: البطاقة اتقدّمت رغم الفشل أو الرسالة مش بكلام المنصة')
-    # «بعدين»
+    # البطاقة المقفولة: «حدّث الآن» شغّال، وأزرار الفتح شغّالة، والباقي مقفول
+    lock_label = page.inner_text('[data-a="refresh"]')
+    if lock_label != 'حدّث الآن' or page.query_selector('[data-a="primary"]'):
+        PROBLEMS.append(p + '40: البطاقة المقفولة مفيهاش زرّ «حدّث الآن» (%r)' % lock_label)
+    sec = page.query_selector('[data-a="secondary"]')
+    if page.is_disabled('[data-a="refresh"]') or (sec and sec.is_disabled()):
+        PROBLEMS.append(p + '40: «حدّث الآن» أو زرّ «افتح الملف» مقفول على البطاقة المقفولة')
+    if page.query_selector('[data-a="open"]') and page.is_disabled('[data-a="open"]'):
+        PROBLEMS.append(p + '40: «غيّر / افتح» مقفول على بطاقة مقفولة')
+    del h.ef.forced[('POST', '/api/bridge/expert-files/%s/assign' % fid)]
+    page.click('[data-a="refresh"]')
+    page.wait_for_function("() => !document.querySelector('[data-a=\"refresh\"]')", timeout=20000)
+    shot(page, p + '41-after-refresh.jpg')
+    if page.evaluate("() => V2._state.deck[0].id") != locked_id or page.evaluate("() => V2._state.lockedId") != '':
+        PROBLEMS.append(p + '41: بعد التحديث البطاقة لازم تفضل وتتفكّ')
+    if not page.query_selector('[data-a="primary"]') or page.is_disabled('[data-a="primary"]'):
+        PROBLEMS.append(p + '41: الأزرار ما رجعتش بعد التحديث')
+    # بطاقة مقفولة + اتحسمت في مكان تاني ⇒ «حدّث الآن» بيقدّم اللي بعدها
+    focus_on(page, 'manual_payment', 0)
+    mp_id, mp_api = page.evaluate("() => [V2._state.deck[0].id, V2._state.deck[0].row.apiId]")
+    h.ef.payments = [x for x in h.ef.payments if x['id'] != mp_api]
+    page.evaluate("() => { V2._state.lockedId = V2._state.deck[0].id; V2.render(document.getElementById('view')); }")
+    page.click('[data-a="refresh"]')
+    page.wait_for_function("(id) => V2._state.deck[0] && V2._state.deck[0].id !== id", arg=mp_id, timeout=20000)
+    shot(page, p + '42-refresh-advances.jpg')
+    if page.evaluate("() => V2._state.lockedId") != '':
+        PROBLEMS.append(p + '42: القفل فضل بعد التقديم')
+    # «لاحقًا»
+    focus_on(page, 'file_waiting', 0, 'أقترح')
     first = page.evaluate("() => V2._state.deck[0].id")
     page.click('[data-a="later"]')
     page.wait_for_timeout(150)
@@ -240,6 +272,18 @@ def flow(browser, h, pre, viewport, mobile):
     page.wait_for_selector('.v2-tile')
     page.wait_for_function(READY, timeout=30000)
     shot(page, p + '61-board-after.jpg')
+    # قائمة مقصوصة: العدّادات المبنية من صفوف الوارد «ناقصة» معلَنة، والتحذير على شريط «الحاجة الجاية»
+    page.evaluate("""() => { window.INBOX_TRUNCATED = ['نزاعات الملفات: معروض 100 من 300']; V2.render(document.getElementById('view')); }""")
+    page.wait_for_selector('.v2-warnline')
+    shot(page, p + '04-board-truncated.jpg')
+    txt = page.inner_text('.v2-next')
+    if 'معروض جزء فقط من: نزاعات الملفات' not in txt:
+        PROBLEMS.append(p + '04: تحذير القائمة المقصوصة مش ظاهر: %r' % txt)
+    for key in ('books', 'people', 'brain'):
+        t = page.inner_text('[data-tile="%s"]' % key)
+        if 'العدد ناقص' not in t:
+            PROBLEMS.append(p + '04: مربّع %s من غير «العدد ناقص» والقائمة مقصوصة' % key)
+    page.evaluate("() => { window.INBOX_TRUNCATED = []; }")
     browser.close()
 
     # اللوحة من غير قرارات
@@ -249,6 +293,27 @@ def flow(browser, h, pre, viewport, mobile):
     shot(page, p + '70-board-empty.jpg')
     if page.query_selector('[data-a="start"]'):
         PROBLEMS.append(p + '70: زرّ «ابدأ القرارات» ظاهر من غير قرارات')
+    browser.close()
+
+    # جلب فاشل ⇒ لا «لا توجد قرارات» ولا «العقل يعمل»
+    h.ef = v2fx.V2Platform(empty=True)
+    h.ef.forced[('GET', '/api/bridge/ops/queue')] = (500, {'detail': 'down'})
+    ctx = browser.context(h, 'admin', viewport, mobile)
+    page = ctx.new_page()
+    page.goto(DASH + '/', wait_until='domcontentloaded')
+    page.wait_for_function("() => window.V2_ON === true && window.EP && ['opsQueue','inbox','walletPayouts'].every(k => ['ready','error'].indexOf(EP.state[k]) > -1)"
+                           " && document.querySelector('.v2-tile') && !document.querySelector('.v2-cnt.ld')", timeout=30000)
+    page.wait_for_timeout(300)
+    shot(page, p + '71-board-failed.jpg')
+    txt = page.inner_text('.v2-next')
+    if 'تعذّر جلب القرارات' not in txt or 'العقل يعمل' in txt or 'لا توجد قرارات' in txt:
+        PROBLEMS.append(p + '71: شريط «الحاجة الجاية» بيطمّن فوق جلب فاشل: %r' % txt)
+    page.evaluate("() => { const S = V2._state; S.mode = 'focus'; S.deck = []; S.total = 0; V2.render(document.getElementById('view')); }")
+    page.wait_for_selector('.v2-end')
+    shot(page, p + '72-end-failed.jpg')
+    end = page.inner_text('.v2-end')
+    if 'تعذّر جلب القرارات' not in end or 'العقل يكمل' in end:
+        PROBLEMS.append(p + '72: شاشة النهاية بتطمّن فوق جلب فاشل: %r' % end)
     browser.close()
 
     # المفتاح مقفول

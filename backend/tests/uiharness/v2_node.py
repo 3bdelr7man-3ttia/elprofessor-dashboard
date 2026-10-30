@@ -23,6 +23,11 @@ def logic(fn, *args):
     return _run('v2_apply.js', {'fn': fn, 'args': list(args)})
 
 
+def decide(row, action, reply, reason='', extra=None):
+    """يشغّل `EP.decideInboxItem` الحقيقي على ردّ جاهز (`{'status','body'}` أو `{'throw': True}`) ⇒ {result, calls}."""
+    return _run('v2_decide.js', {'row': row, 'action': action, 'reason': reason, 'extra': extra, 'reply': reply})
+
+
 def real_rows(client, headers, keys=None):
     """مرحلتين: الأولى تعرف المسارات المطلوبة، التانية تديها ردود الداشبورد الحقيقية لكل مسار."""
     first = _run('v2_rows.js', {'responses': {}, 'keys': keys})

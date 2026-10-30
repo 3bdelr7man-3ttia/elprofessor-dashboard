@@ -135,6 +135,15 @@
              next: '', dest: null, land: null, internal: false };
   }
   function failTile(t) { t.failed = true; t.count = null; t.hot = false; t.next = FAILED_TEXT; return t; }
+  // عدّاد ناقص معلَن: «العدد ناقص» أول جملة في السطر (السطر مقصوص بسطرين/٣ في الموبايل — التحذير آخر شيء يُخفى).
+  var PARTIAL_TEXT = 'العدد ناقص';
+  function markPartial(t) {
+    if (t.failed) return t;
+    t.partial = true;
+    if (t.next.indexOf(PARTIAL_TEXT) !== 0) t.next = PARTIAL_TEXT + (t.next ? ' · ' + t.next : '');
+    return t;
+  }
+  function hasTrunc(extras) { return !!(extras && Array.isArray(extras.inboxTruncated) && extras.inboxTruncated.length); }
 
   function inboxFailedHas(extras, label) {
     var f = extras && extras.inboxFailed;
@@ -189,7 +198,7 @@
       if (hot) p.push(ar(hot) + ' متأخر');
       if (rev) p.push(ar(rev) + ' تنتظر مراجعتك');
       if (aw) p.push(ar(aw) + ' تنتظر خبيرًا');
-      if (bl) p.push(ar(bl) + ' فلوسها واقفة');
+      if (bl) p.push(U(bl, ['ملف أمواله متوقفة', 'ملفان أموالهما متوقفة', 'ملفات أموالها متوقفة', 'ملفًا أمواله متوقفة']));
       t.next = p.length ? p.join(' · ') : 'كل شيء يسير في موعده';
       t.land = late ? 'expert_files_late' : over ? 'expert_files_assign_overdue' : rev ? 'expert_files_in_review'
         : aw ? 'expert_files_awaiting_assignment' : bl ? 'expert_files_blocked' : 'expert_files_awaiting_assignment';
@@ -221,7 +230,7 @@
       if (c) p.push(U(c, ['دورة تنتظر الاعتماد', 'دورتان تنتظران الاعتماد', 'دورات تنتظر الاعتماد', 'دورة تنتظر الاعتماد']));
       if (tr) p.push(U(tr, ['مدرّب جديد', 'مدرّبان جديدان', 'مدرّبين جدد', 'مدرّبًا جديدًا']));
       if (lv) p.push(ar(lv) + ' حيّة تحتاج قرارًا');
-      t.next = p.length ? p.join(' · ') : 'الدورات والمدرّبون';
+      t.next = p.length ? p.join(' · ') : 'لا شيء ينتظر قرارك';
       if (c) { t.dest = 'courses'; t.land = 'courses_pending'; }
       else if (tr) { t.dest = 'team'; t.land = 'trainer_applications_pending'; }
       else if (lv) { t.dest = 'courses'; t.land = 'live_needs_decision'; }
@@ -244,6 +253,7 @@
       var n = rowsOfKind(rows, 'book').length;
       t.count = n;
       t.next = n ? U(n, ['كتاب ينتظر المراجعة', 'كتابان ينتظران المراجعة', 'كتب تنتظر المراجعة', 'كتابًا ينتظر المراجعة']) : 'المتجر والمراجعة';
+      if (hasTrunc(extras)) markPartial(t);      // قائمة الوارد مقصوصة ⇒ العدّ من صفوفها ناقص معلَن
     })(T.books);
 
     // —— الناس والدعوات: أربعة مصادر؛ ناقص أحدها ⇒ المجموع جزئي ومعلَن (لا رقم يكذب).
@@ -264,7 +274,7 @@
       if (jn) p.push(U(jn, ['طلب انضمام', 'طلبا انضمام', 'طلبات انضمام', 'طلب انضمام']));
       if (ld) p.push(U(ld, ['خبير مؤسس', 'خبيران مؤسسان', 'خبراء مؤسسون', 'خبيرًا مؤسسًا']));
       t.next = p.length ? p.join(' · ') : 'الأعضاء والدعوات';
-      if (t.partial) t.next += (p.length ? ' · ' : '') + 'العدد ناقص';
+      if (t.partial || hasTrunc(extras)) markPartial(t);
     })(T.people);
 
     // —— الفلوس
@@ -311,6 +321,7 @@
       var n = v2BrainLog(rows, now).length;
       t.count = n;
       t.next = n ? 'وزّع ' + U(n, ['ملفًا واحدًا', 'ملفين', 'ملفات', 'ملفًا']) + ' وحده اليوم' : 'لم يوزّع شيئًا اليوم';
+      if (hasTrunc(extras)) markPartial(t);
     })(T.brain);
 
     return TILE_DEFS.map(function (d) { return T[d.key]; });
@@ -415,7 +426,7 @@
     if (c.same_specialty === true) b.push('نفس التخصص');
     if (c.same_country === true) b.push('نفس بلد القانون');
     if (typeof c.load === 'number') {
-      b.push(c.load > 0 ? 'لديه ' + U(c.load, ['ملف مفتوح واحد', 'ملفان مفتوحان', 'ملفات مفتوحة', 'ملفًا مفتوحًا']) : 'ليس لديه ملفات مفتوحة');
+      b.push(c.load > 0 ? 'عدد الملفات المفتوحة: ' + ar(c.load) : 'لا ملفات مفتوحة');
     }
     return b;
   }
@@ -433,20 +444,33 @@
     return clean([str(r.payMethod), moneyText(r.amount, r.currency), str(r.payWhat)]).join(' · ');
   }
 
-  // هل يوجد نزاع مفتوح على نفس الشخص؟ true/false أو null إن تعذّر الفحص (الوارد ناقص).
+  // هل يوجد نزاع مفتوح **على هذا الشخص كخبير**؟ true/false، أو null لو الفحص ما اكتملش لأي سبب:
+  //   · الوارد ما وصلش / أي طابور من طوابير النزاعات الثلاثة تعذّر جلبه،
+  //   · أو قائمة النزاعات/القضايا/الاستشارات القديمة اتقصّت («معروض ١٠٠ من ٣٠٠») ⇒ المعروض مش كل اللي موجود،
+  //   · أو ما اتبعتش لنا بيان القصّ أصلًا (نعتبره مجهولًا مش «لا قصّ»).
+  // ⛔ false = «فحصنا كل المصادر ولا يوجد»، لا أقل. والفحص كله على إيميلات الخبير/المسنَد إليه/المستفيد في صفوف النزاع —
+  // عميل سحب فلوسًا مستردّة إيميله مش في الصفوف أصلًا (بيانات العميل مقصوصة) ⇒ الجملة ما بتقولش شيئًا عنه.
+  var DISPUTE_SOURCES = ['نزاعات الملفات', 'نزاعات الاستشارات', 'قضايا فيها ملاحظة'];
+  var DISPUTE_TRUNC_MARKS = ['نزاعات', 'قضايا', 'استشارات قديمة'];
   function openDisputeFor(email, rows, opts) {
     email = str(email).toLowerCase();
     if (!email || !Array.isArray(rows)) return null;
-    var failed = (opts && Array.isArray(opts.inboxFailed)) ? opts.inboxFailed : null;
-    if (!failed) return null;
-    var needed = ['نزاعات الملفات', 'نزاعات الاستشارات', 'قضايا فيها ملاحظة'];
-    for (var i = 0; i < needed.length; i++) if (failed.indexOf(needed[i]) > -1) return null;
+    // نزاع معروض فعلًا = حقيقة حتى لو باقي الفحص ناقص (التحذير لا يحتاج اكتمال المصادر، «لا يوجد» وحدها هي اللي تحتاجه).
     for (var j = 0; j < rows.length; j++) {
       var r = rows[j];
       if (!r || (r.apiKind !== 'dispute' && r.efLane !== 'case_disputed')) continue;
       var f = r.ef || {}, c = r.cons || {};
       var emails = [f.expert_email, f.assigned_to, c.payee_email, c.expert_email].map(function (x) { return str(x).toLowerCase(); });
       if (emails.indexOf(email) > -1) return true;
+    }
+    var failed = (opts && Array.isArray(opts.inboxFailed)) ? opts.inboxFailed : null;
+    var trunc = (opts && Array.isArray(opts.inboxTruncated)) ? opts.inboxTruncated : null;
+    if (!failed || !trunc) return null;
+    var i;
+    for (i = 0; i < DISPUTE_SOURCES.length; i++) if (failed.indexOf(DISPUTE_SOURCES[i]) > -1) return null;
+    for (i = 0; i < trunc.length; i++) {
+      var tl = String(trunc[i]);
+      if (DISPUTE_TRUNC_MARKS.some(function (m) { return tl.indexOf(m) > -1; })) return null;
     }
     return false;
   }
@@ -474,7 +498,7 @@
         var pre = f.status === 'awaiting_assignment';
         var cand = pickCandidate(f.candidates || r.candidates, f);
         card.tag = late ? 'ملف متأخر' : 'ملف ينتظر خبيرًا';
-        card.title = str(f.title) || str(r.out) || 'ملف';
+        card.title = str(f.title) || 'ملف';
         card.sub = clean([who && ('العميل: ' + who), str(f.law_label), amountLabel]).join(' · ');
         card.brainHead = 'اقتراح العقل';
         var cur = expertNameOf(f);
@@ -502,11 +526,11 @@
         break;
       }
       case 'file_attention': {
-        card.tag = 'فلوس ملف واقفة';
-        card.title = str(f.title) || str(r.out) || 'ملف';
+        card.tag = 'أموال ملف متوقفة';
+        card.title = str(f.title) || 'ملف';
         card.sub = clean([who && ('العميل: ' + who), amountLabel]).join(' · ');
-        card.brain = str(r.warnLine) || str(r.out) || 'فلوس هذا الملف لم تتحرك وحدها';
-        card.reason = 'القرار هنا في الفلوس، فيُفتح الملف للمراجعة أولًا';
+        card.brain = 'أموال هذا الملف لم تتحرك وحدها وتحتاج تدخّلك';
+        card.reason = 'القرار هنا يخص الأموال، فيُفتح الملف للمراجعة أولًا';
         card.primary = { label: 'افتح وراجع', act: OPEN };
         break;
       }
@@ -522,10 +546,10 @@
       case 'dispute': {
         var isCase = r.efLane === 'case_disputed' || r.dsrc === 'case';
         card.tag = isCase ? 'ملاحظة على قضية' : 'نزاع';
-        card.title = str(f.title) || str(c.title) || str(r.out) || 'نزاع';
-        card.sub = clean([str(r.sub2)]).join(' · ');
+        card.title = str(f.title) || str(c.title) || 'نزاع';
+        card.sub = clean([(str(f.expert_name) || str(c.expert_name)) && ('الخبير: ' + (str(f.expert_name) || str(c.expert_name)))]).join(' · ');
         card.brain = 'اعتراض من ' + (who || 'العميل') + ' على ' + (card.title ? '«' + card.title + '»' : 'الخدمة') + (amountLabel ? ' · ' + amountLabel : '');
-        card.reason = 'الفلوس واقفة لحين قرارك، والحسم من الدرج بعد قراءة الرأيين';
+        card.reason = 'الأموال محجوزة لحين قرارك، والحسم من صفحة البند بعد قراءة الرأيين';
         card.primary = { label: 'افتح النزاع', act: OPEN };
         break;
       }
@@ -534,7 +558,7 @@
         card.title = str(f.title) || 'دفعة لم يصل ملفها';
         card.sub = who ? 'العميل: ' + who : '';
         card.brain = (amountLabel ? 'دُفع ' + amountLabel : 'دُفع مبلغ') + ' ولم يصل ملف';
-        card.reason = str(r.sub2) || 'الفلوس وصلت ولم يصل ملفها إلى قائمة التوزيع';
+        card.reason = 'الأموال وصلت ولم يصل الملف إلى قائمة التوزيع';
         card.primary = { label: 'افتح', act: OPEN };
         break;
       }
@@ -542,21 +566,23 @@
         card.tag = 'استشارة قديمة';
         card.title = str(c.title) || 'استشارة قديمة';
         card.sub = clean([who && ('العميل: ' + who), amountLabel]).join(' · ');
-        card.brain = 'استشارة سُلّمت قبل التحويل التلقائي وفلوسها تنتظر قرارك';
-        card.reason = 'للخبير أم للعميل؟ القرار من الدرج';
+        card.brain = 'استشارة سُلّمت قبل التحويل التلقائي وأموالها تنتظر قرارك';
+        card.reason = 'للخبير أم للعميل؟ القرار من صفحة البند';
         card.primary = { label: 'افتح وراجع', act: OPEN };
         break;
       }
       case 'payout': {
-        var amount = Number(r.amount), cr = r.currency || 'EGP';
+        // ⛔ المبلغ الحقيقي من صف المنصة (`raw.amount`) مش `r.amount`: محمّل الفلوس القديم بيقرّب للجنيه، والمنصة بتحوّل
+        // المبلغ بالكسور — المؤسس لازم يأكّد نفس الرقم اللي بيتحوّل (٦٠٠٫٥ مش ٦٠١).
+        var amount = Number(r.raw && r.raw.amount != null ? r.raw.amount : r.amount), cr = r.currency || 'EGP';
         card.tag = 'تحويل أرباح';
         card.title = str(r.who) || 'صاحب الطلب';
         card.sub = clean([moneyText(amount, cr), str(r.dest)]).join(' · ');
         var method = str(r.raw && r.raw.method) || str(r.dest);
         card.brain = 'طلب تحويل ' + moneyText(amount, cr) + ' إلى ' + (str(r.who) || 'صاحب الطلب') + (method ? ' عبر ' + method : '');
         var dis = openDisputeFor(r.email, opts.inboxRows, opts);
-        if (dis === false) card.reason = 'روجعت مع النزاعات والاستردادات: لا شيء مفتوح على هذا الشخص';
-        else if (dis === true) { card.warn = 'عليه نزاع مفتوح — راجعه قبل التحويل'; }
+        if (dis === false) card.reason = 'روجعت النزاعات المفتوحة: لا نزاع مفتوحًا على صاحب الطلب كخبير';
+        else if (dis === true) { card.warn = 'يوجد نزاع مفتوح على صاحب هذا الطلب — راجعه قبل التحويل'; }
         if (r.fx_alert) card.warn = (card.warn ? card.warn + ' · ' : '') + 'العملة ليست الجنيه — حدّد سعر الصرف قبل التحويل';
         var mo = { amount: amount, currency: cr, curName: curName(cr), name: str(r.who) || str(r.email), what: 'تحويل أرباح',
                    method: method, dest: str(r.dest) };
@@ -590,17 +616,17 @@
         card.sub = shorten(str(r.trHeadline) || str(r.note).replace(/\s*—\s*اعتمد.*$/, ''), 140);
         card.brain = clean([who || 'مدرّب', card.sub].concat(facts)).join(' · ');
         card.reason = 'اطّلع على الطلب كاملًا إن أردت قبل القبول';
-        card.primary = { label: 'اقبله', act: act({ do: 'decide', action: 'approve' }) };
+        card.primary = { label: 'اقبل الطلب', act: act({ do: 'decide', action: 'approve' }) };
         card.secondary = { label: 'افتح الطلب', act: OPEN };
         break;
       }
       case 'join': {
         card.tag = 'طلب انضمام';
         card.title = who || 'مقدّم الطلب';
-        card.sub = clean([str(r.serviceLabel) || str(r.from), r.licensed ? 'مرخَّص' : 'غير مرخَّص',
+        card.sub = clean([str(r.serviceLabel) || str(r.from), r.licensed ? 'مع ترخيص' : 'بلا ترخيص',
                           (Array.isArray(r.attachments) && r.attachments.length) ? U(r.attachments.length, ['مرفق واحد', 'مرفقان', 'مرفقات', 'مرفقًا']) : '']).join(' · ');
-        card.brain = 'يطلب تقديم الخدمة' + (str(r.serviceLabel) ? ' «' + str(r.serviceLabel) + '»' : '') + ' — القبول ينشر اسمه';
-        card.reason = r.licenceMissing ? (str(r.licenceNote) || 'مرخَّص بلا رقم قيد — لا يُقبل قبل استكماله') : (shorten(r.note, 140) || 'اقرأ إجاباته من الطلب إن أردت');
+        card.brain = 'طلب تقديم الخدمة' + (str(r.serviceLabel) ? ' «' + str(r.serviceLabel) + '»' : '') + ' — القبول ينشر الاسم على المنصة';
+        card.reason = r.licenceMissing ? (str(r.licenceNote) || 'الترخيص بلا رقم قيد — لا يُقبل الطلب قبل استكماله') : (shorten(r.note, 140) || 'اقرأ إجاباته من الطلب إن أردت');
         if (r.licenceMissing) {
           card.warn = 'رقم القيد ناقص';
           card.primary = { label: 'افتح وراجع', act: OPEN };
@@ -618,23 +644,23 @@
         card.brain = clean([who || 'زائر', str(r.puCountry), card.ageText]).join(' · ');
         if (flags.length) {
           card.warn = 'مشبوه: ' + flags.join(' · ');
-          card.reason = 'يُفتح الطلب للمراجعة قبل فتح المنصة له';
+          card.reason = 'يُفتح الطلب للمراجعة قبل فتح المنصة';
           card.primary = { label: 'افتح وراجع', act: OPEN };
         } else {
-          card.reason = 'سجّل ودخل زائرًا وطلب فتح المنصة';
-          card.primary = { label: 'افتح له المنصة', act: act({ do: 'decide', action: 'approve' }) };
+          card.reason = 'طلب فتح المنصة بعد التسجيل';
+          card.primary = { label: 'افتح المنصة للزائر', act: act({ do: 'decide', action: 'approve' }) };
           card.secondary = { label: 'افتح', act: OPEN };
         }
         break;
       }
       case 'founding': {
-        var labels = { contacted: 'تواصلت معه', invited: 'أرسلت له الدعوة', converted: 'صار مدرّبًا' };
+        var labels = { contacted: 'تم التواصل', invited: 'أُرسلت الدعوة', converted: 'تم التحويل إلى مدرّب' };
         card.tag = 'خبير مؤسس';
         card.title = who || 'خبير';
         card.sub = shorten(r.note, 150);
         card.brain = clean([who, str(r.fSpec), str(r.fCountry)]).join(' · ') || 'طلب انضمام كخبير مؤسس';
-        card.reason = 'كلّمه على واتساب ثم علّم الخطوة';
-        card.primary = { label: labels[r.nextStatus] || 'تواصلت معه', act: act({ do: 'decide', action: 'approve' }) };
+        card.reason = 'تواصل عبر واتساب ثم علّم الخطوة';
+        card.primary = { label: labels[r.nextStatus] || 'تم التواصل', act: act({ do: 'decide', action: 'approve' }) };
         card.secondary = { label: 'افتح', act: OPEN };
         break;
       }
@@ -645,7 +671,7 @@
         card.title = who || T[0];
         card.sub = shorten(r.note, 150);
         card.brain = shorten(r.note, 170) || T[0];
-        card.reason = kind === 'verify' ? 'اختر خبيرًا معتمدًا من الدرج' : 'يحتاج قراءة قبل القرار';
+        card.reason = kind === 'verify' ? 'اختر خبيرًا معتمدًا من صفحة البند' : 'يحتاج قراءة قبل القرار';
         card.primary = { label: 'افتح وراجع', act: OPEN };
         break;
       }
@@ -674,7 +700,7 @@
         card.title = who || card.tag;
         card.sub = shorten(r.note, 160);
         card.brain = shorten(r.note, 170) || card.tag;
-        card.reason = 'بعد التعامل معه علّمه «تم»';
+        card.reason = 'بعد التعامل مع الطلب اضغط «تم»';
         if (r.resolve) {
           card.primary = { label: 'تم', act: act({ do: 'resolve' }) };
           card.secondary = { label: 'افتح', act: OPEN };
@@ -697,7 +723,8 @@
   function v2Decisions(rows, payouts, queue, opts) {
     opts = opts || {};
     var now = opts.now || 0;
-    var cardOpts = { now: now, inboxRows: Array.isArray(rows) ? rows : null, inboxFailed: opts.inboxFailed };   // الوارد ما وصلش ⇒ null ⇒ جملة المراجعة تتشال
+    var cardOpts = { now: now, inboxRows: Array.isArray(rows) ? rows : null, inboxFailed: opts.inboxFailed,
+                     inboxTruncated: opts.inboxTruncated };   // الوارد ما وصلش / قصّ مش معلوم / مقصوص ⇒ null ⇒ جملة المراجعة تتشال
     var src = [];
     (Array.isArray(rows) ? rows : []).forEach(function (r) { if (r && !r.fyi) src.push(r); });
     (Array.isArray(payouts) ? payouts : []).forEach(function (p) {
@@ -738,9 +765,49 @@
 
   var HB_LABEL = { tick_last: 'الفحص الدوري', remind_last: 'التذكيرات', sla_last: 'مهل الملفات', backup_last: 'النسخ الاحتياطي',
                    invite_reminders_last: 'تذكير الدعوات', coach_stalled_last: 'متابعة المتعثرين' };
+
+  // —— تنبيهات الصحة بالفصحى: ⛔ نصوص المنصة (`queue.alerts`) لا تُعرض كما وصلت أبدًا — فيها عامية وإيموجي وأرقام لاتينية
+  // وأحيانًا اسم الشاشة. كل تنبيه معروف يُعاد بناؤه من عدده، وغير المعروف يُلخَّص بجملة ثابتة (لا يُطبع نصّه).
+  var UNKNOWN_ALERT = 'تنبيه من المنصة يحتاج مراجعتك';
+  var ALERT_RULES = [
+    [/^(\d+)\s+ملف مستعجل مستني خبير يبدأ/, ['ملف مستعجل واحد ينتظر خبيرًا يبدأ', 'ملفان مستعجلان ينتظران خبيرًا يبدأ', 'ملفات مستعجلة تنتظر خبيرًا يبدأ', 'ملفًا مستعجلًا ينتظر خبيرًا يبدأ']],
+    [/^(\d+)\s+رأي مستني مراجعتك/, ['رأي واحد ينتظر مراجعتك', 'رأيان ينتظران مراجعتك', 'آراء تنتظر مراجعتك', 'رأيًا ينتظر مراجعتك']],
+    [/^(\d+)\s+ملف مالوش خبير متاح/, ['ملف واحد بلا خبير متاح — اختر الخبير بنفسك', 'ملفان بلا خبير متاح — اختر الخبير بنفسك', 'ملفات بلا خبير متاح — اختر الخبير بنفسك', 'ملفًا بلا خبير متاح — اختر الخبير بنفسك']],
+    [/^(\d+)\s+ملف مستني توزيع/, ['ملف واحد ينتظر التوزيع', 'ملفان ينتظران التوزيع', 'ملفات تنتظر التوزيع', 'ملفًا ينتظر التوزيع']],
+    [/^(\d+)\s+ملف اتبعت لخبير وما اتستلمش/, ['ملف واحد أُرسل إلى خبير ولم يُستلم منذ ١٢ ساعة', 'ملفان أُرسلا إلى خبراء ولم يُستلما منذ ١٢ ساعة', 'ملفات أُرسلت إلى خبراء ولم تُستلم منذ ١٢ ساعة', 'ملفًا أُرسل إلى خبراء ولم يُستلم منذ ١٢ ساعة']],
+    [/^(\d+)\s+رأي متأخر/, ['رأي متأخر واحد', 'رأيان متأخران', 'آراء متأخرة', 'رأيًا متأخرًا']],
+    [/^(\d+)\s+ملف فيه ملاحظة مستنية قرارك/, ['ملف واحد عليه ملاحظة تنتظر قرارك', 'ملفان عليهما ملاحظة تنتظران قرارك', 'ملفات عليها ملاحظة تنتظر قرارك', 'ملفًا عليه ملاحظة تنتظر قرارك']],
+    [/^(\d+)\s+دفعة قضية عليها ملاحظة/, ['دفعة قضية واحدة عليها ملاحظة تنتظر قرارك', 'دفعتا قضية عليهما ملاحظة تنتظران قرارك', 'دفعات قضايا عليها ملاحظة تنتظر قرارك', 'دفعة قضية عليها ملاحظة تنتظر قرارك']],
+    [/^(\d+)\s+ملف فلوسه ما اتحرّكتش لوحدها/, ['ملف واحد لم تتحرك أمواله وحدها ويحتاج تدخّلك', 'ملفان لم تتحرك أموالهما وحدها ويحتاجان تدخّلك', 'ملفات لم تتحرك أموالها وحدها وتحتاج تدخّلك', 'ملفًا لم تتحرك أمواله وحدها ويحتاج تدخّلك']],
+    [/^(\d+)\s+ملف اتدفع وما وصلش لقايمة التوزيع/, ['ملف واحد دُفع ولم يصل إلى قائمة التوزيع — راجعه من النزاعات والاستردادات', 'ملفان دُفعا ولم يصلا إلى قائمة التوزيع — راجعهما من النزاعات والاستردادات', 'ملفات دُفعت ولم تصل إلى قائمة التوزيع — راجعها من النزاعات والاستردادات', 'ملفًا دُفع ولم يصل إلى قائمة التوزيع — راجعها من النزاعات والاستردادات']],
+    [/^(\d+)\s+ملف مدفوع والميزة مقفولة/, ['ملف واحد مدفوع والخدمة مغلقة — أعد الأموال أو احسمه أو افتح الخدمة', 'ملفان مدفوعان والخدمة مغلقة — أعد الأموال أو احسمهما أو افتح الخدمة', 'ملفات مدفوعة والخدمة مغلقة — أعد الأموال أو احسمها أو افتح الخدمة', 'ملفًا مدفوعًا والخدمة مغلقة — أعد الأموال أو احسمها أو افتح الخدمة']],
+    [/^(\d+)\s+نزاع على استشارة/, ['نزاع واحد على استشارة ينتظر قرارك', 'نزاعان على استشارتين ينتظران قرارك', 'نزاعات على استشارات تنتظر قرارك', 'نزاعًا على استشارات ينتظر قرارك']],
+    [/^(\d+)\s+استشارة قديمة/, ['استشارة قديمة واحدة سُلّمت وتنتظر قرارك: للخبير أم للعميل', 'استشارتان قديمتان سُلّمتا وتنتظران قرارك: للخبير أم للعميل', 'استشارات قديمة سُلّمت وتنتظر قرارك: للخبير أم للعميل', 'استشارة قديمة سُلّمت وتنتظر قرارك: للخبير أم للعميل']],
+    [/^(\d+)\s+حجز اتلغى وفلوسه لسه عندنا/, ['حجز واحد أُلغي وأمواله لدينا — أعدها يدويًا', 'حجزان أُلغيا وأموالهما لدينا — أعدهما يدويًا', 'حجوزات أُلغيت وأموالها لدينا — أعدها يدويًا', 'حجزًا أُلغي وأمواله لدينا — أعدها يدويًا']]
+  ];
+  function latinDigits(s) { return String(s).replace(/[٠-٩]/g, function (d) { return String(d.charCodeAt(0) - 0x660); }); }
+  function hrs(x) { return x === Math.floor(x) ? hoursWord(x) : fmt(x) + ' ساعة'; }
+  function plainAlert(raw) {
+    var s = latinDigits(raw).replace(/[\u{1F000}-\u{1FAFF}←-➿⬀-⯿⌀-⏿️‍‏‎]/gu, ' ').replace(/\s+/g, ' ').trim();
+    var i, m;
+    for (i = 0; i < ALERT_RULES.length; i++) {
+      m = ALERT_RULES[i][0].exec(s);
+      if (m) return U(+m[1], ALERT_RULES[i][1]);
+    }
+    if ((m = /^(.+?): لم تعمل ولا مرّة حتى الآن/.exec(s))) return m[1] + ': لم تعمل حتى الآن — شغّلها اليوم';
+    if ((m = /^(.+?): متوقّفة منذ ([\d.]+) ساعة، والحدّ المسموح ([\d.]+) ساعة/.exec(s))) {
+      return m[1] + ': متوقفة منذ ' + hrs(+m[2]) + ' والحد المسموح ' + hrs(+m[3]) + ' — أعد تشغيلها الآن';
+    }
+    if ((m = /^طلب بلا أول رد منذ (\d+) ساعة: (.+)$/.exec(s))) return 'طلب بلا رد أول منذ ' + hoursWord(+m[1]) + ': ' + m[2];
+    if (/تعذّر الوصول إلى سجلّ الالتحاق/.test(s)) return 'تعذّر الوصول إلى سجل الالتحاق بالدورات — الرقم المعروض غير موثوق، تحقق منه بنفسك قبل أي قرار';
+    if (/تفصيل الالتحاق حسب كل دورة غير مكتمل/.test(s)) return 'تفصيل الالتحاق حسب كل دورة غير مكتمل اليوم — الإجمالي وحده هو الرقم الموثوق';
+    return UNKNOWN_ALERT;
+  }
   function v2Health(queue, now) {
     if (!queue) return { ok: false, failed: true, alerts: [], heartbeats: [] };
-    var alerts = (Array.isArray(queue.alerts) ? queue.alerts : []).filter(function (a) { return typeof a === 'string' && a.trim(); }).map(function (a) { return a.trim(); });
+    var raw = (Array.isArray(queue.alerts) ? queue.alerts : []).filter(function (a) { return typeof a === 'string' && a.trim(); });
+    var alerts = [];
+    raw.forEach(function (a) { var t = plainAlert(a); if (alerts.indexOf(t) < 0) alerts.push(t); });
     var hb = queue.heartbeats && typeof queue.heartbeats === 'object' ? queue.heartbeats : {};
     var beats = Object.keys(HB_LABEL).filter(function (k) { return Object.prototype.hasOwnProperty.call(hb, k); }).map(function (k) {
       return { key: k, label: HB_LABEL[k], at: hb[k] || null, ago: hb[k] ? agoText(ms(hb[k]), now || 0) : 'لم تعمل بعد' };
@@ -751,7 +818,7 @@
   var api = {
     v2Tiles: v2Tiles, v2Decisions: v2Decisions, v2Card: v2Card, v2Next: v2Next, v2NextLine: v2NextLine,
     v2Health: v2Health, v2BrainLog: v2BrainLog,
-    TILE_DEFS: TILE_DEFS, FAILED_TEXT: FAILED_TEXT,
+    TILE_DEFS: TILE_DEFS, FAILED_TEXT: FAILED_TEXT, PARTIAL_TEXT: PARTIAL_TEXT,
     util: { ar: ar, fmt: fmt, U: U, agoText: agoText, curName: curName, moneyText: moneyText, kindOf: kindOf, pickCandidate: pickCandidate }
   };
   root.V2L = api;

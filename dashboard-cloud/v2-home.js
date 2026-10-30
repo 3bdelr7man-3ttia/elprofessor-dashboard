@@ -58,16 +58,19 @@
       ? (D.pendingUsers.rows || []).filter(function (u) { return u.requested; }).length : null;
     var inv = (stateOf('invites') === 'ready' && D.invites && !D.invites.missing)
       ? (D.invites.rows || []).filter(function (i) { return i.status === 'awaiting_approval'; }).length : null;
-    var extras = { inbox: rows, inboxFailed: inboxFailed, pendingVisitors: pu, invitesAwaiting: inv, market: marketCount(), now: now };
+    // ما قُصَّ من قوائم الوارد («نزاعات الملفات: معروض ١٠٠ من ٣٠٠»): المعروض مش كل الموجود ⇒ بطاقات ناقصة وعدّاد ناقص معلَن.
+    var inboxTrunc = rows ? ((window.INBOX_TRUNCATED && window.INBOX_TRUNCATED.length) ? window.INBOX_TRUNCATED.slice() : []) : null;
+    var extras = { inbox: rows, inboxFailed: inboxFailed, inboxTruncated: inboxTrunc || [], pendingVisitors: pu, invitesAwaiting: inv, market: marketCount(), now: now };
     var tiles = L.v2Tiles(Q, extras);
-    var decisions = L.v2Decisions(rows, payouts, Q, { now: now, inboxFailed: inboxFailed });
+    var decisions = L.v2Decisions(rows, payouts, Q, { now: now, inboxFailed: inboxFailed, inboxTruncated: inboxTrunc });
+    var truncated = (inboxTrunc || []).map(function (t) { return String(t).split(':')[0].trim(); });
     var failed = [];
-    if (stateOf('opsQueue') === 'error') failed.push('طابور المنصة');
+    if (stateOf('opsQueue') === 'error') failed.push('بيانات المنصة');
     if (stateOf('inbox') === 'error') failed.push('الوارد');
     if (stateOf('walletPayouts') === 'error') failed.push('تحويلات الأرباح');
     inboxFailed.forEach(function (n) { if (failed.indexOf(n) < 0) failed.push(n); });
     return {
-      now: now, Q: Q, rows: rows, tiles: tiles, decisions: decisions, failed: failed,
+      now: now, Q: Q, rows: rows, tiles: tiles, decisions: decisions, failed: failed, truncated: truncated,
       health: L.v2Health(Q, now), next: L.v2Next(decisions),
       brainLog: rows ? L.v2BrainLog(rows, now) : null,
       loading: isLoading('opsQueue') || isLoading('inbox') || isLoading('walletPayouts')
@@ -127,11 +130,17 @@
     } else if (nx) {
       left = '<small>الحاجة الجاية</small><b>' + esc(L.v2NextLine(nx)) + '</b>' + (nx.brain ? '<p>' + esc(nx.brain) + '</p>' : '');
       btn = '<button class="v2-start" data-a="start">ابدأ القرارات (' + esc(U.ar(n)) + ')</button>';
+    } else if (d.failed.length) {
+      // ⛔ لا «العقل يعمل» ولا «لا توجد قرارات» فوق جلب فاشل: لا نعرف إن كان شيء ينتظرك.
+      left = '<small>الحاجة الجاية</small><b>تعذّر جلب القرارات — لا نعرف إن كان شيء ينتظرك</b>';
+    } else if (d.truncated.length) {
+      left = '<small>الحاجة الجاية</small><b>القائمة ناقصة — معروض جزء من القرارات فقط</b>';
     } else {
       left = '<small>الحاجة الجاية</small><b>لا توجد قرارات بانتظارك الآن — العقل يعمل</b>';
     }
     var sub = (brainN != null && brainN > 0) ? '<span class="v2-brainline">العقل وزّع ' + esc(U.U(brainN, ['ملفًا واحدًا', 'ملفين', 'ملفات', 'ملفًا'])) + ' اليوم</span>' : '';
     var warn = d.failed.length ? '<span class="v2-warnline">تعذّر جلب: ' + esc(d.failed.join(' · ')) + ' — القائمة ناقصة</span>' : '';
+    if (d.truncated.length) warn += '<span class="v2-warnline">معروض جزء فقط من: ' + esc(d.truncated.join(' · ')) + ' — القائمة ناقصة</span>';
     return '<section class="v2-next" aria-label="الحاجة الجاية"><img class="v2-av" src="' + img('brain-avatar') + '" alt="">'
       + '<div class="v2-nt">' + left + sub + warn + '</div>' + btn + '</section>';
   }
@@ -192,8 +201,20 @@
 
   // —— وضع التركيز: بطاقة واحدة
   function startFocus(d) {
-    S.deck = d.decisions.slice(); S.total = S.deck.length; S.done = []; S.err = ''; S.lockedId = ''; S.busy = false;
+    S.deck = d.decisions.slice(); S.total = S.deck.length; S.done = []; S.err = ''; S.lockedId = ''; S.busy = false; S.busyText = '';
     S.mode = 'focus'; redraw();
+  }
+  // ⛔ نهاية القرارات لا تطمئن فوق جلب فاشل أو قائمة مقصوصة.
+  function endText(d) {
+    if (d.failed.length) return S.total ? 'انتهت القرارات التي وصلت — وهناك ما لم نستطع جلبه' : 'تعذّر جلب القرارات — لا نعرف إن كان شيء ينتظرك';
+    if (d.truncated.length) return S.total ? 'انتهت القرارات المعروضة — والقائمة ناقصة' : 'القائمة ناقصة — معروض جزء من القرارات فقط';
+    return S.total ? 'انتهت القرارات. العقل يكمل الباقي' : 'لا توجد قرارات بانتظارك الآن';
+  }
+  function incompleteLine(d) {
+    var p = [];
+    if (d.failed.length) p.push('تعذّر جلب: ' + d.failed.join(' · '));
+    if (d.truncated.length) p.push('معروض جزء فقط من: ' + d.truncated.join(' · '));
+    return p.join(' — ');
   }
   function counter() { return U.ar(S.total - S.deck.length + 1) + ' من ' + U.ar(S.total); }
   function drawFocus(v, d) {
@@ -202,19 +223,24 @@
       ? '<aside class="v2-done"><h3>أنجزت الآن</h3><ul>' + S.done.slice(0, 12).map(function (x) { return '<li>' + esc(x.text) + '</li>'; }).join('') + '</ul></aside>' : '';
     if (!c) {
       v.innerHTML = '<div class="v2 v2-focus"><div class="v2-end"><img src="' + img('brain-avatar') + '" alt="">'
-        + '<h2>' + (S.total ? 'انتهت القرارات. العقل يكمل الباقي' : 'لا توجد قرارات بانتظارك الآن') + '</h2>'
+        + '<h2>' + endText(d) + '</h2>'
+        + (incompleteLine(d) ? '<p class="v2-warnline">' + esc(incompleteLine(d)) + '</p>' : '')
         + '<button class="v2-start" data-a="back">العودة إلى اللوحة</button>' + done + '</div></div>';
       v.querySelector('[data-a="back"]').onclick = leaveFocus;
       return;
     }
     var locked = S.lockedId === c.id;
+    var isOpenAct = function (x) { return !!x && (x.do === 'open' || x.do === 'goto'); };
     var pct = Math.round(((S.total - S.deck.length) / Math.max(1, S.total)) * 100);
     var acts = '';
-    acts += '<button class="v2-btn1" data-a="primary"' + ((S.busy || locked) ? ' disabled' : '') + '>' + esc(S.busy ? 'جارٍ التنفيذ…' : (locked ? 'حدّث أولًا' : c.primary.label)) + '</button>';
-    if (c.secondary) acts += '<button class="v2-btn2" data-a="secondary"' + ((S.busy || locked) ? ' disabled' : '') + '>' + esc(c.secondary.label) + '</button>';
+    // مقفولة بعد رد ضايع أو رفض نهائي: الزرّ الأساسي يبقى «حدّث الآن» وبيشتغل فعلًا (بيحدّث ويرجّع الأزرار أو يقدّم بطاقة تانية)،
+    // وأزرار الفتح تفضل شغّالة — اللي بيتقفل بس الفعل اللي ممكن يتنفّذ مرتين.
+    if (locked) acts += '<button class="v2-btn1" data-a="refresh"' + (S.busy ? ' disabled' : '') + '>' + esc(S.busy ? (S.busyText || 'جارٍ التحديث…') : 'حدّث الآن') + '</button>';
+    else acts += '<button class="v2-btn1" data-a="primary"' + (S.busy ? ' disabled' : '') + '>' + esc(S.busy ? (S.busyText || 'جارٍ التنفيذ…') : c.primary.label) + '</button>';
+    if (c.secondary) acts += '<button class="v2-btn2" data-a="secondary"' + ((S.busy || (locked && !isOpenAct(c.secondary.act))) ? ' disabled' : '') + '>' + esc(c.secondary.label) + '</button>';
     var showOpen = !(c.primary && c.primary.act.do === 'open') && !(c.secondary && c.secondary.act.do === 'open');
     if (showOpen) acts += '<button class="v2-btn3" data-a="open"' + (S.busy ? ' disabled' : '') + '>غيّر / افتح</button>';
-    acts += '<button class="v2-btn3" data-a="later"' + (S.busy ? ' disabled' : '') + '>بعدين</button>';
+    acts += '<button class="v2-btn3" data-a="later"' + (S.busy ? ' disabled' : '') + '>لاحقًا</button>';
     var facts = (c.facts || []).filter(function (f) { return f.v; }).map(function (f) { return '<div><small>' + esc(f.k) + '</small><b>' + esc(f.v) + '</b></div>'; }).join('');
     v.innerHTML = '<div class="v2 v2-focus">'
       + '<div class="v2-ftop"><button class="v2-link" data-a="back">' + BACK + 'اللوحة</button><span class="v2-count">' + esc(counter()) + '</span><span class="v2-prog"><i style="width:' + pct + '%"></i></span></div>'
@@ -230,6 +256,7 @@
     v.querySelector('[data-a="back"]').onclick = leaveFocus;
     var q = function (a, fn) { var b = v.querySelector('[data-a="' + a + '"]'); if (b) b.onclick = fn; };
     q('primary', function () { run(c, c.primary.act); });
+    q('refresh', function () { refreshLocked(c); });
     q('secondary', function () { run(c, c.secondary.act); });
     q('open', function () { openCard(c); });
     q('later', function () { S.deck.push(S.deck.shift()); S.err = ''; redraw(); });
@@ -254,7 +281,29 @@
     if (c.kind === 'course' || c.kind === 'live') return true;
     if (stateOf('inbox') !== 'ready') return true;
     var key = rowKey(c.row);
-    return (window.INBOX || []).some(function (r) { return rowKey(r) === key; });
+    return (window.INBOX || []).some(function (r) { return !r.fyi && rowKey(r) === key; });
+  }
+  // انتظار تحميل المصادر التلاتة (مش مجرد طلبها): الاستدعاء بيرجع مرتين لكل مفتاح (بداية التحميل ونهايته).
+  function reloadAll(done) {
+    var E = ep(), keys = ['opsQueue', 'inbox', 'walletPayouts'], fin = false;
+    if (!E || !E.authed) { done(); return; }
+    var finish1 = function () { if (!fin) { fin = true; done(); } };
+    var check = function () { if (keys.every(function (k) { return stateOf(k) !== 'loading'; })) finish1(); };
+    setTimeout(finish1, 20000);
+    keys.forEach(function (k) { E.reload(k, check); });
+  }
+  // «حدّث الآن»: يحمّل من جديد، يشيل البطاقات اللي ما بقتش بانتظارك (ومنها اللي وزّعها العقل أو اتحسمت في تبويب تاني)،
+  // ويفكّ القفل — فإما تبان أزرار البطاقة تاني (الفعل ما اتنفّذش) وإما نمشي للّي بعدها.
+  function refreshLocked(c) {
+    if (S.busy) return;
+    S.busy = true; S.busyText = 'جارٍ التحديث…'; S.err = ''; redraw();
+    reloadAll(function () {
+      var fresh = {};
+      compute().decisions.forEach(function (x) { fresh[x.id] = x; });
+      S.deck = S.deck.filter(stillPending).map(function (x) { return fresh[x.id] || x; });
+      S.lockedId = ''; S.busy = false; S.busyText = ''; S.scrollTop = true;
+      redraw();
+    });
   }
   function openCard(c) {
     var a = c.open || { do: 'open' };
@@ -289,9 +338,18 @@
     reload();
   }
   function fail(c, res) {
-    S.busy = false; S.err = (res && res.error) || 'تعذّر تنفيذ العملية';
+    S.busy = false; S.err = plainError(res);
     if (res && (res.noReply || res.final)) { S.lockedId = c.id; reload(); }
     redraw();
+  }
+  // ⛔ نصوص الخطأ الجاية من طبقة الاتصال القديمة (عامية: «ما وصلناش رد» · «سجّل دخول تاني») بتتبدّل بفصحى ثابتة.
+  // رسالة رفض المنصة نفسها (٤٠٠/٤٠٩ بسبب محدد) بتتعرض كما هي — هي اللي بتشرح ليه الفعل ما اتنفّذش.
+  var NO_REPLY_AR = 'ما وصلنا رد — حدّث الصفحة وانظر ما حدث قبل أن تضغط مرة أخرى';
+  var SESSION_AR = 'انتهت الجلسة — سجّل الدخول من جديد ثم جرّب';
+  function plainError(res) {
+    if (res && res.noReply) return NO_REPLY_AR;
+    if (res && res.unauthorized) return SESSION_AR;
+    return (res && res.error) || 'تعذّر تنفيذ العملية';
   }
   function track(c, p, doneText) {
     S.busy = true; S.err = ''; redraw();
@@ -355,7 +413,7 @@
         delete s.dataset.busy;
         if (res.ok) { window.closeModal(); o.onOk(); return; }
         x.disabled = false;
-        err.innerHTML = '<div class="ef-err">' + esc(res.error || 'تعذّر تنفيذ العملية') + '</div>';
+        err.innerHTML = '<div class="ef-err">' + esc(plainError(res)) + '</div>';
         if (res.noReply || res.final) { go.textContent = res.noReply ? 'حدّث الصفحة أولًا' : o.btn; S.lockedId = o.cardId; reload(); redraw(); return; }   // ⛔ لا ضغطة تانية من هنا
         delete go.dataset.busy; go.textContent = o.btn; sync();
       }).catch(function (e) {
@@ -370,8 +428,8 @@
     return p.then(function () { return { ok: true }; }).catch(function (e) {
       var status = e && e.status, data = (e && e.data) || {}, msg = typeof data.error === 'string' ? data.error : '';
       var noReply = !!data.no_reply || !status || (status >= 500 && !msg);
-      if (status === 401) return { ok: false, error: 'انتهت الجلسة — سجّل الدخول من جديد ثم جرّب' };
-      return { ok: false, error: msg || (noReply ? 'ما وصلنا رد — حدّث الصفحة وانظر ما حدث قبل أن تضغط مرة أخرى' : 'تعذّر تنفيذ العملية'), noReply: noReply, final: !noReply && status === 409 };
+      if (status === 401) return { ok: false, error: SESSION_AR, unauthorized: true };
+      return { ok: false, error: msg || (noReply ? NO_REPLY_AR : 'تعذّر تنفيذ العملية'), noReply: noReply, final: !noReply && status === 409 };
     });
   }
   function payoutModal(c, which) {
@@ -391,11 +449,11 @@
     } else {
       confirmModal({
         title: 'رفض طلب التحويل', cardId: c.id,
-        lead: 'سيُرفض طلب <b>' + esc(m.name) + '</b> بمبلغ <b>' + esc(amt) + '</b> وتعود الفلوس إلى محفظة صاحب الطلب، ويصله السبب الذي تكتبه.',
+        lead: 'سيُرفض طلب <b>' + esc(m.name) + '</b> بمبلغ <b>' + esc(amt) + '</b> وتعود الأموال إلى محفظة صاحب الطلب، ويصله السبب الذي تكتبه.',
         rows: rows, field: { label: 'سبب الرفض (مطلوب — يصل لصاحب الطلب)', max: 500, area: true },
         btn: 'ارفض الطلب', btnCls: 'btn-human', busy: 'جارٍ الرفض…',
         run: function (reason) { return moneyResult(E.post(path, { reason: reason, confirmed: true })); },
-        onOk: function () { finish(c, 'رُفض طلب ' + m.name + ' وعادت ' + amt + ' إلى محفظته'); }
+        onOk: function () { finish(c, 'رُفض طلب ' + m.name + ' وعادت ' + amt + ' إلى محفظة صاحب الطلب'); }
       });
     }
   }

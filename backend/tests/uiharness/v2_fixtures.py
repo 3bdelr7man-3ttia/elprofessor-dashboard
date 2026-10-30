@@ -27,7 +27,7 @@ PAYOUT_OK = {
 }
 PAYOUT_FX = {
     "id": "po-2", "user_email": "faisal@experts.test", "user_name": "أ. فيصل العتيبي", "user_phone": "0500000000",
-    "amount": 3500.0, "currency": "SAR", "status": "pending", "method": "تحويل بنكي", "destination": "SA03 8000 0000 6080 1016 7519",
+    "amount": 3500.5, "currency": "SAR", "status": "pending", "method": "تحويل بنكي", "destination": "SA03 8000 0000 6080 1016 7519",
     "reason": "طلب سحب", "created_at": iso(-30), "age_hours": 30.0, "fx_alert": True,
 }
 
@@ -105,6 +105,7 @@ class V2Platform(fx.EFPlatform):
         self.settled = []
         self.rejected = []
         self.payments = [] if empty else copy.deepcopy(fp.MANUAL_PAYMENTS["payments"])
+        self.decided_payments = {}     # id ⇒ الوثيقة بعد القرار (المنصة بترد بيها لو اتحسمت قبل كده)
         self.trainer_apps = [] if empty else copy.deepcopy(fp.TRAINER_APPS["applications"])
         self.pending_users = [] if empty else copy.deepcopy(fp.PENDING_USERS["users"])
         self.invites = [] if empty else copy.deepcopy(fp.INVITES["invites"])
@@ -213,8 +214,21 @@ class V2Platform(fx.EFPlatform):
                     self.rejected.append(copy.deepcopy(p))
                 return 200, {"ok": True, "payout": copy.deepcopy(p)}
             if len(parts) == 5 and parts[:3] == ["api", "bridge", "manual-payments"] and parts[4] == "decide":
-                self.payments = [x for x in self.payments if x["id"] != parts[3]]
-                return 200, {"ok": True}
+                # `bridge_decide_manual_payment`: الوثيقة بعد القرار (حالتها confirmed|rejected)؛ لو اتحسمت قبل كده بترجّع
+                # الموجودة كما هي بـ٢٠٠ (confirm_manual_payment_doc idempotent)؛ غير موجودة ⇒ ٤٠٤.
+                mid = parts[3]
+                doc = next((x for x in self.payments if x["id"] == mid), None)
+                if doc is not None:
+                    self.payments = [x for x in self.payments if x["id"] != mid]
+                    doc = copy.deepcopy(doc)
+                    decision = (body or {}).get("decision")
+                    doc["status"] = "confirmed" if decision == "confirm" else "rejected"
+                    doc["admin_note"] = (body or {}).get("admin_note", "")
+                    self.decided_payments[mid] = doc
+                    return 200, copy.deepcopy(doc)
+                if mid in self.decided_payments:
+                    return 200, copy.deepcopy(self.decided_payments[mid])
+                return 404, {"detail": "طلب الدفع غير موجود"}
             if len(parts) == 5 and parts[:3] == ["api", "bridge", "trainer-applications"]:
                 self.trainer_apps = [x for x in self.trainer_apps if x["id"] != parts[3]]
                 return 200, {"ok": True}

@@ -2765,7 +2765,7 @@
     if (action === "request_info") {
       return post("/platform-join-requests/" + i.apiId + "/request_info", body)
         .then(function () { note("اتبعت المطلوب لصاحب الطلب — الصفّ لسه مفتوح ✓"); EP.reload("inbox", after); return { ok: true }; })
-        .catch(function (e) { quietToast((e && e.message) || "تعذّر إرسال الطلب"); if (after) after(); return { ok: false, error: (e && e.message) || "تعذّر إرسال الطلب" }; });
+        .catch(function (e) { var r = efFailed(e, null); if (after) after(); return r; });
     }
     switch (i.apiKind) {
       case "trainer":  path = "/platform-trainer-applications/" + i.apiId + "/" + action; break;
@@ -2784,8 +2784,11 @@
       case "topic":    path = "/platform-pending-topics/" + i.apiId + "/" + action; break;
       case "creative": path = "/platform-creative/" + i.apiId + "/" + action; break;
       case "manual_payment":
-        // المنصة تقبل confirm/reject؛ نترجم اعتماد→confirm.
-        path = "/platform-manual-payments/" + i.apiId + "/" + (action === "approve" ? "confirm" : "reject"); break;
+        // المنصة تقبل confirm/reject؛ نترجم اعتماد→confirm. التأكيد فعل فلوس: الخادم بيشترط `confirmed:true`
+        // (الضغطة على «تأكيد الدفعة» نفسها هي التأكيد الصريح — كل الأبواب بتعدّي من هنا).
+        path = "/platform-manual-payments/" + i.apiId + "/" + (action === "approve" ? "confirm" : "reject");
+        if (action === "approve") body.confirmed = true;
+        break;
       case "book":
         path = "/platform-knowledge/" + encodeURIComponent(i.apiId) + "/decide";
         body = { decision: action, admin_note: reason }; break;
@@ -2801,7 +2804,8 @@
         EP.reload("inbox", after);
         return { ok: true };
       })
-      .catch(function (e) { quietToast((e && e.message) || "تعذّر تنفيذ العملية"); if (after) after(); return { ok: false, error: (e && e.message) || "تعذّر تنفيذ العملية" }; });
+      // {ok:false, error, noReply, final}: رد ضاع أو رفض نهائي (٤٠٩) ⇒ اللي بينادي يقفل الزرار ويحدّث بدل ما المؤسس يدوس تاني على عمى.
+      .catch(function (e) { var r = efFailed(e, null); if (after) after(); return r; });
   };
 
   // ---- «زوّار مسجَّلون ينتظرون الفتح»: الزرّان من لوحة «الدعوات» (نفس قرار الوارد بالحرف) ----
@@ -2912,7 +2916,7 @@
     // ٤٠٩ = رفض نهائي: الحالة اتغيّرت على المنصة بعد ما الصفّ اتحمّل (العميل خد فلوسه فـ«للخبير» اتقفل · الفلوس رجعت قبل
     // كده · اتحسم/اتسوّى · رجّعته قبل كده …) — الضغطة التانية هتترفض بنفس الكلام. نافذة الفلوس بتسيب زرارها مقفول وبتحدّث
     // الوارد على نفس الصفّ (مراجعة الجولة ٨).
-    return { ok: false, error: msg, noReply: noReply, final: !noReply && status === 409 };
+    return { ok: false, error: msg, noReply: noReply, final: !noReply && status === 409, unauthorized: !noReply && status === 401 };
   }
   // الملف كله لدرج النزاع — ⛔ من غير كاش: كل فتحة للدرج بتجيب آخر نسخة (تعديل الخبير ممكن يوصل بعد
   // أول فتحة)، والفشل ما يتحفظش.

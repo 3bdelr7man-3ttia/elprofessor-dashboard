@@ -7614,7 +7614,7 @@ window.V2_HOST={
     if(n<0){var k=efRowKey(row);n=INBOX.findIndex(function(r){return efRowKey(r)===k;});}
     selected=n>-1?n:null;
     viewInbox(document.getElementById('view'));
-    try{var w=document.querySelector('.inboxwrap');if(w&&w.scrollIntoView)w.scrollIntoView({block:'start'});}catch(e){}
+    try{var d=document.getElementById('drawer');if(d&&d.scrollIntoView)d.scrollIntoView({block:'start'});}catch(e){}
   },
   logout:function(){var b=document.getElementById('logoutBtn');if(b)b.click();}
 };
@@ -7630,16 +7630,23 @@ function v2Enable(){
   var h=String(location.hash||'').replace(/^#/,'').trim();
   if(!h||h==='home')current='home';
 }
-// مرة واحدة عند الإقلاع، قبل renderNav. أي فشل/تأخير/٤٠٣ = مقفول (السلوك القديم بالحرف).
+// مرة واحدة عند الإقلاع. ⛔ الإقلاع القديم بيترسم فورًا من غير ما ينتظر المفتاح (مقفول = نفس التوقيت بالحرف).
+// لما الرد يوصل بـenabled:true بس: القائمة تتعاد وبنفتح اللوحة. أي فشل/تأخير (> ٣ ثواني)/٤٠٣ = مقفول.
 function v2LoadFlag(cb){
   var done=false;
-  function fin(on){if(done)return;done=true;if(on){try{v2Enable();}catch(e){window.V2_ON=false;}}cb();}
+  function fin(on){if(done)return;done=true;if(on){try{v2Enable();}catch(e){window.V2_ON=false;}}cb(!!window.V2_ON);}
   try{EP.api('/v2/config').then(function(r){fin(!!(r&&r.enabled===true));}).catch(function(){fin(false);});}catch(e){fin(false);}
   setTimeout(function(){fin(false);},3000);
 }
 window.EP_BOOT=function(){
-  if(window.EP&&EP.role==='admin'&&EP.api&&window.V2){v2LoadFlag(epBootCore);return;}
   epBootCore();
+  if(window.EP&&EP.role==='admin'&&EP.api&&window.V2){
+    v2LoadFlag(function(on){
+      if(!on)return;
+      renderNav();
+      if(current==='home')go('home');
+    });
+  }
 };
 function epBootCore(){
   var r=(window.EP&&EP.role)?EP.role:null;

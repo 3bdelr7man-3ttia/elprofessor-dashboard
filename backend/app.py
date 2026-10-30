@@ -2339,11 +2339,41 @@ def platform_manual_payments():
 @token_required
 @roles_required('admin', 'employee')
 def platform_manual_payment_decide(payment_id, action):
+    """تأكيد/رفض إيصال دفع يدوي — فعل فلوس (بيفعّل المنتج ويبلّغ صاحبه):
+      * التأكيد لازم `confirmed: true` (من نافذة/زرّ تأكيد صريح) — نداء من غيره يترفض قبل أي رحلة.
+      * ⛔ نداء واحد ولا إعادة محاولة: رد ضاع ⇒ «ما وصلناش رد» + سطر سجل.
+      * النجاح بيتحقّق من **رد المنصة**: لو الدفعة اتحسمت قبل كده (مؤكدة/مرفوضة في تبويب تاني) المنصة بترد ٢٠٠ بالوثيقة
+        الموجودة — فحالتها لو غير المطلوبة ⇒ ٤٠٩ مش «اتأكد».
+      * السجل بعد النجاح بس: الفاعل من التوكن، والمبلغ والحالة من رد المنصة."""
     if action not in ('confirm', 'reject'):
         return jsonify({'error': 'إجراء غير معروف'}), 400
-    body = request.json or {}
-    return _platform_proxy('POST', f"/api/bridge/manual-payments/{payment_id}/decide",
-                           json_body={'decision': action, 'admin_note': body.get('admin_note') or ''})
+    if _ef_bad_id(payment_id):
+        return jsonify({'error': 'الدفعة دي مش موجودة'}), 404
+    body = request.get_json(silent=True)
+    body = body if isinstance(body, dict) else {}
+    if action == 'confirm' and body.get('confirmed') is not True:
+        return jsonify({'error': V2_CONFIRM_AR}), 400
+    note = body.get('admin_note') if isinstance(body.get('admin_note'), str) else ''
+    resp = _ef_bridge('POST', f"/api/bridge/manual-payments/{quote(payment_id, safe='')}/decide",
+                      json_body={'decision': action, 'admin_note': note}, timeout=25)
+    if not _resp_ok(resp):
+        if _ef_no_reply(resp):
+            return _ef_no_reply_resp('manual_payment', payment_id, action)
+        return resp
+    doc = _proxy_json(resp)
+    wanted = 'confirmed' if action == 'confirm' else 'rejected'
+    got = doc.get('status') if isinstance(doc.get('status'), str) else ''
+    if not got:
+        # ردّ ٢٠٠ بلا حالة: ما نقدرش نقول إن الفعل اتنفّذ — زي رد ضاع (الفعل ممكن يكون اتنفّذ).
+        return _ef_no_reply_resp('manual_payment', payment_id, action)
+    if got != wanted:
+        label = {'confirmed': 'مؤكدة', 'rejected': 'مرفوضة', 'pending_review': 'قيد المراجعة'}.get(got, got)
+        return jsonify({'error': 'الدفعة اتحسمت قبل كده (%s)' % label}), 409
+    meta = {k: doc.get(k) for k in ('status', 'amount', 'currency', 'user_email') if doc.get(k) not in (None, '')}
+    if action == 'reject' and note:
+        meta['note'] = note[:500]
+    _audit('manual_payment.' + action, target=payment_id, meta=meta)
+    return resp
 
 
 @app.route('/api/platform-creative', methods=['GET'])
