@@ -11,6 +11,10 @@
   ٥. النهاية (الفيل «انتهت القرارات») · اللوحة من غير قرارات.
   ٦. المفتاح مقفول (إثبات إن مفيش حاجة اتغيّرت).
 
+الوضع `d1b` (الهيكل الجديد — SPEC-D1B §٤): اللوحة في الغلاف · القائمة المفتوحة (شاشة ١٠٢٤ و٣٩٠) · كل قسم بتبويباته · رابط قديم
+بيهبط على قسمه · المفتاح مقفول. وسكربت الفحص بيفشل لو ظهر أي أثر للقائمة القديمة والمفتاح مفتوح.
+    cd backend && python3 -B tests/uiharness/v2_shots.py <out_dir> [d1|d1b]
+
 ⛔ صفر طلبات حقيقية: الداشبورد بيتنفّذ جوه العملية والمنصة جدول في الذاكرة (`v2_fixtures.V2Platform`)، وأي أصل تاني بيتقفل
 ويتسجّل. السكربت بيفشل لو خرج أي طلب غير خطوط جوجل، أو لو فحوص الصور (تمرير أفقي · undefined/NaN/null · زرار أقل من ٥٢) وقعت.
 """
@@ -347,15 +351,266 @@ def flow(browser, h, pre, viewport, mobile):
     browser.close()
 
 
+# ======================================================================== D1-B: الهيكل الجديد
+TAB = {'width': 1024, 'height': 768}
+SHELL_READY = ("() => window.V2SHELL && V2SHELL.on === true && window.EP && ['opsQueue','inbox','walletPayouts','invites','pendingUsers','market']"
+               ".every(k => EP.state[k] === 'ready') && document.querySelector('.v2c-tab') && !document.querySelector('.v2-cnt.ld')")
+OLD_GROUPS = ('شغل النهاردة', 'الناس والدورات', 'التسويق والمحتوى')
+SECTION_LABELS = ['اللوحة', 'ملفات الخبراء', 'النزاعات والاستردادات', 'الدورات والمدرّبون', 'سوق الخدمات', 'الكتب', 'الناس والدعوات',
+                  'الفلوس', 'المحتوى', 'التسويق', 'التقارير', 'العقل', 'الشركة ورأس المال']
+
+
+def shell_check(page, name):
+    """⛔ لا أثر للقائمة القديمة والمفتاح مفتوح: الشريط مخفي، ولا بند `.nav .item` ظاهر، ولا عنوان مجموعة قديم، والشاشة بلا تمرير أفقي."""
+    r = page.evaluate("""() => {
+      const vis = e => !!e && !!(e.offsetWidth || e.offsetHeight || e.getClientRects().length) && getComputedStyle(e).visibility !== 'hidden';
+      const rail = document.querySelector('.rail'), co = document.getElementById('coPin');
+      const olds = [...document.querySelectorAll('.rail .nav .item, #nav-co .item, .nav .item')].filter(vis).length;
+      const side = document.getElementById('v2Side');
+      const items = side ? [...side.querySelectorAll('.v2s-item')].filter(vis).map(a => a.querySelector('.v2s-name').textContent.trim()) : [];
+      const tabs = [...document.querySelectorAll('.v2c-tab')].filter(vis).map(b => b.getBoundingClientRect().height);
+      const mb = document.getElementById('menuBtn');
+      return {rail: vis(rail), co: vis(co), olds, items, tabs, mb: vis(mb) ? mb.getBoundingClientRect().height : null,
+              shell: document.querySelector('.app').classList.contains('v2-shell'), text: document.body.innerText,
+              sw: Math.max(document.documentElement.scrollWidth, document.body.scrollWidth)};
+    }""")
+    if not r['shell']:
+        PROBLEMS.append('%s: الغلاف مش شغّال' % name)
+    if r['rail'] or r['co'] or r['olds']:
+        PROBLEMS.append('%s: أثر للقائمة القديمة (شريط=%s · كتلة الشركة=%s · بنود=%s)' % (name, r['rail'], r['co'], r['olds']))
+    for g in OLD_GROUPS:
+        if g in r['text']:
+            PROBLEMS.append('%s: عنوان مجموعة قديم «%s» ظاهر' % (name, g))
+    w = page.viewport_size['width']
+    if w >= 1180 and r['items'] != SECTION_LABELS:
+        PROBLEMS.append('%s: بنود القائمة الجانبية %r' % (name, r['items']))
+    if w < 1180 and r['items']:
+        PROBLEMS.append('%s: القائمة الجانبية ظاهرة تحت ١١٨٠' % name)
+    if any(h < 44 for h in r['tabs']):
+        PROBLEMS.append('%s: تبويب أقل من ٤٤px: %r' % (name, r['tabs']))
+    if w < 1180 and (r['mb'] is None or r['mb'] < 44):
+        PROBLEMS.append('%s: زرّ القائمة مش ظاهر أو أقل من ٤٤px' % name)
+    if w <= 1024 and r['sw'] > w + 1:
+        PROBLEMS.append('%s: تمرير أفقي (%s > %s)' % (name, r['sw'], w))
+
+
+def sshot(page, name, full=False):
+    shot(page, name, full)
+    shell_check(page, name)
+
+
+def open_shell(ctx, hash_=''):
+    page = ctx.new_page()
+    page.goto(DASH + '/' + hash_, wait_until='domcontentloaded')
+    page.wait_for_function(SHELL_READY, timeout=30000)
+    page.wait_for_timeout(400)
+    return page
+
+
+def sec_state(page):
+    return page.evaluate("""() => ({hash: location.hash, h1: (document.querySelector('.v2c-h h1') || {}).textContent,
+      tabs: [...document.querySelectorAll('.v2c-tab')].map(b => b.textContent.trim()),
+      on: (document.querySelector('.v2c-tab.on') || {}).textContent, desc: (document.querySelector('.v2c-h p') || {}).textContent,
+      title: document.getElementById('pageTitle').textContent})""")
+
+
+def go_section(page, key, tab=None):
+    """ينقر بند القسم (قائمة جانبية أو ورقة) ثم تبويبه."""
+    if page.viewport_size['width'] >= 1180:
+        page.click('#v2Side [data-sec="%s"]' % key)
+    else:
+        page.click('#menuBtn')
+        page.wait_for_selector('#v2Sheet.open')
+        page.click('#v2Sheet [data-sec="%s"]' % key)
+        page.wait_for_function("() => !document.querySelector('#v2Sheet.open')")
+    page.wait_for_function("(k) => location.hash.indexOf('#s/' + k) === 0", arg=key)
+    if tab:
+        page.click('.v2c-tab[data-tab="%s"]' % tab)
+    page.wait_for_timeout(250)
+
+
+SECTION_FIRST = [('home', 'board', 'اللوحة'), ('files', 'files', 'ملفات الخبراء'), ('disputes', 'disputes', 'النزاعات والاستردادات'),
+                 ('courses', 'courses', 'الدورات والمدرّبون'), ('market', 'requests', 'سوق الخدمات'), ('books', 'books', 'الكتب'),
+                 ('people', 'users', 'الناس والدعوات'), ('money', 'finance', 'الفلوس'), ('content', 'topics', 'المحتوى'),
+                 ('marketing', 'campaigns', 'التسويق'), ('reports', 'demand', 'التقارير'), ('brain', 'log', 'العقل'),
+                 ('company', 'invest', 'الشركة ورأس المال')]
+
+
+def flow_d1b(browser, h, pre, viewport, mobile):
+    h.ef = v2fx.V2Platform()
+    ctx = browser.context(h, 'admin', viewport, mobile)
+    page = open_shell(ctx)
+    w = viewport['width']
+    sshot(page, pre + '01-board.jpg')
+    st = sec_state(page)
+    if st['hash'] != '#s/home/board' or st['h1'] != 'اللوحة':
+        PROBLEMS.append(pre + '01: الافتتاحية مش اللوحة: %r' % st)
+    # الشارات: نفس أعداد مربّعات اللوحة بالظبط (مصدر واحد)
+    badges = page.evaluate("""() => {
+      const T = {}; V2.tiles().forEach(t => { T[t.key] = t; });
+      const root = document.getElementById(innerWidth >= 1180 ? 'v2Side' : 'v2Sheet');
+      const out = {};
+      root.querySelectorAll('[data-sec]').forEach(a => { const b = a.querySelector('.v2s-badge'); out[a.getAttribute('data-sec')] = b ? b.textContent.trim() : ''; });
+      const tiles = {};
+      document.querySelectorAll('.v2-tile').forEach(t => { const c = t.querySelector('.v2-cnt'); tiles[t.getAttribute('data-tile')] = c ? c.textContent.trim() : ''; });
+      return {menu: out, tiles};
+    }""")
+    for key, txt in badges['tiles'].items():
+        mt = badges['menu'].get(key, '')
+        if txt.replace('+', '') != mt.replace('+', '') and not (txt in ('تعذّر الجلب',) and mt == '!'):
+            PROBLEMS.append('%s01: شارة «%s» في القائمة (%s) مش نفس مربّع اللوحة (%s)' % (pre, key, mt, txt))
+    if not any(v for v in badges['menu'].values()):
+        PROBLEMS.append(pre + '01: مفيش ولا شارة في القائمة')
+    # القائمة المفتوحة (الشاشات الأضيق)
+    if w < 1180:
+        page.click('#menuBtn')
+        page.wait_for_selector('#v2Sheet.open')
+        sshot(page, pre + '02-menu-open.jpg')
+        tiles_n = page.evaluate("() => document.querySelectorAll('#v2Sheet .v2s-tile').length")
+        if tiles_n != 13:
+            PROBLEMS.append('%s02: ورقة القائمة فيها %s مربّع' % (pre, tiles_n))
+        page.keyboard.press('Escape')
+        page.wait_for_function("() => !document.querySelector('#v2Sheet.open')")
+    # كل قسم بتبويباته
+    for i, (key, tab, label) in enumerate(SECTION_FIRST[1:], start=3):
+        go_section(page, key)
+        st = sec_state(page)
+        if st['h1'] != label or st['hash'] != '#s/%s/%s' % (key, tab) or st['on'] is None:
+            PROBLEMS.append('%s%02d: القسم %s: %r' % (pre, i, key, st))
+        if not st['desc']:
+            PROBLEMS.append('%s%02d: ترويسة %s من غير سطر وصف' % (pre, i, key))
+        sshot(page, '%s%02d-section-%s.jpg' % (pre, i, key))
+    # تبويبات: ملفات ⇐ الخبراء · الفلوس ⇐ الباقات · الناس ⇐ الدعوات · الشركة ⇐ الإعدادات
+    for n, (key, tab, expect_hash) in enumerate([('files', 'experts', '#s/files/experts'), ('money', 'packages', '#s/money/packages'),
+                                                  ('people', 'invites', '#s/people/invites'), ('company', 'settings', '#s/company/settings'),
+                                                  ('brain', 'helpers', '#s/brain/helpers'), ('content', 'tutorials', '#s/content/tutorials')]):
+        go_section(page, key, tab)
+        st = sec_state(page)
+        if st['hash'] != expect_hash or st['on'] is None:
+            PROBLEMS.append('%s2%d: تبويب %s/%s: %r' % (pre, n, key, tab, st))
+        sshot(page, '%s2%d-tab-%s-%s.jpg' % (pre, n, key, tab))
+    # شاشة قديمة بتغيّر تبويبها الداخلي ⇒ الترويسة والعنوان يتبعوها (من غير ما نكرّر الشاشة)
+    go_section(page, 'money')
+    page.click('#finTabs .tab[data-t="packages"]')
+    page.wait_for_timeout(300)
+    st = sec_state(page)
+    if st['hash'] != '#s/money/packages' or st['on'] != 'الباقات والأسعار':
+        PROBLEMS.append(pre + '26: تبويب داخلي (الباقات) ما حرّكش الترويسة: %r' % st)
+    page.evaluate("() => goEscrowManual()")
+    page.wait_for_timeout(300)
+    st = sec_state(page)
+    if st['hash'] != '#s/money/receipts' or st['h1'] != 'الفلوس' or st['on'] != 'الإيصالات':
+        PROBLEMS.append(pre + '26: دفعات يدوية (goEscrowManual) ما هبطتش على «الإيصالات»: %r' % st)
+    sshot(page, pre + '26-money-receipts.jpg')
+    page.evaluate("() => { location.hash = '#invites'; }")
+    page.wait_for_timeout(400)
+    st = sec_state(page)
+    if st['hash'] != '#s/people/invites' or st['on'] != 'الدعوات':
+        PROBLEMS.append(pre + '26: تغيير العنوان لرابط قديم ما حوّلش: %r' % st)
+    if page.evaluate("() => localStorage.getItem('ep_v2_shell')") != '1':
+        PROBLEMS.append(pre + '26: تذكّر المفتاح المفتوح مش متسجّل')
+    if page.evaluate("() => document.querySelector('.app').classList.contains('v2-pre')"):
+        PROBLEMS.append(pre + '26: صنف الإخفاء المؤقت فضل بعد الجاهزية')
+    # رجوع المتصفح ورجوع التحديث
+    go_section(page, 'files')
+    go_section(page, 'files', 'experts')
+    page.go_back()
+    page.wait_for_timeout(500)
+    st = sec_state(page)
+    if st['hash'] != '#s/files/files' or st['on'] != 'الملفات':
+        PROBLEMS.append(pre + '30: زرّ الرجوع ما رجّعش التبويب السابق: %r' % st)
+    page.reload(wait_until='domcontentloaded')
+    page.wait_for_function(SHELL_READY, timeout=30000)
+    st = sec_state(page)
+    if st['hash'] != '#s/files/files' or st['h1'] != 'ملفات الخبراء':
+        PROBLEMS.append(pre + '30: التحديث ما فضلش في نفس القسم: %r' % st)
+    # «كل الوارد» داخل اللوحة
+    go_section(page, 'home', 'inbox')
+    if sec_state(page)['hash'] != '#s/home/inbox' or not page.query_selector('#rows'):
+        PROBLEMS.append(pre + '31: تبويب «كل الوارد» ما رسمش الوارد')
+    sshot(page, pre + '31-home-all-inbox.jpg')
+    # مربّع من اللوحة بيهبط على قسمه وتبويبه (بنفس الدالة القديمة)
+    go_section(page, 'home', 'board')
+    for tile, expect in (('money', '#s/money/finance'), ('disputes', '#s/disputes/disputes'), ('files', '#s/files/files'),
+                         ('people', '#s/people/invites'), ('courses', '#s/courses/courses')):
+        go_section(page, 'home', 'board')
+        page.wait_for_selector('[data-tile="%s"]' % tile)
+        page.click('[data-tile="%s"]' % tile)
+        page.wait_for_timeout(350)
+        hh = page.evaluate('() => location.hash')
+        if not hh.startswith(expect) and not (tile == 'courses' and hh.startswith('#s/courses/')):
+            PROBLEMS.append('%s32: مربّع %s هبط على %s (المتوقع %s)' % (pre, tile, hh, expect))
+    go_section(page, 'home', 'board')
+    page.click('[data-tile="brain"]')
+    page.wait_for_selector('.v2-log, .v2-empty')
+    if sec_state(page)['hash'] != '#s/brain/log':
+        PROBLEMS.append(pre + '33: مربّع العقل ما فتحش «سجل اليوم»')
+    sshot(page, pre + '33-brain-log.jpg')
+    # وضع التركيز في الغلاف: الترويسة والتبويبات تختفي
+    go_section(page, 'home', 'board')
+    page.click('[data-a="start"]')
+    page.wait_for_selector('.v2-card')
+    if page.is_visible('.v2c-tabs'):
+        PROBLEMS.append(pre + '34: تبويبات القسم ظاهرة في وضع التركيز')
+    sshot(page, pre + '34-focus-in-shell.jpg')
+    browser.close()
+
+    # رابط قديم بيهبط على قسمه وتبويبه
+    for old, expect, label, on_tab in (('#finance', '#s/money/finance', 'الفلوس', 'المالية'), ('#packages', '#s/money/packages', 'الفلوس', 'الباقات والأسعار'),
+                                       ('#messages', '#s/people/messages', 'الناس والدعوات', 'الرسائل'), ('#invites', '#s/people/invites', 'الناس والدعوات', 'الدعوات'),
+                                       ('#escrow', '#s/disputes/escrow', 'النزاعات والاستردادات', 'الضمان'), ('#tutorials', '#s/content/tutorials', 'المحتوى', 'دليل الاستخدام'),
+                                       ('#partners', '#s/company/invest', 'الشركة ورأس المال', 'الاستثمار والشركاء'), ('#inbox', '#s/home/inbox', 'اللوحة', 'كل الوارد'),
+                                       ('#team', '#s/files/experts', 'ملفات الخبراء', 'الخبراء'), ('#s/money/receipts', '#s/money/receipts', 'الفلوس', 'الإيصالات')):
+        ctx = browser.context(h, 'admin', viewport, mobile)
+        page = open_shell(ctx, old)
+        st = sec_state(page)
+        if st['hash'] != expect or st['h1'] != label or st['on'] != on_tab:
+            PROBLEMS.append('%s40: الرابط القديم %s هبط على %r (المتوقع %s / %s / %s)' % (pre, old, st, expect, label, on_tab))
+        if old == '#finance':
+            sshot(page, pre + '40-old-link-finance.jpg')
+        elif old == '#messages':
+            sshot(page, pre + '41-old-link-messages.jpg')
+        browser.close()
+
+    # المفتاح مقفول: مفيش غلاف ولا قائمة جديدة
+    os.environ.pop('DASH_V2_ENABLED', None)
+    try:
+        h.ef = v2fx.V2Platform()
+        ctx = browser.context(h, 'admin', viewport, mobile)
+        page = ctx.new_page()
+        page.goto(DASH + '/', wait_until='domcontentloaded')
+        page.wait_for_function("() => window.EP && EP.state.inbox === 'ready' && document.getElementById('rows')", timeout=30000)
+        page.wait_for_timeout(500)
+        shot(page, pre + '80-switch-off.jpg')
+        st = page.evaluate("""() => ({
+          side: !!document.getElementById('v2Side'), sheet: !!document.getElementById('v2Sheet'), sec: !!document.getElementById('v2sec'),
+          shell: document.querySelector('.app').classList.contains('v2-shell'), on: !!window.V2_ON, shellOn: !!(window.V2SHELL && V2SHELL.on),
+          items: [...document.querySelectorAll('.nav .item')].map(i => i.dataset.mod), title: document.getElementById('pageTitle').textContent,
+          railW: document.querySelector('.rail').offsetWidth, hash: location.hash})""")
+        if st['side'] or st['sheet'] or st['sec'] or st['shell'] or st['on'] or st['shellOn']:
+            PROBLEMS.append(pre + '80: أثر للهيكل الجديد والمفتاح مقفول: %r' % st)
+        if len(st['items']) != 16 or 'الوارد' not in st['title'] or (w >= 1180 and not st['railW']) or st['hash'].startswith('#s/'):
+            PROBLEMS.append(pre + '80: الداشبورد القديمة اتغيّرت والمفتاح مقفول: %r' % st)
+    finally:
+        os.environ['DASH_V2_ENABLED'] = 'true'
+    browser.close()
+
+
 def main():
     from playwright.sync_api import sync_playwright
     os.environ['DASH_V2_ENABLED'] = 'true'
     h = Harness(v2fx.V2Platform())
     with sync_playwright() as p:
         browser = Browsers(p)
+        mode = sys.argv[2] if len(sys.argv) > 2 else 'd1'
         try:
-            flow(browser, h, 'd', DESK, False)
-            flow(browser, h, 'm', MOB, True)
+            if mode == 'd1b':
+                flow_d1b(browser, h, 'd', DESK, False)
+                flow_d1b(browser, h, 't', TAB, False)
+                flow_d1b(browser, h, 'm', MOB, True)
+            else:
+                flow(browser, h, 'd', DESK, False)
+                flow(browser, h, 'm', MOB, True)
         finally:
             browser.close()
     rep = h.blocked_report()
