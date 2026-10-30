@@ -919,13 +919,13 @@ def test_target_rows_current_target_month_line():
           {'id': 3, 'month': '2026-12', 'revenue_egp': 60000, 'target_courses': 5, 'target_students': 150}]
     dash = {'monthly': [{'month': '2026-10', 'revenue': 31000}, {'month': '2026-08', 'revenue': 42000}], 'courses': {'total_courses': 6, 'total_students': 410}}
     rows = _lg('targetRows', fc, dash, NOW)
-    assert [r['month'] for r in rows] == ['2026-12', '2026-10', '2026-08']
-    r12, r10, r08 = rows
+    assert [r['month'] for r in rows] == ['2026-08', '2026-10', '2026-12']
+    r08, r10, r12 = rows
     assert r12['future'] is True and r12.get('actual') is None and r12['na'] is False and r10['actual'] == 31000 and r08['actual'] == 42000
     rows2 = _lg('targetRows', fc, {'monthly': [{'month': '2026-10', 'revenue': 1}]}, NOW)
     assert [r['actual'] for r in rows2 if r['month'] == '2026-08'] == [None] and [r['na'] for r in rows2 if r['month'] == '2026-08'] == [False]
     rows3 = _lg('targetRows', fc, None, NOW)
-    assert [r['na'] for r in rows3] == [False, True, True]
+    assert [r['na'] for r in rows3] == [True, True, False]
     assert _lg('currentTarget', fc, NOW)['month'] == '2026-10'
     assert _lg('currentTarget', [fc[0], fc[2]], NOW)['month'] == '2026-12'
     assert _lg('currentTarget', [fc[0]], NOW) is None and _lg('currentTarget', None, NOW) is None

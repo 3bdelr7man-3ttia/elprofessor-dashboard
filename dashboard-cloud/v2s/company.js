@@ -90,7 +90,7 @@
     var codes = visitCodes();
     if (!codes.length) { if (V.state !== 'none') { V.state = 'none'; V.key = ''; } return; }
     var key = codes.join(',');
-    if (!force && V.key === key && V.state !== 'idle' && V.state !== 'error') return;
+    if (!force && V.key === key && V.state !== 'idle') return;
     var from = todayIso().slice(0, 8) + '01';
     (items('deals') || []).forEach(function (a) { if (a.status === 'active' && a.ref_code && a.starts_on && a.starts_on < from) from = a.starts_on; });
     (items('ads') || []).forEach(function (a) { var d = (a.created_at || '').slice(0, 10); if (a.status === 'active' && a.ref_code && d && d < from) from = d; });
@@ -134,6 +134,7 @@
   var redrawT = null;
   function changed() {
     try { if (window.V2SHELL && V2SHELL.on && V2SHELL.refresh) V2SHELL.refresh(); } catch (e) {}
+    try { var nd = NEEDS[host().current ? host().current() : '']; if (nd && nd.visits) loadVisits(false); } catch (e) {}
     if (redrawT) return;
     redrawT = setTimeout(function () { redrawT = null; if (!document.getElementById('epModal')) redraw(); }, 0);
   }
@@ -457,7 +458,7 @@
       else if (cur) nowLine = cnt + ' — هدف ' + CO.monthName(cur.month) + ': ' + U.U(cur.target_courses || 0, ['دورة واحدة', 'دورتان', 'دورات', 'دورة']) + ' · ' + U.U(cur.target_students || 0, ['طالب واحد', 'طالبان', 'طلاب', 'طالبًا']) + '.';
       else nowLine = cnt + ' — لم يُحدَّد هدف.';
       var rows = CO.targetRows(fc, dash, now()) || [];
-      var shown = S.oldTargets ? rows : rows.slice(0, 6);
+      var shown = S.oldTargets ? rows : rows.slice(-6);
       var thead = '<div class="co-tr head"><span>الشهر</span><span>هدف الدخل</span><span>الدخل الفعلي</span><span>هدف الدورات</span><span>هدف الطلاب</span><span></span></div>';
       body = '<div class="co-brain one tg"><div class="co-bl"><img class="co-bav sm" src="' + img('brain-avatar') + '" alt=""><p>' + (ml.kind === 'na' ? esc(ml.text).replace(NA, na()) : esc(ml.text)) + '</p>'
         + (ml.kind === 'notarget' ? '<button type="button" class="co-blb" data-a="forecastNow">حدّد الهدف</button>' : '') + '</div></div>'
@@ -487,7 +488,7 @@
       main = '<div class="co-grid">' + partnersCard(b) + equipCard(b) + dealsCard(b) + adsCard(b) + '</div>';
     }
     v.innerHTML = '<div class="co" data-board="invest">' + noteStrip() + warnStrip(fl) + brainStrip(sum) + main + targetsCard() + '</div>';
-    if (S.jump === 'targets') { S.jump = null; setTimeout(function () { var t = document.getElementById('coTargets'); if (t && t.scrollIntoView) t.scrollIntoView({ block: 'start' }); }, 30); }
+    if (S.jump === 'targets' && ['summary', 'partners', 'assets', 'subs', 'deals', 'ads', 'forecast', 'dash'].every(function (k) { return !isLoad(k); })) { S.jump = null; setTimeout(function () { var t = document.getElementById('coTargets'); if (t && t.scrollIntoView) t.scrollIntoView({ block: 'start' }); }, 30); }
   }
 
   // ------------------------------------------------------------------ الشركاء ورأس المال
@@ -600,7 +601,7 @@
       eq = '<p class="co-sumline">' + esc(U.U(assets.length, ['بند واحد', 'بندان', 'بنود', 'بندًا']) + ' · القيمة ' + money(totV, 'EGP') + ' · إيجار شهري للشركة ' + money(totR, 'EGP')) + '</p>'
         + (assets.length ? '<div class="co-list">' + assets.map(function (a) {
           return '<div class="co-lr" data-id="a' + esc(a.id) + '"><div class="co-lm"><b>' + esc(a.name) + '</b><small>' + esc((CO.CAT_LABEL[a.category] || a.category || 'معدة') + ' · ملك: ' + (a.owner || 'الشركة')) + '</small></div>'
-            + '<div class="co-la"><b>' + esc(money(a.value_egp, 'EGP')) + '</b>' + ((a.monthly_rent_egp || 0) > 0 ? '<small>إيجار ' + esc(money(a.monthly_rent_egp, 'EGP')) + ' شهريًا</small>' : '') + chip({ text: CO.STATUS_LABEL[a.status] || a.status || 'معدة', tone: 'neutral' }) + '</div>'
+            + '<div class="co-la"><b>' + ((a.value_egp || 0) > 0 ? esc(money(a.value_egp, 'EGP')) : 'بلا قيمة مسجّلة') + '</b>' + ((a.monthly_rent_egp || 0) > 0 ? '<small>إيجار ' + esc(money(a.monthly_rent_egp, 'EGP')) + ' شهريًا</small>' : '') + chip({ text: CO.STATUS_LABEL[a.status] || a.status || 'معدة', tone: 'neutral' }) + '</div>'
             + '<div class="co-ra">' + btn2('عدّل', 'editAsset', ' data-id="' + esc(a.id) + '"') + '</div></div>'; }).join('') + '</div>' : '<p class="co-none">لا معدات مسجّلة بعد.</p>')
         + '<div class="co-bar">' + btn2('أضف معدة', 'addAsset') + '</div>';
     }

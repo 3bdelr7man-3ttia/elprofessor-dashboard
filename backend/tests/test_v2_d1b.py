@@ -28,7 +28,8 @@ DC = os.path.join(ROOT, 'dashboard-cloud')
 NODE = __import__('shutil').which('node')
 needs_node = pytest.mark.skipif(not NODE, reason='needs node')
 PSEUDO_MODS = {'v2files', 'v2disputes', 'v2person',                       # D2: موديولات وهمية يرسمها V2D2 تحت الغلاف الجديد فقط
-               'v2m_overview', 'v2m_payouts', 'v2m_receipts', 'v2m_prices', 'v2m_shares', 'v2m_ads', 'v2b_offers', 'v2b_requests'}   # D3: يرسمها V2D3
+               'v2m_overview', 'v2m_payouts', 'v2m_receipts', 'v2m_prices', 'v2m_shares', 'v2m_ads', 'v2b_offers', 'v2b_requests',   # D3: يرسمها V2D3
+               'v2c_partners', 'v2c_assets', 'v2c_deals', 'v2c_ads'}   # الجولة الأخيرة: قسم الشركة (v2s/company.js)
 
 
 def _read(*parts):
@@ -187,9 +188,9 @@ def test_an_unknown_module_is_not_mapped():
 def test_section_addresses_round_trip():
     res = _node("""const out=[];L.SECTIONS.forEach(s=>s.tabs.forEach(t=>{const h=L.sectionHash(s.key,t.key);
       out.push([s.key,t.key,h,L.parseSectionHash(h),L.parseSectionHash(h.slice(1)),L.routeFor(h)]);}));console.log(JSON.stringify(out))""")
-    assert len(res) == 35                      # ٢٥ + «كل الملفات» و«كل النزاعات» + صفحة الشخص (مخفية) + D3: الفلوس ٨ (واحد مخفي) بدل ٣، والكتب ٣ بدل ١
+    assert len(res) == 39                      # ٢٥ + «كل الملفات» و«كل النزاعات» + صفحة الشخص (مخفية) + D3: الفلوس ٨ (واحد مخفي) بدل ٣، والكتب ٣ بدل ١
     for sec, tab, h, p1, p2, r in res:
-        if (sec, tab) in (('people', 'person'), ('money', 'manual')):
+        if (sec, tab) in (('people', 'person'), ('money', 'manual'), ('company', 'targets')):
             continue                           # تبويب مخفي بلا بريد: يرجع لأول تبويب (يُختبر في test_v2_d2)
         assert h == '#s/%s/%s' % (sec, tab)
         assert p1 == {'section': sec, 'tab': tab, 'exact': True} == p2

@@ -2250,7 +2250,7 @@
   function targetRows(forecast, dash, now) {
     var rows = fcRows(forecast); if (!rows) return null;
     var k = nowKey(now);
-    return rows.slice().reverse().map(function (f) {
+    return rows.slice().map(function (f) {
       var future = f.month > k, actual;
       if (future) actual = undefined;
       else actual = dashMonth(dash, f.month);                                  // undefined ⇒ المصدر غير متاح · null ⇒ لا دخل مسجّل
