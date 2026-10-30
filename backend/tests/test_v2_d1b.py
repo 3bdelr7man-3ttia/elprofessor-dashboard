@@ -162,7 +162,6 @@ def test_inner_screen_state_picks_the_right_tab_and_unknown_state_stays_put():
         ('finance', {'finTab': 'packages'}, 'money', 'all'), ('finance', {'finTab': 'withdrawals'}, 'money', 'all'),
         ('topics', {'topicsTab': 'tutorials'}, 'content', 'tutorials'), ('topics', {'topicsTab': 'news'}, 'content', 'topics'),
         ('courses', {'courseTab': 'demand'}, 'courses', 'courses'), ('home', {'v2mode': 'brain'}, 'home', 'board'),   # سجل العقل القديم لم يعد وضعًا للوحة (صار تبويب v2s_brain)
-        
         ('home', {'v2mode': 'focus'}, 'home', 'board'), ('targets', {'tgTab': 'foundation'}, 'company', 'targets'),
         ('investment', {'invTab': 'opps'}, 'company', 'invest'),
     ]

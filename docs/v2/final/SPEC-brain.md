@@ -207,7 +207,7 @@ Group «ملفات الخبراء والاستشارات»
 |---|---|---|---|---|
 | `assign` (A1) | «توزيع الملفات على الخبراء» | «عندما يُدفع ملف، يُرسل وحده إلى أنسب خبير متاح: حسب التخصص، ثم بلد القانون، ثم الأقل انشغالًا.» | **Real switch** `[وحده | يسألني]`, value from B2 `auto_assign.value`. `null` ⇒ no switch; chip «غير متاح بعد» and the line «تعذّر جلب حالة التوزيع». `auto_assign_missing` ⇒ line «التوزيع التلقائي غير موجود على المنصة بعد» | «آخر تغيير: <agoText(updated_at)> بواسطة <updated_by>» when `explicit` is true; «لم يُغيَّر من قبل» when `explicit` is false. The sheet also shows «آخر تشغيل: …» from `sla_last` |
 | `move` (A2) | «نقل الملف إن لم يُستلم» | On: «عندما لا يستلم الخبير الملف في مهلته، يُرسل وحده إلى الخبير التالي.» Off: «عندما لا يستلم الخبير الملف في مهلته، يصلك تنبيه لترسله بنفسك.» Unknown: the «On» sentence unchanged | Follows `assign`: `true` ⇒ chip «وحده»; `false` ⇒ chip «يسألني»; `null` ⇒ chip «غير متاح بعد» | `true`/`false` ⇒ run text of `sla_last`; `null` ⇒ «تعذّر جلب حالة التوزيع» |
-| `unclaimed_refund` (A3) | «ردّ مبلغ الملف الذي لم يستلمه أحد» | «عندما تمر مهلة الاستلام بعد الدفع دون أن يستلم أي خبير الملف، يُردّ المبلغ كاملًا إلى صاحب الطلب.» | chip «وحده دائمًا» | `sla_last` |
+| `unclaimed_refund` (A3) | «ردّ مبلغ الملف الذي لا يستلمه أحد» (الصياغة المبنية؛ حارس D2 يمنع الكلمة «لم يستلمه» في ملف v2-logic.js) | «عندما تمر مهلة الاستلام بعد الدفع دون أن يستلم أي خبير الملف، يُردّ المبلغ كاملًا إلى صاحب الطلب.» | chip «وحده دائمًا» | `sla_last` |
 | `consult_refund` (A4) | «ردّ مبلغ الاستشارة عند تأخر الرد» | «عندما لا يرد الخبير على الاستشارة في المهلة الموعودة، يُردّ المبلغ إلى محفظة صاحب الطلب.» | chip «وحده دائمًا» | `sla_last` |
 | `release` (A5) | «تحرير أجر الخبير بعد التسليم» | When B2 `release_hours` exists: «عندما تمر <U(hours/24 when divisible by 24, else hours)> على التسليم دون اعتراض، يتحرّر أجر الخبير.» When it is null: «عندما تمر مهلة الاعتراض بعد التسليم دون اعتراض، يتحرّر أجر الخبير.» | chip «وحده دائمًا» | `sla_last` |
 | `case_release` (A6) | «تحرير مراحل القضية» | «عندما تمر مهلة المرحلة دون اعتراض، يتحرّر أجرها.» | chip «وحده دائمًا» | `sla_last` |
@@ -271,7 +271,7 @@ A focus sheet:
 ### 4.5 The brain line (facts only, at most one button)
 Pick the **first** case that is true:
 1. opsQueue alerts contain a run used by a rule ⇒ «<cleaned alert>» with no button. It is a fact; the founder cannot restart a run from here.
-2. B2 `auto_assign.value === false` and opsQueue `expert_files_awaiting_assignment` > 0 ⇒ «التوزيع التلقائي متوقّف، و<U(n, ملف)> ينتظر توزيعك» with the button «افتح الملفات» (`openSection('files')`).
+2. B2 `auto_assign.value === false` and opsQueue `expert_files_awaiting_assignment` > 0 ⇒ «التوزيع التلقائي متوقّف، وينتظر توزيعك: <U(n, ملف)>» with the button «افتح الملفات» (`openSection('files')`).
 3. Today's auto count > 0 ⇒ «وُزّع اليوم <U(n, ملف)> وحده<, وغُيّر خبير <U(m)> منها يدويًا when m > 0>.» with no button.
 4. Sources ok and nothing happened ⇒ «لم يوزّع العقل شيئًا اليوم، وكل ما يعمل وحده يعمل.» with no button. The second clause is only included when there are no alerts **and** opsQueue loaded.
 5. A source failed ⇒ «تعذّر جلب بعض ما يفعله العقل: <names>. لا نعرف الصورة كاملة.» Names: «الملفات» (B1), «حالة ما يعمل وحده» (opsQueue), «القواعد» (B2).

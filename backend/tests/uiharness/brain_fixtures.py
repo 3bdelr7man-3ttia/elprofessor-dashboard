@@ -174,12 +174,19 @@ AGENTS = [('articles', 'المقالات والمحتوى'), ('seo', 'تحسين
 def seed_brain_dash(appmod, used=3, today_reports=('articles', 'master'), data_only=('marketing',), reset=True):
     """يزرع تقريرًا لكل مساعد: القديم قبل ثلاثة أيام، وما في `today_reports` اليوم. `data_only` تقاريره أرقام فقط. ويضبط عدّاد اليوم `used`."""
     m = appmod
+    import v2_brain_routes
     with m.app.app_context():
         if reset:
-            import v2_brain_routes
             v2_brain_routes._model(m.db).query.delete()
             m.AgentReport.query.delete()
             m.AIDailyUsage.query.delete()
+            m.AuditLog.query.filter(m.AuditLog.action.in_(v2_brain_routes.HISTORY_ACTIONS)).delete(synchronize_session=False)
+            m.db.session.commit()
+            # تاريخ تغيير نظيف: أُوقف قبل ٣ ساعات ثم شُغّل قبل ساعتين (فلا تظهر في الورقة «الآن» من خطوات اللقطة).
+            now = datetime.datetime.utcnow()
+            for hrs, on in ((3, False), (2, True)):
+                m.db.session.add(m.AuditLog(actor_email='admin@local.test', action='expert_file.auto_assign', target='settings',
+                                            meta_json=m.json.dumps({'auto_assign': on}), created_at=now - datetime.timedelta(hours=hrs)))
             m.db.session.commit()
         for aid, label in AGENTS:
             fresh = aid in today_reports

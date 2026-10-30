@@ -194,28 +194,13 @@
     var t = d.tiles.filter(function (x) { return x.key === key; })[0];
     if (!t) return;
     if (t.internal) {
-      if (host().openSection) { host().openSection('brain', 'log'); return; }
-      S.mode = 'brain'; redraw(); return;
+      if (host().openSection) host().openSection('brain', 'log');       // سجل العقل القديم اتشال: القسم الجديد «العقل وقواعده» هو الوحيد
+      return;
     }
     // D2: مربّعا الملفات والنزاعات يفتحان لوحة التذاكر (لما الغلاف الجديد شغّال) بدل الوارد القديم.
     // D3: «الفلوس» و«الكتب» كذلك (تبويبهما الأول: نظرة · مراجعة العروض).
     if ((key === 'files' || key === 'disputes' || key === 'money' || key === 'books') && window.V2SHELL && V2SHELL.on && host().openSection) { host().openSection(key); return; }
     if (host().goOps) host().goOps(t.dest, t.land);
-  }
-
-  // —— سجل العقل اليوم (بلا «اعكس» في D1)
-  function drawBrain(v, d) {
-    var log = d.brainLog;
-    var body;
-    if (!log) body = '<p class="v2-empty">تعذّر جلب الوارد — لا نعرف ما وزّعه العقل.</p>';
-    else if (!log.length) body = '<p class="v2-empty">لم يوزّع العقل شيئًا اليوم.</p>';
-    else body = '<ul class="v2-log">' + log.map(function (e) {
-      return '<li><time>' + esc(e.time) + '</time><div><b>وزّع «' + esc(e.title) + '» إلى ' + esc(e.who) + '</b>' + (e.why ? '<p>' + esc(e.why) + '</p>' : '') + '</div></li>';
-    }).join('') + '</ul>';
-    v.innerHTML = '<div class="v2">' + header(d) + '<div class="v2-ftop"><button class="v2-link" data-a="back">' + BACK + 'العودة إلى اللوحة</button></div>'
-      + '<section class="v2-panel"><div class="v2-panel-h"><img class="v2-av" src="' + img('brain-avatar') + '" alt=""><h2>سجل العقل اليوم</h2></div>' + body + '</section></div>';
-    wireCommon(v, d);
-    v.querySelector('[data-a="back"]').onclick = function () { S.mode = 'board'; redraw(); };
   }
 
   // —— وضع التركيز: بطاقة واحدة
@@ -554,7 +539,6 @@
     var d = compute();
     S.sig = signature();
     if (S.mode === 'focus') drawFocus(v, d);
-    else if (S.mode === 'brain') drawBrain(v, d);
     else drawBoard(v, d);
     // الغلاف الجديد يخفي ترويسة القسم وتبويباته أثناء وضع التركيز.
     try { var ap = document.querySelector('.app'); if (ap) ap.classList.toggle('v2-focus', S.mode === 'focus'); } catch (e) {}
@@ -584,7 +568,8 @@
   V2.sourcesSignature = function () { return signature() + '|' + SOURCES.map(function (k) { return stateOf(k); }).join(''); };
   V2.mode = function () { return S.mode; };
   V2.setMode = function (m) {
-    S.mode = m === 'brain' ? 'brain' : 'board';
+    S.mode = 'board';
+    if (m === 'brain' && host().openSection) setTimeout(function () { host().openSection('brain', 'log'); }, 0);   // رابط قديم v2mode=brain ⇒ القسم الجديد
     S.away = false; S.resume = false; S.panel = null; S.err = ''; S.busy = false;
   };
 })();

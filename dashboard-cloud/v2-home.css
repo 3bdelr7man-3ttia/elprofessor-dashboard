@@ -123,12 +123,6 @@
 .v2-panel-h h2{margin:0;font:800 22px 'Cairo',sans-serif}
 .v2-panel-h .v2-av{width:52px;height:52px;border-color:var(--v2-paper2)}
 .v2-empty{color:#6B665C;font-size:15px;margin:6px 0}
-.v2-log{list-style:none;margin:0;padding:0;display:grid;gap:12px}
-.v2-log li{display:flex;gap:14px;border-top:1px solid var(--v2-line);padding-top:12px}
-.v2-log li:first-child{border-top:0;padding-top:0}
-.v2-log time{font:800 14px 'Cairo',sans-serif;color:var(--v2-wine);min-width:76px}
-.v2-log b{font-weight:700}
-.v2-log p{margin:2px 0 0;color:#6B665C;font-size:13.5px}
 .v2-pill{position:fixed;z-index:70;bottom:22px;inset-inline-start:50%;transform:translateX(50%);background:var(--v2-ink,#21262E);color:#fff;border:0;border-radius:999px;padding:14px 26px;min-height:52px;font:800 16px 'Cairo',sans-serif;box-shadow:0 12px 30px rgba(0,0,0,.3);cursor:pointer}
 
 @media(max-width:1180px){

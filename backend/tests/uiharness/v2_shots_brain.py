@@ -47,8 +47,8 @@ def b_check(page, name):
     sw = page.evaluate("() => Math.max(document.documentElement.scrollWidth, document.body.scrollWidth, (document.querySelector('.content')||{}).scrollWidth||0)")
     if sw > w + 1:
         PROBLEMS.append('%s: تمرير أفقي (%s > %s)' % (name, sw, w))
-    small = page.evaluate("""() => [...document.querySelectorAll('.v2sb button, .v2sb a[href], .v2sb input, .v2sb [role=radio], #epModal .v2sbm button, #epModal .v2sbm input')]
-      .filter(b => b.offsetParent && !b.classList.contains('v2sb-person'))
+    small = page.evaluate("""() => [...document.querySelectorAll('.v2sb button, .v2sb a[href], .v2sb input, .v2sb textarea, .v2sb [role=radio], #epModal .v2sbm button, #epModal .v2sbm input')]
+      .filter(b => b.offsetParent)
       .map(b => [b.className || b.tagName, Math.round(b.getBoundingClientRect().height)]).filter(x => x[1] < 44)""")
     if small:
         PROBLEMS.append('%s: أهداف أقل من ٤٤px: %r' % (name, small[:4]))
@@ -80,7 +80,9 @@ def b_check(page, name):
         PROBLEMS.append('%s: أكثر من h1 أو بلا h1' % name)
 
 
-def b_shot(page, name, keep_scroll=False):
+def b_shot(page, name, keep_scroll=False, keep_toast=False):
+    if not keep_toast:        # توستات الخطوات السابقة لا تدخل اللقطة: كل لقطة تمثّل حالتها الصافية
+        page.evaluate("() => { const t = document.getElementById('toasts'); if (t) t.innerHTML = ''; }")
     if not keep_scroll:
         page.evaluate("() => { const c = document.querySelector('.content'); if (c) c.scrollTop = 0; window.scrollTo(0, 0); }")
     path = os.path.join(vs.OUT, name)
@@ -231,6 +233,21 @@ def flow(browser, h, pre, viewport, mobile):
     page.click('#v2sbNo')
     page.wait_for_function("() => !document.getElementById('epModal')")
 
+    # ============================================================ 09 · ورقة القاعدة (قبل أي تغيير من الخطوات: تاريخ نظيف من البيانات)
+    page.click('.v2sb-rt[data-key="assign"]')
+    page.wait_for_selector('#epModal .v2sbm #v2sbGo')
+    sheet = txt(page, '#epModal')
+    if 'متى يعمل' not in sheet or 'أين ترى نتيجته' not in sheet or 'شُغّل بواسطة' not in sheet or 'أُوقف بواسطة' not in sheet:
+        PROBLEMS.append(pre + '09: ورقة القاعدة ناقصة: %s' % sheet[:200])
+    b_shot(page, pre + '09-rule-sheet.jpg')
+    page.click('#v2sbX')
+    page.wait_for_function("() => !document.getElementById('epModal')")
+    page.click('.v2sb-rt[data-key="release"]')
+    page.wait_for_selector('#epModal .v2sbm')
+    if '٣ أيام' not in txt(page, '#epModal'):
+        PROBLEMS.append(pre + '09: مهلة التحرير ٣ أيام غايبة')
+    page.click('#v2sbX')
+    page.wait_for_function("() => !document.getElementById('epModal')")
     # ============================================================ 03/04 · تأكيد المفتاح
     page.evaluate("() => document.querySelector('.v2sb-sw').scrollIntoView({block: 'center'})")
     page.click('.v2sb-sw [data-v="0"]')
@@ -265,22 +282,6 @@ def flow(browser, h, pre, viewport, mobile):
     page.wait_for_function("() => !document.getElementById('epModal')", timeout=15000)
     page.wait_for_function("() => document.querySelector('.v2sb-sw [data-v=\"1\"][aria-checked=\"true\"]')", timeout=15000)
 
-    # ============================================================ 09 · ورقة القاعدة (بعد تغييرين = تاريخ)
-    page.wait_for_timeout(400)
-    page.click('.v2sb-rt[data-key="assign"]')
-    page.wait_for_selector('#epModal .v2sbm #v2sbGo')
-    sheet = txt(page, '#epModal')
-    if 'متى يعمل' not in sheet or 'أين ترى نتيجته' not in sheet or 'شُغّل بواسطة' not in sheet or 'أُوقف بواسطة' not in sheet:
-        PROBLEMS.append(pre + '09: ورقة القاعدة ناقصة: %s' % sheet[:200])
-    b_shot(page, pre + '09-rule-sheet.jpg')
-    page.click('#v2sbX')
-    page.wait_for_function("() => !document.getElementById('epModal')")
-    page.click('.v2sb-rt[data-key="release"]')
-    page.wait_for_selector('#epModal .v2sbm')
-    if '٣ أيام' not in txt(page, '#epModal'):
-        PROBLEMS.append(pre + '09: مهلة التحرير ٣ أيام غايبة')
-    page.click('#v2sbX')
-    page.wait_for_function("() => !document.getElementById('epModal')")
     writes_ok(rec, pre + '01-09')
     page.close()
 
@@ -289,7 +290,7 @@ def flow(browser, h, pre, viewport, mobile):
     rec2 = Rec()
     page = open_brain(browser_ctx(browser, h, tall, mobile), rec2)
     line = txt(page, '.v2sb-line')
-    if not line.startswith('التوزيع التلقائي متوقّف، و') or 'افتح الملفات' not in line:
+    if not line.startswith('التوزيع التلقائي متوقّف، وينتظر توزيعك: ') or 'افتح الملفات' not in line:
         PROBLEMS.append(pre + '02: سطر العقل «%s»' % line)
     b_shot(page, pre + '02-auto-off.jpg')
     page.click('.v2sb-line [data-a="goto"]')
@@ -325,6 +326,19 @@ def flow(browser, h, pre, viewport, mobile):
     if not desk:
         seg(page, 'log')
         b_shot(page, pre + '06b-sources-down-log.jpg')
+    page.close()
+
+    # ============================================================ 18 · سجل التوزيع غير موجود على المنصة (لا نعرف ⇒ لا نقول «لم يحدث شيء»)
+    setup(h, entries=False, dash_kw={'today_reports': (), 'used': 0})
+    h.ef.today_status = (404, {'detail': 'Not Found'})
+    page = open_brain(browser_ctx(browser, h, tall, mobile), Rec())
+    seg(page, 'log')
+    info = page.evaluate("""() => ({elephant: !!document.querySelector('.v2sb-empty'), says: document.body.innerText.indexOf('لم يحدث شيء وحده اليوم') >= 0,
+      note: [...document.querySelectorAll('.v3-warn')].map(n => n.textContent.trim()), na: !!document.querySelector('.v2sb-na') && document.querySelector('.v2sb-na b').textContent,
+      discs: [...document.querySelectorAll('.v2sb-disc b')].map(b => b.textContent)})""")
+    if info['elephant'] or info['says'] or info['na'] != 'غير متاح بعد' or 'سجل التوزيع غير موجود على المنصة بعد' not in info['note'] or info['discs'] != ['غير متاح بعد', 'غير متاح بعد']:
+        PROBLEMS.append(pre + '18: سجل التوزيع غير موجود لازم «غير متاح بعد» بلا فيل ولا «لم يحدث شيء»: %r' % info)
+    b_shot(page, pre + '18-log-missing.jpg')
     page.close()
 
     # ============================================================ 07 · يوم فاضي
@@ -395,7 +409,7 @@ def flow(browser, h, pre, viewport, mobile):
     toast = page.inner_text('#toasts')
     if 'كُتب تقرير «المبيعات»' not in toast:
         PROBLEMS.append(pre + '14: توست التشغيل «%s»' % toast)
-    b_shot(page, pre + '14b-after-run.jpg')
+    b_shot(page, pre + '14b-after-run.jpg', keep_toast=True)
     writes_ok(rec3, pre + '10-14')
     page.close()
     # 12 · سقف اليوم

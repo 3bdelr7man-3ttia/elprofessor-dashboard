@@ -2051,19 +2051,19 @@
   var BR_AGENTS = {
     master: ['الصورة الكاملة', 'يجمع ما كتبه المساعدون في صورة واحدة وأهم ثلاث خطوات', 'brain-avatar'],
     articles: ['المقالات', 'المسودات التي تنتظر الاعتماد، وما لم نكتب عنه بعد', 'content'],
-    seo: ['الظهور في البحث', 'هل تظهر مقالاتنا لمن يبحث عنها، وهل ننشر بانتظام', 'content'],
-    automation: ['الأعمال المتكرّرة', 'ما يتكرّر كل يوم في اللوحة ويمكن أن يعمل وحده', 'brain'],
+    seo: ['الظهور في البحث', 'هل تظهر مقالاتنا لمن يبحث عنها، وهل ننشر بانتظام', 'reports'],
+    automation: ['الأعمال المتكرّرة', 'ما يتكرّر كل يوم في اللوحة ويمكن أن يعمل وحده', 'files'],
     sales: ['المبيعات', 'من سأل ولم يشترِ بعد، والخطوة التالية مع كل واحد', 'market'],
     marketing: ['التسويق', 'أي بلد وأي فئة نخاطب، بناءً على ما يطلبه الناس', 'marketing'],
     platform: ['المنصة', 'ما ينتظر الاعتماد، وما يبدو غير معتاد في الأرقام', 'company'],
-    topics: ['الموضوعات', 'ما نكتب عنه بعد ذلك، من أسئلة الناس الحقيقية', 'content'],
-    incoming: ['ما يطلبه الزوار', 'من أين يأتي الناس وماذا يسألون', 'reports'],
-    dev: ['سلامة الأنظمة', 'الأعطال وما يحتاج إصلاحًا', 'company'],
+    topics: ['الموضوعات', 'ما نكتب عنه بعد ذلك، من أسئلة الناس الحقيقية', 'books'],
+    incoming: ['ما يطلبه الزوار', 'من أين يأتي الناس وماذا يسألون', 'people'],
+    dev: ['سلامة الأنظمة', 'الأعطال وما يحتاج إصلاحًا', 'disputes'],
     finance: ['المالية', 'الدخل والمصروف وما قد يتأخر', 'money']
   };
   function v2sBrainAgentInfo(id, serverLabel, serverDesc) {
     var a = BR_AGENTS[id];
-    return a ? { label: a[0], desc: a[1], img: a[2] } : { label: str(serverLabel) || str(id), desc: str(serverDesc), img: 'brain' };
+    return a ? { label: a[0], desc: a[1], img: a[2] } : { label: str(serverLabel) || str(id), desc: str(serverDesc), img: 'reports' };
   }
   // سجل اليوم كاملًا: مدخلات التوزيع (التي وزّعها العقل + تغيير المؤسس اللاحق) وتقارير المساعدين المكتوبة اليوم، الأحدث أولًا.
   function v2sBrainLogRows(ent, agents, since) {
@@ -2216,7 +2216,7 @@
     if (stopped.length) return { text: stopped[0], button: null };
     var A = S && S.auto_assign && typeof S.auto_assign.value === 'boolean' ? S.auto_assign.value : null;
     var waiting = Q ? qn(Q, 'expert_files_awaiting_assignment') : 0;
-    if (A === false && waiting > 0) return { text: 'التوزيع التلقائي متوقّف، و' + brFile(waiting) + ' ينتظر توزيعك', button: { label: 'افتح الملفات', section: 'files' } };
+    if (A === false && waiting > 0) return { text: 'التوزيع التلقائي متوقّف، وينتظر توزيعك: ' + brFile(waiting), button: { label: 'افتح الملفات', section: 'files' } };
     var n = ent && typeof ent.autoCount === 'number' ? ent.autoCount : null;
     var least = ent && (ent.partial || ent.fromInbox) ? 'على الأقل ' : '';
     if (n != null && n > 0) {

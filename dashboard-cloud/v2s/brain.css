@@ -58,14 +58,14 @@
 .v2sb-sw button[aria-checked="true"].ask{background:var(--wine);color:#fff}
 .v2sb-sw button:disabled{opacity:.6;cursor:wait}
 .v2sb-sw button:not([aria-checked="true"]):hover{background:rgba(33,38,46,.07)}
-.v2sb button:focus-visible,.v2sbm button:focus-visible,.v2sb input:focus-visible,.v2sb a:focus-visible{outline:3px solid rgba(158,43,78,.45);outline-offset:2px}
+.v2sb button:focus-visible,.v2sbm button:focus-visible,.v2sb textarea:focus-visible,.v2sb a:focus-visible{outline:3px solid rgba(158,43,78,.45);outline-offset:2px}
 .v2sb-del{min-height:44px;padding:0 14px;font-size:13.5px}
 
 /* قاعدة تريدها */
 .v2sb-want{background:#FBF6F0;border:1px solid #F0E4D6;border-radius:16px;padding:14px 16px;margin-top:14px;display:grid;gap:8px}
 .v2sb-want h3{font:800 16.5px 'Cairo',sans-serif;margin:0}
-.v2sb-want input{width:100%;min-height:46px;border:1px solid #E1D6C6;border-radius:12px;padding:0 14px;font:500 15px 'IBM Plex Sans Arabic','Cairo',sans-serif;background:#fff;color:var(--ink)}
-.v2sb-want input::placeholder{color:#9A9488}
+.v2sb-want textarea{display:block;width:100%;min-height:46px;border:1px solid #E1D6C6;border-radius:12px;padding:10px 14px;font:500 15px/1.6 'IBM Plex Sans Arabic','Cairo',sans-serif;background:#fff;color:var(--ink);resize:none;box-sizing:border-box}
+.v2sb-want textarea::placeholder{color:#9A9488}
 .v2sb-hint{font-size:13px;color:var(--mute);line-height:1.7}
 .v2sb-want .v3-btn1{justify-self:start;min-width:132px}
 
@@ -79,7 +79,7 @@
 .v2sb-lr.muted .v2sb-lt>span{color:var(--mute)}
 .v2sb-la{min-height:44px;padding:0 10px;border:0;border-radius:10px;background:transparent;color:var(--wine);font:800 13.5px 'Cairo',sans-serif;text-decoration:underline;cursor:pointer;white-space:nowrap}
 .v2sb-la:hover{background:rgba(158,43,78,.07)}
-.v2sb-person{color:var(--wine);font-weight:700;text-decoration:none;white-space:nowrap;border-bottom:1px dashed rgba(158,43,78,.5)}
+.v2sb-person{display:inline-block;padding:11px 4px;margin:-11px -4px;color:var(--wine);font-weight:700;text-decoration:underline dashed rgba(158,43,78,.5);text-underline-offset:5px;white-space:nowrap}
 .v2sb-person:hover{background:rgba(158,43,78,.07)}
 .v2sb-more{margin-top:10px;width:100%}
 .v2sb-empty{padding:26px 16px}
@@ -111,6 +111,18 @@
 .v2sb-hact{display:flex;gap:8px;margin-top:auto;flex-wrap:wrap}
 .v2sb-hact .v3-btn2{flex:1 1 auto;min-width:96px}
 
+/* بطاقة يتيمة في آخر صف تتمدّد بالعرض (أفقيًا) فلا يبقى فراغ */
+@media(min-width:1180px){
+  .v2sb-grid>.v2sb-hc:last-child:nth-child(3n+1){grid-column:1/-1}
+  .v2sb-grid>.v2sb-hc:last-child:nth-child(3n+2){grid-column:span 2}
+  .v2sb-grid>.v2sb-hc:last-child:nth-child(3n+1),.v2sb-grid>.v2sb-hc:last-child:nth-child(3n+2){flex-direction:row}
+  .v2sb-grid>.v2sb-hc:last-child:nth-child(3n+1) .v2sb-hph,.v2sb-grid>.v2sb-hc:last-child:nth-child(3n+2) .v2sb-hph{height:auto;width:260px;flex:none;border-bottom:0;border-inline-end:1px solid var(--line)}
+}
+@media(min-width:761px) and (max-width:1179px){
+  .v2sb-grid>.v2sb-hc:last-child:nth-child(2n+1){grid-column:1/-1;flex-direction:row}
+  .v2sb-grid>.v2sb-hc:last-child:nth-child(2n+1) .v2sb-hph{height:auto;width:240px;flex:none;border-bottom:0;border-inline-end:1px solid var(--line)}
+}
+
 /* —— الأوراق */
 #epModal .modal:has(.v2sbm){max-width:620px}
 #epModal .modal:has(.v2sbm) .mh{background:var(--ink)}
@@ -123,7 +135,8 @@
 .v2sbm .v2sb-hist li{background:#FBFAF7;border-radius:10px;padding:6px 12px}
 .v2sbm .v2sb-by{font-size:12px;font-weight:700;color:var(--mute);margin:-4px 0 10px}
 .v2sbm .v2sb-wait{font:800 14.5px 'Cairo',sans-serif;background:var(--amber-bg);color:#6B4A00;border-radius:12px;padding:8px 14px;margin-bottom:6px}
-.v2sbm .v2sb-st{font-size:13px;color:var(--mute)}
+.v2sbm .v2sb-st{grid-column:auto;grid-row:auto;margin:0;font-size:13px;color:var(--mute)}
+.v2sb-na{padding:26px 16px}
 .v2sbm .v3-btn2{min-height:48px}
 
 /* —— تابلت ودونه: عرض واحد من اثنين */
@@ -160,7 +173,7 @@
   .v2sb-row.req .v2sb-rtx,.v2sb-row.req .v2sb-ctl,.v2sb-row.req .v2sb-st{grid-column:1;grid-row:auto}
   .v2sb-row.req .v2sb-ctl{justify-content:space-between;margin:4px 0}
   .v2sb-del{min-height:52px}
-  .v2sb-want input{min-height:52px}
+  .v2sb-want textarea{min-height:64px}
   .v2sb-want .v3-btn1{width:100%}
   .v2sb-lr{grid-template-columns:54px minmax(0,1fr);row-gap:0}
   .v2sb-lr .v2sb-la{grid-column:2;justify-self:start;min-height:52px;padding:0 6px}

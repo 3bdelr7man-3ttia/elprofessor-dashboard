@@ -130,6 +130,8 @@
   function lineHtml(text, btn) {
     return '<div class="v3-brain v2sb-line">' + AV + '<p>' + esc(text) + '</p>' + (btn ? '<button type="button" class="v3-btn2" data-a="goto" data-s="' + esc(btn.section) + '">' + esc(btn.label) + '</button>' : '') + '</div>';
   }
+  // البريد الإلكتروني داخل جملة عربية يُعزل اتجاهيًا (وإلا يتبعثر ترتيب الكلمات حوله).
+  function bidi(t) { return esc(t).replace(/[^\s<>&]+@[^\s<>&]+/g, function (m) { return '<bdi dir="ltr">' + m + '</bdi>'; }); }
   var CHEV = '<svg viewBox="0 0 24 24" class="v2sb-chev" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>';
 
   // ------------------------------------------------------------------ التبويب الأول: القواعد وسجل اليوم
@@ -148,7 +150,7 @@
     return '<div class="v2sb-row' + (sw ? ' has-sw' : '') + (r.stopped ? ' stopped' : '') + '" data-key="' + esc(r.key) + '">'
       + '<button type="button" class="v2sb-rt" data-a="rule" data-key="' + esc(r.key) + '">' + esc(r.title) + '</button>'
       + '<div class="v2sb-ctl">' + (r.stopped && sw ? '<span class="v2sb-chip tone-stop">متوقّف</span>' : '') + controlHtml(r) + '</div>'
-      + '<p class="v2sb-st">' + esc(r.line) + '</p></div>';
+      + '<p class="v2sb-st">' + bidi(r.line) + '</p></div>';
   }
   function requestedRow(x) {
     return '<div class="v2sb-row req" data-id="' + esc(x.id) + '"><p class="v2sb-rtx">' + esc(x.text) + '</p>'
@@ -171,7 +173,7 @@
     if (req.length) groups.push({ key: 'requested', title: 'قواعد طلبتها', count: req.length, rowsHtml: req.map(requestedRow).join('') });
     var warn = (st === 'error' || st === 'closed') ? '<div class="v3-warn" role="status">تعذّر جلب حالة القواعد الآن. ما يظهر «' + NA + '» ليس معناه أنه متوقف. ' + retryBtn('retry-rules') + '</div>' : '';
     var want = '<div class="v2sb-want"><h3>قاعدة تريدها</h3>'
-      + '<input id="v2sbWant" type="text" maxlength="300" autocomplete="off" aria-label="اكتب القاعدة التي تريدها" placeholder="مثلًا: لا توزّع ملفات الخليج على خبير من مصر" value="' + esc(S.ruleText) + '"' + (S.ruleBusy ? ' disabled' : '') + '>'
+      + '<textarea id="v2sbWant" rows="' + (mobile() ? 2 : 1) + '" maxlength="300" autocomplete="off" aria-label="اكتب القاعدة التي تريدها" placeholder="مثلًا: لا توزّع ملفات الخليج على خبير من مصر"' + (S.ruleBusy ? ' disabled' : '') + '>' + esc(S.ruleText) + '</textarea>'
       + '<p class="v2sb-hint">تُحفظ هنا حتى تُبنى في المنصة، ولا تعمل الآن.</p>'
       + (S.ruleErr ? '<div class="v3-err" role="alert">' + esc(S.ruleErr) + '</div>' : '')
       + '<button type="button" class="v3-btn1" data-a="save" id="v2sbSave"' + (S.ruleBusy || S.ruleText.trim().length < 6 ? ' disabled' : '') + '>' + (S.ruleBusy ? 'جارٍ الحفظ…' : 'احفظها') + '</button></div>';
@@ -195,6 +197,7 @@
     else if (ent && ent.partial) notes += '<div class="v3-warn" role="status">معروض أحدث ' + U.ar(200) + ' ملف فقط، وقد يكون في سجل اليوم ما لم يظهر</div>';
     if (st === 'idle' || st === 'loading') body = skeleton(3);
     else if (!ent) body = '<div class="v3-empty"><b>تعذّر جلب سجل الملفات</b><p>لا نعرف ما وُزّع اليوم، فلا تعتبر السجل فارغًا.</p>' + retryBtn('retry-today') + '</div>';
+    else if (ent.missing && !rows.length) body = '<div class="v3-empty v2sb-na"><b>' + NA + '</b><p>لا نعرف ما وُزّع اليوم، فلا تعتبر السجل فارغًا.</p></div>';
     else if (!rows.length) body = '<div class="v3-empty v2sb-empty"><img src="' + img('brain-avatar') + '" alt=""><b>لم يحدث شيء وحده اليوم حتى الآن</b></div>';
     else {
       var shown = S.expandLog ? rows : rows.slice(0, 12);
@@ -283,12 +286,13 @@
     var res = L.v2sBrainRules(rulesInput()), r = res.rows.filter(function (x) { return x.key === key; })[0];
     if (!r) return;
     var body = sectionBlock('متى يعمل', '<p>' + esc(r.sentence) + '</p>')
-      + sectionBlock('آخر تشغيل', '<p>' + esc(r.runKey ? r.run.text : r.line) + '</p>' + (key === 'assign' && r.line !== r.run.text ? '<p class="v2sb-st">' + esc(r.line) + '</p>' : ''));
+      + sectionBlock('آخر تشغيل', '<p>' + bidi(String(r.runKey ? r.run.text : r.line).replace(/^آخر تشغيل: /, '')) + '</p>')
+      + (key === 'assign' && r.line !== r.run.text ? sectionBlock('آخر تغيير', '<p>' + bidi(String(r.line).replace(/^آخر تغيير: /, '')) + '</p>') : '');
     if (key === 'assign') {
       var hist = ((data('rules') && data('rules').history) || []).filter(function (h) { return h.action === 'expert_file.auto_assign'; });
       body += sectionBlock('تاريخ التغيير', hist.length ? '<ul class="v2sb-hist">' + hist.map(function (h) {
         var on = h.meta && h.meta.auto_assign === true;
-        return '<li>' + esc((U.agoText(L.v2sBrainTime(h.at), now()) || NA) + ' — ' + (on ? 'شُغّل' : 'أُوقف') + ' بواسطة ') + '<span dir="ltr">' + esc(h.actor_email) + '</span></li>';
+        return '<li>' + esc((U.agoText(L.v2sBrainTime(h.at), now()) || NA) + ' — ' + (on ? 'شُغّل' : 'أُوقف') + ' بواسطة ') + '<bdi dir="ltr">' + esc(h.actor_email) + '</bdi></li>';
       }).join('') + '</ul>' : '<p>لم يتغيّر من هذه اللوحة</p>');
     }
     if (key === 'release') body += sectionBlock('المهلة', '<p>' + (r.hours ? esc(U.U(r.hours, ['ساعة', 'ساعتان', 'ساعات', 'ساعة'])) : NA) + '</p>');

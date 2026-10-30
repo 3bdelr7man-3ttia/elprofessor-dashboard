@@ -626,7 +626,7 @@ def test_line_priority_and_cases():
     r = line(queue=stopped_q, settings=off, entries=ent)
     assert r['text'].startswith('حارس المهلة والاسترداد: متوقفة') and r['button'] is None
     r = line(queue=QUEUE_OK, settings=off, entries=ent)
-    assert r['text'] == 'التوزيع التلقائي متوقّف، و٣ ملفات ينتظر توزيعك' and r['button'] == {'label': 'افتح الملفات', 'section': 'files'}
+    assert r['text'] == 'التوزيع التلقائي متوقّف، وينتظر توزيعك: ٣ ملفات' and r['button'] == {'label': 'افتح الملفات', 'section': 'files'}
     r = line(queue=dict(QUEUE_OK, expert_files_awaiting_assignment=0), settings=off, entries=ent)
     assert r['text'] == 'وُزّع اليوم ٤ ملفات وحده، وغُيّر خبير ملف واحد منها يدويًا.' and r['button'] is None
     r = line(queue=QUEUE_OK, settings=B2_OK, entries=dict(ent, changedCount=0, autoCount=1))
@@ -684,7 +684,7 @@ def test_helpers_data_only_and_unknown_label():
     flags = {c['id']: c['dataOnly'] for c in H['cards']}
     assert flags['seo'] is True and flags['articles'] is False
     odd = v2_node.logic('v2sBrainHelpers', {'agents': [{'agent': 'zzz', 'label': 'اسم الخادم', 'desc': 'وصف', 'summary': ''}]}, None, None)
-    assert odd['cards'][0]['label'] == 'اسم الخادم' and odd['cards'][0]['img'] == 'brain' and odd['cards'][0]['hasReport'] is False
+    assert odd['cards'][0]['label'] == 'اسم الخادم' and odd['cards'][0]['img'] == 'reports' and odd['cards'][0]['hasReport'] is False
 
 
 @needs_node
@@ -825,3 +825,57 @@ def test_dashboard_untouched_old_screen_still_present():
     """الشاشة القديمة `viewAI` تبقى للمفتاح المقفول كما هي."""
     html = _read('dashboard-cloud', 'index.html')
     assert 'function viewAI(v)' in html and "if(current==='ai')" in html or 'viewAI(v)' in html
+
+
+# ——— جولة التصليح ———
+@needs_node
+def test_line_waiting_phrase_is_grammatical_for_every_count():
+    off = dict(B2_OK, auto_assign=dict(B2_OK['auto_assign'], value=False))
+    for n, word in ((1, 'ملف واحد'), (2, 'ملفان'), (3, '٣ ملفات'), (9, '٩ ملفات'), (11, '١١ ملفًا')):
+        r = v2_node.logic('v2sBrainLine', {'queue': dict(QUEUE_OK, expert_files_awaiting_assignment=n), 'settings': off, 'entries': None})
+        assert r['text'] == 'التوزيع التلقائي متوقّف، وينتظر توزيعك: ' + word, (n, r['text'])
+
+
+@needs_node
+def test_missing_bridge_entries_are_unknown_not_zero():
+    e = v2_node.logic('v2sBrainEntries', {'files_ok': False, 'entries': None, 'missing': True}, 0)
+    assert e['missing'] is True and e['autoCount'] is None and e['changedCount'] is None and e['entries'] == []
+    js = _read('dashboard-cloud', 'v2s', 'brain.js')
+    # الحالة الناقصة تعرض «غير متاح بعد» بلا صندوق الفيل ولا «لم يحدث شيء» (الفحص الحي في لقطة 18)
+    assert re.search(r"ent\.missing && !rows\.length\) body = '<div class=\"v3-empty v2sb-na\"><b>' \+ NA", js)
+    assert js.index('v2sb-na') < js.index('لم يحدث شيء وحده اليوم')
+
+
+@needs_node
+def test_helper_images_are_scenes_and_never_repeat_among_agents():
+    ids = ['articles', 'seo', 'automation', 'sales', 'marketing', 'platform', 'topics', 'incoming', 'dev', 'finance']
+    imgs = [v2_node.logic('v2sBrainAgentInfo', i, '', '')['img'] for i in ids]
+    assert len(set(imgs)) == len(imgs), imgs
+    assert 'brain' not in imgs and 'brain-avatar' not in imgs
+    for i in imgs:
+        assert os.path.exists(os.path.join(ROOT, 'dashboard-cloud', 'v2', 'img', i + '.jpg')), i
+
+
+def test_old_d1_brain_log_is_gone_and_old_link_redirects():
+    home = _read('dashboard-cloud', 'v2-home.js')
+    css = _read('dashboard-cloud', 'v2-home.css')
+    assert 'drawBrain' not in home and "S.mode = 'brain'" not in home and "S.mode === 'brain'" not in home
+    assert not re.search(r'\.v2-log[ {]', css)
+    assert "host().openSection('brain', 'log')" in home
+
+
+def test_rule_sheet_and_rows_isolate_emails_and_use_start_alignment():
+    js = _read('dashboard-cloud', 'v2s', 'brain.js')
+    css = _read('dashboard-cloud', 'v2s', 'brain.css')
+    assert 'function bidi(' in js and '<bdi dir="ltr">' in js
+    assert "bidi(r.line)" in js                                   # سطر صف القاعدة
+    assert "sectionBlock('آخر تغيير'" in js                       # عنوان مستقل لا سطر بلا عنوان
+    assert re.search(r'\.v2sbm \.v2sb-st\{grid-column:auto', css)  # لا يرث موضع الشبكة من صف القاعدة
+
+
+def test_person_links_and_want_box_are_touch_sized_and_do_not_clip():
+    css = _read('dashboard-cloud', 'v2s', 'brain.css')
+    js = _read('dashboard-cloud', 'v2s', 'brain.js')
+    assert re.search(r'\.v2sb-person\{display:inline-block;padding:11px 4px;margin:-11px -4px', css)
+    assert '<textarea id="v2sbWant"' in js and '<input id="v2sbWant"' not in js
+    assert re.search(r'\.v2sb-want textarea\{[^}]*resize:none', css)
