@@ -28,7 +28,8 @@ DC = os.path.join(ROOT, 'dashboard-cloud')
 NODE = __import__('shutil').which('node')
 needs_node = pytest.mark.skipif(not NODE, reason='needs node')
 PSEUDO_MODS = {'v2files', 'v2disputes', 'v2person',                       # D2: موديولات وهمية يرسمها V2D2 تحت الغلاف الجديد فقط
-               'v2m_overview', 'v2m_payouts', 'v2m_receipts', 'v2m_prices', 'v2m_shares', 'v2m_ads', 'v2b_offers', 'v2b_requests'}   # D3: يرسمها V2D3
+               'v2m_overview', 'v2m_payouts', 'v2m_receipts', 'v2m_prices', 'v2m_shares', 'v2m_ads', 'v2b_offers', 'v2b_requests',   # D3: يرسمها V2D3
+               'v2mk_social', 'v2mk_plan'}   # التسويق (الجولة النهائية): يرسمهما v2s/marketing.js
 
 
 def _read(*parts):
@@ -94,7 +95,7 @@ def test_the_tabs_match_the_approved_table():
                   ['prices', 'الأسعار', 'v2m_prices'], ['shares', 'النسب والإعدادات', 'v2m_shares'], ['ads', 'إعلانات الأعمال', 'v2m_ads'],
                   ['all', 'كل السجلات', 'finance'], ['manual', 'الإيصالات (الشاشة القديمة)', 'escrow']],
         'content': [['topics', 'المحتوى', 'topics'], ['tutorials', 'دليل الاستخدام', 'topics']],
-        'marketing': [['campaigns', 'الحملات', 'marketing']],
+        'marketing': [['campaigns', 'الحملات', 'marketing'], ['social', 'السوشيال ميديا', 'v2mk_social'], ['plan', 'خطة النشر', 'v2mk_plan']],   # الجولة النهائية: الحملات الجديدة + السوشيال + خطة النشر
         'reports': [['demand', 'تحليل الطلب', 'analysis']],
         'brain': [['log', 'سجل اليوم', 'home'], ['helpers', 'المساعدون', 'ai']],
         'company': [['invest', 'الاستثمار والشركاء', 'investment'], ['targets', 'الأهداف والتأسيس', 'targets'], ['settings', 'الإعدادات', 'settings']],
@@ -187,7 +188,7 @@ def test_an_unknown_module_is_not_mapped():
 def test_section_addresses_round_trip():
     res = _node("""const out=[];L.SECTIONS.forEach(s=>s.tabs.forEach(t=>{const h=L.sectionHash(s.key,t.key);
       out.push([s.key,t.key,h,L.parseSectionHash(h),L.parseSectionHash(h.slice(1)),L.routeFor(h)]);}));console.log(JSON.stringify(out))""")
-    assert len(res) == 35                      # ٢٥ + «كل الملفات» و«كل النزاعات» + صفحة الشخص (مخفية) + D3: الفلوس ٨ (واحد مخفي) بدل ٣، والكتب ٣ بدل ١
+    assert len(res) == 37                      # ٢٥ + «كل الملفات» و«كل النزاعات» + صفحة الشخص (مخفية) + D3: الفلوس ٨ (واحد مخفي) بدل ٣، والكتب ٣ بدل ١ + التسويق ٣ بدل ١
     for sec, tab, h, p1, p2, r in res:
         if (sec, tab) in (('people', 'person'), ('money', 'manual')):
             continue                           # تبويب مخفي بلا بريد: يرجع لأول تبويب (يُختبر في test_v2_d2)

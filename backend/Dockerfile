@@ -9,6 +9,7 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY app.py .
+COPY v2_*_routes.py ./
 RUN mkdir -p /data
 
 EXPOSE 5000
