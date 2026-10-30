@@ -15,6 +15,11 @@
 بيهبط على قسمه · المفتاح مقفول. وسكربت الفحص بيفشل لو ظهر أي أثر للقائمة القديمة والمفتاح مفتوح.
     cd backend && python3 -B tests/uiharness/v2_shots.py <out_dir> [d1|d1b]
 
+الوضع `d2` (SPEC-D2): لوحة تذاكر «ملفات الخبراء» بأعمدتها الأربعة (والموبايل على كل عمود) · تذكرة تفتح الدرج · لوحة النزاعات ·
+صفحة شخص كاملة · صفحة شخص مصادرها غير متاحة · بحث الناس · عدّاد التذكرة بعد دقيقة (ساعة مفروضة). السكربت بيفشل لو عمود فاضي، أو تمرير
+أفقي في الموبايل، أو هدف أقل من ٤٤px (والأزرار ٥٢px في الموبايل)، أو «0/null/NaN» ظاهرة بدل «غير متاح بعد».
+    cd backend && python3 -B tests/uiharness/v2_shots.py <out_dir> d2
+
 ⛔ صفر طلبات حقيقية: الداشبورد بيتنفّذ جوه العملية والمنصة جدول في الذاكرة (`v2_fixtures.V2Platform`)، وأي أصل تاني بيتقفل
 ويتسجّل. السكربت بيفشل لو خرج أي طلب غير خطوط جوجل، أو لو فحوص الصور (تمرير أفقي · undefined/NaN/null · زرار أقل من ٥٢) وقعت.
 """
@@ -584,12 +589,12 @@ def flow_d1b(browser, h, pre, viewport, mobile):
     browser.close()
     ctx = browser.context(h, 'admin', viewport, mobile)
     page = open_shell(ctx)
-    go_section(page, 'files')
+    go_section(page, 'files', 'all')          # D2: «الملفات» بقت لوحة تذاكر، والوارد القديم في تبويب «كل الملفات»
     page.wait_for_selector('.chip[data-f="all"]')
     page.click('.chip[data-f="all"]')
     page.wait_for_timeout(500)
     st = sec_state(page)
-    if st['hash'] != '#s/files/files' or st['h1'] != 'ملفات الخبراء':
+    if st['hash'] != '#s/files/all' or st['h1'] != 'ملفات الخبراء':
         PROBLEMS.append('%s43: شريحة «الكل» داخل الملفات نقلت المستخدم: %r' % (pre, st))
     srch = page.evaluate("() => getComputedStyle(document.querySelector('.topbar .search')).display")
     if (w > 760 and srch == 'none') or (w <= 760 and srch != 'none'):
@@ -633,6 +638,226 @@ def flow_d1b(browser, h, pre, viewport, mobile):
     browser.close()
 
 
+# ======================================================================= D2
+D2_BOARD_READY = ("() => window.V2SHELL && V2SHELL.on === true && document.querySelector('.v2d[data-board=\"%s\"] .v2d-col')"
+                  " && !document.querySelector('.v2d-empty')")
+
+
+def d2_check(page, name):
+    """أهداف اللمس ≥ ٤٤px (والأزرار ≥ ٥٢px في الموبايل)، ولا عدّ مختلق، ولا تمرير أفقي، والعدّاد بصيغته."""
+    w = page.viewport_size['width']
+    small = page.evaluate("""() => [...document.querySelectorAll('.v2d button, .v2d a[href], .v2-sbar button, .v2-sbar input, .v2d-res a')]
+      .filter(b => b.offsetParent && !b.classList.contains('v2d-inline')).map(b => [b.className || b.tagName, Math.round(b.getBoundingClientRect().height)])
+      .filter(x => x[1] < 44)""")
+    if small:
+        PROBLEMS.append('%s: أهداف أقل من ٤٤px: %r' % (name, small[:4]))
+    if w <= 400:
+        big = page.evaluate("""() => [...document.querySelectorAll('.v2d-btn1, .v2d-btn2, .v2d-segb, .v2d-sgo')]
+          .filter(b => b.offsetParent).map(b => [b.className, Math.round(b.getBoundingClientRect().height)]).filter(x => x[1] < 52)""")
+        if big:
+            PROBLEMS.append('%s: أزرار أقل من ٥٢px في الموبايل: %r' % (name, big[:4]))
+        sw = page.evaluate("() => Math.max(document.documentElement.scrollWidth, document.body.scrollWidth, (document.querySelector('.content')||{}).scrollWidth||0)")
+        if sw > w + 1:
+            PROBLEMS.append('%s: تمرير أفقي في الموبايل (%s > %s)' % (name, sw, w))
+    txt = page.evaluate("() => document.querySelector('.v2d') ? document.querySelector('.v2d').innerText : ''")
+    if re.search(r'(?<![\w@./-])(0|null|NaN|undefined)(?![\w@./-])', txt):
+        PROBLEMS.append('%s: صفر/null/NaN ظاهر في اللوحة' % name)
+    if re.search(r'\d', re.sub(r'[٠-٩]', '', txt)):
+        # أرقام لاتينية في النص المرئي (مسموح فقط داخل بريد أو رقم مرجع)
+        bad = [t for t in re.findall(r'\S*\d\S*', re.sub(r'[٠-٩]', '', txt)) if '@' not in t]
+        if bad:
+            PROBLEMS.append('%s: أرقام لاتينية ظاهرة: %r' % (name, bad[:3]))
+
+
+def open_d2(ctx, hash_, board=None):
+    page = ctx.new_page()
+    page.goto(DASH + '/' + hash_, wait_until='domcontentloaded')
+    page.wait_for_function(SHELL_READY, timeout=30000)
+    if board:
+        page.wait_for_function(D2_BOARD_READY % board, timeout=30000)
+    page.wait_for_timeout(500)
+    return page
+
+
+def d2_top(page):
+    page.evaluate("() => { const c = document.querySelector('.content'); if (c) c.scrollTop = 0; window.scrollTo(0, 0); }")
+
+
+def d2_shot(page, name):
+    d2_top(page)
+    shot(page, name)
+    shell_check(page, name)
+    d2_check(page, name)
+
+
+PERSON_PATHS = [('GET', '/api/bridge/experts'), ('GET', '/api/bridge/courses'), ('GET', '/api/bridge/invites'),
+                ('GET', '/api/bridge/expert-files'), ('GET', '/api/bridge/wallet-payouts'), ('GET', '/api/bridge/pending-users')]
+
+
+def flow_d2(browser, h, pre, viewport, mobile):
+    w = viewport['width']
+    h.ef = v2fx.V2Platform(d2=True)
+    ctx = browser.context(h, 'admin', viewport, mobile)
+    page = ctx.new_page()
+    page.goto(DASH + '/#s/files/files', wait_until='domcontentloaded')
+    page.wait_for_function(SHELL_READY, timeout=30000)
+    page.wait_for_function(D2_BOARD_READY % 'files', timeout=30000)
+    page.wait_for_timeout(500)
+    # —— ١) لوحة الملفات: أربعة أعمدة كلها فيها تذاكر
+    info = page.evaluate("""() => ({cols: [...document.querySelectorAll('.v2d-col')].map(c => [c.dataset.col, c.querySelectorAll('.v2d-t').length]),
+      head: (document.querySelector('.v2d-auto') || {}).innerText, more: (document.querySelector('.v2d-more') || {}).innerText,
+      h1: (document.querySelector('.v2c-h h1') || {}).textContent, on: (document.querySelector('.v2c-tab.on') || {}).textContent,
+      tabs: [...document.querySelectorAll('.v2c-tab')].map(b => b.textContent.trim()), hash: location.hash})""")
+    cols = dict(info['cols'])
+    for c in ('late', 'review', 'with', 'done'):
+        if not cols.get(c):
+            PROBLEMS.append('%s01: عمود %s فاضي' % (pre, c))
+    if cols.get('with', 0) > 3:
+        PROBLEMS.append('%s01: «عند الخبراء» أكتر من ٣ تذاكر (%s)' % (pre, cols.get('with')))
+    if not info['more'] or 'في موعدها' not in info['more']:
+        PROBLEMS.append('%s01: سطر «و N في موعدها» مش ظاهر: %r' % (pre, info['more']))
+    if not info['head'] or 'التوزيع التلقائي يعمل' not in info['head']:
+        PROBLEMS.append('%s01: سطر التوزيع التلقائي: %r' % (pre, info['head']))
+    if info['tabs'] != ['الملفات', 'الخبراء', 'كل الملفات'] or info['on'] != 'الملفات' or info['hash'] != '#s/files/files':
+        PROBLEMS.append('%s01: تبويبات الملفات: %r' % (pre, info))
+    if w <= 760:
+        for i, (col, label) in enumerate([('late', 'late'), ('review', 'review'), ('with', 'with'), ('done', 'done')]):
+            page.click('.v2d-segb[data-col="%s"]' % col)
+            page.wait_for_timeout(200)
+            vis = page.evaluate("() => [...document.querySelectorAll('.v2d-col')].filter(c => c.offsetParent).map(c => c.dataset.col)")
+            if vis != [col]:
+                PROBLEMS.append('%s02: عمود ظاهر واحد بس متوقّع (%s) لكن %r' % (pre, col, vis))
+            d2_shot(page, '%s02%s-files-%s.jpg' % (pre, 'abcd'[i], label))
+        page.click('.v2d-segb[data-col="late"]')
+        page.wait_for_timeout(200)
+    d2_shot(page, pre + '01-files-board.jpg')
+    # —— العدّاد: بعد ٦١ دقيقة (ساعة مفروضة على نفس دالة الدقيقة) النص يتغيّر لوحده بلا إعادة تحميل
+    t0 = page.evaluate("() => { const e = document.querySelector('.v2d-col[data-col=\"with\"] .v2d-time'); return e ? e.textContent : null; }")
+    page.evaluate("() => V2D2._tick(Date.now() + 61 * 60 * 1000)")
+    page.wait_for_timeout(200)
+    t1 = page.evaluate("() => { const e = document.querySelector('.v2d-col[data-col=\"with\"] .v2d-time'); return e ? e.textContent : null; }")
+    page.evaluate("() => V2D2._tick()")
+    if not t0 or t0 == t1:
+        PROBLEMS.append('%s01: العدّاد ما اتحدّثش بعد ساعة (%r ⇒ %r)' % (pre, t0, t1))
+    # —— ٢) تذكرة تفتح الدرج
+    if w <= 760:
+        page.click('.v2d-segb[data-col="late"]')
+    page.click('.v2d-col[data-col="late"] .v2d-open >> nth=0')
+    page.wait_for_function("() => location.hash === '#s/files/all' && document.querySelector('#drawer') && document.querySelector('#drawer').innerText.length > 40", timeout=15000)
+    page.wait_for_timeout(500)
+    st = sec_state(page)
+    if st['on'] != 'كل الملفات':
+        PROBLEMS.append('%s03: التذكرة ما فتحتش «كل الملفات»: %r' % (pre, st))
+    shot(page, pre + '03-ticket-drawer.jpg')
+    shell_check(page, pre + '03-ticket-drawer.jpg')
+    # —— ٣) لوحة النزاعات
+    page.evaluate("() => { location.hash = '#s/disputes/disputes'; }")
+    page.wait_for_function(D2_BOARD_READY % 'disputes', timeout=15000)
+    page.wait_for_timeout(500)
+    dinfo = page.evaluate("""() => ({cols: [...document.querySelectorAll('.v2d-col')].map(c => [c.dataset.col, c.querySelectorAll('.v2d-t').length]),
+      tabs: [...document.querySelectorAll('.v2c-tab')].map(b => b.textContent.trim()), btns: [...document.querySelectorAll('.v2d-col .v2d-btn1')].map(b => b.textContent.trim())})""")
+    dc = dict(dinfo['cols'])
+    for c in ('disputes', 'refunds', 'legacy'):
+        if not dc.get(c):
+            PROBLEMS.append('%s04: عمود %s فاضي' % (pre, c))
+    if dinfo['tabs'] != ['النزاعات', 'الضمان', 'كل النزاعات']:
+        PROBLEMS.append('%s04: تبويبات النزاعات: %r' % (pre, dinfo['tabs']))
+    if not any(b == 'افتح وقرّر' for b in dinfo['btns']):
+        PROBLEMS.append('%s04: زرّ «افتح وقرّر» غايب: %r' % (pre, dinfo['btns'][:4]))
+    if w <= 760:
+        for i, col in enumerate(('disputes', 'refunds', 'legacy')):
+            page.click('.v2d-segb[data-col="%s"]' % col)
+            page.wait_for_timeout(200)
+            d2_shot(page, '%s04%s-disputes-%s.jpg' % (pre, 'abc'[i], col))
+        page.click('.v2d-segb[data-col="disputes"]')
+        page.wait_for_timeout(200)
+    d2_shot(page, pre + '04-disputes-board.jpg')
+    # نداء «افتح وقرّر» بيفتح الدرج بتأكيده القديم (مفيش قرار فلوس من التذكرة نفسها)
+    page.click('.v2d-col[data-col="disputes"] .v2d-btn1 >> nth=0')
+    page.wait_for_function("() => /#s\\/disputes\\/all/.test(location.hash) && document.querySelector('#drawer') && document.querySelector('#drawer').innerText.length > 40", timeout=15000)
+    # —— ٤) صفحة شخص كاملة
+    page.evaluate("() => { location.hash = '#s/people/person/hala%40example.test'; }")
+    page.wait_for_function("() => document.querySelector('.v2d[data-board=\"person\"] .v2d-pgrid')", timeout=15000)
+    page.wait_for_timeout(500)
+    pinfo = page.evaluate("""() => ({name: (document.querySelector('.v2d-name') || {}).textContent, chips: [...document.querySelectorAll('.v2d-chip')].map(c => c.textContent),
+      join: (document.querySelector('.v2d-join') || {}).textContent, cards: [...document.querySelectorAll('.v2d-pc h3')].map(h => h.textContent),
+      btns: [...document.querySelectorAll('.v2d-pact a, .v2d-pact button')].map(b => b.textContent.trim()), hash: location.hash,
+      log: document.querySelectorAll('.v2d-log li').length, text: document.querySelector('.v2d').innerText})""")
+    if pinfo['cards'] != ['الملفات', 'الدورات', 'الفلوس', 'التعلّم']:
+        PROBLEMS.append('%s05: بطاقات الشخص: %r' % (pre, pinfo['cards']))
+    if 'خبير' not in pinfo['chips'] or 'مدرّب' not in pinfo['chips']:
+        PROBLEMS.append('%s05: وسوم الأدوار: %r' % (pre, pinfo['chips']))
+    if 'بدعوة من أ. نادية فؤاد' not in (pinfo['join'] or ''):
+        PROBLEMS.append('%s05: سطر الانضمام والداعي: %r' % (pre, pinfo['join']))
+    if pinfo['btns'] != ['مراسلة']:
+        PROBLEMS.append('%s05: أزرار الشخص %r (أوقف مؤقتًا ممنوع بلا مسار)' % (pre, pinfo['btns']))
+    if pinfo['log'] < 4:
+        PROBLEMS.append('%s05: السجل قصير (%s)' % (pre, pinfo['log']))
+    if 'أوقف' in pinfo['text']:
+        PROBLEMS.append('%s05: «أوقف» ظاهرة' % pre)
+    d2_shot(page, pre + '05-person-full.jpg')
+    # —— ٥) شخص مصادره غير متاحة (جزئيًا ثم كليًا)
+    for key in PERSON_PATHS:
+        h.ef.forced[key] = (502, {"detail": "down"})
+    h.ef.forced[('GET', '/api/bridge/users/u-mona/purge-check')] = (500, {"detail": "down"})
+    page.evaluate("() => { location.hash = '#s/people/person/mona.s%40example.test'; }")
+    page.wait_for_function("() => document.querySelector('.v2d[data-board=\"person\"] .v2d-pgrid')", timeout=15000)
+    page.wait_for_timeout(500)
+    ninfo = page.evaluate("""() => ({na: document.querySelectorAll('.v2d-na').length, warn: (document.querySelector('.v2d-warn') || {}).innerText,
+      text: document.querySelector('.v2d').innerText})""")
+    if ninfo['na'] < 4 or not ninfo['warn']:
+        PROBLEMS.append('%s06: مصادر غير متاحة ما ظهرتش «غير متاح بعد» (%r)' % (pre, ninfo['na']))
+    d2_shot(page, pre + '06-person-unavailable.jpg')
+    h.ef.forced[('GET', '/api/bridge/users')] = (502, {"detail": "down"})
+    page.evaluate("() => { location.hash = '#s/people/person/salma%40example.test'; }")
+    page.wait_for_function("() => document.querySelector('.v2d[data-board=\"person\"] .v2d-pgrid') && document.querySelector('.v2d-warn')", timeout=15000)
+    page.wait_for_timeout(400)
+    d2_shot(page, pre + '06b-person-all-failed.jpg')
+    h.ef.forced.clear()
+    # —— ٦) بحث الناس
+    page.evaluate("() => { location.hash = '#s/people/users'; }")
+    page.wait_for_selector('#v2dq', state='visible', timeout=15000)
+    page.fill('#v2dq', 'هالة')
+    page.wait_for_selector('#v2dres a', timeout=10000)
+    page.wait_for_timeout(400)
+    items = page.evaluate("() => [...document.querySelectorAll('#v2dres a')].map(a => a.getAttribute('data-person'))")
+    if 'hala@example.test' not in items:
+        PROBLEMS.append('%s07: نتائج البحث %r' % (pre, items))
+    d2_shot(page, pre + '07-people-search.jpg')
+    page.click('#v2dres a >> nth=0')
+    page.wait_for_function("() => location.hash.indexOf('#s/people/person/') === 0", timeout=10000)
+    # الاسم في قائمة المستخدمين يفتح صفحته
+    page.evaluate("() => { location.hash = '#s/people/users'; }")
+    try:
+        page.wait_for_selector('.parties .v2d-person', timeout=15000)
+    except Exception:
+        page.screenshot(path=os.path.join(OUT, 'FAIL-users.png'))
+        print(page.evaluate("() => [location.hash, (document.getElementById('view')||{}).innerText.slice(0, 400), window.EP && EP.state.users, (window.USERS||[]).length]"))
+        raise
+    page.click('.parties .v2d-person >> nth=0')
+    page.wait_for_function("() => location.hash.indexOf('#s/people/person/') === 0", timeout=10000)
+    browser.close()
+
+    # —— المفتاح مقفول: لا أثر للتذاكر ولا الشخص
+    os.environ.pop('DASH_V2_ENABLED', None)
+    try:
+        h.ef = v2fx.V2Platform(d2=True)
+        ctx = browser.context(h, 'admin', viewport, mobile)
+        page = ctx.new_page()
+        page.goto(DASH + '/', wait_until='domcontentloaded')
+        page.wait_for_function("() => window.EP && EP.state.inbox === 'ready' && document.getElementById('rows')", timeout=30000)
+        page.wait_for_timeout(500)
+        st = page.evaluate("() => ({d2: !!document.querySelector('.v2d, .v2-sbar, .v2d-person'), on: !!window.V2_ON, shell: !!(window.V2SHELL && V2SHELL.on)})")
+        if st['d2'] or st['on'] or st['shell']:
+            PROBLEMS.append(pre + '80: أثر لـD2 والمفتاح مقفول: %r' % st)
+        r = page.evaluate("async () => { const t = localStorage.getItem('token'); const x = await fetch('/api/v2/person?email=a%40b.com', {headers: {Authorization: 'Bearer ' + t}}); return x.status; }")
+        if r != 404:
+            PROBLEMS.append('%s80: /api/v2/person والمفتاح مقفول ردّ %s (المتوقّع ٤٠٤)' % (pre, r))
+    finally:
+        os.environ['DASH_V2_ENABLED'] = 'true'
+    browser.close()
+
+
 def main():
     from playwright.sync_api import sync_playwright
     os.environ['DASH_V2_ENABLED'] = 'true'
@@ -641,7 +866,11 @@ def main():
         browser = Browsers(p)
         mode = sys.argv[2] if len(sys.argv) > 2 else 'd1'
         try:
-            if mode == 'd1b':
+            if mode == 'd2':
+                flow_d2(browser, h, 'd', DESK, False)
+                flow_d2(browser, h, 't', TAB, False)
+                flow_d2(browser, h, 'm', MOB, True)
+            elif mode == 'd1b':
                 flow_d1b(browser, h, 'd', DESK, False)
                 flow_d1b(browser, h, 't', TAB, False)
                 flow_d1b(browser, h, 'm', MOB, True)
