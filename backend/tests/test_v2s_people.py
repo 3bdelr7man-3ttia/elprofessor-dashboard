@@ -776,12 +776,14 @@ def test_reads_the_sheets_use_are_admin_or_employee_reads_only(ctx, plat):
 def test_index_has_exactly_our_two_lines_in_the_sections_block_and_the_hook_once_after_d3():
     blk = INDEX[INDEX.index('<!-- v2 sections begin -->'):INDEX.index('<!-- v2 sections end -->')]
     lines = [l.strip() for l in blk.splitlines()[1:] if l.strip()]
-    assert lines == ['<link rel="stylesheet" href="v2s/people.css">', '<script src="v2s/people.js"></script>']
-    assert INDEX.index('<script src="v2-d2.js"></script>') < INDEX.index('<!-- v2 sections begin -->') < INDEX.index('<script src="v2-d3.js"></script>')
-    hook = "if(window.V2_ON&&window.V2SECT){for(var _k in V2SECT){if(V2SECT[_k]&&V2SECT[_k].owns&&V2SECT[_k].owns(current)){var _ap=document.querySelector('.app');if(_ap){_ap.classList.add('v2-bare');_ap.classList.remove('v2-inbox');}return V2SECT[_k].render(current,v);}}}"
-    assert INDEX.count(hook) == 1
+    assert '<link rel="stylesheet" href="v2s/people.css">' in lines and '<script src="v2s/people.js"></script>' in lines   # بعد الدمج: كتلة واحدة لكل الأقسام
+    assert lines.index('<link rel="stylesheet" href="v2s/people.css">') + 1 == lines.index('<script src="v2s/people.js"></script>')
+    assert INDEX.index('<script src="v2-d2.js"></script>') < INDEX.index('<script src="v2-d3.js"></script>') < INDEX.index('<!-- v2 sections begin -->')
+    # الخطّاف موحّد بعد الدمج: سجلّ V2SEC (v2s/_registry.js) والأشخاص مسجَّلون فيه بمفتاحهم، وبلا V2SECT
+    hook = "const _s=V2SEC.owner(current);if(_s){const _ap=document.querySelector('.app');if(_ap){_ap.classList.add('v2-bare');_ap.classList.remove('v2-inbox');}return _s.render(current,v);}"
+    assert INDEX.count(hook) == 1 and 'V2SECT' not in INDEX
     d3 = "if(window.V2_ON&&window.V2D3&&V2D3.owns(current))return V2D3.render(current,v);"
-    assert INDEX.index(d3) < INDEX.index(hook) and INDEX[INDEX.index(d3):INDEX.index(hook)].count('\n') == 1
+    assert INDEX.index(d3) < INDEX.index(hook) and INDEX[INDEX.index(d3):INDEX.index(hook)].count('\n') <= 2
 
 
 def test_the_old_screens_are_byte_identical_to_the_base_commit():
@@ -802,7 +804,7 @@ def test_no_server_route_for_people_and_dockerfiles_ship_the_folder():
 
 def test_the_person_page_opens_the_account_sheet_and_is_byte_identical_without_us():
     d2 = _read('dashboard-cloud', 'v2-d2.js')
-    expr = "(window.V2SECT&&V2SECT.people&&V2SECT.people.manageBtn?V2SECT.people.manageBtn(email):'')"
+    expr = "(window.V2SEC&&V2SEC.people&&V2SEC.people.manageBtn?V2SEC.people.manageBtn(email):'')"
     assert d2.count(expr) == 1
     assert d2.index('data-a="mail">مراسلة</a>') < d2.index(expr) < d2.index("'</div></header>'")
 
@@ -813,7 +815,7 @@ global.document = {addEventListener(t, f){ listeners.push(t) }, getElementById()
 window.V2L = require(%s);
 let SH = %s; if (SH) window.V2SHELL = {on: SH.on}; window.V2_HOST = {state: () => ({section: SH ? SH.section : 'home', tab: SH ? SH.tab : 'board'}), current: () => 'x'};
 require(%s);
-const S = window.V2SECT.people;
+const S = window.V2SEC.people;
 %s
 """
 

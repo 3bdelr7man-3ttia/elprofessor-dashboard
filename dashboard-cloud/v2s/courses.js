@@ -1061,7 +1061,7 @@
   }
 
   // ------------------------------------------------------------------ «أنشئ دورة» (مسودة مخفية بلا سعر)
-  function openCreate(prefillTitle) {
+  function openCreate(prefillTitle, done) {   // done: يستدعيه بعد النجاح بدل الانتقال لصفحة الدورة (يستعمله قسم السوق)
     var experts = C.trainerRows(rowsOf('experts', 'experts'), null, { now: now() }) || [];
     var opts = '<option value="">البروفيسور</option>' + experts.filter(function (r) { return r.email; }).map(function (r) { return '<option value="' + esc(r.email) + '" data-name="' + esc(r.name) + '">' + esc(r.name) + '</option>'; }).join('');
     flow({
@@ -1091,6 +1091,7 @@
       },
       onOk: function (res, p) {
         load('courses', true);
+        if (typeof done === 'function') { done(res, p); return; }
         setNote('أُنشئت الدورة مسودة.' + (p.type === 'recorded_paid' ? ' حدّد سعرها من «الفلوس › الأسعار».' : ''), res && res.platform_course_id ? 'course:' + res.platform_course_id : undefined);
         if (res && res.platform_course_id) goPage(res.platform_course_id); else redraw();
       }
@@ -1279,6 +1280,8 @@
     return true;
   };
   CO.openCourse = function (id) { goPage(id); };
+  // «أنشئ دورة» من خارج قسم الدورات (السوق: دورة من طلب): نفس الورقة الجديدة؛ opts.done(res) يُستدعى بعد النجاح بدل الانتقال لصفحة الدورة.
+  CO.create = function (title, opts) { load('experts'); openCreate(String(title || ''), opts && opts.done); };
   CO._state = S; CO._src = SRC;
   CO._tick = function (t) { S.nowOverride = t || 0; redraw(); };
   window.V2SEC.add({ key: 'courses', take: CO.take });

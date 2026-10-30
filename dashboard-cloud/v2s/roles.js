@@ -118,15 +118,15 @@
   }
 
   // ------------------------------------------------------------------ قطع الرسم الصغيرة
-  function chip(c) { return '<span class="v2r-chip ' + esc(c.tone) + '">' + esc(c.t) + '</span>'; }
-  function loadBlock() { return '<div class="v2r-load">…جارٍ التحميل</div>'; }
-  function retryBtn(k) { return '<button type="button" class="v2r-link" data-r-act="retry" data-k="' + k + '">أعد المحاولة</button>'; }
+  function chip(c) { return '<span class="v2ro-chip ' + esc(c.tone) + '">' + esc(c.t) + '</span>'; }
+  function loadBlock() { return '<div class="v2ro-load">…جارٍ التحميل</div>'; }
+  function retryBtn(k) { return '<button type="button" class="v2ro-link" data-r-act="retry" data-k="' + k + '">أعد المحاولة</button>'; }
   function failStrip(k, name, withNums) {
     var s = src(k);
     var msg = s.status === 403 && s.msg ? s.msg : 'تعذّر جلب ' + (name || SRC_NAME[k]) + '.' + (withNums ? ' الأرقام التي تعتمد عليه تظهر «غير متاح بعد».' : '');
-    return '<div class="v2r-fail" role="status"><span>' + esc(msg) + '</span>' + retryBtn(k) + '</div>';
+    return '<div class="v2ro-fail" role="status"><span>' + esc(msg) + '</span>' + retryBtn(k) + '</div>';
   }
-  function emptyBlock(t, p, extra) { return '<div class="v2r-empty"><b>' + esc(t) + '</b>' + (p ? '<p>' + esc(p) + '</p>' : '') + (extra || '') + '</div>'; }
+  function emptyBlock(t, p, extra) { return '<div class="v2ro-empty"><b>' + esc(t) + '</b>' + (p ? '<p>' + esc(p) + '</p>' : '') + (extra || '') + '</div>'; }
   function cardState(keys, off) {
     if (off) return 'na';
     var res = 'ready';
@@ -138,28 +138,28 @@
     return res;
   }
   function numCard(label, state, text, note, tone) {
-    var big = state === 'load' ? '<p class="v2r-big">…</p>' : (state === 'na' ? '<p class="v2r-big na">' + esc(R.NA) + '</p>' : '<p class="v2r-big">' + esc(text) + '</p>');
-    return '<article class="v2r-num ' + (tone || '') + '"><h3>' + esc(label) + '</h3>' + big + '<p class="v2r-note">' + esc(note) + '</p></article>';
+    var big = state === 'load' ? '<p class="v2ro-big">…</p>' : (state === 'na' ? '<p class="v2ro-big na">' + esc(R.NA) + '</p>' : '<p class="v2ro-big">' + esc(text) + '</p>');
+    return '<article class="v2ro-num ' + (tone || '') + '"><h3>' + esc(label) + '</h3>' + big + '<p class="v2ro-note">' + esc(note) + '</p></article>';
   }
   function hero(photo, line) {
-    return '<section class="v2r-hero" style="background-image:url(' + img(photo) + ')"><div class="v2r-hb"><h2>' + esc(R.greeting(ep() && ep().user)) + '</h2><p>' + esc(line) + '</p></div></section>';
+    return '<section class="v2ro-hero" style="background-image:url(' + img(photo) + ')"><div class="v2ro-hb"><h2>' + esc(R.greeting(ep() && ep().user)) + '</h2><p>' + esc(line) + '</p></div></section>';
   }
   function nextCard(n) {
     if (!n) return '';
     var lk = '';
-    if (n.link) lk = '<button type="button" class="v2r-link" data-r-act="' + (n.link.act ? 'wd' : 'go') + '"' + (n.link.go ? ' data-id="' + n.link.go + '"' : '') + '>' + esc(n.link.label) + '</button>';
-    return '<aside class="v2r-next"><span class="v2r-nd">' + DOT + '</span><p>' + esc(n.text) + '</p>' + lk + '</aside>';
+    if (n.link) lk = '<button type="button" class="v2ro-link" data-r-act="' + (n.link.act ? 'wd' : 'go') + '"' + (n.link.go ? ' data-id="' + n.link.go + '"' : '') + '>' + esc(n.link.label) + '</button>';
+    return '<aside class="v2ro-next"><span class="v2ro-nd">' + DOT + '</span><p>' + esc(n.text) + '</p>' + lk + '</aside>';
   }
-  function notice(t) { return '<div class="v2r-warn" role="status">' + esc(t) + '</div>'; }
+  function notice(t) { return '<div class="v2ro-warn" role="status">' + esc(t) + '</div>'; }
   function rowHtml(title, chipObj, lines, extra) {
-    return '<article class="v2r-row"><div class="v2r-rb"><h3>' + esc(title) + '</h3>' + lines.filter(Boolean).map(function (l) { return '<p class="v2r-meta">' + esc(l) + '</p>'; }).join('') + (extra || '') + '</div>'
-      + (chipObj ? '<div class="v2r-rs">' + chip(chipObj) + '</div>' : '') + '</article>';
+    return '<article class="v2ro-row"><div class="v2ro-rb"><h3>' + esc(title) + '</h3>' + lines.filter(Boolean).map(function (l) { return '<p class="v2ro-meta">' + esc(l) + '</p>'; }).join('') + (extra || '') + '</div>'
+      + (chipObj ? '<div class="v2ro-rs">' + chip(chipObj) + '</div>' : '') + '</article>';
   }
-  function countLine(n, forms) { return n > 0 ? '<p class="v2r-count">' + esc(U.U(n, forms)) + '</p>' : ''; }
+  function countLine(n, forms) { return n > 0 ? '<p class="v2ro-count">' + esc(U.U(n, forms)) + '</p>' : ''; }
   function platformLine(main) {
-    return '<section class="v2r-row v2r-plat"><div class="v2r-rb"><h3>مبيعات دوراتك على المنصة، وطلب التحويل منها، في لوحتك هناك.</h3>'
-      + '<p class="v2r-meta">المبيعات والطلاب والجلسات المباشرة كما تظهر لك على المنصة.</p></div>'
-      + '<div class="v2r-rs"><a class="' + (main ? 'v2r-btn1' : 'v2r-btn2') + '" href="' + PLATFORM_URL + '" target="_blank" rel="noopener">افتح لوحتك على المنصة</a></div></section>';
+    return '<section class="v2ro-row v2ro-plat"><div class="v2ro-rb"><h3>مبيعات دوراتك على المنصة، وطلب التحويل منها، في لوحتك هناك.</h3>'
+      + '<p class="v2ro-meta">المبيعات والطلاب والجلسات المباشرة كما تظهر لك على المنصة.</p></div>'
+      + '<div class="v2ro-rs"><a class="' + (main ? 'v2ro-btn1' : 'v2ro-btn2') + '" href="' + PLATFORM_URL + '" target="_blank" rel="noopener">افتح لوحتك على المنصة</a></div></section>';
   }
 
   // ------------------------------------------------------------------ المدرّب
@@ -172,16 +172,16 @@
     html += nextCard(T.next);
     if (st('courses') === 'error') html += failStrip('courses', 'دوراتك', true);
     if (st('payouts') === 'error') html += failStrip('payouts', 'مستحقاتك', true);
-    html += '<div class="v2r-nums n3">'
+    html += '<div class="v2ro-nums n3">'
       + numCard('دوراتي', cardState(['courses'], off), T.nums.courses == null ? '' : U.ar(T.nums.courses), 'مربوطة باسمك', 'wine')
       + numCard('المسجّلون في دوراتي', cardState(['courses'], off), T.nums.students == null ? '' : U.ar(T.nums.students), 'في كل دوراتك', 'ink')
       + numCard('مستحق لك في دفتر الإدارة', cardState(['payouts'], off), T.nums.due == null ? '' : U.fmt(T.nums.due) + ' جنيه', 'سجّلته الإدارة ولم يُحوَّل بعد', 'green')
       + '</div>';
     html += platformLine(true);
-    html += '<h2 class="v2r-h2">آخر دوراتي</h2>';
+    html += '<h2 class="v2ro-h2">آخر دوراتي</h2>';
     if (st('courses') === 'ready') {
       if (!T.rows.length) html += emptyBlock('لا توجد دورات مربوطة بحسابك بعد.', '');
-      else html += T.rows.slice(0, 3).map(courseRowHtml).join('') + '<button type="button" class="v2r-link" data-r-act="go" data-id="t_courses">كل دوراتي</button>';
+      else html += T.rows.slice(0, 3).map(courseRowHtml).join('') + '<button type="button" class="v2ro-link" data-r-act="go" data-id="t_courses">كل دوراتي</button>';
     } else if (st('courses') !== 'error') html += loadBlock();
     return html;
   }
@@ -197,27 +197,27 @@
   }
   function walletBlock(W, withTitle) {
     var html = '';
-    html += '<div class="v2r-nums">'
+    html += '<div class="v2ro-nums">'
       + numCard('متاح للسحب', 'ready', U.fmt(W.balanceEgp) + ' جنيه', 'بعد خصم طلبات السحب قيد المراجعة', 'wine')
       + numCard('إجمالي ما استثمرته', 'ready', U.fmt(W.investedEgp) + ' جنيه', 'كل استثماراتك', 'ink')
       + numCard('عوائد مستلمة', 'ready', U.fmt(W.returnsEgp) + ' جنيه', 'من الاستثمارات المنتهية', 'green')
       + numCard('سحب قيد المراجعة', 'ready', W.pending.value, W.pending.note, 'amber')
-      + '</div><p class="v2r-fine">القيم مسجّلة بالدولار وتظهر بالجنيه بسعر الصرف الحالي.</p>';
+      + '</div><p class="v2ro-fine">القيم مسجّلة بالدولار وتظهر بالجنيه بسعر الصرف الحالي.</p>';
     html += withdrawArea(W);
     return html;
   }
   function withdrawArea(W) {
-    if (W.canWithdraw) return '<div class="v2r-wdrow"><button type="button" class="v2r-btn1" data-r-act="wd">اطلب سحب الرصيد</button></div>';
-    if (W.balanceEgp === 0) return '<p class="v2r-fine">لا يوجد رصيد متاح للسحب الآن.</p>';
+    if (W.canWithdraw) return '<div class="v2ro-wdrow"><button type="button" class="v2ro-btn1" data-r-act="wd">اطلب سحب الرصيد</button></div>';
+    if (W.balanceEgp === 0) return '<p class="v2ro-fine">لا يوجد رصيد متاح للسحب الآن.</p>';
     return '';
   }
   function viewTEarnings() {
     need('me', 'payouts', 'wallet', 'active');
     var E = R.trainerEarnings(pack(['payouts', 'wallet', 'active']), now());
-    var html = '<h2 class="v2r-h2">من الدورات</h2>';
+    var html = '<h2 class="v2ro-h2">من الدورات</h2>';
     if (st('payouts') === 'error') html += failStrip('payouts', 'مستحقاتك', true);
     var s = cardState(['payouts'], false);
-    html += '<div class="v2r-nums n3">'
+    html += '<div class="v2ro-nums n3">'
       + numCard('مستحق لك في دفتر الإدارة', s, E.due == null ? '' : U.fmt(E.due) + ' جنيه', 'لم يُحوَّل بعد', 'wine')
       + numCard('حُوّل إليك', s, E.paid == null ? '' : U.fmt(E.paid) + ' جنيه', 'منذ البداية', 'green')
       + numCard('آخر ٣٠ يومًا', s, E.last30 == null ? '' : U.fmt(E.last30) + ' جنيه', 'سُجّل لك في آخر ٣٠ يومًا', 'ink')
@@ -225,21 +225,21 @@
     var W = E.wallet;
     var drawsWd = !!(W && W.linked && W.canWithdraw);
     html += platformLine(!drawsWd);
-    html += '<h2 class="v2r-h3">سجل المستحقات</h2>';
+    html += '<h2 class="v2ro-h3">سجل المستحقات</h2>';
     if (st('payouts') === 'ready') {
       if (!E.list.length) html += emptyBlock('لا توجد مستحقات مسجّلة باسمك بعد.', '');
-      else html += E.list.map(function (r) { return rowHtml(r.title, r.chip, [r.date], '<p class="v2r-amt">' + esc(r.amountText) + '</p>'); }).join('');
+      else html += E.list.map(function (r) { return rowHtml(r.title, r.chip, [r.date], '<p class="v2ro-amt">' + esc(r.amountText) + '</p>'); }).join('');
     } else if (st('payouts') !== 'error') html += loadBlock();
-    html += '<p class="v2r-fine">مستحقات الدفتر تحوّلها الإدارة إليك، وتظهر هنا حين تُسجَّل.</p>';
+    html += '<p class="v2ro-fine">مستحقات الدفتر تحوّلها الإدارة إليك، وتظهر هنا حين تُسجَّل.</p>';
     // الجزء ب: محفظة الاستثمار
     if (st('wallet') === 'error') {
-      html += '<h2 class="v2r-h2">محفظة الاستثمار</h2>' + failStrip('wallet', 'محفظتك', false);
+      html += '<h2 class="v2ro-h2">محفظة الاستثمار</h2>' + failStrip('wallet', 'محفظتك', false);
     } else if (W && W.linked) {
-      html += '<h2 class="v2r-h2">محفظة الاستثمار</h2>' + walletBlock(W, true);
+      html += '<h2 class="v2ro-h2">محفظة الاستثمار</h2>' + walletBlock(W, true);
       if (st('active') === 'error') html += failStrip('active', 'استثماراتك', false);
       else if (st('active') === 'ready') {
         var rows = E.activeRows;
-        if (rows.length) html += '<h2 class="v2r-h3">استثماراتك الجارية</h2>' + rows.map(invRowHtml).join('');
+        if (rows.length) html += '<h2 class="v2ro-h3">استثماراتك الجارية</h2>' + rows.map(invRowHtml).join('');
       }
     }
     return html;
@@ -256,26 +256,26 @@
     if (st('wallet') === 'error') html += failStrip('wallet', 'محفظتك', true);
     var s = cardState(['wallet'], off);
     var W = wv && wv.linked ? wv : null;
-    html += '<div class="v2r-nums">'
+    html += '<div class="v2ro-nums">'
       + numCard('متاح للسحب', s, W ? U.fmt(W.balanceEgp) + ' جنيه' : '', 'بعد خصم طلبات السحب قيد المراجعة', 'wine')
       + numCard('إجمالي ما استثمرته', s, W ? U.fmt(W.investedEgp) + ' جنيه' : '', 'كل استثماراتك', 'ink')
       + numCard('عوائد مستلمة', s, W ? U.fmt(W.returnsEgp) + ' جنيه' : '', 'من الاستثمارات المنتهية', 'green')
       + numCard('سحب قيد المراجعة', s, W ? W.pending.value : '', W ? W.pending.note : 'تراجعه الإدارة', 'amber')
       + '</div>';
-    if (W) html += '<p class="v2r-fine">القيم مسجّلة بالدولار وتظهر بالجنيه بسعر الصرف الحالي.</p>' + withdrawArea(W);
+    if (W) html += '<p class="v2ro-fine">القيم مسجّلة بالدولار وتظهر بالجنيه بسعر الصرف الحالي.</p>' + withdrawArea(W);
     // المستوى والشارات
     if (W) {
       var bv = st('badges') === 'ready' ? R.badgesView(src('badges').data) : null;
       var line = st('badges') === 'error' ? 'الشارات: ' + R.NA : (bv ? bv.line : 'الشارات: …');
-      html += '<section class="v2r-row v2r-lvl"><div class="v2r-rb"><h3>مستواك: ' + esc(W.level) + '</h3><p class="v2r-meta">' + esc(line) + '</p>'
-        + (bv && bv.earned.length ? '<div class="v2r-chips-line">' + bv.earned.map(function (t) { return chip({ t: t, tone: 'wine' }); }).join('') + '</div>' : '') + '</div></section>';
+      html += '<section class="v2ro-row v2ro-lvl"><div class="v2ro-rb"><h3>مستواك: ' + esc(W.level) + '</h3><p class="v2ro-meta">' + esc(line) + '</p>'
+        + (bv && bv.earned.length ? '<div class="v2ro-chips-line">' + bv.earned.map(function (t) { return chip({ t: t, tone: 'wine' }); }).join('') + '</div>' : '') + '</div></section>';
     }
     // الاختصارات
     var oppLine = st('opps') === 'error' ? R.NA : (st('opps') === 'ready' ? (R.openOppCount(src('opps').data) > 0 ? 'المفتوحة الآن: ' + U.U(R.openOppCount(src('opps').data), R.COUNT.opp) : 'لا توجد فرص مفتوحة الآن') : '…');
     var actN = st('active') === 'ready' ? (Array.isArray(src('active').data) ? src('active').data.length : 0) : null;
     var invLine = st('active') === 'error' ? R.NA : (actN == null ? '…' : (actN > 0 ? 'الجارية: ' + U.U(actN, R.COUNT.invest) : 'لا توجد استثمارات جارية'));
-    html += '<a class="v2r-row v2r-go" href="#i_market" data-r-act="go" data-id="i_market"><div class="v2r-rb"><h3>فرص الاستثمار</h3><p class="v2r-meta">' + esc(oppLine) + '</p></div></a>'
-      + '<a class="v2r-row v2r-go" href="#i_invest" data-r-act="go" data-id="i_invest"><div class="v2r-rb"><h3>استثماراتي</h3><p class="v2r-meta">' + esc(invLine) + '</p></div></a>';
+    html += '<a class="v2ro-row v2ro-go" href="#i_market" data-r-act="go" data-id="i_market"><div class="v2ro-rb"><h3>فرص الاستثمار</h3><p class="v2ro-meta">' + esc(oppLine) + '</p></div></a>'
+      + '<a class="v2ro-row v2ro-go" href="#i_invest" data-r-act="go" data-id="i_invest"><div class="v2ro-rb"><h3>استثماراتي</h3><p class="v2ro-meta">' + esc(invLine) + '</p></div></a>';
     return html;
   }
   function viewIMarket() {
@@ -284,7 +284,7 @@
     if (s === 'error') return failStrip('opps', 'فرص الاستثمار', false);
     if (s !== 'ready') return loadBlock();
     var rows = Array.isArray(src('opps').data) ? src('opps').data : [];
-    var html = '<aside class="v2r-next v2r-fixed"><span class="v2r-nd">' + DOT + '</span><p>للمشاركة في فرصة، تواصل مع الإدارة.</p></aside>';
+    var html = '<aside class="v2ro-next v2ro-fixed"><span class="v2ro-nd">' + DOT + '</span><p>للمشاركة في فرصة، تواصل مع الإدارة.</p></aside>';
     if (!rows.length) return html + emptyBlock('لا توجد فرص استثمار مفتوحة الآن', 'تظهر هنا كل فرصة تفتحها الإدارة.');
     html += countLine(rows.length, R.COUNT.opp);
     html += rows.map(function (o) {
@@ -295,10 +295,10 @@
       var meta = [];
       if (c.trainer) meta.push('يقدّمها: ' + c.trainer);
       meta.push('المسجّلون: ' + c.students);
-      return '<article class="v2r-opp"><header><div class="v2r-rb"><h3>' + esc(c.title) + '</h3><p class="v2r-meta">' + esc(meta.join(' · ')) + '</p></div>' + chip(c.chip) + '</header>'
-        + (c.showBar ? '<div class="v2r-bar" role="img" aria-label="' + esc(c.progressText) + '"><i style="width:' + c.pct + '%"></i></div>' : '')
-        + '<p class="v2r-prog">' + esc(c.progressText) + '</p>'
-        + '<dl class="v2r-facts">' + facts.map(function (f) { return '<div><dt>' + esc(f[0]) + '</dt><dd>' + esc(f[1]) + (f[2] ? '<small>' + esc(f[2]) + '</small>' : '') + '</dd></div>'; }).join('') + '</dl></article>';
+      return '<article class="v2ro-opp"><header><div class="v2ro-rb"><h3>' + esc(c.title) + '</h3><p class="v2ro-meta">' + esc(meta.join(' · ')) + '</p></div>' + chip(c.chip) + '</header>'
+        + (c.showBar ? '<div class="v2ro-bar" role="img" aria-label="' + esc(c.progressText) + '"><i style="width:' + c.pct + '%"></i></div>' : '')
+        + '<p class="v2ro-prog">' + esc(c.progressText) + '</p>'
+        + '<dl class="v2ro-facts">' + facts.map(function (f) { return '<div><dt>' + esc(f[0]) + '</dt><dd>' + esc(f[1]) + (f[2] ? '<small>' + esc(f[2]) + '</small>' : '') + '</dd></div>'; }).join('') + '</dl></article>';
     }).join('');
     return html;
   }
@@ -314,7 +314,7 @@
     if (s !== 'ready') return loadBlock();
     var rows = Array.isArray(src(k).data) ? src(k).data : [];
     if (!rows.length) {
-      return k === 'active' ? emptyBlock('لا توجد استثمارات جارية باسمك.', '', '<button type="button" class="v2r-link" data-r-act="go" data-id="i_market">تصفّح فرص الاستثمار</button>')
+      return k === 'active' ? emptyBlock('لا توجد استثمارات جارية باسمك.', '', '<button type="button" class="v2ro-link" data-r-act="go" data-id="i_market">تصفّح فرص الاستثمار</button>')
                             : emptyBlock('لا توجد استثمارات منتهية بعد.', '');
     }
     return countLine(rows.length, R.COUNT.invest) + rows.map(function (x) { return invRowHtml(R.investmentRow(x, k)); }).join('');
@@ -327,27 +327,27 @@
     var email = (u.email || '').trim();
     var title = empty ? 'حسابك' : 'حسابك بانتظار التفعيل';
     var body = empty ? 'لا توجد شاشات متاحة لحسابك الآن. تواصل مع الإدارة.' : 'سجّلت بنجاح. تراجع الإدارة حسابك وتحدّد صفته، ثم تظهر لوحتك هنا.';
-    return '<section class="v2r-vw"><div class="v2r-vph" style="background-image:url(' + img('people') + ')"><span class="v2r-vlogo">' + LOGO + '</span></div>'
-      + '<div class="v2r-vb"><h1>' + esc(title) + '</h1><p>' + esc(body) + '</p>'
-      + '<div class="v2r-id">' + (name ? '<p>الحساب: <b>' + esc(name) + '</b></p>' : '') + (email ? '<p class="v2r-mail" dir="ltr">' + esc(email) + '</p>' : '') + '</div>'
-      + '<div class="v2r-vbt"><button type="button" class="v2r-btn1" data-r-act="recheck">تحقّق من جديد</button>'
-      + '<button type="button" class="v2r-btn2" data-r-act="logout">تسجيل الخروج</button></div></div></section>';
+    return '<section class="v2ro-vw"><div class="v2ro-vph" style="background-image:url(' + img('people') + ')"><span class="v2ro-vlogo">' + LOGO + '</span></div>'
+      + '<div class="v2ro-vb"><h1>' + esc(title) + '</h1><p>' + esc(body) + '</p>'
+      + '<div class="v2ro-id">' + (name ? '<p>الحساب: <b>' + esc(name) + '</b></p>' : '') + (email ? '<p class="v2ro-mail" dir="ltr">' + esc(email) + '</p>' : '') + '</div>'
+      + '<div class="v2ro-vbt"><button type="button" class="v2ro-btn1" data-r-act="recheck">تحقّق من جديد</button>'
+      + '<button type="button" class="v2ro-btn2" data-r-act="logout">تسجيل الخروج</button></div></div></section>';
   }
 
   // ------------------------------------------------------------------ فريق المتابعة
   function chipsBar(items, active, counts) {
-    return '<div class="v2r-chips" role="group">' + items.map(function (c) {
+    return '<div class="v2ro-chips" role="group">' + items.map(function (c) {
       var n = counts && counts[c[0]] != null ? ' (' + U.ar(counts[c[0]]) + ')' : '';
-      return '<button type="button" class="v2r-fchip' + (c[0] === active ? ' on' : '') + '" data-r-act="chip" data-id="' + c[0] + '" aria-pressed="' + (c[0] === active) + '">' + esc(c[1] + n) + '</button>';
+      return '<button type="button" class="v2ro-fchip' + (c[0] === active ? ' on' : '') + '" data-r-act="chip" data-id="' + c[0] + '" aria-pressed="' + (c[0] === active) + '">' + esc(c[1] + n) + '</button>';
     }).join('') + '</div>';
   }
   function moreBtn(key, total, shown) {
-    return total > shown ? '<button type="button" class="v2r-btn2 v2r-more" data-r-act="more" data-id="' + key + '">اعرض المزيد (' + U.ar(total - shown) + ')</button>' : '';
+    return total > shown ? '<button type="button" class="v2ro-btn2 v2ro-more" data-r-act="more" data-id="' + key + '">اعرض المزيد (' + U.ar(total - shown) + ')</button>' : '';
   }
   function expandRow(id, head, details) {
     var open = !!S.open[id];
-    return '<article class="v2r-row v2r-x' + (open ? ' open' : '') + '" data-r-act="expand" data-id="' + esc(id) + '" role="button" tabindex="0" aria-expanded="' + open + '">' + head
-      + '<div class="v2r-det"' + (open ? '' : ' hidden') + '>' + details + '</div></article>';
+    return '<article class="v2ro-row v2ro-x' + (open ? ' open' : '') + '" data-r-act="expand" data-id="' + esc(id) + '" role="button" tabindex="0" aria-expanded="' + open + '">' + head
+      + '<div class="v2ro-det"' + (open ? '' : ' hidden') + '>' + details + '</div></article>';
   }
   var PEOPLE_CHIPS = [['all', 'الكل'], ['trainer', 'المدرّبون'], ['pending', 'طلبات تدريب'], ['admin', 'الإدارة'], ['investor', 'المستثمرون'], ['test', 'تجريبي']];
   function peopleList() {
@@ -360,11 +360,11 @@
     var seg = G.seg();
     return f.slice(0, lim).map(function (u, i) {
       var p = R.personRow(u, seg && typeof seg === 'object' ? seg : null);
-      var head = '<div class="v2r-xh"><span class="v2r-av">' + esc(p.initial) + '</span><div class="v2r-rb"><h3>' + esc(p.name) + '</h3>'
-        + (p.email ? '<p class="v2r-meta v2r-mail" dir="ltr">' + esc(p.email) + '</p>' : '')
-        + '<div class="v2r-chips-line">' + p.chips.map(chip).join('') + '</div>'
-        + (p.meta ? '<p class="v2r-meta">' + esc(p.meta) + '</p>' : '') + '</div></div>';
-      var det = '<dl class="v2r-facts">' + p.details.map(function (d) {
+      var head = '<div class="v2ro-xh"><span class="v2ro-av">' + esc(p.initial) + '</span><div class="v2ro-rb"><h3>' + esc(p.name) + '</h3>'
+        + (p.email ? '<p class="v2ro-meta v2ro-mail" dir="ltr">' + esc(p.email) + '</p>' : '')
+        + '<div class="v2ro-chips-line">' + p.chips.map(chip).join('') + '</div>'
+        + (p.meta ? '<p class="v2ro-meta">' + esc(p.meta) + '</p>' : '') + '</div></div>';
+      var det = '<dl class="v2ro-facts">' + p.details.map(function (d) {
         var v = Array.isArray(d.v) ? (d.v.length ? d.v.map(function (t) { return chip({ t: t, tone: 'grey' }); }).join('') : '—') : esc(d.v);
         return '<div><dt>' + esc(d.k) + '</dt><dd>' + v + '</dd></div>';
       }).join('') + '</dl>';
@@ -376,7 +376,7 @@
     var capped = S.baseCapped && S.baseCapped.capped;
     var f = R.peopleFilter(rows, S.chip.users, capped ? '' : S.q);
     var n = capped && S.chip.users === 'all' && !S.q ? S.baseCapped.count : f.length;
-    return countLine(n, R.COUNT.member) + (capped ? '<p class="v2r-fine">' + esc(S.baseCapped.note) + '</p>' : '');
+    return countLine(n, R.COUNT.member) + (capped ? '<p class="v2ro-fine">' + esc(S.baseCapped.note) + '</p>' : '');
   }
   function viewUsers() {
     need('people');
@@ -385,9 +385,9 @@
     if (s !== 'ready' && !src('people').data) return loadBlock();
     var rows = R.peopleRows(src('people').data);
     var html = nextCard(R.staffNext('users', pack(['people'])));
-    html += '<div class="v2r-find"><input id="v2rQ" type="search" data-r-act="search" value="' + esc(S.q) + '" placeholder="ابحث بالاسم أو البريد أو الهاتف" autocomplete="off" aria-label="بحث في الأعضاء"></div>';
+    html += '<div class="v2ro-find"><input id="v2roQ" type="search" data-r-act="search" value="' + esc(S.q) + '" placeholder="ابحث بالاسم أو البريد أو الهاتف" autocomplete="off" aria-label="بحث في الأعضاء"></div>';
     html += chipsBar(PEOPLE_CHIPS, S.chip.users, R.peopleCounts(rows));
-    html += '<div id="v2rCount">' + peopleCount() + '</div><div id="v2rList">' + (s === 'loading' ? loadBlock() : peopleList()) + '</div>';
+    html += '<div id="v2roCount">' + peopleCount() + '</div><div id="v2roList">' + (s === 'loading' ? loadBlock() : peopleList()) + '</div>';
     return html;
   }
   var COURSE_CHIPS = [['all', 'الكل'], ['published', 'منشورة'], ['pending', 'بانتظار الاعتماد'], ['draft', 'مسودات']];
@@ -423,8 +423,8 @@
     html += countLine(f.length, R.COUNT.topic);
     html += f.slice(0, lim).map(function (t, i) {
       var r = R.topicRow(t);
-      var head = '<div class="v2r-xh"><div class="v2r-rb"><h3>' + esc(r.title) + '</h3>' + (r.meta ? '<p class="v2r-meta">' + esc(r.meta) + '</p>' : '') + '</div><div class="v2r-rs">' + chip(r.chip) + '</div></div>';
-      return expandRow('t' + (t.id || i), head, r.summary ? '<p class="v2r-body">' + esc(r.summary) + '</p>' : '<p class="v2r-meta">لا يوجد ملخّص لهذا الموضوع.</p>');
+      var head = '<div class="v2ro-xh"><div class="v2ro-rb"><h3>' + esc(r.title) + '</h3>' + (r.meta ? '<p class="v2ro-meta">' + esc(r.meta) + '</p>' : '') + '</div><div class="v2ro-rs">' + chip(r.chip) + '</div></div>';
+      return expandRow('t' + (t.id || i), head, r.summary ? '<p class="v2ro-body">' + esc(r.summary) + '</p>' : '<p class="v2ro-meta">لا يوجد ملخّص لهذا الموضوع.</p>');
     }).join('') + moreBtn('topics', f.length, lim);
     return html;
   }
@@ -437,11 +437,11 @@
     if (!groups.length) return emptyBlock('لا توجد شروحات بعد.', '');
     var n = 0;
     return groups.map(function (g) {
-      return '<h2 class="v2r-h3">' + esc(g.section) + '</h2>' + g.items.map(function (t) {
+      return '<h2 class="v2ro-h3">' + esc(g.section) + '</h2>' + g.items.map(function (t) {
         n++;
-        var head = '<div class="v2r-xh"><div class="v2r-rb"><h3>' + esc(t.title) + '</h3></div><div class="v2r-rs">' + chip(t.published ? { t: 'منشور', tone: 'green' } : { t: 'مسودة', tone: 'grey' }) + '</div></div>';
-        var det = (t.body ? '<p class="v2r-body">' + esc(t.body) + '</p>' : '<p class="v2r-meta">لا يوجد نص لهذا الشرح.</p>')
-          + (/^https?:\/\//i.test(t.video) ? '<a class="v2r-link" href="' + esc(t.video) + '" target="_blank" rel="noopener">شاهد الشرح</a>' : '');
+        var head = '<div class="v2ro-xh"><div class="v2ro-rb"><h3>' + esc(t.title) + '</h3></div><div class="v2ro-rs">' + chip(t.published ? { t: 'منشور', tone: 'green' } : { t: 'مسودة', tone: 'grey' }) + '</div></div>';
+        var det = (t.body ? '<p class="v2ro-body">' + esc(t.body) + '</p>' : '<p class="v2ro-meta">لا يوجد نص لهذا الشرح.</p>')
+          + (/^https?:\/\//i.test(t.video) ? '<a class="v2ro-link" href="' + esc(t.video) + '" target="_blank" rel="noopener">شاهد الشرح</a>' : '');
         return expandRow('tu' + n, head, det);
       }).join('');
     }).join('');
@@ -491,12 +491,12 @@
       + '<button type="button" class="v2s-out" data-r-act="logout" aria-label="تسجيل الخروج" title="تسجيل الخروج">' + OUT + '</button></div>';
   }
   function drawSide(items, key) {
-    var el = q('#v2rSide'); if (!el) return;
+    var el = q('#v2roSide'); if (!el) return;
     el.innerHTML = '<div class="v2s-brand"><span class="v2s-mark">' + LOGO + '</span><span class="v2s-bt"><b>البروفيسور</b><small>' + esc(R.ROLE_SUB[mapRole()]) + '</small></span></div>'
       + '<nav class="v2s-nav" aria-label="الشاشات">' + items.map(function (it) { return sideItem(it, it.id === key || (key === 'tutorials' && it.id === 'tutorials')); }).join('') + '</nav>' + userBlock();
   }
   function drawSheet(items, key) {
-    var el = q('#v2rSheet'); if (!el) return;
+    var el = q('#v2roSheet'); if (!el) return;
     el.innerHTML = '<div class="v2s-scrim" data-r-act="close"></div><div class="v2s-box" role="dialog" aria-modal="true" aria-label="القائمة">'
       + '<div class="v2s-bh"><b>القائمة</b><button type="button" class="v2s-x" data-r-act="close" aria-label="إغلاق">' + CLOSE + '</button></div>'
       + '<div class="v2s-grid">' + items.map(function (it) {
@@ -506,7 +506,7 @@
       }).join('') + '</div>' + userBlock() + '</div>';
   }
   function drawHead(items, key, tab) {
-    var el = q('#v2rSec'); if (!el) return;
+    var el = q('#v2roSec'); if (!el) return;
     if (!items.length) {   // موظف بلا أي شاشة مسموحة: لا ترويسة، والبطاقة وحدها
       el.innerHTML = '';
       var pt0 = q('#pageTitle'); if (pt0) pt0.textContent = 'حسابك';
@@ -533,15 +533,15 @@
     drawHead(items, key, tab);
     if (sheetOpen()) S.sheetDirty = true; else { drawSheet(items, key); S.sheetDirty = false; }
   };
-  function sheetOpen() { var el = q('#v2rSheet'); return !!(el && el.classList.contains('open')); }
+  function sheetOpen() { var el = q('#v2roSheet'); return !!(el && el.classList.contains('open')); }
   function openSheet() {
-    var el = q('#v2rSheet'); if (!el) return;
+    var el = q('#v2roSheet'); if (!el) return;
     el.classList.add('open'); el.setAttribute('aria-hidden', 'false');
     document.documentElement.classList.add('v2-noscroll');
     var f = q('.v2s-x', el); if (f && f.focus) { try { f.focus(); } catch (e) {} }
   }
   function closeSheet() {
-    var el = q('#v2rSheet'); if (!el) return;
+    var el = q('#v2roSheet'); if (!el) return;
     el.classList.remove('open'); el.setAttribute('aria-hidden', 'true');
     document.documentElement.classList.remove('v2-noscroll');
     if (S.sheetDirty) { S.sheetDirty = false; V.chrome(); }
@@ -556,8 +556,8 @@
     if (key === 'topics' && HIDDEN_TOPIC_TABS.indexOf(G.topicsTab()) > -1 && setters.topicsTab) setters.topicsTab('news');
   }
   function setLegacy(on) {
-    var a = appEl(); if (a) a.classList.toggle('v2r-legacy', !!on);
-    var n = q('#v2rLegacyNote'); if (n) n.hidden = !on;
+    var a = appEl(); if (a) a.classList.toggle('v2ro-legacy', !!on);
+    var n = q('#v2roLegacyNote'); if (n) n.hidden = !on;
     V.legacy = !!on;
     if (on) startLegacyWatch(); else stopLegacyWatch();
   }
@@ -586,7 +586,7 @@
     list.forEach(function (n) {
       var p = n.parentNode;
       if (!p || /^(SCRIPT|STYLE|TEXTAREA|INPUT|OPTION)$/.test(p.nodeName)) return;
-      if (p.closest && p.closest('[dir="ltr"], .v2r-mail, code')) return;
+      if (p.closest && p.closest('[dir="ltr"], .v2ro-mail, code')) return;
       var v = n.nodeValue, c = legacyText(v);
       if (c !== v) n.nodeValue = c;
     });
@@ -615,7 +615,7 @@
 
   // ------------------------------------------------------------------ الرسم
   V.skeleton = function () {
-    var v = q('#view'); if (v) v.innerHTML = '<div class="v2r"><div class="v2r-load">…جارٍ التحميل</div></div>';
+    var v = q('#view'); if (v) v.innerHTML = '<div class="v2ro"><div class="v2ro-load">…جارٍ التحميل</div></div>';
   };
   V.render = function () {
     if (!V.active) return;
@@ -635,13 +635,13 @@
       if (typeof V.hooks.renderView === 'function') V.hooks.renderView();
       return;
     }
-    if (!ids.length && V.role === 'employee') { view.innerHTML = '<div class="v2r v2r-solo">' + viewViewer(true) + '</div>'; return; }
-    view.innerHTML = '<div class="v2r">' + screenHtml(key, tab) + '</div>';
+    if (!ids.length && V.role === 'employee') { view.innerHTML = '<div class="v2ro v2ro-solo">' + viewViewer(true) + '</div>'; return; }
+    view.innerHTML = '<div class="v2ro">' + screenHtml(key, tab) + '</div>';
     restoreFocus(view, keep);
   };
   function focusSnapshot(view) {
     var a = document.activeElement;
-    if (a && a.id === 'v2rQ' && view.contains(a)) return { id: 'v2rQ', s: a.selectionStart, e: a.selectionEnd };
+    if (a && a.id === 'v2roQ' && view.contains(a)) return { id: 'v2roQ', s: a.selectionStart, e: a.selectionEnd };
     return null;
   }
   function restoreFocus(view, k) {
@@ -664,11 +664,11 @@
       case 'more': S.lim[id] = (S.lim[id] || PAGE) + PAGE; V.render(); break;
       case 'close': closeSheet(); break;
       case 'expand': {
-        if (e.target.closest && (e.target.closest('a,button') || e.target.closest('.v2r-det'))) return;
+        if (e.target.closest && (e.target.closest('a,button') || e.target.closest('.v2ro-det'))) return;
         S.open[id] = !S.open[id];
         el.classList.toggle('open', !!S.open[id]);
         el.setAttribute('aria-expanded', String(!!S.open[id]));
-        var d = q('.v2r-det', el); if (d) d.hidden = !S.open[id];
+        var d = q('.v2ro-det', el); if (d) d.hidden = !S.open[id];
         break;
       }
     }
@@ -677,7 +677,7 @@
   function onSearch(inp) {
     S.q = inp.value;
     var capped = S.baseCapped && S.baseCapped.capped;
-    if (!capped) { var c = q('#v2rCount'), l = q('#v2rList'); if (c) c.innerHTML = peopleCount(); if (l) l.innerHTML = peopleList(); return; }
+    if (!capped) { var c = q('#v2roCount'), l = q('#v2roList'); if (c) c.innerHTML = peopleCount(); if (l) l.innerHTML = peopleList(); return; }
     clearTimeout(S.searchT);
     var qv = S.q.trim();
     S.searchT = setTimeout(function () {
@@ -692,8 +692,8 @@
   }
   function wireOnce() {
     var view = q('#view');
-    if (view && !view._v2r) {
-      view._v2r = true;
+    if (view && !view._v2ro) {
+      view._v2ro = true;
       view.addEventListener('click', function (e) {
         var el = e.target.closest ? e.target.closest('[data-r-act]') : null;
         if (!el || !V.active || V.legacy) return;
@@ -708,9 +708,9 @@
         if ((e.key === 'Enter' || e.key === ' ') && e.target && e.target.getAttribute && e.target.getAttribute('data-r-act') === 'expand') { e.preventDefault(); act(e.target, e); }
       });
     }
-    ['#v2rSide', '#v2rSheet', '#v2rSec'].forEach(function (id) {
-      var el = q(id); if (!el || el._v2r) return;
-      el._v2r = true;
+    ['#v2roSide', '#v2roSheet', '#v2roSec'].forEach(function (id) {
+      var el = q(id); if (!el || el._v2ro) return;
+      el._v2ro = true;
       el.addEventListener('click', function (ev) {
         var a = ev.target.closest ? ev.target.closest('[data-mod],[data-r-act]') : null;
         if (!a) return;
@@ -727,8 +727,8 @@
   function openWithdraw() {
     var W = st('wallet') === 'ready' ? R.walletView(src('wallet').data) : null;
     if (!W || !W.linked || !W.canWithdraw || typeof window.openModal !== 'function') return;
-    var s = window.openModal('طلب سحب من محفظتك', '<div class="v2rm" id="v2rWd"></div>');
-    var box = q('#v2rWd', s);
+    var s = window.openModal('طلب سحب من محفظتك', '<div class="v2rom" id="v2roWd"></div>');
+    var box = q('#v2roWd', s);
     var closeIt = function () { if (!s.dataset.busy) window.closeModal(); };
     var x = q('[data-x]', s); if (x) x.onclick = closeIt;
     s.onclick = function (e) { if (e.target === s) closeIt(); };
@@ -738,16 +738,16 @@
   function stage1(box, s, W, val, closeIt, err) {
     var rate = W.rate;
     box.innerHTML = '<p class="mc-lead">يصل طلبك إلى الإدارة لمراجعته وتحويله. يُخصم المبلغ من رصيدك المتاح فور إرسال الطلب.</p>'
-      + '<div class="fld"><label for="v2rAmt">المبلغ بالجنيه</label><input id="v2rAmt" inputmode="numeric" dir="ltr" autocomplete="off" value="' + esc(val) + '">'
-      + '<p class="v2r-fine">الرصيد المتاح: ' + esc(U.fmt(W.balanceEgp)) + ' جنيه</p>'
-      + (rate ? '<p class="v2r-fine">الحد الأدنى للسحب ٥٠ دولارًا (نحو ' + esc(U.fmt(W.minEgp)) + ' جنيه)</p>' : '') + '</div>'
-      + '<div id="v2rWdErr">' + (err ? '<div class="v2r-err">' + esc(err) + '</div>' : '') + '</div>'
-      + '<div class="v2rm-acts"><button type="button" class="v2r-btn1" id="v2rRev">راجع الطلب</button><button type="button" class="v2r-btn2" id="v2rCan">إلغاء</button></div>';
-    var inp = q('#v2rAmt', box);
-    q('#v2rCan', box).onclick = closeIt;
-    q('#v2rRev', box).onclick = function () {
+      + '<div class="fld"><label for="v2roAmt">المبلغ بالجنيه</label><input id="v2roAmt" inputmode="numeric" dir="ltr" autocomplete="off" value="' + esc(val) + '">'
+      + '<p class="v2ro-fine">الرصيد المتاح: ' + esc(U.fmt(W.balanceEgp)) + ' جنيه</p>'
+      + (rate ? '<p class="v2ro-fine">الحد الأدنى للسحب ٥٠ دولارًا (نحو ' + esc(U.fmt(W.minEgp)) + ' جنيه)</p>' : '') + '</div>'
+      + '<div id="v2roWdErr">' + (err ? '<div class="v2ro-err">' + esc(err) + '</div>' : '') + '</div>'
+      + '<div class="v2rom-acts"><button type="button" class="v2ro-btn1" id="v2roRev">راجع الطلب</button><button type="button" class="v2ro-btn2" id="v2roCan">إلغاء</button></div>';
+    var inp = q('#v2roAmt', box);
+    q('#v2roCan', box).onclick = closeIt;
+    q('#v2roRev', box).onclick = function () {
       var chk = R.withdrawCheck(inp.value, W);
-      if (!chk.ok) { q('#v2rWdErr', box).innerHTML = '<div class="v2r-err">' + esc(chk.error) + '</div>'; return; }
+      if (!chk.ok) { q('#v2roWdErr', box).innerHTML = '<div class="v2ro-err">' + esc(chk.error) + '</div>'; return; }
       stage2(box, s, W, chk.amount, closeIt);
     };
     setTimeout(function () { try { inp.focus(); inp.select(); } catch (e) {} }, 30);
@@ -758,9 +758,9 @@
     rows.push(['العملة', 'جنيه مصري'], ['الاسم', userName()], ['من', 'محفظة الاستثمار']);
     box.innerHTML = '<p class="mc-lead">راجع الطلب قبل التأكيد</p>'
       + '<table class="mc-tab">' + rows.map(function (r) { return '<tr><td>' + esc(r[0]) + '</td><td>' + (r[0] === 'المبلغ' ? '<b>' + esc(r[1]) + '</b>' : esc(r[1])) + '</td></tr>'; }).join('') + '</table>'
-      + '<div id="v2rWdErr"></div>'
-      + '<div class="v2rm-acts"><button type="button" class="v2r-btn1" id="v2rGo">أكّد طلب السحب</button><button type="button" class="v2r-btn2" id="v2rBack">رجوع للتعديل</button></div>';
-    var go = q('#v2rGo', box), back = q('#v2rBack', box), errEl = q('#v2rWdErr', box);
+      + '<div id="v2roWdErr"></div>'
+      + '<div class="v2rom-acts"><button type="button" class="v2ro-btn1" id="v2roGo">أكّد طلب السحب</button><button type="button" class="v2ro-btn2" id="v2roBack">رجوع للتعديل</button></div>';
+    var go = q('#v2roGo', box), back = q('#v2roBack', box), errEl = q('#v2roWdErr', box);
     back.onclick = function () { if (!s.dataset.busy) stage1(box, s, W, String(amount), closeIt); };
     go.onclick = function () {
       if (go.dataset.busy) return;
@@ -777,17 +777,17 @@
         delete s.dataset.busy;
         if (status && status < 500 && msg) {
           delete go.dataset.busy; go.disabled = false; back.disabled = false; go.textContent = 'أكّد طلب السحب';
-          errEl.innerHTML = '<div class="v2r-err">' + esc(R.arDigits(msg)) + '</div>';
+          errEl.innerHTML = '<div class="v2ro-err">' + esc(R.arDigits(msg)) + '</div>';
           return;
         }
         if (status && status >= 500 && msg) {
           delete go.dataset.busy; go.disabled = false; back.disabled = false; go.textContent = 'أكّد طلب السحب';
-          errEl.innerHTML = '<div class="v2r-err">' + esc(R.arDigits(msg)) + '</div>';
+          errEl.innerHTML = '<div class="v2ro-err">' + esc(R.arDigits(msg)) + '</div>';
           return;
         }
         back.disabled = false;
         go.textContent = 'حدّث الصفحة أولًا';
-        errEl.innerHTML = '<div class="v2r-err">لم يصل رد. حدّث الصفحة وتأكّد من رصيدك قبل أي محاولة جديدة.</div>';
+        errEl.innerHTML = '<div class="v2ro-err">لم يصل رد. حدّث الصفحة وتأكّد من رصيدك قبل أي محاولة جديدة.</div>';
         reload('wallet');
       });
     };
@@ -800,15 +800,15 @@
     syncRoleClass();
     var rail = q('.rail'), view = q('#view');
     var rb = q('#roBanner'); if (rb) { rb.style.display = 'none'; rb.innerHTML = ''; }   // setRole كتب display:flex بأسلوب مضمّن قبل رد المفتاح
-    var side = document.createElement('aside'); side.id = 'v2rSide'; side.className = 'v2-side';
+    var side = document.createElement('aside'); side.id = 'v2roSide'; side.className = 'v2-side';
     if (rail && rail.parentNode) rail.parentNode.insertBefore(side, rail.nextSibling); else app.insertBefore(side, app.firstChild);
     if (view && view.parentNode) {
-      var sec = document.createElement('div'); sec.id = 'v2rSec'; sec.className = 'v2-sec'; view.parentNode.insertBefore(sec, view);
-      var note = document.createElement('p'); note.id = 'v2rLegacyNote'; note.className = 'v2r-lnote'; note.hidden = true;
+      var sec = document.createElement('div'); sec.id = 'v2roSec'; sec.className = 'v2-sec'; view.parentNode.insertBefore(sec, view);
+      var note = document.createElement('p'); note.id = 'v2roLegacyNote'; note.className = 'v2ro-lnote'; note.hidden = true;
       note.textContent = 'كل السجلات كما كانت، للاطلاع فقط.';
       view.parentNode.insertBefore(note, view);
     }
-    var sheet = document.createElement('div'); sheet.id = 'v2rSheet'; sheet.className = 'v2-sheet'; sheet.setAttribute('aria-hidden', 'true');
+    var sheet = document.createElement('div'); sheet.id = 'v2roSheet'; sheet.className = 'v2-sheet'; sheet.setAttribute('aria-hidden', 'true');
     document.body.appendChild(sheet);
     var tb = q('.topbar'), ttl = tb && q('.ttl', tb);
     if (tb && ttl && !q('.v2-tb-logo', tb)) { var lg = document.createElement('span'); lg.className = 'v2-tb-logo'; lg.innerHTML = LOGO; tb.insertBefore(lg, ttl); }
@@ -827,7 +827,7 @@
       if (!V.active || !sheetOpen()) return;
       if (e.key === 'Escape') { closeSheet(); return; }
       if (e.key !== 'Tab') return;
-      var box = q('#v2rSheet .v2s-box'); if (!box) return;
+      var box = q('#v2roSheet .v2s-box'); if (!box) return;
       var f = qa('a[href],button:not([disabled])', box).filter(function (n) { return n.offsetParent !== null; });
       if (!f.length) return;
       var first = f[0], last = f[f.length - 1], cur = document.activeElement;
@@ -839,9 +839,9 @@
   // صنف الدور على الإطار (يتبدّل مع الحساب بلا إعادة تحميل)
   function syncRoleClass() {
     var app = appEl(); if (!app) return;
-    ['v2r-trainer', 'v2r-investor', 'v2r-staff', 'v2r-viewer'].forEach(function (c) { app.classList.remove(c); });
+    ['v2ro-trainer', 'v2ro-investor', 'v2ro-staff', 'v2ro-viewer'].forEach(function (c) { app.classList.remove(c); });
     var key = ROLEKEY[V.role] || 'viewer';
-    app.classList.add('v2r-' + (key === 'employee' ? 'staff' : key));
+    app.classList.add('v2ro-' + (key === 'employee' ? 'staff' : key));
   }
   // يفكّ الشكل الجديد كله (دخل أدمن في نفس الصفحة، أو رجع المفتاح مقفولًا): لا يبقى من الإطار شيء.
   function deactivate() {
@@ -851,8 +851,8 @@
     stopLegacyWatch();
     closeSheet();
     var app = appEl();
-    if (app) ['v2-shell', 'v2-roles', 'v2-bare', 'v2r-trainer', 'v2r-investor', 'v2r-staff', 'v2r-viewer', 'v2r-legacy', 'v2-pre'].forEach(function (c) { app.classList.remove(c); });
-    ['v2rSide', 'v2rSec', 'v2rSheet', 'v2rLegacyNote'].forEach(function (id) { var n = document.getElementById(id); if (n && n.parentNode) n.parentNode.removeChild(n); });
+    if (app) ['v2-shell', 'v2-roles', 'v2-bare', 'v2ro-trainer', 'v2ro-investor', 'v2ro-staff', 'v2ro-viewer', 'v2ro-legacy', 'v2-pre'].forEach(function (c) { app.classList.remove(c); });
+    ['v2roSide', 'v2roSec', 'v2roSheet', 'v2roLegacyNote'].forEach(function (id) { var n = document.getElementById(id); if (n && n.parentNode) n.parentNode.removeChild(n); });
     var lg = q('.v2-tb-logo'); if (lg && lg.parentNode) lg.parentNode.removeChild(lg);
     var rb = q('#roBanner'); if (rb) rb.style.display = '';
   }

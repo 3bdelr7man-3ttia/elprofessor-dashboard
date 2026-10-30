@@ -1049,7 +1049,7 @@ def test_static_index_hooks():
     assert s.count('<!-- v2 sections begin -->') == 1
     assert [l.strip() for l in blk.group(1).strip().splitlines() if 'company' in l] == ['<link rel="stylesheet" href="v2s/company.css">', '<script src="v2s/company.js"></script>']
     assert s.index('v2-d2.js') < s.index('<!-- v2 sections begin -->')
-    hook = "if(window.V2_ON&&window.V2SEC){for(var _k in V2SEC){var _o=V2SEC[_k];if(_o&&_o.owns&&_o.owns(current)){var _ap=document.querySelector('.app');if(_ap)_ap.classList.add('v2-bare');return _o.render(current,v);}}}"
+    hook = "const _s=V2SEC.owner(current);if(_s){"   # بعد الدمج: خطّاف واحد موحّد عبر السجلّ V2SEC.owner (v2s/_registry.js)
     assert s.count(hook) == 1
     assert s.index("return V2D3.render(current,v);") < s.index(hook) < s.index("if(MODULES_LOOKUP[current]&&MODULES_LOOKUP[current].soon)")
     assert 'openSection:function(key,tab,opts){v2OpenSection(key,tab,opts);}' in s
@@ -1061,9 +1061,10 @@ def test_static_app_and_dockerfile():
     lines = a.splitlines()
     i = [n for n, l in enumerate(lines) if 'v2_company_routes' in l][0]
     assert lines[i].strip() == "__import__('v2_company_routes').register(app, globals())  # v2s:company"
-    assert lines[i + 1].strip() == '# ---- v2 section routes end'
+    end = [n for n, l in enumerate(lines) if l.strip() == '# ---- v2 section routes end']
+    assert len(end) == 1 and i < end[0]   # بعد الدمج: سطور الأقسام الأخرى قد تتبع سطر الشركة قبل العلامة
     d = _read('Dockerfile')
-    assert 'COPY backend/v2_*_routes.py /app/' in d and 'COPY dashboard-cloud/v2s /app/dist/v2s' in d
+    assert 'COPY backend/v2_company_routes.py /app/v2_company_routes.py' in d and 'COPY dashboard-cloud/v2s /app/dist/v2s' in d
 
 
 def test_static_company_js_fix_round_rules():

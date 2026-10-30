@@ -625,7 +625,7 @@ def test_csp_allows_everything_the_dashboard_actually_loads():
     for f in ('index.html', 'dashboard-api.js', 'site-content.js'):
         blob += open(os.path.join(base, f), encoding='utf-8').read()
     src = open(DASHBOARD_HTML, encoding='utf-8').read()
-    assert re.search(r'<script\s+src=["\'](?!site-content\.js|dashboard-api\.js|v2-logic\.js|v2-home\.js|v2-shell\.js|v2-d2\.js|v2-d3\.js|v2s/[a-z0-9_]+\.js)', src) is None
+    assert re.search(r'<script\s+src=["\'](?!site-content\.js|dashboard-api\.js|v2-logic\.js|v2-home\.js|v2-shell\.js|v2-d2\.js|v2-d3\.js|v2s/[a-z0-9_-]+\.js)', src) is None
     assert '<iframe' not in src.lower()
     assert re.search(r'<img\b', src, re.I) is None
     # exactly one network origin for XHR/fetch: same-origin /api

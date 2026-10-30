@@ -816,9 +816,10 @@ def test_home_tile_speaks_the_boards_words_and_always_lands_on_the_ideas_list():
 def test_index_html_hooks_are_inside_the_sections_block_and_the_dispatcher_needs_the_shell():
     b = HTML[HTML.index('<!-- v2 sections begin -->'):HTML.index('<!-- v2 sections end -->')]
     assert 'href="v2s/content.css"' in b and 'src="v2s/content.js"' in b
-    disp = [l for l in HTML.split('\n') if 'V2SEC' in l and 'owns' in l]
+    # بعد الدمج: خطّاف واحد موحّد عبر السجلّ V2SEC.owner (يشترط الغلاف الجديد)
+    disp = [l for l in HTML.split('\n') if 'V2SEC.owner(current)' in l and 'render(' in l]
     assert len(disp) == 1 and 'V2SHELL.on' in disp[0] and 'v2-bare' in disp[0]
-    assert HTML.index('V2D3.render(current,v)') < HTML.index('V2SEC') < HTML.index("if(current==='inbox')return viewInbox(v);")
+    assert HTML.index('V2D3.render(current,v)') < HTML.index('const _s=V2SEC.owner(current)') < HTML.index("if(current==='inbox')return viewInbox(v);")
     assert os.path.isfile(os.path.join(DC, 'v2s', 'content.js')) and os.path.isfile(os.path.join(DC, 'v2s', 'content.css'))
 
 

@@ -1121,18 +1121,20 @@ def test_wiring_in_the_shared_files():
     block = html[html.index('<!-- v2 sections begin -->'):html.index('<!-- v2 sections end -->')]
     assert '<link rel="stylesheet" href="v2s/reports.css">' in block and '<script src="v2s/reports.js"></script>' in block
     assert html.index('<script src="v2-d2.js"></script>') < html.index('<!-- v2 sections begin -->')
-    assert "if(window.V2_ON&&window.V2SEC){const _k=Object.keys(V2SEC).find(function(k){return V2SEC[k].owns(current);});if(_k)return V2SEC[_k].render(current,v);}" in html
-    assert "if(window.V2SEC&&Object.keys(V2SEC).some(function(k){return V2SEC[k].owns(current);}))ap.classList.add('v2-bare');" in html
+    # بعد الدمج: خطّاف واحد موحّد عبر السجلّ V2SEC.owner (v2s/_registry.js) والتقارير مسجَّلة فيه بمفتاحها
+    assert "const _s=V2SEC.owner(current);if(_s){" in html and "return _s.render(current,v);" in html
+    assert "if(window.V2SEC&&V2SEC.owner&&V2SEC.owner(current))ap.classList.add('v2-bare');" in html
     app = _read('backend', 'app.py')
     i = app.index('# ---- v2 section routes end')
     assert "import v2_reports_routes as _v2r; _v2r.register(app, globals())  # v2s:reports" in app[:i]
+    assert app.index('# ---- v2 section routes begin') < app.index('v2_reports_routes')
     assert app.index('v2_book_request_patch') < i < app.index("@app.route('/api/platform-pnl'")
     d3 = _read('dashboard-cloud', 'v2-d3.js')
     assert 'D3.openSheet = openSheet; D3.twoStage = twoStage;' in d3
     for df in ('Dockerfile', os.path.join('deploy', 'Dockerfile.coolify')):
         t = _read(df)
         assert 'COPY dashboard-cloud/v2s /app/dist/v2s' in t and 'COPY backend/v2_reports_routes.py /app/v2_reports_routes.py' in t and 'COPY backend/v2_*_routes.py' not in t
-    assert 'v2s/[a-z_]+\\.js' in _read('backend', 'tests', 'test_xss_hardening.py')
+    assert 'v2s/[a-z0-9_-]+\\.js' in _read('backend', 'tests', 'test_xss_hardening.py')
     assert 'tzdata==2024.1' in _read('backend', 'requirements.txt')
 
 

@@ -20,7 +20,7 @@
     lane: 'all', showTest: false, expanded: { 'new': false, waiting: false, offered: false, done: false }, seg: null,
     drawerId: '', opener: null, ov: '', busy: {}, err: {}, done: {}, detail: {}, bodyOpen: {}, rows: [], T: null,
     all: { state: 'idle', items: [], total: null, counts: null, lane: 'all', status: 'all', need: 'all', author: 'all', q: '', seq: 0, more: false, httpStatus: 0 },
-    qTimer: null, courseGuard: false, doneTimers: {}
+    qTimer: null, doneTimers: {}
   };
 
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
@@ -527,41 +527,10 @@
     var mk = s.querySelector('#mkMake'); if (mk) mk.onclick = function () { window.closeModal(); courseSheet(r.title || ''); };
   }
 
-  // —— إنشاء دورة من طلب: نافذة الإنشاء الموجودة بعد إعادة تلبيسها (الدورات تملكها؛ نحن نلبّسها من الخارج فقط)
-  function retext(el, text) {
-    if (!el) return;
-    var n = Array.prototype.filter.call(el.childNodes, function (c) { return c.nodeType === 3 && c.nodeValue.trim(); })[0];
-    if (n) n.nodeValue = ' ' + text + ' '; else el.appendChild(document.createTextNode(text));
-  }
-  function guardCourseView() {
-    if (S.courseGuard || typeof window.viewCourses !== 'function') return;
-    S.courseGuard = true;
-    var orig = window.viewCourses;
-    // بعد نجاح الإنشاء يستدعي الكود القديم `viewCourses(#view)` فيرسم شاشة الدورات القديمة فوق هذا القسم؛ داخل قسمنا نعيد رسم السوق بدلًا منها.
-    window.viewCourses = function (v) {
-      if (isCurrent() && S.view === v) { toast('أُنشئت الدورة'); if (ep()) ep().reload('courses', null); redraw(); return; }
-      return orig.apply(this, arguments);
-    };
-  }
+  // —— إنشاء دورة من طلب: ورقة «أنشئ دورة» الجديدة في قسم الدورات (V2CO.create)؛ بعد النجاح نبقى في السوق ونعيد رسمه
   function courseSheet(title) {
-    if (typeof window.createCourseModal !== 'function') return;
-    var E = ep();
-    guardCourseView();
-    if (E) E.ensure('courses', null);
-    window.createCourseModal(title || '');
-    var s = document.getElementById('epModal');
-    if (!s) return;
-    s.classList.add('v2s-mk-cc');
-    var mb = s.querySelector('.mb'); if (mb) mb.classList.add('v3m');
-    var x = s.querySelector('[data-x]'); if (x) x.setAttribute('aria-label', 'إغلاق');
-    var hd = s.querySelector('#m_head'); if (hd && hd.parentNode) retext(hd.parentNode, 'تسعير لكل فرد');
-    retext(s.querySelector('details summary'), 'أنشئ المنهج تلقائيًا (اختياري)');
-    var tit = s.querySelector('#m_titch'); if (tit) retext(tit, 'أنشئ المنهج وانشر');
-    var hint = s.querySelector('details > div > div'); if (hint) hint.textContent = 'الصق ملخّص الدورة وهدفها التعليمي، فيُولَّد منهج من دروس متدرّجة وأسئلة تفاعلية ويرتبط بالدورة تلقائيًا.';
-    var plat = s.querySelector('#m_plat'); if (plat && plat.parentNode) retext(plat.parentNode, 'دورة من المنصة نفسها (بلا مدرّب)');
-    var mail = s.querySelector('#m_email'); if (mail && mail.nextElementSibling) mail.nextElementSibling.textContent = 'بهذا البريد تصبح الدورة دورة المدرّب: تظهر في «دوراتي» عنده، ويضيف حلقاتها ويرى دفعتها ومستحقاته. بدونه تبقى الدورة للإدارة وحدها.';
-    if (mail) mail.setAttribute('placeholder', 'بريد المدرّب');
-    var f = s.querySelector('#m_title'); if (f && f.focus) { try { f.focus(); } catch (e) {} }
+    if (!(window.V2CO && typeof window.V2CO.create === 'function')) { toast('تعذّر فتح إنشاء الدورة الآن'); return; }
+    window.V2CO.create(title || '', { done: function () { toast('أُنشئت الدورة مسودة'); if (ep()) ep().reload('courses', null); redraw(); } });
   }
   M.courseSheet = courseSheet;
 
@@ -860,7 +829,7 @@
   document.addEventListener('keydown', function (e) {
     if (e.key !== 'Escape') return;
     var m = document.getElementById('epModal');
-    if (m && (m.classList.contains('v2s-mk-sh') || m.classList.contains('v2s-mk-cc'))) { if (!m.dataset.busy) window.closeModal(); return; }
+    if (m && m.classList.contains('v2s-mk-sh')) { if (!m.dataset.busy) window.closeModal(); return; }
     if (S.ov) { closeDrawer(); }
   });
   document.addEventListener('keydown', function (e) {
@@ -874,5 +843,5 @@
     else if (!e.shiftKey && cur === last) { e.preventDefault(); first.focus(); }
   });
 
-  (window.V2SEC = window.V2SEC || []).push({ owns: M.owns, render: M.render });
+  (window.V2SEC = window.V2SEC || {}).market = { owns: M.owns, render: M.render };
 })();

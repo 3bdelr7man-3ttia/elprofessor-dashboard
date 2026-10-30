@@ -271,7 +271,7 @@ def test_css_is_fully_scoped():
     css = _read('dashboard-cloud', 'v2s', 'roles.css')
     rules = _css_rules(css)
     assert rules
-    ok = ('.app.v2-roles', '.app.v2r-', '.v2r', '.v2rm', '#epModal .modal:has(.v2rm)')
+    ok = ('.app.v2-roles', '.app.v2ro-', '.v2ro', '.v2rom', '#epModal .modal:has(.v2rom)')
     for head, _at in rules:
         for sel in [s.strip() for s in head.split(',') if s.strip()]:
             if sel.startswith('from') or sel.startswith('to') or re.match(r'^\d+%', sel):

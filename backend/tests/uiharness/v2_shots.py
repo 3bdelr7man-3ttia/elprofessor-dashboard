@@ -153,9 +153,9 @@ def flow(browser, h, pre, viewport, mobile):
     page.wait_for_timeout(100)
     # سجل العقل
     page.click('[data-tile="brain"]')
-    page.wait_for_selector('.v2-log, .v2-empty')
+    page.wait_for_selector('.v2-log, .v2-empty, .v2sb')
     shot(page, p + '03-brain-log.jpg')
-    page.click('[data-a="back"]')
+    page.go_back()    # بعد الدمج: سجل العقل تبويب في قسمه، والرجوع بزر المتصفح
     page.wait_for_selector('.v2-tile')
     # التركيز لكل نوع
     start(page)
@@ -442,7 +442,7 @@ def go_section(page, key, tab=None):
 
 SECTION_FIRST = [('home', 'board', 'اللوحة'), ('files', 'files', 'ملفات الخبراء'), ('disputes', 'disputes', 'النزاعات والاستردادات'),
                  ('courses', 'courses', 'الدورات والمدرّبون'), ('market', 'requests', 'سوق الخدمات'), ('books', 'offers', 'الكتب'),          # D3: مراجعة العروض أولًا
-                 ('people', 'users', 'الناس والدعوات'), ('money', 'overview', 'الفلوس'), ('content', 'topics', 'المحتوى'),
+                 ('people', 'invites', 'الناس والدعوات'), ('money', 'overview', 'الفلوس'), ('content', 'pipeline', 'المحتوى'),
                  ('marketing', 'campaigns', 'التسويق'), ('reports', 'report', 'التقارير'), ('brain', 'log', 'العقل'),
                  ('company', 'invest', 'الشركة ورأس المال')]
 
@@ -517,7 +517,7 @@ def flow_d1b(browser, h, pre, viewport, mobile):
     page.evaluate("() => { location.hash = '#invites'; }")
     page.wait_for_timeout(400)
     st = sec_state(page)
-    if st['hash'] != '#s/people/invites' or st['on'] != 'الدعوات':
+    if st['hash'] != '#s/people/invites' or st['on'] != 'الطلبات':   # بعد دمج الناس: تبويب invites اسمه «الطلبات»
         PROBLEMS.append(pre + '26: تغيير العنوان لرابط قديم ما حوّلش: %r' % st)
     if page.evaluate("() => localStorage.getItem('ep_v2_shell')") != '1':
         PROBLEMS.append(pre + '26: تذكّر المفتاح المفتوح مش متسجّل')
@@ -554,7 +554,7 @@ def flow_d1b(browser, h, pre, viewport, mobile):
             PROBLEMS.append('%s32: مربّع %s هبط على %s (المتوقع %s)' % (pre, tile, hh, expect))
     go_section(page, 'home', 'board')
     page.click('[data-tile="brain"]')
-    page.wait_for_selector('.v2-log, .v2-empty')
+    page.wait_for_selector('.v2-log, .v2-empty, .v2sb')
     if sec_state(page)['hash'] != '#s/brain/log':
         PROBLEMS.append(pre + '33: مربّع العقل ما فتحش «سجل اليوم»')
     sshot(page, pre + '33-brain-log.jpg')
@@ -569,9 +569,9 @@ def flow_d1b(browser, h, pre, viewport, mobile):
 
     # رابط قديم بيهبط على قسمه وتبويبه
     for old, expect, label, on_tab in (('#finance', '#s/money/all', 'الفلوس', 'كل السجلات'), ('#packages', '#s/money/all', 'الفلوس', 'كل السجلات'),
-                                       ('#messages', '#s/people/messages', 'الناس والدعوات', 'الرسائل'), ('#invites', '#s/people/invites', 'الناس والدعوات', 'الدعوات'),
+                                       ('#messages', '#s/people/messages', 'الناس والدعوات', 'الرسائل'), ('#invites', '#s/people/invites', 'الناس والدعوات', 'الطلبات'),
                                        ('#escrow', '#s/disputes/escrow', 'النزاعات والاستردادات', 'الضمان'), ('#tutorials', '#s/content/tutorials', 'المحتوى', 'دليل الاستخدام'),
-                                       ('#partners', '#s/company/invest', 'الشركة ورأس المال', 'الاستثمار والشركاء'), ('#inbox', '#s/home/inbox', 'اللوحة', 'كل الوارد'),
+                                       ('#partners', '#s/company/invest', 'الشركة ورأس المال', 'نظرة'), ('#inbox', '#s/home/inbox', 'اللوحة', 'كل الوارد'),
                                        ('#team', '#s/files/experts', 'ملفات الخبراء', 'الخبراء'), ('#s/money/receipts', '#s/money/receipts', 'الفلوس', 'الإيصالات والمدفوعات العالقة')):
         ctx = browser.context(h, 'admin', viewport, mobile)
         page = open_shell(ctx, old)
@@ -590,22 +590,24 @@ def flow_d1b(browser, h, pre, viewport, mobile):
     page = open_shell(ctx, '#foundation')
     st = sec_state(page)
     tg = page.evaluate("() => tgTab")
-    if st['hash'] != '#s/company/targets' or tg != 'foundation':
-        PROBLEMS.append('%s42: #foundation هبط على %r وtgTab=%r (المتوقع foundation)' % (pre, st, tg))
+    if st['hash'] != '#s/company/assets' or st['on'] != 'المعدات والاشتراكات':   # بعد دمج الشركة: #foundation ⇒ «المعدات والاشتراكات»
+        PROBLEMS.append('%s42: #foundation هبط على %r وtgTab=%r (المتوقع #s/company/assets)' % (pre, st, tg))
     sshot(page, pre + '42-old-link-foundation.jpg')
     browser.close()
     ctx = browser.context(h, 'admin', viewport, mobile)
     page = open_shell(ctx)
     go_section(page, 'files', 'all')          # D2: «الملفات» بقت لوحة تذاكر، والوارد القديم في تبويب «كل الملفات»
-    page.wait_for_selector('.chip[data-f="all"]')
-    page.click('.chip[data-f="all"]')
+    if not mobile:   # بعد الدمج: شرائح الوارد بشكل اللوحة الجديد (home.js)، وعلى الموبايل مخفية (التصفية من ورقة أخرى)
+        page.wait_for_selector('.v2h-chip[data-f="late"]')
+        page.click('.v2h-chip[data-f="late"]')
     page.wait_for_timeout(500)
     st = sec_state(page)
     if st['hash'] != '#s/files/all' or st['h1'] != 'ملفات الخبراء':
         PROBLEMS.append('%s43: شريحة «الكل» داخل الملفات نقلت المستخدم: %r' % (pre, st))
-    srch = page.evaluate("() => getComputedStyle(document.querySelector('.topbar .search')).display")
-    if (w > 760 and srch == 'none') or (w <= 760 and srch != 'none'):
-        PROBLEMS.append('%s43: البحث في الوارد (عرض %s) display=%s' % (pre, w, srch))
+    # بعد دمج الرئيسية: بحث الوارد صار داخل الشاشة نفسها (#v2hq) في كل العروض، وبحث الشريط العلوي لا يظهر معه
+    srch = page.evaluate("() => { const e = document.getElementById('v2hq'); return e ? (e.getBoundingClientRect().width > 0 ? 'visible' : 'hidden') : 'missing'; }")
+    if srch != 'visible':
+        PROBLEMS.append('%s43: بحث الوارد (عرض %s) غير ظاهر: %s' % (pre, w, srch))
     sshot(page, pre + '43-inbox-chip-in-files.jpg')
     if w < 1180:
         page.click('#menuBtn')
@@ -813,7 +815,7 @@ def flow_d2(browser, h, pre, viewport, mobile):
         PROBLEMS.append('%s05: وسوم الأدوار: %r' % (pre, pinfo['chips']))
     if 'بدعوة من أ. نادية فؤاد' not in (pinfo['join'] or ''):
         PROBLEMS.append('%s05: سطر الانضمام والداعي: %r' % (pre, pinfo['join']))
-    if pinfo['btns'] != ['مراسلة']:
+    if pinfo['btns'] != ['مراسلة', 'إدارة الحساب']:   # بعد دمج الناس: زر «إدارة الحساب» من v2s/people.js
         PROBLEMS.append('%s05: أزرار الشخص %r (أوقف مؤقتًا ممنوع بلا مسار)' % (pre, pinfo['btns']))
     if pinfo['log'] < 4:
         PROBLEMS.append('%s05: السجل قصير (%s)' % (pre, pinfo['log']))
@@ -838,27 +840,28 @@ def flow_d2(browser, h, pre, viewport, mobile):
     page.wait_for_timeout(400)
     d2_shot(page, pre + '06b-person-all-failed.jpg')
     h.ef.forced.clear()
-    # —— ٦) بحث الناس
-    page.evaluate("() => { location.hash = '#s/people/users'; }")
-    page.wait_for_selector('#v2dq', state='visible', timeout=15000)
-    page.fill('#v2dq', 'هالة')
-    page.wait_for_selector('#v2dres a', timeout=10000)
-    page.wait_for_timeout(400)
-    items = page.evaluate("() => [...document.querySelectorAll('#v2dres a')].map(a => a.getAttribute('data-person'))")
-    if 'hala@example.test' not in items:
-        PROBLEMS.append('%s07: نتائج البحث %r' % (pre, items))
-    d2_shot(page, pre + '07-people-search.jpg')
-    page.click('#v2dres a >> nth=0')
-    page.wait_for_function("() => location.hash.indexOf('#s/people/person/') === 0", timeout=10000)
-    # الاسم في قائمة المستخدمين يفتح صفحته
+    # —— ٦) بحث الناس (بعد دمج الناس: بحث الأشخاص العام يظهر على الكمبيوتر في «الرسائل» فقط؛ تبويب «المستخدمون» ببحثه الخاص، وعلى الموبايل العام مخفي)
+    if w > 760:
+        page.evaluate("() => { location.hash = '#s/people/messages'; }")
+        page.wait_for_selector('#v2dq', state='visible', timeout=15000)
+        page.fill('#v2dq', 'هالة')
+        page.wait_for_selector('#v2dres a', timeout=10000)
+        page.wait_for_timeout(400)
+        items = page.evaluate("() => [...document.querySelectorAll('#v2dres a')].map(a => a.getAttribute('data-person'))")
+        if 'hala@example.test' not in items:
+            PROBLEMS.append('%s07: نتائج البحث %r' % (pre, items))
+        d2_shot(page, pre + '07-people-search.jpg')
+        page.click('#v2dres a >> nth=0')
+        page.wait_for_function("() => location.hash.indexOf('#s/people/person/') === 0", timeout=10000)
+    # زر «افتح صفحة الشخص» في قائمة المستخدمين يفتح صفحته
     page.evaluate("() => { location.hash = '#s/people/users'; }")
     try:
-        page.wait_for_selector('.parties .v2d-person', timeout=15000)
+        page.wait_for_selector('.v2p-btn2[data-a="person"]', timeout=15000)
     except Exception:
         page.screenshot(path=os.path.join(OUT, 'FAIL-users.png'))
         print(page.evaluate("() => [location.hash, (document.getElementById('view')||{}).innerText.slice(0, 400), window.EP && EP.state.users, (window.USERS||[]).length]"))
         raise
-    page.click('.parties .v2d-person >> nth=0')
+    page.click('.v2p-btn2[data-a="person"] >> nth=0')
     page.wait_for_function("() => location.hash.indexOf('#s/people/person/') === 0", timeout=10000)
     browser.close()
 

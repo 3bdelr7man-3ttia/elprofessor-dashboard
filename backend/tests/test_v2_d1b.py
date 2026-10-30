@@ -89,7 +89,7 @@ def test_the_tabs_match_the_approved_table():
         # الجولة الأخيرة: «الدورات والمدرّبون» بشاشاته الجديدة (تبويب مخفي لصفحة الدورة)، والشاشة القديمة آخرًا في «كل السجلات»
         'courses': [['courses', 'الدورات', 'courses'], ['trainers', 'المدرّبون', 'team'], ['live', 'الدورات الحيّة', 'courses'], ['demand', 'ما يطلبه الناس', 'courses'],
                     ['offers', 'عروض الأسعار', 'courses'], ['course', 'صفحة الدورة', 'courses'], ['all', 'كل السجلات', 'courses']],
-        'market': [['requests', 'الطلبات', 'market']],
+        'market': [['requests', 'الطلبات', 'market'], ['all', 'كل الطلبات', 'v2s_market_all'], ['demand', 'ماذا يطلب الناس', 'v2s_market_demand']],
         # D3: مراجعة العروض وطلبات القرّاء أولًا (موديولان وهميان ورا الغلاف)، والشاشة القديمة آخرًا
         'books': [['offers', 'مراجعة العروض', 'v2b_offers'], ['requests', 'طلبات القرّاء', 'v2b_requests'], ['books', 'الكتب والأعمال', 'knowledge']],
         # الناس والدعوات (نهائي): الطلبات والدعوات (موديول وهمي v2p_invites) والمستخدمون والرسائل، وصفحة الشخص مخفية
@@ -102,7 +102,7 @@ def test_the_tabs_match_the_approved_table():
         # الجولة الأخيرة: «المحتوى» بست تبويبات كلها على الموديول القديم `topics` (تُميَّز بـ`topicsTab`) وبلا «كل السجلات»
         'content': [['pipeline', 'خط النشر', 'topics'], ['articles', 'المقالات', 'topics'], ['topics', 'الموضوعات', 'topics'], ['news', 'الأخبار', 'topics'],
                     ['comments', 'التعليقات', 'topics'], ['tutorials', 'دليل الاستخدام', 'topics']],
-        'marketing': [['campaigns', 'الحملات', 'marketing']],
+        'marketing': [['campaigns', 'الحملات', 'marketing'], ['social', 'السوشيال ميديا', 'v2mk_social'], ['plan', 'خطة النشر', 'v2mk_plan']],   # الجولة النهائية: الحملات الجديدة + السوشيال + خطة النشر
         'reports': [['report', 'التقرير', 'analysis'], ['demand', 'ما يسأل عنه الناس', 'v2r_demand'], ['sunday', 'تقرير الأحد', 'v2r_sunday']],     # الجولة النهائية: التقارير
         'brain': [['log', 'القواعد وسجل اليوم', 'v2s_brain'], ['helpers', 'المساعدون', 'ai']],
         'company': [['invest', 'نظرة', 'investment'], ['partners', 'الشركاء ورأس المال', 'v2c_partners'], ['assets', 'المعدات والاشتراكات', 'v2c_assets'], ['deals', 'الاتفاقات والرعاة', 'v2c_deals'], ['ads', 'عملاء الإعلانات', 'v2c_ads'], ['settings', 'الإعدادات', 'settings'], ['targets', 'الأهداف', 'targets']],
@@ -168,7 +168,7 @@ def test_inner_screen_state_picks_the_right_tab_and_unknown_state_stays_put():
         ('escrow', {'escTab': 'manual'}, 'money', 'manual'), ('escrow', {'escTab': 'disputes'}, 'disputes', 'escrow'),
         ('finance', {'finTab': 'packages'}, 'money', 'all'), ('finance', {'finTab': 'withdrawals'}, 'money', 'all'),
         ('topics', {'topicsTab': 'tutorials'}, 'content', 'tutorials'), ('topics', {'topicsTab': 'news'}, 'content', 'news'),
-        ('courses', {'courseTab': 'demand'}, 'courses', 'demand'), ('home', {'v2mode': 'brain'}, 'brain', 'log'),, 'board'}  # + أقسام الجولة النهائية
+        ('courses', {'courseTab': 'demand'}, 'courses', 'demand'), ('home', {'v2mode': 'brain'}, 'home', 'board'),   # سجل العقل القديم لم يعد وضعًا للوحة (صار تبويب v2s_brain)
         ('home', {'v2mode': 'focus'}, 'home', 'board'), ('targets', {'tgTab': 'foundation'}, 'company', 'targets'),
         ('investment', {'invTab': 'opps'}, 'company', 'invest'),
     ]

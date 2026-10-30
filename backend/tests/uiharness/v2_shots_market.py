@@ -388,9 +388,9 @@ def flow(browser, h, pre, vp, mobile):
     page.click('#mkOv [data-a="dlink"]')
     page.wait_for_selector('#epModal.v2s-mk-sh #mkMake')
     mshot(page, pre + '06-sheet-link-none.jpg')
-    # إنشاء دورة من الطلب (النافذة القديمة بتلبيس الورقة الجديدة)
+    # إنشاء دورة من الطلب (بعد الدمج: ورقة «أنشئ دورة» الجديدة من قسم الدورات)
     page.click('#mkMake')
-    page.wait_for_selector('#epModal.v2s-mk-cc .mb.v3m #m_title')
+    page.wait_for_selector('#epModal .v2co-m #co_ti')
     page.wait_for_timeout(300)
     vis_note = page.evaluate("() => { const n = document.querySelector('#epModal .note-ai'); return !!(n && n.offsetParent); }")
     if vis_note:

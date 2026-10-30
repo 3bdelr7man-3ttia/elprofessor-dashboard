@@ -306,7 +306,8 @@ def test_wiring_one_registration_line_above_the_marker_and_lazy_helpers(ctx, pla
     assert src.count('import v2_market_routes as _v2s_market; _v2s_market.register(app, globals())') == 1
     lines = src.split('\n')
     i = [n for n, ln in enumerate(lines) if ln.startswith('# ---- v2 section routes end')][0]
-    assert 'v2_market_routes' in lines[i - 1], 'سطر التسجيل لازم يكون فوق العلامة مباشرة'
+    b = [n for n, ln in enumerate(lines) if ln.startswith('# ---- v2 section routes begin')][0]
+    assert b < [n for n, ln in enumerate(lines) if 'v2_market_routes' in ln][0] < i, 'سطر التسجيل لازم يكون داخل كتلة المسارات بين العلامتين (بعد الدمج: سطر لكل قسم)'
     # `_platform_proxy` بيتقرا وقت النداء: استبداله بعد الاستيراد بيتحترم
     import app as appmod
     calls = []
@@ -664,9 +665,11 @@ def test_index_html_hooks_are_there_once_and_the_old_screen_is_untouched():
     m = re.search(r'<!-- v2 sections begin -->(.*?)<!-- v2 sections end -->', html, re.S)
     assert m and html.count('<!-- v2 sections begin -->') == 1
     assert '<link rel="stylesheet" href="v2s/market.css">' in m.group(1) and '<script src="v2s/market.js"></script>' in m.group(1)
-    assert html.count('V2SEC[_i].owns(current)') == 1 and html.count('for(var _i=0;_i<V2SEC.length;_i++)') == 1
-    assert html.index('V2D3.render(current,v)') < html.index('V2SEC[_i].owns(current)'), 'الخطّاف بعد سطر D3'
-    assert html.index('V2SEC[_i].owns(current)') < html.index("MODULES_LOOKUP[current]&&MODULES_LOOKUP[current].soon"), 'قبل أي شاشة قديمة'
+    # بعد الدمج: خطّاف واحد موحّد للأقسام كلها (السجلّ V2SEC.owner في v2s/_registry.js) والسوق مسجَّل بمفتاحه
+    assert html.count('V2SEC.owner(current)') == 2 and html.count('for(var _i=0;_i<V2SEC.length;_i++)') == 0
+    assert html.index('V2D3.render(current,v)') < html.index('const _s=V2SEC.owner(current)'), 'الخطّاف بعد سطر D3'
+    assert html.index('const _s=V2SEC.owner(current)') < html.index("MODULES_LOOKUP[current]&&MODULES_LOOKUP[current].soon"), 'قبل أي شاشة قديمة'
+    assert ').market = { owns: M.owns, render: M.render }' in _read('dashboard-cloud', 'v2s', 'market.js')
     # الشاشة القديمة بالحرف: الدالة والمحمّلات
     assert 'function viewMarket(v){' in html and "current==='market')return viewMarket(v)" in html and 'function drawMarketReq(){' in html
     assert re.search(r"viewMarket\(v\)\s*\n?\s*\}", html) or True
@@ -707,18 +710,13 @@ def test_index_markup_text_has_no_forbidden_visible_copy():
         assert bad not in _strip(js).replace('V2L.v2sMarket', ''), bad
 
 
-def test_the_create_course_modal_hooks_the_restyle_depends_on_still_exist():
-    """تلبيس «إنشاء دورة» يعتمد على معرّفات ونصوص النافذة القديمة؛ لو غيّرها قسم الدورات يفشل هذا الاختبار بصوت عالٍ عند الدمج."""
-    html = _read('dashboard-cloud', 'index.html')
-    body = html[html.index('function createCourseModal('):html.index('function editCourseModal(')]
-    owner = html[html.index('function courseOwnerBlockHtml('):html.index('function bindCourseOwner(')]
-    for needle in ('id="m_title"', 'id="m_head"', 'id="m_titch"', '<details', '<summary', 'id="m_save"'):
-        assert needle in body, 'تلبيس نافذة الدورة: ' + needle
-    for needle in ('id="m_plat"', 'id="m_email"'):
-        assert needle in owner, 'تلبيس نافذة الدورة: ' + needle
+def test_creating_a_course_from_a_request_uses_the_new_create_sheet_of_the_courses_section():
+    """بعد الدمج: «أنشئ دورة» من طلب = ورقة الدورات الجديدة (V2CO.create) لا النافذة القديمة المعاد تلبيسها، وبلا غلاف على viewCourses."""
     js = _read('dashboard-cloud', 'v2s', 'market.js')
-    for sel in ('#m_head', '#m_titch', '#m_plat', '#m_email', 'details > div > div', '#m_title'):
-        assert sel in js, sel
+    assert 'window.V2CO.create(' in js and 'createCourseModal' not in js and 'window.viewCourses' not in js and 'v2s-mk-cc' not in js
+    co = _read('dashboard-cloud', 'v2s', 'courses.js')
+    assert 'CO.create = function (title, opts)' in co and 'function openCreate(prefillTitle, done)' in co and "if (typeof done === 'function') { done(res, p); return; }" in co
+    assert 'v2s-mk-cc' not in _read('dashboard-cloud', 'v2s', 'market.css')
 
 
 def test_all_requests_reloads_when_any_filter_changed_since_the_last_load():
@@ -738,7 +736,7 @@ def test_plain_copy_has_no_board_loanword():
     for rel in (('dashboard-cloud', 'v2s', 'market.js'), ('dashboard-cloud', 'v2s', 'market.css')):
         assert 'بورد' not in re.sub(r'داشبورد', '', _strip(_read(*rel))), rel
     logic = _read('dashboard-cloud', 'v2-logic.js')
-    blk = logic[logic.index('// ===== v2s:market ====='):]
+    blk = logic[logic.index('// ===== v2s:market ====='):logic.index('// ===== /v2s:market =====')]
     assert 'بورد' not in _strip(blk)
 
 

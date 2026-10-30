@@ -2694,13 +2694,15 @@ def v2_book_request_patch(request_id):
 
 # ---- v2 section routes begin
 # كل قسم من الجولة الأخيرة بيسجّل مساراته في ملف مستقل `v2_<قسم>_routes.py` بسطر واحد هنا (قبل علامة النهاية).
+try:   # العقل: تحميل محروس (غياب الوحدة لا يوقف بقية اللوحة)
+    from v2_brain_routes import register as _v2_brain_register; _v2_brain_register(app, globals())
+except Exception: logger.exception('v2 brain routes not loaded')
 import v2_courses_routes; v2_courses_routes.register(app, globals())
 import v2_market_routes as _v2s_market; _v2s_market.register(app, globals())  # noqa: E402
 __import__('v2_books_routes').register(app, globals())
 import v2_content_routes as _v2s_content; _v2s_content.register(app, globals())
 __import__('v2_marketing_routes').register(app, globals())   # v2s:marketing
 import v2_reports_routes as _v2r; _v2r.register(app, globals())  # v2s:reports
-from v2_brain_routes import register as _v2_brain_register; _v2_brain_register(app, globals())
 __import__('v2_company_routes').register(app, globals())  # v2s:company
 __import__('v2_roles_routes').register(app)   # v2s:roles
 # ---- v2 section routes end

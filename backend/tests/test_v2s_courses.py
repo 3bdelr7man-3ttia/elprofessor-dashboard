@@ -753,7 +753,7 @@ def test_course_page_address():
     assert r[5] == '#s/courses/course/abc-123' and r[6] == 'a%20b' and r[7] == '' and r[8] == 'ok_1'
     # صفحة الشخص كما هي
     p = _L("console.log(JSON.stringify([L.routeFor('#s/people/person/a%40b.test'),L.routeFor('#s/people/person/zzz'),L.sectionHash('people','person','a@b.test')]))")
-    assert p[0]['person'] == 'a@b.test' and p[1]['tab'] == 'users' and p[2] == '#s/people/person/a%40b.test'
+    assert p[0]['person'] == 'a@b.test' and p[1]['tab'] == 'invites' and p[2] == '#s/people/person/a%40b.test'   # بعد دمج الأشخاص: أول تبويب «الطلبات» (invites)
 
 
 # ---------------------------------------------------------------- ٧) الملفات والخطّافات
@@ -772,7 +772,7 @@ def test_page_tags_and_guards():
 
 def test_course_address_lines_in_index():
     assert "if(opts&&opts.course&&sec.key==='courses'&&tab.key==='course')V2S.course=String(opts.course);" in HTML
-    assert HTML.count('V2L.sectionHash(V2S.section,V2S.tab,V2S.person||V2S.course)') == 2
+    assert HTML.count('V2L.sectionHash(V2S.section,V2S.tab,V2S.person||V2S.course,V2S.q)') == 2   # بعد دمج التقارير: العنوان يحمل q أيضًا
     assert "openCourse:function(id){v2OpenSection('courses','course',{course:id});}" in HTML
     assert HTML.count('course:rt.course') == 2
 

@@ -19,6 +19,8 @@
     owns: function (m) { var e = this.mods[m]; return !!(e && e.owns()); },
     render: function (m, v) { return this.mods[m].render(v); }
   };
+  // سجلّ الأقسام الموحّد (v2s/_registry.js): index.html يسأل V2SEC.owner(mod) فقط.
+  (window.V2SEC = window.V2SEC || {}).books = { owns: function (m) { return R.owns(m); }, render: function (m, v) { return R.render(m, v); } };
 
   var SESSION_AR = 'انتهت الجلسة — سجّل الدخول من جديد ثم جرّب';
   var FAIL_AR = 'تعذّر تنفيذ العملية';

@@ -96,7 +96,7 @@ def test_xss_allowlist_accepts_only_v2s_named_scripts():
 def test_every_css_selector_is_scoped_so_the_switch_off_is_untouched():
     css = re.sub(r'/\*.*?\*/', '', HOME_CSS, flags=re.S)
     css = re.sub(r'@media[^{]*\{', '', css)
-    ok = ('.app.v2-shell', 'body:has(> .app.v2-shell)', 'html.v2h-login', '.app.v2-pre', 'from', 'to', '0%', '100%')
+    ok = ('.app.v2-shell', 'body:has(> .app.v2-shell)', 'body:has(> .app.v2-shell:not(.v2-roles))', 'html.v2h-login', '.app.v2-pre', 'from', 'to', '0%', '100%')
     bad = []
     for sel in re.findall(r'([^{}]+)\{', css):
         for part in sel.split(','):
@@ -108,11 +108,10 @@ def test_every_css_selector_is_scoped_so_the_switch_off_is_untouched():
     assert not bad, bad[:5]
 
 
-def test_app_py_is_untouched_by_this_branch():
-    p = subprocess.run(['git', 'diff', '--stat', '7d1aa83', '--', 'backend/app.py'], cwd=ROOT, capture_output=True, text=True)
-    if p.returncode != 0:
-        pytest.skip('no git history here')
-    assert p.stdout.strip() == ''
+def test_home_has_no_server_routes_of_its_own():
+    """بعد الدمج: app.py فيه مسارات الأقسام الأخرى؛ الرئيسية ما لها ملف مسارات ولا سطر تسجيل."""
+    assert not os.path.exists(os.path.join(ROOT, 'backend', 'v2_home_routes.py'))
+    assert 'v2_home_routes' not in _read('backend', 'app.py')
 
 
 def test_css_pieces_that_replace_js():

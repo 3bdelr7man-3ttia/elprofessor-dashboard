@@ -5409,7 +5409,7 @@
     }
     var items = all.filter(function (it) { return !isSkipped(skipped, it.kind + '_' + it.id); });
     if (items.length) return { state: 'items', items: items, text: '' };
-    if (all.length) return { state: 'none', items: [], text: STR.brainNone };           // كلها «بعدين»
+    if (all.length) return { state: 'none', items: [], text: STR.brainNone };           // كلها مؤجّلة
     var young = act.some(function (r) { return !mature(r, todayISO) && r.spent > 0 && ((!r.allZero && r.revenue < r.spent) || r.allZero); });
     if (young) return { state: 'young', items: [], text: STR.brainYoung };
     return { state: 'none', items: [], text: STR.brainNone };

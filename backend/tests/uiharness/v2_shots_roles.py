@@ -4,10 +4,10 @@
     cd backend && python3 -B tests/uiharness/v2_shots_roles.py ../docs/v2/final/shots-roles
 
 ⛔ صفر طلبات حقيقية: الداشبورد جوه العملية والمنصة جدول في الذاكرة (`roles_fixtures.RolesPlatform`)، وأي أصل تاني بيتقفل ويتسجّل.
-السكربت بيفشل (خروج ١) لو: خرج طلب برّه الداشبورد (غير خطوط جوجل) · تمرير أفقي · هدف أقل من ٤٤px (أو زرّ `v2r-btn` أقل من ٥٢px في الموبايل) ·
+السكربت بيفشل (خروج ١) لو: خرج طلب برّه الداشبورد (غير خطوط جوجل) · تمرير أفقي · هدف أقل من ٤٤px (أو زرّ `v2ro-btn` أقل من ٥٢px في الموبايل) ·
 `undefined/null/NaN` ظاهرة · رقم «٠/0» في بطاقة مصدرها واقع أو حساب غير مربوط · القائمة القديمة أو الشريط ذو الإيموجي ظاهر والمفتاح مفتوح ·
-كتابة سحب من غير `confirmed:true` أو نداء مباشر لـ`/api/investor/withdraw` · المدرّب طلب `investment-opportunities` · الأدمن رأى أي `v2r` ·
-زرّ السحب تحت الطي في الموبايل · أكثر من `v2r-btn1` على شاشة · بريد في البانر · تبويب مكرّر ظاهر في «كل السجلات» · لوحة الجرس بشكل قديم ·
+كتابة سحب من غير `confirmed:true` أو نداء مباشر لـ`/api/investor/withdraw` · المدرّب طلب `investment-opportunities` · الأدمن رأى أي `v2ro` ·
+زرّ السحب تحت الطي في الموبايل · أكثر من `v2ro-btn1` على شاشة · بريد في البانر · تبويب مكرّر ظاهر في «كل السجلات» · لوحة الجرس بشكل قديم ·
 قائمة/جرس ظاهرَين في شاشة الحساب المعلّق.
 """
 import json
@@ -32,8 +32,8 @@ PROBLEMS = []
 EMOJI = re.compile('[' + chr(0x1F300) + '-' + chr(0x1FAFF) + chr(0x2600) + '-' + chr(0x2714) + chr(0x2716) + '-' + chr(0x27BF) + chr(0x2B50) + chr(0x23F0) + chr(0x23F3) + chr(0x231A) + chr(0x231B) + ']')   # chr(0x2715) = زرّ إغلاق النافذة الموجودة، مش إيموجي
 NA = 'غير متاح بعد'
 
-READY = """() => !!document.querySelector('.app.v2-roles') && !!document.querySelector('.v2r, .v2r-vw, .v2r-solo')
-  && !document.querySelector('.v2r-load') && ![...document.querySelectorAll('.v2r-big')].some(n => n.textContent.trim() === '…')"""
+READY = """() => !!document.querySelector('.app.v2-roles') && !!document.querySelector('.v2ro, .v2ro-vw, .v2ro-solo')
+  && !document.querySelector('.v2ro-load') && ![...document.querySelectorAll('.v2ro-big')].some(n => n.textContent.trim() === '…')"""
 
 
 class Run(object):
@@ -64,11 +64,11 @@ def check(run, page, name, roles_on=True):
     if small:
         PROBLEMS.append('%s: %d هدف أقل من ٤٤px: %r' % (name, len(small), small[:4]))
     if run.mobile:
-        btn = page.evaluate("""() => [...document.querySelectorAll('.v2r-btn1, .v2r-btn2')]
+        btn = page.evaluate("""() => [...document.querySelectorAll('.v2ro-btn1, .v2ro-btn2')]
           .filter(n => n.offsetParent).map(n => n.getBoundingClientRect().height).filter(h => h < 51.5).length""")
         if btn:
             PROBLEMS.append('%s: %d زرار أقل من ٥٢px في الموبايل' % (name, btn))
-    out = page.evaluate("""() => [...document.querySelectorAll('.v2r a, .v2r button, .v2rm button')].filter(b => b.offsetParent && !b.closest('.v2r-chips'))
+    out = page.evaluate("""() => [...document.querySelectorAll('.v2ro a, .v2ro button, .v2rom button')].filter(b => b.offsetParent && !b.closest('.v2ro-chips'))
       .map(b => b.getBoundingClientRect()).filter(r => r.left < -1 || r.right > window.innerWidth + 1).length""")
     if out:
         PROBLEMS.append('%s: %d عنصر خارج عرض الشاشة' % (name, out))
@@ -81,11 +81,11 @@ def check(run, page, name, roles_on=True):
             PROBLEMS.append('%s: شريط الدور القديم ظاهر' % name)
         if EMOJI.search(txt):
             PROBLEMS.append('%s: إيموجي ظاهر: %r' % (name, EMOJI.findall(txt)[:3]))
-    hero = page.evaluate("() => { const h = document.querySelector('.v2r-hero'); return h ? h.innerText : ''; }")
+    hero = page.evaluate("() => { const h = document.querySelector('.v2ro-hero'); return h ? h.innerText : ''; }")
     if '@' in hero:
         PROBLEMS.append('%s: بريد في البانر' % name)
-    if len(page.query_selector_all('.v2r .v2r-btn1')) > 1 and any(k in name for k in ('investor-home', 'trainer-home', 'trainer-earnings')):
-        vis = page.evaluate("() => [...document.querySelectorAll('.v2r .v2r-btn1')].filter(n => n.offsetParent).length")
+    if len(page.query_selector_all('.v2ro .v2ro-btn1')) > 1 and any(k in name for k in ('investor-home', 'trainer-home', 'trainer-earnings')):
+        vis = page.evaluate("() => [...document.querySelectorAll('.v2ro .v2ro-btn1')].filter(n => n.offsetParent).length")
         if vis > 1:
             PROBLEMS.append('%s: %d زرّ رئيسي ظاهر' % (name, vis))
 
@@ -115,7 +115,7 @@ def goto(page, mod):
 
 
 def bigs(page):
-    return page.evaluate("() => [...document.querySelectorAll('.v2r-num')].map(n => [n.querySelector('h3').textContent.trim(), n.querySelector('.v2r-big').textContent.trim()])")
+    return page.evaluate("() => [...document.querySelectorAll('.v2ro-num')].map(n => [n.querySelector('h3').textContent.trim(), n.querySelector('.v2ro-big').textContent.trim()])")
 
 
 def expect_na(name, page, labels):
@@ -155,7 +155,7 @@ def scan_legacy(page, name, tabs_sel):
         page.wait_for_timeout(700)
         bad = page.evaluate("""() => { const out = [], w = document.createTreeWalker(document.querySelector('#view'), NodeFilter.SHOW_TEXT);
           while (w.nextNode()) { const n = w.currentNode, p = n.parentNode;
-            if (!p || /^(SCRIPT|STYLE|TEXTAREA|OPTION)$/.test(p.nodeName) || p.closest('[dir="ltr"], .v2r-mail, code') || !p.offsetParent) continue;
+            if (!p || /^(SCRIPT|STYLE|TEXTAREA|OPTION)$/.test(p.nodeName) || p.closest('[dir="ltr"], .v2ro-mail, code') || !p.offsetParent) continue;
             const t = n.nodeValue; if (/\d/.test(t) || /[A-Za-z]{2,}/.test(t) || /^\s*[·—]\s*$/.test(t)) out.push(t.trim().slice(0, 60)); }
           return out; }""")
         for t in bad[:4]:
@@ -183,7 +183,7 @@ def flow_trainer(br, h, run):
         PROBLEMS.append('trainer-home: المستحق مش ٢٬٣٥٠ جنيه بل %r' % got)
     if run.w < 1180:
         page.click('#menuBtn')
-        page.wait_for_selector('#v2rSheet.open')
+        page.wait_for_selector('#v2roSheet.open')
         shot(run, page, run.tag('07-trainer-menu-sheet.jpg'))
         page.keyboard.press('Escape')
         page.wait_for_timeout(250)
@@ -194,7 +194,7 @@ def flow_trainer(br, h, run):
     page.evaluate("() => { document.querySelector('.content').style.overflow = 'visible'; document.querySelector('.app').style.height = 'auto'; }")
     shot(run, page, run.tag('03b-trainer-earnings-wallet.jpg'), full=True)
     page.evaluate("() => { document.querySelector('.content').style.overflow = ''; document.querySelector('.app').style.height = ''; }")
-    if len(page.query_selector_all('.v2r-btn1')) != 1 or not page.query_selector('[data-r-act="wd"]'):
+    if len(page.query_selector_all('.v2ro-btn1')) != 1 or not page.query_selector('[data-r-act="wd"]'):
         PROBLEMS.append('trainer-earnings: لازم زرّ رئيسي واحد هو السحب')
     check_calls(run, 'trainer')
     br.close()
@@ -208,7 +208,7 @@ def flow_trainer(br, h, run):
     shot(run, page, run.tag('05-trainer-courses-empty.jpg'))
     goto(page, 't_earnings')
     shot(run, page, run.tag('05b-trainer-earnings-unlinked.jpg'))
-    if page.query_selector('.v2r-h2:has-text("محفظة الاستثمار")'):
+    if page.query_selector('.v2ro-h2:has-text("محفظة الاستثمار")'):
         PROBLEMS.append('trainer-earnings-unlinked: جزء المحفظة مرسوم لمدرّب بلا محفظة')
     br.close()
 
@@ -230,30 +230,30 @@ def flow_investor(br, h, run):
     ctx = br.context(h, 'investor', run.vp, run.mobile)
     page = open_page(ctx, run)
     shot(run, page, run.tag('10-investor-home.jpg'))
-    top = page.evaluate("() => { const b = document.querySelector('[data-r-act=\"wd\"].v2r-btn1'); return b ? b.getBoundingClientRect().top + scrollY : -1; }")
+    top = page.evaluate("() => { const b = document.querySelector('[data-r-act=\"wd\"].v2ro-btn1'); return b ? b.getBoundingClientRect().top + scrollY : -1; }")
     if top < 0:
         PROBLEMS.append('investor-home: زرّ السحب مش موجود')
     elif run.w <= 400 and top > 800:
         PROBLEMS.append('investor-home (m): زرّ السحب تحت الطي (%d)' % top)
     # طلب السحب: النموذج ⇒ المراجعة ⇒ خطأ الخادم ⇒ نجاح
-    page.click('[data-r-act="wd"].v2r-btn1')
-    page.wait_for_selector('#v2rAmt')
+    page.click('[data-r-act="wd"].v2ro-btn1')
+    page.wait_for_selector('#v2roAmt')
     shot(run, page, run.tag('13-investor-withdraw-form.jpg'))
-    page.fill('#v2rAmt', '1000')
-    page.click('#v2rRev')
-    page.wait_for_selector('#v2rGo')
+    page.fill('#v2roAmt', '1000')
+    page.click('#v2roRev')
+    page.wait_for_selector('#v2roGo')
     shot(run, page, run.tag('14-investor-withdraw-review.jpg'))
     n0 = len(run.reqs)
-    page.click('#v2rGo')
-    page.wait_for_selector('.v2r-err')
-    if 'الحد الأدنى' not in page.inner_text('.v2r-err') or '٥٠' not in page.inner_text('.v2r-err'):
-        PROBLEMS.append('investor-withdraw-error: رسالة الخادم مش بالأرقام العربية: %r' % page.inner_text('.v2r-err'))
+    page.click('#v2roGo')
+    page.wait_for_selector('.v2ro-err')
+    if 'الحد الأدنى' not in page.inner_text('.v2ro-err') or '٥٠' not in page.inner_text('.v2ro-err'):
+        PROBLEMS.append('investor-withdraw-error: رسالة الخادم مش بالأرقام العربية: %r' % page.inner_text('.v2ro-err'))
     shot(run, page, run.tag('15-investor-withdraw-error.jpg'))
-    page.click('#v2rBack')
-    page.fill('#v2rAmt', '5000')
-    page.click('#v2rRev')
-    page.wait_for_selector('#v2rGo')
-    page.click('#v2rGo')
+    page.click('#v2roBack')
+    page.fill('#v2roAmt', '5000')
+    page.click('#v2roRev')
+    page.wait_for_selector('#v2roGo')
+    page.click('#v2roGo')
     page.wait_for_function("() => !document.getElementById('epModal')", timeout=15000)
     page.wait_for_function(READY, timeout=15000)
     page.wait_for_timeout(300)
@@ -292,8 +292,8 @@ def flow_staff(br, h, run):
     ctx = br.context(h, 'employee', run.vp, run.mobile)
     page = open_page(ctx, run)
     shot(run, page, run.tag('20-staff-people.jpg'))
-    page.click('.v2r-x >> nth=0')
-    page.wait_for_selector('.v2r-det:not([hidden])')
+    page.click('.v2ro-x >> nth=0')
+    page.wait_for_selector('.v2ro-det:not([hidden])')
     shot(run, page, run.tag('21-staff-people-open.jpg'))
     goto(page, 'courses')
     shot(run, page, run.tag('22-staff-courses.jpg'))
@@ -329,7 +329,7 @@ def flow_staff(br, h, run):
     page.wait_for_timeout(200)
     shot(run, page, run.tag('26-staff-topics-guide-tab.jpg'))
     goto(page, 'tutorials')
-    page.click('.v2r-x >> nth=0')
+    page.click('.v2ro-x >> nth=0')
     shot(run, page, run.tag('27-staff-tutorials.jpg'))
     # الجرس
     page.click('#bellBtn')
@@ -353,7 +353,7 @@ def flow_staff(br, h, run):
     shot(run, page, run.tag('29-staff-people-capped.jpg'))
     expect_text('staff-people-capped', page, 'المعروض أحدث')
     n0 = len(h.dash_calls)
-    page.fill('#v2rQ', 'منى')
+    page.fill('#v2roQ', 'منى')
     page.wait_for_timeout(900)
     page.wait_for_function(READY, timeout=15000)
     if not any(p == '/api/platform-users' for _m, p in h.dash_calls[n0:]):
@@ -371,19 +371,19 @@ def flow_viewer(br, h, run):
         page = open_page(ctx, run)
         shot(run, page, run.tag(name))
         st = page.evaluate("""() => ({menu: !!document.getElementById('menuBtn').offsetParent, bell: !!document.getElementById('bellBtn').offsetParent,
-          title: document.getElementById('pageTitle').textContent.trim(), side: !!(document.getElementById('v2rSide') && document.getElementById('v2rSide').offsetParent)})""")
+          title: document.getElementById('pageTitle').textContent.trim(), side: !!(document.getElementById('v2roSide') && document.getElementById('v2roSide').offsetParent)})""")
         if st['menu'] or st['bell'] or st['side'] or st['title'] != 'حسابك':
             PROBLEMS.append('viewer: قائمة/جرس ظاهر أو عنوان غلط: %r' % st)
         br.close()
-    # الأدمن: لا v2r
+    # الأدمن: لا v2ro
     ctx = br.context(h, 'admin', run.vp, run.mobile)
     page = ctx.new_page()
     page.goto(DASH + '/', wait_until='domcontentloaded')
     page.wait_for_function("() => window.V2_ON === true && document.querySelector('.v2-tile')", timeout=30000)
     page.wait_for_timeout(500)
-    leaks = page.evaluate("() => document.querySelectorAll('[class*=\"v2r\"], #v2rSide, #v2rSec, #v2rSheet').length")
+    leaks = page.evaluate("() => document.querySelectorAll('[class*=\"v2ro\"], #v2roSide, #v2roSec, #v2roSheet').length")
     if leaks:
-        PROBLEMS.append('admin: ظهر %d عنصر v2r' % leaks)
+        PROBLEMS.append('admin: ظهر %d عنصر v2ro' % leaks)
     shot(run, page, run.tag('32-admin-home.jpg'), roles_on=False)
     br.close()
 
@@ -413,7 +413,7 @@ def flow_edge(br, h, run):
     page.goto(DASH + '/', wait_until='domcontentloaded')
     page.wait_for_function("() => window.EP && EP.role === 'trainer' && document.querySelector('.app').classList.contains('v2-pre')", timeout=30000)
     st = page.evaluate("""() => ({rail: getComputedStyle(document.querySelector('.rail')).display, main: getComputedStyle(document.querySelector('.main')).visibility,
-      skel: !!document.querySelector('#view .v2r-load'), old: !!document.querySelector('#view .kpis')})""")
+      skel: !!document.querySelector('#view .v2ro-load'), old: !!document.querySelector('#view .kpis')})""")
     if st['rail'] != 'none' or st['main'] != 'hidden' or st['old']:
         PROBLEMS.append('memo: ومضة للشكل القديم قبل رد المفتاح: %r' % st)
     h.hold.discard(('GET', '/api/v2/roles/config'))
@@ -428,7 +428,7 @@ def flow_edge(br, h, run):
         ctx = br.context(h, 'employee', run.vp, run.mobile)
         page = open_page(ctx, run)
         page.wait_for_timeout(600)
-        names = page.evaluate("() => [...document.querySelectorAll('#v2rSheet .v2s-tn, #v2rSide .v2s-name')].map(n => n.textContent.trim())")
+        names = page.evaluate("() => [...document.querySelectorAll('#v2roSheet .v2s-tn, #v2roSide .v2s-name')].map(n => n.textContent.trim())")
         if sorted(set(names)) != ['الأعضاء', 'دليل الاستخدام']:
             PROBLEMS.append('staff-perms: بنود القائمة مش الاثنين المسموحين: %r' % names)
         shot(run, page, run.tag('40-staff-restricted.jpg'))
@@ -436,7 +436,7 @@ def flow_edge(br, h, run):
         _set_perms(h, {'employee': {'modules': []}})
         ctx = br.context(h, 'employee', run.vp, run.mobile)
         page = open_page(ctx, run)
-        page.wait_for_function("() => document.querySelector('.v2r-solo')", timeout=15000)
+        page.wait_for_function("() => document.querySelector('.v2ro-solo')", timeout=15000)
         shot(run, page, run.tag('41-staff-no-screens.jpg'))
         br.close()
     finally:
@@ -465,8 +465,8 @@ def flow_switch(br, h, run):
         PROBLEMS.append('switch: مبلغ المدرّب (أ) مش ظاهر قبل التبديل')
     _swap_account(page, h.tokens['investor_unlinked'])
     st = page.evaluate("""() => ({cls: document.querySelector('.app').className, txt: document.querySelector('#view').innerText,
-      wd: !!document.querySelector('[data-r-act="wd"]'), side: document.querySelectorAll('#v2rSide').length})""")
-    if 'v2r-trainer' in st['cls'] or 'v2r-investor' not in st['cls']:
+      wd: !!document.querySelector('[data-r-act="wd"]'), side: document.querySelectorAll('#v2roSide').length})""")
+    if 'v2ro-trainer' in st['cls'] or 'v2ro-investor' not in st['cls']:
         PROBLEMS.append('switch: صنف الدور لم يتبدّل: %r' % st['cls'])
     if st['wd'] or '٢٬٣٥٠' in st['txt'] or 'محفظة الاستثمار' in st['txt'] and 'متاح للسحب' not in st['txt']:
         PROBLEMS.append('switch: أثر من حساب المدرّب (أ) على المستثمر (ب): %r' % st['txt'][:200])
@@ -498,7 +498,7 @@ def flow_off(br, h, run):
             page.goto(DASH + '/', wait_until='domcontentloaded')
             page.wait_for_function("() => window.EP && EP.role && document.querySelector('.rail .nav .item')", timeout=30000)
             page.wait_for_timeout(1200)
-            st = page.evaluate("""() => ({rail: getComputedStyle(document.querySelector('.rail')).display !== 'none', side: !!document.getElementById('v2rSide'),
+            st = page.evaluate("""() => ({rail: getComputedStyle(document.querySelector('.rail')).display !== 'none', side: !!document.getElementById('v2roSide'),
               roles: document.querySelector('.app').classList.contains('v2-roles'), memo: localStorage.getItem('ep_v2_roles')})""")
             if run.w >= 1180 and not st['rail']:
                 PROBLEMS.append('%s: القائمة القديمة مش ظاهرة والمفتاح مقفول' % label)

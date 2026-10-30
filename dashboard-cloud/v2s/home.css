@@ -288,6 +288,7 @@ body:has(> .app.v2-shell) #epModal .acts .btn:disabled{opacity:.55}
   body:has(> .app.v2-shell) #epModal .modal{max-width:none;width:100%;border-radius:22px 22px 0 0;max-height:92vh;max-height:92dvh;overflow:auto}
   body:has(> .app.v2-shell) #epModal .modal .mb{max-height:none}
   body:has(> .app.v2-shell) #epModal .acts .btn{min-height:52px}
+  body:has(> .app.v2-shell) #epModal .modal .mh button{width:52px;height:52px}   /* الموبايل: زر الإغلاق ٥٢ (يغلب قاعدة ٤٤ أعلاه) */
 }
 body:has(> .app.v2-shell) .toasts{inset-inline-start:20px;inset-inline-end:auto;left:auto;right:auto}
 body:has(> .app.v2-shell) .toast{background:#21262E;color:#fff;border-radius:14px;font:600 14.5px/1.6 'IBM Plex Sans Arabic','Cairo',sans-serif;padding:12px 18px}
@@ -297,14 +298,14 @@ body:has(> .app.v2-shell) .toast .ic{color:#E8A9BC}
 }
 
 /* ============ ٦) الجرس الواحد ============ */
-body:has(> .app.v2-shell) #notifPanel,body:has(> .app.v2-shell) #bellCount{display:none!important}
-body:has(> .app.v2-shell) .app.v2-shell .topbar #bellBtn{position:relative;width:44px;height:44px;min-width:44px;border-radius:12px;background:#fff;border:1px solid #E9E1D6;color:#21262E}
-body:has(> .app.v2-shell) #bellBtn .v2h-bn{position:absolute;top:-6px;inset-inline-start:-6px;min-width:20px;height:20px;padding:0 5px;border-radius:999px;background:#9E2B4E;color:#fff;font:800 11px/20px 'Cairo',sans-serif;font-style:normal;text-align:center}
-body:has(> .app.v2-shell) #bellBtn .v2h-bn:empty{display:none}
-body:has(> .app.v2-shell) #bellBtn .v2h-bn.tone-warn{background:#E0A526;color:#21262E}
-body:has(> .app.v2-shell) #bellBtn .v2h-bn.dot:empty{display:block;min-width:0;width:12px;height:12px;padding:0;border:2px solid #fff;background:#E0A526;top:-3px;inset-inline-start:-3px}
+body:has(> .app.v2-shell:not(.v2-roles)) #notifPanel,body:has(> .app.v2-shell:not(.v2-roles)) #bellCount{display:none!important}
+body:has(> .app.v2-shell:not(.v2-roles)) .app.v2-shell .topbar #bellBtn{position:relative;width:44px;height:44px;min-width:44px;border-radius:12px;background:#fff;border:1px solid #E9E1D6;color:#21262E}
+body:has(> .app.v2-shell:not(.v2-roles)) #bellBtn .v2h-bn{position:absolute;top:-6px;inset-inline-start:-6px;min-width:20px;height:20px;padding:0 5px;border-radius:999px;background:#9E2B4E;color:#fff;font:800 11px/20px 'Cairo',sans-serif;font-style:normal;text-align:center}
+body:has(> .app.v2-shell:not(.v2-roles)) #bellBtn .v2h-bn:empty{display:none}
+body:has(> .app.v2-shell:not(.v2-roles)) #bellBtn .v2h-bn.tone-warn{background:#E0A526;color:#21262E}
+body:has(> .app.v2-shell:not(.v2-roles)) #bellBtn .v2h-bn.dot:empty{display:block;min-width:0;width:12px;height:12px;padding:0;border:2px solid #fff;background:#E0A526;top:-3px;inset-inline-start:-3px}
 /* العدّ والصحة معًا: العدّ دائرة عنّابية مقروءة في الزاوية العليا، والنقطة الكهرمانية على زاوية الزر السفلى المقابلة (لا تتقاطعان) */
-body:has(> .app.v2-shell) #bellBtn.v2h-hd::after{content:"";position:absolute;bottom:3px;inset-inline-end:3px;width:10px;height:10px;border-radius:50%;background:#E0A526;border:2px solid #fff;box-sizing:content-box;transform:translate(2px,2px)}
+body:has(> .app.v2-shell:not(.v2-roles)) #bellBtn.v2h-hd::after{content:"";position:absolute;bottom:3px;inset-inline-end:3px;width:10px;height:10px;border-radius:50%;background:#E0A526;border:2px solid #fff;box-sizing:content-box;transform:translate(2px,2px)}
 body:has(> .app.v2-shell) .v2h-bscrim{display:none;position:fixed;inset:0;z-index:77;background:transparent}
 body:has(> .app.v2-shell) .v2h-bscrim.open{display:block}
 body:has(> .app.v2-shell) .v2h-bell{display:none;position:fixed;z-index:78;top:62px;inset-inline-end:28px;width:420px;max-height:70vh;overflow-y:auto;background:#FBFAF7;border:1px solid #E9E1D6;border-radius:18px;box-shadow:0 18px 44px rgba(33,38,46,.22);font-family:'IBM Plex Sans Arabic','Cairo',sans-serif;color:#21262E}

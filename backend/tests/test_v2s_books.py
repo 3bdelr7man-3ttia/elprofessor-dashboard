@@ -246,7 +246,7 @@ def test_registration_is_one_line_before_the_marker():
     assert src.index(marker) < src.index("@app.route('/api/platform-pnl'")
     assert src.index("def v2_book_request_patch") < src.index(line)
     block = src[src.index(line):src.index(marker)]
-    assert all(ln.strip() == '' or 'v2_' in ln and '.register(app, globals())' in ln or ln.lstrip().startswith('#') for ln in block.split('\n')), \
+    assert all(ln.strip() == '' or 'v2_' in ln and 'register' in ln and '(app' in ln or ln.lstrip().startswith('#') for ln in block.split('\n')), \
         'بين سطر الكتب والعلامة سطور تسجيل أقسام أخرى فقط'
 
 
@@ -651,7 +651,7 @@ def test_the_files_are_wired_in_the_sections_block_and_shipped():
     assert html.count(begin) == 1 and html.count(end) == 1
     block = html[html.index(begin):html.index(end)]
     assert '<link rel="stylesheet" href="v2s/books.css">' in block and '<script src="v2s/books.js"></script>' in block
-    assert html.index('v2-d2.js') < html.index(begin) < html.index(end) < html.index('v2-d3.js'), 'الكتلة بعد v2-d2 وقبل v2-d3'
+    assert html.index('v2-d2.js') < html.index('v2-d3.js') < html.index(begin) < html.index(end), 'بعد الدمج: كتلة الأقسام بعد v2-d3 (كل الأقسام في كتلة واحدة)'
     refs = re.findall(r'(?:href|src)="(v2s/[^"]+)"', block)
     assert refs.count('v2s/books.css') == 1 and refs.count('v2s/books.js') == 1, refs
     assert refs.index('v2s/books.css') < refs.index('v2s/books.js'), 'الأنماط قبل السكربت'
@@ -659,8 +659,8 @@ def test_the_files_are_wired_in_the_sections_block_and_shipped():
     assert keys == sorted(keys), 'الكتلة مرتّبة أبجديًا بمفتاح القسم'
     for df in ('Dockerfile', os.path.join('deploy', 'Dockerfile.coolify')):
         txt = _read(df)
-        assert 'COPY dashboard-cloud/v2s /app/dist/v2s' in txt and 'COPY backend/v2_*_routes.py /app/' in txt, df
-        assert txt.index('COPY backend/app.py /app/app.py') < txt.index('COPY backend/v2_*_routes.py /app/')
+        assert 'COPY dashboard-cloud/v2s /app/dist/v2s' in txt and 'COPY backend/v2_books_routes.py /app/v2_books_routes.py' in txt, df   # بعد الدمج: سطر صريح لكل قسم (لا نمط عام)
+        assert txt.index('COPY backend/app.py /app/app.py') < txt.index('COPY backend/v2_books_routes.py /app/v2_books_routes.py')
     for f in ('v2s/books.js', 'v2s/books.css'):
         assert os.path.getsize(os.path.join(DC, f)) > 5000
     assert re.search(r'v2s/\[a-z0-9_-\]\+\\\.js', _read('backend', 'tests', 'test_xss_hardening.py')), 'قايمة السكربتات المسموحة تقبل v2s/<مفتاح>.js'
@@ -669,9 +669,10 @@ def test_the_files_are_wired_in_the_sections_block_and_shipped():
 def test_the_dispatch_line_is_there_once_right_after_the_d3_line_and_the_old_screen_stays():
     html = _read('dashboard-cloud', 'index.html')
     d3 = "  if(window.V2_ON&&window.V2D3&&V2D3.owns(current))return V2D3.render(current,v);\n"
-    line = "  if(window.V2_ON&&window.V2SX&&V2SX.owns(current)){const ap2=document.querySelector('.app');if(ap2)ap2.classList.add('v2-bare');return V2SX.render(current,v);}\n"
-    assert html.count(line) == 1 and html.count(d3) == 1
-    assert html.index(d3) + len(d3) == html.index(line), 'السطر مباشرة بعد سطر D3'
+    # بعد الدمج: خطّاف واحد موحّد (V2SEC.owner) بعد سطر D3 مباشرة (بعد سطر تعليقه)، والكتب مسجَّلة فيه بمفتاحها
+    assert html.count(d3) == 1 and html.count('const _s=V2SEC.owner(current)') == 1
+    assert html.index(d3) < html.index('const _s=V2SEC.owner(current)') < html.index('if(MODULES_LOOKUP[current]&&MODULES_LOOKUP[current].soon)')
+    assert '.books = { owns: function (m) { return R.owns(m); }' in _read('dashboard-cloud', 'v2s', 'books.js')
     assert 'function viewKnowledge(v){' in html and 'function addBookModal(){' in html and 'function knowledgeEditModal(k){' in html, 'مسار المفتاح المقفول'
     mods = html[html.index('const MODULES={'):html.index('// موديولات الأدوار غير-الأدمن')]
     assert 'v2s' not in mods and 'V2SX' not in mods

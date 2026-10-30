@@ -195,25 +195,24 @@ html.v2s-mk-lock{overflow:hidden}
 .v2s-mk-panel .v2s-mk-st.st-closed{background:#EFEDE8;color:#5B564C}
 .v2s-mk-panel .v2s-mk-st.st-unknown{background:#FFF3D1;color:#6B4A00}
 
-/* —— الأوراق (نافذة الداشبورد الموجودة بالشكل الجديد) ونافذة إنشاء الدورة المعاد تلبيسها */
-#epModal.v2s-mk-sh .modal,#epModal.v2s-mk-cc .modal{background:#FBFAF7;border-radius:20px;max-width:560px;font-family:'IBM Plex Sans Arabic','Cairo',sans-serif;color:#21262E}
-#epModal.v2s-mk-cc .modal{max-width:640px}
-#epModal.v2s-mk-sh .mh,#epModal.v2s-mk-cc .mh{background:#fff;color:#21262E;border-bottom:1px solid #E9E1D6;padding:12px 16px 12px 12px;font:800 18px 'Cairo',sans-serif}
-#epModal.v2s-mk-sh .mh button,#epModal.v2s-mk-cc .mh button{width:44px;height:44px;border-radius:12px;border:1px solid #E9E1D6;background:#fff;color:#21262E;font-size:16px;cursor:pointer}
-#epModal.v2s-mk-sh .mh button:hover,#epModal.v2s-mk-cc .mh button:hover{background:#FBF0F3;color:#9E2B4E}
-#epModal.v2s-mk-sh .mb,#epModal.v2s-mk-cc .mb{padding:18px 20px}
+/* —— الأوراق (نافذة الداشبورد الموجودة بالشكل الجديد) */
+#epModal.v2s-mk-sh .modal{background:#FBFAF7;border-radius:20px;max-width:560px;font-family:'IBM Plex Sans Arabic','Cairo',sans-serif;color:#21262E}
+#epModal.v2s-mk-sh .mh{background:#fff;color:#21262E;border-bottom:1px solid #E9E1D6;padding:12px 16px 12px 12px;font:800 18px 'Cairo',sans-serif}
+#epModal.v2s-mk-sh .mh button{width:44px;height:44px;border-radius:12px;border:1px solid #E9E1D6;background:#fff;color:#21262E;font-size:16px;cursor:pointer}
+#epModal.v2s-mk-sh .mh button:hover{background:#FBF0F3;color:#9E2B4E}
+#epModal.v2s-mk-sh .mb{padding:18px 20px}
 #epModal.v2s-mk-sh .mc-lead{font-size:15px;line-height:1.9;margin:0 0 12px}
-#epModal.v2s-mk-sh .fld label,#epModal.v2s-mk-cc .fld label{font:700 13.5px 'Cairo',sans-serif;color:#6B665C;margin-bottom:6px}
-#epModal.v2s-mk-sh .fld textarea,#epModal.v2s-mk-sh .fld input,#epModal.v2s-mk-cc .fld input,#epModal.v2s-mk-cc .fld select,#epModal.v2s-mk-cc .fld textarea{min-height:48px;font-size:16px;border:1px solid #D9CFC0;border-radius:12px;background:#FBFAF7;padding:10px 14px;font-family:inherit;color:#21262E}
+#epModal.v2s-mk-sh .fld label{font:700 13.5px 'Cairo',sans-serif;color:#6B665C;margin-bottom:6px}
+#epModal.v2s-mk-sh .fld textarea,#epModal.v2s-mk-sh .fld input{min-height:48px;font-size:16px;border:1px solid #D9CFC0;border-radius:12px;background:#FBFAF7;padding:10px 14px;font-family:inherit;color:#21262E}
 #epModal.v2s-mk-sh .fld textarea{min-height:92px}
-#epModal.v2s-mk-sh input:focus,#epModal.v2s-mk-sh textarea:focus,#epModal.v2s-mk-cc input:focus,#epModal.v2s-mk-cc select:focus,#epModal.v2s-mk-cc textarea:focus{border-color:#9E2B4E;box-shadow:0 0 0 3px rgba(158,43,78,.25);outline:0}
-#epModal.v2s-mk-sh .btn,#epModal.v2s-mk-cc .btn{min-height:48px;border-radius:14px;font:800 15.5px 'Cairo',sans-serif;padding:0 20px;border:0;cursor:pointer}
-#epModal.v2s-mk-sh .btn-primary,#epModal.v2s-mk-cc .btn-primary{background:#9E2B4E;color:#fff}
-#epModal.v2s-mk-sh .btn-primary:hover,#epModal.v2s-mk-cc .btn-primary:hover{background:#85233F}
+#epModal.v2s-mk-sh input:focus,#epModal.v2s-mk-sh textarea:focus{border-color:#9E2B4E;box-shadow:0 0 0 3px rgba(158,43,78,.25);outline:0}
+#epModal.v2s-mk-sh .btn{min-height:48px;border-radius:14px;font:800 15.5px 'Cairo',sans-serif;padding:0 20px;border:0;cursor:pointer}
+#epModal.v2s-mk-sh .btn-primary{background:#9E2B4E;color:#fff}
+#epModal.v2s-mk-sh .btn-primary:hover{background:#85233F}
 #epModal.v2s-mk-sh .btn-primary:disabled{opacity:.5;cursor:not-allowed}
-#epModal.v2s-mk-sh .btn-ghost,#epModal.v2s-mk-cc .btn-ghost,#epModal.v2s-mk-cc .btn-human{background:#fff;color:#9E2B4E;border:1px solid #E9E1D6;font-weight:700}
-#epModal.v2s-mk-sh .acts,#epModal.v2s-mk-cc .acts{display:flex;flex-wrap:wrap;gap:10px;margin-top:16px}
-#epModal.v2s-mk-sh .acts .btn,#epModal.v2s-mk-cc .acts .btn{flex:1 1 auto}
+#epModal.v2s-mk-sh .btn-ghost{background:#fff;color:#9E2B4E;border:1px solid #E9E1D6;font-weight:700}
+#epModal.v2s-mk-sh .acts{display:flex;flex-wrap:wrap;gap:10px;margin-top:16px}
+#epModal.v2s-mk-sh .acts .btn{flex:1 1 auto}
 #epModal.v2s-mk-sh .v2d-err{background:#FDECEF;border:1px solid #F2B5C0;color:#8E1228;border-radius:10px;padding:9px 12px;font-size:13.5px;line-height:1.75;margin:10px 0}
 #epModal.v2s-mk-sh .v2d-none{text-align:center;color:#6B665C;padding:12px}
 .v2s-mk-cnt{font-size:12.5px;color:#6B665C;text-align:end;margin-top:4px}
@@ -225,17 +224,6 @@ html.v2s-mk-lock{overflow:hidden}
 .v2s-mk-radio span{display:grid;gap:1px}
 .v2s-mk-radio b{font:800 15px 'Cairo',sans-serif}
 .v2s-mk-radio small{font-size:12.5px;color:#6B665C}
-#epModal.v2s-mk-cc .note-ai{display:none}
-#epModal.v2s-mk-cc .mb > div[style]{border-color:#E9E1D6!important;background:#F6F1EA!important}
-#epModal.v2s-mk-cc .mb > div[style] > div:first-child{color:#21262E!important}
-#epModal.v2s-mk-cc details{border:1px solid #E9E1D6!important;border-radius:14px!important;background:#fff}
-#epModal.v2s-mk-cc details summary{background:#F6F1EA!important;color:#21262E!important;min-height:48px;font:800 15px 'Cairo',sans-serif}
-#epModal.v2s-mk-cc details summary svg{display:none}
-#epModal.v2s-mk-cc .btn svg{display:none}
-#epModal.v2s-mk-cc .tg{background:#fff;border:1px solid #E9E1D6;border-radius:12px;min-height:48px;padding:6px 14px;font:700 14px 'Cairo',sans-serif}
-#epModal.v2s-mk-cc .tg input{width:22px;height:22px;accent-color:#9E2B4E}
-#epModal.v2s-mk-cc .mb .fld span[style]{color:#9E2B4E!important}
-#epModal.v2s-mk-cc .mb div[style*="font-size:11px"],#epModal.v2s-mk-cc .mb div[style*="font-size:12px"]{font-size:13px!important;line-height:1.8;color:#6B665C!important}
 
 /* —— تابلت: أعمدة 2×2 (القاعدة في v2-d2.css) */
 @media(max-width:1179px){
@@ -278,8 +266,8 @@ html.v2s-mk-lock{overflow:hidden}
   .v2s-mk-df .v2d-btn1,.v2s-mk-df .v2d-btn2,.v2s-mk-panel .v2d-btn1,.v2s-mk-panel .v2d-btn2{min-height:52px}
   .v2s-mk-df .v2d-btn2,.v2s-mk-df .v2d-btn1{flex:1 1 100%;width:100%}
   .v2s-mk-cardbox{padding:14px}
-  #epModal.v2s-mk-sh .btn,#epModal.v2s-mk-cc .btn{min-height:52px;flex:1 1 100%}
-  #epModal.v2s-mk-sh .modal,#epModal.v2s-mk-cc .modal{max-width:100%}
+  #epModal.v2s-mk-sh .btn{min-height:52px;flex:1 1 100%}
+  #epModal.v2s-mk-sh .modal{max-width:100%}
   .v2s-mk-chips.strip .v2s-mk-chip{min-height:44px}
 }
 @media(prefers-reduced-motion:reduce){

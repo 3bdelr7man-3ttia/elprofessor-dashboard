@@ -388,9 +388,11 @@ def test_index_html_has_the_sections_block_and_the_render_hook():
     keys = re.findall(r'v2s/([a-z]+)\.(?:js|css)', block)
     assert keys == sorted(keys), 'الأسطر بترتيب أبجدي بالمفتاح'
     assert h.index('<script src="v2-d3.js"></script>') < h.index('<!-- v2 sections begin -->')
-    assert "if(window.V2SEC_OWNS&&V2SEC_OWNS(current))ap.classList.add('v2-bare');" in h
-    hook = "if(window.V2_ON&&window.V2SEC_OWNS&&V2SEC_OWNS(current))return V2SEC_RENDER(current,v);"
-    assert hook in h and h.index("return V2D3.render(current,v);") < h.index(hook) < h.index("viewSoon(v)")
+    # بعد الدمج: سطر ترويسة الغلاف وخطّاف الرسم موحّدان لكل الأقسام عبر السجلّ V2SEC.owner
+    assert "if(window.V2SEC&&V2SEC.owner&&V2SEC.owner(current))ap.classList.add('v2-bare');" in h
+    hook = "const _s=V2SEC.owner(current);if(_s){"
+    assert h.count(hook) == 1 and h.index("return V2D3.render(current,v);") < h.index(hook) < h.index("viewSoon(v)")
+    assert 'V2SEC_OWNS' not in h and 'V2SEC_RENDER' not in h
 
 
 def test_app_py_registers_the_routes_with_one_line_before_the_end_marker():
@@ -404,7 +406,7 @@ def test_app_py_registers_the_routes_with_one_line_before_the_end_marker():
 def test_all_three_dockerfiles_ship_the_section_files():
     for df in ('Dockerfile', os.path.join('deploy', 'Dockerfile.coolify')):
         t = _read(df)
-        assert 'COPY dashboard-cloud/v2s /app/dist/v2s' in t and 'COPY backend/v2_*_routes.py /app/' in t, df
+        assert 'COPY dashboard-cloud/v2s /app/dist/v2s' in t and 'COPY backend/v2_marketing_routes.py /app/v2_marketing_routes.py' in t, df   # بعد الدمج: سطر صريح لكل قسم
         assert t.index('COPY dashboard-cloud/v2/img /app/dist/v2/img') < t.index('COPY dashboard-cloud/v2s /app/dist/v2s')
     b = _read('backend', 'Dockerfile')
     assert 'COPY v2_*_routes.py ./' in b and b.index('COPY app.py .') < b.index('COPY v2_*_routes.py ./')
@@ -439,7 +441,9 @@ def test_the_old_marketing_screen_is_untouched_when_the_switch_is_off():
     oa, oc = old.index('function viewMarketing(v){'), old.index('// ⛔ (حُذفت: نافذة «إضافة ممول»)')
     assert got == hashlib.sha256(old[oa:oc].encode('utf-8')).hexdigest(), 'viewMarketing/renderMkt/drawMkt/createCampaignModal اتغيّروا'
     api_new, api_old = _read('dashboard-cloud', 'dashboard-api.js'), subprocess.run(['git', 'show', '7d1aa83:dashboard-cloud/dashboard-api.js'], capture_output=True, cwd=ROOT).stdout.decode('utf-8')
-    assert api_new == api_old, 'dashboard-api.js اتغيّر'
+    import difflib   # بعد الدمج: أقسام أخرى عدّلت dashboard-api.js؛ المهم أن لا سطرًا يخص الحملات تغيّر
+    changed = [l[1:] for l in difflib.unified_diff(api_old.split('\n'), api_new.split('\n'), lineterm='', n=0) if l[:1] in '+-' and l[:3] not in ('+++', '---')]
+    assert not [l for l in changed if 'campaign' in l.lower()], 'dashboard-api.js: سطر للحملات اتغيّر'
     assert b > a
 
 

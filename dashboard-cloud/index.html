@@ -463,33 +463,32 @@ body{font-family:'IBM Plex Sans Arabic',sans-serif;background:var(--bg);color:va
 <script src="v2-home.js"></script>
 <script src="v2-shell.js"></script>
 <script src="v2-d2.js"></script>
+<script src="v2-d3.js"></script>
 <!-- v2 sections begin -->
+<script src="v2s/_registry.js"></script>
+<link rel="stylesheet" href="v2s/books.css">
+<script src="v2s/books.js"></script>
+<link rel="stylesheet" href="v2s/brain.css">
+<script src="v2s/brain.js"></script>
+<link rel="stylesheet" href="v2s/company.css">
+<script src="v2s/company.js"></script>
+<link rel="stylesheet" href="v2s/content.css">
+<script src="v2s/content.js"></script>
+<link rel="stylesheet" href="v2s/courses.css">
+<script src="v2s/courses.js"></script>
 <link rel="stylesheet" href="v2s/home.css">
 <script src="v2s/home.js"></script>
 <script src="v2s/home_copy.js"></script>
 <link rel="stylesheet" href="v2s/market.css">
 <script src="v2s/market.js"></script>
-<link rel="stylesheet" href="v2s/books.css">
-<script src="v2s/books.js"></script>
-<link rel="stylesheet" href="v2s/people.css">
-<script src="v2s/people.js"></script>
-<link rel="stylesheet" href="v2s/content.css">
-<script src="v2s/content.js"></script>
-<link rel="stylesheet" href="v2s/reports.css">
-<script src="v2s/reports.js"></script>
-<link rel="stylesheet" href="v2s/brain.css">
-<script src="v2s/brain.js"></script>
-<link rel="stylesheet" href="v2s/company.css">
-<script src="v2s/company.js"></script>
-<link rel="stylesheet" href="v2s/roles.css">
-<script src="v2s/roles.js"></script>
-<!-- v2 sections end -->
-<script src="v2-d3.js"></script>
-<!-- v2 sections begin -->
-<link rel="stylesheet" href="v2s/courses.css">
-<script src="v2s/courses.js"></script>
 <link rel="stylesheet" href="v2s/marketing.css">
 <script src="v2s/marketing.js"></script>
+<link rel="stylesheet" href="v2s/people.css">
+<script src="v2s/people.js"></script>
+<link rel="stylesheet" href="v2s/reports.css">
+<script src="v2s/reports.js"></script>
+<link rel="stylesheet" href="v2s/roles.css">
+<script src="v2s/roles.js"></script>
 <!-- v2 sections end -->
 <script>
 const ICONS={
@@ -730,26 +729,14 @@ function renderView(){
   { const ap=document.querySelector('.app'); const sh=!!(window.V2SHELL&&V2SHELL.on);
     if(ap)ap.classList.toggle('v2-home',current==='home'&&!!window.V2_ON&&!sh);
     // D1-B: صنف الغلاف على `.app` (لوحة بلا إطار · بحث الوارد · وضع التركيز) — الترويسة خارج #view فلا تمسحها الشاشات القديمة.
-    if(ap&&sh){ap.classList.toggle('v2-bare',current==='home'||!!(window.V2D2&&V2D2.owns(current)));ap.classList.toggle('v2-inbox',current==='inbox');if(current!=='home')ap.classList.remove('v2-focus');if(window.V2D3&&V2D3.owns(current))ap.classList.add('v2-bare');if(window.V2SEC_OWNS&&V2SEC_OWNS(current))ap.classList.add('v2-bare');V2SHELL.head();} }
-    if(ap&&sh){ap.classList.toggle('v2-bare',current==='home'||!!(window.V2D2&&V2D2.owns(current)));ap.classList.toggle('v2-inbox',current==='inbox');if(current!=='home')ap.classList.remove('v2-focus');if(window.V2D3&&V2D3.owns(current))ap.classList.add('v2-bare');
-    if(window.V2SEC&&Object.keys(V2SEC).some(function(k){return V2SEC[k].owns(current);}))ap.classList.add('v2-bare');V2SHELL.head();} }
+    if(ap&&sh){ap.classList.toggle('v2-bare',current==='home'||!!(window.V2D2&&V2D2.owns(current)));ap.classList.toggle('v2-inbox',current==='inbox');if(current!=='home')ap.classList.remove('v2-focus');if(window.V2D3&&V2D3.owns(current))ap.classList.add('v2-bare');if(window.V2SEC&&V2SEC.owner&&V2SEC.owner(current))ap.classList.add('v2-bare');V2SHELL.head();} }
   if(current==='home'&&window.V2_ON&&window.V2)return V2.render(v);
   // D2: لوحات التذاكر وصفحة الشخص (موديولات وهمية `v2files`/`v2disputes`/`v2person` لا وجود لها إلا تحت الغلاف الجديد).
   if(window.V2_ON&&window.V2D2&&V2D2.owns(current))return V2D2.render(current,v);
   // D3: شاشات «الفلوس» الجديدة و«الكتب» (موديولات وهمية `v2m_*`/`v2b_*` لا وجود لها إلا تحت الغلاف الجديد).
   if(window.V2_ON&&window.V2D3&&V2D3.owns(current))return V2D3.render(current,v);
-  // v2 sections (final round): كل قسم يسجّل نفسه في window.V2SEC = [{owns(mod), render(mod, view)}].
-  if(window.V2_ON&&window.V2SEC){for(var _i=0;_i<V2SEC.length;_i++){if(V2SEC[_i].owns(current)){var _ap=document.querySelector('.app');if(_ap)_ap.classList.add('v2-bare');return V2SEC[_i].render(current,v);}}}
-  if(window.V2_ON&&window.V2SX&&V2SX.owns(current)){const ap2=document.querySelector('.app');if(ap2)ap2.classList.add('v2-bare');return V2SX.render(current,v);}
-  if(window.V2_ON&&window.V2SECT){for(var _k in V2SECT){if(V2SECT[_k]&&V2SECT[_k].owns&&V2SECT[_k].owns(current)){var _ap=document.querySelector('.app');if(_ap){_ap.classList.add('v2-bare');_ap.classList.remove('v2-inbox');}return V2SECT[_k].render(current,v);}}}
-  // الجولة الأخيرة: أقسام v2s (المحتوى…) — موديول قديم يُرسم بالشكل الجديد تحت الغلاف فقط. الاسم V2SEC لأن V2S محجوز للقسم الحالي.
-  if(window.V2_ON&&window.V2SHELL&&V2SHELL.on&&window.V2SEC){for(var _k in V2SEC){var _s=V2SEC[_k];if(_s&&_s.owns&&_s.owns(current)){var _ap=document.querySelector('.app');if(_ap)_ap.classList.add('v2-bare');return _s.render(current,v);}}}
-  // أقسام الجولة النهائية: كل قسم يسجّل نفسه في V2SEC (v2s/<قسم>.js) فلا يلمس أحد هذا الملف ثانيةً.
-  if(window.V2_ON&&window.V2SEC_OWNS&&V2SEC_OWNS(current))return V2SEC_RENDER(current,v);
-  if(window.V2_ON&&window.V2SEC){const _k=Object.keys(V2SEC).find(function(k){return V2SEC[k].owns(current);});if(_k)return V2SEC[_k].render(current,v);}
-  // الجولة الأخيرة: أقسام v2s/<key>.js — كل قسم يسجّل نفسه في V2SEC ويقرر بـ`owns` أي موديول يرسمه (تحت الغلاف الجديد فقط).
-  if(window.V2_ON&&window.V2SHELL&&V2SHELL.on&&window.V2SEC){for(const k in V2SEC){const s=V2SEC[k];if(s&&s.owns&&s.owns(current)){const ap=document.querySelector('.app');if(ap)ap.classList.add('v2-bare');return s.render(current,v);}}}
-  if(window.V2_ON&&window.V2SEC){for(var _k in V2SEC){var _o=V2SEC[_k];if(_o&&_o.owns&&_o.owns(current)){var _ap=document.querySelector('.app');if(_ap)_ap.classList.add('v2-bare');return _o.render(current,v);}}}
+  // الجولة النهائية: سجلّ واحد window.V2SEC (v2s/_registry.js) — كل قسم يسجّل {owns, render} ويرسم موديولاته تحت الغلاف الجديد فقط.
+  if(window.V2_ON&&window.V2SHELL&&V2SHELL.on&&window.V2SEC&&V2SEC.owner){const _s=V2SEC.owner(current);if(_s){const _ap=document.querySelector('.app');if(_ap){_ap.classList.add('v2-bare');_ap.classList.remove('v2-inbox');}return _s.render(current,v);}}
   // موديولات «قريبًا» (لا واجهة خلفية حقيقية بعد) — لا تعرض بياناتها التصميمية.
   if(MODULES_LOOKUP[current]&&MODULES_LOOKUP[current].soon)return viewSoon(v);
   if(current==='inbox')return viewInbox(v);
@@ -7722,8 +7709,7 @@ const V2_SETTERS={
 // يكتب العنوان #s/<قسم>/<تبويب>: how='push' لتنقّل المستخدم (فيشتغل زر الرجوع)، 'replace' لتصحيح الترويسة بعد هبوط داخلي.
 function v2Commit(how){
   if(!V2S)return;
-  const h=V2L.sectionHash(V2S.section,V2S.tab,V2S.person||V2S.course);
-  const h=V2L.sectionHash(V2S.section,V2S.tab,V2S.person,V2S.q);
+  const h=V2L.sectionHash(V2S.section,V2S.tab,V2S.person||V2S.course,V2S.q);
   try{if(String(location.hash)!==h){if(how==='push')history.pushState(null,'',h);else history.replaceState(null,'',h);}}catch(e){try{location.hash=h;}catch(e2){}}
   const t=document.getElementById('pageTitle');
   const sec=V2L.sectionByKey(V2S.section);
@@ -7739,9 +7725,8 @@ function v2OpenSection(key,tabKey,opts){
   Object.keys(tab.st).forEach(function(k){const f=V2_SETTERS[k];if(f)f(tab.st[k]);});
   if(opts&&opts.st)Object.keys(opts.st).forEach(function(k){const f=V2_SETTERS[k];if(f)f(opts.st[k]);});   // حالة الاسم القديم (#foundation → tgTab)
   current=tab.mod;
-  V2S={section:sec.key,tab:tab.key};
-  if(opts&&opts.course&&sec.key==='courses'&&tab.key==='course')V2S.course=String(opts.course);
   V2S={section:sec.key,tab:tab.key,q:(opts&&opts.q)||null};
+  if(opts&&opts.course&&sec.key==='courses'&&tab.key==='course')V2S.course=String(opts.course);
   v2Commit(opts&&opts.replace?'replace':'push');
   renderView();
 }
@@ -7790,12 +7775,10 @@ function v2Reconcile(){
 function v2OnHash(){
   if(!(window.V2SHELL&&V2SHELL.on)||role!=='admin')return;
   const h=String(location.hash||'');
-  if(V2S&&h===V2L.sectionHash(V2S.section,V2S.tab,V2S.person||V2S.course))return;
+  if(V2S&&h===V2L.sectionHash(V2S.section,V2S.tab,V2S.person||V2S.course,V2S.q))return;
   const rt=V2L.routeFor(h,{});
   if(rt&&rt.person)v2OpenPerson(rt.person,{replace:true});
-  else if(rt)v2OpenSection(rt.section,rt.tab,{replace:true,st:rt.st,course:rt.course});
-  if(V2S&&h===V2L.sectionHash(V2S.section,V2S.tab,V2S.person,V2S.q))return;
-  else if(rt)v2OpenSection(rt.section,rt.tab,{replace:true,st:rt.st,q:rt.q});
+  else if(rt)v2OpenSection(rt.section,rt.tab,{replace:true,st:rt.st,course:rt.course,q:rt.q});
 }
 function v2ShellBoot(){
   if(!(window.V2SHELL&&window.V2L&&V2SHELL.boot&&V2L.routeFor))return false;
@@ -7805,8 +7788,7 @@ function v2ShellBoot(){
   window.addEventListener('popstate',v2OnHash);window.addEventListener('hashchange',v2OnHash);
   // الرابط الأول: عنوان جديد #s/… أو رابط قديم (#finance · #packages …) يهبط على قسمه وتبويبه، وأي غيره على اللوحة.
   const rt=V2L.routeFor(String(location.hash||''),{})||V2L.routeFor('home');
-  if(rt.person)v2OpenPerson(rt.person,{replace:true});else v2OpenSection(rt.section,rt.tab,{replace:true,st:rt.st,course:rt.course});
-  if(rt.person)v2OpenPerson(rt.person,{replace:true});else v2OpenSection(rt.section,rt.tab,{replace:true,st:rt.st,q:rt.q});
+  if(rt.person)v2OpenPerson(rt.person,{replace:true});else v2OpenSection(rt.section,rt.tab,{replace:true,st:rt.st,course:rt.course,q:rt.q});
   return true;
 }
 // مرة واحدة عند الإقلاع. ⛔ الإقلاع القديم بيترسم فورًا من غير ما ينتظر المفتاح (مقفول = نفس التوقيت بالحرف).

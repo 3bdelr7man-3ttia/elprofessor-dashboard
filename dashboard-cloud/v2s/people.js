@@ -1202,7 +1202,6 @@
     if (t && t.id === 'v2pinv' && S.view && S.view.contains(t)) { S.inviter = t.value || 'all'; redraw(true); }
   });
 
-  window.V2SECT = window.V2SECT || {};
-  window.V2SECT.people = { owns: owns, render: render, manageBtn: manageBtn };
+  (window.V2SEC = window.V2SEC || {}).people = { owns: owns, render: render, manageBtn: manageBtn };
   window.V2P = { _state: S, _sheets: { purge: purgeScreen, manage: manageScreen }, PX: PX };
 })();

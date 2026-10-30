@@ -745,11 +745,13 @@ def test_index_html_block_and_dispatcher():
     html = _read('dashboard-cloud', 'index.html')
     m = re.search(r'<!-- v2 sections begin -->\n(.*?)<!-- v2 sections end -->', html, re.S)
     assert m, 'علامتا الكتلة'
-    assert m.group(1).strip().splitlines() == ['<link rel="stylesheet" href="v2s/brain.css">', '<script src="v2s/brain.js"></script>']
+    blk = m.group(1).strip().splitlines()   # بعد الدمج: كتلة واحدة لكل الأقسام؛ العقل سطراه متجاوران
+    assert blk[blk.index('<link rel="stylesheet" href="v2s/brain.css">') + 1] == '<script src="v2s/brain.js"></script>'
     assert html.index('<script src="v2-d2.js"></script>') < html.index('<!-- v2 sections begin -->')
-    assert html.count('window.V2SEC') == 1 or html.count('V2SEC[k]') == 1
+    # بعد الدمج: خطّاف واحد موحّد عبر السجلّ V2SEC.owner، والعقل مسجَّل فيه بمفتاحه (brain.js: V2SEC.brain)
+    assert html.count('const _s=V2SEC.owner(current)') == 1
     d3 = html.index('V2D3.owns(current))return V2D3.render(current,v)')
-    sec = html.index('for(const k in V2SEC)')
+    sec = html.index('const _s=V2SEC.owner(current)')
     assert 0 < d3 < sec
     assert 'window.V2S=' not in html
 
@@ -771,7 +773,7 @@ def test_shared_edits_present():
     d2 = _read('dashboard-cloud', 'v2-d2.js')
     assert 'V2SEC.brain.tileCount' in d2
     dock = _read('Dockerfile')
-    assert 'COPY backend/v2_*_routes.py /app/' in dock and 'COPY dashboard-cloud/v2s /app/dist/v2s' in dock
+    assert 'COPY backend/v2_brain_routes.py /app/v2_brain_routes.py' in dock and 'COPY dashboard-cloud/v2s /app/dist/v2s' in dock   # بعد الدمج: سطر صريح لكل قسم
     app_src = _read('backend', 'app.py')
     end = app_src.index('# ---- v2 section routes end')
     reg = app_src.index('from v2_brain_routes import register as _v2_brain_register')
