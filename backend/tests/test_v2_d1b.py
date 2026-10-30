@@ -351,7 +351,7 @@ def test_no_flash_of_the_old_rail_hint_is_admin_only_and_never_cleared_by_a_fail
     flag = HTML[HTML.index('function v2LoadFlag'):HTML.index('window.EP_BOOT=function(){')]
     # الذاكرة بتتكتب/تتمسح من رد حاسم بس (then) — الفشل والتأخير (catch / مهلة الثلاث ثواني) ما بيلمسوهاش.
     then, _, catch = flag.partition('.catch(')
-    assert "localStorage.setItem('ep_v2_shell','1')" in then and "localStorage.removeItem('ep_v2_shell')" in then
+    assert "localStorage.setItem('ep_v2_shell','1')" in then and "localStorage.setItem('ep_v2_shell','0')" in then
     assert 'localStorage' not in catch
     css = _read('dashboard-cloud', 'v2-shell.css')
     assert '.app.v2-pre .main{visibility:hidden}' in css

@@ -506,7 +506,7 @@
         var cand = pickCandidate(f.candidates || r.candidates, f);
         card.tag = late ? 'ملف متأخر' : 'ملف ينتظر خبيرًا';
         card.title = str(f.title) || 'ملف';
-        card.sub = clean([who && ('العميل: ' + who), str(f.law_label), amountLabel]).join(' · ');
+        card.sub = clean([who && ('صاحب الطلب: ' + who), str(f.law_label), amountLabel]).join(' · ');
         card.brainHead = 'اقتراح العقل';
         var cur = expertNameOf(f);
         if (late) {
@@ -535,7 +535,7 @@
       case 'file_attention': {
         card.tag = 'أموال ملف متوقفة';
         card.title = str(f.title) || 'ملف';
-        card.sub = clean([who && ('العميل: ' + who), amountLabel]).join(' · ');
+        card.sub = clean([who && ('صاحب الطلب: ' + who), amountLabel]).join(' · ');
         card.brain = 'أموال هذا الملف لم تتحرك وحدها وتحتاج تدخّلك';
         card.reason = 'القرار هنا يخص الأموال، فيُفتح الملف للمراجعة أولًا';
         card.primary = { label: 'افتح وراجع', act: OPEN };
@@ -544,9 +544,9 @@
       case 'review': {
         card.tag = 'أول رأي لخبير جديد';
         card.title = str(f.title) || 'رأي ينتظر المراجعة';
-        card.sub = clean([who && ('العميل: ' + who), amountLabel]).join(' · ');
+        card.sub = clean([who && ('صاحب الطلب: ' + who), amountLabel]).join(' · ');
         card.brain = 'رأي ' + (str(f.expert_name) || 'الخبير') + ' في «' + (str(f.title) || 'الملف') + '» ينتظر مراجعتك';
-        card.reason = 'العميل ينتظر؛ لا يصله الرأي قبل موافقتك';
+        card.reason = 'صاحب الطلب ينتظر؛ لا يصله الرأي قبل موافقتك';
         card.primary = { label: 'افتح وراجع', act: OPEN };
         break;
       }
@@ -555,7 +555,7 @@
         card.tag = isCase ? 'ملاحظة على قضية' : 'نزاع';
         card.title = str(f.title) || str(c.title) || 'نزاع';
         card.sub = clean([(str(f.expert_name) || str(c.expert_name)) && ('الخبير: ' + (str(f.expert_name) || str(c.expert_name)))]).join(' · ');
-        card.brain = 'اعتراض من ' + (who || 'العميل') + ' على ' + (card.title ? '«' + card.title + '»' : 'الخدمة') + (amountLabel ? ' · ' + amountLabel : '');
+        card.brain = 'اعتراض من ' + (who || 'صاحب الطلب') + ' على ' + (card.title ? '«' + card.title + '»' : 'الخدمة') + (amountLabel ? ' · ' + amountLabel : '');
         card.reason = 'الأموال محجوزة لحين قرارك، والحسم من صفحة البند بعد قراءة الرأيين';
         card.primary = { label: 'افتح النزاع', act: OPEN };
         break;
@@ -563,7 +563,7 @@
       case 'unactivated': {
         card.tag = 'دفع بلا ملف';
         card.title = str(f.title) || 'دفعة لم يصل ملفها';
-        card.sub = who ? 'العميل: ' + who : '';
+        card.sub = who ? 'صاحب الطلب: ' + who : '';
         card.brain = (amountLabel ? 'دُفع ' + amountLabel : 'دُفع مبلغ') + ' ولم يصل ملف';
         card.reason = 'الأموال وصلت ولم يصل الملف إلى قائمة التوزيع';
         card.primary = { label: 'افتح', act: OPEN };
@@ -572,7 +572,7 @@
       case 'legacy': {
         card.tag = 'استشارة قديمة';
         card.title = str(c.title) || 'استشارة قديمة';
-        card.sub = clean([who && ('العميل: ' + who), amountLabel]).join(' · ');
+        card.sub = clean([who && ('صاحب الطلب: ' + who), amountLabel]).join(' · ');
         card.brain = 'استشارة سُلّمت قبل التحويل التلقائي وأموالها تنتظر قرارك';
         card.reason = 'للخبير أم للعميل؟ القرار من صفحة البند';
         card.primary = { label: 'افتح وراجع', act: OPEN };
@@ -1954,3 +1954,316 @@
   root.V2L = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })(typeof window !== 'undefined' ? window : (typeof globalThis !== 'undefined' ? globalThis : this));
+
+// ===== v2s:home =====
+// «اللوحة + كل الوارد + الدرج + الجرس» (الجولة النهائية). ⛔ نقي: لا DOM ولا شبكة. عدد غير معروف ⇒ null/"" لا صفر.
+(function (root) {
+  'use strict';
+  var L = root.V2L;
+  if (!L) return;
+  var ar = L.util.ar, U = L.util.U;
+  function str(v) { return typeof v === 'string' ? v.trim() : ''; }
+  function finite(n) { return typeof n === 'number' && isFinite(n); }
+  function toArDigits(s) { return String(s).replace(/\d/g, function (d) { return '٠١٢٣٤٥٦٧٨٩'.charAt(+d); }); }
+
+  // ---------------------------------------------------------------- الشرائح
+  var CHIP_LABEL = { all: 'الكل', late: 'متأخر', 't:files': 'ملفات الخبراء', 't:disputes': 'النزاعات', 't:legacy': 'استشارات قديمة',
+    't:money': 'إيصالات التحويل', 't:decisions': 'طلبات انضمام واعتماد', 't:verify': 'توثيق', 't:messages': 'الرسائل', 't:other': 'أخرى',
+    auto: 'عولجت تلقائيًا', attn: 'يحتاج تدخّلك', review: 'ينتظر مراجعتك', urgent: 'مستعجل', nocand: 'لا خبير متاح',
+    contract: 'مراجعة عقود', 'case': 'قضايا عليها ملاحظة' };
+  var CHIP_CTX = {
+    home: { row1: ['all', 'late', 't:files', 't:disputes', 't:legacy', 't:money', 't:decisions', 't:verify', 't:messages', 't:other', 'auto'], row2: [] },
+    files: { row1: ['t:files', 'late'], row2: ['attn', 'review', 'urgent', 'nocand', 'contract', 'case'] },
+    disputes: { row1: ['t:disputes', 't:legacy'], row2: [] },
+    messages: { row1: [], row2: [] }
+  };
+  var CTX_LABEL = { files: { 't:files': 'كل الملفات' } };
+  function ctxOf(c) { return CHIP_CTX[c] ? c : 'home'; }
+  function v2hChipKeys(ctx) { var d = CHIP_CTX[ctxOf(ctx)]; return d.row1.concat(d.row2); }
+  function v2hChips(ctx, counts, active) {
+    ctx = ctxOf(ctx); counts = counts || {};
+    var d = CHIP_CTX[ctx];
+    function mk(key) {
+      var n = Number(counts[key]); if (!isFinite(n) || n < 0) n = 0;
+      var on = key === active;
+      if (n === 0 && !on && key !== 'all') return null;
+      return { key: key, label: (CTX_LABEL[ctx] && CTX_LABEL[ctx][key]) || CHIP_LABEL[key] || 'أخرى', n: n, text: ar(n), on: on, tone: key === 'late' ? 'late' : '' };
+    }
+    return { row1: d.row1.map(mk).filter(Boolean), row2: d.row2.map(mk).filter(Boolean) };
+  }
+
+  // ---------------------------------------------------------------- التذكرة
+  var MONEY_KINDS = { payout: 1, manual_payment: 1, stuck_payment: 1, unactivated: 1, legacy: 1 };
+  function kindOfItem(row, card) { return (card && card.kind) || (row && row.apiKind) || ''; }
+  function v2hTone(row, card, isLate) {
+    if (isLate) return 'late';
+    if (MONEY_KINDS[kindOfItem(row, card)]) return 'money';
+    if (row && row.triage === 'auto') return 'done';
+    return 'wait';
+  }
+  function v2hFlags(row) {
+    var out = [];
+    if (!row) return out;
+    if (row.urgent) out.push({ t: 'مستعجل' });
+    if (row.contract) out.push({ t: 'مراجعة عقد' });
+    if (row.noCandidate) out.push({ t: 'لا خبير متاح' });
+    if (row.needsAttention) out.push({ t: 'يحتاج تدخّلك' });
+    if (row.licenceMissing) out.push({ t: 'خدمة مرخّصة بلا رقم قيد' });
+    else if (row.licensed) out.push({ t: 'خدمة مرخّصة' });
+    if (Array.isArray(row.flagLabels) && row.flagLabels.length) out.push({ t: 'حساب عليه علامات', tip: row.flagLabels.join(' · ') });
+    if (row.msgSource === 'site') out.push({ t: 'من الموقع' });
+    else if (row.msgSource) out.push({ t: 'من المنصة' });
+    // شارات الصف القديم (أعلام السعر · «أقل من ١٢ ساعة» · «خبير اعتذر» · التخصص): كانت تظهر في القائمة فلا تضيع منها.
+    // ما كررته أعلام الصف أعلاه (مستعجل · مراجعة عقد · لا خبير متاح · يحتاج تدخّلك) يُحذف، والتحذيرية (`w`) تأخذ نبرة التحذير.
+    if (Array.isArray(row.badges)) {
+      row.badges.forEach(function (b) {
+        var t = b && str(b.t).replace(/^[^؀-ۿA-Za-z0-9]+/, '').trim();
+        if (!t || b.attn) return;
+        if (row.urgent && t.indexOf('مستعجل') > -1) return;
+        if (row.noCandidate && t.indexOf('خبير متاح') > -1) return;
+        if (row.contract && /عقد/.test(t + ' ' + str(b.tip))) return;
+        t = copyOr(t);
+        if (out.some(function (o) { return o.t === t; })) return;
+        var f = { t: t };
+        if (b.tip) f.tip = copyOr(str(b.tip));
+        if (b.w) f.w = true;
+        out.push(f);
+      });
+    }
+    return out;
+  }
+  // سبب وقوف الفلوس (سطر أحمر في الصف القديم) — نص المنصة كما وصل، يُعرض في التذكرة سطرًا واحدًا.
+  function v2hWarn(row) {
+    var t = row ? str(row.warnLine) : '';
+    var c = t && L.v2hCopy ? L.v2hCopy(t, true) : null;       // جمل المنصة المعروفة تُترجم بالعبارات الطويلة وحدها
+    return c == null ? t : c;
+  }
+  var GROUP_LABEL = { late: 'متأخر', wait: 'ينتظر قرارك', auto: 'عولجت تلقائيًا' };
+  var GROUP_ORDER = ['late', 'wait', 'auto'];
+  function groupKeyOf(it) {
+    var tone = it.tone || v2hTone(it.row, it.card, !!it.late);
+    if (tone === 'late') return 'late';
+    return (it.row && it.row.triage === 'auto') ? 'auto' : 'wait';
+  }
+  function v2hGroups(items) {
+    var buckets = { late: [], wait: [], auto: [] };
+    (items || []).forEach(function (it, idx) {
+      var rank = it.card && finite(it.card.group) ? it.card.group : 999;
+      var ts = it.card && finite(it.card.ts) ? it.card.ts : Infinity;
+      buckets[groupKeyOf(it)].push({ it: it, rank: rank, ts: ts, idx: idx });
+    });
+    return GROUP_ORDER.map(function (k) {
+      var arr = buckets[k].sort(function (a, b) {
+        if (a.rank !== b.rank) return a.rank - b.rank;
+        if (a.ts !== b.ts) return a.ts < b.ts ? -1 : 1;     // Infinity آخرًا
+        return a.idx - b.idx;
+      });
+      return { key: k, label: GROUP_LABEL[k], items: arr.map(function (x) { return x.it; }) };
+    }).filter(function (g) { return g.items.length; });
+  }
+  function v2hSegs(items, seg) {
+    var n = { late: 0, wait: 0, auto: 0 };
+    (items || []).forEach(function (it) { n[groupKeyOf(it)]++; });
+    var active = seg;
+    if (GROUP_ORDER.indexOf(active) < 0) {
+      active = 'late';
+      for (var i = 0; i < GROUP_ORDER.length; i++) if (n[GROUP_ORDER[i]]) { active = GROUP_ORDER[i]; break; }
+    }
+    return { segs: GROUP_ORDER.map(function (k) { return { key: k, label: GROUP_LABEL[k], n: n[k], text: ar(n[k]), on: k === active }; }), active: active };
+  }
+
+  // الزر الواحد في التذكرة
+  // ملاحظة: في درج الوارد زرّا الإيصال هما approve/reject (pay_ok/pay_no في درج «الضمان» القديم وحده).
+  var V2H_ACT_TO_DRAWER = { send: 'ef_pick', pay_confirm: 'approve', pay_reject: 'reject', decide: 'approve', resolve: 'resolve' };
+  var DECISION_ACTS = { send: 1, decide: 1, resolve: 1, pay_confirm: 1, pay_reject: 1, payout_settle: 1, payout_reject: 1, offer_approve: 1, offer_reject: 1, escrow: 1 };
+  var GENERIC_BTN = 'افتح وقرّر';
+  function copyOr(s) { var c = L.v2hCopy ? L.v2hCopy(s) : null; return c == null ? s : c; }
+  function v2hTicketBtn(card) {
+    var p = card && card.primary;
+    if (!p || !p.act || !str(p.label)) return { label: GENERIC_BTN, drawerA: null };
+    var d = p.act.do;
+    if (d === 'open' || DECISION_ACTS[d]) {
+      return { label: copyOr(str(p.label)), drawerA: DECISION_ACTS[d] ? (V2H_ACT_TO_DRAWER[d] || null) : null };
+    }
+    return { label: GENERIC_BTN, drawerA: null };
+  }
+
+  // ---------------------------------------------------------------- البحث
+  function v2hNorm(s) {
+    return String(s == null ? '' : s).toLowerCase()
+      .replace(/[ً-ٰٟـ]/g, '')
+      .replace(/[أإآٱ]/g, 'ا').replace(/ة/g, 'ه').replace(/ى/g, 'ي')
+      .replace(/[٠-٩]/g, function (d) { return String(d.charCodeAt(0) - 0x660); })
+      .replace(/[۰-۹]/g, function (d) { return String(d.charCodeAt(0) - 0x6F0); })
+      .replace(/\s+/g, ' ').trim();
+  }
+  function v2hSearchText(row, destLabel, card) {
+    row = row || {};
+    return [row.out, row.from, row.who, row.serviceLabel, row.email, row.searchText, destLabel, card && card.tag, card && card.title]
+      .filter(function (x) { return x != null && x !== ''; }).join(' ');
+  }
+
+  // ---------------------------------------------------------------- سطر العقل
+  function titleOf(it) { return (it.card && it.card.title) || (it.row && it.row.who) || 'بند ينتظر قرارك'; }
+  function ageOf(it) { return (it.card && it.card.ageText) || ''; }
+  function oldestOf(list) {
+    var best = null;
+    list.forEach(function (it) {
+      var t = it.card && finite(it.card.ts) ? it.card.ts : Infinity;
+      if (t !== Infinity && (!best || t < best.t)) best = { t: t, it: it };
+    });
+    return best && best.it;
+  }
+  function v2hBrainLine(items, brainLogLen, state) {
+    if (state === 'error' || state === 'loading') return null;
+    items = items || [];
+    var late = items.filter(function (it) { return groupKeyOf(it) === 'late'; });
+    var waiting = items.filter(function (it) { return groupKeyOf(it) !== 'auto'; });
+    var base = null, o;
+    if (late.length) {
+      base = U(late.length, ['بند متأخر واحد', 'بندان متأخران', 'بنود متأخرة', 'بندًا متأخرًا']);
+      o = oldestOf(late);
+      if (o) base += ' — أقدمها «' + titleOf(o) + '»' + (ageOf(o) ? ' ' + ageOf(o) : '');
+    } else if ((o = oldestOf(waiting))) {
+      base = 'أقدم ما ينتظرك: «' + titleOf(o) + '»' + (ageOf(o) ? ' ' + ageOf(o) : '');
+    } else if (!waiting.length && state === 'ready') {
+      base = 'لا شيء ينتظرك في الوارد الآن';
+    }
+    var n = Number(brainLogLen);
+    var suffix = (isFinite(n) && n > 0) ? 'وزّع العقل ' + U(n, ['ملفًا واحدًا', 'ملفين', 'ملفات', 'ملفًا']) + ' اليوم' : '';
+    if (base && suffix) return base + ' · ' + suffix;
+    return base || suffix || null;
+  }
+
+  // ---------------------------------------------------------------- أرقام المنصة
+  var QUEUE_LABEL = {
+    trainer_applications_pending: 'طلبات مدرّبين', courses_pending: 'دورات تنتظر الاعتماد', manual_payments_pending: 'إيصالات تحويل',
+    expert_files_in_review: 'آراء تنتظر مراجعتك', expert_files_awaiting_assignment: 'ملفات تنتظر التوزيع',
+    expert_files_assign_overdue: 'ملفات لم تُستلم منذ ١٢ ساعة', expert_files_late: 'آراء متأخرة',
+    expert_files_disputed: 'ملفات عليها ملاحظة من صاحب الطلب', consultation_disputes: 'نزاعات على استشارات',
+    consultations_legacy: 'استشارات قديمة تنتظر قرارك', expert_files_blocked: 'ملفات توقفت أموالها',
+    expert_files_unactivated: 'ملفات دُفعت ولم تصل إلى التوزيع', wallet_payouts_pending: 'طلبات سحب من المحافظ',
+    stuck_card_payments: 'دفعات بطاقة عالقة', course_interests_24h: 'اهتمام بالدورات في آخر ٢٤ ساعة',
+    training_interests_24h: 'مهتمون بالتدريب في آخر ٢٤ ساعة', course_split_pending: 'اقتسام إيراد معلّق',
+    testimonials_pending: 'شهادات تنتظر المراجعة', topics_drafts: 'مسودات موضوعات', founding_leads_new: 'طلبات خبير مؤسس جديدة',
+    pending_users_requested: 'زوّار ينتظرون فتح المنصة', lead_magnet_awaiting_asset: 'ملفات وُعد بها ولم تُسلَّم',
+    live_needs_decision: 'دورات حيّة تحتاج قرارًا'
+  };
+  function v2hQueueLabel(key) { return Object.prototype.hasOwnProperty.call(QUEUE_LABEL, key) ? QUEUE_LABEL[key] : 'بند من المنصة'; }
+
+  // ---------------------------------------------------------------- الجرس
+  function v2hAlertSection(text) {
+    var s = String(text == null ? '' : text);
+    if (/نزاع|استشار(ة|ات|تان)\s+قديم|حجز|حجوز/.test(s)) return 'disputes';
+    if (/ملف|رأي|آراء/.test(s)) return 'files';
+    if (/الالتحاق/.test(s)) return 'courses';
+    return null;
+  }
+  var NOTIF_DEST = { message: { section: 'people', tab: 'messages' }, withdrawal: { section: 'company', tab: 'invest' },
+    trainer_application: { section: 'courses', tab: 'trainers' }, program_request: { section: 'courses', tab: 'courses' },
+    signup: { section: 'people', tab: 'users' } };
+  var NOTIF_TITLE = { message: 'رسالة جديدة من نموذج التواصل', withdrawal: 'طلب سحب من مستثمر ينتظر المراجعة',
+    trainer_application: 'طلب انضمام مدرّب جديد', program_request: 'طلب برنامج أو دورة ينتظر المراجعة', signup: 'حساب جديد على المنصة' };
+  function v2hNotif(item) {
+    item = item || {};
+    var kind = str(item.kind), detail = str(item.detail);
+    var title;
+    if (NOTIF_TITLE[kind]) title = NOTIF_TITLE[kind];
+    else { var t = str(item.title); title = (t && !/[A-Za-z]/.test(t)) ? t : 'إشعار'; }
+    if (kind === 'withdrawal') {
+      detail = toArDigits(detail.replace(/\s*USD\s*$/i, ' دولار').replace(/(\d)\.(\d)/g, '$1٫$2'));
+    } else if (kind === 'trainer_application') detail = detail.replace(/\s*بانتظار الموافقة\s*$/, '');
+    else if (kind === 'signup') detail = detail.replace(/\s*أنشأ حسابًا\s*$/, '');
+    return { id: String(item.id == null ? '' : item.id), kind: kind, title: title, detail: detail, when: item.when || item.created_at || null,
+      unread: item.unread !== false, dest: NOTIF_DEST[kind] ? { section: NOTIF_DEST[kind].section, tab: NOTIF_DEST[kind].tab } : null };
+  }
+  function v2hNotifList(reply) {
+    var list = Array.isArray(reply) ? reply : (reply && Array.isArray(reply.items) ? reply.items : (reply && Array.isArray(reply.notifications) ? reply.notifications : null));
+    if (!list) return null;
+    return list.filter(function (x) { return x && typeof x === 'object'; }).map(v2hNotif);
+  }
+  function seenHas(seen, id) {
+    if (!seen) return false;
+    if (Array.isArray(seen)) return seen.indexOf(id) > -1;
+    return !!seen[id];
+  }
+  function v2hBellBadge(health, notifs, seen) {
+    var hFailed = !!(health && health.failed);
+    var hAlerts = !!(health && !health.failed && health.alerts && health.alerts.length);
+    var nFailed = notifs === null;
+    var unseen = Array.isArray(notifs) ? notifs.filter(function (n) { return n.unread && !seenHas(seen, n.id); }).length : 0;
+    if (hFailed && nFailed) return { text: '!', tone: 'warn', dot: false };
+    var dot = hFailed || hAlerts || nFailed;
+    var text = unseen > 0 ? ar(unseen) : '';
+    return { text: text, tone: text ? 'count' : (dot ? 'warn' : 'none'), dot: dot };
+  }
+
+  // ---------------------------------------------------------------- سطر الصحة وشرائط الوارد
+  function v2hHealthLine(src, health) {
+    if (src === 'idle' || src === 'loading') return { text: 'حالة المنصة: جارٍ الفحص…', tone: 'ld' };
+    if (src === 'error' || !health || health.failed) return { text: 'حالة المنصة: تعذّر الفحص — افتح التنبيهات', tone: 'bad' };
+    if (health.ok) return { text: 'حالة المنصة: كل شيء يعمل', tone: 'ok' };
+    return { text: 'حالة المنصة: ' + U(health.alerts.length, ['تنبيه واحد', 'تنبيهان', 'تنبيهات', 'تنبيهًا']) + ' — افتح التنبيهات', tone: 'warn' };
+  }
+  function v2hServiceLine(mode, n) {
+    if (mode === 'closed') return 'خدمة «ملف للخبير» متوقفة للناس الآن، والأموال لا تتحرك تلقائيًا. الملفات المفتوحة ما زالت هنا: يمكنك إعادة أموالها أو حسم نزاعها، ولا يمكن إرسالها إلى خبير.';
+    if (mode === 'allowlist') {
+      var who = finite(n) && n >= 0 ? ' (' + U(n, ['حساب واحد', 'حسابان', 'حسابات', 'حسابًا']) + ')' : '';
+      return 'الخدمة مفتوحة للتجربة فقط' + who + ' — يُرسل الملف فقط إلى خبير من قائمة التجربة، وترفض المنصة غير ذلك.';
+    }
+    return '';
+  }
+  function v2hAutoLine(on) {
+    if (on === true) return { head: 'التوزيع التلقائي يعمل', body: 'يُرسل كل ملف مدفوع وحده إلى أنسب خبير متاح، ويمكنك تغيير الخبير في أي وقت.', btn: 'أوقفه',
+      confirm: 'إذا أوقفت التوزيع التلقائي، سينتظر كل ملف يُدفع بعد الآن أن توزّعه بنفسك، ولن تُرسل الملفات المنتظرة الآن وحدها. هل توقفه؟' };
+    if (on === false) return { head: 'التوزيع التلقائي متوقف', body: 'الملفات المدفوعة تنتظر أن توزّعها بنفسك. إذا شغّلته يُرسل كل ملف مدفوع ومنتظر وحده.', btn: 'شغّله', confirm: '' };
+    return null;
+  }
+  function v2hFyiLine(n, autoOn, viewing) {
+    if (viewing) return 'هذه ملفات أُرسلت إلى خبير وما زالت ضمن مهلته — لا تحتاج منك شيئًا الآن.';
+    var tail = autoOn === true ? 'إن لم يُستلم يُرسل إلى خبير آخر تلقائيًا.' : 'إن لم يُستلم يعود إلى هنا.';
+    return 'للعلم: ' + U(n, ['ملف واحد أُرسل', 'ملفان أُرسلا', 'ملفات أُرسلت', 'ملفًا أُرسل']) + ' إلى خبير وما زال ضمن مهلة الاثنتي عشرة ساعة، ولا يحتاج منك شيئًا الآن. ' + tail;
+  }
+
+  // ---------------------------------------------------------------- طبقة النصوص (فصحى بسيطة بدل العامية في الدرج والنوافذ)
+  var V2H_COLLOQUIAL = ['مش ', 'دلوقتي', 'اتبعت', 'اتدفع', 'اتستلم', 'بتاع', 'عايز', 'هيت', 'ابعته', 'رجّع', 'مستني', 'لوحده', 'لوحدها', 'إيه', ' ليه', 'كده', 'اللي', 'تاني', 'مالهاش', 'بقى', 'إزاي', 'خالص', 'يقوّم'];
+  var COPY_EXACT = {};
+  var COPY_RULES = [];
+  var COPY_PHRASES = [];
+  function exact(map) { Object.keys(map).forEach(function (k) { COPY_EXACT[k] = map[k]; }); }
+  function rule(re, to) { COPY_RULES.push([re, to]); }
+  function v2hCopy(text, strict) {
+    if (typeof text !== 'string' || !text) return null;
+    var m = /^(\s*)([\s\S]*?)(\s*)$/.exec(text);
+    var lead = m[1], core = m[2], trail = m[3];
+    if (!core) return null;
+    if (Object.prototype.hasOwnProperty.call(COPY_EXACT, core)) {
+      var ex = COPY_EXACT[core];
+      return ex === core ? null : lead + ex + trail;
+    }
+    var cur = core, i;
+    for (i = 0; i < COPY_RULES.length; i++) {           // قواعد التعبيرات على النص بلا فراغات الأطراف (لها ^ و$)
+      var r = COPY_RULES[i];
+      if (r[0].test(cur)) cur = cur.replace(r[0], r[1]);
+      r[0].lastIndex = 0;
+    }
+    var full = lead + cur + trail;                       // العبارات تُطابَق على النص كاملًا (بفراغاته: «هترجّع » قبل المبلغ)
+    for (i = 0; i < COPY_PHRASES.length; i++) {
+      if (strict && COPY_PHRASES[i][0].trim().length < 12) continue;       // نصوص المنصة وكلام الناس: العبارات الطويلة وحدها
+      if (full.indexOf(COPY_PHRASES[i][0]) > -1) full = full.split(COPY_PHRASES[i][0]).join(COPY_PHRASES[i][1]);
+    }
+    return full === text ? null : full;
+  }
+  L.__copyDict = { exact: exact, rule: rule, EXACT: COPY_EXACT, RULES: COPY_RULES, PHRASES: COPY_PHRASES };
+
+  L.V2H_COLLOQUIAL = V2H_COLLOQUIAL;
+  L.V2H_ACT_TO_DRAWER = V2H_ACT_TO_DRAWER;
+  L.v2hChips = v2hChips; L.v2hChipKeys = v2hChipKeys; L.v2hTone = v2hTone; L.v2hFlags = v2hFlags; L.v2hWarn = v2hWarn; L.v2hGroups = v2hGroups; L.v2hSegs = v2hSegs;
+  L.v2hTicketBtn = v2hTicketBtn; L.v2hNorm = v2hNorm; L.v2hSearchText = v2hSearchText; L.v2hBrainLine = v2hBrainLine;
+  L.v2hQueueLabel = v2hQueueLabel; L.v2hAlertSection = v2hAlertSection; L.v2hNotif = v2hNotif; L.v2hNotifList = v2hNotifList;
+  L.v2hBellBadge = v2hBellBadge; L.v2hHealthLine = v2hHealthLine; L.v2hServiceLine = v2hServiceLine; L.v2hAutoLine = v2hAutoLine;
+  L.v2hFyiLine = v2hFyiLine; L.v2hCopy = v2hCopy; L.v2hToArDigits = toArDigits;
+  L.V2H_GENERIC_BTN = GENERIC_BTN;
+  // (قاموس النصوص في `v2s/home_copy.js`: بيسجّل مفاتيحه عبر `L.__copyDict`؛ الملف ده ما فيهوش عامية)
+})(typeof window !== 'undefined' ? window : globalThis);
+// ===== /v2s:home =====
