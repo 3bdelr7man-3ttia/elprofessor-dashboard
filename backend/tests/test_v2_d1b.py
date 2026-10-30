@@ -28,7 +28,8 @@ DC = os.path.join(ROOT, 'dashboard-cloud')
 NODE = __import__('shutil').which('node')
 needs_node = pytest.mark.skipif(not NODE, reason='needs node')
 PSEUDO_MODS = {'v2files', 'v2disputes', 'v2person',                       # D2: موديولات وهمية يرسمها V2D2 تحت الغلاف الجديد فقط
-               'v2m_overview', 'v2m_payouts', 'v2m_receipts', 'v2m_prices', 'v2m_shares', 'v2m_ads', 'v2b_offers', 'v2b_requests'}   # D3: يرسمها V2D3
+               'v2m_overview', 'v2m_payouts', 'v2m_receipts', 'v2m_prices', 'v2m_shares', 'v2m_ads', 'v2b_offers', 'v2b_requests',   # D3: يرسمها V2D3
+               'v2s_market_all', 'v2s_market_demand'}   # الجولة النهائية · سوق الخدمات: يرسمها V2S_MARKET
 
 
 def _read(*parts):
@@ -84,7 +85,7 @@ def test_the_tabs_match_the_approved_table():
         'files': [['files', 'الملفات', 'v2files'], ['experts', 'الخبراء', 'team'], ['all', 'كل الملفات', 'inbox']],
         'disputes': [['disputes', 'النزاعات', 'v2disputes'], ['escrow', 'الضمان', 'escrow'], ['all', 'كل النزاعات', 'inbox']],
         'courses': [['courses', 'الدورات', 'courses'], ['trainers', 'المدرّبون', 'team']],
-        'market': [['requests', 'الطلبات', 'market']],
+        'market': [['requests', 'الطلبات', 'market'], ['all', 'كل الطلبات', 'v2s_market_all'], ['demand', 'ماذا يطلب الناس', 'v2s_market_demand']],
         # D3: مراجعة العروض وطلبات القرّاء أولًا (موديولان وهميان ورا الغلاف)، والشاشة القديمة آخرًا
         'books': [['offers', 'مراجعة العروض', 'v2b_offers'], ['requests', 'طلبات القرّاء', 'v2b_requests'], ['books', 'الكتب والأعمال', 'knowledge']],
         'people': [['users', 'المستخدمون', 'users'], ['invites', 'الدعوات', 'invites'], ['messages', 'الرسائل', 'inbox'],
@@ -187,7 +188,7 @@ def test_an_unknown_module_is_not_mapped():
 def test_section_addresses_round_trip():
     res = _node("""const out=[];L.SECTIONS.forEach(s=>s.tabs.forEach(t=>{const h=L.sectionHash(s.key,t.key);
       out.push([s.key,t.key,h,L.parseSectionHash(h),L.parseSectionHash(h.slice(1)),L.routeFor(h)]);}));console.log(JSON.stringify(out))""")
-    assert len(res) == 35                      # ٢٥ + «كل الملفات» و«كل النزاعات» + صفحة الشخص (مخفية) + D3: الفلوس ٨ (واحد مخفي) بدل ٣، والكتب ٣ بدل ١
+    assert len(res) == 37                      # ٢٥ + «كل الملفات» و«كل النزاعات» + صفحة الشخص (مخفية) + D3: الفلوس ٨ (واحد مخفي) بدل ٣، والكتب ٣ بدل ١ + السوق: «كل الطلبات» و«ماذا يطلب الناس»
     for sec, tab, h, p1, p2, r in res:
         if (sec, tab) in (('people', 'person'), ('money', 'manual')):
             continue                           # تبويب مخفي بلا بريد: يرجع لأول تبويب (يُختبر في test_v2_d2)
