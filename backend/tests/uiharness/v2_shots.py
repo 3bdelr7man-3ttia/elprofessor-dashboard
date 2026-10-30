@@ -443,7 +443,7 @@ def go_section(page, key, tab=None):
 SECTION_FIRST = [('home', 'board', 'اللوحة'), ('files', 'files', 'ملفات الخبراء'), ('disputes', 'disputes', 'النزاعات والاستردادات'),
                  ('courses', 'courses', 'الدورات والمدرّبون'), ('market', 'requests', 'سوق الخدمات'), ('books', 'offers', 'الكتب'),          # D3: مراجعة العروض أولًا
                  ('people', 'users', 'الناس والدعوات'), ('money', 'overview', 'الفلوس'), ('content', 'topics', 'المحتوى'),
-                 ('marketing', 'campaigns', 'التسويق'), ('reports', 'demand', 'التقارير'), ('brain', 'log', 'العقل'),
+                 ('marketing', 'campaigns', 'التسويق'), ('reports', 'report', 'التقارير'), ('brain', 'log', 'العقل'),
                  ('company', 'invest', 'الشركة ورأس المال')]
 
 

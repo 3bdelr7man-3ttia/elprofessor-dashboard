@@ -30,7 +30,7 @@ needs_node = pytest.mark.skipif(not NODE, reason='needs node')
 PSEUDO_MODS = {'v2files', 'v2disputes', 'v2person',                       # D2: موديولات وهمية يرسمها V2D2 تحت الغلاف الجديد فقط
                'v2m_overview', 'v2m_payouts', 'v2m_receipts', 'v2m_prices', 'v2m_shares', 'v2m_ads', 'v2b_offers', 'v2b_requests',   # D3: يرسمها V2D3
                'v2s_market_all', 'v2s_market_demand',   # الجولة النهائية · سوق الخدمات: يرسمها V2S_MARKET
-               'v2p_invites', 'v2mk_social', 'v2mk_plan'}  # + أقسام الجولة النهائية
+               'v2p_invites', 'v2mk_social', 'v2mk_plan', 'v2r_demand', 'v2r_sunday'}  # + أقسام الجولة النهائية
 
 
 def _read(*parts):
@@ -102,7 +102,7 @@ def test_the_tabs_match_the_approved_table():
         'content': [['pipeline', 'خط النشر', 'topics'], ['articles', 'المقالات', 'topics'], ['topics', 'الموضوعات', 'topics'], ['news', 'الأخبار', 'topics'],
                     ['comments', 'التعليقات', 'topics'], ['tutorials', 'دليل الاستخدام', 'topics']],
         'marketing': [['campaigns', 'الحملات', 'marketing']],
-        'reports': [['demand', 'تحليل الطلب', 'analysis']],
+        'reports': [['report', 'التقرير', 'analysis'], ['demand', 'ما يسأل عنه الناس', 'v2r_demand'], ['sunday', 'تقرير الأحد', 'v2r_sunday']],     # الجولة النهائية: التقارير
         'brain': [['log', 'سجل اليوم', 'home'], ['helpers', 'المساعدون', 'ai']],
         'company': [['invest', 'الاستثمار والشركاء', 'investment'], ['targets', 'الأهداف والتأسيس', 'targets'], ['settings', 'الإعدادات', 'settings']],
     }
@@ -122,7 +122,7 @@ def test_every_old_module_key_lands_on_a_section_and_a_tab():
     assert landed['messages'] == ('people', 'messages') and landed['tutorials'] == ('content', 'tutorials')
     assert landed['partners'] == ('company', 'invest') and landed['foundation'] == ('company', 'targets')
     assert landed['knowledge'] == ('books', 'books') and landed['ai'] == ('brain', 'helpers') and landed['home'] == ('home', 'board')
-    assert landed['analysis'] == ('reports', 'demand') and landed['market'] == ('market', 'requests')
+    assert landed['analysis'] == ('reports', 'report') and landed['market'] == ('market', 'requests')
 
 
 @needs_node
@@ -219,7 +219,7 @@ def test_old_links_land_on_their_section_with_the_right_tab():
              '#invites': ('people', 'invites'), '#users': ('people', 'users'), '#escrow': ('disputes', 'escrow'),
              '#courses': ('courses', 'courses'), '#team': ('files', 'experts'), '#market': ('market', 'requests'),
              '#knowledge': ('books', 'books'), '#topics': ('content', 'pipeline'), '#tutorials': ('content', 'tutorials'),
-             '#marketing': ('marketing', 'campaigns'), '#analysis': ('reports', 'demand'), '#ai': ('brain', 'helpers'),
+             '#marketing': ('marketing', 'campaigns'), '#analysis': ('reports', 'report'), '#ai': ('brain', 'helpers'),
              '#investment': ('company', 'invest'), '#partners': ('company', 'invest'), '#targets': ('company', 'targets'),
              '#foundation': ('company', 'targets'), '#settings': ('company', 'settings'), '#inbox': ('home', 'inbox'),
              '#overview': ('home', 'inbox'), '#home': ('home', 'board'), '': ('home', 'board')}

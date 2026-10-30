@@ -2699,6 +2699,7 @@ import v2_market_routes as _v2s_market; _v2s_market.register(app, globals())  # 
 __import__('v2_books_routes').register(app, globals())
 import v2_content_routes as _v2s_content; _v2s_content.register(app, globals())
 __import__('v2_marketing_routes').register(app, globals())   # v2s:marketing
+import v2_reports_routes as _v2r; _v2r.register(app, globals())  # v2s:reports
 # ---- v2 section routes end
 
 

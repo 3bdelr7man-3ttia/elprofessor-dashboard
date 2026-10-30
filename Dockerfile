@@ -43,6 +43,7 @@ COPY dashboard-cloud/v2/img /app/dist/v2/img
 COPY backend/v2_content_routes.py /app/v2_content_routes.py
 COPY backend/v2_marketing_routes.py /app/v2_marketing_routes.py
 COPY dashboard-cloud/v2s /app/dist/v2s
+COPY backend/v2_reports_routes.py /app/v2_reports_routes.py
 
 EXPOSE 8080
 

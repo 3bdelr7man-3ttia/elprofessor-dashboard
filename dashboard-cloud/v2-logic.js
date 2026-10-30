@@ -1280,8 +1280,10 @@
       T('social', 'السوشيال ميديا', 'v2mk_social'),
       T('plan', 'خطة النشر', 'v2mk_plan')
     ] },
-    { key: 'reports', label: 'التقارير', img: 'reports', desc: 'ما يطلبه الناس وأين الفرصة', tabs: [
-      T('demand', 'تحليل الطلب', 'analysis')
+    { key: 'reports', label: 'التقارير', img: 'reports', desc: 'ما الذي يعمل، وما الذي توقّف، وأين الفرصة', tabs: [
+      T('report', 'التقرير', 'analysis'),
+      T('demand', 'ما يسأل عنه الناس', 'v2r_demand'),
+      T('sunday', 'تقرير الأحد', 'v2r_sunday')
     ] },
     { key: 'brain', label: 'العقل', img: 'brain', desc: 'ما قرّره العقل اليوم ومساعدوه', tabs: [
       T('log', 'سجل اليوم', 'home', { v2mode: 'brain' }, { v2mode: ['brain'] }),
@@ -1361,10 +1363,17 @@
     return any ? pack(any.sec, any.tab, aliasState) : null;
   }
   // العنوان: #s/<قسم>[/<تبويب>] — يقبل بدون # وبدون s/ المسبوقة بشرطة.
-  function sectionHash(key, tab, person) {
+  // الاستعلام الاختياري في العنوان (`?scope=…&period=…`): مفاتيح مسموحة فقط وقيمها [a-z]{1,12}. بلا `?` كل عنوان قديم يُقرأ كما كان.
+  var HASH_Q_KEYS = ['scope', 'period'];
+  function hashQuery(q) {
+    var parts = [];
+    HASH_Q_KEYS.forEach(function (k) { if (q && typeof q[k] === 'string' && /^[a-z]{1,12}$/.test(q[k])) parts.push(k + '=' + q[k]); });
+    return parts.length ? '?' + parts.join('&') : '';
+  }
+  function sectionHash(key, tab, person, q) {
     if (person && key === 'people' && tab === 'person') return '#s/people/person/' + personKey(person);
     if (person && key === 'courses' && tab === 'course') return '#s/courses/course/' + courseKey(person);
-    return '#s/' + key + (tab ? '/' + tab : '');
+    return '#s/' + key + (tab ? '/' + tab : '') + hashQuery(q);
   }
   // صفحة الدورة: معرّفها في العنوان كما هو (حروف وأرقام وشرطتان فقط)، وغير الصالح ⇒ ''.
   function courseKey(id) { return encodeURIComponent(String(id == null ? '' : id).trim()); }
@@ -1384,12 +1393,22 @@
   }
   function parseSectionHash(h) {
     var s = String(h == null ? '' : h).replace(/^#/, '').replace(/^\/+/, '').trim();
+    var qi = s.indexOf('?'), qs = '';
+    if (qi > -1) { qs = s.slice(qi + 1); s = s.slice(0, qi); }
     var parts = s.split('/');
     if (parts[0] !== 's' || !parts[1]) return null;
     var sec = secOf(parts[1]);
     if (!sec) return null;
     var tab = parts[2] ? tabOf(sec.key, parts[2]) : null;
     var out = { section: sec.key, tab: (tab || sec.tabs[0]).key, exact: !!(parts[2] ? tab : true) };
+    if (qs) {
+      var q = {}, any = false;
+      qs.split('&').forEach(function (kv) {
+        var i = kv.indexOf('='), k = i > -1 ? kv.slice(0, i) : kv, v = i > -1 ? kv.slice(i + 1) : '';
+        if (HASH_Q_KEYS.indexOf(k) > -1 && /^[a-z]{1,12}$/.test(v)) { q[k] = v; any = true; }
+      });
+      if (any) out.q = q;
+    }
     if (tab && tab.hidden) {
       // صفحة الشخص: بلا بريد صالح في العنوان ⇒ أول تبويب في القسم (ولا صفحة فاضية).
       var em = sec.key === 'people' && tab.key === 'person' ? personEmailOf(parts[3]) : '';
@@ -1409,6 +1428,7 @@
       var t = tabOf(p.section, p.tab), r = pack(secOf(p.section), t);
       if (p.person) r.person = p.person;
       if (p.course) r.course = p.course;
+      if (p.q) r.q = p.q;
       return r;
     }
     return sectionFor(s, state);
@@ -1980,6 +2000,154 @@
   };
   root.V2L = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
+
+  // ===== v2s:reports =====
+  // «التقارير» (الجولة النهائية): دوال نقية فقط. الأرقام نفسها تأتي من الخادم (`/api/v2/reports/*`) وهنا عرضها ومنطق الشاشة:
+  // لا شبكة ولا DOM ولا ساعة خفية. ⛔ الرقم المجهول `null` يبقى «غير متاح بعد» ولا يتحوّل إلى صفر أبدًا.
+  (function () {
+    // عدّ بفاصل آلاف عربي (نفس `_ar` في الخادم): ٣ أرقام فما فوق تُجمَّع «١٬٨٤٠».
+    function nf(n) { return fmt(n); }
+    function UU(n, forms) {
+      n = Math.round(Number(n) || 0);
+      if (n === 1) return forms[0];
+      if (n === 2) return forms[1];
+      return nf(n) + ' ' + (n >= 3 && n <= 10 ? forms[2] : forms[3]);
+    }
+    function trendChip(t) {
+      var k = t && t.key, p = t && t.pct;
+      if (k === 'up') return { text: 'ينمو ' + nf(Math.abs(p)) + '٪', tone: 'up' };
+      if (k === 'down') return { text: 'يتراجع ' + nf(Math.abs(p)) + '٪', tone: 'down' };
+      if (k === 'flat') return { text: 'ثابت', tone: 'flat' };
+      if (k === 'new') return { text: 'جديد', tone: 'up' };
+      if (k === 'none') return { text: 'لا بيع', tone: 'mute' };
+      return { text: NA, tone: 'na' };
+    }
+    var CONV = { asked: 'من الزوار', signed_up: 'ممن سألوا', opened: 'من المسجّلين', paid: 'ممن فتحوا' };
+    // stage = {key, cur, prev}؛ prevKnown = المرحلة السابقة مباشرة إن كان لها رقم وإلا null.
+    function stageView(st, prevKnown) {
+      var out = { changeText: '', tone: '', convText: '' };
+      if (!st || st.cur == null) return out;
+      if (st.prev != null) {
+        if (st.prev === 0) {
+          if (st.cur > 0) { out.changeText = 'جديد'; out.tone = 'up'; } else { out.changeText = 'كما هو'; out.tone = 'flat'; }
+        } else {
+          var raw = (st.cur - st.prev) * 100 / st.prev;
+          if (Math.abs(raw) < 1) { out.changeText = 'كما هو'; out.tone = 'flat'; }
+          else {
+            var p = Math.round(raw);
+            if (p > 0) { out.changeText = '▲ ' + nf(p) + '٪'; out.tone = 'up'; } else { out.changeText = '▼ ' + nf(Math.abs(p)) + '٪'; out.tone = 'down'; }
+          }
+        }
+      }
+      if (prevKnown && prevKnown.cur != null && prevKnown.cur > 0 && CONV[st.key]) out.convText = nf(Math.round(st.cur * 100 / prevKnown.cur)) + '٪ ' + CONV[st.key];
+      return out;
+    }
+    function missingText(n) {
+      if (!n) return '';
+      return UU(n, ['خطوة واحدة', 'خطوتان', 'خطوات', 'خطوة']) + (n === 2 ? ' تكتملان' : ' تكتمل') + ' حين تسجّل المنصة الزيارات';
+    }
+    function funnelCompact(stages) {
+      var list = Array.isArray(stages) ? stages : [];
+      var rows = list.filter(function (s) { return s && (s.cur != null || s.failed); });
+      var missing = list.filter(function (s) { return s && s.cur == null && !s.failed; }).length;
+      return { rows: rows, missing: missing, text: missingText(missing) };
+    }
+    // نقاط الرسم: x موزّعة بالتساوي، وكل سلسلة على مقياسها (الدخل يسارًا والحسابات يمينًا والزوار لوحدهم). سلسلة فيها قيمة مجهولة لا تُرسم.
+    // سلسلة كلها أصفار تُرسم مسطّحة عند خط الأساس (لا تُخفى). الارتفاع الفعلي = h - أسفل - (قيمة / الأكبر) * (h - أعلى - أسفل).
+    function chartPoints(rows, w, h) {
+      rows = Array.isArray(rows) ? rows : [];
+      var padT = 24, padB = 36, padX = 14, n = rows.length;
+      var inner = h - padT - padB;
+      function series(key) {
+        var vals = rows.map(function (r) { return r[key]; });
+        if (!n || vals.some(function (v) { return v == null || !isFinite(v); })) return null;
+        var max = Math.max.apply(null, vals), min = Math.min.apply(null, vals);
+        // سلسلة ثابتة (كل قيمها واحدة وأكبر من صفر) تُرسم في منتصف الارتفاع لا عند القمة، حتى لا تبدو أعلى من غيرها
+        var constant = n > 1 && max > 0 && min === max;
+        var pts = vals.map(function (v, i) {
+          var x = n === 1 ? w / 2 : padX + (w - 2 * padX) * i / (n - 1);
+          var y = constant ? padT + inner / 2 : (max > 0 ? padT + inner - (v / max) * inner : padT + inner);
+          return [Math.round(x * 10) / 10, Math.round(y * 10) / 10];
+        });
+        return { key: key, pts: pts, max: max, flat: !(max > 0), constant: constant };
+      }
+      var out = { income: series('income_egp'), signups: series('signups'), visits: series('visits'), n: n, base: padT + inner, top: padT, padX: padX };
+      out.grid = [0, 1, 2, 3].map(function (i) { return Math.round((padT + inner * i / 3) * 10) / 10; });
+      return out;
+    }
+    // السلاسل المرسومة فقط تظهر في المفتاح، وما لم يُرسم يُقال مرة واحدة في الحاشية.
+    function legendItems(daily, scope) {
+      var d = daily || {}, items = [], notes = [];
+      if (d.ledger !== false) items.push({ key: 'income', label: 'الدخل بالجنيه' }); else notes.push('الدخل بالجنيه: ' + NA);
+      if (d.signups_available) items.push({ key: 'signups', label: 'حسابات جديدة' }); else if (!scope || scope === 'all') notes.push('الحسابات الجديدة: ' + NA);
+      if (d.visits_available) items.push({ key: 'visits', label: 'الزوار' }); else notes.push('الزوار: ' + NA);
+      // سلسلة بقيمة واحدة في كل الفترة: تُقال صراحة لأن رسمها في المنتصف بلا مقياس
+      var rows = Array.isArray(d.rows) ? d.rows : [], per = d.bucket === 'week' ? 'أسبوعيًا' : 'يوميًا';
+      [['income_egp', 'الدخل', d.ledger !== false], ['signups', 'الحسابات الجديدة', !!d.signups_available], ['visits', 'الزوار', !!d.visits_available]].forEach(function (c) {
+        if (!c[2] || rows.length < 2) return;
+        var vals = rows.map(function (r) { return r[c[0]]; });
+        if (vals.some(function (v) { return v == null || !isFinite(v); })) return;
+        var mx = Math.max.apply(null, vals);
+        if (mx > 0 && Math.min.apply(null, vals) === mx) notes.push(c[1] + ' ثابت: ' + nf(mx) + ' ' + per);
+      });
+      return { items: items, notes: notes };
+    }
+    // تصفية «أحدث الأسئلة»: نفس سلوك الشاشة القديمة بالحرف (f = {seg, country, cat, ne, time}).
+    function within(iso, days, now) { var t = Date.parse(iso || ''); return !isNaN(t) && (now - t) <= days * 86400000; }
+    function demandFilter(recent, f, now) {
+      f = f || {};
+      return (Array.isArray(recent) ? recent : []).filter(function (r) {
+        if (f.seg && f.seg !== 'all' && (r.segment || '') !== f.seg) return false;
+        if (f.country && f.country !== 'all' && (r.country || 'unknown') !== f.country) return false;
+        if (f.cat && f.cat !== 'all' && (r.category || '') !== f.cat) return false;
+        if (f.ne === 'yes' && !r.needs_expert) return false;
+        if (f.ne === 'no' && r.needs_expert) return false;
+        if (f.time && f.time !== 'all' && !within(r.created_at, f.time === '7' ? 7 : 30, now)) return false;
+        return true;
+      });
+    }
+    function hiddenFilters(f) { f = f || {}; return ['seg', 'country', 'cat', 'time'].filter(function (k) { return f[k] && f[k] !== 'all'; }).length + (f.ne === 'no' ? 1 : 0); }
+    function demandNumbers(d) {
+      d = d || {};
+      var countries = (Array.isArray(d.by_country) ? d.by_country : []).filter(function (c) { return c && c.country && c.country !== 'unknown' && (c.count || 0) > 0; }).length;
+      var parts = [UU(d.total || 0, ['سؤال واحد', 'سؤالان', 'أسئلة', 'سؤالًا']),
+        nf(d.needs_expert || 0) + ' تحتاج رأي خبير (' + nf(Math.round((d.needs_expert_rate || 0) * 100)) + '٪)',
+        nf(d.authed || 0) + ' عضو و' + nf(d.anonymous || 0) + ' زائر'];
+      var eo = d.expert_opinions;
+      if (eo && typeof eo === 'object' && eo.requested != null && eo.paid != null) parts.push('دفع ' + nf(eo.paid) + ' من ' + nf(eo.requested) + ' مقابل رأي خبير (' + nf(Math.round((eo.conversion_rate || 0) * 100)) + '٪)');
+      else parts.push('الدفع مقابل رأي خبير: ' + NA);
+      parts.push('من ' + UU(countries, ['بلد واحد', 'بلدين', 'بلاد', 'بلدًا']));
+      return parts.join(' · ');
+    }
+    function weekText(iso) {
+      var m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(iso || ''));
+      return m ? ar(+m[3]) + ' ' + MONTHS[+m[2] - 1] : '';
+    }
+    function deliveryText(d) {
+      d = d || {};
+      if (d.bridge === 'absent') return 'الإرسال كل أحد: ' + NA + ' — ينتظر تجهيز الإرسال على المنصة';
+      if (d.bridge === 'failed') return 'الإرسال كل أحد: تعذّر التحقق الآن';
+      if (!d.setting) return 'الإرسال كل أحد: متوقف';
+      if (d.platform_enabled) return 'يصلك هذا التقرير كل أحد ٨ صباحًا على تليجرام' + (d.last_sent_week && weekText(d.last_sent_week) ? ' · آخر إرسال: أسبوع ' + weekText(d.last_sent_week) : '');
+      return 'الإرسال مفعّل هنا، والمنصة لم تفعّله بعد';
+    }
+    function periodLine(win, prev) { return (win && win.label ? win.label : '') + (prev && prev.label ? ' مقارنة ب' + prev.label : ''); }
+    // زرّ الشريط الوحيد: أول سطر له فعل بترتيب واقف ثم فرصة ثم شغّال (يرسل الخادم `brain_primary` كذلك).
+    function brainPrimary(lines) {
+      var order = ['stalled', 'opportunity', 'working'];
+      for (var i = 0; i < order.length; i++) {
+        var ln = (lines || []).filter(function (x) { return x.key === order[i]; })[0];
+        if (ln && ln.text && ln.action) return order[i];
+      }
+      return null;
+    }
+    var SCOPES = [['all', 'المنصة كلها'], ['files', 'الملفات'], ['courses', 'الدورات'], ['books', 'الكتب'], ['market', 'السوق'], ['content', 'المحتوى'], ['marketing', 'التسويق']];
+    var PERIODS_R = [['week', 'الأسبوع'], ['month', 'الشهر'], ['quarter', '٣ أشهر']];
+    api.v2r = { trendChip: trendChip, stageView: stageView, funnelCompact: funnelCompact, missingText: missingText, chartPoints: chartPoints, legendItems: legendItems,
+      demandFilter: demandFilter, hiddenFilters: hiddenFilters, demandNumbers: demandNumbers, deliveryText: deliveryText, periodLine: periodLine, brainPrimary: brainPrimary,
+      weekText: weekText, u: UU, n: nf, SCOPES: SCOPES, PERIODS: PERIODS_R, NA: NA };
+  })();
+  // ===== /v2s:reports =====
 })(typeof window !== 'undefined' ? window : (typeof globalThis !== 'undefined' ? globalThis : this));
 
 // ===== v2s:home =====
