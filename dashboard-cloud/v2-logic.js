@@ -2211,7 +2211,7 @@
     // ٤) كشوف حساب جاهزة
     var AC = S.ad_clients;
     if (AC && num(AC.unsent) > 0) {
-      var k = AC.unsent, due = sumLines(AC.due_open);
+      var k = AC.unsent, due = sumLines(AC.due_unsent);
       var head = k === 1 ? 'كشف حساب واحد جاهز' : k === 2 ? 'كشفا حساب جاهزان' : k <= 10 ? ar(k) + ' كشوف حساب جاهزة' : ar(k) + ' كشف حساب جاهزة';
       out.push({ key: 'statements', text: head + ' للإرسال' + (due ? '، والمستحق لنا ' + due : '') + '.', btn: 'جهّز الكشوف', act: { tab: 'ads', do: 'statements' } });
     }
@@ -2234,6 +2234,10 @@
     var m = dash && Array.isArray(dash.monthly) ? dash.monthly : null;
     if (!m) return undefined;                                                  // المصدر غير متاح
     var r = m.filter(function (x) { return x.month === key; })[0];
+    if (!r && m.length >= 12) {                                                // النافذة آخر ١٢ شهرًا: شهر أقدم منها خارج المصدر لا «بلا دخل»
+      var first = m.map(function (x) { return x.month; }).sort()[0];
+      if (key < first) return undefined;
+    }
     return r ? num(r.revenue) : null;                                          // null = لا صف لهذا الشهر
   }
   function monthLine(forecast, dash, now) {

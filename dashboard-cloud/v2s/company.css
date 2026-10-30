@@ -286,3 +286,13 @@
 }
 
 .co [hidden],.com [hidden]{display:none!important}
+
+/* ============ ترويسة الورقة بهوية القسم (بدل الكحلي القديم) — تُطبَّق على الأوراق التي فيها .com فقط ============ */
+#epModal:has(.com){background:rgba(33,38,46,.55)}
+#epModal .modal:has(.com){border-radius:20px;background:#FBFAF7;box-shadow:0 24px 64px rgba(33,38,46,.38)}
+#epModal .modal:has(.com) .mh{background:#21262E;color:#fff;padding:16px 20px;font-size:17px;border-bottom:3px solid #9E2B4E}
+#epModal .modal:has(.com) .mh button{width:44px;height:44px;border-radius:12px;background:rgba(255,255,255,.12);font-size:17px;margin:-8px 0}
+#epModal .modal:has(.com) .mh button:hover{background:#9E2B4E}
+#epModal .modal:has(.com) .mh button:focus-visible{outline:3px solid #fff;outline-offset:2px}
+#epModal .modal:has(.com) .mb{padding:20px}
+@media (max-width:560px){#epModal .modal:has(.com) .mh button{width:52px;height:52px;margin:-12px 0}}

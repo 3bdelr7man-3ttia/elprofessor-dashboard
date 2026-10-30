@@ -255,6 +255,11 @@
   function confirmSheet(o) {
     return sheet({ title: o.title, form: '<p class="co-lead">' + esc(o.lead) + '</p>', collect: function () { return { ok: true, payload: 1 }; }, btnSave: o.btn || 'أكّد', send: o.send, onOk: o.onOk, onLost: o.onLost });
   }
+  // حذف سجل مالي: مرحلتان «راجع ⇒ أكّد»
+  function delSheet(o) {
+    return sheet({ title: o.title, form: '<p class="co-lead">' + esc(o.lead) + '</p>', collect: function () { return { ok: true, payload: 1 }; }, btnReview: 'راجع', btnConfirm: o.btn || 'أكّد الحذف',
+      review: function () { return { lead: 'راجع قبل التأكيد', items: [o.lead] }; }, send: o.send, onOk: o.onOk, onLost: o.onLost });
+  }
   // قائمة «المزيد»: أفعال كاملة العرض، والمدمّر آخرًا بنص أحمر
   function moreSheet(title, actions) {
     var s = openSheet(title, '<div class="co-more">' + actions.map(function (a, i) {
@@ -452,8 +457,8 @@
       var ml = CO.monthLine(fc, dash, now());
       var cur = CO.currentTarget(fc, now()), cc = CO.currentCounts(dash);
       var nowLine;
-      var cnt = cc ? 'الآن: ' + (cc.courses == null ? '' : U.U(cc.courses, ['دورة مسجّلة واحدة', 'دورتان مسجّلتان', 'دورات مسجّلة', 'دورة مسجّلة'])) + ' · ' + (cc.students == null ? '' : U.U(cc.students, ['طالب واحد', 'طالبان', 'طلاب', 'طالبًا']))
-        : null;
+      var cnt = !cc ? null : 'الآن: ' + [cc.courses == null ? 'الدورات ' + NA : U.U(cc.courses, ['دورة مسجّلة واحدة', 'دورتان مسجّلتان', 'دورات مسجّلة', 'دورة مسجّلة']),
+        cc.students == null ? 'الطلاب ' + NA : U.U(cc.students, ['طالب واحد', 'طالبان', 'طلاب', 'طالبًا'])].join(' · ');
       if (!cc) nowLine = 'الآن: دورات وطلاب ' + NA;
       else if (cur) nowLine = cnt + ' — هدف ' + CO.monthName(cur.month) + ': ' + U.U(cur.target_courses || 0, ['دورة واحدة', 'دورتان', 'دورات', 'دورة']) + ' · ' + U.U(cur.target_students || 0, ['طالب واحد', 'طالبان', 'طلاب', 'طالبًا']) + '.';
       else nowLine = cnt + ' — لم يُحدَّد هدف.';
@@ -462,7 +467,7 @@
       var thead = '<div class="co-tr head"><span>الشهر</span><span>هدف الدخل</span><span>الدخل الفعلي</span><span>هدف الدورات</span><span>هدف الطلاب</span><span></span></div>';
       body = '<div class="co-brain one tg"><div class="co-bl"><img class="co-bav sm" src="' + img('brain-avatar') + '" alt=""><p>' + (ml.kind === 'na' ? esc(ml.text).replace(NA, na()) : esc(ml.text)) + '</p>'
         + (ml.kind === 'notarget' ? '<button type="button" class="co-blb" data-a="forecastNow">حدّد الهدف</button>' : '') + '</div></div>'
-        + '<p class="co-nowline">' + (cc ? esc(nowLine) : 'الآن: دورات وطلاب ' + na()) + '</p>'
+        + '<p class="co-nowline">' + esc(nowLine).split(NA).join(na()) + '</p>'
         + (rows.length ? '<div class="co-tbl">' + thead + shown.map(function (r) {
           var act = r.future ? '—' : r.na ? na() : (r.actual === null ? 'لا دخل مسجّل' : esc(money(r.actual, 'EGP')));
           return '<div class="co-tr"><span data-l="الشهر"><b>' + esc(r.monthText) + '</b></span><span data-l="هدف الدخل">' + (r.target ? esc(money(r.target, 'EGP')) : '—') + '</span><span data-l="الدخل الفعلي">' + act + '</span>'
@@ -691,7 +696,11 @@
       + '<div class="co-bar">' + btn2('سجّل نتيجة شهر', 'addResult', ' data-c="' + esc(c.id) + '"') + lnk('عدّل الاتفاق', 'editClient', ' data-c="' + esc(c.id) + '"') + '</div></section>';
   }
   function drawAds(v) {
-    var ads = items('ads'), fl = failed(['ads', 'ledger']);
+    var ads = items('ads');
+    var linkedAny = (ads || []).some(function (c) { return c.ledger_kind && c.ledger_owner_id; });
+    var linkedActive = (ads || []).some(function (c) { return c.status === 'active' && c.ledger_kind && c.ledger_owner_id; });
+    if (linkedAny && srcState('ledger') === 'idle') load('ledger', false);                 // الأرصدة لا تُجلب إلا لو فيه عميل مربوط بعمل
+    var fl = failed(linkedActive ? ['ads', 'ledger'] : ['ads']);
     var un = unsentResults(ads);
     var body;
     if (!ads) body = isLoad('ads') ? loadingBlock('عملاء الإعلانات') : '<div class="co-empty"><b>عملاء الإعلانات ' + na() + '.</b>' + btn2('أعد المحاولة', 'retry') + '</div>';
@@ -777,7 +786,7 @@
     // خدمة الذكاء
     var aiBody = models ? (models.length ? '<div class="co-list">' + models.map(function (m) {
       return '<div class="co-lr"><div class="co-lm"><b>' + esc(m.label || 'خدمة') + '</b></div><div class="co-la">' + chip({ text: m.configured ? 'جاهزة' : 'غير جاهزة', tone: m.configured ? 'ok' : 'neutral' }) + '</div></div>'; }).join('') + '</div>' : '<p class="co-none">لا خدمات مسجّلة.</p>')
-      + '<p class="co-fine">تُضبط من الخادم.</p>' : loadingBlock('حالة الخدمة');
+      + '<p class="co-fine">الإعداد من إدارة النظام.</p>' : loadingBlock('حالة الخدمة');
     // الاستخدام
     var useBody;
     if (!usage) useBody = epState('usage') === 'error' ? '<p class="co-none">' + na() + '</p>' : loadingBlock('الاستخدام');
@@ -811,12 +820,14 @@
   function openPartner(row) {
     var E = ep(), edit = row || null, e = edit || {};
     epEnsure(['users']);
-    var users = (window.USERS || []).filter(function (u) { return u && u.name; });
+    function getUsers() { return (window.USERS || []).filter(function (u) { return u && u.name; }); }
+    function userLabel(u) { return u.email ? u.name + ' · ' + u.email : u.name; }
+    function userOpts() { return getUsers().map(function (u) { return '<option value="' + esc(userLabel(u)) + '"></option>'; }).join(''); }
     var knownRole = ROLE_KEYS.some(function (r) { return r[0] === e.role && r[0] !== 'other'; });
     var curRole = edit ? (knownRole ? e.role : 'other') : 'partner';
     var nameFld = edit ? fld('الاسم', inp('co_pn', e.name || '', 'maxlength="255"'))
       : '<p class="co-lead sm">التسجيل من المنصة فقط: اختر شخصًا <b>مسجّلًا</b> لإضافته كشريك.</p>' + fld('اختر من المستخدمين المسجّلين',
-        '<input id="co_pn" type="text" list="co_pul" autocomplete="off" placeholder="ابحث بالاسم أو البريد"><datalist id="co_pul">' + users.map(function (u) { return '<option value="' + esc(u.name + ' · ' + (u.email || '')) + '"></option>'; }).join('') + '</datalist>');
+        '<input id="co_pn" type="text" list="co_pul" autocomplete="off" placeholder="ابحث بالاسم أو البريد"><datalist id="co_pul">' + userOpts() + '</datalist>', getUsers().length ? '' : 'جارٍ جلب المسجّلين…', 'co_pun');
     var contrib = edit && (e.contributions || 0) > 0;
     var form = nameFld + fld('الصفة', sel('co_pr', ROLE_KEYS, curRole)) + '<div id="co_pro_w" class="co-f"' + (curRole === 'other' ? '' : ' hidden') + '><label>اكتب الصفة</label>' + inp('co_pro', knownRole ? '' : (e.role || ''), 'maxlength="100"') + '</div>'
       + '<div class="co-f2">' + fld('الحصة ٪', numInp('co_pe', edit ? e.equity : '')) + fld('رأس المال المتفق عليه بالجنيه', numInp('co_pc', edit && e.agreed ? amountOfList(e.agreed, 'EGP') || '' : '')) + '</div>'
@@ -825,12 +836,23 @@
     function amountOfList(l, c) { var a = (l || []).filter(function (x) { return x.currency === c; })[0]; return a ? a.amount : 0; }
     sheet({
       title: edit ? 'تعديل شريك' : 'أضف شريكًا', form: form, btnReview: 'راجع', btnConfirm: 'أكّد الحفظ',
-      wire: function (s) { var r = q('#co_pr', s); r.onchange = function () { q('#co_pro_w', s).hidden = r.value !== 'other'; }; },
+      wire: function (s) {
+        var r = q('#co_pr', s); r.onchange = function () { q('#co_pro_w', s).hidden = r.value !== 'other'; };
+        if (!edit && !getUsers().length) {                                   // القائمة لم تصل بعد: ننتظرها ثم نملأ الخيارات
+          var tries = 0, t = setInterval(function () {
+            var dl = q('#co_pul', s);
+            if (!dl || ++tries > 40) { clearInterval(t); var h0 = q('#co_pun small', s); if (h0 && dl && !getUsers().length) h0.textContent = 'تعذّر جلب المسجّلين.'; return; }
+            if (getUsers().length) { clearInterval(t); dl.innerHTML = userOpts(); var h = q('#co_pun small', s); if (h) h.remove(); }
+          }, 400);
+        }
+      },
       collect: function (s) {
         var name = val(s, 'co_pn');
         if (!edit) {
-          var u = users.filter(function (x) { return x.name + ' · ' + (x.email || '') === name || x.name === name; })[0];
-          if (!u) return { ok: false, error: 'اختر شخصًا مسجّلًا من القائمة' };
+          var us = getUsers(), u = us.filter(function (x) { return userLabel(x) === name; })[0];
+          if (!u) { var byName = us.filter(function (x) { return x.name === name; }); if (byName.length === 1) u = byName[0]; }
+          if (!u && !us.length) return { ok: false, error: 'جارٍ جلب المسجّلين — انتظر لحظة ثم حاول مرة أخرى' };
+          if (!u) return { ok: false, error: 'اختر شخصًا مسجّلًا من القائمة (وإن تشابهت الأسماء فاختر بالبريد)' };
           name = u.name;
         } else if (!name) return { ok: false, error: 'اكتب الاسم' };
         var role = val(s, 'co_pr'); if (role === 'other') { role = val(s, 'co_pro'); if (!role) return { ok: false, error: 'اكتب الصفة' }; }
@@ -851,7 +873,7 @@
       send: function (p) { return edit ? api('PUT', '/partners/' + edit.id, p) : api('POST', '/partners', p); },
       onOk: function () { reloadP(); afterWrite(edit ? 'حُدّث الشريك.' : 'أُضيف الشريك.', ['partners']); },
       onLost: function () { reloadP(); },
-      danger: edit && !contrib ? { label: 'احذف الشريك', run: function () { window.closeModal(); confirmSheet({ title: 'حذف شريك', lead: 'سيُحذف الشريك «' + e.name + '» من القائمة.', btn: 'احذف الشريك',
+      danger: edit && !contrib ? { label: 'احذف الشريك', run: function () { window.closeModal(); delSheet({ title: 'حذف شريك', lead: 'سيُحذف الشريك «' + e.name + '» من القائمة.', btn: 'احذف الشريك',
         send: function () { return api('DELETE', '/partners/' + edit.id); }, onOk: function () { reloadP(); afterWrite('حُذف الشريك.', ['partners']); } }); } } : null
     });
   }
@@ -907,14 +929,14 @@
   function delContribution(id) {
     var c = byId(items('contribs'), id);
     if (!c) return;
-    confirmSheet({ title: 'حذف دفعة', lead: 'ستُحذف دفعة ' + money(c.amount, c.currency) + ' من ' + (c.partner_name || 'الشريك') + (c.cash_tx_id ? ' وحركة النقد المرتبطة بها' : '') + (c.asset_id ? ' و«' + (c.asset_name || 'المعدة') + '» من المعدات' : '') + '.',
+    delSheet({ title: 'حذف دفعة', lead: 'ستُحذف دفعة ' + money(c.amount, c.currency) + ' من ' + (c.partner_name || 'الشريك') + (c.cash_tx_id ? ' وحركة النقد المرتبطة بها' : '') + (c.asset_id ? ' و«' + (c.asset_name || 'المعدة') + '» من المعدات' : '') + '.',
       btn: 'أكّد الحذف', send: function () { return api('DELETE', '/v2/company/contributions/' + c.id, { confirmed: true }); },
       onOk: function () { afterWrite('حُذفت الدفعة.', ['contribs', 'cash', 'assets']); }, onLost: function () { loadMany(['contribs', 'cash', 'assets', 'summary'], true); } });
   }
   function delOpp(id) {
     var o = byId(listOf('opps'), id), E = ep();
     if (!o) return;
-    confirmSheet({ title: 'حذف فرصة', lead: 'ستُحذف فرصة «' + (o.course_title || 'فرصة') + '».', btn: 'احذف الفرصة', send: function () { return api('DELETE', '/investment-opportunities/' + o.id); },
+    delSheet({ title: 'حذف فرصة', lead: 'ستُحذف فرصة «' + (o.course_title || 'فرصة') + '».', btn: 'احذف الفرصة', send: function () { return api('DELETE', '/investment-opportunities/' + o.id); },
       onOk: function () { load('opps', true); if (E) E.reload('investment', null); setNote('حُذفت الفرصة.'); redraw(); } });
   }
 
@@ -941,7 +963,7 @@
       },
       send: function (p) { return edit ? api('PUT', '/assets/' + e.id, p) : api('POST', '/assets', p); },
       onOk: function () { var E = ep(); if (E) E.reload('dashboard', null); afterWrite(edit ? 'حُدّثت المعدة.' : 'أُضيفت المعدة.', ['assets']); }, onLost: function () { load('assets', true); },
-      danger: edit ? { label: 'احذف المعدة', run: function () { window.closeModal(); confirmSheet({ title: 'حذف معدة', lead: 'ستُحذف «' + e.name + '» من المعدات.', btn: 'احذف المعدة', send: function () { return api('DELETE', '/assets/' + e.id); },
+      danger: edit ? { label: 'احذف المعدة', run: function () { window.closeModal(); delSheet({ title: 'حذف معدة', lead: 'ستُحذف «' + e.name + '» من المعدات.', btn: 'احذف المعدة', send: function () { return api('DELETE', '/assets/' + e.id); },
         onOk: function () { afterWrite('حُذفت المعدة.', ['assets']); } }); } } : null
     });
   }
@@ -1060,7 +1082,7 @@
     var party = isAd ? client.name : a.party, cur = isAd ? client.currency : (a.currency || 'EGP');
     if (isAd && !due) { setNote('المستحق غير محسوب بعد — سجّل دخلهم من الحملة أولًا.'); redraw(); return; }
     var form = '<p class="co-lead sm">' + esc(isAd ? 'تحصيل كشف ' + CO.monthText(a.period) + ' من ' + client.name : 'مبلغ مستلم من ' + a.party) + '</p>'
-      + '<div class="co-f2">' + fld('المبلغ', numInp('co_ia', isAd ? due.amount : (a.amount || ''), isAd ? 'readonly' : '')) + fld('العملة', sel('co_ic', isAd ? [[cur, U.curName(cur)]] : CURS_ALL, cur)) + '</div>'
+      + '<div class="co-f2">' + fld('المبلغ', numInp('co_ia', isAd ? due.amount : (a.amount || ''), isAd ? 'readonly' : '')) + fld('العملة', sel('co_ic', (isAd || a.currency) ? [[cur, U.curName(cur)]] : CURS_ALL, cur)) + '</div>'
       + fld('التاريخ', dateInp('co_id', todayIso())) + fld('طريقة الاستلام', sel('co_im', METHODS, 'bank_transfer'));
     sheet({
       title: isAd ? 'سجّل التحصيل' : 'سجّل مبلغًا مستلمًا', form: form, btnReview: 'راجع', btnConfirm: 'أكّد التسجيل',
@@ -1174,9 +1196,19 @@
   // —— عميل إعلانات
   var DEAL_OPTS = [['percent', 'نسبة من دخل الحملة'], ['fixed_plus_percent', 'مبلغ ثابت + نسبة'], ['fixed', 'مبلغ ثابت'], ['other', 'أخرى']];
   function openClient(row) {
+    if (isLoad('ledger')) {                                                                  // نجلب الأرصدة أولًا ليظهر ربط العمل في الورقة
+      load('ledger', false);
+      var tries = 0, t = setInterval(function () { if (!isLoad('ledger') || ++tries > 27) { clearInterval(t); openClient0(row); } }, 150);
+      return;
+    }
+    openClient0(row);
+  }
+  function openClient0(row) {
     var e = row || {}, edit = !!row, deal0 = e.deal || 'percent';
     var led = L.v2AdsLedger(data('ledger'), now());
-    var form = fld('الاسم', inp('co_kn', e.name || '', 'maxlength="160"')) + fld('البريد (اختياري)', inp('co_ke', e.email || '', 'dir="ltr" maxlength="200"')) + fld('ماذا نقدّم لهم', inp('co_ko', e.offer || '', 'maxlength="300"'))
+    var locked = edit && (e.results || []).some(function (r) { return r.sent_at || r.revenue_id; });
+    var form = (locked ? '<p class="co-info" role="status">أُرسلت كشوف لهذا العميل أو حُصّلت مبالغ منه، فلا تتغير طريقة الحساب ولا النسبة ولا المبلغ ولا العملة. لتغييرها أنهِ هذا الاتفاق وأضف اتفاقًا جديدًا.</p>' : '')
+      + fld('الاسم', inp('co_kn', e.name || '', 'maxlength="160"')) + fld('البريد (اختياري)', inp('co_ke', e.email || '', 'dir="ltr" maxlength="200"')) + fld('ماذا نقدّم لهم', inp('co_ko', e.offer || '', 'maxlength="300"'))
       + fld('طريقة الحساب', sel('co_kd', DEAL_OPTS, deal0))
       + '<div id="co_kdo_w" class="co-f"' + (deal0 === 'other' ? '' : ' hidden') + '><label>اكتب طريقة الحساب</label>' + inp('co_kdo', e.deal_other || '', 'maxlength="120"') + '</div>'
       + '<div class="co-f2"><div id="co_kp_w" class="co-f"><label>النسبة ٪</label>' + numInp('co_kp', e.percent || '') + '</div><div id="co_kf_w" class="co-f"><label>المبلغ الثابت</label>' + numInp('co_kf', e.fixed_amount || '') + '</div></div>'
@@ -1193,6 +1225,7 @@
           var v = d.value; q('#co_kdo_w', s).hidden = v !== 'other'; q('#co_kp_w', s).hidden = !(v === 'percent' || v === 'fixed_plus_percent'); q('#co_kf_w', s).hidden = !(v === 'fixed' || v === 'fixed_plus_percent');
         }
         d.onchange = sync; sync();
+        if (locked) ['co_kd', 'co_kp', 'co_kf', 'co_kc'].forEach(function (i) { var el = q('#' + i, s); if (el) el.disabled = true; });
         var lk = q('#co_klk', s), lw = q('#co_klw', s);
         if (lk && lw) {
           var fill = function () {
@@ -1212,8 +1245,10 @@
         var ref = val(s, 'co_kr'); if (ref && !/^[a-z0-9-]{3,40}$/.test(ref)) return { ok: false, error: 'كود التتبّع: حروف إنجليزية صغيرة وأرقام وشرطة فقط (٣ إلى ٤٠)' };
         var lk = q('#co_klk', s), kind = lk ? lk.value : '', own = kind ? val(s, 'co_klw') : '';
         if (kind && !own) return { ok: false, error: 'اختر العمل المرتبط' };
-        return { ok: true, payload: { name: name, email: val(s, 'co_ke') || null, offer: val(s, 'co_ko'), deal: deal, deal_other: deal === 'other' ? dother : null, percent: pct, fixed_amount: fx, currency: val(s, 'co_kc'),
-                 count_label: val(s, 'co_kl') || 'عملاء جاؤوا من الحملة', ref_code: ref || null, ledger_kind: kind || null, ledger_owner_id: own || null, status: edit ? val(s, 'co_kst') : 'active', note: val(s, 'co_kn2') } };
+        var out = { name: name, email: val(s, 'co_ke') || null, offer: val(s, 'co_ko'), deal: deal, deal_other: deal === 'other' ? dother : null, percent: pct, fixed_amount: fx, currency: val(s, 'co_kc'),
+                 count_label: val(s, 'co_kl') || 'عملاء جاؤوا من الحملة', ref_code: ref || null, status: edit ? val(s, 'co_kst') : 'active', note: val(s, 'co_kn2') };
+        if (lk) { out.ledger_kind = kind || null; out.ledger_owner_id = own || null; }          // خانة الربط غير مرسومة = لا نلمس الربط الحالي
+        return { ok: true, payload: out };
       },
       send: function (p) { return edit ? api('PUT', '/v2/company/ad-clients/' + e.id, p) : api('POST', '/v2/company/ad-clients', p); },
       onOk: function () { afterWrite(edit ? 'حُدّث الاتفاق.' : 'أُضيف العميل.', ['ads']); }, onLost: function () { load('ads', true); }
@@ -1398,11 +1433,11 @@
 
   // ------------------------------------------------------------------ نقطة الدخول
   var NEEDS = {
-    investment: { src: ['summary', 'partners', 'assets', 'subs', 'deals', 'ads', 'forecast', 'dash'], ep: [], visits: true },
+    investment: { src: ['summary', 'partners', 'assets', 'subs', 'deals', 'ads', 'forecast', 'dash'], ep: ['users'], visits: true },
     v2c_partners: { src: ['summary', 'partners', 'contribs', 'cash', 'invest', 'opps', 'wd'], ep: ['users'] },
     v2c_assets: { src: ['assets', 'subs', 'summary'], ep: [] },
     v2c_deals: { src: ['deals'], ep: [], visits: true },
-    v2c_ads: { src: ['ads', 'ledger'], ep: [], visits: true },
+    v2c_ads: { src: ['ads'], ep: [], visits: true },
     settings: { src: [], ep: ['settings', 'dashUsers', 'usage', 'aiModels'] },
     targets: { src: [], ep: [] }
   };
@@ -1431,24 +1466,37 @@
     if (document.getElementById('epModal')) return;                       // لا نعيد رسم الشاشة وتحت نافذة مفتوحة
     if (!document.body.contains(S.view)) return;
     if (mod === 'targets') { goTargets(); return; }
+    S.dirty = false;
     DRAW[mod](S.view);
     wireView(S.view);
     S.sig = signature();
   }
+  // الرسم من المؤقّتات يتأجل لو المستخدم يكتب أو عنده تعديل لم يُحفظ (حتى لا يضيع ما كتبه)
+  function userEditing() {
+    var a = document.activeElement;
+    if (a && S.view && S.view.contains(a) && /^(INPUT|SELECT|TEXTAREA)$/.test(a.tagName)) return true;
+    return !!S.dirty;
+  }
+  function watchDirty(view) {
+    if (!view || view.__coDirty) return;
+    view.__coDirty = 1;
+    var f = function (e) { var t = e.target; if (t && /^(INPUT|SELECT|TEXTAREA)$/.test(t.tagName) && document.body.contains(t)) S.dirty = true; };
+    view.addEventListener('input', f); view.addEventListener('change', f);
+  }
   SECS.company = {
     owns: function (mod) { return !!(window.V2_ON && window.V2SHELL && V2SHELL.on && MODS[mod]); },
     render: function (mod, view) {
-      S.view = view; S.mod = mod;
+      S.view = view; S.mod = mod; watchDirty(view);
       if (mod !== 'targets') ensureFor(mod);
       redraw();
       if (!S.poll) {
         S.poll = setInterval(function () {
           if (!SECS.company.owns(curMod())) { S.mod = ''; return; }
-          if (document.getElementById('epModal')) return;
+          if (document.getElementById('epModal') || userEditing()) return;
           if (signature() !== S.sig) redraw();
         }, 400);
       }
-      if (!S.minute) S.minute = setInterval(function () { if (SECS.company.owns(curMod()) && !document.getElementById('epModal')) redraw(); }, 60000);
+      if (!S.minute) S.minute = setInterval(function () { var m = curMod(); if (SECS.company.owns(m) && m !== 'settings' && !document.getElementById('epModal') && !userEditing()) redraw(); }, 60000);
     },
     _state: S, _src: SRC, _visits: V, _tick: function (t) { S.nowOverride = t || 0; redraw(); }
   };

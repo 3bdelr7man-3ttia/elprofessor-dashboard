@@ -484,7 +484,7 @@ def register(app, ns):
 
     def block_ads():
         clients = AdClient.query.order_by(AdClient.id.asc()).all()
-        unsent, open_pairs, latest = 0, [], []
+        unsent, open_pairs, unsent_pairs, latest = 0, [], [], []
         for c in clients:
             res = client_results(c.id)
             for r in res:
@@ -493,10 +493,11 @@ def register(app, ns):
                     open_pairs.append((c.currency, d))
                     if r.sent_at is None and c.status == 'active':
                         unsent += 1
+                        unsent_pairs.append((c.currency, d))
             if c.status == 'active' and res:
                 r = res[0]
                 latest.append({'client_id': c.id, 'name': c.name, 'period': r.period, 'count': r.count, 'income': r.income, 'due': due_list(c, r)})
-        return {'active': len([c for c in clients if c.status == 'active']), 'unsent': unsent, 'due_open': _sum_by_cur(open_pairs), 'latest': latest}
+        return {'active': len([c for c in clients if c.status == 'active']), 'unsent': unsent, 'due_open': _sum_by_cur(open_pairs), 'due_unsent': _sum_by_cur(unsent_pairs), 'latest': latest}
 
     def block_money():
         rate = get_rate()
@@ -892,6 +893,10 @@ def register(app, ns):
         merged.update({k: v for k, v in b.items() if k in ('name', 'email', 'offer', 'deal', 'deal_other', 'percent', 'fixed_amount', 'currency', 'count_label',
                                                            'ref_code', 'ledger_kind', 'ledger_owner_id', 'status', 'note')})
         f = client_fields(merged, exclude_id=rid)
+        # المستحق يُحسب من شروط العميل: لا تتغير الشروط بعد إرسال كشف أو تحصيل مبلغ حتى لا يختلف المعروض عن المحصَّل
+        if any(f[k] != getattr(row, k) for k in ('deal', 'percent', 'fixed_amount', 'currency')):
+            if any(r.revenue_id is not None or r.sent_at is not None for r in client_results(rid)):
+                bad('لهذا العميل كشوف أُرسلت أو مبالغ حُصّلت — أنهِ هذا الاتفاق وأضف اتفاقًا جديدًا بالشروط الجديدة', 409)
         for k, v in f.items():
             setattr(row, k, v)
         row.updated_at = datetime.datetime.utcnow()
@@ -1046,6 +1051,8 @@ def register(app, ns):
         method = _enum(b.get('method'), ('bank_transfer', 'cash', 'other'), 'طريقة الاستلام')
         if kind == 'agreement':
             src = get_or_404(Agreement, fid, 'الاتفاق غير موجود')
+            if src.currency and currency != src.currency:
+                bad('عملة المبلغ لازم تكون عملة الاتفاق')
             pid = 'co:agreement:%d:%s' % (fid, op)
             who, source, desc = src.party, 'sponsor', 'راعٍ: %s' % src.party
         else:

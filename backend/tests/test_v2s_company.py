@@ -364,7 +364,7 @@ def test_contribution_delete_removes_cash_and_asset(ctx):
 
 # ---------------------------------------------------------------- ٦) المبلغ المستلم
 def test_income_agreement_flow_and_currency_columns(ctx):
-    ag = call(ctx, 'POST', '/api/v2/company/agreements', {'kind': 'sponsor', 'party': 'مكتب النيل', 'amount': 12000, 'currency': 'EGP'}).get_json()['item']
+    ag = call(ctx, 'POST', '/api/v2/company/agreements', {'kind': 'sponsor', 'party': 'مكتب النيل'}).get_json()['item']          # بلا مبلغ ⇒ بلا عملة ⇒ يقبل أي عملة
     body = {'from_kind': 'agreement', 'from_id': ag['id'], 'amount': 12000, 'currency': 'EGP', 'date': iso(today()), 'method': 'bank_transfer', 'op_id': 'op-inc00001'}
     assert call(ctx, 'POST', '/api/v2/company/income', body).status_code == 400
     assert call(ctx, 'POST', '/api/v2/company/income', dict(body, confirmed='yes')).status_code == 400
@@ -654,7 +654,7 @@ def test_summary_blocks(ctx):
     assert [n['name'] for n in sb['next']] == ['دومين', 'أدوبي']                                       # المتأخر أولًا
     assert [a['party'] for a in s['agreements']['ending']] == ['قريب', 'حد 45'] and s['agreements']['active'] == 3
     ac = s['ad_clients']
-    assert ac['active'] == 1 and ac['unsent'] == 1 and ac['due_open'] == [{'currency': 'EGP', 'amount': 4800}]
+    assert ac['active'] == 1 and ac['unsent'] == 1 and ac['due_open'] == [{'currency': 'EGP', 'amount': 4800}] and ac['due_unsent'] == [{'currency': 'EGP', 'amount': 4800}]
     assert ac['latest'] == [{'client_id': cl['id'], 'name': 'مكتب الأمل', 'period': '2026-09', 'count': 14, 'income': 48000, 'due': [{'currency': 'EGP', 'amount': 4800}]}]
 
 
@@ -705,7 +705,7 @@ def test_summary_failed_block_is_null_others_intact(ctx, monkeypatch):
     assert j['assets'] is None
     assert j['partners'] is not None and j['partners']['equity_total'] == 40
     assert j['subscriptions'] == {'active': 0, 'monthly': [], 'yearly': [], 'next': []} and j['agreements'] == {'active': 0, 'ending': []}
-    assert j['ad_clients'] == {'active': 0, 'unsent': 0, 'due_open': [], 'latest': []} and j['capital_moves'] == []
+    assert j['ad_clients'] == {'active': 0, 'unsent': 0, 'due_open': [], 'due_unsent': [], 'latest': []} and j['capital_moves'] == []
 
 
 # ---------------------------------------------------------------- ١١) الأهداف
@@ -774,6 +774,52 @@ def test_ad_client_crud_and_results_order(ctx):
     assert call(ctx, 'GET', '/api/v2/company/ad-clients').get_json()['items'] == []
 
 
+def test_ad_client_put_without_ledger_keys_keeps_the_link(ctx):
+    c = mkclient(ctx, ledger_kind='course', ledger_owner_id='crs-1')
+    r = call(ctx, 'PUT', '/api/v2/company/ad-clients/%d' % c['id'], {'name': 'اسم جديد', 'note': 'ملاحظة'})
+    it = r.get_json()['item']
+    assert r.status_code == 200 and it['ledger_kind'] == 'course' and it['ledger_owner_id'] == 'crs-1' and it['name'] == 'اسم جديد'
+    # مسح الربط صراحةً ما زال ممكنًا
+    r = call(ctx, 'PUT', '/api/v2/company/ad-clients/%d' % c['id'], {'ledger_kind': None, 'ledger_owner_id': None})
+    assert r.get_json()['item']['ledger_kind'] is None
+
+
+def test_ad_client_terms_locked_after_sent_or_collected(ctx):
+    c = mkclient(ctx)
+    cid = c['id']
+    res = call(ctx, 'POST', '/api/v2/company/ad-clients/%d/results' % cid, {'period': '2026-09', 'count': 14, 'income': 48000}).get_json()['item']
+    # قبل أي إرسال: الشروط تتغير
+    assert call(ctx, 'PUT', '/api/v2/company/ad-clients/%d' % cid, {'percent': 12}).status_code == 200
+    assert call(ctx, 'POST', '/api/v2/company/ad-results/sent', {'ids': [res['id']]}).status_code == 200
+    # بعد الإرسال: الشروط ثابتة (٤٠٩) لكن الاسم والملاحظة والحالة تتعدّل
+    for body in ({'percent': 20}, {'currency': 'USD'}, {'deal': 'fixed', 'fixed_amount': 100}):
+        r = call(ctx, 'PUT', '/api/v2/company/ad-clients/%d' % cid, body)
+        assert r.status_code == 409, body
+    assert call(ctx, 'PUT', '/api/v2/company/ad-clients/%d' % cid, {'percent': 12, 'name': 'اسم', 'status': 'ended'}).status_code == 200
+    got = call(ctx, 'GET', '/api/v2/company/ad-clients').get_json()['items'][0]
+    assert got['percent'] == 12 and got['results'][0]['due'] == [{'currency': 'EGP', 'amount': 5760.0}]
+
+
+def test_income_agreement_currency_must_match(ctx):
+    ag = call(ctx, 'POST', '/api/v2/company/agreements', {'kind': 'sponsor', 'party': 'راعٍ', 'amount': 500, 'currency': 'USD'}).get_json()['item']
+    body = {'from_kind': 'agreement', 'from_id': ag['id'], 'amount': 500, 'currency': 'EGP', 'date': iso(today()), 'method': 'cash', 'confirmed': True, 'op_id': 'op-cur00001'}
+    assert call(ctx, 'POST', '/api/v2/company/income', body).status_code == 422 and Revenue.query.count() == 0
+    assert call(ctx, 'POST', '/api/v2/company/income', dict(body, currency='USD')).status_code == 201
+
+
+def test_summary_due_unsent_only_counts_active_unsent(ctx):
+    a = mkclient(ctx, name='نشط')
+    b = mkclient(ctx, name='منتهٍ')
+    ra = call(ctx, 'POST', '/api/v2/company/ad-clients/%d/results' % a['id'], {'period': '2026-09', 'income': 1000}).get_json()['item']
+    call(ctx, 'POST', '/api/v2/company/ad-clients/%d/results' % b['id'], {'period': '2026-09', 'income': 5000})
+    call(ctx, 'PUT', '/api/v2/company/ad-clients/%d' % b['id'], {'status': 'ended'})
+    ac = call(ctx, 'GET', '/api/v2/company/summary').get_json()['ad_clients']
+    assert ac['unsent'] == 1 and ac['due_unsent'] == [{'currency': 'EGP', 'amount': 100.0}] and ac['due_open'] == [{'currency': 'EGP', 'amount': 600.0}]
+    call(ctx, 'POST', '/api/v2/company/ad-results/sent', {'ids': [ra['id']]})
+    ac = call(ctx, 'GET', '/api/v2/company/summary').get_json()['ad_clients']
+    assert ac['unsent'] == 0 and ac['due_unsent'] == []
+
+
 # ================================================================ المنطق (node)
 NOW = int(datetime.datetime(2026, 10, 30, 10, 0, tzinfo=datetime.timezone.utc).timestamp() * 1000)
 
@@ -828,7 +874,7 @@ def test_brain_lines_each_from_its_facts():
     P0 = {'partners': {'rows': [dict(rows[0], paid=[], contributions=0)], 'equity_total': 100, 'any_contribution': False}}
     assert _lg('brain', P0, NOW)[0]['text'] == 'لم تُسجَّل دفعات الشركاء بعد، فالمدفوع من رأس المال غير معروف.'
     # كشوف الحساب · مجموع الحصص
-    A = {'ad_clients': {'unsent': 2, 'due_open': [{'currency': 'EGP', 'amount': 12350}]}}
+    A = {'ad_clients': {'unsent': 2, 'due_unsent': [{'currency': 'EGP', 'amount': 12350}]}}
     assert _lg('brain', A, NOW)[0]['text'] == 'كشفا حساب جاهزان للإرسال، والمستحق لنا ١٢٬٣٥٠ جنيه.'
     A['ad_clients']['unsent'] = 5
     assert _lg('brain', A, NOW)[0]['text'].startswith('٥ كشوف حساب جاهزة للإرسال')
@@ -844,7 +890,7 @@ def test_brain_priority_max_three_null_blocks_no_zero():
     full = {'money': {'month': '2026-09', 'revenue': 1000, 'expenses': 2000, 'covered_since': None},
             'agreements': {'ending': [{'id': 1, 'party': 'س', 'ends_on': '2026-11-05'}]}, 'subscriptions': {'next': []},
             'partners': {'rows': [{'id': 1, 'name': 'أ', 'reserve': False, 'agreed': [{'currency': 'EGP', 'amount': 10}], 'paid': [{'currency': 'EGP', 'amount': 5}], 'contributions': 1}], 'equity_total': 90, 'any_contribution': True},
-            'ad_clients': {'unsent': 1, 'due_open': [{'currency': 'EGP', 'amount': 5}]}}
+            'ad_clients': {'unsent': 1, 'due_unsent': [{'currency': 'EGP', 'amount': 5}]}}
     ls = _lg('brain', full, NOW)
     assert [l['key'] for l in ls] == ['money', 'agreement', 'owing']
     nulls = {k: None for k in ('money', 'agreements', 'subscriptions', 'partners', 'ad_clients', 'assets', 'capital_moves')}
@@ -936,6 +982,20 @@ def test_target_rows_current_target_month_line():
 
 
 @needs_node
+def test_target_rows_month_older_than_12_month_window_is_na():
+    months = ['2025-%02d' % m for m in range(11, 13)] + ['2026-%02d' % m for m in range(1, 11)]          # ١٢ شهرًا: 2025-11 … 2026-10
+    dash = {'monthly': [{'month': m, 'revenue': 100} for m in months if m != '2026-03']}
+    dash['monthly'] = dash['monthly'] + [{'month': '2026-03', 'revenue': 0}]
+    fc = [{'id': 1, 'month': '2025-06', 'revenue_egp': 1, 'target_courses': 0, 'target_students': 0},
+          {'id': 2, 'month': '2026-03', 'revenue_egp': 1, 'target_courses': 0, 'target_students': 0}]
+    r = _lg('targetRows', fc, dash, NOW)
+    assert r[0]['na'] is True and r[1]['na'] is False and r[1]['actual'] == 0
+    short = {'monthly': [{'month': '2026-09', 'revenue': 5}]}                                         # أقل من ١٢ ⇒ التاريخ كله موجود: «لا دخل»
+    r2 = _lg('targetRows', fc, short, NOW)
+    assert r2[0]['na'] is False and r2[0]['actual'] is None
+
+
+@needs_node
 def test_month_options():
     jan = int(datetime.datetime(2026, 1, 15, 12, tzinfo=datetime.timezone.utc).timestamp() * 1000)
     dec = int(datetime.datetime(2026, 12, 3, 12, tzinfo=datetime.timezone.utc).timestamp() * 1000)
@@ -1004,6 +1064,17 @@ def test_static_app_and_dockerfile():
     assert lines[i + 1].strip() == '# ---- v2 section routes end'
     d = _read('Dockerfile')
     assert 'COPY backend/v2_*_routes.py /app/' in d and 'COPY dashboard-cloud/v2s /app/dist/v2s' in d
+
+
+def test_static_company_js_fix_round_rules():
+    js = _read('dashboard-cloud', 'v2s', 'company.js')
+    css = _read('dashboard-cloud', 'v2s', 'company.css')
+    assert "if (lk) { out.ledger_kind" in js and 'ledger_kind: kind || null, ledger_owner_id: own || null, status' not in js     # الربط لا يُمسح بصمت
+    assert 'userEditing()' in js and "m !== 'settings'" in js                                                                  # المؤقّتات لا تمسح ما كُتب
+    assert 'تُضبط من الخادم' not in js
+    assert js.count('delSheet({') == 4 and 'confirmSheet({ title: \'حذف' not in js                                            # كل حذف بمرحلتين
+    assert "ep: ['users']" in js
+    assert '#epModal .modal:has(.com) .mh' in css and '#21262E' in css
 
 
 def test_static_company_js_rules():
