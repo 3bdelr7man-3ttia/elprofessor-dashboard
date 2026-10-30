@@ -2386,8 +2386,22 @@ def _v2_confirmed(body):
     return None
 
 
+V2_PLATFORM_DOWN_AR = 'تعذّر الاتصال بالمنصة'
+
+
+def _v2_mask_auth(resp):
+    """رفض المنصة للمفتاح المشترك (٤٠١/٤٠٣) عطلٌ في الربط لا انتهاء جلسة الأدمن: لو مرّ ٤٠١ كما هو
+    لخرج `EP.api` بالأدمن إلى شاشة الدخول. فيصير ٥٠٢ عاديًا، والشاشة تكتب «غير متاح بعد»."""
+    try:
+        if isinstance(resp, tuple) and int(resp[1]) in (401, 403):
+            return jsonify({'error': V2_PLATFORM_DOWN_AR}), 502
+    except Exception:
+        pass
+    return resp
+
+
 def _v2_get(path, params=None):
-    return _v2_ns(_platform_proxy('GET', path, params=params))
+    return _v2_ns(_v2_mask_auth(_platform_proxy('GET', path, params=params)))
 
 
 def _v2_write(method, path, platform_body, audit_action, target, meta, params=None):
@@ -2400,7 +2414,7 @@ def _v2_write(method, path, platform_body, audit_action, target, meta, params=No
         return _v2_ns(resp)
     if _ef_no_reply(resp):
         return _v2_ns(_ef_no_reply_resp(audit_action.split('.')[0], target, audit_action))
-    return _v2_ns(resp)
+    return _v2_ns(_v2_mask_auth(resp))
 
 
 def _v2_money_int(v):
@@ -2466,9 +2480,9 @@ def v2_shares_put():
     changes = body.get('changes')
     version = _v2_money_int(body.get('version'))
     if not isinstance(changes, dict) or not changes:
-        return _v2_ns((jsonify({'error': 'مفيش تعديل'}), 400))
+        return _v2_ns((jsonify({'error': 'لا تعديل'}), 400))
     if version is None or version < 0:
-        return _v2_ns((jsonify({'error': 'حدّث الشاشة وجرّب تاني'}), 400))
+        return _v2_ns((jsonify({'error': 'حدّث الصفحة ثم أعد المحاولة'}), 400))
     return _v2_write('PUT', '/api/bridge/shares', {'changes': changes, 'version': version, 'confirmed': True},
                      'shares.update', 'shares', {'keys': sorted(changes.keys())[:10], 'version': version})
 
@@ -2489,10 +2503,14 @@ def v2_ads_ledger_owner(owner_id):
     if closed:
         return closed
     if not V2_ID_RE.match(owner_id or ''):
-        return _v2_ns((jsonify({'error': 'العمل ده مش موجود'}), 404))
+        return _v2_ns((jsonify({'error': 'هذا العمل غير موجود'}), 404))
+    # جسر المنصة لحركات الكتب وحدها: ردّه لعمل من نوع آخر ٢٠٠ فارغ، وهو صفر كاذب. فنرفض النوع الآخر صراحةً.
+    kind = (request.args.get('kind') or 'book').strip().lower()
+    if kind != 'book':
+        return _v2_ns((jsonify({'error': 'حركات هذا النوع من الأعمال غير متاحة بعد'}), 404))
     month = (request.args.get('month') or '').strip()
     if month and not V2_MONTH_RE.match(month):
-        return _v2_ns((jsonify({'error': 'الشهر مش صالح'}), 400))
+        return _v2_ns((jsonify({'error': 'الشهر غير صالح'}), 400))
     return _v2_get('/api/bridge/ads-ledger/%s' % quote(owner_id, safe=''), {'month': month} if month else None)
 
 
@@ -2513,7 +2531,7 @@ def v2_income_by_service():
         return closed
     month = (request.args.get('month') or '').strip()
     if month and not V2_MONTH_RE.match(month):
-        return _v2_ns((jsonify({'error': 'الشهر مش صالح'}), 400))
+        return _v2_ns((jsonify({'error': 'الشهر غير صالح'}), 400))
     return _v2_get('/api/bridge/income/by-service', {'month': month} if month else None)
 
 
@@ -2536,7 +2554,7 @@ def v2_prices_list(kind):
     if closed:
         return closed
     if kind not in V2_PRICE_KINDS:
-        return _v2_ns((jsonify({'error': 'النوع لازم كتاب أو دورة'}), 404))
+        return _v2_ns((jsonify({'error': 'النوع كتاب أو دورة فقط'}), 404))
     return _v2_get('/api/bridge/prices/%s' % kind)
 
 
@@ -2548,7 +2566,7 @@ def v2_prices_get(kind, item_id):
     if closed:
         return closed
     if kind not in V2_PRICE_KINDS or not V2_ID_RE.match(item_id or ''):
-        return _v2_ns((jsonify({'error': 'مش موجود'}), 404))
+        return _v2_ns((jsonify({'error': 'غير موجود'}), 404))
     return _v2_get('/api/bridge/prices/%s/%s' % (kind, quote(item_id, safe='')))
 
 
@@ -2560,16 +2578,16 @@ def v2_prices_put(kind, item_id):
     if closed:
         return closed
     if kind not in V2_PRICE_KINDS or not V2_ID_RE.match(item_id or ''):
-        return _v2_ns((jsonify({'error': 'مش موجود'}), 404))
+        return _v2_ns((jsonify({'error': 'غير موجود'}), 404))
     body = _v2_body()
     bad = _v2_confirmed(body)
     if bad:
         return bad
     versions, visible = body.get('versions'), body.get('visible')
     if not isinstance(versions, dict):
-        return _v2_ns((jsonify({'error': 'الأسعار مش صالحة'}), 400))
+        return _v2_ns((jsonify({'error': 'الأسعار غير صالحة'}), 400))
     if not isinstance(visible, bool):
-        return _v2_ns((jsonify({'error': 'حدّد ظاهر للناس ولا لأ'}), 400))
+        return _v2_ns((jsonify({'error': 'حدّد: ظاهر للناس أم لا'}), 400))
     out = {'versions': versions, 'visible': visible, 'confirmed': True,
            'note': _ef_note(body.get('note'), V2_NOTE_MAX)}
     title = _ef_note(body.get('title'), 300)
@@ -2603,14 +2621,14 @@ def v2_book_offer_approve(offer_id):
     if closed:
         return closed
     if not V2_ID_RE.match(offer_id or ''):
-        return _v2_ns((jsonify({'error': 'العرض مش موجود'}), 404))
+        return _v2_ns((jsonify({'error': 'هذا العرض غير موجود'}), 404))
     body = _v2_body()
     bad = _v2_confirmed(body)
     if bad:
         return bad
     versions = body.get('versions')
     if not isinstance(versions, dict):
-        return _v2_ns((jsonify({'error': 'الأسعار مش صالحة'}), 400))
+        return _v2_ns((jsonify({'error': 'الأسعار غير صالحة'}), 400))
     return _v2_write('POST', '/api/bridge/book-offers/%s/approve' % quote(offer_id, safe=''),
                      {'versions': versions, 'note': _ef_note(body.get('note'), 1000)},
                      'book_offer.approve', offer_id, {})
@@ -2624,14 +2642,14 @@ def v2_book_offer_reject(offer_id):
     if closed:
         return closed
     if not V2_ID_RE.match(offer_id or ''):
-        return _v2_ns((jsonify({'error': 'العرض مش موجود'}), 404))
+        return _v2_ns((jsonify({'error': 'هذا العرض غير موجود'}), 404))
     body = _v2_body()
     bad = _v2_confirmed(body)
     if bad:
         return bad
     reason = _ef_note(body.get('reason'), V2_REASON_MAX)
     if not reason:
-        return _v2_ns((jsonify({'error': 'اكتب سبب الرفض — بيوصل لصاحب العرض'}), 400))
+        return _v2_ns((jsonify({'error': 'اكتب سبب الرفض، فهو يصل إلى صاحب العرض'}), 400))
     return _v2_write('POST', '/api/bridge/book-offers/%s/reject' % quote(offer_id, safe=''), {'reason': reason},
                      'book_offer.reject', offer_id, {})
 
@@ -2652,7 +2670,7 @@ def v2_book_request_patch(request_id):
     if closed:
         return closed
     if not V2_ID_RE.match(request_id or ''):
-        return _v2_ns((jsonify({'error': 'الطلب مش موجود'}), 404))
+        return _v2_ns((jsonify({'error': 'هذا الطلب غير موجود'}), 404))
     body = _v2_body()
     out = {}
     status = body.get('status')
@@ -2662,14 +2680,14 @@ def v2_book_request_patch(request_id):
         out['status'] = status
     if 'hidden' in body:
         if not isinstance(body.get('hidden'), bool):
-            return _v2_ns((jsonify({'error': 'حدّد إخفاء ولا إظهار'}), 400))
+            return _v2_ns((jsonify({'error': 'حدّد: إخفاء أم إظهار'}), 400))
         out['hidden'] = body['hidden']
     if 'public_text' in body:
         out['public_text'] = _ef_note(body.get('public_text'), 400)
     if body.get('apply_to_group') is True:
         out['apply_to_group'] = True
     if not out:
-        return _v2_ns((jsonify({'error': 'مفيش تعديل'}), 400))
+        return _v2_ns((jsonify({'error': 'لا تعديل'}), 400))
     return _v2_write('PATCH', '/api/bridge/book-requests/%s' % quote(request_id, safe=''), out,
                      'book_request.update', request_id, {k: v for k, v in out.items() if k != 'public_text'})
 
