@@ -19,6 +19,7 @@ import json
 import os
 import re
 import subprocess
+import time
 import sys
 
 import jwt
@@ -286,7 +287,22 @@ def test_owners_hides_rows_of_deleted_campaigns(ctx, plat, fresh):
     assert _call(ctx, 'DELETE', '/api/campaigns/%d' % b).status_code == 200
     items = _call(ctx, 'GET', '/api/v2/marketing/owners').get_json()['items']
     assert [i['campaign_id'] for i in items] == [a]
-    assert db.session.execute(text('SELECT COUNT(*) FROM v2_campaign_owner')).scalar() == 2, 'الصف اليتيم يفضل في SQLite ويتفلتر بس'
+    assert db.session.execute(text('SELECT COUNT(*) FROM v2_campaign_owner')).scalar() == 1, 'الصف اليتيم يُمسح عند القراءة'
+
+
+def test_a_reused_campaign_id_never_inherits_the_deleted_campaigns_owner_or_legacy_mark(ctx, plat, fresh):
+    old = _camp(name='قديمة', currency='USD')
+    top = _camp(name='العليا', currency='USD')
+    assert _call(ctx, 'GET', '/api/v2/marketing/owners').get_json()['legacy_max_id'] == top           # أول تشغيل: الحد = العليا
+    assert _call(ctx, 'PUT', '/api/v2/marketing/campaigns/%d/owner' % top, {'owner_kind': 'course', 'owner_id': 'c-1', 'owner_title': 'دورة'}).status_code == 200
+    assert _call(ctx, 'DELETE', '/api/campaigns/%d' % top).status_code == 200
+    time.sleep(1.1)                                                       # الصف اليتيم أقدم من الحملة الجديدة بثانية على الأقل
+    again = _camp(name='جديدة بنفس الرقم', currency='USD')
+    assert again == top, 'SQLite أعاد استخدام الرقم'
+    got = _call(ctx, 'GET', '/api/v2/marketing/owners').get_json()
+    assert got['items'] == [], 'صاحب الحملة المحذوفة لا ينتقل إلى الحملة الجديدة'
+    assert got['legacy_max_id'] == old, 'الحملة الجديدة بالرقم المُعاد ليست من الشاشة القديمة'
+    assert db.session.execute(text('SELECT COUNT(*) FROM v2_campaign_owner')).scalar() == 0
 
 
 def test_legacy_max_id_is_written_once_by_the_first_run(ctx, plat, fresh):
@@ -776,14 +792,15 @@ def test_owner_choices_never_replace_a_stored_owner_when_the_list_is_missing():
     assert ready['selected'] == 'course:contract-basics' and ready['disabled'] is False
     same = _node_json("console.log(JSON.stringify(L.mk.ownerChoices('ready',%s,%s).options.map(o=>o.label)))" % (j([{'owner_kind': 'course', 'owner_id': 'contract-basics', 'title': ''}]), j(own)))
     assert same == ['البروفيسور نفسه', 'أساسيات صياغة العقود — دورة'], 'عنوان الأرصدة فارغ ⇒ نستعمل العنوان المحفوظ مع الحملة'
-    kept = _validate(dict(F, ownerValue='course:contract-basics', ownerDisabled=False), own)
+    kept = _validate(dict(F, ownerValue='course:contract-basics', ownerDisabled=False, edit=True), own)
     assert kept['ownerChanged'] is False
     changed = _validate(dict(F, ownerValue='book:bk-1', ownerDisabled=False, ownerTitle='كتاب الإيجار'), own)
     assert changed['ownerChanged'] is True and changed['owner'] == {'owner_kind': 'book', 'owner_id': 'bk-1', 'owner_title': 'كتاب الإيجار'}
     back = _validate(dict(F, ownerValue='platform'), own)
     assert back['ownerChanged'] is True and back['owner'] == {'owner_kind': 'platform'}
     newc = _validate(dict(F, ownerValue='platform'), None)
-    assert newc['ownerChanged'] is False, 'حملة جديدة بلا مالك: لا نداء'
+    assert newc['ownerChanged'] is True and newc['owner'] == {'owner_kind': 'platform'}, 'الإنشاء يرسل الصاحب دائمًا حتى لو «البروفيسور نفسه»'
+    assert _validate(dict(F, ownerValue='platform', edit=True), None)['ownerChanged'] is False, 'التعديل بلا تغيير: لا نداء'
     assert _validate(dict(F, ownerValue='book:bk-1', ownerTitle='ك'), None)['ownerChanged'] is True
     # «أرصدة الأعمال» غائبة وحملة جديدة: القائمة مقفولة على «البروفيسور نفسه» فلا يتغيّر شيء
     off = _node_json("console.log(JSON.stringify(L.mk.ownerChoices('error',null,null,true)))")

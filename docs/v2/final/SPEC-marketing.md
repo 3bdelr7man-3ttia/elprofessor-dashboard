@@ -802,3 +802,6 @@ All points received were accepted. Where the fix was adjusted, the reason is giv
 
 Observation outside our scope, for the integrator: `deploy/Dockerfile.coolify` does not copy `backend/refresh_rules.py`, which `app.py` imports at start (§1 item 5).
 
+
+
+> Amendment (fix round): the button named «بعدين» above ships as «لاحقًا» (plain standard Arabic; D1 source guard). `legacy_max_id` is computed from campaigns created before the first run (`legacy_cutoff`), not from the raw max id, because SQLite reuses the top id after a delete.

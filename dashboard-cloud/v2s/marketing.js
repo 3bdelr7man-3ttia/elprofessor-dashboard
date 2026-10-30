@@ -128,7 +128,13 @@
   }
   function statusChip(r) { return '<span class="mk-chip st-' + esc(r.status) + '">' + esc(r.statusLabel) + '</span>'; }
   function ratioCell(r) { return r.noResults ? '—' : '<span class="mk-r ' + r.ratioTone + '">' + esc(r.ratioText) + '</span>'; }
-  function rowAttrs(r) { return ' class="mk-row" role="button" tabindex="0" data-a="open" data-id="' + esc(r.id) + '"'; }
+  // الصف كله اختصار للفأرة فقط (بلا role)، والاسم زرّ حقيقي يفتح التفاصيل للوحة المفاتيح وقارئات الشاشة
+  function rowAttrs(r) { return ' class="mk-row" data-a="rowopen" data-id="' + esc(r.id) + '"'; }
+  function nameBtn(r) { return '<button type="button" class="mk-namebtn" data-a="open" data-id="' + esc(r.id) + '">' + esc(r.name) + '</button>'; }
+  function moneyLines(t) {
+    var parts = String(t || '').split(' · ').filter(Boolean);
+    return parts.length > 1 ? '<span class="mk-ml">' + parts.map(function (x) { return '<span>' + esc(x) + '</span>'; }).join('') + '</span>' : esc(t);
+  }
   function deskTable(vm) {
     var head = '<thead><tr><th style="width:' + (vm.viaColumn ? '18' : '31') + '%">' + esc(T.colCampaign) + '</th><th style="width:9%">' + esc(T.colPlatform) + '</th><th style="width:8%">' + esc(T.colStatus) + '</th>'
       + '<th style="width:11%">' + esc(T.colSpent) + '</th><th style="width:7%">' + esc(T.colVisits) + '</th>'
@@ -137,7 +143,7 @@
       + '<th style="width:11%">' + esc(T.colRev) + '</th><th style="width:7%">' + esc(T.colRatio) + '</th>'
       + (vm.viaColumn ? '<th class="mk-via-c" style="width:13%">' + esc(T.colVia) + '<small>' + esc(T.colViaSub) + '</small></th>' : '') + '</tr></thead>';
     var body = vm.rows.map(function (r) {
-      return '<tr' + rowAttrs(r) + '><td><div class="mk-name"><b>' + esc(r.name) + '</b>' + (r.owner ? '<span class="mk-sub">' + esc(r.owner) + '</span>' : '') + '</div></td>'
+      return '<tr' + rowAttrs(r) + '><td><div class="mk-name"><b>' + nameBtn(r) + '</b>' + (r.owner ? '<span class="mk-sub">' + esc(r.owner) + '</span>' : '') + '</div></td>'
         + '<td>' + esc(r.platform) + '</td><td>' + statusChip(r) + '</td><td>' + esc(r.spentText) + '</td>'
         + (r.noResults ? '<td colspan="4"><span class="mk-chip nores">' + esc(T.noResultsChip) + '</span></td>'
           : '<td>' + esc(r.clicks) + '</td><td>' + esc(r.leads) + '</td><td>' + esc(r.conversions) + '</td><td>' + esc(r.revenueText) + '</td>')
@@ -146,7 +152,7 @@
     var o = vm.organic;
     var org = '<tr class="mk-organic"><td><div class="mk-name"><b>' + esc(o.name) + '</b><span class="mk-sub">' + esc(o.sub) + '</span></div></td><td></td><td></td><td></td>'
       + (o.na ? '<td colspan="' + (vm.viaColumn ? 6 : 5) + '" class="mk-na">' + esc(o.naText) + '</td>'
-        : '<td></td><td>' + esc(o.signups) + '</td><td>' + esc(o.paid) + '</td><td>' + esc(o.revenueText) + '</td><td>' + esc(o.ratioText) + '</td>' + (vm.viaColumn ? '<td></td>' : '')) + '</tr>';
+        : '<td></td><td>' + esc(o.signups) + '</td><td>' + esc(o.paid) + '</td><td>' + moneyLines(o.revenueText) + '</td><td>' + esc(o.ratioText) + '</td>' + (vm.viaColumn ? '<td></td>' : '')) + '</tr>';
     return '<table class="mk-table mk-desk">' + head + '<tbody>' + body + org + '</tbody></table>';
   }
   function tabTable(vm) {
@@ -156,14 +162,14 @@
     var body = vm.rows.map(function (r) {
       var fold = '<span class="mk-sub">' + esc([r.platform, r.statusLabel].filter(Boolean).join(' · ')) + (r.owner ? ' · ' + esc(r.owner) : '') + '</span>';
       var via = r.via ? '<span class="mk-via">عبر الرابط هذا الشهر: ' + esc(r.viaText) + '</span>' : '';
-      return '<tr' + rowAttrs(r) + '><td><div class="mk-name"><b>' + esc(r.name) + '</b>' + fold + via + '</div></td><td>' + esc(r.spentText) + '</td>'
+      return '<tr' + rowAttrs(r) + '><td><div class="mk-name"><b>' + nameBtn(r) + '</b>' + fold + via + '</div></td><td>' + esc(r.spentText) + '</td>'
         + (r.noResults ? '<td colspan="3"><span class="mk-chip nores">' + esc(T.noResultsChip) + '</span></td>'
           : '<td>' + esc(r.leads) + '</td><td>' + esc(r.conversions) + '</td><td>' + esc(r.revenueText) + '</td>') + '<td>' + ratioCell(r) + '</td></tr>';
     }).join('');
     var o = vm.organic;
     var org = '<tr class="mk-organic"><td><div class="mk-name"><b>' + esc(o.name) + '</b><span class="mk-sub">' + esc(o.sub) + '</span></div></td>'
       + (o.na ? '<td colspan="5" class="mk-na">' + esc(o.naText) + '</td>'
-        : '<td></td><td>' + esc(o.signups) + '</td><td>' + esc(o.paid) + '</td><td>' + esc(o.revenueText) + '</td><td>' + esc(o.ratioText) + '</td>') + '</tr>';
+        : '<td></td><td>' + esc(o.signups) + '</td><td>' + esc(o.paid) + '</td><td>' + moneyLines(o.revenueText) + '</td><td>' + esc(o.ratioText) + '</td>') + '</tr>';
     return '<table class="mk-table mk-tab">' + head + '<tbody>' + body + org + '</tbody></table>';
   }
   function cardList(vm) {
@@ -172,14 +178,14 @@
         ? '<div><span>' + esc(T.colSpent) + '</span><b>' + esc(r.spentText) + '</b></div><div class="mk-nores-row"><span class="mk-chip nores">' + esc(T.noResultsChip) + '</span></div>'
         : '<div><span>' + esc(T.colSpent) + '</span><b>' + esc(r.spentText) + '</b></div><div><span>' + esc(T.colVisits) + '</span><b>' + esc(r.clicks) + '</b></div><div><span>' + esc(T.colLeads) + '</span><b>' + esc(r.leads) + '</b></div>'
           + '<div><span>' + esc(T.colPaid) + '</span><b>' + esc(r.conversions) + '</b></div><div><span>' + esc(T.colRev) + '</span><b>' + esc(r.revenueText) + '</b></div><div><span>' + esc(T.colRatio) + '</span><b>' + ratioCell(r) + '</b></div>';
-      return '<article class="mk-ccard" role="button" tabindex="0" data-a="open" data-id="' + esc(r.id) + '"><div class="mk-ch"><b>' + esc(r.name) + '</b>' + statusChip(r) + '</div>'
+      return '<article class="mk-ccard" data-a="rowopen" data-id="' + esc(r.id) + '"><div class="mk-ch"><b>' + nameBtn(r) + '</b>' + statusChip(r) + '</div>'
         + '<p class="mk-sub">' + esc([r.owner, r.platform].filter(Boolean).join(' · ')) + '</p><div class="mk-mg">' + grid + '</div>'
         + (r.via ? '<p class="mk-viarow">عبر الرابط هذا الشهر: ' + esc(r.viaText) + '</p>' : '') + '</article>';
     }).join('');
     var o = vm.organic;
     cards += '<article class="mk-ccard mk-organic"><div class="mk-ch"><b>' + esc(o.name) + '</b></div><p class="mk-sub">' + esc(o.sub) + '</p>'
       + (o.na ? '<p class="mk-na">' + esc(o.naText) + '</p>' : '<div class="mk-mg"><div><span>' + esc(T.colLeads) + '</span><b>' + esc(o.signups) + '</b></div><div><span>' + esc(T.colPaid) + '</span><b>' + esc(o.paid) + '</b></div>'
-        + '<div><span>' + esc(T.colRev) + '</span><b>' + esc(o.revenueText) + '</b></div></div>') + '</article>';
+        + '<div><span>' + esc(T.colRev) + '</span><b>' + moneyLines(o.revenueText) + '</b></div></div>') + '</article>';
     return '<div class="mk-cards">' + cards + '</div>';
   }
   function adsLineHtml(m) {
@@ -408,9 +414,9 @@
       return '<option value="' + esc(o.value) + '" data-title="' + esc(o.title) + '"' + (o.value === oc.selected ? ' selected' : '') + '>' + esc(o.label) + '</option>'; }).join('') + '</select></div>'
       + (oc.hint ? '<p class="mk-hintline">' + esc(oc.hint) + '</p>' : '');
     var html = '<div class="fld"><label for="mk_name">' + esc(T.fName) + '</label><input id="mk_name" type="text" maxlength="255" value="' + esc(f.name) + '"></div>' + ownerSelect
-      + '<div class="mk-f2">' + selectField('mk_plat', T.fPlatform, MK.PLATFORM_OPTS, platSel) + selectField('mk_cur', T.fCurrency, MK.CURRENCY_OPTS, curSel) + '</div>'
-      + '<div class="mk-f2"><div class="fld" id="mk_plat_o"' + (platSel === 'other' ? '' : ' hidden') + '><label for="mk_plat_t">' + esc(T.fPlatformOther) + '</label><input id="mk_plat_t" type="text" maxlength="50" value="' + esc(platOther) + '"></div>'
-      + '<div class="fld" id="mk_cur_o"' + (curSel === 'other' ? '' : ' hidden') + '><label for="mk_cur_t">' + esc(T.fCurrencyOther) + '</label><input id="mk_cur_t" type="text" maxlength="3" dir="ltr" value="' + esc(curOther) + '"></div></div>'
+      + '<div class="mk-f2"><div class="mk-fc">' + selectField('mk_plat', T.fPlatform, MK.PLATFORM_OPTS, platSel)
+      + '<div class="fld" id="mk_plat_o"' + (platSel === 'other' ? '' : ' hidden') + '><label for="mk_plat_t">' + esc(T.fPlatformOther) + '</label><input id="mk_plat_t" type="text" maxlength="50" value="' + esc(platOther) + '"></div></div>'
+      + '<div class="mk-fc">' + selectField('mk_cur', T.fCurrency, MK.CURRENCY_OPTS, curSel) + '<div class="fld" id="mk_cur_o"' + (curSel === 'other' ? '' : ' hidden') + '><label for="mk_cur_t">' + esc(T.fCurrencyOther) + '</label><input id="mk_cur_t" type="text" maxlength="3" dir="ltr" value="' + esc(curOther) + '"></div></div></div>'
       + '<div class="mk-f2">' + selectField('mk_st', T.fStatus, [['active', 'نشطة'], ['paused', 'موقوفة'], ['completed', 'انتهت'], ['draft', 'مسودة']], f.status)
       + '<div class="fld"><label for="mk_aud">' + esc(T.fAudience) + '</label><input id="mk_aud" type="text" maxlength="500" value="' + esc(f.audience || '') + '"></div></div>'
       + '<div class="mk-f2"><div class="fld"><label for="mk_d1">' + esc(T.fStart) + '</label><input id="mk_d1" type="date" value="' + esc(f.start || '') + '"></div>'
@@ -523,7 +529,8 @@
     qa('[data-a="filter"]', v).forEach(function (b) { b.onclick = function () { S.filter = b.getAttribute('data-f'); redraw(); }; });
     qa('[data-a="showall"]', v).forEach(function (b) { b.onclick = function () { S.filter = 'all'; redraw(); }; });
     qa('[data-a="new"]', v).forEach(function (b) { b.onclick = function () { openForm(null); }; });
-    qa('[data-a="open"]', v).forEach(function (el) { activate(el, function () { openDetail(el.getAttribute('data-id')); }); });
+    qa('[data-a="open"]', v).forEach(function (el) { el.onclick = function (e) { e.stopPropagation(); openDetail(el.getAttribute('data-id')); }; });
+    qa('[data-a="rowopen"]', v).forEach(function (el) { el.onclick = function () { openDetail(el.getAttribute('data-id')); }; });
     qa('[data-a="legacy"]', v).forEach(function (b) { b.onclick = openLegacy; });
     qa('[data-a="how"]', v).forEach(function (b) { b.onclick = openHow; });
     qa('[data-a="madar"]', v).forEach(function (b) { b.onclick = openMadar; });

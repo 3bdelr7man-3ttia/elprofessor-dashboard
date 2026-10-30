@@ -17,6 +17,7 @@ TITLE_MAX = 200
 PUBLISHED_CAP = 50
 LEGACY_KEY = 'legacy_max_campaign_id'
 CHECKED_KEY = 'legacy_checked'
+CUTOFF_KEY = 'legacy_cutoff'           # لحظة أول تشغيل: كل حملة أُنشئت قبلها «من الشاشة القديمة»
 
 
 def register(app, env):
@@ -32,6 +33,7 @@ def register(app, env):
     month_re = env['V2_MONTH_RE']
     db = env['db']
     Article = env['Article']
+    Campaign = env['Campaign']
     jsonify = env['jsonify']
     request = env['request']
 
@@ -53,12 +55,38 @@ def register(app, env):
                 'INSERT INTO v2_marketing_meta (k, v) SELECT :k, CAST(COALESCE(MAX(id), 0) AS TEXT) FROM campaigns '
                 'WHERE NOT EXISTS (SELECT 1 FROM v2_marketing_meta WHERE k = :k)'), {'k': LEGACY_KEY})
             db.session.commit()
+            db.session.execute(text(
+                'INSERT INTO v2_marketing_meta (k, v) SELECT :c, :t WHERE NOT EXISTS (SELECT 1 FROM v2_marketing_meta WHERE k = :c)'),
+                {'c': CUTOFF_KEY, 't': datetime.datetime.utcnow().isoformat()})
+            db.session.commit()
         except Exception:
             db.session.rollback()          # سباق مع طلب تاني كتب نفس المفتاح: كفاية
 
     def meta(key):
         row = db.session.execute(text('SELECT v FROM v2_marketing_meta WHERE k = :k'), {'k': key}).fetchone()
         return row[0] if row else None
+
+    def as_dt(v):
+        """يحوّل نص/تاريخ إلى datetime بلا منطقة زمنية، أو None."""
+        if isinstance(v, datetime.datetime):
+            return v.replace(tzinfo=None)
+        try:
+            return datetime.datetime.fromisoformat(str(v).replace('Z', '').replace(' ', 'T'))
+        except (TypeError, ValueError):
+            return None
+
+    def legacy_max():
+        """أعلى رقم حملة أُنشئت قبل أول تشغيل. SQLite يعيد استخدام أعلى رقم بعد حذفه، فحملة جديدة بنفس الرقم تُحسب بتاريخ إنشائها لا برقمها."""
+        stored = int(meta(LEGACY_KEY) or 0)
+        cut = as_dt(meta(CUTOFF_KEY))
+        if stored <= 0 or cut is None:
+            return stored
+        top = 0
+        for cid, made in db.session.query(Campaign.id, Campaign.created_at).filter(Campaign.id <= stored).all():
+            made = as_dt(made)
+            if (made is None or made <= cut) and cid > top:
+                top = cid
+        return top
 
     def owner_item(row):
         return {'campaign_id': row[0], 'owner_kind': row[1], 'owner_id': row[2], 'owner_title': row[3], 'updated_at': row[4], 'updated_by': row[5]}
@@ -104,10 +132,21 @@ def register(app, env):
         gate = guard()
         if gate:
             return gate
-        rows = db.session.execute(text(
-            'SELECT o.campaign_id, o.owner_kind, o.owner_id, o.owner_title, o.updated_at, o.updated_by FROM v2_campaign_owner o '
-            'WHERE o.campaign_id IN (SELECT id FROM campaigns) ORDER BY o.campaign_id')).fetchall()
-        legacy = 0 if meta(CHECKED_KEY) else int(meta(LEGACY_KEY) or 0)
+        # صفوف يتيمة (حملة حُذفت) تُمسح، وصف أقدم من إنشاء الحملة (رقم أُعيد استخدامه) لا يُعرض ويُمسح
+        db.session.execute(text('DELETE FROM v2_campaign_owner WHERE campaign_id NOT IN (SELECT id FROM campaigns)'))
+        made = {cid: as_dt(at) for cid, at in db.session.query(Campaign.id, Campaign.created_at).all()}
+        rows, stale = [], []
+        for r in db.session.execute(text(
+                'SELECT campaign_id, owner_kind, owner_id, owner_title, updated_at, updated_by FROM v2_campaign_owner ORDER BY campaign_id')).fetchall():
+            born, saved = made.get(r[0]), as_dt(r[4])
+            if born is not None and saved is not None and saved < born.replace(microsecond=0):
+                stale.append(r[0])
+            else:
+                rows.append(r)
+        for cid in stale:
+            db.session.execute(text('DELETE FROM v2_campaign_owner WHERE campaign_id = :c'), {'c': cid})
+        db.session.commit()
+        legacy = 0 if meta(CHECKED_KEY) else legacy_max()
         return ns(jsonify({'ok': True, 'items': [owner_item(r) for r in rows], 'legacy_max_id': legacy}))
 
     @app.route('/api/v2/marketing/legacy-checked', methods=['POST'], endpoint='v2mk_legacy_checked')

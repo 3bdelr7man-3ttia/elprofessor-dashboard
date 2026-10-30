@@ -2404,7 +2404,7 @@
     if (start) body.start_date = start;
     if (end) body.end_date = end;
     var loaded = ownerValue(loadedOwner), chosen = String(form.ownerValue || 'platform');
-    var ownerChanged = !form.ownerDisabled && chosen !== loaded;
+    var ownerChanged = !form.ownerDisabled && (chosen !== loaded || !form.edit);   // الإنشاء يرسل الصاحب دائمًا فيُستبدل أي صف قديم بنفس الرقم
     var owner = null;
     if (ownerChanged) {
       if (chosen === 'platform') owner = { owner_kind: 'platform' };

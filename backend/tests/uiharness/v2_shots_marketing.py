@@ -366,14 +366,14 @@ def flow_writes(browser, h):
     # كل الاستدعاءات لمنصة المال: ولا واحد (التسويق سجلّ فقط)
     if [c for c in h.platform_calls if c[0] in ('PUT', 'POST', 'PATCH') and 'attribution' not in c[1]]:
         PROBLEMS.append('w03: كتابة غير متوقعة على المنصة: %r' % [c for c in h.platform_calls if c[0] in ('PUT', 'POST', 'PATCH')][:3])
-    # الكيبورد: Enter على صف يفتح التفاصيل
+    # الكيبورد: Enter على اسم الحملة (زرّ حقيقي) يفتح التفاصيل
     page.click('.v3-pb[data-f="all"]')
     page.wait_for_timeout(300)
-    page.focus('.mk-desk .mk-row[data-id="%d"]' % ids['winning'])
+    page.focus('.mk-desk .mk-row[data-id="%d"] .mk-namebtn' % ids['winning'])
     page.keyboard.press('Enter')
     sheet_open(page)
     if 'حملة: حملة الدورات على فيسبوك' not in page.inner_text('#epModal'):
-        PROBLEMS.append('w04: Enter على الصف ما فتحش التفاصيل')
+        PROBLEMS.append('w04: Enter على اسم الحملة ما فتحش التفاصيل')
     page.click('#mk_copy')
     page.wait_for_timeout(300)
     if 'نُسخ الرابط' not in page.inner_text('#toasts'):

@@ -42,9 +42,13 @@
 .mk-table td:first-child{text-align:start}
 .mk-row{cursor:pointer;height:56px}
 .mk-row:hover td{background:#FBF0F3}
-.mk-row:focus-visible{outline:3px solid rgba(158,43,78,.45);outline-offset:-3px}
 .mk-name{display:grid;gap:2px}
 .mk-name b{font:800 15px/1.5 'Cairo',sans-serif}
+.mk-namebtn{background:none;border:0;padding:0;margin:0;font:inherit;color:inherit;text-align:start;cursor:pointer;min-height:44px;display:inline-flex;align-items:center;max-width:100%;overflow-wrap:anywhere}
+.mk-namebtn:focus-visible{outline:3px solid rgba(158,43,78,.45);outline-offset:2px;border-radius:6px}
+.mk-ml{display:grid;gap:2px}
+.mk-ml span{white-space:nowrap}
+.v3m .mk-fc{min-width:0}
 .mk-sub{font-size:12.5px;color:var(--mute);line-height:1.6}
 .mk-chip{display:inline-block;font:800 12.5px/1.6 'Cairo',sans-serif;border-radius:999px;padding:1px 12px;white-space:nowrap}
 .mk-chip.st-active{background:#E8F6EE;color:#0F5A37}
@@ -64,7 +68,6 @@
 .mk-tab{display:none}
 .mk-cards{display:none;gap:10px}
 .mk-ccard{background:#fff;border:1px solid var(--line);border-radius:16px;padding:12px 14px;display:grid;gap:8px;cursor:pointer;min-height:52px}
-.mk-ccard:focus-visible{outline:3px solid rgba(158,43,78,.45);outline-offset:2px}
 .mk-ch{display:flex;align-items:center;justify-content:space-between;gap:8px}
 .mk-ch b{font:800 15.5px/1.5 'Cairo',sans-serif;overflow-wrap:anywhere}
 .mk-mg{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px 10px}
