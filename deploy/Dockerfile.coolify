@@ -23,6 +23,7 @@ RUN apt-get update \
 COPY backend/app.py /app/app.py
 # مسارات الأقسام (الجولة الأخيرة): ملف لكل قسم، يسجّله app.py بسطر واحد.
 COPY backend/v2_courses_routes.py /app/v2_courses_routes.py
+COPY backend/v2_courses2_routes.py /app/v2_courses2_routes.py
 COPY backend/v2_market_routes.py /app/v2_market_routes.py
 COPY backend/v2_books_routes.py /app/v2_books_routes.py
 COPY backend/v2_content_routes.py /app/v2_content_routes.py

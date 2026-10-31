@@ -11,7 +11,7 @@
   'use strict';
   var L = window.V2L;
   if (!L || !L.v2s || !L.v2s.courses) return;
-  var U = L.util, C = L.v2s.courses;
+  var U = L.util, C = L.v2s.courses, K2 = L.courses2 || null;
   // سجلّ مشترك مع أقسام الجولة الأخيرة الأخرى: كل قسم يسجّل `take` بتاعه، والحارس في الشاشات القديمة يسأل السجلّ.
   window.V2SEC = window.V2SEC || { _o: [], add: function (o) { this._o.push(o); },
     take: function (mod, v) { if (!window.V2_ON || !(window.V2SHELL && V2SHELL.on)) return false;
@@ -19,7 +19,7 @@
   var CO = window.V2CO = {};
   var NA = C.NA;
   var S = { view: null, screen: '', sig: '', poll: null, minute: null, list: false, filter: 'all', search: '', col: '', tr: '', note: null, noteT: null,
-            busy: {}, sheetBusy: false, nowOverride: 0, fresh: {} };
+            busy: {}, sheetBusy: false, nowOverride: 0, fresh: {}, editing: '' };
   try { var sc = localStorage.getItem('v2co_col'); if (sc === 'review' || sc === 'building' || sc === 'published') S.col = sc; } catch (e) {}
   try { var st = localStorage.getItem('v2co_tr'); if (st === 'apps' || st === 'list') S.tr = st; } catch (e) {}
 
@@ -38,10 +38,10 @@
   var SRC = {};
   var PATHS = { courses: '/platform-courses', apps: '/platform-trainer-applications?status=pending', experts: '/platform-experts', schedules: '/platform-schedules',
                 offers: '/platform-course-offers?status=pending', progStats: '/platform-program-requests/stats', programs: '/platform-program-requests?status=pending',
-                stats: '/v2/courses/stats', shares: '/v2/shares' };
+                stats: '/v2/courses/stats', shares: '/v2/shares', courses2: '/v2/courses2' };
   var LABEL = { courses: 'الدورات', apps: 'طلبات المدرّبين', experts: 'المدرّبون', schedules: 'مواعيد الدورات الحيّة', offers: 'عروض الأسعار', progStats: 'أكثر الدورات طلبًا',
-                programs: 'طلبات البرامج', stats: 'المبيعات ونسبة الإكمال', shares: 'جدول النسب' };
-  var OPTIONAL = { stats: 1, shares: 1 };            // ٤٠٤ فيها = «غير متاح بعد» بهدوء، لا شريط تحذير
+                programs: 'طلبات البرامج', stats: 'المبيعات ونسبة الإكمال', shares: 'جدول النسب', courses2: 'دورات المحرّر' };
+  var OPTIONAL = { stats: 1, shares: 1, courses2: 1 };            // ٤٠٤ فيها = «غير متاح بعد» بهدوء، لا شريط تحذير
   function pathOf(k) {
     if (PATHS[k]) return PATHS[k];
     var m = /^(checklist|detail):(.+)$/.exec(k);
@@ -145,6 +145,14 @@
     return FAIL_AR;
   }
   function courseById(id) { var cs = rowsOf('courses', 'courses'); if (!cs) return null; for (var i = 0; i < cs.length; i++) if (cs[i] && String(cs[i].id) === String(id)) return cs[i]; return null; }
+  // محرّر الدورات (course_editor.js): قائمة `courses2` تُدمج مع لوحة المنصّة بالمعرّف أو الرابط المختصر
+  function c2Rows() { return rowsOf('courses2', 'courses') || []; }
+  function c2Of(c) { return c && K2 ? K2.c2Index(c2Rows())[c.id] || (c.slug ? K2.c2Index(c2Rows())[c.slug] : null) || null : null; }
+  function c2ById(id) { return K2 ? K2.c2Index(c2Rows())[id] || null : null; }
+  function c2Meta(c) {
+    var m = c2Of(c), line = m && K2 ? K2.c2Line(m) : '';
+    return m ? '<span class="v2co-st v2ce-c2">' + chip(m.status_ar || 'مسودة', m.status === 'published' ? 'green' : (m.status === 'draft' || m.status === 'paused' ? 'grey' : 'amber')) + (line ? ' ' + esc(line) : '') + '</span>' : '';
+  }
   function courseBySlug(slug) { var cs = rowsOf('courses', 'courses'); if (!cs) return null; for (var i = 0; i < cs.length; i++) if (cs[i] && cs[i].slug === slug) return cs[i]; return null; }
   function schedOf(c) {
     var rs = rowsOf('schedules', 'schedules');
@@ -290,7 +298,7 @@
     }
     return '<button type="button" class="v2co-bc" data-a="open" data-id="' + esc(c.id) + '">' + coverHtml(c, 'big')
       + '<b>' + esc(c.title || 'دورة بلا عنوان') + '</b><span class="v2co-who">' + esc(C.trainerOf(c) + lessons) + '</span>'
-      + (line ? '<span class="v2co-st ' + cls + '">' + esc(line) + '</span>' : '') + (due ? '<span class="v2co-st ' + due.cls + '">' + esc(due.text) + '</span>' : '') + '</button>';
+      + (line ? '<span class="v2co-st ' + cls + '">' + esc(line) + '</span>' : '') + (due ? '<span class="v2co-st ' + due.cls + '">' + esc(due.text) + '</span>' : '') + c2Meta(c) + '</button>';
   }
   function publishedRow(c) {
     var learners = U.U(c.total_enrolled || 0, ['متعلّم واحد', 'متعلّمان', 'متعلّمين', 'متعلّمًا']);
@@ -390,8 +398,11 @@
                  ['hidden', 'مخفية', b.counts.hidden], ['archived', 'مؤرشفة', b.counts.archived], ['rejected', 'أُعيدت', b.counts.rejected]].map(function (x) {
       return '<button type="button" class="v2co-fchip' + (S.filter === x[0] ? ' on' : '') + '" aria-pressed="' + (S.filter === x[0]) + '" data-a="filter" data-f="' + x[0] + '">' + esc(x[1]) + ' <b>' + esc(ar(x[2])) + '</b></button>';
     }).join('');
+    var extras = K2 ? K2.c2Extras(c2Rows(), rowsOf('courses', 'courses') || []) : [];
+    var extraHtml = extras.length ? '<section class="v2co-card v2ce-extras" aria-label="دورات المحرّر"><h2 class="v2co-h2">دورات من المحرّر</h2><ul class="v2ce-xl">' + extras.map(function (x) {
+      return '<li><button type="button" class="v2co-lrow v2ce-xr" data-a="open" data-id="' + esc(x.id) + '"><span class="v2co-lt"><b>' + esc(x.title || 'دورة بلا عنوان') + '</b>' + c2Meta(x) + '</span></button></li>'; }).join('') + '</ul></section>' : '';
     v.innerHTML = '<div class="v2co" data-screen="list">' + noteStrip()
-      + '<div class="v2co-top"><button type="button" class="v2co-link back" data-a="board">‹ اللوحة</button><button type="button" class="v2co-main" data-a="create">' + PLUS + 'أنشئ دورة</button></div>'
+      + '<div class="v2co-top"><button type="button" class="v2co-link back" data-a="board">‹ اللوحة</button><button type="button" class="v2co-main" data-a="create">' + PLUS + 'أنشئ دورة</button></div>' + extraHtml
       + '<div class="v2co-fchips" role="group" aria-label="تصفية الدورات">' + chips + '</div>'
       + '<div class="v2co-search"><input type="search" id="co_q" placeholder="ابحث بعنوان الدورة أو اسم المدرّب" value="' + esc(S.search) + '" aria-label="بحث في الدورات" autocomplete="off"></div>'
       + '<div class="v2co-lhead" aria-hidden="true"><span>الدورة</span><span>المدرّب</span><span>النوع</span><span>المتعلّمون</span><span>السعر</span><span>الحالة</span></div>'
@@ -409,7 +420,7 @@
       var type = (C.TYPE_LABEL[c.type] || '') + (c.story ? ' · تفاعلية' : '');
       var pr = C.priceOf(c);
       return '<li><button type="button" class="v2co-lrow" data-a="open" data-id="' + esc(c.id) + '">'
-        + '<span class="v2co-lc1">' + coverHtml(c, 'sm') + '<span class="v2co-lt"><b>' + esc(c.title || 'دورة بلا عنوان') + '</b><small>' + esc(C.trainerOf(c) + ' · ' + type) + '</small></span></span>'
+        + '<span class="v2co-lc1">' + coverHtml(c, 'sm') + '<span class="v2co-lt"><b>' + esc(c.title || 'دورة بلا عنوان') + '</b><small>' + esc(C.trainerOf(c) + ' · ' + type) + '</small>' + c2Meta(c) + '</span></span>'
         + '<span class="v2co-lc2">' + esc(C.trainerOf(c)) + '</span><span class="v2co-lc3">' + esc(type) + '</span>'
         + '<span class="v2co-lc4"><em>المتعلّمون: </em>' + esc(ar(c.total_enrolled || 0)) + '</span><span class="v2co-lc5">' + esc(pr.ok === false ? 'بلا سعر' : pr.text) + '</span>'
         + '<span class="v2co-lc6">' + stateChip(c.state) + '</span></button></li>';
@@ -597,6 +608,7 @@
   function drawCourse(v) {
     var id = (host().state && host().state().course) || '';
     var back = '<button type="button" class="v2co-link back" data-a="all-courses">‹ كل الدورات</button>';
+    if (window.V2CE && id && (S.editing === id || (!pending('courses') && !courseById(id) && c2ById(id)))) { S.editing = id; load('courses2'); window.V2CE.draw(v, id); return; }
     if (pending('courses')) { v.innerHTML = '<div class="v2co" data-screen="course">' + back + '<div class="v2co-skw">' + skeleton(3) + '</div></div>'; return; }
     var c = courseById(id);
     if (!c) {
@@ -630,7 +642,7 @@
     var side = '<aside class="v2co-pgside">' + (m.state === 'archived'
       ? '<section class="v2co-card"><h2 class="v2co-h2">مؤرشفة</h2><p class="v2co-fine">لا يراها متعلّمون جدد، والمسجّلون ودفعاتهم تبقى كما هي.</p><div class="v2co-acts stack"><button type="button" class="v2co-btn1" data-a="show" data-id="' + esc(c.id) + '">أعِد نشرها</button></div></section>'
       : checklistCard(c, m, cst)) + '</aside>';
-    var contentCard = '<section class="v2co-card"><h2 class="v2co-h2">المحتوى</h2>' + contentHtml(c, m, id) + '<button type="button" class="v2co-link" data-a="edit-lessons" data-id="' + esc(c.id) + '">تعديل الدروس من «كل السجلات»</button></section>';
+    var contentCard = '<section class="v2co-card"><h2 class="v2co-h2">المحتوى</h2>' + contentHtml(c, m, id) + '<div class="v2co-acts stack"><button type="button" class="v2co-btn1" data-a="edit-course" data-id="' + esc(c.id) + '">حرّر الدورة</button></div></section>';
     v.innerHTML = '<div class="v2co" data-screen="course">' + noteStrip() + warnStrip(failed) + back
       + '<div class="v2co-pg">' + heroHtml + note + tiles + side + bid + livec + contentCard + danger + '</div></div>';
   }
@@ -1121,7 +1133,8 @@
   }
   var ACT = {
     retry: function () { reloadAll(); },
-    create: function () { openCreate(''); },
+    create: function () { if (window.V2CE && window.V2CE.openCreate) { load('experts'); window.V2CE.openCreate({}); } else openCreate(''); },
+    'edit-course': function (el) { openEditor(el.getAttribute('data-id')); },
     mk: function (el) { var g = S.demand && S.demand.chat && S.demand.chat.groups[+el.getAttribute('data-i')]; openCreate(g ? g.title : ''); },
     open: function (el) { goPage(el.getAttribute('data-id')); },
     all: function () { S.list = true; S.filter = 'all'; redraw(); },
@@ -1206,12 +1219,12 @@
     return 'board';
   }
   var NEEDS = {
-    board: function () { load('courses'); load('apps'); load('experts'); load('schedules'); },
+    board: function () { load('courses'); load('apps'); load('experts'); load('schedules'); load('courses2'); },
     trainers: function () { load('courses'); load('apps'); load('experts'); },
     live: function () { load('courses'); load('schedules'); epEnsure(['opsQueue']); },
     demand: function () { load('progStats'); load('programs'); epEnsure(['analysis']); },
     offers: function () { load('offers'); },
-    course: function () { load('courses'); },
+    course: function () { load('courses'); load('courses2'); },
     all: function () {}
   };
   var DRAW = { board: drawBoard, trainers: drawTrainers, live: drawLive, demand: drawDemand, offers: drawOffers, course: drawCourse };
@@ -1223,6 +1236,7 @@
     var scr = screenNow(mod);
     if (!scr || scr === 'all') return;
     if (document.getElementById('epModal')) return;           // لا نعيد الرسم تحت ورقة مفتوحة (ما يُكتب فيها يضيع)
+    if (S.editing && window.V2CE && scr === 'course') return; // المحرّر يرسم نفسه (مسودّاته غير المحفوظة لا تُمسح بإعادة رسم الصفحة)
     S.screen = scr;
     if (NEEDS[scr]) NEEDS[scr]();
     DRAW[scr](v);
@@ -1241,6 +1255,19 @@
     });
     S.mObs.observe(document.body, { childList: true });
   }
+  function openEditor(id) {
+    if (!window.V2CE || !id) return;
+    S.editing = id; window.V2CE.start(id);
+    if (S.view) { S.screen = 'course'; drawCourse(S.view); }
+  }
+  // أدوات يستعملها course_editor.js (الأوراق · النماذج · قائمة المدرّبين · الرجوع) — ⛔ لا منطق عمل، ولا شبكة.
+  CO.kit = {
+    flow: flow, listHtml: listHtml, fld: fld, BRAIN: BRAIN, NA: NA,
+    trainerOptions: function () { var rows = C.trainerRows(rowsOf('experts', 'experts'), null, { now: now() }) || []; return rows.filter(function (r) { return r.email; }).map(function (r) { return { email: r.email, name: r.name }; }); },
+    reloadList: function () { load('courses', true); load('courses2', true); },
+    closeEditor: function () { S.editing = ''; load('courses', true); load('courses2', true); redraw(); },
+    openEditorFor: function (id, note, tab) { S.editing = id; if (window.V2CE) window.V2CE.start(id, note, tab); goPage(id); }
+  };
   CO.take = function (mod, v) {
     if (!window.V2_ON || !(window.V2SHELL && V2SHELL.on)) return false;
     if (v && v.id === 'v2coLegacyHost') return false;
@@ -1250,6 +1277,7 @@
     var keep = S.keepList; S.keepList = false;
     if (!keep && scr === 'board') S.list = false;
     S.view = v; S.screen = scr;
+    if (S.editing && !(scr === 'course' && host().state && host().state().course === S.editing)) S.editing = '';
     if (!v.__v2co) {
       v.__v2co = true;
       v.addEventListener('click', onClick); v.addEventListener('input', onInput); v.addEventListener('error', onImgError, true);

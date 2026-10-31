@@ -584,7 +584,7 @@ EXPECTED_CSP_DIRECTIVES = [
     "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
     "font-src 'self' https://fonts.gstatic.com data:",
     "img-src 'self' data:",
-    "connect-src 'self'",
+    "connect-src 'self' https://video.bunnycdn.com",   # رفع الفيديو المباشر لـBunny (TUS) من محرّر الدورات: المضيف الوحيد خارج 'self'
     "object-src 'none'",
     "base-uri 'none'",
     # F-141 — measured inside Chromium (AUDIT/tools/csp_exfil_probe.py): without this a

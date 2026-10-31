@@ -6304,6 +6304,503 @@
 })(typeof window !== 'undefined' ? window : (typeof globalThis !== 'undefined' ? globalThis : this));
 // ===== /v2s:experts =====
 
+// ===== courses2 =====
+// محرّر الدورات من الداشبورد (SPEC-C-courses §C1): دوال نقية فقط — قاموس الكتل وحقولها الرئيسية، عمليات قائمة الكتل (إضافة · تحريك · حذف)،
+// فرق الهيكل وجسم الـPUT، أجسام حفظ الدرس لكل نوع، خطة رفع TUS على قطع ورافع بدالة `fetch` تُمرَّر، وأجسام مساعد الدورة.
+// ⛔ لا DOM ولا شبكة ولا ساعة خفية (الرافع يأخذ `fetch` من المنادي). ⛔ لا سعر ولا نسبة هنا أبدًا.
+(function (root) {
+  'use strict';
+  var L = root.V2L || (typeof module !== 'undefined' && module.exports);
+  if (!L) return;
+  var DIG = '٠١٢٣٤٥٦٧٨٩';
+  function arN(n) { return String(Math.round(Number(n) || 0)).replace(/\d/g, function (d) { return DIG.charAt(+d); }); }
+  function isObj(x) { return x && typeof x === 'object' && !Array.isArray(x); }
+  function clone(x) { return x === undefined ? undefined : JSON.parse(JSON.stringify(x)); }
+  function str(x) { return x == null ? '' : String(x); }
+
+  // ------------------------------------------------------------------ قاموس الكتل
+  // حقل: {k, l, t: text|area|lines|rows|int, cols: [{k, l, t: text|area|bool}], hint}
+  var F = {
+    text: function (k, l, h) { return { k: k, l: l, t: 'text', hint: h || '' }; },
+    area: function (k, l, h) { return { k: k, l: l, t: 'area', hint: h || '' }; },
+    lines: function (k, l, h) { return { k: k, l: l, t: 'lines', hint: h || 'سطر لكل عنصر' }; },
+    rows: function (k, l, cols, h) { return { k: k, l: l, t: 'rows', cols: cols, hint: h || '' }; }
+  };
+  var C = {
+    text: function (k, l) { return { k: k, l: l, t: 'text' }; },
+    area: function (k, l) { return { k: k, l: l, t: 'area' }; },
+    bool: function (k, l) { return { k: k, l: l, t: 'bool' }; }
+  };
+  var TYPES = [
+    { type: 'text', ar: 'نص', main: true, fields: [F.area('md', 'النص')], blank: { type: 'text', md: '' } },
+    { type: 'objectives', ar: 'الأهداف', main: true, fields: [F.lines('items', 'الأهداف')], blank: { type: 'objectives', items: [''] } },
+    { type: 'situation', ar: 'موقف', main: true, fields: [F.area('text', 'الموقف', 'ثلاث جمل أو أربع'), F.text('question', 'السؤال'),
+      F.rows('options', 'الاختيارات', [C.text('text', 'الاختيار'), C.text('comment', 'التعليق')], 'من اختيارين إلى ثلاثة')],
+      blank: { type: 'situation', text: '', question: '', options: [{ text: '', comment: '' }, { text: '', comment: '' }] } },
+    { type: 'decision', ar: 'قرار', main: true, fields: [F.area('text', 'الموقف'), F.text('question', 'السؤال'),
+      F.rows('options', 'الاختيارات', [C.text('text', 'الاختيار'), C.text('result', 'النتيجة'), C.text('comment', 'التعليق')], 'من اختيارين إلى ثلاثة')],
+      blank: { type: 'decision', text: '', question: '', options: [{ text: '', result: '', comment: '' }, { text: '', result: '', comment: '' }] } },
+    { type: 'recall', ar: 'افتكر', main: true, fields: [F.text('key', 'مفتاح القرار (حروف إنجليزية)'), F.text('default', 'النص الافتراضي')], blank: { type: 'recall', key: '', follow: {}, default: '' } },
+    { type: 'quiz', ar: 'اختبار قصير', main: true, fields: [F.text('question', 'السؤال'),
+      F.rows('options', 'الاختيارات', [C.text('text', 'الاختيار'), C.bool('ok', 'صحيح'), C.text('feedback', 'التعليق')])],
+      blank: { type: 'quiz', question: '', options: [{ text: '', ok: true, feedback: '' }, { text: '', ok: false, feedback: '' }] } },
+    { type: 'example', ar: 'مثال', main: true, fields: [F.text('title', 'العنوان'), F.area('text', 'نص المثال')], blank: { type: 'example', title: '', text: '' } },
+    { type: 'cards', ar: 'كروت', main: true, fields: [F.text('prompt', 'التعليمة'), F.rows('cards', 'الكروت', [C.text('front', 'الوجه'), C.text('back', 'الظهر')], 'من ثلاثة إلى ستة')],
+      blank: { type: 'cards', prompt: '', cards: [{ front: '', back: '' }, { front: '', back: '' }, { front: '', back: '' }] } },
+    { type: 'summary', ar: 'ملخّص', main: true, fields: [F.lines('items', 'نقاط الملخّص')], blank: { type: 'summary', items: [''] } },
+    { type: 'order', ar: 'رتّب', main: true, fields: [F.text('prompt', 'التعليمة'), F.lines('items', 'العناصر بالترتيب الصحيح', 'من ثلاثة إلى ستة، سطر لكل عنصر'), F.text('comment', 'التعليق')],
+      blank: { type: 'order', prompt: '', items: ['', '', ''], comment: '' } },
+    { type: 'match', ar: 'طابق', main: true, fields: [F.text('prompt', 'التعليمة'), F.rows('pairs', 'الأزواج', [C.text('left', 'الأول'), C.text('right', 'الثاني')], 'من ثلاثة إلى خمسة'), F.text('comment', 'التعليق')],
+      blank: { type: 'match', prompt: '', pairs: [{ left: '', right: '' }, { left: '', right: '' }, { left: '', right: '' }], comment: '' } },
+    { type: 'before_after', ar: 'قبل وبعد', main: true, fields: [F.area('before', 'قبل'), F.area('after', 'بعد'), F.text('comment', 'التعليق')], blank: { type: 'before_after', before: '', after: '', comment: '' } },
+    { type: 'icon_line', ar: 'سطر بأيقونة', main: true, fields: [F.text('icon', 'الأيقونة (bulb · warn · target · question · star · clock · heart · check · message · people)'), F.text('text', 'السطر')],
+      blank: { type: 'icon_line', icon: 'bulb', text: '' } },
+    { type: 'quote', ar: 'اقتباس', main: true, fields: [F.area('text', 'الاقتباس'), F.text('by', 'القائل')], blank: { type: 'quote', text: '', by: '' } },
+    { type: 'steps', ar: 'خطوات', main: true, fields: [F.lines('items', 'الخطوات')], blank: { type: 'steps', items: [''] } },
+    { type: 'accordion', ar: 'أكورديون', main: true, fields: [F.text('title', 'العنوان'), F.rows('items', 'العناصر', [C.text('term', 'المصطلح'), C.text('text', 'الشرح')])],
+      blank: { type: 'accordion', title: '', items: [{ term: '', text: '' }] } },
+    { type: 'image', ar: 'صورة', main: true, fields: [F.text('url', 'رابط الصورة (https)'), F.text('alt', 'وصف الصورة')], blank: { type: 'image', url: '', alt: '' } },
+    { type: 'video', ar: 'فيديو مدمج', main: true, fields: [F.text('url', 'رابط الفيديو'), F.text('title', 'العنوان'), F.area('transcript', 'نص الفيديو')], blank: { type: 'video', url: '', title: '', transcript: '' } },
+    // أنواع بحقول كثيرة: تُحرَّر من «متقدّم» (JSON) وتبدأ بهيكل جاهز
+    { type: 'spot', ar: 'اضغط الغلط', main: false, fields: [], blank: { type: 'spot', shape: 'post', prompt: '', sentences: [{ text: '', wrong: false }, { text: '', wrong: false }, { text: '', wrong: true, why: '' }], comment: '' } },
+    { type: 'predict', ar: 'توقّع', main: false, fields: [], blank: { type: 'predict', question: '', options: [{ text: '', ok: true }, { text: '', ok: false }], reveal: '' } },
+    { type: 'line', ar: 'اكتب سطرًا', main: false, fields: [], blank: { type: 'line', prompt: '', criteria: [''], fallback: '' } },
+    { type: 'gate', ar: 'أسئلة البوابة', main: false, fields: [], blank: { type: 'gate', pass: 1, questions: [{ text: '', options: [{ text: '', ok: true, explanation: '' }, { text: '', ok: false, explanation: '' }] }] } },
+    { type: 'exercise', ar: 'تمرين', main: false, fields: [], blank: { type: 'exercise', n: 1, title: '', intro: '', checks: [''], hint: '' } },
+    { type: 'ai_station', ar: 'محطة المساعد', main: false, fields: [], blank: { type: 'ai_station', attempts: 2, task: '', rubric: '' } },
+    { type: 'audio', ar: 'صوت', main: false, fields: [], blank: { type: 'audio', url: '', title: '', transcript: '' } },
+    { type: 'case_pick', ar: 'اختيار الحالة', main: false, fields: [], blank: { type: 'case_pick' } },
+    { type: 'download', ar: 'تنزيل', main: false, fields: [], blank: { type: 'download', what: 'workbook', label: '' } },
+    { type: 'goal', ar: 'هدفك', main: false, fields: [], blank: { type: 'goal' } },
+    { type: 'eval', ar: 'تقييم', main: false, fields: [], blank: { type: 'eval' } },
+    { type: 'chat', ar: 'محادثة موجّهة', main: false, fields: [], blank: { type: 'chat' } },
+    { type: 'registered', ar: 'للمسجّلين', main: false, fields: [], blank: { type: 'registered' } },
+    { type: 'sheet', ar: 'ورقة الملخّص', main: false, fields: [], blank: { type: 'sheet' } },
+    { type: 'certificate', ar: 'شهادة', main: false, fields: [], blank: { type: 'certificate' } }
+  ];
+  var BY_TYPE = {};
+  TYPES.forEach(function (t) { BY_TYPE[t.type] = t; });
+  function typeAr(type) { return BY_TYPE[type] ? BY_TYPE[type].ar : str(type) || 'كتلة'; }
+  function typeDef(type) { return BY_TYPE[type] || null; }
+  function blankBlock(type) { return BY_TYPE[type] ? clone(BY_TYPE[type].blank) : { type: str(type) }; }
+
+  // ------------------------------------------------------------------ عمليات القائمة (نقية: تعيد قائمة جديدة)
+  function blocksAdd(blocks, block, at) {
+    var a = (blocks || []).slice();
+    var i = at == null || at < 0 || at > a.length ? a.length : at;
+    a.splice(i, 0, block);
+    return a;
+  }
+  function blocksMove(blocks, i, dir) {
+    var a = (blocks || []).slice(), j = i + (dir < 0 ? -1 : 1);
+    if (i < 0 || i >= a.length || j < 0 || j >= a.length) return a;
+    var t = a[i]; a[i] = a[j]; a[j] = t;
+    return a;
+  }
+  function blocksDelete(blocks, i) {
+    var a = (blocks || []).slice();
+    if (i >= 0 && i < a.length) a.splice(i, 1);
+    return a;
+  }
+  // setIn(obj, 'options.1.text', v) ⇒ نسخة جديدة. المسار أرقام ومفاتيح مفصولة بنقطة.
+  function setIn(obj, path, value) {
+    var keys = String(path).split('.');
+    var out = clone(obj);
+    var cur = out;
+    for (var i = 0; i < keys.length - 1; i++) {
+      var k = /^\d+$/.test(keys[i]) ? +keys[i] : keys[i];
+      if (cur[k] == null || typeof cur[k] !== 'object') cur[k] = /^\d+$/.test(keys[i + 1]) ? [] : {};
+      cur = cur[k];
+    }
+    var last = keys[keys.length - 1];
+    cur[/^\d+$/.test(last) ? +last : last] = value;
+    return out;
+  }
+  function rowAdd(block, field, blankRow) {
+    var arr = (block[field] || []).slice();
+    arr.push(clone(blankRow));
+    return setIn(block, field, arr);
+  }
+  function rowDelete(block, field, i) {
+    var arr = (block[field] || []).slice();
+    if (i >= 0 && i < arr.length) arr.splice(i, 1);
+    return setIn(block, field, arr);
+  }
+  function linesToArr(s) { return str(s).replace(/\r/g, '').split('\n').map(function (x) { return x.trim(); }).filter(function (x) { return x; }); }
+  function arrToLines(a) { return Array.isArray(a) ? a.map(str).join('\n') : ''; }
+  // رأس الكتلة في القائمة: أول نص مفهوم منها
+  function blockHead(b) {
+    if (!isObj(b)) return '';
+    var order = ['title', 'question', 'prompt', 'md', 'text', 'before', 'by', 'url'];
+    for (var i = 0; i < order.length; i++) {
+      var v = b[order[i]];
+      if (typeof v === 'string' && v.trim()) return v.trim().replace(/\s+/g, ' ').slice(0, 70);
+    }
+    if (Array.isArray(b.items) && b.items.length) {
+      var f = b.items[0];
+      var t = typeof f === 'string' ? f : (f && (f.text || f.term)) || '';
+      if (t) return str(t).trim().slice(0, 70);
+    }
+    return '';
+  }
+  // JSON «متقدّم»: نص ⇒ {ok, block} أو {ok:false, error}
+  function parseBlockJson(text) {
+    var v;
+    try { v = JSON.parse(text); } catch (e) { return { ok: false, error: 'النص ليس JSON صالحًا' }; }
+    if (!isObj(v)) return { ok: false, error: 'يجب أن تكون الكتلة كائنًا' };
+    if (typeof v.type !== 'string' || !v.type) return { ok: false, error: 'تنقص الكتلة خانة «type»' };
+    return { ok: true, block: v };
+  }
+  function blocksIssues(blocks) {
+    var out = [];
+    (blocks || []).forEach(function (b, i) {
+      if (!isObj(b) || typeof b.type !== 'string' || !b.type) out.push('الكتلة ' + arN(i + 1) + ' بلا نوع');
+    });
+    return out;
+  }
+
+  // ------------------------------------------------------------------ زمن «د:ث»
+  function parseT(s) {
+    s = str(s).trim().replace(/[٠-٩]/g, function (d) { return DIG.indexOf(d); });
+    if (!s) return null;
+    var m = /^(\d+):([0-5]?\d)$/.exec(s);
+    if (m) return (+m[1]) * 60 + (+m[2]);
+    return /^\d+$/.test(s) ? +s : null;
+  }
+  function fmtT(n) {
+    n = Math.max(0, Math.round(Number(n) || 0));
+    var m = Math.floor(n / 60), s = n % 60;
+    return m + ':' + (s < 10 ? '0' : '') + s;
+  }
+
+  // ------------------------------------------------------------------ أجسام حفظ الدرس
+  function hasContent(l) {
+    if (!isObj(l)) return false;
+    if (l.kind === 'interactive') return Array.isArray(l.blocks) && l.blocks.length > 0;
+    if (l.kind === 'recorded') return !!(l.has_video || (l.video && (l.video.bunny_video_id || l.video.url)) || (Array.isArray(l.summary) && l.summary.length) || str(l.transcript).trim());
+    if (l.kind === 'live') return !!(l.starts_at || l.zoom_link || l.recording_url);
+    return false;
+  }
+  function cleanOptions(opts) {
+    return (opts || []).map(function (o) { return { text: str(o.text).trim(), ok: o.ok === true, explanation: str(o.explanation).trim() }; }).filter(function (o) { return o.text; });
+  }
+  // مسودة الفيديو: {touched, mode: 'upload'|'link'|'none', bunny_video_id, url}
+  function videoBody(v) {
+    if (!v || !v.touched) return undefined;
+    if (v.mode === 'upload' && v.bunny_video_id) return { bunny_video_id: v.bunny_video_id };
+    if (v.mode === 'link' && str(v.url).trim()) return { url: str(v.url).trim() };
+    return {};
+  }
+  // lessonBody(lesson, draft) ⇒ جسم PUT الدرس (الحقول القابلة للتحرير فقط، لا مسودة غير مرسلة)
+  function lessonBody(lesson, draft) {
+    var d = draft || lesson, kind = lesson.kind, out = { title: str(d.title).trim() };
+    if (kind === 'interactive') {
+      out.blocks = clone(d.blocks || []);
+      out.time = Math.max(0, parseInt(d.time, 10) || 0);
+      out.for = Array.isArray(d.for) ? d.for.slice() : [];
+      if (str(d.hero).trim() || str(lesson.hero).trim()) out.hero = str(d.hero).trim();
+      if (str(d.motion).trim() || str(lesson.motion).trim()) out.motion = str(d.motion).trim();
+    } else if (kind === 'recorded') {
+      var vb = videoBody(d._video);
+      if (vb !== undefined) out.video = vb;
+      var secs = parseT(d.duration_seconds);
+      out.duration_seconds = secs == null ? 0 : secs;
+      out.is_preview = d.is_preview === true;
+      out.chapters = (d.chapters || []).map(function (c) { return { t: parseT(c.t) || 0, title: str(c.title).trim() }; }).filter(function (c) { return c.title; });
+      out.checkpoints = (d.checkpoints || []).map(function (c) { return { t: parseT(c.t) || 0, question: str(c.question).trim(), options: cleanOptions(c.options) }; }).filter(function (c) { return c.question; });
+      out.summary = (Array.isArray(d.summary) ? d.summary : linesToArr(d.summary)).map(function (x) { return str(x).trim(); }).filter(Boolean).slice(0, 3);
+      out.transcript = str(d.transcript).trim();
+    } else if (kind === 'live') {
+      out.starts_at = str(d.starts_at).trim();
+      out.duration_min = Math.max(0, parseInt(d.duration_min, 10) || 0);
+      out.zoom_link = str(d.zoom_link).trim();
+      out.recording_url = str(d.recording_url).trim();
+      out.status = str(d.status).trim() || 'scheduled';
+      var q = d.quiz;
+      out.quiz = q && str(q.question).trim() ? { question: str(q.question).trim(), options: cleanOptions(q.options) } : null;
+    }
+    return out;
+  }
+  function lessonIssues(lesson, draft) {
+    var d = draft || lesson, out = [];
+    if (!str(d.title).trim()) out.push('اكتب عنوان الدرس');
+    if (lesson.kind === 'interactive') out = out.concat(blocksIssues(d.blocks));
+    if (lesson.kind === 'recorded') {
+      var sm = Array.isArray(d.summary) ? d.summary : linesToArr(d.summary);
+      if (sm.filter(function (x) { return str(x).trim(); }).length > 3) out.push('الملخّص ثلاثة أسطر على الأكثر');
+      (d.chapters || []).forEach(function (c, i) { if (str(c.t).trim() && parseT(c.t) == null) out.push('وقت الفصل ' + arN(i + 1) + ' غير مفهوم (اكتب مثل ١:٣٠)'); });
+      (d.checkpoints || []).forEach(function (c, i) {
+        if (str(c.t).trim() && parseT(c.t) == null) out.push('وقت سؤال التوقف ' + arN(i + 1) + ' غير مفهوم');
+        if (str(c.question).trim() && cleanOptions(c.options).length < 2) out.push('سؤال التوقف ' + arN(i + 1) + ' يحتاج اختيارين');
+      });
+    }
+    if (lesson.kind === 'live' && str(d.starts_at).trim() && isNaN(Date.parse(str(d.starts_at).trim()))) out.push('موعد البدء غير مفهوم');
+    return out;
+  }
+  // مسودة محرّر من الدرس المخزّن (نسخة قابلة للتعديل)
+  function draftFrom(lesson) {
+    var d = clone(lesson) || {};
+    if (lesson.kind === 'recorded') {
+      d.duration_seconds = lesson.duration_seconds ? fmtT(lesson.duration_seconds) : '';
+      d.chapters = (lesson.chapters || []).map(function (c) { return { t: fmtT(c.t), title: str(c.title) }; });
+      d.checkpoints = (lesson.checkpoints || []).map(function (c) { return { t: fmtT(c.t), question: str(c.question), options: clone(c.options || []) }; });
+      d.summary = (lesson.summary || []).slice();
+      var v = lesson.video || {};
+      d._video = { touched: false, mode: v.bunny_video_id ? 'upload' : (v.url ? 'link' : 'none'), bunny_video_id: v.bunny_video_id || '', url: v.bunny_video_id ? '' : (v.url || '') };
+    }
+    return d;
+  }
+
+  // ------------------------------------------------------------------ الهيكل
+  function structFrom(course) {
+    var units = ((course && course.outline && course.outline.units) || []).map(function (u) {
+      return { id: u.id, title: str(u.title), lessons: (u.lessons || []).map(function (l) { return { id: l.id, title: str(l.title), kind: l.kind, hasContent: hasContent(l) }; }) };
+    });
+    return units;
+  }
+  function flat(units) {
+    var out = [];
+    (units || []).forEach(function (u) { (u.lessons || []).forEach(function (l) { out.push(l); }); });
+    return out;
+  }
+  function structSig(units) {
+    return JSON.stringify((units || []).map(function (u) {
+      return [u.id || '+', str(u.title), (u.lessons || []).map(function (l) { return [l.id || '+', str(l.title), l.id ? '' : str(l.kind)]; })];
+    }));
+  }
+  function structureDiff(prev, next) {
+    var pm = {}, nm = {}, pu = {}, nu = {};
+    flat(prev).forEach(function (l) { if (l.id) pm[l.id] = l; });
+    (prev || []).forEach(function (u) { if (u.id) pu[u.id] = 1; });
+    var kept = [], added = [], renamed = [], removed = [];
+    flat(next).forEach(function (l) {
+      if (l.id && pm[l.id]) { kept.push(l.id); nm[l.id] = true; if (str(pm[l.id].title) !== str(l.title)) renamed.push({ id: l.id, from: pm[l.id].title, to: l.title }); }
+      else added.push({ title: l.title, kind: l.kind });
+    });
+    flat(prev).forEach(function (l) { if (l.id && !nm[l.id]) removed.push({ id: l.id, title: l.title, hasContent: !!l.hasContent }); });
+    (next || []).forEach(function (u) { if (u.id && pu[u.id]) nu[u.id] = 1; });
+    var prevOrder = flat(prev).map(function (l) { return l.id; }).filter(function (id) { return nm[id]; }).join(',');
+    var prevUnitOrder = (prev || []).map(function (u) { return u.id; }).filter(function (id) { return nu[id]; }).join(',');
+    var nextUnitOrder = (next || []).map(function (u) { return u.id; }).filter(function (id) { return id && nu[id]; }).join(',');
+    var reordered = prevOrder !== kept.join(',') || prevUnitOrder !== nextUnitOrder;
+    return { kept: kept, added: added, removed: removed, renamed: renamed, reordered: reordered,
+             unitsAdded: (next || []).filter(function (u) { return !u.id || !pu[u.id]; }).length,
+             unitsRemoved: (prev || []).filter(function (u) { return !nu[u.id]; }).length,
+             changed: structSig(prev) !== structSig(next) };
+  }
+  function structureErrors(units) {
+    var out = [];
+    if (!(units || []).length) out.push('أضف وحدة واحدة على الأقل');
+    if ((units || []).length > 30) out.push('الوحدات حتى ٣٠ وحدة');
+    if (flat(units).length > 200) out.push('الدروس حتى ٢٠٠ درس');
+    (units || []).forEach(function (u, i) {
+      if (!str(u.title).trim()) out.push('الوحدة ' + arN(i + 1) + ' بلا عنوان');
+      (u.lessons || []).forEach(function (l, j) {
+        if (!str(l.title).trim()) out.push('الدرس ' + arN(j + 1) + ' في الوحدة ' + arN(i + 1) + ' بلا عنوان');
+        if (!l.id && ['interactive', 'recorded', 'live'].indexOf(l.kind) < 0) out.push('اختر نوع الدرس «' + (str(l.title).trim() || 'الجديد') + '»: تفاعلي أو مسجّل أو مباشر');
+      });
+    });
+    return out;
+  }
+  function structureBody(units, cases) {
+    var body = { units: (units || []).map(function (u) {
+      var o = { title: str(u.title).trim(), lessons: (u.lessons || []).map(function (l) {
+        var x = { title: str(l.title).trim(), kind: l.kind };
+        if (l.id) x.id = l.id;
+        return x;
+      }) };
+      if (u.id) o.id = u.id;
+      return o;
+    }) };
+    if (Array.isArray(cases)) body.cases = cases.slice();
+    return body;
+  }
+  // يضيف وحدات مسودة «حوّل مادتي» إلى الهيكل الحالي (القديم يبقى بمعرّفاته)
+  function mergeDraftIntoStructure(existing, draft) {
+    var units = clone(existing) || [];
+    ((draft && draft.units) || []).forEach(function (u) {
+      units.push({ title: str(u.title).trim() || 'وحدة جديدة', lessons: (u.lessons || []).map(function (l) { return { title: str(l.title).trim() || 'درس جديد', kind: 'recorded' }; }) });
+    });
+    return units;
+  }
+  function draftLessons(draft) {
+    var out = [];
+    ((draft && draft.units) || []).forEach(function (u) { (u.lessons || []).forEach(function (l) { out.push(l); }); });
+    return out;
+  }
+  // بعد الـPUT: الدروس الجديدة (ليست في المعرّفات القديمة) بترتيبها ⇒ تُقابَل بدروس المسودة بالترتيب
+  function pairNewLessons(prevIds, course, draft) {
+    var seen = {};
+    (prevIds || []).forEach(function (id) { seen[id] = 1; });
+    var fresh = flat(((course && course.outline && course.outline.units) || [])).filter(function (l) { return l.id && !seen[l.id]; });
+    var dl = draftLessons(draft);
+    return fresh.map(function (l, i) {
+      var d = dl[i] || {};
+      return { id: l.id, title: l.title, body: { summary: (d.summary || []).slice(0, 3).map(str), transcript: str(d.transcript) } };
+    });
+  }
+
+  // ------------------------------------------------------------------ رفع TUS
+  var CHUNK = 5 * 1024 * 1024;
+  function tusPlan(size, chunk) {
+    chunk = chunk || CHUNK;
+    var out = [];
+    for (var off = 0; off < size; off += chunk) out.push({ offset: off, length: Math.min(chunk, size - off) });
+    return out;
+  }
+  function b64(s, enc) {
+    if (enc) return enc(s);
+    if (typeof btoa === 'function') return btoa(unescape(encodeURIComponent(s)));
+    return Buffer.from(s, 'utf8').toString('base64');
+  }
+  function tusMetadata(meta, enc) {
+    return Object.keys(meta).map(function (k) { return k + ' ' + b64(str(meta[k]), enc); }).join(',');
+  }
+  // رفع كامل: POST لإنشاء الرفع ثم PATCH لكل قطعة. up = ردّ المسار ١٢ (upload_url · headers). fetchFn(url, init) ⇒ Promise<{ok,status,headers:{get}}>
+  function tusUpload(file, up, fetchFn, opts) {
+    opts = opts || {};
+    var plan = tusPlan(file.size, opts.chunk), auth = up.headers || {};
+    var baseH = { 'Tus-Resumable': '1.0.0' };
+    ['AuthorizationSignature', 'AuthorizationExpire', 'VideoId', 'LibraryId'].forEach(function (k) { if (auth[k] != null) baseH[k] = String(auth[k]); });
+    var meta = { filetype: file.type || 'video/mp4', title: opts.title || file.name || 'video' };
+    var createH = Object.assign({}, baseH, { 'Upload-Length': String(file.size), 'Upload-Metadata': tusMetadata(meta, opts.b64) });
+    function fail(msg, status) { var e = new Error(msg); e.status = status || 0; return e; }
+    return fetchFn(up.upload_url, { method: 'POST', headers: createH }).then(function (r) {
+      if (!r || !(r.status >= 200 && r.status < 300)) throw fail('تعذّر بدء الرفع', r && r.status);
+      var loc = r.headers && r.headers.get && r.headers.get('Location');
+      var url = loc ? new URL(loc, up.upload_url).href : up.upload_url;
+      var i = 0, sent = 0;
+      if (opts.onProgress) opts.onProgress(0, file.size);
+      function next() {
+        if (i >= plan.length) { if (opts.onProgress) opts.onProgress(file.size, file.size); return Promise.resolve({ ok: true, chunks: plan.length }); }
+        var p = plan[i];
+        var h = Object.assign({}, baseH, { 'Content-Type': 'application/offset+octet-stream', 'Upload-Offset': String(p.offset) });
+        return fetchFn(url, { method: 'PATCH', headers: h, body: file.slice(p.offset, p.offset + p.length) }).then(function (r2) {
+          if (!r2 || !(r2.status >= 200 && r2.status < 300)) throw fail('انقطع الرفع عند القطعة ' + arN(i + 1) + ' من ' + arN(plan.length), r2 && r2.status);
+          var off = r2.headers && r2.headers.get && r2.headers.get('Upload-Offset');
+          sent = off != null && off !== '' && !isNaN(+off) ? +off : p.offset + p.length;
+          i++;
+          if (opts.onProgress) opts.onProgress(Math.min(sent, file.size), file.size);
+          return next();
+        });
+      }
+      return next();
+    });
+  }
+
+  // ------------------------------------------------------------------ مساعد الدورة
+  var ASSIST = [
+    { kind: 'activity_decision', ar: 'حوّل إلى نشاط قرار', lesson: true, text: 'حوّل الفقرة إلى نشاط قرار', ask: false },
+    { kind: 'shorter_title', ar: 'اقترح عناوين أقصر', lesson: true, text: 'اقترح عناوين أقصر للدرس', ask: false },
+    { kind: 'video_script', ar: 'اكتب نص فيديو', lesson: true, text: 'اكتب نص فيديو للدرس', ask: false },
+    { kind: 'free', ar: 'سؤال حر', lesson: false, text: '', ask: true },
+    { kind: 'from_material', ar: 'حوّل مادتي إلى دروس', lesson: false, text: 'حوّل مادتي إلى دروس', ask: false, material: true }
+  ];
+  function assistKinds(inLesson) { return ASSIST.filter(function (a) { return inLesson ? a.kind !== 'from_material' : !a.lesson; }); }
+  function assistErrors(kind, instruction, material, lessonId) {
+    var a = ASSIST.filter(function (x) { return x.kind === kind; })[0];
+    if (!a) return ['اختر ما تريده من المساعد'];
+    if (a.lesson && !lessonId) return ['اختر درسًا أولًا'];
+    if (a.ask && !str(instruction).trim()) return ['اكتب سؤالك'];
+    if (a.material && str(material).trim().length < 80) return ['الصق مادة من ٨٠ حرفًا على الأقل'];
+    return [];
+  }
+  function assistBody(kind, instruction, material, lessonId) {
+    var a = ASSIST.filter(function (x) { return x.kind === kind; })[0] || {};
+    var b = { instruction: str(instruction).trim() || a.text || '', kind: kind };
+    if (a.lesson && lessonId) b.lesson_id = lessonId;
+    if (a.material) b.material = str(material).trim();
+    return b;
+  }
+  // يطبّق مسودة المساعد على مسودة الدرس (بلا حفظ). choice: رقم العنوان المختار.
+  function applyDraft(lessonKind, draftLesson, kind, res, choice) {
+    var d = clone(draftLesson), dr = (res && res.draft) || {};
+    if (kind === 'activity_decision' && dr.block) { d.blocks = (d.blocks || []).concat([dr.block]); return { ok: true, lesson: d }; }
+    if (kind === 'shorter_title' && Array.isArray(dr.titles) && dr.titles[choice || 0]) { d.title = str(dr.titles[choice || 0]); return { ok: true, lesson: d }; }
+    if (kind === 'video_script' && typeof dr.transcript === 'string') {
+      if (lessonKind === 'recorded') d.transcript = dr.transcript;
+      else d.blocks = (d.blocks || []).concat([{ type: 'text', md: dr.transcript }]);
+      return { ok: true, lesson: d };
+    }
+    return { ok: false, lesson: d };
+  }
+
+  // ------------------------------------------------------------------ القائمة والمراجعة
+  function gapsLine(course) {
+    var g = (course && course.gaps) || [];
+    return g.length ? 'ينقصها: ' + g.join('، ') : 'جاهزة';
+  }
+  function c2Index(list) {
+    var by = {};
+    (list || []).forEach(function (c) { if (c && c.id) by[c.id] = c; if (c && c.slug) by[c.slug] = c; });
+    return by;
+  }
+  // صف القائمة: [حالة المحرّر · الأنواع · عدد الدروس · الملاحظات المفتوحة]
+  var KIND_AR = { interactive: 'تفاعلي', recorded: 'مسجّل', live: 'مباشر' };
+  function c2Bits(c) {
+    if (!c) return null;
+    var kinds = (c.kinds || []).map(function (k) { return KIND_AR[k] || k; });
+    return { status: str(c.status_ar), kinds: kinds, lessons: Number(c.lessons_count) || 0, open: Number(c.open_notes) || 0 };
+  }
+  function c2Line(c) {
+    var b = c2Bits(c);
+    if (!b) return '';
+    var p = [];
+    if (b.kinds.length) p.push(b.kinds.join(' · '));
+    p.push(arN(b.lessons) + ' ' + (b.lessons === 1 ? 'درس' : (b.lessons === 2 ? 'درسان' : (b.lessons >= 3 && b.lessons <= 10 ? 'دروس' : 'درسًا'))));
+    if (b.open) p.push(arN(b.open) + (b.open === 1 ? ' ملاحظة مفتوحة' : ' ملاحظات مفتوحة'));
+    return p.join(' · ');
+  }
+  // الدورات التي في المحرّر فقط (لا مقابل لها في لوحة المنصّة)
+  function c2Extras(c2list, boardRows) {
+    var by = c2Index(boardRows);
+    return (c2list || []).filter(function (c) { return c && c.id && !by[c.id] && !(c.slug && by[c.slug]); });
+  }
+  function returnBody(rows) {
+    var notes = [];
+    (rows || []).forEach(function (r) {
+      var t = str(r.text).trim();
+      if (r.on && t) notes.push({ target_kind: r.kind, target_id: r.kind === 'course' ? '' : str(r.id), text: t.slice(0, 600) });
+    });
+    return { notes: notes };
+  }
+  function returnIssues(rows) {
+    var on = (rows || []).filter(function (r) { return r.on; });
+    if (!on.length) return ['اختر هدفًا واحدًا على الأقل'];
+    var out = [];
+    on.forEach(function (r) { if (!str(r.text).trim()) out.push('اكتب ملاحظة «' + str(r.label) + '»'); if (str(r.text).length > 600) out.push('ملاحظة «' + str(r.label) + '» أطول من ٦٠٠ حرف'); });
+    return out;
+  }
+  function idemKey(uuid) {
+    var u = typeof uuid === 'function' ? uuid() : '';
+    if (!u) { u = ''; for (var i = 0; i < 32; i++) u += Math.floor(Math.random() * 16).toString(16); }
+    return 'c-' + String(u).replace(/[^A-Za-z0-9]/g, '').slice(0, 40);
+  }
+  function coverIssue(url) {
+    url = str(url).trim();
+    return url && !/^https:\/\/\S+$/.test(url) ? 'رابط الغلاف يبدأ بـ https://' : '';
+  }
+  function dataBody(d) {
+    var out = { title: str(d.title).trim(), subtitle: str(d.subtitle).trim(), description: str(d.description).trim(), cover: str(d.cover).trim(), level: str(d.level), outcomes: linesToArr(Array.isArray(d.outcomes) ? d.outcomes.join('\n') : d.outcomes) };
+    return out;
+  }
+
+  L.courses2 = {
+    TYPES: TYPES, typeAr: typeAr, typeDef: typeDef, blankBlock: blankBlock,
+    blocksAdd: blocksAdd, blocksMove: blocksMove, blocksDelete: blocksDelete, setIn: setIn, rowAdd: rowAdd, rowDelete: rowDelete,
+    linesToArr: linesToArr, arrToLines: arrToLines, blockHead: blockHead, parseBlockJson: parseBlockJson, blocksIssues: blocksIssues,
+    parseT: parseT, fmtT: fmtT, hasContent: hasContent, videoBody: videoBody, lessonBody: lessonBody, lessonIssues: lessonIssues, draftFrom: draftFrom,
+    structFrom: structFrom, structureDiff: structureDiff, structureErrors: structureErrors, structureBody: structureBody,
+    mergeDraftIntoStructure: mergeDraftIntoStructure, draftLessons: draftLessons, pairNewLessons: pairNewLessons,
+    CHUNK: CHUNK, tusPlan: tusPlan, tusMetadata: tusMetadata, tusUpload: tusUpload,
+    ASSIST: ASSIST, assistKinds: assistKinds, assistErrors: assistErrors, assistBody: assistBody, applyDraft: applyDraft,
+    gapsLine: gapsLine, c2Index: c2Index, c2Bits: c2Bits, c2Line: c2Line, c2Extras: c2Extras, returnBody: returnBody, returnIssues: returnIssues,
+    idemKey: idemKey, coverIssue: coverIssue, dataBody: dataBody, KIND_AR: KIND_AR
+  };
+  if (typeof module !== 'undefined' && module.exports && module.exports !== L) module.exports.courses2 = L.courses2;
+})(typeof window !== 'undefined' ? window : (typeof globalThis !== 'undefined' ? globalThis : this));
+// ===== /courses2 =====
+
 // ===== brain2 =====
 // «العقل» الجولة ٢ (SPEC docs/v2/brain2 §4.1): دوال نقية فقط — حقائق البطاقة المسموحة للرأي، وتزيين البطاقة برأي العقل أو بعلامة الجملة الثابتة،
 // وبطاقة اقتراح العقل. ⛔ لا DOM ولا شبكة ولا ساعة خفية (`now` يُمرَّر). الاسم والبريد والهاتف لا يخرجون من هنا أبدًا.
@@ -6504,3 +7001,4 @@
   if (typeof module !== 'undefined' && module.exports) { module.exports.v2bFacts = v2bFacts; module.exports.v2bDecorate = v2bDecorate; module.exports.v2bItemCard = v2bItemCard; }
 })(typeof window !== 'undefined' ? window : (typeof globalThis !== 'undefined' ? globalThis : this));
 // ===== /brain2 =====
+
