@@ -10,7 +10,7 @@
 
 Read both sections in full.
 
-**Platform code:** branch `pillars-courses@20da444`, which sits on main 29f1fa6. It is not published yet. Everything runs behind `COURSES_V2_ENABLED`; when the flag is off, every route returns 404.
+**Platform code:** branch `pillars-courses@744e173`, which sits on main 29f1fa6. It is not published yet. Everything runs behind `COURSES_V2_ENABLED`; when the flag is off, every route returns 404.
 
 ## C1: Course editor in the dashboard
 
@@ -65,8 +65,7 @@ The editor lives in the «الدورات والمدرّبون» section. Its fil
    - For `from_material`, «أنشئ الهيكل منها» does a structure PUT and then one lesson PUT per lesson, with one confirm sheet for all of them.
 5. **Old screen.** The old «تعديل الدروس من «كل السجلات»» link becomes «حرّر الدورة» and opens the new editor. The old screen stays under «كل السجلات».
 
-**Seeded story courses.** For courses whose slug is in the platform's seeded list (start with `marketing-basics`; also show a warning when a course is not in `courses2` but has a story), the editor shows this line:
-«هذه الدورة مكتوبة في ملف أساسي؛ أي تعديل من هنا قد يُستبدل عند تحديث الملف.»
+**Seeded story courses:** no warning needed. Since `pillars-courses@744e173`, any edit marks the course `story_edited_in_app` and the repo seed no longer overwrites it.
 
 **Copy rules:** plain Arabic, gender-neutral, no «يقوّم», no prices, no mention of refunds or guarantees.
 
@@ -108,7 +107,7 @@ The editor lives in the «الدورات والمدرّبون» section. Its fil
 - **History list** for each trainer.
 - **Copy:** percentages are allowed here because this is the founder's own money screen.
 
-## C3: Platform money (branch `courses-money` from `pillars-courses@20da444`)
+## C3: Platform money (branch `courses-money` from `pillars-courses@744e173`)
 
 **1. Share stamp in `routes/payments.py`, `_course_order_stamp`** (exactly as the PARALLEL «نسبة المدرّب جاهزة» request says)
 - `order["share_stamp"] = await trainer_share_for(db, instructor_email, source)`, where source is `trainer_code` or `platform` from the existing attribution.
