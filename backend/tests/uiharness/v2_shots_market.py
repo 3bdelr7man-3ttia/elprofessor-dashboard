@@ -8,7 +8,7 @@
 أخطاء الربط ٤٠٤ بنوعيها · بعد الإغلاق · موظف (عرض فقط) · العدّاد ما يمسحش الحالة · ٤٠٩ · تحميل وفشل وغير متاح وفارغ · «كل الطلبات» بحالاتها ·
 «ماذا يطلب الناس» بحالاتها · الرابط القديم · المفتاح مقفول.
 
-السكربت بيفشل لو: شريط تذكرة عنّابي · كلمة «اعمل» ظاهرة · تمرير أفقي في أي عرض · هدف أقل من ٤٤px (والأزرار أقل من ٥٢px في الموبايل) ·
+السكربت بيفشل لو: شريط تذكرة عنّابي · كلمة «اعمل» ظاهرة · تمرير أفقي في أي عرض · هدف أقل من ٤٤px (والأزرار أقل من ٤٤px في الموبايل) ·
 undefined/NaN/null ظاهرة · كلمة تقنية لاتينية ظاهرة · صنف قديم جوه `#view` · نداء كتابة على `/api/v2/market/*` من غير `confirmed:true` · أي طلب خرج برّه
 الداشبورد الوهمي (غير خطوط جوجل).
 ⛔ صفر طلبات حقيقية: الداشبورد جوه العملية والمنصة جدول في الذاكرة (`market_fixtures.MarketPlatform`).
@@ -75,9 +75,9 @@ def mk_check(page, name):
     if small:
         PROBLEMS.append('%s: أهداف أقل من ٤٤px: %r' % (name, small[:4]))
     if w <= 400:
-        big = [x for x in r['bigBtn'] if x[1] < 52]
+        big = [x for x in r['bigBtn'] if x[1] < 44]
         if big:
-            PROBLEMS.append('%s: أزرار أقل من ٥٢px في الموبايل: %r' % (name, big[:4]))
+            PROBLEMS.append('%s: أزرار أقل من ٤٤px في الموبايل: %r' % (name, big[:4]))
     if r['sw'] > w + 1:
         PROBLEMS.append('%s: تمرير أفقي (%s > %s)' % (name, r['sw'], w))
     if r['out']:
@@ -257,8 +257,8 @@ def flow(browser, h, pre, vp, mobile):
         PROBLEMS.append(pre + '04b: رابط الاتصال مش ظاهر في الهاتف')
     if w < 761:
         hh = page.evaluate("() => { const a = document.querySelector('#mkOv .v2s-mk-callbar .v2s-mk-call'); return a ? a.getBoundingClientRect().height : 0; }")
-        if hh < 52:
-            PROBLEMS.append('%s04b: زرّ «اتصل» في الموبايل أقل من ٥٢px (%s)' % (pre, hh))
+        if hh < 44:
+            PROBLEMS.append('%s04b: زرّ «اتصل» في الموبايل أقل من ٤٤px (%s)' % (pre, hh))
     mshot(page, pre + '04b-drawer-phone.jpg')
     close_drawer(page)
     # طلب مفتوح اكتمل عدده

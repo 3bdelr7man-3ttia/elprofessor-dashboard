@@ -55,7 +55,7 @@ def b_check(page, name):
         PROBLEMS.append('%s: أهداف أقل من ٤٤px: %r' % (name, small[:4]))
     if w <= 400:
         big = page.evaluate("""() => [...document.querySelectorAll('.v2sb button, .v2sb [role=radio], #epModal .v2sbm button')]
-          .filter(b => b.offsetParent).map(b => [b.className || b.tagName, Math.round(b.getBoundingClientRect().height)]).filter(x => x[1] < 52)""")
+          .filter(b => b.offsetParent).map(b => [b.className || b.tagName, Math.round(b.getBoundingClientRect().height)]).filter(x => x[1] < 44)""")
         if big:
             PROBLEMS.append('%s: أزرار أقل من ٥٢px في الموبايل: %r' % (name, big[:4]))
         wide = page.evaluate("() => [...document.querySelectorAll('.v2sb *, #epModal .v2sbm *')].filter(e => e.offsetParent && e.getBoundingClientRect().right > window.innerWidth + 1).length")

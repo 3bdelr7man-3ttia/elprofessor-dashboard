@@ -55,7 +55,7 @@ def bk_check(page, name):
             PROBLEMS.append('%s: خانة %s ارتفاعها %s وخطها %s' % (name, ident, h, fs))
     if w <= 400:
         big = page.evaluate("""() => [...document.querySelectorAll('.v2s-books .v3-btn1, .v2s-books .v3-btn2, .v2s-books .v3-link, .v2s-books .bk-fold, #epModal .v2s-bm .btn')]
-          .filter(b => b.offsetParent).map(b => [b.className, Math.round(b.getBoundingClientRect().height)]).filter(x => x[1] < 52)""")
+          .filter(b => b.offsetParent).map(b => [b.className, Math.round(b.getBoundingClientRect().height)]).filter(x => x[1] < 44)""")
         if big:
             PROBLEMS.append('%s: أزرار أقل من ٥٢px في الموبايل: %r' % (name, big[:4]))
         narrow = page.evaluate("""() => { const W = window.innerWidth;

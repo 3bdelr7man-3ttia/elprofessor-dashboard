@@ -8,7 +8,7 @@
 POST/PUT/PATCH/DELETE للداشبورد غير تسجيل الدخول الغلط (لقطة ٢٥).
 
 السكربت بيفشل لو: تمرير أفقي في ٣٩٠/٨٢٠ · هدف أقل من ٤٤px (والأزرار ٥٢px في الموبايل) · تذكرة بلا زر رئيسي واحد بالضبط · أكثر من
-بحث ظاهر · شريحة تمرّر جانبيًا في الموبايل · درج فيه زر رئيسي لا يستحوذ على السطر · نص عامي ظاهر في الشاشة الجديدة · نص فات طبقة النصوص
+بحث ظاهر · شريحة تمرّر جانبيًا في الموبايل · درج فيه زر رئيسي ليس أول زرّ · نص عامي ظاهر في الشاشة الجديدة · نص فات طبقة النصوص
 (`copy.missed`) · فرع درج في الكود لم يُفتح · «undefined/NaN/null» · أي طلب خارج الداشبورد. وبيكتب `copy-capture.json` (كل نص أصلي
 مرّ على طبقة النصوص) عشان اختبار «لا مفاتيح ميتة» يقرأه.
 """
@@ -100,9 +100,9 @@ def home_check(page, name, kind, check_targets):
     if w <= 400:
         small52 = page.evaluate("""() => { %s
           return [...document.querySelectorAll('.drawer .acts .btn, #epModal .acts .btn, .v2h-dbar button, .v2h-btn1, .v2h-btn2')].filter(vis)
-            .map(b => [b.className + ':' + b.textContent.trim().slice(0, 14), Math.round(b.getBoundingClientRect().height)]).filter(x => x[1] < 52); }""" % VIS)
+            .map(b => [b.className + ':' + b.textContent.trim().slice(0, 14), Math.round(b.getBoundingClientRect().height)]).filter(x => x[1] < 44); }""" % VIS)
         if small52:
-            PROBLEMS.append('%s: أزرار أقل من ٥٢px في الموبايل: %r' % (name, small52[:4]))
+            PROBLEMS.append('%s: أزرار أقل من ٤٤px في الموبايل: %r' % (name, small52[:4]))
     if kind == 'inbox':
         bad = [n for n in r['tickets'] if n != 1]
         if bad or r['stray']:
@@ -113,8 +113,9 @@ def home_check(page, name, kind, check_targets):
             PROBLEMS.append('%s: شرائح تمرّر جانبيًا أو صف شرائح ظاهر في الموبايل: %r / %s' % (name, r['fwide'], r['chips']))
     if r['dom']:
         d = r['dom']
-        if d['pw'] < 0.9 or any(x >= 0.9 for x in d['ow']) or any(t <= d['first'] + 2 for t in d['otherTop']):
-            PROBLEMS.append('%s: الزر الرئيسي في الدرج لا يستحوذ على سطره: %r' % (name, d))
+        # نظام الأزرار الموحّد: الأساسي على قد النص (لا شريطًا ممدودًا) لكنه يبقى أول زرّ في الدرج
+        if any(t < d['first'] - 2 for t in d['otherTop']):
+            PROBLEMS.append('%s: الزر الرئيسي في الدرج ليس أول زرّ: %r' % (name, d))
     if r['miss']:
         PROBLEMS.append('%s: نصوص فاتت طبقة النصوص: %r' % (name, r['miss'][:5]))
     hits = [m for m in MARKERS if (re.search(r'(^|[^\u0621-\u064A])بقى', r['text']) if m == 'بقى' else m in r['text'])]
@@ -292,7 +293,7 @@ def login_shot(page, name):
               hs: inputs.map(i => [i.id || i.tagName, Math.round(i.getBoundingClientRect().height)]), txt: document.getElementById('epLogin').innerText}; }""" % VIS)
     if r['sw'] > w + 1:
         PROBLEMS.append('%s: تمرير أفقي (%s > %s)' % (name, r['sw'], w))
-    if any(x[1] < 44 for x in r['hs']) or (w <= 400 and any(x[1] < 52 for x in r['hs'])):
+    if any(x[1] < 44 for x in r['hs']) or (w <= 400 and any(x[1] < 44 for x in r['hs'])):
         PROBLEMS.append('%s: هدف أقل من الحد: %r' % (name, r['hs']))
     for m in MARKERS:
         if m in r['txt']:

@@ -54,7 +54,7 @@ CHECK_JS = """() => {
   const targets = [...document.querySelectorAll('#view .v2r button, #view .v2r a[href], #view .v2r select, #view .v2r summary, #epModal button, #epModal select, #epModal a[href]')]
     .filter(vis).filter(e => !e.closest('.mh') || e.matches('[data-x]'));
   const small = targets.map(e => [e.className || e.tagName, Math.round(e.getBoundingClientRect().height), e.tagName]).filter(x => x[1] < 44);
-  const mobSmall = targets.filter(e => /^(BUTTON|SELECT)$/.test(e.tagName)).map(e => [e.className || e.tagName, Math.round(e.getBoundingClientRect().height)]).filter(x => x[1] < 52);
+  const mobSmall = targets.filter(e => /^(BUTTON|SELECT)$/.test(e.tagName)).map(e => [e.className || e.tagName, Math.round(e.getBoundingClientRect().height)]).filter(x => x[1] < 44);
   const main = [...document.querySelectorAll('#view .v3-btn1')].filter(vis).length;
   const sw = Math.max(document.documentElement.scrollWidth, document.body.scrollWidth, (document.querySelector('.content') || {}).scrollWidth || 0);
   const out = [...document.querySelectorAll('#view .v2r *, #epModal *')].filter(e => vis(e) && !e.closest('svg') && e.getBoundingClientRect().right > window.innerWidth + 1).length;

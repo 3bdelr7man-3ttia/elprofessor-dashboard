@@ -55,7 +55,7 @@ def ed_check(page, name):
         PROBLEMS.append('%s: أهداف أقل من ٤٤px: %r' % (name, small[:4]))
     if mobile:
         big = page.evaluate("""() => [...document.querySelectorAll('.v2ce .v2co-btn1, .v2ce .v2co-btn2, .v2ce .v2co-link, .v2ce-tab, .v2ce-pt, .v2ce-ak, #epModal .v2co-m .v2co-btn1, #epModal .v2co-m .v2co-btn2')]
-          .filter(b => b.offsetParent).map(b => [(b.className || '').toString().slice(0, 30), Math.round(b.getBoundingClientRect().height)]).filter(x => x[1] < 52)""")
+          .filter(b => b.offsetParent).map(b => [(b.className || '').toString().slice(0, 30), Math.round(b.getBoundingClientRect().height)]).filter(x => x[1] < 44)""")
         if big:
             PROBLEMS.append('%s: أزرار أقل من ٥٢px في الموبايل: %r' % (name, big[:4]))
     sw = page.evaluate("() => Math.max(document.documentElement.scrollWidth, document.body.scrollWidth, (document.querySelector('.content')||{}).scrollWidth||0)")

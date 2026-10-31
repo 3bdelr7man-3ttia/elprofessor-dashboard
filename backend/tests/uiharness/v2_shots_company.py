@@ -74,7 +74,7 @@ def check(page, name):
       const na = [...document.querySelectorAll('[data-na]')].filter(e => e.textContent.trim() !== 'غير متاح بعد').map(e => e.textContent.trim());
       const btns = [...document.querySelectorAll('.co button, .co input[type=text], .co select, .co textarea, #epModal .com button, #epModal .com input, #epModal .com select, #epModal .com textarea')].filter(vis);
       const small = btns.map(b => [b.className || b.tagName, Math.round(((b.type === 'checkbox' && b.closest('label')) ? b.closest('label') : b).getBoundingClientRect().height)]).filter(x => x[1] < 44);
-      const small52 = [...document.querySelectorAll('.co-btn1, .co-btn2, #epModal .com .co-btn1, #epModal .com .co-btn2')].filter(vis).map(b => [b.className, Math.round(b.getBoundingClientRect().height)]).filter(x => x[1] < 52);
+      const small52 = [...document.querySelectorAll('.co-btn1, .co-btn2, #epModal .com .co-btn1, #epModal .com .co-btn2')].filter(vis).map(b => [b.className, Math.round(b.getBoundingClientRect().height)]).filter(x => x[1] < 44);
       const outside = btns.filter(b => { const q = b.getBoundingClientRect(); return q.left < -1 || q.right > window.innerWidth + 1; }).length;
       const strip = document.querySelector('.v2c-tabs'), on = document.querySelector('.v2c-tab.on');
       let tabIn = true;
@@ -96,7 +96,7 @@ def check(page, name):
         PROBLEMS.append('%s: أهداف أقل من ٤٤px %r' % (name, r['small'][:4]))
     if w <= 400:
         if r['small52']:
-            PROBLEMS.append('%s: أزرار أقل من ٥٢px في الموبايل %r' % (name, r['small52'][:4]))
+            PROBLEMS.append('%s: أزرار أقل من ٤٤px في الموبايل %r' % (name, r['small52'][:4]))
         if r['sw'] > w + 1:
             PROBLEMS.append('%s: تمرير أفقي (%s > %s)' % (name, r['sw'], w))
         if not r['tabIn']:

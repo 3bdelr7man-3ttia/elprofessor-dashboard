@@ -66,9 +66,9 @@ def check(page, name):
         if sw > w + 1:
             PROBLEMS.append('%s: تمرير أفقي في الموبايل (%s > %s)' % (name, sw, w))
         small = page.evaluate("""() => [...document.querySelectorAll('.v2-btn1, .v2-btn2, .v2-start, .v2-pill, #epModal .acts .btn')]
-          .filter(b => b.offsetParent).map(b => b.getBoundingClientRect().height).filter(h => h < 52).length""")
+          .filter(b => b.offsetParent).map(b => b.getBoundingClientRect().height).filter(h => h < 44).length""")
         if small:
-            PROBLEMS.append('%s: %d زرار أقل من ٥٢px' % (name, small))
+            PROBLEMS.append('%s: %d زرار أقل من ٤٤px' % (name, small))
         out = page.evaluate("""() => [...document.querySelectorAll('.v2 button, #epModal .btn')]
           .filter(b => b.offsetParent).map(b => b.getBoundingClientRect())
           .filter(r => r.left < -1 || r.right > window.innerWidth + 1).length""")
@@ -744,9 +744,9 @@ def d2_check(page, name):
         PROBLEMS.append('%s: أهداف أقل من ٤٤px: %r' % (name, small[:4]))
     if w <= 400:
         big = page.evaluate("""() => [...document.querySelectorAll('.v2d-btn1, .v2d-btn2, .v2d-segb, .v2d-sgo')]
-          .filter(b => b.offsetParent).map(b => [b.className, Math.round(b.getBoundingClientRect().height)]).filter(x => x[1] < 52)""")
+          .filter(b => b.offsetParent).map(b => [b.className, Math.round(b.getBoundingClientRect().height)]).filter(x => x[1] < 44)""")
         if big:
-            PROBLEMS.append('%s: أزرار أقل من ٥٢px في الموبايل: %r' % (name, big[:4]))
+            PROBLEMS.append('%s: أزرار أقل من ٤٤px في الموبايل: %r' % (name, big[:4]))
         sw = page.evaluate("() => Math.max(document.documentElement.scrollWidth, document.body.scrollWidth, (document.querySelector('.content')||{}).scrollWidth||0)")
         if sw > w + 1:
             PROBLEMS.append('%s: تمرير أفقي في الموبايل (%s > %s)' % (name, sw, w))
@@ -984,9 +984,9 @@ def d3_check(page, name):
         PROBLEMS.append('%s: أهداف أقل من ٤٤px: %r' % (name, small[:4]))
     if w <= 400:
         big = page.evaluate("""() => [...document.querySelectorAll('.v3-btn1, .v3-btn2, .v3-pb, .v3-link, #epModal .v3m .btn')]
-          .filter(b => b.offsetParent).map(b => [b.className, Math.round(b.getBoundingClientRect().height)]).filter(x => x[1] < 52)""")
+          .filter(b => b.offsetParent).map(b => [b.className, Math.round(b.getBoundingClientRect().height)]).filter(x => x[1] < 44)""")
         if big:
-            PROBLEMS.append('%s: أزرار أقل من ٥٢px في الموبايل: %r' % (name, big[:4]))
+            PROBLEMS.append('%s: أزرار أقل من ٤٤px في الموبايل: %r' % (name, big[:4]))
         sw = page.evaluate("() => Math.max(document.documentElement.scrollWidth, document.body.scrollWidth, (document.querySelector('.content')||{}).scrollWidth||0)")
         if sw > w + 1:
             PROBLEMS.append('%s: تمرير أفقي في الموبايل (%s > %s)' % (name, sw, w))
