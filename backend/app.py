@@ -2700,6 +2700,9 @@ except Exception: logger.exception('v2 brain routes not loaded')
 try:   # العقل الجولة ٢ (SPEC docs/v2/brain2): تحميل محروس
     import v2_brain2_routes as _v2_brain2; _v2_brain2.register(app, globals())
 except Exception: logger.exception('v2 brain2 routes not loaded')
+try:   # العقل: «المفاتيح والكاتب» (SPEC-B B1): تحميل محروس
+    import v2_brain2_keys_routes as _v2_brain2_keys; _v2_brain2_keys.register(app, globals())
+except Exception: logger.exception('v2 brain2 keys routes not loaded')
 
 
 def _v2_brain2_kick(trigger='cron'):
@@ -7461,8 +7464,97 @@ def _ai_reserve_call():
                       'counter_error': type(exc).__name__}
 
 
+def _ai_db_chain():
+    """مفاتيح «المفاتيح والكاتب» من القاعدة: [الأساسي، الاحتياطي] القابلان للقراءة. أي عطل (جدول/سياق/تشفير) ⇒ [] فيكمل السلوك القديم (البيئة)."""
+    try:
+        from brain2 import keys as _bk
+        return _bk.active_chain(db)
+    except Exception as exc:   # noqa: BLE001
+        try:
+            db.session.rollback()
+        except Exception:
+            pass
+        logger.warning('brain keys chain unavailable (%s) — falling back to env provider', type(exc).__name__)
+        return []
+
+
+def ai_writer_state():
+    """الكاتب الحالي: {'writer': 'main'|'backup'|None, 'label': اسم مفتاح القاعدة أو None, 'source': 'db'|'env'|None}.
+    مفتاح القاعدة يعلو على البيئة؛ بلا مفتاح في القاعدة ⇒ السلوك القديم (Claude أساسي وغيره احتياطي). ⛔ لا اسم مزوّد من البيئة يخرج."""
+    chain = _ai_db_chain()
+    if chain:
+        return {'writer': chain[0]['role'], 'label': chain[0]['label'], 'source': 'db'}
+    prov = ai_provider_in_use()
+    if not prov:
+        return {'writer': None, 'label': None, 'source': None}
+    return {'writer': 'main' if prov == 'anthropic' else 'backup', 'label': None, 'source': 'env'}
+
+
+def _ai_send_spec(spec, system_prompt, user_content):
+    """الناقلان المعروفان فقط (يُقرآن وقت النداء ليُستبدلا في الاختبارات). `spec` من `brain2.keys.row_spec`."""
+    if spec['kind'] == 'anthropic':
+        return call_anthropic(spec['api_key'], spec['model'], system_prompt, user_content)
+    return call_openai_compatible(spec['base_url'], spec['api_key'], spec['model'], system_prompt, user_content)
+
+
+def _ai_call_db_key(spec, system_prompt, user_content, purpose):
+    """نداء واحد بمفتاح من القاعدة. نفس أخطاء `ai_call`: kind='error' لأي فشل نقل، 'empty' لردّ فارغ."""
+    _AI_LAST['provider'], _AI_LAST['model'] = 'db:' + (spec.get('preset') or spec['kind']), spec['model']
+    try:
+        text = _ai_send_spec(spec, system_prompt, user_content)
+    except Exception as exc:   # noqa: BLE001
+        _AI_LAST['error'] = _ai_safe_error(exc)
+        _AI_LAST['error_at'] = datetime.datetime.utcnow().isoformat()
+        logger.error('AI call failed (%s, db-key=%s role=%s, model=%s): %s',
+                     purpose, spec['id'], spec['role'], spec['model'], _AI_LAST['error'])
+        raise AIUnavailable('تعذّر الاتصال بخدمة الذكاء', kind='error')
+    if not (text or '').strip():
+        _AI_LAST['error'] = f"empty reply (model={spec['model']})"
+        _AI_LAST['error_at'] = datetime.datetime.utcnow().isoformat()
+        logger.error('AI call returned an EMPTY reply (%s, db-key=%s role=%s, model=%s).',
+                     purpose, spec['id'], spec['role'], spec['model'])
+        raise AIUnavailable('ردّ فارغ من خدمة الذكاء', kind='empty')
+    _AI_LAST['error'] = None
+    _AI_LAST['ok_at'] = datetime.datetime.utcnow().isoformat()
+    return text
+
+
 def ai_call(system_prompt, user_content, purpose='ai'):
-    """**نقطة الاختناق الوحيدة**: كل مساعد ذكاء في اللوحة يمرّ من هنا وحدها.
+    """الترتيب (SPEC-B B1): مفتاح القاعدة `main` ⇒ عند خطأ/ردّ فارغ منه بديلٌ **واحد** فقط (`backup` من القاعدة، وإلا مزوّد البيئة) ويُسجَّل ⇒
+    وبلا مفاتيح في القاعدة: السلوك القديم بالبيئة كما هو. السقف اليومي و`max_tokens` والأخطاء كما هي، والبديل يُحسب من السقف (كلّف فعلًا)."""
+    chain = _ai_db_chain()
+    if not chain:
+        return _ai_call_env(system_prompt, user_content, purpose)
+    allowed, usage = _ai_reserve_call()
+    if not allowed:
+        raise AIUnavailable(
+            f"تجاوزنا سقف اليوم ({usage['cap']} نداء) — يعود تلقائيًّا بعد منتصف الليل UTC",
+            kind='cap')
+    try:
+        return _ai_call_db_key(chain[0], system_prompt, user_content, purpose)
+    except AIUnavailable as first:
+        if first.kind not in ('error', 'empty'):
+            raise
+        fallback = chain[1] if len(chain) > 1 else None
+        logger.error('AI fallback (%s): %s key %s failed (%s) — trying %s', purpose, chain[0]['role'], chain[0]['id'], first.kind,
+                     'the backup key' if fallback else 'the env provider')
+        if fallback is None:
+            if not ai_provider_in_use():
+                raise first
+            try:
+                return _ai_call_env(system_prompt, user_content, purpose)
+            except AIUnavailable as second:
+                if second.kind in ('no_key', 'cap'):
+                    raise first
+                raise
+        allowed, _usage = _ai_reserve_call()
+        if not allowed:
+            raise first
+        return _ai_call_db_key(fallback, system_prompt, user_content, purpose)
+
+
+def _ai_call_env(system_prompt, user_content, purpose='ai'):
+    """السلوك القديم كما كان: مزوّد البيئة وحده.
 
     كانت أربع نسخ متطابقة من اختيار المزوّد + النداء (`ask` · `courses/ai-draft` ·
     `goals-advisor` · `_agent_llm`)، فأي سقفٍ أو تسجيلٍ كان يحتاج أربع تعديلات

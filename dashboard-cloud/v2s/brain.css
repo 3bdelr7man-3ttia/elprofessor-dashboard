@@ -160,6 +160,40 @@
 .v2sb-na{padding:26px 16px}
 .v2sbm .v3-btn2{min-height:48px}
 
+/* —— المفاتيح والكاتب (SPEC-B B1) */
+.v2sb-keys{margin-bottom:14px}
+.v2sb-kl{display:grid;gap:10px;margin:2px 0 12px}
+.v2sb-kr{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px 14px;background:#fff;border:1px solid var(--line);border-radius:16px;padding:12px 14px}
+.v2sb-kr.bad{border-color:#E7B8C0;background:#FDF5F6}
+.v2sb-kt{flex:1 1 260px;min-width:0;display:grid;gap:3px}
+.v2sb-kh{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.v2sb-kh b{font:800 16px/1.6 'Cairo',sans-serif;color:var(--ink);overflow-wrap:anywhere;min-width:0}
+.v2sb-km{font-size:13.5px;line-height:1.7;color:var(--mute);overflow-wrap:anywhere}
+.v2sb-ks{font-size:13px;line-height:1.7;color:var(--mute);overflow-wrap:anywhere}
+.v2sb-ks.st-ok{color:#2F6B45;font-weight:700}
+.v2sb-ks.st-fail{color:#8E1228;font-weight:700}
+.v2sb-kact{display:flex;flex-wrap:wrap;gap:8px;flex:none}
+.v2sb-kb{min-height:44px;padding:0 16px}
+.v2sb-kdel{color:#8E1228}
+.v2sb-kadd{min-height:48px;min-width:160px}
+.v2sb-kadd:disabled{opacity:.55;cursor:not-allowed}
+.v2sb-keys .v2sb-none{margin:4px 0 12px}
+
+/* ورقة المفتاح */
+.v2sbk{display:grid;gap:12px}
+.v2sbk-pre{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.v2sbk-p{min-height:48px;padding:0 10px;border:1px solid var(--line);border-radius:12px;background:#fff;color:var(--ink);font:800 14.5px 'Cairo',sans-serif;cursor:pointer}
+.v2sbk-p:hover{background:rgba(158,43,78,.06)}
+.v2sbk-p[aria-checked="true"]{background:var(--wine);border-color:var(--wine);color:#fff}
+.v2sbk-f{display:grid;gap:5px;font:700 14px 'Cairo',sans-serif;color:var(--ink)}
+.v2sbk-f small{font:500 12.5px/1.7 'IBM Plex Sans Arabic','Cairo',sans-serif;color:var(--mute)}
+.v2sbk-f input{display:block;width:100%;min-height:48px;border:1px solid #E1D6C6;border-radius:12px;padding:0 14px;font:500 15px 'IBM Plex Sans Arabic','Cairo',sans-serif;background:#fff;color:var(--ink);box-sizing:border-box}
+.v2sbk-f input::placeholder{color:#9A9488}
+.v2sbk-f input:focus-visible{outline:3px solid rgba(158,43,78,.45);outline-offset:2px}
+#v2sbkUrlW[hidden]{display:none}
+.v2sbk-roles{display:flex;width:100%}
+.v2sbk-roles button{flex:1;min-width:0}
+
 /* —— تابلت ودونه: عرض واحد من اثنين */
 @media(max-width:1179px){
   .v2sb-top{flex-direction:column;align-items:stretch}
@@ -210,6 +244,12 @@
   .v2sbm .v3-btn2{min-height:52px}
   .v2sb-more{min-height:52px}
   .v2sb-master .v3-btn1{width:100%}
+  .v2sb-kact{width:100%}
+  .v2sb-kact .v3-btn2{flex:1 1 30%;min-height:52px;padding:0 8px}
+  .v2sbk-p{min-height:52px}
+  .v2sbk-roles button{min-height:52px}
+  .v2sbk-f input{min-height:52px}
+  .v2sb-kadd{width:100%;min-height:52px}
 }
 @media(prefers-reduced-motion:reduce){
   .v2sb-sk i{animation:none}

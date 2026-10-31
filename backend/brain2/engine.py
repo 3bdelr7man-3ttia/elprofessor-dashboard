@@ -306,15 +306,27 @@ def effective_mode(ns, p):
     return mode
 
 
-def writer_of(ns):
-    """'main' لو الكاتب الأساسي (Claude) · 'backup' لأي مزوّد آخر مضبوط · None لا أحد. لا اسم مزوّد يخرج أبدًا."""
+def writer_state(ns):
+    """{'writer': 'main'|'backup'|None, 'label': اسم مفتاح القاعدة|None}. مفتاح القاعدة يعلو؛ وبدونه السلوك القديم (البيئة)."""
+    try:
+        fn = ns.get('ai_writer_state')
+        if fn is not None:
+            st = fn()
+            return {'writer': st.get('writer'), 'label': st.get('label')}
+    except Exception:   # noqa: BLE001
+        pass
     try:
         prov = ns['ai_provider_in_use']()
     except Exception:
-        return None
+        return {'writer': None, 'label': None}
     if not prov:
-        return None
-    return 'main' if prov == 'anthropic' else 'backup'
+        return {'writer': None, 'label': None}
+    return {'writer': 'main' if prov == 'anthropic' else 'backup', 'label': None}
+
+
+def writer_of(ns):
+    """'main' لو الكاتب الأساسي · 'backup' للاحتياطي · None لا أحد. لا اسم مزوّد من البيئة يخرج أبدًا."""
+    return writer_state(ns)['writer']
 
 
 # ------------------------------------------------------------------ العدّادات

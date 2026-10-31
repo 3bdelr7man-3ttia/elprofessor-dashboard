@@ -47,6 +47,7 @@ COPY dashboard-cloud/v2s /app/dist/v2s
 COPY backend/v2_reports_routes.py /app/v2_reports_routes.py
 COPY backend/v2_brain_routes.py /app/v2_brain_routes.py
 COPY backend/v2_brain2_routes.py /app/v2_brain2_routes.py
+COPY backend/v2_brain2_keys_routes.py /app/v2_brain2_keys_routes.py
 COPY backend/brain2 /app/brain2
 COPY backend/v2_company_routes.py /app/v2_company_routes.py
 COPY backend/v2_roles_routes.py /app/v2_roles_routes.py
