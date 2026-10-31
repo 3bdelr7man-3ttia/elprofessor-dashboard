@@ -354,6 +354,7 @@
 
   function kindOf(r) {
     if (!r) return null;
+    if (r.apiKind === 'brain_item') return 'brain_item';       // brain2: اقتراح كتبه العقل (يُبنى بـv2bItemCard)
     if (r.apiKind === 'payout' || r.kind === 'payout') return 'payout';
     if (r.apiKind === 'stuck_payment') return 'stuck_payment';
     if (r.apiKind === 'book_offer') return 'book_offer';
@@ -509,6 +510,11 @@
     var amountLabel = str(r.amountLabel);
 
     switch (kind) {
+      case 'brain_item': {
+        // brain2: البطاقة جاهزة من `v2bItemCard` (آخر الملف). ما فيها صف وارد ولا شخص.
+        var mk = root.V2L && root.V2L.v2bItemCard;
+        return (mk && r.item) ? mk(r.item, now) : null;
+      }
       case 'file_waiting': case 'file_late': {
         var late = kind === 'file_late';
         var pre = f.status === 'awaiting_assignment';
@@ -783,6 +789,11 @@
     (Array.isArray(opts.offers) ? opts.offers : []).forEach(function (of) {
       if (!of || !of.id) return;
       src.push({ apiKind: 'book_offer', apiId: of.id, ref: of.id, offerRow: of, who: of.ownerName, ts: isFinite(of.at) ? of.at : undefined });
+    });
+    // brain2: اقتراحات العقل المنتظرة (proposed فقط) بطاقاتٌ في آخر الترتيب.
+    (Array.isArray(opts.brainItems) ? opts.brainItems : []).forEach(function (it) {
+      if (!it || !it.id || (it.status != null && it.status !== 'proposed')) return;
+      src.push({ apiKind: 'brain_item', apiId: it.id, ref: it.id, item: it, ts: ms(it.created_at) });
     });
     var Q = queue || null;
     if (Q) {
@@ -6292,3 +6303,204 @@
   if (typeof module !== 'undefined' && module.exports) module.exports.v2s = L.v2s;
 })(typeof window !== 'undefined' ? window : (typeof globalThis !== 'undefined' ? globalThis : this));
 // ===== /v2s:experts =====
+
+// ===== brain2 =====
+// «العقل» الجولة ٢ (SPEC docs/v2/brain2 §4.1): دوال نقية فقط — حقائق البطاقة المسموحة للرأي، وتزيين البطاقة برأي العقل أو بعلامة الجملة الثابتة،
+// وبطاقة اقتراح العقل. ⛔ لا DOM ولا شبكة ولا ساعة خفية (`now` يُمرَّر). الاسم والبريد والهاتف لا يخرجون من هنا أبدًا.
+(function (root) {
+  'use strict';
+  var L = root.V2L;
+  if (!L) return;
+  var UT = L.util;
+  var CLIENT = 'صاحب الطلب';
+
+  var MONEY = { payout: 1, manual_payment: 1, stuck_payment: 1, unactivated: 1, legacy: 1, file_attention: 1, dispute: 1 };
+  var DECIDE = { trainer: 1, join: 1, pending_user: 1, book_offer: 1, book: 1, creative: 1, topic: 1, program: 1 };
+  var INFO = { review: 1, lead: 1, message: 1, open_message: 1, course: 1, live: 1, verify: 1, founding: 1, other: 1 };
+  var RECOMMEND = { decide: ['approve', 'reject', 'open'], info: ['open', 'wait'] };
+  // المفاتيح المسموحة (SPEC §3.2): مشتركة + لكل نوع. الخادم يعيد التنقية بنفس القائمة.
+  var COMMON_KEYS = ['tag', 'age', 'sub', 'warn', 'reason', 'static_line', 'facts', 'money_text'];
+  var KIND_KEYS = {
+    dispute: ['objection', 'expert_reply', 'hours_held'],
+    trainer: ['headline', 'specialty', 'years', 'attachments'],
+    payout: ['method', 'dispute_check', 'fx_alert'],
+    book_offer: ['type', 'suggested_price', 'price_note'],
+    join: ['service', 'licensed', 'licence_missing'],
+    lead: ['body', 'topic'],
+    message: ['body', 'topic']
+  };
+  var MAXLEN = { sub: 160, warn: 120, reason: 140, static_line: 200, objection: 300, expert_reply: 300, body: 400, headline: 160, price_note: 120 };
+
+  function s_(v) { return typeof v === 'string' ? v.trim() : (typeof v === 'number' && isFinite(v) ? String(v) : ''); }
+  function bytes(o) { try { return unescape(encodeURIComponent(JSON.stringify(o))).length; } catch (e) { return 0; } }
+
+  // نص آمن: اسم العميل ⇒ «صاحب الطلب» · لا بريد · لا هاتف (٧ أرقام فأكثر متتالية) · لا «@».
+  function scrub(v, names, max) {
+    var s = s_(v);
+    if (!s) return '';
+    (names || []).forEach(function (n) { if (n && n.length >= 2) s = s.split(n).join(CLIENT); });
+    s = s.replace(/[^\s@<>()،؛,;]+@[^\s@<>()،؛,;]+/g, ' ').replace(/@/g, ' ');
+    s = s.replace(/\+?[0-9٠-٩](?:[\s\-().]*[0-9٠-٩])+/g, function (m) { return (m.match(/[0-9٠-٩]/g) || []).length >= 7 ? ' ' : m; });
+    s = s.replace(/https?:\/\/\S+/g, ' ').replace(/\s+/g, ' ').replace(/(\s·){2,}/g, ' ·').replace(/^[\s·—-]+|[\s·—-]+$/g, '');
+    if (max && s.length > max) s = s.slice(0, max).replace(/\s+\S*$/, '') + '…';
+    return s;
+  }
+  function namesOf(card) {
+    var r = (card && card.row) || {}, f = r.ef || {}, c = r.cons || {}, sk = r.stuck || {}, out = [];
+    [r.who, f.client_first_name, c.client_first_name, f.client_name, c.client_name, sk.name].forEach(function (n) {
+      n = s_(n);
+      if (n && n.length >= 2 && n !== CLIENT && n !== 'عميل' && n !== '—' && out.indexOf(n) < 0) out.push(n);
+    });
+    return out;
+  }
+  // العمر بحبيبة اليوم حتى لا يتغيّر مفتاح الرأي كل ساعة (كل تغيّر في الحقائق = رأي جديد).
+  function ageFact(t) {
+    t = s_(t);
+    if (!t) return '';
+    return /(يوم|أيام|يومين|يومًا)/.test(t) ? t : 'أقل من يوم';
+  }
+  function heldFact(card, now) {
+    var ts = Number(card && card.ts);
+    if (!now || !isFinite(ts)) return '';
+    var days = Math.floor(Math.max(0, now - ts) / 86400e3);
+    return days >= 1 ? 'أكثر من ' + UT.U(days, ['يوم واحد', 'يومين', 'أيام', 'يومًا']) : 'أقل من يوم';
+  }
+  function moneyOf(card) {
+    var r = (card && card.row) || {};
+    switch (card.kind) {
+      case 'payout': return UT.moneyText(r.raw && r.raw.amount != null ? r.raw.amount : r.amount, r.currency || 'EGP');
+      case 'manual_payment': return UT.moneyText(r.amount, r.currency || 'EGP');
+      case 'stuck_payment': return s_((r.stuck || {}).amountText);
+      case 'book_offer': return s_((r.offerRow || {}).suggestedText);
+      case 'dispute': case 'legacy': case 'unactivated': case 'file_attention': return s_(r.amountLabel);
+      default: return '';
+    }
+  }
+
+  // v2bFacts(card, now?) ⇒ {kind, card_id, facts} أو null لما لا يحمل رأيًا (ملفات الخبراء تبقى بمرشّحها القائم).
+  function v2bFacts(card, now) {
+    if (!card || !card.kind || !card.id) return null;
+    var kind = card.kind;
+    if (!MONEY[kind] && !DECIDE[kind] && !INFO[kind]) return null;
+    var r = card.row || {}, f = r.ef || {}, c = r.cons || {}, names = namesOf(card), out = {};
+    function put(k, v, max) {
+      if (typeof v === 'boolean') { out[k] = v; return; }
+      if (typeof v === 'number') { if (isFinite(v) && v > 0) out[k] = v; return; }
+      var t = scrub(v, names, max || MAXLEN[k] || 120);
+      if (t) out[k] = t;
+    }
+    put('tag', card.tag, 60);
+    var age = ageFact(card.ageText); if (age) out.age = age;
+    put('sub', card.sub); put('warn', card.warn); put('reason', card.reason); put('static_line', card.brain);
+    var fl = (Array.isArray(card.facts) ? card.facts : []).map(function (x) {
+      var v = x && scrub(s_(x.k) + ': ' + s_(x.v), names, 70);
+      return x && x.k && x.v ? v : '';
+    }).filter(Boolean).slice(0, 4);
+    if (fl.length) out.facts = fl;
+    var mt = moneyOf(card); if (mt) out.money_text = mt;
+    switch (kind) {
+      case 'dispute': {
+        var d = f.dispute || {};
+        put('objection', r.note || r.sub2);
+        put('expert_reply', d.expert_reply || d.expert_note || f.expert_reply || c.expert_reply);
+        var h = heldFact(card, now); if (h) out.hours_held = h;
+        break;
+      }
+      case 'trainer': put('headline', r.trHeadline); put('specialty', r.trSpec, 80); put('years', s_(r.trYears), 30); put('attachments', Number(r.trAttach) || 0); break;
+      case 'payout': {
+        put('method', s_(r.raw && r.raw.method) || s_(r.dest), 80);
+        out.dispute_check = /نزاع مفتوح/.test(card.warn || '') ? 'يوجد نزاع مفتوح على صاحب الطلب' : (/^روجعت النزاعات/.test(card.reason || '') ? 'لا نزاع مفتوحًا على صاحب الطلب كخبير' : 'لم يكتمل فحص النزاعات');
+        if (r.fx_alert) out.fx_alert = 'العملة ليست الجنيه';
+        break;
+      }
+      case 'book_offer': { var of = r.offerRow || {}; put('type', of.typeText, 40); put('suggested_price', of.suggestedText, 60); put('price_note', of.priceNote); break; }
+      case 'join': put('service', r.serviceLabel || r.from, 80); out.licensed = !!r.licensed; out.licence_missing = !!r.licenceMissing; break;
+      case 'lead': case 'message': put('body', r.body || r.note); put('topic', r.topic, 80); break;
+    }
+    // الأمان الأخير: لا مفتاح خارج القائمة، والحجم تحت الحد (الخادم يرفض فوق ٣ كيلوبايت).
+    var allowed = COMMON_KEYS.concat(KIND_KEYS[kind] || []);
+    Object.keys(out).forEach(function (k) { if (allowed.indexOf(k) < 0) delete out[k]; });
+    var guard = 0;
+    while (bytes(out) > 2400 && guard++ < 40) {
+      var big = Object.keys(out).filter(function (k) { return typeof out[k] === 'string'; }).sort(function (a, b) { return out[b].length - out[a].length; })[0];
+      if (!big) break;
+      out[big] = out[big].length > 40 ? out[big].slice(0, Math.floor(out[big].length / 2)) + '…' : '';
+      if (!out[big]) delete out[big];
+    }
+    return { kind: kind, card_id: card.id, facts: out };
+  }
+
+  var MARK = {
+    failed: 'جملة ثابتة: تعذّرت كتابة رأي العقل الآن',
+    cap: 'جملة ثابتة: بلغ العقل حدّ كتابته اليوم',
+    off: 'جملة ثابتة: رأي العقل متوقّف من القواعد',
+    busy: 'جملة ثابتة: العقل مشغول بكتابة أخرى الآن',
+    loading: 'يكتب العقل رأيه…'
+  };
+  function isReject(a) { return !!a && (a.do === 'offer_reject' || a.do === 'payout_reject' || a.do === 'pay_reject' || (a.do === 'decide' && a.action === 'reject')); }
+  function isOpenAct(a) { return !!a && (a.do === 'open' || a.do === 'goto' || a.do === 'section'); }
+  function recGroup(kind) { return DECIDE[kind] ? 'decide' : (INFO[kind] ? 'info' : ''); }
+  // يبدّل الزر الأساسي بالثانوي القائم فقط لو الثانوي هو الفعل المطلوب. لا فعل جديد يُخترع هنا أبدًا.
+  function remap(c, rec) {
+    var p = c.primary, s = c.secondary;
+    var pred = rec === 'reject' ? isReject : (rec === 'open' ? isOpenAct : null);
+    if (!pred || !p || !s || !p.act || !s.act || pred(p.act) || !pred(s.act) || (p.money || s.money)) return false;
+    c.primary = s; c.secondary = p; c.remapped = rec;
+    return true;
+  }
+
+  // v2bDecorate(card, entry, now) ⇒ نسخة من البطاقة. entry = {state:'none'|'loading'|'ready'|'off'|'cap'|'busy'|'failed', item, remap?}
+  function v2bDecorate(card, entry, now) {
+    var c = Object.assign({}, card || {});
+    c.src = { text: '', tone: '' };
+    if (!card || !(MONEY[card.kind] || DECIDE[card.kind] || INFO[card.kind])) return c;   // نوع بلا رأي (ملفات الخبراء · نوع غير معروف): كما هي
+    entry = entry || { state: 'none' };
+    var st = entry.state, it = entry.item, b = it && it.body && typeof it.body === 'object' ? it.body : null;
+    if (st === 'ready' && b && s_(b.text)) {
+      c.brain = s_(b.text);
+      c.brainHead = 'رأي العقل';
+      if (s_(b.why)) c.reason = s_(b.why);
+      var ago = UT.agoText(it.created_at, now);
+      c.src = { text: 'كتبه العقل ' + (ago || 'الآن'), tone: 'ai' };
+      if (!MONEY[card.kind] && entry.remap !== false && c.primary && c.secondary) {
+        var g = recGroup(card.kind), rec = s_(b.recommend);
+        if (g && RECOMMEND[g].indexOf(rec) > -1 && (rec === 'reject' || rec === 'open')) remap(c, rec);
+      }
+      return c;
+    }
+    if (st === 'loading') c.src = { text: MARK.loading, tone: 'wait' };
+    else if (MARK[st] && st !== 'loading') c.src = { text: MARK[st], tone: 'static' };
+    return c;
+  }
+
+  var SEC_IMG = { home: 'brain', files: 'files', disputes: 'disputes', courses: 'courses', market: 'market', books: 'books', people: 'people', money: 'money',
+                  content: 'content', marketing: 'marketing', reports: 'reports', brain: 'brain', company: 'company' };
+  var FIELD_LABEL = { title: 'العنوان', body: 'النص' };
+  // v2bItemCard(item, now) ⇒ بطاقة قرار لاقتراح العقل (مسودة: اعتمد/عدّل/ارفض · ملاحظة: احتفظ بها/احذفها).
+  function v2bItemCard(item, now) {
+    if (!item || !item.id) return null;
+    var b = item.body && typeof item.body === 'object' ? item.body : {};
+    var note = item.kind === 'note';
+    var t = Date.parse(item.created_at || '');
+    var fields = [];
+    if (b.fields && typeof b.fields === 'object') Object.keys(b.fields).forEach(function (k) { if (FIELD_LABEL[k] && s_(b.fields[k])) fields.push({ k: FIELD_LABEL[k], v: s_(b.fields[k]) }); });
+    var card = {
+      id: 'brain_item|' + item.id, kind: 'brain_item', group: 900, tag: s_(item.tag) || (note ? 'ملاحظة العقل' : 'اقتراح العقل'),
+      title: s_(item.target_label) || (note ? 'ملاحظة' : 'اقتراح'), sub: '', brain: s_(b.text), brainHead: 'ما كتبه العقل', reason: '', warn: '',
+      ageText: isNaN(t) ? '' : UT.agoText(t, now), ts: isNaN(t) ? Infinity : t,
+      primary: { label: note ? 'احتفظ بها' : (s_(item.approve_label) || 'اعتمد'), act: { do: 'brain_approve', id: item.id } },
+      secondary: { label: note ? 'احذفها' : 'ارفض', act: { do: 'brain_reject', id: item.id } },
+      edit: note ? null : { label: 'عدّل', act: { do: 'brain_edit', id: item.id } },
+      open: { do: 'open' }, link: null, facts: [], fields: fields, img: SEC_IMG[item.section] || 'brain',
+      brainItem: item, src: { text: '', tone: '' }, row: { apiKind: 'brain_item', item: item }
+    };
+    return card;
+  }
+
+  L.v2bFacts = v2bFacts;
+  L.v2bDecorate = v2bDecorate;
+  L.v2bItemCard = v2bItemCard;
+  L.v2bMarks = MARK;
+  if (typeof module !== 'undefined' && module.exports) { module.exports.v2bFacts = v2bFacts; module.exports.v2bDecorate = v2bDecorate; module.exports.v2bItemCard = v2bItemCard; }
+})(typeof window !== 'undefined' ? window : (typeof globalThis !== 'undefined' ? globalThis : this));
+// ===== /brain2 =====

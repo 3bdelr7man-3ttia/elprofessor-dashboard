@@ -155,7 +155,8 @@
     }, 700);
   }
   function signature() {
-    return ['inbox', 'opsQueue', 'pendingUsers', 'escrow'].map(stateOf).join(',') + '|' + rowsAll().length + '|' + failedList().length + '|' + (ctxNow());
+    return ['inbox', 'opsQueue', 'pendingUsers', 'escrow'].map(stateOf).join(',') + '|' + rowsAll().length + '|' + failedList().length + '|' + (ctxNow())
+      + (window.V2BRAIN && window.V2BRAIN.sig ? '|' + window.V2BRAIN.sig() : '');
   }
 
   // إعادة رسم خفيفة (البحث وتحميل المصادر): الرأس والشرائح والقائمة فقط — لا نلمس الدرج لئلا يضيع ما يُكتب فيه
@@ -286,6 +287,8 @@
   function ticketHtml(it, sel) {
     var c = it.card || { tag: 'بند', title: str(it.row.who) || 'بند ينتظر قرارك', sub: '', brain: '', ageText: '' };
     var btn = L.v2hTicketBtn(it.card);
+    // brain2: رأي العقل من الذاكرة فقط (لا طلب رأي جديد من التذكرة) وبلا تبديل لزرّها. أي عطل ⇒ السطر القديم كما هو.
+    if (it.card && window.V2BRAIN) { try { c = window.V2BRAIN.decorate(it.card, { remap: false }) || it.card; } catch (e) { c = it.card; } }
     var flags = L.v2hFlags(it.row), warn = L.v2hWarn(it.row);
     var title = esc(c.title);
     if (c.person && window.V2D2 && window.V2D2.link) title = window.V2D2.link(c.title, c.person.email);
@@ -295,7 +298,8 @@
       + (c.sub ? '<p class="v2h-sub">' + esc(c.sub) + '</p>' : '')
       + (flags.length ? '<div class="v2h-flags">' + flags.map(function (f) { return '<span class="v2h-flag' + (f.w ? ' w' : '') + '"' + (f.tip ? ' title="' + esc(f.tip) + '"' : '') + '>' + esc(f.t) + '</span>'; }).join('') + '</div>' : '')
       + (warn ? '<p class="v2h-warn">' + esc(warn) + '</p>' : '')
-      + (c.brain && c.brain !== c.tag && c.brain !== c.sub ? '<p class="v2h-brain"><img src="' + img('brain-avatar') + '" alt=""><span>' + esc(c.brain) + '</span></p>' : '')
+      + (c.brain && c.brain !== c.tag && c.brain !== c.sub ? '<p class="v2h-brain"><img src="' + img('brain-avatar') + '" alt=""><span>' + esc(c.brain)
+          + (c.src && c.src.text ? '<span class="v2b-src ' + esc(c.src.tone || '') + '">' + esc(c.src.text) + '</span>' : '') + '</span></p>' : '')
       + (it.row.amountLabel ? '<span class="v2h-amt">' + esc(it.row.amountLabel) + '</span>' : '')
       + '</div><div class="v2h-tfoot"><button type="button" class="v2h-btn1" data-a="t1" data-i="' + it.idx + '" aria-label="' + esc(btn.label + ': ' + c.title) + '">' + esc(btn.label) + '</button></div></article>';
     return h;
@@ -307,6 +311,7 @@
     var el = document.getElementById('rows'); if (!el) return;
     var st = inboxStatus(), failed = failedList(), sel = getSel();
     var items = b.shown, h = '';
+    if (window.V2BRAIN && items.length) { try { window.V2BRAIN['prefetch'](items.slice(0, 40).map(function (it) { return it.card; }).filter(Boolean)); } catch (e) {} }   // مفتاح نصّي: فحص «لا شبكة هنا» يمنع الكلمة مع القوس
     var inN = document.getElementById('inboxN'); if (inN) inN.textContent = String(items.length);
     if (!items.length) {
       var ctxDefault = CTX_DEFAULT[ctx] || 'all';
