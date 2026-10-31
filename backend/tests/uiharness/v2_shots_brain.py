@@ -14,6 +14,7 @@ import json
 import os
 import re
 import sys
+from urllib.parse import parse_qsl, urlparse
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, _HERE)
@@ -135,7 +136,13 @@ def open_brain(ctx, rec, hash_='#s/brain/log'):
     return page
 
 
+B2_KEYS = ('items', 'writer', 'used', 'cap', 'active', 'down')
+
+
 def setup(h, dash_kw=None, **kw):
+    """`items/writer/used/cap/active/down` تذهب لمسارات العقل الجديدة المزيّفة (`Brain2Fake`)، والباقي للمنصة."""
+    b2 = {k: kw.pop(k) for k in B2_KEYS if k in kw}
+    h.b2 = bfx.Brain2Fake(**b2)
     h.ef = bfx.BrainPlatform(**kw)
     bfx.seed_brain_dash(h.app, **(dash_kw or {}))
     h.hold.clear()
@@ -199,8 +206,8 @@ def flow(browser, h, pre, viewport, mobile):
         PROBLEMS.append(pre + '01: التبويبات %r' % info['tabs'])
     if mobile:
         opened = [g for g in info['groups'] if g[1] == 'true']
-        if [g[0] for g in opened] != ['ملفات الخبراء والاستشارات']:
-            PROBLEMS.append(pre + '01: على الموبايل لازم المجموعة الأولى مفتوحة فقط: %r' % info['groups'])
+        if [g[0] for g in opened] != ['ما يكتبه العقل', 'ملفات الخبراء والاستشارات']:
+            PROBLEMS.append(pre + '01: على الموبايل لازم «ما يكتبه العقل» و«ملفات الخبراء» مفتوحتين فقط: %r' % info['groups'])
     b_shot(page, pre + '01-rules-log.jpg')
     b_full(page, pre + '01c-rules-log-full.jpg')
     if not desk:
@@ -353,6 +360,179 @@ def flow(browser, h, pre, viewport, mobile):
     b_shot(page, pre + '07-empty-day.jpg')
     page.close()
 
+    # ============================================================ 18-21 · ما يكتبه العقل (الجولة الثانية — SPEC brain2 §4.4)
+    setup(h)
+    rec4 = Rec()
+    page = open_brain(browser_ctx(browser, h, tall, mobile), rec4)
+    page.wait_for_function("() => document.querySelectorAll('.v2sb-md').length === 8", timeout=15000)
+    info = page.evaluate("""() => ({grp: [...document.querySelectorAll('.v2sb-gh')].map(b => [b.querySelector('.v2sb-gt').textContent, b.getAttribute('aria-expanded')]),
+      hint: (document.querySelector('.v2sb-whint') || {}).textContent,
+      rows: [...document.querySelectorAll('.v2sb-row.has-md')].map(r => ({id: r.getAttribute('data-key'), title: r.querySelector('.v2sb-rt').textContent,
+        radios: [...r.querySelectorAll('[role=radio]')].map(b => [b.textContent, b.getAttribute('aria-checked')]), group: r.querySelector('[role=radiogroup]').getAttribute('aria-label'), st: r.querySelector('.v2sb-st').textContent})),
+      run: (document.querySelector('.v2sb-runbtn') || {}).textContent, runOff: !!(document.querySelector('.v2sb-runbtn') || {}).disabled})""")
+    rows = {r['id']: r for r in info['rows']}
+    if info['grp'][0] != ['ما يكتبه العقل', 'true'] or info['hint'] != 'اقتراحات يكتبها العقل من بيانات حقيقية' or len(rows) != 8:
+        PROBLEMS.append(pre + '18: مجموعة «ما يكتبه العقل» %r' % info['grp'])
+    if rows['w:opinion']['radios'] != [['وحده', 'true'], ['متوقّف', 'false']]:
+        PROBLEMS.append(pre + '18: الرأي لازم «وحده | متوقّف»: %r' % rows['w:opinion']['radios'])
+    for k, reason in (('w:reply_draft', 'يسألك دائمًا لأن الرد يصل إلى صاحب الرسالة.'), ('w:course_review', 'يسألك دائمًا لأن النشر يظهر للناس.'),
+                      ('w:market_match', 'يسألك دائمًا لأنه يغيّر بيانات الطلب على المنصة.')):
+        if rows[k]['radios'] != [['يسألني', 'true'], ['متوقّف', 'false']] or rows[k]['st'] != reason:
+            PROBLEMS.append(pre + '18: المقفول %s لازم «يسألني | متوقّف» وسطر السبب: %r' % (k, rows[k]))
+    for k in ('w:seo_notes', 'w:campaign_comment', 'w:weekly_read', 'w:forecast_comment'):
+        if rows[k]['radios'] != [['وحده', 'true'], ['يسألني', 'false'], ['متوقّف', 'false']]:
+            PROBLEMS.append(pre + '18: %s لازم ثلاثة خيارات: %r' % (k, rows[k]['radios']))
+    if rows['w:seo_notes']['group'] != 'ملاحظات الظهور في البحث على المسودات' or info['run'] != 'اكتب الاقتراحات الآن' or info['runOff']:
+        PROBLEMS.append(pre + '18: اسم المجموعة أو زرّ الكتابة %r' % info['run'])
+    page.evaluate("() => document.querySelector('.v2sb-rules').scrollIntoView({block: 'start'})")
+    b_shot(page, pre + '18-switches.jpg', keep_scroll=True)
+    page.evaluate("() => document.querySelector('.v2sb-runnow').scrollIntoView({block: 'center'})")
+    b_shot(page, pre + '18b-switches-run-button.jpg', keep_scroll=True)
+    # تغيير اختيار: ورقة التأكيد ⇐ PUT بـconfirmed ⇐ «حُفظ الاختيار»
+    page.evaluate("() => document.querySelector('.v2sb-row[data-key=\"w:seo_notes\"]').scrollIntoView({block: 'center'})")
+    page.click('.v2sb-row[data-key="w:seo_notes"] [role=radio].off')
+    page.wait_for_selector('#epModal .v2sbm #v2sbGo')
+    cf = txt(page, '#epModal')
+    if 'يتوقف العقل عن كتابة «ملاحظات الظهور في البحث على المسودات»' not in cf or 'نعم، أوقفه' not in cf:
+        PROBLEMS.append(pre + '18: ورقة تأكيد الإيقاف «%s»' % cf[:200])
+    if h.b2.writes:
+        PROBLEMS.append(pre + '18: الاختيار اتغيّر قبل التأكيد')
+    b_shot(page, pre + '18c-mode-confirm.jpg')
+    n0 = len(rec4.writes)
+    page.click('#v2sbGo')
+    page.wait_for_function("() => !document.getElementById('epModal')", timeout=15000)
+    page.wait_for_function("() => document.querySelector('.v2sb-row[data-key=\"w:seo_notes\"] [role=radio].off[aria-checked=\"true\"]')", timeout=15000)
+    puts = [x for x in rec4.writes[n0:] if x[0] == 'PUT' and x[1] == '/api/v2/brain/switches/seo_notes']
+    if len(puts) != 1 or json.loads(puts[0][2]) != {'mode': 'off', 'confirmed': True} or h.b2.modes['seo_notes'] != 'off':
+        PROBLEMS.append(pre + '18: PUT الاختيار %r' % puts)
+    if 'حُفظ الاختيار' not in page.inner_text('#toasts'):
+        PROBLEMS.append(pre + '18: توست «حُفظ الاختيار» غايب')
+    # ورقة قاعدة مقفولة: الجملة + سبب القفل + «أين ترى نتيجته»
+    page.evaluate("() => document.querySelector('.v2sb-row[data-key=\"w:reply_draft\"]').scrollIntoView({block: 'center'})")
+    page.click('.v2sb-row[data-key="w:reply_draft"] .v2sb-rt')
+    page.wait_for_selector('#epModal .v2sbm #v2sbGo')
+    sheet = txt(page, '#epModal')
+    for need in ('عندما تصل رسالة أو طلب تواصل، يكتب العقل مسودة رد تراجعها قبل أن تصل إلى صاحبها.', 'يسألك دائمًا لأن الرد يصل إلى صاحب الرسالة.', 'أين ترى نتيجته', 'افتح الناس والدعوات'):
+        if need not in sheet:
+            PROBLEMS.append(pre + '19: ورقة القاعدة المقفولة ينقصها «%s»' % need)
+    b_shot(page, pre + '19-locked-sheet.jpg')
+    page.click('#v2sbGo')
+    page.wait_for_function("() => location.hash.indexOf('#s/people') === 0", timeout=15000)
+    writes_ok(rec4, pre + '18-19')
+    page.close()
+
+    # —— 20 · سجل اليوم بعناصر العقل
+    setup(h, entries=False, items=bfx.brain2_items())
+    rec5 = Rec()
+    page = open_brain(browser_ctx(browser, h, tall, mobile), rec5)
+    page.wait_for_function("() => document.querySelector('.v2sb-log-card').textContent.indexOf('كتب رأيه في') >= 0", timeout=15000)
+    line = txt(page, '.v2sb-line')
+    if not line.startswith('ينتظرك من العقل: اقتراحان') or 'ابدأ القرارات' not in line:
+        PROBLEMS.append(pre + '20: سطر العقل 2b «%s»' % line)
+    seg(page, 'log')
+    got = page.evaluate("() => [...document.querySelectorAll('.v2sb-lr')].map(r => [r.querySelector('.v2sb-lt > span').textContent, (r.querySelector('.v2sb-la') || {}).textContent || ''])")
+    want = {'كتب ملاحظة على «مقال: عقود الإيجار التجاري»': 'احذفها', 'كتب ملاحظة على «حملة الإيجار — فيسبوك»': 'احذفها',
+            'اقترح «مسودة رد» على «رسالة من منى عن موعد الاستشارة»': 'افتح', 'اقترح «مراجعة دورة» على «دورة أساسيات التسويق القانوني»': 'افتح',
+            'نُفّذ «ربط بدورة» على «طلب: تدريب على عقود العمل» بموافقتك': '', 'رُفض اقتراح على «رسالة من كريم»': '',
+            'حُذفت ملاحظة على «مقال: نفقة الزوجة»': '', 'تعذّرت الكتابة عن «الأسبوع الماضي»': '', 'كتب رأيه في ٣ قرارات': ''}
+    have = {t: a for t, a in got}
+    for t, a in want.items():
+        if t not in have or have[t] != a:
+            PROBLEMS.append(pre + '20: صف السجل «%s» (الإجراء «%s») غير موجود أو إجراؤه خطأ: %r' % (t, a, got))
+    if sum(1 for t, a in got if t.startswith('كتب رأيه في')) != 1 or any('بياناتي' in t for t, a in got):
+        PROBLEMS.append(pre + '20: الآراء لازم صف واحد مجمَّع')
+    if h.b2.item_queries and not (h.b2.item_queries[0].get('status') == 'all' and re.match(r'^\d{4}-\d\d-\d\dT', h.b2.item_queries[0].get('since', ''))):
+        PROBLEMS.append(pre + '20: استعلام العناصر %r' % h.b2.item_queries[:1])
+    b_shot(page, pre + '20-log-items.jpg')
+    b_full(page, pre + '20c-log-items-full.jpg')
+    # حذف ملاحظة: ورقة ثم توست ثم تتحول لصف «حُذفت»
+    page.click('.v2sb-lr:has-text("عقود الإيجار التجاري") .v2sb-la')
+    page.wait_for_selector('#epModal .v2sbm #v2sbGo')
+    if 'تُحذف هذه الملاحظة. لم تغيّر شيئًا في المنصة.' not in txt(page, '#epModal'):
+        PROBLEMS.append(pre + '20: نص ورقة الحذف «%s»' % txt(page, '#epModal')[:120])
+    b_shot(page, pre + '20b-discard-sheet.jpg')
+    n0 = len(rec5.writes)
+    page.click('#v2sbGo')
+    page.wait_for_function("() => !document.getElementById('epModal')", timeout=15000)
+    page.wait_for_function("() => [...document.querySelectorAll('.v2sb-lt > span')].some(s => s.textContent === 'حُذفت ملاحظة على «مقال: عقود الإيجار التجاري»')", timeout=15000)
+    posts = [x for x in rec5.writes[n0:] if x[0] == 'POST' and x[1] == '/api/v2/brain/items/bi-note-1/discard']
+    if len(posts) != 1 or json.loads(posts[0][2]) != {'confirmed': True}:
+        PROBLEMS.append(pre + '20: نداء الحذف %r' % posts)
+    if 'حُذفت الملاحظة' not in page.inner_text('#toasts'):
+        PROBLEMS.append(pre + '20: توست «حُذفت الملاحظة» غايب')
+    b_shot(page, pre + '20d-after-discard.jpg', keep_toast=True)
+    # «ابدأ القرارات» تفتح الرئيسية
+    page.click('.v2sb-line [data-a="goto"]')
+    page.wait_for_function("() => location.hash.indexOf('#s/home') === 0", timeout=15000)
+    writes_ok(rec5, pre + '20')
+    page.close()
+
+    # —— 21 · اكتب الاقتراحات الآن
+    setup(h)
+    rec6 = Rec()
+    page = open_brain(browser_ctx(browser, h, tall, mobile), rec6)
+    page.wait_for_function("() => document.querySelector('.v2sb-runbtn')", timeout=15000)
+    page.evaluate("() => document.querySelector('.v2sb-runnow').scrollIntoView({block: 'center'})")
+    page.click('.v2sb-runbtn')
+    page.wait_for_selector('#epModal .v2sbm #v2sbGo')
+    lead = txt(page, '#epModal .mc-lead')
+    if lead != 'يكتب العقل الآن ما ينقص من اقتراحات، بحد أقصى ٢٠ كتابة.' or 'نعم، ابدأ' not in txt(page, '#epModal'):
+        PROBLEMS.append(pre + '21: نص ورقة التشغيل «%s»' % lead)
+    if h.b2.writes:
+        PROBLEMS.append(pre + '21: نداء التشغيل قبل التأكيد')
+    b_shot(page, pre + '21-run-sheet.jpg')
+    n0 = len(rec6.writes)
+    page.click('#v2sbGo')
+    page.wait_for_function("() => !document.getElementById('epModal')", timeout=15000)
+    page.wait_for_function("() => document.querySelector('.v2sb-runbtn').disabled", timeout=15000)
+    runs = [x for x in rec6.writes[n0:] if x[0] == 'POST' and x[1] == '/api/v2/brain/run']
+    if len(runs) != 1 or json.loads(runs[0][2]) != {'confirmed': True}:
+        PROBLEMS.append(pre + '21: نداء التشغيل %r' % runs)
+    if 'بدأ العقل الكتابة' not in page.inner_text('#toasts') or 'العقل يكتب الآن' not in txt(page, '.v2sb-runnow'):
+        PROBLEMS.append(pre + '21: توست أو سبب التعطيل غايب')
+    b_shot(page, pre + '21b-run-active.jpg', keep_scroll=True, keep_toast=True)
+    writes_ok(rec6, pre + '21')
+    page.close()
+    # جولة جارية من قبل ⇒ الزرّ معطّل من أول لحظة · سقف اليوم ⇒ معطّل بسببه
+    setup(h, active=True)
+    page = open_brain(browser_ctx(browser, h, tall, mobile), Rec())
+    page.wait_for_function("() => document.querySelector('.v2sb-runbtn')", timeout=15000)
+    if not page.evaluate("() => document.querySelector('.v2sb-runbtn').disabled"):
+        PROBLEMS.append(pre + '21: جولة جارية والزرّ مفتوح')
+    page.close()
+    setup(h, used=60, cap=60)
+    page = open_brain(browser_ctx(browser, h, tall, mobile), Rec())
+    page.wait_for_function("() => document.querySelector('.v2sb-runbtn')", timeout=15000)
+    if not page.evaluate("() => document.querySelector('.v2sb-runbtn').disabled") or 'بلغ العقل حدّ كتابته اليوم' not in txt(page, '.v2sb-runnow'):
+        PROBLEMS.append(pre + '21: سقف اليوم لازم يعطّل الزرّ بسببه')
+    page.close()
+
+    # —— 22 · كل مصدر يفشل لوحده ⇒ «غير متاح بعد» لا صفر
+    setup(h, down={'/api/v2/brain/switches', '/api/v2/brain/items', '/api/v2/brain/runs/latest'})
+    page = open_brain(browser_ctx(browser, h, tall, mobile), Rec())
+    page.wait_for_function("() => document.querySelector('.v2sb-whint') && document.querySelector('.v2sb-whint').parentElement.querySelector('.v3-warn')", timeout=15000)
+    info = page.evaluate("""() => ({md: document.querySelectorAll('.v2sb-md').length, run: !!document.querySelector('.v2sb-runbtn'),
+      warn: document.querySelector('.v2sb-whint').parentElement.querySelector('.v3-warn').textContent,
+      log: document.querySelector('.v2sb-log-card').textContent})""")
+    if info['md'] or info['run'] or 'غير متاح بعد' not in info['warn'] or 'ما كتبه العقل اليوم: غير متاح بعد' not in info['log']:
+        PROBLEMS.append(pre + '22: المصادر الواقعة %r' % info)
+    b_shot(page, pre + '22-brain2-sources-down.jpg')
+    page.close()
+    page = open_brain(browser_ctx(browser, h, tall, mobile), Rec(), '#s/brain/helpers')
+    wd = page.evaluate("() => [...document.querySelectorAll('.v2sb-wdiscs .v2sb-disc b')].map(b => b.textContent)")
+    if wd != ['غير متاح بعد', 'غير متاح بعد']:
+        PROBLEMS.append(pre + '22: قرصا المساعدين لازم «غير متاح بعد» حين يقع المصدر: %r' % wd)
+    b_shot(page, pre + '22b-helpers-discs-down.jpg')
+    page.close()
+    for writer, expect in (('backup', 'الكاتب الاحتياطي'), (None, 'لا أحد')):
+        setup(h, writer=writer)
+        page = open_brain(browser_ctx(browser, h, tall, mobile), Rec(), '#s/brain/helpers')
+        page.wait_for_function("() => document.querySelector('.v2sb-wdiscs .v2sb-disc b').textContent !== 'غير متاح بعد'", timeout=15000)
+        got = page.inner_text('.v2sb-wdiscs .v2sb-disc b')
+        if got != expect:
+            PROBLEMS.append(pre + '22: قرص الكاتب %r بدل %r' % (got, expect))
+        page.close()
+
     # ============================================================ 10-14 · المساعدون
     setup(h)
     rec3 = Rec()
@@ -367,6 +547,9 @@ def flow(browser, h, pre, viewport, mobile):
         PROBLEMS.append(pre + '10: الترويسة %r' % info)
     if not info['line'].startswith('آخر صورة كاملة كُتبت'):
         PROBLEMS.append(pre + '10: سطر العقل «%s»' % info['line'])
+    wd = page.evaluate("() => [...document.querySelectorAll('.v2sb-wdiscs .v2sb-disc')].map(d => [d.querySelector('b').textContent, d.querySelector('span').textContent])")
+    if wd != [['الكاتب الأساسي', 'من يكتب الآن'], ['١٢ من ٦٠', 'كتابات العقل اليوم']]:
+        PROBLEMS.append(pre + '10: قرصا الكاتب وعدّاد اليوم %r' % wd)
     b_shot(page, pre + '10-helpers.jpg')
     b_full(page, pre + '10c-helpers-full.jpg')
     # 11 · ورقة تقرير مساعد
@@ -482,6 +665,26 @@ def main():
 
     appmod.ai_call = no_ai
     appmod.call_anthropic = no_ai
+
+    # مسارات العقل الجديدة (الباكدج P1 يبنيها في الخادم): تُجاب هنا من `Brain2Fake` فلا يعتمد اللقط على وجودها. باقي المسارات للتطبيق نفسه.
+    orig_api = h._api
+
+    def api(route):
+        req = route.request
+        u = urlparse(req.url)
+        b2 = getattr(h, 'b2', None)
+        if b2 is not None and b2.owns(u.path):
+            try:
+                body = json.loads(req.post_data) if req.post_data else None
+            except Exception:
+                body = None
+            out = b2.handle(req.method, u.path, dict(parse_qsl(u.query)), body)
+            if out is not None:
+                return route.fulfill(status=out[0], headers={'content-type': 'application/json'}, body=json.dumps(out[1], ensure_ascii=False))
+        return orig_api(route)
+
+    h._api = api
+    h.b2 = bfx.Brain2Fake()
 
     def fake_run(agent):
         meta = appmod.AI_AGENT_MAP.get(agent)

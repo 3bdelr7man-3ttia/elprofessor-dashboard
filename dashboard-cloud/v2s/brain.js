@@ -6,6 +6,8 @@
  *   `POST /api/ai/agents/run` من أزرار التشغيل وحدها (قفل واحد: ضغطة ثانية لا ترسل شيئًا). ولا نداء للدالتين الجاهزتين في dashboard-api.js
  *   (تشغيل المساعدين ومفتاح التوزيع) لأن نصوصهما عامية ولا تُرجعان وعدًا نكمل عليه.
  * ⛔ لا زرّ تراجع: لا فعل تلقائي له تراجع حقيقي بعد. الأمر الصادق للتوزيع الذي لم يُستلم هو «أرسله لخبير آخر» من درج الملف.
+ * الجولة الثانية (SPEC brain2 §4.4): مجموعة «ما يكتبه العقل» (`/v2/brain/switches` · PUT بتأكيد) · «اكتب الاقتراحات الآن» (`POST /v2/brain/run` بتأكيد) ·
+ *   صفوف السجل من `/v2/brain/items` وحذف الملاحظة (`POST …/discard` بتأكيد) · قرصا المساعدين. كل مصدر يفشل لوحده ⇒ «غير متاح بعد» لا صفر.
  * ========================================================================== */
 (function () {
   'use strict';
@@ -16,7 +18,7 @@
   var B = window.V2SEC.brain = {};
   var MODS = { v2s_brain: 1, ai: 1 };
   var S = { view: null, mod: '', sig: '', poll: null, minute: null, seg: 'rules', open: {}, expandLog: false, running: null, note: null, noteT: null,
-            ruleText: '', ruleErr: '', ruleBusy: false, switchBusy: false, nowOverride: 0, sheetAgent: '' };
+            ruleText: '', ruleErr: '', ruleBusy: false, switchBusy: false, nowOverride: 0, sheetAgent: '', modeBusy: false, wasActive: false };
   var FAIL_AR = 'تعذّر تنفيذ العملية';
   var SESSION_AR = 'انتهت الجلسة. سجّل الدخول من جديد ثم جرّب.';
   var NOREPLY_AR = 'لم يصل رد. حدّث الصفحة وتأكّد مما حدث قبل أن تضغط مرة أخرى.';
@@ -44,7 +46,10 @@
   var PATHS = {
     today: function () { return '/v2/brain/today?since=' + encodeURIComponent(new Date(L.v2sBrainSince(now())).toISOString()); },
     rules: function () { return '/v2/brain/rules'; },
-    status: function () { return '/v2/brain/helpers-status'; }
+    status: function () { return '/v2/brain/helpers-status'; },
+    switches: function () { return '/v2/brain/switches'; },
+    items: function () { return '/v2/brain/items?status=all&since=' + encodeURIComponent(new Date(L.v2sBrainSince(now())).toISOString()); },
+    run: function () { return '/v2/brain/runs/latest'; }
   };
   function srcOf(k) { return SRC[k] || (SRC[k] = { state: 'idle', data: null, at: 0, busy: false, status: 0 }); }
   function data(k) { var s = srcOf(k); return s.state === 'ready' ? s.data : null; }
@@ -74,6 +79,12 @@
   function agentsResp() { var E = ep(); return epReady('aiAgents') ? (E.data.aiAgents || null) : null; }
   function inviteSet() { var E = ep(); return epReady('inviteSettings') ? (E.data.inviteSettings || null) : null; }
   function sinceMs() { return L.v2sBrainSince(now()); }
+  // مصادر الجولة الثانية: null = لم تصل (جارية أو فاشلة)، لا قيمة مخترعة.
+  function swInfo() { return srcState('switches') === 'ready' ? L.v2sBrainSwitches(data('switches'), now()) : null; }
+  function itemsList() { return srcState('items') === 'ready' ? L.v2sBrainItems(data('items')) : null; }
+  function runState() { return L.v2sBrainRunState(srcState('run') === 'ready' ? data('run') : null, now()); }
+  function failedSrc(k) { var st = srcState(k); return st === 'error' || st === 'closed' || (st === 'ready' && (k === 'switches' ? !swInfo() : k === 'items' ? !itemsList() : false)); }
+  function pendingSrc(k) { var st = srcState(k); return st === 'idle' || st === 'loading'; }
 
   // سجل اليوم الواحد لكل المواضع: من B1، وإن فشل فمن صفوف الوارد المفتوحة (ناقص دائمًا ويُعلَن). بلا صفوف في الاحتياط ⇒ null (لا سجل فاضي كاذب).
   function entries() {
@@ -128,7 +139,7 @@
   function discNum(n, least) { return n == null ? NA : (n === 0 ? 'لا شيء' : (least ? 'على الأقل ' : '') + U.ar(n)); }
   function disc(v, label, na) { return '<div class="v2sb-disc' + (na ? ' na' : '') + (String(v).length > 5 ? ' long' : '') + '"><b>' + esc(v) + '</b><span>' + esc(label) + '</span></div>'; }
   function lineHtml(text, btn) {
-    return '<div class="v3-brain v2sb-line">' + AV + '<p>' + esc(text) + '</p>' + (btn ? '<button type="button" class="v3-btn2" data-a="goto" data-s="' + esc(btn.section) + '">' + esc(btn.label) + '</button>' : '') + '</div>';
+    return '<div class="v3-brain v2sb-line">' + AV + '<p>' + esc(text) + '</p>' + (btn ? '<button type="button" class="v3-btn2" data-a="goto" data-s="' + esc(btn.section) + '"' + (btn.deck ? ' data-deck="1"' : '') + '>' + esc(btn.label) + '</button>' : '') + '</div>';
   }
   // البريد الإلكتروني داخل جملة عربية يُعزل اتجاهيًا (وإلا يتبعثر ترتيب الكلمات حوله).
   function bidi(t) { return esc(t).replace(/[^\s<>&]+@[^\s<>&]+/g, function (m) { return '<bdi dir="ltr">' + m + '</bdi>'; }); }
@@ -159,16 +170,40 @@
   }
   function groupHtml(g, isOpen, count) {
     return '<div class="v2sb-grp' + (isOpen ? ' open' : '') + '"><button type="button" class="v2sb-gh" data-a="grp" data-g="' + esc(g.key) + '" aria-expanded="' + isOpen + '">'
-      + '<span class="v2sb-gt">' + esc(g.title) + '</span><span class="v2sb-gc">' + esc(U.ar(count)) + '</span>' + CHEV + '</button>'
+      + '<span class="v2sb-gt">' + esc(g.title) + '</span>' + (count == null ? '' : '<span class="v2sb-gc">' + esc(U.ar(count)) + '</span>') + CHEV + '</button>'
       + (isOpen ? '<div class="v2sb-rows">' + g.rowsHtml + '</div>' : '') + '</div>';
   }
   function isOpen(key) {
     if (S.open[key] !== undefined) return S.open[key];
+    if (key === 'writes') return true;
     return mobile() ? key === 'files' : true;
+  }
+  // —— مجموعة «ما يكتبه العقل»
+  function modeRow(r) {
+    var radios = r.options.map(function (o) {
+      return '<button type="button" role="radio" class="' + esc(o.value) + '" aria-checked="' + o.on + '" data-a="mode" data-id="' + esc(r.id) + '" data-v="' + esc(o.value) + '"' + (S.modeBusy ? ' disabled' : '') + '>' + esc(o.label) + '</button>';
+    }).join('');
+    return '<div class="v2sb-row has-md' + (r.locked ? ' locked' : '') + '" data-key="w:' + esc(r.id) + '">'
+      + '<button type="button" class="v2sb-rt" data-a="mrule" data-id="' + esc(r.id) + '">' + esc(r.title) + '</button>'
+      + '<div class="v2sb-ctl"><div class="v2sb-md" role="radiogroup" aria-label="' + esc(r.title) + '">' + radios + '</div></div>'
+      + '<p class="v2sb-st">' + bidi(r.line) + '</p></div>';
+  }
+  function writesGroup() {
+    var sw = swInfo(), hint = '<p class="v2sb-hint v2sb-whint">اقتراحات يكتبها العقل من بيانات حقيقية</p>', body, count = null;
+    if (pendingSrc('switches')) body = hint + skeleton(2);
+    else if (!sw) body = hint + '<div class="v3-warn" role="status">' + NA + '. ما يكتبه العقل لا نعرف حالته الآن. ' + retryBtn('retry-switches') + '</div>';
+    else {
+      var ri = L.v2sBrainRunInfo(sw, runState(), now());
+      count = sw.rows.length;
+      body = hint + sw.rows.map(modeRow).join('')
+        + '<div class="v2sb-runnow"><button type="button" class="v3-btn2 v2sb-runbtn" data-a="runnow"' + (ri.canStart ? '' : ' disabled') + '>اكتب الاقتراحات الآن</button>'
+        + (ri.reason ? '<p class="v2sb-hint v2sb-runwhy" role="status">' + esc(ri.reason) + '</p>' : '') + '</div>';
+    }
+    return { key: 'writes', title: 'ما يكتبه العقل', count: count, rowsHtml: body };
   }
   function rulesCard() {
     var st = srcState('rules'), res = L.v2sBrainRules(rulesInput());
-    var groups = res.groups.map(function (g) { return { key: g.key, title: g.title, count: g.rows.length, rowsHtml: g.rows.map(ruleRow).join('') }; });
+    var groups = [writesGroup()].concat(res.groups.map(function (g) { return { key: g.key, title: g.title, count: g.rows.length, rowsHtml: g.rows.map(ruleRow).join('') }; }));
     var req = (data('rules') && data('rules').requested) || [];
     if (req.length) groups.push({ key: 'requested', title: 'قواعد طلبتها', count: req.length, rowsHtml: req.map(requestedRow).join('') });
     var warn = (st === 'error' || st === 'closed') ? '<div class="v3-warn" role="status">تعذّر جلب حالة القواعد الآن. ما يظهر «' + NA + '» ليس معناه أنه متوقف. ' + retryBtn('retry-rules') + '</div>' : '';
@@ -185,19 +220,22 @@
     if (r.kind === 'file') text = esc(r.parts[0]) + personLink(r.parts[1], r.email) + esc(r.parts[2]);
     else text = esc(r.text);
     return '<li class="v2sb-lr' + (r.muted ? ' muted' : '') + '"><time>' + esc(r.time) + '</time><div class="v2sb-lt"><span>' + text + '</span>' + (r.why ? '<small>' + esc(r.why) + '</small>' : '') + '</div>'
-      + '<button type="button" class="v2sb-la" data-a="logact" data-i="' + i + '">' + esc(r.action.label) + '</button></li>';
+      + (r.action ? '<button type="button" class="v2sb-la" data-a="logact" data-i="' + i + '">' + esc(r.action.label) + '</button>' : '') + '</li>';
   }
   function logCard() {
     var ent = entries(), st = srcState('today'), body, notes = '';
-    var agents = agentsResp();
-    var rows = ent ? L.v2sBrainLogRows(ent, agents ? agents.agents : [], sinceMs()) : null;
+    var agents = agentsResp(), items = itemsList(), itemsBad = failedSrc('items');
+    var rows = (ent || items) ? L.v2sBrainLogRows(ent, agents ? agents.agents : [], sinceMs(), items) : null;
     S.logRows = rows || [];
     if (ent && ent.fromInbox) notes += '<div class="v3-warn" role="status">من الملفات المفتوحة فقط، وقد يكون السجل ناقصًا</div>';
     else if (ent && ent.missing) notes += '<div class="v3-warn" role="status">سجل التوزيع غير موجود على المنصة بعد</div>';
     else if (ent && ent.partial) notes += '<div class="v3-warn" role="status">معروض أحدث ' + U.ar(200) + ' ملف فقط، وقد يكون في سجل اليوم ما لم يظهر</div>';
-    if (st === 'idle' || st === 'loading') body = skeleton(3);
-    else if (!ent) body = '<div class="v3-empty"><b>تعذّر جلب سجل الملفات</b><p>لا نعرف ما وُزّع اليوم، فلا تعتبر السجل فارغًا.</p>' + retryBtn('retry-today') + '</div>';
-    else if (ent.missing && !rows.length) body = '<div class="v3-empty v2sb-na"><b>' + NA + '</b><p>لا نعرف ما وُزّع اليوم، فلا تعتبر السجل فارغًا.</p></div>';
+    if (itemsBad) notes += '<div class="v3-warn" role="status">ما كتبه العقل اليوم: ' + NA + '. قد يكون السجل ناقصًا. ' + retryBtn('retry-items') + '</div>';
+    else if (!ent && items && st !== 'idle' && st !== 'loading') notes += '<div class="v3-warn" role="status">سجل الملفات: ' + NA + '. قد يكون السجل ناقصًا. ' + retryBtn('retry-today') + '</div>';
+    if (st === 'idle' || st === 'loading' || (!ent && !items && pendingSrc('items'))) body = skeleton(3);
+    else if (!rows) body = '<div class="v3-empty"><b>تعذّر جلب سجل الملفات</b><p>لا نعرف ما وُزّع اليوم، فلا تعتبر السجل فارغًا.</p>' + retryBtn('retry-today') + '</div>';
+    else if (ent && ent.missing && !rows.length) body = '<div class="v3-empty v2sb-na"><b>' + NA + '</b><p>لا نعرف ما وُزّع اليوم، فلا تعتبر السجل فارغًا.</p></div>';
+    else if (!rows.length && itemsBad) body = '<div class="v3-empty v2sb-na"><b>' + NA + '</b><p>لا نعرف ما كتبه العقل اليوم، فلا تعتبر السجل فارغًا.</p></div>';
     else if (!rows.length) body = '<div class="v3-empty v2sb-empty"><img src="' + img('brain-avatar') + '" alt=""><b>لم يحدث شيء وحده اليوم حتى الآن</b></div>';
     else {
       var shown = S.expandLog ? rows : rows.slice(0, 12);
@@ -208,7 +246,7 @@
   }
   function drawRules(v) {
     var ent = entries(), Q = queue();
-    var line = L.v2sBrainLine({ queue: Q, settings: data('rules'), entries: ent });
+    var line = L.v2sBrainLine({ queue: Q, settings: data('rules'), entries: ent, proposed: L.v2sBrainProposed(itemsList()) });
     var loadingAll = ['today', 'rules'].some(function (k) { return srcState(k) === 'idle' || srcState(k) === 'loading'; }) || ['opsQueue', 'inbox'].some(function (k) { return epState(k) === 'idle' || epState(k) === 'loading'; });
     var least = !!(ent && (ent.partial || ent.fromInbox));
     var d1 = ent ? discNum(ent.autoCount, least) : NA, d2 = ent ? discNum(ent.changedCount, least) : NA;
@@ -244,17 +282,25 @@
         : '<p class="v2sb-none">لم تُكتب بعد. حدّثها بعد أن يكتب المساعدون تقاريرهم.</p>')
       + '<button type="button" class="v3-btn1 v2sb-run" data-a="hrun" data-run="master" data-label="حدّث الصورة الكاملة"' + (m.canRun ? '' : ' disabled') + '>' + esc(runLabel(m, 'حدّث الصورة الكاملة')) + '</button></section>';
   }
+  // قرصا «من يكتب الآن» و«كتابات العقل اليوم»: كل واحد من مصدره، والفاشل «غير متاح بعد».
+  function writerDiscs() {
+    var stt = data('status'), sw = swInfo(), writer, known = false;
+    if (stt && Object.prototype.hasOwnProperty.call(stt, 'writer') && (stt.writer === null || stt.writer === 'main' || stt.writer === 'backup')) { writer = stt.writer; known = true; }
+    else if (sw && sw.writer !== undefined) { writer = sw.writer; known = true; }
+    var w = L.v2sBrainWriterText(writer, known), t = L.v2sBrainWritesToday(sw ? sw.brainToday : null);
+    return '<div class="v2sb-discs v2sb-wdiscs">' + disc(w, 'من يكتب الآن', w === NA) + disc(t, 'كتابات العقل اليوم', t === NA) + '</div>';
+  }
   function drawHelpers(v) {
     var A = agentsResp(), st = data('status'), H = A ? L.v2sBrainHelpers(A, st, S.running ? S.running.id : null) : null;
     var loading = epState('aiAgents') === 'idle' || epState('aiAgents') === 'loading';
-    var head, body;
+    var head, body, wd = writerDiscs();
     if (loading) { head = lineHtml('…جارٍ جلب تقارير المساعدين', null); body = '<div class="v2sb-grid">' + skeleton(1) + skeleton(1) + skeleton(1) + '</div>'; }
     else if (!H) {
-      head = lineHtml('تعذّر جلب تقارير المساعدين', null);
+      head = '<div class="v2sb-hl">' + lineHtml('تعذّر جلب تقارير المساعدين', null) + wd + '</div>';
       body = '<div class="v3-empty"><b>تعذّر جلب تقارير المساعدين</b><p>لا نعرف ما كتبوه، فلا تعتبر الشاشة فارغة.</p>' + retryBtn('retry-agents') + '</div>';
     } else {
       var all = '<button type="button" class="v3-btn2 v2sb-run" data-a="hall" data-run="all" data-label="حدّث الكل"' + (H.canRunAll ? '' : ' disabled') + (H.runAllReason ? ' title="' + esc(H.runAllReason) + '"' : '') + '>' + (S.running && S.running.id === 'all' ? 'جارٍ الكتابة…' : 'حدّث الكل') + '</button>';
-      head = '<div class="v2sb-hl">' + lineHtml(L.v2sBrainHelpersLine(H, st, now()), null) + '<div class="v2sb-hdisc">' + disc(L.v2sBrainCap(st), 'تحديثات اليوم', !st) + all + '</div></div>'
+      head = '<div class="v2sb-hl">' + lineHtml(L.v2sBrainHelpersLine(H, st, now()), null) + '<div class="v2sb-hdisc">' + disc(L.v2sBrainCap(st), 'تحديثات اليوم', !st) + all + '</div>' + wd + '</div>'
         + (H.runAllReason ? '<p class="v2sb-why">' + esc(H.runAllReason) + '</p>' : '');
       body = masterCard(H) + '<div class="v2sb-grid">' + H.cards.filter(function (c) { return c.id !== 'master'; }).map(helperCard).join('') + '</div>';
     }
@@ -302,6 +348,108 @@
     if (!s) return;
     q('#v2sbX', s).onclick = closeSheet;
     q('#v2sbGo', s).onclick = function () { closeSheet(); if (host().openSection) host().openSection(r.link.section, r.link.tab || undefined); };
+  }
+
+  // —— ورقة قاعدة من «ما يكتبه العقل»
+  function swRow(id) { var sw = swInfo(); return sw ? sw.rows.filter(function (r) { return r.id === id; })[0] || null : null; }
+  function openModeRule(id) {
+    var r = swRow(id);
+    if (!r) return;
+    var cur = r.options.filter(function (o) { return o.on; })[0];
+    var body = sectionBlock('متى يعمل', '<p>' + esc(r.sentence) + '</p>')
+      + sectionBlock('اختيارك الآن', '<p>' + esc(cur ? cur.label : NA) + '</p>')
+      + (r.locked ? sectionBlock('لماذا لا يعمل وحده', '<p>' + esc(r.lockReason) + '</p>') : '')
+      + (r.link ? sectionBlock('أين ترى نتيجته', '<button type="button" class="v3-btn2" id="v2sbGo">' + esc(r.link.label) + '</button>') : '')
+      + '<div class="acts"><button type="button" class="btn btn-ghost" id="v2sbX">إغلاق</button></div>';
+    var s = openSheet(r.title, body);
+    if (!s) return;
+    q('#v2sbX', s).onclick = closeSheet;
+    var go = q('#v2sbGo', s);
+    if (go) go.onclick = function () { closeSheet(); if (host().openSection) host().openSection(r.link.section); };
+  }
+
+  // —— تأكيد تغيير ما يكتبه العقل
+  function openMode(id, mode) {
+    var r = swRow(id), E = ep();
+    if (!r || !E) return;
+    var sh = L.v2sBrainSwitchSheet(r, mode);
+    var s = openSheet(sh.title, '<p class="mc-lead">' + esc(sh.lead) + '</p><div id="v2sbErr" role="alert"></div>'
+      + '<div class="acts"><button type="button" class="btn btn-human" id="v2sbGo">' + esc(sh.go) + '</button><button type="button" class="btn btn-ghost" id="v2sbNo">رجوع</button></div>');
+    if (!s) return;
+    var go = q('#v2sbGo', s), no = q('#v2sbNo', s);
+    no.onclick = function () { if (!s.dataset.busy) closeSheet(); };
+    go.onclick = function () {
+      if (s.dataset.busy) return;
+      s.dataset.busy = '1'; S.modeBusy = true; go.disabled = true; no.disabled = true; go.textContent = 'جارٍ الحفظ…';
+      E.api('/v2/brain/switches/' + encodeURIComponent(id), { method: 'PUT', body: { mode: mode, confirmed: true } }).then(function () {
+        S.modeBusy = false; delete s.dataset.busy;
+        var d = data('switches'), list = d && (Array.isArray(d) ? d : (d.switches || d.producers));
+        if (Array.isArray(list)) list.forEach(function (p) { if (p && p.id === id) p.mode = mode; });     // يظهر الاختيار فورًا، ثم تأتي القراءة الأحدث
+        closeSheet(); toast('حُفظ الاختيار'); load('switches', true, true); redraw(true);
+      }).catch(function (e) {
+        S.modeBusy = false; delete s.dataset.busy;
+        var box = q('#v2sbErr', s); if (box) box.innerHTML = '<div class="v3-err">' + esc(errMsg(e)) + '</div>';
+        go.disabled = false; no.disabled = false; go.textContent = sh.go; redraw();
+      });
+    };
+  }
+
+  // —— حذف ملاحظة كتبها العقل (هذا هو التراجع الحقيقي الوحيد: الملاحظة نصّ فقط)
+  function openDiscard(id) {
+    var E = ep();
+    var s = openSheet('حذف الملاحظة', '<p class="mc-lead">تُحذف هذه الملاحظة. لم تغيّر شيئًا في المنصة.</p><div id="v2sbErr" role="alert"></div>'
+      + '<div class="acts"><button type="button" class="btn btn-human" id="v2sbGo">احذفها</button><button type="button" class="btn btn-ghost" id="v2sbNo">رجوع</button></div>');
+    if (!s || !E) return;
+    var go = q('#v2sbGo', s), no = q('#v2sbNo', s);
+    no.onclick = function () { if (!s.dataset.busy) closeSheet(); };
+    go.onclick = function () {
+      if (s.dataset.busy) return;
+      s.dataset.busy = '1'; go.disabled = true; no.disabled = true; go.textContent = 'جارٍ الحذف…';
+      E.api('/v2/brain/items/' + encodeURIComponent(id) + '/discard', { method: 'POST', body: { confirmed: true } }).then(function () {
+        delete s.dataset.busy; closeSheet(); toast('حُذفت الملاحظة'); load('items', true, true);
+      }).catch(function (e) {
+        delete s.dataset.busy; go.disabled = false; no.disabled = false; go.textContent = 'احذفها';
+        var box = q('#v2sbErr', s); if (box) box.innerHTML = '<div class="v3-err">' + esc(errMsg(e)) + '</div>';
+        load('items', true, true);
+      });
+    };
+  }
+
+  // —— «اكتب الاقتراحات الآن»
+  function openRunNow() {
+    var ri = L.v2sBrainRunInfo(swInfo(), runState(), now()), E = ep();
+    if (!ri.canStart || !E) return;
+    var s = openSheet('اكتب الاقتراحات الآن', '<p class="mc-lead">' + esc(ri.lead) + '</p><div id="v2sbErr" role="alert"></div>'
+      + '<div class="acts"><button type="button" class="btn btn-human" id="v2sbGo">نعم، ابدأ</button><button type="button" class="btn btn-ghost" id="v2sbNo">رجوع</button></div>');
+    if (!s) return;
+    var go = q('#v2sbGo', s), no = q('#v2sbNo', s);
+    no.onclick = function () { if (!s.dataset.busy) closeSheet(); };
+    go.onclick = function () {
+      if (s.dataset.busy) return;
+      s.dataset.busy = '1'; go.disabled = true; no.disabled = true; go.textContent = 'جارٍ البدء…';
+      E.api('/v2/brain/run', { method: 'POST', body: { confirmed: true } }).then(function () {
+        delete s.dataset.busy;
+        var sr = srcOf('run'); sr.state = 'ready'; sr.at = Date.now(); sr.data = { run: { started_at: new Date(now()).toISOString(), finished_at: null } };
+        S.wasActive = true;
+        closeSheet(); toast('بدأ العقل الكتابة'); redraw(true);
+      }).catch(function (e) {
+        delete s.dataset.busy; go.disabled = false; no.disabled = false; go.textContent = 'نعم، ابدأ';
+        var box = q('#v2sbErr', s); if (box) box.innerHTML = '<div class="v3-err">' + esc(errMsg(e)) + '</div>';
+        load('run', true, true);
+      });
+    };
+  }
+
+  // «ابدأ القرارات»: القسم الرئيسي ثم زرّ البدء نفسه حين يظهر (لا مدخل آخر لبطاقات القرار).
+  function startDeck() {
+    if (host().openSection) host().openSection('home');
+    var tries = 0;
+    (function tick() {
+      if (!(host().isHome && host().isHome())) { if (++tries < 30) setTimeout(tick, 150); return; }
+      var b = q('.v2 [data-a="start"]');
+      if (b) { b.click(); return; }
+      if (++tries < 30) setTimeout(tick, 150);
+    })();
   }
 
   // —— تأكيد مفتاح التوزيع
@@ -465,7 +613,16 @@
       var b = e.target.closest ? e.target.closest('[data-a]') : null;
       if (!b || !v.contains(b) || b.disabled) return;
       var a = b.getAttribute('data-a');
-      if (a === 'goto') { if (host().openSection) host().openSection(b.getAttribute('data-s')); }
+      if (a === 'goto') { if (b.getAttribute('data-deck')) startDeck(); else if (host().openSection) host().openSection(b.getAttribute('data-s')); }
+      else if (a === 'mode') {
+        var mr = swRow(b.getAttribute('data-id')), mv = b.getAttribute('data-v');
+        if (!mr || S.modeBusy || b.getAttribute('aria-checked') === 'true') return;
+        openMode(mr.id, mv);
+      }
+      else if (a === 'mrule') openModeRule(b.getAttribute('data-id'));
+      else if (a === 'runnow') openRunNow();
+      else if (a === 'retry-switches') { load('switches', true); }
+      else if (a === 'retry-items') { load('items', true); }
       else if (a === 'seg') { S.seg = b.getAttribute('data-s'); try { localStorage.setItem('v2sb_seg', S.seg); } catch (x) {} redraw(true); }
       else if (a === 'grp') { var g = b.getAttribute('data-g'); S.open[g] = !isOpen(g); redraw(true); }
       else if (a === 'rule') openRule(b.getAttribute('data-key'));
@@ -483,7 +640,9 @@
       else if (a === 'logact') {
         var r = (S.logRows || [])[+b.getAttribute('data-i')];
         if (!r) return;
-        if (r.kind === 'report') openHelper(r.agent); else openFile(r.entry);
+        if (r.kind === 'report') openHelper(r.agent);
+        else if (r.kind === 'item') { if (r.action && r.action.kind === 'discard') openDiscard(r.id); else if (host().openSection) host().openSection(r.section || 'home'); }
+        else openFile(r.entry);
       }
       else if (a === 'hview') openHelper(b.getAttribute('data-id'));
       else if (a === 'hrun') runAgent(b.getAttribute('data-run'));
@@ -503,8 +662,8 @@
 
   // ------------------------------------------------------------------ نقطة الدخول
   var NEEDS = {
-    v2s_brain: { ep: ['opsQueue', 'inbox', 'aiAgents', 'inviteSettings'], src: ['today', 'rules'] },
-    ai: { ep: ['aiAgents'], src: ['status'] }
+    v2s_brain: { ep: ['opsQueue', 'inbox', 'aiAgents', 'inviteSettings'], src: ['today', 'rules', 'switches', 'items', 'run'] },
+    ai: { ep: ['aiAgents'], src: ['status', 'switches'] }
   };
   function ensureFor(mod) {
     var n = NEEDS[mod];
@@ -526,6 +685,17 @@
     S.sig = signature();
     syncRunButtons();
   }
+  // جولة الكتابة قيد العمل: نسأل عنها كل بضع ثوانٍ، وحين تنتهي نقرأ المكتوب والعدّاد من جديد.
+  function watchRun() {
+    if (S.mod !== 'v2s_brain') return;
+    var rs = runState(), sr = srcOf('run');
+    if (rs.active) {
+      S.wasActive = true;
+      if (!sr.busy && Date.now() - sr.at > 4000) load('run', true, true);
+    } else if (S.wasActive && rs.known) {
+      S.wasActive = false; load('items', true, true); load('switches', true, true);
+    }
+  }
   B.render = function (mod, view) {
     S.view = view; S.mod = mod;
     ensureFor(mod);
@@ -533,13 +703,14 @@
     if (!S.poll) {
       S.poll = setInterval(function () {
         if (!(host().current && B.owns(host().current()))) return;
+        watchRun();
         if (document.getElementById('epModal')) return;
         if (signature() !== S.sig) redraw();
       }, 400);
     }
     if (!S.minute) S.minute = setInterval(function () {
       if (host().current && B.owns(host().current()) && !document.getElementById('epModal')) {
-        if (S.mod === 'v2s_brain') load('today', true, true);
+        if (S.mod === 'v2s_brain') { load('today', true, true); load('items', true, true); load('switches', true, true); load('run', true, true); }
         redraw();
       }
     }, 60000);

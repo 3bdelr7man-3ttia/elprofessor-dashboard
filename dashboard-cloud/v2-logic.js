@@ -2121,7 +2121,7 @@
     return a ? { label: a[0], desc: a[1], img: a[2] } : { label: str(serverLabel) || str(id), desc: str(serverDesc), img: 'reports' };
   }
   // سجل اليوم كاملًا: مدخلات التوزيع (التي وزّعها العقل + تغيير المؤسس اللاحق) وتقارير المساعدين المكتوبة اليوم، الأحدث أولًا.
-  function v2sBrainLogRows(ent, agents, since) {
+  function v2sBrainLogRows(ent, agents, since, items) {
     var rows = [], sinceMs = v2sBrainTime(since);
     ((ent && ent.entries) || []).forEach(function (e) {
       if (e.by !== 'auto' && !e.afterAuto) return;
@@ -2135,8 +2135,130 @@
       var id = str(a.agent || a.id), info = v2sBrainAgentInfo(id, a.label, a.desc);
       rows.push({ kind: 'report', atMs: t, time: brClock(t), text: 'كتب مساعد «' + info.label + '» تقريره', why: '', muted: false, agent: id, action: { kind: 'report', label: 'اعرض' } });
     });
+    v2sBrainItemRows(items, since).forEach(function (r) { rows.push(r); });
     rows.sort(function (a, b) { return b.atMs - a.atMs; });
     return rows;
+  }
+
+  // —— ما يكتبه العقل (الجولة الثانية): المفاتيح والسجل والتشغيل. ⛔ كل مصدر يفشل لوحده ⇒ null (لا صفر ولا قائمة فاضية).
+  var BR_MODE_LABEL = { alone: 'وحده', ask: 'يسألني', off: 'متوقّف' };
+  var BR_RUN_CAP = 20;
+  var BR_RUN_FRESH = 15 * 60 * 1000;
+  // ردّ GET /switches ⇒ {rows, writer, brainToday} أو null. writer: 'main' | 'backup' | null (لا كاتب) | undefined (غير معروف).
+  function v2sBrainSwitches(resp, now) {
+    var list = resp && Array.isArray(resp) ? resp : (resp && typeof resp === 'object' ? (resp.switches || resp.producers) : null);
+    if (!Array.isArray(list)) return null;
+    var rows = [];
+    list.forEach(function (p) {
+      if (!p || typeof p !== 'object' || !str(p.id)) return;
+      var locked = p.may_run_alone === false || str(p.kind) === 'draft';
+      var opinion = str(p.kind) === 'opinion';
+      var opts = locked ? ['ask', 'off'] : (opinion ? ['alone', 'off'] : ['alone', 'ask', 'off']);
+      var mode = str(p.mode);
+      if (opts.indexOf(mode) < 0) mode = opinion ? 'alone' : 'ask';       // الاختيار المحجوب لا يُعرض أبدًا: القفل في الخادم، وهنا نعرض ما يعمل فعلًا
+      var sec = secOf(str(p.section)), t = v2sBrainTime(p.updated_at), line;
+      if (locked) line = str(p.lock_reason) || 'يسألك دائمًا قبل أن يصل ما يكتبه إلى أحد.';
+      else if (t != null) line = 'آخر تغيير: ' + (agoText(t, now || Date.now()) || 'غير متاح بعد') + (str(p.updated_by) ? ' بواسطة ' + str(p.updated_by) : '');
+      else line = 'لم يُغيَّر من قبل';
+      rows.push({ id: str(p.id), section: str(p.section), kind: str(p.kind), title: str(p.label) || str(p.id), sentence: str(p.sentence), lockReason: str(p.lock_reason),
+                  locked: locked, mode: mode, updatedMs: t, updatedBy: str(p.updated_by), line: line,
+                  options: opts.map(function (o) { return { value: o, label: BR_MODE_LABEL[o], on: o === mode }; }),
+                  link: sec ? { label: 'افتح ' + sec.label, section: sec.key } : null });
+    });
+    var bt = resp && !Array.isArray(resp) && resp.brain_today && typeof resp.brain_today === 'object' ? resp.brain_today : null;
+    var used = bt && typeof bt.used === 'number' && isFinite(bt.used) && bt.used >= 0 ? bt.used : null;
+    var cap = bt && typeof bt.cap === 'number' && isFinite(bt.cap) && bt.cap > 0 ? bt.cap : null;
+    var w = resp && !Array.isArray(resp) ? resp.writer : undefined;
+    return { rows: rows, writer: w === 'main' || w === 'backup' || w === null ? w : undefined, brainToday: { used: used, cap: cap } };
+  }
+  // ورقة تأكيد تغيير الاختيار: {title, lead, go}.
+  function v2sBrainSwitchSheet(row, mode) {
+    var t = '«' + row.title + '»', lead, go;
+    if (mode === 'off') {
+      lead = row.kind === 'opinion' ? 'يتوقف العقل عن كتابة رأيه على بطاقات القرار، وتعود الجملة الثابتة. ويبقى ما كتبه من قبل كما هو.'
+        : 'يتوقف العقل عن كتابة ' + t + '. ويبقى ما كتبه من قبل كما هو.';
+      go = 'نعم، أوقفه';
+    } else if (mode === 'alone') {
+      lead = row.kind === 'opinion' ? 'يكتب العقل رأيه على كل قرار وحده، ويظهر في بطاقة القرار. لا يُنفَّذ شيء بسببه.'
+        : 'يكتب العقل ' + t + ' وحده، ويظهر ما كتبه في اللوحة دون انتظار موافقتك. لا يصل منه شيء إلى أحد خارج اللوحة.';
+      go = 'نعم، وحده';
+    } else {
+      lead = 'يكتب العقل ' + t + ' اقتراحًا يظهر في اللوحة، ولا يُنفَّذ شيء إلا بعد موافقتك.';
+      go = 'نعم، يسألني';
+    }
+    return { title: row.title, lead: lead, go: go };
+  }
+  // ردّ GET /items ⇒ قائمة مطبَّعة أو null.
+  function v2sBrainItems(resp) {
+    var list = Array.isArray(resp) ? resp : (resp && typeof resp === 'object' ? resp.items : null);
+    if (!Array.isArray(list)) return null;
+    return list.filter(function (i) { return i && typeof i === 'object' && str(i.id); }).map(function (i) {
+      var b = i.body && typeof i.body === 'object' ? i.body : {};
+      return { id: str(i.id), producer: str(i.producer), section: str(i.section), kind: str(i.kind), label: shorten(str(i.target_label), 80), tag: str(i.tag),
+               status: str(i.status), source: str(i.source), text: str(b.text), atMs: v2sBrainTime(i.created_at), decidedMs: v2sBrainTime(i.decided_at),
+               by: str(i.decided_by), error: str(i.last_error) };
+    });
+  }
+  var BR_OPINION_FORMS = ['قرار واحد', 'قرارين', 'قرارات', 'قرارًا'];
+  // صفوف السجل من العناصر: الآراء صف واحد مجمَّع، والباقي صف لكل عنصر بالجمل المعتمدة.
+  function v2sBrainItemRows(items, since) {
+    var rows = [], sinceMs = v2sBrainTime(since), ops = 0, opAt = null;
+    (Array.isArray(items) ? items : []).forEach(function (i) {
+      var at = (i.decidedMs != null && ['approved', 'edited', 'rejected', 'discarded'].indexOf(i.status) >= 0) ? i.decidedMs : i.atMs;
+      if (at == null || (sinceMs != null && at < sinceMs)) return;
+      if (i.kind === 'opinion') {
+        if (i.status === 'failed' || i.status === 'discarded') return;
+        ops++; if (opAt == null || at > opAt) opAt = at;
+        return;
+      }
+      var on = '«' + (i.label || 'عنصر') + '»', tag = '«' + (i.tag || 'كتابة') + '»', text, act = null, muted = false;
+      if (i.status === 'done_alone') { text = 'كتب ملاحظة على ' + on; act = { kind: 'discard', label: 'احذفها' }; }
+      else if (i.status === 'proposed') { text = 'اقترح ' + tag + ' على ' + on; act = { kind: 'open', label: 'افتح' }; }
+      else if (i.status === 'approved' || i.status === 'edited') text = 'نُفّذ ' + tag + ' على ' + on + ' بموافقتك';
+      else if (i.status === 'rejected') { text = 'رُفض اقتراح على ' + on; muted = true; }
+      else if (i.status === 'discarded') { text = 'حُذفت ملاحظة على ' + on; muted = true; }
+      else if (i.status === 'failed') { text = 'تعذّرت الكتابة عن ' + on; muted = true; }
+      else if (i.status === 'unknown') text = 'لم نتأكد من نتيجة ' + tag + ' على ' + on;
+      else return;
+      rows.push({ kind: 'item', atMs: at, time: brClock(at), text: text, why: '', muted: muted, id: i.id, status: i.status, section: i.section, action: act });
+    });
+    if (ops > 0) rows.push({ kind: 'opinions', atMs: opAt, time: brClock(opAt), text: 'كتب رأيه في ' + U(ops, BR_OPINION_FORMS), why: '', muted: false, count: ops, action: null });
+    return rows;
+  }
+  // عدد الاقتراحات التي تنتظر القرار (null إن فشل المصدر).
+  function v2sBrainProposed(items) {
+    if (!Array.isArray(items)) return null;
+    return items.filter(function (i) { return i.status === 'proposed' && i.kind !== 'opinion'; }).length;
+  }
+  // الجولة: ردّ GET /runs/latest ⇒ {known, active}. جولة بلا انتهاء مضى عليها أكثر من ١٥ دقيقة لا تُعدّ نشطة (القفل نفسه كذلك).
+  function v2sBrainRunState(resp, now) {
+    if (!resp || typeof resp !== 'object') return { known: false, active: false };
+    var r = resp.run !== undefined ? resp.run : resp;
+    if (r === null || typeof r !== 'object') return { known: true, active: false };
+    var st = v2sBrainTime(r.started_at), fin = r.finished_at;
+    return { known: true, active: !fin && st != null && (now || 0) - st < BR_RUN_FRESH };
+  }
+  // زرّ «اكتب الاقتراحات الآن»: {canStart, active, reason, n, lead}. sw = ناتج v2sBrainSwitches|null · run = ناتج v2sBrainRunState.
+  function v2sBrainRunInfo(sw, run, now) {
+    var bt = sw && sw.brainToday ? sw.brainToday : { used: null, cap: null };
+    var left = bt.used != null && bt.cap != null ? Math.max(0, bt.cap - bt.used) : null;
+    var n = left != null ? Math.min(BR_RUN_CAP, left) : BR_RUN_CAP;
+    var reason = '';
+    if (run && run.active) reason = 'العقل يكتب الآن';
+    else if (sw && sw.writer === null) reason = 'لا كاتب مفعّل الآن';
+    else if (left === 0) reason = 'بلغ العقل حدّ كتابته اليوم';
+    var lead = left != null || !sw ? 'يكتب العقل الآن ما ينقص من اقتراحات، بحد أقصى ' + U(n, ['كتابة واحدة', 'كتابتين', 'كتابات', 'كتابة']) + '.'
+      : 'يكتب العقل الآن ما ينقص من اقتراحات.';
+    return { canStart: !reason, active: !!(run && run.active), reason: reason, n: n, lead: lead };
+  }
+  // قرصا المساعدين الجديدان.
+  function v2sBrainWriterText(writer, known) {
+    if (!known || writer === undefined) return 'غير متاح بعد';
+    return writer === 'main' ? 'الكاتب الأساسي' : writer === 'backup' ? 'الكاتب الاحتياطي' : 'لا أحد';
+  }
+  function v2sBrainWritesToday(bt) {
+    if (!bt || bt.used == null || bt.cap == null) return 'غير متاح بعد';
+    return ar(bt.used) + ' من ' + ar(bt.cap);
   }
 
   // —— القواعد
@@ -2272,6 +2394,9 @@
     var A = S && S.auto_assign && typeof S.auto_assign.value === 'boolean' ? S.auto_assign.value : null;
     var waiting = Q ? qn(Q, 'expert_files_awaiting_assignment') : 0;
     if (A === false && waiting > 0) return { text: 'التوزيع التلقائي متوقّف، وينتظر توزيعك: ' + brFile(waiting), button: { label: 'افتح الملفات', section: 'files' } };
+    if (typeof ctx.proposed === 'number' && ctx.proposed > 0) {
+      return { text: 'ينتظرك من العقل: ' + U(ctx.proposed, ['اقتراح واحد', 'اقتراحان', 'اقتراحات', 'اقتراحًا']), button: { label: 'ابدأ القرارات', section: 'home', deck: true } };
+    }
     var n = ent && typeof ent.autoCount === 'number' ? ent.autoCount : null;
     var least = ent && (ent.partial || ent.fromInbox) ? 'على الأقل ' : '';
     if (n != null && n > 0) {
@@ -2334,7 +2459,10 @@
     v2sBrainTime: v2sBrainTime, v2sBrainSince: v2sBrainSince, v2sBrainEntries: v2sBrainEntries, v2sBrainLogFromInbox: v2sBrainLogFromInbox,
     v2sBrainLogText: v2sBrainLogText, v2sBrainLogParts: v2sBrainLogParts, v2sBrainLogRows: v2sBrainLogRows, v2sBrainRules: v2sBrainRules, v2sBrainRunText: v2sBrainRunText,
     v2sBrainStopped: v2sBrainStopped, v2sBrainStoppedAll: v2sBrainStoppedAll, v2sBrainLine: v2sBrainLine, v2sBrainHelpers: v2sBrainHelpers,
-    v2sBrainAgentInfo: v2sBrainAgentInfo, v2sBrainCap: v2sBrainCap, v2sBrainHelpersLine: v2sBrainHelpersLine, v2sBrainConfirmAll: v2sBrainConfirmAll
+    v2sBrainAgentInfo: v2sBrainAgentInfo, v2sBrainCap: v2sBrainCap, v2sBrainHelpersLine: v2sBrainHelpersLine, v2sBrainConfirmAll: v2sBrainConfirmAll,
+    v2sBrainSwitches: v2sBrainSwitches, v2sBrainSwitchSheet: v2sBrainSwitchSheet, v2sBrainItems: v2sBrainItems, v2sBrainItemRows: v2sBrainItemRows,
+    v2sBrainProposed: v2sBrainProposed, v2sBrainRunState: v2sBrainRunState, v2sBrainRunInfo: v2sBrainRunInfo,
+    v2sBrainWriterText: v2sBrainWriterText, v2sBrainWritesToday: v2sBrainWritesToday
   });
   // ===== /v2s:brain =====
 
