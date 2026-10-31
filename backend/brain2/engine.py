@@ -14,6 +14,7 @@
 import datetime
 import hashlib
 import json
+import sys
 import logging
 import os
 import queue
@@ -474,8 +475,18 @@ def process_target(ns, p, t, state, run_id=None):
     if isinstance(tb, dict):
         state['template_calls'] += 1
         return _store(ns, p, t, ref, label, h, fj, tb, 'template', state, run_id)[0]
+    failed_error = ERR_INVALID_OUTPUT if err == 'invalid' else ERR_WRITE_FAILED
+    if err == 'invalid':
+        # منتج بيتحقق من مكتوبه عند المنصة (مسودة الدرس): سبب الرفض العربي أوضح للمؤسس من الجملة العامة.
+        try:
+            mod = sys.modules.get(getattr(p.validate, '__module__', '') or '')
+            why = mod.preview_detail(ref) if mod is not None and hasattr(mod, 'preview_detail') else ''
+            if isinstance(why, str) and why.strip():
+                failed_error = (ERR_INVALID_OUTPUT + ': ' + why.strip())[:300]
+        except Exception:   # noqa: BLE001
+            pass
     return _store(ns, p, t, ref, label, h, fj, None, 'ai', state, run_id,
-                  failed_error=ERR_INVALID_OUTPUT if err == 'invalid' else ERR_WRITE_FAILED)[0]
+                  failed_error=failed_error)[0]
 
 
 def _parse(ns, p, t, text):
