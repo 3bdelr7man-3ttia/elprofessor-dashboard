@@ -38,14 +38,16 @@
   // api(path, opts) -> Promise<json>  (يرفض الوعد عند خطأ مع .status و .data)
   function api(path, opts) {
     opts = opts || {};
-    var headers = { "Content-Type": "application/json" };
+    // رفع ملف (FormData): المتصفح يحدّد الـContent-Type بنفسه مع الحدود، والجسم يمرّ كما هو.
+    var isForm = typeof FormData !== "undefined" && opts.body instanceof FormData;
+    var headers = isForm ? {} : { "Content-Type": "application/json" };
     var t = getToken();
     if (t) headers["Authorization"] = "Bearer " + t;
     if (opts.headers) for (var k in opts.headers) headers[k] = opts.headers[k];
     return fetch(API_BASE + path, {
       method: opts.method || "GET",
       headers: headers,
-      body: opts.body != null ? (typeof opts.body === "string" ? opts.body : JSON.stringify(opts.body)) : undefined,
+      body: opts.body != null ? (isForm || typeof opts.body === "string" ? opts.body : JSON.stringify(opts.body)) : undefined,
     }).then(function (r) {
       // `blob: true` (رسالة الخبير الصوتية): الرد الناجح بايتات — الفاشل لسه نص بيتقرا تحت.
       if (opts.blob && r.ok) return r.blob();

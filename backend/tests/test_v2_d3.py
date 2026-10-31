@@ -913,7 +913,7 @@ def test_the_money_and_books_sections_have_the_new_tabs_and_the_old_ones_last():
     vis = lambda k: [(t['key'], t['label'], t['mod']) for t in secs[k]['tabs'] if not t.get('hidden')]
     assert vis('money') == [('overview', 'نظرة', 'v2m_overview'), ('payouts', 'التحويلات', 'v2m_payouts'), ('receipts', 'الإيصالات والمدفوعات العالقة', 'v2m_receipts'),
                             ('prices', 'الأسعار', 'v2m_prices'), ('shares', 'النسب والإعدادات', 'v2m_shares'), ('ads', 'إعلانات الأعمال', 'v2m_ads'), ('all', 'كل السجلات', 'finance')]
-    assert vis('books') == [('offers', 'مراجعة العروض', 'v2b_offers'), ('requests', 'طلبات القرّاء', 'v2b_requests'), ('books', 'الكتب والأعمال', 'knowledge')]
+    assert vis('books') == [('offers', 'مراجعة العروض', 'v2b_offers'), ('requests', 'طلبات القرّاء', 'v2b_requests'), ('books', 'الكتب والأعمال', 'knowledge'), ('ours', 'كتبنا', 'v2s_books_ours')]
     assert secs['money']['tabs'][0]['key'] == 'overview' and secs['books']['tabs'][0]['key'] == 'offers'
 
 

@@ -139,3 +139,93 @@ body:has(#epModal) .v2s-books .bk-dock{display:none}
 @media(prefers-reduced-motion:reduce){
   .v2s-books *{transition:none}
 }
+
+/* ============================================================================
+ * «كتبنا» (v2s_books_ours): قائمة كروت · صفحة الكتاب بثلاث خطوات · أكواد الأدلّة. كلها تحت `.v2s-ours`.
+ * الأزرار من نظام الأزرار الموحّد (`.ep-b1` / `.ep-b2` / `.ep-bs` في v2-shell.css): لا قياسات أزرار هنا.
+ * ========================================================================== */
+.v2s-ours .ou-head{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:12px 20px;margin:0 0 16px}
+.v2s-ours .ou-sub{margin-top:4px;color:var(--mute);font-size:14.5px;line-height:1.8;max-width:62ch}
+.v2s-ours .ou-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;align-items:stretch;margin:0 0 14px}
+.v2s-ours .ou-grid.ou-one{grid-template-columns:minmax(0,1fr);max-width:560px}
+.v2s-ours .ou-card{display:grid;align-content:start;gap:8px;background:#fff;border:1px solid var(--line);border-radius:18px;padding:16px 18px;box-shadow:0 2px 10px rgba(33,38,46,.05);min-width:0}
+.v2s-ours .ou-guides{background:var(--paper2);box-shadow:none}
+.v2s-ours .ou-card h3{font:800 17px/1.6 'Cairo',sans-serif;overflow-wrap:anywhere}
+.v2s-ours .ou-pills{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.v2s-ours .ou-file{font-size:14px;line-height:1.7}
+.v2s-ours .ou-file.ok{color:#0F5A37;font-weight:700}
+.v2s-ours .ou-file.no{color:var(--mute)}
+.v2s-ours .ou-fine{font-size:13px;color:var(--mute);line-height:1.7}
+.v2s-ours .ou-about{font-size:14.5px;line-height:1.8;color:#3A3730;overflow-wrap:anywhere}
+.v2s-ours .ou-acts{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:4px}
+.v2s-ours .ou-sums{margin:0;display:grid;gap:6px}
+.v2s-ours .ou-sums>div{display:grid;grid-template-columns:96px minmax(0,1fr);gap:8px;font-size:14px;line-height:1.7}
+.v2s-ours .ou-sums dt{color:var(--mute);font-weight:700}
+.v2s-ours .ou-sums dd{margin:0;overflow-wrap:anywhere}
+
+/* —— صفحة الكتاب */
+.v2s-ours .ou-bhead{display:grid;gap:8px;background:#fff;border:1px solid var(--line);border-radius:18px;padding:18px 22px;margin:0 0 14px}
+.v2s-ours .ou-bhead h2{font:800 25px/1.5 'Cairo',sans-serif;overflow-wrap:anywhere}
+.v2s-ours .ou-steps{list-style:none;margin:0;padding:0;display:grid;gap:12px}
+.v2s-ours .ou-step{display:grid;gap:10px;background:#fff;border:1px solid var(--line);border-radius:18px;padding:16px 20px;min-width:0}
+.v2s-ours .ou-step.done{border-color:#BFE3CE}
+.v2s-ours .ou-sh{display:flex;align-items:center;gap:12px;min-width:0}
+.v2s-ours .ou-sh h3{font:800 18px/1.5 'Cairo',sans-serif;flex:1 1 auto}
+.v2s-ours .ou-n{flex:none;display:inline-flex;align-items:center;justify-content:center;width:34px;height:34px;border-radius:50%;background:var(--paper2);color:var(--wine);font:800 16px 'Cairo',sans-serif}
+.v2s-ours .ou-step.done .ou-n{background:#E8F6EE;color:#0F5A37}
+.v2s-ours .ou-flag{flex:none;font:800 12.5px/1.6 'Cairo',sans-serif;border-radius:999px;padding:1px 12px}
+.v2s-ours .ou-flag.yes{background:#E8F6EE;color:#0F5A37}
+.v2s-ours .ou-flag.no{background:#F1EBE0;color:var(--mute)}
+.v2s-ours .ou-line{font-size:15px;line-height:1.8;overflow-wrap:anywhere}
+.v2s-ours .ou-line.mute{color:var(--mute)}
+.v2s-ours .ou-list{margin:0;padding:0 18px 0 0;display:grid;gap:4px;font-size:15px;line-height:1.8}
+.v2s-ours .ou-confirm{display:grid;gap:10px;background:var(--amber-bg);border:1px solid #EBD38E;border-radius:14px;padding:14px 16px}
+.v2s-ours .ou-confirm p{font:700 15px/1.8 'Cairo',sans-serif;color:#4F3700}
+
+/* —— الكتابة مع العقل */
+.v2s-ours .ou-writer{display:grid;gap:12px;background:var(--paper);border:1px solid var(--line);border-radius:16px;padding:16px}
+.v2s-ours .ou-writer h4{margin:0;font:800 16px/1.6 'Cairo',sans-serif;color:var(--wine)}
+.v2s-ours .ou-writing{font:700 14.5px/1.8 'Cairo',sans-serif;color:var(--wine)}
+.v2s-ours .ou-draft{display:grid;gap:12px;border-top:1px solid var(--line);padding-top:14px}
+.v2s-ours .ou-ch{display:grid;gap:10px;background:#fff;border:1px solid var(--line);border-radius:14px;padding:12px 14px}
+.v2s-ours .ou-chh{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.v2s-ours .fld{display:grid;gap:6px}
+.v2s-ours .fld label{font:700 14.5px 'Cairo',sans-serif}
+.v2s-ours .fld input,.v2s-ours .fld textarea,.v2s-ours .fld select{width:100%;border:1px solid var(--line);border-radius:10px;padding:0 12px;min-height:48px;font-size:16px;background:#fff;color:var(--ink);font-family:inherit}
+.v2s-ours .fld textarea{padding:10px 12px;line-height:1.8;resize:vertical}
+.v2s-ours .fld input:focus,.v2s-ours .fld textarea:focus{outline:3px solid rgba(158,43,78,.3);outline-offset:1px;border-color:var(--wine)}
+
+/* —— أكواد الفتح: جدول على الشاشة العريضة، وبطاقات على الموبايل */
+.v2s-ours .ou-codes{display:grid;gap:8px;margin:0 0 12px}
+.v2s-ours .ou-chead,.v2s-ours .ou-code{display:grid;grid-template-columns:minmax(150px,1.2fr) minmax(150px,1.4fr) 120px 96px minmax(110px,.8fr) 76px;gap:10px;align-items:center}
+.v2s-ours .ou-chead{padding:0 17px;color:var(--mute);font:700 13.5px 'Cairo',sans-serif}
+.v2s-ours .ou-code{background:#fff;border:1px solid var(--line);border-radius:14px;padding:10px 16px}
+.v2s-ours .ou-code input[type=text]{width:100%;border:1px solid var(--line);border-radius:10px;padding:0 12px;min-height:48px;font-size:16px;background:#fff;color:var(--ink);font-family:inherit}
+.v2s-ours .ou-code input[type=text]:focus{outline:3px solid rgba(158,43,78,.3);outline-offset:1px;border-color:var(--wine)}
+.v2s-ours .ou-chk label{display:inline-flex;align-items:center;gap:8px;min-height:44px;font-size:15px;cursor:pointer}
+.v2s-ours .ou-chk input{width:20px;height:20px;accent-color:var(--wine)}
+.v2s-ours .ou-used{font-size:13.5px;color:var(--mute);line-height:1.6}
+.v2s-ours .ou-save{margin-top:6px}
+
+@media(max-width:1179px){
+  .v2s-ours .ou-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+@media(max-width:760px){
+  .v2s-ours .ou-grid{grid-template-columns:minmax(0,1fr)}
+  .v2s-ours .ou-head>.ep-b1{width:100%}
+  .v2s-ours .ou-bhead{padding:14px 16px}
+  .v2s-ours .ou-bhead h2{font-size:21px}
+  .v2s-ours .ou-step{padding:14px}
+  .v2s-ours .ou-sh{flex-wrap:wrap}
+  .v2s-ours .ou-acts>.ep-b1,.v2s-ours .ou-acts>.ep-b2{flex:1 1 100%}
+  .v2s-ours .ou-confirm .ou-acts>button{flex:1 1 100%}
+  .v2s-ours .ou-chead{display:none}
+  .v2s-ours .ou-code{grid-template-columns:minmax(0,1fr);gap:8px}
+  .v2s-ours .ou-cell[data-l]::before{content:attr(data-l);display:block;font:700 13px 'Cairo',sans-serif;color:var(--mute);margin-bottom:2px}
+  .v2s-ours .ou-chk[data-l]::before,.v2s-ours .ou-del::before{display:none}
+  .v2s-ours .fld input,.v2s-ours .fld textarea,.v2s-ours .ou-code input[type=text]{min-height:52px}
+  .v2s-ours .ou-sums>div{grid-template-columns:minmax(0,1fr);gap:0}
+}
+@media(prefers-reduced-motion:reduce){
+  .v2s-ours *{transition:none}
+}

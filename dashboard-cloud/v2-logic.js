@@ -1268,7 +1268,8 @@
     { key: 'books', label: 'الكتب', img: 'books', desc: 'كل كتاب وعمل، وعروض تنتظر المراجعة، وطلبات القرّاء', tabs: [
       T('offers', 'مراجعة العروض', 'v2b_offers'),
       T('requests', 'طلبات القرّاء', 'v2b_requests'),
-      T('books', 'الكتب والأعمال', 'knowledge')
+      T('books', 'الكتب والأعمال', 'knowledge'),
+      T('ours', 'كتبنا', 'v2s_books_ours')
     ] },
     { key: 'people', label: 'الناس والدعوات', img: 'people', desc: 'من ينتظر الدخول، والدعوات، والأعضاء، والرسائل', tabs: [
       T('invites', 'الطلبات', 'invites'),

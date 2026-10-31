@@ -17,8 +17,9 @@ COPY backend/requirements.txt /tmp/requirements.txt
 # article.html نفسه داخل node:vm بدل إعادة كتابته — فلا تتفرّع نسختان من المُصيِّر).
 # لو فشل تثبيته لأي سبب، الميزة بتتعطّل لوحدها والداشبورد بيقوم عادي (فحص وقت التشغيل
 # في _prerender_push) — الداشبورد بيخدّم فيد مقالات الموقع الحيّ فما ينفعش يقع علشانها.
+# libpango/libharfbuzz-subset: مطلوبة لـweasyprint (إنشاء PDF عربي لـ«كتبنا» من الداشبورد). المكتبة بتتحمّل كسول، وغيابها يعطّل الميزة بس.
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends curl nodejs \
+    && apt-get install -y --no-install-recommends curl nodejs libpango-1.0-0 libpangoft2-1.0-0 libharfbuzz-subset0 \
     && rm -rf /var/lib/apt/lists/* \
     && pip install --no-cache-dir -r /tmp/requirements.txt \
     && mkdir -p /data
@@ -33,6 +34,9 @@ COPY backend/refresh_rules.py /app/refresh_rules.py
 # v2_<قسم>_routes.py: مسارات أقسام الجولة النهائية — app.py يستوردها عند الإقلاع (غيابها = الحاوية لا تقوم)
 COPY backend/v2_market_routes.py /app/v2_market_routes.py
 COPY backend/v2_books_routes.py /app/v2_books_routes.py
+# «كتبنا وأدلّتنا»: مسارات الرفع والكتابة بالعقل + خط Cairo (OFL) للـPDF — app.py بيستوردها محروسة.
+COPY backend/v2_books_ours_routes.py /app/v2_books_ours_routes.py
+COPY backend/assets/fonts /app/assets/fonts
 # The new cloud-design dashboard becomes the served frontend (Flask serves /app/dist).
 # Only the live app files are shipped — the standalone prototype HTMLs
 # (Dashboard-Outputs.html / Dashboard-State.html) are unreferenced and not deployed.

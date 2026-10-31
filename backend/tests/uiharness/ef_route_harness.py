@@ -95,7 +95,7 @@ class Harness(object):
         self.tokens = self._seed()
 
     # ---------------------------------------------------------------- الخادم: المنصة المزيّفة
-    def _fake(self, method, url, params=None, json=None, headers=None, timeout=None, **_kw):
+    def _fake(self, method, url, params=None, json=None, headers=None, timeout=None, data=None, files=None, **_kw):
         if not str(url).startswith(PLATFORM + '/'):
             with self._lock:
                 self.blocked_inproc.append(str(url))
@@ -103,6 +103,9 @@ class Harness(object):
         if (headers or {}).get('X-ELP-Metrics-Secret') != SECRET:
             raise RuntimeError('السرّ اللي اتبعت مش سرّ الأداة')
         path = str(url)[len(PLATFORM):]
+        if files:      # رفع multipart (كتبنا): الجسم المسجَّل = حقول النموذج + وصف الملف (الاسم · الحجم · أول بايتات)
+            name, content = files['file'][0], files['file'][1]
+            json = dict(data or {}, confirmed=(data or {}).get('confirmed') == 'true', __file__={'name': name, 'size': len(content), 'head': content[:8].decode('latin-1')})
         with self._lock:
             self.platform_calls.append((method, path, dict(params or {}), json))
         out = self.ef.handle(method, path, params or {}, json or {})

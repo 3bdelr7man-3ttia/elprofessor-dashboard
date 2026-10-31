@@ -477,7 +477,7 @@
     var vis = q('#v3_vis', s); if (vis && vals.visible != null) vis.checked = vals.visible;
     var nt = q('#v3_note', s); if (nt && vals.note != null) nt.value = vals.note;
   }
-  function openPrice(kind, id, title) {
+  function openPrice(kind, id, title, onDone) {
     var E = ep();
     var s0 = openSheet('أسعار: ' + title, '<p class="v3-load">…جارٍ جلب الأسعار</p>');
     if (!s0 || !E) return;
@@ -506,7 +506,7 @@
         send: function (p) {
           return E.api('/v2/prices/' + kind + '/' + encodeURIComponent(id), { method: 'PUT', body: { versions: p.built.versions, visible: p.built.visible, note: p.note, rev: form.rev, title: form.title, confirmed: true } });
         },
-        onOk: function () { setNote('حُفظت أسعار «' + form.title + '»'); load(kind === 'book' ? 'pricesBook' : 'pricesCourse', true); redraw(); },
+        onOk: function () { setNote('حُفظت أسعار «' + form.title + '»'); load(kind === 'book' ? 'pricesBook' : 'pricesCourse', true); redraw(); if (typeof onDone === 'function') { try { onDone(); } catch (e) {} } },
         onStale: function () { load(kind === 'book' ? 'pricesBook' : 'pricesCourse', true); }
       });
     }).catch(function (e) {
@@ -840,6 +840,7 @@
   D3.sig = function () { return ['stuck', 'offers', 'pricesBook'].map(function (k) { return srcOf(k).state; }).join(','); };
   D3.openApprove = openApprove;
   D3.openSheet = openSheet; D3.twoStage = twoStage;
+  D3.openPrice = openPrice;   // «كتبنا»: نفس ورقة الأسعار الموجودة تُفتح من صفحة الكتاب (لا فورم سعر ثانٍ)
   D3.openReject = openReject;
   D3._state = S;
   D3._src = SRC;

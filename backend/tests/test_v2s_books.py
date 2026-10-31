@@ -246,6 +246,8 @@ def test_registration_is_one_line_before_the_marker():
     assert src.index(marker) < src.index("@app.route('/api/platform-pnl'")
     assert src.index("def v2_book_request_patch") < src.index(line)
     block = src[src.index(line):src.index(marker)]
+    # «كتبنا» سجّلت نفسها محروسة بـtry (docs/v2/books-ours): ثلاثة أسطر لها اختبارها (test_books_ours_routes).
+    block = re.sub(r"try:   # «كتبنا وأدلّتنا[^\n]*\n[^\n]*books_ours[^\n]*\nexcept[^\n]*books ours[^\n]*", '', block)
     assert all(ln.strip() == '' or 'v2_' in ln and 'register' in ln and '(app' in ln or ln.lstrip().startswith('#') for ln in block.split('\n')), \
         'بين سطر الكتب والعلامة سطور تسجيل أقسام أخرى فقط'
 
@@ -683,7 +685,8 @@ def test_the_books_section_tabs_are_unchanged_and_the_description_is_the_new_tex
     secs = {s['key']: s for s in L('SECTIONS')}
     books = secs['books']
     assert [(t['key'], t['label'], t['mod']) for t in books['tabs']] == [('offers', 'مراجعة العروض', 'v2b_offers'), ('requests', 'طلبات القرّاء', 'v2b_requests'),
-                                                                        ('books', 'الكتب والأعمال', 'knowledge')]
+                                                                        ('books', 'الكتب والأعمال', 'knowledge'),
+                                                                        ('ours', 'كتبنا', 'v2s_books_ours')]
     assert books['desc'] == 'كل كتاب وعمل، وعروض تنتظر المراجعة، وطلبات القرّاء' and books['img'] == 'books'
     assert not [t for t in books['tabs'] if 'كل السجلات' in t['label']], 'لا «كل السجلات»: كل ما في الشاشة القديمة له بيت جديد'
     land = L('sectionFor', 'knowledge', {})
@@ -717,7 +720,10 @@ def test_the_registry_owns_the_knowledge_module_only_under_the_new_shell():
     assert on['sum']['review'] is None and on['sum']['partial'] is True, 'قبل أي جلب: لا أرقام مخترعة'
 
 
-JS = _read('dashboard-cloud', 'v2s', 'books.js')
+JS_ALL = _read('dashboard-cloud', 'v2s', 'books.js')
+# تبويب «كتبنا» (v2s_books_ours) له ملف اختباره: tests/test_books_ours_ui.py + test_books_ours_routes.py. هنا شاشة «الكتب والأعمال» وحدها.
+_OURS_AT = JS_ALL.index('  // ====', JS_ALL.index('«كتبنا» — تبويب'))
+JS = JS_ALL[:_OURS_AT - 1] + JS_ALL[JS_ALL.index('  R.mods.knowledge = {'):]
 CODE = _strip_comments(JS)
 
 
@@ -783,7 +789,7 @@ def test_css_is_scoped_under_the_books_roots_only():
         if sel.startswith('@') or re.match(r'^[\d.]+%|^from$|^to$', sel):
             continue
         for part in sel.split(','):
-            assert part.strip().startswith(('.v2s-books', '.v2s-bm', '#epModal', 'body:has(#epModal) .v2s-books')), part
+            assert part.strip().startswith(('.v2s-books', '.v2s-bm', '#epModal', 'body:has(#epModal) .v2s-books', '.v2s-ours')), part
 
 
 def test_touch_targets_and_the_mobile_dock_rules_are_in_the_css():

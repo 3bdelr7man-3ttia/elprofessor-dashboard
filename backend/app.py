@@ -2728,6 +2728,9 @@ try:   # محرّر الدورات (SPEC-C §C1): تحميل محروس — غي
 except Exception: logger.exception('v2 courses2 routes not loaded')
 import v2_market_routes as _v2s_market; _v2s_market.register(app, globals())  # noqa: E402
 __import__('v2_books_routes').register(app, globals())
+try:   # «كتبنا وأدلّتنا» (docs/v2/books-ours/SPEC.md): تحميل محروس — غيابه لا يكسر الإقلاع
+    import v2_books_ours_routes as _v2s_books_ours; _v2s_books_ours.register(app, globals())
+except Exception: logger.exception('v2 books ours routes not loaded')
 import v2_content_routes as _v2s_content; _v2s_content.register(app, globals())
 __import__('v2_marketing_routes').register(app, globals())   # v2s:marketing
 import v2_reports_routes as _v2r; _v2r.register(app, globals())  # v2s:reports
@@ -2751,12 +2754,18 @@ def platform_pnl():
     return _platform_proxy('GET', '/api/bridge/ops/pnl', params={'month': month} if month else None)
 
 
-def _platform_proxy(method, path, params=None, json_body=None, timeout=12):
+def _platform_proxy(method, path, params=None, json_body=None, timeout=12, data=None, files=None):
     """Proxy an admin action to the main platform via the shared service secret.
     Same pattern as platform_metrics/platform_users above, factored out because the
     approval endpoints below all need it. Returns a Flask (json, status) response."""
     if not PLATFORM_METRICS_SECRET:
         return jsonify({'error': 'لم يتم ضبط الربط بعد'}), 503
+    # `data`/`files`: رفع multipart (كتبنا) — لا يُمرَّران لـrequests إلا لو اتحدّدا، فكل النداءات القديمة بنفس شكلها بالظبط.
+    extra = {}
+    if data is not None:
+        extra['data'] = data
+    if files is not None:
+        extra['files'] = files
     try:
         r = requests.request(
             method,
@@ -2765,6 +2774,7 @@ def _platform_proxy(method, path, params=None, json_body=None, timeout=12):
             json=json_body,
             headers={'X-ELP-Metrics-Secret': PLATFORM_METRICS_SECRET},
             timeout=timeout,
+            **extra,
         )
     except Exception:
         return jsonify({'error': 'تعذر الاتصال بالمنصة'}), 502
