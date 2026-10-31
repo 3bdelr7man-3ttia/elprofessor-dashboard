@@ -1281,7 +1281,8 @@
       T('topics',    'الموضوعات',       'topics', { topicsTab: 'pending' },   { topicsTab: ['pending', 'ideas', 'incoming', 'working', 'board', 'rejected', 'archived'] }),
       T('news',      'الأخبار',         'topics', { topicsTab: 'news' },      { topicsTab: ['news'] }),
       T('comments',  'التعليقات',       'topics', { topicsTab: 'comments' },  { topicsTab: ['comments'] }),
-      T('tutorials', 'دليل الاستخدام', 'topics', { topicsTab: 'tutorials' }, { topicsTab: ['tutorials'] })
+      T('tutorials', 'دليل الاستخدام', 'topics', { topicsTab: 'tutorials' }, { topicsTab: ['tutorials'] }),
+      T('site',      'الموقع',          'topics', { topicsTab: 'site' },      { topicsTab: ['site'] })
     ] },
     { key: 'marketing', label: 'التسويق', img: 'marketing', desc: 'الحملات من الإعلان حتى الدفع، والسوشيال، وخطة النشر', tabs: [
       T('campaigns', 'الحملات', 'marketing'),
@@ -4956,7 +4957,7 @@
 
   var TAB_OF = { pipeline: 'pipeline', articles: 'articles', blog: 'articles', auto: 'articles',
                  pending: 'topics', ideas: 'topics', incoming: 'topics', working: 'topics', board: 'topics', rejected: 'topics', archived: 'topics',
-                 news: 'news', comments: 'comments', tutorials: 'tutorials' };
+                 news: 'news', comments: 'comments', tutorials: 'tutorials', site: 'site' };
   function v2ContentTabFor(topicsTab) { return TAB_OF[topicsTab] || 'pipeline'; }
 
   // ------------------------------------------------------------ حالة صفحات محركات البحث
@@ -5268,6 +5269,53 @@
              top: { rule: rule, line: line, today: today, week: week, loading: anyLoadingAll, failedAny: anyFailedAll } };
   }
 
+  // ------------------------------------------------------------ «الموقع»: تعديل نصوص الموقع من اللوحة (SPEC-B §B6)
+  // نقي: الكتل والنسخ تصل من الخادم، والتحقق هنا مرآة لتحقق الخادم (الخادم هو الحَكَم).
+  var SITE_TAG = { title: 'عنوان التبويب', meta: 'وصف البحث', h1: 'عنوان رئيسي', h2: 'عنوان فرعي', h3: 'عنوان فرعي', p: 'فقرة', li: 'بند في قائمة', a: 'رابط', button: 'زر' };
+  var SITE_KINDS = [{ key: 'all', label: 'الكل', tags: null }, { key: 'heads', label: 'العناوين', tags: ['title', 'meta', 'h1', 'h2', 'h3'] },
+                    { key: 'paras', label: 'الفقرات والبنود', tags: ['p', 'li'] }, { key: 'links', label: 'الروابط والأزرار', tags: ['a', 'button'] }];
+  var SITE_HEADS = ['title', 'h1', 'h2', 'h3'];
+  var SITE_NEW_MAX = 600;
+  var SITE_NOTE = { apply: 'قبل تعديل نُشر', before_restore: 'قبل إرجاع سابق' };
+  var SITE_BANNED = new RegExp('ي[\\u064b-\\u0652]*ق[\\u064b-\\u0652]*و[\\u064b-\\u0652]*\\u0651[\\u064b-\\u0652]*م');
+  var SITE_LEAD = new RegExp('^[\\s«"]*' + 'ال' + 'ذكاء');
+  function v2SiteKinds() { return SITE_KINDS.map(function (k) { return { key: k.key, label: k.label }; }); }
+  // صفوف الكتل للعرض: التصنيف بالنوع، والجزء من فقرة مختلطة يُعلَّم، وغير القابل للتعديل يحمل سببه.
+  function v2SiteBlockRows(blocks, kind) {
+    if (!isArr(blocks)) return [];
+    var def = SITE_KINDS.filter(function (k) { return k.key === kind; })[0] || SITE_KINDS[0];
+    var out = [];
+    blocks.forEach(function (b, i) {
+      if (!b || typeof b.text !== 'string' || !b.text) return;
+      var tag = str(b.tag);
+      if (def.tags && def.tags.indexOf(tag) < 0) return;
+      var m = /#(\d+)$/.exec(str(b.path));
+      out.push({ index: i, path: str(b.path), tag: tag, tagLabel: SITE_TAG[tag] || 'نص', text: b.text, editable: b.editable === true,
+                 note: str(b.note) || (b.editable === true ? '' : 'لا يمكن تعديله'), part: m ? Number(m[1]) : 0 });
+    });
+    return out;
+  }
+  // يتحقق من النص الجديد قبل الإرسال. ok=false ⇒ error جملة عربية جاهزة. text = النص بعد التنظيف.
+  function v2SiteCheckNew(oldText, text, tag) {
+    var t = String(text == null ? '' : text).replace(/\s+/g, ' ').trim();
+    if (!t) return { ok: false, text: t, error: 'اكتب النص الجديد' };
+    if (t.length > SITE_NEW_MAX) return { ok: false, text: t, error: 'النص أطول من ' + ar(SITE_NEW_MAX) + ' حرف' };
+    if (t.indexOf('<') > -1 || t.indexOf('>') > -1) return { ok: false, text: t, error: 'لا تكتب رمزَي الأقواس الزاوية' };
+    if (t === String(oldText == null ? '' : oldText).replace(/\s+/g, ' ').trim()) return { ok: false, text: t, error: 'النص الجديد مطابق للقديم' };
+    if (SITE_BANNED.test(t)) return { ok: false, text: t, error: 'في النص عبارة غير مقبولة. عدّلها ثم أعد المحاولة' };
+    if (SITE_HEADS.indexOf(tag) > -1 && SITE_LEAD.test(t)) return { ok: false, text: t, error: 'لا يبدأ العنوان بكلمة «ال' + 'ذكاء». عدّل الصياغة' };
+    return { ok: true, text: t, error: '' };
+  }
+  // قائمة النسخ السابقة: الأحدث أولًا كما يرسلها الخادم.
+  function v2SiteBackupRows(backups, now) {
+    if (!isArr(backups)) return [];
+    return backups.map(function (b) {
+      var kb = typeof b.size === 'number' && isFinite(b.size) ? Math.max(1, Math.round(b.size / 1024)) : null;
+      return { id: b.id, when: since(b.created_at, now) || NA, who: str(b.created_by), kind: SITE_NOTE[str(b.note)] || 'نسخة سابقة', size: kb === null ? NA : ar(kb) + ' ك.ب' };
+    });
+  }
+
+  L.v2SiteKinds = v2SiteKinds; L.v2SiteBlockRows = v2SiteBlockRows; L.v2SiteCheckNew = v2SiteCheckNew; L.v2SiteBackupRows = v2SiteBackupRows;
   L.v2ContentTabFor = v2ContentTabFor; L.v2ContentBoard = v2ContentBoard; L.v2ContentFacts = v2ContentFacts; L.v2ContentSuggest = v2ContentSuggest;
   L.v2ContentCommentVerdict = v2ContentCommentVerdict; L.v2ContentPrerender = v2ContentPrerender; L.v2ContentPublishLead = v2ContentPublishLead;
   L.v2ContentTopicChips = v2ContentTopicChips; L.v2ContentSegments = v2ContentSegments; L.v2ContentTopicTabOf = topicTabOf; L.v2ContentByText = v2ContentByText;

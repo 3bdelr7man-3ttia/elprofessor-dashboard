@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""سجل المنتجين: الكل = producers_ops + producers_biz. أي ملف يفشل استيراده يُسجَّل ولا يُسقط اللوحة."""
+"""سجل المنتجين: الكل = producers_ops + producers_biz + producers_site. أي ملف يفشل استيراده يُسجَّل ولا يُسقط اللوحة."""
 import logging
 
 logger = logging.getLogger(__name__)
@@ -14,6 +14,11 @@ try:
     PRODUCERS.extend(_biz.PRODUCERS)
 except ImportError:
     logger.exception('brain2: producers_biz failed to import')
+try:
+    from brain2 import producers_site as _site
+    PRODUCERS.extend(_site.PRODUCERS)
+except ImportError:
+    logger.exception('brain2: producers_site failed to import')
 
 
 def by_id(pid):

@@ -1,5 +1,5 @@
 /* ============================================================================
- * v2s/content.js — قسم «المحتوى» بالشكل الجديد (الجولة الأخيرة): خط النشر · المقالات · الموضوعات · الأخبار · التعليقات · دليل الاستخدام.
+ * v2s/content.js — قسم «المحتوى» بالشكل الجديد (الجولة الأخيرة): خط النشر · المقالات · الموضوعات · الأخبار · التعليقات · دليل الاستخدام · الموقع.
  * ⛔ لا منطق عمل هنا: الأعمدة والعدّادات وسطور العقل والزرّ الأساسي من `v2-logic.js` (كتلة `v2s:content`)، والكتابة كلها عبر دوال EP الموجودة بالحرف.
  * ⛔ كل نشر أو إلغاء نشر أو اعتماد أو رفض أو حذف أو استهلاك رصيد الكتابة الآلية يمرّ على ورقة تأكيد (`confirmSheet`) تضع
  *   `window.__v2ctConfirmAt`؛ والاستثناءات المسموحة مكتوبة في القائمة EXEMPT أدناه وليس غيرها.
@@ -271,6 +271,7 @@
     if (entered) { S.lastTab = tab; }
     ensureTab(tab);
     if (entered && tab === 'pipeline' && Date.now() - S.lastRefresh > 15000) refreshKeys(WAITING);
+    if (entered && tab === 'site' && SS.init) siteEnter();
     var html;
     try {
       if (tab === 'pipeline') html = drawPipeline();
@@ -278,6 +279,7 @@
       else if (tab === 'topics') html = drawTopics();
       else if (tab === 'news') html = drawNews();
       else if (tab === 'comments') html = drawComments();
+      else if (tab === 'site') html = drawSite();
       else html = drawTutorials();
     } catch (err) {
       // عطل في الرسم لا يترك شاشة فاضية تبدو كأنها «لا شيء»: نقول إننا لم نعرضها ونعرض زرّ إعادة المحاولة.
@@ -1406,6 +1408,206 @@
     confirmSheet({ title: 'اعتماد الرأي', lead: lead, extra: '<p class="v2ct-val pre tall">' + esc(r.text || '') + '</p>', okLabel: 'اعتمد', run: function (done) { decideTestimonial(r, 'approve', done); } });
   }
 
+  // ================================================================== ٧) الموقع: تعديل نصوص الموقع من اللوحة
+  // الطريق: «عدّل» على نص ⇒ اقتراح بانتظار الاعتماد (لا يلمس الموقع) ⇒ «اعتمد وانشر» بورقة تأكيد ⇒ نسخة سابقة ثم نشر وتحقق.
+  // ⛔ لا كتابة على الموقع من هنا مباشرة: كل شيء عبر مسارات `/v2/site/*` و`/v2/brain/items/<id>/approve` (الخادم هو الحَكَم).
+  // ⛔ كل مصدر هنا: undefined = جارٍ · null = تعذّر (يُكتب ولا يُعتبر فارغًا) · مصفوفة = وصل.
+  var SITE_PRODUCERS = ['site_review', 'site_edit_manual'];
+  var SS = { init: false, pages: undefined, page: '', label: '', blocks: undefined, sha: '', decisions: undefined, backups: undefined, pending: undefined,
+             kind: 'all', decDraft: '', decErr: '', err: {}, byId: {}, seq: {} };
+  function siteApi(key, path, pick, bound) {
+    var E = ep(), snap = SS.page, n = (SS.seq[key] || 0) + 1;
+    SS.seq[key] = n;
+    if (!E || !E.api) { SS[key] = null; return; }
+    E.api(path).then(function (d) {
+      if (SS.seq[key] !== n || (bound && SS.page !== snap)) return;       // وصل ردّ قديم بعد تبديل الصفحة: نتجاهله
+      SS.err[key] = ''; SS[key] = pick(d || {});
+    }).catch(function (e) {
+      if (SS.seq[key] !== n || (bound && SS.page !== snap)) return;
+      SS[key] = null; SS.err[key] = apiErr(e);
+    }).then(siteRedraw);
+  }
+  function siteRedraw() { if (isCurrent() && currentTab() === 'site' && !modalOpen()) redraw(); }
+  function siteLoadPending() {
+    siteApi('pending', '/v2/brain/items?status=proposed&section=content', function (d) {
+      SS.byId = {};
+      var rows = (d.items || []).filter(function (i) { return SITE_PRODUCERS.indexOf(i.producer) > -1; });
+      rows.forEach(function (i) { SS.byId[i.id] = i; });
+      return rows;
+    });
+  }
+  function siteLoadDecisions() { siteApi('decisions', '/v2/site/decisions', function (d) { return d.decisions || []; }); }
+  function siteLoadPage() {
+    if (!SS.page) return;
+    var enc = encodeURIComponent(SS.page);
+    SS.blocks = undefined; SS.backups = undefined;
+    siteApi('blocks', '/v2/site/blocks?page=' + enc, function (d) { SS.sha = d.sha || ''; SS.label = d.label || SS.label; return d.blocks || []; }, true);
+    siteApi('backups', '/v2/site/backups?page=' + enc, function (d) { return d.backups || []; }, true);
+  }
+  function siteLoadBase() {
+    siteApi('pages', '/v2/site/pages', function (d) { return d.pages || []; });
+    siteLoadDecisions();
+    siteLoadPending();
+    siteLoadPage();
+  }
+  function siteEnter() { siteLoadDecisions(); siteLoadPending(); siteLoadPage(); }          // دخول جديد للتبويب: كل شيء من جديد، والنصوص من الموقع الحي
+  function siteAfterChange() { siteLoadPending(); siteLoadPage(); }
+  function siteUnavailable(key, title) {
+    return '<div class="v2ct-empty"><b>' + esc(title) + ': ' + NA + '</b><p>' + esc(SS.err[key] || 'تعذّر الوصول إلى هذه البيانات الآن، فلا تعتبرها فارغة.') + '</p>'
+      + '<button type="button" class="v2ct-b2" data-a="sreload">أعد المحاولة</button></div>';
+  }
+  function siteDiff(item) {
+    var b = item.body || {}, edits = Array.isArray(b.edits) ? b.edits : [];
+    return '<ul class="v2ct-sdiff">' + edits.map(function (e) {
+      return '<li><span class="v2ct-sold" dir="auto">' + esc(e.old) + '</span><span class="v2ct-snew" dir="auto">' + esc(e.new) + '</span>' + (e.why ? '<em>' + esc(e.why) + '</em>' : '') + '</li>';
+    }).join('') + '</ul>';
+  }
+  function sitePendingBox() {
+    if (SS.pending === undefined) return '';
+    if (SS.pending === null) return '<div class="v2ct-warn" role="status">تعذّر جلب الاقتراحات المنتظرة. ' + esc(SS.err.pending || '') + ' <button type="button" class="v2ct-b2 sm" data-a="sreload">أعد المحاولة</button></div>';
+    if (!SS.pending.length) return '';
+    return '<section class="v2ct-box"><header><h2>ينتظر اعتمادك</h2><span class="v2ct-n">' + esc(ar(SS.pending.length)) + '</span></header>'
+      + '<div class="v2ct-stack">' + SS.pending.map(function (it) {
+        var mine = it.source === 'founder', body = it.body || {};
+        return '<article class="v2ct-row v2ct-sprop"><p class="v2ct-cm">' + esc(body.page_label || it.target_label || 'صفحة') + ' · ' + esc(mine ? 'كتبته بنفسك' : 'اقترحه العقل') + '</p>'
+          + siteDiff(it) + (it.last_error ? '<div class="v2ct-err" role="alert">' + esc(it.last_error) + '</div>' : '')
+          + '<div class="v2ct-acts"><button type="button" class="v2ct-b1 auto" data-a="sapprove" data-id="' + esc(it.id) + '">اعتمد وانشر</button> '
+          + '<button type="button" class="v2ct-b2" data-a="sreject" data-id="' + esc(it.id) + '">ارفض</button></div></article>';
+      }).join('') + '</div></section>';
+  }
+  function sitePickerBox() {
+    var head0 = '<header><h2>صفحات الموقع</h2></header>';
+    if (SS.pages === undefined) return '<section class="v2ct-box">' + head0 + '<p class="v2ct-line">…جارٍ جلب الصفحات</p></section>';
+    if (SS.pages === null) return '<section class="v2ct-box">' + head0 + siteUnavailable('pages', 'الصفحات') + '</section>';
+    var opts = '<option value="">اختر صفحة…</option>' + SS.pages.map(function (p) {
+      return '<option value="' + esc(p.page) + '"' + (p.page === SS.page ? ' selected' : '') + '>' + esc(p.label) + '</option>';
+    }).join('');
+    return '<section class="v2ct-box">' + head0 + '<div class="v2ct-catf"><label for="sitePage">الصفحة</label><select id="sitePage" class="v2ct-sel" data-a="spick">' + opts + '</select>'
+      + (SS.page ? '<button type="button" class="v2ct-b2" data-a="sreload">حدّث النصوص من الموقع</button>' : '') + '</div>'
+      + (SS.page ? '' : '<p class="v2ct-line">اختر صفحة لترى نصوصها كما هي على الموقع الآن.</p>') + '</section>';
+  }
+  function siteBlocksBox() {
+    var title = SS.label || 'الصفحة';
+    if (SS.blocks === undefined) return '<section class="v2ct-box"><header><h2>' + esc(title) + '</h2></header><p class="v2ct-line">…جارٍ قراءة الصفحة من الموقع</p></section>';
+    if (SS.blocks === null) return '<section class="v2ct-box"><header><h2>' + esc(title) + '</h2></header>' + siteUnavailable('blocks', 'نصوص الصفحة') + '</section>';
+    var chips = L.v2SiteKinds().map(function (k) {
+      return '<button type="button" class="v2ct-chip' + (k.key === SS.kind ? ' on' : '') + '" data-a="skind" data-v="' + k.key + '">' + esc(k.label) + '</button>';
+    }).join('');
+    var rows = L.v2SiteBlockRows(SS.blocks, SS.kind);
+    var list = rows.length ? rows.map(function (r) {
+      return '<div class="v2ct-sb"><div class="v2ct-sbm"><span class="v2ct-pill">' + esc(r.tagLabel) + '</span>' + (r.part ? '<span class="v2ct-pill amber">جزء ' + esc(ar(r.part)) + ' من فقرة</span>' : '') + '</div>'
+        + '<p class="v2ct-sbt" dir="auto">' + esc(r.text) + '</p>'
+        + (r.editable ? '<button type="button" class="v2ct-b2 sm" data-a="sedit" data-i="' + r.index + '">عدّل</button>' : '<span class="v2ct-line">' + esc(r.note) + '</span>') + '</div>';
+    }).join('') : '<div class="v2ct-none">لا نصوص من هذا النوع في الصفحة</div>';
+    return '<section class="v2ct-box"><header><h2>' + esc(title) + '</h2><span class="v2ct-n">' + esc(ar(rows.length)) + '</span></header>'
+      + '<p class="v2ct-line">النصوص كما هي على الموقع الآن. اضغط «عدّل» لتكتب بديلًا، فيصير اقتراحًا تعتمده بنفسك.</p>'
+      + '<div class="v2ct-chips" role="tablist" aria-label="نوع النص">' + chips + '</div><div class="v2ct-sblist">' + list + '</div></section>';
+  }
+  function siteDecisionsBox() {
+    var head0 = '<header><h2>القرارات</h2></header><p class="v2ct-line">قواعد النص العام التي يراعيها العقل حين يقترح تعديلًا على الموقع. أضف قاعدة أو احذف ما لم يعد صالحًا.</p>';
+    if (SS.decisions === undefined) return '<section class="v2ct-box">' + head0 + '<p class="v2ct-line">…جارٍ جلب القرارات</p></section>';
+    if (SS.decisions === null) return '<section class="v2ct-box">' + head0 + siteUnavailable('decisions', 'القرارات') + '</section>';
+    var list = SS.decisions.length ? '<ul class="v2ct-sdec">' + SS.decisions.map(function (d) {
+      return '<li><span>' + esc(d.text) + '</span><button type="button" class="v2ct-b3" data-a="sdecdel" data-id="' + esc(d.id) + '">احذف</button></li>';
+    }).join('') + '</ul>' : '<div class="v2ct-none">لا قواعد بعد</div>';
+    return '<section class="v2ct-box">' + head0 + list
+      + '<div class="v2ct-sdecadd"><label for="siteDec">قاعدة جديدة</label><input id="siteDec" class="v2ct-sel" maxlength="300" value="' + esc(SS.decDraft) + '" placeholder="اكتب القاعدة في جملة واحدة">'
+      + '<button type="button" class="v2ct-b2" data-a="sdecadd">أضف القاعدة</button></div>'
+      + (SS.decErr ? '<div class="v2ct-err" role="alert">' + esc(SS.decErr) + '</div>' : '') + '</section>';
+  }
+  function siteBackupsBox() {
+    var head0 = '<header><h2>النسخ السابقة</h2></header>';
+    if (SS.backups === undefined) return '<section class="v2ct-box">' + head0 + '<p class="v2ct-line">…جارٍ جلب النسخ</p></section>';
+    if (SS.backups === null) return '<section class="v2ct-box">' + head0 + siteUnavailable('backups', 'النسخ السابقة') + '</section>';
+    var rows = L.v2SiteBackupRows(SS.backups, now());
+    var list = rows.length ? '<ul class="v2ct-sdec">' + rows.map(function (r) {
+      return '<li><span>' + esc(r.kind + ' · ' + r.when + (r.who ? ' · ' + r.who : '') + ' · ' + r.size) + '</span>'
+        + '<button type="button" class="v2ct-b2 sm" data-a="srestore" data-id="' + esc(r.id) + '">أرجِع الصفحة</button></li>';
+    }).join('') + '</ul>' : '<div class="v2ct-none">لا نسخ بعد. تُحفظ نسخة قبل كل تعديل يُنشر.</div>';
+    return '<section class="v2ct-box">' + head0 + '<p class="v2ct-line">آخر ' + esc(ar(20)) + ' نسخة من هذه الصفحة. «أرجِع الصفحة» يعيدها كما كانت وقت النسخة.</p>' + list + '</section>';
+  }
+  function drawSite() {
+    if (!SS.init) { SS.init = true; siteLoadBase(); }
+    return head('الموقع', 'عدّل أي نص في صفحات الموقع. تعديلك يصير اقتراحًا، ولا يظهر للناس حتى تعتمده.')
+      + sitePendingBox() + sitePickerBox() + (SS.page ? siteBlocksBox() : '') + siteDecisionsBox() + (SS.page ? siteBackupsBox() : '');
+  }
+  function sitePick(page) {
+    SS.page = page || ''; SS.kind = 'all'; SS.blocks = undefined; SS.backups = undefined; SS.sha = '';
+    SS.label = ((SS.pages || []).filter(function (p) { return p.page === SS.page; })[0] || {}).label || '';
+    if (SS.page) siteLoadPage();
+    redraw();
+  }
+  function siteEditSheet(r) {
+    var s = openSheet('تعديل نص في الموقع', '<p class="v2ct-kick">' + esc(r.tagLabel + (r.part ? ' · جزء ' + ar(r.part) + ' من فقرة' : '')) + '</p>'
+      + '<div class="v2ct-fld"><label>النص الحالي</label><p class="v2ct-val" dir="auto">' + esc(r.text) + '</p></div>'
+      + '<div class="v2ct-fld"><label for="siteNew">النص الجديد</label><textarea id="siteNew" rows="5" maxlength="600">' + esc(r.text) + '</textarea></div>'
+      + '<p class="v2ct-fine">لن يظهر على الموقع حتى تعتمده. اكتب نصًا عاديًا بلا وسوم.</p><div id="v2ctErr"></div>'
+      + '<div class="v2ct-acts2"><button type="button" class="v2ct-b1" id="v2ctSave">احفظ الاقتراح</button><button type="button" class="v2ct-b2" id="v2ctNo">رجوع</button></div>', true);
+    if (!s) return;
+    var save = q('#v2ctSave', s), box = q('#siteNew', s);
+    q('#v2ctNo', s).onclick = function () { if (!s.dataset.busy) closeSheet(); };
+    save.onclick = function () {
+      // مستثنى من التأكيد: يحفظ اقتراحًا فقط ولا يلمس الموقع؛ النشر نفسه يمرّ على ورقة «اعتمد وانشر».
+      if (save.dataset.busy) return;
+      var chk = L.v2SiteCheckNew(r.text, box.value, r.tag);
+      if (!chk.ok) { errBox(s, chk.error); return; }
+      save.dataset.busy = '1'; s.dataset.busy = '1'; save.disabled = true; save.textContent = 'جارٍ الحفظ…'; errBox(s, '');
+      apiPost('/v2/site/edit', { page: SS.page, path: r.path, old: r.text, new: chk.text, sha: SS.sha, confirmed: true }).then(function () {
+        delete s.dataset.busy; closeSheet();
+        setNote('حُفظ الاقتراح. اعتمده من «ينتظر اعتمادك» حتى يظهر على الموقع.');
+        siteLoadPending(); redraw();
+      }).catch(function (e) {
+        delete s.dataset.busy; delete save.dataset.busy; save.disabled = false; save.textContent = 'احفظ الاقتراح';
+        errBox(s, apiErr(e));
+        if (e && e.status === 409) siteLoadPage();
+      });
+    };
+  }
+  function siteApprove(it) {
+    confirmSheet({ title: 'نشر التعديل على الموقع', lead: 'سيظهر التعديل على الموقع للناس فور الاعتماد، وتُحفظ نسخة سابقة تستطيع إرجاعها.', extra: siteDiff(it),
+      okLabel: 'اعتمد وانشر', run: function (done) {
+        apiPost('/v2/brain/items/' + encodeURIComponent(it.id) + '/approve', { confirmed: true }).then(function () {
+          siteAfterChange(); done({ ok: true, note: 'تمّ: ظهر التعديل على الموقع.' });
+        }).catch(function (e) { siteLoadPending(); done({ ok: false, error: apiErr(e) }); });
+      } });
+  }
+  function siteReject(it) {
+    confirmSheet({ title: 'رفض الاقتراح', lead: 'لن يُنشر هذا الاقتراح، ولن يتغيّر الموقع.', extra: siteDiff(it), okLabel: 'ارفض', run: function (done) {
+      apiPost('/v2/brain/items/' + encodeURIComponent(it.id) + '/reject', { confirmed: true }).then(function () {
+        siteLoadPending(); done({ ok: true, note: 'تمّ: رُفض الاقتراح.' });
+      }).catch(function (e) { siteLoadPending(); done({ ok: false, error: apiErr(e) }); });
+    } });
+  }
+  function siteRestore(id) {
+    var row = L.v2SiteBackupRows((SS.backups || []).filter(function (b) { return String(b.id) === String(id); }), now())[0];
+    if (!row) return;
+    confirmSheet({ title: 'إرجاع الصفحة', danger: true,
+      lead: 'ستعود «' + (SS.label || 'الصفحة') + '» كما كانت ' + row.when + '، وتظهر للناس فور الإرجاع. نحفظ نسخة من الحالية قبل ذلك.',
+      okLabel: 'أرجِع الصفحة', run: function (done) {
+        apiPost('/v2/site/restore', { page: SS.page, backup_id: Number(id), confirmed: true }).then(function () {
+          siteAfterChange(); done({ ok: true, note: 'تمّ: عادت الصفحة كما كانت.' });
+        }).catch(function (e) { done({ ok: false, error: apiErr(e) }); });
+      } });
+  }
+  function siteAddDecision() {
+    // مستثنى من التأكيد: قاعدة داخلية يقرؤها العقل ولا تظهر للناس، وتُحذف بتأكيد.
+    var text = String(SS.decDraft || '').trim();
+    if (text.length < 3) { SS.decErr = 'اكتب قاعدة من ٣ أحرف فأكثر'; return redraw(); }
+    SS.decErr = '';
+    apiPost('/v2/site/decisions', { text: text, confirmed: true }).then(function () {
+      SS.decDraft = ''; setNote('تمّ: أُضيفت القاعدة.'); siteLoadDecisions(); redraw();
+    }).catch(function (e) { SS.decErr = apiErr(e); redraw(); });
+  }
+  function siteDelDecision(id) {
+    var d = (SS.decisions || []).filter(function (x) { return x.id === id; })[0];
+    if (!d) return;
+    confirmSheet({ title: 'حذف قاعدة', danger: true, lead: 'تُحذف هذه القاعدة من القرارات، ولا يراعيها العقل بعد الآن.', extra: '<p class="v2ct-val">' + esc(d.text) + '</p>', okLabel: 'احذف', run: function (done) {
+      ep().api('/v2/site/decisions/' + encodeURIComponent(id), { method: 'DELETE', body: { confirmed: true } }).then(function () {
+        siteLoadDecisions(); done({ ok: true, note: 'تمّ: حُذفت القاعدة.' });
+      }).catch(function (e) { done({ ok: false, error: apiErr(e) }); });
+    } });
+  }
+
   // ================================================================== الأحداث
   function itemOf(id) { return S.items[id] || null; }
   function runAct(it) {
@@ -1485,6 +1687,14 @@
     if (a === 'cmain') { var o2 = opinionById(id); if (!o2) return; var sg = L.v2ContentSuggest({ kind: 'comment', moderation: o2.moderation }); return sg.act === 'rejectComment' ? rejectOpinion(o2) : commentSheet(o2); }
     if (a === 'creply') { var o3 = approvedById(id); if (o3) replySheet(o3); return; }
     if (a === 'csummary') return summaryConfirm();
+    if (a === 'sreload') { siteLoadDecisions(); siteLoadPending(); if (!SS.pages) siteApi('pages', '/v2/site/pages', function (d) { return d.pages || []; }); siteLoadPage(); return redraw(); }
+    if (a === 'skind') { SS.kind = v; return redraw(); }
+    if (a === 'sedit') { var sr = L.v2SiteBlockRows(SS.blocks, 'all').filter(function (x) { return String(x.index) === b.getAttribute('data-i'); })[0]; if (sr && sr.editable) siteEditSheet(sr); return; }
+    if (a === 'sapprove') { var si = SS.byId[id]; if (si) siteApprove(si); return; }
+    if (a === 'sreject') { var sj = SS.byId[id]; if (sj) siteReject(sj); return; }
+    if (a === 'srestore') return siteRestore(id);
+    if (a === 'sdecadd') { var inp = q('#siteDec', S.view); if (inp) SS.decDraft = inp.value; return siteAddDecision(); }
+    if (a === 'sdecdel') return siteDelDecision(id);
     if (a === 'newtut') return tutSheet(null);
     if (a === 'tedit') { var tu = (window.TUTORIALS || []).filter(function (t2) { return t2.id === id; })[0]; if (tu) tutSheet(tu); return; }
   }
@@ -1493,6 +1703,11 @@
     var t = e.target;
     if (!isCurrent()) return;
     if (t && t.getAttribute && t.getAttribute('data-a') === 'cat' && t.closest && t.closest('.v2ct')) { S.cat = t.value; redraw(); }
+    if (t && t.getAttribute && t.getAttribute('data-a') === 'spick' && t.closest && t.closest('.v2ct')) sitePick(t.value);
+  }
+  // مسوّدة «قاعدة جديدة» تبقى عبر إعادات الرسم (الدقيقة وتبديل المصادر) حتى تُضاف أو تُترك.
+  function onInput(e) {
+    if (e.target && e.target.id === 'siteDec' && isCurrent()) SS.decDraft = e.target.value;
   }
 
   // ================================================================== نقطة الدخول
@@ -1513,11 +1728,12 @@
     activate();
     view.onclick = onClick;
     view.onchange = onChange;
+    view.oninput = onInput;
     S.lastTab = '';          // دخول جديد للقسم ⇒ تحديث الجانب المنتظِر
     redraw();
     if (!S.poll) {
       S.poll = setInterval(function () {
-        if (!isCurrent()) { if (S.active) { deactivate(); if (S.view) { if (S.view.onclick === onClick) S.view.onclick = null; if (S.view.onchange === onChange) S.view.onchange = null; } } return; }
+        if (!isCurrent()) { if (S.active) { deactivate(); if (S.view) { if (S.view.onclick === onClick) S.view.onclick = null; if (S.view.onchange === onChange) S.view.onchange = null; if (S.view.oninput === onInput) S.view.oninput = null; } } return; }
         if (!S.active) activate();
         if (modalOpen()) return;
         if (signature() !== S.sig) redraw();
@@ -1530,6 +1746,7 @@
     }, 60000);   // العدّاد: نصوص الأزمنة تتجدّد بلا إعادة تحميل
   };
   API._state = S;
+  API._site = SS;
   API._t = { safeHref: safeHref, safeLink: safeLink, creativeSheet: creativeSheet, testimonialSheet: testimonialSheet, approveTestimonial: approveTestimonial, refreshKeys: refreshKeys, WAITING: WAITING };   // خطّاف اختبار فقط
   API._tick = function (t) { S.nowOverride = t || 0; redraw(); };
 })();
