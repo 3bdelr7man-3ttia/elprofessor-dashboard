@@ -240,10 +240,10 @@ def test_gather_builds_targets_from_all_sources(app_ctx):
     assert a.meta['id'] == 'pm-1' and a.meta['email'] == 'layla.a@example.test' and a.meta['approve_label'] == 'أرسل الرد'
     assert by['pmsg:pm-2'].facts['has_account'] is False and by['pmsg:pm-2'].meta['approve_label'] == 'انسخ الرد'
     s = by['smsg:%d' % m.id]
-    assert s.meta['approve_label'] == 'احفظ الرد وانسخه' and s.facts['subject'] == 'استفسار'
+    assert s.meta['approve_label'] == 'أرسل الرد بالبريد' and s.facts['subject'] == 'استفسار'   # له بريد
     ld = by['lead:ld-1']
     assert set(ld.facts) == {'want', 'experience'} and ld.meta['phone'] == '+201555000111'
-    assert ld.meta['approve_label'] == 'انسخ الرسالة وعلّمه تم'
+    assert ld.meta['approve_label'] == 'أرسل بالبريد'   # له بريد
     for t in ts:
         assert len(t.label) <= 120 and len(t.ref) <= 200 and len(t.facts['body'] if 'body' in t.facts else '') <= 1200
         blob = json.dumps(t.facts, ensure_ascii=False)
@@ -361,7 +361,9 @@ def test_apply_member_sends_exact_path_and_body_and_audits():
     p.routes[('POST', '/api/bridge/messages/pm-1/reply')] = (200, {'ok': True})
     audits = []
     ctx = _ctx(p, audit=lambda *a, **k: audits.append((a, k)), actor='boss@x.test')
-    res = ops.PRODUCERS[1].apply(ctx, {'text': 'شكرًا لرسالتكم.'}, _pm_target())
+    t = _pm_target()
+    t.meta['email'] = ''      # بلا بريد معروف ⇒ الرد داخل المنصة وحده، ولا نداء بريد
+    res = ops.PRODUCERS[1].apply(ctx, {'text': 'شكرًا لرسالتكم.'}, t)
     assert isinstance(res, ApplyResult) and res.ok and not res.no_reply and res.copy_text == ''
     assert p.calls == [{'method': 'POST', 'path': '/api/bridge/messages/pm-1/reply', 'params': None,
                         'json': {'body': 'شكرًا لرسالتكم.', 'by': 'boss@x.test', 'confirmed': True}}]
@@ -425,9 +427,9 @@ def test_apply_lead_copy_and_resolve():
 
 
 def test_apply_site_message_same_writes_as_admin_reply_no_network(app_ctx):
-    m = _seed_msg()
+    m = _seed_msg(email='')          # بلا بريد ⇒ النسخ فقط، ولا أي نداء
     p = FakePlatform()
-    t = Target(ref='smsg:%d' % m.id, label='x', facts={'subject': 's', 'body': 'b'}, meta={'id': m.id, 'email': m.email})
+    t = Target(ref='smsg:%d' % m.id, label='x', facts={'subject': 's', 'body': 'b'}, meta={'id': m.id, 'email': ''})
     before = datetime.datetime.utcnow()
     res = _prod('reply_draft').apply(_ctx(p), {'text': 'شكرًا، سنوافيكم بالتفاصيل.'}, t)
     assert res.ok and res.copy_text == 'شكرًا، سنوافيكم بالتفاصيل.'
@@ -464,6 +466,248 @@ def test_audit_failure_does_not_break_send():
         raise RuntimeError('db')
     res = _prod('reply_draft').apply(_ctx(p, audit=boom), {'text': 'رد'}, _pm_target())
     assert res.ok
+
+
+# ---------------------------------------------------------------- reply_draft · البريد (SPEC-B §B4)
+
+EMAIL = '/api/bridge/email/send'
+ITEM = 'f' * 32
+
+
+def _ectx(plat, actor='boss@x.test', item_id=ITEM):
+    ctx = _ctx(plat, actor=actor)
+    if item_id:
+        ctx.item_id = item_id
+    return ctx
+
+
+def _emsg(m, email='visitor@example.test'):
+    return Target(ref='smsg:%d' % m.id, label='x', facts={'subject': 'استفسار', 'body': 'b'}, meta={'id': m.id, 'email': email})
+
+
+def _no_acct(mid='pm-2', email='guest@example.test'):
+    return Target(ref='pmsg:' + mid, label='x', facts={'subject': 'سؤال', 'body': 'b', 'has_account': False},
+                  meta={'id': mid, 'email': email})
+
+
+def _lead(email='salma.m@example.test'):
+    return Target(ref='lead:ld-1', label='x', facts={'want': 'w', 'experience': ''}, meta={'id': 'ld-1', 'phone': '+201', 'email': email})
+
+
+def _email_calls(p):
+    return [c for c in p.calls if c['path'] == EMAIL]
+
+
+def test_email_body_is_exact_for_site_message(app_ctx):
+    m = _seed_msg()
+    p = FakePlatform()
+    p.routes[('POST', EMAIL)] = (200, {'sent': True})
+    audits = []
+    res = _prod('reply_draft').apply(_ectx(p), {'text': 'شكرًا لتواصلكم.'}, _emsg(m))
+    assert res.ok and res.copy_text == '' and res.info['emailed'] is True and res.info['saved'] is True
+    assert res.info['message'] == 'وصل الرد إلى بريد صاحب الرسالة.' and res.info['line'] == 'أُرسل الرد بالبريد'
+    assert p.calls == [{'method': 'POST', 'path': EMAIL, 'params': None, 'json': {
+        'to_email': 'visitor@example.test', 'subject': 'رد على: استفسار', 'text': 'شكرًا لتواصلكم.', 'by': 'boss@x.test',
+        'confirmed': True, 'idem_key': ITEM, 'context': {'kind': 'user', 'id': 'visitor@example.test'}}}]
+    row = db.session.get(Message, m.id)
+    assert row.status == 'replied' and row.reply_body == 'شكرًا لتواصلكم.'
+
+
+def test_email_limits_are_respected_in_the_payload(app_ctx):
+    m = _seed_msg()
+    p = FakePlatform()
+    p.routes[('POST', EMAIL)] = (200, {'sent': True})
+    t = _emsg(m)
+    t.facts['subject'] = 'ع' * 300
+    _prod('reply_draft').apply(_ectx(p), {'text': 'ر' * 900}, t)
+    j = _email_calls(p)[0]['json']
+    assert len(j['subject']) <= 120 and len(j['text']) <= 4000 and len(j['idem_key']) <= 64 and len(j['by']) <= 120
+
+
+def test_idem_key_falls_back_to_a_stable_hash_without_an_item_id(app_ctx):
+    m = _seed_msg()
+    p = FakePlatform()
+    p.routes[('POST', EMAIL)] = (200, {'sent': True})
+    _prod('reply_draft').apply(_ectx(p, item_id=None), {'text': 'رد'}, _emsg(m))
+    k = _email_calls(p)[0]['json']['idem_key']
+    assert re.match(r'^[0-9a-f]{32}$', k) and k != ITEM
+
+
+@pytest.mark.parametrize('outcome,why', [
+    ((200, {'sent': False, 'reason': 'not_configured'}), 'خدمة البريد غير مفعّلة بعد'),
+    ((200, {'sent': False, 'reason': 'failed'}), 'تعذّر الإرسال الآن'),
+    ((200, {'sent': False}), 'تعذّر الإرسال الآن'),
+    ((422, {'error': 'هذا البريد غير معروف لدينا'}), 'هذا البريد غير معروف لدينا'),
+    ((429, {'error': 'بلغ البريد حدّه اليوم'}), 'بلغ البريد حدّه اليوم'),
+    ((404, {'error': 'Not Found'}), 'خدمة البريد غير مفعّلة بعد'),
+    ((503, {'error': 'لم يتم ضبط الربط بعد'}), 'خدمة البريد غير مفعّلة بعد'),
+    ((403, {'error': 'x'}), 'تعذّر الإرسال الآن')])
+def test_site_message_fallback_is_honest_and_keeps_the_copy_behaviour(app_ctx, outcome, why):
+    m = _seed_msg()
+    p = FakePlatform()
+    p.routes[('POST', EMAIL)] = outcome
+    res = _prod('reply_draft').apply(_ectx(p), {'text': 'رد للنسخ'}, _emsg(m))
+    assert res.ok and res.copy_text == 'رد للنسخ' and res.info['emailed'] is False and res.info['saved'] is True
+    assert res.info['message'] == 'لم يُرسل الرد بالبريد: %s. انسخ الرد وأرسله بنفسك.' % why
+    assert 'line' not in res.info and 'أُرسل' not in json.dumps(res.info, ensure_ascii=False)
+    row = db.session.get(Message, m.id)
+    assert row.status == 'replied' and row.reply_body == 'رد للنسخ'
+
+
+@pytest.mark.parametrize('outcome', [OSError('down'), (502, {'error': 'x'}), (504, {'error': 'x'}), (500, {'error': 'x'})])
+def test_site_message_unknown_outcome_claims_nothing_and_saves_nothing(app_ctx, outcome):
+    m = _seed_msg()
+    p = FakePlatform()
+    p.routes[('POST', EMAIL)] = outcome
+    res = _prod('reply_draft').apply(_ectx(p), {'text': 'رد'}, _emsg(m))
+    assert res.ok is False and res.no_reply is True and res.copy_text == 'رد'
+    assert 'لا نعرف إن وصل البريد' in res.error and 'أُرسل' not in res.error
+    assert db.session.get(Message, m.id).status != 'replied'
+
+
+def test_telegram_actor_never_falls_back_to_copy(app_ctx):
+    m = _seed_msg()
+    p = FakePlatform()
+    p.routes[('POST', EMAIL)] = (200, {'sent': False, 'reason': 'not_configured'})
+    res = _prod('reply_draft').apply(_ectx(p, actor='telegram:42'), {'text': 'رد'}, _emsg(m))
+    assert not res.ok and not res.no_reply and res.copy_text == ''
+    assert res.error == 'لم يُرسل الرد بالبريد (خدمة البريد غير مفعّلة بعد). افتح اللوحة لتنسخه وترسله بنفسك.'
+    assert db.session.get(Message, m.id).status != 'replied', 'الاقتراح يبقى ليُنسخ من اللوحة'
+    assert _email_calls(p)[0]['json']['by'] == 'telegram:42'
+
+
+def test_pmsg_without_account_sends_email_then_resolves():
+    p = FakePlatform()
+    p.routes[('POST', EMAIL)] = (200, {'sent': True})
+    p.routes[('POST', '/api/bridge/messages/pm-2/resolve')] = (200, {'ok': True})
+    audits = []
+    res = _prod('reply_draft').apply(_ctx_audit(p, audits), {'text': 'مرحبًا بك'}, _no_acct())
+    assert res.ok and res.copy_text == '' and res.info['emailed'] is True
+    assert [(c['method'], c['path']) for c in p.calls] == [('POST', EMAIL), ('POST', '/api/bridge/messages/pm-2/resolve')]
+    j = p.calls[0]['json']
+    assert j['to_email'] == 'guest@example.test' and j['context'] == {'kind': 'message', 'id': 'pm-2'} and j['subject'] == 'رد على: سؤال'
+    assert audits == ['brain.reply_email']
+    assert 'reply' not in ''.join(c['path'] for c in p.calls), 'لا رد داخلي لمن بلا حساب'
+
+
+def _ctx_audit(plat, audits, actor='boss@x.test'):
+    ctx = _ctx(plat, audit=lambda action, **k: audits.append(action), actor=actor)
+    ctx.item_id = ITEM
+    return ctx
+
+
+def test_pmsg_without_account_resolve_failure_after_a_real_send_is_still_ok():
+    p = FakePlatform()
+    p.routes[('POST', EMAIL)] = (200, {'sent': True})
+    p.routes[('POST', '/api/bridge/messages/pm-2/resolve')] = (500, {'error': 'x'})
+    res = _prod('reply_draft').apply(_ectx(p), {'text': 'رد'}, _no_acct())
+    assert res.ok and res.info['emailed'] is True and 'تعذّر تعليم الرسالة' in res.info['message']
+
+
+def test_pmsg_without_account_fallback_is_copy_plus_resolve():
+    p = FakePlatform()
+    p.routes[('POST', EMAIL)] = (200, {'sent': False, 'reason': 'not_configured'})
+    p.routes[('POST', '/api/bridge/messages/pm-2/resolve')] = (200, {'ok': True})
+    res = _prod('reply_draft').apply(_ectx(p), {'text': 'رد'}, _no_acct())
+    assert res.ok and res.copy_text == 'رد' and res.info['emailed'] is False and 'غير مفعّلة' in res.info['message']
+    assert [c['path'] for c in p.calls] == [EMAIL, '/api/bridge/messages/pm-2/resolve']
+
+
+def test_pmsg_without_account_unknown_email_outcome_does_not_resolve():
+    p = FakePlatform()
+    p.routes[('POST', EMAIL)] = (502, {'error': 'x'})
+    res = _prod('reply_draft').apply(_ectx(p), {'text': 'رد'}, _no_acct())
+    assert res.no_reply is True and [c['path'] for c in p.calls] == [EMAIL]
+
+
+def test_pmsg_without_account_and_without_email_stays_copy_only():
+    p = FakePlatform()
+    p.routes[('POST', '/api/bridge/messages/pm-2/resolve')] = (200, {'ok': True})
+    res = _prod('reply_draft').apply(_ectx(p), {'text': 'رد'}, _no_acct(email=''))
+    assert res.ok and res.copy_text == 'رد' and [c['path'] for c in p.calls] == ['/api/bridge/messages/pm-2/resolve']
+
+
+def test_pmsg_with_account_replies_in_app_then_emails():
+    p = FakePlatform()
+    p.routes[('POST', '/api/bridge/messages/pm-1/reply')] = (200, {'ok': True})
+    p.routes[('POST', EMAIL)] = (200, {'sent': True})
+    audits = []
+    res = _prod('reply_draft').apply(_ctx_audit(p, audits), {'text': 'شكرًا'}, _pm_target())
+    assert res.ok and res.info['sent'] is True and res.info['emailed'] is True and res.copy_text == ''
+    assert [c['path'] for c in p.calls] == ['/api/bridge/messages/pm-1/reply', EMAIL]
+    assert p.calls[1]['json']['context'] == {'kind': 'message', 'id': 'pm-1'}
+    assert audits == ['brain.reply_send', 'brain.reply_email']
+
+
+@pytest.mark.parametrize('outcome,fragment', [
+    ((200, {'sent': False, 'reason': 'not_configured'}), 'لم تُرسل نسخة بالبريد: خدمة البريد غير مفعّلة بعد'),
+    ((422, {'error': 'x'}), 'لم تُرسل نسخة بالبريد: هذا البريد غير معروف لدينا'),
+    ((502, {'error': 'x'}), 'ولا نعرف إن وصلت نسخة البريد')])
+def test_pmsg_with_account_email_failure_never_cancels_or_hides_the_in_app_reply(outcome, fragment):
+    p = FakePlatform()
+    p.routes[('POST', '/api/bridge/messages/pm-1/reply')] = (200, {'ok': True})
+    p.routes[('POST', EMAIL)] = outcome
+    res = _prod('reply_draft').apply(_ectx(p), {'text': 'شكرًا'}, _pm_target())
+    assert res.ok and res.info['sent'] is True and res.info['emailed'] is False
+    assert res.info['message'].startswith('وصل الرد داخل المنصة.') and fragment in res.info['message']
+
+
+def test_pmsg_with_account_in_app_failure_sends_no_email():
+    p = FakePlatform()
+    p.routes[('POST', '/api/bridge/messages/pm-1/reply')] = (500, {'error': 'x'})
+    p.routes[('POST', EMAIL)] = (200, {'sent': True})
+    res = _prod('reply_draft').apply(_ectx(p), {'text': 'رد'}, _pm_target())
+    assert not res.ok and _email_calls(p) == []
+
+
+def test_lead_with_email_sends_then_resolves_and_without_email_copies():
+    p = FakePlatform()
+    p.routes[('POST', EMAIL)] = (200, {'sent': True})
+    p.routes[('POST', '/api/bridge/leads/ld-1/resolve')] = (200, {'ok': True})
+    res = _prod('reply_draft').apply(_ectx(p), {'text': 'مرحبًا سلمى'}, _lead())
+    assert res.ok and res.copy_text == '' and res.info['emailed'] is True and res.info['message'] == 'وصل الرد إلى بريد صاحب الطلب.'
+    assert [c['path'] for c in p.calls] == [EMAIL, '/api/bridge/leads/ld-1/resolve']
+    j = p.calls[0]['json']
+    assert j['context'] == {'kind': 'lead', 'id': 'ld-1'} and j['subject'] == 'رد على طلب التواصل' and j['to_email'] == 'salma.m@example.test'
+    p2 = FakePlatform()
+    p2.routes[('POST', '/api/bridge/leads/ld-1/resolve')] = (200, {'ok': True})
+    r2 = _prod('reply_draft').apply(_ectx(p2), {'text': 'مرحبًا'}, _lead(email=''))
+    assert r2.ok and r2.copy_text == 'مرحبًا' and [c['path'] for c in p2.calls] == ['/api/bridge/leads/ld-1/resolve']
+
+
+def test_lead_fallback_and_unknown():
+    p = FakePlatform()
+    p.routes[('POST', EMAIL)] = (200, {'sent': False, 'reason': 'failed'})
+    p.routes[('POST', '/api/bridge/leads/ld-1/resolve')] = (200, {'ok': True})
+    res = _prod('reply_draft').apply(_ectx(p), {'text': 'مرحبًا'}, _lead())
+    assert res.ok and res.copy_text == 'مرحبًا' and res.info['emailed'] is False and 'تعذّر الإرسال الآن' in res.info['message']
+    p2 = FakePlatform()
+    p2.routes[('POST', EMAIL)] = OSError('x')
+    r2 = _prod('reply_draft').apply(_ectx(p2), {'text': 'مرحبًا'}, _lead())
+    assert r2.no_reply is True and [c['path'] for c in p2.calls] == [EMAIL]
+
+
+def test_email_audit_failure_does_not_break_the_send(app_ctx):
+    m = _seed_msg()
+    p = FakePlatform()
+    p.routes[('POST', EMAIL)] = (200, {'sent': True})
+
+    def boom(*a, **k):
+        raise RuntimeError('db')
+    ctx = _ctx(p, audit=boom)
+    ctx.item_id = ITEM
+    assert _prod('reply_draft').apply(ctx, {'text': 'رد'}, _emsg(m)).ok
+
+
+def test_approve_labels_follow_the_email_path():
+    assert ops.LABEL_EMAIL == 'أرسل الرد بالبريد' and ops.LABEL_EMAIL_LEAD == 'أرسل بالبريد'
+
+
+def test_email_copy_has_no_false_claims():
+    src = open(ops.__file__, encoding='utf-8').read()
+    assert 'يقوّم' not in src
+    for msg in ops._EMAIL_WHY.values():
+        assert 'أُرسل' not in msg
 
 
 # ---------------------------------------------------------------- تكامل مع `_platform_proxy` الحقيقي (requests مزيّف)

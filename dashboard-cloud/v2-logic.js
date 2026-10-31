@@ -2171,7 +2171,10 @@
       if (locked) line = str(p.lock_reason) || 'يسألك دائمًا قبل أن يصل ما يكتبه إلى أحد.';
       else if (t != null) line = 'آخر تغيير: ' + (agoText(t, now || Date.now()) || 'غير متاح بعد') + (str(p.updated_by) ? ' بواسطة ' + str(p.updated_by) : '');
       else line = 'لم يُغيَّر من قبل';
+      // «اسألني على تليجرام»: يظهر المفتاح فقط لو الخادم أعلن أنه يُضبط لهذا الصف (الرأي لا يُرسل أبدًا) وبقيمة منطقية صريحة.
+      var tgToggle = p.telegram_can_toggle === true && typeof p.telegram === 'boolean';
       rows.push({ id: str(p.id), section: str(p.section), kind: str(p.kind), title: str(p.label) || str(p.id), sentence: str(p.sentence), lockReason: str(p.lock_reason),
+                  tgToggle: tgToggle, telegram: tgToggle ? p.telegram : null, tgOk: p.telegram_ok === true,
                   locked: locked, mode: mode, updatedMs: t, updatedBy: str(p.updated_by), line: line,
                   options: opts.map(function (o) { return { value: o, label: BR_MODE_LABEL[o], on: o === mode }; }),
                   link: sec ? { label: 'افتح ' + sec.label, section: sec.key } : null });
@@ -2196,6 +2199,19 @@
     } else {
       lead = 'يكتب العقل ' + t + ' اقتراحًا يظهر في اللوحة، ولا يُنفَّذ شيء إلا بعد موافقتك.';
       go = 'نعم، يسألني';
+    }
+    return { title: row.title, lead: lead, go: go };
+  }
+  // ورقة تأكيد «اسألني على تليجرام»: {title, lead, go}. ⛔ لا نقول إن الاعتماد من تليجرام متاح إلا لو الخادم أعلنه (`tgOk`).
+  function v2sBrainTelegramSheet(row, on) {
+    var t = '«' + row.title + '»', lead, go;
+    if (on) {
+      lead = 'يرسل العقل ' + t + ' إلى تليجرام عندما يكتب اقتراحًا جديدًا. '
+        + (row.tgOk ? 'تستطيع أن تعتمده أو ترفضه من هناك، وتفتحه في اللوحة.' : 'تصلك رسالة بالرابط فقط، والقرار يبقى في اللوحة.');
+      go = 'نعم، اسألني';
+    } else {
+      lead = 'لا يرسل العقل ' + t + ' إلى تليجرام. يبقى الاقتراح في اللوحة تراه هناك.';
+      go = 'نعم، أوقفه';
     }
     return { title: row.title, lead: lead, go: go };
   }
@@ -2471,7 +2487,7 @@
     v2sBrainLogText: v2sBrainLogText, v2sBrainLogParts: v2sBrainLogParts, v2sBrainLogRows: v2sBrainLogRows, v2sBrainRules: v2sBrainRules, v2sBrainRunText: v2sBrainRunText,
     v2sBrainStopped: v2sBrainStopped, v2sBrainStoppedAll: v2sBrainStoppedAll, v2sBrainLine: v2sBrainLine, v2sBrainHelpers: v2sBrainHelpers,
     v2sBrainAgentInfo: v2sBrainAgentInfo, v2sBrainCap: v2sBrainCap, v2sBrainHelpersLine: v2sBrainHelpersLine, v2sBrainConfirmAll: v2sBrainConfirmAll,
-    v2sBrainSwitches: v2sBrainSwitches, v2sBrainSwitchSheet: v2sBrainSwitchSheet, v2sBrainItems: v2sBrainItems, v2sBrainItemRows: v2sBrainItemRows,
+    v2sBrainSwitches: v2sBrainSwitches, v2sBrainSwitchSheet: v2sBrainSwitchSheet, v2sBrainTelegramSheet: v2sBrainTelegramSheet, v2sBrainItems: v2sBrainItems, v2sBrainItemRows: v2sBrainItemRows,
     v2sBrainProposed: v2sBrainProposed, v2sBrainRunState: v2sBrainRunState, v2sBrainRunInfo: v2sBrainRunInfo,
     v2sBrainWriterText: v2sBrainWriterText, v2sBrainWritesToday: v2sBrainWritesToday
   });

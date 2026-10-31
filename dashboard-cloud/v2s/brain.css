@@ -71,6 +71,10 @@
 .v2sb-md button:not([aria-checked="true"]):hover{background:rgba(33,38,46,.07)}
 .v2sb-md button:focus-visible{outline:3px solid rgba(158,43,78,.45);outline-offset:2px}
 .v2sb-row.locked .v2sb-st{color:#5A5448}
+.v2sb-tg{grid-column:1/3;justify-self:start;min-height:44px;padding:0 14px;margin:2px 0 4px;border:1px solid var(--line);border-radius:12px;background:#fff;color:var(--ink);font:700 14px 'Cairo',sans-serif;cursor:pointer}
+.v2sb-tg[aria-checked="true"]{background:#F6E9EE;border-color:var(--wine);color:var(--wine)}
+.v2sb-tg:disabled{opacity:.6;cursor:wait}
+.v2sb-tg:focus-visible{outline:3px solid rgba(158,43,78,.45);outline-offset:2px}
 .v2sb-whint{margin:2px 6px 4px}
 .v2sb-runnow{display:grid;gap:4px;justify-items:start;padding:10px 6px 4px}
 .v2sb-runbtn{min-height:48px;padding:0 22px}
