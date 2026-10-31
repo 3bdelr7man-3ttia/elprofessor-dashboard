@@ -512,7 +512,8 @@ def _email_context(src, rid, to_email):
         return {'kind': 'message', 'id': str(rid)}
     if src == SRC_LEAD:
         return {'kind': 'lead', 'id': str(rid)}
-    return {'kind': 'user', 'id': to_email}      # رسالة الموقع: لا تُعرَف على المنصة، فيتحقق الجسر من أن البريد لمستخدم موجود
+    # رسالة نموذج «تواصل» محفوظة هنا في اللوحة: الجسر يقبل `site_message` (محمي بالسرّ وحدّ ٣٠ بريد/يوم) — brain-tg@8630f4e
+    return {'kind': 'site_message', 'id': str(rid)[:64]}
 
 
 def _email_subject(src, target):

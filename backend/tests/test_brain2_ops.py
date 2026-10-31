@@ -508,7 +508,7 @@ def test_email_body_is_exact_for_site_message(app_ctx):
     assert res.info['message'] == 'وصل الرد إلى بريد صاحب الرسالة.' and res.info['line'] == 'أُرسل الرد بالبريد'
     assert p.calls == [{'method': 'POST', 'path': EMAIL, 'params': None, 'json': {
         'to_email': 'visitor@example.test', 'subject': 'رد على: استفسار', 'text': 'شكرًا لتواصلكم.', 'by': 'boss@x.test',
-        'confirmed': True, 'idem_key': ITEM, 'context': {'kind': 'user', 'id': 'visitor@example.test'}}}]
+        'confirmed': True, 'idem_key': ITEM, 'context': {'kind': 'site_message', 'id': str(m.id)}}}]
     row = db.session.get(Message, m.id)
     assert row.status == 'replied' and row.reply_body == 'شكرًا لتواصلكم.'
 
