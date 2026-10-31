@@ -257,8 +257,14 @@ def register(app, ns):
         broken = bool(st.get('counter_error'))
         used = None if broken else int(st.get('used') or 0)
         remaining = None if (cap is None or broken) else max(0, cap - used)
+        # الكاتب الحالي: 'main' (الأساسي) · 'backup' (الاحتياطي) · None (لا أحد). ⛔ لا اسم مزوّد يخرج.
+        try:
+            prov = L('ai_provider_in_use')()
+        except Exception:
+            prov = None
+        writer = None if not prov else ('main' if prov == 'anthropic' else 'backup')
         return out({'configured': bool(configured), 'cap': cap, 'used': used, 'remaining': remaining,
-                    'blocked': bool(st.get('blocked')) and cap is not None})
+                    'blocked': bool(st.get('blocked')) and cap is not None, 'writer': writer})
 
     # ------------------------------------------------------------------ B4 · قاعدة تريدها
     @app.route('/api/v2/brain/rules', methods=['POST'], endpoint='v2_brain_rules_add')

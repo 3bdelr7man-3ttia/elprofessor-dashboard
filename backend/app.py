@@ -7272,8 +7272,8 @@ AI_PROVIDERS = {
         'label': 'Claude',
         'env_key': 'ANTHROPIC_API_KEY',
         'model_env': 'ANTHROPIC_MODEL',
-        'default_model': 'claude-sonnet-4-20250514',
-        'models': ['claude-sonnet-4-20250514', 'claude-3-5-sonnet-latest', 'claude-3-5-haiku-latest'],
+        'default_model': 'claude-sonnet-5-5',
+        'models': ['claude-sonnet-5-5', 'claude-opus-5-5', 'claude-haiku-5-5'],
     },
     'openai': {
         'label': 'ChatGPT',
@@ -7348,7 +7348,12 @@ def ai_provider_in_use():
 # و`backend/.env.example` ما زالا يمرّران `DEEPSEEK_MODEL=deepseek-chat`، أي أن **البيئة
 # تُحيي الاسم الميّت فوق الافتراضي الصحيح**. الكود يبطلها هنا صراحةً: اسمٌ مسحوب = يُتجاهل
 # ويُسجَّل، ويُرسَل الافتراضي الحيّ. (أي اسم آخر يمرّ كما هو — التجاوز بالبيئة يبقى مسموحًا.)
-AI_RETIRED_MODELS = {'deepseek-chat', 'deepseek-reasoner'}
+AI_RETIRED_MODELS = {'deepseek-chat', 'deepseek-reasoner',
+                     'claude-sonnet-4-20250514', 'claude-3-5-sonnet-latest', 'claude-3-5-haiku-latest'}
+
+# بادئة اسم الموديل لكل مزوّد: `DASHBOARD_AI_MODEL` يعلو على كل المزوّدين، فاسمٌ من مزوّد آخر
+# (مثلًا `deepseek-v4-flash` والمزوّد Claude) كان يُرسَل كما هو فيرجع ٤٠٠ ويبدو «ذكاء غير متاح».
+AI_MODEL_PREFIXES = {'anthropic': 'claude-', 'deepseek': 'deepseek-', 'openai': 'gpt-'}
 
 
 def ai_model_for(provider):
@@ -7356,6 +7361,13 @@ def ai_model_for(provider):
     cfg = AI_PROVIDERS.get(provider) or {}
     default_model = (cfg.get('default_model') or '').strip()
     override = (os.environ.get('DASHBOARD_AI_MODEL') or '').strip()
+    if override:
+        own = AI_MODEL_PREFIXES.get(provider)
+        foreign = [p for k, p in AI_MODEL_PREFIXES.items() if k != provider]
+        if own and not override.startswith(own) and any(override.startswith(p) for p in foreign):
+            logger.error('Ignoring DASHBOARD_AI_MODEL %r: its prefix does not match provider %r — using the '
+                         'provider setting instead.', override, provider)
+            override = ''
     resolved = override or (os.environ.get(cfg.get('model_env', '')) or default_model or '').strip()
     if resolved in AI_RETIRED_MODELS:
         logger.error('Ignoring RETIRED model name %r from the environment — using %r instead. '
