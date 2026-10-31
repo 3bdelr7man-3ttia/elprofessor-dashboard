@@ -134,9 +134,9 @@ def ts_check(page, name):
     if out:
         PROBLEMS.append('%s: %d عنصر يخرج من عرض الشاشة' % (name, out))
     small = page.evaluate("""(min) => [...document.querySelectorAll('.v2ts button, #epModal .v2ts-m button, #epModal .v2ts-m input:not([type=hidden]), #epModal .v2ts-m textarea')]
-      .filter(b => b.offsetParent && !b.disabled).map(b => [(b.className || b.id || b.tagName).toString().slice(0, 24), Math.round(b.getBoundingClientRect().height)]).filter(x => x[1] < min)""", 52 if mobile else 44)
+      .filter(b => b.offsetParent && !b.disabled).map(b => [(b.className || b.id || b.tagName).toString().slice(0, 24), Math.round(b.getBoundingClientRect().height)]).filter(x => x[1] < min)""", 44)
     if small:
-        PROBLEMS.append('%s: أهداف أقل من %d px: %r' % (name, 52 if mobile else 44, small[:4]))
+        PROBLEMS.append('%s: أهداف أقل من %d px: %r' % (name, 44, small[:4]))
     txt = page.evaluate("""() => [...document.querySelectorAll('.v2ts, #epModal .v2ts-m')].map(e => { const c = e.cloneNode(true);
       c.querySelectorAll('[dir="ltr"], script, style, input, textarea, time').forEach(n => n.remove()); return c.innerText; }).join('\\n')""")
     if re.search(r'(?<![\w@./-])(0|null|NaN|undefined)(?![\w@./-])', txt):

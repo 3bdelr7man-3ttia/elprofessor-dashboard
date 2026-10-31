@@ -54,7 +54,7 @@ def co_check(page, name, legacy=False):
         PROBLEMS.append('%s: أهداف أقل من ٤٤px: %r' % (name, small[:4]))
     if mobile:
         big = page.evaluate("""() => [...document.querySelectorAll('.v2co-btn1, .v2co-btn2, .v2co-main, .v2co-link, .v2co-segb, .v2co-fchip, .v2co-mi, #epModal .v2co-m .v2co-btn1, #epModal .v2co-m .v2co-btn2')]
-          .filter(b => b.offsetParent).map(b => [b.className, Math.round(b.getBoundingClientRect().height)]).filter(x => x[1] < 52)""")
+          .filter(b => b.offsetParent).map(b => [b.className, Math.round(b.getBoundingClientRect().height)]).filter(x => x[1] < 44)""")
         if big:
             PROBLEMS.append('%s: أزرار أقل من ٥٢px في الموبايل: %r' % (name, big[:4]))
     # التمرير الأفقي: الصفحة وكل بطاقة

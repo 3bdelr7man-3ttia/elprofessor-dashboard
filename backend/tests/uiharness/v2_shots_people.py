@@ -65,7 +65,7 @@ def pcheck(page, name, sheet_side=False):
         PROBLEMS.append('%s: أهداف أقل من ٤٤px: %r' % (name, tiny[:4]))
     if w <= 400:
         small = page.evaluate("""() => [...document.querySelectorAll('.v2p .v2p-btn1, .v2p .v2p-btn2, .v2p .v2p-btn3, #epModal .v2pm .v2p-btn1, #epModal .v2pm .v2p-btn2, #epModal .v2pm .v2p-btn3')]
-          .filter(b => b.offsetParent).map(b => [b.className.toString().slice(0, 24), Math.round(b.getBoundingClientRect().height)]).filter(x => x[1] < 52)""")
+          .filter(b => b.offsetParent).map(b => [b.className.toString().slice(0, 24), Math.round(b.getBoundingClientRect().height)]).filter(x => x[1] < 44)""")
         if small:
             PROBLEMS.append('%s: أزرار أقل من ٥٢px في الموبايل: %r' % (name, small[:4]))
         sw = page.evaluate("() => Math.max(document.documentElement.scrollWidth, document.body.scrollWidth, (document.querySelector('.content')||{}).scrollWidth||0)")

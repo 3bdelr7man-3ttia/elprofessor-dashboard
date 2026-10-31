@@ -143,3 +143,298 @@ body:has(> .app.v2-shell) #epModal .modal .mh button:focus-visible{outline:3px s
 @media(max-width:560px){
   body:has(> .app.v2-shell) #epModal .modal .mh button{width:52px;height:52px}
 }
+
+/* ============================================================================
+ * نظام الأزرار الموحّد — نفس مفهوم أزرار الدورات في المنصة (`.c2-btn` / `.ep-btn`). شكل فقط، بلا منطق.
+ *  أساسي : عنّابي مصمت · ارتفاع ٤٤ · حشو ٢٠ · نصف قطر ١٢ · خط ١٥/٦٠٠ · العرض على قد النص.
+ *  ثانوي : إطار عنّابي بلا تعبئة · نفس الارتفاع والنصف قطر ⇒ يتميّز عن الأساسي بوضوح.
+ *  صغير  : للحذف وإضافة صف والإجراءات الجانبية · خط ١٤/٥٠٠ · حشو ١٣ · نصف قطر ١٠ · هدف اللمس يفضل ٤٤.
+ *  وحيد  : الأساسي الوحيد في أسفل الموبايل يملأ العرض بسقف ٤٤٠ (`--btn-max`).
+ *  شبكة  : الأزرار السريعة الكثيرة عمودان، كل زرّ سطر واحد (أيقونة + كلمة) بارتفاع ٤٨ (`.ep-grid`).
+ * ⛔ هذا القسم هو المرجع الوحيد لقياسات الأزرار: `:not(#_)` يرفع أولويته فوق قواعد الأقسام القديمة
+ *    (`.xxx-btn1{min-height:48px…}` تبقى في ملفاتها بلا أثر) ⇒ زرّ جديد = أحد الأصناف أدناه أو `.ep-b1/.ep-b2/.ep-bs`، لا قياسات جديدة.
+ * ⛔ السياقات القديمة (`.btn .btn-primary …` في الدرج وورق التأكيد) داخل `:where()` فتتساوى أولوية كل القواعد ويحكم الترتيب.
+ * ========================================================================== */
+:root{
+  --btn-h:44px;--btn-px:20px;--btn-r:12px;--btn-fs:15px;--btn-fw:600;
+  --btn-sm-px:13px;--btn-sm-r:10px;--btn-sm-fs:14px;--btn-sm-fw:500;
+  --btn-grid-h:48px;--btn-max:440px;
+  --btn-wine:#9E2B4E;--btn-wine-d:#7A1F3B;--btn-wine-soft:rgba(158,43,78,.07);
+  --btn-red:#C8102E;--btn-red-d:#A80D26;--btn-red-soft:rgba(200,16,46,.07);--btn-ink:#21262E;--btn-line:#E6DED3;
+}
+
+/* —— الأساس المشترك */
+.ep-b1:not(#_):not(#_),
+.v2-btn1:not(#_):not(#_),
+.v2-start:not(#_):not(#_),
+.v2b-b1:not(#_):not(#_),
+.v2d-btn1:not(#_):not(#_),
+.v2d-sgo:not(#_):not(#_),
+.v3-btn1:not(#_):not(#_),
+.co-btn1:not(#_):not(#_),
+.v2co-btn1:not(#_):not(#_),
+.v2ct-b1:not(#_):not(#_),
+.v2ex-btn1:not(#_):not(#_),
+.v2h-btn1:not(#_):not(#_),
+.v2p-btn1:not(#_):not(#_),
+.v2ro-btn1:not(#_):not(#_),
+.v2ts-btn1:not(#_):not(#_),
+.v2co-main:not(#_):not(#_),
+.ep-b2:not(#_):not(#_),
+.v2-btn2:not(#_):not(#_),
+.v2b-b2:not(#_):not(#_),
+.v2b-all:not(#_):not(#_),
+.v2d-btn2:not(#_):not(#_),
+.v3-btn2:not(#_):not(#_),
+.co-btn2:not(#_):not(#_),
+.v2co-btn2:not(#_):not(#_),
+.v2ct-b2:not(#_):not(#_),
+.v2ex-btn2:not(#_):not(#_),
+.v2h-btn2:not(#_):not(#_),
+.v2p-btn2:not(#_):not(#_),
+.v2ro-btn2:not(#_):not(#_),
+.v2ts-btn2:not(#_):not(#_),
+.v2s-mk-fbtn:not(#_):not(#_),
+.v2h-qlink:not(#_):not(#_),
+.mk-later:not(#_):not(#_),
+.v2-btn3:not(#_):not(#_),
+.ep-bs:not(#_):not(#_),
+.v2ct-b3:not(#_):not(#_),
+.v2p-btn3:not(#_):not(#_),
+:where(.app.v2-shell .drawer,.app.v2-shell.v2lg #view,body:has(> .app.v2-shell) #epModal,.v2-sheet) .btn:not(#_):not(#_),
+.v2h-dbar button:not(#_):not(#_){
+  display:inline-flex;align-items:center;justify-content:center;gap:7px;box-sizing:border-box;
+  min-height:var(--btn-h);height:auto;padding:0 var(--btn-px);border-radius:var(--btn-r);
+  border-width:1.5px;border-style:solid;font-family:'Cairo',sans-serif;font-size:var(--btn-fs);font-weight:var(--btn-fw);line-height:1.4;
+  width:fit-content;max-width:100%;flex:0 0 auto;text-align:center;text-decoration:none;cursor:pointer;white-space:normal;text-wrap:balance;
+  transition:background .15s,border-color .15s,color .15s,opacity .15s}
+/* —— ثانوي: إطار فقط بلا تعبئة */
+.ep-b2:not(#_):not(#_),
+.v2-btn2:not(#_):not(#_),
+.v2b-b2:not(#_):not(#_),
+.v2b-all:not(#_):not(#_),
+.v2d-btn2:not(#_):not(#_),
+.v3-btn2:not(#_):not(#_),
+.co-btn2:not(#_):not(#_),
+.v2co-btn2:not(#_):not(#_),
+.v2ct-b2:not(#_):not(#_),
+.v2ex-btn2:not(#_):not(#_),
+.v2h-btn2:not(#_):not(#_),
+.v2p-btn2:not(#_):not(#_),
+.v2ro-btn2:not(#_):not(#_),
+.v2ts-btn2:not(#_):not(#_),
+.v2s-mk-fbtn:not(#_):not(#_),
+.v2h-qlink:not(#_):not(#_),
+.mk-later:not(#_):not(#_),
+.v2co-btn1.outline:not(#_):not(#_),
+:where(.app.v2-shell .drawer,.app.v2-shell.v2lg #view,body:has(> .app.v2-shell) #epModal,.v2-sheet) .btn:not(#_):not(#_),
+.v2h-dbar button:not(#_):not(#_){background:transparent;border-color:var(--btn-wine);color:var(--btn-wine);box-shadow:none}
+.ep-b2:not(#_):not(#_):not(:disabled):hover,
+.v2-btn2:not(#_):not(#_):not(:disabled):hover,
+.v2b-b2:not(#_):not(#_):not(:disabled):hover,
+.v2b-all:not(#_):not(#_):not(:disabled):hover,
+.v2d-btn2:not(#_):not(#_):not(:disabled):hover,
+.v3-btn2:not(#_):not(#_):not(:disabled):hover,
+.co-btn2:not(#_):not(#_):not(:disabled):hover,
+.v2co-btn2:not(#_):not(#_):not(:disabled):hover,
+.v2ct-b2:not(#_):not(#_):not(:disabled):hover,
+.v2ex-btn2:not(#_):not(#_):not(:disabled):hover,
+.v2h-btn2:not(#_):not(#_):not(:disabled):hover,
+.v2p-btn2:not(#_):not(#_):not(:disabled):hover,
+.v2ro-btn2:not(#_):not(#_):not(:disabled):hover,
+.v2ts-btn2:not(#_):not(#_):not(:disabled):hover,
+.v2s-mk-fbtn:not(#_):not(#_):not(:disabled):hover,
+.v2h-qlink:not(#_):not(#_):not(:disabled):hover,
+.mk-later:not(#_):not(#_):not(:disabled):hover,
+.v2co-btn1.outline:not(#_):not(#_):not(:disabled):hover,
+:where(.app.v2-shell .drawer,.app.v2-shell.v2lg #view,body:has(> .app.v2-shell) #epModal,.v2-sheet) .btn:not(#_):not(#_):not(:disabled):hover,
+.v2h-dbar button:not(#_):not(#_):not(:disabled):hover{background:var(--btn-wine-soft);border-color:var(--btn-wine-d);color:var(--btn-wine-d);filter:none}
+/* —— أساسي: عنّابي مصمت */
+.ep-b1:not(#_):not(#_),
+.v2-btn1:not(#_):not(#_),
+.v2-start:not(#_):not(#_),
+.v2b-b1:not(#_):not(#_),
+.v2d-btn1:not(#_):not(#_),
+.v2d-sgo:not(#_):not(#_),
+.v3-btn1:not(#_):not(#_),
+.co-btn1:not(#_):not(#_),
+.v2co-btn1:not(#_):not(#_),
+.v2ct-b1:not(#_):not(#_),
+.v2ex-btn1:not(#_):not(#_),
+.v2h-btn1:not(#_):not(#_),
+.v2p-btn1:not(#_):not(#_),
+.v2ro-btn1:not(#_):not(#_),
+.v2ts-btn1:not(#_):not(#_),
+.v2co-main:not(#_):not(#_),
+:where(.app.v2-shell .drawer,.app.v2-shell.v2lg #view,body:has(> .app.v2-shell) #epModal,.v2-sheet) .btn-primary:not(#_):not(#_),
+:where(.app.v2-shell .drawer,.app.v2-shell.v2lg #view,body:has(> .app.v2-shell) #epModal,.v2-sheet) .btn-human:not(#_):not(#_){background:var(--btn-wine);border-color:var(--btn-wine);color:#fff;box-shadow:none}
+.ep-b1:not(#_):not(#_):not(:disabled):hover,
+.v2-btn1:not(#_):not(#_):not(:disabled):hover,
+.v2-start:not(#_):not(#_):not(:disabled):hover,
+.v2b-b1:not(#_):not(#_):not(:disabled):hover,
+.v2d-btn1:not(#_):not(#_):not(:disabled):hover,
+.v2d-sgo:not(#_):not(#_):not(:disabled):hover,
+.v3-btn1:not(#_):not(#_):not(:disabled):hover,
+.co-btn1:not(#_):not(#_):not(:disabled):hover,
+.v2co-btn1:not(#_):not(#_):not(:disabled):hover,
+.v2ct-b1:not(#_):not(#_):not(:disabled):hover,
+.v2ex-btn1:not(#_):not(#_):not(:disabled):hover,
+.v2h-btn1:not(#_):not(#_):not(:disabled):hover,
+.v2p-btn1:not(#_):not(#_):not(:disabled):hover,
+.v2ro-btn1:not(#_):not(#_):not(:disabled):hover,
+.v2ts-btn1:not(#_):not(#_):not(:disabled):hover,
+.v2co-main:not(#_):not(#_):not(:disabled):hover,
+:where(.app.v2-shell .drawer,.app.v2-shell.v2lg #view,body:has(> .app.v2-shell) #epModal,.v2-sheet) .btn-primary:not(#_):not(#_):not(:disabled):hover,
+:where(.app.v2-shell .drawer,.app.v2-shell.v2lg #view,body:has(> .app.v2-shell) #epModal,.v2-sheet) .btn-human:not(#_):not(#_):not(:disabled):hover{background:var(--btn-wine-d);border-color:var(--btn-wine-d);color:#fff;filter:none}
+.v2ct-b1.ink:not(#_):not(#_){background:var(--btn-ink);border-color:var(--btn-ink)}
+.v2ct-b1.ink:not(#_):not(#_):not(:disabled):hover{background:#0F1217;border-color:#0F1217}
+/* —— خطِر: إطار أحمر (حذف · رفض · استرداد) */
+.co-btn2.co-dng:not(#_):not(#_),
+.v2co-btn2.red:not(#_):not(#_),
+.v2p-btn2.danger:not(#_):not(#_),
+.v2p-btn3:not(#_):not(#_),
+.v2ct-b3:not(#_):not(#_),
+:where(.app.v2-shell .drawer,.app.v2-shell.v2lg #view,body:has(> .app.v2-shell) #epModal,.v2-sheet) .btn-warn:not(#_):not(#_),
+:where(.app.v2-shell .drawer,.app.v2-shell.v2lg #view,body:has(> .app.v2-shell) #epModal,.v2-sheet) .btn-refund:not(#_):not(#_),
+:where(.app.v2-shell .drawer,.app.v2-shell.v2lg #view,body:has(> .app.v2-shell) #epModal,.v2-sheet) .btn-purge-ghost:not(#_):not(#_){background:transparent;border-color:var(--btn-red);color:var(--btn-red)}
+.co-btn2.co-dng:not(#_):not(#_):not(:disabled):hover,
+.v2co-btn2.red:not(#_):not(#_):not(:disabled):hover,
+.v2p-btn2.danger:not(#_):not(#_):not(:disabled):hover,
+.v2p-btn3:not(#_):not(#_):not(:disabled):hover,
+.v2ct-b3:not(#_):not(#_):not(:disabled):hover,
+:where(.app.v2-shell .drawer,.app.v2-shell.v2lg #view,body:has(> .app.v2-shell) #epModal,.v2-sheet) .btn-warn:not(#_):not(#_):not(:disabled):hover,
+:where(.app.v2-shell .drawer,.app.v2-shell.v2lg #view,body:has(> .app.v2-shell) #epModal,.v2-sheet) .btn-refund:not(#_):not(#_):not(:disabled):hover,
+:where(.app.v2-shell .drawer,.app.v2-shell.v2lg #view,body:has(> .app.v2-shell) #epModal,.v2-sheet) .btn-purge-ghost:not(#_):not(#_):not(:disabled):hover{background:var(--btn-red-soft);border-color:var(--btn-red-d);color:var(--btn-red-d)}
+/* —— خطِر مؤكَّد: أحمر مصمت */
+.v2ct-b1.danger:not(#_):not(#_),
+.v2co-btn1.danger:not(#_):not(#_),
+.v2p-btn1.danger:not(#_):not(#_),
+:where(.app.v2-shell .drawer,.app.v2-shell.v2lg #view,body:has(> .app.v2-shell) #epModal,.v2-sheet) .btn-purge:not(#_):not(#_),
+:where(body:has(> .app.v2-shell) #epModal) .btn-refund:not(#_):not(#_){background:var(--btn-red);border-color:var(--btn-red);color:#fff}
+.v2ct-b1.danger:not(#_):not(#_):not(:disabled):hover,
+.v2co-btn1.danger:not(#_):not(#_):not(:disabled):hover,
+.v2p-btn1.danger:not(#_):not(#_):not(:disabled):hover,
+:where(.app.v2-shell .drawer,.app.v2-shell.v2lg #view,body:has(> .app.v2-shell) #epModal,.v2-sheet) .btn-purge:not(#_):not(#_):not(:disabled):hover,
+:where(body:has(> .app.v2-shell) #epModal) .btn-refund:not(#_):not(#_):not(:disabled):hover{background:var(--btn-red-d);border-color:var(--btn-red-d);color:#fff}
+/* —— نصّي بلا إطار (لاحقًا · تراجع) */
+.v2-btn3:not(#_):not(#_),
+.v2ct-b3:not(#_):not(#_),
+:where(.app.v2-shell .drawer,.app.v2-shell.v2lg #view,body:has(> .app.v2-shell) #epModal,.v2-sheet) .btn-purge-ghost:not(#_):not(#_){border-color:transparent}
+.v2-btn3:not(#_):not(#_){color:#4B463E}
+.v2-btn3:not(#_):not(#_):not(:disabled):hover{background:rgba(33,38,46,.06);border-color:transparent;color:var(--btn-ink)}
+.v2ct-b3:not(#_):not(#_):not(:disabled):hover,
+:where(.app.v2-shell .drawer,.app.v2-shell.v2lg #view,body:has(> .app.v2-shell) #epModal,.v2-sheet) .btn-purge-ghost:not(#_):not(#_):not(:disabled):hover{border-color:transparent}
+/* —— صغير: حذف · أضف صفًّا · إجراء جانبي (هدف اللمس يبقى ٤٤) */
+.ep-bs:not(#_):not(#_),
+.v2ct-b2.sm:not(#_):not(#_),
+.v2h-btn1.sm:not(#_):not(#_),
+.v2h-btn2.sm:not(#_):not(#_),
+.v2sb-kb:not(#_):not(#_),
+.v2sb-kadd:not(#_):not(#_),
+.v2sb-del:not(#_):not(#_),
+.v2ce-ib:not(#_):not(#_),
+.v2ce-addb:not(#_):not(#_),
+.v2ct-b3:not(#_):not(#_),
+.v2p-btn3:not(#_):not(#_),
+.v2-btn3:not(#_):not(#_),
+.v2co-btn2.red:not(#_):not(#_){font-size:var(--btn-sm-fs);font-weight:var(--btn-sm-fw);padding:0 var(--btn-sm-px);border-radius:var(--btn-sm-r);min-height:44px}
+.ep-bs:not(#_):not(#_),
+.v2ct-b2.sm:not(#_):not(#_),
+.v2h-btn2.sm:not(#_):not(#_),
+.v2sb-kb:not(#_):not(#_),
+.v2sb-del:not(#_):not(#_),
+.v2ce-ib:not(#_):not(#_),
+.v2ce-addb:not(#_):not(#_){border-color:var(--btn-line);color:var(--btn-ink)}
+.ep-bs:not(#_):not(#_):not(:disabled):hover,
+.v2ct-b2.sm:not(#_):not(#_):not(:disabled):hover,
+.v2h-btn2.sm:not(#_):not(#_):not(:disabled):hover,
+.v2sb-kb:not(#_):not(#_):not(:disabled):hover,
+.v2sb-del:not(#_):not(#_):not(:disabled):hover,
+.v2ce-ib:not(#_):not(#_):not(:disabled):hover,
+.v2ce-addb:not(#_):not(#_):not(:disabled):hover{border-color:var(--btn-wine);color:var(--btn-wine);background:var(--btn-wine-soft)}
+.v2sb-kdel:not(#_):not(#_),
+.v2sb-del:not(#_):not(#_),
+.v2ce-ib.red:not(#_):not(#_){border-color:var(--btn-red);color:var(--btn-red)}
+.v2sb-kdel:not(#_):not(#_):not(:disabled):hover,
+.v2sb-del:not(#_):not(#_):not(:disabled):hover,
+.v2ce-ib.red:not(#_):not(#_):not(:disabled):hover{border-color:var(--btn-red-d);color:var(--btn-red-d);background:var(--btn-red-soft)}
+.v2ce-ib:not(#_):not(#_){min-width:44px;padding-inline:10px}
+.v2sb-run:not(#_):not(#_),.co-btn1:not(#_):not(#_),.co-btn2:not(#_):not(#_){align-self:center}
+/* —— معطَّل */
+.ep-b1:not(#_):not(#_):disabled,
+.v2-btn1:not(#_):not(#_):disabled,
+.v2-start:not(#_):not(#_):disabled,
+.v2b-b1:not(#_):not(#_):disabled,
+.v2d-btn1:not(#_):not(#_):disabled,
+.v2d-sgo:not(#_):not(#_):disabled,
+.v3-btn1:not(#_):not(#_):disabled,
+.co-btn1:not(#_):not(#_):disabled,
+.v2co-btn1:not(#_):not(#_):disabled,
+.v2ct-b1:not(#_):not(#_):disabled,
+.v2ex-btn1:not(#_):not(#_):disabled,
+.v2h-btn1:not(#_):not(#_):disabled,
+.v2p-btn1:not(#_):not(#_):disabled,
+.v2ro-btn1:not(#_):not(#_):disabled,
+.v2ts-btn1:not(#_):not(#_):disabled,
+.v2co-main:not(#_):not(#_):disabled,
+.ep-b2:not(#_):not(#_):disabled,
+.v2-btn2:not(#_):not(#_):disabled,
+.v2b-b2:not(#_):not(#_):disabled,
+.v2b-all:not(#_):not(#_):disabled,
+.v2d-btn2:not(#_):not(#_):disabled,
+.v3-btn2:not(#_):not(#_):disabled,
+.co-btn2:not(#_):not(#_):disabled,
+.v2co-btn2:not(#_):not(#_):disabled,
+.v2ct-b2:not(#_):not(#_):disabled,
+.v2ex-btn2:not(#_):not(#_):disabled,
+.v2h-btn2:not(#_):not(#_):disabled,
+.v2p-btn2:not(#_):not(#_):disabled,
+.v2ro-btn2:not(#_):not(#_):disabled,
+.v2ts-btn2:not(#_):not(#_):disabled,
+.v2s-mk-fbtn:not(#_):not(#_):disabled,
+.v2h-qlink:not(#_):not(#_):disabled,
+.mk-later:not(#_):not(#_):disabled,
+.v2-btn3:not(#_):not(#_):disabled,
+.ep-bs:not(#_):not(#_):disabled,
+.v2ct-b3:not(#_):not(#_):disabled,
+.v2p-btn3:not(#_):not(#_):disabled,
+:where(.app.v2-shell .drawer,.app.v2-shell.v2lg #view,body:has(> .app.v2-shell) #epModal,.v2-sheet) .btn:not(#_):not(#_):disabled,
+:where(.app.v2-shell .drawer,.app.v2-shell.v2lg #view,body:has(> .app.v2-shell) #epModal,.v2-sheet) .btn-primary:not(#_):not(#_):disabled,
+:where(.app.v2-shell .drawer,.app.v2-shell.v2lg #view,body:has(> .app.v2-shell) #epModal,.v2-sheet) .btn-human:not(#_):not(#_):disabled,
+:where(.app.v2-shell .drawer,.app.v2-shell.v2lg #view,body:has(> .app.v2-shell) #epModal,.v2-sheet) .btn-warn:not(#_):not(#_):disabled,
+:where(.app.v2-shell .drawer,.app.v2-shell.v2lg #view,body:has(> .app.v2-shell) #epModal,.v2-sheet) .btn-refund:not(#_):not(#_):disabled,
+:where(.app.v2-shell .drawer,.app.v2-shell.v2lg #view,body:has(> .app.v2-shell) #epModal,.v2-sheet) .btn-purge:not(#_):not(#_):disabled,
+:where(.app.v2-shell .drawer,.app.v2-shell.v2lg #view,body:has(> .app.v2-shell) #epModal,.v2-sheet) .btn-purge-ghost:not(#_):not(#_):disabled{opacity:.55;cursor:not-allowed;filter:none}
+/* —— الأساسي الوحيد في أسفل الموبايل: يملأ العرض بسقف ٤٤٠؛ وما عداه على قد النص */
+@media(max-width:760px){
+.ep-b1:not(#_):not(#_):only-child,
+.v2-btn1:not(#_):not(#_):only-child,
+.v2-start:not(#_):not(#_):only-child,
+.v2b-b1:not(#_):not(#_):only-child,
+.v2d-btn1:not(#_):not(#_):only-child,
+.v2d-sgo:not(#_):not(#_):only-child,
+.v3-btn1:not(#_):not(#_):only-child,
+.co-btn1:not(#_):not(#_):only-child,
+.v2co-btn1:not(#_):not(#_):only-child,
+.v2ct-b1:not(#_):not(#_):only-child,
+.v2ex-btn1:not(#_):not(#_):only-child,
+.v2h-btn1:not(#_):not(#_):only-child,
+.v2p-btn1:not(#_):not(#_):only-child,
+.v2ro-btn1:not(#_):not(#_):only-child,
+.v2ts-btn1:not(#_):not(#_):only-child,
+.v2co-main:not(#_):not(#_):only-child,
+:where(.app.v2-shell .drawer,.app.v2-shell.v2lg #view,body:has(> .app.v2-shell) #epModal,.v2-sheet) .btn-primary:not(#_):not(#_):only-child,
+:where(.app.v2-shell .drawer,.app.v2-shell.v2lg #view,body:has(> .app.v2-shell) #epModal,.v2-sheet) .btn-human:not(#_):not(#_):only-child{width:100%;max-width:var(--btn-max)}
+}
+/* —— صفّ الإجراءات في الدرج وورق القرار: صفّ واحد يلتف، الأساسي أولًا، لا أعمدة ممدودة */
+:where(.app.v2-shell .drawer,.app.v2-shell.v2lg #view,body:has(> .app.v2-shell) #epModal,.v2-sheet) .acts:not(#_):not(#_){display:flex;flex-direction:row;flex-wrap:wrap;align-items:center;gap:10px}
+:where(.app.v2-shell .drawer,.app.v2-shell.v2lg #view,body:has(> .app.v2-shell) #epModal,.v2-sheet) .acts .btn-primary:not(#_):not(#_),:where(.app.v2-shell .drawer,.app.v2-shell.v2lg #view,body:has(> .app.v2-shell) #epModal,.v2-sheet) .acts .btn-human:not(#_):not(#_){order:-1}
+/* —— حاويات أزرار كانت شبكة عمود واحد تمدّد الأزرار: صفّ واحد يلتف، الأزرار على قد نصّها */
+.v2co-acts:not(#_),.v2ex-acts:not(#_),.v2p-acts:not(#_),.v2sb-acts:not(#_),.v3-acts:not(#_){display:flex;flex-direction:row;flex-wrap:wrap;align-items:center;gap:10px}
+/* —— أزرار الطوابير السريعة (اسم + عدد): سطر واحد بارتفاع ٤٨ ونفس نصف القطر */
+.v2h-qb:not(#_){min-height:var(--btn-grid-h);padding:0 14px;border-radius:var(--btn-r);font-size:14.5px;font-weight:var(--btn-fw)}
+/* —— شريط «القرار التالي» في الموبايل: الزرّ الأساسي الوحيد في صفّه يملأ العرض بسقف ٤٨٠ */
+@media(max-width:760px){.v2-next .v2-start:not(#_){flex:1 1 100%;width:100%;max-width:480px}}
+/* —— أزرار سريعة كثيرة: شبكة عمودين، كل زرّ سطر واحد (أيقونة + كلمة) */
+.ep-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.ep-grid > :is(button,a):not(#_){width:auto;max-width:none;min-height:var(--btn-grid-h);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-wrap:nowrap}

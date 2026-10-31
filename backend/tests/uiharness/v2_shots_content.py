@@ -42,7 +42,7 @@ def ct_check(page, name):
       const targets = [...document.querySelectorAll('.v2ct button, .v2ct a[href], .v2ct select, #epModal .v2ct-m button, #epModal .v2ct-m a[href], #epModal .v2ct-m input:not([type=checkbox]), #epModal .v2ct-m textarea, #epModal .v2ct-m select')]
         .filter(e => vis(e) && !e.classList.contains('v2ct-person'));
       const small = targets.map(e => [e.className || e.tagName, Math.round(e.getBoundingClientRect().height)]).filter(x => x[1] < 44);
-      const btns = [...document.querySelectorAll('.v2ct-b1, .v2ct-b2, .v2ct-b3, .v2ct-chip, .v2ct-link')].filter(vis).map(e => [e.className, Math.round(e.getBoundingClientRect().height)]).filter(x => x[1] < 52);
+      const btns = [...document.querySelectorAll('.v2ct-b1, .v2ct-b2, .v2ct-b3, .v2ct-chip, .v2ct-link')].filter(vis).map(e => [e.className, Math.round(e.getBoundingClientRect().height)]).filter(x => x[1] < 44);
       const segs = [...document.querySelectorAll('.v2ct-segb')].filter(vis).map(e => [e.className, Math.round(e.getBoundingClientRect().height)]).filter(x => x[1] < 60);
       const multi = [...document.querySelectorAll('.v2ct-t, .v2ct-card, .v2ct-row, #epModal .v2ct-m')].filter(vis)
         .filter(e => [...e.querySelectorAll('.v2ct-b1')].filter(vis).length > 1).map(e => e.className);
