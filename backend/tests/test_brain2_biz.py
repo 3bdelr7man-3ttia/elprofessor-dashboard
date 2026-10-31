@@ -236,13 +236,11 @@ def test_arabic_copy_rules():
         assert 'null' not in t and 'undefined' not in t
 
 
-def test_hidden_hook():
+def test_lesson_producer_is_listed_and_locked():
+    """كان خطّافًا مخفيًا؛ ملأته الجولة C2 (تفاصيله في test_brain2_lessons.py)."""
     h = prod('course_lesson_draft')
-    assert h.listed is False and h.may_run_alone is False and h.apply is None and h.kind == 'draft'
-    assert h.gather(None) == []
-    d = h.gather.__doc__
-    assert 'gather' in d and 'validate' in d and 'apply' in d and "'fields'" in d and 'confirmed:true' in d
-    assert all(p.listed for p in biz.PRODUCERS if p.id != 'course_lesson_draft')
+    assert h.listed is True and h.may_run_alone is False and h.apply is not None and h.kind == 'draft'
+    assert all(p.listed for p in biz.PRODUCERS)
 
 
 # ------------------------------------------------------------------ course_review

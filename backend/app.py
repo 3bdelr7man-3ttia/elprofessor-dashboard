@@ -2713,6 +2713,8 @@ def _v2_brain2_kick(trigger='cron'):
 
 
 import v2_courses_routes; v2_courses_routes.register(app, globals())
+try: import v2_trainer_share_routes as _v2ts; _v2ts.register(app, globals())  # نسبة المدرّب (C2b): تحميل محروس
+except Exception: logger.exception('v2 trainer share routes not loaded')
 import v2_market_routes as _v2s_market; _v2s_market.register(app, globals())  # noqa: E402
 __import__('v2_books_routes').register(app, globals())
 import v2_content_routes as _v2s_content; _v2s_content.register(app, globals())
