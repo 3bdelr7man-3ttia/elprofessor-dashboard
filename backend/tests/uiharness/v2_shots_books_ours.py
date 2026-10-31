@@ -333,7 +333,7 @@ def flow_ours(browser, h, pre, viewport, mobile):
             PROBLEMS.append('%s05: المسودة ما ظهرتش بفصولها (%s)' % (pre, chs))
         mk = page.evaluate("""() => ({marks: [...document.querySelectorAll('.ou-hl-back mark')].map(m => m.textContent), note: (document.getElementById('ou-review') || {}).hidden === false ? document.getElementById('ou-review').textContent : null,
           color: getComputedStyle(document.querySelector('.ou-hl-back mark')).borderBottomColor})""")
-        if sorted(set(mk['marks'])) != sorted(['٥٦٣', '٢٠٠٣', 'Labor', 'Law']) or mk['note'] != 'راجع الأرقام والأسماء دي قبل ما تعرضه' or 'rgba(158, 43, 78' not in mk['color']:
+        if sorted(set(mk['marks'])) != sorted(['٥٦٣', '٢٠٠٣', 'Labor', 'Law']) or mk['note'] != 'راجع هذه الأرقام والأسماء قبل العرض' or 'rgba(158, 43, 78' not in mk['color']:
             PROBLEMS.append('%s05: علامات المراجعة %r' % (pre, mk))
         oshot(page, pre + '05-brain-draft.jpg', target='.ou-review')
         # تعديل ثم حفظ (محلي) ثم PDF بتأكيد
@@ -350,7 +350,7 @@ def flow_ours(browser, h, pre, viewport, mobile):
             PROBLEMS.append('%s05: فصل ناقص ما اتمنعش' % pre)
         click(page, '[data-a="chdel"][data-i="3"]', 300)
         click(page, '[data-a="mkpdf"]', 600)
-        if 'سيُنشأ ملف PDF' not in page.inner_text('.ou-draft .ou-confirm') or 'فيه ٤ حاجات محتاجة مراجعة' not in page.inner_text('.ou-draft .ou-confirm'):
+        if 'سيُنشأ ملف PDF' not in page.inner_text('.ou-draft .ou-confirm') or '٤ مواضع تحتاج مراجعة' not in page.inner_text('.ou-draft .ou-confirm'):
             PROBLEMS.append('%s05: لوحة تأكيد الـPDF' % pre)
         check_writes(pre + '05-before-pdf', h, base, 0)
         oshot(page, pre + '05b-pdf-confirm.jpg', keep=False, target='.ou-draft .ou-confirm')

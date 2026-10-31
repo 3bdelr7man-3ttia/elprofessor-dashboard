@@ -791,9 +791,10 @@
   }
   // ------------------------------------------------------------------ علامات المراجعة (أرقام وأسماء لاتينية ليست في التعليمات): تُعلَّم لا تُرفض
   function reviewPhrase(n) {
-    if (n === 1) return 'فيه حاجة محتاجة مراجعة';
-    if (n === 2) return 'فيه حاجتين محتاجتين مراجعة';
-    return 'فيه ' + arDigits(n) + ' حاجات محتاجة مراجعة';
+    if (n === 1) return 'موضع واحد يحتاج مراجعة';
+    if (n === 2) return 'موضعان يحتاجان مراجعة';
+    if (n <= 10) return arDigits(n) + ' مواضع تحتاج مراجعة';
+    return arDigits(n) + ' موضعًا يحتاج مراجعة';
   }
   function liveMarks() {
     var d = O.f.draft, toks = O.f.tokens || [], n = 0;
@@ -822,7 +823,7 @@
     var d = O.f.draft;
     var who = dv && dv.writer === 'backup' ? 'كتبها الكاتب الاحتياطي' : 'كتبها العقل';
     var h = '<div class="ou-draft"><p class="ou-fine">' + esc(who) + '. راجعها وعدّلها كما تشاء قبل أن تعمل الملف.</p>'
-      + '<p class="ou-review" id="ou-review" role="note"' + (liveMarks() ? '' : ' hidden') + '>راجع الأرقام والأسماء دي قبل ما تعرضه</p>'
+      + '<p class="ou-review" id="ou-review" role="note"' + (liveMarks() ? '' : ' hidden') + '>راجع هذه الأرقام والأسماء قبل العرض</p>'
       + '<div class="fld"><label for="ou_dt">عنوان الكتاب</label>' + hlField('in', 'id="ou_dt" maxlength="160"', d.title) + '</div>'
       + '<div class="fld"><label for="ou_da">نبذة قصيرة</label>' + hlField('ta', 'id="ou_da" rows="3" maxlength="2000"', d.about) + '</div>';
     d.chapters.forEach(function (c, i) {
