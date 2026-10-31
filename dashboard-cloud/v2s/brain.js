@@ -186,7 +186,9 @@
     return '<div class="v2sb-row has-md' + (r.locked ? ' locked' : '') + '" data-key="w:' + esc(r.id) + '">'
       + '<button type="button" class="v2sb-rt" data-a="mrule" data-id="' + esc(r.id) + '">' + esc(r.title) + '</button>'
       + '<div class="v2sb-ctl"><div class="v2sb-md" role="radiogroup" aria-label="' + esc(r.title) + '">' + radios + '</div></div>'
-      + '<p class="v2sb-st">' + bidi(r.line) + '</p></div>';
+      + '<p class="v2sb-st">' + bidi(r.line) + '</p>'
+      + (r.tgToggle ? '<button type="button" class="v2sb-tg" role="switch" aria-checked="' + (r.telegram === true) + '" data-a="tg" data-id="' + esc(r.id) + '"' + (S.modeBusy ? ' disabled' : '') + '>اسألني على تليجرام: ' + (r.telegram === true ? 'يعمل' : 'متوقّف') + '</button>' : '')
+      + '</div>';
   }
   function writesGroup() {
     var sw = swInfo(), hint = '<p class="v2sb-hint v2sb-whint">اقتراحات يكتبها العقل من بيانات حقيقية</p>', body, count = null;
@@ -385,6 +387,32 @@
         S.modeBusy = false; delete s.dataset.busy;
         var d = data('switches'), list = d && (Array.isArray(d) ? d : (d.switches || d.producers));
         if (Array.isArray(list)) list.forEach(function (p) { if (p && p.id === id) p.mode = mode; });     // يظهر الاختيار فورًا، ثم تأتي القراءة الأحدث
+        closeSheet(); toast('حُفظ الاختيار'); load('switches', true, true); redraw(true);
+      }).catch(function (e) {
+        S.modeBusy = false; delete s.dataset.busy;
+        var box = q('#v2sbErr', s); if (box) box.innerHTML = '<div class="v3-err">' + esc(errMsg(e)) + '</div>';
+        go.disabled = false; no.disabled = false; go.textContent = sh.go; redraw();
+      });
+    };
+  }
+
+  // —— «اسألني على تليجرام»: تأكيد ثم PUT {telegram, confirmed}
+  function openTelegram(id, on) {
+    var r = swRow(id), E = ep();
+    if (!r || !E) return;
+    var sh = L.v2sBrainTelegramSheet(r, on);
+    var s = openSheet(sh.title, '<p class="mc-lead">' + esc(sh.lead) + '</p><div id="v2sbErr" role="alert"></div>'
+      + '<div class="acts"><button type="button" class="btn btn-human" id="v2sbGo">' + esc(sh.go) + '</button><button type="button" class="btn btn-ghost" id="v2sbNo">رجوع</button></div>');
+    if (!s) return;
+    var go = q('#v2sbGo', s), no = q('#v2sbNo', s);
+    no.onclick = function () { if (!s.dataset.busy) closeSheet(); };
+    go.onclick = function () {
+      if (s.dataset.busy) return;
+      s.dataset.busy = '1'; S.modeBusy = true; go.disabled = true; no.disabled = true; go.textContent = 'جارٍ الحفظ…';
+      E.api('/v2/brain/switches/' + encodeURIComponent(id), { method: 'PUT', body: { telegram: on, confirmed: true } }).then(function () {
+        S.modeBusy = false; delete s.dataset.busy;
+        var d = data('switches'), list = d && (Array.isArray(d) ? d : (d.switches || d.producers));
+        if (Array.isArray(list)) list.forEach(function (p) { if (p && p.id === id) p.telegram = on; });
         closeSheet(); toast('حُفظ الاختيار'); load('switches', true, true); redraw(true);
       }).catch(function (e) {
         S.modeBusy = false; delete s.dataset.busy;
@@ -619,6 +647,7 @@
         if (!mr || S.modeBusy || b.getAttribute('aria-checked') === 'true') return;
         openMode(mr.id, mv);
       }
+      else if (a === 'tg') { var tr = swRow(b.getAttribute('data-id')); if (tr && tr.tgToggle && !S.modeBusy) openTelegram(tr.id, !tr.telegram); }
       else if (a === 'mrule') openModeRule(b.getAttribute('data-id'));
       else if (a === 'runnow') openRunNow();
       else if (a === 'retry-switches') { load('switches', true); }

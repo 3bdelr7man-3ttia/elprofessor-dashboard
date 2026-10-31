@@ -16,7 +16,7 @@ import re
 
 from flask import jsonify, request
 
-from brain2 import engine, registry
+from brain2 import engine, registry, telegram
 
 logger = logging.getLogger(__name__)
 
@@ -35,6 +35,9 @@ ERR_TOO_MANY = 'عدد البطاقات أكبر من المسموح'
 ERR_BAD_SINCE = 'تاريخ غير صالح'
 ERR_UNKNOWN_PRODUCER = 'قاعدة غير معروفة'
 ERR_DISCARD = 'لا تُحذف هذه الكتابة من هنا'
+ERR_BAD_TELEGRAM = 'اختيار تليجرام غير صالح'
+ERR_TG_NOT_FOR_OPINION = 'الآراء لا تُرسل إلى تليجرام'
+TG_ID_RE = re.compile(r'^\d{1,20}$')
 
 
 def _iso(dt):
@@ -114,6 +117,7 @@ def register(app, ns):
         closed = gate()
         if closed:
             return closed
+        engine.ensure_schema(db)
         rows = {r.producer: r for r in Switch.query.all()}
         items = []
         for p in registry.PRODUCERS:
@@ -123,6 +127,8 @@ def register(app, ns):
             items.append({'id': p.id, 'section': p.section, 'kind': p.kind, 'label': p.label,
                           'sentence': p.sentence, 'lock_reason': p.lock_reason,
                           'may_run_alone': bool(p.may_run_alone), 'mode': engine.effective_mode(ns, p),
+                          'telegram': telegram.enabled(ns, p), 'telegram_ok': telegram.decide_allowed_producer(p),
+                          'telegram_can_toggle': telegram.toggle_allowed(p),
                           'updated_at': _iso(r.updated_at) if r else None,
                           'updated_by': (r.updated_by or None) if r else None})
         return out({'switches': items, 'writer': engine.writer_of(ns),
@@ -141,21 +147,38 @@ def register(app, ns):
         p = listed(producer_id)
         if p is None:
             return out({'error': ERR_UNKNOWN_PRODUCER}, 404)
-        mode = body.get('mode')
-        if mode not in engine.MODES:
+        mode = body.get('mode') if 'mode' in body else None
+        tg = body.get('telegram') if 'telegram' in body else None
+        if mode is None and tg is None:
             return out({'error': ERR_BAD_MODE}, 400)
-        if mode == 'alone' and not p.may_run_alone:
-            return out({'error': 'هذا لا يعمل وحده: ' + (p.lock_reason or '')}, 400)
+        if mode is not None:
+            if mode not in engine.MODES:
+                return out({'error': ERR_BAD_MODE}, 400)
+            if mode == 'alone' and not p.may_run_alone:
+                return out({'error': 'هذا لا يعمل وحده: ' + (p.lock_reason or '')}, 400)
+        if 'telegram' in body:
+            if not isinstance(tg, bool):
+                return out({'error': ERR_BAD_TELEGRAM}, 400)
+            if not telegram.toggle_allowed(p):
+                return out({'error': ERR_TG_NOT_FOR_OPINION}, 400)
         actor = L('_actor_email')()
+        engine.ensure_schema(db)
         row = Switch.query.get(p.id)
         if row is None:
-            row = Switch(producer=p.id)
+            row = Switch(producer=p.id, mode=mode or engine.effective_mode(ns, p))
             db.session.add(row)
-        row.mode, row.updated_at, row.updated_by = mode, engine.utcnow(), actor
+        meta = {}
+        if mode is not None:
+            row.mode = mode
+            meta['mode'] = mode
+        if tg is not None:
+            row.telegram = tg
+            meta['telegram'] = tg
+        row.updated_at, row.updated_by = engine.utcnow(), actor
         db.session.commit()
-        L('_audit')('v2_brain.switch', target=p.id, meta={'mode': mode})
-        return out({'id': p.id, 'mode': engine.effective_mode(ns, p), 'updated_at': _iso(row.updated_at),
-                    'updated_by': actor})
+        L('_audit')('v2_brain.switch', target=p.id, meta=meta)
+        return out({'id': p.id, 'mode': engine.effective_mode(ns, p), 'telegram': telegram.enabled(ns, p),
+                    'updated_at': _iso(row.updated_at), 'updated_by': actor})
 
     # ------------------------------------------------------------------ العناصر
     @app.route('/api/v2/brain/items', methods=['GET'], endpoint='v2_brain2_items')
@@ -360,3 +383,58 @@ def register(app, ns):
             return out({'error': 'unauthorized'}, 401)
         status, payload = engine.start_run(ns, 'cron', 'cron')
         return out(payload, status)
+
+    # ------------------------------------------------------------------ قرار من تليجرام
+    def tg_reply(payload, status=200):
+        return out(payload, status)
+
+    @app.route('/api/v2/brain/telegram-decide', methods=['POST'], endpoint='v2_brain2_telegram_decide')
+    def v2_brain2_telegram_decide():
+        """تستدعيه المنصة عند ضغطة زر في تليجرام. ⛔ بالسرّ المشترك فقط (لا JWT)، والفاعل `telegram:<id>` لا من الجسم.
+        approve = نفس تنفيذ مسار الاعتماد بلا تعديل · reject = رفض · open = لا شيء. غير `proposed` ⇒ {ok:false, reason:'decided'}."""
+        closed = gate()
+        if closed:
+            return closed
+        if not L('_metrics_secret_ok')():
+            return tg_reply({'error': 'unauthorized'}, 401)
+        raw = request.get_json(silent=True)
+        raw = raw if isinstance(raw, dict) else {}
+        item_id, action, tg_id = raw.get('item_id'), raw.get('action'), raw.get('tg_user_id')
+        if isinstance(tg_id, int) and not isinstance(tg_id, bool):
+            tg_id = str(tg_id)
+        if not (isinstance(item_id, str) and ID_RE.match(item_id) and action in ('approve', 'reject', 'open')
+                and isinstance(tg_id, str) and TG_ID_RE.match(tg_id)):
+            return tg_reply({'ok': False, 'reason': 'bad_request'}, 400)
+        if action == 'open':
+            return tg_reply({'ok': True, 'line': ''})
+        r = Item.query.get(item_id)
+        if r is None:
+            return tg_reply({'ok': False, 'reason': 'not_found'})
+        if r.status != 'proposed':
+            return tg_reply({'ok': False, 'reason': 'decided'})
+        p = registry.by_id(r.producer)
+        body_d = engine._loads(r.body_json, {})
+        if not telegram.can_decide(p, body_d, engine._loads(r.meta_json, {}), engine._loads(r.facts_json, {}), r.target_ref):
+            return tg_reply({'ok': False, 'reason': 'not_allowed'})
+        actor = 'telegram:' + tg_id
+        # الفاعل لمسارات المنصة وسجل التدقيق (`_actor_email` و`_audit` يقرآنه من g.user): طلب تليجرام بلا مستخدم لوحة.
+        from types import SimpleNamespace
+        from flask import g
+        g.user = SimpleNamespace(email=actor)
+        if action == 'reject':
+            changed = Item.query.filter(Item.id == item_id, Item.status == 'proposed').update(
+                {'status': 'rejected', 'decided_at': engine.utcnow(), 'decided_by': actor}, synchronize_session=False)
+            db.session.commit()
+            if changed != 1:
+                return tg_reply({'ok': False, 'reason': 'decided'})
+            L('_audit')('brain.reject', target=item_id, meta={'producer': r.producer, 'via': 'telegram'}, actor=actor)
+            return tg_reply({'ok': True, 'line': 'رُفض الاقتراح'})
+        status, payload = engine.apply_item(ns, item_id, actor, None)
+        if status == 200:
+            return tg_reply({'ok': True, 'line': telegram.result_line(p, payload.get('info'))})
+        if status == 409:
+            return tg_reply({'ok': False, 'reason': 'decided'})
+        if status == 404:
+            return tg_reply({'ok': False, 'reason': 'not_found'})
+        reason = 'unknown' if payload.get('no_reply') else 'failed'
+        return tg_reply({'ok': False, 'reason': reason, 'line': str(payload.get('error') or '')[:200]})

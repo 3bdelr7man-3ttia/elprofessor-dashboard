@@ -127,6 +127,7 @@ def _models(db):
         mode = db.Column(db.String(8), nullable=False)
         updated_at = db.Column(db.DateTime, default=datetime.datetime.utcnow)
         updated_by = db.Column(db.String(255))
+        telegram = db.Column(db.Boolean)    # «اسألني على تليجرام» (SPEC-B §B2): None ⇒ الافتراضي حسب المنتج
 
     class V2BrainRun(db.Model):
         __tablename__ = 'v2_brain_runs'
@@ -268,7 +269,28 @@ def check_body(body, facts, kind):
 
 # ------------------------------------------------------------------ الأوضاع
 
+_SCHEMA = {'ok': False}
+
+
+def ensure_schema(db):
+    """عمود `telegram` على `v2_brain_switches` لقاعدة قائمة قبله (create_all لا يضيف أعمدة). مرة واحدة لكل عملية؛ أي فشل يُسجَّل
+    ولا يكسر شيئًا (الاستعلام نفسه يفشل حينها ويُلتقط عند مستدعيه كما قبل)."""
+    if _SCHEMA['ok']:
+        return
+    try:
+        from sqlalchemy import inspect as _inspect, text as _text
+        insp = _inspect(db.engine)
+        if 'v2_brain_switches' in insp.get_table_names():
+            if 'telegram' not in {c['name'] for c in insp.get_columns('v2_brain_switches')}:
+                with db.engine.begin() as conn:
+                    conn.execute(_text('ALTER TABLE v2_brain_switches ADD COLUMN telegram BOOLEAN'))
+        _SCHEMA['ok'] = True
+    except Exception:   # noqa: BLE001
+        logger.exception('brain2: ensure_schema failed')
+
+
 def get_switch(db, producer_id):
+    ensure_schema(db)
     return _models(db)[1].query.get(producer_id)
 
 
@@ -324,7 +346,7 @@ class StopRun(Exception):
 
 
 def _new_state(run_cap_value=None):
-    return {'calls': 0, 'items': 0, 'run_cap': run_cap_value, 'per': {}, 'skipped': {}, 'template_calls': 0}
+    return {'calls': 0, 'items': 0, 'run_cap': run_cap_value, 'per': {}, 'skipped': {}, 'template_calls': 0, 'asks': []}
 
 
 def _skip(state, key):
@@ -372,6 +394,8 @@ def _store(ns, p, t, ref, label, h, fj, body, source, state, run_id, failed_erro
         logger.exception('brain2: store failed for %s %s', p.id, ref)
         return 'exists', None
     state['items'] += 1
+    if status == 'proposed' and failed_error is None and p.kind != 'opinion':
+        state.setdefault('asks', []).append(row.id)     # سؤال تليجرام واحد لكل اقتراح جديد (يُرسَل بعد الجولة في الخيط الخلفي)
     return ('failed' if failed_error is not None else source), row
 
 
@@ -808,6 +832,18 @@ def execute_run(ns, run_id, only, actor):
         state['skipped']['_stop'] = 'error'
     finally:
         _finish_run(ns, run_id, state['calls'], state['items'], state['skipped'])
+        _send_asks(ns, state.get('asks'))
+
+
+def _send_asks(ns, ids):
+    """أسئلة تليجرام للاقتراحات الجديدة، في الخيط الخلفي بعد ختم الجولة. أي فشل يُسجَّل ولا يكسر الجولة."""
+    if not ids:
+        return
+    try:
+        from brain2 import telegram
+        telegram.send_asks(ns, ids)
+    except Exception:   # noqa: BLE001
+        logger.exception('brain2: telegram asks failed')
 
 
 def submit_opinion(ns, kind, card_id, facts):
@@ -894,6 +930,7 @@ def apply_item(ns, item_id, actor, edited_text=None):
     target = Target(ref=row.target_ref, label=row.target_label or '', facts=_loads(row.facts_json, {}),
                     meta=_loads(row.meta_json, {}))
     ctx = Ctx(ns=ns, now=_aware(), actor=str(actor))
+    ctx.item_id = item_id      # للتنفيذ فقط (مفتاح عدم تكرار البريد = معرّف الاقتراح)؛ العقد لا يتغيّر
     unknown = False
     if p is None:
         res = ApplyResult(ok=False, error=ERR_APPLY_FAILED)

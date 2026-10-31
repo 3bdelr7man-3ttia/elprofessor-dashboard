@@ -73,7 +73,16 @@ def env(monkeypatch, request):
         raise AssertionError('نداء شبكة حقيقي ممنوع')
     monkeypatch.setattr(appmod.requests, 'post', _boom)
     monkeypatch.setattr(appmod.requests, 'get', _boom)
+    monkeypatch.setattr(appmod.requests, 'request', _boom)
+    # سؤال تليجرام (B2) يمرّ من `_platform_proxy`: بديل محلي يسجّل ولا يخرج لأي شبكة.
+    asks = []
+
+    def _fake_proxy(method, path, params=None, json_body=None, timeout=12):
+        asks.append({'method': method, 'path': path, 'json': json_body})
+        return appmod.jsonify({'sent': True})
+    monkeypatch.setattr(appmod, '_platform_proxy', _fake_proxy)
     script = Script(default={'text': 'ملاحظة مكتوبة'})
+    script.asks = asks
     monkeypatch.setattr(appmod, 'call_anthropic', script)
     monkeypatch.setitem(flask_app.config, 'BRAIN_INLINE', True)
     day = '2098-02-%02d' % ((abs(hash(request.node.name)) % 27) + 1)
@@ -680,7 +689,7 @@ def test_tables_exist_with_the_spec_columns():
             'applied_json'}
         assert {c.name for c in Run.__table__.columns} == {'id', 'trigger', 'started_at', 'finished_at', 'ai_calls',
                                                             'items', 'skipped_json', 'by'}
-        assert {c.name for c in Switch.__table__.columns} == {'producer', 'mode', 'updated_at', 'updated_by'}
+        assert {c.name for c in Switch.__table__.columns} == {'producer', 'mode', 'updated_at', 'updated_by', 'telegram'}
 
 
 # ───────────────────────────────────────────────────────────── تكامل P2/P3

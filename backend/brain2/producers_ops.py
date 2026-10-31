@@ -15,7 +15,10 @@
   • الإرسال لعضو: `POST /api/bridge/messages/<id>/reply {body, by, confirmed:true}`. الرد ٤٢٢ = المرسل زائر بلا
     حساب ⇒ `ok=False` بنص عربي (والصف يرجع «مقترح» فيُنسخ الرد يدويًا). لا ردّ/انقطاع (٥٠٢ و٥٠٤ أو استثناء) ⇒
     `no_reply=True` (الحالة مجهولة، لا إعادة إرسال تلقائية).
-  • رد الموقع لا يُرسَل بالبريد أبدًا: يُحفظ ويُنسخ فقط (كما `admin_message_reply`) ولا نص هنا يقول غير ذلك.
+  • البريد (SPEC-B §B4): رسالة الموقع ورسالة عضو بلا حساب وطلب تواصل لهم بريد ⇒ «أرسل الرد بالبريد» عبر جسر
+    `POST /api/bridge/email/send` (مفتاح عدم التكرار = معرّف الاقتراح). لا نقول «أُرسل» إلا لو رجع `sent:true`؛
+    وإن لم يُرسل (غير مفعّل/فشل/بريد غير معروف/حدّ يومي) نرجع لسلوك النسخ مع جملة صادقة. عضو بحساب ⇒ رد داخل المنصة
+    ثم نسخة بالبريد. فاعل تليجرام لا يعود للنسخ: يبقى الاقتراح ليُنسخ من اللوحة.
   • الـprompt لا يحمل `meta` ولا بريدًا ولا هاتفًا؛ كل نص يمرّ على `_scrub` عند الجمع وعند بناء الـprompt.
 """
 import datetime
@@ -343,7 +346,8 @@ def _gather_pmsg(ctx):
             ref='pmsg:' + mid,
             label=('رسالة عضو' + (' من ' + name if name else '') + (' — ' + subject if subject else ''))[:120],
             facts={'subject': subject, 'body': body, 'has_account': has_account},
-            meta={'id': mid, 'email': email, 'approve_label': LABEL_SEND if has_account else LABEL_COPY}))
+            meta={'id': mid, 'email': email,
+                  'approve_label': LABEL_SEND if has_account else (LABEL_EMAIL if email else LABEL_COPY)}))
     return out
 
 
@@ -370,7 +374,8 @@ def _gather_smsg(ctx):
             ref='smsg:%s' % m.id,
             label=('رسالة من الموقع' + (' من ' + name if name else '') + (' — ' + topic if topic else ''))[:120],
             facts={'subject': topic, 'body': body},
-            meta={'id': m.id, 'email': m.email or '', 'phone': m.phone or '', 'approve_label': LABEL_SAVE_COPY}))
+            meta={'id': m.id, 'email': m.email or '', 'phone': m.phone or '',
+                  'approve_label': LABEL_EMAIL if (m.email or '').strip() else LABEL_SAVE_COPY}))
     return out
 
 
@@ -387,7 +392,7 @@ def _gather_leads(ctx):
             label=('طلب تواصل' + (' من ' + name if name else ''))[:120],
             facts={'want': want, 'experience': _scrub(r.get('experience'), 300)},
             meta={'id': lid, 'phone': str(r.get('phone') or ''), 'email': str(r.get('from_email') or ''),
-                  'approve_label': LABEL_COPY_RESOLVE}))
+                  'approve_label': LABEL_EMAIL_LEAD if str(r.get('from_email') or '').strip() else LABEL_COPY_RESOLVE}))
     return out
 
 
@@ -468,6 +473,102 @@ def _resolve(ctx, kind, rid):
     return _is_ok(ctx, resp), _status_of(resp)
 
 
+EMAIL_PATH = '/api/bridge/email/send'
+LABEL_EMAIL = 'أرسل الرد بالبريد'
+LABEL_EMAIL_LEAD = 'أرسل بالبريد'
+EMAIL_SUBJECT_DEFAULT = 'رد من فريق البروفيسور'
+EMAIL_SUBJECT_LEAD = 'رد على طلب التواصل'
+# أسباب «لم يُرسل بالبريد» ⇒ جملة صادقة تقال للمؤسس (لا ندّعي إرسالًا لم يتأكد).
+_EMAIL_WHY = {
+    'not_configured': 'خدمة البريد غير مفعّلة بعد',
+    'failed': 'تعذّر الإرسال الآن',
+    'unknown_email': 'هذا البريد غير معروف لدينا',
+    'limit': 'بلغ البريد حدّه اليوم',
+}
+MSG_COPY_AFTER = 'انسخ الرد وأرسله بنفسك.'
+ERR_EMAIL_UNKNOWN = 'تعذّر الاتصال بالمنصة؛ لا نعرف إن وصل البريد. راجع الرسالة قبل المحاولة من جديد.'
+ERR_TG_NO_EMAIL = 'لم يُرسل الرد بالبريد (%s). افتح اللوحة لتنسخه وترسله بنفسك.'
+
+
+def _is_telegram(ctx):
+    return str(getattr(ctx, 'actor', '') or '').startswith('telegram:')
+
+
+def _email_of(target):
+    e = str((target.meta or {}).get('email') or '').strip()
+    return e if e and '@' in e and len(e) <= 200 else ''
+
+
+def _idem_key(ctx, target, text):
+    import hashlib
+    iid = str(getattr(ctx, 'item_id', '') or '').strip()
+    if iid and re.match(r'^[A-Za-z0-9_\-]{1,64}$', iid):
+        return iid
+    return hashlib.sha1(('%s|%s' % (target.ref, text)).encode('utf-8')).hexdigest()[:32]
+
+
+def _email_context(src, rid, to_email):
+    if src == SRC_PMSG:
+        return {'kind': 'message', 'id': str(rid)}
+    if src == SRC_LEAD:
+        return {'kind': 'lead', 'id': str(rid)}
+    return {'kind': 'user', 'id': to_email}      # رسالة الموقع: لا تُعرَف على المنصة، فيتحقق الجسر من أن البريد لمستخدم موجود
+
+
+def _email_subject(src, target):
+    if src == SRC_LEAD:
+        return EMAIL_SUBJECT_LEAD
+    subj = _scrub((target.facts or {}).get('subject'), 100)
+    return ('رد على: ' + subj)[:120] if subj else EMAIL_SUBJECT_DEFAULT
+
+
+def _send_email(ctx, target, src, rid, text):
+    """نداء واحد إلى جسر البريد. يرجع ('sent', None) أو ('fallback', سبب) أو ('unknown', None).
+    unknown = لا نعرف إن خرج البريد (انقطاع/٥٠٠): ⛔ لا نقول إنه أُرسل ولا نقول إنه لم يُرسل."""
+    to_email = _email_of(target)
+    payload = {'to_email': to_email, 'subject': _email_subject(src, target), 'text': text[:4000],
+               'by': str(ctx.actor)[:120], 'confirmed': True, 'idem_key': _idem_key(ctx, target, text)[:64],
+               'context': _email_context(src, rid, to_email)}
+    try:
+        resp = _proxy(ctx)('POST', EMAIL_PATH, json_body=payload, timeout=25)
+    except Exception:
+        return 'unknown', None
+    st = _status_of(resp)
+    if _is_ok(ctx, resp):
+        js = _json_of(resp)
+        js = js if isinstance(js, dict) else {}
+        if js.get('sent') is True:
+            return 'sent', None
+        reason = js.get('reason')
+        return 'fallback', (reason if reason in _EMAIL_WHY else 'failed')
+    if st == 422:
+        return 'fallback', 'unknown_email'
+    if st == 429:
+        return 'fallback', 'limit'
+    if st in (404, 503):
+        return 'fallback', 'not_configured'     # الجسر لم يُنشر بعد، أو الربط غير مضبوط: لم يخرج شيء
+    if st in (0, 500, 502, 504):
+        return 'unknown', None
+    return 'fallback', 'failed'
+
+
+def _why_msg(reason):
+    return 'لم يُرسل الرد بالبريد: %s. %s' % (_EMAIL_WHY.get(reason, _EMAIL_WHY['failed']), MSG_COPY_AFTER)
+
+
+def _email_outcome(ctx, target, src, rid, text):
+    """(kind, payload). kind ∈ 'sent' | 'copy' | 'stop'. 'stop' ⇒ ApplyResult جاهز في payload."""
+    state, reason = _send_email(ctx, target, src, rid, text)
+    if state == 'sent':
+        _audit(ctx, 'brain.reply_email', str(rid), {'producer': 'reply_draft', 'ref': target.ref})
+        return 'sent', None
+    if state == 'unknown':
+        return 'stop', _bad(ERR_EMAIL_UNKNOWN, no_reply=True, copy_text=text)
+    if _is_telegram(ctx):
+        return 'stop', _bad(ERR_TG_NO_EMAIL % _EMAIL_WHY.get(reason, _EMAIL_WHY['failed']))
+    return 'copy', _why_msg(reason)
+
+
 def _reply_apply(ctx, body, target):
     text = str((body or {}).get('text') or '').strip()
     if not text:
@@ -477,6 +578,7 @@ def _reply_apply(ctx, body, target):
     src = _src_of(target)
     meta = target.meta or {}
     rid = meta.get('id')
+    email = _email_of(target)
 
     if src == SRC_PMSG:
         rid = str(rid or '')
@@ -491,17 +593,42 @@ def _reply_apply(ctx, body, target):
             st = _status_of(resp)
             if _is_ok(ctx, resp):
                 _audit(ctx, 'brain.reply_send', rid, {'producer': 'reply_draft', 'ref': target.ref})
-                return ApplyResult(ok=True, info={'sent': True})
+                info = {'sent': True, 'line': 'أُرسل الرد داخل المنصة'}
+                if email:
+                    # عضو بحساب: الرد داخل المنصة وصل، ويُرسل نسخة بالبريد أيضًا. فشل البريد لا يلغي الأول ولا يُخفى.
+                    state, reason = _send_email(ctx, target, src, rid, text)
+                    if state == 'sent':
+                        _audit(ctx, 'brain.reply_email', rid, {'producer': 'reply_draft', 'ref': target.ref})
+                        info.update(emailed=True, line='أُرسل الرد داخل المنصة وبالبريد',
+                                    message='وصل الرد داخل المنصة، وأُرسلت نسخة منه بالبريد.')
+                    elif state == 'unknown':
+                        info.update(emailed=False, message='وصل الرد داخل المنصة. ولا نعرف إن وصلت نسخة البريد.')
+                    else:
+                        info.update(emailed=False, message='وصل الرد داخل المنصة. لم تُرسل نسخة بالبريد: %s.'
+                                    % _EMAIL_WHY.get(reason, _EMAIL_WHY['failed']))
+                return ApplyResult(ok=True, info=info)
             if st == 422:
                 return _bad('صاحب هذه الرسالة زائر بلا حساب، فلا يصله الرد من المنصة. انسخ الرد وأرسله بنفسك.',
                             copy_text=text, info={'visitor': True})
             if st in (0, 502, 504):
                 return _bad('تعذّر الاتصال بالمنصة؛ لا نعرف إن وصل الرد. راجع الرسالة قبل المحاولة من جديد.', no_reply=True)
             return _bad('رفضت المنصة الرد؛ لم يُرسَل شيء.')
+        info = {'copied': True}
+        if email:
+            kind, payload = _email_outcome(ctx, target, src, rid, text)
+            if kind == 'stop':
+                return payload
+            if kind == 'sent':
+                ok, _st = _resolve(ctx, 'messages', rid)
+                info = {'emailed': True, 'line': 'أُرسل الرد بالبريد', 'message': 'وصل الرد إلى بريد صاحب الرسالة.'}
+                if not ok:
+                    info['message'] += ' لكن تعذّر تعليم الرسالة «تم» على المنصة، علّمها بنفسك.'
+                return ApplyResult(ok=True, info=info)
+            info = {'copied': True, 'emailed': False, 'message': payload}
         ok, _st = _resolve(ctx, 'messages', rid)
         if not ok:
             return _bad('تعذّر تعليم الرسالة «تم» على المنصة. حاول مرة أخرى.')
-        return ApplyResult(ok=True, copy_text=text, info={'copied': True})
+        return ApplyResult(ok=True, copy_text=text, info=info)
 
     if src == SRC_SMSG:
         Message, db = ctx.ns.get('Message'), ctx.ns.get('db')
@@ -513,6 +640,18 @@ def _reply_apply(ctx, body, target):
             return _bad('الرسالة لم تعد موجودة')
         if msg.status == 'replied':
             return _bad('سبق حفظ ردّ على هذه الرسالة')
+        info = {'saved': True}
+        emailed = False
+        if email:
+            kind, payload = _email_outcome(ctx, target, src, rid, text)
+            if kind == 'stop':
+                return payload
+            if kind == 'sent':
+                emailed = True
+                info = {'saved': True, 'emailed': True, 'line': 'أُرسل الرد بالبريد',
+                        'message': 'وصل الرد إلى بريد صاحب الرسالة.'}
+            else:
+                info = {'saved': True, 'emailed': False, 'message': payload}
         try:
             msg.reply_body = text
             msg.status = 'replied'
@@ -523,18 +662,34 @@ def _reply_apply(ctx, body, target):
                 db.session.rollback()
             except Exception:
                 pass
+            if emailed:
+                # البريد خرج فعلًا؛ تعذّر الحفظ المحلي فقط. لا نعيد المحاولة ولا نخفي.
+                return ApplyResult(ok=True, info={'emailed': True, 'saved': False, 'line': 'أُرسل الرد بالبريد',
+                                                  'message': 'وصل الرد إلى بريد صاحب الرسالة، لكن تعذّر حفظه في اللوحة.'})
             return _bad('تعذّر حفظ الرد')
-        logger.info('Message reply to %s (id=%s) recorded by brain; no email is sent.', msg.email, msg.id)
-        return ApplyResult(ok=True, copy_text=text, info={'saved': True})
+        logger.info('Message reply to %s (id=%s) recorded by brain; emailed=%s.', msg.email, msg.id, emailed)
+        return ApplyResult(ok=True, copy_text='' if emailed else text, info=info)
 
     if src == SRC_LEAD:
         rid = str(rid or '')
         if not _ID_RE.match(rid):
             return _bad('معرّف الطلب غير صالح')
+        info = {'copied': True}
+        if email:
+            kind, payload = _email_outcome(ctx, target, src, rid, text)
+            if kind == 'stop':
+                return payload
+            if kind == 'sent':
+                ok, _st = _resolve(ctx, 'leads', rid)
+                info = {'emailed': True, 'line': 'أُرسل الرد بالبريد', 'message': 'وصل الرد إلى بريد صاحب الطلب.'}
+                if not ok:
+                    info['message'] += ' لكن تعذّر تعليم الطلب «تم» على المنصة، علّمه بنفسك.'
+                return ApplyResult(ok=True, info=info)
+            info = {'copied': True, 'emailed': False, 'message': payload}
         ok, _st = _resolve(ctx, 'leads', rid)
         if not ok:
             return _bad('تعذّر تعليم الطلب «تم» على المنصة. حاول مرة أخرى.')
-        return ApplyResult(ok=True, copy_text=text, info={'copied': True})
+        return ApplyResult(ok=True, copy_text=text, info=info)
 
     return _bad('مصدر غير معروف')
 

@@ -170,7 +170,7 @@ def test_switches_list(api, monkeypatch):
     by = {s['id']: s for s in d['switches']}
     assert set(by) == {'note1', 'draft1'}, 'المخفي لا يظهر'
     assert set(by['note1']) == {'id', 'section', 'kind', 'label', 'sentence', 'lock_reason', 'may_run_alone', 'mode',
-                                'updated_at', 'updated_by'}
+                                'telegram', 'telegram_ok', 'telegram_can_toggle', 'updated_at', 'updated_by'}
     assert by['note1']['mode'] == 'alone' and by['draft1']['mode'] == 'ask'
     assert by['draft1']['lock_reason'] and by['draft1']['may_run_alone'] is False
     assert d['writer'] == 'main' and d['brain_today'] == {'used': 0, 'cap': 60}
