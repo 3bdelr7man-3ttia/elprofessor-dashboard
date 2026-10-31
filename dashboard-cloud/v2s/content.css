@@ -250,3 +250,31 @@
 }
 .v2ct-open.static{cursor:default;min-height:0;padding:6px 0}
 .v2ct-open.static:hover{color:var(--ink);text-decoration:none}
+
+/* —— تبويب «الموقع»: الاقتراحات المنتظرة · الكتل · القرارات · النسخ السابقة */
+.v2ct-sprop{gap:10px}
+.v2ct-sdiff{list-style:none;margin:0;padding:0;display:grid;gap:8px}
+.v2ct-sdiff li{display:grid;gap:4px;background:#fff;border:1px solid var(--line);border-radius:12px;padding:10px 12px;font-size:14.5px;line-height:1.85}
+.v2ct-sdiff .v2ct-sold{color:var(--mute);text-decoration:line-through;text-decoration-color:rgba(200,16,46,.55);overflow-wrap:anywhere}
+.v2ct-sdiff .v2ct-snew{color:var(--ink);font-weight:700;overflow-wrap:anywhere}
+.v2ct-sdiff em{font-style:normal;font-size:13px;color:var(--mute)}
+.v2ct-sblist{display:grid;gap:8px}
+.v2ct-sb{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:6px 12px;align-items:center;background:var(--paper);border-radius:14px;padding:10px 14px}
+.v2ct-sbm{grid-column:1 / -1;display:flex;flex-wrap:wrap;gap:6px}
+.v2ct-sbt{font-size:15px;line-height:1.85;overflow-wrap:anywhere;min-width:0}
+.v2ct-sb .v2ct-line{font-size:13px;max-width:180px;text-align:end}
+.v2ct-sdec{list-style:none;margin:0;padding:0;display:grid;gap:8px}
+.v2ct-sdec li{display:flex;align-items:center;justify-content:space-between;gap:12px;background:var(--paper);border-radius:12px;padding:8px 14px;font-size:14.5px;line-height:1.8;min-height:52px}
+.v2ct-sdec li span{min-width:0;overflow-wrap:anywhere}
+.v2ct-sdecadd{display:flex;flex-wrap:wrap;align-items:center;gap:10px}
+.v2ct-sdecadd label{font:700 14px 'Cairo',sans-serif;color:var(--mute);flex:1 1 100%}
+.v2ct-sdecadd input{flex:1 1 280px;min-width:0}
+@media(max-width:760px){
+  .v2ct-sb{grid-template-columns:minmax(0,1fr)}
+  .v2ct-sb .v2ct-b2{width:100%}
+  .v2ct-sb .v2ct-line{max-width:none;text-align:start}
+  .v2ct-sdec li{flex-direction:column;align-items:stretch}
+  .v2ct-sdec li .v2ct-b2,.v2ct-sdec li .v2ct-b3{width:100%}
+  .v2ct-sdecadd .v2ct-b2{width:100%}
+  .v2ct-sdecadd input{flex:1 1 100%}
+}

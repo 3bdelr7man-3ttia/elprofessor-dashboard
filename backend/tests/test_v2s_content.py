@@ -82,15 +82,16 @@ def ms_ago(h):
 # ====================================================================== ١) الخريطة والروابط
 
 EXPECTED_TABS = [['pipeline', 'خط النشر', 'topics'], ['articles', 'المقالات', 'topics'], ['topics', 'الموضوعات', 'topics'],
-                 ['news', 'الأخبار', 'topics'], ['comments', 'التعليقات', 'topics'], ['tutorials', 'دليل الاستخدام', 'topics']]
+                 ['news', 'الأخبار', 'topics'], ['comments', 'التعليقات', 'topics'], ['tutorials', 'دليل الاستخدام', 'topics'],
+                 ['site', 'الموقع', 'topics']]
 
 
 @needs_node
-def test_the_section_has_six_tabs_all_on_the_old_module():
+def test_the_section_has_seven_tabs_all_on_the_old_module():
     got = _node("const s=L.sectionByKey('content');console.log(JSON.stringify({d:s.desc,t:s.tabs.map(t=>[t.key,t.label,t.mod]),st:s.tabs.map(t=>t.st)}))")
     assert got['t'] == EXPECTED_TABS
     assert got['d'] == 'المقالات والموضوعات والأخبار والتعليقات ودليل الاستخدام'
-    assert [s['topicsTab'] for s in got['st']] == ['pipeline', 'articles', 'pending', 'news', 'comments', 'tutorials']
+    assert [s['topicsTab'] for s in got['st']] == ['pipeline', 'articles', 'pending', 'news', 'comments', 'tutorials', 'site']
 
 
 @needs_node
@@ -99,7 +100,7 @@ def test_every_tab_recognises_itself_and_every_legacy_state_lands_right():
     for key, sec, tab in res:
         assert (sec, tab) == ('content', key), key
     legacy = {'pending': 'topics', 'ideas': 'topics', 'incoming': 'topics', 'working': 'topics', 'board': 'topics', 'rejected': 'topics', 'news': 'news',
-              'articles': 'articles', 'blog': 'articles', 'auto': 'articles', 'comments': 'comments', 'tutorials': 'tutorials', 'pipeline': 'pipeline'}
+              'articles': 'articles', 'blog': 'articles', 'auto': 'articles', 'comments': 'comments', 'tutorials': 'tutorials', 'pipeline': 'pipeline', 'site': 'site'}
     got = _node("const ks=%s;console.log(JSON.stringify(ks.map(k=>{const m=L.sectionFor('topics',{topicsTab:k});return [k,m.section,m.tab,L.v2ContentTabFor(k)];})))" % json.dumps(list(legacy)))
     for k, sec, tab, tf in got:
         assert (sec, tab, tf) == ('content', legacy[k], legacy[k]), k
@@ -839,6 +840,183 @@ def test_css_is_scoped_under_the_section_roots_and_meets_the_touch_rules():
             assert part.strip().startswith(('.v2ct', '#epModal')), part
     assert '.v2ct-b1{' in CSS and 'min-height:52px' in CSS and 'min-height:60px' in CSS and 'min-height:44px' in CSS
     assert '#9E2B4E' in CSS and '#FBFAF7' in CSS and '#21262E' in CSS and 'rgb(190,88,48)' in CSS
+
+
+# ====================================================================== ٩) تبويب «الموقع» (SPEC-B §B6): مساعدات نقية + تشغيل حقيقي بـnode
+
+@needs_node
+def test_site_helpers_kinds_rows_check_and_backups():
+    kinds = _logic('v2SiteKinds')
+    assert [k['key'] for k in kinds] == ['all', 'heads', 'paras', 'links'] and kinds[0]['label'] == 'الكل'
+    blocks = [{'path': 'b[1]>title[1]', 'tag': 'title', 'text': 'العنوان', 'editable': True, 'note': ''},
+              {'path': 'b[1]>p[1]#2', 'tag': 'p', 'text': 'جزء', 'editable': True, 'note': ''},
+              {'path': 'b[1]>button[1]', 'tag': 'button', 'text': 'ابدأ', 'editable': False, 'note': 'النص مكرر في الصفحة'},
+              {'path': 'b[1]>a[1]', 'tag': 'a', 'text': 'رابط', 'editable': False, 'note': ''}, {'path': 'x', 'tag': 'p', 'text': '', 'editable': True}]
+    rows = _logic('v2SiteBlockRows', blocks, 'all')
+    assert [r['index'] for r in rows] == [0, 1, 2, 3], 'الفارغ يسقط والفهرس يشير إلى المصفوفة الأصلية'
+    assert rows[0]['tagLabel'] == 'عنوان التبويب' and rows[1]['part'] == 2 and rows[0]['part'] == 0
+    assert rows[2]['editable'] is False and rows[2]['note'] == 'النص مكرر في الصفحة' and rows[3]['note'] == 'لا يمكن تعديله'
+    assert [r['tag'] for r in _logic('v2SiteBlockRows', blocks, 'heads')] == ['title']
+    assert [r['tag'] for r in _logic('v2SiteBlockRows', blocks, 'links')] == ['button', 'a']
+    assert _logic('v2SiteBlockRows', None, 'all') == [] and _logic('v2SiteBlockRows', 'x', 'all') == []
+    ok = _logic('v2SiteCheckNew', 'قديم', '  نص   جديد ', 'p')
+    assert ok == {'ok': True, 'text': 'نص جديد', 'error': ''}
+    for text, tag, err in (('', 'p', 'اكتب النص الجديد'), ('س' * 601, 'p', 'النص أطول من ٦٠٠ حرف'), ('<b>x</b>', 'p', 'لا تكتب رمزَي الأقواس الزاوية'),
+                           ('قديم', 'p', 'النص الجديد مطابق للقديم'), ('عن يَقَوِّمُ الأداء', 'p', 'في النص عبارة غير مقبولة. عدّلها ثم أعد المحاولة'),
+                           ('الذكاء الاصطناعي أولًا', 'h1', 'لا يبدأ العنوان بكلمة «الذكاء». عدّل الصياغة')):
+        r = _logic('v2SiteCheckNew', 'قديم', text, tag)
+        assert r['ok'] is False and r['error'] == err, (text[:12], r)
+    assert _logic('v2SiteCheckNew', 'قديم', 'الذكاء يخدم القارئ', 'p')['ok'] is True, 'القاعدة على العناوين فقط'
+    assert _logic('v2SiteCheckNew', 'قديم', '«الذكاء» أولًا', 'title')['ok'] is False
+    bk = _logic('v2SiteBackupRows', [{'id': 3, 'created_at': ago(2), 'created_by': 'a@x.test', 'note': 'apply', 'size': 2048},
+                                    {'id': 2, 'created_at': ago(30), 'created_by': '', 'note': 'before_restore', 'size': 100},
+                                    {'id': 1, 'created_at': 'bad', 'created_by': 'b', 'note': 'zz'}], NOW)
+    assert bk[0] == {'id': 3, 'when': 'منذ ٢ س', 'who': 'a@x.test', 'kind': 'قبل تعديل نُشر', 'size': '٢ ك.ب'}
+    assert bk[1]['kind'] == 'قبل إرجاع سابق' and bk[1]['size'] == '١ ك.ب' and bk[2]['when'] == 'غير متاح بعد' and bk[2]['size'] == 'غير متاح بعد'
+    assert bk[2]['kind'] == 'نسخة سابقة' and _logic('v2SiteBackupRows', None, NOW) == []
+
+
+def test_site_tab_is_wired_through_confirm_sheets_and_only_the_site_and_brain_item_routes():
+    start = JS.index('// ================================================================== ٧) الموقع')
+    sect = JS[start:JS.index('// ================================================================== الأحداث')]
+    paths = set(re.findall(r"'(/v2/[^']*)'", sect))
+    assert paths == {'/v2/site/pages', '/v2/site/decisions', '/v2/site/blocks?page=', '/v2/site/backups?page=', '/v2/site/edit', '/v2/site/restore',
+                     '/v2/site/decisions/', '/v2/brain/items?status=proposed&section=content', '/v2/brain/items/'}, paths
+    for fn in ('siteApprove', 'siteReject', 'siteRestore', 'siteDelDecision'):
+        body = sect[sect.index('function %s(' % fn):]
+        body = body[:body.index('\n  }\n')]
+        assert 'confirmSheet(' in body, fn
+    assert "method: 'DELETE'" in sect and sect.count("confirmed: true") >= 6
+    assert re.search(r"ensure\(|\.reload\(", sect) is None, 'لا محمّلات EP: مصادر الموقع تُجلب من مساراتها'
+    assert "data-a=\"sapprove\"" in sect and "data-a=\"srestore\"" in sect and 'أرجِع الصفحة' in sect and 'احفظ الاقتراح' in sect and 'عدّل' in sect
+    assert 'القرارات' in sect and 'النسخ السابقة' in sect and 'ينتظر اعتمادك' in sect and 'اعتمد وانشر' in sect
+    for h in ("a === 'sreload'", "a === 'skind'", "a === 'sedit'", "a === 'sapprove'", "a === 'sreject'", "a === 'srestore'", "a === 'sdecadd'", "a === 'sdecdel'", "'spick'"):
+        assert h in JS, h
+    assert "tab === 'site'" in JS and 'drawSite()' in JS
+    # كل نص يأتي من الخادم يمرّ على esc(): لا يُلصق حقل خام بين علامتي نص
+    for raw in ('d.text', 'it.target_label', 'r.text', 'r.note', 'r.tagLabel', 'e.old', 'e.new', 'e.why', 'p.label', 'SS.err.pending',
+                'SS.decErr', 'SS.decDraft', 'SS.label', 'it.last_error', 'body.page_label'):
+        assert not re.search(r"\+\s*" + re.escape(raw) + r"\s*(\+|;|\))", re.sub(r'esc\(' + re.escape(raw) + r'\)', '', sect)), raw
+
+
+SITE_HARNESS = r"""
+const vm = require('vm'), fs = require('fs');
+const inp = JSON.parse(fs.readFileSync(0, 'utf8'));
+const L = require(process.argv[1]);
+const calls = [], sheets = [], fakes = {};
+let modal = false;
+const sb = { console, Promise, JSON, Math, Date, Object, Array, String, Number, Error, encodeURIComponent, isNaN, parseInt, Intl };
+sb.window = sb; sb.V2L = L;
+sb.setTimeout = () => 1; sb.clearTimeout = () => {}; sb.setInterval = () => 1; sb.clearInterval = () => {};
+sb.document = { body: { contains: () => true }, getElementById: (id) => (id === 'epModal' && modal ? {} : null), querySelector: () => null, querySelectorAll: () => [] };
+sb.V2_HOST = { current: () => 'topics' };
+sb.v2Snapshot = () => ({ topicsTab: 'site' });
+sb.v2OpenSection = () => {};
+sb.openModal = (title, html) => {
+  modal = true;
+  const el = { title, html, dataset: {}, nodes: {}, querySelector(sel) { if (sel === '#siteNew') { return this.nodes[sel] = this.nodes[sel] || { value: inp.typed || '' }; } return this.nodes[sel] = this.nodes[sel] || { dataset: {}, onclick: null, disabled: false, textContent: '', style: {}, innerHTML: '' }; } };
+  sheets.push(el); return el;
+};
+sb.closeModal = () => { modal = false; };
+sb.EP = { authed: true, state: {}, data: {}, ensure() {}, reload() {}, muteNotes: false,
+  api(path, opts) {
+    const method = (opts && opts.method) || 'GET', body = opts && opts.body ? JSON.parse(JSON.stringify(opts.body)) : null;
+    calls.push({ path, method, body });
+    const r = inp.replies[method + ' ' + path] || inp.replies[method + ' ' + path.split('?')[0]];
+    if (!r) return Promise.reject(Object.assign(new Error('x'), { status: 404, data: {} }));
+    if (r.status >= 400) return Promise.reject(Object.assign(new Error(r.body.error || 'x'), { status: r.status, data: r.body }));
+    return Promise.resolve(r.body);
+  } };
+vm.createContext(sb);
+vm.runInContext(fs.readFileSync(process.argv[2], 'utf8'), sb);
+const API = sb.V2SEC.content, view = { innerHTML: '', onclick: null, onchange: null, contains: () => true };
+const tick = () => new Promise((r) => setImmediate(r));
+async function flush() { for (let i = 0; i < 8; i++) await tick(); }
+const click = (attrs) => { const b = { getAttribute: (k) => attrs[k] == null ? null : attrs[k], closest: () => true }; view.onclick({ target: { closest: () => b } }); };
+(async () => {
+  const out = {};
+  API.render('topics', view); await flush();
+  out.first = view.innerHTML; out.calls1 = calls.slice();
+  view.onchange({ target: { getAttribute: (k) => k === 'data-a' ? 'spick' : null, value: 'pricing.html', closest: () => true } }); await flush();
+  out.picked = view.innerHTML; out.calls2 = calls.slice(out.calls1.length);
+  click({ 'data-a': 'sedit', 'data-i': String(inp.editIndex) }); await flush();
+  out.editSheet = sheets.length ? sheets[sheets.length - 1].html : null;
+  if (sheets.length) {
+    const s = sheets[sheets.length - 1];
+    s.querySelector('#v2ctSave').onclick(); await flush();
+    out.afterSave = { modal, calls: calls.slice(out.calls1.length + out.calls2.length) };
+  }
+  const n3 = calls.length;
+  click({ 'data-a': 'sapprove', 'data-id': 'i1' }); await flush();
+  out.approveSheet = sheets[sheets.length - 1].html;
+  const go = sheets[sheets.length - 1].querySelector('#v2ctGo');
+  go.onclick(); await flush();
+  out.afterApprove = { calls: calls.slice(n3), err: sheets[sheets.length - 1].querySelector('#v2ctErr').innerHTML };
+  const n4 = calls.length;
+  click({ 'data-a': 'srestore', 'data-id': '7' }); await flush();
+  out.restoreSheet = sheets[sheets.length - 1].html;
+  sheets[sheets.length - 1].querySelector('#v2ctGo').onclick(); await flush();
+  out.afterRestore = calls.slice(n4);
+  const n5 = calls.length;
+  click({ 'data-a': 'sdecdel', 'data-id': 'd2' }); await flush();
+  sheets[sheets.length - 1].querySelector('#v2ctGo').onclick(); await flush();
+  out.afterDel = calls.slice(n5);
+  process.stdout.write(JSON.stringify(out));
+})();
+"""
+
+
+@needs_node
+def test_site_tab_runs_end_to_end_with_canned_answers_and_every_write_goes_through_a_sheet(tmp_path):
+    blocks = [{'path': 'p1', 'tag': 'title', 'text': 'الأسعار <b>', 'editable': True, 'note': ''},
+              {'path': 'p2', 'tag': 'h1', 'text': 'باقات "بسيطة"', 'editable': True, 'note': ''},
+              {'path': 'p3', 'tag': 'button', 'text': 'ابدأ الآن', 'editable': False, 'note': 'النص مكرر في الصفحة'}]
+    item = {'id': 'i1', 'producer': 'site_edit_manual', 'source': 'founder', 'status': 'proposed', 'target_label': 'صفحة الأسعار',
+            'body': {'page_label': 'صفحة الأسعار', 'edits': [{'old': 'باقات "بسيطة"', 'new': 'باقات <واضحة>', 'why': 'تعديل من المؤسس'}]}}
+    other = {'id': 'i2', 'producer': 'seo_notes', 'status': 'proposed', 'body': {'text': 'ليست من الموقع'}}
+    replies = {
+        'GET /v2/site/pages': {'status': 200, 'body': {'pages': [{'page': 'pricing.html', 'label': 'صفحة الأسعار'}, {'page': 'terms.html', 'label': 'الشروط'}]}},
+        'GET /v2/site/decisions': {'status': 200, 'body': {'decisions': [{'id': 'd1', 'text': 'لا شرح تقني', 'seed': True}, {'id': 'd2', 'text': 'قاعدة <مني>', 'seed': False}]}},
+        'GET /v2/brain/items': {'status': 200, 'body': {'items': [item, other]}},
+        'GET /v2/site/blocks': {'status': 200, 'body': {'page': 'pricing.html', 'label': 'صفحة الأسعار', 'sha': 'abc', 'blocks': blocks}},
+        'GET /v2/site/backups': {'status': 200, 'body': {'backups': [{'id': 7, 'created_at': (datetime.datetime.utcnow() - datetime.timedelta(hours=3, minutes=5)).isoformat() + 'Z', 'created_by': 'a@x.test', 'note': 'apply', 'size': 4096, 'sha256': 'x'}]}},
+        'POST /v2/site/edit': {'status': 200, 'body': {'ok': True}},
+        'POST /v2/brain/items/i1/approve': {'status': 422, 'body': {'error': 'تغيّرت الصفحة منذ الاقتراح؛ أعد التوليد'}},
+        'POST /v2/site/restore': {'status': 200, 'body': {'ok': True}},
+        'DELETE /v2/site/decisions/d2': {'status': 200, 'body': {'ok': True}},
+    }
+    p = subprocess.run([NODE, '-e', SITE_HARNESS, os.path.join(DC, 'v2-logic.js'), os.path.join(DC, 'v2s', 'content.js')],
+                       input=json.dumps({'replies': replies, 'editIndex': 1, 'typed': 'باقات واضحة'}), capture_output=True, text=True, timeout=60)
+    assert p.returncode == 0, p.stderr[-2000:]
+    out = json.loads(p.stdout)
+    # ١) الدخول: صفحات + قرارات + اقتراحات منتظرة فقط (بلا نداء للموقع قبل اختيار صفحة)
+    assert [c['path'].split('?')[0] for c in out['calls1']] == ['/v2/site/pages', '/v2/site/decisions', '/v2/brain/items']
+    assert all(c['method'] == 'GET' for c in out['calls1'])
+    h = out['first']
+    assert 'ينتظر اعتمادك' in h and 'كتبته بنفسك' in h and 'ليست من الموقع' not in h, 'اقتراحات الموقع فقط'
+    assert 'باقات &lt;واضحة&gt;' in h and '<واضحة>' not in h, 'نص الخادم يمرّ على esc'
+    assert 'قاعدة &lt;مني&gt;' in h and 'اختر صفحة' in h and 'صفحة الأسعار' in h
+    assert 'data-a="sapprove"' in h and 'data-a="sreject"' in h and 'data-a="sdecdel"' in h and 'النسخ السابقة' not in h
+    # ٢) اختيار صفحة ⇒ كتلها الحية ونسخها
+    assert sorted(c['path'] for c in out['calls2']) == ['/v2/site/backups?page=pricing.html', '/v2/site/blocks?page=pricing.html']
+    ph = out['picked']
+    assert 'الأسعار &lt;b&gt;' in ph and 'باقات "بسيطة"' in ph.replace('&quot;', '"') and 'النص مكرر في الصفحة' in ph
+    assert ph.count('data-a="sedit"') == 2, 'القابل للتعديل فقط عليه زر «عدّل»'
+    assert 'النسخ السابقة' in ph and 'data-a="srestore"' in ph and 'أرجِع الصفحة' in ph and 'قبل تعديل نُشر' in ph
+    # ٣) ورقة التعديل ⇒ اقتراح يحمل بصمة الصفحة وتأكيدًا، ولا يمسّ الموقع
+    assert 'احفظ الاقتراح' in out['editSheet'] and 'لن يظهر على الموقع حتى تعتمده' in out['editSheet']
+    saved = out['afterSave']['calls']
+    assert saved[0] == {'path': '/v2/site/edit', 'method': 'POST', 'body': {'page': 'pricing.html', 'path': 'p2', 'old': 'باقات "بسيطة"',
+                                                                               'new': 'باقات واضحة', 'sha': 'abc', 'confirmed': True}}
+    assert out['afterSave']['modal'] is False
+    # ٤) اعتماد النشر بورقة تأكيد، وفشل الخادم يُعرض بنصه ولا يُغلق الورقة
+    assert 'سيظهر التعديل على الموقع للناس فور الاعتماد' in out['approveSheet'] and 'اعتمد وانشر' in out['approveSheet']
+    assert out['afterApprove']['calls'][0] == {'path': '/v2/brain/items/i1/approve', 'method': 'POST', 'body': {'confirmed': True}}
+    assert 'تغيّرت الصفحة منذ الاقتراح؛ أعد التوليد' in out['afterApprove']['err']
+    # ٥) إرجاع النسخة وحذف القاعدة بتأكيد
+    assert 'ستعود «صفحة الأسعار» كما كانت منذ ٣ س' in out['restoreSheet'] and 'أرجِع الصفحة' in out['restoreSheet']
+    assert out['afterRestore'][0] == {'path': '/v2/site/restore', 'method': 'POST', 'body': {'page': 'pricing.html', 'backup_id': 7, 'confirmed': True}}
+    assert out['afterDel'][0] == {'path': '/v2/site/decisions/d2', 'method': 'DELETE', 'body': {'confirmed': True}}
 
 
 # ====================================================================== ١٠) الخادم

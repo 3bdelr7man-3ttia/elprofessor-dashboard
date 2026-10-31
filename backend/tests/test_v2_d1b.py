@@ -102,7 +102,7 @@ def test_the_tabs_match_the_approved_table():
                   ['all', 'كل السجلات', 'finance']],
         # الجولة الأخيرة: «المحتوى» بست تبويبات كلها على الموديول القديم `topics` (تُميَّز بـ`topicsTab`) وبلا «كل السجلات»
         'content': [['pipeline', 'خط النشر', 'topics'], ['articles', 'المقالات', 'topics'], ['topics', 'الموضوعات', 'topics'], ['news', 'الأخبار', 'topics'],
-                    ['comments', 'التعليقات', 'topics'], ['tutorials', 'دليل الاستخدام', 'topics']],
+                    ['comments', 'التعليقات', 'topics'], ['tutorials', 'دليل الاستخدام', 'topics'], ['site', 'الموقع', 'topics']],
         'marketing': [['campaigns', 'الحملات', 'marketing'], ['social', 'السوشيال ميديا', 'v2mk_social'], ['plan', 'خطة النشر', 'v2mk_plan']],   # الجولة النهائية: الحملات الجديدة + السوشيال + خطة النشر
         'reports': [['report', 'التقرير', 'analysis'], ['demand', 'ما يسأل عنه الناس', 'v2r_demand'], ['sunday', 'تقرير الأحد', 'v2r_sunday']],     # الجولة النهائية: التقارير
         'brain': [['log', 'القواعد وسجل اليوم', 'v2s_brain'], ['helpers', 'المساعدون', 'ai']],

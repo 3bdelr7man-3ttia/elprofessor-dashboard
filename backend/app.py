@@ -2703,6 +2703,8 @@ except Exception: logger.exception('v2 brain2 routes not loaded')
 try:   # العقل: «المفاتيح والكاتب» (SPEC-B B1): تحميل محروس
     import v2_brain2_keys_routes as _v2_brain2_keys; _v2_brain2_keys.register(app, globals())
 except Exception: logger.exception('v2 brain2 keys routes not loaded')
+try: import v2_site_routes as _v2_site; _v2_site.register(app, globals())   # «الموقع» (SPEC-B §B6): تحميل محروس
+except Exception: logger.exception('v2 site routes not loaded')
 
 
 def _v2_brain2_kick(trigger='cron'):
