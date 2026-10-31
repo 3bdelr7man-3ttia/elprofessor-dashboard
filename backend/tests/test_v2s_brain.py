@@ -884,3 +884,202 @@ def test_person_links_and_want_box_are_touch_sized_and_do_not_clip():
     assert re.search(r'\.v2sb-person\{display:inline-block;padding:11px 4px;margin:-11px -4px', css)
     assert '<textarea id="v2sbWant"' in js and '<input id="v2sbWant"' not in js
     assert re.search(r'\.v2sb-want textarea\{[^}]*resize:none', css)
+
+
+# ——— الجولة الثانية (P5): ما يكتبه العقل · السجل · المساعدون — SPEC brain2 §4.4 ———
+def _sw_resp(**over):
+    base = [
+        {'id': 'opinion', 'section': 'home', 'kind': 'opinion', 'label': 'رأي العقل في كل قرار', 'sentence': 'جملة الرأي.', 'lock_reason': '', 'may_run_alone': True, 'mode': 'alone', 'updated_at': None, 'updated_by': ''},
+        {'id': 'reply_draft', 'section': 'people', 'kind': 'draft', 'label': 'مسودات الرد على الرسائل', 'sentence': 'جملة الرد.', 'lock_reason': 'يسألك دائمًا لأن الرد يصل إلى صاحب الرسالة.', 'may_run_alone': False, 'mode': 'ask', 'updated_at': None, 'updated_by': ''},
+        {'id': 'seo_notes', 'section': 'content', 'kind': 'note', 'label': 'ملاحظات الظهور', 'sentence': 'جملة البحث.', 'lock_reason': '', 'may_run_alone': True, 'mode': 'alone', 'updated_at': '2026-10-30T10:00:00+00:00', 'updated_by': 'admin@local.test'},
+    ]
+    d = {'switches': base, 'writer': 'main', 'brain_today': {'used': 12, 'cap': 60}}
+    d.update(over)
+    return d
+
+
+@needs_node
+def test_switch_rows_options_lock_and_lines():
+    r = v2_node.logic('v2sBrainSwitches', _sw_resp(), NOW)
+    rows = {x['id']: x for x in r['rows']}
+    lab = lambda x: [(o['label'], o['on']) for o in x['options']]
+    assert lab(rows['opinion']) == [('وحده', True), ('متوقّف', False)]                       # الرأي: وحده | متوقّف
+    assert lab(rows['reply_draft']) == [('يسألني', True), ('متوقّف', False)]                 # المقفول لا يعرض «وحده» أبدًا
+    assert lab(rows['seo_notes']) == [('وحده', True), ('يسألني', False), ('متوقّف', False)]
+    assert rows['reply_draft']['line'] == 'يسألك دائمًا لأن الرد يصل إلى صاحب الرسالة.' and rows['reply_draft']['locked'] is True
+    assert rows['opinion']['line'] == 'لم يُغيَّر من قبل'
+    assert rows['seo_notes']['line'] == 'آخر تغيير: منذ ساعتين بواسطة admin@local.test'
+    assert rows['reply_draft']['link'] == {'label': 'افتح الناس والدعوات', 'section': 'people'} and rows['opinion']['link']['label'] == 'افتح اللوحة'
+    assert r['writer'] == 'main' and r['brainToday'] == {'used': 12, 'cap': 60}
+    # صف محجوب بيد «وحده» في قاعدة معبوث بها ⇒ يُعرض «يسألني» (الخادم يفرضه أيضًا)، ولا يُعرض اختيار ممنوع
+    t = _sw_resp()
+    t['switches'][1]['mode'] = 'alone'
+    assert lab({x['id']: x for x in v2_node.logic('v2sBrainSwitches', t, NOW)['rows']}['reply_draft']) == [('يسألني', True), ('متوقّف', False)]
+    t['switches'][0]['mode'] = 'ask'
+    assert lab({x['id']: x for x in v2_node.logic('v2sBrainSwitches', t, NOW)['rows']}['opinion']) == [('وحده', True), ('متوقّف', False)]
+
+
+@needs_node
+def test_switch_source_failure_is_null_not_empty_and_writer_states():
+    sw = lambda r: v2_node.logic('v2sBrainSwitches', r, NOW)
+    assert sw(None) is None and sw({}) is None and sw({'switches': 'x'}) is None
+    assert sw(_sw_resp(writer='backup'))['writer'] == 'backup'
+    assert sw(_sw_resp(writer=None))['writer'] is None                      # لا كاتب مفعّل
+    nowriter = _sw_resp()
+    del nowriter['writer']
+    assert 'writer' not in sw(nowriter) or sw(nowriter)['writer'] is None   # غير معروف (undefined في JS يسقط من JSON)
+    assert sw(_sw_resp(brain_today=None))['brainToday'] == {'used': None, 'cap': None}
+    assert sw(_sw_resp(brain_today={'used': 'x', 'cap': 0}))['brainToday'] == {'used': None, 'cap': None}
+    w = lambda writer, known: v2_node.logic('v2sBrainWriterText', writer, known)
+    assert w('main', True) == 'الكاتب الأساسي' and w('backup', True) == 'الكاتب الاحتياطي' and w(None, True) == 'لا أحد' and w(None, False) == 'غير متاح بعد'
+    t = lambda bt: v2_node.logic('v2sBrainWritesToday', bt)
+    assert t({'used': 12, 'cap': 60}) == '١٢ من ٦٠' and t({'used': None, 'cap': 60}) == 'غير متاح بعد' and t({'used': 3, 'cap': None}) == 'غير متاح بعد' and t(None) == 'غير متاح بعد'
+
+
+@needs_node
+def test_switch_confirm_sheet_texts():
+    rows = {x['id']: x for x in v2_node.logic('v2sBrainSwitches', _sw_resp(), NOW)['rows']}
+    s = lambda i, m: v2_node.logic('v2sBrainSwitchSheet', rows[i], m)
+    assert s('seo_notes', 'off') == {'title': 'ملاحظات الظهور', 'lead': 'يتوقف العقل عن كتابة «ملاحظات الظهور». ويبقى ما كتبه من قبل كما هو.', 'go': 'نعم، أوقفه'}
+    assert 'وحده' in s('seo_notes', 'alone')['lead'] and s('seo_notes', 'alone')['go'] == 'نعم، وحده'
+    assert 'لا يُنفَّذ شيء إلا بعد موافقتك' in s('seo_notes', 'ask')['lead'] and s('seo_notes', 'ask')['go'] == 'نعم، يسألني'
+    assert 'الجملة الثابتة' in s('opinion', 'off')['lead']
+    for i in rows:
+        for m in ('alone', 'ask', 'off'):
+            assert not re.search(r'[A-Za-z]', s(i, m)['lead'] + s(i, m)['go'])
+
+
+def _it(iid, status, kind='note', label='مقال', tag='', at='2026-10-30T10:00:00Z', decided=None, section='content'):
+    return {'id': iid, 'producer': 'seo_notes', 'section': section, 'kind': kind, 'target_label': label, 'body': {'text': 'نص'}, 'status': status, 'source': 'ai',
+            'created_at': at, 'decided_at': decided, 'decided_by': '', 'tag': tag, 'approve_label': '', 'last_error': ''}
+
+
+@needs_node
+def test_log_rows_exact_texts_actions_and_opinion_summary():
+    resp = {'items': [
+        _it('a', 'done_alone', label='م١', at='2026-10-30T11:00:00Z'),
+        _it('b', 'proposed', 'draft', 'رسالة منى', 'مسودة رد', at='2026-10-30T10:50:00Z', section='people'),
+        _it('c', 'approved', 'draft', 'طلب س', 'ربط بدورة', at='2026-10-30T09:00:00Z', decided='2026-10-30T10:40:00Z'),
+        _it('d', 'edited', 'draft', 'طلب ص', 'مسودة رد', at='2026-10-30T09:00:00Z', decided='2026-10-30T10:30:00Z'),
+        _it('e', 'rejected', 'draft', 'رسالة كريم', 'مسودة رد', decided='2026-10-30T10:20:00Z'),
+        _it('f', 'discarded', label='م٢', decided='2026-10-30T10:10:00Z'),
+        _it('g', 'failed', label='الأسبوع الماضي', at='2026-10-30T10:05:00Z'),
+        _it('h', 'unknown', 'draft', 'رسالة ل', 'مسودة رد', at='2026-10-30T10:01:00Z'),
+        _it('i', 'expired', 'draft', 'قديم', 'مسودة رد'), _it('j', 'applying', 'draft', 'جارٍ', 'مسودة رد'),
+        _it('o1', 'done_alone', 'opinion', 'ق١', at='2026-10-30T08:00:00Z'), _it('o2', 'done_alone', 'opinion', 'ق٢', at='2026-10-30T08:30:00Z'),
+        _it('o3', 'failed', 'opinion', 'ق٣', at='2026-10-30T08:40:00Z'),
+        _it('old', 'done_alone', label='أمس', at='2026-10-29T10:00:00Z'),
+    ]}
+    items = v2_node.logic('v2sBrainItems', resp)
+    rows = v2_node.logic('v2sBrainItemRows', items, '2026-10-30T00:00:00Z')
+    got = [(r['text'], (r['action'] or {}).get('label', '')) for r in sorted(rows, key=lambda r: -r['atMs'])]
+    assert got == [
+        ('كتب ملاحظة على «م١»', 'احذفها'),
+        ('اقترح «مسودة رد» على «رسالة منى»', 'افتح'),
+        ('نُفّذ «ربط بدورة» على «طلب س» بموافقتك', ''),
+        ('نُفّذ «مسودة رد» على «طلب ص» بموافقتك', ''),
+        ('رُفض اقتراح على «رسالة كريم»', ''),
+        ('حُذفت ملاحظة على «م٢»', ''),
+        ('تعذّرت الكتابة عن «الأسبوع الماضي»', ''),
+        ('لم نتأكد من نتيجة «مسودة رد» على «رسالة ل»', ''),
+        ('كتب رأيه في قرارين', ''),
+    ], got
+    one = v2_node.logic('v2sBrainItemRows', v2_node.logic('v2sBrainItems', {'items': [_it('o', 'done_alone', 'opinion')]}), '2026-10-30T00:00:00Z')
+    assert one[0]['text'] == 'كتب رأيه في قرار واحد' and one[0]['action'] is None
+    many = v2_node.logic('v2sBrainItems', {'items': [_it('o%d' % n, 'done_alone', 'opinion') for n in range(11)]})
+    assert v2_node.logic('v2sBrainItemRows', many, '2026-10-30T00:00:00Z')[0]['text'] == 'كتب رأيه في ١١ قرارًا'
+    # الآراء وحدها لا صفوف فردية، والفاشل لا يُحسب
+    assert [r['kind'] for r in rows].count('opinions') == 1 and not [r for r in rows if r.get('id') in ('o1', 'o2', 'o3')]
+    # اقتراح ينتظر ⇒ يُعدّ، والآراء لا تُعدّ
+    assert v2_node.logic('v2sBrainProposed', items) == 1
+    assert v2_node.logic('v2sBrainProposed', None) is None
+    # مصدر فاشل ⇒ null لا قائمة فاضية
+    assert v2_node.logic('v2sBrainItems', None) is None and v2_node.logic('v2sBrainItems', {'items': 'x'}) is None
+
+
+@needs_node
+def test_log_rows_merge_with_files_and_reports():
+    ent = v2_node.logic('v2sBrainEntries', {'files_ok': True, 'entries': [_e('a', '2026-10-30T10:00:00Z')]}, CAIRO_MID)
+    items = v2_node.logic('v2sBrainItems', {'items': [_it('a', 'done_alone', label='م١', at='2026-10-30T11:00:00Z')]})
+    rows = v2_node.logic('v2sBrainLogRows', ent, [], CAIRO_MID, items)
+    assert [r['kind'] for r in rows] == ['item', 'file']
+    assert len(v2_node.logic('v2sBrainLogRows', ent, [], CAIRO_MID)) == 1, 'بلا عناصر ⇒ السلوك القديم كما هو'
+    assert [r['kind'] for r in v2_node.logic('v2sBrainLogRows', None, [], CAIRO_MID, items)] == ['item'], 'سجل الملفات الفاشل لا يُخفي عناصر العقل'
+
+
+@needs_node
+def test_run_state_and_run_info():
+    rs = lambda r, now=NOW: v2_node.logic('v2sBrainRunState', r, now)
+    assert rs(None) == {'known': False, 'active': False}
+    assert rs({'run': None}) == {'known': True, 'active': False}
+    assert rs({'run': {'started_at': '2026-10-30T11:55:00Z', 'finished_at': None}})['active'] is True
+    assert rs({'run': {'started_at': '2026-10-30T11:55:00Z', 'finished_at': '2026-10-30T11:58:00Z'}})['active'] is False
+    assert rs({'run': {'started_at': '2026-10-30T11:00:00Z', 'finished_at': None}})['active'] is False, 'جولة عالقة منذ أكثر من ١٥ دقيقة لا تقفل الزرّ'
+    sw = v2_node.logic('v2sBrainSwitches', _sw_resp(), NOW)
+    info = lambda s, r: v2_node.logic('v2sBrainRunInfo', s, r, NOW)
+    ok = info(sw, {'known': True, 'active': False})
+    assert ok == {'canStart': True, 'active': False, 'reason': '', 'n': 20, 'lead': 'يكتب العقل الآن ما ينقص من اقتراحات، بحد أقصى ٢٠ كتابة.'}
+    assert info(sw, {'known': True, 'active': True})['canStart'] is False and info(sw, {'known': True, 'active': True})['reason'] == 'العقل يكتب الآن'
+    low = v2_node.logic('v2sBrainSwitches', _sw_resp(brain_today={'used': 58, 'cap': 60}), NOW)
+    assert info(low, None)['n'] == 2 and info(low, None)['lead'].endswith('بحد أقصى كتابتين.')
+    full = v2_node.logic('v2sBrainSwitches', _sw_resp(brain_today={'used': 60, 'cap': 60}), NOW)
+    assert info(full, None)['canStart'] is False and info(full, None)['reason'] == 'بلغ العقل حدّ كتابته اليوم'
+    nowriter = v2_node.logic('v2sBrainSwitches', _sw_resp(writer=None), NOW)
+    assert info(nowriter, None)['canStart'] is False and info(nowriter, None)['reason'] == 'لا كاتب مفعّل الآن'
+    unknown = v2_node.logic('v2sBrainSwitches', _sw_resp(brain_today=None), NOW)
+    assert info(unknown, None)['canStart'] is True and 'بحد أقصى' not in info(unknown, None)['lead'], 'عدّاد غير معروف ⇒ لا رقم مخترع'
+
+
+@needs_node
+def test_line_case_2b_waiting_proposals_sits_between_off_and_counts():
+    ent = {'entries': [], 'autoCount': 4, 'changedCount': 0, 'partial': False, 'missing': False, 'fromInbox': False}
+    off = dict(B2_OK, auto_assign=dict(B2_OK['auto_assign'], value=False))
+    line = lambda **k: v2_node.logic('v2sBrainLine', k)
+    for n, word in ((1, 'اقتراح واحد'), (2, 'اقتراحان'), (3, '٣ اقتراحات'), (11, '١١ اقتراحًا')):
+        r = line(queue=QUEUE_OK, settings=B2_OK, entries=ent, proposed=n)
+        assert r['text'] == 'ينتظرك من العقل: ' + word and r['button'] == {'label': 'ابدأ القرارات', 'section': 'home', 'deck': True}, r
+    # التوزيع المتوقّف مع ملفات تنتظر أهم، والتنبيه المتوقّف أهم منهما
+    assert line(queue=QUEUE_OK, settings=off, entries=ent, proposed=2)['text'].startswith('التوزيع التلقائي متوقّف')
+    stopped = dict(QUEUE_OK, alerts=['⚠️ حارس المهلة والاسترداد: متوقّفة منذ 5 ساعة، والحدّ المسموح 2 ساعة'])
+    assert line(queue=stopped, settings=B2_OK, entries=ent, proposed=2)['text'].startswith('حارس المهلة والاسترداد')
+    # لا اقتراحات (٠ أو غير معروف) ⇒ السطر القديم بلا تغيير
+    for p in (0, None):
+        assert line(queue=QUEUE_OK, settings=B2_OK, entries=ent, proposed=p)['text'] == 'وُزّع اليوم ٤ ملفات وحده.'
+
+
+def test_brain2_wiring_in_brain_js():
+    js = _read('dashboard-cloud', 'v2s', 'brain.js')
+    # المسارات والتأكيد: كل كتابة ببدن confirmed:true، والمسارات من SPEC §2.5
+    assert "'/v2/brain/switches'" in js and "'/v2/brain/runs/latest'" in js and "'/v2/brain/items?status=all&since='" in js
+    assert "'/v2/brain/switches/' + encodeURIComponent(id), { method: 'PUT', body: { mode: mode, confirmed: true } }" in js
+    assert "'/v2/brain/items/' + encodeURIComponent(id) + '/discard', { method: 'POST', body: { confirmed: true } }" in js
+    assert "'/v2/brain/run', { method: 'POST', body: { confirmed: true } }" in js and js.count("'/v2/brain/run'") == 1
+    for t in ('حُفظ الاختيار', 'بدأ العقل الكتابة', 'حُذفت الملاحظة', 'اكتب الاقتراحات الآن', 'نعم، ابدأ', 'ما يكتبه العقل', 'اقتراحات يكتبها العقل من بيانات حقيقية',
+              'أين ترى نتيجته', 'من يكتب الآن', 'كتابات العقل اليوم', 'تُحذف هذه الملاحظة. لم تغيّر شيئًا في المنصة.'):
+        assert t in js, t
+    assert 'role="radiogroup"' in js and 'role="radio"' in js and 'openSection(r.link.section)' in js
+    # «ابدأ القرارات» تفتح الرئيسية ثم تضغط زرّ البدء الموجود، لا مدخل آخر
+    assert "openSection('home')" in js and '[data-a="start"]' in js
+    # الزرّ يعطَّل أثناء جولة نشطة: من حالة المصدر لا من حالة محلية فقط
+    assert 'L.v2sBrainRunInfo(sw, runState(), now())' in js and '(ri.canStart ? \'\' : \' disabled\')' in js
+    # لا نعرض صفرًا ولا null: القرصان يمرّان على «غير متاح بعد»
+    assert 'L.v2sBrainWriterText(' in js and 'L.v2sBrainWritesToday(' in js
+    css = _read('dashboard-cloud', 'v2s', 'brain.css')
+    assert '.v2sb-md button{min-height:44px' in css and re.search(r'\.v2sb-row\.has-md \.v2sb-md button\{flex:1;min-width:0;min-height:52px', css)
+
+
+def test_brain2_new_copy_passes_the_rules():
+    """SPEC §4.5 على نصوص الجولة الثانية: فصحى محايدة · بلا «يقوّم/اعكس/⇒/✓/لما » · بلا لاتينية · لا عنوان يبدأ بـ«الذكاء» · لا «0/null/undefined»."""
+    js = _read('dashboard-cloud', 'v2s', 'brain.js')
+    logic = _read('dashboard-cloud', 'v2-logic.js')
+    block = logic[logic.index('// ===== v2s:brain ====='):logic.index('// ===== /v2s:brain =====')]
+    fresh = block[block.index('// —— ما يكتبه العقل (الجولة الثانية)'):block.index('// —— القواعد')]
+    texts = _visible_copy(fresh) + _visible_copy(js[js.index('// —— مجموعة «ما يكتبه العقل»') if '// —— مجموعة «ما يكتبه العقل»' in js else 0:])
+    assert len(texts) > 60
+    for t in texts:
+        for bad in FORBIDDEN + ['null', 'undefined']:
+            assert not re.search(r'(?<![؀-ۿ])' + re.escape(bad), t), (bad, t)
+        assert not re.search(r'[A-Za-z0-9]', t), t
+        assert not re.match(r'^\s*(الذكاء|AI)', t), t
+    # لا ادعاء أن رد الموقع أُرسل بالبريد
+    assert not re.search(r'(أُرسل|أرسلنا|وصل)[^.]{0,20}(بريد|إيميل)', ' '.join(texts))

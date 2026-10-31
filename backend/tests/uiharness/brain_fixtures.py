@@ -201,3 +201,120 @@ def seed_brain_dash(appmod, used=3, today_reports=('articles', 'master'), data_o
         if used is not None:
             m.db.session.add(m.AIDailyUsage(day=m._ai_utc_day(), calls=used))
         m.db.session.commit()
+
+
+# ---------------------------------------------------------------- «ما يكتبه العقل» (الجولة الثانية): مسارات `/api/v2/brain/{switches,items,run,runs/latest}` المزيّفة
+# الخادم الحقيقي لها في الباكدج P1؛ هنا جدول في الذاكرة بنفس الأشكال المعتمدة في SPEC brain2 §2.5 (لا شبكة ولا ذكاء).
+PRODUCERS = [
+    # id, section, kind, label, sentence, lock_reason, may_run_alone, default_mode
+    ('opinion', 'home', 'opinion', 'رأي العقل في كل قرار', 'عندما يظهر قرار ينتظرك، يكتب العقل رأيه فيه من بيانات البطاقة نفسها.', '', True, 'alone'),
+    ('reply_draft', 'people', 'draft', 'مسودات الرد على الرسائل', 'عندما تصل رسالة أو طلب تواصل، يكتب العقل مسودة رد تراجعها قبل أن تصل إلى صاحبها.',
+     'يسألك دائمًا لأن الرد يصل إلى صاحب الرسالة.', False, 'ask'),
+    ('course_review', 'courses', 'draft', 'مراجعة الدورة قبل النشر', 'عندما تُقدَّم دورة للنشر، يكتب العقل ما ينقصها ويقترح: انشر أو أصلح أولًا.',
+     'يسألك دائمًا لأن النشر يظهر للناس.', False, 'ask'),
+    ('market_match', 'market', 'draft', 'ربط طلبات السوق بدورة مناسبة', 'عندما يطلب عضو شيئًا تغطيه دورة لدينا، يقترح العقل ربطه بها.',
+     'يسألك دائمًا لأنه يغيّر بيانات الطلب على المنصة.', False, 'ask'),
+    ('seo_notes', 'content', 'note', 'ملاحظات الظهور في البحث على المسودات', 'عندما تنتظر مسودة مقال، يكتب العقل ما يحسّن ظهورها في البحث. لا يُنشر شيء.', '', True, 'alone'),
+    ('campaign_comment', 'marketing', 'note', 'تعليق على الحملات', 'عندما تتغير أرقام حملة، يكتب العقل تعليقًا قصيرًا عليها.', '', True, 'alone'),
+    ('weekly_read', 'reports', 'note', 'قراءة الأسبوع', 'في بداية كل أسبوع، يكتب العقل قراءة قصيرة لأرقام الأسبوع الماضي.', '', True, 'alone'),
+    ('forecast_comment', 'company', 'note', 'تعليق على التوقعات', 'عندما تتغير التوقعات أو الأرقام الفعلية، يكتب العقل تعليقًا عليها.', '', True, 'alone'),
+]
+
+
+def make_item(iid, producer, section, kind, label, status, text='', tag='', approve='', at=.3, decided=None, by='', source='ai'):
+    return {'id': iid, 'producer': producer, 'section': section, 'kind': kind, 'target_label': label, 'body': {'text': text}, 'status': status,
+            'source': source, 'created_at': today_at(at), 'decided_at': today_at(decided) if decided is not None else None, 'decided_by': by,
+            'tag': tag, 'approve_label': approve, 'last_error': ''}
+
+
+def brain2_items():
+    """ملاحظتان (واحدة تبقى وأخرى تُحذف في اللقطة) · اقتراحان ينتظران · مُنفَّذ · مرفوض · محذوف · فاشل · ثلاثة آراء."""
+    return [
+        make_item('bi-note-1', 'seo_notes', 'content', 'note', 'مقال: عقود الإيجار التجاري', 'done_alone', 'العنوان أطول من اللازم، ولا يوجد وصف قصير.', at=.62),
+        make_item('bi-note-2', 'campaign_comment', 'marketing', 'note', 'حملة الإيجار — فيسبوك', 'done_alone', 'الإنفاق ارتفع والنتائج ثابتة.', at=.58),
+        make_item('bi-prop-1', 'reply_draft', 'people', 'draft', 'رسالة من منى عن موعد الاستشارة', 'proposed', 'مسودة الرد على الرسالة.', tag='مسودة رد', approve='أرسل الرد', at=.55),
+        make_item('bi-prop-2', 'course_review', 'courses', 'draft', 'دورة أساسيات التسويق القانوني', 'proposed', 'ينقصها وصف المخرجات.', tag='مراجعة دورة', approve='افتح الدورة', at=.5),
+        make_item('bi-done-1', 'market_match', 'market', 'draft', 'طلب: تدريب على عقود العمل', 'approved', 'اربطه بدورة عقود العمل.', tag='ربط بدورة', approve='اربطه بالدورة', at=.4, decided=.45, by='admin@local.test'),
+        make_item('bi-rej-1', 'reply_draft', 'people', 'draft', 'رسالة من كريم', 'rejected', 'مسودة.', tag='مسودة رد', approve='أرسل الرد', at=.35, decided=.38, by='admin@local.test'),
+        make_item('bi-disc-1', 'seo_notes', 'content', 'note', 'مقال: نفقة الزوجة', 'discarded', 'ملاحظة قديمة.', at=.3, decided=.33, by='admin@local.test'),
+        make_item('bi-fail-1', 'weekly_read', 'reports', 'note', 'الأسبوع الماضي', 'failed', '', at=.25),
+        make_item('bi-op-1', 'opinion', 'home', 'opinion', 'تحويل للخبير', 'done_alone', 'راجع الحساب قبل التحويل.', at=.2),
+        make_item('bi-op-2', 'opinion', 'home', 'opinion', 'طلب انضمام', 'done_alone', 'الملف مكتمل.', at=.21),
+        make_item('bi-op-3', 'opinion', 'home', 'opinion', 'نزاع على ملف', 'done_alone', 'اسمع الطرفين.', at=.22),
+    ]
+
+
+class Brain2Fake(object):
+    """يرد على مسارات العقل الجديدة. `handle(method, path, query, body)` ⇒ (status, payload) أو None لو المسار ليس من نصيبه.
+
+    المعاملات: items (قائمة العناصر · الافتراضي فاضية) · writer ('main'|'backup'|None) · used/cap (عدّاد اليوم) · active (جولة جارية) · down (مجموعة مسارات ترجع ٥٠٢)."""
+    OWN = ('/api/v2/brain/switches', '/api/v2/brain/items', '/api/v2/brain/run', '/api/v2/brain/runs/latest')
+
+    def __init__(self, items=None, writer='main', used=12, cap=60, active=False, down=()):
+        self.modes = {p[0]: p[7] for p in PRODUCERS}
+        self.stamp = {}
+        self.items = copy.deepcopy(items) if items else []
+        self.writer = writer
+        self.used = used
+        self.cap = cap
+        self.active = active
+        self.down = set(down)
+        self.writes = []            # (method, path, body)
+        self.item_queries = []
+
+    def owns(self, path):
+        return path in self.OWN or path.startswith('/api/v2/brain/switches/') or (path.startswith('/api/v2/brain/items/') and path.endswith('/discard'))
+
+    def _switch(self, p):
+        st = self.stamp.get(p[0])
+        return {'id': p[0], 'section': p[1], 'kind': p[2], 'label': p[3], 'sentence': p[4], 'lock_reason': p[5], 'may_run_alone': p[6],
+                'mode': self.modes[p[0]], 'updated_at': st[0] if st else None, 'updated_by': st[1] if st else ''}
+
+    def handle(self, method, path, query, body):
+        m = method.upper()
+        if not self.owns(path):
+            return None
+        if path in self.down:
+            return 502, {'error': 'تعذر الاتصال'}
+        if path == '/api/v2/brain/switches' and m == 'GET':
+            return 200, {'switches': [self._switch(p) for p in PRODUCERS], 'writer': self.writer, 'brain_today': {'used': self.used, 'cap': self.cap}}
+        if path.startswith('/api/v2/brain/switches/') and m == 'PUT':
+            pid = path.rsplit('/', 1)[1]
+            prod = [p for p in PRODUCERS if p[0] == pid]
+            self.writes.append((m, path, copy.deepcopy(body)))
+            if not prod:
+                return 404, {'error': 'غير موجود'}
+            mode = (body or {}).get('mode')
+            if (body or {}).get('confirmed') is not True or mode not in ('alone', 'ask', 'off'):
+                return 400, {'error': 'تعذّر تنفيذ العملية'}
+            if mode == 'alone' and not prod[0][6]:
+                return 400, {'error': 'هذا لا يعمل وحده: ' + prod[0][5]}
+            self.modes[pid] = mode
+            self.stamp[pid] = (datetime.datetime.now(UTC).isoformat(), 'admin@local.test')
+            return 200, {'ok': True, 'id': pid, 'mode': mode}
+        if path == '/api/v2/brain/items' and m == 'GET':
+            self.item_queries.append(dict(query))
+            return 200, {'items': copy.deepcopy(self.items)}
+        if path.startswith('/api/v2/brain/items/') and path.endswith('/discard') and m == 'POST':
+            iid = path.split('/')[-2]
+            self.writes.append((m, path, copy.deepcopy(body)))
+            it = [i for i in self.items if i['id'] == iid]
+            if not it or it[0]['status'] != 'done_alone' or it[0]['kind'] != 'note':
+                return 409, {'error': 'حُسم هذا الاقتراح من قبل'}
+            it[0]['status'] = 'discarded'
+            it[0]['decided_at'] = datetime.datetime.now(UTC).isoformat()
+            it[0]['decided_by'] = 'admin@local.test'
+            return 200, {'ok': True}
+        if path == '/api/v2/brain/runs/latest' and m == 'GET':
+            if self.active:
+                return 200, {'run': {'id': 'run1', 'trigger': 'admin', 'started_at': datetime.datetime.now(UTC).isoformat(), 'finished_at': None, 'items': 0}}
+            return 200, {'run': None}
+        if path == '/api/v2/brain/run' and m == 'POST':
+            self.writes.append((m, path, copy.deepcopy(body)))
+            if (body or {}).get('confirmed') is not True:
+                return 400, {'error': 'تعذّر تنفيذ العملية'}
+            if self.active:
+                return 409, {'error': 'العقل يكتب الآن. جرّب بعد قليل'}
+            self.active = True
+            return 202, {'run_id': 'run1'}
+        return None
