@@ -354,7 +354,7 @@ def test_b3_mapping_and_no_ai(ctx, plat, monkeypatch):
     monkeypatch.setenv('DEEPSEEK_API_KEY', 'not-a-real-key')
     _usage(monkeypatch)
     d = get(ctx, '/api/v2/brain/helpers-status').get_json()
-    assert d == {'configured': True, 'cap': 40, 'used': 12, 'remaining': 28, 'blocked': False}
+    assert d == {'configured': True, 'cap': 40, 'used': 12, 'remaining': 28, 'blocked': False, 'writer': 'backup'}
     _usage(monkeypatch, cap=0, remaining=None, used=5)
     d = get(ctx, '/api/v2/brain/helpers-status').get_json()
     assert d['cap'] is None and d['remaining'] is None and d['used'] == 5 and d['blocked'] is False
@@ -365,7 +365,10 @@ def test_b3_mapping_and_no_ai(ctx, plat, monkeypatch):
     assert get(ctx, '/api/v2/brain/helpers-status').get_json()['blocked'] is True
     for k in ('ANTHROPIC_API_KEY', 'OPENAI_API_KEY', 'DEEPSEEK_API_KEY'):
         monkeypatch.delenv(k, raising=False)
-    assert get(ctx, '/api/v2/brain/helpers-status').get_json()['configured'] is False
+    d = get(ctx, '/api/v2/brain/helpers-status').get_json()
+    assert d['configured'] is False and d['writer'] is None
+    monkeypatch.setenv('ANTHROPIC_API_KEY', 'not-a-real-key')
+    assert get(ctx, '/api/v2/brain/helpers-status').get_json()['writer'] == 'main'
     assert plat.seen == [], 'B3 بلا نداء للمنصة'
 
 

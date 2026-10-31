@@ -108,6 +108,22 @@ def test_deepseek_default_model_is_v4_flash_and_the_retired_aliases_are_gone():
     assert 'deepseek-reasoner' not in cfg['models']
 
 
+def test_anthropic_default_model_is_sonnet_5_5_and_the_old_names_are_retired():
+    """§2.6 (العقل الجولة ٢): الافتراضي الحيّ لـClaude + الأسماء المسحوبة تُتجاهل من البيئة."""
+    cfg = AI_PROVIDERS['anthropic']
+    assert cfg['default_model'] == 'claude-sonnet-5-5'
+    assert cfg['models'] == ['claude-sonnet-5-5', 'claude-opus-5-5', 'claude-haiku-5-5']
+    for retired in ('claude-sonnet-4-20250514', 'claude-3-5-sonnet-latest', 'claude-3-5-haiku-latest'):
+        assert retired in appmod.AI_RETIRED_MODELS and retired not in cfg['models']
+
+
+def test_dashboard_model_override_with_a_foreign_prefix_is_ignored(monkeypatch):
+    monkeypatch.delenv('ANTHROPIC_MODEL', raising=False)
+    monkeypatch.setenv('DASHBOARD_AI_MODEL', 'deepseek-v4-flash')
+    assert ai_model_for('anthropic') == 'claude-sonnet-5-5'
+    assert ai_model_for('deepseek') == 'deepseek-v4-flash'
+
+
 def test_model_default_and_env_overrides(monkeypatch):
     monkeypatch.delenv('DASHBOARD_AI_MODEL', raising=False)
     monkeypatch.delenv('DEEPSEEK_MODEL', raising=False)
