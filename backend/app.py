@@ -2697,6 +2697,21 @@ def v2_book_request_patch(request_id):
 try:   # العقل: تحميل محروس (غياب الوحدة لا يوقف بقية اللوحة)
     from v2_brain_routes import register as _v2_brain_register; _v2_brain_register(app, globals())
 except Exception: logger.exception('v2 brain routes not loaded')
+try:   # العقل الجولة ٢ (SPEC docs/v2/brain2): تحميل محروس
+    import v2_brain2_routes as _v2_brain2; _v2_brain2.register(app, globals())
+except Exception: logger.exception('v2 brain2 routes not loaded')
+
+
+def _v2_brain2_kick(trigger='cron'):
+    """يبدأ جولة كتابة «العقل» في الخيط الخلفي بلا انتظار؛ أي فشل يُسجَّل ولا يكسر المنادي."""
+    try:
+        import v2_brain2_routes as _b2
+        return _b2.kick(globals(), trigger)
+    except Exception:
+        logger.exception('brain2 kick failed')
+        return None
+
+
 import v2_courses_routes; v2_courses_routes.register(app, globals())
 import v2_market_routes as _v2s_market; _v2s_market.register(app, globals())  # noqa: E402
 __import__('v2_books_routes').register(app, globals())
@@ -8547,6 +8562,7 @@ def ai_agents_run_cron():
         logging.getLogger(__name__).exception('ai_agents_run_cron failed')
         return jsonify({'ok': False, 'ran': ran}), 200  # never 5xx to the cron
     _audit('ai.agents_run_cron', target=agent, meta={'ran': len(ran)})
+    _v2_brain2_kick('cron')  # لا ينتظر: الكتابة في خيط «العقل» الخلفي
     return jsonify({'ok': True, 'ran': ran})
 
 
