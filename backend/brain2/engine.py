@@ -142,8 +142,22 @@ def _models(db):
         skipped_json = db.Column(db.Text)
         by = db.Column(db.String(255))
 
+    class V2BrainDay(db.Model):
+        """عدّاد يومي حقيقي (UTC) لنداءات الذكاء من العقل: يزيد قبل كل نداء، فلا يضيع نداءٌ فشل أو نتج عنه قالب."""
+        __tablename__ = 'v2_brain_day'
+        __table_args__ = {'extend_existing': True}
+        day = db.Column(db.String(10), primary_key=True)
+        calls = db.Column(db.Integer, nullable=False, default=0)
+        opinions = db.Column(db.Integer, nullable=False, default=0)
+
     _MODEL['cls'] = (V2BrainItem, V2BrainSwitch, V2BrainRun)
+    _MODEL['day'] = V2BrainDay
     return _MODEL['cls']
+
+
+def _day_model(db):
+    _models(db)
+    return _MODEL['day']
 
 
 # ------------------------------------------------------------------ البصمة والنصوص
@@ -281,6 +295,8 @@ def ensure_schema(db):
     try:
         from sqlalchemy import inspect as _inspect, text as _text
         insp = _inspect(db.engine)
+        if 'v2_brain_day' not in insp.get_table_names():
+            _day_model(db).__table__.create(db.engine, checkfirst=True)
         if 'v2_brain_switches' in insp.get_table_names():
             if 'telegram' not in {c['name'] for c in insp.get_columns('v2_brain_switches')}:
                 with db.engine.begin() as conn:
@@ -341,13 +357,62 @@ def _counted(q, Item):
                     ((Item.source == 'ai') | (Item.status == 'failed')))
 
 
+def _day_key():
+    return _day_start().strftime('%Y-%m-%d')
+
+
+def _day_row(db):
+    try:
+        ensure_schema(db)
+        return _day_model(db).query.get(_day_key())
+    except Exception:   # noqa: BLE001
+        db.session.rollback()
+        return None
+
+
 def brain_today(db, kind=None):
-    """عدد كتابات اليوم (UTC): صفوف `source='ai'` + الفاشلة. `kind` للعدّ داخل السقف (الآراء)."""
+    """عدد نداءات العقل اليوم (UTC) من العدّاد الحقيقي `v2_brain_day`. `kind='opinion'` للآراء.
+    لو صف اليوم غير موجود (قبل أول نداء) ⇒ العدّ القديم من صفوف `source='ai'` + الفاشلة احتياطًا."""
+    row = _day_row(db)
+    if row is not None:
+        return int((row.opinions if kind == 'opinion' else row.calls) or 0)
     Item = _models(db)[0]
     q = Item.query
     if kind:
         q = q.filter(Item.kind == kind)
     return _counted(q, Item).count()
+
+
+def _bump_day(db, opinion=False):
+    """يزيد عدّاد اليوم بنداء واحد قبل نداء الذكاء مباشرة (تحديث ذرّي، وإدراج الصف إن غاب)."""
+    D = _day_model(db)
+    key = _day_key()
+    vals = {D.calls: D.calls + 1}
+    if opinion:
+        vals[D.opinions] = D.opinions + 1
+    try:
+        n = D.query.filter(D.day == key).update(vals, synchronize_session=False)
+        if n != 1:
+            # الصف أول مرة: نبدأ من العدّ القديم حتى لا يصفّر السقف في منتصف اليوم عند أول نشر.
+            Item = _models(db)[0]
+            base_calls = _counted(Item.query, Item).count()
+            base_op = _counted(Item.query.filter(Item.kind == 'opinion'), Item).count()
+            db.session.add(D(day=key, calls=base_calls + 1, opinions=base_op + (1 if opinion else 0)))
+        db.session.commit()
+    except Exception:   # noqa: BLE001
+        db.session.rollback()
+        try:
+            D.query.filter(D.day == key).update(vals, synchronize_session=False)
+            db.session.commit()
+        except Exception:   # noqa: BLE001
+            db.session.rollback()
+            logger.exception('brain2: day counter failed')
+
+
+def day_used(db, state):
+    """المستخدم اليوم للسقف: العدّاد يشمل أصلًا نداءات القالب؛ وعند غياب صفه نضيف `template_calls` كما كان."""
+    n = brain_today(db)
+    return n if _day_row(db) is not None else n + state.get('template_calls', 0)
 
 
 # ------------------------------------------------------------------ تخزين
@@ -446,7 +511,7 @@ def process_target(ns, p, t, state, run_id=None):
         raise StopRun('off')
     if state['run_cap'] is not None and state['calls'] >= state['run_cap']:
         raise StopRun('run_cap')
-    if brain_today(db) + state['template_calls'] >= day_cap():
+    if day_used(db, state) >= day_cap():
         raise StopRun('day_cap')
     if p.kind == 'opinion' and brain_today(db, 'opinion') >= opinion_cap():
         raise StopRun('opinion_cap')
@@ -459,6 +524,7 @@ def process_target(ns, p, t, state, run_id=None):
 
     state['calls'] += 1
     state['per'][p.id] = state['per'].get(p.id, 0) + 1
+    _bump_day(db, opinion=(p.kind == 'opinion'))
     body, err = None, None
     try:
         sys_ar, user_ar = p.prompt(t)
@@ -776,8 +842,9 @@ def start_run(ns, trigger, actor, only=None):
     db.session.commit()
     run_id = run.id
     sub = submit(ns, 'run', lambda: execute_run(ns, run_id, only, actor))
-    if not sub.get('queued'):
-        _finish_run(ns, run_id, 0, 0, {'_stop': 'busy'})
+    if not sub.get('queued') or sub.get('duplicate'):
+        # جولة أخرى لا تزال في الطابور/تعمل: لن يُنفَّذ هذا الصف أبدًا، فنختمه بدل أن يبقى «يعمل» فيقفل الجولات ١٥ دقيقة.
+        _finish_run(ns, run_id, 0, 0, {'busy': 1})
         return 409, {'error': ERR_RUNNING}
     return 202, {'run_id': run_id}
 
@@ -928,6 +995,27 @@ def _loads(s, default):
         return default
 
 
+APPLYING_STALE_MINUTES = 10
+ERR_STALE_APPLYING = 'لم نتأكد من نتيجة التنفيذ؛ راجع ما حدث قبل إعادة المحاولة'
+
+
+def sweep_applying(db):
+    """صف عالق في `applying` أكثر من ١٠ دقائق (الخيط مات أو انقطع الرد) ⇒ `unknown` برسالة صريحة. تحديث واحد رخيص.
+    بداية التنفيذ محفوظة في `decided_at`؛ الصف القديم بلا ختم يُقاس بـ`created_at`."""
+    Item = _models(db)[0]
+    cutoff = utcnow() - datetime.timedelta(minutes=APPLYING_STALE_MINUTES)
+    try:
+        n = Item.query.filter(Item.status == 'applying',
+                              ((Item.decided_at < cutoff) | (Item.decided_at.is_(None) & (Item.created_at < cutoff)))
+                              ).update({'status': 'unknown', 'last_error': ERR_STALE_APPLYING}, synchronize_session=False)
+        db.session.commit()
+        return n
+    except Exception:   # noqa: BLE001
+        db.session.rollback()
+        logger.exception('brain2: sweep_applying failed')
+        return 0
+
+
 def apply_item(ns, item_id, actor, edited_text=None):
     """proposed ⇒ applying (تحديث شرطي) ⇒ approved/edited/unknown/proposed. يرجع (status_code, payload)."""
     from brain2.contract import ApplyResult
@@ -946,7 +1034,7 @@ def apply_item(ns, item_id, actor, edited_text=None):
         edited = edited_text != body.get('text')
         body['text'] = edited_text
     changed = Item.query.filter(Item.id == item_id, Item.status == 'proposed').update(
-        {'status': 'applying'}, synchronize_session=False)
+        {'status': 'applying', 'decided_at': utcnow()}, synchronize_session=False)     # decided_at هنا = بداية التنفيذ (للكنس)
     db.session.commit()
     if changed != 1:
         return 409, {'error': ERR_DECIDED}
@@ -991,6 +1079,7 @@ def apply_item(ns, item_id, actor, edited_text=None):
             pl['copy_text'] = res.copy_text
         return 502, pl
     row.status = 'proposed'
+    row.decided_at = None
     row.last_error = (res.error or ERR_APPLY_FAILED)[:300]
     db.session.commit()
     pl = {'error': res.error or ERR_APPLY_FAILED}

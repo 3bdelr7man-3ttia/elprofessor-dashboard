@@ -102,6 +102,27 @@ def _fit(facts):
     return facts
 
 
+# ------------------------------------------------------------------ الموقف بالعربية
+_STANCE_AR = {
+    'favorable': 'في صالح العميل', 'unfavorable': 'ليس في صالح العميل', 'mixed': 'مختلط',
+    'cautious': 'مشروط', 'conditional': 'مشروط',
+}
+_LATIN_RE = re.compile(r'[A-Za-z]')
+
+
+def _stance_ar(po):
+    """الموقف الذي يراه المؤسس عربي دائمًا: `stance_label` من المنصة إن كان عربيًا، وإلا ترجمة القيمة الإنجليزية المعروفة.
+    قيمة لاتينية غير معروفة تُحذف (لا حرف لاتيني على البطاقة)."""
+    label = po.get('stance_label')
+    if isinstance(label, str) and label.strip() and not _LATIN_RE.search(label):
+        return label.strip()
+    raw = po.get('stance')
+    raw = raw.strip() if isinstance(raw, str) else ''
+    if raw.lower() in _STANCE_AR:
+        return _STANCE_AR[raw.lower()]
+    return '' if _LATIN_RE.search(raw) else raw
+
+
 # ------------------------------------------------------------------ gather
 
 def _list_rows(ctx):
@@ -143,6 +164,8 @@ def gather(ctx):
         po = d.get('pending_opinion') or {}
         if d.get('status') != 'in_review' or not po.get('answers'):
             continue
+        po = dict(po, stance=_stance_ar(po))
+        po.pop('stance_label', None)
         facts = {'title': d['title'], 'questions': d['questions'], 'facts': d['facts'], 'pending_opinion': po}
         if d.get('round'):
             facts['round'] = d['round']

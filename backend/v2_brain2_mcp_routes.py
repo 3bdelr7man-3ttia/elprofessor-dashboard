@@ -39,6 +39,7 @@ ERR_T_FULL = 'وصلت إلى حدّ الرموز العاملة. ألغِ رم�
 ERR_T_NOT_FOUND = 'هذا الرمز غير موجود'
 ERR_T_REVOKED = 'أُلغي هذا الرمز من قبل'
 ERR_SECRET = 'تعذّر الحفظ الآن'
+ERR_URL_NEEDS_TOKEN = 'غيّرت العنوان؛ أدخل الرمز من جديد'
 TOKEN_MIN, TOKEN_MAX = 8, 600
 
 
@@ -246,6 +247,8 @@ def register(app, ns):
             url = K.normalize_url(body['url'])
             if url is None:
                 return out({'error': ERR_URL}, 400)
+            if url != row.url and body.get('token') in (None, ''):
+                return out({'error': ERR_URL_NEEDS_TOKEN}, 400)    # ⛔ لا يُرسَل رمز محفوظ إلى عنوان تغيّر
             ch['url'] = url
         if body.get('token') not in (None, ''):
             token = clean_token(body['token'])

@@ -215,9 +215,10 @@ def test_reply_draft_without_a_real_send_path_gets_link_only(env, monkeypatch):
               validate=lambda d, t: {'text': d['text']}, apply=lambda c, b, t: ApplyResult(ok=True))
     use(monkeypatch, prod)
     run()
-    acts = {a['json']['title'].split(' — ', 1)[1]: [b['action'] for b in a['json']['buttons']] for a in _asks(env)}
-    assert acts == {'هدف smsg:1': ['open'], 'هدف smsg:2': ['approve', 'reject', 'open'],
-                    'هدف lead:3': ['open'], 'هدف pmsg:4': ['approve', 'reject', 'open']}
+    ref_of = {r.id: r.target_ref for r in rows()}
+    acts = {ref_of[a['json']['item_id']]: [b['action'] for b in a['json']['buttons']] for a in _asks(env)}
+    assert acts == {'smsg:1': ['open'], 'smsg:2': ['approve', 'reject', 'open'],
+                    'lead:3': ['open'], 'pmsg:4': ['approve', 'reject', 'open']}
 
 
 def test_file_review_return_note_is_in_the_ask_and_label_follows_the_recommendation():
@@ -356,6 +357,8 @@ def test_platform_write_by_is_the_telegram_actor(api, monkeypatch):
 
     def proxy(method, path, params=None, json_body=None, timeout=12):
         sent.append((method, path, json_body))
+        if path == '/api/bridge/brain/ask':
+            return appmod.jsonify({'sent': True})
         return appmod.jsonify({'ok': True, 'status': 'delivered'})
     monkeypatch.setattr(appmod, '_platform_proxy', proxy)
     prod = producers_files.PRODUCERS[0]
@@ -442,3 +445,94 @@ def test_ensure_schema_adds_the_column_to_an_old_table(monkeypatch):
     assert 'telegram' in {c['name'] for c in sa.inspect(eng).get_columns('v2_brain_switches')}
     engine.ensure_schema(FakeDB)           # مرة ثانية بلا خطأ
     monkeypatch.setitem(engine._SCHEMA, 'ok', True)
+
+
+# ───────────────────────────────────────────────────────────── جولة الإصلاح: من يملك قرار تليجرام
+
+def test_decide_refuses_an_item_that_was_never_sent_to_telegram(api, monkeypatch):
+    prod, seen = draft()
+    seed(monkeypatch, api, prod)
+    (item,) = rows()
+    AuditLog.query.filter_by(action='brain.tg_ask').delete()          # كأن السؤال لم يُرسل أصلًا
+    db.session.commit()
+    for action in ('approve', 'reject'):
+        r = tg(api, {'item_id': item.id, 'action': action, 'tg_user_id': 42})
+        assert r.get_json() == {'ok': False, 'reason': 'not_allowed'}
+    assert seen == [] and rows()[0].status == 'proposed'
+
+
+def test_decide_refuses_when_the_ask_was_logged_but_not_actually_sent(api, monkeypatch):
+    prod, seen = draft()
+    seed(monkeypatch, api, prod)
+    (item,) = rows()
+    AuditLog.query.filter_by(action='brain.tg_ask').delete()
+    db.session.commit()
+    telegram._record(NS, item.id, False, 'failed')                    # أُجري النداء ولم تقل المنصة «أُرسل»
+    assert tg(api, {'item_id': item.id, 'action': 'approve', 'tg_user_id': 42}).get_json() == {'ok': False, 'reason': 'not_allowed'}
+    assert seen == [] and rows()[0].status == 'proposed'
+
+
+def test_decide_refuses_after_telegram_is_switched_off_for_the_producer(api, monkeypatch):
+    prod, seen = draft()
+    seed(monkeypatch, api, prod)
+    (item,) = rows()
+    assert api.put('/api/v2/brain/switches/file_review', {'telegram': False, 'confirmed': True}).status_code == 200
+    r = tg(api, {'item_id': item.id, 'action': 'approve', 'tg_user_id': 42})
+    assert r.get_json() == {'ok': False, 'reason': 'not_allowed'} and seen == []
+    assert tg(api, {'item_id': item.id, 'action': 'reject', 'tg_user_id': 42}).get_json()['reason'] == 'not_allowed'
+    assert rows()[0].status == 'proposed'
+    # وإعادة التفعيل تعيد القرار (الإرسال القديم ما زال مسجلًا)
+    assert api.put('/api/v2/brain/switches/file_review', {'telegram': True, 'confirmed': True}).status_code == 200
+    assert tg(api, {'item_id': item.id, 'action': 'approve', 'tg_user_id': 42}).get_json()['ok'] is True
+
+
+def test_decide_refuses_a_producer_outside_telegram_ok_even_if_it_was_asked(api, monkeypatch):
+    prod, seen = draft(pid='market_match')
+    use(monkeypatch, prod)
+    Switch = engine._models(db)[1]
+    db.session.add(Switch(producer='market_match', mode='ask', telegram=True))
+    db.session.commit()
+    run()
+    (item,) = [r for r in rows() if r.producer == 'market_match']
+    assert telegram.was_sent(NS, item.id) is True
+    assert tg(api, {'item_id': item.id, 'action': 'approve', 'tg_user_id': 42}).get_json() == {'ok': False, 'reason': 'not_allowed'}
+    assert seen == []
+
+
+def test_decide_admin_ids_env_restricts_who_may_decide(api, monkeypatch):
+    prod, seen = draft()
+    seed(monkeypatch, api, prod)
+    (item,) = rows()
+    monkeypatch.setenv('DASH_TG_ADMIN_IDS', '7, 99')
+    assert tg(api, {'item_id': item.id, 'action': 'approve', 'tg_user_id': 42}).get_json() == {'ok': False, 'reason': 'not_allowed'}
+    assert seen == [] and rows()[0].status == 'proposed'
+    assert tg(api, {'item_id': item.id, 'action': 'approve', 'tg_user_id': '99'}).get_json()['ok'] is True
+    monkeypatch.delenv('DASH_TG_ADMIN_IDS')
+    assert telegram.admin_ids() is None
+
+
+# ───────────────────────────────────────────────────────────── جولة الإصلاح: لا أسماء في تليجرام
+
+def test_ask_title_is_tag_plus_source_type_never_the_customer_name(env, monkeypatch):
+    prod = fp(pid='reply_draft', alone=False, kind='draft', section='people',
+              targets=[('pmsg:9', {'subject': 'س', 'body': 'أنا سمر عبد الله وأحتاج استشارة', 'has_account': True, 'customer_name': 'سمر عبد الله'},
+                        {'id': '9', 'email': 'samar@x.test', 'name': 'سمر عبد الله'})],
+              validate=lambda d, t: {'text': 'رد على سمر عبد الله بخصوص طلبها'}, apply=lambda c, b, t: ApplyResult(ok=True))
+    use(monkeypatch, prod)
+    run()
+    (ask,) = _asks(env)
+    p = ask['json']
+    assert p['title'] == 'وسم — رسالة من المنصة'
+    blob = json.dumps(p, ensure_ascii=False)
+    assert 'سمر' not in blob and 'عبد الله' not in blob and 'samar@x.test' not in blob and 'هدف' not in blob
+
+
+def test_ask_text_scrubs_target_label_and_contact_names():
+    class Row(object):
+        id = 'a' * 32
+        target_label = 'مراجعة رأي: ملف عبد الرحمن الشناوي'
+        target_ref = 'file:f1'
+    p = registry.by_id('file_review')
+    body = {'text': 'ملف عبد الرحمن الشناوي ينقصه سؤال', 'recommend': 'approve', 'approve_label': 'اعتمد'}
+    out = telegram.build_ask(p, Row, body, {}, {})
+    assert 'الشناوي' not in out['text'] and 'الشناوي' not in out['title'] and out['title'] == 'مراجعة رأي — ملف'

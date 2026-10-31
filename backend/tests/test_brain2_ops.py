@@ -361,12 +361,13 @@ def test_apply_member_sends_exact_path_and_body_and_audits():
     p.routes[('POST', '/api/bridge/messages/pm-1/reply')] = (200, {'ok': True})
     audits = []
     ctx = _ctx(p, audit=lambda *a, **k: audits.append((a, k)), actor='boss@x.test')
+    ctx.item_id = ITEM
     t = _pm_target()
     t.meta['email'] = ''      # بلا بريد معروف ⇒ الرد داخل المنصة وحده، ولا نداء بريد
     res = ops.PRODUCERS[1].apply(ctx, {'text': 'شكرًا لرسالتكم.'}, t)
     assert isinstance(res, ApplyResult) and res.ok and not res.no_reply and res.copy_text == ''
     assert p.calls == [{'method': 'POST', 'path': '/api/bridge/messages/pm-1/reply', 'params': None,
-                        'json': {'body': 'شكرًا لرسالتكم.', 'by': 'boss@x.test', 'confirmed': True}}]
+                        'json': {'body': 'شكرًا لرسالتكم.', 'by': 'boss@x.test', 'confirmed': True, 'idem_key': ITEM}}]
     assert audits == [(('brain.reply_send',), {'target': 'pm-1', 'meta': {'producer': 'reply_draft', 'ref': 'pmsg:pm-1'}, 'actor': 'boss@x.test'})]
 
 
@@ -391,9 +392,28 @@ def test_apply_member_no_reply(outcome):
 
 def test_apply_member_definite_rejection_is_plain_error():
     p = FakePlatform()
-    p.routes[('POST', '/api/bridge/messages/pm-1/reply')] = (500, {'error': 'x'})
+    p.routes[('POST', '/api/bridge/messages/pm-1/reply')] = (400, {'error': 'x'})
     res = _prod('reply_draft').apply(_ctx(p), {'text': 'رد'}, _pm_target())
     assert res.ok is False and res.no_reply is False and res.error
+
+
+@pytest.mark.parametrize('status', [500, 502, 503, 504, 599, 0])
+def test_apply_member_any_5xx_or_timeout_is_no_reply_not_back_to_proposed(status):
+    """لا نعرف إن وصل الرد ⇒ unknown (no_reply) لا «رُدّ إلى مقترح» فيُرسَل مرتين."""
+    p = FakePlatform()
+    p.routes[('POST', '/api/bridge/messages/pm-1/reply')] = (status, {'error': 'x'})
+    res = _prod('reply_draft').apply(_ctx(p), {'text': 'رد'}, _pm_target())
+    assert res.ok is False and res.no_reply is True
+
+
+def test_apply_member_raising_proxy_is_no_reply_and_sends_the_item_id_as_idem_key():
+    p = FakePlatform()
+
+    def boom(*a, **k):
+        raise TimeoutError('t')
+    ctx = _ctx(boom)
+    ctx.item_id = ITEM
+    assert _prod('reply_draft').apply(ctx, {'text': 'رد'}, _pm_target()).no_reply is True
 
 
 def test_apply_visitor_without_account_is_copy_only_then_resolve():
@@ -744,12 +764,13 @@ def test_works_with_real_platform_proxy_shapes(app_ctx, monkeypatch):
                   'Message': Message, 'db': db}, now=datetime.datetime.now(UTC), actor='boss@x.test')
     ts = _prod('reply_draft').gather(ctx)
     assert {t.ref for t in ts} == {'pmsg:pm-1', 'pmsg:pm-2', 'lead:ld-1'}
+    ctx.item_id = ITEM
     res = _prod('reply_draft').apply(ctx, {'text': 'رد'}, _pm_target())
     assert not res.ok and not res.no_reply and 'زائر' in res.error      # 422 حقيقي من الوكيل
     res = _prod('reply_draft').apply(ctx, {'text': 'رد'}, _pm_target(True, 'pm-9'))
     assert res.no_reply is True                                           # 502 حقيقي من الوكيل
     sent = [c for c in calls if c[1].endswith('/reply')][0]
-    assert sent[2] == {'body': 'رد', 'by': 'boss@x.test', 'confirmed': True}
+    assert sent[2] == {'body': 'رد', 'by': 'boss@x.test', 'confirmed': True, 'idem_key': ITEM}
     # بلا سر مضبوط ⇒ 503 من الوكيل ⇒ لا مصدر منصّة، والموقع المحلي وحده يكفي
     monkeypatch.setattr(appmod, 'PLATFORM_METRICS_SECRET', '')
     _seed_msg()

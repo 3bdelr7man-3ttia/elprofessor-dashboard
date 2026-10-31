@@ -43,6 +43,18 @@ def clean(env):   # noqa: F811
     db.session.commit()
 
 
+@pytest.fixture(autouse=True)
+def fake_dns(monkeypatch):
+    """⛔ صفر شبكة: حلّ أسماء المضيفين (`getaddrinfo`) من جدول محلي؛ ما ليس في الجدول يحلّ إلى عنوان عام ثابت."""
+    import socket
+    table = {'localhost': '127.0.0.1', 'rebind.example.com': '10.0.0.8'}
+
+    def gai(host, port=None, *a, **k):
+        ip = table.get(host, '93.184.216.34')
+        return [(socket.AF_INET, socket.SOCK_STREAM, 6, '', (ip, 0))]
+    monkeypatch.setattr(K.socket, 'getaddrinfo', gai)
+
+
 # ───────────────────────────────────────────────────────────── نقل مزيّف
 
 class Remote(object):
@@ -118,7 +130,7 @@ def test_client_handshake_list_and_call_with_bearer_and_timeout():
     assert [t['name'] for t in c.list_tools()] == list(MADAR_TOOLS)
     assert c.call_tool('alerts_list') == MADAR_TOOLS['alerts_list'][1]
     assert rem.methods() == ['initialize', 'notifications/initialized', 'tools/list', 'tools/call']
-    assert all(r['auth'] == 'Bearer ' + SECRET_TOKEN and r['timeout'] == 15 and 'text/event-stream' in r['accept'] for r in rem.requests)
+    assert all(r['auth'] == 'Bearer ' + SECRET_TOKEN and r['timeout'] == (5, 10) and 'text/event-stream' in r['accept'] for r in rem.requests)
     assert rem.requests[0]['params']['protocolVersion'] == '2025-06-18'
     assert rem.requests[2]['session'] == 'sess-1', 'معرّف الجلسة يُرسل بعد المصافحة'
 
@@ -198,8 +210,8 @@ def test_real_transport_reads_first_sse_event_and_never_follows_redirects(monkey
         return Resp()
     monkeypatch.setattr(appmod.requests, 'post', post)
     monkeypatch.setattr(LK, '_host_is_public', lambda h: True)
-    status, headers, text = LK._real_transport(URL, {'Authorization': 'Bearer x'}, b'{}', 15)
-    assert status == 200 and '"ok":true' in text and seen['allow_redirects'] is False and seen['timeout'] == 15 and seen['closed']
+    status, headers, text = LK._real_transport(URL, {'Authorization': 'Bearer x'}, b'{}', (5, 10))
+    assert status == 200 and '"ok":true' in text and seen['allow_redirects'] is False and seen['timeout'] == (5, 10) and seen['closed']
     monkeypatch.setattr(LK, '_host_is_public', lambda h: False)
     with pytest.raises(LK.LinkError) as ei:
         LK._real_transport(URL, {}, b'{}', 15)
@@ -562,3 +574,71 @@ def test_ui_contract_in_brain_js_and_css():
     assert "load('links', false); load('mcpTokens', false)" in js
     # أهداف اللمس وعرض الموبايل
     assert '.v2sb-addrr .v3-btn2{width:100%;min-height:52px}' in css and '.v2sb-addrv{' in css and 'overflow-wrap:anywhere' in css
+
+
+# ───────────────────────────────────────────────────────────── جولة الإصلاح
+
+def test_changing_the_url_requires_a_new_token_in_the_same_request(api):
+    row = add_link()
+    old_token = K.decrypt(row.token_enc)
+    r = api.put('%s/%s' % (LINKS, row.id), {'url': 'https://elsewhere.example.com/mcp', 'confirmed': True})
+    assert r.status_code == 400 and r.get_json()['error'] == 'غيّرت العنوان؛ أدخل الرمز من جديد'
+    r = api.put('%s/%s' % (LINKS, row.id), {'url': 'https://elsewhere.example.com/mcp', 'token': '', 'confirmed': True})
+    assert r.status_code == 400
+    db.session.expire_all()
+    fresh = LK._models(db).query.get(row.id)
+    assert fresh.url == row.url and K.decrypt(fresh.token_enc) == old_token, 'لم يتغيّر شيء، والرمز القديم لا يذهب لعنوان جديد'
+    # مع رمز جديد ينجح
+    r = api.put('%s/%s' % (LINKS, row.id), {'url': 'https://elsewhere.example.com/mcp', 'token': 'brand-new-token-XYZ789', 'confirmed': True})
+    assert r.status_code == 200
+    db.session.expire_all()
+    fresh = LK._models(db).query.get(row.id)
+    assert fresh.url == 'https://elsewhere.example.com/mcp' and K.decrypt(fresh.token_enc) == 'brand-new-token-XYZ789'
+    # نفس العنوان (مع اختلاف شرطة أخيرة) لا يطلب رمزًا
+    r = api.put('%s/%s' % (LINKS, row.id), {'url': 'https://elsewhere.example.com/mcp/', 'name': 'اسم', 'confirmed': True})
+    assert r.status_code == 200
+
+
+def test_link_url_that_resolves_to_a_private_address_is_refused(api):
+    assert post_link(api, url='https://rebind.example.com/mcp').status_code == 400
+    assert LK._models(db).query.count() == 0
+
+
+def test_real_transport_has_an_overall_read_deadline(monkeypatch):
+    clock = {'t': 1000.0}
+    monkeypatch.setattr(LK.time, 'monotonic', lambda: clock['t'])
+
+    class Slow(object):
+        status_code = 200
+        headers = {'Content-Type': 'application/json'}
+
+        def iter_content(self, chunk_size=0):
+            while True:                      # يقطّر بايتًا بعد بايت إلى الأبد
+                clock['t'] += 7
+                yield b'x'
+
+        def close(self):
+            pass
+    monkeypatch.setattr(appmod.requests, 'post', lambda url, **kw: Slow())
+    monkeypatch.setattr(LK, '_host_is_public', lambda h: True)
+    with pytest.raises(LK.LinkError) as ei:
+        LK._real_transport(URL, {}, b'{}', (5, 10))
+    assert ei.value.message == LK.ERR_TIMEOUT and LK.READ_DEADLINE == 20
+
+
+def test_probe_is_bounded_by_a_total_budget(monkeypatch):
+    clock = {'t': 50.0}
+    monkeypatch.setattr(LK.time, 'monotonic', lambda: clock['t'])
+    seen = []
+
+    def slow(url, headers, body, timeout):
+        seen.append(timeout)
+        m = json.loads(body)
+        clock['t'] += 25                     # كل طلب يأكل ٢٥ ثانية
+        return 200, {'Content-Type': 'application/json'}, json.dumps({'jsonrpc': '2.0', 'id': m.get('id'), 'result': {'tools': [], 'serverInfo': {'name': 'x'}}})
+    row = types.SimpleNamespace(url=URL, token_enc=K.encrypt(SECRET_TOKEN))
+    with pytest.raises(LK.LinkError) as ei:
+        LK.probe(row, transport=slow)
+    assert ei.value.message == LK.ERR_TIMEOUT
+    assert LK.TEST_BUDGET <= 30 and len(seen) <= 3
+    assert seen[0] == (5, 10, 20), 'الطلب الأول: مهلة اتصال/قراءة وسقف قراءة كلها ٢٠ ثانية'

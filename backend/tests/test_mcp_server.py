@@ -470,3 +470,28 @@ def test_dockerfile_and_app_wiring():
 def test_no_real_network_modules_in_the_server():
     src = open(os.path.join(ROOT, 'backend', 'mcp_server.py'), encoding='utf-8').read()
     assert 'import requests' not in src and 'urllib.request' not in src and 'ai_call' not in src
+
+
+# ───────────────────────────────────────────────────────────── جولة الإصلاح
+
+def test_platform_calls_from_mcp_tools_use_a_timeout_of_8_seconds_at_most(rpc, monkeypatch):
+    seen = []
+
+    def proxy(method, path, params=None, json_body=None, timeout=12):
+        seen.append(timeout)
+        return appmod.jsonify({'courses': COURSES})
+    monkeypatch.setattr(appmod, '_platform_proxy', proxy)
+    raw, _ = mint()
+    for name in ('business_summary', 'courses_catalog'):
+        assert rpc.tool(raw, name).status_code == 200
+    assert seen and all(t <= 8 for t in seen), seen
+
+
+def test_backend_dockerfile_copies_the_same_top_level_modules_as_the_root_one():
+    backend = open(os.path.join(ROOT, 'backend', 'Dockerfile'), encoding='utf-8').read()
+    root_df = open(os.path.join(ROOT, 'Dockerfile'), encoding='utf-8').read()
+    modules = sorted(set(re.findall(r'COPY backend/([A-Za-z0-9_]+\.py) /app/', root_df)))
+    assert 'mcp_server.py' in modules and 'site_edit.py' in modules
+    for m in modules:
+        assert m in backend or (m.startswith('v2_') and m.endswith('_routes.py')), 'ينقص backend/Dockerfile: ' + m
+    assert 'COPY brain2 ./brain2' in backend and 'COPY v2_*_routes.py ./' in backend

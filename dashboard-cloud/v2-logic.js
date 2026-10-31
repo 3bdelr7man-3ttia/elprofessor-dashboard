@@ -7230,6 +7230,11 @@
     var note = item.kind === 'note';
     var t = Date.parse(item.created_at || '');
     var fields = [];
+    // اقتراحات الموقع تحمل قائمة تعديلات كاملة (القديم ⇒ الجديد + السبب): تُعرض كلها قبل الاعتماد، ولا يُعدَّل «نصها» هنا.
+    var edits = [];
+    if (Array.isArray(b.edits)) b.edits.forEach(function (e) {
+      if (e && typeof e === 'object' && s_(e.old) && s_(e.new)) edits.push({ path: s_(e.path), old: s_(e.old), new: s_(e.new), why: s_(e.why) });
+    });
     if (b.fields && typeof b.fields === 'object') Object.keys(b.fields).forEach(function (k) { if (FIELD_LABEL[k] && s_(b.fields[k])) fields.push({ k: FIELD_LABEL[k], v: s_(b.fields[k]) }); });
     var card = {
       id: 'brain_item|' + item.id, kind: 'brain_item', group: 900, tag: s_(item.tag) || (note ? 'ملاحظة العقل' : 'اقتراح العقل'),
@@ -7237,7 +7242,8 @@
       ageText: isNaN(t) ? '' : UT.agoText(t, now), ts: isNaN(t) ? Infinity : t,
       primary: { label: note ? 'احتفظ بها' : (s_(item.approve_label) || 'اعتمد'), act: { do: 'brain_approve', id: item.id } },
       secondary: { label: note ? 'احذفها' : 'ارفض', act: { do: 'brain_reject', id: item.id } },
-      edit: note ? null : { label: 'عدّل', act: { do: 'brain_edit', id: item.id } },
+      edit: (note || edits.length) ? null : { label: 'عدّل', act: { do: 'brain_edit', id: item.id } },
+      edits: edits,
       open: { do: 'open' }, link: null, facts: [], fields: fields, img: SEC_IMG[item.section] || 'brain',
       brainItem: item, src: { text: '', tone: '' }, row: { apiKind: 'brain_item', item: item }
     };

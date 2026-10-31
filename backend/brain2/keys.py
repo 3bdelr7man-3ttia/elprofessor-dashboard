@@ -14,6 +14,7 @@ import ipaddress
 import logging
 import os
 import re
+import socket
 from urllib.parse import urlparse
 
 from cryptography.hazmat.primitives import hashes
@@ -169,6 +170,30 @@ def valid_key_text(k):
     return isinstance(k, str) and KEY_MIN <= len(k) <= KEY_MAX and bool(_KEY_RE.match(k))
 
 
+def ip_is_public(ip):
+    return not (ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved or ip.is_multicast or ip.is_unspecified)
+
+
+def host_is_public(host):
+    """يحلّ المضيف (`getaddrinfo`) ويرفض لو أيٌّ من العناوين الناتجة خاص أو محلي أو محجوز. لا حلّ ⇒ لا (نغلق عند الشك)."""
+    try:
+        return ip_is_public(ipaddress.ip_address(host))        # عنوان حرفي: لا حاجة لحلّ
+    except ValueError:
+        pass
+    try:
+        infos = socket.getaddrinfo(host, None)
+    except (OSError, UnicodeError):
+        return False
+    for info in infos:
+        try:
+            ip = ipaddress.ip_address(info[4][0].split('%')[0])
+        except ValueError:
+            return False
+        if not ip_is_public(ip):
+            return False
+    return bool(infos)
+
+
 def normalize_url(raw):
     """https فقط · بلا بيانات دخول ولا استعلام · لا مضيف محلي/خاص. يرجّع (url|None). شرطة مائلة أخيرة تُحذف."""
     if not isinstance(raw, str):
@@ -186,12 +211,8 @@ def normalize_url(raw):
         return None
     if host == 'localhost' or host.endswith(('.local', '.internal', '.localhost', '.lan')) or ('.' not in host and ':' not in host):
         return None
-    try:
-        ip = ipaddress.ip_address(host.strip('[]'))
-        if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved or ip.is_multicast or ip.is_unspecified:
-            return None
-    except ValueError:
-        pass
+    if not host_is_public(host.strip('[]')):       # يحلّ الاسم ويرفض أي عنوان خاص/محلي/محجوز ضمن ما يُحلّ إليه
+        return None
     return u.rstrip('/')
 
 

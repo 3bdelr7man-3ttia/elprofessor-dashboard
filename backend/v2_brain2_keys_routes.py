@@ -22,6 +22,7 @@ logger = logging.getLogger(__name__)
 ID_RE = re.compile(r'^[0-9a-f]{32}$')
 TEST_SYSTEM = 'أنت تختبر الاتصال فقط. أجب بكلمة واحدة.'
 TEST_USER = 'أجب بكلمة: تم'
+TEST_TIMEOUT = (5, 25)      # (اتصال، قراءة): مسار الاختبار في خيط الطلب فلا ننتظر المهلة العادية (٦٠ ثانية)
 CAP_AR = 'بلغنا سقف نداءات اليوم. جرّب غدًا'
 
 
@@ -232,7 +233,7 @@ def register(app, ns):
                 return out({'error': CAP_AR, 'reason': 'cap'}, 429)
             spec = K.row_spec(row, key)
             try:
-                text = L('_ai_send_spec')(spec, TEST_SYSTEM, TEST_USER)
+                text = L('_ai_send_spec')(spec, TEST_SYSTEM, TEST_USER, timeout=TEST_TIMEOUT)
                 if (text or '').strip():
                     ok = True
                 else:

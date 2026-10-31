@@ -162,6 +162,9 @@ _CR_ROLE = (
     'الشكل المطلوب: {"text":"…","recommend":"publish|fix_first"}'
 )
 _CR_RECS = ('publish', 'fix_first')
+ERR_COURSE_CHANGED = 'حالة الدورة تغيّرت منذ المراجعة'
+ERR_CHECKLIST_CHANGED = 'بنود الفحص لم تعد مكتملة'
+ERR_COURSE_UNREADABLE = 'تعذّرت قراءة حالة الدورة الآن، فلم تُنشر. حاول بعد قليل'
 CR_PUBLISH_LABEL = 'انشر الدورة'
 CR_OPEN_LABEL = 'افتح الدورة'
 
@@ -240,6 +243,21 @@ def _apply_course_review(ctx, body, target):
         return ApplyResult(ok=False, error='تعذّر تحديد الدورة')
     if body.get('recommend') != 'publish':
         return ApplyResult(ok=True, info={'open_course': cid, 'no_write': True})
+    # الاعتماد ينشر دورة للعامة: نقرأ حالتها وقائمة فحصها الآن لا وقت المراجعة (قد يمرّ ساعات، وقد تتغير الدورة).
+    try:
+        courses = _as_list(_platform_get(ctx, '/api/bridge/courses'), 'courses')
+        if courses is None:
+            raise SourceDown('/api/bridge/courses')
+        cur = next((c for c in courses if isinstance(c, dict) and str(c.get('id') or '').strip() == str(cid)), None)
+        if cur is None or cur.get('approval_status') != 'pending':
+            return ApplyResult(ok=False, error=ERR_COURSE_CHANGED)
+        rows = _as_list(_platform_get(ctx, '/api/bridge/courses/%s/checklist' % quote(cid, safe='')), 'checklist')
+        if rows is None:
+            raise SourceDown('checklist')
+    except SourceDown:
+        return ApplyResult(ok=False, error=ERR_COURSE_UNREADABLE)
+    if any(isinstance(r, dict) and not r.get('ok') for r in rows):
+        return ApplyResult(ok=False, error=ERR_CHECKLIST_CHANGED)
     path = '/api/bridge/courses/%s/approve' % quote(cid, safe='')
     resp = _fn(ctx, '_v2_write')('POST', path, {'confirmed': True, 'by': ctx.actor}, 'course.approve', cid,
                                  {'payout_model': None, 'via': 'brain'})

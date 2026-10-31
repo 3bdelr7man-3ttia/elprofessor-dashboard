@@ -131,6 +131,9 @@ def clean_pending(po, names=()):
         else po.get('next_step')
     out = {'answers': answers, 'stance': _scrub(stance, 120, names), 'case_note': _scrub(note, 300, names),
            'todo': _texts(po.get('todo'), names, TODO_ITEMS, 200), 'next_step': _scrub(step, 200, names)}
+    label = _scrub(po.get('stance_label'), 120, names)
+    if label:
+        out['stance_label'] = label        # تسمية عربية من المنصة إن وُجدت (يستعملها `file_review` بدل القيمة الإنجليزية)
     return out
 
 

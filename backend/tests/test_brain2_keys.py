@@ -41,6 +41,27 @@ def clean_keys(env, monkeypatch):   # noqa: F811
     db.session.commit()
 
 
+FAKE_DNS = {'private.example.com': '10.1.2.3', 'loop.example.com': '127.0.0.1', 'meta.example.com': '169.254.169.254',
+            'v6loop.example.com': '::1', 'mixed.example.com': ['93.184.216.34', '192.168.0.9'], 'nx.example.com': None}
+
+
+@pytest.fixture(autouse=True)
+def fake_dns(monkeypatch):
+    """⛔ صفر شبكة: `normalize_url` يحلّ الاسم، فنستبدل `getaddrinfo` بجدول محلي (الأسماء العامة تحلّ إلى عنوان عام ثابت)."""
+    import socket
+    calls = []
+
+    def gai(host, port=None, *a, **k):
+        calls.append(host)
+        ans = FAKE_DNS.get(host, '93.184.216.34')
+        if ans is None:
+            raise socket.gaierror('nx')
+        ips = ans if isinstance(ans, list) else [ans]
+        return [(socket.AF_INET6 if ':' in ip else socket.AF_INET, socket.SOCK_STREAM, 6, '', (ip, 0)) for ip in ips]
+    monkeypatch.setattr(K.socket, 'getaddrinfo', gai)
+    return calls
+
+
 class HTTPFail(Exception):
     """يشبه خطأ requests: يحمل `.response.status_code` و`.text` فقط."""
 
@@ -53,10 +74,11 @@ class Transport(object):
     """ناقل مزيّف. `replies`: قائمة (نص | استثناء | دالة). كل نداء يُسجَّل بمعطياته (المفتاح الصريح هنا لاختبار الاختيار فقط)."""
 
     def __init__(self, name, replies=None, default='تم'):
-        self.name, self.replies, self.default, self.calls = name, list(replies or []), default, []
+        self.name, self.replies, self.default, self.calls, self.kwargs = name, list(replies or []), default, [], []
 
-    def __call__(self, *args):
+    def __call__(self, *args, **kw):
         self.calls.append(args)
+        self.kwargs.append(kw)
         r = self.replies.pop(0) if self.replies else self.default
         if callable(r):
             r = r(*args)
@@ -156,6 +178,12 @@ def test_presets_public_have_labels_only_and_other_is_present():
     ('https://169.254.169.254/latest', None),
     ('https://intranet/v1', None),
     ('https://host.internal/v1', None),
+    ('https://private.example.com/v1', None),      # اسم عام يحلّ إلى عنوان خاص
+    ('https://loop.example.com/v1', None),
+    ('https://meta.example.com/v1', None),         # عنوان بيانات السحابة
+    ('https://v6loop.example.com/v1', None),
+    ('https://mixed.example.com/v1', None),        # أحد العناوين خاص ⇒ يُرفض
+    ('https://nx.example.com/v1', None),           # لا يُحلّ ⇒ نغلق عند الشك
     ('https://ex ample.com', None),
     ('x' * 250, None),
     (None, None),
@@ -606,3 +634,46 @@ def test_files_registration_requirements_dockerfile():
     j = src.index('v2_brain2_keys_routes as _v2_brain2_keys')
     assert 0 < j - i < 400 and "logger.exception('v2 brain2 keys routes not loaded')" in src
     assert not re.search(r'\bimport\s+app\b|from app import', _read('backend', 'brain2', 'keys.py')), 'keys.py مستقل ليستعمله MCP'
+
+
+# ───────────────────────────────────────────────────────────── جولة الإصلاح: مهلة الاختبار · لا إعادة توجيه · حلّ المضيف
+
+def test_test_route_uses_the_short_timeout_but_normal_calls_pass_none(api, wires):
+    a = add(api)
+    api.post(KEYS + '/' + a['id'] + '/test')
+    assert wires.claude.kwargs[0] == {'timeout': (5, 25)}
+    wires.claude.kwargs.clear()
+    ids = chain_rows(api, backup=None)
+    appmod.ai_call('s', 'u')
+    assert all(kw == {} for kw in wires.claude.kwargs), 'النداء العادي لا يغيّر مهلته'
+
+
+def test_transports_default_to_60_and_never_follow_redirects(monkeypatch):
+    seen = []
+
+    class R(object):
+        status_code = 200
+
+        def raise_for_status(self):
+            pass
+
+        def json(self):
+            return {'choices': [{'message': {'content': 'x'}}], 'content': [{'type': 'text', 'text': 'x'}]}
+
+    monkeypatch.setattr(appmod.requests, 'post', lambda url, **kw: seen.append(kw) or R())
+    _REAL_COMPAT('https://api.z.ai/api/paas/v4', 'k', 'glm-4.6', 's', 'u')
+    _REAL_ANTHROPIC('k', 'claude-sonnet-5-5', 's', 'u')
+    _REAL_COMPAT('https://api.z.ai/api/paas/v4', 'k', 'glm-4.6', 's', 'u', timeout=(5, 25))
+    _REAL_ANTHROPIC('k', 'claude-sonnet-5-5', 's', 'u', timeout=(5, 25))
+    assert [kw['timeout'] for kw in seen] == [60, 60, (5, 25), (5, 25)]
+    assert all(kw['allow_redirects'] is False for kw in seen)
+
+
+def test_add_route_rejects_a_public_name_that_resolves_to_a_private_address(api, wires, fake_dns):
+    r = api.post(KEYS, {'preset': 'other', 'key': PLAIN_A, 'role': 'backup', 'model': 'm1',
+                        'base_url': 'https://private.example.com/v1', 'confirmed': True})
+    assert r.status_code == 400 and K._models(db).query.count() == 0
+    assert 'private.example.com' in fake_dns
+    ok = api.post(KEYS, {'preset': 'other', 'key': PLAIN_A, 'role': 'backup', 'model': 'm1',
+                         'base_url': 'https://llm.example.com/v1', 'confirmed': True})
+    assert ok.status_code == 200

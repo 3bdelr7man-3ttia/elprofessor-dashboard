@@ -12,8 +12,10 @@
   * ⛔ لا ندّعي تنفيذًا لم يحدث: السطر الراجع للمنصة يأتي من نتيجة التنفيذ الفعلية.
 """
 import datetime
+import json
 import logging
 import os
+import re
 
 from brain2 import engine, registry
 
@@ -90,18 +92,51 @@ def _clip(s, n):
     return s if len(s) <= n else s[:n - 1].rstrip() + '…'
 
 
+_SRC_LABEL = {'pmsg': 'رسالة من المنصة', 'smsg': 'رسالة من الموقع', 'lead': 'عميل محتمل', 'file': 'ملف', 'course': 'دورة'}
+_NAME_KEY_RE = re.compile(r'name|customer|client|author|sender', re.I)
+
+
+def _name_tokens(row, meta, facts):
+    """كل ما قد يكون اسمًا في الاقتراح (العنوان واسم العميل...) لنمسحه من نص تليجرام. لا نمسح كلمات قصيرة جدًا."""
+    vals = [getattr(row, 'target_label', '') or '']
+    for src in (meta, facts):
+        if isinstance(src, dict):
+            for k, v in src.items():
+                if isinstance(v, str) and _NAME_KEY_RE.search(str(k)):
+                    vals.append(v)
+    toks = set()
+    for v in vals:
+        v = engine.clean_text(v, keep_newlines=False)
+        if len(v) >= 3:
+            toks.add(v)
+        for w in re.split(r'[\s:،,؛;/|—\-]+', v):
+            if len(w) >= 4:
+                toks.add(w)
+    return sorted(toks, key=len, reverse=True)
+
+
+def _scrub(s, names):
+    """يمسح البريد والهاتف وأسماء العميل من نص يخرج إلى تليجرام."""
+    s = engine.strip_contacts(s) if isinstance(s, str) else ''
+    for n in names:
+        s = s.replace(n, '…')
+    return s
+
+
 def build_ask(p, row, body, meta, facts):
-    """(payload|None). `row`: صف الاقتراح. ⛔ لا يخرج بريد ولا هاتف ولا meta."""
-    title = _clip(' — '.join(x for x in ((p.tag or p.label), (row.target_label or '')) if x), TITLE_MAX)
+    """(payload|None). `row`: صف الاقتراح. ⛔ لا يخرج بريد ولا هاتف ولا اسم عميل ولا meta؛ والعنوان وسم المنتج + نوع المصدر فقط."""
+    src = _SRC_LABEL.get(_src(row.target_ref), '')
+    title = _clip(' — '.join(x for x in ((p.tag or p.label), src) if x), TITLE_MAX)
+    names = _name_tokens(row, meta, facts)
     parts = []
     orig = facts.get('body') if isinstance(facts, dict) else None
     if isinstance(orig, str) and orig.strip():
-        parts.append('الرسالة: ' + _clip(engine.strip_contacts(orig), SNIPPET_MAX))
+        parts.append('الرسالة: ' + _clip(_scrub(orig, names), SNIPPET_MAX))
     text = body.get('text') if isinstance(body, dict) else ''
-    parts.append(('المقترح: ' if parts else '') + _clip(text, 500))
+    parts.append(('المقترح: ' if parts else '') + _clip(_scrub(text, names), 500))
     note = body.get('return_note') if isinstance(body, dict) else ''
     if isinstance(note, str) and note.strip() and body.get('recommend') == 'return':
-        parts.append('الملاحظة التي تصل إلى الخبير: ' + _clip(note, 300))
+        parts.append('الملاحظة التي تصل إلى الخبير: ' + _clip(_scrub(note, names), 300))
     out_text = _clip('\n\n'.join(x for x in parts if x), TEXT_MAX)
     if not out_text:
         return None
@@ -135,6 +170,27 @@ def asks_today(ns):
 def already_asked(ns, item_id):
     A = _audit_model(ns)
     return A is not None and A.query.filter(A.action == AUDIT_ASK, A.target == item_id).count() > 0
+
+
+def was_sent(ns, item_id):
+    """هل أُرسل هذا الاقتراح فعلًا إلى تليجرام (صف تدقيق `brain.tg_ask` بـ`sent:true`)؟"""
+    A = _audit_model(ns)
+    if A is None:
+        return False
+    for r in A.query.filter(A.action == AUDIT_ASK, A.target == item_id).all():
+        try:
+            if (json.loads(r.meta_json or '{}') or {}).get('sent') is True:
+                return True
+        except (TypeError, ValueError, AttributeError):
+            continue
+    return False
+
+
+def admin_ids():
+    """`DASH_TG_ADMIN_IDS` (قائمة بفواصل): إن ضُبطت صار معرّف تليجرام لازمًا فيها. فارغة ⇒ None (لا تقييد)."""
+    raw = (os.environ.get('DASH_TG_ADMIN_IDS') or '').strip()
+    ids = {x.strip() for x in raw.split(',') if x.strip()}
+    return ids or None
 
 
 def _record(ns, item_id, sent, why=''):
