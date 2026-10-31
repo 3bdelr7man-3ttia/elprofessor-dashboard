@@ -2585,6 +2585,88 @@
     return { title: title, lead: lead, go: go };
   }
 
+  // —— «الأنظمة المتصلة» (SPEC-B B5): أنظمة نقرأ منها، ورموز تدخل بها أنظمة أخرى إلى هذه اللوحة. ⛔ لا نص رمز يصل هنا إلا لحظة الإنشاء (يُعرض مرة واحدة).
+  var BR_MCP_SCOPE = { 'read': 'للقراءة فقط', 'read,propose': 'للقراءة والاقتراح' };
+  var BR_LINK_BRAND_RE = /^[A-Za-z0-9][A-Za-z0-9._\-]{0,63}$/;
+  function brHost(u) {
+    var m = /^https:\/\/([^\/?#:]+)/i.exec(typeof u === 'string' ? u.trim() : '');
+    return m ? m[1].toLowerCase() : '';
+  }
+  function brLinkTest(l, now) {
+    var err = str(l.last_error), t = v2sBrainTime(l.last_ok_at);
+    if (err) return { state: 'fail', text: 'آخر محاولة لم تنجح: ' + err };
+    if (t != null) return { state: 'ok', text: 'آخر اتصال ناجح ' + agoText(t, now || Date.now()) };
+    return { state: 'none', text: 'لم يُجرَّب بعد' };
+  }
+  // ردّ GET /links ⇒ {rows} أو null (مصدر فاشل = null لا قائمة فاضية).
+  function v2sBrainLinks(resp, now) {
+    if (!resp || typeof resp !== 'object' || !Array.isArray(resp.links)) return null;
+    var rows = [];
+    resp.links.forEach(function (l) {
+      if (!l || typeof l !== 'object' || !str(l.id)) return;
+      var readable = l.readable !== false, enabled = l.enabled !== false, known = l.known === true;
+      rows.push({ id: str(l.id), name: brKeyLabel(l.name) || 'نظام', host: brHost(l.url), enabled: enabled, known: known, readable: readable,
+                  brandId: str(l.brand_id), notice: readable ? '' : (str(l.notice) || 'تعذّرت قراءة الرمز المحفوظ؛ أضِف النظام من جديد'),
+                  tone: !readable ? 'stop' : (enabled ? 'auto' : 'na'), stateLabel: !readable ? 'غير مقروء' : (enabled ? 'مفعّل' : 'موقوف'),
+                  autoText: known ? 'يقرأ العقل أرقامه ويكتب ملخصًا قصيرًا' : 'لا يقرأ العقل منه تلقائيًا؛ تظهر أدواته عند التجربة فقط',
+                  test: readable ? brLinkTest(l, now) : { state: 'none', text: '' } });
+    });
+    return { rows: rows, full: rows.length >= 10 };
+  }
+  // نموذج «أضف نظامًا»: {ok, field, error, body}. التحقق هنا للراحة، والخادم هو الحَكَم.
+  function v2sBrainLinkForm(input) {
+    var inp = input && typeof input === 'object' ? input : {};
+    var fail = function (field, error) { return { ok: false, field: field, error: error, body: null }; };
+    var name = brKeyLabel(inp.name);
+    if (!name) return fail('name', 'اكتب اسم النظام');
+    if (str(inp.name).length > 60) return fail('name', 'الاسم أطول من ' + ar(60) + ' حرفًا');
+    var url = str(inp.url);
+    if (!url) return fail('url', 'اكتب عنوان النظام كما يعطيه');
+    if (url.slice(0, 8).toLowerCase() !== BR_KEY_HTTPS || /\s/.test(url) || url.length > 200 || !brHost(url)) return fail('url', 'اكتب عنوانًا آمنًا يبدأ بـ ' + BR_KEY_HTTPS);
+    var token = typeof inp.token === 'string' ? inp.token.trim() : '';
+    if (!token) return fail('token', 'الصق الرمز هنا');
+    if (token.length < 8 || token.length > 600 || !/^[\x21-\x7e]+$/.test(token)) return fail('token', 'الرمز غير مكتمل أو فيه مسافات');
+    var brand = str(inp.brand_id);
+    if (brand && !BR_LINK_BRAND_RE.test(brand)) return fail('brand_id', 'معرّف العلامة غير صالح');
+    var body = { name: name, url: url, token: token, confirmed: true };
+    if (brand) body.brand_id = brand;
+    return { ok: true, field: '', error: '', body: body };
+  }
+  // ردّ GET /mcp-tokens ⇒ {rows, active, serverUrl, tools} أو null. العاملة أولًا ثم الملغاة.
+  function v2sBrainMcpTokens(resp, now) {
+    if (!resp || typeof resp !== 'object' || !Array.isArray(resp.tokens)) return null;
+    var rows = [];
+    resp.tokens.forEach(function (t) {
+      if (!t || typeof t !== 'object' || !str(t.id)) return;
+      var revoked = v2sBrainTime(t.revoked_at) != null, used = v2sBrainTime(t.last_used_at), canPropose = t.can_propose === true;
+      rows.push({ id: str(t.id), name: brKeyLabel(t.name) || 'رمز', canPropose: canPropose, scopeLabel: BR_MCP_SCOPE[canPropose ? 'read,propose' : 'read'],
+                  revoked: revoked, tone: revoked ? 'stop' : 'auto', stateLabel: revoked ? 'أُلغي' : 'عامل',
+                  usedText: revoked ? 'توقف عن الدخول ' + (agoText(v2sBrainTime(t.revoked_at), now || Date.now()) || '')
+                    : (used != null ? 'آخر استعمال ' + agoText(used, now || Date.now()) : 'لم يُستعمل بعد') });
+    });
+    rows = rows.map(function (r, i) { return { r: r, i: i }; }).sort(function (a, b) { return (a.r.revoked - b.r.revoked) || (a.i - b.i); }).map(function (x) { return x.r; });
+    var su = str(resp.server_url);
+    return { rows: rows, active: rows.filter(function (r) { return !r.revoked; }).length, serverUrl: su.slice(0, 8).toLowerCase() === BR_KEY_HTTPS && !/\s/.test(su) ? su : '',
+             tools: Array.isArray(resp.tools) ? resp.tools.filter(function (x) { return typeof x === 'string'; }) : [] };
+  }
+  // نموذج «أنشئ رمزًا»: {ok, field, error, body}.
+  function v2sBrainMcpTokenForm(input) {
+    var inp = input && typeof input === 'object' ? input : {};
+    var fail = function (field, error) { return { ok: false, field: field, error: error, body: null }; };
+    var name = brKeyLabel(inp.name);
+    if (!name) return fail('name', 'اكتب اسم النظام الذي سيستعمل الرمز');
+    if (str(inp.name).length > 36) return fail('name', 'الاسم أطول من ' + ar(36) + ' حرفًا');
+    if (BR_MCP_SCOPE[inp.scopes] == null) return fail('scopes', 'اختر ما يسمح به الرمز');
+    return { ok: true, field: '', error: '', body: { name: name, scopes: inp.scopes, confirmed: true } };
+  }
+  // أوراق التأكيد: {title, lead, go}. action: link-delete | link-test | token-revoke.
+  function v2sBrainMcpSheet(action, row) {
+    var t = '«' + (row && row.name ? row.name : '') + '»';
+    if (action === 'link-delete') return { title: 'حذف النظام', go: 'نعم، احذفه', lead: 'يُحذف ' + t + ' من الأنظمة المتصلة ويُمسح رمزه المحفوظ. لا يتغيّر شيء عند النظام الآخر.' };
+    if (action === 'token-revoke') return { title: 'إلغاء الرمز', go: 'نعم، ألغِه', lead: 'يتوقف ' + t + ' عن الدخول إلى هذه اللوحة فورًا، ولا يمكن إعادة تفعيل الرمز. تنشئ رمزًا جديدًا إن احتجت.' };
+    return { title: 'جرّب الاتصال', go: 'نعم، جرّب', lead: 'يُطلب من ' + t + ' الاتصال وقائمة أدواته فقط. لا تُقرأ أرقام ولا يتغيّر شيء.' };
+  }
+
   Object.assign(api, {
     v2sBrainTime: v2sBrainTime, v2sBrainSince: v2sBrainSince, v2sBrainEntries: v2sBrainEntries, v2sBrainLogFromInbox: v2sBrainLogFromInbox,
     v2sBrainLogText: v2sBrainLogText, v2sBrainLogParts: v2sBrainLogParts, v2sBrainLogRows: v2sBrainLogRows, v2sBrainRules: v2sBrainRules, v2sBrainRunText: v2sBrainRunText,
@@ -2593,7 +2675,8 @@
     v2sBrainSwitches: v2sBrainSwitches, v2sBrainSwitchSheet: v2sBrainSwitchSheet, v2sBrainTelegramSheet: v2sBrainTelegramSheet, v2sBrainItems: v2sBrainItems, v2sBrainItemRows: v2sBrainItemRows,
     v2sBrainProposed: v2sBrainProposed, v2sBrainRunState: v2sBrainRunState, v2sBrainRunInfo: v2sBrainRunInfo,
     v2sBrainWriterText: v2sBrainWriterText, v2sBrainWritesToday: v2sBrainWritesToday, v2sBrainWriterPick: v2sBrainWriterPick,
-    v2sBrainKeys: v2sBrainKeys, v2sBrainKeyForm: v2sBrainKeyForm, v2sBrainKeySheet: v2sBrainKeySheet
+    v2sBrainKeys: v2sBrainKeys, v2sBrainKeyForm: v2sBrainKeyForm, v2sBrainKeySheet: v2sBrainKeySheet,
+    v2sBrainLinks: v2sBrainLinks, v2sBrainLinkForm: v2sBrainLinkForm, v2sBrainMcpTokens: v2sBrainMcpTokens, v2sBrainMcpTokenForm: v2sBrainMcpTokenForm, v2sBrainMcpSheet: v2sBrainMcpSheet
   });
   // ===== /v2s:brain =====
 

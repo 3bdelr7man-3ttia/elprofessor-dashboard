@@ -10,6 +10,8 @@
  *   صفوف السجل من `/v2/brain/items` وحذف الملاحظة (`POST …/discard` بتأكيد) · قرصا المساعدين. كل مصدر يفشل لوحده ⇒ «غير متاح بعد» لا صفر.
  * المفاتيح والكاتب (SPEC-B B1): بطاقة في تبويب المساعدين فوق القرصين — `/v2/brain/keys` (GET · POST · PUT · DELETE · POST …/test)، كل كتابة بتأكيد.
  *   ⛔ النص الصريح للمفتاح يمرّ من حقل كلمة سر واحد إلى POST ثم يُمسح من الصفحة؛ والقائمة لا تعرف إلا آخر ٤ أحرف.
+ * الأنظمة المتصلة (SPEC-B B5): بطاقة تحت المفاتيح — `/v2/brain/links` (GET · POST · PUT · DELETE · POST …/test) و`/v2/brain/mcp-tokens` (GET · POST · DELETE)، كل كتابة بتأكيد.
+ *   ⛔ رمز النظام الآخر يمرّ من حقل كلمة سر إلى POST ثم يُمسح؛ ورمز الدخول إلى هذه اللوحة يظهر مرة واحدة في ورقة الإنشاء ويُمسح عند إغلاقها ولا يُحفظ في أي مخزن.
  * ========================================================================== */
 (function () {
   'use strict';
@@ -20,7 +22,7 @@
   var B = window.V2SEC.brain = {};
   var MODS = { v2s_brain: 1, ai: 1 };
   var S = { view: null, mod: '', sig: '', poll: null, minute: null, seg: 'rules', open: {}, expandLog: false, running: null, note: null, noteT: null,
-            ruleText: '', ruleErr: '', ruleBusy: false, switchBusy: false, nowOverride: 0, sheetAgent: '', modeBusy: false, wasActive: false, keyBusy: false };
+            ruleText: '', ruleErr: '', ruleBusy: false, switchBusy: false, nowOverride: 0, sheetAgent: '', modeBusy: false, wasActive: false, keyBusy: false, linkBusy: false };
   var FAIL_AR = 'تعذّر تنفيذ العملية';
   var SESSION_AR = 'انتهت الجلسة. سجّل الدخول من جديد ثم جرّب.';
   var NOREPLY_AR = 'لم يصل رد. حدّث الصفحة وتأكّد مما حدث قبل أن تضغط مرة أخرى.';
@@ -52,7 +54,9 @@
     switches: function () { return '/v2/brain/switches'; },
     items: function () { return '/v2/brain/items?status=all&since=' + encodeURIComponent(new Date(L.v2sBrainSince(now())).toISOString()); },
     run: function () { return '/v2/brain/runs/latest'; },
-    keys: function () { return '/v2/brain/keys'; }
+    keys: function () { return '/v2/brain/keys'; },
+    links: function () { return '/v2/brain/links'; },
+    mcpTokens: function () { return '/v2/brain/mcp-tokens'; }
   };
   function srcOf(k) { return SRC[k] || (SRC[k] = { state: 'idle', data: null, at: 0, busy: false, status: 0 }); }
   function data(k) { var s = srcOf(k); return s.state === 'ready' ? s.data : null; }
@@ -312,9 +316,61 @@
     else body = info.rows.length ? '<div class="v2sb-kl">' + info.rows.map(keyRowHtml).join('') + '</div>'
       : '<p class="v2sb-none">لا مفاتيح محفوظة هنا، فيكتب العقل بإعداد الخادم الأصلي.</p>';
     return '<section class="v3-card v2sb-keys" aria-label="المفاتيح والكاتب"><header class="v3-ch"><h2>المفاتيح والكاتب</h2><p>اختر من يكتب للعقل، وبدّله في أي وقت.</p></header>'
-      + body + (info ? '<button type="button" class="v3-btn1 v2sb-kadd" data-a="kadd"' + (info.rows.length >= 12 ? ' disabled' : '') + '>أضف مفتاحًا</button>' : '') + '</section>';
+      + body + (info ? '<button type="button" class="v3-btn1 v2sb-kadd" data-a="kadd"' + (info.rows.length >= 12 ? ' disabled' : '') + '>أضف مفتاحًا</button>' : '') + '</section>'
+      + connectedCard();      // «الأنظمة المتصلة» (SPEC-B B5) تحت بطاقة المفاتيح مباشرة
   }
   function refreshKeys() { load('keys', true, true); load('status', true, true); load('switches', true, true); }
+
+  // ------------------------------------------------------------------ الأنظمة المتصلة (SPEC-B B5)
+  function linksInfo() { return srcState('links') === 'ready' ? L.v2sBrainLinks(data('links'), now()) : null; }
+  function tokensInfo() { return srcState('mcpTokens') === 'ready' ? L.v2sBrainMcpTokens(data('mcpTokens'), now()) : null; }
+  function linkRowHtml(l) {
+    var act = (l.readable ? '<button type="button" class="v3-btn2 v2sb-kb" data-a="ltest" data-id="' + esc(l.id) + '">جرّب الاتصال</button>'
+      + '<button type="button" class="v3-btn2 v2sb-kb" data-a="ltoggle" data-id="' + esc(l.id) + '">' + (l.enabled ? 'أوقفه' : 'فعّله') + '</button>' : '')
+      + '<button type="button" class="v3-btn2 v2sb-kb v2sb-kdel" data-a="ldel" data-id="' + esc(l.id) + '">احذفه</button>';
+    return '<article class="v2sb-kr' + (l.readable ? '' : ' bad') + '" data-id="' + esc(l.id) + '"><div class="v2sb-kt"><div class="v2sb-kh"><b dir="auto">' + esc(l.name) + '</b>'
+      + '<span class="v2sb-chip tone-' + esc(l.tone) + '">' + esc(l.stateLabel) + '</span></div>'
+      + '<p class="v2sb-km">' + (l.host ? '<bdi dir="ltr">' + esc(l.host) + '</bdi> · ' : '') + esc(l.autoText) + '</p>'
+      + (l.readable ? '<p class="v2sb-ks st-' + esc(l.test.state) + '">' + esc(l.test.text) + '</p>' : '<p class="v2sb-ks st-fail" role="status">' + esc(l.notice) + '</p>')
+      + '</div><div class="v2sb-kact">' + act + '</div></article>';
+  }
+  function tokenRowHtml(t) {
+    return '<article class="v2sb-kr' + (t.revoked ? ' bad' : '') + '" data-id="' + esc(t.id) + '"><div class="v2sb-kt"><div class="v2sb-kh"><b dir="auto">' + esc(t.name) + '</b>'
+      + '<span class="v2sb-chip tone-' + esc(t.tone) + '">' + esc(t.stateLabel) + '</span></div>'
+      + '<p class="v2sb-km">' + esc(t.scopeLabel) + '</p><p class="v2sb-ks">' + esc(t.usedText) + '</p></div>'
+      + (t.revoked ? '' : '<div class="v2sb-kact"><button type="button" class="v3-btn2 v2sb-kb v2sb-kdel" data-a="trevoke" data-id="' + esc(t.id) + '">ألغِه</button></div>') + '</article>';
+  }
+  function connectedCard() {
+    var ls = srcState('links'), ts = srcState('mcpTokens'), li = linksInfo(), ti = tokensInfo(), lbody, tbody;
+    if (ls === 'idle' || ls === 'loading') lbody = skeleton(1);
+    else if (!li) lbody = '<div class="v3-empty v2sb-na"><b>' + NA + '</b><p>لا نعرف الأنظمة المتصلة، فلا تعتبر القائمة فارغة.</p>' + retryBtn('retry-links') + '</div>';
+    else lbody = li.rows.length ? '<div class="v2sb-kl">' + li.rows.map(linkRowHtml).join('') + '</div>' : '<p class="v2sb-none">لا أنظمة متصلة بعد. أضف نظامًا ليقرأ العقل أرقامه.</p>';
+    if (ts === 'idle' || ts === 'loading') tbody = skeleton(1);
+    else if (!ti) tbody = '<div class="v3-empty v2sb-na"><b>' + NA + '</b><p>لا نعرف الرموز الحالية، فلا تعتبر القائمة فارغة.</p>' + retryBtn('retry-tokens') + '</div>';
+    else tbody = (ti.serverUrl ? '<div class="v2sb-addr"><span>عنوان هذه اللوحة لتعطيه للأنظمة الأخرى</span><div class="v2sb-addrr"><bdi dir="ltr" class="v2sb-addrv">' + esc(ti.serverUrl) + '</bdi>'
+        + '<button type="button" class="v3-btn2 v2sb-kb" data-a="curl">انسخ العنوان</button></div></div>' : '')
+      + (ti.rows.length ? '<div class="v2sb-kl">' + ti.rows.map(tokenRowHtml).join('') + '</div>' : '<p class="v2sb-none">لا رموز بعد. أنشئ رمزًا لكل نظام تريد أن يقرأ من هنا.</p>');
+    return '<section class="v3-card v2sb-keys v2sb-links" aria-label="الأنظمة المتصلة"><header class="v3-ch"><h2>الأنظمة المتصلة</h2><p>يقرأ العقل أرقام أنظمة أخرى، وتقرأ هي من هنا ما تسمح به فقط.</p></header>'
+      + '<h3 class="v2sb-sg">أنظمة يقرأ منها العقل</h3>' + lbody
+      + (li ? '<button type="button" class="v3-btn1 v2sb-kadd" data-a="ladd"' + (li.full ? ' disabled' : '') + '>أضف نظامًا</button>' : '')
+      + '<h3 class="v2sb-sg">رموز الدخول لهذه اللوحة</h3>' + tbody
+      + (ti ? '<button type="button" class="v3-btn1 v2sb-kadd" data-a="tadd">أنشئ رمزًا</button>' : '') + '</section>';
+  }
+  function refreshLinks() { load('links', true, true); }
+  function refreshTokens() { load('mcpTokens', true, true); }
+  function copyText(text, done) {
+    function fallback() {
+      var ta = document.createElement('textarea');
+      ta.value = text; ta.setAttribute('readonly', ''); ta.style.position = 'fixed'; ta.style.opacity = '0';
+      document.body.appendChild(ta); ta.select();
+      var ok = false; try { ok = document.execCommand('copy'); } catch (e) {}
+      document.body.removeChild(ta); done(ok);
+    }
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(function () { done(true); }, fallback);
+      else fallback();
+    } catch (e) { fallback(); }
+  }
 
   function drawHelpers(v) {
     var A = agentsResp(), st = data('status'), H = A ? L.v2sBrainHelpers(A, st, S.running ? S.running.id : null) : null;
@@ -561,6 +617,157 @@
     };
   }
 
+
+  // —— الأنظمة المتصلة: إضافة · تجربة · إيقاف · حذف، والرموز: إنشاء · إلغاء
+  function openLinkAdd() {
+    var E = ep();
+    if (!E || S.linkBusy) return;
+    var s = openSheet('أضف نظامًا', '<div class="v2sbk"><p class="mc-lead">اكتب اسم النظام وعنوانه، ثم الصق الرمز الذي أعطاك إياه.</p>'
+      + keyField('v2sblName', 'اسم النظام', '<input id="v2sblName" type="text" autocomplete="off" maxlength="60">')
+      + keyField('v2sblUrl', 'عنوان النظام', '<input id="v2sblUrl" type="url" dir="ltr" autocomplete="off" autocapitalize="off" spellcheck="false" maxlength="200" placeholder="https://">')
+      + keyField('v2sblTok', 'الرمز', '<input id="v2sblTok" type="password" dir="ltr" autocomplete="new-password" autocapitalize="off" spellcheck="false" maxlength="600">', 'يُحفظ مشفّرًا، ولا يظهر منه شيء بعد الحفظ.')
+      + keyField('v2sblBrand', 'معرّف العلامة (اختياري)', '<input id="v2sblBrand" type="text" dir="ltr" autocomplete="off" autocapitalize="off" spellcheck="false" maxlength="64">', 'يطلبه بعض الأنظمة لقراءة أرقام علامة واحدة.')
+      + '<div id="v2sbErr" role="alert"></div>'
+      + '<div class="acts"><button type="button" class="btn btn-human" id="v2sbGo">احفظ النظام</button><button type="button" class="btn btn-ghost" id="v2sbNo">رجوع</button></div></div>');
+    if (!s) return;
+    var go = q('#v2sbGo', s), no = q('#v2sbNo', s), f = { name: q('#v2sblName', s), url: q('#v2sblUrl', s), token: q('#v2sblTok', s), brand_id: q('#v2sblBrand', s) };
+    function showErr(t, el) { var box = q('#v2sbErr', s); if (box) box.innerHTML = t ? '<div class="v3-err">' + esc(t) + '</div>' : ''; if (el && el.focus) try { el.focus(); } catch (x) {} }
+    function clearTok() { try { f.token.value = ''; } catch (x) {} }
+    no.onclick = function () { if (!s.dataset.busy) { clearTok(); closeSheet(); } };
+    var x = q('[data-x]', s); if (x) x.addEventListener('click', clearTok);
+    go.onclick = function () {
+      if (s.dataset.busy) return;
+      var r = L.v2sBrainLinkForm({ name: f.name.value, url: f.url.value, token: f.token.value, brand_id: f.brand_id.value });
+      if (!r.ok) { showErr(r.error, f[r.field]); return; }
+      s.dataset.busy = '1'; S.linkBusy = true; go.disabled = true; no.disabled = true; go.textContent = 'جارٍ الحفظ…'; showErr('');
+      E.api('/v2/brain/links', { method: 'POST', body: r.body }).then(function () {
+        r.body.token = ''; clearTok(); delete s.dataset.busy; S.linkBusy = false;
+        closeSheet(); toast('حُفظ النظام'); refreshLinks(); redraw(true);
+      }).catch(function (e) {
+        delete s.dataset.busy; S.linkBusy = false; go.disabled = false; no.disabled = false; go.textContent = 'احفظ النظام'; showErr(errMsg(e));
+      });
+    };
+  }
+  function openLinkAction(action, id) {
+    var info = linksInfo(), E = ep(), row = info && info.rows.filter(function (r) { return r.id === id; })[0];
+    if (!row || !E || S.linkBusy) return;
+    var del = action === 'delete';
+    var sh = L.v2sBrainMcpSheet(del ? 'link-delete' : 'link-test', row);
+    var s = openSheet(sh.title, '<p class="mc-lead">' + esc(sh.lead) + '</p><div id="v2sbRes"></div><div id="v2sbErr" role="alert"></div>'
+      + '<div class="acts"><button type="button" class="btn btn-human" id="v2sbGo">' + esc(sh.go) + '</button><button type="button" class="btn btn-ghost" id="v2sbNo">رجوع</button></div>');
+    if (!s) return;
+    var go = q('#v2sbGo', s), no = q('#v2sbNo', s);
+    no.onclick = function () { if (!s.dataset.busy) closeSheet(); };
+    go.onclick = function () {
+      if (s.dataset.busy) return;
+      s.dataset.busy = '1'; S.linkBusy = true; go.disabled = true; no.disabled = true; go.textContent = del ? 'جارٍ الحذف…' : 'جارٍ التجربة…';
+      var req = del ? E.api('/v2/brain/links/' + encodeURIComponent(id), { method: 'DELETE', body: { confirmed: true } })
+        : E.api('/v2/brain/links/' + encodeURIComponent(id) + '/test', { method: 'POST', body: {} });
+      req.then(function (d) {
+        delete s.dataset.busy; S.linkBusy = false; refreshLinks();
+        if (del) { closeSheet(); toast('حُذف النظام'); redraw(true); return; }
+        var res = q('#v2sbRes', s), box = q('#v2sbErr', s);
+        if (d && d.ok) {
+          var names = (d.tools || []).map(function (n) { return '<li><bdi dir="ltr">' + esc(n) + '</bdi></li>'; }).join('');
+          res.innerHTML = '<p class="v2sb-okline">اتصل النظام بنجاح. عدد أدواته: ' + esc(U.ar(d.count || 0)) + '</p>' + (names ? '<ul class="v2sb-tools">' + names + '</ul>' : '');
+          box.innerHTML = '';
+        } else {
+          box.innerHTML = '<div class="v3-err">' + esc((d && d.error) || 'لم يصل رد') + '</div>';
+        }
+        go.style.display = 'none'; no.disabled = false; no.textContent = 'إغلاق';
+      }).catch(function (e) {
+        delete s.dataset.busy; S.linkBusy = false; go.disabled = false; no.disabled = false; go.textContent = sh.go;
+        var box = q('#v2sbErr', s); if (box) box.innerHTML = '<div class="v3-err">' + esc(errMsg(e)) + '</div>';
+        refreshLinks();
+      });
+    };
+  }
+  function toggleLink(id) {
+    var info = linksInfo(), E = ep(), row = info && info.rows.filter(function (r) { return r.id === id; })[0];
+    if (!row || !E || S.linkBusy) return;
+    S.linkBusy = true;
+    E.api('/v2/brain/links/' + encodeURIComponent(id), { method: 'PUT', body: { enabled: !row.enabled, confirmed: true } }).then(function () {
+      S.linkBusy = false; toast(row.enabled ? 'أُوقف النظام' : 'فُعّل النظام'); refreshLinks(); redraw(true);
+    }).catch(function (e) { S.linkBusy = false; toast(errMsg(e)); refreshLinks(); });
+  }
+  function openTokenAdd() {
+    var E = ep();
+    if (!E || S.linkBusy) return;
+    var cur = { scopes: 'read' };
+    var s = openSheet('أنشئ رمزًا', '<div class="v2sbk"><p class="mc-lead">يعطي هذا الرمز نظامًا آخر حق القراءة من هذه اللوحة. لا يستطيع الاعتماد ولا الإرسال ولا النشر ولا لمس المال.</p>'
+      + keyField('v2sbtName', 'اسم النظام الذي سيستعمله', '<input id="v2sbtName" type="text" autocomplete="off" maxlength="36">')
+      + '<div class="v2sbk-f"><span>ما يسمح به الرمز</span><div class="v2sb-md v2sbk-roles" role="radiogroup" aria-label="ما يسمح به الرمز">'
+      + '<button type="button" role="radio" class="alone" data-sc="read" aria-checked="true">القراءة فقط</button>'
+      + '<button type="button" role="radio" class="ask" data-sc="read,propose" aria-checked="false">القراءة والاقتراح</button></div>'
+      + '<small>الاقتراح يعني أن يكتب النظام ملاحظة تصلك لتقرر فيها.</small></div>'
+      + '<div id="v2sbErr" role="alert"></div>'
+      + '<div class="acts"><button type="button" class="btn btn-human" id="v2sbGo">أنشئ الرمز</button><button type="button" class="btn btn-ghost" id="v2sbNo">رجوع</button></div></div>');
+    if (!s) return;
+    var go = q('#v2sbGo', s), no = q('#v2sbNo', s), name = q('#v2sbtName', s);
+    function showErr(t, el) { var box = q('#v2sbErr', s); if (box) box.innerHTML = t ? '<div class="v3-err">' + esc(t) + '</div>' : ''; if (el && el.focus) try { el.focus(); } catch (x) {} }
+    qa('[data-sc]', s).forEach(function (b) {
+      b.onclick = function () {
+        if (s.dataset.busy) return;
+        cur.scopes = b.getAttribute('data-sc');
+        qa('[data-sc]', s).forEach(function (o) { o.setAttribute('aria-checked', o === b ? 'true' : 'false'); });
+      };
+    });
+    no.onclick = function () { if (!s.dataset.busy) closeSheet(); };
+    go.onclick = function () {
+      if (s.dataset.busy) return;
+      var r = L.v2sBrainMcpTokenForm({ name: name.value, scopes: cur.scopes });
+      if (!r.ok) { showErr(r.error, name); return; }
+      s.dataset.busy = '1'; S.linkBusy = true; go.disabled = true; no.disabled = true; go.textContent = 'جارٍ الإنشاء…'; showErr('');
+      E.api('/v2/brain/mcp-tokens', { method: 'POST', body: r.body }).then(function (d) {
+        delete s.dataset.busy; S.linkBusy = false; refreshTokens();
+        showToken(s, d || {});
+      }).catch(function (e) {
+        delete s.dataset.busy; S.linkBusy = false; go.disabled = false; no.disabled = false; go.textContent = 'أنشئ الرمز'; showErr(errMsg(e));
+      });
+    };
+  }
+  // الرمز يظهر هنا مرة واحدة فقط، ويُمسح من الصفحة عند الإغلاق. ⛔ لا يُحفظ في أي مخزن ولا في حالة الشاشة.
+  function showToken(s, d) {
+    var box = q('.v2sbm', s);
+    if (!box || typeof d.token !== 'string' || !d.token) { closeSheet(); toast(FAIL_AR); return; }
+    box.innerHTML = '<div class="v2sbk"><div class="v2sb-warn" role="status"><b>يظهر الرمز مرة واحدة فقط</b><p>انسخه الآن وسلّمه للنظام. إن ضاع، ألغِه وأنشئ غيره.</p></div>'
+      + '<label class="v2sbk-f" for="v2sbtVal"><span>الرمز</span><input id="v2sbtVal" type="text" readonly dir="ltr" autocomplete="off" spellcheck="false"></label>'
+      + (d.server_url ? '<p class="v2sb-km">عنوان هذه اللوحة: <bdi dir="ltr">' + esc(d.server_url) + '</bdi></p>' : '')
+      + '<div id="v2sbErr" role="alert"></div>'
+      + '<div class="acts"><button type="button" class="btn btn-human" id="v2sbCopy">انسخ الرمز</button><button type="button" class="btn btn-ghost" id="v2sbDone">تم</button></div></div>';
+    var val = q('#v2sbtVal', s);
+    val.value = d.token; d.token = '';
+    function wipe() { try { val.value = ''; } catch (x) {} }
+    val.onfocus = function () { try { val.select(); } catch (x) {} };
+    q('#v2sbCopy', s).onclick = function () {
+      copyText(val.value, function (ok) { if (ok) toast('نُسخ الرمز'); else { try { val.focus(); val.select(); } catch (x) {} toast('حدّد الرمز وانسخه يدويًّا'); } });
+    };
+    q('#v2sbDone', s).onclick = function () { wipe(); closeSheet(); redraw(true); };
+    var x = q('[data-x]', s); if (x) x.addEventListener('click', wipe);
+    s.addEventListener('click', function (e) { if (e.target === s) wipe(); });
+  }
+  function openTokenRevoke(id) {
+    var info = tokensInfo(), E = ep(), row = info && info.rows.filter(function (r) { return r.id === id; })[0];
+    if (!row || !E || S.linkBusy || row.revoked) return;
+    var sh = L.v2sBrainMcpSheet('token-revoke', row);
+    var s = openSheet(sh.title, '<p class="mc-lead">' + esc(sh.lead) + '</p><div id="v2sbErr" role="alert"></div>'
+      + '<div class="acts"><button type="button" class="btn btn-human" id="v2sbGo">' + esc(sh.go) + '</button><button type="button" class="btn btn-ghost" id="v2sbNo">رجوع</button></div>');
+    if (!s) return;
+    var go = q('#v2sbGo', s), no = q('#v2sbNo', s);
+    no.onclick = function () { if (!s.dataset.busy) closeSheet(); };
+    go.onclick = function () {
+      if (s.dataset.busy) return;
+      s.dataset.busy = '1'; S.linkBusy = true; go.disabled = true; no.disabled = true; go.textContent = 'جارٍ الإلغاء…';
+      E.api('/v2/brain/mcp-tokens/' + encodeURIComponent(id), { method: 'DELETE', body: { confirmed: true } }).then(function () {
+        delete s.dataset.busy; S.linkBusy = false; closeSheet(); toast('أُلغي الرمز'); refreshTokens(); redraw(true);
+      }).catch(function (e) {
+        delete s.dataset.busy; S.linkBusy = false; go.disabled = false; no.disabled = false; go.textContent = sh.go;
+        var box = q('#v2sbErr', s); if (box) box.innerHTML = '<div class="v3-err">' + esc(errMsg(e)) + '</div>';
+        refreshTokens();
+      });
+    };
+  }
+
   // —— حذف ملاحظة كتبها العقل (هذا هو التراجع الحقيقي الوحيد: الملاحظة نصّ فقط)
   function openDiscard(id) {
     var E = ep();
@@ -793,6 +1000,15 @@
       else if (a === 'kedit') openKeyEdit(b.getAttribute('data-id'));
       else if (a === 'ktest') openKeyConfirm('test', b.getAttribute('data-id'));
       else if (a === 'kdel') openKeyConfirm('delete', b.getAttribute('data-id'));
+      else if (a === 'ladd') openLinkAdd();
+      else if (a === 'ltest') openLinkAction('test', b.getAttribute('data-id'));
+      else if (a === 'ldel') openLinkAction('delete', b.getAttribute('data-id'));
+      else if (a === 'ltoggle') toggleLink(b.getAttribute('data-id'));
+      else if (a === 'tadd') openTokenAdd();
+      else if (a === 'trevoke') openTokenRevoke(b.getAttribute('data-id'));
+      else if (a === 'curl') { var tu = tokensInfo(); if (tu && tu.serverUrl) copyText(tu.serverUrl, function (ok) { toast(ok ? 'نُسخ العنوان' : 'تعذّر النسخ'); }); }
+      else if (a === 'retry-links') { load('links', true); }
+      else if (a === 'retry-tokens') { load('mcpTokens', true); }
       else if (a === 'retry-keys') { load('keys', true); }
       else if (a === 'retry-switches') { load('switches', true); }
       else if (a === 'retry-items') { load('items', true); }
@@ -842,6 +1058,7 @@
     var n = NEEDS[mod];
     if (!n) return;
     epEnsure(n.ep); n.src.forEach(function (k) { load(k, false); });
+    if (mod === 'ai') { load('links', false); load('mcpTokens', false); }      // الأنظمة المتصلة (SPEC-B B5)
   }
   function redraw(force) {
     if (!S.view || !host().current || !B.owns(host().current())) return;

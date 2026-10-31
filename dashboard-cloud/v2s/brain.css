@@ -255,3 +255,21 @@
   .v2sb-sk i{animation:none}
   .v2sb-chev{transition:none}
 }
+
+/* ——— الأنظمة المتصلة (SPEC-B B5): تحت بطاقة المفاتيح، وتستعير صفوفها ——— */
+.v2sb-links .v2sb-sg{font:800 15px/1.6 'Cairo',sans-serif;color:var(--ink);margin:14px 0 8px}
+.v2sb-links .v2sb-sg:first-of-type{margin-top:4px}
+.v2sb-addr{display:grid;gap:6px;background:#FBFAF7;border:1px dashed #D9CDBB;border-radius:14px;padding:10px 14px;margin:0 0 12px}
+.v2sb-addr>span{font:700 13.5px/1.6 'Cairo',sans-serif;color:var(--mute)}
+.v2sb-addrr{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px}
+.v2sb-addrv{flex:1 1 240px;min-width:0;font:600 14px/1.7 'IBM Plex Sans Arabic',monospace;color:var(--ink);overflow-wrap:anywhere;direction:ltr;text-align:left}
+.v2sb-warn{background:#FFF6E5;border:1px solid #EBCB8B;border-radius:14px;padding:10px 14px}
+.v2sb-warn b{display:block;font:800 15px/1.7 'Cairo',sans-serif;color:#7A4B00}
+.v2sb-warn p{margin:2px 0 0;font-size:13.5px;line-height:1.7;color:#7A4B00}
+.v2sb-okline{font:800 15px/1.7 'Cairo',sans-serif;color:#2F6B45;margin:0 0 6px}
+.v2sb-tools{list-style:none;margin:0 0 8px;padding:0;display:flex;flex-wrap:wrap;gap:6px}
+.v2sb-tools li{background:#F3EEE7;border:1px solid var(--line);border-radius:999px;padding:3px 12px;font:600 13px/1.7 'IBM Plex Sans Arabic',sans-serif;color:var(--ink);overflow-wrap:anywhere}
+#v2sbtVal{direction:ltr;text-align:left;font-family:'IBM Plex Sans Arabic',monospace;font-size:14px}
+@media(max-width:760px){
+  .v2sb-addrr .v3-btn2{width:100%;min-height:52px}
+}

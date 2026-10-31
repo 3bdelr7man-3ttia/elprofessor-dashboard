@@ -999,6 +999,55 @@ def apply_item(ns, item_id, actor, edited_text=None):
     return 422, pl
 
 
+# ------------------------------------------------------------------ اقتراحات الأنظمة المتصلة (SPEC-B B5a)
+EXTERNAL_PREFIX = 'mcp:'
+EXTERNAL_SECTIONS = ('home', 'courses', 'market', 'content', 'marketing', 'reports', 'company', 'people', 'books')
+EXTERNAL_TITLE_MAX = 120
+EXTERNAL_OPEN_CAP = 30            # أقصى عدد اقتراحات خارجية مفتوحة معًا: لا يغرق نظامٌ متصل اللوحة بالاقتراحات
+EXTERNAL_LABEL = 'احتفظ بها'
+
+
+def store_external_note(ns, producer_id, section, title, text, actor):
+    """يحفظ ملاحظة اقترحها نظام متصل (MCP) كصف `proposed` من نوع `note` بلا أي نداء ذكاء.
+    فحوص الطول والعبارة المحظورة فقط (لا فحص أرقام ولا حقائق: الكاتب هنا جهة خارجية لا العقل).
+    ⛔ لا اعتماد ولا تنفيذ هنا: القرار للمؤسس وحده من شاشة العقل. يرجع (row|None, reason)؛ reason فارغ عند النجاح.
+    reason: 'bad' (شكل) · 'long' · 'banned' · 'section' · 'full' · 'exists' (نفس الاقتراح موجود)."""
+    if not (isinstance(producer_id, str) and producer_id.startswith(EXTERNAL_PREFIX) and 5 <= len(producer_id) <= 40):
+        return None, 'bad'
+    if section not in EXTERNAL_SECTIONS:
+        return None, 'section'
+    title = clean_text(title, keep_newlines=False) if isinstance(title, str) else ''
+    text = clean_text(text) if isinstance(text, str) else ''
+    if not title or not text:
+        return None, 'bad'
+    if len(title) > EXTERNAL_TITLE_MAX or len(text) > TEXT_LIMIT['note']:
+        return None, 'long'
+    if has_banned(title) or has_banned(text):
+        return None, 'banned'
+    db = ns['db']
+    Item = _models(db)[0]
+    if Item.query.filter(Item.source == 'external', Item.status == 'proposed').count() >= EXTERNAL_OPEN_CAP:
+        return None, 'full'
+    h = hashlib.sha256(canon({'s': section, 't': title, 'x': text}).encode('utf-8')).hexdigest()
+    ref = EXTERNAL_PREFIX + h[:24]
+    if Item.query.filter_by(producer=producer_id, target_ref=ref, input_hash=h).first() is not None:
+        return None, 'exists'
+    facts = {'title': title, 'source': producer_id}
+    row = Item(id=uuid.uuid4().hex, producer=producer_id, section=section, kind='note', target_ref=ref, target_label=title,
+               input_hash=h, facts_json=_dump(facts), meta_json=_dump({'external': True}),
+               body_json=_dump({'text': text, 'approve_label': EXTERNAL_LABEL}), status='proposed', source='external',
+               mode='ask', run_id=None, created_at=utcnow())
+    try:
+        db.session.add(row)
+        db.session.commit()
+    except Exception:   # noqa: BLE001
+        db.session.rollback()
+        logger.exception('brain2: external note store failed')
+        return None, 'exists'
+    _audit(ns, 'brain.external_note', row.id, {'producer': producer_id, 'section': section}, actor)
+    return row, ''
+
+
 def _audit(ns, action, target, meta, actor):
     try:
         ns['_audit'](action, target=target, meta=meta)
