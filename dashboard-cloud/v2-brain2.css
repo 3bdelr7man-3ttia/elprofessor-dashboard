@@ -72,3 +72,10 @@
   .v2b-m .acts .btn{width:100%;min-height:52px}
 }
 .app.v2-shell.v2-focus .v2-bbar{display:none}
+
+.v2b-edits{list-style:none;margin:0 0 12px;padding:0;display:grid;gap:10px;max-height:340px;overflow:auto}
+.v2b-edits li{padding:10px 12px;border:1px solid #E6E1D8;border-radius:10px;background:#FBFAF7;display:grid;gap:6px;font-size:15px;line-height:1.8}
+.v2b-edits small{display:block;color:#6b7280;font-size:12px}
+.v2b-edits span{overflow-wrap:anywhere;white-space:pre-line}
+.v2b-e-old span{text-decoration:line-through;text-decoration-color:rgba(158,43,78,.45)}
+.v2b-e-new span{font-weight:600}

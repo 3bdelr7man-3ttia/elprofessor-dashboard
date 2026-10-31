@@ -576,3 +576,106 @@ def test_visible_arabic_copy_rules():
         for bad in ('API', 'JSON', 'Claude', 'DeepSeek', 'OpenAI', 'Anthropic', 'null', 'undefined', '⇒', '✓', 'اعكس'):
             if t is not engine.SYSTEM_AR:
                 assert bad not in t, (bad, t)
+
+
+# ───────────────────────────────────────────────────────────── جولة الإصلاح
+
+def test_approve_rejects_a_text_edit_on_proposals_that_carry_site_edits(api, monkeypatch):
+    seen = []
+    edits = [{'path': 'b1', 'old': 'قديم', 'new': 'جديد', 'why': 'قرار'}]
+    seed(monkeypatch, api, fp(pid='site_review', alone=False, kind='draft', section='content',
+                              targets=[('site:p', F1, {'page': 'pricing.html'})],
+                              validate=lambda d, t: {'text': 'ملخص', 'edits': edits},
+                              apply=lambda c, b, t: seen.append(b) or ApplyResult(ok=True)))
+    (r,) = rows()
+    path = '/api/v2/brain/items/%s/approve' % r.id
+    res = api.post(path, {'text': 'نص معدّل', 'confirmed': True})
+    assert res.status_code == 400
+    assert res.get_json()['error'] == 'لا يُعدّل نص هذا الاقتراح هنا؛ افتح الموقع وعدّل الكتلة نفسها'
+    assert seen == [] and rows()[0].status == 'proposed', 'لا تنفيذ ولا تغيير حالة'
+    ok = api.post(path, {'confirmed': True})                      # الاعتماد بلا تعديل نص يعمل
+    assert ok.status_code == 200 and seen and seen[0]['edits'] == edits
+
+
+def test_list_sweeps_stale_applying_rows_to_unknown(api, monkeypatch):
+    use(monkeypatch)
+    Item = engine._models(db)[0]
+    now = datetime.datetime.utcnow()
+    db.session.add(Item(id='1' * 32, producer='zz', section='x', kind='draft', target_ref='r1', input_hash='h1', status='applying',
+                        created_at=now, decided_at=now - datetime.timedelta(minutes=12)))
+    db.session.add(Item(id='2' * 32, producer='zz', section='x', kind='draft', target_ref='r2', input_hash='h2', status='applying',
+                        created_at=now, decided_at=now - datetime.timedelta(minutes=2)))
+    db.session.commit()
+    items = {i['id']: i for i in api.get('/api/v2/brain/items?status=all').get_json()['items']}
+    assert items['1' * 32]['status'] == 'unknown'
+    assert items['1' * 32]['last_error'] == 'لم نتأكد من نتيجة التنفيذ؛ راجع ما حدث قبل إعادة المحاولة'
+    assert items['2' * 32]['status'] == 'applying'
+
+
+@pytest.mark.parametrize('route', ['approve', 'reject'])
+def test_approve_and_reject_also_sweep_first(api, monkeypatch, route):
+    seed(monkeypatch, api, fp(alone=False, kind='draft', targets=[('m:1', F1)]))
+    Item = engine._models(db)[0]
+    db.session.add(Item(id='3' * 32, producer='zz', section='x', kind='draft', target_ref='r3', input_hash='h3', status='applying',
+                        created_at=datetime.datetime.utcnow(), decided_at=datetime.datetime.utcnow() - datetime.timedelta(minutes=30)))
+    db.session.commit()
+    (r,) = [x for x in rows() if x.producer == 'fp']
+    api.post('/api/v2/brain/items/%s/%s' % (r.id, route), {'confirmed': True})
+    db.session.expire_all()
+    assert Item.query.get('3' * 32).status == 'unknown'
+
+
+# ----- مرسل رسالة الموقع (للمنصة فقط)
+
+SENDER = '/api/v2/brain/site-message/%s/sender'
+MSG_SECRET = 'test-metrics-secret'
+
+
+@pytest.fixture()
+def sender_env(env, monkeypatch):
+    monkeypatch.setattr(appmod, 'PLATFORM_METRICS_SECRET', MSG_SECRET)
+    m = appmod.Message(name='سمر عبد الله', email='  Samar.Test@Example.COM ', body='نص خاص جدًا', topic='موضوع')
+    db.session.add(m)
+    db.session.commit()
+    yield m.id
+    appmod.Message.query.filter_by(id=m.id).delete()
+    db.session.commit()
+
+
+def _sender(mid, secret=MSG_SECRET):
+    heads = {'X-ELP-Metrics-Secret': secret} if secret is not None else {}
+    return flask_app.test_client().get(SENDER % mid, headers=heads)
+
+
+def test_site_message_sender_returns_only_the_lowercased_email(sender_env):
+    r = _sender(sender_env)
+    assert r.status_code == 200 and r.get_json() == {'email': 'samar.test@example.com'}
+    assert r.headers.get('Cache-Control') == 'no-store'
+    blob = r.get_data(as_text=True)
+    assert 'سمر' not in blob and 'نص خاص' not in blob
+
+
+def test_site_message_sender_auth_is_the_secret_only(sender_env, api):
+    assert _sender(sender_env, secret=None).status_code == 401
+    assert _sender(sender_env, secret='wrong').status_code == 401
+    r = flask_app.test_client().get(SENDER % sender_env, headers=dict(api.heads['admin']))
+    assert r.status_code == 401, 'توكن الأدمن لا يكفي'
+    appmod.PLATFORM_METRICS_SECRET = ''
+    try:
+        assert _sender(sender_env, secret='').status_code == 401, 'سرّ غير مضبوط ⇒ رفض'
+    finally:
+        appmod.PLATFORM_METRICS_SECRET = MSG_SECRET
+
+
+def test_site_message_sender_flag_off_is_404_before_the_secret_check(sender_env, monkeypatch):
+    monkeypatch.setenv('DASH_V2_ENABLED', 'false')
+    for secret in (MSG_SECRET, 'wrong', None):
+        r = _sender(sender_env, secret=secret)
+        assert r.status_code == 404 and r.headers.get('Cache-Control') == 'no-store'
+
+
+def test_site_message_sender_not_found_and_bad_ids(sender_env):
+    assert _sender(sender_env + 100000).status_code == 404
+    assert _sender(sender_env + 100000).get_json() == {'error': 'not_found'}
+    for bad in ('abc', '1a', '-1', '1.5', '١٢٣', '1' * 20, '%20', '0x10'):
+        assert _sender(bad).status_code == 404, bad

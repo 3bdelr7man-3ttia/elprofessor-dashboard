@@ -72,16 +72,24 @@ ERR_MULTI_MATCH = 'النص القديم يتكرر في الصفحة أكثر �
 ERR_BAD_EDIT = 'التعديل غير صالح'
 ERR_NO_BACKUP = 'هذه النسخة غير موجودة'
 ERR_ENCODING = 'تعذّرت قراءة ترميز الصفحة'
+ERR_RENAME_UNKNOWN = 'لم يصلنا تأكيد حفظ التعديل على الاستضافة؛ افتح الموقع وتأكّد مما حدث قبل أن تعيد المحاولة'
+
+# مهلات الشبكة: الخادم بخيط واحد متزامن (١٢٠ ثانية)، فلا يجوز أن تعلق الاستضافة طلبًا أطول من هذا.
+CONNECT_TIMEOUT = 10
+CHANNEL_TIMEOUT = 20
+HTTP_TIMEOUT = (5, 10)
+VERIFY_MAX_TRIES = 2
 
 
 class SiteError(Exception):
     """خطأ عربي جاهز للعرض + رمز آلي + حالة HTTP مقترحة."""
 
-    def __init__(self, code, message, status=400):
+    def __init__(self, code, message, status=400, unknown=False):
         super(SiteError, self).__init__(message)
         self.code = code
         self.message = message
         self.status = status
+        self.unknown = unknown       # لا نعرف هل نُفِّذ الفعل البعيد (الرد ضاع بعد أن بدأ)
 
 
 # ------------------------------------------------------------------ أدوات نصية
@@ -357,7 +365,7 @@ def page_url(page):
 def default_getter(url):
     """(status, text). ⛔ الإنتاج فقط: كاسر كاش لأن الـCDN أمام الموقع يقدّم نسخة قديمة بعد الرفع."""
     import requests
-    r = requests.get(url, params={'nocache': str(int(time.time()))}, timeout=30,
+    r = requests.get(url, params={'nocache': str(int(time.time()))}, timeout=HTTP_TIMEOUT,
                      headers={'User-Agent': 'elprofessor-dashboard-site/1.0', 'Cache-Control': 'no-cache',
                               'Pragma': 'no-cache'})
     return r.status_code, r.content.decode('utf-8', errors='replace')
@@ -430,14 +438,24 @@ def default_sftp_factory():
         import paramiko
         cl = paramiko.SSHClient()
         cl.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-        cl.connect(host, port=port, username=user, password=password, timeout=30, allow_agent=False,
+        cl.connect(host, port=port, username=user, password=password, timeout=CONNECT_TIMEOUT, banner_timeout=CONNECT_TIMEOUT,
+                   auth_timeout=CONNECT_TIMEOUT, allow_agent=False,
                    look_for_keys=False)
         sftp = cl.open_sftp()
+        _channel_timeout(sftp)
         home = sftp.normalize('.')
     except Exception:   # noqa: BLE001
         logger.warning('site_edit: sftp connect failed')
         raise SiteError('remote', ERR_REMOTE, 502)
     return Session(sftp, '%s/%s' % (home.rstrip('/'), site_root), cl.close)
+
+
+def _channel_timeout(sftp):
+    """مهلة قناة SFTP لكل قراءة/كتابة/إعادة تسمية: بدونها يعلق الطلب بلا حدّ. تجاهل صامت لما لا يملك قناة (الاختبارات)."""
+    try:
+        sftp.get_channel().settimeout(CHANNEL_TIMEOUT)
+    except Exception:   # noqa: BLE001
+        pass
 
 
 def _remote_path(session, page):
@@ -447,6 +465,7 @@ def _remote_path(session, page):
 
 def remote_read(session, page):
     path = _remote_path(session, page)
+    _channel_timeout(session.sftp)
     try:
         fh = session.sftp.open(path, 'rb')
         try:
@@ -466,6 +485,7 @@ def remote_write(session, page, data):
     path = _remote_path(session, page)
     tmp = path + TMP_SUFFIX
     sftp = session.sftp
+    _channel_timeout(sftp)
     mode = None
     try:
         mode = sftp.stat(path).st_mode & 0o777
@@ -482,10 +502,15 @@ def remote_write(session, page, data):
                 sftp.chmod(tmp, mode)
             except Exception:   # noqa: BLE001
                 pass
+    except Exception:   # noqa: BLE001
+        logger.warning('site_edit: remote upload failed for %s', page)
+        raise SiteError('remote', ERR_REMOTE, 502)             # لم يُمسّ الملف الحي بعد
+    try:
         sftp.posix_rename(tmp, path)
     except Exception:   # noqa: BLE001
-        logger.warning('site_edit: remote write failed for %s', page)
-        raise SiteError('remote', ERR_REMOTE, 502)
+        # الرد قد يضيع بعد أن نُفِّذت إعادة التسمية فعلًا: لا نقول «لم يتغيّر شيء».
+        logger.warning('site_edit: remote rename outcome unknown for %s', page)
+        raise SiteError('remote_unknown', ERR_RENAME_UNKNOWN, 502, unknown=True)
 
 
 # ------------------------------------------------------------------ النسخ الاحتياطية
@@ -557,6 +582,13 @@ def get_backup(db, page, backup_id):
 _LOCK = threading.Lock()
 
 
+def _err(e):
+    d = {'ok': False, 'status': e.status, 'error': e.message, 'code': e.code}
+    if getattr(e, 'unknown', False):
+        d['unknown'] = True
+    return d
+
+
 def _decode(data):
     try:
         return data.decode('utf-8')
@@ -565,9 +597,15 @@ def _decode(data):
 
 
 def _verify(page, edits, getter, attempts, delay, sleep):
-    want = [collapse(e['new']) for e in edits]
+    want = []
+    for e in edits:
+        try:
+            want.append(clean_new_text(e['new']))          # نفس تطبيع ما كُتب (علامات الاتجاه تُمسح ثم تُجمع الفراغات)
+        except SiteError:
+            want.append(collapse(_CTRL_RE.sub('', e['new'])) if isinstance(e.get('new'), str) else '')
     url = page_url(page)
-    for i in range(max(1, attempts)):
+    attempts = min(max(1, attempts), VERIFY_MAX_TRIES)
+    for i in range(attempts):
         try:
             status, text = getter(url)
             if status == 200 and isinstance(text, str):
@@ -581,7 +619,7 @@ def _verify(page, edits, getter, attempts, delay, sleep):
     return False
 
 
-def apply_edits(db, page, expected_sha, edits, actor='', sftp_factory=None, getter=None, verify_attempts=3,
+def apply_edits(db, page, expected_sha, edits, actor='', sftp_factory=None, getter=None, verify_attempts=VERIFY_MAX_TRIES,
                 verify_delay=2.0, sleep=None):
     """صفحة واحدة، الكل أو لا شيء. يرجع dict: ok · status · error · (backup_id · sha · restored · unknown).
     لا يرفع استثناء توقعًا؛ الأخطاء المعروفة تُرجَع في الـdict."""
@@ -616,7 +654,7 @@ def apply_edits(db, page, expected_sha, edits, actor='', sftp_factory=None, gett
         return {'ok': False, 'status': 502, 'error': ERR_VERIFY, 'code': 'verify', 'restored': True,
                 'backup_id': backup.id}
     except SiteError as e:
-        return {'ok': False, 'status': e.status, 'error': e.message, 'code': e.code}
+        return _err(e)
     finally:
         if session is not None:
             session.close()
@@ -647,7 +685,7 @@ def restore_backup(db, page, backup_id, actor='', sftp_factory=None):
                     'unknown': True}
         return {'ok': True, 'status': 200, 'backup_id': row.id, 'sha256': row.sha256}
     except SiteError as e:
-        return {'ok': False, 'status': e.status, 'error': e.message, 'code': e.code}
+        return _err(e)
     finally:
         if session is not None:
             session.close()

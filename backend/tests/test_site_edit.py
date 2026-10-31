@@ -76,10 +76,13 @@ class FakeSftp(object):
         self.files = dict(files or {})
         self.log = []
         self.fail_rename = False
+        self.fail_write_open = False
 
     def open(self, path, mode='rb'):
         if 'r' in mode and path not in self.files:
             raise IOError('no such file')
+        if 'w' in mode and self.fail_write_open:
+            raise IOError('upload failed')
         return FakeFile(self, path, mode)
 
     def stat(self, path):
@@ -347,7 +350,7 @@ def test_verify_failure_restores_the_backup_and_says_so(site):
     r = se.apply_edits(db, PAGE, sha_of(PRICING), EDIT, 'a@x.test', verify_attempts=3)
     assert r['ok'] is False and r['restored'] is True and r['error'] == 'لم يظهر التعديل؛ أعدنا الصفحة كما كانت'
     assert live_bytes(site) == PRICING.encode('utf-8'), 'الصفحة كما كانت بالبايت'
-    assert len(site.web.calls) == 3, 'ثلاث محاولات تحقق'
+    assert len(site.web.calls) == 2, 'محاولتا تحقق على الأكثر ولو طُلب أكثر (الخادم بخيط واحد)'
     assert len([e for e in site.sftp.log if e[0] == 'rename']) == 2, 'رفع ثم إرجاع'
     assert len(se.list_backups(db, PAGE)) == 1
 
@@ -374,11 +377,20 @@ def test_a_failed_restore_after_failed_verify_is_reported_as_unknown(site):
     assert 'النسخ السابقة' in r['error']
 
 
-def test_rename_failure_changes_nothing_and_never_deletes(site):
+def test_rename_failure_is_unknown_not_nothing_changed_and_never_deletes(site):
+    """الرد قد يضيع بعد أن نُفِّذت إعادة التسمية فعلًا ⇒ لا نقول «لم يتغيّر شيء»."""
     site.sftp.fail_rename = True
     r = se.apply_edits(db, PAGE, sha_of(PRICING), EDIT, 'a@x.test')
-    assert r['ok'] is False and r['status'] == 502 and r['error'] == se.ERR_REMOTE
+    assert r['ok'] is False and r['status'] == 502 and r['error'] == se.ERR_RENAME_UNKNOWN and r['unknown'] is True
+    assert r['code'] == 'remote_unknown' and 'لم يتغيّر شيء' not in r['error']
     assert live_bytes(site) == PRICING.encode('utf-8'), 'الأصل كما هو؛ المؤقت وحده بقي'
+
+
+def test_upload_failure_before_the_rename_still_says_nothing_changed(site):
+    site.sftp.fail_write_open = True
+    r = se.apply_edits(db, PAGE, sha_of(PRICING), EDIT, 'a@x.test')
+    assert r['ok'] is False and r['error'] == se.ERR_REMOTE and 'unknown' not in r and 'لم يتغيّر شيء' in r['error']
+    assert live_bytes(site) == PRICING.encode('utf-8')
 
 
 def test_unconfigured_hosting_is_a_clear_503_and_makes_no_connection(monkeypatch):
@@ -872,7 +884,7 @@ def test_restore_failure_is_reported_with_its_status(api, site):
     bk = se.save_backup(db, PAGE, PRICING.encode('utf-8'), 'a@x.test')
     site.sftp.fail_rename = True
     r = api.post('/api/v2/site/restore', {'page': PAGE, 'backup_id': bk.id, 'confirmed': True})
-    assert r.status_code == 502 and r.get_json()['error'] == se.ERR_REMOTE
+    assert r.status_code == 502 and r.get_json()['error'] == se.ERR_RENAME_UNKNOWN
 
 
 # ───────────────────────────────────────────────────────────── ربط التسليم
@@ -901,3 +913,78 @@ def test_no_real_network_or_credentials_in_the_new_modules():
     for f in ('backend/site_edit.py', 'backend/v2_site_routes.py', 'backend/brain2/producers_site.py'):
         s = open(os.path.join(ROOT, f), encoding='utf-8').read()
         assert not re.search(r'sk-[A-Za-z0-9]{10,}|password\s*=\s*[\'"][^\'"]+[\'"]', s), f
+
+
+# ───────────────────────────────────────────────────────────── جولة الإصلاح: مهلات الشبكة · تطبيع التحقق
+
+def test_verify_normalizes_like_the_write_so_direction_marks_do_not_roll_back(site):
+    edit = [{'old': H1, 'new': 'باقات‏  بسيطة‫ لكل خبير'}]
+    r = se.apply_edits(db, PAGE, sha_of(PRICING), edit, 'a@x.test')
+    assert r['ok'] is True, r
+    assert 'باقات بسيطة لكل خبير' in live_bytes(site).decode('utf-8') and '‏' not in live_bytes(site).decode('utf-8')
+    assert len([e for e in site.sftp.log if e[0] == 'rename']) == 1, 'لا إرجاع بلا داعٍ'
+
+
+def test_verify_makes_at_most_two_tries_whatever_the_caller_asks(site):
+    site.web.pinned[PAGE] = PRICING
+    se.apply_edits(db, PAGE, sha_of(PRICING), EDIT, 'a@x.test', verify_attempts=9)
+    assert len(site.web.calls) == 2 and se.VERIFY_MAX_TRIES == 2
+
+
+def test_sftp_channel_timeout_is_set_for_read_and_write(site):
+    seen = []
+
+    class Chan(object):
+        def settimeout(self, t):
+            seen.append(t)
+    site.sftp.get_channel = lambda: Chan()
+    se.remote_read(se.Session(site.sftp, SFTP_ROOT), PAGE)
+    se.remote_write(se.Session(site.sftp, SFTP_ROOT), PAGE, b'<p>x</p>')
+    assert seen == [20, 20] and se.CHANNEL_TIMEOUT == 20
+
+
+def test_default_sftp_factory_connects_with_a_10s_timeout_and_sets_the_channel_timeout(monkeypatch):
+    se.set_hooks()
+    for k, v in (('PRERENDER_SSH_HOST', 'h.test'), ('PRERENDER_SSH_USER', 'u'), ('PRERENDER_SSH_PASSWORD', 'p')):
+        monkeypatch.setenv(k, v)
+    got = {}
+
+    class Chan(object):
+        def settimeout(self, t):
+            got['chan'] = t
+
+    class Sftp(object):
+        def get_channel(self):
+            return Chan()
+
+        def normalize(self, p):
+            return '/home/u'
+
+    class Client(object):
+        def set_missing_host_key_policy(self, p):
+            pass
+
+        def connect(self, host, **kw):
+            got['connect'] = kw
+
+        def open_sftp(self):
+            return Sftp()
+
+        def close(self):
+            pass
+    import types
+    fake = types.SimpleNamespace(SSHClient=Client, AutoAddPolicy=lambda: None)
+    monkeypatch.setitem(__import__('sys').modules, 'paramiko', fake)
+    s = se.default_sftp_factory()
+    assert got['connect']['timeout'] == 10 and got['chan'] == 20 and s.root.endswith('public_html')
+
+
+def test_default_getter_uses_connect_5_read_10(monkeypatch):
+    seen = {}
+
+    class R(object):
+        status_code = 200
+        content = b'<p>x</p>'
+    monkeypatch.setattr(appmod.requests, 'get', lambda url, **kw: seen.update(kw) or R())
+    assert se.default_getter('https://elprofessor.net/pricing.html')[0] == 200
+    assert seen['timeout'] == (5, 10) and se.HTTP_TIMEOUT == (5, 10)

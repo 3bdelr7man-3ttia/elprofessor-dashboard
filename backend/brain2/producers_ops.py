@@ -588,7 +588,8 @@ def _reply_apply(ctx, body, target):
         if (target.facts or {}).get('has_account'):
             try:
                 resp = _proxy(ctx)('POST', '/api/bridge/messages/%s/reply' % rid,
-                                   json_body={'body': text, 'by': str(ctx.actor)[:120], 'confirmed': True})
+                                   json_body={'body': text, 'by': str(ctx.actor)[:120], 'confirmed': True,
+                                              'idem_key': _idem_key(ctx, target, text)[:64]})
             except Exception:
                 return _bad('تعذّر الاتصال بالمنصة؛ لا نعرف إن وصل الرد. راجع الرسالة قبل المحاولة من جديد.', no_reply=True)
             st = _status_of(resp)
@@ -611,7 +612,7 @@ def _reply_apply(ctx, body, target):
             if st == 422:
                 return _bad('صاحب هذه الرسالة زائر بلا حساب، فلا يصله الرد من المنصة. انسخ الرد وأرسله بنفسك.',
                             copy_text=text, info={'visitor': True})
-            if st in (0, 502, 504):
+            if st == 0 or st >= 500:       # أي ٥xx أو انقطاع: لا نعرف إن وصل الرد، فلا نعيد الاقتراح إلى «مقترح»
                 return _bad('تعذّر الاتصال بالمنصة؛ لا نعرف إن وصل الرد. راجع الرسالة قبل المحاولة من جديد.', no_reply=True)
             return _bad('رفضت المنصة الرد؛ لم يُرسَل شيء.')
         info = {'copied': True}

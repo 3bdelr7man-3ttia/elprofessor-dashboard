@@ -188,7 +188,7 @@ def tool_business_summary(ns, args):
 def _platform_list(ns, path, key):
     """قراءة قائمة من المنصة بنداء واحد، أو None (لا نخلط الفشل بالفراغ)."""
     try:
-        resp = ns['_platform_proxy']('GET', path, timeout=12)
+        resp = ns['_platform_proxy']('GET', path, timeout=8)
         if not ns['_resp_ok'](resp):
             return None
         data = ns['_proxy_json'](resp)

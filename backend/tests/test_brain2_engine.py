@@ -90,14 +90,15 @@ def env(monkeypatch, request):
     with flask_app.app_context():
         db.create_all()
         Item, Switch, Run = engine._models(db)
-        for M in (Item, Switch, Run):
+        Day = engine._day_model(db)
+        for M in (Item, Switch, Run, Day):
             M.query.delete()
         row = appmod.AIDailyUsage.query.get(day)
         if row:
             db.session.delete(row)
         db.session.commit()
         yield script
-        for M in (Item, Switch, Run):
+        for M in (Item, Switch, Run, Day):
             M.query.delete()
         db.session.commit()
 
@@ -769,3 +770,100 @@ def test_ops_opinion_helpers_are_used_lazily_when_present(env, monkeypatch):
     assert engine.submit_opinion(NS, 'review', 'c1', {'tag': 'نظيف'})[2]
     assert seen['target'] == ('review', 'c1') and rows(producer='opinion')[0].status == 'done_alone'
     assert engine.submit_opinion(NS, 'bad', 'c2', {})[1] == 'not_supported'
+
+
+# ───────────────────────────────────────────────────────────── جولة الإصلاح: عدّاد اليوم الحقيقي
+
+def test_day_counter_counts_every_ai_call_including_ones_that_end_as_templates_or_failures(env, monkeypatch):
+    """الصف القالب لا يحمل source='ai' ولا يُحسب في العدّ القديم؛ العدّاد الحقيقي يحسب النداء نفسه."""
+    monkeypatch.setenv('DASH_BRAIN_DAY_CAP', '100')
+    tpl = fp(pid='t', targets=[('t:%d' % i, {'n': i}) for i in range(3)], validate=lambda d, t: None,
+             template=lambda t: {'text': 'قالب'})
+    use(monkeypatch, tpl)
+    run()
+    assert {r.source for r in rows()} == {'template'}
+    assert len(env.calls) == 3
+    assert engine.brain_today(db) == 3, 'ثلاثة نداءات فعلية رغم أن الصفوف كلها قوالب'
+    Day = engine._day_model(db)
+    d = Day.query.one()
+    assert d.calls == 3 and d.opinions == 0 and d.day == engine._day_key()
+
+
+def test_day_cap_uses_the_real_counter_so_templates_cannot_slip_past_it(env, monkeypatch):
+    monkeypatch.setenv('DASH_BRAIN_DAY_CAP', '4')
+    use(monkeypatch, fp(pid='t', targets=[('t:%d' % i, {'n': i}) for i in range(6)], validate=lambda d, t: None,
+                        template=lambda t: {'text': 'قالب'}))
+    rid = run()
+    assert len(env.calls) == 4 and skipped(rid)['_stop'] == 'day_cap'
+    rid = run()                     # جولة ثانية في اليوم نفسه: السقف ما زال ممتلئًا
+    assert len(env.calls) == 4 and skipped(rid)['_stop'] == 'day_cap'
+
+
+def test_opinion_counter_and_cap_read_the_counter(env, monkeypatch):
+    monkeypatch.setenv('DASH_BRAIN_OPINION_CAP', '2')
+    env.default = {'opinion': 'رأي'}
+    # منتج رأي مزيّف يُحقن مكان الحقيقي
+    from test_brain2_routes import opinion_producer
+    use(monkeypatch, opinion_producer())
+    for i in range(3):
+        engine.submit_opinion(NS, 'review', 'c%d' % i, {'tag': 'م%d' % i})
+    d = engine._day_model(db).query.one()
+    assert d.opinions == 2 and d.calls == 2 and len(env.calls) == 2
+    assert engine.brain_today(db, 'opinion') == 2
+    assert engine.submit_opinion(NS, 'review', 'c9', {'tag': 'ط'})[1] == 'cap'
+
+
+def test_missing_counter_row_falls_back_to_the_old_row_count(env, monkeypatch):
+    Item = engine._models(db)[0]
+    for i in range(2):
+        db.session.add(Item(id='%032x' % i, producer='x', section='content', kind='note', target_ref='r%d' % i, input_hash='h%d' % i,
+                            status='proposed', source='ai', created_at=engine.utcnow()))
+    db.session.commit()
+    assert engine._day_row(db) is None and engine.brain_today(db) == 2
+    # أول نداء يبدأ العدّاد من العدّ القديم فلا يصفّر السقف في منتصف اليوم
+    use(monkeypatch, fp(targets=[('n:1', F1)]))
+    run()
+    assert engine.brain_today(db) == 3
+
+
+# ───────────────────────────────────────────────────────────── جولة الإصلاح: جولة مكرّرة وكنس «applying»
+
+def test_start_run_marks_the_new_row_finished_when_another_run_is_queued(env, monkeypatch):
+    monkeypatch.setattr(engine, 'submit', lambda ns, key, fn: {'queued': True, 'duplicate': True})
+    status, payload = engine.start_run(NS, 'admin', ACTOR, None)
+    assert status == 409 and payload == {'error': 'العقل يكتب الآن. جرّب بعد قليل'}
+    Run = engine._models(db)[2]
+    db.session.expire_all()
+    (r,) = Run.query.all()
+    assert r.finished_at is not None and json.loads(r.skipped_json) == {'busy': 1}
+    assert engine.active_run(db) is None, 'الصف الميت لا يقفل الجولات ١٥ دقيقة'
+
+
+def test_sweep_turns_stale_applying_into_unknown_with_a_clear_reason(env, monkeypatch):
+    Item = engine._models(db)[0]
+    now = engine.utcnow()
+    mk = lambda i, status, decided, created=None: Item(id='%032x' % i, producer='x', section='content', kind='draft', target_ref='r%d' % i,
+                                                         input_hash='h%d' % i, status=status, source='ai', decided_at=decided,
+                                                         created_at=created or now)
+    db.session.add_all([mk(1, 'applying', now - datetime.timedelta(minutes=11)),        # عالق
+                        mk(2, 'applying', now - datetime.timedelta(minutes=3)),         # يعمل الآن
+                        mk(3, 'applying', None, now - datetime.timedelta(hours=2)),     # قديم بلا ختم
+                        mk(4, 'proposed', None, now - datetime.timedelta(hours=2))])
+    db.session.commit()
+    assert engine.sweep_applying(db) == 2
+    db.session.expire_all()
+    st = {r.id: (r.status, r.last_error) for r in Item.query.all()}
+    msg = 'لم نتأكد من نتيجة التنفيذ؛ راجع ما حدث قبل إعادة المحاولة'
+    assert st['%032x' % 1] == ('unknown', msg) and st['%032x' % 3] == ('unknown', msg)
+    assert st['%032x' % 2][0] == 'applying' and st['%032x' % 4][0] == 'proposed'
+
+
+def test_apply_item_stamps_the_start_time_and_clears_it_when_sent_back_to_proposed(env, monkeypatch):
+    use(monkeypatch, fp(pid='d', kind='draft', alone=False, targets=[('d:1', F1)],
+                        apply=lambda c, b, t: ApplyResult(ok=False, error='رفض')))
+    run()
+    (item,) = rows()
+    status, payload = engine.apply_item(NS, item.id, ACTOR)
+    assert status == 422
+    row = rows()[0]
+    assert row.status == 'proposed' and row.decided_at is None

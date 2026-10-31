@@ -809,3 +809,38 @@ def test_new_js_never_touches_the_network_directly_or_the_other_packages_files()
 def test_no_new_role_and_no_other_package_files_are_referenced():
     for src in (BRAIN_JS, BRAIN_CSS):
         assert 'v2s/brain' not in src and 'V2SEC.brain' not in src
+
+
+# ================================================================ جولة الإصلاح: «عدّل» ومراجعة الموقع
+_SITE_EDITS = [{'path': 'b1', 'old': ('عنوان قديم طويل جدًا ' * 6).strip(), 'new': 'عنوان جديد أوضح', 'why': 'يخالف قرارًا معتمدًا'},
+               {'path': 'b2', 'old': 'فقرة قديمة', 'new': 'فقرة جديدة', 'why': ''},
+               {'path': 'b3', 'old': 'ثالث قديم', 'new': 'ثالث جديد', 'why': 'سبب'},
+               {'path': 'b4', 'old': 'رابع قديم', 'new': 'رابع جديد', 'why': 'سبب آخر'}]
+
+
+@needs_node
+@pytest.mark.parametrize('producer', ['site_review', 'site_edit_manual'])
+def test_site_items_hide_edit_and_carry_every_edit_in_full(producer):
+    c = v2_node.logic('v2bItemCard', _item(producer=producer, section='content', approve_label='انشر التعديل على الموقع',
+                                           body={'text': 'ملخص مقتطع…', 'edits': _SITE_EDITS, 'page': 'pricing.html'}), NOW)
+    assert c['edit'] is None, 'لا «عدّل» لاقتراح تعديلات الموقع'
+    assert c['primary']['label'] == 'انشر التعديل على الموقع'
+    assert [e['new'] for e in c['edits']] == [e['new'] for e in _SITE_EDITS], 'كل التعديلات، بلا قصّ'
+    assert c['edits'][0]['old'] == _SITE_EDITS[0]['old'] and c['edits'][0]['why'] == 'يخالف قرارًا معتمدًا'
+
+
+@needs_node
+def test_items_without_edits_keep_the_edit_button_and_an_empty_list():
+    c = v2_node.logic('v2bItemCard', _item(), NOW)
+    assert c['edit'] == {'label': 'عدّل', 'act': {'do': 'brain_edit', 'id': 'it1'}} and c['edits'] == []
+    c2 = v2_node.logic('v2bItemCard', _item(body={'text': 'ن', 'edits': []}), NOW)
+    assert c2['edit'] is not None and c2['edits'] == []
+
+
+def test_approve_sheet_renders_the_full_edits_list_instead_of_the_truncated_summary():
+    blob = BRAIN_JS
+    assert 'function editsList(' in blob and 'v2b-e-old' in blob and 'v2b-e-new' in blob and 'v2b-e-why' in blob
+    # صفحة التأكيد تستعمل القائمة الكاملة حين توجد تعديلات، والمقتطف المقتصّ حين لا توجد
+    assert re.search(r"edits\.length \? editsList\(edits\) : quote\(item\.body && item\.body\.text\)", blob)
+    css = _read('dashboard-cloud', 'v2-brain2.css')
+    assert '.v2b-edits' in css

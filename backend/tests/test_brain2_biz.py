@@ -320,13 +320,49 @@ def test_course_review_templates(ctx):
 
 
 def test_course_review_apply_publish_exact_call(ctx, plat):
-    [t, _] = gather('course_review', ctx)
+    [_, t] = gather('course_review', ctx)         # c-pend-2: كل بنود فحصها مكتملة
     plat.calls.clear()
-    res = prod('course_review').apply(ctx, {'text': 'x', 'recommend': 'publish', 'course_id': 'c-pend-1'}, t)
+    res = prod('course_review').apply(ctx, {'text': 'x', 'recommend': 'publish', 'course_id': 'c-pend-2'}, t)
     assert res.ok is True and res.no_reply is False
-    assert plat.calls == [('POST', '/api/bridge/courses/c-pend-1/approve',
-                           {'confirmed': True, 'by': 'founder@elprofessor.net'}, 'course.approve', 'c-pend-1',
-                           {'payout_model': None, 'via': 'brain'})]
+    # الحالة وقائمة الفحص تُقرآن من جديد قبل أي كتابة، والكتابة بعدهما وحدها
+    assert [c[1] for c in plat.calls] == ['/api/bridge/courses', '/api/bridge/courses/c-pend-2/checklist',
+                                          '/api/bridge/courses/c-pend-2/approve']
+    assert plat.calls[-1] == ('POST', '/api/bridge/courses/c-pend-2/approve',
+                              {'confirmed': True, 'by': 'founder@elprofessor.net'}, 'course.approve', 'c-pend-2',
+                              {'payout_model': None, 'via': 'brain'})
+
+
+def test_course_review_apply_refuses_when_the_course_is_no_longer_pending(ctx, plat, monkeypatch):
+    [_, t] = gather('course_review', ctx)
+    changed = [dict(c, approval_status='approved') if c['id'] == 'c-pend-2' else c for c in COURSES]
+    monkeypatch.setattr(sys.modules[__name__], 'COURSES', changed)
+    plat.calls.clear()
+    r = prod('course_review').apply(ctx, {'text': 'x', 'recommend': 'publish'}, t)
+    assert (r.ok, r.no_reply, r.error) == (False, False, 'حالة الدورة تغيّرت منذ المراجعة')
+    assert all(c[0] != 'POST' for c in plat.calls), 'لا كتابة'
+    # الدورة اختفت من القائمة كلها
+    monkeypatch.setattr(sys.modules[__name__], 'COURSES', [c for c in COURSES if c['id'] != 'c-pend-2'])
+    assert prod('course_review').apply(ctx, {'text': 'x', 'recommend': 'publish'}, t).error == 'حالة الدورة تغيّرت منذ المراجعة'
+
+
+def test_course_review_apply_refuses_when_a_checklist_item_now_fails(ctx, plat, monkeypatch):
+    [_, t] = gather('course_review', ctx)
+    worse = dict(CHECKLISTS, **{'c-pend-2': [{'key': 'content', 'item': 'فيها محتوى', 'ok': True},
+                                              {'key': 'level', 'item': 'مستوى الدورة محدّد', 'ok': False}]})
+    monkeypatch.setattr(sys.modules[__name__], 'CHECKLISTS', worse)
+    plat.calls.clear()
+    r = prod('course_review').apply(ctx, {'text': 'x', 'recommend': 'publish'}, t)
+    assert (r.ok, r.no_reply, r.error) == (False, False, 'بنود الفحص لم تعد مكتملة')
+    assert all(c[0] != 'POST' for c in plat.calls), 'لا كتابة'
+
+
+def test_course_review_apply_unreadable_state_publishes_nothing(ctx, plat):
+    [_, t] = gather('course_review', ctx)
+    plat.down.add('/api/bridge/courses/c-pend-2/checklist')
+    plat.calls.clear()
+    r = prod('course_review').apply(ctx, {'text': 'x', 'recommend': 'publish'}, t)
+    assert r.ok is False and r.no_reply is False and r.error
+    assert all(c[0] != 'POST' for c in plat.calls)
 
 
 def test_course_review_apply_fix_first_writes_nothing(ctx, plat):
@@ -338,7 +374,7 @@ def test_course_review_apply_fix_first_writes_nothing(ctx, plat):
 
 
 def test_course_review_apply_failure_modes(ctx, plat):
-    [t, _] = gather('course_review', ctx)
+    [_, t] = gather('course_review', ctx)
     pub = {'text': 'x', 'recommend': 'publish'}
     plat.write_resp = Resp(422, {'error': 'المدرّب لم يوقّع الاتفاقية'})
     r = prod('course_review').apply(ctx, pub, t)

@@ -11,9 +11,8 @@
 import datetime
 import json
 import logging
-import socket
-import ipaddress
 import re
+import time
 from urllib.parse import urlparse
 
 from brain2 import keys as K
@@ -21,7 +20,9 @@ from brain2 import keys as K
 logger = logging.getLogger(__name__)
 
 PROTOCOL = '2025-06-18'
-TIMEOUT = 15
+TIMEOUT = (5, 10)                 # (اتصال، قراءة) بالثواني — مهلة كل طلب
+READ_DEADLINE = 20               # سقف زمن قراءة الرد كله (يمنع التنقيط البطيء من تجميد الخادم)
+TEST_BUDGET = 30                 # سقف «جرّب الاتصال» كله
 READ_MAX = 1024 * 1024            # أكبر رد نقرؤه (١ ميغابايت)
 NAME_MAX = 60
 BRAND_MAX = 64
@@ -107,19 +108,8 @@ def set_transport(fn):
 
 
 def _host_is_public(host):
-    """لا نتصل بمضيف يشير إلى عنوان خاص أو محلي (حماية من توجيه الاسم إلى الشبكة الداخلية)."""
-    try:
-        infos = socket.getaddrinfo(host, None)
-    except OSError:
-        return False
-    for info in infos:
-        try:
-            ip = ipaddress.ip_address(info[4][0].split('%')[0])
-        except ValueError:
-            return False
-        if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved or ip.is_multicast or ip.is_unspecified:
-            return False
-    return bool(infos)
+    """لا نتصل بمضيف يشير إلى عنوان خاص أو محلي (حماية من توجيه الاسم إلى الشبكة الداخلية). المنطق المشترك في `keys.host_is_public`."""
+    return K.host_is_public(host)
 
 
 def _real_transport(url, headers, body, timeout):
@@ -127,6 +117,9 @@ def _real_transport(url, headers, body, timeout):
     host = (urlparse(url).hostname or '').lower()
     if not _host_is_public(host):
         raise LinkError(ERR_PRIVATE)
+    total = READ_DEADLINE
+    if isinstance(timeout, tuple) and len(timeout) == 3:
+        timeout, total = timeout[:2], timeout[2]
     try:
         resp = requests.post(url, data=body, headers=headers, timeout=timeout, allow_redirects=False, stream=True)
     except requests.exceptions.Timeout:
@@ -136,8 +129,11 @@ def _real_transport(url, headers, body, timeout):
     try:
         ctype = (resp.headers.get('Content-Type') or '').lower()
         buf = b''
+        deadline = time.monotonic() + total
         for chunk in resp.iter_content(chunk_size=4096):
             buf += chunk
+            if time.monotonic() > deadline:
+                raise LinkError(ERR_TIMEOUT)
             if len(buf) > READ_MAX:
                 break
             if 'text/event-stream' in ctype and _sse_has_reply(buf):
@@ -215,8 +211,9 @@ def parse_reply(text, content_type='', req_id=None):
 class McpClient(object):
     """عميل JSON-RPC صغير. كل طلب نداء HTTP واحد بمهلة ثابتة ولا إعادة محاولة."""
 
-    def __init__(self, url, token, transport=None, timeout=TIMEOUT):
+    def __init__(self, url, token, transport=None, timeout=TIMEOUT, budget=None):
         self.url, self._token, self.timeout = url, token, timeout
+        self._deadline = (time.monotonic() + budget) if budget else None
         self._transport = transport
         self._id = 0
         self._session = ''
@@ -228,9 +225,15 @@ class McpClient(object):
         if self._session:
             headers['Mcp-Session-Id'] = self._session
         fn = self._transport or _TRANSPORT['fn'] or _real_transport
+        tmo = self.timeout
+        if self._deadline is not None:
+            left = self._deadline - time.monotonic()
+            if left <= 0:
+                raise LinkError(ERR_TIMEOUT)
+            tmo = (tmo[0], min(tmo[1], left), min(READ_DEADLINE, left))     # الثالث: سقف قراءة الرد كله ضمن ميزانية الاختبار
         body = json.dumps(payload, ensure_ascii=False).encode('utf-8')
         try:
-            status, rh, text = fn(self.url, headers, body, self.timeout)
+            status, rh, text = fn(self.url, headers, body, tmo)
         except LinkError:
             raise
         except TimeoutError:
@@ -315,6 +318,7 @@ def client_for(row, transport=None):
 def probe(row, transport=None):
     """`initialize` + `tools/list` ⇒ {'tools': [names], 'count': n, 'server': name}. يرفع LinkError عند الفشل."""
     c = client_for(row, transport)
+    c._deadline = time.monotonic() + TEST_BUDGET
     info = c.initialize()
     tools = c.list_tools()
     names = [t['name'][:80] for t in tools]

@@ -397,3 +397,41 @@ def test_apply_through_the_real_v2_write(monkeypatch):
 def test_no_banned_words_in_visible_copy():
     p = pf.PRODUCERS[0]
     assert not engine.has_banned(' '.join((pf.LABEL_APPROVE, pf.LABEL_RETURN, pf.LOCK_REASON, p.label, p.sentence, p.tag)))
+
+
+# ───────────────────────────────────────────────────────────── الموقف بالعربية (لا حرف لاتيني على بطاقة المؤسس)
+
+_LATIN = re.compile(r'[A-Za-z]')
+
+
+def _stance_facts(**po_kw):
+    d = _detail('ef-1')
+    d['pending_opinion'] = dict(d['pending_opinion'], **po_kw)
+    (t,) = pf.gather(_ctx(_plat(details={'ef-1': d})))
+    return t.facts['pending_opinion']
+
+
+@pytest.mark.parametrize('raw,ar', [
+    ('favorable', 'في صالح العميل'), ('unfavorable', 'ليس في صالح العميل'), ('mixed', 'مختلط'),
+    ('cautious', 'مشروط'), ('conditional', 'مشروط'), ('Favorable', 'في صالح العميل'),
+])
+def test_english_stance_values_become_arabic(raw, ar):
+    po = _stance_facts(stance=raw)
+    assert po['stance'] == ar and not _LATIN.search(po['stance'])
+
+
+def test_stance_label_from_the_platform_wins_and_is_not_duplicated():
+    po = _stance_facts(stance='favorable', stance_label='موقف جيد للعميل')
+    assert po['stance'] == 'موقف جيد للعميل' and 'stance_label' not in po
+    # تسمية لاتينية لا تُقبل، ونرجع لخريطتنا
+    po = _stance_facts(stance='mixed', stance_label='Mixed')
+    assert po['stance'] == 'مختلط'
+
+
+def test_unknown_latin_stance_is_dropped_and_arabic_kept():
+    assert _stance_facts(stance='weird_value')['stance'] == ''
+    assert _stance_facts(stance='الموقف قوي')['stance'] == 'الموقف قوي'
+    d = _detail('ef-1')
+    d['pending_opinion'] = {k: v for k, v in d['pending_opinion'].items() if k != 'stance'}
+    (t,) = pf.gather(_ctx(_plat(details={'ef-1': d})))
+    assert t.facts['pending_opinion']['stance'] == ''

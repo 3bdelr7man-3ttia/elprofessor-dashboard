@@ -37,6 +37,7 @@ ERR_UNKNOWN_PRODUCER = 'قاعدة غير معروفة'
 ERR_DISCARD = 'لا تُحذف هذه الكتابة من هنا'
 ERR_BAD_TELEGRAM = 'اختيار تليجرام غير صالح'
 ERR_TG_NOT_FOR_OPINION = 'الآراء لا تُرسل إلى تليجرام'
+ERR_NO_TEXT_EDIT = 'لا يُعدّل نص هذا الاقتراح هنا؛ افتح الموقع وعدّل الكتلة نفسها'
 TG_ID_RE = re.compile(r'^\d{1,20}$')
 
 
@@ -210,6 +211,7 @@ def register(app, ns):
             if since is None:
                 return out({'error': ERR_BAD_SINCE}, 400)
             q = q.filter(Item.created_at >= since.replace(tzinfo=None))
+        engine.sweep_applying(db)
         rows = q.order_by(Item.created_at.desc(), Item.id.desc()).limit(ITEMS_LIMIT).all()
         return out({'items': [item_out(r) for r in rows]})
 
@@ -226,8 +228,13 @@ def register(app, ns):
         bad = bad_id(item_id)
         if bad:
             return bad
+        engine.sweep_applying(db)
         text = None
         if body.get('text') is not None:
+            cur = Item.query.get(item_id)
+            cur_body = engine._loads(cur.body_json, {}) if cur is not None else {}
+            if isinstance(cur_body.get('edits'), list) and cur_body.get('edits'):
+                return out({'error': ERR_NO_TEXT_EDIT}, 400)       # مراجعة/تعديل الموقع: التعديلات هي الاقتراح، لا نصّه
             text = engine.clean_text(body.get('text')) if isinstance(body.get('text'), str) else ''
             if not (engine.EDIT_MIN <= len(text) <= engine.EDIT_MAX):
                 return out({'error': ERR_BAD_TEXT}, 400)
@@ -240,6 +247,7 @@ def register(app, ns):
         bad = bad_id(item_id)
         if bad:
             return bad
+        engine.sweep_applying(db)
         r = Item.query.get(item_id)
         if r is None:
             return out({'error': ERR_NOT_FOUND}, 404)
@@ -411,12 +419,18 @@ def register(app, ns):
             return tg_reply({'ok': False, 'reason': 'bad_request'}, 400)
         if action == 'open':
             return tg_reply({'ok': True, 'line': ''})
+        admins = telegram.admin_ids()
+        if admins is not None and tg_id not in admins:
+            return tg_reply({'ok': False, 'reason': 'not_allowed'})
         r = Item.query.get(item_id)
         if r is None:
             return tg_reply({'ok': False, 'reason': 'not_found'})
         if r.status != 'proposed':
             return tg_reply({'ok': False, 'reason': 'decided'})
         p = registry.by_id(r.producer)
+        # لا قرار من تليجرام إلا لاقتراح أُرسل إليه فعلًا، ومنتجه مسموح، والمفتاح لم يُطفأ بعد الإرسال.
+        if not (telegram.decide_allowed_producer(p) and telegram.enabled(ns, p) and telegram.was_sent(ns, item_id)):
+            return tg_reply({'ok': False, 'reason': 'not_allowed'})
         body_d = engine._loads(r.body_json, {})
         if not telegram.can_decide(p, body_d, engine._loads(r.meta_json, {}), engine._loads(r.facts_json, {}), r.target_ref):
             return tg_reply({'ok': False, 'reason': 'not_allowed'})
@@ -442,3 +456,22 @@ def register(app, ns):
             return tg_reply({'ok': False, 'reason': 'not_found'})
         reason = 'unknown' if payload.get('no_reply') else 'failed'
         return tg_reply({'ok': False, 'reason': reason, 'line': str(payload.get('error') or '')[:200]})
+
+    # ------------------------------------------------------------------ مرسل رسالة الموقع (للمنصة فقط)
+    @app.route('/api/v2/brain/site-message/<msg_id>/sender', methods=['GET'], endpoint='v2_brain2_site_message_sender')
+    def v2_brain2_site_message_sender(msg_id):
+        """تتحقق منه المنصة من مستلم بريد العقل لسياق `site_message`. ⛔ بالسرّ المشترك فقط (لا JWT)،
+        والمفتاح مقفول ⇒ ٤٠٤ قبل أي فحص سرّ. لا يرجّع غير البريد (بلا اسم ولا نص)."""
+        closed = gate()
+        if closed:
+            return closed
+        if not L('_metrics_secret_ok')():
+            return out({'error': 'unauthorized'}, 401)
+        if not (isinstance(msg_id, str) and re.fullmatch(r'[0-9]{1,12}', msg_id)):
+            return out({'error': 'not_found'}, 404)
+        M = ns.get('Message')
+        row = M.query.get(int(msg_id)) if M is not None else None
+        email = (getattr(row, 'email', '') or '').strip().lower() if row is not None else ''
+        if not email:
+            return out({'error': 'not_found'}, 404)
+        return out({'email': email})

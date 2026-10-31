@@ -254,9 +254,19 @@
   }
 
   function quote(text) { return text ? '<blockquote class="v2b-quote">' + esc(text) + '</blockquote>' : ''; }
+  // قائمة تعديلات الموقع كاملة (كل تعديل: القديم ⇒ الجديد + السبب)؛ لا اختصار ولا قصّ، فالمؤسس يعتمد ما يراه كله.
+  function editsList(edits) {
+    if (!edits || !edits.length) return '';
+    return '<ol class="v2b-edits">' + edits.map(function (e) {
+      return '<li><div class="v2b-e-old"><small>القديم</small><span>' + esc(e.old) + '</span></div>'
+        + '<div class="v2b-e-new"><small>الجديد</small><span>' + esc(e.new) + '</span></div>'
+        + (e.why ? '<div class="v2b-e-why"><small>السبب</small><span>' + esc(e.why) + '</span></div>' : '') + '</li>';
+    }).join('') + '</ol>';
+  }
   function confirmSheet(card, item, which, cb) {
     var info = which === 'reject' ? rejectInfo(item) : approveInfo(item);
-    var s = sheet(info.title, '<p class="v2b-p">' + esc(info.body) + '</p>' + quote(item.body && item.body.text)
+    var edits = which === 'approve' ? ((card && card.edits) || (L.v2bItemCard(item, Date.now()) || {}).edits || []) : [];
+    var s = sheet(info.title, '<p class="v2b-p">' + esc(info.body) + '</p>' + (edits.length ? editsList(edits) : quote(item.body && item.body.text))
       + '<div id="v2b_err"></div><div class="acts"><button type="button" class="btn ' + (which === 'reject' ? 'btn-human' : 'btn-primary') + '" id="v2b_go">' + esc(info.go) + '</button>'
       + '<button type="button" class="btn btn-ghost" id="v2b_x">رجوع</button></div>');
     if (!s) return;

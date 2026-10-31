@@ -7495,11 +7495,13 @@ def ai_writer_state():
     return {'writer': 'main' if prov == 'anthropic' else 'backup', 'label': None, 'source': 'env'}
 
 
-def _ai_send_spec(spec, system_prompt, user_content):
-    """الناقلان المعروفان فقط (يُقرآن وقت النداء ليُستبدلا في الاختبارات). `spec` من `brain2.keys.row_spec`."""
+def _ai_send_spec(spec, system_prompt, user_content, timeout=None):
+    """الناقلان المعروفان فقط (يُقرآن وقت النداء ليُستبدلا في الاختبارات). `spec` من `brain2.keys.row_spec`.
+    `timeout` اختياري ولا يُمرَّر إلا إن حُدِّد (مسار «جرّب المفتاح» وحده: خيط الطلب لا يجوز أن يبقى ٦٠ ثانية)."""
+    kw = {} if timeout is None else {'timeout': timeout}
     if spec['kind'] == 'anthropic':
-        return call_anthropic(spec['api_key'], spec['model'], system_prompt, user_content)
-    return call_openai_compatible(spec['base_url'], spec['api_key'], spec['model'], system_prompt, user_content)
+        return call_anthropic(spec['api_key'], spec['model'], system_prompt, user_content, **kw)
+    return call_openai_compatible(spec['base_url'], spec['api_key'], spec['model'], system_prompt, user_content, **kw)
 
 
 def _ai_call_db_key(spec, system_prompt, user_content, purpose):
@@ -7645,7 +7647,7 @@ def build_ai_messages(question, snapshot):
     user_content = f"{question}\n\nبيانات الشركة الحالية:\n{json.dumps(snapshot, ensure_ascii=False, indent=2)}"
     return system_prompt, user_content
 
-def call_anthropic(api_key, model, system_prompt, user_content):
+def call_anthropic(api_key, model, system_prompt, user_content, timeout=60):
     r = requests.post(
         'https://api.anthropic.com/v1/messages',
         headers={
@@ -7659,13 +7661,14 @@ def call_anthropic(api_key, model, system_prompt, user_content):
             'system': system_prompt,
             'messages': [{'role': 'user', 'content': user_content}],
         },
-        timeout=60,
+        timeout=timeout,
+        allow_redirects=False,
     )
     r.raise_for_status()
     data = r.json()
     return '\n'.join(part.get('text', '') for part in data.get('content', []) if part.get('type') == 'text')
 
-def call_openai_compatible(base_url, api_key, model, system_prompt, user_content):
+def call_openai_compatible(base_url, api_key, model, system_prompt, user_content, timeout=60):
     r = requests.post(
         f'{base_url}/chat/completions',
         headers={'authorization': f'Bearer {api_key}', 'content-type': 'application/json'},
@@ -7678,7 +7681,8 @@ def call_openai_compatible(base_url, api_key, model, system_prompt, user_content
             'temperature': 0.2,
             'max_tokens': AI_MAX_TOKENS,
         },
-        timeout=60,
+        timeout=timeout,
+        allow_redirects=False,
     )
     r.raise_for_status()
     data = r.json()
