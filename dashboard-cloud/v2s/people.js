@@ -166,8 +166,20 @@
     var busy = !!S.busy[id];
     return '<button type="button" class="' + cls + '" data-a="act" data-id="' + esc(id) + '" data-w="' + w + '"' + (busy ? ' disabled' : '') + '>' + (busy && w === 'p' ? 'جارٍ التنفيذ…' : label) + '</button>';
   }
+  // brain2: رأي العقل على تذاكر المدرّبين والانضمام والزوّار والخبراء المؤسسين (من الذاكرة فقط، بلا تبديل لأزرارها). أي عطل ⇒ السطر القديم.
+  var BR_KINDS = ['trainer', 'join', 'pending_user', 'founding'];
+  function brainCardOf(t) {
+    if (!window.V2BRAIN || !t || !t.ref || BR_KINDS.indexOf(t.ref.apiKind) < 0) return null;
+    try { return L.v2Card(t.ref, { now: now() }); } catch (e) { return null; }
+  }
+  function brainDecor(t) {
+    var c = brainCardOf(t);
+    try { return c ? window.V2BRAIN.decorate(c, { remap: false }) : null; } catch (e) { return null; }
+  }
   function ticketHtml(t, tone) {
     var id = t.id; S.items[id] = t;
+    var dc = brainDecor(t), bt = t.brain, rs = t.reason, bsrc = '';
+    if (dc && dc.src && dc.src.text) { bsrc = '<span class="v2b-src ' + esc(dc.src.tone || '') + '">' + esc(dc.src.text) + '</span>'; if (dc.src.tone === 'ai') { bt = dc.brain; rs = dc.reason || rs; } }
     var err = S.err[id] || '', done = S.done[id] || '';
     var who = t.kind ? t.link : t.person;
     var title = who ? personLink(t.title, who) : esc(t.title);
@@ -177,8 +189,8 @@
     if (t.sub) h += '<p class="v2p-subl">' + esc(t.sub) + '</p>';
     if (t.expiry) h += '<p class="v2p-subl' + (t.expiry === 'انتهت مهلتها' ? ' late' : '') + '">' + esc(t.expiry) + '</p>';
     if (t.docRequested) h += '<span class="v2p-chip2">طلب توثيق من خبير</span>';
-    if (t.brain) h += '<div class="v2p-bline">' + BRAIN + '<p>' + esc(t.brain) + '</p></div>';
-    if (t.reason) h += '<p class="v2p-reason">' + esc(t.reason) + '</p>';
+    if (bt) h += '<div class="v2p-bline">' + BRAIN + '<p>' + esc(bt) + '</p></div>' + bsrc;
+    if (rs) h += '<p class="v2p-reason">' + esc(rs) + '</p>';
     if (t.warn) h += '<p class="v2p-tw">' + esc(t.warn) + '</p>';
     (t.extra || []).forEach(function (x) { h += '<p class="v2p-reason">' + esc(x) + '</p>'; });
     if (t.teamNote) h += '<p class="v2p-reason">' + esc(t.teamNote) + '</p>';
@@ -230,6 +242,13 @@
   }
   function drawRequests(v) {
     var R = S.req = P.requests(reqInputs(), now());
+    if (window.V2BRAIN) {       // brain2: نداء lookup واحد لتذاكر هذه الشاشة (لا يكتب ولا يستدعي الذكاء)
+      try {
+        var bcards = [];
+        REQ_ORDER.forEach(function (k) { (R.cols[k].items || []).forEach(function (t) { var bc = brainCardOf(t); if (bc) bcards.push(bc); }); });
+        window.V2BRAIN['prefetch'](bcards.slice(0, 40));
+      } catch (e) {}
+    }
     var active = pickActive('requests', R.cols, REQ_ORDER);
     var all = REQ_ORDER.every(function (k) { return R.cols[k].state === 'ready'; });
     var total = REQ_ORDER.reduce(function (n, k) { return n + R.cols[k].items.length; }, 0);
@@ -449,6 +468,7 @@
     var out = keys.map(function (k) { return k + ':' + stateOf(k) + ':' + ser(E && E.data ? E.data[k] : null); }).join(',');
     out += '|' + ser(window.INBOX) + '|' + (window.INBOX_FAILED || []).length + '|' + (window.INBOX_TRUNCATED || []).length;
     out += '|' + S.own.chat.state + ser(S.own.chat.rows) + S.own.follow.state + ser(S.own.follow.rows);
+    if (S.tab === 'requests' && window.V2BRAIN && window.V2BRAIN.sig) out += '|b' + window.V2BRAIN.sig();
     return out;
   }
   var redrawT = null;

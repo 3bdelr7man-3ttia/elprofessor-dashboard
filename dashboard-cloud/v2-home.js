@@ -67,13 +67,16 @@
     if (d3 && d3.offersCount !== undefined) extras.bookOffers = d3.offersCount;
     // العقل: رقم واحد للمربّع والقائمة والشاشة من سجل اليوم الكامل (عدد · null عند الفشل · undefined قبل الوصول ⇒ العدّ القديم).
     if (window.V2SEC && V2SEC.brain && V2SEC.brain.tileCount) { extras.brainToday = V2SEC.brain.tileCount(); extras.brainTodayPartial = !!(V2SEC.brain.tilePartial && V2SEC.brain.tilePartial()); }
-    return { E: E, D: D, now: now, Q: Q, rows: rows, inboxFailed: inboxFailed, payouts: payouts, inboxTrunc: inboxTrunc, extras: extras, d3: d3 };
+    // brain2: اقتراحات العقل المنتظرة (مصفوفة · null إن تعذّر · undefined قبل الوصول). غيابها لا يغيّر شيئًا.
+    var brainItems = null;
+    try { var bp = window.V2BRAIN && V2BRAIN.pending ? V2BRAIN.pending() : null; if (Array.isArray(bp)) brainItems = bp; } catch (e) {}
+    return { E: E, D: D, now: now, Q: Q, rows: rows, inboxFailed: inboxFailed, payouts: payouts, inboxTrunc: inboxTrunc, extras: extras, d3: d3, brainItems: brainItems };
   }
   function compute() {
     var g = gather(), Q = g.Q, rows = g.rows, now = g.now, inboxFailed = g.inboxFailed, inboxTrunc = g.inboxTrunc;
     var tiles = L.v2Tiles(Q, g.extras);
     var decisions = L.v2Decisions(rows, g.payouts, Q, { now: now, inboxFailed: inboxFailed, inboxTruncated: inboxTrunc,
-                                                          stuck: g.d3 ? g.d3.stuck : null, offers: g.d3 ? g.d3.offers : null });
+                                                          stuck: g.d3 ? g.d3.stuck : null, offers: g.d3 ? g.d3.offers : null, brainItems: g.brainItems });
     var truncated = (inboxTrunc || []).map(function (t) { return String(t).split(':')[0].trim(); });
     var failed = [];
     if (stateOf('opsQueue') === 'error') failed.push('بيانات المنصة');
@@ -91,7 +94,8 @@
   function signature() {
     var E = ep();
     return SOURCES.map(stateOf).join(',') + '|' + ((window.INBOX || []).length) + '|' + (E && E.data.walletPayouts ? E.data.walletPayouts.count : '')
-      + (window.V2D3 ? '|' + V2D3.sig() : '') + (window.V2SEC && V2SEC.brain && V2SEC.brain.sig ? '|' + V2SEC.brain.sig() : '');
+      + (window.V2D3 ? '|' + V2D3.sig() : '') + (window.V2SEC && V2SEC.brain && V2SEC.brain.sig ? '|' + V2SEC.brain.sig() : '')
+      + (window.V2BRAIN && V2BRAIN.sig ? '|' + V2BRAIN.sig() : '');
   }
 
   // ------------------------------------------------------------------ الرسم
@@ -221,8 +225,17 @@
     return p.join(' — ');
   }
   function counter() { return U.ar(S.total - S.deck.length + 1) + ' من ' + U.ar(S.total); }
+  // brain2: رأي العقل على بطاقة التركيز (من الذاكرة، ويطلب الجديد من الخادم مرة واحدة) + جلب آراء البطاقات التالية بنداء واحد. أي عطل ⇒ البطاقة كما هي.
+  function brainCard(c) {
+    if (!c || !window.V2BRAIN) return c;
+    try { var out = V2BRAIN.decorate(c, { fetch: true }) || c; V2BRAIN.prefetch(S.deck.slice(1, 9)); return out; } catch (e) { return c; }
+  }
+  function brainSrc(c) { return c.src && c.src.text ? '<span class="v2b-src ' + esc(c.src.tone || '') + '">' + esc(c.src.text) + '</span>' : ''; }
+  function brainFields(c) {
+    return (c.fields && c.fields.length) ? '<div class="v2b-fields">' + c.fields.map(function (x) { return '<div><small>' + esc(x.k) + '</small><b>' + esc(x.v) + '</b></div>'; }).join('') + '</div>' : '';
+  }
   function drawFocus(v, d) {
-    var c = S.deck[0];
+    var c = brainCard(S.deck[0]);
     var done = S.done.length
       ? '<aside class="v2-done"><h3>أنجزت الآن</h3><ul>' + S.done.slice(0, 12).map(function (x) { return '<li>' + esc(x.text) + '</li>'; }).join('') + '</ul></aside>' : '';
     if (!c) {
@@ -242,16 +255,19 @@
     if (locked) acts += '<button class="v2-btn1" data-a="refresh"' + (S.busy ? ' disabled' : '') + '>' + esc(S.busy ? (S.busyText || 'جارٍ التحديث…') : 'حدّث الآن') + '</button>';
     else acts += '<button class="v2-btn1" data-a="primary"' + (S.busy ? ' disabled' : '') + '>' + esc(S.busy ? (S.busyText || 'جارٍ التنفيذ…') : c.primary.label) + '</button>';
     if (c.secondary) acts += '<button class="v2-btn2" data-a="secondary"' + ((S.busy || (locked && !isOpenAct(c.secondary.act))) ? ' disabled' : '') + '>' + esc(c.secondary.label) + '</button>';
-    var showOpen = !(c.primary && c.primary.act.do === 'open') && !(c.secondary && c.secondary.act.do === 'open');
+    var isBrain = c.kind === 'brain_item';
+    if (isBrain && c.edit) acts += '<button class="v2-btn2" data-a="edit"' + ((S.busy || locked) ? ' disabled' : '') + '>' + esc(c.edit.label) + '</button>';
+    var showOpen = !isBrain && !(c.primary && c.primary.act.do === 'open') && !(c.secondary && c.secondary.act.do === 'open');
     if (showOpen) acts += '<button class="v2-btn3" data-a="open"' + (S.busy ? ' disabled' : '') + '>غيّر / افتح</button>';
     acts += '<button class="v2-btn3" data-a="later"' + (S.busy ? ' disabled' : '') + '>لاحقًا</button>';
     var facts = (c.facts || []).filter(function (f) { return f.v; }).map(function (f) { return '<div><small>' + esc(f.k) + '</small><b>' + esc(f.v) + '</b></div>'; }).join('');
     v.innerHTML = '<div class="v2 v2-focus">'
       + '<div class="v2-ftop"><button class="v2-link" data-a="back">' + BACK + 'اللوحة</button><span class="v2-count">' + esc(counter()) + '</span><span class="v2-prog"><i style="width:' + pct + '%"></i></span></div>'
-      + '<div class="v2-fgrid' + (done ? '' : ' solo') + '"><article class="v2-card' + (S.leaving === c.id ? ' v2-out' : '') + '" data-id="' + esc(c.id) + '" data-kind="' + esc(c.kind) + '">'
+      + '<div class="v2-fgrid' + (done ? '' : ' solo') + '"><article class="v2-card' + (S.leaving === c.id ? ' v2-out' : '') + '" data-id="' + esc(c.id) + '" data-bid="' + esc(c.id) + '" data-kind="' + esc(c.kind) + '">'
       + '<div class="v2-cimg" style="background-image:url(' + img(c.img) + ')"><span class="v2-tag">' + esc(c.tag) + '</span>' + (c.ageText ? '<span class="v2-age">' + esc(c.ageText) + '</span>' : '') + '</div>'
       + '<div class="v2-cbody"><h2>' + (c.person && window.V2D2 ? V2D2.link(c.title, c.person.email) : esc(c.title)) + '</h2>' + (c.sub ? '<p class="v2-csub">' + esc(c.sub) + '</p>' : '')
-      + '<div class="v2-brain"><img src="' + img('brain-avatar') + '" alt=""><div><b>' + esc(c.brainHead) + '</b><p>' + esc(c.brain) + '</p>' + (c.reason ? '<p class="v2-reason">' + esc(c.reason) + '</p>' : '') + '</div></div>'
+      + '<div class="v2-brain"><img src="' + img('brain-avatar') + '" alt=""><div><b>' + esc(c.brainHead) + '</b><p' + (isBrain ? ' class="v2b-draft"' : '') + '>' + esc(c.brain) + '</p>' + (c.reason ? '<p class="v2-reason">' + esc(c.reason) + '</p>' : '') + brainSrc(c) + '</div></div>'
+      + brainFields(c)
       + (c.warn ? '<div class="v2-cwarn">' + esc(c.warn) + '</div>' : '')
       + (facts ? '<div class="v2-facts">' + facts + '</div>' : '')
       + (c.link ? '<p class="v2-linkp"><a href="' + esc(c.link.url) + '" target="_blank" rel="noopener noreferrer">' + esc(c.link.label) + '</a></p>' : '')
@@ -262,6 +278,7 @@
     q('primary', function () { run(c, c.primary.act); });
     q('refresh', function () { refreshLocked(c); });
     q('secondary', function () { run(c, c.secondary.act); });
+    q('edit', function () { if (c.edit) run(c, c.edit.act); });
     q('open', function () { openCard(c); });
     q('later', function () { S.deck.push(S.deck.shift()); S.err = ''; redraw(); });
     if (S.err) { var er = v.querySelector('.v2-err'); if (er && er.scrollIntoView) { try { er.scrollIntoView({ block: 'center' }); } catch (e) {} } }
@@ -271,6 +288,7 @@
     removePill();
     S.mode = 'board'; S.err = ''; S.busy = false;
     var E = ep(); if (E) { E.reload('opsQueue'); E.reload('inbox'); E.reload('walletPayouts'); }
+    try { if (window.V2BRAIN && V2BRAIN.reload) V2BRAIN.reload(); } catch (e) {}
     redraw();
   }
 
@@ -278,6 +296,11 @@
   function rowKey(r) { return r ? [r.apiKind, r.dsrc || '', r.apiId].join('|') : ''; }
   function stillPending(c) {
     var E = ep();
+    if (c.kind === 'brain_item') {
+      var bp = null;
+      try { bp = window.V2BRAIN && V2BRAIN.pending ? V2BRAIN.pending() : null; } catch (e) {}
+      return !Array.isArray(bp) || bp.some(function (i) { return 'brain_item|' + i.id === c.id; });
+    }
     if (c.kind === 'payout') {
       if (stateOf('walletPayouts') !== 'ready' || !E.data.walletPayouts) return true;
       return (E.data.walletPayouts.rows || []).some(function (p) { return p.pid === c.row.pid; });
@@ -293,12 +316,13 @@
   }
   // انتظار تحميل المصادر التلاتة (مش مجرد طلبها): الاستدعاء بيرجع مرتين لكل مفتاح (بداية التحميل ونهايته).
   function reloadAll(done) {
-    var E = ep(), keys = ['opsQueue', 'inbox', 'walletPayouts'], fin = false;
+    var E = ep(), keys = ['opsQueue', 'inbox', 'walletPayouts'], fin = false, bdone = !(window.V2BRAIN && V2BRAIN.reload);
     if (!E || !E.authed) { done(); return; }
     var finish1 = function () { if (!fin) { fin = true; done(); } };
-    var check = function () { if (keys.every(function (k) { return stateOf(k) !== 'loading'; })) finish1(); };
+    var check = function () { if (bdone && keys.every(function (k) { return stateOf(k) !== 'loading'; })) finish1(); };
     setTimeout(finish1, 20000);
     keys.forEach(function (k) { E.reload(k, check); });
+    if (!bdone) { try { V2BRAIN.reload(function () { bdone = true; check(); }); } catch (e) { bdone = true; } }
   }
   // «حدّث الآن»: يحمّل من جديد، يشيل البطاقات اللي ما بقتش بانتظارك (ومنها اللي وزّعها العقل أو اتحسمت في تبويب تاني)،
   // ويفكّ القفل — فإما تبان أزرار البطاقة تاني (الفعل ما اتنفّذش) وإما نمشي للّي بعدها.
@@ -392,7 +416,17 @@
       case 'payout_reject': return payoutModal(c, 'reject');
       case 'pay_confirm': return payConfirm(c);
       case 'pay_reject': return payReject(c);
+      case 'brain_approve': case 'brain_reject': case 'brain_edit': return brainAct(c, a);
     }
+  }
+  // brain2: اعتماد/رفض/تعديل اقتراح العقل. الورقة (بنصها) في V2BRAIN؛ بعد النجاح ننهي البطاقة بـ`track` كأي قرار، والقفل (ردّ ضائع/حُسم من قبل) يقفل البطاقة.
+  function brainAct(c, a) {
+    if (!window.V2BRAIN || !V2BRAIN.act) return;
+    V2BRAIN.act(c, a, function (res) {
+      res = res || {};
+      if (res.ok) track(c, Promise.resolve({ ok: true }), (res.text || 'تم') + ': ' + c.title);
+      else fail(c, res);
+    });
   }
   function doneVerb(c) {
     switch (c.kind) {
@@ -533,6 +567,8 @@
   V2.render = function (v) {
     S.view = v;
     removePill();
+    // brain2: وصول رأي أو اقتراح والبطاقة معروضة ⇒ إعادة رسمها (مؤقّت اللوحة لا يعمل في وضع التركيز).
+    if (!S.bl && window.V2BRAIN && V2BRAIN.listen) S.bl = V2BRAIN.listen(function () { if (S.mode === 'focus' && host().isHome && host().isHome()) redraw(); });
     // رجوع للّوحة من القائمة (مش من زرّ «العودة إلى القرارات») ⇒ على اللوحة نفسها لا على بطاقة قديمة.
     if (S.away) { S.away = false; if (!S.resume) { S.mode = 'board'; S.panel = null; S.err = ''; S.busy = false; } S.resume = false; }
     load();
