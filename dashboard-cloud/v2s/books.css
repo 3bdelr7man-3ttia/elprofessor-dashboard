@@ -195,6 +195,17 @@ body:has(#epModal) .v2s-books .bk-dock{display:none}
 .v2s-ours .fld textarea{padding:10px 12px;line-height:1.8;resize:vertical}
 .v2s-ours .fld input:focus,.v2s-ours .fld textarea:focus{outline:3px solid rgba(158,43,78,.3);outline-offset:1px;border-color:var(--wine)}
 
+/* —— علامات المراجعة: تسطير عنّابي ناعم (مش أحمر) تحت الأرقام والأسماء، وملاحظة هادئة فوق المسودة */
+.v2s-ours .ou-review{margin:0;background:var(--paper2);border:1px solid var(--line);border-inline-start:4px solid var(--wine);border-radius:12px;padding:10px 14px;font:700 14.5px/1.8 'Cairo',sans-serif;color:var(--ink)}
+.v2s-ours .ou-review[hidden]{display:none}
+.v2s-ours .ou-hl{position:relative;background:#fff;border-radius:10px}
+.v2s-ours .ou-hl-back{position:absolute;inset:0;border:1px solid transparent;padding:0 12px;color:transparent;font:400 16px/1.8 'Cairo',sans-serif;pointer-events:none;overflow:hidden;white-space:pre-wrap;overflow-wrap:anywhere}
+.v2s-ours .ou-hl.one .ou-hl-back{display:flex;align-items:center;white-space:nowrap;line-height:normal}
+.v2s-ours .ou-hl.multi .ou-hl-back{padding:10px 12px}
+.v2s-ours .ou-hl-back mark{background:rgba(158,43,78,.08);color:transparent;border-bottom:2px solid rgba(158,43,78,.5);border-radius:2px}
+.v2s-ours .ou-hl input,.v2s-ours .ou-hl textarea{position:relative;background:transparent;font-family:'Cairo',sans-serif;font-size:16px}
+.v2s-ours .ou-hl textarea{line-height:1.8;resize:none;overflow:hidden}
+
 /* —— أكواد الفتح: جدول على الشاشة العريضة، وبطاقات على الموبايل */
 .v2s-ours .ou-codes{display:grid;gap:8px;margin:0 0 12px}
 .v2s-ours .ou-chead,.v2s-ours .ou-code{display:grid;grid-template-columns:minmax(150px,1.2fr) minmax(150px,1.4fr) 120px 96px minmax(110px,.8fr) 76px;gap:10px;align-items:center}

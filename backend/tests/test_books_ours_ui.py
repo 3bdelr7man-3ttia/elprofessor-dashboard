@@ -64,6 +64,14 @@ def test_visible_copy_rules():
     assert 'استرداد' not in strings
 
 
+def test_review_marks_are_soft_not_red_and_note_copy_is_exact():
+    blk = _ours_block()
+    assert 'راجع الأرقام والأسماء دي قبل ما تعرضه' in blk and 'محتاجة مراجعة' in blk and "'<mark>'" in blk
+    css = _read('dashboard-cloud', 'v2s', 'books.css')
+    rule = [l for l in css.splitlines() if '.ou-hl-back mark' in l][0]
+    assert '158,43,78' in rule and 'C8102E' not in rule.upper() and '200,16,46' not in rule
+
+
 def test_dashboard_api_passes_form_data_untouched():
     js = _read('dashboard-cloud', 'dashboard-api.js')
     assert 'opts.body instanceof FormData' in js and 'isForm ? {}' in js

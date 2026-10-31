@@ -158,8 +158,8 @@ def _norm(g_engine, s):
 
 def validate_draft(data, engine, source_text=None):
     """(مسودة نظيفة | None، رمز العلّة | None).
-    `source_text` (تعليمات + مخطّط) ⇒ فحوص الصدق: لا رقم ولا كلمة لاتينية خارجه، ولا «يقوّم»، ولا عنوان يبدأ بالذكاء/AI.
-    بدون `source_text` (تعديل المؤسس بيده): الشكل والحدود و«يقوّم» بس."""
+    الرفض الصارم: الشكل والحدود · «يقوّم» · عنوان يبدأ بالذكاء/AI (والأخيرة بس لمسودة العقل `source_text is not None`).
+    ⛔ الأرقام والكلمات اللاتينية ما بتترفضش (كتاب قانون فيه أرقام مواد وسنين وأسماء قوانين): بتتعلّم بـ`review_marks` (تحت)."""
     if not isinstance(data, dict):
         return None, 'shape'
     title = engine.clean_text(data.get('title'), keep_newlines=False)
@@ -180,20 +180,50 @@ def validate_draft(data, engine, source_text=None):
     strings = [title, about] + [x for c in out for x in (c['title'], c['body'])]
     if any(engine.has_banned(s) for s in strings):
         return None, 'banned'
-    if source_text is not None:
-        src = _norm(engine, source_text)
-        src_lower = src.lower()
-        for s in strings:
-            n = _norm(engine, s)
-            for run in engine._DIGITS_RE.findall(n):
-                if run not in src:
-                    return None, 'number'
-            for w in engine._LATIN_RE.findall(n):
-                if w.lower() not in src_lower:
-                    return None, 'latin'
-        if any(engine._AI_START_RE.match(t) for t in [title] + [c['title'] for c in out]):
-            return None, 'lead'
+    if source_text is not None and any(engine._AI_START_RE.match(t) for t in [title] + [c['title'] for c in out]):
+        return None, 'lead'
     return clean, None
+
+
+def _tokens_in(engine, text):
+    """(الرمز كما كُتب) لكل رقم أو كلمة لاتينية في النص. الأرقام العربية تُقارَن بصيغتها اللاتينية لكن يُرجَع النص الأصلي."""
+    n = _norm(engine, text)
+    out = []
+    for rx in (engine._DIGITS_RE, engine._LATIN_RE):
+        for m in rx.finditer(n):
+            out.append((m.start(), text[m.start():m.end()], m.group(0)))
+    out.sort()
+    return out
+
+
+def review_marks(draft, engine, source_text):
+    """[{chapter_index, token}] لكل رقم/كلمة لاتينية في المسودة مش موجودة في التعليمات. chapter_index = ‏-١ للعنوان والنبذة. بلا تكرار داخل الفصل الواحد."""
+    src = _norm(engine, source_text or '')
+    src_lower = src.lower()
+    marks, seen = [], set()
+    fields = [(-1, draft.get('title', '')), (-1, draft.get('about', ''))]
+    for i, c in enumerate(draft.get('chapters') or []):
+        fields += [(i, c.get('title', '')), (i, c.get('body', ''))]
+    for idx, text in fields:
+        for _pos, tok, norm in _tokens_in(engine, text):
+            known = (norm in src) if norm.isdigit() else (norm.lower() in src_lower)
+            if known or (idx, tok) in seen:
+                continue
+            seen.add((idx, tok))
+            marks.append({'chapter_index': idx, 'token': tok})
+    return marks
+
+
+def remap_marks(draft, tokens):
+    """بعد تعديل المؤسس: كل رمز كان معلَّمًا يبقى معلَّمًا ما دام موجودًا في النص (الفصل الذي هو فيه الآن)."""
+    marks = []
+    for tok in tokens:
+        if draft.get('title', '').find(tok) >= 0 or draft.get('about', '').find(tok) >= 0:
+            marks.append({'chapter_index': -1, 'token': tok})
+        for i, c in enumerate(draft.get('chapters') or []):
+            if tok in c.get('title', '') or tok in c.get('body', ''):
+                marks.append({'chapter_index': i, 'token': tok})
+    return marks
 
 
 def draft_prompt(instruction, outline):
@@ -335,7 +365,7 @@ def register(app, g):
 
     def draft_view(row):
         if row is None:
-            return {'status': 'none', 'draft': None}
+            return {'status': 'none', 'draft': None, 'review_marks': []}
         status = row.status
         if status == 'writing' and row.updated_at and datetime.datetime.utcnow() - row.updated_at > datetime.timedelta(minutes=DRAFT_STALE_MIN):
             status = 'failed'
@@ -343,7 +373,10 @@ def register(app, g):
             data = json.loads(row.data_json) if row.data_json else None
         except (TypeError, ValueError):
             data = None
-        return {'status': status, 'draft': data, 'instruction': row.instruction or '', 'outline': row.outline or '',
+        marks = []
+        if isinstance(data, dict):
+            marks = data.pop('review_marks', None) or []
+        return {'status': status, 'draft': data, 'review_marks': marks, 'instruction': row.instruction or '', 'outline': row.outline or '',
                 'error': (row.error or ERR_FAILED_AR) if status == 'failed' else '',
                 'writer': row.writer, 'updated_at': iso(row.updated_at), 'pdf_at': iso(row.pdf_at)}
 
@@ -645,10 +678,11 @@ def register(app, g):
                 db.session.commit()
                 return
             r.status, r.error = 'ready', None
-            r.data_json = json.dumps(clean, ensure_ascii=False)
+            marks = review_marks(clean, eng, instruction + '\n' + outline)
+            r.data_json = json.dumps(dict(clean, review_marks=marks), ensure_ascii=False)
             r.pdf_at = None
             db.session.commit()
-            g['_audit']('book_ours.brain_draft', target=slug, meta={'chapters': len(clean['chapters']), 'writer': writer}, actor=actor)
+            g['_audit']('book_ours.brain_draft', target=slug, meta={'chapters': len(clean['chapters']), 'writer': writer, 'review_marks': len(marks)}, actor=actor)
 
         sub = eng.submit(g, 'books_ours:' + slug, job)
         if not sub.get('queued'):
@@ -675,7 +709,9 @@ def register(app, g):
             row = M(slug=slug, instruction='', outline='')
             db.session.add(row)
         row.status, row.error = 'ready', None
-        row.data_json = json.dumps(clean, ensure_ascii=False)
+        old = draft_view(row).get('review_marks') or []
+        marks = remap_marks(clean, sorted(set(m['token'] for m in old)))
+        row.data_json = json.dumps(dict(clean, review_marks=marks), ensure_ascii=False)
         row.updated_at, row.updated_by, row.pdf_at = datetime.datetime.utcnow(), g['_actor_email'](), None
         db.session.commit()
         return ns(jsonify(draft_view(row)))

@@ -441,7 +441,7 @@ def test_brain_draft_saved_one_writer_call_no_platform_call(ctx, plat, brain):
     g = _call(ctx, 'GET', B + '/ours-draft-a/brain/draft').get_json()
     assert g['status'] == 'ready' and g['writer'] == 'main' and g['draft']['chapters'][1]['title'] == 'بنود لا تُنسى' and g['instruction'].startswith('اكتب دليلًا')
     assert plat.seen == []
-    assert json.loads(_audits('book_ours.brain_draft')[-1].meta_json) == {'chapters': 2, 'writer': 'main'}
+    assert json.loads(_audits('book_ours.brain_draft')[-1].meta_json) == {'chapters': 2, 'writer': 'main', 'review_marks': 0}
 
 
 def test_brain_draft_rules_are_in_the_prompt(ctx, plat, brain):
@@ -486,8 +486,6 @@ def test_brain_draft_respects_daily_caps(ctx, plat, brain, monkeypatch):
 
 
 @pytest.mark.parametrize('reply,why', [
-    ({'title': 'عنوان', 'about': '', 'chapters': [{'title': 'ف', 'body': 'هذا الكتاب يضم ٣٥٠ صفحة'}]}, 'رقم ليس في التعليمات'),
-    ({'title': 'عنوان', 'about': '', 'chapters': [{'title': 'ف', 'body': 'this is English text'}]}, 'كلمات لاتينية'),
     ({'title': 'عنوان', 'about': '', 'chapters': [{'title': 'ف', 'body': 'كيف يُقَوِّم القاضي الأدلة'}]}, 'يقوّم'),
     ({'title': 'الذكاء الاصطناعي في العقود', 'about': '', 'chapters': [{'title': 'ف', 'body': 'نص'}]}, 'عنوان يبدأ بالذكاء'),
     ({'title': 'عنوان', 'about': '', 'chapters': []}, 'بلا فصول'),
@@ -506,11 +504,48 @@ def test_brain_draft_invalid_output_is_never_saved(ctx, plat, brain, reply, why)
     assert plat.seen == []
 
 
-def test_brain_draft_numbers_allowed_when_in_instruction(ctx, plat, brain):
-    brain.reply = {'title': 'دليل في ٣ خطوات', 'about': '', 'chapters': [{'title': 'الخطوة', 'body': 'اتبع الخطوات ٣ بترتيب.'}]}
+def test_brain_draft_numbers_and_latin_are_marked_not_rejected(ctx, plat, brain):
+    brain.reply = {'title': 'شرح قانون العمل', 'about': 'يتناول العقود.',
+                   'chapters': [{'title': 'عقد العمل', 'body': 'تنص المادة ٧٠ من القانون على حقوق العامل، وصدر في سنة 2003، وهو مثل Labor Law.'},
+                                {'title': 'الإجازات', 'body': 'المادة ٧٠ أيضًا، ثم المادة ٤٨ من القانون.'}]}
+    r = _call(ctx, 'POST', B + '/ours-marks/brain/draft', {'instruction': 'اكتب شرحًا لقانون العمل'})
+    assert r.status_code == 202
+    v = _call(ctx, 'GET', B + '/ours-marks/brain/draft').get_json()
+    assert v['status'] == 'ready' and v['draft']['title'] == 'شرح قانون العمل' and 'review_marks' not in v['draft']
+    got = sorted((m['chapter_index'], m['token']) for m in v['review_marks'])
+    assert got == [(0, '2003'), (0, 'Labor'), (0, 'Law'), (0, '٧٠'), (1, '٤٨'), (1, '٧٠')], got
+    assert json.loads(_audits('book_ours.brain_draft')[-1].meta_json)['review_marks'] == 6
+    assert plat.seen == []
+
+
+def test_brain_draft_tokens_from_the_instruction_are_not_marked(ctx, plat, brain):
+    brain.reply = {'title': 'دليل في ٣ خطوات', 'about': '', 'chapters': [{'title': 'الخطوة', 'body': 'اتبع الخطوات ٣ بترتيب. راجع Law في الملحق.'}]}
     _call(ctx, 'POST', B + '/ours-draft-n/brain/draft', {'instruction': 'اكتب دليلًا في 3 خطوات'})
     v = _call(ctx, 'GET', B + '/ours-draft-n/brain/draft').get_json()
-    assert v['status'] == 'ready', v
+    assert v['status'] == 'ready' and [m['token'] for m in v['review_marks']] == ['Law'], v['review_marks']
+
+
+def test_review_marks_follow_the_founders_edits(ctx, plat, brain):
+    brain.reply = {'title': 'عنوان', 'about': '', 'chapters': [{'title': 'ف', 'body': 'المادة ٧٠ والمادة ٤٨'}, {'title': 'فصل ثانٍ', 'body': 'نص'}]}
+    _call(ctx, 'POST', B + '/ours-edit-marks/brain/draft', {'instruction': 'اكتب'})
+    d = _call(ctx, 'GET', B + '/ours-edit-marks/brain/draft').get_json()
+    assert len(d['review_marks']) == 2
+    d['draft']['chapters'][0]['body'] = 'المادة ٧٠ فقط'
+    d['draft']['chapters'][1]['body'] = 'ونُقلت المادة ٤٨ هنا'
+    saved = _call(ctx, 'PUT', B + '/ours-edit-marks/brain/draft', d['draft']).get_json()
+    assert sorted((m['chapter_index'], m['token']) for m in saved['review_marks']) == [(0, '٧٠'), (1, '٤٨')]
+    saved['draft']['chapters'][0]['body'] = 'بلا أرقام'
+    again = _call(ctx, 'PUT', B + '/ours-edit-marks/brain/draft', saved['draft']).get_json()
+    assert [(m['chapter_index'], m['token']) for m in again['review_marks']] == [(1, '٤٨')]
+
+
+def test_banned_word_and_ai_headline_still_reject_hard(ctx, plat, brain):
+    brain.reply = {'title': 'عنوان', 'about': '', 'chapters': [{'title': 'ف', 'body': 'المادة ٧٠ وكيف يُقَوِّم القاضي'}]}
+    _call(ctx, 'POST', B + '/ours-hard-a/brain/draft', {'instruction': 'اكتب'})
+    assert _call(ctx, 'GET', B + '/ours-hard-a/brain/draft').get_json()['status'] == 'failed'
+    brain.reply = {'title': 'الذكاء في العقود', 'about': '', 'chapters': [{'title': 'ف', 'body': 'نص ٧٠'}]}
+    _call(ctx, 'POST', B + '/ours-hard-b/brain/draft', {'instruction': 'اكتب'})
+    assert _call(ctx, 'GET', B + '/ours-hard-b/brain/draft').get_json()['status'] == 'failed'
 
 
 @pytest.mark.parametrize('kind,msg', [('cap', 'وصل العقل'), ('no_key', 'لا يوجد كاتب'), (None, 'تعذّرت الكتابة')])
@@ -553,7 +588,7 @@ def test_brain_draft_edit_by_founder_saves_locally(ctx, plat, brain):
 
 def test_brain_draft_none_when_never_written(ctx, plat):
     v = _call(ctx, 'GET', B + '/ours-never/brain/draft').get_json()
-    assert v == {'status': 'none', 'draft': None}
+    assert v == {'status': 'none', 'draft': None, 'review_marks': []}
 
 
 # ---------------------------------------------------------------- ٦ · الـPDF

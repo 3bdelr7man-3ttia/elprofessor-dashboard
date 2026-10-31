@@ -651,7 +651,7 @@
   var CODE_RE = /^[a-z0-9_-]{3,40}$/;
   var CODE_ERR = 'الكود من ٣ إلى ٤٠ حرفًا: أحرف إنجليزية صغيرة وأرقام وشرطة فقط';
   var O = { view: null, mode: 'list', slug: null, src: {}, note: null, noteT: null, err: null, confirm: null, busy: false, writer: false,
-            f: { instruction: '', outline: '', draft: null, dirty: false }, pending: null, rows: null, poll: null, away: false, hist: false };
+            f: { instruction: '', outline: '', draft: null, dirty: false, tokens: [] }, pending: null, rows: null, poll: null, away: false, hist: false };
 
   function oTypeText(t) { var r = OTYPES.filter(function (x) { return x[0] === t; })[0]; return r ? r[1] : 'أخرى'; }
   function oSrc(k) { return O.src[k] || (O.src[k] = { state: 'idle', data: null, status: 0, seq: 0 }); }
@@ -789,22 +789,52 @@
     if (O.f.draft) h += draftEditor(b, dv);
     return h + '</div>';
   }
+  // ------------------------------------------------------------------ علامات المراجعة (أرقام وأسماء لاتينية ليست في التعليمات): تُعلَّم لا تُرفض
+  function reviewPhrase(n) {
+    if (n === 1) return 'فيه حاجة محتاجة مراجعة';
+    if (n === 2) return 'فيه حاجتين محتاجتين مراجعة';
+    return 'فيه ' + arDigits(n) + ' حاجات محتاجة مراجعة';
+  }
+  function liveMarks() {
+    var d = O.f.draft, toks = O.f.tokens || [], n = 0;
+    if (!d || !toks.length) return 0;
+    toks.forEach(function (t) {
+      if (String(d.title || '').indexOf(t) >= 0 || String(d.about || '').indexOf(t) >= 0) n++;
+      d.chapters.forEach(function (c) { if (String(c.title || '').indexOf(t) >= 0 || String(c.body || '').indexOf(t) >= 0) n++; });
+    });
+    return n;
+  }
+  // نص ⇒ HTML فيه الرموز المعلَّمة داخل <mark> (الباقي مهرَّب). الرمز يطابق الرقم أو الكلمة كاملة.
+  function markHtml(text, toks) {
+    var set = {}; (toks || []).forEach(function (t) { set[t] = 1; });
+    return String(text == null ? '' : text).split(/([0-9٠-٩]+|[A-Za-z]+)/).map(function (part, i) {
+      return i % 2 === 1 && set[part] ? '<mark>' + esc(part) + '</mark>' : esc(part);
+    }).join('');
+  }
+  // خانة بتعليم ناعم: طبقة خلفية بنفس النص (شفّافة) يظهر منها التسطير فقط، والخانة الحقيقية فوقها
+  function hlField(kind, attrs, value) {
+    var inner = kind === 'ta' ? '<textarea ' + attrs + '>' + esc(value) + '</textarea>' : '<input type="text" ' + attrs + ' value="' + esc(value) + '" autocomplete="off">';
+    return '<div class="ou-hl ' + (kind === 'ta' ? 'multi' : 'one') + '"><div class="ou-hl-back" aria-hidden="true">' + markHtml(value, O.f.tokens) + '</div>' + inner + '</div>';
+  }
+  function autosize(v) { qa('.ou-hl.multi textarea', v).forEach(function (t) { t.style.height = 'auto'; t.style.height = (t.scrollHeight + 2) + 'px'; }); }
+
   function draftEditor(b, dv) {
     var d = O.f.draft;
     var who = dv && dv.writer === 'backup' ? 'كتبها الكاتب الاحتياطي' : 'كتبها العقل';
     var h = '<div class="ou-draft"><p class="ou-fine">' + esc(who) + '. راجعها وعدّلها كما تشاء قبل أن تعمل الملف.</p>'
-      + '<div class="fld"><label for="ou_dt">عنوان الكتاب</label><input id="ou_dt" type="text" maxlength="160" value="' + esc(d.title) + '" autocomplete="off"></div>'
-      + '<div class="fld"><label for="ou_da">نبذة قصيرة</label><textarea id="ou_da" rows="3" maxlength="2000">' + esc(d.about) + '</textarea></div>';
+      + '<p class="ou-review" id="ou-review" role="note"' + (liveMarks() ? '' : ' hidden') + '>راجع الأرقام والأسماء دي قبل ما تعرضه</p>'
+      + '<div class="fld"><label for="ou_dt">عنوان الكتاب</label>' + hlField('in', 'id="ou_dt" maxlength="160"', d.title) + '</div>'
+      + '<div class="fld"><label for="ou_da">نبذة قصيرة</label>' + hlField('ta', 'id="ou_da" rows="3" maxlength="2000"', d.about) + '</div>';
     d.chapters.forEach(function (c, i) {
       h += '<div class="ou-ch" data-i="' + i + '"><div class="ou-chh"><b>الفصل ' + arDigits(i + 1) + '</b>'
         + '<button type="button" class="ep-bs" data-a="chdel" data-i="' + i + '"' + (d.chapters.length < 2 ? ' disabled' : '') + '>احذف الفصل</button></div>'
-        + '<div class="fld"><label for="ou_ct' + i + '">عنوان الفصل</label><input id="ou_ct' + i + '" data-f="ct" data-i="' + i + '" type="text" maxlength="120" value="' + esc(c.title) + '" autocomplete="off"></div>'
-        + '<div class="fld"><label for="ou_cb' + i + '">النص</label><textarea id="ou_cb' + i + '" data-f="cb" data-i="' + i + '" rows="8" maxlength="8000">' + esc(c.body) + '</textarea></div></div>';
+        + '<div class="fld"><label for="ou_ct' + i + '">عنوان الفصل</label>' + hlField('in', 'id="ou_ct' + i + '" data-f="ct" data-i="' + i + '" maxlength="120"', c.title) + '</div>'
+        + '<div class="fld"><label for="ou_cb' + i + '">النص</label>' + hlField('ta', 'id="ou_cb' + i + '" data-f="cb" data-i="' + i + '" rows="8" maxlength="8000"', c.body) + '</div></div>';
     });
     h += '<div class="ou-acts"><button type="button" class="ep-bs" data-a="chadd"' + (d.chapters.length >= 12 ? ' disabled' : '') + '>أضف فصلًا</button></div>'
       + '<div class="ou-acts"><button type="button" class="ep-b2" data-a="savedraft"' + (O.f.dirty ? '' : ' disabled') + '>' + (O.f.dirty ? 'احفظ التعديل' : 'التعديل محفوظ') + '</button>'
       + '<button type="button" class="ep-b1" data-a="mkpdf">اعمل PDF وارفعه</button></div>'
-      + confirmBox('pdf', 'سيُنشأ ملف PDF من هذه المسودة ويُرفع' + (b.file && b.file.uploaded ? '، ويحلّ محلّ الملف الحالي' : '') + '.', 'اعمل الملف وارفعه') + oErrStrip('pdf') + '</div>';
+      + confirmBox('pdf', 'سيُنشأ ملف PDF من هذه المسودة ويُرفع' + (b.file && b.file.uploaded ? '، ويحلّ محلّ الملف الحالي' : '') + '.' + (liveMarks() ? ' ' + reviewPhrase(liveMarks()) + '.' : ''), 'اعمل الملف وارفعه') + oErrStrip('pdf') + '</div>';
     return h;
   }
   function stepContent(b, nextIs) {
@@ -936,7 +966,7 @@
   function oPush(state) { try { history.pushState({ v2sOurs: state }, '', location.hash); O.hist = true; } catch (e) {} }
   function oGo(mode, slug) {
     O.mode = mode; O.slug = slug || null; O.confirm = null; O.err = null; O.pending = null; O.busy = false; O.writer = false;
-    O.f = { instruction: '', outline: '', draft: null, dirty: false };
+    O.f = { instruction: '', outline: '', draft: null, dirty: false, tokens: [] };
     oStopPoll();
     if (mode === 'book') { oLoad('price:' + slug, oPricePath(slug), true); oLoad('draft:' + slug, oDraftPath(slug), true); }
     if (mode === 'codes') { oLoad('codes', OP.codes, true); O.rows = codesFromSource(); }
@@ -1018,6 +1048,7 @@
     if (s.data.status === 'writing') oStartPoll(slug);
     if (s.data.draft && !O.f.dirty && (!O.f.draft || O.f.stamp !== s.data.updated_at)) {
       O.f.draft = JSON.parse(JSON.stringify(s.data.draft)); O.f.stamp = s.data.updated_at;
+      var seenT = {}; O.f.tokens = (s.data.review_marks || []).map(function (m) { return m.token; }).filter(function (t) { return t && !seenT[t] && (seenT[t] = 1); });
     }
     if (!O.f.instruction && s.data.instruction) O.f.instruction = s.data.instruction;
     if (!O.f.outline && s.data.outline) O.f.outline = s.data.outline;
@@ -1083,6 +1114,9 @@
     qa('#ou_dt,#ou_da,[data-f="ct"],[data-f="cb"]', v).forEach(function (el) {
       el.addEventListener('input', function () {
         readDraftFields(v);
+        var hl = el.closest('.ou-hl'); if (hl) { hl.querySelector('.ou-hl-back').innerHTML = markHtml(el.value, O.f.tokens) + (el.tagName === 'TEXTAREA' ? '\u200b' : ''); }
+        if (el.tagName === 'TEXTAREA') { el.style.height = 'auto'; el.style.height = (el.scrollHeight + 2) + 'px'; }
+        var rv = q('#ou-review', v); if (rv) rv.hidden = !liveMarks();
         if (!O.f.dirty) { O.f.dirty = true; var sb = q('[data-a="savedraft"]', v); if (sb) { sb.disabled = false; sb.textContent = 'احفظ التعديل'; } }
       });
     });
@@ -1090,6 +1124,7 @@
       el.addEventListener('input', function () { var r = O.rows[+el.getAttribute('data-i')], f = el.getAttribute('data-f'); if (!r) return; if (f === 'code') r.code = el.value; else if (f === 'note') r.note = el.value; else r.max_uses = el.value; });
     });
     qa('[data-f="active"]', v).forEach(function (el) { el.addEventListener('change', function () { var r = O.rows[+el.getAttribute('data-i')]; if (r) r.active = el.checked; }); });
+    autosize(v);
     var fi = q('#ou_file', v);
     if (fi) fi.addEventListener('change', function () {
       var f = fi.files && fi.files[0]; if (!f) return;
