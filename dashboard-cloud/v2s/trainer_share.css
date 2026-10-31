@@ -1,0 +1,94 @@
+/* ============================================================================
+ * v2s/trainer_share.css — شاشة «نسبة المدرّب» داخل تبويب «المدرّبون» (SPEC-C-courses C2b).
+ * كل القواعد تحت `.v2ts` (القسم) أو `.v2ts-m` (داخل الورقة): المفتاح مقفول ⇒ لا عنصر يحمل الأصناف فلا أثر على أي شاشة.
+ * الهوية: عنّابي #9E2B4E · ورق #FBFAF7/#F6F1EA · حبر #21262E · أحمر #C8102E للخطأ بس. أهداف اللمس ≥٤٤px (والأزرار الرئيسية ٥٢px في الموبايل).
+ * ========================================================================== */
+.v2ts,.v2ts-m{--wine:#9E2B4E;--wine-d:#85233F;--paper:#FBFAF7;--paper2:#F6F1EA;--ink:#21262E;--red:#C8102E;--line:#E9E1D6;--green:#187E4E;--mute:#6B665C;
+  font-family:'IBM Plex Sans Arabic','Cairo',sans-serif;color:var(--ink)}
+.v2ts{margin-top:22px;max-width:1360px}
+.v2ts *,.v2ts-m *{box-sizing:border-box}
+.v2ts button,.v2ts input,.v2ts-m button,.v2ts-m input,.v2ts-m textarea{font-family:inherit}
+.v2ts button:focus-visible,.v2ts-m button:focus-visible,.v2ts-m input:focus-visible,.v2ts-m textarea:focus-visible{outline:3px solid rgba(158,43,78,.45);outline-offset:2px}
+.v2ts p,.v2ts h2,.v2ts h3,.v2ts h4,.v2ts-m p,.v2ts-m h4{margin:0}
+
+.v2ts-h{margin-bottom:12px}
+.v2ts-h h2{font:800 20px/1.5 'Cairo',sans-serif;color:var(--ink)}
+.v2ts-h p{font-size:14px;color:var(--mute);line-height:1.8;margin-top:2px}
+.v2ts-ok{background:#EAF6EF;border:1px solid #B9DEC9;color:#0F5A37;border-radius:12px;padding:10px 14px;margin-bottom:10px;font-size:14.5px;font-weight:700;line-height:1.7}
+.v2ts-card{background:#fff;border:1px solid var(--line);border-radius:16px;padding:14px 16px;margin-bottom:12px;min-width:0}
+.v2ts-card h3{font:800 16px/1.5 'Cairo',sans-serif;margin-bottom:8px}
+.v2ts-rulescard{background:var(--paper2)}
+.v2ts-rules{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin:0 0 10px}
+.v2ts-rules>div{background:#fff;border:1px solid var(--line);border-radius:12px;padding:10px 12px;min-width:0}
+.v2ts-rules dt{font-size:13px;color:var(--mute);margin-bottom:2px}
+.v2ts-rules dd{margin:0;font:800 22px/1.4 'Cairo',sans-serif;color:var(--wine)}
+.v2ts-rules small{font:600 12.5px 'Cairo',sans-serif;color:var(--mute)}
+
+.v2ts-btn1,.v2ts-btn2{display:inline-flex;align-items:center;justify-content:center;min-height:48px;padding:0 20px;border-radius:14px;font:800 15px 'Cairo',sans-serif;cursor:pointer;border:1px solid transparent;max-width:100%;text-align:center;line-height:1.4}
+.v2ts-btn1{background:var(--wine);color:#fff;width:100%}
+.v2ts-btn1:hover{background:var(--wine-d)}
+.v2ts-btn1:disabled,.v2ts-btn2:disabled{opacity:.55;cursor:not-allowed}
+.v2ts-btn2{background:#fff;color:var(--wine);border-color:var(--line);min-height:44px;font-size:14px;font-weight:700}
+.v2ts-btn2:hover{background:#FBF0F3}
+
+.v2ts-list{list-style:none;margin:0;padding:0;display:grid;gap:0}
+.v2ts-row{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:12px;align-items:center;padding:12px 0;border-top:1px solid var(--line)}
+.v2ts-row:first-child{border-top:0}
+.v2ts-av{width:40px;height:40px;border-radius:50%;background:#FBF0F3;color:var(--wine);display:inline-flex;align-items:center;justify-content:center;font:800 17px 'Cairo',sans-serif}
+.v2ts-who{display:grid;gap:3px;min-width:0}
+.v2ts-who b{font:800 15.5px/1.5 'Cairo',sans-serif;overflow-wrap:anywhere}
+.v2ts-mail{font-size:12.5px;color:var(--mute);overflow-wrap:anywhere;text-align:right}
+.v2ts-chips{display:flex;flex-wrap:wrap;gap:6px}
+.v2ts-chip{display:inline-flex;align-items:center;border-radius:999px;padding:3px 11px;font:700 12.5px/1.5 'Cairo',sans-serif;background:var(--paper2);color:var(--ink);border:1px solid var(--line);white-space:nowrap}
+.v2ts-chip.wine{background:#FBF0F3;color:var(--wine);border-color:#EBC3CE}
+.v2ts-chip.green{background:#EAF6EF;color:#0F5A37;border-color:#B9DEC9}
+.v2ts-chip.grey{background:#F1EDE5;color:#5C574D}
+.v2ts-per,.v2ts-why{font-size:13px;color:var(--mute);line-height:1.7;overflow-wrap:anywhere}
+.v2ts-why{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.v2ts-none{text-align:center;color:var(--mute);font-size:14px;padding:18px 8px}
+.v2ts-none.sm{padding:6px 0;text-align:right;font-size:13.5px}
+.v2ts-load{color:var(--mute);font-size:14px;padding:10px 0}
+.v2ts-na{display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between;background:var(--paper2);border:1px dashed #D9CFC0;border-radius:12px;padding:12px 14px}
+.v2ts-na b{font-size:14.5px}
+.v2ts-na-line{font-size:13.5px;color:var(--mute);background:var(--paper2);border-radius:10px;padding:8px 12px}
+
+/* —— الورقة */
+.v2ts-m{padding-bottom:4px}
+.v2ts-lead{font-size:15px;line-height:1.8;margin-bottom:8px}
+.v2ts-total{background:#FBF0F3;border:1px solid #EBC3CE;border-radius:14px;padding:12px 14px;margin-bottom:14px;display:grid;gap:3px}
+.v2ts-total b{font:800 18px/1.6 'Cairo',sans-serif;color:var(--wine)}
+.v2ts-total small{font-size:13px;color:var(--mute)}
+.v2ts-totna{font-size:14px;color:var(--mute)}
+.v2ts-fld{display:grid;gap:5px;margin-bottom:12px;min-width:0}
+.v2ts-fld label{font:700 14px 'Cairo',sans-serif}
+.v2ts-fld small{color:var(--mute);font-size:13px}
+.v2ts-fld input,.v2ts-fld textarea{width:100%;min-height:48px;border:1px solid #D9CFC0;border-radius:12px;padding:8px 12px;font-size:16px;background:#fff;color:#21262E}
+.v2ts-fld textarea{min-height:92px;line-height:1.8;resize:vertical}
+.v2ts-ferr{font-style:normal;font-size:13px;color:var(--red);min-height:0}
+.v2ts-ferr:empty{display:none}
+.v2ts-two{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.v2ts-ro{min-height:48px;display:flex;align-items:center;gap:8px;border:1px solid var(--line);background:var(--paper2);border-radius:12px;padding:8px 12px;font:800 16px 'Cairo',sans-serif}
+.v2ts-ro small{font:600 13px 'Cairo',sans-serif;color:var(--mute)}
+.v2ts-ads,.v2ts-histbox{border-top:1px solid var(--line);padding-top:10px;margin-top:6px;margin-bottom:10px}
+.v2ts-ads h4,.v2ts-histbox h4{font:800 14.5px/1.5 'Cairo',sans-serif;margin-bottom:6px}
+.v2ts-dep,.v2ts-hist{list-style:none;margin:0 0 6px;padding:0;display:grid;gap:6px}
+.v2ts-dep li{display:flex;justify-content:space-between;gap:10px;align-items:center;background:var(--paper2);border-radius:10px;padding:8px 12px;font-size:14px}
+.v2ts-dep li b{font-weight:800}
+.v2ts-sales{font-size:14px;line-height:1.8}
+.v2ts-hist li{display:grid;gap:2px;background:var(--paper2);border-radius:10px;padding:8px 12px;font-size:13.5px;line-height:1.7}
+.v2ts-hist time{color:var(--mute);font-size:12.5px}
+.v2ts-hist small{color:var(--mute);overflow-wrap:anywhere;text-align:right}
+.v2ts-will{margin:0 0 10px;padding:0 20px 0 0;display:grid;gap:6px;font-size:15px;line-height:1.8}
+.v2ts-errbox{background:#FDECEF;border:1px solid #F2B8C2;color:#8A0C20;border-radius:12px;padding:10px 14px;font-size:14.5px;font-weight:700;line-height:1.7;margin-top:8px}
+.v2ts-macts{display:flex;flex-wrap:wrap;gap:10px;margin-top:14px;position:sticky;bottom:-18px;background:#fff;padding:10px 0 4px;z-index:2}
+.v2ts-macts .v2ts-btn1,.v2ts-macts .v2ts-btn2{flex:1 1 auto;width:auto;min-height:48px}
+
+@media (max-width:640px){
+  .v2ts-row{grid-template-columns:auto minmax(0,1fr)}
+  .v2ts-row .v2ts-btn2{grid-column:1 / -1;width:100%;min-height:52px}
+  .v2ts-rules{grid-template-columns:1fr}
+  .v2ts-btn1,.v2ts-btn2,.v2ts-macts .v2ts-btn1,.v2ts-macts .v2ts-btn2{min-height:52px}
+  .v2ts-fld input,.v2ts-fld textarea{min-height:52px}
+  .v2ts-rulescard .v2ts-btn2{width:100%}
+  .v2ts-two{grid-template-columns:1fr}
+}

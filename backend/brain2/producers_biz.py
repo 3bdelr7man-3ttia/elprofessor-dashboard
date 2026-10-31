@@ -5,13 +5,16 @@
   * كل قراءة تمر بمساعدات `ctx.ns` (قاموس app.py الحي) وقت النداء، لا وقت الاستيراد (التسجيل في app.py أبكر من تعريفها).
   * مصدر لا يُقرأ ⇒ `SourceDown`: لا نكتب شيئًا ولا نخلط «فاضي» بـ«تعذّر».
   * `facts` هي كل ما يراه الذكاء: JSON لا يزيد عن ٤ كيلوبايت، بلا بريد ولا هاتف ولا اسم عميل. المعرّفات والبريد في `meta` فقط.
-  * الكتابات الوحيدة: اعتماد دورة وربط طلب بدورة، وكلاهما عبر `_v2_write` (المسار الموجود نفسه) ولا يعمل إلا بعد موافقة المؤسس.
+  * الكتابات الوحيدة: اعتماد دورة وربط طلب بدورة وإضافة محتوى درس ناقص، وكلها عبر `_v2_write` ولا تعمل إلا بعد موافقة المؤسس.
 """
 import json
+import logging
 import re
 from urllib.parse import quote
 
 from brain2.contract import ApplyResult, Producer, SourceDown, Target
+
+logger = logging.getLogger(__name__)
 
 FACTS_MAX_BYTES = 4000          # الحد في المواصفة ٤ك؛ نترك هامشًا صغيرًا
 
@@ -538,25 +541,432 @@ def _prompt_forecast_comment(target):
     return (_system_ar() + _FC_ROLE, _user_prompt(target, 'علّق على هذه التوقعات.'))
 
 
-# ================================================================== course_lesson_draft (hook)
-def _gather_course_lesson_draft(ctx):
-    """خطّاف مخفي (listed=False) لجولة لاحقة — لا يعمل في هذه الجولة، ومحرّر الدورة خارجها.
+# ================================================================== course_lesson_draft
+# «مسودة درس» (SPEC-C-courses C2a): دروس ناقصة في دورات «مسودة / رجعت بملاحظات» ⇒ يكتب العقل محتواها، والمؤسس يعتمد «أضف الدرس».
+#
+# التصميم:
+#   * gather: `GET /api/bridge/courses2` ثم كل دورة مرشّحة. الدرس المرشّح: `state == 'draft'` وبلا كتل (تفاعلي) أو بلا نص مفرّغ (مسجّل).
+#     يرجع حتى ١٢ هدفًا فقط، والسقف الفعلي ٣ نداءات ذكاء في الجولة هو `per_run_cap` في المحرّك (يُحسب بعد فحص التكرار):
+#     لو رجعنا ٣ فقط لحُجبت بقية الدروس خلف ٣ مقترحات لم يُبتّ فيها بعد.
+#   * validate (بلا ctx في توقيع المحرّك): الشكل أولًا، ثم فحص الصدق على كل نص في المسودة، ثم معاينة المنصة
+#     (`POST …/lessons/<lid>/preview`، تحقّق بلا كتابة). المعاينة تقرأ `ns` من مرجع على مستوى الوحدة يضبطه gather في كل جولة
+#     (`_RUN`)؛ المحرّك يشغّل gather ثم validate في خيط واحد، فلا تعارض. لا مرجع أو لا ردّ من المعاينة ⇒ المسودة غير صالحة
+#     (لا نعرض مسودة لم تُتحقَّق). رفض المنصة (٤٠٠/٤٢٢) يسجَّل بنصه في `preview_detail(ref)` وفي اللوج، والصف يخرج `failed`.
+#   * text (للبطاقة) ملخّص عربي قصير يبنيه الكود لا الذكاء: لا أرقام ولا حروف لاتينية إلا من الحقائق.
+#   * المسودة نفسها في `body['lesson']`، وما تراه الواجهة في `body['fields'] = {title, body}`.
+#   * apply: تأكيد أن الدرس ما زال فاضيًا ثم `PUT …/lessons/<lid>` بالحقول + `confirmed:true` + `by`.
+_CLD_KINDS = ('interactive', 'recorded')
+_CLD_STATUSES = ('draft', 'changes')
+_CLD_GATHER_MAX = 12            # أهداف تُرجَع (السقف الفعلي للذكاء: per_run_cap = ٣)
+_CLD_COURSES_MAX = 12           # دورات تُقرأ في الجولة
+_CLD_BLOCK_TYPES = ('objectives', 'text', 'situation', 'decision', 'recall', 'quiz', 'summary', 'example', 'cards')
+_CLD_BLOCKS_MIN, _CLD_BLOCKS_MAX = 4, 7
+_CLD_TRANSCRIPT_MIN, _CLD_TRANSCRIPT_MAX = 120, 4000
+CLD_LABEL = 'مسودة درس'
+CLD_APPROVE_LABEL = 'أضف الدرس'
+_CLD_KIND_AR = {'interactive': 'درس تفاعلي', 'recorded': 'درس مسجّل'}
+_CLD_TYPE_AR = {'objectives': 'أهداف', 'text': 'شرح', 'situation': 'موقف', 'decision': 'قرار', 'recall': 'تذكير بالقرار',
+                'quiz': 'اختبار', 'summary': 'ملخص', 'example': 'مثال', 'cards': 'كروت'}
+_CLD_KEY_RE = re.compile(r'^[a-z][a-z0-9_]*$')
 
-    ما تملؤه الجولة اللاحقة:
-      * gather: يقرأ من جسر المنصة الجديد للدروس (دروس ناقصة في دورة) ويرجع Targets بحقائق الدرس.
-      * validate: يرجع {'text', 'fields': {'title', 'body'}} والواجهة تعرض body.fields بشكل عام.
-      * apply: ينادي الجسر الجديد بـ confirmed:true بعد موافقة المؤسس.
-    إلى ذلك الحين: gather ترجع [] و apply تساوي None، فلا يُكتب شيء ولا تُنادى أي خدمة.
-    """
-    return []
+_RUN = {'ns': None}             # يضبطه gather؛ validate يقرأ منه المعاينة
+_PREVIEW_ERRORS = {}            # ref ⇒ نص رفض المنصة (آخر ٥٠)
+
+
+def preview_detail(ref):
+    """آخر نص رفضته المنصة لمعاينة هذا الهدف، أو ''."""
+    return _PREVIEW_ERRORS.get(ref, '')
+
+
+def _remember_preview_error(ref, detail):
+    _PREVIEW_ERRORS.pop(ref, None)
+    _PREVIEW_ERRORS[ref] = detail
+    while len(_PREVIEW_ERRORS) > 50:
+        _PREVIEW_ERRORS.pop(next(iter(_PREVIEW_ERRORS)))
+
+
+def _lesson_needs_draft(lesson):
+    if not isinstance(lesson, dict) or lesson.get('state') != 'draft':
+        return False
+    kind = lesson.get('kind')
+    if kind == 'interactive':
+        return not (isinstance(lesson.get('blocks'), list) and lesson['blocks'])
+    if kind == 'recorded':
+        return not (isinstance(lesson.get('transcript'), str) and lesson['transcript'].strip())
+    return False
+
+
+def _course_of(payload):
+    c = payload.get('course') if isinstance(payload, dict) else None
+    return c if isinstance(c, dict) else None
+
+
+def _units_of(course):
+    outline = course.get('outline') if isinstance(course.get('outline'), dict) else {}
+    units = outline.get('units')
+    return [u for u in units if isinstance(u, dict)] if isinstance(units, list) else []
+
+
+def _gather_course_lesson_draft(ctx):
+    """يقرأ دورات المحرّر (`/api/bridge/courses2`) ويرجع الدروس الناقصة. مصدر القائمة لا يُقرأ ⇒ SourceDown."""
+    _RUN['ns'] = ctx.ns
+    data = _platform_get(ctx, '/api/bridge/courses2')
+    rows = _as_list(data, 'courses')
+    if rows is None:
+        raise SourceDown('/api/bridge/courses2')
+    picked = [c for c in rows if isinstance(c, dict) and c.get('status') in _CLD_STATUSES and str(c.get('id') or '').strip()]
+    out, reads, failed = [], 0, 0
+    for c in picked[:_CLD_COURSES_MAX]:
+        cid = str(c['id']).strip()
+        reads += 1
+        try:
+            course = _course_of(_platform_get(ctx, '/api/bridge/courses2/%s' % quote(cid, safe='')))
+        except SourceDown:
+            failed += 1
+            continue
+        if course is None or course.get('status') not in _CLD_STATUSES:
+            continue
+        meta = course.get('meta') if isinstance(course.get('meta'), dict) else {}
+        units = _units_of(course)
+        for u in units:
+            for les in (u.get('lessons') if isinstance(u.get('lessons'), list) else []):
+                if len(out) >= _CLD_GATHER_MAX:
+                    break
+                if not _lesson_needs_draft(les):
+                    continue
+                lid = str(les.get('id') or '').strip()
+                if not lid:
+                    continue
+                outcomes = [_scrub(x, 120) for x in (meta.get('outcomes') if isinstance(meta.get('outcomes'), list) else []) if isinstance(x, str)][:8]
+                facts = {
+                    'course': {'title': _scrub(meta.get('title'), 120), 'subtitle': _scrub(meta.get('subtitle'), 160),
+                               'level': _scrub(meta.get('level'), 30), 'outcomes': outcomes},
+                    'unit': {'title': _scrub(u.get('title'), 120)},
+                    'lesson': {'id': _scrub(lid, 60), 'title': _scrub(les.get('title'), 120), 'kind': les['kind']},
+                    'units': [{'title': _scrub(x.get('title'), 80),
+                               'lessons': [_scrub(l.get('title'), 80) for l in (x.get('lessons') or []) if isinstance(l, dict)][:10]}
+                              for x in units][:10],
+                }
+                _fit(facts, 'units')
+                title = facts['lesson']['title'] or 'درس بلا عنوان'
+                out.append(Target(ref=('lesson:%s:%s' % (cid, lid))[:200], label=('%s: %s' % (CLD_LABEL, title))[:120], facts=facts,
+                                  meta={'course_id': cid, 'lesson_id': lid, 'kind': les['kind']}))
+    if reads and failed == reads:
+        raise SourceDown('/api/bridge/courses2/<id>')       # كل قراءات التفاصيل فشلت: لا نخلط «لا شيء ناقص» بـ«تعذّر القراءة»
+    return out
+
+
+# ------------------------------------------------------------------ الموجّه
+_CLD_ROLE_COMMON = (
+    ' دورك: كتابة مسودة محتوى درس ناقص في دورة تدريبية لمكاتب المحاماة والشركات، بأسلوب تطبيقي قصير ومواقف من العمل اليومي. '
+    'استعمل عنوان الدرس وعنوان الوحدة وأهداف الدورة المعطاة وحدها لتحديد المحتوى. لا تقدّم نصيحة قانونية ولا تَعِد بنتيجة، '
+    'ولا تذكر أسماء أشخاص ولا جهات ولا روابط ولا بريدًا. اكتب الأعداد بالحروف لا بالأرقام، ولا تستعمل حروفًا لاتينية. '
+)
+_CLD_ROLE_INTERACTIVE = _CLD_ROLE_COMMON + (
+    'أعد كائنًا واحدًا فيه المفتاح blocks: قائمة من ٤ إلى ٧ كتل، وكل كتلة من هذه الأنواع فقط وبهذه الحقول بالضبط: '
+    '{"type":"objectives","items":["…","…"]} (٢ إلى ٥ بنود) · '
+    '{"type":"text","md":"…"} · '
+    '{"type":"situation","text":"حكاية الموقف في ثلاث جمل أو أربع","question":"…","options":[{"text":"…","comment":"…"}]} (٢ إلى ٣ اختيارات) · '
+    '{"type":"decision","key":"first_step","text":"…","question":"…","options":[{"text":"…","result":"…","comment":"…"}]} (٢ إلى ٣ قرارات، والمفتاح حروف إنجليزية صغيرة و_ فقط) · '
+    '{"type":"recall","key":"<مفتاح قرار سبق في الدرس>","follow":{"0":"…","1":"…"},"default":"…"} (المفتاح 0 هو القرار الأول) · '
+    '{"type":"quiz","question":"…","options":[{"text":"…","ok":true,"feedback":"…"},{"text":"…","ok":false,"feedback":"…"}]} (اختيار صحيح واحد على الأقل) · '
+    '{"type":"summary","items":["…","…"]} (٢ إلى ٥ بنود) · '
+    '{"type":"example","title":"…","text":"…"} · '
+    '{"type":"cards","prompt":"…","cards":[{"front":"كلمة قصيرة","back":"شرحها"}]} (٣ إلى ٦ كروت، والوجه حتى أربعين حرفًا). '
+    'لا تستعمل الرمزين | و— داخل نصوص الاختيارات والكروت. ابدأ بالأهداف وأنهِ بالملخص. '
+    'الشكل المطلوب: {"blocks":[…]}'
+)
+_CLD_ROLE_RECORDED = _CLD_ROLE_COMMON + (
+    'الدرس مسجّل بالفيديو، فاكتب ملخصًا ونصًّا مفرّغًا يقرؤه المتحدث: summary قائمة من سطر إلى ثلاثة أسطر قصيرة، '
+    'وtranscript نص متصل من أربع فقرات إلى ست بصوت المتحدث. '
+    'الشكل المطلوب: {"summary":["…"],"transcript":"…"}'
+)
 
 
 def _prompt_course_lesson_draft(target):
-    return (_system_ar(), '')
+    kind = (target.facts.get('lesson') or {}).get('kind')
+    if kind == 'recorded':
+        return (_system_ar() + _CLD_ROLE_RECORDED, _user_prompt(target, 'اكتب ملخص الدرس ونصه المفرّغ.'))
+    return (_system_ar() + _CLD_ROLE_INTERACTIVE, _user_prompt(target, 'اكتب كتل هذا الدرس.'))
+
+
+# ------------------------------------------------------------------ التحقق
+def _one(v, limit):
+    """نص في سطر واحد، بلا | ولا — (يفسدان صيغة الحفظ على المنصة)، وبطول محدود. فاضي ⇒ ''."""
+    if not isinstance(v, str):
+        return ''
+    s = re.sub(r'\s+', ' ', v.replace('|', '،').replace('—', '-')).strip()
+    return s[:limit]
+
+
+def _para(v, limit):
+    """نص بفقرات (سطور محفوظة). سطر يبدأ بـ«::» يفتح كتلة جديدة على المنصة فنمسح النقطتين."""
+    if not isinstance(v, str):
+        return ''
+    s = re.sub(r'[ \t]+', ' ', v.replace('\r\n', '\n').replace('\r', '\n'))
+    s = re.sub(r'(?m)^\s*:+', '', s)
+    s = re.sub(r'\n{3,}', '\n\n', s).strip()
+    return s[:limit]
+
+
+def _flat(v, limit):
+    """حكاية الموقف والمثال: سطر واحد (السطر الذي يبدأ بـ«-» اختيار على المنصة)."""
+    return re.sub(r'\s+', ' ', _para(v, limit * 2)).lstrip('-–•* ').strip()[:limit]
+
+
+def _options(raw, lo, hi, shape):
+    """قائمة اختيارات: كل عنصر قاموس بحقول `shape` كلها غير فاضية. خارج الحدود ⇒ None."""
+    if not isinstance(raw, list) or not lo <= len(raw) <= hi:
+        return None
+    out = []
+    for o in raw:
+        if not isinstance(o, dict):
+            return None
+        item = {k: _one(o.get(k), lim) for k, lim in shape}
+        if any(not v for v in item.values()):
+            return None
+        out.append(item)
+    return out
+
+
+def _strings(raw, lo, hi, limit):
+    if not isinstance(raw, list) or not lo <= len(raw) <= hi:
+        return None
+    out = [_one(x, limit) for x in raw]
+    return out if all(out) else None
+
+
+def _norm_block(b, decisions):
+    """كتلة خام ⇒ كتلة نظيفة بحقول المنصة بالضبط، أو None. `decisions` = {مفتاح: عدد القرارات} لقرارات سبقت."""
+    if not isinstance(b, dict):
+        return None
+    t = b.get('type')
+    if t == 'objectives':
+        items = _strings(b.get('items'), 2, 5, 140)
+        return {'type': t, 'items': items} if items else None
+    if t == 'text':
+        md = _para(b.get('md'), 1200)
+        return {'type': t, 'md': md} if md else None
+    if t == 'situation':
+        text, q = _flat(b.get('text'), 600), _one(b.get('question'), 120)
+        opts = _options(b.get('options'), 2, 3, (('text', 140), ('comment', 220)))
+        return {'type': t, 'text': text, 'question': q or 'ماذا تفعل؟', 'options': opts} if text and opts else None
+    if t == 'decision':
+        text, q = _flat(b.get('text'), 600), _one(b.get('question'), 120)
+        opts = _options(b.get('options'), 2, 3, (('text', 140), ('result', 200), ('comment', 220)))
+        key = b.get('key') if isinstance(b.get('key'), str) else ''
+        if not _CLD_KEY_RE.match(key) or len(key) > 40 or key in decisions:
+            key = 'decision_%d' % (len(decisions) + 1)
+        if not (text and opts):
+            return None
+        decisions[key] = len(opts)
+        return {'type': t, 'key': key, 'text': text, 'question': q or 'ماذا تختار؟', 'options': opts}
+    if t == 'recall':
+        key = b.get('key')
+        if not isinstance(key, str) or key not in decisions:
+            return None
+        follow_raw = b.get('follow') if isinstance(b.get('follow'), dict) else {}
+        follow = {}
+        for k, v in follow_raw.items():
+            ks = str(k).strip()
+            if ks.isdigit() and int(ks) < decisions[key] and _one(v, 220):
+                follow[str(int(ks))] = _one(v, 220)
+        default = _one(b.get('default'), 220)
+        return {'type': t, 'key': key, 'follow': follow, 'default': default} if follow or default else None
+    if t == 'quiz':
+        q = _one(b.get('question'), 160)
+        raw = b.get('options')
+        if not q or not isinstance(raw, list) or not 2 <= len(raw) <= 4:
+            return None
+        opts = []
+        for o in raw:
+            if not isinstance(o, dict) or not _one(o.get('text'), 140) or not isinstance(o.get('ok'), bool):
+                return None
+            opts.append({'text': _one(o.get('text'), 140), 'ok': o['ok'], 'feedback': _one(o.get('feedback'), 200)})
+        return {'type': t, 'question': q, 'options': opts} if any(o['ok'] for o in opts) else None
+    if t == 'summary':
+        items = _strings(b.get('items'), 2, 5, 160)
+        return {'type': t, 'items': items} if items else None
+    if t == 'example':
+        text = _flat(b.get('text'), 700)
+        return {'type': t, 'title': _one(b.get('title'), 60), 'text': text} if text else None
+    if t == 'cards':
+        raw = b.get('cards')
+        if not isinstance(raw, list) or not 3 <= len(raw) <= 6:
+            return None
+        cards = []
+        for c in raw:
+            if not isinstance(c, dict):
+                return None
+            front, back = _one(c.get('front'), 40), _one(c.get('back'), 140)
+            if not front or not back:
+                return None
+            cards.append({'front': front, 'back': back})
+        return {'type': t, 'prompt': _one(b.get('prompt'), 120) or 'اقلب الكروت', 'cards': cards}
+    return None
+
+
+def _lesson_strings(lesson):
+    """كل نص في مسودة الدرس، كلٌّ على حدة (لفحص الصدق نفسه الذي يطبّقه المحرّك على النصوص)."""
+    out = []
+
+    def walk(o):
+        if isinstance(o, dict):
+            for k, v in o.items():
+                if k in ('type', 'key', 'ok'):
+                    continue
+                walk(v)
+        elif isinstance(o, list):
+            for v in o:
+                walk(v)
+        elif isinstance(o, str) and o.strip():
+            out.append(o)
+    walk(lesson)
+    pieces = []
+    for s in out:
+        while len(s) > 800:
+            cut = s.rfind(' ', 0, 800)
+            cut = cut if cut > 0 else 800
+            pieces.append(s[:cut])
+            s = s[cut:].lstrip()
+        pieces.append(s)
+    return pieces
+
+
+def _honest(lesson, facts):
+    """نفس فحوص صدق المحرّك (أرقام · لاتيني · بريد/هاتف · «يقوّم» · بدء بـ«الذكاء») على كل نص في المسودة."""
+    try:
+        from brain2.engine import check_body
+    except Exception:
+        return False
+    pieces = _lesson_strings(lesson)
+    if not pieces:
+        return False
+    for i in range(0, len(pieces), 40):
+        probe = {'text': 'مسودة', 'fields': {'p%d' % j: s for j, s in enumerate(pieces[i:i + 40])}}
+        if check_body(probe, facts, 'draft') is not None:
+            return False
+    return True
+
+
+def _readable(lesson, kind):
+    """عرض نصي قصير للمسودة (للبطاقة): بلا أرقام، حتى ٨٨٠ حرفًا."""
+    lines = []
+    if kind == 'recorded':
+        lines += ['• ' + x for x in lesson.get('summary', [])]
+        lines.append(lesson.get('transcript', ''))
+    else:
+        for b in lesson.get('blocks', []):
+            head = _CLD_TYPE_AR.get(b['type'], '')
+            body = b.get('md') or b.get('text') or b.get('question') or b.get('prompt') or '؛ '.join(b.get('items') or [])
+            lines.append('• %s: %s' % (head, body))
+    s = '\n'.join(x for x in lines if x)
+    if len(s) > 880:
+        s = s[:880].rsplit(' ', 1)[0] + '…'
+    return s
+
+
+def _summary_text(kind, lesson, title):
+    if kind == 'recorded':
+        return ('مسودة لدرس «%s»: ملخص قصير ونص مفرّغ يقرؤه المتحدث.' % title)[:300]
+    names = []
+    for b in lesson['blocks']:
+        n = _CLD_TYPE_AR[b['type']]
+        if n not in names:
+            names.append(n)
+    return ('مسودة لدرس «%s» تضم: %s.' % (title, '، '.join(names)))[:300]
+
+
+def _preview(target, lesson):
+    """معاينة المنصة (تحقّق بلا كتابة). (ok, detail). رفض المنصة ⇒ (False, نصها). تعذّر الوصول ⇒ (False, '')."""
+    ns = _RUN.get('ns')
+    cid, lid = (target.meta or {}).get('course_id'), (target.meta or {}).get('lesson_id')
+    if ns is None or not cid or not lid or ns.get('_platform_proxy') is None:
+        return False, ''
+    path = '/api/bridge/courses2/%s/lessons/%s/preview' % (quote(cid, safe=''), quote(lid, safe=''))
+    try:
+        resp = ns['_platform_proxy']('POST', path, json_body=dict(lesson), timeout=25)
+    except Exception:
+        return False, ''
+    if ns['_resp_ok'](resp):
+        return True, ''
+    if isinstance(resp, tuple) and len(resp) > 1:
+        status = resp[1]
+    else:
+        status = getattr(resp, 'status_code', None) or getattr(resp, 'status', 0)
+    if status in (400, 422):
+        err = ns['_proxy_json'](resp).get('error')
+        return False, err.strip()[:300] if isinstance(err, str) else ''
+    return False, ''
 
 
 def _validate_course_lesson_draft(raw, target):
-    return None
+    """شكل المسودة ⇒ صدق النصوص ⇒ معاينة المنصة. يرجع {'text','fields':{'title','body'},'lesson':{…}} أو None."""
+    if not isinstance(raw, dict):
+        return None
+    facts = target.facts or {}
+    kind = (target.meta or {}).get('kind') or (facts.get('lesson') or {}).get('kind')
+    title = (facts.get('lesson') or {}).get('title') or ''
+    if kind == 'interactive':
+        blocks_raw = raw.get('blocks')
+        if not isinstance(blocks_raw, list) or not _CLD_BLOCKS_MIN <= len(blocks_raw) <= _CLD_BLOCKS_MAX:
+            return None
+        decisions, blocks = {}, []
+        for b in blocks_raw:
+            nb = _norm_block(b, decisions)
+            if nb is None:
+                return None
+            blocks.append(nb)
+        lesson = {'blocks': blocks}
+    elif kind == 'recorded':
+        summary = _strings(raw.get('summary'), 1, 3, 160)
+        transcript = _para(raw.get('transcript'), _CLD_TRANSCRIPT_MAX + 1)
+        if not summary or not _CLD_TRANSCRIPT_MIN <= len(transcript) <= _CLD_TRANSCRIPT_MAX:
+            return None
+        lesson = {'summary': summary, 'transcript': transcript}
+    else:
+        return None
+    if not _honest(lesson, facts):
+        return None
+    ok, detail = _preview(target, lesson)
+    if not ok:
+        if detail:
+            _remember_preview_error(target.ref, detail)
+            logger.warning('brain2: lesson preview rejected %s: %s', target.ref, detail)
+        return None
+    return {'text': _summary_text(kind, lesson, title), 'fields': {'title': title[:200], 'body': _readable(lesson, kind)}, 'lesson': lesson}
+
+
+# ------------------------------------------------------------------ الاعتماد
+def _lesson_still_empty(ctx, cid, lid):
+    """True لو الدرس ما زال بلا محتوى، False لو أحدٌ كتب فيه بعد المسودة، None لو تعذّرت القراءة."""
+    try:
+        course = _course_of(_platform_get(ctx, '/api/bridge/courses2/%s' % quote(cid, safe='')))
+    except SourceDown:
+        return None
+    if course is None:
+        return None
+    for u in _units_of(course):
+        for les in (u.get('lessons') if isinstance(u.get('lessons'), list) else []):
+            if isinstance(les, dict) and str(les.get('id') or '') == lid:
+                return _lesson_needs_draft(les)
+    return False
+
+
+def _apply_course_lesson_draft(ctx, body, target):
+    cid, lid = (target.meta or {}).get('course_id'), (target.meta or {}).get('lesson_id')
+    lesson = body.get('lesson') if isinstance(body, dict) else None
+    if not cid or not lid or not isinstance(lesson, dict) or not lesson:
+        return ApplyResult(ok=False, error='لا توجد مسودة لإضافتها')
+    empty = _lesson_still_empty(ctx, cid, lid)
+    if empty is None:
+        return ApplyResult(ok=False, error='تعذّر التأكد من حالة الدرس الآن. حاول بعد قليل')
+    if empty is False:
+        return ApplyResult(ok=False, error='تغيّر الدرس منذ كتابة المسودة. افتح الدورة وراجعه')
+    path = '/api/bridge/courses2/%s/lessons/%s' % (quote(cid, safe=''), quote(lid, safe=''))
+    payload = dict(lesson, confirmed=True, by=ctx.actor)
+    resp = _fn(ctx, '_v2_write')('PUT', path, payload, 'course.lesson_brain', lid, {'course': cid, 'via': 'brain'})
+    return _write_result(ctx.ns, resp, {'course_id': cid, 'lesson_id': lid})
 
 
 # ================================================================== السجل
@@ -614,12 +1024,12 @@ PRODUCERS = [
     ),
     Producer(
         id='course_lesson_draft', section='courses', kind='draft',
-        label='مسودات دروس الدورات',
+        label=CLD_LABEL,
         sentence='عندما ينقص درس في دورة، يكتب العقل مسودته لتراجعها.',
         lock_reason='يسألك دائمًا لأن الدرس يظهر للمتعلمين.',
         may_run_alone=False, default_mode='ask', per_run_cap=3,
         gather=_gather_course_lesson_draft, prompt=_prompt_course_lesson_draft,
-        validate=_validate_course_lesson_draft, apply=None,
-        tag='مسودة درس', approve_label='اعتمد المسودة', listed=False,
+        validate=_validate_course_lesson_draft, apply=_apply_course_lesson_draft,
+        tag='مسودة درس', approve_label=CLD_APPROVE_LABEL, listed=True,
     ),
 ]

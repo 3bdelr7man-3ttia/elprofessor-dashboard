@@ -457,6 +457,7 @@
       + '<div class="v2co-seg" role="tablist" aria-label="الطلبات والمدرّبون">' + segHtml + '</div>'
       + '<div class="v2co-two" data-active="' + seg + '"><section class="v2co-colbox" data-col="apps"><h2 class="v2co-h2">طلبات المدرّبين <span class="v2co-cnt">' + esc(apps ? ar(apps.length) : '—') + '</span></h2>' + appsHtml + '</section>'
       + '<section class="v2co-colbox card" data-col="list"><h2 class="v2co-h2">المدرّبون</h2>' + listHtml + '</section></div></div>';
+    if (window.V2TS) window.V2TS.mount(q('.v2co', v));       // نسبة المدرّب (v2s/trainer_share.js)
   }
 
   // ------------------------------------------------------------------ الدورات الحيّة
