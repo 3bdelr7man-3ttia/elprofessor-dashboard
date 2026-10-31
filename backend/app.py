@@ -186,7 +186,7 @@ def _security_headers(resp):
         # الجولة ١٢: رسالة الخبير الصوتية في درج المراجعة بتتشغّل من blob (fetch بالتوكن ⇒ blob) — من غير media-src
         # بتقع على default-src 'self' والمتصفح بيرفض blob:.
         "media-src 'self' blob:; "
-        "connect-src 'self'; "
+        "connect-src 'self' https://video.bunnycdn.com; "
         "object-src 'none'; "
         "base-uri 'none'; "
         "form-action 'self'; "
@@ -2723,6 +2723,9 @@ def _v2_brain2_kick(trigger='cron'):
 import v2_courses_routes; v2_courses_routes.register(app, globals())
 try: import v2_trainer_share_routes as _v2ts; _v2ts.register(app, globals())  # نسبة المدرّب (C2b): تحميل محروس
 except Exception: logger.exception('v2 trainer share routes not loaded')
+try:   # محرّر الدورات (SPEC-C §C1): تحميل محروس — غيابه لا يكسر الإقلاع
+    import v2_courses2_routes; v2_courses2_routes.register(app, globals())
+except Exception: logger.exception('v2 courses2 routes not loaded')
 import v2_market_routes as _v2s_market; _v2s_market.register(app, globals())  # noqa: E402
 __import__('v2_books_routes').register(app, globals())
 import v2_content_routes as _v2s_content; _v2s_content.register(app, globals())

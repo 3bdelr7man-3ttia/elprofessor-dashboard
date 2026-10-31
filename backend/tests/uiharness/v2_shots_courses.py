@@ -24,6 +24,7 @@ sys.argv = [sys.argv[0], OUT] + sys.argv[2:]
 
 import v2_shots as vs                       # noqa: E402
 import courses_fixtures as cf               # noqa: E402
+import course_editor_fixtures as cef        # noqa: E402
 from ef_route_harness import Harness, DASH  # noqa: E402
 
 vs.OUT = OUT
@@ -483,11 +484,12 @@ def flow_main(browser, h, pre, vp, mobile):
     page.wait_for_selector('#epModal .v2co-will')
     co_shot(page, pre + '12d-accept-offer-2.jpg')
     close_sheet(page)
-    # —— ١٣) أنشئ دورة
+    # —— ١٣) أنشئ دورة (بالمحرّر الجديد: مسار courses2 بمفتاح منع تكرار؛ المنصّة هنا تعرف المسارين)
+    h.ef = cef.Courses2Platform(with_abc=False)
     nav(page, '#s/courses/courses')
     page.click('[data-a="create"]')
     sheet(page)
-    page.fill('#co_ti', 'دورة العقود الذكية للمبتدئين')
+    page.fill('#ce_ti', 'دورة العقود الذكية للمبتدئين')
     co_shot(page, pre + '13-create-sheet-1.jpg')
     page.click('#co_next')
     page.wait_for_selector('#epModal .v2co-will')
@@ -496,19 +498,18 @@ def flow_main(browser, h, pre, vp, mobile):
     page.click('#co_go')
     page.wait_for_function("() => !document.getElementById('epModal')", timeout=15000)
     page.wait_for_function("() => location.hash.indexOf('#s/courses/course/') === 0", timeout=10000)
+    page.wait_for_selector('.v2ce .v2ce-tabs', timeout=10000)
     page.wait_for_timeout(900)
-    cr = [c for c in h.platform_calls[n0:] if c[0] == 'POST' and c[1] == '/api/bridge/courses']
-    if len(cr) != 1 or cr[0][3].get('is_active') is not False or any(k.startswith('price') for k in cr[0][3]) or cr[0][3].get('platform_owned') is not True:
+    cr = [c for c in h.platform_calls[n0:] if c[0] == 'POST' and c[1] == '/api/bridge/courses2']
+    if len(cr) != 1 or any(k.startswith('price') for k in cr[0][3]) or cr[0][3].get('platform_owned') is not True or cr[0][3].get('confirmed') is not True or not cr[0][3].get('idem_key'):
         PROBLEMS.append('%s13: نداء الإنشاء %r' % (pre, cr))
-    if 'مسودة' not in page.inner_text('.v2co-ok') or 'الفلوس' not in page.inner_text('.v2co-ok'):
-        PROBLEMS.append(pre + '13c: شريط النجاح لازم يذكر المسودة وسعرها في «الفلوس»')
-    co_shot(page, pre + '13c-after-create.jpg')
+    if 'مسودة' not in page.inner_text('.v2co-ok'):
+        PROBLEMS.append(pre + '13c: شريط النجاح لازم يذكر المسودة')
     nav(page, '#s/courses/courses')
-    if mobile:
-        click_col(page, 'building', True)
-    if not page.query_selector('.v2co-bc >> text=دورة العقود الذكية للمبتدئين'):
-        PROBLEMS.append(pre + '13c: الدورة الجديدة ما ظهرتش في «تحت البناء»')
-    co_shot(page, pre + '13d-board-after-create.jpg')
+    page.click('[data-a="all"]') if not mobile else (click_col(page, 'published', True), page.click('[data-a="all"]'))
+    page.wait_for_selector('.v2ce-extras', timeout=10000)
+    if 'دورة العقود الذكية للمبتدئين' not in page.inner_text('.v2ce-extras'):
+        PROBLEMS.append(pre + '13c: الدورة الجديدة ما ظهرتش في «دورات من المحرّر»')
     writes_ok(reqs, pre + 'main')
     # —— ١٤) «كل السجلات»
     h.ef = cf.CoursesPlatform(with_abc=False)      # منصة نظيفة: فيها دورة في المراجعة للكتالوج القديم

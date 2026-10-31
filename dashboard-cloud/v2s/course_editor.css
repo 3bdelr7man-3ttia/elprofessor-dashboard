@@ -1,0 +1,179 @@
+/* ============================================================================
+ * v2s/course_editor.css — محرّر الدورات (SPEC-C-courses §C1). فوق أصناف courses.css (`.v2co-*`) ولا يعرّف ألوانًا جديدة: العنّابي والورق والحبر.
+ * ⛔ البادئة `.v2ce-` فقط. المفتاح مقفول ⇒ لا عنصر في الصفحة يحمل هذه الأصناف فلا أثر على أي شاشة.
+ * أهداف اللمس ٤٤px على الأقل (والأزرار ٥٢px في الموبايل من courses.css)، ولا تمرير أفقي.
+ * ========================================================================== */
+.v2ce{--ce-gap:14px}
+.v2ce h1{font:800 26px/1.4 'Cairo',sans-serif;margin:0}
+.v2ce h3{font:800 16px/1.5 'Cairo',sans-serif;margin:0}
+.v2ce-head{margin:6px 0 14px;display:grid;gap:8px}
+.v2ce-mute{color:var(--mute);font-size:14px;line-height:1.8}
+.v2ce-lead{margin:0 0 12px}
+.v2ce-hint{display:block;color:var(--mute);font-size:13px;margin-bottom:6px}
+
+/* —— التبويبات */
+.v2ce-tabs{display:flex;gap:6px;margin:0 0 14px;background:var(--paper2);border-radius:16px;padding:5px}
+.v2ce-tab{flex:1 1 0;min-width:0;min-height:48px;border:0;background:transparent;border-radius:12px;font:700 15px 'Cairo',sans-serif;color:var(--ink);cursor:pointer;position:relative;padding:0 8px}
+.v2ce-tab:hover{background:#fff}
+.v2ce-tab.on{background:var(--ink);color:#fff}
+.v2ce-dot{position:absolute;top:8px;inset-inline-end:10px;width:9px;height:9px;border-radius:50%;background:#E0A100;display:block}
+.v2ce-panel{display:grid;gap:var(--ce-gap);min-width:0}
+.v2ce-card{min-width:0}
+
+/* —— الحقول داخل المحرّر (الصفحة لا الورقة) */
+.v2ce .v2co-fld{margin:0 0 4px}
+.v2ce .v2co-fld label{font:700 14px 'Cairo',sans-serif}
+.v2ce .v2co-fld small{color:var(--mute);font-size:13px}
+.v2ce .v2co-fld input[type=text],.v2ce .v2co-fld input[type=number],.v2ce .v2co-fld input[type=datetime-local],.v2ce .v2co-fld input:not([type]),.v2ce .v2co-fld textarea,.v2ce .v2co-fld select,
+.v2ce .v2ce-json{width:100%;min-height:48px;border:1px solid #D9CFC0;border-radius:12px;padding:8px 12px;font-size:16px;background:#fff;color:var(--ink);font-family:inherit}
+.v2ce .v2co-fld textarea{min-height:96px;line-height:1.8}
+.v2ce .v2ce-json{min-height:160px;font:13px/1.6 ui-monospace,Menlo,Consolas,monospace;direction:ltr;text-align:left}
+.v2ce input:focus-visible,.v2ce textarea:focus-visible,.v2ce select:focus-visible{outline:3px solid rgba(158,43,78,.35);outline-offset:1px}
+.v2ce-chk{display:flex;align-items:center;gap:10px;min-height:48px;font:700 14.5px 'Cairo',sans-serif;cursor:pointer}
+.v2ce .v2ce-chk input,.v2co-m .v2ce-chk input,.v2ce .v2ce-radio input{width:22px;height:22px;min-height:0;padding:0;accent-color:var(--wine);flex:none}
+.v2ce-grid2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0 14px}
+.v2ce-err{min-height:0}
+.v2ce summary{min-height:48px;display:flex;align-items:center;cursor:pointer;font:700 14.5px 'Cairo',sans-serif;color:var(--wine);list-style-position:inside}
+
+/* —— الهيكل */
+.v2ce-unit{gap:12px}
+.v2ce-uh{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:10px;align-items:end}
+.v2ce-un{font:800 15px 'Cairo',sans-serif;color:var(--wine);padding-bottom:14px}
+.v2ce-ops{display:inline-flex;gap:6px;flex:none}
+.v2co-btn2.v2ce-ib{min-width:48px;padding:0 10px;min-height:48px}
+.v2ce-lsl{list-style:none;margin:0;padding:0;display:grid;gap:8px}
+.v2ce-ls{display:grid;grid-template-columns:auto minmax(0,1fr) auto auto;gap:10px;align-items:end;background:var(--paper);border:1px solid var(--line);border-radius:14px;padding:10px 12px}
+.v2ce-lsn{font:800 14px 'Cairo',sans-serif;color:var(--mute);padding-bottom:14px}
+.v2ce-lsk{display:inline-flex;gap:4px;padding-bottom:8px;flex-wrap:wrap}
+.v2ce-addls{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.v2ce-bar{display:flex;gap:10px;flex-wrap:wrap}
+.v2ce-bar .v2co-btn1,.v2ce-bar .v2co-btn2{flex:1 1 auto;width:auto}
+.v2ce-bar.sticky{position:sticky;bottom:0;background:linear-gradient(0deg,#fff 70%,rgba(255,255,255,0));padding:12px 0 6px;z-index:3}
+.v2ce-sum{font:700 14.5px/1.7 'Cairo',sans-serif;color:var(--ink)}
+
+/* —— الدروس */
+.v2ce-split{display:grid;grid-template-columns:minmax(240px,300px) minmax(0,1fr);gap:16px;align-items:start}
+.v2ce-side{position:sticky;top:8px}
+.v2ce-ll{list-style:none;margin:0;padding:0;display:grid;gap:8px}
+.v2ce-lsel>summary{display:none}
+.v2ce-lb{width:100%;text-align:start;border:1px solid var(--line);background:#fff;border-radius:14px;padding:10px 12px;display:grid;gap:4px;cursor:pointer;min-height:56px;font-family:inherit;color:var(--ink)}
+.v2ce-lb:hover{background:#FBF0F3}
+.v2ce-lb.on{border:2px solid var(--wine);background:#FBF0F3}
+.v2ce-lno{font-size:12.5px;color:var(--mute);font-weight:700}
+.v2ce-lb b{font:800 15px/1.5 'Cairo',sans-serif}
+.v2ce-lm{display:flex;gap:5px;flex-wrap:wrap}
+.v2ce-main{display:grid;gap:var(--ce-gap);min-width:0}
+.v2ce-lh{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.v2ce-lh .v2co-h2{margin:0}
+.v2ce-sec{display:grid;gap:8px;margin:12px 0}
+.v2ce-sec h3 small{color:var(--mute);font-weight:600}
+
+/* —— الكتل */
+.v2ce-bh{display:flex;align-items:center;gap:10px;margin:10px 0 6px}
+.v2ce-bh h3{display:flex;align-items:center;gap:10px}
+.v2ce-blocks{display:grid;gap:10px}
+.v2ce-blk{border:1px solid var(--line);border-radius:14px;background:var(--paper);min-width:0}
+.v2ce-blk.open{border-color:#D9B7C2;background:#fff}
+.v2ce-bhd{display:flex;align-items:center;gap:8px;padding:6px 8px 6px 6px;min-width:0}
+.v2ce-bt{flex:1 1 auto;min-width:0;display:flex;align-items:center;gap:10px;min-height:52px;border:0;background:transparent;font-family:inherit;color:var(--ink);cursor:pointer;text-align:start;padding:0 6px}
+.v2ce-bn{flex:none;width:30px;height:30px;border-radius:50%;background:var(--ink);color:#fff;display:inline-grid;place-items:center;font:800 13px 'Cairo',sans-serif}
+.v2ce-bt b{flex:none;font:800 15px 'Cairo',sans-serif;color:var(--wine)}
+.v2ce-bhead{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--mute);font-size:14px}
+.v2ce-bbody{display:none;padding:4px 12px 14px;border-top:1px dashed var(--line)}
+.v2ce-blk.open .v2ce-bbody{display:block}
+.v2ce-addb{margin-top:10px;width:100%}
+.v2ce-picker{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:8px;margin-top:10px;padding:12px;background:var(--paper2);border-radius:14px}
+.v2ce-picker.in{grid-column:1/-1;margin-top:0;padding:0;background:transparent}
+.v2ce-padv{grid-column:1/-1}
+.v2ce-pt{min-height:52px;border:1px solid var(--line);background:#fff;border-radius:12px;font:700 14.5px 'Cairo',sans-serif;color:var(--ink);cursor:pointer;padding:0 10px}
+.v2ce-pt:hover{border-color:var(--wine);background:#FBF0F3}
+.v2ce-rows{display:grid;gap:8px;margin:6px 0 10px}
+.v2ce-rl{font:700 14px 'Cairo',sans-serif}
+.v2ce-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;align-items:end;background:var(--paper2);border-radius:12px;padding:8px 10px}
+.v2ce-rowf{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:0 10px;min-width:0}
+.v2ce-cp{border:1px solid var(--line);border-radius:14px;padding:10px 12px;display:grid;gap:6px;background:var(--paper)}
+.v2ce-cph{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.v2ce-jerr{margin-top:6px}
+
+/* —— الفيديو */
+.v2ce-vs{font:700 14px 'Cairo',sans-serif;color:var(--ink)}
+.v2ce-vgrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
+.v2ce-upl{display:grid;gap:8px}
+.v2ce-file{cursor:pointer;width:100%}
+.v2ce-fn{font-size:13.5px;color:var(--mute);overflow-wrap:anywhere}
+.v2ce-prog{height:14px;border-radius:999px;background:var(--paper2);border:1px solid var(--line);overflow:hidden;margin-top:8px}
+.v2ce-prog i{display:block;height:100%;background:var(--wine);transition:width .2s}
+
+/* —— المعاينة */
+.v2ce-pv{background:#fff;border:2px solid var(--wine);border-radius:16px;padding:14px 16px;display:grid;gap:10px}
+.v2ce-pv h3 small{color:var(--mute);font-weight:600;margin-inline-start:8px}
+.v2ce-pvb{border:1px solid var(--line);border-radius:12px;padding:10px 14px;background:var(--paper);display:grid;gap:6px;line-height:1.9;font-size:15.5px}
+.v2ce-pvb p{margin:0}
+.v2ce-pvb ul,.v2ce-pvb ol{margin:0;padding-inline-start:22px}
+.v2ce-pvt{font:800 12px 'Cairo',sans-serif;color:var(--wine);background:#FBF0F3;border-radius:999px;padding:1px 10px;justify-self:start}
+.v2ce-pvq{font-weight:800}
+.v2ce-pvo{list-style:none;padding:0!important;display:grid;gap:6px}
+.v2ce-pvo li{border:1px solid var(--line);border-radius:10px;background:#fff;padding:8px 12px;display:grid;gap:2px}
+.v2ce-pvo li.ok{border-color:#B9DEC9;background:#EAF6EF}
+.v2ce-pvo em{font-style:normal;color:var(--mute);font-size:14px}
+.v2ce-pvo span{color:var(--ink);font-size:14.5px}
+.v2ce-pvg{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px}
+.v2ce-pvg>div{border:1px solid var(--line);border-radius:10px;background:#fff;padding:8px 12px;display:grid;gap:2px}
+.v2ce-pvb blockquote{margin:0;border-inline-start:4px solid var(--wine);padding:2px 12px}
+.v2ce-pvb cite{display:block;color:var(--mute);font-size:14px}
+
+/* —— المساعد */
+.v2ce-as .v2co-h2{gap:10px}
+.v2ce-aks{display:flex;flex-wrap:wrap;gap:8px}
+.v2ce-ak{min-height:48px;border:1px solid var(--line);background:#fff;border-radius:999px;padding:0 16px;font:700 14.5px 'Cairo',sans-serif;color:var(--ink);cursor:pointer}
+.v2ce-ak.on{background:var(--ink);color:#fff;border-color:var(--ink)}
+.v2ce-draft{border:2px dashed #D9B7C2;border-radius:16px;padding:12px 14px;display:grid;gap:10px;background:#FFFDFB}
+.v2ce-draft h3 small{color:var(--mute);font-weight:600;margin-inline-start:8px}
+.v2ce-script{white-space:normal;line-height:1.9;background:#fff;border:1px solid var(--line);border-radius:12px;padding:10px 14px;font-size:15px}
+.v2ce-titles{display:grid;gap:6px}
+.v2ce-radio{display:flex;align-items:center;gap:10px;min-height:48px;border:1px solid var(--line);border-radius:12px;padding:0 12px;background:#fff;cursor:pointer;font-weight:700}
+.v2ce-du{background:#fff;border:1px solid var(--line);border-radius:12px;padding:8px 12px}
+.v2ce-du ul{margin:4px 0 0;padding-inline-start:22px}
+
+/* —— المراجعة */
+.v2ce-notes{list-style:none;margin:0;padding:0;display:grid;gap:8px}
+.v2ce-notes li{border:1px solid var(--line);border-radius:12px;padding:10px 12px;background:var(--paper)}
+.v2ce-nh{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap}
+.v2ce-notes p{margin:4px 0 0!important}
+
+/* —— القائمة: دورات المحرّر */
+.v2ce-c2{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.v2ce-xl{list-style:none;margin:0;padding:0;display:grid;gap:8px}
+.v2co-lrow.v2ce-xr{display:flex;width:100%;min-height:56px;text-align:start}
+
+/* —— ورقة الإرجاع */
+.v2co-m .v2ce-rr{border:1px solid var(--line);border-radius:12px;padding:6px 12px;margin-bottom:8px;display:grid;gap:6px}
+.v2co-m .v2ce-rr textarea{width:100%;min-height:80px;border:1px solid #D9CFC0;border-radius:10px;padding:8px 12px;font-size:16px;font-family:inherit}
+.v2co-m .v2ce-chk{min-height:48px}
+
+@media(max-width:899px){
+  .v2ce-lsel>summary{display:flex;border:1px solid var(--line);background:#fff;border-radius:14px;padding:0 14px;margin-bottom:8px;min-height:56px;font-weight:800}
+  .v2ce-split{grid-template-columns:minmax(0,1fr)}
+  .v2ce-side{position:static}
+  .v2ce-ll{max-height:260px;overflow-y:auto}
+}
+@media(max-width:699px){
+  .v2ce h1{font-size:21px}
+  .v2ce-tab{font-size:13px;padding:0 2px;min-height:52px}
+  .v2ce-grid2,.v2ce-vgrid{grid-template-columns:minmax(0,1fr)}
+  .v2ce-uh{grid-template-columns:minmax(0,1fr)}
+  .v2ce-un{padding-bottom:0}
+  .v2ce-ls{grid-template-columns:minmax(0,1fr)}
+  .v2ce-lsn{padding-bottom:0}
+  .v2ce-lsk{padding-bottom:0}
+  .v2ce-ops{width:100%}
+  .v2ce-ops .v2co-btn2{flex:1 1 0}
+  .v2ce-bhd{flex-wrap:wrap}
+  .v2ce-bt{flex:1 1 100%}
+  .v2ce-row{grid-template-columns:minmax(0,1fr)}
+  .v2ce-row .v2co-btn2{width:100%}
+  .v2ce-picker{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .v2ce .v2co-btn1,.v2ce .v2co-btn2,.v2ce .v2co-link{min-height:52px}
+  .v2ce-pt,.v2ce-ak{min-height:52px}
+  .v2ce-bar.sticky{padding-bottom:10px}
+}
