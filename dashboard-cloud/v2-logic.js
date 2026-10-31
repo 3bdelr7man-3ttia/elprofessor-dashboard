@@ -2169,7 +2169,7 @@
     var used = bt && typeof bt.used === 'number' && isFinite(bt.used) && bt.used >= 0 ? bt.used : null;
     var cap = bt && typeof bt.cap === 'number' && isFinite(bt.cap) && bt.cap > 0 ? bt.cap : null;
     var w = resp && !Array.isArray(resp) ? resp.writer : undefined;
-    return { rows: rows, writer: w === 'main' || w === 'backup' || w === null ? w : undefined, brainToday: { used: used, cap: cap } };
+    return { rows: rows, writer: w === 'main' || w === 'backup' || w === null ? w : undefined, writerLabel: resp && !Array.isArray(resp) ? brKeyLabel(resp.writer_label) : '', brainToday: { used: used, cap: cap } };
   }
   // ورقة تأكيد تغيير الاختيار: {title, lead, go}.
   function v2sBrainSwitchSheet(row, mode) {
@@ -2252,9 +2252,18 @@
     return { canStart: !reason, active: !!(run && run.active), reason: reason, n: n, lead: lead };
   }
   // قرصا المساعدين الجديدان.
-  function v2sBrainWriterText(writer, known) {
+  function v2sBrainWriterText(writer, known, label) {
     if (!known || writer === undefined) return 'غير متاح بعد';
+    var lab = brKeyLabel(label);
+    if (lab && (writer === 'main' || writer === 'backup')) return lab + ' (' + (writer === 'main' ? 'الأساسي' : 'الاحتياطي') + ')';
     return writer === 'main' ? 'الكاتب الأساسي' : writer === 'backup' ? 'الكاتب الاحتياطي' : 'لا أحد';
+  }
+  // من يكتب الآن: من حالة المساعدين أولًا ثم من قواعد العقل. {writer, known, label}؛ الاسم يخصّ مفتاح القاعدة فقط ويغيب مع إعداد الخادم.
+  function v2sBrainWriterPick(status, sw) {
+    var okW = function (w) { return w === null || w === 'main' || w === 'backup'; };
+    if (status && typeof status === 'object' && Object.prototype.hasOwnProperty.call(status, 'writer') && okW(status.writer)) return { writer: status.writer, known: true, label: brKeyLabel(status.writer_label) };
+    if (sw && sw.writer !== undefined) return { writer: sw.writer, known: true, label: brKeyLabel(sw.writerLabel) };
+    return { writer: undefined, known: false, label: '' };
   }
   function v2sBrainWritesToday(bt) {
     if (!bt || bt.used == null || bt.cap == null) return 'غير متاح بعد';
@@ -2455,6 +2464,99 @@
       + ' من تحديثات اليوم (المتبقي: ' + H.remainingText + ').';
   }
 
+  // —— «المفاتيح والكاتب» (SPEC-B B1): صفوف المفاتيح والنموذج والجمل. ⛔ لا نص مفتاح يصل هنا أبدًا: الخادم يرسل آخر ٤ أحرف فقط.
+  var BR_KEY_ROLE = { main: 'الأساسي', backup: 'الاحتياطي', off: 'موقوف' };
+  var BR_KEY_TONE = { main: 'auto', backup: 'ask', off: 'na' };
+  var BR_KEY_ROLES = ['main', 'backup', 'off'];
+  var BR_KEY_HTTPS = 'https://';
+  function brKeyLabel(v) { return typeof v === 'string' ? v.replace(/[\u0000-\u001f\u007f]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 60) : ''; }
+  function brKeyTest(k, now) {
+    var t = v2sBrainTime(k.last_test_at);
+    if (k.last_test_ok === true) return { state: 'ok', text: 'جُرّب ' + (t != null ? agoText(t, now || Date.now()) : 'قبل قليل') + ': يعمل' };
+    if (k.last_test_ok === false) return { state: 'fail', text: 'آخر تجربة لم تنجح: ' + (str(k.last_test_error) || 'لم يصل رد') };
+    return { state: 'none', text: 'لم يُجرَّب بعد' };
+  }
+  // ردّ GET /keys ⇒ {rows, presets, main, backup} أو null (مصدر فاشل = null لا قائمة فاضية). «أخرى» دائمًا في آخر القوالب (قاعدة المؤسس).
+  function v2sBrainKeys(resp, now) {
+    if (!resp || typeof resp !== 'object' || !Array.isArray(resp.keys)) return null;
+    var presets = [], seen = {};
+    (Array.isArray(resp.presets) ? resp.presets : []).forEach(function (p) {
+      if (!p || typeof p !== 'object' || !str(p.id) || !str(p.label) || seen[str(p.id)]) return;
+      seen[str(p.id)] = 1;
+      presets.push({ id: str(p.id), label: str(p.label), needsUrl: p.needs_url === true, defaultModel: str(p.default_model) });
+    });
+    var other = presets.filter(function (p) { return p.id === 'other'; })[0];
+    presets = presets.filter(function (p) { return p.id !== 'other'; });
+    presets.push(other || { id: 'other', label: 'أخرى', needsUrl: true, defaultModel: '' });
+    var rows = [];
+    resp.keys.forEach(function (k) {
+      if (!k || typeof k !== 'object' || !str(k.id)) return;
+      var role = BR_KEY_ROLES.indexOf(k.role) >= 0 ? k.role : 'off';
+      var tail = typeof k.key_tail === 'string' ? k.key_tail.replace(/[^\x21-\x7e]/g, '').slice(-4) : '';
+      var pr = presets.filter(function (p) { return p.id === str(k.preset); })[0];
+      var readable = k.readable !== false;
+      rows.push({ id: str(k.id), label: brKeyLabel(k.label) || (pr ? pr.label : 'مفتاح'), preset: str(k.preset), presetLabel: pr ? pr.label : '', model: str(k.model),
+                  baseUrl: str(k.base_url), tail: tail ? '••••' + tail : '', tailText: tail ? 'ينتهي بـ ••••' + tail : 'غير متاح بعد',
+                  role: role, roleLabel: BR_KEY_ROLE[role], tone: readable ? BR_KEY_TONE[role] : 'stop', readable: readable,
+                  notice: readable ? '' : (str(k.notice) || 'تعذّرت قراءة هذا المفتاح؛ أضِفه من جديد'), test: readable ? brKeyTest(k, now) : { state: 'none', text: '' } });
+    });
+    var rank = { main: 0, backup: 1, off: 2 };      // الأساسي ثم الاحتياطي ثم الموقوف، وتبقى الأحدث أولًا داخل كل دور
+    rows = rows.map(function (r, i) { return { r: r, i: i }; }).sort(function (a, b) { return (rank[a.r.role] - rank[b.r.role]) || (a.i - b.i); }).map(function (x) { return x.r; });
+    var pick = function (r) { return rows.filter(function (x) { return x.role === r && x.readable; })[0] || null; };
+    return { rows: rows, presets: presets, main: pick('main'), backup: pick('backup') };
+  }
+  // نموذج «أضف مفتاحًا»: {ok, field, error, body}. preset = عنصر من v2sBrainKeys().presets. التحقق هنا للراحة، والخادم هو الحَكَم.
+  function v2sBrainKeyForm(preset, input) {
+    var inp = input && typeof input === 'object' ? input : {};
+    var fail = function (field, error) { return { ok: false, field: field, error: error, body: null }; };
+    if (!preset || !str(preset.id)) return fail('preset', 'اختر الجهة أولًا');
+    var model = str(inp.model) || str(preset.defaultModel);
+    if (!model) return fail('model', 'اكتب اسم الموديل');
+    if (model.length > 80 || /\s/.test(model)) return fail('model', 'اسم الموديل غير صالح؛ بلا مسافات وبحد أقصى ' + ar(80) + ' حرفًا');
+    var url = str(inp.base_url);
+    if (preset.needsUrl) {
+      if (!url && preset.id === 'other') return fail('base_url', 'اكتب عنوان الخدمة كما يعطيه المزوّد');
+      if (url && (url.slice(0, 8).toLowerCase() !== BR_KEY_HTTPS || /\s/.test(url) || url.length > 200)) return fail('base_url', 'اكتب عنوانًا آمنًا يبدأ بـ ' + BR_KEY_HTTPS);
+    }
+    var key = typeof inp.key === 'string' ? inp.key.trim() : '';
+    if (!key) return fail('key', 'الصق المفتاح هنا');
+    if (key.length < 8 || key.length > 400 || /\s/.test(key) || !/^[\x21-\x7e]+$/.test(key)) return fail('key', 'المفتاح غير مكتمل أو فيه مسافات');
+    var role = BR_KEY_ROLES.indexOf(inp.role) >= 0 ? inp.role : '';
+    if (!role) return fail('role', 'اختر دور المفتاح');
+    var label = brKeyLabel(inp.label);
+    if (str(inp.label).length > 60) return fail('label', 'الاسم أطول من ' + ar(60) + ' حرفًا');
+    var body = { preset: preset.id, model: model, key: key, role: role, confirmed: true };
+    if (label) body.label = label;
+    if (preset.needsUrl && url) body.base_url = url;
+    return { ok: true, field: '', error: '', body: body };
+  }
+  // أوراق التأكيد: {title, lead, go}. action: delete|main|backup|off|test. rows = ناتج v2sBrainKeys().rows (لذكر ما يتغيّر معه).
+  function v2sBrainKeySheet(action, row, rows) {
+    var t = '«' + row.label + '»', list = Array.isArray(rows) ? rows : [];
+    var other = function (r) { return list.filter(function (x) { return x.role === r && x.id !== row.id; })[0] || null; };
+    var lead, title, go;
+    if (action === 'delete') {
+      title = 'حذف المفتاح'; go = 'نعم، احذفه';
+      lead = 'يُحذف المفتاح ' + t + ' من اللوحة نهائيًّا.' + (row.role === 'main' ? ' وهو الكاتب الأساسي الآن؛ بعد حذفه يكتب الاحتياطي إن وُجد، وإلا الإعداد الأصلي للخادم.'
+        : row.role === 'backup' ? ' وهو الاحتياطي الآن.' : '');
+    } else if (action === 'main') {
+      var om = other('main'), ob = other('backup');
+      title = 'اجعله الأساسي'; go = 'نعم، اجعله الأساسي';
+      lead = t + ' يصير الكاتب الأساسي.' + (om ? ' وينتقل «' + om.label + '» إلى الاحتياطي' + (ob ? '، ويتوقف «' + ob.label + '»' : '') + '.' : (ob && ob.id !== row.id ? ' ويتوقف الاحتياطي «' + ob.label + '».' : ''));
+    } else if (action === 'backup') {
+      var pb = other('backup');
+      title = 'اجعله احتياطيًّا'; go = 'نعم، اجعله احتياطيًّا';
+      lead = t + ' لا يكتب إلا إذا تعثّر الكاتب الأساسي.' + (pb ? ' ويتوقف الاحتياطي الحالي «' + pb.label + '».' : '');
+    } else if (action === 'off') {
+      title = 'أوقف المفتاح'; go = 'نعم، أوقفه';
+      lead = t + ' لا يكتب بعد الآن، ويبقى محفوظًا لتعيده متى شئت.';
+    } else {
+      title = 'جرّب المفتاح'; go = 'نعم، جرّبه';
+      lead = 'يُرسل إلى ' + t + ' طلب صغير واحد، ويُحسب من تحديثات اليوم.';
+    }
+    return { title: title, lead: lead, go: go };
+  }
+
   Object.assign(api, {
     v2sBrainTime: v2sBrainTime, v2sBrainSince: v2sBrainSince, v2sBrainEntries: v2sBrainEntries, v2sBrainLogFromInbox: v2sBrainLogFromInbox,
     v2sBrainLogText: v2sBrainLogText, v2sBrainLogParts: v2sBrainLogParts, v2sBrainLogRows: v2sBrainLogRows, v2sBrainRules: v2sBrainRules, v2sBrainRunText: v2sBrainRunText,
@@ -2462,7 +2564,8 @@
     v2sBrainAgentInfo: v2sBrainAgentInfo, v2sBrainCap: v2sBrainCap, v2sBrainHelpersLine: v2sBrainHelpersLine, v2sBrainConfirmAll: v2sBrainConfirmAll,
     v2sBrainSwitches: v2sBrainSwitches, v2sBrainSwitchSheet: v2sBrainSwitchSheet, v2sBrainItems: v2sBrainItems, v2sBrainItemRows: v2sBrainItemRows,
     v2sBrainProposed: v2sBrainProposed, v2sBrainRunState: v2sBrainRunState, v2sBrainRunInfo: v2sBrainRunInfo,
-    v2sBrainWriterText: v2sBrainWriterText, v2sBrainWritesToday: v2sBrainWritesToday
+    v2sBrainWriterText: v2sBrainWriterText, v2sBrainWritesToday: v2sBrainWritesToday, v2sBrainWriterPick: v2sBrainWriterPick,
+    v2sBrainKeys: v2sBrainKeys, v2sBrainKeyForm: v2sBrainKeyForm, v2sBrainKeySheet: v2sBrainKeySheet
   });
   // ===== /v2s:brain =====
 

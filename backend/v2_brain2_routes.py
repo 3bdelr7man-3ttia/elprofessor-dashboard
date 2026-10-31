@@ -125,8 +125,12 @@ def register(app, ns):
                           'may_run_alone': bool(p.may_run_alone), 'mode': engine.effective_mode(ns, p),
                           'updated_at': _iso(r.updated_at) if r else None,
                           'updated_by': (r.updated_by or None) if r else None})
-        return out({'switches': items, 'writer': engine.writer_of(ns),
-                    'brain_today': {'used': engine.brain_today(db), 'cap': engine.day_cap()}})
+        ws = engine.writer_state(ns)
+        payload = {'switches': items, 'writer': ws['writer'],
+                   'brain_today': {'used': engine.brain_today(db), 'cap': engine.day_cap()}}
+        if ws['label']:
+            payload['writer_label'] = ws['label']      # اسم مفتاح القاعدة الشغّال (SPEC-B B1) — يغيب مع مزوّد البيئة
+        return out(payload)
 
     @app.route('/api/v2/brain/switches/<producer_id>', methods=['PUT'], endpoint='v2_brain2_switches_put')
     @token_required

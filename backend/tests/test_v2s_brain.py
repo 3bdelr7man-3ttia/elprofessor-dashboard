@@ -1083,3 +1083,124 @@ def test_brain2_new_copy_passes_the_rules():
         assert not re.match(r'^\s*(الذكاء|AI)', t), t
     # لا ادعاء أن رد الموقع أُرسل بالبريد
     assert not re.search(r'(أُرسل|أرسلنا|وصل)[^.]{0,20}(بريد|إيميل)', ' '.join(texts))
+
+
+# ——— B1 · «المفاتيح والكاتب» (SPEC-B B1): مساعدات نقية في v2-logic.js وبطاقة تبويب المساعدين ———
+def _keys_resp(**over):
+    d = {'keys': [
+        {'id': 'k1', 'label': 'Claude', 'preset': 'claude', 'kind': 'anthropic', 'base_url': '', 'model': 'claude-sonnet-5-5', 'key_tail': 'abcd', 'role': 'main',
+         'readable': True, 'created_at': '2026-10-30T10:00:00+00:00', 'created_by': 'a@x.test', 'last_test_at': '2026-10-30T11:57:00+00:00', 'last_test_ok': True, 'last_test_error': ''},
+        {'id': 'k2', 'label': 'GLM', 'preset': 'glm', 'kind': 'openai_compat', 'base_url': '', 'model': 'glm-4.6', 'key_tail': 'wxyz', 'role': 'backup',
+         'readable': True, 'last_test_at': '2026-10-30T11:00:00+00:00', 'last_test_ok': False, 'last_test_error': 'المفتاح غير صحيح'},
+        {'id': 'k3', 'label': 'قديم', 'preset': 'openai', 'kind': 'openai_compat', 'base_url': '', 'model': 'gpt-4.1-mini', 'key_tail': '1234', 'role': 'off',
+         'readable': False, 'notice': 'تعذّرت قراءة هذا المفتاح؛ أضِفه من جديد', 'last_test_ok': None},
+    ], 'presets': [{'id': 'claude', 'label': 'Claude', 'needs_url': False, 'default_model': 'claude-sonnet-5-5'},
+                   {'id': 'glm', 'label': 'GLM', 'needs_url': False, 'default_model': 'glm-4.6'},
+                   {'id': 'openrouter', 'label': 'OpenRouter', 'needs_url': True, 'default_model': ''}]}
+    d.update(over)
+    return d
+
+
+@needs_node
+def test_keys_rows_roles_tails_tests_and_failed_source_is_null():
+    r = v2_node.logic('v2sBrainKeys', _keys_resp(), NOW)
+    rows = {x['id']: x for x in r['rows']}
+    assert rows['k1']['tailText'] == 'ينتهي بـ ••••abcd' and rows['k1']['tail'] == '••••abcd'
+    assert (rows['k1']['roleLabel'], rows['k2']['roleLabel'], rows['k3']['roleLabel']) == ('الأساسي', 'الاحتياطي', 'موقوف')
+    assert rows['k1']['test'] == {'state': 'ok', 'text': 'جُرّب منذ ٣ دقائق: يعمل'}
+    assert rows['k2']['test']['state'] == 'fail' and rows['k2']['test']['text'] == 'آخر تجربة لم تنجح: المفتاح غير صحيح'
+    assert rows['k3']['readable'] is False and rows['k3']['tone'] == 'stop' and rows['k3']['notice'].startswith('تعذّرت قراءة هذا المفتاح')
+    assert r['main']['id'] == 'k1' and r['backup']['id'] == 'k2'
+    assert [x['id'] for x in v2_node.logic('v2sBrainKeys', {'keys': list(reversed(_keys_resp()['keys']))}, NOW)['rows']] == ['k1', 'k2', 'k3'], 'الأساسي ثم الاحتياطي ثم الموقوف'
+    assert v2_node.logic('v2sBrainKeys', _keys_resp(keys=[{'id': 'z', 'label': 'x', 'role': 'boss', 'key_tail': 'ab cd€'}]), NOW)['rows'][0]['role'] == 'off'
+    for bad in (None, {}, {'keys': 'x'}, {'presets': []}, 'x'):
+        assert v2_node.logic('v2sBrainKeys', bad, NOW) is None, bad
+    empty = v2_node.logic('v2sBrainKeys', {'keys': []}, NOW)
+    assert empty['rows'] == [] and empty['main'] is None and empty['backup'] is None
+
+
+@needs_node
+def test_keys_presets_always_end_with_other():
+    ids = lambda r: [p['id'] for p in v2_node.logic('v2sBrainKeys', r, NOW)['presets']]
+    assert ids(_keys_resp()) == ['claude', 'glm', 'openrouter', 'other']
+    assert ids({'keys': []}) == ['other'], 'حتى لو لم يصل شيء من القوالب «أخرى» موجودة'
+    got = v2_node.logic('v2sBrainKeys', {'keys': [], 'presets': [{'id': 'other', 'label': 'أخرى', 'needs_url': True, 'default_model': ''}, {'id': 'claude', 'label': 'Claude', 'needs_url': False}]}, NOW)
+    assert [p['id'] for p in got['presets']] == ['claude', 'other'] and got['presets'][1]['needsUrl'] is True
+
+
+@needs_node
+def test_key_form_validation_and_body():
+    pre = {p['id']: p for p in v2_node.logic('v2sBrainKeys', {'keys': [], 'presets': _keys_resp()['presets']}, NOW)['presets']}
+    f = lambda pid, **kw: v2_node.logic('v2sBrainKeyForm', pre[pid], dict({'model': '', 'base_url': '', 'key': 'sk-test-12345678', 'role': 'main', 'label': ''}, **kw))
+    ok = f('claude')
+    assert ok['ok'] and ok['body'] == {'preset': 'claude', 'model': 'claude-sonnet-5-5', 'key': 'sk-test-12345678', 'role': 'main', 'confirmed': True}
+    assert f('claude', key='  sk-test-12345678\n')['body']['key'] == 'sk-test-12345678'
+    assert f('claude', label=' كاتبي  الأول ')['body']['label'] == 'كاتبي الأول'
+    assert f('glm', base_url='https://evil.example.com')['body'].get('base_url') is None, 'القوالب الجاهزة لا ترسل عنوانًا'
+    bad = lambda r, field: (r['ok'] is False and r['field'] == field and r['body'] is None and isinstance(r['error'], str) and r['error'])
+    assert bad(f('claude', key=''), 'key') and bad(f('claude', key='short'), 'key') and bad(f('claude', key='sk-has space-1234'), 'key')
+    assert bad(f('claude', key='مفتاح-عربي-12345'), 'key') and bad(f('claude', key='k' * 401), 'key')
+    assert bad(f('claude', model='has space'), 'model') and bad(f('claude', model='m' * 81), 'model')
+    assert bad(f('openrouter'), 'model'), 'OpenRouter بلا موديل افتراضي'
+    assert bad(f('claude', role='boss'), 'role') and bad(f('claude', role=''), 'role')
+    assert bad(f('claude', label='ل' * 61), 'label')
+    # «أخرى»: عنوان https إلزامي · OpenRouter: اختياري لكنه https إن كُتب
+    assert bad(f('other', model='m1'), 'base_url') and bad(f('other', model='m1', base_url='http://llm.example.com'), 'base_url')
+    o = f('other', model='m1', base_url='https://llm.example.com/v1')
+    assert o['ok'] and o['body']['base_url'] == 'https://llm.example.com/v1' and o['body']['preset'] == 'other'
+    assert f('openrouter', model='a/b')['ok'] and 'base_url' not in f('openrouter', model='a/b')['body']
+    assert bad(f('openrouter', model='a/b', base_url='http://x.example.com'), 'base_url')
+    assert v2_node.logic('v2sBrainKeyForm', None, {})['field'] == 'preset'
+
+
+@needs_node
+def test_key_confirm_sheet_texts_name_what_changes():
+    rows = v2_node.logic('v2sBrainKeys', _keys_resp(), NOW)['rows']
+    by = {r['id']: r for r in rows}
+    sh = lambda a, i: v2_node.logic('v2sBrainKeySheet', a, by[i], rows)
+    d = sh('delete', 'k1')
+    assert d['title'] == 'حذف المفتاح' and d['go'] == 'نعم، احذفه' and '«Claude»' in d['lead'] and 'الأساسي' in d['lead']
+    assert 'الاحتياطي' in sh('delete', 'k2')['lead'] and sh('delete', 'k3')['lead'] == 'يُحذف المفتاح «قديم» من اللوحة نهائيًّا.'
+    m = sh('main', 'k2')
+    assert m['go'] == 'نعم، اجعله الأساسي' and '«GLM» يصير الكاتب الأساسي' in m['lead'] and 'ينتقل «Claude» إلى الاحتياطي' in m['lead']
+    b = sh('backup', 'k3')
+    assert '«قديم» لا يكتب إلا إذا تعثّر' in b['lead'] and 'يتوقف الاحتياطي الحالي «GLM»' in b['lead']
+    assert 'يبقى محفوظًا' in sh('off', 'k1')['lead']
+    t = sh('test', 'k1')
+    assert t['title'] == 'جرّب المفتاح' and 'تحديثات اليوم' in t['lead'] and 'نداء' not in t['lead']
+
+
+@needs_node
+def test_writer_disc_shows_the_db_key_label_with_role_and_env_is_unchanged():
+    w = lambda writer, known, label=None: v2_node.logic('v2sBrainWriterText', writer, known, label)
+    assert w('main', True, 'Claude') == 'Claude (الأساسي)' and w('backup', True, 'GLM') == 'GLM (الاحتياطي)'
+    assert w('main', True) == 'الكاتب الأساسي' and w('backup', True, '') == 'الكاتب الاحتياطي' and w(None, True, 'Claude') == 'لا أحد' and w('main', False, 'Claude') == 'غير متاح بعد'
+    pick = lambda st, sw=None: v2_node.logic('v2sBrainWriterPick', st, sw)
+    assert pick({'writer': 'main', 'writer_label': 'Claude'}) == {'writer': 'main', 'known': True, 'label': 'Claude'}
+    assert pick({'writer': 'backup'}) == {'writer': 'backup', 'known': True, 'label': ''}
+    assert pick({'configured': True}, {'writer': 'backup', 'writerLabel': 'GLM'}) == {'writer': 'backup', 'known': True, 'label': 'GLM'}
+    assert pick(None, None)['known'] is False
+    sw = v2_node.logic('v2sBrainSwitches', _sw_resp(writer_label='  DeepSeek '), NOW)
+    assert sw['writerLabel'] == 'DeepSeek' and v2_node.logic('v2sBrainSwitches', _sw_resp(), NOW)['writerLabel'] == ''
+
+
+def test_keys_card_contract_in_brain_js_and_css():
+    js = _read('dashboard-cloud', 'v2s', 'brain.js')
+    css = _read('dashboard-cloud', 'v2s', 'brain.css')
+    assert "keysCard() + '<div class=\"v3-top v2sb-top\">'" in js, 'البطاقة فوق القرصين'
+    assert '<h2>المفاتيح والكاتب</h2>' in js and 'أضف مفتاحًا' in js and 'جرّبه' in js and 'احذفه' in js and 'ينتهي بـ' in js
+    # حقل المفتاح كلمة سر لا يُعاد عرضها، ويُمسح من الصفحة بعد الحفظ ومع الإغلاق
+    assert 'id="v2sbkKey" type="password"' in js and 'autocomplete="new-password"' in js
+    assert "key.value = ''" in js and 'r.body.key = ' in js
+    assert 'localStorage.setItem(\'v2sbk' not in js and 'sessionStorage' not in js
+    assert not re.search(r"v2sbkKey[^;\n]*(innerHTML|textContent|setAttribute\('value')", js)
+    # كل كتابة بتأكيد صريح والمسارات في مكان واحد
+    assert "'/v2/brain/keys', { method: 'POST', body: r.body }" in js and "method: 'DELETE', body: { confirmed: true }" in js and "/test', { method: 'POST'" in js
+    assert "body = { confirmed: true }" in js
+    # «أخرى» دائمة، وحقل العنوان مخفي لغيرها
+    assert 'uw.hidden = !cur.preset.needsUrl' in js
+    # أهداف اللمس ≥44px و≥52px في الموبايل، بلا تمرير أفقي
+    assert re.search(r'\.v2sb-kb\{min-height:44px', css) and re.search(r'\.v2sbk-f input\{[^}]*min-height:48px', css)
+    mobile = css[css.index('@media(max-width:760px)'):]
+    assert '.v2sb-kact .v3-btn2{flex:1 1 30%;min-height:52px' in mobile and '.v2sbk-roles button{min-height:52px' in mobile
+    assert "ai: { ep: ['aiAgents'], src: ['status', 'switches', 'keys'] }" in js

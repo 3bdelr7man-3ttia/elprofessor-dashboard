@@ -8,6 +8,8 @@
  * ⛔ لا زرّ تراجع: لا فعل تلقائي له تراجع حقيقي بعد. الأمر الصادق للتوزيع الذي لم يُستلم هو «أرسله لخبير آخر» من درج الملف.
  * الجولة الثانية (SPEC brain2 §4.4): مجموعة «ما يكتبه العقل» (`/v2/brain/switches` · PUT بتأكيد) · «اكتب الاقتراحات الآن» (`POST /v2/brain/run` بتأكيد) ·
  *   صفوف السجل من `/v2/brain/items` وحذف الملاحظة (`POST …/discard` بتأكيد) · قرصا المساعدين. كل مصدر يفشل لوحده ⇒ «غير متاح بعد» لا صفر.
+ * المفاتيح والكاتب (SPEC-B B1): بطاقة في تبويب المساعدين فوق القرصين — `/v2/brain/keys` (GET · POST · PUT · DELETE · POST …/test)، كل كتابة بتأكيد.
+ *   ⛔ النص الصريح للمفتاح يمرّ من حقل كلمة سر واحد إلى POST ثم يُمسح من الصفحة؛ والقائمة لا تعرف إلا آخر ٤ أحرف.
  * ========================================================================== */
 (function () {
   'use strict';
@@ -18,7 +20,7 @@
   var B = window.V2SEC.brain = {};
   var MODS = { v2s_brain: 1, ai: 1 };
   var S = { view: null, mod: '', sig: '', poll: null, minute: null, seg: 'rules', open: {}, expandLog: false, running: null, note: null, noteT: null,
-            ruleText: '', ruleErr: '', ruleBusy: false, switchBusy: false, nowOverride: 0, sheetAgent: '', modeBusy: false, wasActive: false };
+            ruleText: '', ruleErr: '', ruleBusy: false, switchBusy: false, nowOverride: 0, sheetAgent: '', modeBusy: false, wasActive: false, keyBusy: false };
   var FAIL_AR = 'تعذّر تنفيذ العملية';
   var SESSION_AR = 'انتهت الجلسة. سجّل الدخول من جديد ثم جرّب.';
   var NOREPLY_AR = 'لم يصل رد. حدّث الصفحة وتأكّد مما حدث قبل أن تضغط مرة أخرى.';
@@ -49,7 +51,8 @@
     status: function () { return '/v2/brain/helpers-status'; },
     switches: function () { return '/v2/brain/switches'; },
     items: function () { return '/v2/brain/items?status=all&since=' + encodeURIComponent(new Date(L.v2sBrainSince(now())).toISOString()); },
-    run: function () { return '/v2/brain/runs/latest'; }
+    run: function () { return '/v2/brain/runs/latest'; },
+    keys: function () { return '/v2/brain/keys'; }
   };
   function srcOf(k) { return SRC[k] || (SRC[k] = { state: 'idle', data: null, at: 0, busy: false, status: 0 }); }
   function data(k) { var s = srcOf(k); return s.state === 'ready' ? s.data : null; }
@@ -284,12 +287,33 @@
   }
   // قرصا «من يكتب الآن» و«كتابات العقل اليوم»: كل واحد من مصدره، والفاشل «غير متاح بعد».
   function writerDiscs() {
-    var stt = data('status'), sw = swInfo(), writer, known = false;
-    if (stt && Object.prototype.hasOwnProperty.call(stt, 'writer') && (stt.writer === null || stt.writer === 'main' || stt.writer === 'backup')) { writer = stt.writer; known = true; }
-    else if (sw && sw.writer !== undefined) { writer = sw.writer; known = true; }
-    var w = L.v2sBrainWriterText(writer, known), t = L.v2sBrainWritesToday(sw ? sw.brainToday : null);
+    var pk = L.v2sBrainWriterPick(data('status'), swInfo());
+    var w = L.v2sBrainWriterText(pk.writer, pk.known, pk.label), t = L.v2sBrainWritesToday(swInfo() ? swInfo().brainToday : null);
     return '<div class="v2sb-discs v2sb-wdiscs">' + disc(w, 'من يكتب الآن', w === NA) + disc(t, 'كتابات العقل اليوم', t === NA) + '</div>';
   }
+  // ------------------------------------------------------------------ المفاتيح والكاتب (SPEC-B B1)
+  function keysInfo() { return srcState('keys') === 'ready' ? L.v2sBrainKeys(data('keys'), now()) : null; }
+  function keyRowHtml(k) {
+    var act = (k.readable ? '<button type="button" class="v3-btn2 v2sb-kb" data-a="ktest" data-id="' + esc(k.id) + '">جرّبه</button>'
+      + '<button type="button" class="v3-btn2 v2sb-kb" data-a="kedit" data-id="' + esc(k.id) + '">عدّله</button>' : '')
+      + '<button type="button" class="v3-btn2 v2sb-kb v2sb-kdel" data-a="kdel" data-id="' + esc(k.id) + '">احذفه</button>';
+    return '<article class="v2sb-kr' + (k.readable ? '' : ' bad') + '" data-id="' + esc(k.id) + '"><div class="v2sb-kt"><div class="v2sb-kh"><b dir="auto">' + esc(k.label) + '</b>'
+      + '<span class="v2sb-chip tone-' + esc(k.tone) + '">' + esc(k.readable ? k.roleLabel : 'غير مقروء') + '</span></div>'
+      + '<p class="v2sb-km">' + (k.tail ? 'ينتهي بـ <bdi dir="ltr">' + esc(k.tail) + '</bdi>' : esc(NA)) + (k.model ? ' · <bdi dir="ltr">' + esc(k.model) + '</bdi>' : '') + '</p>'
+      + (k.readable ? '<p class="v2sb-ks st-' + esc(k.test.state) + '">' + esc(k.test.text) + '</p>' : '<p class="v2sb-ks st-fail" role="status">' + esc(k.notice) + '</p>')
+      + '</div><div class="v2sb-kact">' + act + '</div></article>';
+  }
+  function keysCard() {
+    var st = srcState('keys'), info = keysInfo(), body;
+    if (st === 'idle' || st === 'loading') body = skeleton(2);
+    else if (!info) body = '<div class="v3-empty v2sb-na"><b>' + NA + '</b><p>لا نعرف المفاتيح المحفوظة، فلا تعتبر القائمة فارغة.</p>' + retryBtn('retry-keys') + '</div>';
+    else body = info.rows.length ? '<div class="v2sb-kl">' + info.rows.map(keyRowHtml).join('') + '</div>'
+      : '<p class="v2sb-none">لا مفاتيح محفوظة هنا، فيكتب العقل بإعداد الخادم الأصلي.</p>';
+    return '<section class="v3-card v2sb-keys" aria-label="المفاتيح والكاتب"><header class="v3-ch"><h2>المفاتيح والكاتب</h2><p>اختر من يكتب للعقل، وبدّله في أي وقت.</p></header>'
+      + body + (info ? '<button type="button" class="v3-btn1 v2sb-kadd" data-a="kadd"' + (info.rows.length >= 12 ? ' disabled' : '') + '>أضف مفتاحًا</button>' : '') + '</section>';
+  }
+  function refreshKeys() { load('keys', true, true); load('status', true, true); load('switches', true, true); }
+
   function drawHelpers(v) {
     var A = agentsResp(), st = data('status'), H = A ? L.v2sBrainHelpers(A, st, S.running ? S.running.id : null) : null;
     var loading = epState('aiAgents') === 'idle' || epState('aiAgents') === 'loading';
@@ -304,7 +328,7 @@
         + (H.runAllReason ? '<p class="v2sb-why">' + esc(H.runAllReason) + '</p>' : '');
       body = masterCard(H) + '<div class="v2sb-grid">' + H.cards.filter(function (c) { return c.id !== 'master'; }).map(helperCard).join('') + '</div>';
     }
-    v.innerHTML = '<div class="v3 v2sb v2sb-helpers" data-board="brain-helpers" data-ready="' + (loading ? 0 : 1) + '">' + noteStrip() + '<div class="v3-top v2sb-top">' + head + '</div>' + body + '</div>';
+    v.innerHTML = '<div class="v3 v2sb v2sb-helpers" data-board="brain-helpers" data-ready="' + (loading ? 0 : 1) + '">' + noteStrip() + keysCard() + '<div class="v3-top v2sb-top">' + head + '</div>' + body + '</div>';
     S.H = H;
     wire(v);
   }
@@ -390,6 +414,121 @@
         S.modeBusy = false; delete s.dataset.busy;
         var box = q('#v2sbErr', s); if (box) box.innerHTML = '<div class="v3-err">' + esc(errMsg(e)) + '</div>';
         go.disabled = false; no.disabled = false; go.textContent = sh.go; redraw();
+      });
+    };
+  }
+
+  // —— المفاتيح والكاتب: إضافة · تعديل · تأكيد حذف/اختبار
+  function keyField(id, label, input, hint) { return '<label class="v2sbk-f" for="' + id + '"><span>' + esc(label) + '</span>' + input + (hint ? '<small>' + esc(hint) + '</small>' : '') + '</label>'; }
+  function roleButtons(cur) {
+    var cls = { main: 'alone', backup: 'ask', off: 'off' }, names = { main: 'الأساسي', backup: 'الاحتياطي', off: 'موقوف' };
+    return '<div class="v2sb-md v2sbk-roles" role="radiogroup" aria-label="دور المفتاح">' + ['main', 'backup', 'off'].map(function (r) {
+      return '<button type="button" role="radio" class="' + cls[r] + '" data-r="' + r + '" aria-checked="' + (r === cur ? 'true' : 'false') + '">' + names[r] + '</button>';
+    }).join('') + '</div>';
+  }
+  function pickRole(s, role) { qa('.v2sbk-roles button', s).forEach(function (b) { b.setAttribute('aria-checked', b.getAttribute('data-r') === role ? 'true' : 'false'); }); }
+  function openKeyAdd() {
+    var info = keysInfo(), E = ep();
+    if (!info || !E || S.keyBusy) return;
+    var cur = { preset: info.presets[0], role: info.rows.length ? 'backup' : 'main', modelTouched: false };
+    var pre = info.presets.map(function (p) { return '<button type="button" role="radio" class="v2sbk-p" data-p="' + esc(p.id) + '" aria-checked="false">' + esc(p.label) + '</button>'; }).join('');
+    var s = openSheet('أضف مفتاحًا', '<div class="v2sbk"><p class="mc-lead">اختر الجهة التي تكتب للعقل، ثم الصق مفتاحها.</p>'
+      + '<div class="v2sbk-pre" role="radiogroup" aria-label="الجهة">' + pre + '</div>'
+      + keyField('v2sbkModel', 'اسم الموديل', '<input id="v2sbkModel" type="text" dir="ltr" autocomplete="off" autocapitalize="off" spellcheck="false" maxlength="80">')
+      + '<div id="v2sbkUrlW">' + keyField('v2sbkUrl', 'عنوان الخدمة', '<input id="v2sbkUrl" type="url" dir="ltr" autocomplete="off" autocapitalize="off" spellcheck="false" maxlength="200" placeholder="https://">', '') + '</div>'
+      + keyField('v2sbkKey', 'المفتاح', '<input id="v2sbkKey" type="password" dir="ltr" autocomplete="new-password" autocapitalize="off" spellcheck="false" maxlength="400">', 'يُحفظ مشفّرًا، ولا يظهر منه بعد الحفظ إلا آخر أربعة أحرف.')
+      + keyField('v2sbkLabel', 'اسم يظهر في اللوحة (اختياري)', '<input id="v2sbkLabel" type="text" autocomplete="off" maxlength="60">')
+      + '<div class="v2sbk-f"><span>دور المفتاح</span>' + roleButtons(cur.role) + '</div>'
+      + '<div id="v2sbErr" role="alert"></div>'
+      + '<div class="acts"><button type="button" class="btn btn-human" id="v2sbGo">احفظ المفتاح</button><button type="button" class="btn btn-ghost" id="v2sbNo">رجوع</button></div></div>');
+    if (!s) return;
+    var go = q('#v2sbGo', s), no = q('#v2sbNo', s), model = q('#v2sbkModel', s), url = q('#v2sbkUrl', s), key = q('#v2sbkKey', s), label = q('#v2sbkLabel', s), uw = q('#v2sbkUrlW', s);
+    function showErr(t, el) { var box = q('#v2sbErr', s); if (box) box.innerHTML = t ? '<div class="v3-err">' + esc(t) + '</div>' : ''; if (el && el.focus) try { el.focus(); } catch (x) {} }
+    function pickPreset(id) {
+      cur.preset = info.presets.filter(function (p) { return p.id === id; })[0] || info.presets[0];
+      qa('.v2sbk-p', s).forEach(function (b) { b.setAttribute('aria-checked', b.getAttribute('data-p') === cur.preset.id ? 'true' : 'false'); });
+      uw.hidden = !cur.preset.needsUrl;
+      url.required = cur.preset.id === 'other';
+      model.placeholder = cur.preset.defaultModel ? '' : 'اسمه كما يعطيه المزوّد';
+      if (!cur.modelTouched) model.value = cur.preset.defaultModel;
+      showErr('');
+    }
+    qa('.v2sbk-p', s).forEach(function (b) { b.onclick = function () { if (!s.dataset.busy) pickPreset(b.getAttribute('data-p')); }; });
+    qa('.v2sbk-roles button', s).forEach(function (b) { b.onclick = function () { if (!s.dataset.busy) { cur.role = b.getAttribute('data-r'); pickRole(s, cur.role); } }; });
+    model.oninput = function () { cur.modelTouched = true; };
+    pickPreset(cur.preset.id);
+    function clearKey() { try { key.value = ''; } catch (x) {} }
+    no.onclick = function () { if (!s.dataset.busy) { clearKey(); closeSheet(); } };
+    var x = q('[data-x]', s); if (x) x.addEventListener('click', clearKey);
+    go.onclick = function () {
+      if (s.dataset.busy) return;
+      var r = L.v2sBrainKeyForm(cur.preset, { model: model.value, base_url: url.value, key: key.value, label: label.value, role: cur.role });
+      if (!r.ok) { showErr(r.error, { model: model, base_url: url, key: key, label: label }[r.field]); return; }
+      s.dataset.busy = '1'; S.keyBusy = true; go.disabled = true; no.disabled = true; go.textContent = 'جارٍ الحفظ…'; showErr('');
+      E.api('/v2/brain/keys', { method: 'POST', body: r.body }).then(function () {
+        r.body.key = ''; clearKey(); delete s.dataset.busy; S.keyBusy = false;
+        closeSheet(); toast('حُفظ المفتاح'); refreshKeys(); redraw(true);
+      }).catch(function (e) {
+        delete s.dataset.busy; S.keyBusy = false; go.disabled = false; no.disabled = false; go.textContent = 'احفظ المفتاح';
+        showErr(errMsg(e));
+      });
+    };
+  }
+  function openKeyEdit(id) {
+    var info = keysInfo(), E = ep(), row = info && info.rows.filter(function (r) { return r.id === id; })[0];
+    if (!row || !E || S.keyBusy || !row.readable) return;
+    var cur = { role: row.role };
+    var s = openSheet('عدّل المفتاح', '<div class="v2sbk"><p class="mc-lead">' + esc(row.label) + '</p>'
+      + keyField('v2sbkModel', 'اسم الموديل', '<input id="v2sbkModel" type="text" dir="ltr" autocomplete="off" autocapitalize="off" spellcheck="false" maxlength="80" value="' + esc(row.model) + '">')
+      + keyField('v2sbkLabel', 'الاسم الظاهر في اللوحة', '<input id="v2sbkLabel" type="text" autocomplete="off" maxlength="60" value="' + esc(row.label) + '">')
+      + '<div class="v2sbk-f"><span>دور المفتاح</span>' + roleButtons(cur.role) + '<small id="v2sbkNote"></small></div>'
+      + '<div id="v2sbErr" role="alert"></div>'
+      + '<div class="acts"><button type="button" class="btn btn-human" id="v2sbGo">احفظ</button><button type="button" class="btn btn-ghost" id="v2sbNo">رجوع</button></div></div>');
+    if (!s) return;
+    var go = q('#v2sbGo', s), no = q('#v2sbNo', s), model = q('#v2sbkModel', s), label = q('#v2sbkLabel', s), note = q('#v2sbkNote', s);
+    function showErr(t) { var box = q('#v2sbErr', s); if (box) box.innerHTML = t ? '<div class="v3-err">' + esc(t) + '</div>' : ''; }
+    function explain() { note.textContent = cur.role !== row.role && (cur.role === 'main' || cur.role === 'backup') ? L.v2sBrainKeySheet(cur.role, row, info.rows).lead : ''; }
+    qa('.v2sbk-roles button', s).forEach(function (b) { b.onclick = function () { if (!s.dataset.busy) { cur.role = b.getAttribute('data-r'); pickRole(s, cur.role); explain(); } }; });
+    no.onclick = function () { if (!s.dataset.busy) closeSheet(); };
+    go.onclick = function () {
+      if (s.dataset.busy) return;
+      var m = model.value.trim(), lb = label.value.trim().replace(/\s+/g, ' '), body = { confirmed: true };
+      if (!m || m.length > 80 || /\s/.test(m)) { showErr('اسم الموديل غير صالح؛ بلا مسافات وبحد أقصى ' + U.ar(80) + ' حرفًا'); return; }
+      if (!lb || lb.length > 60) { showErr('اكتب اسمًا من حرف إلى ' + U.ar(60) + ' حرفًا'); return; }
+      if (m !== row.model) body.model = m;
+      if (lb !== row.label) body.label = lb;
+      if (cur.role !== row.role) body.role = cur.role;
+      if (Object.keys(body).length < 2) { closeSheet(); return; }
+      s.dataset.busy = '1'; S.keyBusy = true; go.disabled = true; no.disabled = true; go.textContent = 'جارٍ الحفظ…'; showErr('');
+      E.api('/v2/brain/keys/' + encodeURIComponent(id), { method: 'PUT', body: body }).then(function () {
+        delete s.dataset.busy; S.keyBusy = false; closeSheet(); toast('حُفظ التعديل'); refreshKeys(); redraw(true);
+      }).catch(function (e) {
+        delete s.dataset.busy; S.keyBusy = false; go.disabled = false; no.disabled = false; go.textContent = 'احفظ'; showErr(errMsg(e));
+      });
+    };
+  }
+  function openKeyConfirm(action, id) {
+    var info = keysInfo(), E = ep(), row = info && info.rows.filter(function (r) { return r.id === id; })[0];
+    if (!row || !E || S.keyBusy) return;
+    var sh = L.v2sBrainKeySheet(action, row, info.rows);
+    var s = openSheet(sh.title, '<p class="mc-lead">' + esc(sh.lead) + '</p><div id="v2sbErr" role="alert"></div>'
+      + '<div class="acts"><button type="button" class="btn btn-human" id="v2sbGo">' + esc(sh.go) + '</button><button type="button" class="btn btn-ghost" id="v2sbNo">رجوع</button></div>');
+    if (!s) return;
+    var go = q('#v2sbGo', s), no = q('#v2sbNo', s), del = action === 'delete';
+    no.onclick = function () { if (!s.dataset.busy) closeSheet(); };
+    go.onclick = function () {
+      if (s.dataset.busy) return;
+      s.dataset.busy = '1'; S.keyBusy = true; go.disabled = true; no.disabled = true; go.textContent = del ? 'جارٍ الحذف…' : 'جارٍ التجربة…';
+      var req = del ? E.api('/v2/brain/keys/' + encodeURIComponent(id), { method: 'DELETE', body: { confirmed: true } })
+        : E.api('/v2/brain/keys/' + encodeURIComponent(id) + '/test', { method: 'POST', body: {} });
+      req.then(function (d) {
+        delete s.dataset.busy; S.keyBusy = false; closeSheet();
+        toast(del ? 'حُذف المفتاح' : (d && d.ok ? 'المفتاح يعمل' : ((d && d.error) || 'لم يصل رد')));
+        refreshKeys(); redraw(true);
+      }).catch(function (e) {
+        delete s.dataset.busy; S.keyBusy = false; go.disabled = false; no.disabled = false; go.textContent = sh.go;
+        var box = q('#v2sbErr', s); if (box) box.innerHTML = '<div class="v3-err">' + esc(errMsg(e)) + '</div>';
+        refreshKeys();
       });
     };
   }
@@ -621,6 +760,11 @@
       }
       else if (a === 'mrule') openModeRule(b.getAttribute('data-id'));
       else if (a === 'runnow') openRunNow();
+      else if (a === 'kadd') openKeyAdd();
+      else if (a === 'kedit') openKeyEdit(b.getAttribute('data-id'));
+      else if (a === 'ktest') openKeyConfirm('test', b.getAttribute('data-id'));
+      else if (a === 'kdel') openKeyConfirm('delete', b.getAttribute('data-id'));
+      else if (a === 'retry-keys') { load('keys', true); }
       else if (a === 'retry-switches') { load('switches', true); }
       else if (a === 'retry-items') { load('items', true); }
       else if (a === 'seg') { S.seg = b.getAttribute('data-s'); try { localStorage.setItem('v2sb_seg', S.seg); } catch (x) {} redraw(true); }
@@ -663,7 +807,7 @@
   // ------------------------------------------------------------------ نقطة الدخول
   var NEEDS = {
     v2s_brain: { ep: ['opsQueue', 'inbox', 'aiAgents', 'inviteSettings'], src: ['today', 'rules', 'switches', 'items', 'run'] },
-    ai: { ep: ['aiAgents'], src: ['status', 'switches'] }
+    ai: { ep: ['aiAgents'], src: ['status', 'switches', 'keys'] }
   };
   function ensureFor(mod) {
     var n = NEEDS[mod];
