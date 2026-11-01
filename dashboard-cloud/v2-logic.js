@@ -1292,7 +1292,7 @@
       T('ads', 'إعلانات الأعمال', 'v2m_ads'),
       T('all', 'كل السجلات', 'finance', { finTab: 'summary' }, { finTab: { not: [] } })
     ] },
-    { key: 'content', label: 'المحتوى', img: 'content', desc: 'المقالات والموضوعات والأخبار والتعليقات والساحة والديوان ودليل الاستخدام', tabs: [
+    { key: 'content', label: 'المحتوى', img: 'content', desc: 'المقالات والموضوعات والأخبار والتعليقات والساحة والديوان والقاموس ودليل الاستخدام', tabs: [
       T('pipeline',  'خط النشر',       'topics', { topicsTab: 'pipeline' },  { topicsTab: ['pipeline'] }),
       T('articles',  'المقالات',        'topics', { topicsTab: 'articles' },  { topicsTab: ['articles', 'blog', 'auto'] }),
       T('topics',    'الموضوعات',       'topics', { topicsTab: 'pending' },   { topicsTab: ['pending', 'ideas', 'incoming', 'working', 'board', 'rejected', 'archived'] }),
@@ -1300,6 +1300,7 @@
       T('comments',  'التعليقات',       'topics', { topicsTab: 'comments' },  { topicsTab: ['comments'] }),
       T('saha',      'الساحة',          'v2s_saha'),
       T('diwan',     'الديوان',         'v2s_diwan'),
+      T('glossary',  'القاموس',         'v2s_glossary'),
       T('tutorials', 'دليل الاستخدام', 'topics', { topicsTab: 'tutorials' }, { topicsTab: ['tutorials'] }),
       T('site',      'الموقع',          'topics', { topicsTab: 'site' },      { topicsTab: ['site'] })
     ] },
@@ -3424,9 +3425,9 @@
   }
   var NOTIF_DEST = { message: { section: 'people', tab: 'messages' }, withdrawal: { section: 'company', tab: 'invest' },
     trainer_application: { section: 'courses', tab: 'trainers' }, program_request: { section: 'courses', tab: 'courses' },
-    signup: { section: 'people', tab: 'users' } };
+    signup: { section: 'people', tab: 'users' }, glossary_review: { section: 'content', tab: 'glossary' } };
   var NOTIF_TITLE = { message: 'رسالة جديدة من نموذج التواصل', withdrawal: 'طلب سحب من مستثمر ينتظر المراجعة',
-    trainer_application: 'طلب انضمام مدرّب جديد', program_request: 'طلب برنامج أو دورة ينتظر المراجعة', signup: 'حساب جديد على المنصة' };
+    trainer_application: 'طلب انضمام مدرّب جديد', program_request: 'طلب برنامج أو دورة ينتظر المراجعة', signup: 'حساب جديد على المنصة', glossary_review: 'مراجعات القاموس تنتظر قرارك' };
   function v2hNotif(item) {
     item = item || {};
     var kind = str(item.kind), detail = str(item.detail);
@@ -3437,6 +3438,7 @@
       detail = toArDigits(detail.replace(/\s*USD\s*$/i, ' دولار').replace(/(\d)\.(\d)/g, '$1٫$2'));
     } else if (kind === 'trainer_application') detail = detail.replace(/\s*بانتظار الموافقة\s*$/, '');
     else if (kind === 'signup') detail = detail.replace(/\s*أنشأ حسابًا\s*$/, '');
+    else if (kind === 'glossary_review') detail = toArDigits(detail);
     return { id: String(item.id == null ? '' : item.id), kind: kind, title: title, detail: detail, when: item.when || item.created_at || null,
       unread: item.unread !== false, dest: NOTIF_DEST[kind] ? { section: NOTIF_DEST[kind].section, tab: NOTIF_DEST[kind].tab } : null };
   }

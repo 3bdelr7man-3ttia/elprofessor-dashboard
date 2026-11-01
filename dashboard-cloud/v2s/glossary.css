@@ -1,0 +1,59 @@
+/* ============================================================================
+ * v2s/glossary.css — «القاموس» في الداشبورد: يكمّل saha.css (نفس المحرّك: مربّعات · قوائم · أوراق) بما يخص المصطلح وحده.
+ * كل القواعد تحت `.v2s-sh` أو `#epModal.v2s-sh-sh`. ⛔ لا أصفر: التنبيه بدرجة عنّابية فاتحة. الأهداف ≥٤٤px والخانات ≥١٦px.
+ * ========================================================================== */
+.v2s-sh[data-board="glossary-term"] .sh-bar{display:none}   /* شاشة المصطلح لها زرّها «→ كل المصطلحات» */
+.v2s-sh .g-term{padding:20px}
+.v2s-sh .g-top{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 10px}
+.v2s-sh .g-ar{font:800 30px/1.5 'Cairo',sans-serif;margin:0 0 6px;overflow-wrap:anywhere}
+.v2s-sh .g-lang{display:flex;align-items:baseline;gap:10px;margin:0 0 4px;font-size:18px;line-height:1.6;unicode-bidi:plaintext}
+.v2s-sh .g-lang b{flex:none;min-width:30px;font:800 12.5px 'IBM Plex Sans Arabic',sans-serif;color:var(--mute);letter-spacing:.06em}
+.v2s-sh .g-lang span{overflow-wrap:anywhere}
+.v2s-sh .g-h{font:800 14px 'Cairo',sans-serif;color:var(--mute);margin:16px 0 4px}
+.v2s-sh .g-def{margin:0;font-size:16px;line-height:1.95;overflow-wrap:anywhere;white-space:pre-wrap}
+.v2s-sh .g-ex{margin:0 0 8px;padding:8px 14px;border-inline-start:3px solid var(--wine);background:var(--paper2);border-radius:8px;font-size:15.5px;line-height:1.85;overflow-wrap:anywhere;white-space:pre-wrap}
+.v2s-sh .g-false{margin:14px 0 0;padding:12px 16px;background:var(--tint);border:1px solid var(--tint-line);border-radius:12px;color:var(--tint-ink)}
+.v2s-sh .g-false b{font:800 14px 'Cairo',sans-serif}
+.v2s-sh .g-false p{margin:4px 0 0;font-size:15px;line-height:1.85;white-space:pre-wrap}
+.v2s-sh .g-rel{display:flex;flex-wrap:wrap;align-items:center;gap:8px}
+.v2s-sh .g-line{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 12px;margin:10px 0 0;font-size:15px;line-height:1.8}
+.v2s-sh .g-line>b{font:800 13.5px 'Cairo',sans-serif;color:var(--mute)}
+.v2s-sh .g-why{margin:8px 0 0;padding:8px 12px;background:var(--tint);border:1px solid var(--tint-line);border-radius:10px;color:var(--tint-ink);font-size:14.5px;line-height:1.8}
+.v2s-sh .g-err{color:#8E1228;min-height:0;font-size:13.5px}
+.v2s-sh .g-err:empty{display:none}
+.v2s-sh .g-sample li small{color:var(--mute);unicode-bidi:plaintext}
+.v2s-sh .ep-b1:disabled,.v2s-sh .ep-b2:disabled{opacity:.55;cursor:not-allowed}
+
+/* —— شرط المراجعة: وضعان مشروحان */
+.v2s-sh .g-rules{margin:12px 0 0;display:grid;gap:4px}
+.v2s-sh .g-rules dt{font:800 13.5px 'Cairo',sans-serif;color:var(--mute);margin-top:8px}
+.v2s-sh .g-rules dd{margin:0;font-size:15px;line-height:1.85}
+
+/* —— اقتراح متخصص بجانب المصطلح */
+.v2s-sh .g-sug{border-color:var(--tint-line);background:var(--tint);color:var(--tint-ink)}
+.v2s-sh .g-sugtxt b{font:800 15px 'Cairo',sans-serif;margin-inline-end:8px}
+.v2s-sh .g-sugtxt p{margin:6px 0 0;font-size:15.5px;line-height:1.9;white-space:pre-wrap;overflow-wrap:anywhere}
+#epModal.v2s-sh-sh .g-sugbox{margin:0 0 14px;padding:12px 16px;background:#FBF0F3;border:1px solid #EBCBD4;border-radius:12px;color:#5A1830}
+#epModal.v2s-sh-sh .g-sugh{display:block;font:800 13.5px 'Cairo',sans-serif;margin-bottom:4px}
+#epModal.v2s-sh-sh .g-sugbox b{font:800 15px 'Cairo',sans-serif;margin-inline-end:8px}
+#epModal.v2s-sh-sh .g-sugbox p{margin:6px 0 0;font-size:15.5px;line-height:1.9;white-space:pre-wrap;overflow-wrap:anywhere;max-height:30vh;overflow:auto}
+
+/* —— ورقة التعديل: المصطلحات القريبة */
+#epModal.v2s-sh-sh .g-rel{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 10px}
+#epModal.v2s-sh-sh .g-rc{display:inline-flex;align-items:center;gap:6px;min-height:44px;padding:0 4px 0 14px;border:1px solid #E9E1D6;border-radius:999px;background:#fff;font:700 14.5px 'Cairo',sans-serif}
+#epModal.v2s-sh-sh .g-rc small{font-weight:400;font-size:12.5px;color:#6B665C}
+#epModal.v2s-sh-sh .g-rx{width:44px;height:44px;border:0;border-radius:50%;background:transparent;color:#7A2342;font:800 20px/1 'Cairo',sans-serif;cursor:pointer}
+#epModal.v2s-sh-sh .g-rx:hover{background:#FBF0F3}
+#epModal.v2s-sh-sh .g-rx:focus-visible{outline:3px solid rgba(158,43,78,.35)}
+#epModal.v2s-sh-sh .g-relpick{display:flex;gap:8px;align-items:stretch}
+#epModal.v2s-sh-sh .g-relpick select{flex:1;min-width:0}
+#epModal.v2s-sh-sh .g-relpick .ep-bs{flex:none}
+#epModal.v2s-sh-sh .fld input[dir=ltr],#epModal.v2s-sh-sh .fld textarea[dir=ltr]{text-align:left}
+#epModal.v2s-sh-sh .fld input:disabled{background:#F6F1EA;color:#6B665C}
+
+@media (max-width:760px){
+  .v2s-sh .g-term{padding:16px}
+  .v2s-sh .g-ar{font-size:26px}
+  .v2s-sh .g-lang{font-size:16.5px}
+  #epModal.v2s-sh-sh .g-relpick{flex-direction:column}
+}

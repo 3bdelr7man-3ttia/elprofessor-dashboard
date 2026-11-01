@@ -695,6 +695,63 @@ class Article(db.Model):
     saha_topic_id = db.Column(db.String(80))
 
 
+class GlossaryTerm(db.Model):
+    """«القاموس» (docs/v2/glossary/SPEC.md): مصطلح قانوني بثلاث لغات. الجدول جديد فيُنشأ مع `create_all` بلا هجرة.
+    slug: ASCII يُكتب عند الإنشاء ويتجمّد عند أول نشر (published_at ≠ NULL) كروابط المقالات.
+    related: JSON list of slugs (يُحفظ حتى لو المصطلح القريب لم يُستورد بعد).
+    reviewed_*: ختم «راجعه» (اسم وصفة يكتبهما الأدمن + وقت الخادم) — الإيميل في سجل التدقيق فقط، لا هنا.
+    reviewer_name_public: وافق المراجع على ظهور اسمه (يُعتمد كتسويق) — بدونها تقول الصفحة «راجعه متخصص» فقط.
+    status: draft (للمؤسس وحده) ⇒ under_review (منشور وظاهر) ⇒ confirmed (منشور وعليه ختم)؛ «منشور» = أيٌّ من الأخيرين."""
+    __tablename__ = 'glossary_terms'
+    id = db.Column(db.Integer, primary_key=True)
+    slug = db.Column(db.String(64), unique=True, nullable=False, index=True)
+    ar = db.Column(db.String(300), nullable=False)
+    en = db.Column(db.String(300), nullable=False)
+    fr = db.Column(db.String(300))
+    area = db.Column(db.String(20), nullable=False, default='general')
+    definition_ar = db.Column(db.Text, nullable=False)
+    example_en = db.Column(db.Text)
+    example_ar = db.Column(db.Text)
+    false_friend_note_ar = db.Column(db.Text)
+    countries_note_ar = db.Column(db.Text)
+    related = db.Column(db.Text)                        # JSON list[str]
+    status = db.Column(db.String(20), default='draft')  # draft | under_review | confirmed
+    reviewed_by_name = db.Column(db.String(120))
+    reviewed_by_role = db.Column(db.String(80))
+    reviewed_at = db.Column(db.DateTime)
+    reviewer_name_public = db.Column(db.Boolean, default=False, nullable=False)
+    saha_topic_id = db.Column(db.String(80))
+    source = db.Column(db.String(20), default='manual')  # seed | course1 | upload | manual
+    created_at = db.Column(db.DateTime, default=datetime.datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.datetime.utcnow)
+    published_at = db.Column(db.DateTime)
+
+
+class ExpertReviewSubmission(db.Model):
+    """مراجعة يقدّمها متخصص من نموذج الموقع العام (docs/v2/glossary/SPEC.md، الجولة الثانية): تأكيد أو اقتراح تعديل على مصطلح قاموس
+    (أو دورة/مسار تعالجها المنصة). kind: glossary_term | course | track؛ ref = رابط المصطلح (slug) أو معرّف الدورة/المسار.
+    ⛔ لا عنوان IP ولا متصفح: حدّ المعدّل في الذاكرة فقط. term_updated_at لقطة من وقت تعديل المصطلح وقت التقديم
+    (ليعرف الأدمن أن النص تغيّر بعدها). الإيميل للتواصل بشأن المراجعة وحده ولا يظهر في أي مكان عام."""
+    __tablename__ = 'expert_review_submissions'
+    id = db.Column(db.Integer, primary_key=True)
+    kind = db.Column(db.String(20), nullable=False, index=True)
+    ref = db.Column(db.String(120), nullable=False, index=True)
+    ref_title = db.Column(db.String(300))
+    term_updated_at = db.Column(db.DateTime)
+    name = db.Column(db.String(80), nullable=False)
+    email = db.Column(db.String(254), nullable=False, index=True)
+    specialty = db.Column(db.String(30), nullable=False)
+    specialty_other = db.Column(db.String(80))
+    verdict = db.Column(db.String(10), nullable=False)      # confirm | suggest
+    text = db.Column(db.Text)
+    show_name = db.Column(db.Boolean, default=False, nullable=False)
+    status = db.Column(db.String(10), default='pending', nullable=False, index=True)   # pending | approved | rejected
+    created_at = db.Column(db.DateTime, default=datetime.datetime.utcnow)
+    decided_at = db.Column(db.DateTime)
+    decided_by = db.Column(db.String(80))
+    admin_note = db.Column(db.String(500))
+
+
 class ArticleVersion(db.Model):
     """لقطة المقال **قبل** كل تحديث (refresh) — للرجوع والتدقيق. request_id فريد = التحديث لا يُطبَّق مرّتين."""
     __tablename__ = 'article_versions'
@@ -2774,6 +2831,9 @@ except Exception: logger.exception('v2 market4 routes not loaded')
 try:   # «ناقشها في الساحة» من محرّر المقال (docs/v2/saha-link/SPEC.md): تحميل محروس — غيابه لا يكسر الإقلاع
     import v2_saha_link_routes as _v2s_saha_link; _v2s_saha_link.register(app, globals())
 except Exception: logger.exception('v2 saha link routes not loaded')
+try:   # «القاموس» (docs/v2/glossary/SPEC.md): مسارات الإدارة + الفيد العام /api/content/glossary — تحميل محروس
+    import v2_glossary_routes as _v2s_glossary; _v2s_glossary.register(app, globals())
+except Exception: logger.exception('v2 glossary routes not loaded')
 try:   # «الساحة» و«الديوان» و«الفرص» — مربّعات الإدارة (docs/v2/saha-tiles/SPEC.md): تحميل محروس — غيابه لا يكسر الإقلاع
     import v2_saha_routes as _v2s_saha; _v2s_saha.register(app, globals())
 except Exception: logger.exception('v2 saha routes not loaded')
@@ -6575,6 +6635,9 @@ def get_settings():
 @roles_required('admin')
 def update_settings():
     d = request.json or {}
+    # «القاموس»: شرط المراجعة له مساره المخصّص (ورقة تأكيد + تدقيق) — لا يُكتب من هنا.
+    if 'glossary.require_review' in d:
+        return jsonify({'error': 'هذا الإعداد يُغيَّر من شاشة القاموس وحدها'}), 400
     for k, v in d.items():
         s = Setting.query.get(k)
         if s:
@@ -8200,6 +8263,24 @@ def notifications():
             'when': u.get('created_at') or u.get('joined_at'),
             'unread': False,  # informational, not an action item
         })
+
+    # 6) مراجعات القاموس التي قدّمها متخصصون من الموقع وتنتظر قرار الأدمن (جدول محلي). صف واحد مجمَّع.
+    try:
+        _gl_pending = ExpertReviewSubmission.query.filter_by(status='pending')
+        _gl_n = _gl_pending.count()
+        if _gl_n:
+            _gl_last = _gl_pending.order_by(ExpertReviewSubmission.created_at.desc()).first()
+            items.append({
+                'id': 'glossary-reviews',
+                'title': 'مراجعات القاموس تنتظر قرارك',
+                'detail': _v2s_glossary.ar_count(_gl_n, ['مراجعة واحدة من متخصص', 'مراجعتان من متخصصين', 'مراجعات من متخصصين', 'مراجعةً من متخصصين']),
+                'kind': 'glossary_review',
+                'route': '/content',
+                'when': _gl_last.created_at.isoformat() if _gl_last and _gl_last.created_at else None,
+                'unread': True,
+            })
+    except Exception:
+        logger.exception('notifications: glossary reviews skipped')
 
     # Newest first; rows without a timestamp sink to the bottom.
     items.sort(key=lambda x: x.get('when') or '', reverse=True)
@@ -10303,6 +10384,54 @@ def _prerender_prune_topics(sftp, topic_dir, fresh):
     return removed
 
 
+GLOSSARY_DIR = 'glossary'       # glossary/<slug>.html + glossary/index.html — ملفات ثابتة تقدّمها الاستضافة مباشرة
+_GLOSSARY_PAGE_RE = re.compile(r'^[a-z](?:[a-z0-9-]{0,62}[a-z0-9])?\.html$')
+_GLOSSARY_TPLS = ('glossary-term.html', 'glossary.html')
+
+
+def _prerender_prune_glossary(sftp, gdir, fresh):
+    """يشيل من glossary على الاستضافة كل صفحة قاموس لم تعد في التوليد الحالي (مصطلح أُلغي نشره أو سقط ختمه).
+    ⛔ لا يُنادى إلا بعد توليد قاموس ناجح بالكامل (state=ok) — فشل الجلب أو التحقّق لا يمسح شيئًا أبدًا.
+    ضيّق كغيره: أسماء slug بنمطها فقط (.tmp وأي ملف آخر لا يُلمس). توليد ناجح بلا أي صفحة (لا مصطلح منشور) يمسح الكل."""
+    keep = {rel.rsplit('/', 1)[-1] for rel in fresh if rel.startswith('%s/' % GLOSSARY_DIR)}
+    removed = 0
+    try:
+        names = sftp.listdir(gdir)
+    except IOError:
+        return 0
+    for name in names:
+        if _GLOSSARY_PAGE_RE.match(name) and name not in keep:
+            try:
+                sftp.remove('%s/%s' % (gdir, name))
+                removed += 1
+            except IOError:
+                pass
+    return removed
+
+
+def _glossary_sitemap_rows(feed, names):
+    """صفوف خريطة الموقع لصفحات القاموس المولَّدة فعلًا (names = أسماء الملفات في glossary/ من التوليد الحالي)."""
+    if not names:
+        return ''
+    by = {t['slug'] + '.html': t for t in (feed.get('terms') or [])}
+    rows, stamps = [], []
+    for n in sorted(names):
+        if n == 'index.html':
+            continue
+        t = by.get(n)
+        lm = str((t or {}).get('updated_at') or (t or {}).get('published_at') or '')[:10]
+        if lm:
+            stamps.append(lm)
+        rows.append('<url><loc>%s</loc>%s<changefreq>monthly</changefreq></url>'
+                    % (xesc('https://elprofessor.net/%s/%s' % (GLOSSARY_DIR, n)),
+                       ('<lastmod>%s</lastmod>' % lm) if lm else ''))
+    if 'index.html' in names:
+        rows.insert(0, '<url><loc>%s</loc>%s<changefreq>weekly</changefreq></url>'
+                    % (xesc('https://elprofessor.net/%s/' % GLOSSARY_DIR),
+                       ('<lastmod>%s</lastmod>' % max(stamps)) if stamps else ''))
+    return ''.join(rows)
+
+
 def _retracted_article_ids():
     """مقالات اتنشرت قبل كده واتسحبت (مسودّة وليها published_at) — روابطها معروفة لجوجل،
     فلازم ترد 410 «اتشالت» مش صفحة «المقال غير موجود» بـ200 (soft-404)."""
@@ -10364,18 +10493,66 @@ def _prerender_push(reason=''):
         with open(feed_path, 'w', encoding='utf-8') as fh:
             fh.write(_prerender_feed_json())
 
+        # «القاموس»: قالباه من الموقع الحيّ اختياريان — غيابهما (٤٠٤ قبل رفعهما) أو أي عطل في جلبهما يعني «لا قاموس
+        # في هذه الدفعة» بلا أي أثر على المقالات ولا مسح لما هو منشور.
+        gl_args, gl_feed = [], None
+        try:
+            fn = globals().get('_glossary_feed_payload')
+            if fn:
+                got = {}
+                for name in _GLOSSARY_TPLS:
+                    r = requests.get('%s/%s' % (PRERENDER_ORIGIN, name), timeout=30,
+                                     params={'nocache': str(int(time.time()))},
+                                     headers={'User-Agent': 'elprofessor-prerender/1.0',
+                                              'Cache-Control': 'no-cache', 'Pragma': 'no-cache'})
+                    if r.status_code != 200 or not r.text.strip():
+                        got = None
+                        app.logger.info('prerender: glossary template %s not on the site (HTTP %s) — glossary skipped',
+                                        name, r.status_code)
+                        break
+                    got[name] = r.text
+                if got:
+                    for name, text in got.items():
+                        with open(os.path.join(tmp, name), 'w', encoding='utf-8') as fh:
+                            fh.write(text)
+                    gl_feed = fn()
+                    gl_path = os.path.join(tmp, '_glossary_feed.json')
+                    with open(gl_path, 'w', encoding='utf-8') as fh:
+                        json.dump(gl_feed, fh, ensure_ascii=False)
+                    gl_args = ['--glossary-feed-file', gl_path]
+        except Exception as exc:                 # noqa: BLE001
+            gl_args, gl_feed = [], None
+            app.logger.warning('prerender: glossary skipped (%s)', exc)
+
         proc = subprocess.run(
-            ['python3', _PRERENDER_SCRIPT, '--site', tmp, '--feed-file', feed_path],
+            ['python3', _PRERENDER_SCRIPT, '--site', tmp, '--feed-file', feed_path] + gl_args,
             capture_output=True, text=True, timeout=600)
         if proc.returncode != 0:
             # عقد المولّد all-or-nothing: أي فشل تحقّق ⇒ ما كتبش حاجة. مفيش نصف رفع.
             raise RuntimeError('generator exit %s: %s' % (
                 proc.returncode, (proc.stderr or proc.stdout or '')[-600:]))
+        gl_state, gl_note = None, None
+        if gl_args:
+            try:
+                gl_note = (json.loads((proc.stdout or '').strip().splitlines()[-1]) or {}).get('glossary') or {}
+            except Exception:                    # noqa: BLE001
+                gl_note = {}
+            gl_state = gl_note.get('state')
+            if gl_state != 'ok':
+                app.logger.warning('prerender: glossary not generated (%s) — nothing of it uploaded or pruned: %s',
+                                   gl_state, gl_note.get('error') or gl_note.get('reason'))
 
         # E1 — خريطة المقالات تُكتب في public_html نفسه (بدل 301 إلى مضيف الداشبورد) من نفس الدفعة
         # ونفس القاعدة التي ولّدت الصفحات، فلا تسبق الخريطةُ صفحاتِها ولا تتأخّر عنها.
+        _gl_dir = os.path.join(tmp, GLOSSARY_DIR)
+        glossary_pages = ['%s/%s' % (GLOSSARY_DIR, n) for n in sorted(os.listdir(_gl_dir))
+                          if _GLOSSARY_PAGE_RE.match(n)] if (gl_state == 'ok' and os.path.isdir(_gl_dir)) else []
         with open(os.path.join(tmp, SITEMAP_FILE), 'w', encoding='utf-8') as fh:
-            fh.write(_articles_sitemap_xml())
+            _sm = _articles_sitemap_xml()
+            if glossary_pages:      # صفحات القاموس تُعلن فقط حين ولّدها المولّد فعلًا (المسار الاحتياطي العام لا يعلنها)
+                _sm = _sm.replace('</urlset>', _glossary_sitemap_rows(
+                    gl_feed or {}, [p.rsplit('/', 1)[-1] for p in glossary_pages]) + '</urlset>')
+            fh.write(_sm)
 
         # نرفع المتغيّر فقط — ٦ تشغيلات يوميًا × ١١٥ ملف رفعٌ كامل هدر بلا داعٍ
         try:
@@ -10389,7 +10566,7 @@ def _prerender_push(reason=''):
                        if _TOPIC_PAGE_RE.match(n)] if os.path.isdir(_topic_tmp) else []
         for rel in ['blog.html', 'feed.xml', 'blog/_pre/manifest.txt', SITEMAP_FILE] + [
                 'blog/_pre/' + n for n in sorted(os.listdir(os.path.join(tmp, 'blog', '_pre')))
-                if n.endswith('.html')] + topic_pages:
+                if n.endswith('.html')] + topic_pages + glossary_pages:
             path = os.path.join(tmp, rel)
             if not os.path.isfile(path):
                 continue
@@ -10402,6 +10579,7 @@ def _prerender_push(reason=''):
         uploaded = 0
         pruned = 0
         topics_pruned = 0
+        glossary_pruned = 0
         gone = None
         # الحذف من الاستضافة نفسها، مش من النسخة المحلية بس: prerender.py بيشيل الصفحة اليتيمة
         # من tmp، لكن نسختها المرفوعة كانت بتفضل تتقدّم للزواحف للأبد (عطل 2026-10-02: ١١٥ مقالًا
@@ -10417,7 +10595,7 @@ def _prerender_push(reason=''):
                 sftp = cl.open_sftp()
                 home = sftp.normalize('.')
                 root = '%s/%s' % (home.rstrip('/'), PRERENDER_SITE_ROOT)
-                for d in ('blog', 'blog/_pre', 'blog/' + TOPIC_DIR):
+                for d in ('blog', 'blog/_pre', 'blog/' + TOPIC_DIR) + ((GLOSSARY_DIR,) if gl_state == 'ok' else ()):
                     try:
                         sftp.stat('%s/%s' % (root, d))
                     except IOError:
@@ -10431,6 +10609,8 @@ def _prerender_push(reason=''):
                     uploaded += 1
                 pruned = _prerender_prune_remote(sftp, '%s/blog/_pre' % root, fresh)
                 topics_pruned = _prerender_prune_topics(sftp, '%s/blog/%s' % (root, TOPIC_DIR), fresh)
+                if gl_state == 'ok':
+                    glossary_pruned = _prerender_prune_glossary(sftp, '%s/%s' % (root, GLOSSARY_DIR), fresh)
                 gone =_prerender_sync_gone(sftp, '%s/blog/_gone' % root, _retracted_article_ids())
                 sftp.close()
             finally:
@@ -10442,12 +10622,14 @@ def _prerender_push(reason=''):
                 pass                             # كاش تحسين فقط — فقدانه = رفع كامل مرة
 
         _prerender_last = {
-            'state': 'ok', 'reason': reason, 'articles': len(fresh) - 4 - len(topic_pages),
+            'state': 'ok', 'reason': reason, 'articles': len(fresh) - 4 - len(topic_pages) - len(glossary_pages),
             'topics': len(topic_pages), 'topics_pruned': topics_pruned,
             'uploaded': uploaded, 'pruned': pruned, 'gone': gone, 'unchanged': len(fresh) - len(wanted),
             'seconds': round(time.time() - started, 1),
             'at': datetime.datetime.utcnow().isoformat(),
         }
+        if gl_args:       # المفتاح لا يظهر إلا لدفعة طُلب فيها القاموس: شكل النتيجة للمقالات وحدها لم يتغيّر
+            _prerender_last['glossary'] = {'state': gl_state, 'pages': len(glossary_pages), 'pruned': glossary_pruned}
         app.logger.info('prerender: ok (%s) uploaded=%s', reason, uploaded)
     except Exception as exc:                     # noqa: BLE001
         _prerender_last = {'state': 'error', 'reason': reason, 'error': str(exc)[:500],

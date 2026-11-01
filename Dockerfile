@@ -40,6 +40,9 @@ COPY backend/v2_market4_routes.py /app/v2_market4_routes.py
 COPY backend/v2_books_ours_routes.py /app/v2_books_ours_routes.py
 # «ناقشها في الساحة» من محرّر المقال (docs/v2/saha-link/SPEC.md): app.py بيستوردها محروسة.
 COPY backend/v2_saha_link_routes.py /app/v2_saha_link_routes.py
+# «القاموس» (docs/v2/glossary/SPEC.md): المسارات + مصدرا الاستيراد (٨٠ مصطلحًا أساسيًّا · ٣١ مرشّحًا من دورة القراءة) — app.py بيستورد الوحدة محروسة.
+COPY backend/v2_glossary_routes.py /app/v2_glossary_routes.py
+COPY backend/data/glossary_seed.json backend/data/glossary_course1.json /app/data/
 # «الساحة» و«الديوان» و«الفرص» (مربّعات الإدارة، docs/v2/saha-tiles/SPEC.md): app.py بيستوردها محروسة.
 COPY backend/v2_saha_routes.py /app/v2_saha_routes.py
 COPY backend/assets/fonts /app/assets/fonts

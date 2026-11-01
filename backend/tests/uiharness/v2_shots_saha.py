@@ -219,7 +219,7 @@ def flow_saha(browser, h, pre, vp, mobile):
                and nums.get('opinions') == ('٢', 'رأي ينتظر قرارك') and nums.get('prep', ('',))[0] == 'مضبوط' and nums.get('import', ('',))[0] == 'جرّب'
                and nums.get('reminders') == ('—', 'لم يُشغَّل بعد'), '%s01: أرقام مربّعات الساحة %r' % (pre, nums))
         tabs = page.evaluate("() => [...document.querySelectorAll('.v2c-tab')].map(b => b.textContent.trim())")
-        expect('الساحة' in tabs and 'الديوان' in tabs and len(tabs) == 9, '%s01: تبويبات المحتوى %r' % (pre, tabs))
+        expect('الساحة' in tabs and 'الديوان' in tabs and 'القاموس' in tabs and len(tabs) == 10, '%s01: تبويبات المحتوى %r' % (pre, tabs))
         imgs = page.evaluate("() => [...document.querySelectorAll('.sh-timg')].map(e => getComputedStyle(e).backgroundImage.replace(/.*\\//, ''))")
         expect(len(imgs) == 7 and all('.jpg' in i for i in imgs), '%s01: صور المربّعات %r' % (pre, imgs))
         mshot(page, pre + '01-hub.jpg')

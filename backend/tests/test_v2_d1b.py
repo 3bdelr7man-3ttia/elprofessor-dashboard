@@ -29,7 +29,7 @@ NODE = __import__('shutil').which('node')
 needs_node = pytest.mark.skipif(not NODE, reason='needs node')
 PSEUDO_MODS = {'v2files', 'v2disputes', 'v2person',                       # D2: موديولات وهمية يرسمها V2D2 تحت الغلاف الجديد فقط
                'v2m_overview', 'v2m_payouts', 'v2m_receipts', 'v2m_prices', 'v2m_shares', 'v2m_ads', 'v2b_offers', 'v2b_requests',   # D3: يرسمها V2D3
-               'v2s_market_all', 'v2s_market_demand', 'v2s_market_v4', 'v2s_books_ours', 'v2s_saha', 'v2s_diwan',   # كتبنا (books.js) + إدارة السوق v4 (market4.js) +
+               'v2s_market_all', 'v2s_market_demand', 'v2s_market_v4', 'v2s_books_ours', 'v2s_saha', 'v2s_diwan', 'v2s_glossary',   # كتبنا (books.js) + إدارة السوق v4 (market4.js) +
                # الجولة النهائية · سوق الخدمات: يرسمها V2S_MARKET
                'v2p_invites', 'v2mk_social', 'v2mk_plan', 'v2r_demand', 'v2r_sunday', 'v2s_brain',
                'v2c_partners', 'v2c_assets', 'v2c_deals', 'v2c_ads'}  # + أقسام الجولة النهائية
@@ -103,7 +103,7 @@ def test_the_tabs_match_the_approved_table():
                   ['all', 'كل السجلات', 'finance']],
         # الجولة الأخيرة: «المحتوى» بست تبويبات كلها على الموديول القديم `topics` (تُميَّز بـ`topicsTab`) وبلا «كل السجلات»
         'content': [['pipeline', 'خط النشر', 'topics'], ['articles', 'المقالات', 'topics'], ['topics', 'الموضوعات', 'topics'], ['news', 'الأخبار', 'topics'],
-                    ['comments', 'التعليقات', 'topics'], ['saha', 'الساحة', 'v2s_saha'], ['diwan', 'الديوان', 'v2s_diwan'],
+                    ['comments', 'التعليقات', 'topics'], ['saha', 'الساحة', 'v2s_saha'], ['diwan', 'الديوان', 'v2s_diwan'], ['glossary', 'القاموس', 'v2s_glossary'],
                     ['tutorials', 'دليل الاستخدام', 'topics'], ['site', 'الموقع', 'topics']],
         'marketing': [['campaigns', 'الحملات', 'marketing'], ['social', 'السوشيال ميديا', 'v2mk_social'], ['plan', 'خطة النشر', 'v2mk_plan']],   # الجولة النهائية: الحملات الجديدة + السوشيال + خطة النشر
         'reports': [['report', 'التقرير', 'analysis'], ['demand', 'ما يسأل عنه الناس', 'v2r_demand'], ['sunday', 'تقرير الأحد', 'v2r_sunday']],     # الجولة النهائية: التقارير
