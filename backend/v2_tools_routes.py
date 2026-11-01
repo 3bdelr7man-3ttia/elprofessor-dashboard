@@ -1,13 +1,13 @@
 # -*- coding: utf-8 -*-
 """«الأدوات / الاستوديو» في الداشبورد (docs/v2/tools/SPEC.md): بروكسيات رفيعة فوق جسور المنصة `/api/bridge/tools/*` (docs/TOOLS-API.md هناك).
 
-    GET  /api/v2/tools/overview                    ⇒ /api/bridge/tools/overview + /api/bridge/tools/report (اليوم)      نظرة اليوم
+    GET  /api/v2/tools/overview                    ⇒ /api/bridge/tools/overview (فيه jobs_today؛ تقرير اليوم احتياطي لمنصة أقدم)  نظرة اليوم
     POST /api/v2/tools/kill                        ⇒ PUT /api/bridge/tools/settings {kill}                            «أوقف الاستوديو الآن» / إعادة التشغيل
     GET  /api/v2/tools/recipes                     ⇒ /api/bridge/tools/recipes                                        الأدوات والأماكن
     POST /api/v2/tools/recipes/<id>/enable         ⇒ PUT /api/bridge/tools/recipes/<id>                               مفتاح التشغيل لكل أداة
     PUT  /api/v2/tools/recipes/<id>                ⇒ PUT /api/bridge/tools/recipes/<id>                               السعر والتكلفة والقاعدة المجانية
     POST /api/v2/tools/recipes/<id>/test-render    ⇒ POST /api/bridge/tools/test-render/<id>                          رسم تجريبي (مزوّد تجريبي فقط)
-    POST /api/v2/tools/styles   (multipart)        ⇒ POST /api/bridge/tools/styles (+ PUT الأداة لإظهاره)             مكان جديد بصورته
+    POST /api/v2/tools/styles   (multipart)        ⇒ POST /api/bridge/tools/styles بـ attach_to (نداء واحد)            مكان جديد بصورته
     PUT  /api/v2/tools/styles/<id>                 ⇒ PUT /api/bridge/tools/styles/<id>                                الاسم والترتيب والوصف وبدل الصورة
     POST /api/v2/tools/styles/<id>/visible         ⇒ PUT /api/bridge/tools/recipes/<أداته>                            ظاهر للناس / غير ظاهر
     DELETE /api/v2/tools/styles/<id>               ⇒ DELETE /api/bridge/tools/styles/<id>
@@ -46,6 +46,7 @@ NO_CHANGE_AR = 'لا فرق عن القيم الحالية'
 REAL_AR = 'الرسم الحقيقي غير متاح من الداشبورد. المعاينة تجريبية فقط.'
 FILE_NONE_AR = 'اختر صورة المكان'
 FILE_BAD_AR = 'الملف ليس صورة صالحة (JPG أو PNG أو WebP)'
+ATTACH_FAILED_AR = 'أُضيف المكان لكنه لم يُربط بالأداة. حدّث الصفحة ثم اضغط «أظهره للناس» عليه'
 
 CURRENCIES = ('EGP', 'SAR', 'AED', 'QAR', 'KWD', 'OMR', 'USD')
 CUR_AR = {'EGP': 'الجنيه', 'SAR': 'الريال السعودي', 'AED': 'الدرهم', 'QAR': 'الريال القطري', 'KWD': 'الدينار الكويتي', 'OMR': 'الريال العماني', 'USD': 'الدولار'}
@@ -131,7 +132,10 @@ def view_overview(ov, rep):
     t = ov['today']
     fl = ov.get('flags') if isinstance(ov.get('flags'), dict) else {}
     jobs = None
-    if isinstance(rep, dict) and isinstance(rep.get('recipes'), list):
+    jt = ov.get('jobs_today')
+    if isinstance(jt, dict) and _int(jt.get('count')) is not None:        # المنصة الجديدة: `jobs_today` في نفس الرد (يوم UTC)
+        jobs = {'count': _int(jt.get('count')) or 0, 'succeeded': _int(jt.get('succeeded')) or 0, 'failures': _int(jt.get('failures')) or 0}
+    elif isinstance(rep, dict) and isinstance(rep.get('recipes'), list):   # منصة أقدم: من تقرير اليوم
         rows = [r for r in rep['recipes'] if isinstance(r, dict)]
         jobs = {'count': sum(_int(r.get('count')) or 0 for r in rows), 'succeeded': sum(_int(r.get('succeeded')) or 0 for r in rows),
                 'failures': sum(_int(r.get('failures')) or 0 for r in rows)}
@@ -228,7 +232,7 @@ def view_report(d, frm, to):
     ov = view_overview({'today': d.get('today') or {}, 'flags': {}}, None)
     tp = d.get('topups')
     topups = None
-    if isinstance(tp, dict) and isinstance(tp.get('by_currency'), dict):
+    if isinstance(tp, dict) and isinstance(tp.get('by_currency'), dict) and tp.get('is_revenue') is not True:     # لو المنصة قالت «إيراد» ما نعرضوش (رصيد عميل بس)
         topups = {'by_currency': _cur_map(tp['by_currency']), 'count': _int(tp.get('count'))}
     return {'recipes': rows, 'from': frm, 'to': to, 'today': ov['today'] if ov else None, 'topups': topups}
 
@@ -514,11 +518,14 @@ def register(app, g):
         if fail:
             return fail
         today = utc_today().isoformat()
-        rep, _f = read('/api/bridge/tools/report', {'from': today, 'to': today})       # فشل التقرير لا يُسقط النظرة: «أعمال اليوم» تكتب «غير متاح بعد»
+        jt = ov.get('jobs_today') if isinstance(ov, dict) else None
+        rep = None
+        if not (isinstance(jt, dict) and _int(jt.get('count')) is not None):          # مفيش `jobs_today` (منصة أقدم) ⇒ نقرا تقرير اليوم
+            rep, _f = read('/api/bridge/tools/report', {'from': today, 'to': today})   # فشل التقرير لا يُسقط النظرة: «أعمال اليوم» تكتب «غير متاح بعد»
         view = view_overview(ov, rep)
         if view is None:
             return err('تعذر قراءة رد المنصة', 502)
-        view['day'] = today
+        view['day'] = jt.get('day') if isinstance(jt, dict) and DATE_RE.match(str(jt.get('day') or '')) else today
         return ns(jsonify(view))
 
     @app.route('/api/v2/tools/kill', methods=['POST'], endpoint='v2tl_kill')
@@ -567,7 +574,8 @@ def register(app, g):
         sets, fail = read('/api/bridge/tools/settings')
         if fail:
             return fail
-        gmsg = guard_error(merged, sets.get('settings') if isinstance(sets.get('settings'), dict) else {})
+        turning_off = merged.get('enabled') is False and _cur_map(merged.get('price')) == _cur_map(cur.get('price'))
+        gmsg = None if turning_off else guard_error(merged, sets.get('settings') if isinstance(sets.get('settings'), dict) else {})   # الإيقاف بلا تغيير سعر ما يتحرسش (زي المنصة)
         if gmsg:
             return err(gmsg, 422)
         out, fail = platform_write('PUT', '/api/bridge/tools/recipes/%s' % q(rid), {'recipe': merged}, attempt=action, target=rid)
@@ -698,26 +706,28 @@ def register(app, g):
         if sid in data['styles_raw']:
             return err('أُضيف هذا المكان من قبل. حدّث الصفحة.', 409)
         ext = {'image/png': 'png', 'image/jpeg': 'jpg', 'image/webp': 'webp'}[kind]
-        out, fail = platform_write('POST', '/api/bridge/tools/styles',
-                                   data={'id': sid, 'recipe_id': rid, 'title_ar': fields['title_ar'], 'place_prompt': fields['place_prompt'],
-                                         'judge_ok': 'true' if fields.get('judge_ok', True) else 'false', 'uses_provider': 'true', 'kind': 'scene',
-                                         'sort': str(fields.get('sort', 0))},
-                                   files={'preview': ('preview.' + ext, raw, kind)}, timeout=40, attempt='style_create', target=sid)
-        if fail:
-            return fail
-        style = view_style(out.get('style')) or {'id': sid, 'recipe_id': rid, 'title_ar': fields['title_ar']}
-        attached, attach_failed = False, False
+        form_data = {'id': sid, 'recipe_id': rid, 'title_ar': fields['title_ar'], 'place_prompt': fields['place_prompt'],
+                     'judge_ok': 'true' if fields.get('judge_ok', True) else 'false', 'uses_provider': 'true', 'kind': 'scene', 'sort': str(fields.get('sort', 0))}
         if attach:
-            data2, fail2 = load_recipes()                       # قراءة طازجة قبل الربط (يقصّر نافذة التعارض)
-            cur = (data2 or {}).get('raw', {}).get(rid) if not fail2 else None
-            if cur is not None:
-                merged = dict(cur)
-                merged['styles'] = list(cur.get('styles') or []) + ([sid] if sid not in (cur.get('styles') or []) else [])
-                _o, fail3 = platform_write('PUT', '/api/bridge/tools/recipes/%s' % q(rid), {'recipe': merged}, attempt='style_attach', target=rid)
-                attached = fail3 is None
-            attach_failed = not attached
+            form_data['attach_to'] = rid                         # نداء واحد: المنصة تربطه بالأداة ذرّيًا (`$addToSet`)
+        resp = g['_platform_proxy']('POST', '/api/bridge/tools/styles', data=dict(form_data, by=g['_actor_email']()[:80]),
+                                    files={'preview': ('preview.' + ext, raw, kind)}, timeout=40)
+        if not g['_resp_ok'](resp):
+            if isinstance(resp, tuple) and int(resp[1]) == 503 and 'لم يُحفظ' in str((resp[0].get_json(silent=True) or {}).get('error') or ''):
+                # ٥٠٣ برسالة المنصة «تعذّر ربط المكان…، لم يُحفظ شيء»: رد أكيد (النمط اتشال عندها) لا رد ضايع
+                return err(str(resp[0].get_json(silent=True).get('error')), 502, not_saved=True)
+            if g['_ef_no_reply'](resp):
+                g['_audit']('tools.no_reply', target=sid, meta={'attempt': 'style_create'})
+                return ns((jsonify({'error': NO_REPLY_AR, 'no_reply': True}), 502))
+            return ns(g['_v2_mask_auth'](resp))
+        out = resp.get_json(silent=True)
+        out = out if isinstance(out, dict) else {}
+        style = view_style(out.get('style')) or {'id': sid, 'recipe_id': rid, 'title_ar': fields['title_ar']}
+        attached = bool(attach and out.get('attached') is True)
         g['_audit']('tools.style_create', target=sid, meta={'recipe': rid, 'attached': attached, 'size': len(raw)})
-        return ns(jsonify({'style': style, 'attached': attached, 'attach_failed': attach_failed}))
+        if attach and not attached:                              # الرد 200 لكن بلا `attached:true`: المكان اتحفظ ولم يُربط ⇒ خطأ واضح مش نجاح
+            return err(ATTACH_FAILED_AR, 502, attach_failed=True)
+        return ns(jsonify({'style': style, 'attached': attached, 'attach_failed': False}))
 
     @app.route('/api/v2/tools/styles/<sid>', methods=['PUT'], endpoint='v2tl_style_edit')
     @token_required

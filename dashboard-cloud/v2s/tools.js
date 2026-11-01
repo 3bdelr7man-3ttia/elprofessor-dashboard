@@ -213,7 +213,7 @@
   var WRITE_FAIL = { 404: 'لم تعد هذه الأداة موجودة على المنصة', other: 'تعذّر الحفظ، حاول مرة أخرى' };
   function writeError(status, data) {
     var msg = data && typeof data.error === 'string' ? data.error : '';
-    if (data && data.no_reply) return msg;
+    if (data && (data.no_reply || data.not_saved || data.attach_failed) && msg) return arDigits(msg);     // رد المنصة الأكيد: «لم يُحفظ شيء» أو «لم يُربط»
     if (msg && (status === 409 || status === 422 || status === 404 || status === 400 || status === 413)) return arDigits(msg);
     return WRITE_FAIL[status] || WRITE_FAIL.other;
   }
@@ -646,7 +646,7 @@
     }).catch(function (e) {
       delete s.dataset.busy; goBtn.disabled = false; if (noBtn) noBtn.disabled = false; goBtn.textContent = label;
       errBox.innerHTML = '<div class="tl-err" role="alert">' + esc(plain401(e) ? 'انتهت الجلسة، سجّل الدخول من جديد ثم جرّب' : errText(e && e.status, e && e.data)) + '</div>';
-      if (e && (e.status === 409 || (e.data && e.data.no_reply))) reloadAfterWrite();
+      if (e && (e.status === 409 || (e.data && (e.data.no_reply || e.data.attach_failed)))) reloadAfterWrite();
     });
   }
   function api(path, body, method) { return ep().api(path, { method: method || 'POST', body: body }); }

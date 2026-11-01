@@ -283,6 +283,14 @@ def test_recipe_diff_lists_only_what_changed_with_before_and_after():
 
 
 @needs_node
+def test_a_confirmed_not_saved_or_not_attached_reply_shows_the_platforms_message_not_a_lost_reply():
+    assert M('writeError', 502, {'error': 'تعذّر ربط المكان بالأداة، لم يُحفظ شيء. حاول مرة أخرى', 'not_saved': True}) == 'تعذّر ربط المكان بالأداة، لم يُحفظ شيء. حاول مرة أخرى'
+    assert 'لم يُربط' in M('writeError', 502, {'error': 'أُضيف المكان لكنه لم يُربط بالأداة. حدّث الصفحة', 'attach_failed': True})
+    assert M('writeError', 502, {}) == 'تعذّر الحفظ، حاول مرة أخرى', 'بلا علامة أكيدة ⇒ النص العام'
+    assert M('writeError', 409, {'error': 'هذا آخر مكان شغّال في أداة شغّالة. أوقف الأداة أولًا'}).startswith('هذا آخر مكان شغّال')
+
+
+@needs_node
 def test_write_errors_pass_the_platform_text_in_arabic_digits_and_lost_replies_stay_lost():
     assert M('writeError', 409, {'error': 'تغيّرت هذه الأداة منذ فتحت الصفحة.'}).startswith('تغيّرت هذه الأداة')
     assert M('writeError', 422, {'error': 'سعر EGP أقل من الحد الأدنى (التكلفة × 3)'}) == 'سعر EGP أقل من الحد الأدنى (التكلفة × ٣)'

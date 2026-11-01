@@ -195,6 +195,8 @@ def flow_hub(browser, h, pre, vp, mobile):
         expect(st['stats'] == ['٤٣ عمل اليوم', '٤١ نجحت', '٢ لم تنجح'] and st['kill'] == 'أوقف الاستوديو الآن', '%s01: أعمال اليوم والفاشل ومفتاح الإيقاف %r' % (pre, st))
         expect(any(f.startswith('وضع الرسم تجريبي') for f in st['facts']) and any(f.startswith('الأدوات للأعضاء مغلقة') for f in st['facts']) and any(f.startswith('شحن الرصيد مغلق') for f in st['facts']), '%s01: المفاتيح للقراءة فقط %r' % (pre, st['facts']))
         expect(page.evaluate("() => !document.querySelector('.tl-facts input, .tl-facts select, .tl-facts [role=switch]')"), '%s01: مفاتيح الخادم لازم تبقى قراءة فقط' % pre)
+        expect(not [c for c in h.platform_calls if c[1] == '/api/bridge/tools/report'] or all(c[1] != '/api/bridge/tools/report' for c in h.platform_calls[-40:]),
+               '%s01: أعمال اليوم من jobs_today في نظرة اليوم (لا نداء تقرير)' % pre)
         tabs = page.evaluate("() => [...document.querySelectorAll('.v2c-tab')].map(b => b.textContent.trim())")
         expect(tabs[-2] == 'الأدوات' and tabs[-1] == 'الإعدادات' and len(tabs) == 7, '%s01: تبويب الأدوات %r' % (pre, tabs))
         imgs = page.evaluate("() => [...document.querySelectorAll('.tl-timg')].map(e => getComputedStyle(e).backgroundImage.replace(/.*\\//, ''))")
@@ -382,6 +384,26 @@ def flow_recipes(browser, h, pre, vp, mobile):
         expect('السعر صفر والتكلفة أكبر من صفر' in page.inner_text('#tlE_EGP'), '%s03d: الصفر بلا قاعدة %r' % (pre, page.inner_text('#tlE_EGP')))
         browser.close()
 
+    if want('03g'):                       # الإيقاف مسموح ولو السعر تحت الحد، والتشغيل والتعديل لسه محروسين
+        ef = tfx.ToolsPlatform()
+        ef.tools_settings['image_min_multiple'] = 20
+        page = topen(browser, h, ef, vp, mobile)
+        go_sub(page, 'recipes')
+        n = len(h.platform_calls)
+        click(page, '.tl-sw[data-id="headshot"]', 400)
+        sheet_open(page)
+        click(page, '#tlGo', 1000)
+        sheet_gone(page)
+        got = check_writes(pre + '03g-off', h, n, 1)
+        page.wait_for_function("() => document.querySelector('.tl-sw[data-id=\"headshot\"]').getAttribute('aria-checked') === 'false'", timeout=10000)
+        tshot(page, pre + '03g-off-below-guard.jpg')
+        click(page, '.tl-sw[data-id="headshot"]', 400)
+        sheet_open(page)
+        click(page, '#tlGo', 900)
+        expect('أقل من الحد الأدنى' in page.inner_text('#tlErr'), '%s03g: التشغيل لسه محروس %r' % (pre, page.inner_text('#tlErr')))
+        check_writes(pre + '03g-on-refused', h, n, 1)
+        browser.close()
+
     if want('03f'):                       # الرسم التجريبي: معاينة بلا تأكيد ولا كتابة
         ef = tfx.ToolsPlatform()
         page = topen(browser, h, ef, vp, mobile)
@@ -458,12 +480,12 @@ def flow_styles(browser, h, pre, vp, mobile):
         check_writes(pre + '04-before-confirm', h, base, 0)
         click(page, '#tlGo', 1300)
         sheet_gone(page)
-        got = check_writes(pre + '04-add', h, base, 2)
-        if len(got) == 2:
-            up, att = got
+        got = check_writes(pre + '04-add', h, base, 1)           # نداء واحد بـattach_to (بدل رفع ثم PUT للأداة)
+        if len(got) == 1:
+            up = got[0]
+            expect(up[3].get('attach_to') == 'headshot', '%s04: attach_to' % pre)
             expect(up[1] == '/api/bridge/tools/styles' and up[3]['recipe_id'] == 'headshot' and up[3]['title_ar'] == 'غرفة اجتماعات' and up[3]['sort'] == '5' and up[3]['__file__']['name'] == 'preview.png'
                    and up[3]['__file__']['head'].startswith('\x89PNG') and re.fullmatch(r'st_[0-9a-f]{8}', up[3]['id']), '%s04: جسم الرفع %r' % (pre, up[3]))
-            expect(att[1] == '/api/bridge/tools/recipes/headshot' and att[3]['recipe']['styles'][-1] == up[3]['id'], '%s04: ربط المكان بالأداة' % pre)
         page.wait_for_function("() => document.querySelectorAll('.tl-group[data-recipe=headshot] .tl-style[data-id]').length === 5", timeout=10000)
         expect('وظهر للناس' in page.inner_text('.tl-note'), '%s04: رسالة الإضافة %r' % (pre, page.inner_text('.tl-note')))
         new_id = style_ids(page, 'headshot')[-1]
@@ -525,6 +547,38 @@ def flow_styles(browser, h, pre, vp, mobile):
         check_writes(pre + '04h-nothing', h, n, 0)
         click(page, '#tlNo', 300)
         sheet_gone(page)
+        # حارس المنصة التاني: ٤٠٩ برسالتها (نخدع الحارس الأول بحالة قديمة)
+        ef.forced[('DELETE', '/api/bridge/tools/styles/hs_plain')] = (409, {'detail': {'code': 'style_protected', 'message': 'هذا النمط مربوط بشاشات المنصة ولا يُحذف. يمكنك إخفاؤه'}})
+        ef._recipe('headshot')['styles'] = ['hs_plain', 'hs_office']
+        ef._style('hs_office')['enabled'] = True
+        page.reload(wait_until='domcontentloaded')
+        page.wait_for_function(vs.SHELL_READY, timeout=30000)
+        page.wait_for_function(READY, timeout=30000)
+        click(page, '.tl-tile[data-sub="styles"]', 600)
+        page.wait_for_selector('[data-a="sdel"][data-id="hs_plain"]')
+        click(page, '[data-a="sdel"][data-id="hs_plain"]', 400)
+        sheet_open(page)
+        click(page, '#tlGo', 900)
+        expect('مربوط بشاشات المنصة' in page.inner_text('#tlErr'), '%s04h: رسالة ٤٠٩ من المنصة %r' % (pre, page.inner_text('#tlErr')))
+        del ef.forced[('DELETE', '/api/bridge/tools/styles/hs_plain')]
+        click(page, '#tlNo', 300)
+        sheet_gone(page)
+        # ربط المكان بالأداة فشل عند المنصة (٥٠٣): «لم يُحفظ شيء» رسالة أكيدة لا «لم يصل رد»
+        ef.attach_fail = True
+        click(page, '[data-a="sadd"][data-id="headshot"]', 400)
+        sheet_open(page)
+        page.fill('#tlTitle', 'مكان لا يُربط')
+        page.fill('#tlPlace', 'a calm room')
+        page.set_input_files('#tlFile', files=[{'name': 'room.png', 'mimeType': 'image/png', 'buffer': tfx.place_png('plain')}])
+        page.wait_for_function("() => !document.getElementById('tlThumb').hidden", timeout=5000)
+        click(page, '#tlNext', 400)
+        click(page, '#tlGo', 900)
+        expect('لم يُحفظ شيء' in page.inner_text('#tlErr') and 'لم يصل رد' not in page.inner_text('#tlErr'), '%s04h: ٥٠٣ الربط %r' % (pre, page.inner_text('#tlErr')))
+        tshot(page, pre + '04i-attach-failed.jpg')
+        ef.attach_fail = False
+        click(page, '#epModal [data-x]', 300)
+        sheet_gone(page)
+        expect(all(st['title_ar'] != 'مكان لا يُربط' for st in ef.tools_styles), '%s04h: لا نمط يتيم بعد فشل الربط' % pre)
         # رد ضايع على الرفع ⇒ «لم يصل رد»، وإعادة الضغط بنفس المعرّف ⇒ تعارض لا تكرار
         click(page, '[data-a="sadd"][data-id="headshot"]', 400)
         sheet_open(page)
@@ -625,7 +679,7 @@ def flow_report(browser, h, pre, vp, mobile):
     expect(sums[0] == '٤٦ عمل' and sums[1] == '٢ لم تنجح' and sums[2].startswith('٥٫٥٢ دولار') and '٤٦٠ جنيه، ١٣٤ ريال سعودي' in sums[3], '%s06: إجماليات اليوم %r' % (pre, sums))
     expect('تقرير يوم' in page.inner_text('.tl-head'), '%s06: عنوان الفترة %r' % (pre, page.inner_text('.tl-head')))
     tp = page.inner_text('.tl-topup')
-    expect('رصيد للعميل وليس إيرادًا' in tp and 'أرقام الشحن غير متاحة بعد من المنصة' in tp, '%s06: الشحن منفصلًا وغير متاح %r' % (pre, tp))
+    expect('رصيد للعميل وليس إيرادًا' in tp and 'شُحن ٧ مرات: ١٬٥٠٠ جنيه، ٤٥ ريال سعودي' in tp, '%s06: الشحن من المنصة منفصلًا عن الإيراد %r' % (pre, tp))
     expect('تحتاج مراجعة سعرها' in page.inner_text('.tl-warn') or 'تحتاج مراجعة سعرها' in page.inner_text('.v2s-tl'), '%s06: علم الحارس' % pre)
     tshot(page, pre + '06-report.jpg')
     tshot(page, pre + '06b-report-bottom.jpg', keep=True, target='.tl-topup')
@@ -642,13 +696,18 @@ def flow_report(browser, h, pre, vp, mobile):
     expect('بعد تاريخ' in page.inner_text('.v2s-tl'), '%s06: تواريخ مقلوبة %r' % (pre, page.inner_text('.tl-ce')))
     page.fill('#tlFrom', '2026-10-01')
     page.fill('#tlTo', '2026-10-15')
-    ef.tools_topups = {'by_currency': {'EGP': 1500, 'SAR': 45}, 'count': 7}
+    ef.tools_topups = {'by_currency': {'EGP': 1500, 'SAR': 45}, 'count': 7, 'label': 'x', 'is_revenue': False}
     click(page, '[data-a="rgo"]', 900)
     page.wait_for_function("() => document.querySelector('.tl-tpline') && !document.querySelector('.tl-tpline.na')", timeout=10000)
     tp = page.inner_text('.tl-topup')
     expect('شُحن ٧ مرات: ١٬٥٠٠ جنيه، ٤٥ ريال سعودي' in tp and 'رصيد للعميل وليس إيرادًا' in tp, '%s06: الشحن حين تطلّعه المنصة %r' % (pre, tp))
     expect('من ١ أكتوبر ٢٠٢٦ إلى ١٥ أكتوبر ٢٠٢٦' in page.inner_text('.tl-head'), '%s06: عنوان الفترة المخصّصة %r' % (pre, page.inner_text('.tl-head')))
     tshot(page, pre + '06d-custom.jpg')
+    ef.tools_topups = None                                  # منصة أقدم: بلا `topups` ⇒ «غير متاحة بعد» لا صفر
+    click(page, '[data-a="rgo"]', 900)
+    page.wait_for_function("() => document.querySelector('.tl-tpline.na')", timeout=10000)
+    expect('أرقام الشحن غير متاحة بعد من المنصة' in page.inner_text('.tl-topup'), '%s06: الشحن غير متاح على منصة أقدم' % pre)
+    tshot(page, pre + '06e-topups-na.jpg', keep=True, target='.tl-topup')
     check_writes(pre + '06-readonly', h, base0, 0)      # التقرير للقراءة فقط
     browser.close()
 
@@ -795,7 +854,7 @@ def main():
                         flow(browser, h, pre, vp, mobile)
                     except Exception as e:   # noqa: BLE001 — فشل خطوة ⇒ مشكلة مسجَّلة، ونكمّل باقي الخطوات
                         import traceback
-                        PROBLEMS.append('%s%s: انهارت الخطوة: %s | %s' % (pre, flow.__name__, str(e).strip().split('\n')[0][:160], traceback.format_exc().strip().split('\n')[-3].strip()[:200]))
+                        PROBLEMS.append('%s%s: انهارت الخطوة: %s | %s' % (pre, flow.__name__, str(e).strip().split('\n')[0][:160], ' ; '.join(l.strip() for l in traceback.format_exc().strip().split('\n') if 'v2_shots_tools.py' in l)[:300]))
                         try:
                             browser.close()
                         except Exception:   # noqa: BLE001

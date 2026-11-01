@@ -240,7 +240,9 @@ class ToolsPlatform(m4fx.Market4Platform):
         self.tools_spent = 0.0 if empty else 2.4
         self.tools_ffmpeg = True
         self.tools_raqm = True
-        self.tools_topups = None            # {"by_currency": {...}, "count": n} ⇒ يطلع في التقرير (المنصة الحالية ما بتطلّعوش)
+        self.tools_legacy = False           # True ⇒ منصة أقدم (قبل r4-int@a5e1e6b): بلا `jobs_today` ولا `topups` ولا `attach_to`، والمنع عند الحذف بلا ٤٠٩
+        self.tools_topups = {"by_currency": {"EGP": 1500, "SAR": 45}, "count": 7, "label": "رصيد عملاء مشحون (التزام، مش إيراد)", "is_revenue": False}
+        self.attach_fail = False            # True ⇒ ربط المكان بالأداة يفشل: ٥٠٣ والنمط يتشال
         self.sweep_result = {"inputs": 0, "outputs_expired": 0, "outputs_removed": 0, "jobs_stale": 0}
         self.sweeps = []
         self.renders = []
@@ -279,8 +281,11 @@ class ToolsPlatform(m4fx.Market4Platform):
     # ---------------------------------------------------------------- الجسور
     def _tools(self, m, path, params, body):
         if path == "/api/bridge/tools/overview" and m == "GET":
-            return 200, {"ok": True, "flags": dict(self.tools_flags), "today": self._cap_state(), "currencies": list(CURRENCIES),
-                         "ffmpeg": self.tools_ffmpeg, "raqm": self.tools_raqm}
+            out = {"ok": True, "flags": dict(self.tools_flags), "today": self._cap_state(), "currencies": list(CURRENCIES), "ffmpeg": self.tools_ffmpeg, "raqm": self.tools_raqm}
+            if not self.tools_legacy:
+                out["jobs_today"] = {"day": iso(0)[:10], "count": sum(r["count"] for r in self.tools_report), "succeeded": sum(r["succeeded"] for r in self.tools_report),
+                                     "failures": sum(r["failures"] for r in self.tools_report)}
+            return 200, out
         if path == "/api/bridge/tools/recipes" and m == "GET":
             rs = sorted(copy.deepcopy(self.tools_recipes), key=lambda r: (int(r.get("sort") or 0), r["id"]))
             return 200, {"ok": True, "recipes": rs, "styles": copy.deepcopy(self.tools_styles), "roles": list(ROLES), "groups": list(GROUPS),
@@ -372,10 +377,11 @@ class ToolsPlatform(m4fx.Market4Platform):
         for cur in (r.get("price") or {}):
             if cur not in CURRENCIES:
                 return 422, {"detail": "عملة غير معروفة: " + str(cur)}
-        gmsg = self._guard(r)
+        prev = self._recipe(rid)
+        turning_off = (not self.tools_legacy) and r.get("enabled") is False and prev is not None and r.get("price") == prev.get("price")
+        gmsg = None if turning_off else self._guard(r)          # الإيقاف بلا تغيير سعر ما يتحرسش (r4-int@a5e1e6b)
         if gmsg:
             return 422, {"detail": gmsg}
-        prev = self._recipe(rid)
         r["updated_at"], r["updated_by"] = self._stamp(), body["by"]
         r["created_at"] = (prev or {}).get("created_at") or r["updated_at"]
         self.writes.append(("PUT", "/api/bridge/tools/recipes/%s" % rid, copy.deepcopy(body)))
@@ -414,9 +420,21 @@ class ToolsPlatform(m4fx.Market4Platform):
                 return 422, {"detail": "الملف ليس صورة صالحة (JPG أو PNG أو WebP)"}
             row["preview_data"] = _jpeg_data(_plain)       # المنصة بتصغّر الصورة المرفوعة ٤٨٠px — هنا معاينة بديلة
             row["preview_asset_id"] = "v1"
+        attach = str(body.get("attach_to") or "").strip() if not self.tools_legacy else ""
+        if attach and attach != rid:
+            return 422, {"detail": "الربط لازم يكون بنفس الأداة (attach_to = recipe_id)"}
         self.writes.append(("POST", "/api/bridge/tools/styles", copy.deepcopy(body)))
+        if attach and self.attach_fail:
+            return 503, {"detail": "تعذّر ربط المكان بالأداة، لم يُحفظ شيء. حاول مرة أخرى"}      # المنصة بتشيل النمط: لا نمط يتيم
         self.tools_styles.append(row)
-        return 200, {"ok": True, "style": copy.deepcopy(row)}
+        out = {"ok": True, "style": copy.deepcopy(row), "attached": False}
+        if attach:
+            rec = self._recipe(attach)
+            if sid not in rec["styles"]:
+                rec["styles"].append(sid)
+            rec["updated_at"], rec["updated_by"] = self._stamp(), body["by"]
+            out.update(attached=True, recipe=copy.deepcopy(rec))
+        return 200, out
 
     def _put_style(self, sid, body):
         bad = self._by(body)
@@ -447,6 +465,13 @@ class ToolsPlatform(m4fx.Market4Platform):
         cur = self._style(sid)
         if cur is None:
             return 404, {"detail": "النمط غير موجود"}
+        if not self.tools_legacy:
+            if cur.get("kind") in ("expert_card", "certificate_card", "winner_card"):
+                return 409, {"detail": {"code": "style_protected", "message": "هذا النمط مربوط بشاشات المنصة ولا يُحذف. يمكنك إخفاؤه"}}
+            if cur.get("enabled", True) is not False:
+                for r in self.tools_recipes:
+                    if r["enabled"] and sid in r["styles"] and not [o for o in r["styles"] if o != sid and (self._style(o) or {}).get("enabled", True) is not False]:
+                        return 409, {"detail": {"code": "last_style", "message": "هذا آخر مكان شغّال في أداة شغّالة. أوقف الأداة أولًا أو أضف مكانًا آخر"}}
         self.writes.append(("DELETE", "/api/bridge/tools/styles/%s" % sid, None))
         self.tools_styles = [s for s in self.tools_styles if s["id"] != sid]
         for r in self.tools_recipes:
@@ -575,6 +600,6 @@ class ToolsPlatform(m4fx.Market4Platform):
                     r[k] = round(r[k] * 6, 4)
                 r["revenue_by_currency"] = {c: v * 6 for c, v in r["revenue_by_currency"].items()}
         out = {"ok": True, "recipes": rows, "today": self._cap_state(), "from": frm, "to": to}
-        if self.tools_topups is not None:
+        if self.tools_topups is not None and not self.tools_legacy:
             out["topups"] = copy.deepcopy(self.tools_topups)
         return 200, out

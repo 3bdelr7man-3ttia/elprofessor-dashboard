@@ -217,24 +217,41 @@ def test_every_reply_is_no_store_and_the_secret_goes_out(ctx, plat):
 
 # ---------------------------------------------------------------- ٢) نظرة اليوم ومفتاح الإيقاف
 
-def test_overview_merges_the_platform_state_with_todays_report_and_whitelists(ctx, plat, monkeypatch):
+def test_overview_takes_jobs_today_from_the_overview_itself_with_no_report_call(ctx, plat, monkeypatch):
     import v2_tools_routes as vt
     monkeypatch.setattr(vt, 'utc_today', lambda: datetime.date(2026, 11, 1))
     plat.ef.tools_flags = {'tools_enabled': False, 'provider': 'mock', 'topup_enabled': False, 'secret_key': 'sk-live'}
     d = _call(ctx, 'GET', T + '/overview').get_json()
     assert d['flags'] == {'tools_enabled': False, 'provider': 'mock', 'topup_enabled': False}
     assert d['today'] == {'cap_usd': 10.0, 'spent_usd': 2.4, 'remaining_usd': 7.6, 'kill': False, 'paused': False, 'reason': None}
-    assert d['jobs'] == {'count': 43, 'succeeded': 41, 'failures': 2} and d['day'] == '2026-11-01'
+    assert d['jobs'] == {'count': 43, 'succeeded': 41, 'failures': 2} and d['day'] == tfx.iso(0)[:10]
     assert d['ffmpeg'] is True and d['raqm'] is True
     assert 'secret_key' not in json.dumps(d)
-    rep = plat.calls('/api/bridge/tools/report')[0]
-    assert rep['params'] == {'from': '2026-11-01', 'to': '2026-11-01'}
+    assert plat.calls('/api/bridge/tools/report') == [], 'jobs_today موجودة ⇒ لا نداء تقرير'
 
 
-def test_overview_survives_a_failed_report_and_says_so(ctx, plat):
+def test_an_older_platform_without_jobs_today_falls_back_to_todays_report(ctx, plat, monkeypatch):
+    import v2_tools_routes as vt
+    monkeypatch.setattr(vt, 'utc_today', lambda: datetime.date(2026, 11, 1))
+    plat.ef.tools_legacy = True
+    d = _call(ctx, 'GET', T + '/overview').get_json()
+    assert d['jobs'] == {'count': 43, 'succeeded': 41, 'failures': 2} and d['day'] == '2026-11-01'
+    assert plat.calls('/api/bridge/tools/report')[0]['params'] == {'from': '2026-11-01', 'to': '2026-11-01'}
+
+
+def test_overview_survives_a_failed_report_on_an_older_platform_and_says_so(ctx, plat):
+    plat.ef.tools_legacy = True
     plat.ef.down.add('/api/bridge/tools/report')
     r = _call(ctx, 'GET', T + '/overview')
     assert r.status_code == 200 and r.get_json()['jobs'] is None
+
+
+def test_a_malformed_jobs_today_is_ignored_not_trusted(ctx, plat):
+    plat.ef.forced[('GET', '/api/bridge/tools/overview')] = (200, {'ok': True, 'today': {'cap_usd': 10, 'spent_usd': 1, 'remaining_usd': 9, 'kill': False, 'paused': False},
+                                                                   'flags': {}, 'jobs_today': {'count': 'many', 'failures': 2}})
+    d = _call(ctx, 'GET', T + '/overview').get_json()
+    assert d['jobs'] == {'count': 43, 'succeeded': 41, 'failures': 2}, 'ارتدّينا لتقرير اليوم'
+    assert plat.calls('/api/bridge/tools/report')
 
 
 def test_a_bridge_the_platform_does_not_have_yet_says_bridge_missing(ctx, plat):
@@ -503,39 +520,53 @@ def test_create_a_style_needs_the_form_confirmation_before_any_call(ctx, plat):
     assert plat.seen == []
 
 
-def test_create_a_style_uploads_the_picture_and_attaches_it_to_the_recipe(ctx, plat):
+def test_create_a_style_uploads_the_picture_and_attaches_it_in_one_call(ctx, plat):
     _clear_audits()
     r = _post_style(ctx)
     d = r.get_json()
     assert r.status_code == 200 and d['attached'] is True and d['attach_failed'] is False and d['style']['id'] == 'st_a1b2c3d4'
     w = plat.writes()
-    assert [(c['method'], c['path']) for c in w] == [('POST', '/api/bridge/tools/styles'), ('PUT', '/api/bridge/tools/recipes/headshot')]
+    assert [(c['method'], c['path']) for c in w] == [('POST', '/api/bridge/tools/styles')], 'نداء واحد، لا PUT للأداة'
     up = w[0]
     assert up['multipart'] is True and up['json']['by'] == ADMIN_EMAIL and 'confirmed' not in up['json']
-    assert up['json']['id'] == 'st_a1b2c3d4' and up['json']['recipe_id'] == 'headshot' and up['json']['judge_ok'] == 'true' and up['json']['uses_provider'] == 'true'
+    assert up['json']['id'] == 'st_a1b2c3d4' and up['json']['recipe_id'] == 'headshot' and up['json']['attach_to'] == 'headshot' and up['json']['judge_ok'] == 'true' and up['json']['uses_provider'] == 'true'
     assert up['json']['kind'] == 'scene' and up['json']['sort'] == '5' and up['json']['__file__']['head'].startswith('\x89PNG')
-    assert w[1]['json']['recipe']['styles'][-1] == 'st_a1b2c3d4'
+    assert 'st_a1b2c3d4' in _recipe(plat, 'headshot')['styles']
     assert _audits('tools.')[-1][:3] == ('tools.style_create', 'st_a1b2c3d4', {'recipe': 'headshot', 'attached': True, 'size': len(PNG)})
-    # تنضيف
     assert _call(ctx, 'DELETE', T + '/styles/st_a1b2c3d4', {'confirmed': True}).status_code == 200
 
 
-def test_create_a_style_without_attaching_makes_one_write(ctx, plat):
+def test_create_a_style_without_attaching_sends_no_attach_to(ctx, plat):
     r = _post_style(ctx, id='st_b2c3d4e5', attach='false', judge_ok='false', preview=(io.BytesIO(JPG), 'r.jpg'))
     d = r.get_json()
     assert r.status_code == 200 and d['attached'] is False and d['attach_failed'] is False
-    assert len(plat.writes()) == 1 and plat.writes()[0]['json']['judge_ok'] == 'false'
+    assert len(plat.writes()) == 1 and plat.writes()[0]['json']['judge_ok'] == 'false' and 'attach_to' not in plat.writes()[0]['json']
     assert 'st_b2c3d4e5' not in _recipe(plat, 'headshot')['styles']
     _call(ctx, 'DELETE', T + '/styles/st_b2c3d4e5', {'confirmed': True})
 
 
-def test_a_failed_attach_still_reports_the_created_style_and_how_to_finish(ctx, plat):
-    plat.ef.forced[('PUT', '/api/bridge/tools/recipes/headshot')] = (502, {'detail': 'تعذر'})
+def test_a_platform_503_on_attach_is_a_clean_not_saved_error_and_leaves_no_orphan(ctx, plat):
+    _clear_audits()
+    plat.ef.attach_fail = True
     r = _post_style(ctx, id='st_c3d4e5f6')
     d = r.get_json()
-    assert r.status_code == 200 and d['attached'] is False and d['attach_failed'] is True and d['style']['id'] == 'st_c3d4e5f6'
-    del plat.ef.forced[('PUT', '/api/bridge/tools/recipes/headshot')]
+    assert r.status_code == 502 and d.get('not_saved') is True and 'لم يُحفظ شيء' in d['error'] and not d.get('no_reply')
+    assert plat.ef._style('st_c3d4e5f6') is None
+    assert [a[0] for a in _audits('tools.')] == [], 'لا سطر نجاح ولا «رد ضايع»'
+    plat.ef.attach_fail = False
+    assert _post_style(ctx, id='st_c3d4e5f6').status_code == 200            # إعادة الضغط بنفس المعرّف تنجح (لا تعارض: النمط اتشال)
     _call(ctx, 'DELETE', T + '/styles/st_c3d4e5f6', {'confirmed': True})
+
+
+def test_a_200_reply_without_attached_true_is_an_error_not_a_success(ctx, plat):
+    plat.ef.tools_legacy = True                                              # منصة أقدم: تتجاهل attach_to وترد attached:false والمكان اتحفظ
+    r = _post_style(ctx, id='st_d5e6f7a8')
+    d = r.get_json()
+    assert r.status_code == 502 and d.get('attach_failed') is True and 'لم يُربط' in d['error'] and 'أظهره للناس' in d['error']
+    assert plat.ef._style('st_d5e6f7a8') is not None and 'st_d5e6f7a8' not in _recipe(plat, 'headshot')['styles']
+    assert _audits('tools.style_create')[-1][2]['attached'] is False
+    plat.ef.tools_legacy = False
+    _call(ctx, 'DELETE', T + '/styles/st_d5e6f7a8', {'confirmed': True})
 
 
 @pytest.mark.parametrize('over,code,frag', [
@@ -584,7 +615,7 @@ def test_a_lost_reply_on_the_upload_is_no_reply_and_the_retry_is_a_conflict_not_
     _clear_audits()
     plat.ef.forced[('POST', '/api/bridge/tools/styles')] = (504, {'detail': 'timeout'})
     r = _post_style(ctx, id='st_a7b8c9d0')
-    assert r.status_code == 502 and r.get_json().get('no_reply') is True
+    assert r.status_code == 502 and r.get_json().get('no_reply') is True and not r.get_json().get('not_saved')
     assert [a[0] for a in _audits('tools.')] == ['tools.no_reply']
     del plat.ef.forced[('POST', '/api/bridge/tools/styles')]
     assert _post_style(ctx, id='st_a7b8c9d0', attach='false').status_code == 200          # الرد ضاع لكن الكتابة تمّت؟ هنا لا: المنصة ما كتبتش
@@ -836,14 +867,20 @@ def test_a_bad_custom_range_is_refused_before_any_call(ctx, plat, q):
     assert plat.seen == []
 
 
-def test_topups_show_only_when_the_platform_really_sends_them_and_never_as_a_zero(ctx, plat):
-    assert _call(ctx, 'GET', T + '/report').get_json()['topups'] is None
-    plat.ef.tools_topups = {'by_currency': {'EGP': 1500, 'SAR': 45, 'XXX': 9}, 'count': 7, 'secret': 'x'}
+def test_topups_pass_through_whitelisted_and_never_as_revenue(ctx, plat):
     d = _call(ctx, 'GET', T + '/report').get_json()
-    assert d['topups'] == {'by_currency': {'EGP': 1500, 'SAR': 45}, 'count': 7}
+    assert d['topups'] == {'by_currency': {'EGP': 1500, 'SAR': 45}, 'count': 7}, 'لا label ولا is_revenue: الشاشة تكتب نصّها'
+    plat.ef.tools_topups = {'by_currency': {'EGP': 1500, 'SAR': 45, 'XXX': 9}, 'count': 7, 'secret': 'x', 'is_revenue': False}
+    assert _call(ctx, 'GET', T + '/report').get_json()['topups'] == {'by_currency': {'EGP': 1500, 'SAR': 45}, 'count': 7}
+    plat.ef.tools_topups = {'by_currency': {'EGP': 1500}, 'count': 1, 'is_revenue': True}
+    assert _call(ctx, 'GET', T + '/report').get_json()['topups'] is None, 'منصة تقول «إيراد»: ما نعرضهوش'
     plat.ef.tools_topups = {'by_currency': 'x'}
     assert _call(ctx, 'GET', T + '/report').get_json()['topups'] is None
-    plat.ef.tools_topups = None
+
+
+def test_an_older_platform_without_topups_gives_null_never_a_zero(ctx, plat):
+    plat.ef.tools_legacy = True
+    assert _call(ctx, 'GET', T + '/report').get_json()['topups'] is None
 
 
 def test_report_rows_are_whitelisted_and_numbers_are_numbers(ctx, plat):
@@ -912,3 +949,46 @@ def test_no_route_ever_sends_a_real_flag_or_a_confirmation_to_the_platform(ctx, 
     for c in plat.writes():
         j = c['json'] or {}
         assert 'confirmed' not in json.dumps(j) and j.get('real') in (None, False), c
+
+
+# ---------------------------------------------------------------- ١١) حارس السعر والحذف بعد r4-int@a5e1e6b
+
+def test_turning_a_recipe_off_is_allowed_even_when_its_price_is_below_the_guard(ctx, plat):
+    plat.ef.tools_settings['image_min_multiple'] = 20                         # صار سعر «صورتك المهنية» تحت الحد
+    try:
+        base = _fresh(ctx, plat, 'headshot')['updated_at']
+        r = _call(ctx, 'POST', T + '/recipes/headshot/enable', {'enabled': False, 'base_updated_at': base, 'confirmed': True})
+        assert r.status_code == 200 and r.get_json()['recipe']['enabled'] is False
+        assert plat.writes()[-1]['json']['recipe']['enabled'] is False
+        # الإعادة للتشغيل ما زالت محروسة
+        base = _fresh(ctx, plat, 'headshot')['updated_at']
+        n = len(plat.writes())
+        r = _call(ctx, 'POST', T + '/recipes/headshot/enable', {'enabled': True, 'base_updated_at': base, 'confirmed': True})
+        assert r.status_code == 422 and 'أقل من الحد الأدنى' in r.get_json()['error'] and len(plat.writes()) == n
+        # وتعديل السعر ما زال محروسًا ولو الأداة موقوفة
+        r = _edit(ctx, plat, 'headshot', {'price': dict(PRICE_OK, EGP=21)})
+        assert r.status_code == 422 and len(plat.writes()) == n
+    finally:
+        plat.ef.tools_settings['image_min_multiple'] = 3
+        base = _fresh(ctx, plat, 'headshot')['updated_at']
+        _call(ctx, 'POST', T + '/recipes/headshot/enable', {'enabled': True, 'base_updated_at': base, 'confirmed': True})
+
+
+def test_the_platforms_409_on_delete_shows_its_own_message(ctx, plat):
+    plat.ef.forced[('DELETE', '/api/bridge/tools/styles/hs_plain')] = (409, {'detail': {'code': 'last_style', 'message': 'هذا آخر مكان شغّال في أداة شغّالة. أوقف الأداة أولًا أو أضف مكانًا آخر'}})
+    r = _call(ctx, 'DELETE', T + '/styles/hs_plain', {'confirmed': True})
+    assert r.status_code == 409 and r.get_json()['error'].startswith('هذا آخر مكان شغّال') and plat.ef._style('hs_plain') is not None
+    del plat.ef.forced[('DELETE', '/api/bridge/tools/styles/hs_plain')]
+    plat.ef.forced[('DELETE', '/api/bridge/tools/styles/hs_plain')] = (409, {'detail': {'code': 'style_protected', 'message': 'هذا النمط مربوط بشاشات المنصة ولا يُحذف. يمكنك إخفاؤه'}})
+    r = _call(ctx, 'DELETE', T + '/styles/hs_plain', {'confirmed': True})
+    assert r.status_code == 409 and 'مربوط بشاشات المنصة' in r.get_json()['error']
+
+
+def test_the_platform_itself_refuses_the_last_place_when_the_client_guard_is_bypassed(ctx, plat):
+    # الحارس الأول عندنا (قراءة الأدوات)؛ الثاني عند المنصة: نخدع الأول بتعديل الحالة بين القراءة والكتابة.
+    _recipe(plat, 'headshot')['styles'] = ['hs_plain', 'hs_office']
+    plat.ef._style('hs_office')['enabled'] = False                           # «الآخر» غير شغّال ⇒ عندنا مكانان، وعند المنصة واحد شغّال فقط
+    r = _call(ctx, 'DELETE', T + '/styles/hs_plain', {'confirmed': True})
+    assert r.status_code == 409 and 'آخر مكان شغّال' in r.get_json()['error'] and plat.ef._style('hs_plain') is not None
+    _recipe(plat, 'headshot')['styles'] = ['hs_office', 'hs_library', 'hs_entrance', 'hs_plain']
+    plat.ef._style('hs_office')['enabled'] = True
