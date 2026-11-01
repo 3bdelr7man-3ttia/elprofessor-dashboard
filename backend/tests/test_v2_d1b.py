@@ -368,6 +368,19 @@ def test_no_flash_of_the_old_rail_hint_is_admin_only_and_never_cleared_by_a_fail
     assert '.app.v2-pre .main{visibility:hidden}' in css
 
 
+def test_no_flash_before_auth_me_the_hint_is_set_from_the_first_frame():
+    # الومضة كانت بين تحميل الصفحة ورد /auth/me: v2-pre كان بيتحط في EP_BOOT بس (بعد الرد).
+    app_open = HTML.index('<div class="app"')
+    first_script = HTML[app_open:HTML.index('</script>', app_open)]
+    assert "document.currentScript.parentNode" in first_script and "classList.add('v2-pre')" in first_script
+    # من الذاكرة الحاسمة + جلسة محفوظة بس، ومهلة أمان ترجع القديم لو الإقلاع ما حصلش
+    assert "ls.getItem('ep_v2_shell')==='1'" in first_script and "ls.getItem('token')||ls.getItem('ep_dash_token')" in first_script
+    assert "if(!window.EP_BOOTED)app.classList.remove('v2-pre')" in first_script
+    # الإقلاع: غير الأدمن (أو المفتاح مقفول في الذاكرة) يشيل الصنف فورًا
+    boot = HTML[HTML.index('window.EP_BOOT=function(){'):HTML.index('function epBootCore(){')]
+    assert 'window.EP_BOOTED=true;' in boot and "else _app.classList.remove('v2-pre')" in boot
+
+
 # ---------------------------------------------------------------- ٥) الملفات الجديدة بلا أثر على القديم
 
 def test_old_screen_files_were_not_touched_beyond_the_hooks():
