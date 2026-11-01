@@ -2774,6 +2774,9 @@ except Exception: logger.exception('v2 market4 routes not loaded')
 try:   # «ناقشها في الساحة» من محرّر المقال (docs/v2/saha-link/SPEC.md): تحميل محروس — غيابه لا يكسر الإقلاع
     import v2_saha_link_routes as _v2s_saha_link; _v2s_saha_link.register(app, globals())
 except Exception: logger.exception('v2 saha link routes not loaded')
+try:   # «الساحة» و«الديوان» و«الفرص» — مربّعات الإدارة (docs/v2/saha-tiles/SPEC.md): تحميل محروس — غيابه لا يكسر الإقلاع
+    import v2_saha_routes as _v2s_saha; _v2s_saha.register(app, globals())
+except Exception: logger.exception('v2 saha routes not loaded')
 __import__('v2_books_routes').register(app, globals())
 try:   # «كتبنا وأدلّتنا» (docs/v2/books-ours/SPEC.md): تحميل محروس — غيابه لا يكسر الإقلاع
     import v2_books_ours_routes as _v2s_books_ours; _v2s_books_ours.register(app, globals())

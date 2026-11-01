@@ -1292,12 +1292,14 @@
       T('ads', 'إعلانات الأعمال', 'v2m_ads'),
       T('all', 'كل السجلات', 'finance', { finTab: 'summary' }, { finTab: { not: [] } })
     ] },
-    { key: 'content', label: 'المحتوى', img: 'content', desc: 'المقالات والموضوعات والأخبار والتعليقات ودليل الاستخدام', tabs: [
+    { key: 'content', label: 'المحتوى', img: 'content', desc: 'المقالات والموضوعات والأخبار والتعليقات والساحة والديوان ودليل الاستخدام', tabs: [
       T('pipeline',  'خط النشر',       'topics', { topicsTab: 'pipeline' },  { topicsTab: ['pipeline'] }),
       T('articles',  'المقالات',        'topics', { topicsTab: 'articles' },  { topicsTab: ['articles', 'blog', 'auto'] }),
       T('topics',    'الموضوعات',       'topics', { topicsTab: 'pending' },   { topicsTab: ['pending', 'ideas', 'incoming', 'working', 'board', 'rejected', 'archived'] }),
       T('news',      'الأخبار',         'topics', { topicsTab: 'news' },      { topicsTab: ['news'] }),
       T('comments',  'التعليقات',       'topics', { topicsTab: 'comments' },  { topicsTab: ['comments'] }),
+      T('saha',      'الساحة',          'v2s_saha'),
+      T('diwan',     'الديوان',         'v2s_diwan'),
       T('tutorials', 'دليل الاستخدام', 'topics', { topicsTab: 'tutorials' }, { topicsTab: ['tutorials'] }),
       T('site',      'الموقع',          'topics', { topicsTab: 'site' },      { topicsTab: ['site'] })
     ] },
