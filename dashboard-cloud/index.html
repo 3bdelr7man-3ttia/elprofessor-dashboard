@@ -421,6 +421,7 @@ body{font-family:'IBM Plex Sans Arabic',sans-serif;background:var(--bg);color:va
 </head>
 <body>
 <div class="app" data-screen-label="الداش بورد الجديدة">
+<script>/* لا ومضة للقديمة أثناء /auth/me: لو آخر رد حاسم للمفتاح «مفتوح» وفيه جلسة محفوظة، القديم مخفي من أول إطار. EP_BOOT يشيله لغير الأدمن، وv2LoadFlag يشيله بعد الرد، ولو الإقلاع ما حصلش خلال ٨ ثواني يرجع القديم. */(function(){try{var ls=window.localStorage,app=document.currentScript.parentNode;if(ls.getItem('ep_v2_shell')==='1'&&(ls.getItem('token')||ls.getItem('ep_dash_token'))){app.classList.add('v2-pre');setTimeout(function(){if(!window.EP_BOOTED)app.classList.remove('v2-pre');},8000);}}catch(e){}})();</script>
   <aside class="rail">
     <div class="brand">
       <div class="mark"><svg viewBox="0 0 798 588" style="width:60%;height:60%"><path fill="#fff" d="M389 50 Q389 0 439 0 L672 0 Q762 0 762 90 L762 347 L675 347 L675 353 L572 353 L572 588 L496 588 L496 493 L462 493 L462 588 L386 588 L386 493 L302 493 L302 588 L228 588 L228 493 L201 493 L201 588 L104 588 L104 335 L76 335 L76 409 L0 409 L0 351 L40 351 L40 182 L108 182 L108 106 L389 106 Z"></path><path fill="#fff" d="M675 337 L762 337 L762 421 L798 421 L798 492 L675 492 Z"></path></svg></div>
@@ -7817,7 +7818,8 @@ function v2LoadFlag(cb){
 }
 window.EP_BOOT=function(){
   // D1-B: الأدمن اللي المفتاح كان مفتوح عنده آخر مرة: الشريط القديم مخفي لحد ما الرد يوصل (مفيش ومضة قائمة قديمة).
-  try{if(window.EP&&EP.role==='admin'&&window.V2&&localStorage.getItem('ep_v2_shell')==='1')document.querySelector('.app').classList.add('v2-pre');}catch(e){}
+  window.EP_BOOTED=true;
+  try{var _app=document.querySelector('.app');if(window.EP&&EP.role==='admin'&&window.V2&&localStorage.getItem('ep_v2_shell')==='1')_app.classList.add('v2-pre');else _app.classList.remove('v2-pre');}catch(e){}
   epBootCore();
   if(window.EP&&EP.role==='admin'&&EP.api&&window.V2){
     v2LoadFlag(function(on){
