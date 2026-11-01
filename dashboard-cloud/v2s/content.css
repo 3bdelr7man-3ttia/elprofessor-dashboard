@@ -278,3 +278,12 @@
   .v2ct-sdecadd .v2ct-b2{width:100%}
   .v2ct-sdecadd input{flex:1 1 100%}
 }
+
+/* —— «النقاش في الساحة» داخل قارئ مقال الموقع */
+.v2ct-m .v2ct-saha{display:grid;gap:6px;background:var(--paper);border-radius:14px;padding:12px 14px;margin:12px 0}
+.v2ct-m .v2ct-saha>b{font:800 15px 'Cairo',sans-serif;color:var(--ink)}
+.v2ct-m .v2ct-saha.on{background:#F1F8F2}
+.v2ct-m .v2ct-saha .v2ct-rowacts{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+@media(max-width:760px){
+  .v2ct-m .v2ct-saha .v2ct-rowacts .v2ct-b2{width:100%}
+}

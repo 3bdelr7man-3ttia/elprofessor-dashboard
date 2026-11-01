@@ -124,6 +124,13 @@ LEAD_MAGNET_URL = "https://api.elprofessor.net/api/lead-magnet"
 LEAD_MAGNET_ASSET = "fee-contract-template"
 LEAD_MAGNET_HONEYPOT = 'name="website"'
 
+# «ناقشها في الساحة» (docs/v2/saha-link/SPEC.md): زرّ في آخر المتن يرسم رابط نقاش المنصة لمقالٍ له saha_topic_id.
+# ⛔ الترتيب: هذا التحقّق ينزل قبل القالب. يقبل المقال بالزرّ وبدونه، ولا يشترط شيئًا حتى يُصرّح القالب
+#    نفسه بأنه يقرأ الحقل (ctx["renderer_has_saha"]) — فالقالب القديم يمرّ، والجديد يمرّ، والعيب وحده يفشل.
+SAHA_TOPIC_ID_RE = re.compile(r"^[A-Za-z0-9_-]{8,64}$")
+SAHA_LINK_PREFIX = "https://app.elprofessor.net/?page=saha&amp;topic="
+SAHA_BUTTON_TEXT = "ناقشها في الساحة"
+
 
 class Fail(Exception):
     """فشل قاتل — لا يُكتب شيء على القرص."""
@@ -688,6 +695,28 @@ def verify_article(html, a, r, meta, ctx):
         q = str((a["faq"][0] or {}).get("q") or "")
         if q and esc_text(q) not in art and esc_attr(q) not in art:
             bad("renderer declares FAQ rendering but the first question is not in #art")
+
+    # «ناقشها في الساحة» — يتسلّح فور أن يقرأ مُصيِّر article.html الحقل saha_topic_id.
+    # مع معرّف صالح: زرّ واحد بالرابط الصحيح بالضبط. بلا معرّف (أو معرّف فاسد): لا رابط نقاش في #art.
+    # (نعدّ بادئة رابط التطبيق كاملة لا «page=saha» وحدها: متن المقال قد يحمل رابطًا داخليًّا مشروعًا.)
+    # قالب قديم لا يقرأ الحقل: لا يُطلب منه زرّ (المقال بالزرّ وبدونه مقبول، والزرّ الفاسد وحده مرفوض).
+    sid = str(a.get("saha_topic_id") or "")
+    sid_ok = bool(SAHA_TOPIC_ID_RE.match(sid))
+    n_saha = art.count(SAHA_LINK_PREFIX)
+    if ctx.get("renderer_has_saha") and sid_ok:
+        want = SAHA_LINK_PREFIX + sid + '"'
+        if art.count(want) != 1:
+            bad("saha button: expected exactly one link %s... in #art (found %d)"
+                % (SAHA_LINK_PREFIX + sid, art.count(want)))
+        if n_saha != 1:
+            bad("saha button: %d saha links in #art (expected 1)" % n_saha)
+        if art.count(SAHA_BUTTON_TEXT) != 1:
+            bad("saha button: label %r appears %d times in #art (expected 1)"
+                % (SAHA_BUTTON_TEXT, art.count(SAHA_BUTTON_TEXT)))
+    elif n_saha:
+        bad("saha link in #art but the article has no valid saha_topic_id (%r)" % sid)
+    if "<script" in art.lower():
+        bad("a <script> leaked into #art")
     return errs, len(txt)
 
 
@@ -1257,6 +1286,7 @@ def main(argv=None):
     ctx = {
         "renderer_has_faq": "faqHtml" in article_code,
         "renderer_has_topic": "topic_slug" in article_code,
+        "renderer_has_saha": "saha_topic_id" in article_code,
         "soft404": list(soft404.groups()) if soft404 else [],
         "placeholder": unique_line(art_tpl, r"^<title>.*</title>$", "title")[len("<title>"):-len("</title>")],
     }

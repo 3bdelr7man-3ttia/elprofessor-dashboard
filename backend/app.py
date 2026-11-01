@@ -690,6 +690,9 @@ class Article(db.Model):
     last_refreshed_at = db.Column(db.DateTime)
     reviewed_by = db.Column(db.String(255))              # مراجع بشري حقيقي فقط (reviewedBy في JSON-LD)
     reviewed_at = db.Column(db.DateTime)
+    # «ناقشها في الساحة» (docs/v2/saha-link/SPEC.md): معرّف نقاش المنصة المفتوح لهذا المقال. اختياري؛ يُكتب من
+    # مسار الداشبورد المخصّص فقط (v2_saha_link_routes) لا من PUT المقال العام، ولا يظهر في الفيد إلا لو صالح.
+    saha_topic_id = db.Column(db.String(80))
 
 
 class ArticleVersion(db.Model):
@@ -2768,6 +2771,9 @@ import v2_market_routes as _v2s_market; _v2s_market.register(app, globals())  # 
 try:   # «السوق v4»: اقتراحات «أخرى» · مدى الأسعار · المكاتب · ملف الترخيص (docs/v2/market4/SPEC.md): تحميل محروس
     import v2_market4_routes as _v2s_market4; _v2s_market4.register(app, globals())
 except Exception: logger.exception('v2 market4 routes not loaded')
+try:   # «ناقشها في الساحة» من محرّر المقال (docs/v2/saha-link/SPEC.md): تحميل محروس — غيابه لا يكسر الإقلاع
+    import v2_saha_link_routes as _v2s_saha_link; _v2s_saha_link.register(app, globals())
+except Exception: logger.exception('v2 saha link routes not loaded')
 __import__('v2_books_routes').register(app, globals())
 try:   # «كتبنا وأدلّتنا» (docs/v2/books-ours/SPEC.md): تحميل محروس — غيابه لا يكسر الإقلاع
     import v2_books_ours_routes as _v2s_books_ours; _v2s_books_ours.register(app, globals())
@@ -9397,7 +9403,7 @@ def ensure_runtime_schema():
                                ('cluster_id', 'VARCHAR(120)'), ('role', 'VARCHAR(20)'),
                                ('parent_id', 'INTEGER'), ('refresh_count', 'INTEGER'),
                                ('last_refreshed_at', 'DATETIME'), ('reviewed_by', 'VARCHAR(255)'),
-                               ('reviewed_at', 'DATETIME')):
+                               ('reviewed_at', 'DATETIME'), ('saha_topic_id', 'VARCHAR(80)')):
                 if _col not in article_columns:
                     try:
                         connection.execute(text(f"ALTER TABLE articles ADD COLUMN {_col} {_typ}"))
@@ -9807,6 +9813,8 @@ def serialize_article(article):
         'reviewed_at': article.reviewed_at.isoformat() if article.reviewed_at else None,
         'refresh_count': article.refresh_count or 0,
         'last_refreshed_at': article.last_refreshed_at.isoformat() if article.last_refreshed_at else None,
+        # «ناقشها في الساحة»: الموقع يرسم الزرّ لو الحقل موجود (null = لا زرّ). article.html يتحقّق من الشكل بنفسه أيضًا.
+        'saha_topic_id': article.saha_topic_id or None,
         **_byline_fields(article),
     }
 

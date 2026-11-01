@@ -1231,15 +1231,17 @@ def test_cms_contract_is_unchanged_prerender_reasons_and_article_key_set(ctx, pl
         db.session.commit()
     assert keys == {'id', 'slug', 'title', 'excerpt', 'cat', 'kicker', 'date', 'by', 'tone', 'video', 'image_url', 'body', 'meta_description', 'keywords', 'faq', 'target_audience', 'status',
                     'published_at', 'updated_at', 'content_hash', 'primary_kw', 'cluster_id', 'role', 'parent_id', 'topic_slug', 'topic_label', 'reviewed_by', 'reviewed_at',
-                    'refresh_count', 'last_refreshed_at'} | {k for k in keys if k.startswith(('byline', 'author', 'reviewer'))}
+                    'refresh_count', 'last_refreshed_at', 'saha_topic_id'} | {k for k in keys if k.startswith(('byline', 'author', 'reviewer'))}
 
 
 def test_prerender_py_has_no_diff_against_the_branch_base():
     git = subprocess.run(['git', '-C', ROOT, 'cat-file', '-e', BASE_COMMIT], capture_output=True)
     if git.returncode != 0:
         pytest.skip('القاعدة غير متاحة في هذا المستودع')
-    d = subprocess.run(['git', '-C', ROOT, 'diff', '--quiet', BASE_COMMIT, '--', 'backend/prerender.py'])
-    assert d.returncode == 0, 'prerender.py اتغيّر'
+    # فرع «ناقشها في الساحة» (docs/v2/saha-link) يضيف تحققًا لزرّ الساحة في prerender.py عمدًا: إضافات فقط، ولا سطر محذوف ولا معدَّل.
+    d = subprocess.run(['git', '-C', ROOT, 'diff', '--numstat', BASE_COMMIT, '--', 'backend/prerender.py'], capture_output=True, text=True)
+    removed = sum(int(l.split()[1]) for l in d.stdout.splitlines() if l.strip())
+    assert removed == 0, 'prerender.py: سطور اتحذفت أو اتعدّلت'
     app_src = _read('backend', 'app.py')
     assert "import v2_content_routes as _v2s_content; _v2s_content.register(app, globals())" in app_src
     assert app_src.index('_v2s_content.register') < app_src.index('# ---- v2 section routes end')

@@ -493,6 +493,7 @@
         + (raw.excerpt ? '<p class="v2ct-exb">' + esc(raw.excerpt) + '</p>' : '')
         + (String(raw.image_url || '').trim() ? '<p class="v2ct-pills">' + pill('صورة الغلاف: موجودة', 'green') + '</p>' : '')
         + '<div class="v2ct-article">' + bodyHtml(raw.body) + '</div>'
+        + sahaBlock(raw, pub)
         + '<div class="v2ct-acts2">' + prim + sec + '</div>'
         + (pub ? '<p class="v2ct-fine">لحذف مقال منشور: أوقف نشره أولًا، ثم احذفه من المسودات.</p>' : '');
       wireRead();
@@ -503,6 +504,8 @@
       var u = q('#v2ctUnpub', stage); if (u) u.onclick = function () { closeSheet(); unpublishSite(raw); };
       var d = q('#v2ctDel', stage); if (d) d.onclick = function () { closeSheet(); deleteDraft(raw, false); };
       var dd = q('#v2ctDelDup', stage); if (dd) dd.onclick = function () { closeSheet(); deleteDraft(raw, true); };
+      var so = q('#v2ctSahaOpen', stage); if (so) so.onclick = function () { sahaForm(stage, raw, function () { read(); }, s); };
+      var sd = q('#v2ctSahaDetach', stage); if (sd) sd.onclick = function () { closeSheet(); sahaDetach(raw); };
     }
     function edit() { articleForm(stage, raw, function () { read(); }, s); }
     read();
@@ -564,6 +567,64 @@
     };
     var sp = q('#v2ctSavePub', stage);
     if (sp) sp.onclick = function () { doSave(g0(), true, true); };
+  }
+  // —— «النقاش في الساحة» (docs/v2/saha-link/SPEC.md): يفتح نقاشًا للمقال المنشور في المنصة ويحفظ معرّفه، فيظهر زرّ «ناقشها في الساحة» في المقال.
+  // المعرّف الصالح فقط يُرسم رابطًا (نفس شكل article.html)؛ الكتابة عبر `/v2/content/articles/<id>/saha-topic` وبعد ورقة تأكيد.
+  var SAHA_ID = /^[A-Za-z0-9_-]{8,64}$/;
+  var SAHA_APP = 'https://app.elprofessor.net/?page=saha&topic=';
+  function sahaBlock(raw, pub) {
+    if (!pub) return '<div class="v2ct-saha"><b>النقاش في الساحة</b><p class="v2ct-line">يُفتح النقاش بعد نشر المقال على الموقع.</p></div>';
+    var tid = String(raw.saha_topic_id || '');
+    if (tid && SAHA_ID.test(tid)) {
+      return '<div class="v2ct-saha on"><b>النقاش في الساحة</b><p class="v2ct-pills">' + pill('النقاش مفتوح', 'green') + '</p>'
+        + '<p class="v2ct-line">يظهر زرّ «ناقشها في الساحة» في آخر المقال.</p>'
+        + '<div class="v2ct-rowacts">' + safeLink(SAHA_APP + encodeURIComponent(tid), 'افتح النقاش في الساحة') + '<button type="button" class="v2ct-b2" id="v2ctSahaDetach">افصل</button></div></div>';
+    }
+    return '<div class="v2ct-saha"><b>النقاش في الساحة</b><p class="v2ct-line">لا نقاش لهذا المقال. افتح نقاشًا ليظهر زرّ «ناقشها في الساحة» في آخر المقال.</p>'
+      + '<div class="v2ct-rowacts"><button type="button" class="v2ct-b2" id="v2ctSahaOpen">افتح نقاشًا لهذا المقال</button></div></div>';
+  }
+  function sahaDone(raw, want, done, okNote) {
+    // بعد الكتابة نعيد تحميل المقالات ونحكم من البيانات: هل صار المعرّف على المقال (أو غاب) فعلًا؟
+    var E = ep(), fired = false;
+    function chk() {
+      if (fired || E.state.content === 'loading') return;
+      fired = true;
+      var hit = (siteRaw() || []).filter(function (a) { return String(a.id) === String(raw.id); })[0];
+      var has = !!(hit && hit.saha_topic_id);
+      if (has === want) done({ ok: true, note: okNote });
+      else done({ ok: false, error: 'لم يتأكد الحفظ. حدّث الصفحة ثم تحقّق.' });
+    }
+    E.reload('content', chk);
+  }
+  function sahaForm(stage, raw, back, sheet) {
+    var q0 = raw.excerpt || raw.meta_description || '';
+    var cover = /^https:\/\//i.test(String(raw.image_url || '').trim());
+    function fld(id, label, val, extra) { return '<div class="v2ct-fld"><label for="' + id + '">' + esc(label) + '</label>' + extra.replace('{v}', esc(val)) + '</div>'; }
+    stage.innerHTML = '<h2 class="v2ct-rt">نقاش لهذا المقال</h2>'
+      + '<p class="v2ct-lead">يُفتح النقاش في الساحة للناس، ويظهر زرّ «ناقشها في الساحة» في آخر المقال.</p>'
+      + fld('sh_t', 'عنوان النقاش', raw.title || '', '<input id="sh_t" maxlength="200" value="{v}">')
+      + fld('sh_q', 'سؤال النقاش', q0, '<textarea id="sh_q" rows="4" maxlength="5000" placeholder="اكتب السؤال الذي يُناقَش">{v}</textarea>')
+      + (cover ? '<p class="v2ct-fine">صورة المقال تصير غلاف النقاش.</p>' : '')
+      + '<div id="v2ctErr"></div><div class="v2ct-acts2"><button type="button" class="v2ct-b1" id="v2ctSahaGo">راجع وافتح</button><button type="button" class="v2ct-b2" id="v2ctBack">رجوع</button></div>';
+    q('#v2ctBack', stage).onclick = back;
+    q('#v2ctSahaGo', stage).onclick = function () {
+      var t = q('#sh_t', stage).value.trim(), qu = q('#sh_q', stage).value.trim();
+      if (t.length < 3) { errBox(sheet, 'اكتب عنوانًا للنقاش (٣ أحرف على الأقل)'); return; }
+      if (!qu) { errBox(sheet, 'اكتب سؤال النقاش'); return; }
+      errBox(sheet, '');
+      inlineConfirm(sheet, { lead: 'سيُفتح نقاش «' + t + '» للناس في الساحة الآن، ويظهر زرّ «ناقشها في الساحة» في المقال خلال دقائق.', okLabel: 'افتح النقاش', run: function (done) {
+        apiPost('/v2/content/articles/' + encodeURIComponent(raw.id) + '/saha-topic', { confirmed: true, title: t, question: qu }).then(function (r) {
+          sahaDone(raw, true, done, r && r.adopted ? 'تمّ: ربطنا بالمقال نقاشًا سابقًا كان قد فُتح له.' : 'تمّ: فُتح النقاش. يظهر الزرّ في المقال خلال دقائق.');
+        }).catch(function (e) { done({ ok: false, error: apiErr(e) }); });
+      } });
+    };
+  }
+  function sahaDetach(raw) {
+    confirmSheet({ title: 'فصل النقاش', lead: 'سيختفي زرّ «ناقشها في الساحة» من المقال. النقاش نفسه يبقى في الساحة كما هو.', okLabel: 'افصل', danger: true, run: function (done) {
+      apiPost('/v2/content/articles/' + encodeURIComponent(raw.id) + '/saha-topic/detach', { confirmed: true }).then(function () {
+        sahaDone(raw, false, done, 'تمّ: فُصل النقاش عن المقال.');
+      }).catch(function (e) { done({ ok: false, error: apiErr(e) }); });
+    } });
   }
   function publishSite(raw) {
     var lead = L.v2ContentPublishLead(raw.title, overviewPrerender());
