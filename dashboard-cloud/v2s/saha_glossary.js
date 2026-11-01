@@ -1,7 +1,8 @@
 /* ============================================================================
  * v2s/saha_glossary.js — لوحة «القاموس» (تبويب في قسم «المحتوى») على المحرّك المشترك `V2S_SAHA_KIT.board` من saha.js (ولهذا اسمه `saha_glossary.js` ويُحمَّل بعد `saha_diwan.js`؛ المنطق النقي في `glossary.js`).
- * مربّعات بصور: المصطلحات · تنتظر مراجعة خبير · مراجعات القاموس (ما يقدّمه المتخصصون من الموقع) · الاستيراد · شرط المراجعة.
- * وكل مصطلح له شاشة: النص كاملًا · الحالة (مسودة · تحت التأكيد · مؤكّد) والمراجعة · النقاش في الساحة. وكل مراجعة لها شاشة: ما كتبه المتخصص وما هو عليه المصطلح الآن.
+ * مربّعات بصور: المصطلحات · نقاشات المصطلحات (نقاش «الساحة» لكل منشور) · الاستيراد، ومعها حين تُفعَّل مراجعات المتخصصين: تنتظر مراجعة خبير · مراجعات القاموس · شرط المراجعة.
+ * (قرار المؤسس ٢٠٢٦-١١-٠١: المراجعات مطفأة افتراضيًا، فالحالات «مسودة / منشور» والأربعة الأخرى لا تظهر، و«راجعه» ختم داخلي في شاشة المصطلح.)
+ * وكل مصطلح له شاشة: النص كاملًا · الحالة والمراجعة · النقاش في الساحة (افتح نقاشًا جديدًا أو اربط موجودًا). وكل مراجعة لها شاشة: ما كتبه المتخصص وما هو عليه المصطلح الآن.
  * ⛔ لا منطق عمل هنا: كل التحقق والنصوص من `V2L.v2sGlossary`. ولا طلب شبكة إلا `/api/v2/content/glossary/*` (أدمن بس).
  * ⛔ كل كتابة تمرّ على ورقة مراجعة ثم تأكيد وتذهب بـ`confirmed: true` (والمعاينة وحدها بلا تأكيد لأنها لا تكتب). مفيش confirm()/alert()/prompt() ولا حفظ في المتصفح.
  * ⛔ المفتاح مقفول: الملف بيتحمّل دايمًا لكنه ما بيرسم شيئًا إلا لو index.html نادى `render` (والغلاف الجديد شغّال).
@@ -26,7 +27,8 @@
   function reviewsView() { var d = B.data(P.reviews); return d ? G.reviews(d) : null; }
   function reviewById(id) { var v = reviewsView(); if (v) for (var i = 0; i < v.rows.length; i++) if (v.rows[i].id === String(id)) return v.rows[i]; return null; }
   function rvPath(rv, tail) { return BASE + '/reviews/' + encodeURIComponent(rv.id) + (tail || ''); }
-  function stateClass(r) { return r.confirmed ? 'green' : (r.underReview ? 'gold' : ''); }
+  function reviewsOn() { var v = termsView(); return !!(v && v.reviewsEnabled); }
+  function stateClass(r) { return !r.reviewsOn ? (r.published ? 'green' : '') : (r.confirmed ? 'green' : (r.underReview ? 'gold' : '')); }
   function requireReview() { var v = termsView(); return v ? v.requireReview : false; }
   function rowById(id) { var v = termsView(); if (v) for (var i = 0; i < v.rows.length; i++) if (v.rows[i].id === String(id)) return v.rows[i]; return null; }
   function path(r, tail) { return BASE + '/' + encodeURIComponent(r.id) + (tail || ''); }
@@ -50,34 +52,43 @@
 
   // ------------------------------------------------------------------ المربّعات
   function tiles() {
+    var on = reviewsOn();
     var all = Kit.count(B, P.all, function () { var v = termsView(); return v ? { n: ar(v.counts.all), note: v.counts.all ? G.summary(v.counts) : 'لا مصطلحات بعد، استورد القاموس الأساسي' } : null; });
-    var wait = Kit.count(B, P.all, function () { var v = termsView(); return v ? { n: ar(v.counts.unreviewed), note: v.counts.unreviewed ? 'مصطلح ينتظر مراجعة خبير' : 'لا مصطلحات تنتظر', hot: v.counts.unreviewed > 0 } : null; });
-    var rvw = Kit.count(B, P.all, function () { var v = termsView(); return v ? { n: ar(v.counts.reviewsPending), note: v.counts.reviewsPending ? 'مراجعة من متخصصين تنتظر قرارك' : 'لا مراجعات تنتظر', hot: v.counts.reviewsPending > 0 } : null; });
-    var rules = Kit.count(B, P.all, function () { var r = G.rulesView(termsView()); return r ? { n: r.word, note: 'مراجعة الخبير قبل النشر', word: true, hot: r.on } : null; });
-    return [
-      Object.assign({ sub: 'terms', name: 'المصطلحات', img: 'books' }, all),
-      Object.assign({ sub: 'wait', name: 'تنتظر مراجعة خبير', img: 'people' }, wait),
-      Object.assign({ sub: 'reviews', name: 'مراجعات القاموس', img: 'content' }, rvw),
-      Object.assign({ sub: 'import', name: 'استيراد المصطلحات', img: 'files' }, { n: 'استورد', note: 'القاموس الأساسي أو ملف', word: true }),
-      Object.assign({ sub: 'rules', name: 'شرط المراجعة', img: 'company' }, rules)
-    ];
+    var tp = Kit.count(B, P.all, function () { var v = termsView(); return v ? { n: ar(v.counts.publishedNoTopic), note: v.counts.publishedNoTopic ? 'مصطلح منشور بلا نقاش في الساحة' : 'لكل منشور نقاشه', hot: v.counts.publishedNoTopic > 0 } : null; });
+    var imp = { n: 'استورد', note: 'القاموس الأساسي أو ملف', word: true };
+    var list = [Object.assign({ sub: 'terms', name: 'المصطلحات', img: 'books' }, all), Object.assign({ sub: 'topics', name: 'نقاشات المصطلحات', img: 'people' }, tp)];
+    if (on) {
+      var wait = Kit.count(B, P.all, function () { var v = termsView(); return v ? { n: ar(v.counts.unreviewed), note: v.counts.unreviewed ? 'مصطلح ينتظر مراجعة خبير' : 'لا مصطلحات تنتظر', hot: v.counts.unreviewed > 0 } : null; });
+      var rvw = Kit.count(B, P.all, function () { var v = termsView(); return v ? { n: ar(v.counts.reviewsPending), note: v.counts.reviewsPending ? 'مراجعة من متخصصين تنتظر قرارك' : 'لا مراجعات تنتظر', hot: v.counts.reviewsPending > 0 } : null; });
+      var rules = Kit.count(B, P.all, function () { var r = G.rulesView(termsView()); return r ? { n: r.word, note: 'مراجعة الخبير قبل النشر', word: true, hot: r.on } : null; });
+      list.push(Object.assign({ sub: 'wait', name: 'تنتظر مراجعة خبير', img: 'disputes' }, wait), Object.assign({ sub: 'reviews', name: 'مراجعات القاموس', img: 'content' }, rvw));
+      list.push(Object.assign({ sub: 'import', name: 'استيراد المصطلحات', img: 'files' }, imp), Object.assign({ sub: 'rules', name: 'شرط المراجعة', img: 'company' }, rules));
+      return list;
+    }
+    list.push(Object.assign({ sub: 'import', name: 'استيراد المصطلحات', img: 'files' }, imp));
+    return list;
   }
+  // شاشة مراجعات المتخصصين مطفأة: لا نداء لها ولا عرض
+  function offScreen(title, img) { return { title: title, sub: '', img: img, html: B.empty('غير مفعّلة الآن', 'ارجع إلى مربّعات القاموس.') }; }
 
   // ------------------------------------------------------------------ ١ · قائمة المصطلحات
   function filters(mode) {
-    return { q: B.f('gq', ''), area: B.f('garea', 'all'), status: B.f('gst', 'all'), review: mode === 'wait' ? 'unreviewed' : B.f('grev', 'all') };
+    var on = reviewsOn(), st = B.f('gst', 'all');
+    if (!on && (st === 'confirmed' || st === 'under_review')) st = 'published';          // شرائح الحالة الثلاث تختفي والمراجعات مطفأة
+    return { q: B.f('gq', ''), area: B.f('garea', 'all'), status: st, review: on ? (mode === 'wait' ? 'unreviewed' : B.f('grev', 'all')) : 'all' };
   }
-  function listCols() {
-    return [
+  function listCols(on) {
+    var cols = [
       { h: 'المصطلح', c: function (r) { return '<b class="sh-t">' + esc(r.ar) + '</b><span class="sh-sub" dir="ltr">' + esc(r.en) + '</span>' + (r.fr ? '<span class="sh-sub" dir="ltr">' + esc(r.fr) + '</span>' : ''); } },
       { h: 'المجال', c: function (r) { return esc(r.areaText); } },
-      { h: 'الحالة', c: function (r) { return Kit.pill(r.statusText, stateClass(r)); } },
-      { h: 'المراجعة', c: function (r) { return r.reviewed ? Kit.pill('راجعه خبير', 'green') + '<span class="sh-sub">' + bdi(r.reviewerName) + '، ' + bdi(r.reviewerRole) + '</span>' : Kit.pill('ينتظر خبيرًا', 'gold'); } }
+      { h: 'الحالة', c: function (r) { return Kit.pill(r.statusText, stateClass(r)); } }
     ];
+    if (on) cols.push({ h: 'المراجعة', c: function (r) { return r.reviewed ? Kit.pill('راجعه خبير', 'green') + '<span class="sh-sub">' + bdi(r.reviewerName) + '، ' + bdi(r.reviewerRole) + '</span>' : Kit.pill('ينتظر خبيرًا', 'gold'); } });
+    return cols;
   }
   function listActs(r) {
     var id = ' data-id="' + esc(r.id) + '"';
-    var main = !r.reviewed ? '<button type="button" class="ep-b1" data-a="grev"' + id + '>راجعه</button>'
+    var main = r.reviewsOn && !r.reviewed ? '<button type="button" class="ep-b1" data-a="grev"' + id + '>راجعه</button>'
       : (!r.published ? '<button type="button" class="ep-b1" data-a="gpub"' + id + '>انشر</button>' : '<button type="button" class="ep-b2" data-a="gunpub"' + id + '>ألغِ النشر</button>');
     return '<button type="button" class="ep-b2" data-a="gopen"' + id + '>افتح</button>' + main;
   }
@@ -86,28 +97,29 @@
     if (!v.rows.length) return B.empty('لا مصطلحات بعد', 'استورد القاموس الأساسي أو أضف مصطلحًا بيدك') + '<div class="sh-acts"><button type="button" class="ep-b1" data-a="gimport">استورد المصطلحات</button></div>';
     if (!rows.length) {
       var clean = !f.q && f.area === 'all' && f.status === 'all' && (mode === 'wait' || f.review === 'all');
-      return clean ? B.empty('لا مصطلحات تنتظر مراجعة خبير', 'كل مصطلح في القاموس عليه ختم مراجعة') : B.empty('لا مصطلحات تطابق بحثك', 'جرّب كلمة أخرى أو امسح الفلاتر');
+      return clean && mode === 'wait' ? B.empty('لا مصطلحات تنتظر مراجعة خبير', 'كل مصطلح في القاموس عليه ختم مراجعة') : B.empty('لا مصطلحات تطابق بحثك', 'جرّب كلمة أخرى أو امسح الفلاتر');
     }
-    return '<p class="sh-count">' + esc(G.termCountText(rows.length)) + '</p>' + B.list(rows, listCols(), listActs);
+    return '<p class="sh-count">' + esc(G.termCountText(rows.length)) + '</p>' + B.list(rows, listCols(v.reviewsEnabled), listActs);
   }
   function screenList(mode) {
     return function () {
       B.need(P.all);
-      var v = termsView(), f = filters(mode), wait = mode === 'wait', body;
+      var v = termsView(), f = filters(mode), wait = mode === 'wait' && !!(v && v.reviewsEnabled), body;
       if (!v) body = B.stateBlock(P.all, 'المصطلحات');
       else {
-        var c = v.counts;
+        var c = v.counts, on = v.reviewsEnabled;
         body = '<div class="sh-top"><button type="button" class="ep-b1" data-a="gnew">أضف مصطلحًا</button><button type="button" class="ep-b2" data-a="gimport">استورد مصطلحات</button></div>'
-          + '<ul class="sh-nums" aria-label="أعداد المصطلحات"><li><b>' + esc(ar(c.confirmed)) + '</b><span>مؤكّد</span></li><li><b>' + esc(ar(c.underReview)) + '</b><span>تحت التأكيد</span></li>'
+          + '<ul class="sh-nums" aria-label="أعداد المصطلحات">' + (on ? '<li><b>' + esc(ar(c.confirmed)) + '</b><span>مؤكّد</span></li><li><b>' + esc(ar(c.underReview)) + '</b><span>تحت التأكيد</span></li>'
+              : '<li><b>' + esc(ar(c.published)) + '</b><span>منشور</span></li>')
           + '<li><b>' + esc(ar(c.draft)) + '</b><span>مسودة</span></li></ul>'
           + '<div class="sh-sbox"><label for="shQ">ابحث في المصطلحات</label><input id="shQ" type="text" dir="auto" autocomplete="off" value="' + esc(f.q) + '" placeholder="بالعربية أو الإنجليزية أو الفرنسية أو في التعريف"></div>'
           + '<span class="sh-flabel">المجال</span>' + B.chips('garea', G.areaChips(c), f.area)
-          + '<span class="sh-flabel">الحالة</span>' + B.chips('gst', G.STATUS_CHIPS, f.status)
-          + (wait ? '' : '<span class="sh-flabel">المراجعة</span>' + B.chips('grev', G.REVIEW_CHIPS, f.review))
+          + '<span class="sh-flabel">الحالة</span>' + B.chips('gst', G.statusChips(on), f.status)
+          + (wait || !on ? '' : '<span class="sh-flabel">المراجعة</span>' + B.chips('grev', G.REVIEW_CHIPS, f.review))
           + (v.truncated ? '<p class="sh-fine">يعرض الجدول أول ' + esc(ar(v.rows.length)) + ' مصطلح من أصل ' + esc(ar(v.total)) + '.</p>' : '')
           + '<div id="gList">' + listBody(v, mode) + '</div>';
       }
-      return { title: wait ? 'تنتظر مراجعة خبير' : 'المصطلحات', sub: v ? G.summary(v.counts) : '', img: wait ? 'people' : 'books', html: body, after: function (vw) {
+      return { title: wait ? 'تنتظر مراجعة خبير' : 'المصطلحات', sub: v ? G.summary(v.counts) : '', img: wait ? 'disputes' : 'books', html: body, after: function (vw) {
         var i = q1('#shQ', vw);
         if (!i) return;
         i.addEventListener('input', function () {
@@ -136,7 +148,7 @@
       + '<h4 class="g-h">التعريف</h4><p class="g-def">' + esc(G.arDigits(r.definition)) + '</p>'
       + (r.exampleEn || r.exampleAr ? '<h4 class="g-h">مثال</h4>' + (r.exampleEn ? '<p class="g-ex" dir="ltr">' + esc(r.exampleEn) + '</p>' : '') + (r.exampleAr ? '<p class="g-ex">' + esc(G.arDigits(r.exampleAr)) + '</p>' : '') : '')
       + (r.falseFriend ? '<div class="g-false"><b>خطأ شائع</b><p>' + esc(G.arDigits(r.falseFriend)) + '</p></div>' : '')
-      + (r.countries ? '<h4 class="g-h">ملاحظة الدول</h4><p class="g-def">' + esc(G.arDigits(r.countries)) + '</p>' + (r.confirmed ? '' : '<p class="sh-fine">لا تظهر هذه الملاحظة على الموقع قبل أن يؤكّد خبير المصطلح.</p>') : '')
+      + (r.countries ? '<h4 class="g-h">ملاحظة الدول</h4><p class="g-def">' + esc(G.arDigits(r.countries)) + '</p>' + (r.confirmed || !r.reviewsOn ? '' : '<p class="sh-fine">لا تظهر هذه الملاحظة على الموقع قبل أن يؤكّد خبير المصطلح.</p>') : '')
       + (rel.length ? '<h4 class="g-h">مصطلحات قريبة</h4><div class="g-rel">' + rel.map(function (x) {
           return x.known ? '<button type="button" class="sh-chip" data-a="gopen" data-id="' + esc(x.id) + '">' + esc(x.label) + '</button>'
             : '<span class="sh-st mute" dir="ltr">' + esc(x.slug) + '</span><small class="sh-sub">لم يُستورد بعد</small>';
@@ -150,11 +162,15 @@
       + (r.published ? '<button type="button" class="ep-b2" data-a="gunpub"' + id + '>ألغِ النشر</button>'
           : '<button type="button" class="ep-b' + (r.reviewed || !req ? '1' : '2') + '" data-a="gpub"' + id + (why ? ' disabled aria-describedby="gWhy"' : '') + '>انشر المصطلح</button>')
       + (r.canDelete ? '<button type="button" class="ep-bs" data-a="gdel"' + id + '>احذف</button>' : '');
-    var status = '<div class="sh-panel"><h3>الحالة والمراجعة</h3>' + line('الحالة', Kit.pill(r.statusText, stateClass(r)))
-      + line('المراجعة', r.reviewed ? '<b>راجعه: ' + bdi(r.reviewerName) + '، ' + bdi(r.reviewerRole) + '</b>' + (r.reviewedOn ? ' <small class="sh-sub">' + esc(r.reviewedOn) + '</small>' : '') : 'لم يراجعه خبير بعد')
-      + (r.reviewed ? line('ظهور الاسم', r.namePublic ? 'يظهر للناس' : 'لا يظهر، وتقول الصفحة «راجعه متخصص»') : '')
-      + (r.siteBadge ? line('على الموقع', esc(r.siteBadge)) : '')
-      + (why ? '<p class="g-why" id="gWhy" role="status">' + esc(why) + '</p>' : '') + '<div class="sh-acts">' + acts + '</div></div>';
+    var stamp = r.reviewed ? '<b>راجعه: ' + bdi(r.reviewerName) + '، ' + bdi(r.reviewerRole) + '</b>' + (r.reviewedOn ? ' <small class="sh-sub">' + esc(r.reviewedOn) + '</small>' : '') : 'لم يراجعه خبير بعد';
+    var status = r.reviewsOn
+      ? '<div class="sh-panel"><h3>الحالة والمراجعة</h3>' + line('الحالة', Kit.pill(r.statusText, stateClass(r))) + line('المراجعة', stamp)
+        + (r.reviewed ? line('ظهور الاسم', r.namePublic ? 'يظهر للناس' : 'لا يظهر، وتقول الصفحة «راجعه متخصص»') : '')
+        + (r.siteBadge ? line('على الموقع', esc(r.siteBadge)) : '')
+        + (why ? '<p class="g-why" id="gWhy" role="status">' + esc(why) + '</p>' : '') + '<div class="sh-acts">' + acts + '</div></div>'
+      : '<div class="sh-panel"><h3>الحالة</h3>' + line('الحالة', Kit.pill(r.statusText, stateClass(r)))
+        + '<h4 class="g-h">مراجعة داخلية، لا تظهر على الموقع</h4>' + line('المراجعة', r.reviewed ? stamp : 'لم تُسجَّل مراجعة')
+        + (why ? '<p class="g-why" id="gWhy" role="status">' + esc(why) + '</p>' : '') + '<div class="sh-acts">' + acts + '</div></div>';
     return { title: r.ar, sub: r.areaText, img: 'books', html: back + term + status + topicPanel(r), after: function (vw) {
       var s = q1('#gTopic', vw);
       if (s) s.addEventListener('change', function () { var e = q1('#gTopicErr', vw); if (e) e.textContent = ''; });
@@ -166,11 +182,16 @@
       var title = G.topicTitle(tv, r.topicId);
       body = '<p class="g-line"><b>النقاش المرتبط</b><span>' + (title ? esc(title) : 'نقاش في الساحة') + '</span></p>' + '<p class="g-line">' + Kit.link(G.topicUrl(r.topicId), 'فتح النقاش في الساحة') + '</p>'
         + '<div class="sh-acts"><button type="button" class="ep-b2" data-a="gdetach"' + id + '>افصل النقاش</button></div>';
-    } else if (!tv) body = B.stateBlock(P.topics, 'قائمة النقاشات');
-    else if (!tv.rows.length) body = '<p class="sh-fine">لا نقاشات منشورة في الساحة الآن. حين يُفتح نقاش يمكنك ربطه هنا.</p>';
-    else body = '<p class="sh-fine">اربط نقاشًا موجودًا في الساحة، فيظهر في صفحة المصطلح زرّ «ناقشه في الساحة». لا يمكن فتح نقاش جديد من هنا بعد.</p>'
-      + '<div class="sh-sbox"><label for="gTopic">النقاش</label><select id="gTopic"><option value="">اختر نقاشًا</option>' + tv.rows.map(function (t) { return '<option value="' + esc(t.id) + '">' + esc(t.title) + '</option>'; }).join('') + '</select>'
-      + '<small class="ferr g-err" id="gTopicErr" role="alert"></small></div><div class="sh-acts"><button type="button" class="ep-b1" data-a="gattach"' + id + '>اربط النقاش</button></div>';
+    } else {
+      var can = G.canOpenTopic(r);
+      body = '<p class="sh-fine">يُفتح في الساحة نقاش يدعو كل من يرى خطأً في الترجمة أو التعريف إلى كتابة اعتراضه أو اقتراحه، ويظهر في صفحة المصطلح زرّ «ناقشه في الساحة».</p>'
+        + (can.ok ? '' : '<p class="g-why" role="status">' + esc(can.error) + '</p>')
+        + '<div class="sh-acts"><button type="button" class="ep-b1" data-a="gtopen"' + id + (can.ok ? '' : ' disabled') + '>افتح نقاشًا لهذا المصطلح</button></div>';
+      if (!tv) body += B.stateBlock(P.topics, 'قائمة النقاشات');
+      else if (tv.rows.length) body += '<h4 class="g-h">أو اربط نقاشًا موجودًا في الساحة</h4>'
+        + '<div class="sh-sbox"><label for="gTopic">النقاش</label><select id="gTopic"><option value="">اختر نقاشًا</option>' + tv.rows.map(function (t) { return '<option value="' + esc(t.id) + '">' + esc(t.title) + '</option>'; }).join('') + '</select>'
+        + '<small class="ferr g-err" id="gTopicErr" role="alert"></small></div><div class="sh-acts"><button type="button" class="ep-b2" data-a="gattach"' + id + '>اربط النقاش</button></div>';
+    }
     return '<div class="sh-panel"><h3>النقاش في الساحة</h3>' + body + '</div>';
   }
 
@@ -222,7 +243,7 @@
           + fld('المثال بالإنجليزية (اختياري)', ltr(txt('example_en', vals.example_en, 3, 1500)), 'example_en')
           + fld('المثال بالعربية (اختياري)', txt('example_ar', vals.example_ar, 3, 1500), 'example_ar')
           + fld('الخطأ الشائع (اختياري)', txt('false_friend_note_ar', vals.false_friend_note_ar, 3, 2000), 'false_friend_note_ar', 'تنبيه من خلط شائع بين هذا المصطلح وما يشبهه.')
-          + fld('ملاحظة الدول (اختياري)', txt('countries_note_ar', vals.countries_note_ar, 3, 2000), 'countries_note_ar', 'تظهر في صفحة المصطلح بعد أن يراجعه خبير.')
+          + fld('ملاحظة الدول (اختياري)', txt('countries_note_ar', vals.countries_note_ar, 3, 2000), 'countries_note_ar', (v.reviewsEnabled ? 'تظهر في صفحة المصطلح بعد أن يراجعه خبير.' : 'تظهر في صفحة المصطلح.'))
           + '<div class="fld"><label>المصطلحات القريبة</label><div id="gRel"></div><small class="ferr" data-e="related" role="alert"></small></div>'
           + fld('رابط المصطلح', frozen ? inp('slug', vals.slug, { max: 64, ltr: true }).replace('<input ', '<input disabled ') : inp('slug', vals.slug, { max: 64, ltr: true, ph: 'force-majeure' }), 'slug',
               frozen ? 'لا يتغيّر بعد أول نشر.' : (create ? 'يُشتق من الاسم الإنجليزي لو تركته فارغًا، ويتجمّد عند أول نشر.' : 'يمكن تغييره قبل أول نشر فقط.'));
@@ -232,27 +253,28 @@
       send: function (res) {
         return create ? B.api(BASE, Object.assign({}, res.body, { confirmed: true })) : B.api(path(r), Object.assign({}, res.body, { confirmed: true }), 'PUT');
       },
-      done: function (out) { return G.termDone(create ? 'create' : 'edit', out); }
+      done: function (out) { return G.termDone(create ? 'create' : 'edit', out, v.reviewsEnabled); }
     });
   }
   function reviewFlow(r) {
+    var on = r.reviewsOn;
     B.flow({
       title: r.reviewed ? 'تجديد ختم المراجعة' : 'راجعه خبير',
-      intro: 'اكتب اسم الخبير الذي راجع المصطلح وصفته. لا يظهر الاسم للناس إلا إذا وافق صاحبه.',
+      intro: on ? 'اكتب اسم الخبير الذي راجع المصطلح وصفته. لا يظهر الاسم للناس إلا إذا وافق صاحبه.' : 'اكتب اسم الخبير الذي راجع المصطلح وصفته. مراجعة داخلية، لا تظهر على الموقع.',
       init: { reviewer_name: r.reviewerName, reviewer_role: r.reviewerRole, reviewer_name_public: r.namePublic },
       form: function (vals) {
         return fld('اسم المراجع', inp('reviewer_name', vals.reviewer_name, { max: 120 }), 'reviewer_name')
           + fld('صفته', inp('reviewer_role', vals.reviewer_role, { max: 80, ph: 'مثل: محامٍ أو أستاذ قانون' }), 'reviewer_role', 'تاريخ المراجعة يُسجَّل تلقائيًا.')
-          + '<div class="fld">' + Kit.chk('reviewer_name_public', vals.reviewer_name_public, 'وافق المراجع على ظهور اسمه') + '</div>';
+          + (on ? '<div class="fld">' + Kit.chk('reviewer_name_public', vals.reviewer_name_public, 'وافق المراجع على ظهور اسمه') + '</div>' : '');
       },
-      check: function (vals) { return withDiff(G.reviewCheck(vals, r)); },
+      check: function (vals) { return withDiff(G.reviewCheck(on ? vals : Object.assign({}, vals, { reviewer_name_public: r.namePublic }), r)); },
       send: function (res) { return B.api(path(r, '/review'), Object.assign({}, res.body, { confirmed: true })); },
       done: function () { return G.reviewDone(r); }
     });
   }
   function unreviewFlow(r) {
     B.flow({ title: 'مسح ختم المراجعة', check: function () { return withDiff(G.unreviewCheck(r, requireReview())); },
-      send: function () { return B.api(path(r, '/unreview'), { confirmed: true }); }, done: function (out) { return G.unreviewDone(out); } });
+      send: function () { return B.api(path(r, '/unreview'), { confirmed: true }); }, done: function (out) { return G.unreviewDone(out, r.reviewsOn); } });
   }
   function publishFlow(r) {
     B.flow({ title: 'نشر المصطلح', check: function () { return withDiff(G.publishCheck(r, requireReview())); },
@@ -278,6 +300,89 @@
   function detachFlow(r) {
     B.flow({ title: 'فصل النقاش', check: function () { return withDiff(G.detachCheck(r, topicsView())); },
       send: function () { return B.api(path(r, '/detach-topic'), { confirmed: true }); }, done: function () { return 'فُصل النقاش عن المصطلح «' + r.ar + '»'; } });
+  }
+
+  // فتح نقاش جديد للمصطلح: نموذج (العنوان والسؤال) ⇒ معاينة من الخادم بلا كتابة (تظهر في ورقة المراجعة) ⇒ تأكيد.
+  function openTopicFlow(r) {
+    var ck = G.canOpenTopic(r);
+    if (!ck.ok) { B.setNote(ck.error); B.redraw(); return; }
+    var d = G.topicDefaults(r);
+    B.flow({
+      title: 'فتح نقاش لهذا المصطلح',
+      intro: 'يُفتح النقاش في الساحة بهذا العنوان وهذا السؤال، ويدعو الناس إلى مراجعة الترجمة والتعريف. عدّلهما إن أردت.',
+      init: d, nextLabel: 'راجع ثم افتح',
+      form: function (vals) {
+        return fld('عنوان النقاش', txt('title', vals.title, 2, 200), 'title') + fld('سؤال النقاش', txt('question', vals.question, 3, 5000), 'question');
+      },
+      check: function (vals) {
+        var f = G.topicFormCheck(vals);
+        if (!f.ok) return f;
+        return B.api(path(r, '/saha-topic/preview'), f.body).then(function (pv) { return withDiff(G.topicOpenCheck(r, pv)); })
+          .catch(function (e) { return { ok: false, error: G.writeError(e && e.status, e && e.data) }; });
+      },
+      send: function (res) { return B.api(path(r, '/saha-topic/open'), Object.assign({}, res.body, { confirmed: true })); },
+      done: function (out) { return G.topicOpenDone(out, r); }
+    });
+  }
+
+  // ------------------------------------------------------------------ ٢ب · نقاشات المصطلحات (كل المنشور بلا نقاش دفعةً)
+  function groupList(rows, kind, cap) {
+    var list = rows.filter(function (x) { return x.kind === kind; });
+    if (!list.length) return '';
+    var shown = cap && list.length > cap ? list.slice(0, cap) : list;
+    return '<ul class="g-tl">' + shown.map(function (x) {
+      return '<li><b>' + esc(x.ar) + '</b> <small dir="ltr">' + esc(x.en) + '</small>' + (kind === 'problem' && x.message ? '<span class="g-tm">' + esc(x.message) + '</span>' : '') + '</li>';
+    }).join('') + (shown.length < list.length ? '<li class="g-tmore">و' + esc(U.U(list.length - shown.length, ['مصطلح آخر', 'مصطلحان آخران', 'مصطلحات أخرى', 'مصطلحًا آخر'])) + '</li>' : '') + '</ul>';
+  }
+  function bulkNums(v) {
+    return '<ul class="sh-nums"><li><b>' + esc(ar(v.create)) + '</b><span>' + (v.applied ? 'نقاش جديد فُتح' : 'نقاش جديد سيُفتح') + '</span></li>'
+      + '<li><b>' + esc(ar(v.link)) + '</b><span>' + (v.applied ? 'رُبط بنقاش موجود' : 'سيُربط بنقاش موجود') + '</span></li>'
+      + '<li><b>' + esc(ar(v.problem)) + '</b><span>' + (v.applied ? 'تُرك لمشكلة' : 'مشكلة تمنع فتحه') + '</span></li></ul>';
+  }
+  function bulkGroups(v, cap) {
+    return (v.problem ? '<div class="sh-warns"><b>مصطلحات بها مشكلة، تُترك كما هي</b>' + groupList(v.rows, 'problem') + '</div>' : '')
+      + (v.link ? '<h4 class="g-h">' + (v.applied ? 'رُبطت بنقاش موجود' : 'ستُربط بنقاش موجود') + '</h4>' + groupList(v.rows, 'link') : '')
+      + (v.create ? '<h4 class="g-h">' + (v.applied ? 'نقاش جديد فُتح لها' : 'سيُفتح لها نقاش جديد') + '</h4>' + groupList(v.rows, 'create', cap) : '');
+  }
+  function screenTopics() {
+    B.need(P.all);
+    var v = termsView(), pv = G.bulkView(B.f('gtpPrev', null)), res = G.bulkView(B.f('gtpRes', null)), busy = B.f('gtpBusy', false), err = B.f('gtpErr', ''), html;
+    if (!v) html = B.stateBlock(P.all, 'المصطلحات');
+    else {
+      var n = v.counts.publishedNoTopic;
+      html = '<div class="sh-panel"><p class="sh-fine">يُفتح لكل مصطلح منشور نقاش واحد في الساحة عنوانه «المصطلح بالعربية (بالإنجليزية): هل الترجمة والتعريف دقيقان؟»، ويدعو كل من يرى خطأً إلى كتابة اعتراضه أو اقتراحه. نجمع الاعتراضات ونصلح بناءً عليها. جرّب أولًا لترى ما سيحدث بلا أن يُفتح شيء، ثم أكِّد.</p>'
+        + '<p class="sh-cur"><b>منشور بلا نقاش</b><span>' + esc(n ? U.U(n, ['مصطلح واحد', 'مصطلحان', 'مصطلحات', 'مصطلحًا']) : 'لا مصطلحات، لكل منشور نقاشه') + '</span></p>'
+        + '<div class="sh-acts"><button type="button" class="ep-b1" data-a="gbprev"' + (busy || !n ? ' disabled' : '') + '>' + (busy ? 'جارٍ التجربة…' : 'جرّب فتح النقاشات (بلا فتح)') + '</button></div>'
+        + (err ? '<div class="sh-err" role="alert">' + esc(err) + '</div>' : '') + '</div>';
+      if (res) {
+        html += '<div class="sh-panel" data-r="gtpres"><h3>' + (res.stopped ? 'توقفت العملية' : 'نتيجة فتح النقاشات') + '</h3><p class="sh-fine">' + esc(G.bulkSummary(res) || 'لم يتغيّر شيء') + '.</p>'
+          + bulkNums(res) + bulkGroups(res, 0) + '</div>';
+      } else if (pv) {
+        html += '<div class="sh-panel" data-r="gtpprev"><h3>نتيجة التجربة</h3><p class="sh-fine">لم يُفتح شيء بعد، والمجموع ' + esc(U.U(pv.rows.length, ['مصطلح واحد', 'مصطلحان', 'مصطلحات', 'مصطلحًا'])) + '.</p>'
+          + bulkNums(pv) + bulkGroups(pv, 12)
+          + '<div class="sh-acts"><button type="button" class="ep-b1" data-a="gbgo"' + (pv.create + pv.link ? '' : ' disabled') + '>راجع ثم افتح النقاشات</button>' + (pv.create + pv.link ? '' : '<span class="sh-fine">لا شيء يمكن فتحه الآن.</span>') + '</div></div>';
+      }
+    }
+    return { title: 'نقاشات المصطلحات', sub: v ? (v.counts.publishedNoTopic ? U.U(v.counts.publishedNoTopic, ['مصطلح واحد منشور', 'مصطلحان منشوران', 'مصطلحات منشورة', 'مصطلحًا منشورًا']) + ' بلا نقاش' : 'لكل مصطلح منشور نقاشه') : '', img: 'people', html: html };
+  }
+  function bulkPreview() {
+    if (B.f('gtpBusy', false)) return;
+    B.set('gtpBusy', true); B.set('gtpErr', ''); B.set('gtpRes', null); B.redraw();
+    B.api(BASE + '/saha-topics/bulk/preview', {}).then(function (d) { B.set('gtpBusy', false); B.set('gtpPrev', d); B.redraw(); })
+      .catch(function (e) { B.set('gtpBusy', false); B.set('gtpPrev', null); B.set('gtpErr', G.writeError(e && e.status, e && e.data)); B.redraw(); });
+  }
+  function bulkFlow() {
+    var pv = G.bulkView(B.f('gtpPrev', null));
+    if (!pv) return;
+    B.flow({ title: 'فتح نقاشات المصطلحات', check: function () { return withDiff(G.bulkCheck(pv)); },
+      send: function () {
+        return B.api(BASE + '/saha-topics/bulk/open', { confirmed: true }).catch(function (e) {
+          var part = e && e.data && Array.isArray(e.data.results) ? e.data : null;      // توقفت في وسط الدفعات: ما تمّ قبلها يُعرض
+          if (part) { B.set('gtpRes', part); B.set('gtpPrev', null); B.refresh(); B.redraw(); e = { status: e.status, data: Object.assign({}, e.data, { error: G.bulkStopText(e.data, e.status), no_reply: true }) }; }   // no_reply ⇒ محرّك الأوراق يعرض النص كما هو
+          throw e;
+        });
+      },
+      done: function (out) { return G.bulkDone(G.bulkView(out)); }, after: function (out) { B.set('gtpRes', out); B.set('gtpPrev', null); } });
   }
 
   // ------------------------------------------------------------------ ٣ · الاستيراد (تجربة بلا حفظ ثم تأكيد)
@@ -341,6 +446,7 @@
   // ------------------------------------------------------------------ ٤ · شرط المراجعة
   function screenRules() {
     B.need(P.all);
+    if (termsView() && !reviewsOn()) return offScreen('شرط المراجعة', 'company');
     var v = termsView(), r = G.rulesView(v), body;
     if (!r) body = B.stateBlock(P.all, 'شرط المراجعة');
     else {
@@ -381,6 +487,8 @@
     return '<p class="sh-count">' + esc(G.reviewCountText(rows.length)) + '</p>' + B.list(rows, rvCols(), rvActs);
   }
   function screenReviews() {
+    B.need(P.all);
+    if (!reviewsOn()) return termsView() ? offScreen('مراجعات القاموس', 'content') : { title: 'مراجعات القاموس', sub: '', img: 'content', html: B.stateBlock(P.all, 'المصطلحات') };
     B.need(P.reviews);
     var v = reviewsView(), f = rvFilters(), body;
     if (!v) body = B.stateBlock(P.reviews, 'مراجعات القاموس');
@@ -395,6 +503,8 @@
     return { title: 'مراجعات القاموس', sub: v ? (v.counts.pending ? G.reviewCountText(v.counts.pending) + ' تنتظر قرارك' : 'لا مراجعات تنتظر قرارك') : '', img: 'content', html: body };
   }
   function screenReview() {
+    B.need(P.all);
+    if (!reviewsOn()) return offScreen('مراجعة متخصص', 'content');
     B.need(P.reviews);
     var v = reviewsView(), rv = v ? reviewById(B.f('rvopen', '')) : null;
     var back = '<div class="sh-top"><button type="button" class="ep-bs" data-a="rvtolist">→ كل المراجعات</button></div>';
@@ -441,7 +551,7 @@
   B = Kit.board({
     key: 'glossary', mod: 'v2s_glossary', label: 'القاموس', lead: 'اختر ما تريد إدارته في القاموس',
     hub: function () { return HUB; }, tiles: tiles,
-    screens: { terms: screenList('all'), wait: screenList('wait'), term: screenTerm, reviews: screenReviews, review: screenReview, import: screenImport, rules: screenRules },
+    screens: { terms: screenList('all'), wait: screenList('wait'), term: screenTerm, topics: screenTopics, reviews: screenReviews, review: screenReview, import: screenImport, rules: screenRules },
     act: {
       gopen: function (b, a, id) { b.set('gfrom', b.S.sub === 'wait' ? 'wait' : (b.S.sub === 'review' ? 'review' : (b.S.sub === 'term' ? b.f('gfrom', 'terms') : 'terms'))); b.set('gopen', String(id)); goSub('term'); },
       gtolist: function (b) { var from = b.f('gfrom', 'terms'); goSub(from === 'wait' ? 'wait' : (from === 'review' ? 'review' : (from === 'reviews' ? 'reviews' : 'terms'))); },
@@ -459,6 +569,9 @@
       gdel: rowAct(deleteFlow),
       gattach: rowAct(attachFlow),
       gdetach: rowAct(detachFlow),
+      gtopen: rowAct(openTopicFlow),
+      gbprev: bulkPreview,
+      gbgo: bulkFlow,
       gimport: function () { goSub('import'); },
       gsrc: function (b, a) { b.set('gimpSrc', a.getAttribute('data-v')); b.set('gimpPrev', null); b.set('gimpErr', ''); b.redraw(); },
       gprev: importPreview,

@@ -9,6 +9,9 @@
 ١٤ الوضع الافتراضي (الشرط مغلق): نشر بلا ختم ⇒ «تحت التأكيد» ⇒ ختم مع موافقة ظهور الاسم ⇒ تعديل يعيده «تحت التأكيد» · ١٥ «مراجعات القاموس»: اعتمد تأكيدًا ·
 اعتمد اقتراحًا (يفتح المحرّر ومعه الاقتراح) · تمّ لدورة · ارفض بملاحظة وبلا · تنبيه تغيّر المصطلح · حالات فاضية.
 (١ إلى ١٣ تعمل والشرط مفعّل صراحةً كي تثبت قاعدة المنع، و١٤ و١٥ بالافتراضي المغلق.)
+الجولة ٣ (قرار المؤسس ٢٠٢٦-١١-٠١، «نفتحه للنقاش ونلمّ الاعتراضات»): الخطوات ٠١ إلى ١٥ تُصوَّر والإعداد `glossary.expert_reviews_enabled` **مفعّل** (شكل الجولة ٢ كما كان،
+وصندوق المراجعات وشرط المراجعة يظهران فيه فقط)؛ و١٦ إلى ١٨ بالافتراضي الجديد (مطفأ): ١٦ شاشات «مسودة / منشور» بلا مراجعات (والختم داخلي) · ١٧ فتح نقاش لمصطلح واحد
+(معاينة بلا كتابة ⇒ تأكيد · ربط بنقاش موجود · عنوان مكرر غير علني · مسودة) · ١٨ «نقاشات المصطلحات» دفعةً (تجربة ⇒ تأكيد ⇒ نتيجة لكل مصطلح).
 
 السكربت بيفشل (exit 1) لو: «0/null/NaN/undefined» ظاهر · هدف أقل من ٤٤px · خانة أقل من ١٦px · تمرير أفقي · رقم لاتيني في نص عربي · «·» ملاصقة لرقم · كلمة ممنوعة ·
 نافذة متصفح · كتابة وصلت الخادم قبل ضغطة التأكيد أو بلا `confirmed:true` بالضبط أو فيها `by` أو حقل خارج قائمة المسار · كتابة وصلت المنصة (المصطلح لا يكتب فيها) ·
@@ -42,7 +45,8 @@ OK_WRITES = [('POST', re.compile(G + r'$'), TERM_FIELDS), ('PUT', re.compile(G +
              ('POST', re.compile(G + r'/\d+/(publish|unpublish|unreview|detach-topic)$'), set()),
              ('POST', re.compile(G + r'/\d+/review$'), {'reviewer_name', 'reviewer_role', 'reviewer_name_public'}),
              ('POST', re.compile(G + r'/reviews/\d+/approve$'), set()), ('POST', re.compile(G + r'/reviews/\d+/reject$'), {'admin_note'}),
-             ('POST', re.compile(G + r'/\d+/attach-topic$'), {'saha_topic_id'}), ('PUT', re.compile(G + r'/settings$'), {'require_review'}),
+             ('POST', re.compile(G + r'/\d+/attach-topic$'), {'saha_topic_id'}), ('PUT', re.compile(G + r'/settings$'), {'require_review', 'expert_reviews_enabled'}),
+             ('POST', re.compile(G + r'/\d+/saha-topic/open$'), {'title', 'question'}), ('POST', re.compile(G + r'/saha-topics/bulk/open$'), set()),
              ('POST', re.compile(G + r'/seed/import$'), {'source', 'payload'})]
 SCOPE_JS = """() => [...document.querySelectorAll('.v2s-sh, #epModal.v2s-sh-sh')].map(e => { const c = e.cloneNode(true);
   c.querySelectorAll('[dir="ltr"], [dir="auto"], .sh-who, script, style, input, textarea, select, option').forEach(n => n.remove()); return c.innerText; }).join('\\n')"""
@@ -92,8 +96,10 @@ def shcheck(page, name):
         PROBLEMS.append('%s: حفظ في المتصفح %r' % (name, keys))
 
 
-def mshot(page, name, keep=True):
+def mshot(page, name, keep=True, focus=None):
     page.evaluate("() => { const c = document.querySelector('.content'); if (c) c.scrollTop = 0; window.scrollTo(0, 0); }")
+    if focus:                                  # لقطة عند عنصر تحت الطيّة (لوحة النقاش في آخر شاشة المصطلح)
+        page.evaluate("s => { const e = document.querySelector(s); if (e) e.scrollIntoView({block: 'center'}); }", focus)
     page.wait_for_timeout(300)
     if keep:
         vs.shot(page, name, full=False)
@@ -105,7 +111,7 @@ def mshot(page, name, keep=True):
 def gwrites(page, since=0):
     out = []
     for m, p, body in page._glog[since:]:
-        if m in ('POST', 'PUT', 'DELETE') and p.startswith('/api/v2/content/glossary') and not p.endswith('/seed/preview'):
+        if m in ('POST', 'PUT', 'DELETE') and p.startswith('/api/v2/content/glossary') and not p.endswith('/preview'):
             out.append((m, p, json.loads(body) if body else None))
     return out
 
@@ -136,8 +142,8 @@ def platform_clean(name, h, base):
         PROBLEMS.append('%s: كتابة وصلت المنصة والمصطلح لا يكتب فيها: %r' % (name, bad))
 
 
-def sopen(browser, h, viewport, mobile, hash_='#s/content/glossary', rows=None, require=True, topics=None, down=(), pre_route=None, ready=READY, reviews=False):
-    gfx.seed_terms(h, rows, require)
+def sopen(browser, h, viewport, mobile, hash_='#s/content/glossary', rows=None, require=True, topics=None, down=(), pre_route=None, ready=READY, reviews=False, expert=True):
+    gfx.seed_terms(h, rows, require, expert)
     if reviews:
         h.rv = gfx.seed_reviews(h)
     ef = gfx.GlossaryPlatform(topics)
@@ -247,7 +253,9 @@ def flow_glossary(browser, h, pre, vp, mobile):
         tabs = page.evaluate("() => [...document.querySelectorAll('.v2c-tab')].map(b => b.textContent.trim())")
         expect('القاموس' in tabs and tabs.index('القاموس') == tabs.index('الديوان') + 1 and len(tabs) == 10, '%s01: تبويبات المحتوى %r' % (pre, tabs))
         imgs = page.evaluate("() => [...document.querySelectorAll('.sh-timg')].map(e => getComputedStyle(e).backgroundImage.replace(/.*\\//, ''))")
-        expect(len(imgs) == 5 and all('.jpg' in i for i in imgs), '%s01: صور المربّعات %r' % (pre, imgs))
+        expect(len(imgs) == 6 and all('.jpg' in i for i in imgs), '%s01: صور المربّعات %r' % (pre, imgs))
+        order = page.evaluate("() => [...document.querySelectorAll('.sh-tile')].map(t => t.dataset.sub)")
+        expect(order == ['terms', 'topics', 'wait', 'reviews', 'import', 'rules'] and nums.get('topics') == ('١', 'مصطلح منشور بلا نقاش في الساحة'), '%s01: ترتيب المربّعات ونقاشاتها %r %r' % (pre, order, nums.get('topics')))
         mshot(page, pre + '01-hub.jpg')
         browser.close()
 
@@ -514,7 +522,8 @@ def flow_glossary(browser, h, pre, vp, mobile):
         base, pbase, pn = len(page._glog), len(h.platform_calls), len(PUSHES)
         opts = page.evaluate("() => [...document.querySelectorAll('#gTopic option')].map(o => [o.value, o.textContent.trim()])")
         expect(len(opts) == 4 and opts[0][0] == '' and gfx.TOPIC_DRAFT not in [o[0] for o in opts] and opts[2][1] == 'هل يكفي شرط التحكيم وحده؟', '%s08: النقاشات المنشورة فقط %r' % (pre, opts))
-        expect('لا يمكن فتح نقاش جديد من هنا' in view_text(page), '%s08: ملاحظة عدم فتح نقاش جديد' % pre)
+        expect('أو اربط نقاشًا موجودًا في الساحة' in view_text(page) and page.evaluate("() => { const b = document.querySelector('[data-a=gtopen]'); return !!b && b.disabled; }")
+               and 'انشر المصطلح أولًا ثم افتح نقاشه' in view_text(page), '%s08: الربط بموجود بديل ثانوي والمسودة لا يُفتح لها نقاش' % pre)
         mshot(page, pre + '08a-topic-picker.jpg')
         click(page, '[data-a="gattach"]', 300)
         expect('اختر نقاشًا' in err_text(page, '#gTopicErr') and not page.evaluate("() => !!document.getElementById('epModal')"), '%s08: ربط بلا اختيار %r' % (pre, err_text(page, '#gTopicErr')))
@@ -637,7 +646,7 @@ def flow_glossary(browser, h, pre, vp, mobile):
         failing = (re.compile(r'.*/api/v2/content/glossary\?limit=500$'), lambda r: r.fulfill(status=500, content_type='application/json', body='{"error":"x"}'))
         page = sopen(browser, h, vp, mobile, pre_route=failing)
         nums = tile_numbers(page)
-        expect(nums.get('terms') == ('—', 'غير متاح بعد') and nums.get('wait') == ('—', 'غير متاح بعد'), '%s12: مربّعات المصدر الواقع %r' % (pre, nums))
+        expect(nums.get('terms') == ('—', 'غير متاح بعد') and nums.get('topics') == ('—', 'غير متاح بعد') and 'wait' not in nums, '%s12: مربّعات المصدر الواقع %r' % (pre, nums))
         expect(page.evaluate("() => !!document.querySelector('.sh-warn')"), '%s12: تنبيه الأرقام غير المتاحة' % pre)
         mshot(page, pre + '12a-hub-down.jpg')
         go_sub(page, 'terms', '.sh-warn')
@@ -956,6 +965,242 @@ def import_flow(browser, h, pre, vp, mobile):
     browser.close()
 
 
+# ======================================================================= الجولة ٣ (المراجعات مطفأة: الافتراضي الجديد) — ١٦ إلى ١٨
+def off_rows():
+    return gfx.published_rows()
+
+
+def topics_with(*extra):
+    t = [dict(x) for x in gfx.TOPICS]
+    t.extend(extra)
+    return t
+
+
+def flow_round3(browser, h, pre, vp, mobile):
+    # —— ١٦) الافتراضي الجديد: «مسودة / منشور» بلا مراجعات، و«راجعه» ختم داخلي
+    if want('16'):
+        page = sopen(browser, h, vp, mobile, rows=off_rows(), require=None, expert=False)
+        nums = tile_numbers(page)
+        order = page.evaluate("() => [...document.querySelectorAll('.sh-tile')].map(t => t.dataset.sub)")
+        expect(order == ['terms', 'topics', 'import'], '%s16: مربّعات الافتراضي الجديد %r' % (pre, order))
+        expect(nums.get('terms') == ('١٤', 'منشور ٧، مسودة ٧') and nums.get('topics') == ('٦', 'مصطلح منشور بلا نقاش في الساحة'), '%s16: أرقام المربّعات %r' % (pre, nums))
+        expect(not re.search('مراجعات القاموس|شرط المراجعة|تنتظر مراجعة خبير|تحت التأكيد', view_text(page)), '%s16: لا أثر للمراجعات في المربّعات' % pre)
+        mshot(page, pre + '16a-hub-default.jpg')
+        go_sub(page, 'terms')
+        wait_rows(page, 14)
+        t = view_text(page)
+        nums_ = page.evaluate("() => [...document.querySelectorAll('.sh-nums li')].map(l => l.innerText.replace(/\\s+/g, ' ').trim())")
+        chips = page.evaluate("() => [...document.querySelectorAll('.sh-chip')].map(c => c.textContent.trim())")
+        heads = page.evaluate("() => [...document.querySelectorAll('.sh-tb thead th')].map(c => c.textContent.trim())")
+        expect(nums_ == ['٧ منشور', '٧ مسودة'] and not re.search('تحت التأكيد|مؤكّد|ينتظر خبيرًا|المراجعة', t), '%s16: القائمة بلا مراجعات %r %r' % (pre, nums_, t[:200]))
+        expect('منشور' in chips and 'مسودة' in chips and 'مؤكّد' not in chips and 'تحت التأكيد' not in chips and 'راجعه خبير' not in chips and any(c.startswith('أخرى') for c in chips), '%s16: شرائح الحالة %r' % (pre, chips))
+        expect('المراجعة' not in heads and heads[:3] == ['المصطلح', 'المجال', 'الحالة'], '%s16: أعمدة الجدول %r' % (pre, heads))
+        mshot(page, pre + '16b-list-default.jpg')
+        click(page, '[data-k="gst"][data-v="published"]', 400)
+        wait_rows(page, 7)
+        click(page, '[data-k="gst"][data-v="all"]', 300)
+        # شاشة مصطلح منشور: الحالة «منشور» والمراجعة داخلية
+        open_term(page, h, 'injunction')
+        t = view_text(page)
+        expect('منشور' in t and 'مراجعة داخلية، لا تظهر على الموقع' in t and not re.search('تحت التأكيد|على الموقع: ', t), '%s16: شاشة المصطلح %r' % (pre, t[:300]))
+        mshot(page, pre + '16c-term-published.jpg')
+        base, pbase, pn = len(page._glog), len(h.platform_calls), len(PUSHES)
+        click(page, '[data-a="grev"]', 400)
+        sheet_open(page)
+        t = sheet_text(page)
+        expect('مراجعة داخلية، لا تظهر على الموقع' in t and 'وافق المراجع' not in t and page.evaluate("() => !document.querySelector('#epModal .sh-chk')"), '%s16: ورقة «راجعه» الداخلية %r' % (pre, t[:200]))
+        mshot(page, pre + '16d-stamp-form.jpg')
+        page.fill('#f_reviewer_name', 'أ. سلمى منصور')
+        page.fill('#f_reviewer_role', 'محامية')
+        click(page, '#shNext', 300)
+        t = sheet_text(page)
+        expect('مراجعة داخلية: تُحفظ في الداشبورد ولا تظهر على الموقع.' in t and 'ظهور الاسم' not in t and 'تحت التأكيد' not in t, '%s16: مراجعة الختم %r' % (pre, t[:300]))
+        mshot(page, pre + '16e-stamp-confirm.jpg')
+        check_writes(pre + '16-before', page, base, 0)
+        confirm(page, 1000)
+        sheet_gone(page)
+        got = check_writes(pre + '16-stamp', page, base, 1)
+        expect(got and got[0][2] == {'reviewer_name': 'أ. سلمى منصور', 'reviewer_role': 'محامية', 'reviewer_name_public': False, 'confirmed': True}, '%s16: جسم الختم %r' % (pre, got[-1:]))
+        expect(gfx.term(h, 'injunction')['reviewed_by_name'] == 'أ. سلمى منصور' and PUSHES[pn:] == ['glossary:%s' % tid(h, 'injunction')], '%s16: الختم والتوليد' % pre)
+        expect('تحت التأكيد' not in view_text(page) and 'منشور' in view_text(page), '%s16: الحالة بعد الختم تبقى «منشور»' % pre)
+        # نشر مسودة: لا ذكر لـ«تحت التأكيد»
+        click(page, '[data-a="gtolist"]', 400)
+        open_term(page, h, 'child-custody')
+        click(page, '[data-a="gpub"]', 400)
+        sheet_open(page)
+        t = sheet_text(page)
+        expect('مسودة' in t and 'منشور' in t and 'تحت التأكيد' not in t and 'لم يراجعه خبير' not in t, '%s16: ورقة النشر بلا شارة %r' % (pre, t[:300]))
+        mshot(page, pre + '16f-publish-confirm.jpg')
+        confirm(page, 1000)
+        sheet_gone(page)
+        expect(gfx.term(h, 'child-custody')['status'] == 'under_review' and 'تحت التأكيد' not in note_text(page) and 'نُشر المصطلح' in note_text(page), '%s16: نُشر %r' % (pre, note_text(page)))
+        # ملاحظة الدول تُعرض بلا شرط التأكيد
+        click(page, '[data-a="gtolist"]', 400)
+        open_term(page, h, 'consideration')
+        expect('ملاحظة الدول' in view_text(page) and 'لا تظهر هذه الملاحظة' not in view_text(page), '%s16: ملاحظة الدول %r' % (pre, view_text(page)[:100]))
+        # صندوق المراجعات وشرطها مغلقان من الخادم أيضًا، والاستمارة العامة ٤٠٤
+        bad = page.evaluate("""async () => { const t = localStorage.getItem('token'); const H = {Authorization: 'Bearer ' + t, 'Content-Type': 'application/json'}; const out = {};
+          out.list = (await fetch('/api/v2/content/glossary/reviews', {headers: H})).status;
+          out.approve = (await fetch('/api/v2/content/glossary/reviews/1/approve', {method: 'POST', headers: H, body: JSON.stringify({confirmed: true})})).status;
+          out.pub = (await fetch('/api/public/expert-reviews', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({kind: 'glossary_term', ref: 'injunction'})})).status;
+          out.generic = (await fetch('/api/settings', {method: 'PUT', headers: H, body: JSON.stringify({'glossary.expert_reviews_enabled': '1'})})).status;
+          const feed = await (await fetch('/api/content/glossary')).json(); out.feedKeys = [...new Set(feed.terms.flatMap(x => Object.keys(x)))].filter(k => /review/.test(k));
+          return out; }""")
+        expect(bad['list'] == 404 and bad['approve'] == 404 and bad['pub'] == 404 and bad['generic'] == 400 and bad['feedKeys'] == [], '%s16: الإغلاق من الخادم %r' % (pre, bad))
+        expect(gfx.expert_setting(h) is None, '%s16: الإعداد ما زال مغلقًا' % pre)
+        browser.close()
+
+    # —— ١٧) نقاش «الساحة» لمصطلح واحد: معاينة بلا كتابة ⇒ تأكيد
+    if want('17'):
+        arb = [r for r in off_rows() if r['slug'] == 'arbitral-award'][0]
+        bur = [r for r in off_rows() if r['slug'] == 'burden-of-proof'][0]
+        dup_live = {'id': 'e1e1e1e1-0000-4000-8000-000000000001', 'title': gfx.default_title(arb), 'status': 'open'}
+        dup_dead = {'id': 'e2e2e2e2-0000-4000-8000-000000000002', 'title': gfx.default_title(bur), 'status': 'draft'}
+        page = sopen(browser, h, vp, mobile, rows=off_rows(), require=None, expert=False, topics=topics_with(dup_live, dup_dead))
+        term_screen(page, h, 'injunction')
+        row = [r for r in off_rows() if r['slug'] == 'injunction'][0]
+        base, pbase, pn = len(page._glog), len(h.platform_calls), len(PUSHES)
+        t = view_text(page)
+        expect('افتح نقاشًا لهذا المصطلح' in t and 'أو اربط نقاشًا موجودًا في الساحة' in t and page.evaluate("() => !document.querySelector('[data-a=gtopen]').disabled"), '%s17: لوحة النقاش %r' % (pre, t[-400:]))
+        mshot(page, pre + '17a-topic-panel.jpg', focus='[data-a="gtopen"]')
+        click(page, '[data-a="gtopen"]', 400)
+        sheet_open(page)
+        vals = page.evaluate("() => ({t: f_title.value, q: f_question.value})")
+        expect(vals['t'] == gfx.default_title(row) and vals['q'] == 'هل الترجمة أو التعريف دقيق في نظامك القانوني؟ اكتب اعتراضك أو اقتراحك.', '%s17: العنوان والسؤال الافتراضيان %r' % (pre, vals))
+        mshot(page, pre + '17b-topic-form.jpg')
+        page.fill('#f_title', '')
+        click(page, '#shNext', 300)
+        expect('عنوان النقاش من' in page.inner_text('#epModal [data-e="title"]') and len(h.ef.seed_calls) == 0, '%s17: عنوان فارغ يُرفض قبل أي نداء %r' % (pre, h.ef.seed_calls))
+        edited = gfx.default_title(row) + ' (نسخة)'
+        page.fill('#f_title', edited)
+        click(page, '#shNext', 1000)
+        page.wait_for_selector('#shGo', timeout=10000)
+        t = sheet_text(page)
+        expect('سيُفتح نقاش جديد في الساحة' in t and edited in t and 'افتح النقاش' in t and 'حين تُفتح الساحة' in t, '%s17: مراجعة النقاش الجديد %r' % (pre, t[:400]))
+        expect(h.ef.seed_calls == [(False, 1, edited)] and gfx.term(h, 'injunction')['saha_topic_id'] is None, '%s17: المعاينة بلا كتابة %r' % (pre, h.ef.seed_calls))
+        mshot(page, pre + '17c-topic-review-new.jpg')
+        check_writes(pre + '17-before', page, base, 0)
+        click(page, '#shBack', 300)
+        expect(page.input_value('#f_title') == edited, '%s17: الرجوع يحفظ العنوان' % pre)
+        click(page, '#shNext', 1000)
+        page.wait_for_selector('#shGo', timeout=10000)
+        confirm(page, 1200)
+        sheet_gone(page)
+        got = check_writes(pre + '17-open', page, base, 1)
+        q = 'هل الترجمة أو التعريف دقيق في نظامك القانوني؟ اكتب اعتراضك أو اقتراحك.'
+        expect(got and got[0][2] == {'title': edited, 'question': q, 'confirmed': True}, '%s17: جسم الفتح %r' % (pre, got[-1:]))
+        row_db = gfx.term(h, 'injunction')
+        made = [x for x in h.ef.topics if x['title'] == edited]
+        expect(len(made) == 1 and row_db['saha_topic_id'] == made[0]['id'] and [c[0] for c in h.ef.seed_calls] == [False, False, True], '%s17: النقاش فُتح وربط %r %r' % (pre, h.ef.seed_calls, row_db['saha_topic_id']))
+        expect(PUSHES[pn:] == ['glossary:%s' % row_db['id']] and 'فُتح للمصطلح' in note_text(page), '%s17: التوليد والرسالة %r %r' % (pre, PUSHES[pn:], note_text(page)))
+        expect(page.evaluate("(u) => [...document.querySelectorAll('.v2s-sh a.sh-lnk')].some(a => a.getAttribute('href') === u)", 'https://app.elprofessor.net/?page=saha&topic=' + (row_db['saha_topic_id'] or '')), '%s17: رابط النقاش المفتوح' % pre)
+        mshot(page, pre + '17d-topic-opened.jpg')
+        # عنوان موجود وعلنيّ: يُربط به ولا يتكرر
+        click(page, '[data-a="gtolist"]', 400)
+        open_term(page, h, 'arbitral-award')
+        n_topics = len(h.ef.topics)
+        base = len(page._glog)
+        click(page, '[data-a="gtopen"]', 400)
+        sheet_open(page)
+        click(page, '#shNext', 1000)
+        page.wait_for_selector('#shGo', timeout=10000)
+        t = sheet_text(page)
+        expect('يوجد نقاش بنفس العنوان، سيُربط به' in t and 'اربط النقاش' in t and 'فلن يُفتح نقاش ثانٍ' in t, '%s17: مراجعة الربط بموجود %r' % (pre, t[:300]))
+        mshot(page, pre + '17e-topic-review-existing.jpg')
+        confirm(page, 1200)
+        sheet_gone(page)
+        check_writes(pre + '17-adopt', page, base, 1)
+        expect(gfx.term(h, 'arbitral-award')['saha_topic_id'] == dup_live['id'] and len(h.ef.topics) == n_topics and 'رُبط المصطلح' in note_text(page), '%s17: ربط بالموجود بلا تكرار' % pre)
+        # عنوان موجود لكنه غير علني: لا ربط
+        click(page, '[data-a="gtolist"]', 400)
+        open_term(page, h, 'burden-of-proof')
+        base = len(page._glog)
+        click(page, '[data-a="gtopen"]', 400)
+        sheet_open(page)
+        click(page, '#shNext', 1000)
+        page.wait_for_function("() => document.querySelector('#shErr') && document.querySelector('#shErr').textContent.trim()", timeout=10000)
+        expect(err_text(page) == 'يوجد نقاش بنفس العنوان لكنه غير منشور في الساحة' and page.evaluate("() => !!document.querySelector('#f_title')"), '%s17: عنوان غير علني %r' % (pre, err_text(page)))
+        mshot(page, pre + '17f-topic-not-live.jpg')
+        click(page, '#shNo', 300)
+        sheet_gone(page)
+        check_writes(pre + '17-dead', page, base, 0)
+        expect(gfx.term(h, 'burden-of-proof')['saha_topic_id'] is None, '%s17: لم يُربط' % pre)
+        # مسودة: الزرّ معطّل وسببه ظاهر
+        click(page, '[data-a="gtolist"]', 400)
+        open_term(page, h, 'child-custody')
+        expect(page.evaluate("() => document.querySelector('[data-a=gtopen]').disabled") and 'انشر المصطلح أولًا ثم افتح نقاشه' in view_text(page), '%s17: المسودة' % pre)
+        mshot(page, pre + '17g-topic-draft.jpg')
+        browser.close()
+        # ضياع الرد في المعاينة: رسالة عربية والورقة تبقى
+        page = sopen(browser, h, vp, mobile, rows=off_rows(), require=None, expert=False, down=['/api/bridge/topics/seed'])
+        term_screen(page, h, 'injunction')
+        click(page, '[data-a="gtopen"]', 400)
+        sheet_open(page)
+        click(page, '#shNext', 1000)
+        page.wait_for_function("() => document.querySelector('#shErr') && document.querySelector('#shErr').textContent.trim()", timeout=10000)
+        expect('لم يصل رد' in err_text(page) and page.evaluate("() => !!document.querySelector('#f_title')"), '%s17: ضياع الرد %r' % (pre, err_text(page)))
+        mshot(page, pre + '17h-topic-no-reply.jpg')
+        browser.close()
+
+    # —— ١٨) نقاشات المصطلحات دفعةً
+    if want('18'):
+        arb = [r for r in off_rows() if r['slug'] == 'arbitral-award'][0]
+        bur = [r for r in off_rows() if r['slug'] == 'burden-of-proof'][0]
+        dup_live = {'id': 'e1e1e1e1-0000-4000-8000-000000000001', 'title': gfx.default_title(arb), 'status': 'published'}
+        dup_dead = {'id': 'e2e2e2e2-0000-4000-8000-000000000002', 'title': gfx.default_title(bur), 'status': 'rejected'}
+        page = sopen(browser, h, vp, mobile, rows=off_rows(), require=None, expert=False, topics=topics_with(dup_live, dup_dead))
+        expect(tile_numbers(page).get('topics') == ('٦', 'مصطلح منشور بلا نقاش في الساحة') and page.evaluate("() => document.querySelector('.sh-tile[data-sub=topics]').classList.contains('hot')"), '%s18: مربّع نقاشات المصطلحات حارّ' % pre)
+        go_sub(page, 'topics')
+        t = view_text(page)
+        expect('٦ مصطلحات' in t and 'جرّب فتح النقاشات (بلا فتح)' in t and 'هل الترجمة والتعريف دقيقان؟' in t, '%s18: شاشة الدفعة %r' % (pre, t[:300]))
+        mshot(page, pre + '18a-bulk-start.jpg')
+        base, pbase = len(page._glog), len(h.platform_calls)
+        click(page, '[data-a="gbprev"]', 1200)
+        page.wait_for_selector('[data-r="gtpprev"]', timeout=10000)
+        nums = page.evaluate("() => [...document.querySelectorAll('[data-r=gtpprev] .sh-nums b')].map(b => b.textContent.trim())")
+        t = view_text(page)
+        expect(nums == ['٤', '١', '١'] and 'يوجد نقاش بنفس العنوان لكنه غير منشور في الساحة' in t and 'ستُربط بنقاش موجود' in t and 'سيُفتح لها نقاش جديد' in t and 'لم يُفتح شيء بعد' in t, '%s18: نتيجة التجربة %r %r' % (pre, nums, t[-500:]))
+        expect(h.ef.seed_calls == [(False, 6, h.ef.seed_calls[0][2] if h.ef.seed_calls else None)] and gfx.count(h) == 14 and all(not x['saha_topic_id'] for x in [gfx.term(h, 'trademark')]), '%s18: التجربة بلا كتابة %r' % (pre, h.ef.seed_calls))
+        check_writes(pre + '18-preview', page, base, 0)
+        mshot(page, pre + '18b-bulk-preview.jpg')
+        click(page, '[data-a="gbgo"]', 400)
+        sheet_open(page)
+        t = sheet_text(page)
+        expect('نقاش جديد يُفتح' in t and 'تُربط بنقاش موجود' in t and 'تُترك لمشكلة' in t and 'حين تُفتح الساحة' in t and 'افتح النقاشات' in t, '%s18: ورقة التأكيد %r' % (pre, t[:400]))
+        mshot(page, pre + '18c-bulk-confirm.jpg')
+        check_writes(pre + '18-before', page, base, 0)
+        confirm(page, 1500)
+        sheet_gone(page)
+        got = check_writes(pre + '18-open', page, base, 1)
+        expect(got and got[0][2] == {'confirmed': True}, '%s18: جسم الفتح %r' % (pre, got[-1:]))
+        page.wait_for_selector('[data-r="gtpres"]', timeout=10000)
+        nums = page.evaluate("() => [...document.querySelectorAll('[data-r=gtpres] .sh-nums b')].map(b => b.textContent.trim())")
+        t = view_text(page)
+        expect(nums == ['٤', '١', '١'] and 'نقاش جديد فُتح لها' in t and 'رُبطت بنقاش موجود' in t and 'مصطلحات بها مشكلة' in t, '%s18: النتيجة لكل مصطلح %r' % (pre, nums))
+        linked = {s: gfx.term(h, s)['saha_topic_id'] for s in ('injunction', 'hardship-clause', 'trademark', 'consideration', 'arbitral-award', 'burden-of-proof')}
+        expect(all(linked[s] for s in ('injunction', 'hardship-clause', 'trademark', 'consideration', 'arbitral-award')) and linked['burden-of-proof'] is None and linked['arbitral-award'] == dup_live['id'], '%s18: الربط في القاعدة %r' % (pre, linked))
+        expect([c[0] for c in h.ef.seed_calls] == [False, True] and note_text(page).startswith('اكتملت العملية'), '%s18: التجربة ثم الفتح %r %r' % (pre, h.ef.seed_calls, note_text(page)))
+        mshot(page, pre + '18d-bulk-result.jpg')
+        back_hub(page)
+        expect(tile_numbers(page).get('topics') == ('١', 'مصطلح منشور بلا نقاش في الساحة'), '%s18: المربّع بعد الفتح %r' % (pre, tile_numbers(page).get('topics')))
+        browser.close()
+        # ضياع الرد: رسالة عربية ولا شيء يُربط
+        page = sopen(browser, h, vp, mobile, rows=off_rows(), require=None, expert=False, down=['/api/bridge/topics/seed'])
+        go_sub(page, 'topics')
+        click(page, '[data-a="gbprev"]', 1000)
+        page.wait_for_selector('.v2s-sh .sh-err', timeout=10000)
+        expect('لم يصل رد' in page.inner_text('.v2s-sh .sh-err') and page.evaluate("() => !document.querySelector('[data-r=gtpprev]')"), '%s18: ضياع الرد %r' % (pre, page.inner_text('.v2s-sh .sh-err')))
+        mshot(page, pre + '18e-bulk-no-reply.jpg')
+        browser.close()
+        # كل المنشور له نقاش: لا شيء للدفعة
+        rows = [dict(r, saha_topic_id=r['saha_topic_id'] or gfx.TOPIC_PUB) if r['status'] != 'draft' else r for r in off_rows()]
+        page = sopen(browser, h, vp, mobile, rows=rows, require=None, expert=False)
+        go_sub(page, 'topics')
+        expect('لا مصطلحات، لكل منشور نقاشه' in view_text(page) and page.evaluate("() => document.querySelector('[data-a=gbprev]').disabled"), '%s18: لا شيء للدفعة' % pre)
+        mshot(page, pre + '18f-bulk-none.jpg')
+        browser.close()
+
+
 def flow_closed(browser, h, pre, vp, mobile):
     if not want('13'):
         return
@@ -995,6 +1240,7 @@ def main():
                 if pre[-1] not in os.environ.get('GLOSSARY_VP', 'dm'):
                     continue
                 flow_glossary(browser, h, pre, vp, mobile)
+                flow_round3(browser, h, pre, vp, mobile)
                 flow_closed(browser, h, pre, vp, mobile)
         finally:
             browser.close()

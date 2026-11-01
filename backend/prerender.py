@@ -1230,19 +1230,15 @@ GLOSSARY_INDEX_URL = ORIGIN + "/glossary/"
 GLOSSARY_ASK_URL = "https://app.elprofessor.net/?page=chat"
 GLOSSARY_ASK_LABEL = "اسأل خبيرًا"
 GLOSSARY_SAHA_LABEL = "ناقشه في الساحة"
-GLOSSARY_REVIEW_LABEL = "راجعه:"
-# قرار المؤسس 2026-11-01: المنشور بلا ختم = «تحت التأكيد» (ظاهر)، و«مؤكّد» بعد ختم مراجع. الحالة تأتي من review_state في الفيد.
-GLOSSARY_STATES = ("under_review", "confirmed")
-GLOSSARY_STATE_LABEL = {"under_review": "تحت التأكيد", "confirmed": "مؤكّد"}
-GLOSSARY_UNDER_BADGE = "تحت التأكيد: نبحث عن متخصص يراجع هذا المصطلح"
-GLOSSARY_CONFIRMED_ANON = "راجعه متخصص"
-GLOSSARY_REVIEW_URL = "https://dashboard.elprofessor.net/api/public/expert-reviews"
-GLOSSARY_REVIEW_BUTTON = "أنت متخصص؟ راجِع هذا المصطلح"
-GLOSSARY_REVIEW_SPECIALTIES = ("law_practice", "judiciary", "legal_translation", "law_teaching", "corporate_counsel", "other")
-GLOSSARY_REVIEW_PRIVACY = "لا نعرض بريدك، ونستعمله للتواصل بشأن مراجعتك فقط."
-GLOSSARY_REVIEW_CONSENT = "أوافق على ظهور اسمي مع المصطلح بعد اعتماد مراجعتي"
-GLOSSARY_REVIEW_JS_ID, GLOSSARY_FILTER_JS_ID = "epGlossaryReviewJs", "epGlossaryFilterJs"
-GL_TRACKING_JS = ("fbq(", "gtag(", "dataLayer", "_fbq", "data-cta", "localStorage", "sessionStorage", "document.cookie")
+# قرار المؤسس 2026-11-01 (الجولة ٣): المصطلح المنشور مفتوح للنقاش بلا أي علامة تأكيد أو مراجعة أو نموذج على الموقع.
+# الثوابت التالية تُستعمل للتحقق من الغياب فقط: ظهور أيٍّ منها في صفحة قاموس يُسقط الخطوة كلها (لا صفحة تُكتب).
+# تُطابَق بعد طيّ التشكيل والتطويل من النص ومن الكلمة معًا، فتُمسك «مؤكد» و«مؤكّد» و«مؤكَّد» وأخواتها بنفس الكلمة.
+GLOSSARY_ABSENT_TEXT = ("تحت التأكيد", "تأكيد", "مؤكد", "راجعه", "راجع", "أنت متخصص", "نبحث عن")
+GLOSSARY_ABSENT_CONTROLS_RE = re.compile(r"(?i)<(?:input|select|textarea|button)\b")
+_GL_FOLD_RE = re.compile("[\u0640\u064b-\u065f\u0670]")
+GLOSSARY_REVIEW_URL_PART = "expert-reviews"
+GLOSSARY_ABSENT_MARKUP = ("<form", "data-gl-review", "gl-rev", "gl-review", "gl-form", "gl-sum", "gl-hp", "gl-l-st", "gl-filter",
+                          "data-st=", "data-gl-f", "epGlossaryReviewJs", "epGlossaryFilterJs", "name=\"verdict\"", "name=\"website\"")
 GL_OPEN, GL_CLOSE = "<!--EP:GL-->", "<!--/EP:GL-->"
 GL_LD, GL_FLAG = "<!--EP:LD-->", "<!--EP:FLAG-->"
 GL_TRACKING = (GTM_ID, "googletagmanager.com/ns.html", "/pixel.js?v=", "gtag('config'", 'gtag("config"',
@@ -1261,6 +1257,11 @@ def glossary_ar(s):
 
 def _gl_text(v):
     return v if isinstance(v, str) and v.strip() else None
+
+
+def _gl_fold(text):
+    """يحذف التشكيل (الفتحة والضمة والكسرة والشدة والسكون وأخواتها وألف الخنجر) والتطويل: «مُؤَكَّد» و«مؤكـــد» و«مؤكد» تصير واحدة."""
+    return _GL_FOLD_RE.sub("", text)
 
 
 def fetch_glossary_feed(feed_file=None, url=GLOSSARY_FEED_URL):
@@ -1314,11 +1315,9 @@ def fetch_glossary_feed(feed_file=None, url=GLOSSARY_FEED_URL):
         for f in ("ar", "en", "definition_ar"):
             if not _gl_text(t.get(f)):
                 raise Fail("glossary term %s has no %s" % (slug, f))
-        if t.get("review_state") not in GLOSSARY_STATES:
-            raise Fail("glossary term %s: review_state is %r (expected one of %s)"
-                       % (slug, t.get("review_state"), ", ".join(GLOSSARY_STATES)))
+        # review_state وreviewed_by_* وreviewed_at مفاتيح اختيارية تُتجاهل كليًّا (قرار المؤسس 2026-11-01: لا علامة حالة على الموقع)
         for f in ("fr", "example_en", "example_ar", "false_friend_note_ar", "countries_note_ar",
-                  "reviewed_by_name", "reviewed_by_role", "reviewed_at", "saha_topic_id", "area_label", "area"):
+                  "saha_topic_id", "area_label", "area"):
             if t.get(f) is not None and not isinstance(t.get(f), str):
                 raise Fail("glossary term %s: %s is not text" % (slug, f))
         if t.get("related") is not None and not isinstance(t.get("related"), list):
@@ -1553,45 +1552,13 @@ def verify_glossary_term(html, t, r, tpl, slugs):
         bad("«خطأ شائع:» must appear iff the term has a false-friend note")
     if note and esc_attr(glossary_ar(note)) not in block:
         bad("the false-friend note is not on the page")
-    # الحالة: شارة «تحت التأكيد» ⇔ under_review · «راجعه: الاسم» ⇔ confirmed باسم ظاهر · «راجعه متخصص» ⇔ confirmed بلا اسم.
-    # ملاحظة البلاد ⇔ confirmed + نص الملاحظة. اسم المراجع لا يظهر إلا مع confirmed (الخادم يفرضه والقالب يفرضه ثانيةً).
-    state = t.get("review_state")
-    confirmed = state == "confirmed"
-    rname = _gl_text(t.get("reviewed_by_name")) if confirmed else None
-    # العدّ على الكتلة بعد حذف نصوص المحتوى الحرّة (تعريف · مثال · ملاحظات · أسماء · اسم المراجع وصفته · القريبة): تعريف يحوي «راجعه:» أو
-    # نص الشارة لا يُسقط صفحات القاموس كلها، وما يزيد عن ذلك في قالب الصفحة نفسه (شارة ثانية، سطر مراجعة شاذ) يبقى مرصودًا.
-    scan = block
-    free = [t.get(k) for k in ("definition_ar", "example_ar", "false_friend_note_ar", "countries_note_ar", "ar")]
-    free += [t.get(k) for k in ("example_en", "en", "fr")]
-    free += [r_.get(k) for r_ in (t.get("related") or []) if isinstance(r_, dict) for k in ("ar", "en")]
-    free += [t.get("reviewed_by_name"), t.get("reviewed_by_role")]
-    for x in sorted({_gl_text(x) for x in free if _gl_text(x)}, key=len, reverse=True):
-        for form in {esc_attr(x), esc_attr(glossary_ar(x))}:
-            scan = scan.replace(form, "")
-    n_rev = len(re.findall(r'<p class="gl-rev(?: wait)?" data-state="', block))
-    rev_m = re.search(r'<p class="gl-rev(?: wait)?" data-state="[^"]*">.*?</p>', block, re.S)
-    rev = rev_m.group(0) if rev_m else ""
-    n_under, n_label, n_anon = (scan.count(GLOSSARY_UNDER_BADGE), scan.count(GLOSSARY_REVIEW_LABEL),
-                                scan.count(GLOSSARY_CONFIRMED_ANON))
-    if n_under != (0 if confirmed else 1):
-        bad("the «تحت التأكيد» badge appears %d times (expected %d for state %r)" % (n_under, 0 if confirmed else 1, state))
-    if n_label != (1 if rname else 0):
-        bad("«راجعه:» appears %d times (expected %d)" % (n_label, 1 if rname else 0))
-    if n_anon != (1 if (confirmed and not rname) else 0):
-        bad("«راجعه متخصص» appears %d times (expected %d)" % (n_anon, 1 if (confirmed and not rname) else 0))
-    if n_rev != 1 or ('data-state="%s"' % ("confirmed" if confirmed else "under_review")) not in rev:
-        bad("exactly one review-state line with data-state=%s is expected (found %d)" % (state, n_rev))
-    if rname and esc_attr(glossary_ar(rname)) not in block:
-        bad("the reviewer's name is not on the page")
-    if not rname and _gl_text(t.get("reviewed_by_name")) and esc_attr(glossary_ar(t["reviewed_by_name"])) in block:
-        bad("the reviewer's name of a term that is not confirmed leaked onto the page")
-    cn = t.get("countries_note_ar")
-    want_country = bool(confirmed and cn)
-    if block.count('class="gl-country"') != (1 if want_country else 0):
-        bad("country note section must appear iff the term is confirmed and has one")
-    if cn and not confirmed and esc_attr(glossary_ar(cn)) in block:
-        bad("the country note of an UNCONFIRMED term leaked onto the page")
-    if want_country and esc_attr(glossary_ar(cn)) not in block:
+    # لا علامة حالة ولا سطر مراجعة ولا نموذج ولا نقطة إرسال على الصفحة، مهما كان محتوى الفيد (مفاتيح المراجعة تُتجاهل).
+    _verify_gl_absent(html, block, t, bad)
+    # ملاحظة البلاد: تظهر متى وُجدت (المصطلح منشور ومفتوح للنقاش)
+    cn = _gl_text(t.get("countries_note_ar"))
+    if block.count('class="gl-country"') != (1 if cn else 0):
+        bad("country note section must appear exactly once iff the term has a country note")
+    if cn and esc_attr(glossary_ar(cn)) not in block:
         bad("the country note is not on the page")
     # «ناقشه في الساحة»: رابط واحد بالضبط لمعرّف صالح، وإلا صفر
     sid = str(t.get("saha_topic_id") or "")
@@ -1608,56 +1575,49 @@ def verify_glossary_term(html, t, r, tpl, slugs):
     have = sorted(re.findall(r'href="/glossary/([^"/]+)\.html"', block))
     if have != want:
         bad("related links %r != expected %r (only published, generated, non-self terms may be linked)" % (have, want))
-    _verify_review_form(html, block, slug, bad)
     if len(strip_to_text(block)) < 60:
         bad("the page text is too short")
     return errs
 
 
-def _verify_review_form(html, block, slug, bad):
-    """نموذج «أنت متخصص؟ راجِع هذا المصطلح»: واحد بالضبط، بوجهة الإرسال الحرفية، وkind/ref، وفخّ الروبوتات، والخيارات كلها."""
-    if block.count("<form") != 1 or block.count("</form>") != 1:
-        bad("the review form must appear exactly once (found %d)" % block.count("<form"))
-        return
-    m = re.search(r"<form\b([^>]*)>", block)
-    attrs = m.group(1) if m else ""
-    if attrs.count('data-endpoint="%s"' % GLOSSARY_REVIEW_URL) != 1 or "data-gl-review" not in attrs:
-        bad("the review form does not post to exactly %s" % GLOSSARY_REVIEW_URL)
-    if re.search(r"\baction=", attrs):
-        bad("the review form must carry no action attribute (it is sent by the script only)")
-    if block.count(GLOSSARY_REVIEW_URL) != 1:
-        bad("the review endpoint URL must appear exactly once in the content")
-    if block.count('<input type="hidden" name="kind" value="glossary_term">') != 1:
-        bad("review form: hidden kind=glossary_term missing or duplicated")
-    if block.count('<input type="hidden" name="ref" value="%s">' % esc_attr(slug)) != 1 or block.count('name="ref"') != 1:
-        bad("review form: hidden ref=%s missing or duplicated" % slug)
-    hp = re.findall(r'<div class="gl-hp" aria-hidden="true">(.*?)</div>', block, re.S)
-    if len(hp) != 1 or block.count('name="website"') != 1 or 'tabindex="-1"' not in hp[0] or 'name="website"' not in hp[0] \
-            or 'autocomplete="off"' not in hp[0] or "value=" in hp[0]:
-        bad("review form: the honeypot input name=website must appear exactly once, hidden, untabbable, empty")
-    if block.count(GLOSSARY_REVIEW_BUTTON) != 1:
-        bad("the «%s» button must appear exactly once" % GLOSSARY_REVIEW_BUTTON)
-    opts = re.findall(r'<option value="([^"]*)">', block)
-    if opts != [""] + list(GLOSSARY_REVIEW_SPECIALTIES) or ">أخرى</option>" not in block:
-        bad("review form: specialty options are %r (expected the six values, «أخرى» included)" % opts)
-    if re.findall(r'name="verdict" value="([^"]*)"', block) != ["confirm", "suggest"]:
-        bad("review form: the verdict radios must be confirm then suggest")
-    for needle, what in (('name="name"', "name"), ('name="email"', "email"), ('name="specialty_other"', "specialty_other"),
-                         ('name="text"', "text"), ('name="show_name"', "show_name")):
-        if block.count(needle) != 1:
-            bad("review form: field %s must appear exactly once" % what)
-    for label in ("أؤكد الترجمة والتعريف", "أقترح تعديلًا", GLOSSARY_REVIEW_CONSENT, GLOSSARY_REVIEW_PRIVACY, "أرسل المراجعة"):
-        if block.count(label) != 1:
-            bad("review form: the text «%s» must appear exactly once" % label)
-    scripts = re.findall(r'<script id="%s">\n(.*?)</script>' % GLOSSARY_REVIEW_JS_ID, html, re.S)
-    if len(scripts) != 1 or html.count('id="%s"' % GLOSSARY_REVIEW_JS_ID) != 1:
-        bad("the review script (#%s) must appear exactly once, outside the content block" % GLOSSARY_REVIEW_JS_ID)
-    else:
-        for pat in GL_TRACKING_JS:
-            if pat in scripts[0]:
-                bad("the review script carries tracking or storage (%r)" % pat)
-        if "'Content-Type':'application/json'" not in scripts[0] or "credentials:'omit'" not in scripts[0]:
-            bad("the review script must send JSON without credentials")
+def _gl_free_texts(terms):
+    """النصوص الحرّة القادمة من الفيد (تعريف · مثال · ملاحظات · أسماء · قريبة · المجال): قد تحوي أي كلمة، فتُحذف قبل فحوص الغياب
+    حتى لا يُسقط نصٌّ حرٌّ صفحات القاموس كلها، ويبقى ما يزيد عنها في قالب الصفحة نفسه مرصودًا."""
+    free = []
+    for t in terms:
+        free += [t.get(k) for k in ("definition_ar", "example_ar", "false_friend_note_ar", "countries_note_ar", "ar",
+                                    "example_en", "en", "fr", "area_label")]
+        free += [r_.get(k) for r_ in (t.get("related") or []) if isinstance(r_, dict) for k in ("ar", "en")]
+    return sorted({_gl_text(x) for x in free if _gl_text(x)}, key=len, reverse=True)
+
+
+def _gl_scrub(text, terms):
+    for x in _gl_free_texts(terms):
+        for form in {esc_attr(x), esc_attr(glossary_ar(x))}:
+            text = text.replace(form, "")
+    return text
+
+
+def _verify_gl_absent(html, block, t, bad):
+    """قرار المؤسس 2026-11-01: لا شارة «تحت التأكيد» ولا «راجعه» ولا نموذج مراجعة ولا نقطة إرسال ولا سكربت لهما على صفحة المصطلح."""
+    scan = _gl_scrub(block, [t])
+    folded = _gl_fold(scan)
+    for w in GLOSSARY_ABSENT_TEXT:
+        if _gl_fold(w) in folded:
+            bad("the page shows «%s» (no confirmation badge, review line or review button is allowed)" % w)
+    if GLOSSARY_ABSENT_CONTROLS_RE.search(scan):
+        bad("a form control (<input>, <select>, <textarea> or <button>) is in the term content (the review form was removed)")
+    whole = _gl_scrub(html, [t])
+    for m in GLOSSARY_ABSENT_MARKUP:
+        if m in whole:
+            bad("review/state markup %r is on the page (the review form, badge and state marks were removed)" % m)
+    if GLOSSARY_REVIEW_URL_PART in scan or GLOSSARY_REVIEW_URL_PART in "\n".join(_script_bodies(html)):
+        bad("the page references the review endpoint (%s)" % GLOSSARY_REVIEW_URL_PART)
+
+
+def _script_bodies(html):
+    """نصوص السكربتات التنفيذية (بلا JSON-LD)."""
+    return [m.group(1) for m in re.finditer(r'(?is)<script(?![^>]*application/ld\+json)[^>]*>(.*?)</script>', html)]
 
 
 def verify_glossary_index(html, terms, r, tpl):
@@ -1686,7 +1646,7 @@ def verify_glossary_index(html, terms, r, tpl):
             % (len(links), len(terms)))
     if "<input" in block or "<form" in block or "<select" in block:
         bad("the index must not carry a search box or form")
-    _verify_index_states(html, block, terms, bad)
+    _verify_gl_index_absent(html, block, terms, bad)
     for m in re.findall(r'href="#(area-[a-z-]+)"', block):
         if block.count('id="%s"' % m) != 1:
             bad("area jump link #%s has no section" % m)
@@ -1695,42 +1655,21 @@ def verify_glossary_index(html, terms, r, tpl):
     return errs
 
 
-def _verify_index_states(html, block, terms, bad):
-    """كل مصطلح معلَّم بحالته (مؤكّد/تحت التأكيد) كما في الفيد. أزرار التصفية ⇔ وجود الحالتين معًا."""
-    want = {t["slug"]: t["review_state"] for t in terms}
-    got = {}
-    for m in re.finditer(r'<li data-st="([^"]*)"><a href="/glossary/([^"/]+)\.html">(.*?)</a></li>', block, re.S):
-        st, slug, inner = m.groups()
-        marks = re.findall(r'<span class="gl-l-st (is-[cw])">([^<]*)</span>', inner)
-        if slug in got:
-            bad("the index lists %s twice" % slug)
-        got[slug] = st
-        if st not in GLOSSARY_STATES or want.get(slug) != st:
-            bad("index item %s is marked data-st=%r (the feed says %r)" % (slug, st, want.get(slug)))
-        elif marks != [("is-c" if st == "confirmed" else "is-w", GLOSSARY_STATE_LABEL[st])]:
-            bad("index item %s carries the visible mark %r (expected «%s» only)" % (slug, marks, GLOSSARY_STATE_LABEL[st]))
-    if got.keys() != want.keys():
-        bad("index items with a state mark: %d of %d terms" % (len(got), len(want)))
-    if block.count('class="gl-l-st') != len(terms):
-        bad("the index carries %d state marks for %d terms" % (block.count('class="gl-l-st'), len(terms)))
-    n_c = sum(1 for v in want.values() if v == "confirmed")
-    n_w = len(want) - n_c
-    chips = re.findall(r'<button type="button" class="chip" data-gl-f="([^"]*)" aria-pressed="([^"]*)">([^<]*?) <span class="n">([^<]*)</span></button>', block)
-    if n_c and n_w:
-        exp = [("all", "true", "الكل", glossary_ar(len(terms))),
-               ("confirmed", "false", GLOSSARY_STATE_LABEL["confirmed"], glossary_ar(n_c)),
-               ("under_review", "false", GLOSSARY_STATE_LABEL["under_review"], glossary_ar(n_w))]
-        if chips != exp or block.count('data-gl-filter') != 1:
-            bad("filter chips are %r (expected %r)" % (chips, exp))
-    elif chips or "data-gl-filter" in block:
-        bad("filter chips appear although every term is in the same state")
-    scripts = re.findall(r'<script id="%s">\n(.*?)</script>' % GLOSSARY_FILTER_JS_ID, html, re.S)
-    if len(scripts) != 1 or html.count('id="%s"' % GLOSSARY_FILTER_JS_ID) != 1:
-        bad("the filter script (#%s) must appear exactly once, outside the content block" % GLOSSARY_FILTER_JS_ID)
-    else:
-        for pat in GL_TRACKING_JS:
-            if pat in scripts[0]:
-                bad("the filter script carries tracking or storage (%r)" % pat)
+def _verify_gl_index_absent(html, block, terms, bad):
+    """الفهرس: شرائح المجالات وحدها. لا علامة حالة على أي مصطلح ولا أزرار تصفية ولا سكربت لها ولا كلمات تأكيد."""
+    scan = _gl_scrub(block, terms)
+    folded = _gl_fold(scan)
+    for w in GLOSSARY_ABSENT_TEXT:
+        if _gl_fold(w) in folded:
+            bad("the index shows «%s» (it carries area chips only)" % w)
+    whole = _gl_scrub(html, terms)
+    for m in GLOSSARY_ABSENT_MARKUP:
+        if m in whole:
+            bad("state/filter markup %r is on the index (area chips only)" % m)
+    if GLOSSARY_ABSENT_CONTROLS_RE.search(scan):   # الممنوع أي عنصر تحكّم داخل المحتوى (أزرار التصفية القديمة، صندوق بحث، نموذج)
+        bad("a form control (<input>, <select>, <textarea> or <button>) is in the index content (the status filter was removed; area chips are links)")
+    if GLOSSARY_REVIEW_URL_PART in scan or GLOSSARY_REVIEW_URL_PART in "\n".join(_script_bodies(html)):
+        bad("the index references the review endpoint (%s)" % GLOSSARY_REVIEW_URL_PART)
 
 
 def glossary_step(site, feed_file=None, feed_url=GLOSSARY_FEED_URL):

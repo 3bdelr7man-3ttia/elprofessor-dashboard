@@ -57,3 +57,11 @@
   .v2s-sh .g-lang{font-size:16.5px}
   #epModal.v2s-sh-sh .g-relpick{flex-direction:column}
 }
+
+/* —— نقاشات المصطلحات: قوائم المعاينة والنتيجة */
+.v2s-sh .g-tl{list-style:none;margin:6px 0 0;padding:0;display:grid;gap:2px}
+.v2s-sh .g-tl li{padding:6px 0;border-bottom:1px solid var(--line,#E9E1D6);font-size:15px;line-height:1.8;overflow-wrap:anywhere}
+.v2s-sh .g-tl li:last-child{border-bottom:0}
+.v2s-sh .g-tl small{color:var(--mute);unicode-bidi:plaintext}
+.v2s-sh .g-tl .g-tm{display:block;font-size:14px;color:var(--tint-ink)}
+.v2s-sh .g-tl .g-tmore{color:var(--mute)}

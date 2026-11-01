@@ -4,6 +4,9 @@
  *   ٣) ختم «راجعه» (مع موافقة المراجع على ظهور اسمه) ومسحه · ٤) النشر وإلغاؤه والحذف (النشر بلا ختم ⇒ «تحت التأكيد»، ويُمنع فقط ما دام الشرط مفعّلًا)
  *   ٥) شرط المراجعة (إعداد، الافتراضي مغلق) · ٦) نقاش «الساحة» (ربط موجود وفصله) · ٧) الاستيراد: مصدر مدمج أو ملف ⇒ تجربة بلا حفظ ثم تأكيد
  *   ٨) «مراجعات القاموس»: ما يقدّمه المتخصصون من الموقع ⇒ اعتمد (يختم المصطلح أو يفتح اقتراحه) · ارفض · تمّ (دورة أو مسار).
+ *   ٩) نقاش «الساحة» الجديد: لكل مصطلح منشور (معاينة بلا كتابة ⇒ تأكيد) ولكل المنشور بلا نقاش دفعةً (معاينة ⇒ تأكيد ⇒ نتيجة لكل مصطلح).
+ * قرار المؤسس ٢٠٢٦-١١-٠١: «نفتحه للنقاش ونلمّ الاعتراضات» ⇒ المراجعات مطفأة افتراضيًا (`reviews_enabled` في ردّ الخادم): الحالات «مسودة / منشور» فقط،
+ *   ولا شارة «تحت التأكيد» ولا صندوق مراجعات ولا شرط مراجعة، و«راجعه» ختم داخلي في المحرّر لا يظهر على الموقع. الكود كله باقٍ ويعمل حين يُفعَّل الإعداد.
  * الواجهة في `saha_glossary.js` (ركبت على محرّك الساحة فتُحمَّل بعد `saha_diwan.js`). ⛔ التحقق هنا يطابق الخادم (v2_glossary_routes.py) والتحقق النهائي عنده. المصدر الفاشل = null (والشاشة تكتب «غير متاح بعد»).
  * ⛔ نصوص ظاهرة: فصحى بسيطة محايدة للجنس، بلا مصطلحات تقنية، «·» لا تلاصق رقمًا (نستعمل «،»)، والنص الإنجليزي والفرنسي يبقى برقمه اللاتيني.
  * ========================================================================== */
@@ -56,6 +59,8 @@
   var AREAS = [['contracts', 'عقود'], ['litigation', 'تقاضٍ'], ['corporate', 'شركات'], ['general', 'عام'], ['arbitration', 'تحكيم'],
                ['criminal', 'جنائي'], ['ip', 'ملكية فكرية'], ['labor', 'عمل'], ['family', 'أسرة'], [OTHER, 'أخرى']];
   var STATUS_CHIPS = [['all', 'الكل'], ['confirmed', 'مؤكّد'], ['under_review', 'تحت التأكيد'], ['draft', 'مسودة']];
+  var STATUS_CHIPS_OFF = [['all', 'الكل'], ['published', 'منشور'], ['draft', 'مسودة']];
+  function statusChips(on) { return on ? STATUS_CHIPS : STATUS_CHIPS_OFF; }
   var STATE_TEXT = { draft: 'مسودة', under_review: 'تحت التأكيد', confirmed: 'مؤكّد' };
   var REVIEW_KINDS = [['glossary_term', 'مصطلح'], ['course', 'دورة'], ['track', 'مسار']];
   var REVIEW_STATUS_CHIPS = [['pending', 'تنتظر القرار'], ['approved', 'اعتُمدت'], ['rejected', 'رُفضت'], ['all', 'الكل']];
@@ -100,8 +105,10 @@
   }
 
   // ------------------------------------------------------------------ ١ · القائمة
-  function toRow(r) {
+  // on = المراجعات مفعّلة (`reviews_enabled`). مطفأة: «مسودة / منشور» فقط ولا شارة موقع.
+  function toRow(r, on) {
     var st = r.status === 'confirmed' || r.status === 'under_review' ? r.status : 'draft';
+    on = on === true;
     var area = labelOf(AREAS, str(r.area)) ? str(r.area) : OTHER;
     var name = str(r.reviewed_by_name), role = str(r.reviewed_by_role);
     var rev = r.reviewed === true && !!name && !!role;
@@ -110,10 +117,10 @@
       id: String(r.id), slug: slug, ar: str(r.ar) || 'مصطلح بلا عنوان', en: str(r.en), fr: str(r.fr), area: area, areaText: areaText(area),
       definition: str(r.definition_ar), exampleEn: str(r.example_en), exampleAr: str(r.example_ar), falseFriend: str(r.false_friend_note_ar), countries: str(r.countries_note_ar),
       related: Array.isArray(r.related) ? r.related.filter(function (x) { return typeof x === 'string' && SLUG_RE.test(x); }) : [],
-      status: st, published: st !== 'draft', confirmed: st === 'confirmed', underReview: st === 'under_review', statusText: STATE_TEXT[st],
+      status: st, published: st !== 'draft', confirmed: st === 'confirmed', underReview: st === 'under_review', reviewsOn: on, statusText: on ? STATE_TEXT[st] : (st === 'draft' ? 'مسودة' : 'منشور'),
       reviewed: rev, reviewerName: rev ? name : '', reviewerRole: rev ? role : '', reviewedOn: rev ? dayText(r.reviewed_at) : '', namePublic: rev && r.reviewer_name_public === true,
       reviewLine: rev ? 'راجعه: ' + name + '، ' + role : '',
-      siteBadge: st === 'confirmed' ? (rev && r.reviewer_name_public === true ? 'راجعه: ' + name + '، ' + role : 'راجعه متخصص') : (st === 'under_review' ? 'تحت التأكيد: نبحث عن متخصص يراجع هذا المصطلح' : ''),
+      siteBadge: !on ? '' : st === 'confirmed' ? (rev && r.reviewer_name_public === true ? 'راجعه: ' + name + '، ' + role : 'راجعه متخصص') : (st === 'under_review' ? 'تحت التأكيد: نبحث عن متخصص يراجع هذا المصطلح' : ''),
       topicId: TOPIC_RE.test(tid) ? tid : '', frozen: frozen, source: str(r.source),
       canDelete: st === 'draft' && !frozen, previewUrl: st !== 'draft' && SLUG_RE.test(slug) ? SITE + slug + '.html' : ''
     };
@@ -121,7 +128,8 @@
   // resp = ردّ GET /v2/content/glossary ⇒ null لو المصدر فشل
   function terms(resp) {
     if (!resp || typeof resp !== 'object' || !Array.isArray(resp.items)) return null;
-    var rows = resp.items.filter(function (r) { return r && typeof r === 'object' && r.id != null && str(String(r.id)); }).map(toRow);
+    var on = resp.reviews_enabled === true;
+    var rows = resp.items.filter(function (r) { return r && typeof r === 'object' && r.id != null && str(String(r.id)); }).map(function (r) { return toRow(r, on); });
     var c = resp.counts && typeof resp.counts === 'object' ? resp.counts : null;
     var n = function (k, d) { return c && isNum(c[k]) ? c[k] : d; };
     var rev = rows.filter(function (r) { return r.reviewed; }).length;
@@ -131,12 +139,13 @@
     AREAS.forEach(function (a) { by[a[0]] = c && c.by_area && isNum(c.by_area[a[0]]) ? c.by_area[a[0]] : rows.filter(function (r) { return r.area === a[0]; }).length; });
     var counts = { all: n('all', rows.length), draft: n('draft', rows.length - pub), underReview: n('under_review', under), confirmed: n('confirmed', conf), published: n('published', pub),
                    reviewed: n('reviewed', rev), unreviewed: n('unreviewed', rows.length - rev), publishedUnreviewed: n('published_unreviewed', under),
-                   reviewsPending: n('reviews_pending', 0), byArea: by };
+                   reviewsPending: on ? n('reviews_pending', 0) : 0, publishedNoTopic: n('published_no_topic', rows.filter(function (r) { return r.published && !r.topicId; }).length), reviewsOn: on, byArea: by };
     var total = isNum(resp.total) ? resp.total : rows.length;
-    return { rows: rows, total: total, counts: counts, requireReview: resp.require_review === true, truncated: total > rows.length };
+    return { rows: rows, total: total, counts: counts, reviewsEnabled: on, requireReview: on && resp.require_review === true, truncated: total > rows.length };
   }
   function summary(counts) {
     if (!counts) return '';
+    if (!counts.reviewsOn) return 'منشور ' + ar(counts.published) + '، مسودة ' + ar(counts.draft);
     return 'مؤكّد ' + ar(counts.confirmed) + '، تحت التأكيد ' + ar(counts.underReview) + '، مسودة ' + ar(counts.draft);
   }
   function termCountText(n) { return countWord(n, ['مصطلح واحد', 'مصطلحان', 'مصطلحات', 'مصطلحًا'], 'لا مصطلحات هنا'); }
@@ -245,18 +254,18 @@
     if (o.reviewed && touchesText) {
       warns.push('سيُلغى ختم المراجعة لأنك عدّلت النص' + (o.reviewerName ? ' (راجعه ' + o.reviewerName + ')' : '') + '.');
       if (o.published && requireReview) { drops = true; warns.push('وسيعود المصطلح مسودة وتختفي صفحته من الموقع عند التوليد التالي، حتى يراجعه خبير وتنشره من جديد.'); }
-      else if (o.published) warns.push('سيرجع المصطلح إلى «تحت التأكيد» ويبقى ظاهرًا.');
+      else if (o.published && o.reviewsOn) warns.push('سيرجع المصطلح إلى «تحت التأكيد» ويبقى ظاهرًا.');
     }
     var lead = 'ستُحفظ التعديلات على «' + o.ar + '»' + (o.published && !drops ? '، وتتحدّث صفحته على الموقع خلال دقائق' : '') + ':';
     return { ok: true, body: body, lines: lines, warns: warns, errors: {}, lead: lead, goLabel: 'احفظ التعديلات', clearsReview: !!(o.reviewed && touchesText), drops: drops };
   }
-  function termDone(kind, out) {
+  function termDone(kind, out, on) {
     if (kind === 'create') return 'أُضيف المصطلح «' + (out && out.item && out.item.ar ? out.item.ar : '') + '» مسودة';
     var t = 'حُفظت التعديلات';
     if (!out || !Array.isArray(out.changed) || !out.changed.length) return 'لا يوجد تغيير';
     if (out.review_cleared) t += '، وأُلغي ختم المراجعة';
     if (out.unpublished) t += '، وعاد المصطلح مسودة وستختفي صفحته من الموقع حتى يراجعه خبير وتنشره';
-    else if (out.review_cleared && out.item && out.item.status === 'under_review') t += '، وعاد المصطلح إلى «تحت التأكيد» ويبقى ظاهرًا';
+    else if (on !== false && out.review_cleared && out.item && out.item.status === 'under_review') t += '، وعاد المصطلح إلى «تحت التأكيد» ويبقى ظاهرًا';
     return t;
   }
 
@@ -269,15 +278,21 @@
     if (name.length < 2 || name.length > 120 || bad(name)) errors.reviewer_name = 'اكتب اسم المراجع (حرفان على الأقل)، بلا روابط ولا بريد';
     if (role.length < 2 || role.length > 80 || bad(role)) errors.reviewer_role = 'اكتب صفة المراجع، مثل: محامٍ أو أستاذ قانون';
     if (Object.keys(errors).length) return { ok: false, error: 'صحّح الخانات المعلَّمة', errors: errors };
-    var lines = [{ label: 'المصطلح', to: row.ar }, { label: 'المراجع', from: row.reviewed ? row.reviewerName + '، ' + row.reviewerRole : '', to: name + '، ' + role },
-                 { label: 'ظهور الاسم للناس', from: row.reviewed ? (row.namePublic ? 'يظهر' : 'لا يظهر') : '', to: shown ? 'يظهر' : 'لا يظهر' }];
-    if (row.published) lines.push({ label: 'الحالة', from: row.statusText, to: STATE_TEXT.confirmed });
-    var warns = [shown ? 'يظهر هذا الاسم وصفته للناس في صفحة المصطلح، فتأكد أن هذا الخبير راجع المصطلح فعلًا وأنه وافق على ظهور اسمه.'
-                       : 'لن يظهر اسم المراجع للناس، وتقول الصفحة «راجعه متخصص» فقط.'];
-    if (!row.published) warns.push('المصطلح مسودة، فيبقى مسودة، ويظهر مؤكّدًا حين تنشره.');
-    if (row.countries && !row.confirmed) warns.push('وتظهر ملاحظة الدول في الصفحة بعد الختم.');
+    var on = row.reviewsOn !== false;
+    var lines = [{ label: 'المصطلح', to: row.ar }, { label: 'المراجع', from: row.reviewed ? row.reviewerName + '، ' + row.reviewerRole : '', to: name + '، ' + role }];
+    if (on) lines.push({ label: 'ظهور الاسم للناس', from: row.reviewed ? (row.namePublic ? 'يظهر' : 'لا يظهر') : '', to: shown ? 'يظهر' : 'لا يظهر' });
+    if (on && row.published) lines.push({ label: 'الحالة', from: row.statusText, to: STATE_TEXT.confirmed });
+    var warns = [];
+    if (!on) warns.push('مراجعة داخلية: تُحفظ في الداشبورد ولا تظهر على الموقع.');
+    else {
+      warns.push(shown ? 'يظهر هذا الاسم وصفته للناس في صفحة المصطلح، فتأكد أن هذا الخبير راجع المصطلح فعلًا وأنه وافق على ظهور اسمه.'
+                       : 'لن يظهر اسم المراجع للناس، وتقول الصفحة «راجعه متخصص» فقط.');
+      if (!row.published) warns.push('المصطلح مسودة، فيبقى مسودة، ويظهر مؤكّدًا حين تنشره.');
+      if (row.countries && !row.confirmed) warns.push('وتظهر ملاحظة الدول في الصفحة بعد الختم.');
+    }
     return { ok: true, body: { reviewer_name: name, reviewer_role: role, reviewer_name_public: shown }, lines: lines, warns: warns, errors: {},
-             lead: (row.reviewed ? 'سيحلّ هذا المراجع محلّ المراجع السابق' : 'سيُختم المصطلح بأن خبيرًا راجعه') + (row.published ? '، وتتحدّث صفحته على الموقع خلال دقائق:' : ':'),
+             lead: on ? (row.reviewed ? 'سيحلّ هذا المراجع محلّ المراجع السابق' : 'سيُختم المصطلح بأن خبيرًا راجعه') + (row.published ? '، وتتحدّث صفحته على الموقع خلال دقائق:' : ':')
+                      : (row.reviewed ? 'سيحلّ هذا المراجع محلّ المراجع السابق في سجلّ الداشبورد:' : 'سيُسجَّل في الداشبورد أن خبيرًا راجع المصطلح:'),
              goLabel: row.reviewed ? 'جدّد ختم المراجعة' : 'ضع ختم المراجعة' };
   }
   function reviewDone(row) { return 'خُتم المصطلح «' + row.ar + '» بأن خبيرًا راجعه'; }
@@ -285,14 +300,14 @@
     if (!row.reviewed) return { ok: false, error: 'المصطلح لم يُراجَع بعد' };
     var warns = [];
     if (row.published && requireReview) warns.push('ولأنه منشور وشرط المراجعة مفعّل سيعود مسودة، وتختفي صفحته من الموقع حتى يُراجَع وينشر من جديد.');
-    else if (row.published) warns.push('سيرجع المصطلح إلى «تحت التأكيد» ويبقى ظاهرًا.');
+    else if (row.published && row.reviewsOn) warns.push('سيرجع المصطلح إلى «تحت التأكيد» ويبقى ظاهرًا.');
     var lines = [{ label: 'المراجعة', from: row.reviewLine.replace(/^راجعه: /, ''), to: 'بلا ختم' }];
-    if (row.published) lines.push({ label: 'الحالة', from: row.statusText, to: requireReview ? STATE_TEXT.draft : STATE_TEXT.under_review });
+    if (row.published && row.reviewsOn) lines.push({ label: 'الحالة', from: row.statusText, to: requireReview ? STATE_TEXT.draft : STATE_TEXT.under_review });
     return { ok: true, lead: 'سيُمسح ختم المراجعة عن «' + row.ar + '»:', goLabel: 'امسح الختم', warns: warns, unpublishes: !!(row.published && requireReview), lines: lines };
   }
-  function unreviewDone(out) {
+  function unreviewDone(out, on) {
     if (out && out.unpublished) return 'مُسح الختم، وعاد المصطلح مسودة';
-    return out && out.item && out.item.status === 'under_review' ? 'مُسح الختم، وعاد المصطلح إلى «تحت التأكيد»' : 'مُسح ختم المراجعة';
+    return on !== false && out && out.item && out.item.status === 'under_review' ? 'مُسح الختم، وعاد المصطلح إلى «تحت التأكيد»' : 'مُسح ختم المراجعة';
   }
 
   // ------------------------------------------------------------------ ٤ · النشر والحذف
@@ -300,11 +315,11 @@
     if (row.published) return { ok: false, error: 'المصطلح منشور بالفعل' };
     if (requireReview && !row.reviewed) return { ok: false, error: NEEDS_REVIEW_AR, needsReview: true };
     var warns = [];
-    if (!row.reviewed) warns.push('لم يراجعه خبير بعد، فستظهر صفحته بشارة «تحت التأكيد: نبحث عن متخصص يراجع هذا المصطلح» حتى يراجعه متخصص.');
-    if (!row.reviewed && row.countries) warns.push('وملاحظة الدول لا تظهر حتى يُؤكَّد المصطلح.');
+    if (row.reviewsOn && !row.reviewed) warns.push('لم يراجعه خبير بعد، فستظهر صفحته بشارة «تحت التأكيد: نبحث عن متخصص يراجع هذا المصطلح» حتى يراجعه متخصص.');
+    if (row.reviewsOn && !row.reviewed && row.countries) warns.push('وملاحظة الدول لا تظهر حتى يُؤكَّد المصطلح.');
     if (!row.frozen) warns.push('يتجمّد رابط المصطلح بعد أول نشر ولا يتغير.');
     return { ok: true, lead: 'ستظهر صفحة المصطلح على الموقع خلال دقائق.', goLabel: 'انشر المصطلح', warns: warns,
-             lines: [{ label: 'المصطلح', to: row.ar }, { label: 'الحالة', from: STATE_TEXT.draft, to: row.reviewed ? STATE_TEXT.confirmed : STATE_TEXT.under_review },
+             lines: [{ label: 'المصطلح', to: row.ar }, { label: 'الحالة', from: row.statusText, to: row.reviewsOn ? (row.reviewed ? STATE_TEXT.confirmed : STATE_TEXT.under_review) : 'منشور' },
                      { label: 'الصفحة', to: SITE.replace('https://', '') + row.slug + '.html', ltr: true }] };
   }
   function unpublishCheck(row) {
@@ -321,7 +336,7 @@
     if (row.published) return '';
     return requireReview && !row.reviewed ? NEEDS_REVIEW_AR : '';
   }
-  function publishDone(row) { return 'نُشر المصطلح «' + row.ar + '»' + (row.reviewed ? '' : ' تحت التأكيد') + '، وتظهر صفحته على الموقع خلال دقائق'; }
+  function publishDone(row) { return 'نُشر المصطلح «' + row.ar + '»' + (row.reviewed || !row.reviewsOn ? '' : ' تحت التأكيد') + '، وتظهر صفحته على الموقع خلال دقائق'; }
   function unpublishDone(row) { return 'أُلغي نشر «' + row.ar + '»، وتختفي صفحته من الموقع خلال دقائق'; }
 
   // ------------------------------------------------------------------ ٥ · شرط المراجعة (إعداد، الافتراضي مغلق)
@@ -366,6 +381,82 @@
     if (!row.topicId) return { ok: false, error: 'لا نقاش مرتبط بهذا المصطلح' };
     return { ok: true, lead: 'سيُفصل النقاش عن المصطلح «' + row.ar + '»، ويبقى النقاش نفسه في الساحة' + (row.published ? '، ويختفي زرّه من صفحة المصطلح خلال دقائق:' : ':'),
              lines: [{ label: 'النقاش', to: topicTitle(tv, row.topicId) || 'نقاش في الساحة' }], goLabel: 'افصل النقاش' };
+  }
+
+  // ------------------------------------------------------------------ ٦ب · نقاش جديد في «الساحة» (يطابق الخادم: العنوان والسؤال الافتراضيان)
+  var TOPIC_TAIL = ': هل الترجمة والتعريف دقيقان؟';
+  var TOPIC_QUESTION = 'هل الترجمة أو التعريف دقيق في نظامك القانوني؟ اكتب اعتراضك أو اقتراحك.';
+  var TOPIC_TITLE_MAX = 200, TOPIC_QUESTION_MAX = 5000;
+  var SAHA_NOTE = 'يظهر زرّ «ناقشه في الساحة» في صفحة المصطلح خلال دقائق، ويعمل للناس حين تُفتح الساحة على المنصة.';
+  // المصطلح المنشور بلا نقاش
+  function canOpenTopic(row) {
+    if (!row.published) return { ok: false, error: 'انشر المصطلح أولًا ثم افتح نقاشه' };
+    if (row.topicId) return { ok: false, error: 'لهذا المصطلح نقاش مرتبط بالفعل، افصله أولًا' };
+    return { ok: true };
+  }
+  function topicDefaults(row) { return { title: str(row.ar) + ' (' + str(row.en) + ')' + TOPIC_TAIL, question: TOPIC_QUESTION }; }
+  // form = {title, question} ⇒ {ok, errors, body}
+  function topicFormCheck(form) {
+    form = form || {};
+    var t = plain(form.title), q = plain(form.question), errors = {};
+    if (t.length < 3 || t.length > TOPIC_TITLE_MAX) errors.title = 'عنوان النقاش من ' + ar(3) + ' إلى ' + ar(TOPIC_TITLE_MAX) + ' حرف';
+    if (!q || q.length > TOPIC_QUESTION_MAX) errors.question = 'اكتب سؤال النقاش (حتى ' + ar(TOPIC_QUESTION_MAX) + ' حرف)';
+    if (Object.keys(errors).length) return { ok: false, error: 'صحّح الخانات المعلَّمة', errors: errors };
+    return { ok: true, body: { title: t, question: q } };
+  }
+  // pv = ردّ معاينة الخادم {plan: create | link_existing, title, question, existing_id} ⇒ ورقة المراجعة
+  function topicOpenCheck(row, pv) {
+    var link = pv && pv.plan === 'link_existing';
+    if (!pv || (pv.plan !== 'create' && !link)) return { ok: false, error: 'تعذّر قراءة معاينة النقاش، حاول مرة أخرى' };
+    var lines = [{ label: 'العنوان', to: str(pv.title) }, { label: 'السؤال', to: short(pv.question, 160) },
+                 { label: 'النتيجة', to: link ? 'يوجد نقاش بنفس العنوان، سيُربط به' : 'سيُفتح نقاش جديد في الساحة' }];
+    return { ok: true, body: { title: str(pv.title), question: str(pv.question) }, lines: lines, warns: [SAHA_NOTE], goLabel: link ? 'اربط النقاش' : 'افتح النقاش',
+             lead: link ? 'يوجد في الساحة نقاش بهذا العنوان، فلن يُفتح نقاش ثانٍ، وسيُربط المصطلح «' + row.ar + '» به:'
+                        : 'سيُفتح في الساحة نقاش جديد للمصطلح «' + row.ar + '»، ويدعو الناس إلى مراجعة ترجمته وتعريفه:' };
+  }
+  function topicOpenDone(out, row) {
+    return out && out.adopted ? 'رُبط المصطلح «' + row.ar + '» بنقاش موجود في الساحة' : 'فُتح للمصطلح «' + row.ar + '» نقاش في الساحة';
+  }
+
+  // الدفعة الكاملة: resp = ردّ /saha-topics/bulk/preview | /bulk/open (أو جسم الخطأ الجزئي) ⇒ null لو غير مفهوم
+  var BULK_OUTCOME = { created: 'create', linked_existing: 'link', error: 'problem' };
+  function bulkView(resp) {
+    if (!resp || typeof resp !== 'object' || !Array.isArray(resp.results)) return null;
+    var rows = resp.results.filter(function (r) { return r && typeof r === 'object' && BULK_OUTCOME[r.outcome]; }).map(function (r) {
+      return { id: String(r.id), ar: str(r.ar) || 'مصطلح بلا عنوان', en: str(r.en), slug: str(r.slug), kind: BULK_OUTCOME[r.outcome], message: str(r.message), topicId: TOPIC_RE.test(str(r.topic_id)) ? str(r.topic_id) : '' };
+    });
+    var cnt = function (k) { return rows.filter(function (r) { return r.kind === k; }).length; };
+    return { applied: resp.applied === true, stopped: resp.stopped === true, rows: rows, total: isNum(resp.total) ? resp.total : rows.length, batches: isNum(resp.batches) ? resp.batches : 0,
+             remaining: isNum(resp.remaining) ? resp.remaining : 0, create: cnt('create'), link: cnt('link'), problem: cnt('problem') };
+  }
+  function bulkSummary(v) {
+    if (!v) return '';
+    var parts = [];
+    if (v.create) parts.push(U(v.create, ['نقاش جديد واحد', 'نقاشان جديدان', 'نقاشات جديدة', 'نقاشًا جديدًا']));
+    if (v.link) parts.push(U(v.link, ['ربط واحد بنقاش موجود', 'ربطان بنقاش موجود', 'ربط بنقاش موجود', 'ربطًا بنقاش موجود']));
+    if (v.problem) parts.push(U(v.problem, ['مصطلح واحد بمشكلة', 'مصطلحان بمشكلة', 'مصطلحات بمشكلة', 'مصطلحًا بمشكلة']));
+    return parts.join('، ');
+  }
+  function bulkCheck(v) {
+    if (!v || !v.rows.length) return { ok: false, error: 'لا مصطلحات منشورة بلا نقاش' };
+    var todo = v.create + v.link;
+    if (!todo) return { ok: false, error: 'لا مصطلحات يمكن فتح نقاش لها الآن، راجع المشاكل المعروضة' };
+    var lines = [{ label: 'مصطلحات منشورة بلا نقاش', to: ar(v.rows.length) }, { label: 'نقاش جديد يُفتح', to: ar(v.create) }, { label: 'تُربط بنقاش موجود', to: ar(v.link) }, { label: 'تُترك لمشكلة', to: ar(v.problem) }];
+    var warns = [SAHA_NOTE];
+    if (v.batches > 1) warns.push('يُنفَّذ على ' + ar(v.batches) + ' دفعات متتابعة، وإن توقفت إحداها يبقى ما سبقها ويمكنك إعادة المحاولة للباقي.');
+    if (v.problem) warns.push('المصطلحات التي بها مشكلة تُترك كما هي، وتفتح نقاشها بنفسك من شاشة المصطلح.');
+    return { ok: true, lead: 'سيُفتح الآن في الساحة نقاش لكل مصطلح منشور بلا نقاش، ويُربط به:', lines: lines, warns: warns, goLabel: 'افتح النقاشات' };
+  }
+  function bulkDone(v) {
+    if (!v) return 'تمّت العملية';
+    var t = bulkSummary(v);
+    return 'اكتملت العملية' + (t ? ': ' + t : '');
+  }
+  // خطأ في وسط الدفعة ⇒ نص واحد يذكر ما تم قبله
+  function bulkStopText(data, status) {
+    var base = writeError(status, data), v = bulkView(data);
+    var done = v ? v.create + v.link : 0;
+    return base + (v && v.stopped ? (done ? ' رُبط ' + U(done, ['مصطلح واحد', 'مصطلحان', 'مصطلحات', 'مصطلحًا']) + ' قبل التوقف، وبقي ' + ar(v.remaining) + '. أعد المحاولة للباقي.' : ' لم يُربط شيء.') : '');
   }
 
   // ------------------------------------------------------------------ ٧ · الاستيراد (تجربة بلا حفظ ثم تأكيد)
@@ -413,7 +504,7 @@
     var kind = labelOf(REVIEW_KINDS, str(r.kind)) ? str(r.kind) : 'glossary_term';
     var st = REVIEW_STATUS_TEXT[str(r.status)] ? str(r.status) : 'pending';
     var verdict = r.verdict === 'suggest' ? 'suggest' : 'confirm';
-    var term = r.term && typeof r.term === 'object' && r.term.id != null ? toRow(r.term) : null;
+    var term = r.term && typeof r.term === 'object' && r.term.id != null ? toRow(r.term, true) : null;
     var spec = str(r.specialty_text) || str(r.specialty_label) || labelOf(AREAS, OTHER);
     return {
       id: String(r.id), kind: kind, kindText: labelOf(REVIEW_KINDS, kind), isTerm: kind === 'glossary_term', ref: str(r.ref), title: str(r.ref_title) || str(r.ref),
@@ -496,6 +587,8 @@
     publishCheck: publishCheck, unpublishCheck: unpublishCheck, deleteCheck: deleteCheck, publishBlock: publishBlock, publishDone: publishDone, unpublishDone: unpublishDone,
     rulesView: rulesView, settingsCheck: settingsCheck, settingsDone: settingsDone,
     topics: topics, topicTitle: topicTitle, attachCheck: attachCheck, detachCheck: detachCheck,
+    statusChips: statusChips, STATUS_CHIPS_OFF: STATUS_CHIPS_OFF, SAHA_NOTE: SAHA_NOTE, TOPIC_QUESTION: TOPIC_QUESTION, canOpenTopic: canOpenTopic, topicDefaults: topicDefaults, topicFormCheck: topicFormCheck,
+    topicOpenCheck: topicOpenCheck, topicOpenDone: topicOpenDone, bulkView: bulkView, bulkSummary: bulkSummary, bulkCheck: bulkCheck, bulkDone: bulkDone, bulkStopText: bulkStopText,
     importFileCheck: importFileCheck, importBody: importBody, importCanPreview: importCanPreview, importView: importView, importDone: importDone
   };
   if (typeof module !== 'undefined' && module.exports) module.exports.v2sGlossary = L.v2sGlossary;

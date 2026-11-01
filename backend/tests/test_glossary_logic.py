@@ -82,7 +82,7 @@ def _reviewed(**kw):
 def _resp(items, **kw):
     r = {'items': items, 'total': len(items), 'counts': {'all': len(items), 'draft': 0, 'under_review': 0, 'confirmed': 0, 'published': 0, 'reviewed': 0, 'unreviewed': 0,
                                                     'published_unreviewed': 0, 'reviews_pending': 0, 'by_area': {}},
-         'require_review': False}
+         'require_review': False, 'reviews_enabled': True}      # شكل الجولة ٢؛ الجولة ٣ (المراجعات مطفأة) في آخر الملف
     r.update(kw)
     return r
 
@@ -105,7 +105,9 @@ def test_a_failed_source_is_null_and_the_review_requirement_defaults_to_off():
     assert G('terms', None) is None and G('terms', {}) is None and G('terms', {'items': 'x'}) is None
     v = G('terms', {'items': []})
     assert v['rows'] == [] and v['requireReview'] is False and v['counts']['all'] == 0 and v['counts']['reviewsPending'] == 0
-    assert G('terms', {'items': [], 'require_review': True})['requireReview'] is True and G('terms', {'items': [], 'require_review': 'yes'})['requireReview'] is False
+    assert G('terms', {'items': [], 'require_review': True, 'reviews_enabled': True})['requireReview'] is True
+    assert G('terms', {'items': [], 'require_review': 'yes', 'reviews_enabled': True})['requireReview'] is False
+    assert G('terms', {'items': [], 'require_review': True})['requireReview'] is False, 'المراجعات مطفأة (الافتراضي) فلا شرط مراجعة'
 
 
 @needs_node
@@ -546,3 +548,159 @@ def test_review_copy_is_clean_arabic_and_the_server_error_text_passes_through():
     _clean_copy(*outs)
     assert G('writeError', 409, {'error': 'سبق البتّ في هذه المراجعة'}) == 'سبق البتّ في هذه المراجعة'
     assert G('writeError', 404, {'error': 'المراجعة غير موجودة'}) == 'المراجعة غير موجودة'
+
+
+# ====================================================================== الجولة ٣ (قرار المؤسس ٢٠٢٦-١١-٠١): المراجعات مطفأة افتراضيًا + نقاش «الساحة» لكل مصطلح
+
+def _off(items, **kw):
+    r = _resp(items, **kw)
+    r['reviews_enabled'] = False
+    r['counts'].update({'draft': 1, 'under_review': 1, 'confirmed': 1, 'published': 2, 'reviews_pending': 3, 'published_no_topic': 2})
+    return r
+
+
+def _orow(**kw):
+    return G('terms', _off([_item(**kw)]))['rows'][0]
+
+
+@needs_node
+def test_off_states_are_only_draft_and_published_and_nothing_is_a_site_badge():
+    d, u, c = _orow(), _orow(status='under_review'), _orow(status='confirmed', **_reviewed(reviewer_name_public=True))
+    assert (d['statusText'], u['statusText'], c['statusText']) == ('مسودة', 'منشور', 'منشور')
+    assert u['published'] and c['published'] and not d['published']
+    assert d['siteBadge'] == u['siteBadge'] == c['siteBadge'] == '' and not any(r['reviewsOn'] for r in (d, u, c))
+    v = G('terms', _off([_item(1), _item(2, slug='b', status='under_review'), _item(3, slug='c', status='confirmed')]))
+    assert v['reviewsEnabled'] is False and v['requireReview'] is False and v['counts']['reviewsPending'] == 0 and v['counts']['publishedNoTopic'] == 2
+    assert G('summary', v['counts']) == 'منشور ٢، مسودة ١' and G('statusChips', False) == [['all', 'الكل'], ['published', 'منشور'], ['draft', 'مسودة']]
+    assert [x[0] for x in G('statusChips', True)] == ['all', 'confirmed', 'under_review', 'draft']
+    on = G('terms', _resp([_item(1)]))
+    assert on['reviewsEnabled'] is True and G('summary', on['counts']) == 'مؤكّد ٠، تحت التأكيد ٠، مسودة ٠'
+    fm = G('filterRows', G('terms', _off([_item(1, status='confirmed', **_reviewed()), _item(2, slug='b', status='under_review'), _item(3, slug='c')]))['rows'], {'status': 'published'})
+    assert [r['id'] for r in fm] == ['1', '2']
+
+
+@needs_node
+def test_off_sheets_never_talk_about_the_under_review_badge_or_the_site_stamp():
+    pub = _orow(status='under_review')
+    unrev = _orow()
+    p = G('publishCheck', unrev, False)
+    assert p['ok'] and not any('تحت التأكيد' in w for w in p['warns']) and {'label': 'الحالة', 'from': 'مسودة', 'to': 'منشور'} in p['lines']
+    assert G('publishDone', unrev) == 'نُشر المصطلح «القوة القاهرة»، وتظهر صفحته على الموقع خلال دقائق'
+    rv = G('reviewCheck', {'reviewer_name': 'سارة أحمد', 'reviewer_role': 'محامية', 'reviewer_name_public': True}, pub)
+    assert rv['ok'] and rv['warns'] == ['مراجعة داخلية: تُحفظ في الداشبورد ولا تظهر على الموقع.']
+    assert [l['label'] for l in rv['lines']] == ['المصطلح', 'المراجع'] and 'الموقع' not in rv['lead'] and rv['body']['reviewer_name_public'] is True
+    stamped = _orow(status='confirmed', **_reviewed())
+    un = G('unreviewCheck', stamped, False)
+    assert un['ok'] and un['warns'] == [] and [l['label'] for l in un['lines']] == ['المراجعة']
+    assert G('unreviewDone', {'item': {'status': 'under_review'}}, False) == 'مُسح ختم المراجعة'
+    e = G('termCheck', dict(G('termForm', stamped), ar='القوة القاهرة المعدّلة'), 'edit', stamped, False)
+    assert e['ok'] and any('سيُلغى ختم المراجعة' in w for w in e['warns']) and not any('تحت التأكيد' in w for w in e['warns'])
+    assert G('termDone', 'edit', {'changed': ['ar'], 'review_cleared': True, 'item': {'status': 'under_review'}}, False) == 'حُفظت التعديلات، وأُلغي ختم المراجعة'
+    _clean_copy(p, rv, un, e)
+
+
+@needs_node
+def test_on_sheets_keep_the_round_two_texts_exactly():
+    unrev = _row()
+    p = G('publishCheck', unrev, False)
+    assert any('«تحت التأكيد: نبحث عن متخصص يراجع هذا المصطلح»' in w for w in p['warns']) and {'label': 'الحالة', 'from': 'مسودة', 'to': 'تحت التأكيد'} in p['lines']
+    assert G('publishDone', unrev).endswith('تحت التأكيد، وتظهر صفحته على الموقع خلال دقائق')
+    assert G('termDone', 'edit', {'changed': ['ar'], 'review_cleared': True, 'item': {'status': 'under_review'}}, True).endswith('وعاد المصطلح إلى «تحت التأكيد» ويبقى ظاهرًا')
+
+
+TFM = 'القوة القاهرة (force majeure): هل الترجمة والتعريف دقيقان؟'
+TQ = 'هل الترجمة أو التعريف دقيق في نظامك القانوني؟ اكتب اعتراضك أو اقتراحك.'
+
+
+@needs_node
+def test_topic_defaults_match_the_server_exactly():
+    import v2_glossary_routes as gr
+    row = _orow(status='under_review')
+    d = G('topicDefaults', row)
+    assert d == {'title': TFM, 'question': TQ} and gr.TOPIC_QUESTION == TQ
+    class T(object):
+        ar, en = 'القوة القاهرة', 'force majeure'
+    assert gr.default_topic_title(T) == d['title']
+
+
+def test_default_topic_title_is_per_ar_en_pair_not_per_term():
+    """الفريد في القاموس هو الـslug وحده؛ مصطلحان بالزوج (عربي، إنجليزي) نفسه يخرجان بعنوان واحد (ويعالجه البذر بـduplicate_*)."""
+    import v2_glossary_routes as gr
+    class A(object):
+        ar, en, slug = 'القوة القاهرة', 'force majeure', 'force-majeure'
+    class B(object):
+        ar, en, slug = ' القوة القاهرة ', 'force majeure ', 'force-majeure-2'
+    class C(object):
+        ar, en, slug = 'القوة القاهرة', 'act of god', 'act-of-god'
+    assert gr.default_topic_title(A) == gr.default_topic_title(B) != gr.default_topic_title(C)
+
+
+@needs_node
+def test_topic_form_check_bounds_match_the_server():
+    ok = G('topicFormCheck', {'title': '  عنوان  ', 'question': ' سؤال؟ '})
+    assert ok['ok'] and ok['body'] == {'title': 'عنوان', 'question': 'سؤال؟'}
+    for bad, key in (({'title': 'ab', 'question': 'q'}, 'title'), ({'title': 'x' * 201, 'question': 'q'}, 'title'), ({'title': 'abc', 'question': ''}, 'question'),
+                     ({'title': 'abc', 'question': 'q' * 5001}, 'question'), ({}, 'title')):
+        r = G('topicFormCheck', bad)
+        assert r['ok'] is False and key in r['errors'], bad
+    assert G('topicFormCheck', {'title': 'x' * 200, 'question': 'q' * 5000})['ok'] is True
+
+
+@needs_node
+def test_only_a_published_unlinked_term_can_open_a_topic():
+    assert G('canOpenTopic', _orow()) == {'ok': False, 'error': 'انشر المصطلح أولًا ثم افتح نقاشه'}
+    assert G('canOpenTopic', _orow(status='under_review', saha_topic_id='c0ffee00-1111'))['ok'] is False
+    assert G('canOpenTopic', _orow(status='under_review')) == {'ok': True}
+
+
+@needs_node
+def test_topic_review_sheet_says_new_or_link_and_the_result_text():
+    row = _orow(status='under_review')
+    new = G('topicOpenCheck', row, {'plan': 'create', 'title': TFM, 'question': TQ, 'existing_id': None})
+    assert new['ok'] and new['goLabel'] == 'افتح النقاش' and 'سيُفتح في الساحة نقاش جديد' in new['lead']
+    assert {'label': 'النتيجة', 'to': 'سيُفتح نقاش جديد في الساحة'} in new['lines'] and {'label': 'العنوان', 'to': TFM} in new['lines']
+    assert new['body'] == {'title': TFM, 'question': TQ} and any('«ناقشه في الساحة»' in w and 'حين تُفتح الساحة' in w for w in new['warns'])
+    ln = G('topicOpenCheck', row, {'plan': 'link_existing', 'title': TFM, 'question': TQ, 'existing_id': 'exist001-0000'})
+    assert ln['ok'] and ln['goLabel'] == 'اربط النقاش' and {'label': 'النتيجة', 'to': 'يوجد نقاش بنفس العنوان، سيُربط به'} in ln['lines'] and 'فلن يُفتح نقاش ثانٍ' in ln['lead']
+    assert G('topicOpenCheck', row, None)['ok'] is False and G('topicOpenCheck', row, {'plan': 'x'})['ok'] is False
+    assert G('topicOpenDone', {'adopted': False}, row) == 'فُتح للمصطلح «القوة القاهرة» نقاش في الساحة'
+    assert G('topicOpenDone', {'adopted': True}, row) == 'رُبط المصطلح «القوة القاهرة» بنقاش موجود في الساحة'
+    _clean_copy(new, ln)
+
+
+def _bulk(**kw):
+    rows = [{'id': 1, 'ar': 'أ', 'en': 'a', 'slug': 'a', 'outcome': 'created', 'message': 'سيُفتح نقاش جديد في الساحة', 'topic_id': None},
+            {'id': 2, 'ar': 'ب', 'en': 'b', 'slug': 'b', 'outcome': 'linked_existing', 'message': 'يوجد نقاش بنفس العنوان، سيُربط به', 'topic_id': None},
+            {'id': 3, 'ar': 'ج', 'en': 'c', 'slug': 'c', 'outcome': 'error', 'message': 'يوجد نقاش بنفس العنوان لكنه غير منشور في الساحة', 'topic_id': None},
+            {'id': 4, 'ar': 'د', 'en': 'd', 'slug': 'd', 'outcome': 'created', 'message': '', 'topic_id': None}]
+    r = {'ok': True, 'applied': False, 'dry_run': True, 'total': 4, 'batches': 1, 'counts': {}, 'results': rows}
+    r.update(kw)
+    return r
+
+
+@needs_node
+def test_bulk_view_groups_new_existing_and_problems_and_the_sheet_counts_them():
+    v = G('bulkView', _bulk())
+    assert (v['create'], v['link'], v['problem'], v['applied'], v['stopped']) == (2, 1, 1, False, False)
+    assert [r['kind'] for r in v['rows']] == ['create', 'link', 'problem', 'create'] and v['rows'][2]['message'].startswith('يوجد نقاش بنفس العنوان لكنه')
+    assert G('bulkView', None) is None and G('bulkView', {}) is None
+    assert G('bulkSummary', v) == 'نقاشان جديدان، ربط واحد بنقاش موجود، مصطلح واحد بمشكلة'
+    c = G('bulkCheck', v)
+    assert c['ok'] and c['goLabel'] == 'افتح النقاشات' and {'label': 'نقاش جديد يُفتح', 'to': '٢'} in c['lines'] and {'label': 'تُترك لمشكلة', 'to': '١'} in c['lines']
+    assert any('المصطلحات التي بها مشكلة تُترك' in w for w in c['warns']) and not any('دفعات' in w for w in c['warns'])
+    many = G('bulkCheck', G('bulkView', _bulk(batches=3)))
+    assert any('٣ دفعات متتابعة' in w for w in many['warns'])
+    only_bad = G('bulkView', _bulk(results=[_bulk()['results'][2]]))
+    assert G('bulkCheck', only_bad)['ok'] is False and G('bulkCheck', G('bulkView', _bulk(results=[])))['ok'] is False
+    assert G('bulkDone', G('bulkView', _bulk(applied=True))).startswith('اكتملت العملية: نقاشان جديدان')
+    _clean_copy(c, many, G('bulkSummary', v))
+
+
+@needs_node
+def test_a_stopped_bulk_says_what_was_done_before_the_stop():
+    part = _bulk(applied=True, stopped=True, remaining=70, error='لم يصل رد. حدّث الصفحة ثم أعد المحاولة.', no_reply=True, results=_bulk()['results'][:2])
+    t = G('bulkStopText', part, 502)
+    assert t.startswith('لم يصل رد.') and 'رُبط مصطلحان قبل التوقف، وبقي ٧٠' in t
+    none = _bulk(applied=True, stopped=True, remaining=3, error='فئة غير معروفة', results=[])
+    assert G('bulkStopText', none, 422).endswith('لم يُربط شيء.')
+    assert G('bulkStopText', {'error': 'x'}, 409) == 'تغيّرت حالة هذا المصطلح، حدّث الصفحة وحاول مرة أخرى'

@@ -13,6 +13,11 @@ Run:  cd backend && python3 -B -m pytest -q -p no:cacheprovider tests/test_gloss
 الجولة الثانية (قرار المؤسس ٢٠٢٦-١١-٠١): ١٢. الحالات مسودة ⇒ تحت التأكيد ⇒ مؤكّد والشرط الافتراضي مغلق · ١٣. الاستمارة العامة (فخّ الحقل الخفي · الحدّ · التحقق ·
   ٤٠٤ لمصطلح غير منشور · مراجعة معلّقة واحدة لكل بريد ومصطلح · لا IP ولا متصفح) · ١٤. صندوق «مراجعات القاموس»: اعتمد (يختم) · اعتمد اقتراحًا · ارفض ·
   تحذير تغيّر المصطلح · ١٥. التنبيه: لا سطر تليجرام، وصف واحد في جرس الإشعارات.
+الجولة الثالثة (قرار المؤسس ٢٠٢٦-١١-٠١، «نفتحه للنقاش ونلمّ الاعتراضات»): ١٦. `glossary.expert_reviews_enabled` الافتراضي مغلق: الاستمارة العامة ٤٠٤ والصندوق ٤٠٤ والجرس بلا صف
+  والفيد بلا حقول مراجعة، والإعداد لا يُكتب من `PUT /api/settings` العام · ١٧. نقاش «الساحة» لكل مصطلح عبر مسار البذر بلا نموذج ذكاء: معاينة بلا كتابة ·
+  فتح يربط المعرّف · عنوان مكرر يربط الموجود لو علنيًّا فقط · ضياع الرد ثم إعادة المحاولة بلا تكرار · ٤٢٢ يمرّ · ٤٠٩ مربوط/مسودة · الدفعات ≤٥٠ بالتتابع.
+
+كل اختبارات الجولتين ١ و٢ تعمل والإعداد **مفعّل** (الحارس `ctx` يفعّله، وهو شكل الجولة ٢ حرفيًّا)؛ واختبارات الجولة ٣ تطفئه بـ`reviews(ctx, False)` وهو الافتراضي الحقيقي.
 """
 import copy
 import datetime
@@ -88,16 +93,30 @@ def ctx():
         db.create_all()
         GlossaryTerm.query.delete()
         ExpertReviewSubmission.query.delete()
-        Setting.query.filter_by(key=gr.SETTING_KEY).delete()
+        Setting.query.filter(Setting.key.in_([gr.SETTING_KEY, gr.EXPERT_KEY])).delete(synchronize_session=False)
         AuditLog.query.filter(AuditLog.action.like('glossary%')).delete(synchronize_session=False)
+        db.session.add(Setting(key=gr.EXPERT_KEY, value='1'))       # شكل الجولة ٢؛ الافتراضي الحقيقي (مغلق) تختبره الجولة ٣ بـ reviews(ctx, False)
         db.session.commit()
         heads = {r: _bearer(_mkuser('glos-%s@x.test' % r, r)) for r in NON_ADMIN_ROLES}
         heads['admin'] = _bearer(_mkuser('glos-admin@x.test', 'admin'))
         yield {'heads': heads, 'client': flask_app.test_client()}
         GlossaryTerm.query.delete()
         ExpertReviewSubmission.query.delete()
-        Setting.query.filter_by(key=gr.SETTING_KEY).delete()
+        Setting.query.filter(Setting.key.in_([gr.SETTING_KEY, gr.EXPERT_KEY])).delete(synchronize_session=False)
         db.session.commit()
+
+
+def reviews(ctx, on):
+    """يضبط `glossary.expert_reviews_enabled` مباشرة في المخزن (الحارس `ctx` يبدأ به مفعّلًا)."""
+    if on:
+        s = Setting.query.get(gr.EXPERT_KEY)
+        if s is None:
+            db.session.add(Setting(key=gr.EXPERT_KEY, value='1'))
+        else:
+            s.value = '1'
+    else:
+        Setting.query.filter_by(key=gr.EXPERT_KEY).delete()
+    db.session.commit()
 
 
 class _Resp(object):
@@ -111,8 +130,19 @@ class _Resp(object):
         return self._p
 
 
+_TITLE_MARKS = re.compile('[\u0640\u064b-\u0652\u0670\u06d6-\u06ed]')
+_FOLD = str.maketrans({'أ': 'ا', 'إ': 'ا', 'آ': 'ا', 'ٱ': 'ا', 'ى': 'ي', 'ة': 'ه', 'ؤ': 'و', 'ئ': 'ي'})
+
+
+def norm_title(t):
+    """نسخة مصغّرة من normalize_topic_title في المنصة (مسار البذر): بلا تشكيل ولا ترقيم، وألف/ياء/تاء مربوطة موحَّدة."""
+    s = _TITLE_MARKS.sub('', str(t or '').strip()).translate(_FOLD)
+    return re.sub(r'\s+', ' ', re.sub(r'[^\w\s]', ' ', s)).strip().casefold()
+
+
 class FakeBridge(object):
-    """جسر المنصة بديل في الذاكرة: قراءة `/api/bridge/topics` فقط (المصطلح لا يُنشئ نقاشًا)."""
+    """جسر المنصة بديل في الذاكرة: قراءة `/api/bridge/topics` + مسار البذر `/api/bridge/topics/seed` (بلا نموذج ذكاء) كما في المنصة:
+    معاينة افتراضية · تحقق كامل قبل أي كتابة · فريد بالعنوان المطبَّع (ضد كل الحالات) · `duplicate_in_batch` · تحدٍّ من `segment` مجهول بـ٤٢٢."""
 
     def __init__(self):
         self.topics = [
@@ -123,7 +153,56 @@ class FakeBridge(object):
         ]
         self.seen = []
         self.blocked = []
+        self.seeds = []             # كل نداء بذر: {'items', 'apply'}
         self.mode = 'ok'            # ok | lost | down403 | junk
+        self.seed_mode = 'ok'       # ok | lost_after_apply (يُنشأ ثم يضيع الرد) | lost_before | r422 | r403 | r404 | junk | fail_on_call_N
+        self.fail_call = None       # رقم نداء البذر (١..) الذي يفشل بـ٥٠٤ قبل أي كتابة
+        self.n = 0
+
+    def _seed(self, body):
+        self.n += 1
+        self.seeds.append({'items': copy.deepcopy(body.get('items')), 'apply': body.get('apply')})
+        if self.fail_call == self.n or self.seed_mode == 'lost_before':
+            return _Resp(504, {'detail': 'timeout'})
+        if self.seed_mode == 'r403':
+            return _Resp(403, {'detail': 'no'})
+        if self.seed_mode == 'r404':
+            return _Resp(404, {'detail': 'Not Found'})
+        if self.seed_mode == 'r422':
+            return _Resp(422, {'detail': {'error': 'unknown_segment', 'message': 'فئة غير معروفة — اختر واحدة من الفئات المعتمدة.'}})
+        if self.seed_mode == 'r422_list':
+            return _Resp(422, {'detail': [{'loc': ['body'], 'msg': 'bad'}]})
+        if self.seed_mode == 'junk':
+            return _Resp(200, {'oops': 1})
+        items = body.get('items') or []
+        if not items or len(items) > 50:
+            return _Resp(422, {'detail': [{'msg': 'items'}]})
+        for it in items:
+            if not (3 <= len(it.get('title', '')) <= 200) or not it.get('question') or it.get('segment'):
+                return _Resp(422, {'detail': {'error': 'invalid', 'message': 'بيانات غير صالحة'}})
+        apply = bool(body.get('apply'))
+        known = {norm_title(t['title']): t['id'] for t in self.topics}
+        origin = {k: 'existing' for k in known}
+        created, skipped = [], []
+        for it in items:
+            title = it['title'].strip()
+            k = norm_title(title)
+            if k in known:
+                skipped.append({'title': title, 'normalized_title': k, 'existing_id': known[k] or None,
+                                'reason': 'duplicate_title' if origin[k] == 'existing' else 'duplicate_in_batch'})
+                continue
+            nid = 'seed%04d-0000-4000-8000-%012d' % (len(self.topics) + 1, len(self.topics) + 1)
+            if apply:
+                self.topics.append({'id': nid, 'title': title, 'status': 'open', 'question': it['question'], 'body': it.get('body'), 'tags': it.get('tags')})
+            known[k] = nid if apply else ''
+            origin[k] = 'batch'
+            created.append({'id': nid if apply else None, 'title': title, 'status': 'open', 'tags': it.get('tags')})
+        reply = {'ok': True, 'applied': apply, 'dry_run': not apply, 'requested': len(items), 'created_count': len(created),
+                 'skipped_count': len(skipped), 'created': created, 'skipped': skipped}
+        if apply and self.seed_mode == 'lost_after_apply':
+            self.seed_mode = 'ok'
+            return _Resp(504, {'detail': 'timeout'})              # كُتب النقاش ثم ضاع الرد
+        return _Resp(200, reply)
 
     def __call__(self, method, url, params=None, json=None, headers=None, timeout=None, data=None, files=None):
         self.seen.append({'method': method.upper(), 'url': url, 'json': copy.deepcopy(json), 'headers': dict(headers or {})})
@@ -131,6 +210,8 @@ class FakeBridge(object):
             self.blocked.append(url)
             raise RuntimeError('طلب حقيقي ممنوع: ' + url)
         path = url[len(PLATFORM):]
+        if path == '/api/bridge/topics/seed' and method.upper() == 'POST':
+            return self._seed(json or {})
         if path == '/api/bridge/topics' and method.upper() == 'GET':
             if self.mode == 'lost':
                 return _Resp(504, {'detail': 'timeout'})
@@ -187,6 +268,7 @@ ROUTES = [
     ('POST', '/1/review'), ('POST', '/1/unreview'), ('POST', '/seed/preview'), ('POST', '/seed/import'), ('GET', '/topics'),
     ('POST', '/1/attach-topic'), ('POST', '/1/detach-topic'), ('GET', '/settings'), ('PUT', '/settings'),
     ('GET', '/reviews'), ('POST', '/reviews/1/approve'), ('POST', '/reviews/1/reject'),
+    ('POST', '/1/saha-topic/preview'), ('POST', '/1/saha-topic/open'), ('POST', '/saha-topics/bulk/preview'), ('POST', '/saha-topics/bulk/open'),
 ]
 
 
@@ -218,7 +300,8 @@ def test_closed_flag_is_404_no_side_effect_no_call(ctx, plat, monkeypatch):
 
 WRITES = [('POST', ''), ('PUT', '/{id}'), ('DELETE', '/{id}'), ('POST', '/{id}/publish'), ('POST', '/{id}/unpublish'),
           ('POST', '/{id}/review'), ('POST', '/{id}/unreview'), ('POST', '/seed/import'), ('POST', '/{id}/attach-topic'),
-          ('POST', '/{id}/detach-topic'), ('PUT', '/settings'), ('POST', '/reviews/{id}/approve'), ('POST', '/reviews/{id}/reject')]
+          ('POST', '/{id}/detach-topic'), ('PUT', '/settings'), ('POST', '/reviews/{id}/approve'), ('POST', '/reviews/{id}/reject'),
+          ('POST', '/{id}/saha-topic/open'), ('POST', '/saha-topics/bulk/open')]
 
 
 @pytest.mark.parametrize('bad', [{}, {'confirmed': False}, {'confirmed': 'true'}, {'confirmed': 1}, {'confirmed': None}])
@@ -1361,3 +1444,493 @@ def test_a_submission_for_the_reserved_ref_is_invalid(pubctx):
 def test_ar_count_matches_the_dashboard_plural_helper():
     f = ['مراجعة واحدة', 'مراجعتان', 'مراجعات', 'مراجعةً']
     assert [gr.ar_count(n, f) for n in (1, 2, 3, 10, 11, 25)] == ['مراجعة واحدة', 'مراجعتان', '٣ مراجعات', '١٠ مراجعات', '١١ مراجعةً', '٢٥ مراجعةً']
+
+
+# ——————————————————————————————————————————————— ١٦) الجولة ٣: المراجعات مطفأة (الافتراضي) — الإعداد `glossary.expert_reviews_enabled`
+
+def test_expert_reviews_setting_default_off_toggle_confirmed_audited_and_admin_only(ctx, plat):
+    reviews(ctx, False)
+    assert Setting.query.get(gr.EXPERT_KEY) is None
+    assert call(ctx, 'GET', '/settings').get_json()['expert_reviews_enabled'] is False
+    assert call(ctx, 'PUT', '/settings', {'expert_reviews_enabled': True}, confirmed=False).status_code == 400
+    for bad in ('yes', 1, None, {}):
+        assert call(ctx, 'PUT', '/settings', {'expert_reviews_enabled': bad}).status_code == 400
+    assert call(ctx, 'PUT', '/settings', {'unrelated': True}).status_code == 400
+    for role in NON_ADMIN_ROLES:
+        assert call(ctx, 'PUT', '/settings', {'expert_reviews_enabled': True}, role=role).status_code == 403
+    assert Setting.query.get(gr.EXPERT_KEY) is None and audits() == []
+    r = call(ctx, 'PUT', '/settings', {'expert_reviews_enabled': True})
+    assert r.status_code == 200 and r.get_json()['expert_reviews_enabled'] is True and Setting.query.get(gr.EXPERT_KEY).value == '1'
+    assert [a[0] for a in audits('glossary.setting')] == ['glossary.setting'] and audits('glossary.setting')[0][2] == {'expert_reviews_enabled': True}
+    call(ctx, 'PUT', '/settings', {'expert_reviews_enabled': True})                        # لا تغيير ⇒ لا سطر جديد
+    assert len(audits('glossary.setting')) == 1
+    call(ctx, 'PUT', '/settings', {'expert_reviews_enabled': False})
+    assert Setting.query.get(gr.EXPERT_KEY).value == '0' and call(ctx, 'GET', '/settings').get_json()['expert_reviews_enabled'] is False
+
+
+def test_expert_reviews_setting_garbage_in_store_means_off(ctx, plat):
+    Setting.query.filter_by(key=gr.EXPERT_KEY).delete()
+    db.session.add(Setting(key=gr.EXPERT_KEY, value='maybe'))
+    db.session.commit()
+    assert call(ctx, 'GET', '/settings').get_json()['expert_reviews_enabled'] is False
+    assert ctx['client'].post(PUB, json=_sub()).status_code == 404
+
+
+def test_generic_settings_route_cannot_write_the_expert_reviews_setting(ctx, plat):
+    reviews(ctx, False)
+    r = ctx['client'].put('/api/settings', headers=ctx['heads']['admin'], json={gr.EXPERT_KEY: '1', 'other_key_x': 'v'})
+    assert r.status_code == 400 and Setting.query.get(gr.EXPERT_KEY) is None and Setting.query.get('other_key_x') is None
+    r = ctx['client'].put('/api/settings', headers=ctx['heads']['admin'], json={gr.SETTING_KEY: '1'})
+    assert r.status_code == 400 and Setting.query.get(gr.SETTING_KEY) is None
+
+
+def test_off_public_endpoint_is_404_before_reading_the_body_and_stores_nothing(pubctx):
+    reviews(pubctx, False)
+    _term(status='published')
+    for body in (_sub(), {}, {'website': 'bot'}):
+        r = post_pub(pubctx, body)
+        assert r.status_code == 404 and r.get_json() == {'error': 'not_found'} and r.headers['Cache-Control'] == 'no-store'
+    r = pubctx['client'].post(PUB, data='{not json', content_type='application/json', headers={'X-Forwarded-For': '203.0.113.7'})
+    assert r.status_code == 404 and r.get_json() == {'error': 'not_found'}                   # الجسم المكسور لا يُقرأ أصلًا
+    assert ExpertReviewSubmission.query.count() == 0 and not appmod._RATE_BUCKETS            # لا تخزين ولا حصة تُستهلك
+    reviews(pubctx, True)
+    assert post_pub(pubctx, _sub()).status_code == 201 and ExpertReviewSubmission.query.count() == 1
+
+
+def test_off_review_box_routes_are_404_and_leave_pending_rows_alone(pubctx):
+    _term(status='published')
+    assert post_pub(pubctx, _sub()).status_code == 201
+    row = ExpertReviewSubmission.query.first()
+    reviews(pubctx, False)
+    assert call(pubctx, 'GET', '/reviews').status_code == 404
+    for tail in ('approve', 'reject'):
+        for confirmed in (True, False):
+            r = call(pubctx, 'POST', '/reviews/%d/%s' % (row.id, tail), confirmed=confirmed)
+            assert r.status_code == 404 and r.headers['Cache-Control'] == 'no-store'
+    assert ExpertReviewSubmission.query.get(row.id).status == 'pending' and audits('glossary.review_') == []
+    reviews(pubctx, True)
+    assert call(pubctx, 'GET', '/reviews').status_code == 200
+
+
+def test_off_counts_hide_the_pending_reviews_and_ask_for_the_reviews_flag(pubctx):
+    _term(status='published')
+    assert post_pub(pubctx, _sub()).status_code == 201
+    on = call(pubctx, 'GET', '').get_json()
+    assert on['reviews_enabled'] is True and on['counts']['reviews_pending'] == 1
+    reviews(pubctx, False)
+    off = call(pubctx, 'GET', '').get_json()
+    assert off['reviews_enabled'] is False and off['counts']['reviews_pending'] == 0
+    assert call(pubctx, 'GET', '/%d' % GlossaryTerm.query.first().id).get_json()['reviews_enabled'] is False
+
+
+def test_off_bell_has_no_row_even_with_pending_reviews(pubctx, monkeypatch):
+    monkeypatch.setattr(appmod, '_bridge_get', lambda *a, **k: {})
+    _term(status='published')
+    assert post_pub(pubctx, _sub()).status_code == 201
+    c, h = pubctx['client'], pubctx['heads']['admin']
+    assert [i for i in c.get('/api/notifications', headers=h).get_json()['items'] if i['kind'] == 'glossary_review']
+    reviews(pubctx, False)
+    assert not [i for i in c.get('/api/notifications', headers=h).get_json()['items'] if i['kind'] == 'glossary_review']
+
+
+FEED_OFF_KEYS = {'id', 'slug', 'ar', 'en', 'fr', 'area', 'area_label', 'definition_ar', 'example_en', 'example_ar', 'false_friend_note_ar',
+                 'countries_note_ar', 'related', 'saha_topic_id', 'published_at', 'updated_at'}
+FEED_ON_KEYS = FEED_OFF_KEYS | {'review_state', 'reviewed_by_name', 'reviewed_by_role', 'reviewed_at'}
+
+
+def test_off_feed_has_no_review_keys_at_all_and_shows_the_countries_note(ctx, plat):
+    reviews(ctx, False)
+    a = _term('contract-law', 'قانون العقود', 'contract law', status='published', reviewed=True, countries_note_ar='يختلف بين الدول', saha_topic_id=TID)
+    a.reviewer_name_public = True
+    _term('unrev', 'غير مراجَع', 'unrev', status='published', countries_note_ar='ملاحظة دول')
+    _term('draft-one', 'مسودة', 'draft one', countries_note_ar='لا تظهر')
+    db.session.commit()
+    r = ctx['client'].get('/api/content/glossary')
+    j = r.get_json()
+    assert [t['slug'] for t in j['terms']] == ['contract-law', 'unrev']
+    for t in j['terms']:
+        assert set(t) == FEED_OFF_KEYS, set(t) ^ FEED_OFF_KEYS
+    body = r.get_data(as_text=True)
+    for gone in ('review_state', 'reviewed_by', 'reviewed_at', 'هبة الجندي', 'محامية'):
+        assert gone not in body, gone
+    assert j['terms'][0]['countries_note_ar'] == 'يختلف بين الدول' and j['terms'][1]['countries_note_ar'] == 'ملاحظة دول'
+    assert j['terms'][0]['saha_topic_id'] == TID and 'لا تظهر' not in body
+
+
+def test_on_feed_is_exactly_the_round_two_shape(ctx, plat):
+    a = _term('contract-law', 'قانون العقود', 'contract law', status='published', reviewed=True, countries_note_ar='يختلف')
+    a.reviewer_name_public = True
+    _term('unrev', 'غير مراجَع', 'unrev', status='published', countries_note_ar='ملاحظة دول')
+    db.session.commit()
+    t1, t2 = ctx['client'].get('/api/content/glossary').get_json()['terms']
+    assert set(t1) == FEED_ON_KEYS and set(t2) == FEED_ON_KEYS
+    assert t1['review_state'] == 'confirmed' and t1['reviewed_by_name'] == 'أ. هبة الجندي' and t1['countries_note_ar'] == 'يختلف'
+    assert t2['review_state'] == 'under_review' and t2['countries_note_ar'] is None and t2['reviewed_by_name'] is None
+
+
+def test_off_the_review_requirement_is_ignored_so_publishing_never_needs_a_stamp(ctx, plat):
+    set_require(ctx, True)                                                                  # مخزَّن وهو مفعّل
+    assert call(ctx, 'GET', '/settings').get_json()['require_review'] is True
+    reviews(ctx, False)
+    assert call(ctx, 'GET', '/settings').get_json()['require_review'] is False and call(ctx, 'GET', '').get_json()['require_review'] is False
+    t = _term()
+    r = call(ctx, 'POST', '/%d/publish' % t.id)
+    assert r.status_code == 200 and fresh(t.id).status == 'under_review'
+    assert plat.pushes == ['glossary:%d' % t.id]
+
+
+def test_off_the_internal_stamp_still_works_and_never_reaches_the_feed(ctx, plat):
+    reviews(ctx, False)
+    t = _term(status='published')
+    r = call(ctx, 'POST', '/%d/review' % t.id, {'reviewer_name': 'سارة أحمد', 'reviewer_role': 'محامية', 'reviewer_name_public': True})
+    assert r.status_code == 200 and fresh(t.id).reviewed_by_name == 'سارة أحمد' and plat.pushes == ['glossary:%d' % t.id]
+    row = ctx['client'].get('/api/content/glossary').get_json()['terms'][0]
+    assert set(row) == FEED_OFF_KEYS and 'سارة' not in json.dumps(row, ensure_ascii=False)
+
+
+# ——————————————————————————————————————————————— ١٧) الجولة ٣: نقاش «الساحة» لكل مصطلح (مسار البذر بلا نموذج ذكاء)
+
+TITLE_FM = 'القوة القاهرة (force majeure): هل الترجمة والتعريف دقيقان؟'
+Q_DEFAULT = 'هل الترجمة أو التعريف دقيق في نظامك القانوني؟ اكتب اعتراضك أو اقتراحك.'
+
+
+def seeds(plat, apply=None):
+    return [x for x in plat.seeds if apply is None or x['apply'] is apply]
+
+
+def _pub_terms(n, start=0):
+    out = []
+    for i in range(start, start + n):
+        out.append(GlossaryTerm(slug='term-%03d' % i, ar='مصطلح %d' % i, en='term %03d' % i, area='general', definition_ar='تعريف %d.' % i, status='under_review',
+                                source='manual', related='[]', published_at=datetime.datetime(2026, 10, 1), created_at=datetime.datetime(2026, 9, 1),
+                                updated_at=datetime.datetime(2026, 9, 1)))
+    db.session.add_all(out)
+    db.session.commit()
+    return out
+
+
+def test_single_preview_is_a_dry_run_that_writes_nothing_and_sends_the_right_body(ctx, plat):
+    t = _term(status='published', example_en='The Seller is not liable.', example_ar='لا يسأل البائع.')
+    topics_before = copy.deepcopy(plat.topics)
+    r = call(ctx, 'POST', '/%d/saha-topic/preview' % t.id, confirmed=False)               # المعاينة بلا تأكيد
+    assert r.status_code == 200 and r.headers['Cache-Control'] == 'no-store'
+    j = r.get_json()
+    assert j == {'ok': True, 'plan': 'create', 'title': TITLE_FM, 'question': Q_DEFAULT, 'message': 'سيُفتح نقاش جديد في الساحة', 'existing_id': None}
+    assert plat.topics == topics_before and fresh(t.id).saha_topic_id is None
+    assert audits() == [] and plat.pushes == []
+    [call_] = [x for x in plat.seen if x['url'].endswith('/seed')]
+    assert call_['method'] == 'POST' and call_['headers'].get('X-ELP-Metrics-Secret') == SECRET
+    assert set(call_['json']) == {'items', 'apply'} and call_['json']['apply'] is False
+    [item] = call_['json']['items']
+    assert set(item) == {'title', 'question', 'body', 'tags'}                                # لا segment ولا specialty ولا country ولا source_article_slug
+    assert item['tags'] == ['القاموس'] and item['title'] == TITLE_FM and item['question'] == Q_DEFAULT
+    assert item['body'] == ('حدث خارج عن إرادة الطرفين يعفي من التنفيذ.\n\nمثال:\nThe Seller is not liable.\nلا يسأل البائع.\n\n'
+                            'https://elprofessor.net/glossary/force-majeure.html')
+    assert 'source_article_slug' not in json.dumps(call_['json']) and 'confirmed' not in json.dumps(call_['json']) and 'by' not in call_['json']
+    assert not [x for x in plat.seen if x['method'] == 'POST' and not x['url'].endswith('/seed')]     # لا bridge_create_topic أبدًا
+
+
+def test_single_body_without_example_is_definition_and_link_only(ctx, plat):
+    t = _term(status='published', example_en=None, example_ar=None)
+    call(ctx, 'POST', '/%d/saha-topic/preview' % t.id)
+    assert seeds(plat)[0]['items'][0]['body'] == 'حدث خارج عن إرادة الطرفين يعفي من التنفيذ.\n\nhttps://elprofessor.net/glossary/force-majeure.html'
+
+
+def test_single_open_creates_then_links_the_created_id_and_requests_prerender(ctx, plat):
+    t = _term(status='published')
+    r = call(ctx, 'POST', '/%d/saha-topic/open' % t.id)
+    assert r.status_code == 200
+    created = [x for x in plat.topics if x['title'] == TITLE_FM]
+    assert len(created) == 1 and created[0]['status'] == 'open'
+    j = r.get_json()
+    assert j == {'ok': True, 'saha_topic_id': created[0]['id'], 'url': 'https://app.elprofessor.net/?page=saha&topic=' + created[0]['id'], 'adopted': False}
+    assert fresh(t.id).saha_topic_id == created[0]['id']
+    assert [a[:2] for a in audits('glossary.saha_open')] == [('glossary.saha_open', str(t.id))] and audits('glossary.saha_open')[0][2] == {'topic_id': created[0]['id'], 'adopted': False}
+    assert plat.pushes == ['glossary:%d' % t.id]
+    assert [x['apply'] for x in plat.seeds] == [True]                                        # نداء واحد، بلا معاينة سابقة مخفية
+    assert ctx['client'].get('/api/content/glossary').get_json()['terms'][0]['saha_topic_id'] == created[0]['id']
+
+
+def test_single_open_uses_the_edited_title_and_question(ctx, plat):
+    t = _term(status='published')
+    r = call(ctx, 'POST', '/%d/saha-topic/open' % t.id, {'title': '  عنوان معدّل  ', 'question': ' سؤال معدّل؟ ', 'ar': 'x', 'saha_topic_id': TID})
+    assert r.status_code == 200
+    assert seeds(plat)[0]['items'][0]['title'] == 'عنوان معدّل' and seeds(plat)[0]['items'][0]['question'] == 'سؤال معدّل؟'
+    assert fresh(t.id).ar == 'القوة القاهرة' and fresh(t.id).saha_topic_id == r.get_json()['saha_topic_id'] != TID
+
+
+@pytest.mark.parametrize('body', [{'title': 'ab'}, {'title': 'x' * 201}, {'title': 5}, {'title': '   '}, {'question': ''}, {'question': 'q' * 5001}, {'question': ['a']}])
+def test_single_bad_title_or_question_is_400_without_any_call(ctx, plat, body):
+    t = _term(status='published')
+    for tail in ('preview', 'open'):
+        r = call(ctx, 'POST', '/%d/saha-topic/%s' % (t.id, tail), body)
+        assert r.status_code == 400 and 'النقاش' in r.get_json()['error']
+    assert plat.seen == [] and fresh(t.id).saha_topic_id is None and audits() == []
+
+
+def test_single_existing_live_title_is_linked_not_duplicated(ctx, plat):
+    t = _term(status='published')
+    plat.topics.append({'id': 'exist001-0000-4000-8000-000000000001', 'title': 'القوة القاهرة (force majeure) هل الترجمة والتعريف دقيقان', 'status': 'open'})
+    n = len(plat.topics)
+    pv = call(ctx, 'POST', '/%d/saha-topic/preview' % t.id).get_json()
+    assert pv['plan'] == 'link_existing' and pv['existing_id'] == 'exist001-0000-4000-8000-000000000001' and pv['message'] == 'يوجد نقاش بنفس العنوان، سيُربط به'
+    assert fresh(t.id).saha_topic_id is None
+    j = call(ctx, 'POST', '/%d/saha-topic/open' % t.id).get_json()
+    assert j['adopted'] is True and j['saha_topic_id'] == 'exist001-0000-4000-8000-000000000001' and len(plat.topics) == n
+    assert fresh(t.id).saha_topic_id == 'exist001-0000-4000-8000-000000000001' and audits('glossary.saha_open')[0][2]['adopted'] is True
+
+
+@pytest.mark.parametrize('status', ['draft', 'rejected', 'archived'])
+def test_single_existing_title_that_is_not_live_is_never_linked(ctx, plat, status):
+    t = _term(status='published')
+    plat.topics.append({'id': 'exist002-0000-4000-8000-000000000002', 'title': TITLE_FM, 'status': status})
+    n = len(plat.topics)
+    for tail in ('preview', 'open'):
+        r = call(ctx, 'POST', '/%d/saha-topic/%s' % (t.id, tail))
+        assert r.status_code == 409 and r.get_json()['error'] == 'يوجد نقاش بنفس العنوان لكنه غير منشور في الساحة'
+    assert fresh(t.id).saha_topic_id is None and len(plat.topics) == n and audits() == [] and plat.pushes == []
+
+
+def test_single_lost_reply_on_apply_links_nothing_and_a_retry_adopts_without_duplicating(ctx, plat):
+    t = _term(status='published')
+    plat.seed_mode = 'lost_after_apply'
+    r = call(ctx, 'POST', '/%d/saha-topic/open' % t.id)
+    assert r.status_code == 502 and r.get_json()['no_reply'] is True and 'ولن يتكرر' in r.get_json()['error']
+    assert fresh(t.id).saha_topic_id is None and plat.pushes == [] and [a[0] for a in audits()] == ['glossary.no_reply']
+    made = [x for x in plat.topics if x['title'] == TITLE_FM]
+    assert len(made) == 1                                                                     # النقاش اتفتح فعلًا والرد ضاع
+    r = call(ctx, 'POST', '/%d/saha-topic/open' % t.id)
+    assert r.status_code == 200 and r.get_json()['adopted'] is True and r.get_json()['saha_topic_id'] == made[0]['id']
+    assert len([x for x in plat.topics if x['title'] == TITLE_FM]) == 1 and fresh(t.id).saha_topic_id == made[0]['id']
+
+
+def test_single_lost_reply_before_anything_was_written(ctx, plat):
+    t = _term(status='published')
+    plat.seed_mode = 'lost_before'
+    r = call(ctx, 'POST', '/%d/saha-topic/open' % t.id)
+    assert r.status_code == 502 and r.get_json()['no_reply'] is True and fresh(t.id).saha_topic_id is None
+    assert not [x for x in plat.topics if x['title'] == TITLE_FM]
+    plat.seed_mode = 'ok'
+    assert call(ctx, 'POST', '/%d/saha-topic/open' % t.id).get_json()['adopted'] is False
+
+
+def test_single_platform_422_passes_its_arabic_message_and_writes_nothing(ctx, plat):
+    t = _term(status='published')
+    plat.seed_mode = 'r422'
+    for tail in ('preview', 'open'):
+        r = call(ctx, 'POST', '/%d/saha-topic/%s' % (t.id, tail))
+        assert r.status_code == 422 and r.get_json()['error'] == 'فئة غير معروفة — اختر واحدة من الفئات المعتمدة.'
+    plat.seed_mode = 'r422_list'
+    r = call(ctx, 'POST', '/%d/saha-topic/open' % t.id)
+    assert r.status_code == 422 and r.get_json()['error'] == 'المنصة رفضت البيانات المرسلة'
+    assert fresh(t.id).saha_topic_id is None and audits() == [] and plat.pushes == []
+
+
+@pytest.mark.parametrize('mode,msg', [('r403', 'تعذّر الاتصال بالمنصة'), ('r404', 'تعذّر الاتصال بالمنصة'), ('junk', 'تعذّر قراءة رد المنصة')])
+def test_single_platform_refusals_are_502_and_never_link(ctx, plat, mode, msg):
+    t = _term(status='published')
+    plat.seed_mode = mode
+    r = call(ctx, 'POST', '/%d/saha-topic/open' % t.id)
+    assert r.status_code == 502 and r.get_json()['error'] == msg and 'no_reply' not in r.get_json()
+    assert fresh(t.id).saha_topic_id is None and audits() == []
+
+
+def test_single_existing_title_but_topics_list_unreadable_links_nothing(ctx, plat):
+    t = _term(status='published')
+    plat.topics.append({'id': 'exist003-0000-4000-8000-000000000003', 'title': TITLE_FM, 'status': 'open'})
+    plat.mode = 'lost'
+    r = call(ctx, 'POST', '/%d/saha-topic/open' % t.id)
+    assert r.status_code == 502 and fresh(t.id).saha_topic_id is None
+
+
+def test_single_already_linked_is_409_and_makes_no_call(ctx, plat):
+    t = _term(status='published', saha_topic_id=TID)
+    for tail in ('preview', 'open'):
+        r = call(ctx, 'POST', '/%d/saha-topic/%s' % (t.id, tail))
+        assert r.status_code == 409 and r.get_json()['error'] == 'لهذا المصطلح نقاش مرتبط بالفعل'
+    assert plat.seen == [] and fresh(t.id).saha_topic_id == TID
+
+
+def test_single_draft_is_refused_and_missing_is_404_without_a_call(ctx, plat):
+    t = _term()
+    for tail in ('preview', 'open'):
+        r = call(ctx, 'POST', '/%d/saha-topic/%s' % (t.id, tail))
+        assert r.status_code == 409 and r.get_json()['error'] == 'انشر المصطلح أولًا ثم افتح نقاشه'
+        assert call(ctx, 'POST', '/9999/saha-topic/%s' % tail).status_code == 404
+    assert plat.seen == [] and fresh(t.id).saha_topic_id is None
+
+
+def test_single_prerender_failure_never_fails_the_link(ctx, plat, monkeypatch):
+    t = _term(status='published')
+    monkeypatch.setattr(appmod, '_prerender_push_async', lambda reason='': (_ for _ in ()).throw(RuntimeError('boom')))
+    r = call(ctx, 'POST', '/%d/saha-topic/open' % t.id)
+    assert r.status_code == 200 and fresh(t.id).saha_topic_id == r.get_json()['saha_topic_id']
+
+
+def test_single_after_open_the_term_can_be_detached_and_attach_existing_still_works(ctx, plat):
+    t = _term(status='published')
+    call(ctx, 'POST', '/%d/saha-topic/open' % t.id)
+    assert call(ctx, 'POST', '/%d/detach-topic' % t.id).status_code == 200 and fresh(t.id).saha_topic_id is None
+    assert call(ctx, 'POST', '/%d/attach-topic' % t.id, {'saha_topic_id': TID}).status_code == 200 and fresh(t.id).saha_topic_id == TID
+
+
+def test_single_works_with_expert_reviews_off_and_on_alike(ctx, plat):
+    for on in (False, True):
+        reviews(ctx, on)
+        t = _term('t-%s' % on, 'مصطلح %s' % on, 'term %s' % on, status='published')
+        assert call(ctx, 'POST', '/%d/saha-topic/open' % t.id).status_code == 200
+
+
+# ——— الدفعة الكاملة
+
+def test_bulk_preview_lists_new_existing_and_problems_and_writes_nothing(ctx, plat):
+    a, b, c = _pub_terms(3)
+    _term('draft-x', 'مسودة', 'draft x')                                                    # مسودة ⇒ خارج الدفعة
+    _term('linked-x', 'مربوط', 'linked x', status='published', saha_topic_id=TID)             # مربوط ⇒ خارج الدفعة
+    plat.topics.append({'id': 'exist004-0000-4000-8000-000000000004', 'title': 'مصطلح 1 (term 001): هل الترجمة والتعريف دقيقان؟', 'status': 'published'})
+    plat.topics.append({'id': 'exist005-0000-4000-8000-000000000005', 'title': 'مصطلح 2 (term 002): هل الترجمة والتعريف دقيقان؟', 'status': 'rejected'})
+    n = len(plat.topics)
+    r = call(ctx, 'POST', '/saha-topics/bulk/preview', confirmed=False)
+    assert r.status_code == 200 and r.headers['Cache-Control'] == 'no-store'
+    j = r.get_json()
+    assert j['dry_run'] is True and j['applied'] is False and j['total'] == 3 and j['batches'] == 1
+    by = {x['slug']: x for x in j['results']}
+    assert set(by) == {'term-000', 'term-001', 'term-002'}
+    assert by['term-000']['outcome'] == 'created' and by['term-000']['topic_id'] is None
+    assert by['term-001']['outcome'] == 'linked_existing' and by['term-001']['existing_id'] == 'exist004-0000-4000-8000-000000000004'
+    assert by['term-002']['outcome'] == 'error' and by['term-002']['message'] == 'يوجد نقاش بنفس العنوان لكنه غير منشور في الساحة'
+    assert j['counts'] == {'created': 1, 'linked_existing': 1, 'error': 1}
+    assert len(plat.topics) == n and all(x['apply'] is False for x in plat.seeds) and audits() == [] and plat.pushes == []
+    assert GlossaryTerm.query.filter(GlossaryTerm.saha_topic_id.isnot(None)).count() == 1
+
+
+def test_bulk_open_links_each_term_and_reports_per_term(ctx, plat):
+    _pub_terms(3)
+    plat.topics.append({'id': 'exist004-0000-4000-8000-000000000004', 'title': 'مصطلح 1 (term 001): هل الترجمة والتعريف دقيقان؟', 'status': 'open'})
+    r = call(ctx, 'POST', '/saha-topics/bulk/open')
+    assert r.status_code == 200
+    j = r.get_json()
+    assert j['applied'] is True and j['counts'] == {'created': 2, 'linked_existing': 1, 'error': 0} and j['batches'] == 1
+    by = {x['slug']: x for x in j['results']}
+    assert by['term-001']['outcome'] == 'linked_existing' and by['term-001']['topic_id'] == 'exist004-0000-4000-8000-000000000004'
+    for slug in ('term-000', 'term-002'):
+        topic = [x for x in plat.topics if x['title'].startswith('مصطلح %d ' % int(slug[-1]))][0]
+        assert by[slug]['outcome'] == 'created' and by[slug]['topic_id'] == topic['id'] and GlossaryTerm.query.filter_by(slug=slug).first().saha_topic_id == topic['id']
+    assert GlossaryTerm.query.filter(GlossaryTerm.saha_topic_id.is_(None)).count() == 0
+    assert len(audits('glossary.saha_open')) == 3 and audits('glossary.saha_bulk')[0][2]['created'] == 2
+    assert sorted(plat.pushes) == sorted('glossary:%d' % t.id for t in GlossaryTerm.query.all())
+    item = seeds(plat)[0]['items'][0]
+    assert set(item) == {'title', 'question', 'body', 'tags'} and item['tags'] == ['القاموس']
+    assert call(ctx, 'POST', '/saha-topics/bulk/open').status_code == 409                       # لا شيء بقي بلا نقاش
+
+
+def test_bulk_nothing_to_open_is_409_without_a_call(ctx, plat):
+    _term('draft-x', 'مسودة', 'draft x')
+    for tail in ('preview', 'open'):
+        r = call(ctx, 'POST', '/saha-topics/bulk/' + tail)
+        assert r.status_code == 409 and r.get_json()['error'] == 'لا مصطلحات منشورة بلا نقاش'
+    assert plat.seen == []
+
+
+def test_bulk_batches_are_at_most_fifty_and_sequential(ctx, plat):
+    _pub_terms(120)
+    pv = call(ctx, 'POST', '/saha-topics/bulk/preview').get_json()
+    assert pv['batches'] == 3 and pv['counts'] == {'created': 120, 'linked_existing': 0, 'error': 0}
+    assert [len(x['items']) for x in plat.seeds] == [50, 50, 20] and all(x['apply'] is False for x in plat.seeds)
+    plat.seeds.clear()
+    j = call(ctx, 'POST', '/saha-topics/bulk/open').get_json()
+    assert j['batches'] == 3 and j['counts']['created'] == 120 and len(j['results']) == 120
+    assert [len(x['items']) for x in plat.seeds] == [50, 50, 20] and all(x['apply'] is True for x in plat.seeds)
+    assert max(len(x['items']) for x in plat.seeds) <= gr.SEED_CAP == 50
+    assert GlossaryTerm.query.filter(GlossaryTerm.saha_topic_id.is_(None)).count() == 0
+    firsts = [x['items'][0]['title'] for x in plat.seeds]                                      # الدفعات بترتيب الإنجليزي بلا تداخل
+    assert firsts == ['مصطلح 0 (term 000): هل الترجمة والتعريف دقيقان؟', 'مصطلح 50 (term 050): هل الترجمة والتعريف دقيقان؟', 'مصطلح 100 (term 100): هل الترجمة والتعريف دقيقان؟']
+
+
+def test_bulk_stops_at_the_first_failed_batch_and_a_retry_continues_without_duplicates(ctx, plat):
+    _pub_terms(120)
+    plat.fail_call = 2
+    r = call(ctx, 'POST', '/saha-topics/bulk/open')
+    j = r.get_json()
+    assert r.status_code == 502 and j['no_reply'] is True and j['stopped'] is True
+    assert len(j['results']) == 50 and j['done'] == 50 and j['remaining'] == 70
+    assert len(plat.seeds) == 2                                                               # لا نداء ثالثًا بعد الفشل
+    assert GlossaryTerm.query.filter(GlossaryTerm.saha_topic_id.isnot(None)).count() == 50
+    assert len(audits('glossary.saha_open')) == 50 and audits('glossary.saha_bulk') == []
+    plat.fail_call = None
+    plat.seeds.clear()
+    j = call(ctx, 'POST', '/saha-topics/bulk/open').get_json()
+    assert j['total'] == 70 and j['counts']['created'] == 70 and [len(x['items']) for x in plat.seeds] == [50, 20]
+    assert GlossaryTerm.query.filter(GlossaryTerm.saha_topic_id.is_(None)).count() == 0
+    assert len(plat.topics) == 4 + 120 and len({x['title'] for x in plat.topics}) == len(plat.topics)
+
+
+def test_bulk_lost_reply_on_apply_then_retry_links_the_existing_ones(ctx, plat):
+    _pub_terms(3)
+    plat.seed_mode = 'lost_after_apply'
+    r = call(ctx, 'POST', '/saha-topics/bulk/open')
+    j = r.get_json()
+    assert r.status_code == 502 and j['no_reply'] is True and j['results'] == [] and j['remaining'] == 3
+    assert GlossaryTerm.query.filter(GlossaryTerm.saha_topic_id.isnot(None)).count() == 0 and len(plat.topics) == 7
+    j = call(ctx, 'POST', '/saha-topics/bulk/open').get_json()
+    assert j['counts'] == {'created': 0, 'linked_existing': 3, 'error': 0} and len(plat.topics) == 7
+    assert GlossaryTerm.query.filter(GlossaryTerm.saha_topic_id.is_(None)).count() == 0
+
+
+def test_bulk_422_on_the_first_batch_passes_the_message_and_links_nothing(ctx, plat):
+    _pub_terms(2)
+    plat.seed_mode = 'r422'
+    r = call(ctx, 'POST', '/saha-topics/bulk/open')
+    j = r.get_json()
+    assert r.status_code == 422 and j['error'] == 'فئة غير معروفة — اختر واحدة من الفئات المعتمدة.' and j['results'] == [] and j['stopped'] is True
+    assert GlossaryTerm.query.filter(GlossaryTerm.saha_topic_id.isnot(None)).count() == 0 and audits() == []
+    plat.seed_mode = 'r403'
+    r = call(ctx, 'POST', '/saha-topics/bulk/preview')
+    assert r.status_code == 502 and r.get_json()['error'] == 'تعذّر الاتصال بالمنصة'
+
+
+def test_bulk_duplicate_in_batch_is_an_error_for_that_term_and_not_linked(ctx, plat):
+    first = _term('fm-1', 'القوة القاهرة', 'force majeure', status='published')
+    second = _term('fm-2', 'القوة القاهرة', 'force majeure', status='published')              # العربي والإنجليزي نفساهما ⇒ العنوان نفسه
+    pv = call(ctx, 'POST', '/saha-topics/bulk/preview').get_json()
+    assert [x['outcome'] for x in pv['results']] == ['created', 'error']
+    j = call(ctx, 'POST', '/saha-topics/bulk/open').get_json()
+    by = {x['slug']: x for x in j['results']}
+    assert by['fm-1']['outcome'] == 'created' and by['fm-2']['outcome'] == 'error' and 'عنوان مكرر' in by['fm-2']['message']
+    assert fresh(first.id).saha_topic_id and fresh(second.id).saha_topic_id is None
+    assert len([x for x in plat.topics if x['title'] == TITLE_FM]) == 1
+
+
+def test_bulk_title_over_two_hundred_is_a_problem_for_that_term_only(ctx, plat):
+    long_term = _term('long-one', 'ع' * 150, 'e' * 150, status='published')
+    ok = _term('short-one', 'قصير', 'short one', status='published')
+    j = call(ctx, 'POST', '/saha-topics/bulk/open').get_json()
+    by = {x['slug']: x for x in j['results']}
+    assert by['long-one']['outcome'] == 'error' and 'أطول من ٢٠٠' in by['long-one']['message'] and by['short-one']['outcome'] == 'created'
+    assert fresh(long_term.id).saha_topic_id is None and fresh(ok.id).saha_topic_id
+    assert all(len(i['title']) <= 200 for x in plat.seeds for i in x['items'])
+
+
+def test_bulk_skips_a_term_linked_between_preview_and_open(ctx, plat):
+    a, b = _pub_terms(2)
+    call(ctx, 'POST', '/saha-topics/bulk/preview')
+    a.saha_topic_id = TID
+    db.session.commit()
+    j = call(ctx, 'POST', '/saha-topics/bulk/open').get_json()
+    assert [x['slug'] for x in j['results']] == ['term-001'] and fresh(a.id).saha_topic_id == TID
+
+
+def test_bulk_topics_list_failure_stops_and_links_nothing(ctx, plat):
+    _pub_terms(2)
+    plat.topics.append({'id': 'exist006-0000-4000-8000-000000000006', 'title': 'مصطلح 0 (term 000): هل الترجمة والتعريف دقيقان؟', 'status': 'open'})
+    plat.mode = 'down403'
+    r = call(ctx, 'POST', '/saha-topics/bulk/open')
+    assert r.status_code == 502 and r.get_json()['stopped'] is True
+    assert GlossaryTerm.query.filter(GlossaryTerm.saha_topic_id.isnot(None)).count() == 0
+
+
+def test_the_module_has_no_create_topic_call_and_never_forwards_by_or_confirmed():
+    src = open(os.path.join(BACKEND, 'v2_glossary_routes.py'), encoding='utf-8').read()
+    assert "'POST', '/api/bridge/topics'" not in src and 'bridge/topics/%s/publish' not in src
+    assert "'POST', '/api/bridge/topics/seed'" in src and "'source_article_slug'" not in src and "'segment'" not in src
+    assert "json_body={'items': items, 'apply': bool(apply)}" in src
