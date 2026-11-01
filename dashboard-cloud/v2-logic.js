@@ -1321,6 +1321,7 @@
       T('assets', 'المعدات والاشتراكات', 'v2c_assets'),
       T('deals', 'الاتفاقات والرعاة', 'v2c_deals'),
       T('ads', 'عملاء الإعلانات', 'v2c_ads'),
+      T('tools', 'الأدوات', 'v2s_tools'),
       T('settings', 'الإعدادات', 'settings'),
       hiddenTab(T('targets', 'الأهداف', 'targets'))
     ] }

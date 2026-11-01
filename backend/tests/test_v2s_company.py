@@ -1104,7 +1104,7 @@ def test_sections_company_entry_and_old_links():
     co = [s for s in secs if s['key'] == 'company'][0]
     assert [(t['key'], t['label'], t['mod']) for t in co['tabs'] if not t.get('hidden')] == [
         ('invest', 'نظرة', 'investment'), ('partners', 'الشركاء ورأس المال', 'v2c_partners'), ('assets', 'المعدات والاشتراكات', 'v2c_assets'),
-        ('deals', 'الاتفاقات والرعاة', 'v2c_deals'), ('ads', 'عملاء الإعلانات', 'v2c_ads'), ('settings', 'الإعدادات', 'settings')]
+        ('deals', 'الاتفاقات والرعاة', 'v2c_deals'), ('ads', 'عملاء الإعلانات', 'v2c_ads'), ('tools', 'الأدوات', 'v2s_tools'), ('settings', 'الإعدادات', 'settings')]
     tg = [t for t in co['tabs'] if t['key'] == 'targets'][0]
     assert tg['hidden'] is True and tg['st'] == {} and tg['mod'] == 'targets'
     for mod, tab in (('investment', 'invest'), ('targets', 'targets'), ('settings', 'settings'), ('partners', 'targets' if False else None), ('foundation', 'targets')):

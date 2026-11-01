@@ -65,6 +65,8 @@ COPY backend/v2_site_routes.py /app/v2_site_routes.py
 COPY backend/v2_company_routes.py /app/v2_company_routes.py
 COPY backend/v2_roles_routes.py /app/v2_roles_routes.py
 # الجولة الأخيرة · أقسام الداشبورد (كل قسم ملفاته: v2s/<key>.js|css ومساراته v2_<key>_routes.py) — سطران مشتركان لكل الأقسام.
+# «الأدوات / الاستوديو» (docs/v2/tools/SPEC.md): app.py بيستوردها محروسة.
+COPY backend/v2_tools_routes.py /app/v2_tools_routes.py
 
 EXPOSE 8080
 

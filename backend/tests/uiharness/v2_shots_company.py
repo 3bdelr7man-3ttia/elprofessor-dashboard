@@ -166,7 +166,7 @@ def flow(browser, h, pre, vp, mobile):
     page, rec = open_tab(h, browser, vp, mobile, '#s/company/invest', 'invest')
     info = page.evaluate("""() => ({tabs: [...document.querySelectorAll('.v2c-tab')].map(b => b.textContent.trim()), lines: document.querySelectorAll('.co-brain:not(.tg) .co-bl').length,
       cards: [...document.querySelectorAll('.co-card .co-ch h2')].map(e => e.textContent.trim()), txt: document.querySelector('.co').innerText})""")
-    if info['tabs'] != ['نظرة', 'الشركاء ورأس المال', 'المعدات والاشتراكات', 'الاتفاقات والرعاة', 'عملاء الإعلانات', 'الإعدادات']:
+    if info['tabs'] != ['نظرة', 'الشركاء ورأس المال', 'المعدات والاشتراكات', 'الاتفاقات والرعاة', 'عملاء الإعلانات', 'الأدوات', 'الإعدادات']:
         PROBLEMS.append('%s01: التبويبات %r' % (pre, info['tabs']))
     if info['lines'] != 3 or 'غطّاه منذ' not in info['txt'] or '٤٠٠٬٠٠٠ جنيه' not in info['txt'] or '٣٧٥٬٠٠٠ جنيه' not in info['txt'] or 'باقٍ ٢٥٬٠٠٠ جنيه' not in info['txt']:
         PROBLEMS.append('%s01: أرقام اللوحة غير مطابقة للوحة المفاهيم %r' % (pre, info['lines']))
