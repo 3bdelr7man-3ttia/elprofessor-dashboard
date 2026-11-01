@@ -108,7 +108,8 @@ class Harness(object):
             raise RuntimeError('السرّ اللي اتبعت مش سرّ الأداة')
         path = str(url)[len(PLATFORM):]
         if files:      # رفع multipart (كتبنا): الجسم المسجَّل = حقول النموذج + وصف الملف (الاسم · الحجم · أول بايتات)
-            name, content = files['file'][0], files['file'][1]
+            fk = 'file' if 'file' in files else next(iter(files))      # «كتبنا»: الحقل `file` · «الأدوات»: `preview`
+            name, content = files[fk][0], files[fk][1]
             json = dict(data or {}, confirmed=(data or {}).get('confirmed') == 'true', __file__={'name': name, 'size': len(content), 'head': content[:8].decode('latin-1')})
         with self._lock:
             self.platform_calls.append((method, path, dict(params or {}), json))

@@ -29,7 +29,7 @@ NODE = __import__('shutil').which('node')
 needs_node = pytest.mark.skipif(not NODE, reason='needs node')
 PSEUDO_MODS = {'v2files', 'v2disputes', 'v2person',                       # D2: موديولات وهمية يرسمها V2D2 تحت الغلاف الجديد فقط
                'v2m_overview', 'v2m_payouts', 'v2m_receipts', 'v2m_prices', 'v2m_shares', 'v2m_ads', 'v2b_offers', 'v2b_requests',   # D3: يرسمها V2D3
-               'v2s_market_all', 'v2s_market_demand', 'v2s_market_v4', 'v2s_books_ours', 'v2s_saha', 'v2s_diwan',   # كتبنا (books.js) + إدارة السوق v4 (market4.js) +
+               'v2s_market_all', 'v2s_market_demand', 'v2s_market_v4', 'v2s_books_ours', 'v2s_saha', 'v2s_diwan', 'v2s_tools',   # كتبنا (books.js) + إدارة السوق v4 (market4.js) +
                # الجولة النهائية · سوق الخدمات: يرسمها V2S_MARKET
                'v2p_invites', 'v2mk_social', 'v2mk_plan', 'v2r_demand', 'v2r_sunday', 'v2s_brain',
                'v2c_partners', 'v2c_assets', 'v2c_deals', 'v2c_ads'}  # + أقسام الجولة النهائية
@@ -108,7 +108,7 @@ def test_the_tabs_match_the_approved_table():
         'marketing': [['campaigns', 'الحملات', 'marketing'], ['social', 'السوشيال ميديا', 'v2mk_social'], ['plan', 'خطة النشر', 'v2mk_plan']],   # الجولة النهائية: الحملات الجديدة + السوشيال + خطة النشر
         'reports': [['report', 'التقرير', 'analysis'], ['demand', 'ما يسأل عنه الناس', 'v2r_demand'], ['sunday', 'تقرير الأحد', 'v2r_sunday']],     # الجولة النهائية: التقارير
         'brain': [['log', 'القواعد وسجل اليوم', 'v2s_brain'], ['helpers', 'المساعدون', 'ai']],
-        'company': [['invest', 'نظرة', 'investment'], ['partners', 'الشركاء ورأس المال', 'v2c_partners'], ['assets', 'المعدات والاشتراكات', 'v2c_assets'], ['deals', 'الاتفاقات والرعاة', 'v2c_deals'], ['ads', 'عملاء الإعلانات', 'v2c_ads'], ['settings', 'الإعدادات', 'settings'], ['targets', 'الأهداف', 'targets']],
+        'company': [['invest', 'نظرة', 'investment'], ['partners', 'الشركاء ورأس المال', 'v2c_partners'], ['assets', 'المعدات والاشتراكات', 'v2c_assets'], ['deals', 'الاتفاقات والرعاة', 'v2c_deals'], ['ads', 'عملاء الإعلانات', 'v2c_ads'], ['tools', 'الأدوات', 'v2s_tools'], ['settings', 'الإعدادات', 'settings'], ['targets', 'الأهداف', 'targets']],
     }
     assert {k: t for k, t in got} == want
 
