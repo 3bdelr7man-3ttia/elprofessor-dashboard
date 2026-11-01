@@ -6635,8 +6635,8 @@ def get_settings():
 @roles_required('admin')
 def update_settings():
     d = request.json or {}
-    # «القاموس»: شرط المراجعة له مساره المخصّص (ورقة تأكيد + تدقيق) — لا يُكتب من هنا.
-    if 'glossary.require_review' in d:
+    # «القاموس»: شرط المراجعة وتفعيل مراجعات المتخصصين لهما مسار مخصّص (ورقة تأكيد + تدقيق) — لا يُكتبان من هنا.
+    if 'glossary.require_review' in d or 'glossary.expert_reviews_enabled' in d:
         return jsonify({'error': 'هذا الإعداد يُغيَّر من شاشة القاموس وحدها'}), 400
     for k, v in d.items():
         s = Setting.query.get(k)
@@ -8266,8 +8266,9 @@ def notifications():
 
     # 6) مراجعات القاموس التي قدّمها متخصصون من الموقع وتنتظر قرار الأدمن (جدول محلي). صف واحد مجمَّع.
     try:
+        # قرار المؤسس ٢٠٢٦-١١-٠١: مراجعات المتخصصين مطفأة افتراضيًا (`glossary.expert_reviews_enabled`) فلا صف لها في الجرس.
         _gl_pending = ExpertReviewSubmission.query.filter_by(status='pending')
-        _gl_n = _gl_pending.count()
+        _gl_n = _gl_pending.count() if _v2s_glossary.reviews_enabled(Setting) else 0
         if _gl_n:
             _gl_last = _gl_pending.order_by(ExpertReviewSubmission.created_at.desc()).first()
             items.append({

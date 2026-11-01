@@ -11,9 +11,9 @@ Run:  cd backend && EP_SITE_REPO=~/elprofessor-site/.worktrees/glossary python3 
   ٢. prerender طرفي بسطر الأوامر على فيد محلي: مصطلح بمراجِع ونقاش وملاحظة بلاد · مصطلح بلا شيء · قريب غير منشور · أرقام لاتينية في
      example_ar ⇒ هندية · قالب غائب ⇒ تخطٍّ · عيب ⇒ لا تُكتب أي صفحة قاموس والمقالات تُكتب · المقالات حرفيًّا نفسها بالقاموس وبدونه.
   ٣. الدفع والمسح (app.py) مع SFTP بديل: يرفع صفحات القاموس، يمسح اليتيمة بنمط الـslug فقط، لا يمسح بعد جلب/تحقق فاشل أو قالب غائب.
-  ٤. الجولة ٢ (قرار المؤسس 2026-11-01): المصطلح المنشور بلا ختم ظاهر «تحت التأكيد»، و«مؤكّد» بعد الختم (باسم المراجع إن وافق وإلا «راجعه متخصص»)؛
-     نموذج «أنت متخصص؟ راجِع هذا المصطلح» (وجهة حرفية، kind/ref، فخّ الروبوتات، التخصصات الست)، وعلامات الفهرس وأزرار التصفية؛
-     كل قاعدة ومعها عيب يُسقطها، وطرفي بسطر الأوامر للحالات الثلاث.
+  ٤. الجولة ٣ (قرار المؤسس 2026-11-01: «احنا نحط المصطلح ونفتحه للنقاش»): لا شارة «تحت التأكيد» ولا «راجعه» ولا نموذج مراجعة ولا نقطة إرسال ولا علامة
+     حالة في الفهرس ولا أزرار تصفية بالحالة؛ مفاتيح المراجعة في الفيد اختيارية وتُتجاهل، وملاحظة البلاد تظهر متى وُجدت؛ كل غياب ومعه عيب يُسقطه،
+     وطرفي بسطر الأوامر: مصطلح بنقاش · بلا نقاش · فيد بشكل «الجولة ٢» (مفاتيح المراجعة موجودة) لا يغيّر الصفحة.
 """
 import copy
 import json
@@ -60,11 +60,11 @@ LONG = ('هذا نص تجريبي طويل يشرح المبدأ القانون�
 
 
 def term(slug, **kw):
+    """مصطلح بشكل الفيد في الوضع المغلق (glossary.expert_reviews_enabled = off): بلا أي مفتاح مراجعة."""
     t = {'id': 1, 'slug': slug, 'ar': 'المقابل (العوض)', 'en': 'consideration', 'fr': 'contrepartie', 'area': 'contracts',
          'area_label': 'عقود', 'definition_ar': 'شيء ذو قيمة يقدّمه كل طرف للآخر ليصبح الوعد ملزمًا.',
          'example_en': 'The fee is USD 50,000.', 'example_ar': 'الرسم 50,000 دولار بنسبة 0.5% سنويًا.',
-         'false_friend_note_ar': 'لا تترجمها «الاعتبار».', 'countries_note_ar': None, 'related': [], 'review_state': 'under_review',
-         'reviewed_by_name': None, 'reviewed_by_role': None, 'reviewed_at': None, 'saha_topic_id': None,
+         'false_friend_note_ar': 'لا تترجمها «الاعتبار».', 'countries_note_ar': None, 'related': [], 'saha_topic_id': None,
          'published_at': '2026-11-01T10:05:00', 'updated_at': '2026-11-01T10:05:00'}
     t.update(kw)
     return t
@@ -74,20 +74,21 @@ def feed_of(*terms, areas=AREAS):
     return {'source': 'dashboard', 'areas': areas, 'terms': list(terms)}
 
 
-FULL = term('consideration', review_state='confirmed', reviewed_by_name='أ. هبة الجندي', reviewed_by_role='محامية', reviewed_at='2026-11-01T10:00:00',
-            saha_topic_id=TID, countries_note_ar='يُقال «العوض» في مصر و«المقابل» في الأردن.',
+# مصطلح بنقاش وملاحظة بلاد وقريب منشور وآخر غير منشور
+FULL = term('consideration', saha_topic_id=TID, countries_note_ar='يُقال «العوض» في مصر و«المقابل» في الأردن.',
             related=[{'slug': 'offer', 'ar': 'الإيجاب', 'en': 'offer'}, {'slug': 'ghost', 'ar': 'شبح', 'en': 'ghost'}])
+# مصطلح بلا نقاش ولا فرنسي ولا مثال
 PLAIN = term('offer', ar='الإيجاب', en='offer', fr=None, example_en=None, example_ar=None, false_friend_note_ar=None,
              area='litigation', area_label='تقاضٍ', related=[{'slug': 'consideration', 'ar': 'المقابل', 'en': 'consideration'}],
              countries_note_ar=None)
-UNREV_WITH_NOTE = term('estoppel', ar='الدفع بالتناقض', en='estoppel', countries_note_ar='ملاحظة بلاد لا يجوز ظهورها.',
-                       saha_topic_id='bad id!')
-# مؤكّد والمراجع لم يوافق على ظهور اسمه: الخادم يرجّع الاسم والصفة null، والملاحظة تظهر
-CONF_ANON = term('waiver', ar='التنازل', en='waiver', fr=None, review_state='confirmed', reviewed_at='2026-11-01T09:00:00',
-                 countries_note_ar='يُسمّى «الإسقاط» في بعض البلاد.', example_ar=None, example_en=None, false_friend_note_ar=None)
-# فيد مخالف للعقد: تحت التأكيد ومعه اسم مراجع وملاحظة بلاد ⇒ القالب والمولّد يمنعان ظهورهما
-LEAK = term('laches', ar='التقادم المانع', en='laches', reviewed_by_name='أ. اسم مسرّب', reviewed_by_role='صفة مسرّبة',
-            countries_note_ar='ملاحظة بلاد مسرّبة.')
+# ملاحظة بلاد بلا نقاش (معرّف نقاش غير صالح لا يُرسم رابطًا)
+NOTE_ONLY = term('estoppel', ar='الدفع بالتناقض', en='estoppel', countries_note_ar='ملاحظة بلاد تظهر لأن المصطلح مفتوح للنقاش.',
+                 saha_topic_id='bad id!')
+WAIVER = term('waiver', ar='التنازل', en='waiver', fr=None, countries_note_ar='يُسمّى «الإسقاط» في بعض البلاد.',
+              example_ar=None, example_en=None, false_friend_note_ar=None)
+# فيد بشكل الجولة ٢ (الإعداد مفتوح): مفاتيح المراجعة موجودة بقيم مؤكَّدة ومعها اسم وصفة. يجب أن تُتجاهل كليًّا فلا تظهر على الصفحة.
+ON_SHAPE = term('laches', ar='التقادم المانع', en='laches', review_state='confirmed', reviewed_by_name='أ. اسم مسرّب', reviewed_by_role='صفة مسرّبة',
+                reviewed_at='2026-11-01T10:00:00', countries_note_ar='ملاحظة بلاد تظهر.')
 
 
 def _write(path, text):
@@ -153,17 +154,13 @@ def test_feed_rejects_bad_shapes_slugs_and_the_reserved_index_name(tmp_path):
     assert 'malformed related' in _feed_err(tmp_path, feed_of(term('x3', related=['nope'])))
 
 
-def test_feed_requires_a_known_review_state(tmp_path):
-    for state in ('draft', 'published', 'CONFIRMED', '', None, 5, True):
-        msg = _feed_err(tmp_path, feed_of(term('st1', review_state=state)))
-        assert 'review_state' in msg and 'st1' in msg, state
-    t = term('st2')
-    del t['review_state']
-    assert 'review_state' in _feed_err(tmp_path, feed_of(t))                          # غيابه عيب لا افتراض
-    assert 'reviewed_at is not text' in _feed_err(tmp_path, feed_of(term('st3', reviewed_at=7))).replace('glossary term st3: ', '')
+def test_feed_ignores_the_review_keys_whatever_they_hold(tmp_path):
+    """review_state وreviewed_by_* وreviewed_at اختيارية وتُتجاهل: غيابها أو قيمتها الغريبة ليست عيبًا (الإعداد قد يُفتح ويُغلق)."""
     p = tmp_path / 'ok.json'
-    p.write_text(json.dumps(feed_of(term('a1'), term('a2', review_state='confirmed'))), encoding='utf-8')
-    assert [t['review_state'] for t in pr.fetch_glossary_feed(str(p))[0]] == ['under_review', 'confirmed']
+    odd = [term('a1'), term('a2', review_state='confirmed', reviewed_by_name='س', reviewed_by_role='ص', reviewed_at='2026-11-01T10:00:00'),
+           term('a3', review_state='draft'), term('a4', review_state=None), term('a5', review_state=5, reviewed_at=7, reviewed_by_name=3)]
+    p.write_text(json.dumps(feed_of(*odd)), encoding='utf-8')
+    assert [t['slug'] for t in pr.fetch_glossary_feed(str(p))[0]] == ['a1', 'a2', 'a3', 'a4', 'a5']
 
 
 def test_feed_url_mode_is_not_used_by_a_file_run(monkeypatch, tmp_path):
@@ -182,7 +179,7 @@ def built(tmp_path_factory):
     if not (HAS_NODE and HAS_TPL):
         pytest.skip('needs node + site checkout')
     tmp = str(tmp_path_factory.mktemp('gl'))
-    terms = [FULL, PLAIN, UNREV_WITH_NOTE, CONF_ANON, LEAK]
+    terms = [FULL, PLAIN, NOTE_ONLY, WAIVER, ON_SHAPE]
     gf = _gfile(tmp, feed_of(*terms))
     summary, pages = pr.glossary_step(SITE_DIR, gf)
     assert summary['state'] == 'ok' and summary['terms'] == 5
@@ -197,21 +194,22 @@ def _verify(b, slug, html=None):
 
 
 @needs_site
-def test_good_pages_verify_with_and_without_reviewer_and_topic(built):
+def test_good_pages_verify_with_and_without_a_topic_and_with_an_on_shape_feed(built):
     for slug in ('consideration', 'offer', 'estoppel', 'waiver', 'laches'):
         assert _verify(built, slug) == [], slug
     assert pr.verify_glossary_index(built['pages']['index'], built['list'], None, built['index_tpl']) == []
 
 
 @needs_site
-def test_reviewer_topic_and_country_note_appear_only_when_they_should(built):
-    full, plain, unrev = (_block(built['pages'][s]) for s in ('consideration', 'offer', 'estoppel'))
-    assert full.count('راجعه:') == 1 and '<bdi>أ. هبة الجندي</bdi>، <bdi>محامية</bdi>' in full
+def test_topic_link_and_country_note_appear_only_when_they_should(built):
+    full, plain, note, waiver, on = (_block(built['pages'][s_]) for s_ in ('consideration', 'offer', 'estoppel', 'waiver', 'laches'))
     assert full.count(pr.SAHA_LINK_PREFIX + TID + '"') == 1 and full.count('ناقشه في الساحة') == 1
-    assert 'class="gl-country"' in full and 'في البلاد العربية' in full
-    for b in (plain, unrev):
-        assert 'راجعه' not in b and pr.SAHA_LINK_PREFIX not in b and 'ناقشه في الساحة' not in b       # «راجِع» في الزر بكسرة: كلمة أخرى
-    assert 'class="gl-country"' not in unrev and 'ملاحظة بلاد' not in built['pages']['estoppel'].split('<script id="epGlossaryJs">')[0]
+    for b in (plain, note, waiver, on):                                                  # بلا معرّف نقاش صالح ⇒ لا رابط ولا نص
+        assert pr.SAHA_LINK_PREFIX not in b and 'ناقشه في الساحة' not in b
+    # ملاحظة البلاد تظهر متى وُجدت بلا شرط حالة
+    assert full.count('class="gl-country"') == 1 and 'في البلاد العربية' in full
+    assert 'ملاحظة بلاد تظهر لأن المصطلح مفتوح للنقاش.' in note and 'يُسمّى «الإسقاط» في بعض البلاد.' in waiver and 'ملاحظة بلاد تظهر.' in on
+    assert 'class="gl-country"' not in plain
     assert 'lang="fr"' in full and 'lang="fr"' not in plain          # الفرنسي يُحذف حين يغيب
     assert full.count('https://app.elprofessor.net/?page=chat"') == 1 and full.count('اسأل خبيرًا') == 1
 
@@ -261,104 +259,70 @@ def test_index_groups_by_area_links_every_term_once_and_has_no_search_box(built)
 
 
 @needs_site
-@pytest.mark.parametrize('state,name', [('under_review', None), ('confirmed', 'أ. هبة الجندي'), ('confirmed', None)])
-def test_state_words_inside_the_content_do_not_fail_the_glossary(tmp_path, state, name):
-    """تعريف أو مثال أو ملاحظة تحوي «راجعه:» أو «راجعه متخصص» أو نص الشارة لا يُسقط الصفحة؛ العدّ داخل سطر الحالة وحده."""
-    badge = 'تحت التأكيد: نبحث عن متخصص يراجع هذا المصطلح'
-    tricky = term('tricky', review_state=state, reviewed_by_name=name, reviewed_by_role='محامية' if name else None,
-                  reviewed_at='2026-11-01T10:00:00' if state == 'confirmed' else None,
-                  definition_ar='تعريف يذكر عبارة راجعه: فلان وعبارة راجعه متخصص وعبارة «%s» في سياق الشرح.' % badge,
-                  example_ar='مثال: راجعه: محامٍ آخر.', false_friend_note_ar='خطأ في نقل «راجعه متخصص».')
-    gf = _gfile(str(tmp_path), feed_of(tricky))
-    summary, pages = pr.glossary_step(SITE_DIR, gf)
+@pytest.mark.parametrize('word', ['تحت التأكيد: نبحث عن متخصص يراجع هذا المصطلح', 'راجعه: فلان', 'راجعه متخصص', 'مؤكّد', 'مؤكد', 'مؤكـــد', 'بانتظار تأكيد المحكّمين', 'نبحث عن صياغة أفضل', 'أنت متخصص؟ راجِع هذا المصطلح'])
+def test_state_words_inside_the_free_text_do_not_fail_the_glossary(tmp_path, word):
+    """تعريف أو مثال أو ملاحظة يحوي عبارة من عبارات المراجعة المحذوفة لا يُسقط الصفحة: الفحص على ما يضيفه القالب لا على نصّ الفيد."""
+    tricky = term('tricky', definition_ar='تعريف يذكر عبارة «%s» في سياق الشرح.' % word, example_ar='مثال: %s.' % word,
+                  false_friend_note_ar='خطأ في نقل «%s».' % word, countries_note_ar='ملاحظة بلاد فيها %s.' % word)
+    summary, pages = pr.glossary_step(SITE_DIR, _gfile(str(tmp_path), feed_of(tricky)))
     assert summary['state'] == 'ok', summary
     html = next(h for pth, h in pages.items() if pth.endswith('tricky.html'))
-    b = _block(html)
-    assert b.count(badge) == (2 if state == 'under_review' else 1) and 'راجعه متخصص' in b
+    assert word in _block(html)
     assert pr.verify_glossary_term(html, tricky, None, _read(os.path.join(SITE_DIR, 'glossary-term.html')), {'tricky'}) == []
 
 
 @needs_site
-def test_state_line_badge_reviewer_and_anonymous_reviewer(built):
-    under, conf, anon, leak = (_block(built['pages'][s_]) for s_ in ('offer', 'consideration', 'waiver', 'laches'))
-    badge = 'تحت التأكيد: نبحث عن متخصص يراجع هذا المصطلح'
-    for b in (under, leak):                                             # تحت التأكيد ⇒ الشارة الهادئة وحدها
-        assert b.count(badge) == 1 and 'data-state="under_review"' in b and 'class="gl-rev wait"' in b
-        assert 'راجعه' not in b
-    for b in (conf, anon):                                              # مؤكّد ⇒ لا شارة
-        assert badge not in b and 'data-state="confirmed"' in b and 'class="gl-rev wait"' not in b
-    assert conf.count('راجعه: <b><bdi>أ. هبة الجندي</bdi>، <bdi>محامية</bdi></b>') == 1 and 'راجعه متخصص' not in conf
-    assert anon.count('راجعه متخصص') == 1 and 'راجعه:' not in anon                              # بلا اسم ولا صفة
-    # ملاحظة البلاد: مؤكّد فقط (حتى بلا اسم ظاهر)، وتسريب الفيد يُحجب في القالب
-    assert 'class="gl-country"' in anon and 'يُسمّى «الإسقاط» في بعض البلاد.' in anon
-    assert 'class="gl-country"' not in leak and 'ملاحظة بلاد مسرّبة' not in built['pages']['laches'].split('<script id="epGlossaryJs">')[0]
-    assert 'أ. اسم مسرّب' not in built['pages']['laches'].split('<script id="epGlossaryJs">')[0] and 'صفة مسرّبة' not in leak
-    # الحالة سطر واحد بالضبط في كل صفحة، وهو الأول بعد الأسماء (داخل رأس البطاقة)
-    for slug in ('offer', 'consideration', 'waiver', 'laches', 'estoppel'):
-        assert len(re.findall(r'<p class="gl-rev', _block(built['pages'][slug]))) == 1, slug
+def test_markup_typed_inside_the_free_text_is_escaped_and_does_not_fail_the_glossary(tmp_path):
+    """نصٌّ حرٌّ فيه وسوم إدخال أو زر يُكتب نصًّا مُهرَّبًا لا عنصرًا، فلا يُسقط الصفحة ولا يُنتج عنصر تحكّم."""
+    tricky = term('tricky', definition_ar='تعريف فيه <input name="x"> و<button>زر</button> و<textarea></textarea> مكتوبة نصًّا.')
+    summary, pages = pr.glossary_step(SITE_DIR, _gfile(str(tmp_path), feed_of(tricky)))
+    assert summary['state'] == 'ok', summary
+    html = next(h for pth, h in pages.items() if pth.endswith('tricky.html'))
+    assert not pr.GLOSSARY_ABSENT_CONTROLS_RE.search(_block(html)) and '&lt;input' in _block(html)
 
 
 @needs_site
-def test_every_term_page_has_exactly_one_review_form_with_the_exact_endpoint(built):
+def test_no_badge_state_line_reviewer_form_or_endpoint_on_any_page(built):
+    """⛔ قرار المؤسس 2026-11-01: لا شارة ولا «راجعه» ولا نموذج ولا نقطة إرسال ولا علامة حالة، ولو حمل الفيد مفاتيح المراجعة (ON_SHAPE)."""
     for slug, html in built['pages'].items():
-        if slug == 'index':
-            continue
         b = _block(html)
-        assert b.count('<form') == 1 and b.count('أنت متخصص؟ راجِع هذا المصطلح') == 1, slug
-        assert b.count('data-endpoint="https://dashboard.elprofessor.net/api/public/expert-reviews"') == 1, slug
-        assert b.count('<input type="hidden" name="kind" value="glossary_term">') == 1
-        assert b.count('<input type="hidden" name="ref" value="%s">' % slug) == 1
-        assert b.count('name="website"') == 1 and '<div class="gl-hp" aria-hidden="true">' in b and 'tabindex="-1"' in b
-        assert not re.search(r'<form[^>]*\baction=', b) and '<script' not in b.lower()
-        assert re.findall(r'<option value="([^"]*)">', b) == ['', 'law_practice', 'judiciary', 'legal_translation', 'law_teaching', 'corporate_counsel', 'other']
-        for label in ('محاماة', 'قضاء', 'ترجمة قانونية', 'تدريس القانون', 'مستشار شركات', '>أخرى</option>'):
-            assert label in b
-        assert re.findall(r'name="verdict" value="([^"]*)"', b) == ['confirm', 'suggest']
-        for text in ('أؤكد الترجمة والتعريف', 'أقترح تعديلًا', 'أوافق على ظهور اسمي مع المصطلح بعد اعتماد مراجعتي',
-                     'لا نعرض بريدك، ونستعمله للتواصل بشأن مراجعتك فقط.'):
-            assert b.count(text) == 1
-        assert html.count('<script id="epGlossaryReviewJs">') == 1 and html.index('<script id="epGlossaryReviewJs">') > html.index(pr.GL_CLOSE)
+        for w in ('تحت التأكيد', 'راجعه', 'راجِع', 'أنت متخصص', 'مؤكّد', 'مؤكَّد', 'مؤكد'):
+            assert w not in b, (slug, w)
+        fb = pr._gl_fold(b)
+        for w in ('تحت التأكيد', 'مؤكد', 'تأكيد', 'نبحث عن', 'راجعه'):
+            assert pr._gl_fold(w) not in fb, (slug, w)
+        assert not pr.GLOSSARY_ABSENT_CONTROLS_RE.search(b), slug
+        for m in ('<form', 'gl-rev', 'gl-review', 'gl-form', 'gl-sum', 'gl-hp', 'gl-l-st', 'gl-filter', 'data-st=', 'data-gl-f', 'data-gl-review',
+                  'name="verdict"', 'name="website"', 'epGlossaryReviewJs', 'epGlossaryFilterJs'):
+            assert m not in html, (slug, m)
+        assert 'expert-reviews' not in html and 'api/public' not in html, slug
+    on = built['pages']['laches']
+    assert 'أ. اسم مسرّب' not in on and 'صفة مسرّبة' not in on                            # الاسم والصفة من الفيد لا يظهران في أي مكان
 
 
 @needs_site
-def test_review_script_is_not_a_tracker_and_the_page_adds_no_tracking(built):
-    for slug in ('offer', 'consideration'):
+def test_a_term_page_runs_only_the_renderer_script_besides_the_site_trackers(built):
+    for slug in ('offer', 'consideration', 'laches'):
         h = built['pages'][slug]
-        js = re.search(r'<script id="epGlossaryReviewJs">\n(.*?)</script>', h, re.S).group(1)
-        for bad in pr.GL_TRACKING_JS:
-            assert bad not in js, bad
-        assert "credentials:'omit'" in js and h.count('googletagmanager.com/gtm.js') == built['term_tpl'].count('googletagmanager.com/gtm.js')
-        sec = re.search(r'(?s)<section class="gl-review".*?</section>', _block(h)).group(0)
-        assert 'data-cta' not in sec and 'pixel' not in sec.lower()              # نموذج المراجعة بلا وسوم قياس
+        ids = re.findall(r'<script id="([^"]+)"', h)
+        assert ids.count('epGlossaryJs') == 1 and 'epGlossaryReviewJs' not in ids and 'epGlossaryFilterJs' not in ids
+        assert h.count('googletagmanager.com/gtm.js') == built['term_tpl'].count('googletagmanager.com/gtm.js')
+        assert 'expert-reviews' not in '\n'.join(pr._script_bodies(h))
 
 
 @needs_site
-def test_index_marks_each_term_with_its_state_and_has_filter_chips(built):
+def test_index_has_area_chips_only_no_state_marks_no_filter(built):
     idx = _block(built['pages']['index'])
-    items = dict((m[1], (m[0], m[2], m[3])) for m in re.findall(
-        r'<li data-st="([a-z_]+)"><a href="/glossary/([^"/]+)\.html">.*?<span class="gl-l-st (is-[cw])">([^<]*)</span>', idx, re.S))
-    assert items == {'consideration': ('confirmed', 'is-c', 'مؤكّد'), 'waiver': ('confirmed', 'is-c', 'مؤكّد'),
-                     'offer': ('under_review', 'is-w', 'تحت التأكيد'), 'estoppel': ('under_review', 'is-w', 'تحت التأكيد'),
-                     'laches': ('under_review', 'is-w', 'تحت التأكيد')}
-    chips = re.findall(r'data-gl-f="([a-z_]+)" aria-pressed="([a-z]+)">([^<]*?) <span class="n">([^<]*)</span>', idx)
-    assert chips == [('all', 'true', 'الكل', '٥'), ('confirmed', 'false', 'مؤكّد', '٢'), ('under_review', 'false', 'تحت التأكيد', '٣')]
-    assert idx.count('data-gl-filter') == 1 and 'role="group"' in idx and '<input' not in idx and '<form' not in idx
+    chips = re.findall(r'<a class="chip" href="#(area-[a-z]+)">([^<]*?) <span class="n">([^<]*)</span></a>', idx)
+    assert chips == [('area-contracts', 'عقود', '٤'), ('area-litigation', 'تقاضٍ', '١')]
+    assert idx.count('class="chip"') == len(chips) and '<button' not in idx and 'data-st' not in idx and 'gl-l-st' not in idx
+    for w in ('مؤكّد', 'تحت التأكيد', 'تصفية'):
+        assert w not in idx
     html = built['pages']['index']
-    assert html.count('<script id="epGlossaryFilterJs">') == 1 and html.index('<script id="epGlossaryFilterJs">') > html.index(pr.GL_CLOSE)
+    assert 'epGlossaryFilterJs' not in html and 'data-gl-filter' not in html
 
 
-@needs_site
-def test_index_without_both_states_has_no_filter_chips_but_still_marks(built, tmp_path):
-    for feed_terms, mark in (([PLAIN, UNREV_WITH_NOTE], 'تحت التأكيد'), ([FULL, CONF_ANON], 'مؤكّد')):
-        summary, pages = pr.glossary_step(SITE_DIR, _gfile(str(tmp_path), feed_of(*feed_terms)))
-        idx = next(h for p_, h in pages.items() if p_.endswith('index.html'))
-        b = _block(idx)
-        assert 'data-gl-filter' not in b and 'data-gl-f=' not in b and b.count('class="gl-l-st') == 2
-        assert re.findall(r'<span class="gl-l-st is-[cw]">([^<]*)</span>', b) == [mark, mark]
-        assert pr.verify_glossary_index(idx, feed_terms, None, built['index_tpl']) == []
-
-
-NMUT = 60
+NMUT = 52
 
 
 def _in_content(h, old, new):
@@ -368,26 +332,27 @@ def _in_content(h, old, new):
     return h[:i] + h[i:j].replace(old, new, 1) + h[j:]
 
 
-def _in_review_js(h, old, new):
-    k = h.index('<script id="epGlossaryReviewJs">')
-    assert old in h[k:], old
-    return h[:k] + h[k:].replace(old, new, 1)
-
-
 def _mutations(b):
     """(اسم, slug, دالة تعدّل الصفحة, جزء من رسالة الخطأ)."""
     full = 'consideration'
+    actions = '<div class="gl-actions">'
+    badge = 'تحت التأكيد: نبحث عن متخصص يراجع هذا المصطلح'
+    form = ('<section class="gl-review"><details class="gl-rf"><summary class="btn btn-ghost gl-sum">أنت متخصص؟ راجِع هذا المصطلح</summary>'
+            '<form class="gl-form" data-gl-review data-endpoint="https://dashboard.elprofessor.net/api/public/expert-reviews" novalidate>'
+            '<input type="hidden" name="kind" value="glossary_term"><div class="gl-hp" aria-hidden="true"><input type="text" name="website" tabindex="-1"></div>'
+            '<button type="submit" class="btn btn-primary">أرسل المراجعة</button></form></details></section>')
     return [
         ('second h1', full, lambda h: h.replace('<h1>', '<h1>x</h1><h1>', 1), 'H1'),
         ('wrong canonical', full, lambda h: h.replace('glossary/consideration.html">', 'glossary/other.html">', 1), 'canonical'),
         ('saha link removed', full, lambda h: re.sub(r'<a class="btn btn-ghost"[^>]*>ناقشه في الساحة</a>', '', h), 'saha link'),
-        ('saha link doubled', full, lambda h: h.replace('<div class="gl-actions">', '<div class="gl-actions"><a href="' + pr.SAHA_LINK_PREFIX + TID + '">ناقشه في الساحة</a>', 1), 'saha link'),
-        ('saha link on a term without topic', 'offer', lambda h: h.replace('<div class="gl-actions">', '<div class="gl-actions"><a href="' + pr.SAHA_LINK_PREFIX + TID + '">ناقشه في الساحة</a>', 1), 'saha'),
-        ('review stamp dropped', full, lambda h: h.replace('راجعه:', 'راجع:'), 'راجعه'),
-        ('review stamp on an unreviewed term', 'offer', lambda h: h.replace('<div class="gl-actions">', '<p>راجعه: أحد</p><div class="gl-actions">', 1), 'راجعه'),
-        ('country note leaked on an unreviewed term', 'estoppel', lambda h: h.replace('<div class="gl-actions">', '<section class="gl-country"><p>ملاحظة بلاد لا يجوز ظهورها.</p></section><div class="gl-actions">', 1), 'country'),
-        ('country note dropped on a reviewed term', full, lambda h: h.replace('class="gl-country"', 'class="x"'), 'country'),
-        ('script inside the content', full, lambda h: h.replace('<div class="gl-actions">', '<script>1</script><div class="gl-actions">', 1), 'script'),
+        ('saha link doubled', full, lambda h: h.replace(actions, actions + '<a href="' + pr.SAHA_LINK_PREFIX + TID + '">ناقشه في الساحة</a>', 1), 'saha link'),
+        ('saha link on a term without topic', 'offer', lambda h: h.replace(actions, actions + '<a href="' + pr.SAHA_LINK_PREFIX + TID + '">ناقشه في الساحة</a>', 1), 'saha'),
+        ('saha link on a term with an invalid topic id', 'estoppel', lambda h: h.replace(actions, actions + '<a href="' + pr.SAHA_LINK_PREFIX + TID + '">ناقشه في الساحة</a>', 1), 'saha'),
+        ('country note dropped', full, lambda h: h.replace('class="gl-country"', 'class="x"'), 'country'),
+        ('country note dropped on a term the old rules hid', 'laches', lambda h: h.replace('class="gl-country"', 'class="x"'), 'country'),
+        ('country note doubled', 'waiver', lambda h: h.replace(actions, '<section class="gl-country"><p>يُسمّى «الإسقاط» في بعض البلاد.</p></section>' + actions, 1), 'country'),
+        ('country note invented on a term without one', 'offer', lambda h: h.replace(actions, '<section class="gl-country"><p>ملاحظة</p></section>' + actions, 1), 'country'),
+        ('script inside the content', full, lambda h: h.replace(actions, '<script>1</script>' + actions, 1), 'script'),
         ('prerender flag missing', full, lambda h: h.replace('window.EP_PRERENDERED=true;', '', 1), 'EP_PRERENDERED'),
         ('slug flag wrong', full, lambda h: h.replace('EP_GLOSSARY_SLUG="consideration"', 'EP_GLOSSARY_SLUG="zzz"', 1), 'SLUG'),
         ('extra tracking tag', full, lambda h: h.replace('</head>', '<script>/* GTM-N5G8ZRBV */</script></head>', 1), 'tracking'),
@@ -395,51 +360,42 @@ def _mutations(b):
         ('two DefinedTerm blocks', full, lambda h: h.replace('</head>', '<script type="application/ld+json">{"@type":"DefinedTerm","name":"x"}</script></head>', 1), 'DefinedTerm'),
         ('broken JSON-LD', full, lambda h: h.replace('"termCode"', '"termCode",,', 1), 'JSON-LD'),
         ('relative url', full, lambda h: h.replace('href="/site.css', 'href="site.css', 1), 'relative'),
-        ('link to a page that is not generated', full, lambda h: h.replace('<div class="gl-actions">', '<a href="/glossary/ghost.html">x</a><div class="gl-actions">', 1), 'related'),
+        ('link to a page that is not generated', full, lambda h: h.replace(actions, '<a href="/glossary/ghost.html">x</a>' + actions, 1), 'related'),
         ('related link dropped', full, lambda h: h.replace('href="/glossary/offer.html"', 'href="/glossary/"', 1), 'related'),
         ('Latin digits left in Arabic example', full, lambda h: h.replace('٥٠٬٠٠٠', '50,000', 1), 'example'),
         ('definition missing', full, lambda h: h.replace('<p class="gl-def">شيء ذو قيمة', '<p class="gl-def">شيء', 1), 'definition'),
-        ('ask link doubled', full, lambda h: h.replace('<div class="gl-actions">', '<div class="gl-actions"><a href="https://app.elprofessor.net/?page=chat">اسأل خبيرًا</a>', 1), 'ask'),
+        ('ask link doubled', full, lambda h: h.replace(actions, actions + '<a href="https://app.elprofessor.net/?page=chat">اسأل خبيرًا</a>', 1), 'ask'),
         ('placeholder left', full, lambda h: h.replace('<div class="gl-body" id="term">', '<div class="gl-body" id="term"><p>جارٍ تحميل المصطلح…</p>', 1), 'placeholder'),
-        # —— الجولة ٢: الحالة
-        ('badge missing on an under-review term', 'offer', lambda h: h.replace('تحت التأكيد: نبحث عن متخصص يراجع هذا المصطلح', 'قيد النظر'), 'badge'),
-        ('badge doubled', 'offer', lambda h: h.replace('<div class="gl-actions">', '<p>تحت التأكيد: نبحث عن متخصص يراجع هذا المصطلح</p><div class="gl-actions">', 1), 'badge'),
-        ('badge on a confirmed term', full, lambda h: h.replace('<div class="gl-actions">', '<p>تحت التأكيد: نبحث عن متخصص يراجع هذا المصطلح</p><div class="gl-actions">', 1), 'badge'),
-        ('badge on a confirmed term without a name', 'waiver', lambda h: h.replace('<div class="gl-actions">', '<p>تحت التأكيد: نبحث عن متخصص يراجع هذا المصطلح</p><div class="gl-actions">', 1), 'badge'),
-        ('reviewer name missing on a confirmed term', full, lambda h: h.replace('أ. هبة الجندي', 'أحدهم', 1), 'name'),
-        ('anonymous line missing', 'waiver', lambda h: h.replace('راجعه متخصص', 'راجعه أحد', 1), 'راجعه متخصص'),
-        ('anonymous line on an under-review term', 'offer', lambda h: h.replace('<div class="gl-actions">', '<p>راجعه متخصص</p><div class="gl-actions">', 1), 'راجعه متخصص'),
-        ('anonymous line next to a public name', full, lambda h: h.replace('<div class="gl-actions">', '<p>راجعه متخصص</p><div class="gl-actions">', 1), 'راجعه متخصص'),
-        ('name shown on a confirmed term that hides it', 'waiver', lambda h: h.replace('<div class="gl-actions">', '<p>راجعه: أحد</p><div class="gl-actions">', 1), 'راجعه'),
-        ('leaked reviewer name on an under-review term', 'laches', lambda h: h.replace('<div class="gl-actions">', '<p>أ. اسم مسرّب</p><div class="gl-actions">', 1), 'leaked'),
-        ('leaked country note on an under-review term', 'laches', lambda h: h.replace('<div class="gl-actions">', '<section class="gl-country"><p>ملاحظة بلاد مسرّبة.</p></section><div class="gl-actions">', 1), 'country'),
-        ('country note dropped on a confirmed anonymous term', 'waiver', lambda h: h.replace('class="gl-country"', 'class="x"'), 'country'),
-        ('two state lines', 'offer', lambda h: h.replace('<div class="gl-actions">', '<p class="gl-rev wait" data-state="under_review">x</p><div class="gl-actions">', 1), 'state line'),
-        ('state line says the wrong state', 'offer', lambda h: h.replace('data-state="under_review"', 'data-state="confirmed"', 1), 'data-state'),
-        # —— الجولة ٢: نموذج المراجعة
-        ('form removed', full, lambda h: re.sub(r'(?s)<form.*?</form>', '', h), 'form'),
-        ('form doubled', full, lambda h: h.replace('</form>', '</form><form data-gl-review></form>', 1), 'form'),
-        ('endpoint wrong host', full, lambda h: h.replace('dashboard.elprofessor.net/api/public/expert-reviews', 'dashboard.elprofessor.net/api/messages', 1), 'post to exactly'),
-        ('endpoint lookalike', full, lambda h: h.replace('https://dashboard.elprofessor.net/api/public', 'https://dashboard.elprofessor.net.evil.example/api/public', 1), 'post to exactly'),
-        ('form got an action', full, lambda h: h.replace('<form class="gl-form"', '<form action="/x" class="gl-form"', 1), 'action'),
-        ('kind wrong', full, lambda h: h.replace('name="kind" value="glossary_term"', 'name="kind" value="course"', 1), 'kind'),
-        ('ref wrong', full, lambda h: h.replace('name="ref" value="consideration"', 'name="ref" value="offer"', 1), 'ref'),
-        ('ref missing', full, lambda h: h.replace('<input type="hidden" name="ref" value="consideration">', '', 1), 'ref'),
-        ('honeypot renamed', full, lambda h: h.replace('name="website"', 'name="site"', 1), 'honeypot'),
-        ('honeypot visible (not hidden from assistive tech)', full, lambda h: h.replace('<div class="gl-hp" aria-hidden="true">', '<div class="gl-hp">', 1), 'honeypot'),
-        ('honeypot reachable by tab', full, lambda h: h.replace('name="website" tabindex="-1"', 'name="website"', 1), 'honeypot'),
-        ('honeypot prefilled', full, lambda h: h.replace('name="website" tabindex="-1"', 'name="website" value="x" tabindex="-1"', 1), 'honeypot'),
-        ('review button text changed', full, lambda h: _in_content(h, 'أنت متخصص؟ راجِع هذا المصطلح', 'راجع المصطلح'), 'button'),
-        ('specialty «أخرى» removed', full, lambda h: h.replace('<option value="other">أخرى</option>', '', 1), 'specialty'),
-        ('specialty value renamed', full, lambda h: h.replace('value="judiciary"', 'value="judge"', 1), 'specialty'),
-        ('verdict radio removed', full, lambda h: re.sub(r'<label class="gl-opt"><input type="radio" name="verdict" value="suggest">.*?</label>', '', h, count=1, flags=re.S), 'verdict'),
-        ('consent text changed', full, lambda h: _in_content(h, 'أوافق على ظهور اسمي مع المصطلح بعد اعتماد مراجعتي', 'أوافق'), 'the text'),
-        ('privacy line dropped', full, lambda h: _in_content(h, 'لا نعرض بريدك، ونستعمله للتواصل بشأن مراجعتك فقط.', ''), 'the text'),
-        ('review script missing', full, lambda h: h.replace('<script id="epGlossaryReviewJs">', '<script id="x">', 1), 'review script'),
-        ('review script tracks', full, lambda h: h.replace('<script id="epGlossaryReviewJs">\n', '<script id="epGlossaryReviewJs">\nfbq("track","Lead");\n', 1), 'tracking'),
-        ('review script uses local storage', full, lambda h: h.replace('<script id="epGlossaryReviewJs">\n', '<script id="epGlossaryReviewJs">\nlocalStorage.x=1;\n', 1), 'tracking'),
-        ('review script sends credentials', full, lambda h: _in_review_js(h, "credentials:'omit'", "credentials:'include'"), 'without credentials'),
-        ('review script twice', full, lambda h: h.replace('</body>', '<script id="epGlossaryReviewJs">\n1</script></body>', 1), 'review script'),
+        # —— الجولة ٣: غياب الشارة وسطر المراجعة والنموذج ونقطة الإرسال وعلامات الحالة (كلٌّ منها يُسقط الصفحة)
+        ('stray «تحت التأكيد» badge', 'offer', lambda h: h.replace(actions, '<p>' + badge + '</p>' + actions, 1), 'تحت التأكيد'),
+        ('stray badge on a term with a topic', full, lambda h: h.replace(actions, '<p>' + badge + '</p>' + actions, 1), 'تحت التأكيد'),
+        ('stray state line markup', 'offer', lambda h: h.replace(actions, '<p class="gl-rev wait" data-state="under_review">x</p>' + actions, 1), 'markup'),
+        ('stray confirmed state line', full, lambda h: h.replace(actions, '<p class="gl-rev" data-state="confirmed">x</p>' + actions, 1), 'markup'),
+        ('stray «راجعه:» reviewer line', full, lambda h: h.replace(actions, '<p>راجعه: أحد</p>' + actions, 1), 'راجعه'),
+        ('stray «راجعه متخصص» line', 'waiver', lambda h: h.replace(actions, '<p>راجعه متخصص</p>' + actions, 1), 'راجعه'),
+        ('stray «مؤكّد» word', 'offer', lambda h: h.replace(actions, '<p>مؤكّد</p>' + actions, 1), 'مؤكد'),
+        ('stray review button text', full, lambda h: h.replace(actions, '<a class="btn" href="#">أنت متخصص؟ راجِع هذا المصطلح</a>' + actions, 1), 'أنت متخصص'),
+        ('stray review form', full, lambda h: h.replace('</article>', form + '</article>', 1), 'markup'),
+        ('stray bare form', 'offer', lambda h: h.replace(actions, '<form></form>' + actions, 1), '<form'),
+        ('stray review attribute', 'offer', lambda h: h.replace(actions, '<div data-gl-review></div>' + actions, 1), 'data-gl-review'),
+        ('stray honeypot input', 'offer', lambda h: h.replace(actions, '<input name="website" tabindex="-1">' + actions, 1), 'markup'),
+        ('stray endpoint text', full, lambda h: h.replace(actions, '<p>https://dashboard.elprofessor.net/api/public/expert-reviews</p>' + actions, 1), 'endpoint'),
+        ('review script back before the body end', full, lambda h: h.replace('</body>', '<script id="epGlossaryReviewJs">\nvar u="https://dashboard.elprofessor.net/api/public/expert-reviews";\n</script></body>', 1), 'markup'),
+        ('endpoint inside another script', 'offer', lambda h: h.replace('</body>', '<script>fetch("https://dashboard.elprofessor.net/api/public/expert-reviews")</script></body>', 1), 'endpoint'),
+        ('filter script on a term page', 'offer', lambda h: h.replace('</body>', '<script id="epGlossaryFilterJs">\n1\n</script></body>', 1), 'markup'),
+        ('state mark span on a term page', 'offer', lambda h: h.replace(actions, '<span class="gl-l-st is-w">x</span>' + actions, 1), 'markup'),
+        # —— ثغرات فحص «لا يبقى شيء»: كلمة بلا تشكيل، أو بتطويل، وأي عنصر إدخال أو زر داخل محتوى المصطلح
+        ('plain «مؤكد» without diacritics', 'offer', lambda h: h.replace(actions, '<p>مؤكد</p>' + actions, 1), 'مؤكد'),
+        ('«مؤكد» stretched with tatweel', 'offer', lambda h: h.replace(actions, '<p>مؤكـــد</p>' + actions, 1), 'مؤكد'),
+        ('hidden badge with plain «مؤكد، نبحث عن مراجع»', full, lambda h: h.replace(actions, '<span class="x" hidden>مؤكد، نبحث عن مراجع</span>' + actions, 1), 'مؤكد'),
+        ('«نبحث عن» line', 'offer', lambda h: h.replace(actions, '<p>نبحث عن متخصص</p>' + actions, 1), 'نبحث عن'),
+        ('«تأكيد» word', 'offer', lambda h: h.replace(actions, '<p>بانتظار تأكيد</p>' + actions, 1), 'تأكيد'),
+        ('stray email input', full, lambda h: h.replace(actions, '<input type="email" name="mail">' + actions, 1), 'form control'),
+        ('stray select', 'offer', lambda h: h.replace(actions, '<select><option>x</option></select>' + actions, 1), 'form control'),
+        ('stray textarea', 'offer', lambda h: h.replace(actions, '<textarea name="note"></textarea>' + actions, 1), 'form control'),
+        ('stray button', 'offer', lambda h: h.replace(actions, '<button type="button">x</button>' + actions, 1), 'form control'),
+        ('stray upper-case INPUT', 'offer', lambda h: h.replace(actions, '<INPUT name="x">' + actions, 1), 'form control'),
+        ('reviewer name from the feed shown (on-shape)', 'laches', lambda h: h.replace(actions, '<p>راجعه: أ. اسم مسرّب</p>' + actions, 1), 'راجعه'),
     ]
 
 
@@ -474,21 +430,22 @@ def _index_errs(built, html):
 
 @needs_site
 def test_index_state_and_filter_defects_fail(built):
+    """⛔ الفهرس شرائح المجالات وحدها: أي علامة حالة أو زر تصفية أو كلمة تأكيد أو نقطة إرسال تُسقط الصفحة."""
     idx = built['pages']['index']
     cases = (
-        ('item data-st flipped', idx.replace('<li data-st="under_review"><a href="/glossary/offer.html">', '<li data-st="confirmed"><a href="/glossary/offer.html">', 1), 'marked data-st'),
-        ('item data-st invalid', idx.replace('<li data-st="confirmed">', '<li data-st="published">', 1), 'marked data-st'),
-        ('mark text wrong', idx.replace('<span class="gl-l-st is-w">تحت التأكيد</span>', '<span class="gl-l-st is-w">مؤكّد</span>', 1), 'visible mark'),
-        ('mark class wrong', idx.replace('<span class="gl-l-st is-c">مؤكّد</span>', '<span class="gl-l-st is-w">مؤكّد</span>', 1), 'visible mark'),
-        ('mark missing', idx.replace('<span class="gl-l-st is-c">مؤكّد</span>', '', 1), 'mark'),
-        ('mark doubled', idx.replace('<span class="gl-l-st is-c">مؤكّد</span>', '<span class="gl-l-st is-c">مؤكّد</span><span class="gl-l-st is-c">مؤكّد</span>', 1), 'mark'),
-        ('item data-st dropped', idx.replace('<li data-st="under_review">', '<li>', 1), 'state mark'),
-        ('filter removed', re.sub(r'(?s)<div class="gl-filter".*?</div>', '', idx, count=1), 'filter chips'),
-        ('filter count wrong', idx.replace('data-gl-f="confirmed" aria-pressed="false">مؤكّد <span class="n">٢</span>', 'data-gl-f="confirmed" aria-pressed="false">مؤكّد <span class="n">٣</span>', 1), 'filter chips'),
-        ('filter chip pressed wrongly', idx.replace('data-gl-f="all" aria-pressed="true"', 'data-gl-f="all" aria-pressed="false"', 1), 'filter chips'),
-        ('filter chip renamed', idx.replace('data-gl-f="under_review"', 'data-gl-f="pending"', 1), 'filter chips'),
-        ('filter script missing', idx.replace('<script id="epGlossaryFilterJs">', '<script id="x">', 1), 'filter script'),
-        ('filter script tracks', idx.replace('<script id="epGlossaryFilterJs">\n', '<script id="epGlossaryFilterJs">\ngtag("event","x");\n', 1), 'tracking'),
+        ('state mark on an item', idx.replace('<span class="gl-l-ar">الإيجاب</span>', '<span class="gl-l-ar">الإيجاب</span><span class="gl-l-st is-w">تحت التأكيد</span>', 1), 'markup'),
+        ('item carries data-st', idx.replace('<li><a href="/glossary/offer.html">', '<li data-st="under_review"><a href="/glossary/offer.html">', 1), 'markup'),
+        ('«مؤكّد» word in the content', idx.replace('<div class="gl-end">', '<p>مؤكّد</p><div class="gl-end">', 1), 'مؤكد'),
+        ('plain «مؤكد» in the content', idx.replace('<div class="gl-end">', '<p>مؤكد</p><div class="gl-end">', 1), 'مؤكد'),
+        ('«مؤكد» stretched with tatweel', idx.replace('<div class="gl-end">', '<p>مؤكـــد</p><div class="gl-end">', 1), 'مؤكد'),
+        ('«نبحث عن» line in the content', idx.replace('<div class="gl-end">', '<p>نبحث عن مراجع لهذه المصطلحات</p><div class="gl-end">', 1), 'نبحث عن'),
+        ('a textarea in the content', idx.replace('<nav class="gl-areas"', '<textarea></textarea><nav class="gl-areas"', 1), 'form control'),
+        ('«تحت التأكيد» note in the content', idx.replace('<div class="gl-end">', '<p>المصطلح المعلَّم بـ«تحت التأكيد» منشور.</p><div class="gl-end">', 1), 'تحت التأكيد'),
+        ('filter chips back', idx.replace('<nav class="gl-areas"', '<div class="gl-filter" role="group" data-gl-filter><button type="button" class="chip" data-gl-f="all" aria-pressed="true">الكل <span class="n">٥</span></button></div><nav class="gl-areas"', 1), 'markup'),
+        ('a button in the content', idx.replace('<nav class="gl-areas"', '<button type="button">x</button><nav class="gl-areas"', 1), 'button'),
+        ('filter script back', idx.replace('</body>', '<script id="epGlossaryFilterJs">\n1\n</script></body>', 1), 'markup'),
+        ('review endpoint in a script', idx.replace('</body>', '<script>var u="https://dashboard.elprofessor.net/api/public/expert-reviews";</script></body>', 1), 'endpoint'),
+        ('review form back', idx.replace('<div class="gl-end">', '<form></form><div class="gl-end">', 1), 'form'),
         ('search box beside the chips', idx.replace('<nav class="gl-areas"', '<select></select><nav class="gl-areas"', 1), 'search box'),
     )
     for name, html, needle in cases:
@@ -498,14 +455,11 @@ def test_index_state_and_filter_defects_fail(built):
 
 
 @needs_site
-def test_index_with_chips_when_every_term_has_one_state_fails(built, tmp_path):
-    terms = [PLAIN, UNREV_WITH_NOTE]
-    summary, pages = pr.glossary_step(SITE_DIR, _gfile(str(tmp_path), feed_of(*terms)))
-    idx = next(h for p_, h in pages.items() if p_.endswith('index.html'))
-    chip = '<div class="gl-filter" role="group" data-gl-filter><button type="button" class="chip" data-gl-f="all" aria-pressed="true">الكل <span class="n">٢</span></button></div>'
-    bad = idx.replace('<nav class="gl-areas"', chip + '<nav class="gl-areas"', 1)
-    errs = pr.verify_glossary_index(bad, terms, None, built['index_tpl'])
-    assert errs and any('filter chips appear' in e for e in errs)
+def test_state_words_in_a_term_name_or_area_do_not_fail_the_index(tmp_path):
+    """اسم مصطلح أو مجال فيه «مؤكّد» أو «تحت التأكيد» نصٌّ حرٌّ من الفيد فلا يُسقط الفهرس."""
+    t = term('odd', ar='العقد مؤكّد', en='confirmed contract', area='other', area_label='تحت التأكيد')
+    summary, pages = pr.glossary_step(SITE_DIR, _gfile(str(tmp_path), feed_of(t)))
+    assert summary['state'] == 'ok', summary
 
 
 # ——————————————————————————————————————————————— ٢) طرفي: سطر الأوامر
@@ -575,7 +529,7 @@ def _glossary_files(tmp):
 @needs_site
 def test_cli_end_to_end_writes_term_pages_and_index(article_feed, tmp_path):
     tmp = _site(str(tmp_path))
-    gf = _gfile(tmp, feed_of(FULL, PLAIN, UNREV_WITH_NOTE))
+    gf = _gfile(tmp, feed_of(FULL, PLAIN, NOTE_ONLY))
     proc, out = _cli(tmp, article_feed, '--glossary-feed-file', gf)
     assert proc.returncode == 0, proc.stderr[-2000:]
     assert out['glossary']['state'] == 'ok' and out['glossary']['terms'] == 3
@@ -583,80 +537,96 @@ def test_cli_end_to_end_writes_term_pages_and_index(article_feed, tmp_path):
     assert all(re.match(r'^[a-z0-9.-]+$', n) for n in _glossary_files(tmp))              # أسماء ASCII
     full = _read(os.path.join(tmp, 'glossary', 'consideration.html'))
     offer = _read(os.path.join(tmp, 'glossary', 'offer.html'))
-    assert 'راجعه: <b><bdi>أ. هبة الجندي</bdi>، <bdi>محامية</bdi></b>' in full and pr.SAHA_LINK_PREFIX + TID + '"' in full
+    assert 'راجعه' not in _block(full) and pr.SAHA_LINK_PREFIX + TID + '"' in full
     assert 'راجعه' not in _block(offer) and pr.SAHA_LINK_PREFIX not in _block(offer)
     assert os.path.isfile(os.path.join(tmp, 'blog', '_pre', '%s.html' % json.loads(article_feed)['articles'][0]['id']))   # والمقالات كالمعتاد
 
 
-def _cli_state_feed():
-    under = term('delay', ar='التأخير', en='delay', fr=None, countries_note_ar='ملاحظة بلاد لا تظهر.')
-    named = term('breach', ar='الإخلال', en='breach', example_en=None, example_ar=None, review_state='confirmed', reviewed_at='2026-11-01T09:00:00',
-                 reviewed_by_name='أ. سلمى & <b>الشريك</b> 2', reviewed_by_role='محكّمة منذ 15 سنة',
-                 countries_note_ar='في الأردن 3 أنظمة و0.5% رسم.')
-    anon = term('waiver', ar='التنازل', en='waiver', fr=None, review_state='confirmed', reviewed_at='2026-11-01T09:00:00',
-                countries_note_ar='يُسمّى «الإسقاط» في بعض البلاد.')
-    return under, named, anon
+def _cli_feed_shapes():
+    """مصطلح بنقاش وملاحظة بلاد · مصطلح بلا نقاش · مصطلح بشكل الجولة ٢ (مفاتيح المراجعة موجودة، والاسم فيه رموز تُهرَّب)."""
+    topic = term('delay', ar='التأخير', en='delay', fr=None, example_en=None, example_ar=None, saha_topic_id=TID, countries_note_ar='في الأردن 3 أنظمة و0.5% رسم.')
+    none = term('waiver', ar='التنازل', en='waiver', fr=None, countries_note_ar='يُسمّى «الإسقاط» في بعض البلاد.')
+    on = term('breach', ar='الإخلال', en='breach', example_en=None, example_ar=None, review_state='confirmed', reviewed_at='2026-11-01T09:00:00',
+              reviewed_by_name='أ. سلمى & <b>الشريك</b> 2', reviewed_by_role='محكّمة منذ 15 سنة', countries_note_ar='في مصر نظام آخر.')
+    return topic, none, on
 
 
 @needs_site
-def test_cli_end_to_end_the_three_states_under_review_named_and_anonymous(article_feed, tmp_path):
+def test_cli_end_to_end_a_term_with_a_topic_without_one_and_an_on_shape_feed(article_feed, tmp_path):
     tmp = _site(str(tmp_path))
-    under, named, anon = _cli_state_feed()
-    proc, out = _cli(tmp, article_feed, '--glossary-feed-file', _gfile(tmp, feed_of(under, named, anon)))
+    topic, none, on = _cli_feed_shapes()
+    proc, out = _cli(tmp, article_feed, '--glossary-feed-file', _gfile(tmp, feed_of(topic, none, on)))
     assert proc.returncode == 0, proc.stderr[-2000:]
     assert out['glossary']['state'] == 'ok' and out['glossary']['terms'] == 3
-    u, n, a, idx = (_read(os.path.join(tmp, 'glossary', f + '.html')) for f in ('delay', 'breach', 'waiver', 'index'))
-    badge = 'تحت التأكيد: نبحث عن متخصص يراجع هذا المصطلح'
-    # تحت التأكيد: شارة، بلا مراجع ولا ملاحظة بلاد، ونموذج واحد
-    assert _block(u).count(badge) == 1 and 'راجعه' not in _block(u) and 'class="gl-country"' not in _block(u) and 'ملاحظة بلاد لا تظهر' not in u
-    # مؤكّد باسم: الاسم يمرّ بالتهريب والأرقام هندية، وملاحظة البلاد تظهر بأرقام هندية
-    assert badge not in _block(n)
-    assert 'راجعه: <b><bdi>أ. سلمى &amp; &lt;b&gt;الشريك&lt;/b&gt; ٢</bdi>، <bdi>محكّمة منذ ١٥ سنة</bdi></b>' in _block(n)
-    assert 'في الأردن ٣ أنظمة و٠٫٥٪ رسم.' in _block(n) and '<b>الشريك</b>' not in n
-    assert not re.search(r'[0-9]', pr.strip_to_text(_block(n)))                                        # لا رقم لاتيني في النص الظاهر
-    # مؤكّد بلا اسم: «راجعه متخصص» وملاحظة البلاد
-    assert _block(a).count('راجعه متخصص') == 1 and 'راجعه:' not in _block(a) and badge not in _block(a)
-    assert 'يُسمّى «الإسقاط» في بعض البلاد.' in _block(a)
-    for html in (u, n, a):
-        b = _block(html)
-        assert b.count('<form') == 1 and b.count('name="website"') == 1 and 'api/public/expert-reviews' in b
-    # الفهرس: علامات وأزرار تصفية
-    assert idx.count('class="gl-l-st is-c">مؤكّد<') == 2 and idx.count('class="gl-l-st is-w">تحت التأكيد<') == 1 and 'data-gl-filter' in idx
+    d, w, b, idx = (_read(os.path.join(tmp, 'glossary', f + '.html')) for f in ('delay', 'waiver', 'breach', 'index'))
+    # بنقاش: رابط الساحة مرة واحدة؛ بلا نقاش: لا رابط ولا نص؛ ملاحظة البلاد بأرقام هندية تظهر في الثلاثة
+    assert _block(d).count(pr.SAHA_LINK_PREFIX + TID + '"') == 1 and _block(d).count('ناقشه في الساحة') == 1
+    for h in (w, b):
+        assert pr.SAHA_LINK_PREFIX not in _block(h) and 'ناقشه في الساحة' not in _block(h)
+    assert 'في الأردن ٣ أنظمة و٠٫٥٪ رسم.' in _block(d) and 'يُسمّى «الإسقاط» في بعض البلاد.' in _block(w) and 'في مصر نظام آخر.' in _block(b)
+    assert not re.search(r'[0-9]', pr.strip_to_text(_block(d)))                                       # لا رقم لاتيني في النص الظاهر
+    # الفيد بمفاتيح المراجعة لا يغيّر شيئًا: لا اسم ولا صفة ولا سطر ولا نموذج في أي صفحة
+    for h in (d, w, b, idx):
+        for m in ('سلمى', 'الشريك', 'محكّمة', 'تحت التأكيد', 'راجعه', 'مؤكّد', '<form', 'expert-reviews', 'gl-rev', 'gl-l-st', 'data-st', 'data-gl-f'):
+            assert m not in h, m
+    assert 'class="chip"' in idx and '<button' not in _block(idx)
 
 
 @needs_site
-def test_cli_unknown_or_missing_review_state_is_an_error_and_writes_nothing(article_feed, tmp_path):
-    tmp = _site(str(tmp_path))
-    for bad in ('published', 'draft', 'Confirmed'):
-        proc, out = _cli(tmp, article_feed, '--glossary-feed-file', _gfile(tmp, feed_of(PLAIN, term('zz1', review_state=bad))))
-        assert proc.returncode == 0 and out['glossary']['state'] == 'error' and 'review_state' in out['glossary']['error'], bad
-        assert _glossary_files(tmp) == []
-    t = term('zz2')
-    del t['review_state']
-    proc, out = _cli(tmp, article_feed, '--glossary-feed-file', _gfile(tmp, feed_of(t)))
-    assert out['glossary']['state'] == 'error' and 'review_state' in out['glossary']['error'] and _glossary_files(tmp) == []
-
-
-@needs_site
-def test_cli_a_template_that_drops_the_review_form_or_the_badge_writes_no_glossary_page(article_feed, tmp_path):
-    def drop_form(tmp):
-        p = os.path.join(tmp, 'glossary-term.html')
-        s = _read(p)
-        assert "<form class=\"gl-form\" data-gl-review" in s and "'</form></details>" in s
-        _write(p, s.replace('<form class="gl-form" data-gl-review', '<div class="gl-form" data-gl-review').replace("'</form></details>", "'</div></details>"))
-
-    def drop_badge(tmp):
-        p = os.path.join(tmp, 'glossary-term.html')
-        s = _read(p)
-        assert 'تحت التأكيد: نبحث عن متخصص يراجع هذا المصطلح' in s
-        _write(p, s.replace('تحت التأكيد: نبحث عن متخصص يراجع هذا المصطلح', 'قيد النظر'))
-    for tweak in (drop_form, drop_badge):
-        d = tmp_path / tweak.__name__
+def test_cli_the_on_shape_feed_gives_the_same_pages_as_the_off_shape_feed(article_feed, tmp_path):
+    """نفس المصطلحات بمفاتيح المراجعة وبدونها ⇒ صفحات قاموس متطابقة بايتًا."""
+    off = [term('delay'), term('breach', ar='الإخلال', en='breach', countries_note_ar='ملاحظة.')]
+    on = [dict(t, review_state='confirmed', reviewed_by_name='أ. اسم', reviewed_by_role='محامية', reviewed_at='2026-11-01T10:00:00') for t in off]
+    trees = []
+    for name, terms in (('off', off), ('on', on)):
+        d = tmp_path / name
         d.mkdir()
-        tmp = _site(str(d), tweak=tweak)
-        proc, out = _cli(tmp, article_feed, '--glossary-feed-file', _gfile(tmp, feed_of(PLAIN)))
-        assert proc.returncode == 0 and out['glossary']['state'] == 'error' and 'verification failure' in out['glossary']['error'], tweak.__name__
-        assert _glossary_files(tmp) == [] and out['files_written'] > 30
+        tmp = _site(str(d))
+        proc, out = _cli(tmp, article_feed, '--glossary-feed-file', _gfile(tmp, feed_of(*terms)))
+        assert proc.returncode == 0 and out['glossary']['state'] == 'ok', proc.stderr[-1500:]
+        trees.append(_tree(tmp, 'glossary'))
+    assert trees[0] and trees[0] == trees[1]
+
+
+@needs_site
+def test_cli_a_missing_or_odd_review_state_is_not_an_error(article_feed, tmp_path):
+    tmp = _site(str(tmp_path))
+    for st in ('published', 'draft', 'Confirmed', None, 5):
+        proc, out = _cli(tmp, article_feed, '--glossary-feed-file', _gfile(tmp, feed_of(PLAIN, term('zz1', review_state=st))))
+        assert proc.returncode == 0 and out['glossary']['state'] == 'ok', st
+    proc, out = _cli(tmp, article_feed, '--glossary-feed-file', _gfile(tmp, feed_of(PLAIN)))
+    assert out['glossary']['state'] == 'ok' and 'review_state' not in _read(os.path.join(tmp, 'glossary', 'offer.html'))
+
+
+def _inject(tpl, old, new):
+    """يعدّل القالب في موقع الأعمال (--site) لاختبار أن المولّد يرفض قالبًا يُعيد ما أُزيل."""
+    def tweak(tmp):
+        p = os.path.join(tmp, tpl)
+        s = _read(p)
+        assert old in s, old
+        _write(p, s.replace(old, new, 1))
+    tweak.__name__ = 'inject_' + re.sub(r'\W+', '_', new)[:30]
+    return tweak
+
+
+@needs_site
+@pytest.mark.parametrize('tpl,old,new', [
+    ('glossary-term.html', "h.push('</article>');", "h.push('<p class=\"gl-rev wait\" data-state=\"under_review\">تحت التأكيد: نبحث عن متخصص يراجع هذا المصطلح</p>');h.push('</article>');"),
+    ('glossary-term.html', "h.push('</article>');", "h.push('<form data-gl-review data-endpoint=\"https://dashboard.elprofessor.net/api/public/expert-reviews\"></form>');h.push('</article>');"),
+    ('glossary-term.html', "h.push('</article>');", "h.push('<p>راجعه: أحد</p>');h.push('</article>');"),
+    ('glossary-term.html', "h.push('</article>');", "h.push('<a class=\"btn\" href=\"#\">أنت متخصص؟ راجِع هذا المصطلح</a>');h.push('</article>');"),
+    ('glossary-term.html', "h.push('</article>');", "h.push('<span class=\"gl-badge\" hidden>مؤكد، نبحث عن مراجع</span><input type=\"email\" name=\"mail\">');h.push('</article>');"),
+    ('glossary-term.html', "h.push('</article>');", "h.push('<input type=\"email\" name=\"mail\">');h.push('</article>');"),
+    ('glossary-term.html', "h.push('</article>');", "h.push('<p>مؤكد</p>');h.push('</article>');"),
+    ('glossary.html', "return '<li><a href=\"/glossary/'", "return '<li data-st=\"under_review\"><a href=\"/glossary/'"),
+    ('glossary.html', "h.push('<nav class=\"gl-areas\"", "h.push('<p>مؤكّد</p>');h.push('<nav class=\"gl-areas\""),
+])
+def test_cli_a_template_that_brings_back_the_badge_form_or_state_marks_writes_no_glossary_page(article_feed, tmp_path, tpl, old, new):
+    tmp = _site(str(tmp_path), tweak=_inject(tpl, old, new))
+    _write(os.path.join(tmp, 'glossary', 'old.html'), 'OLD')                                  # ولا مسح بعد فشل
+    proc, out = _cli(tmp, article_feed, '--glossary-feed-file', _gfile(tmp, feed_of(PLAIN)))
+    assert proc.returncode == 0 and out['glossary']['state'] == 'error' and 'verification failure' in out['glossary']['error'], new
+    assert _glossary_files(tmp) == ['old.html'] and out['files_written'] > 30
 
 
 @needs_site
@@ -794,19 +764,6 @@ def test_old_site_template_set_is_safe_default_url_is_never_fetched_without_a_fl
     tmp = _site(str(tmp_path))
     proc, out = _cli(tmp, article_feed)           # لا --glossary: لا شبكة ولا مفتاح
     assert proc.returncode == 0 and 'glossary' not in out
-
-
-# ——————————————————————————————————————————————— ٢ب) المتصفح: النموذج والتصفية (playwright محلي، كل طلب خارجي مجهَض)
-
-@needs_site
-def test_browser_review_form_and_index_filter_with_a_fake_fetch():
-    """tests/uiharness/glossary_review_form.py: يتحقق في كروميوم حقيقي من النموذج (تحقق، جسم JSON حرفي، ٢٠١/٤٠٠/٤٢٩/٤٠٤/انقطاع،
-    فخّ الروبوتات، الأهداف)، ومن علامات الفهرس وأزرار التصفية، وبلا JS. fetch مبدَّلة وأي مضيف خارجي يُجهَض. خروج ٧٧ = لا متصفح هنا."""
-    proc = subprocess.run([sys.executable, '-B', os.path.join(_HERE, 'uiharness', 'glossary_review_form.py'), SITE_DIR],
-                          capture_output=True, text=True, timeout=300)
-    if proc.returncode == 77:
-        pytest.skip('no browser in this environment')
-    assert proc.returncode == 0, proc.stdout[-3000:] + proc.stderr[-1500:]
 
 
 # ——————————————————————————————————————————————— ٣) الدفع والمسح (app.py) بـSFTP بديل

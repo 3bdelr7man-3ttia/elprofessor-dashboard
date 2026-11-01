@@ -3,15 +3,16 @@
 
     cd backend && python3 -B tests/uiharness/glossary_site_shots.py ../docs/v2/glossary/shots [/path/to/site-checkout]
 
-الخطوات: نسخة مؤقتة من ريبو الموقع (بلا .git ولا فيديو) ⇐ فيد قاموس محلي من البذرة (٨٠ مصطلحًا بحالات المراجعة الجديدة) وفيد مقالات من ٦٢ مقالًا ⇐
-`prerender.py` بسطر الأوامر (لا شبكة) ⇐ صفحات حقيقية مولَّدة ⇐ playwright يفتحها من الملفات بمسار `https://elprofessor.net/...` يخدمه المسار المحلي،
-وأي أصل آخر `route.abort()` ويُسجَّل. `window.fetch` مبدَّلة قبل أي سكربت فلا يخرج نموذج المراجعة إلى الشبكة (يسجّل الجسم ويردّ ٢٠١).
-  s01 مصطلح «تحت التأكيد» والنموذج مغلق (الفسخ) · s02 المصطلح نفسه والنموذج مفتوح وفيه أخطاء التحقق · s03 رسالة النجاح بعد إرسال سليم ·
-  s04 مصطلح مؤكَّد باسم المراجع ومعه نقاش الساحة (القوة القاهرة) · s05 مؤكَّد بلا اسم معلن · s06 الفهرس بالعلامات وأزرار التصفية.
+الخطوات: نسخة مؤقتة من ريبو الموقع (بلا .git ولا فيديو) ⇐ فيد قاموس محلي من البذرة (٨٠ مصطلحًا بشكل الإعداد المغلق: بلا أي مفتاح مراجعة، إلا أن كل ثالث مصطلح
+يحمل مفاتيح المراجعة بقيم مؤكَّدة واسم مراجع لنثبت أنها تُتجاهل) وفيد مقالات من ٦٢ مقالًا ⇐ `prerender.py` بسطر الأوامر (لا شبكة) ⇐ صفحات حقيقية مولَّدة ⇐
+playwright يفتحها من الملفات بمسار `https://elprofessor.net/...` يخدمه المسار المحلي، وأي أصل آخر `route.abort()` ويُسجَّل. `window.fetch` مبدَّلة قبل أي سكربت
+وتسجّل كل نداء: صفحة القاموس لا تنادي شيئًا.
+  s01 مصطلح بنقاش (يظهر «ناقشه في الساحة») ومعه ملاحظة بلاد · s02 مصطلح بلا نقاش ولا فرنسي ولا ملاحظة بلاد · s03 مصطلح بملاحظة بلاد بلا نقاش · s04 الفهرس بشرائح المجالات.
+(قبل الجولة ٣ كانت s01 إلى s06 تُظهر شارة «تحت التأكيد» ونموذج المراجعة وعلامات الفهرس؛ نسخها محفوظة باسم `before-*`.)
 
-السكربت بيفشل (exit 1) لو: خروج المولّد ≠ ٠ أو حالة القاموس ≠ ok · صفحة ناقصة · الشارة أو «راجعه» أو النموذج أو النقاش في غير مكانه · هدف أقل من ٤٤px · خانة أقل من ١٦px ·
-تمرير أفقي · عنصر يخرج من العرض · رقم لاتيني في نص عربي · «·» ملاصقة لرقم · كلمة ممنوعة · لون أصفر · طلب خرج لغير الموقع المحلي بغير ما هو معروف ·
-جسم الإرسال ليس ما كتبه الزائر · JSON-LD لا يُقرأ أو ليس DefinedTerm.
+السكربت بيفشل (exit 1) لو: خروج المولّد ≠ ٠ أو حالة القاموس ≠ ok · صفحة ناقصة · شارة أو «راجعه» أو «مؤكّد» أو نموذج أو خانة إدخال أو زر في المحتوى · اسم مراجع من الفيد على الصفحة ·
+النقاش في غير مكانه · هدف أقل من ٤٤px · خانة أقل من ١٦px · تمرير أفقي · عنصر يخرج من العرض · رقم لاتيني في نص عربي · «·» ملاصقة لرقم · كلمة ممنوعة · لون أصفر ·
+طلب خرج لغير الموقع المحلي · نداء fetch من الصفحة · JSON-LD لا يُقرأ أو ليس DefinedTerm.
 ⛔ صفر شبكة حقيقية: كل شيء من الديسك.
 """
 import json
@@ -37,17 +38,17 @@ BLOCKED = {}
 AREAS = [('contracts', 'عقود'), ('litigation', 'تقاضٍ'), ('corporate', 'شركات'), ('general', 'عام'), ('arbitration', 'تحكيم'),
          ('criminal', 'جنائي'), ('ip', 'ملكية فكرية'), ('labor', 'عمل'), ('family', 'أسرة'), ('other', 'أخرى')]
 TOPIC = 'c0ffee00-1111-4222-8333-444455556666'
-UNDER = 'rescission'                  # تحت التأكيد، بلا نقاش ولا فرنسي (s01 إلى s03)
-CONF_ANON = 'consideration'             # مؤكَّد بلا اسم معلن (s05)
-ENDPOINT = 'https://dashboard.elprofessor.net/api/public/expert-reviews'
-BADGE = 'تحت التأكيد: نبحث عن متخصص يراجع هذا المصطلح'
-SHOTS_SPEC = (('s01', UNDER + '.html', 'under-review-closed'), ('s02', UNDER + '.html', 'form-errors'), ('s03', UNDER + '.html', 'form-success'),
-              ('s04', 'force-majeure.html', 'confirmed-named'), ('s05', CONF_ANON + '.html', 'confirmed-anonymous'), ('s06', '', 'index'))
+WITH_TOPIC = 'force-majeure'          # بنقاش وفرنسي وملاحظة بلاد (s01)
+NO_TOPIC = 'rescission'               # بلا نقاش ولا فرنسي ولا ملاحظة بلاد (s02)
+WITH_NOTE = 'liquidated-damages'      # ملاحظة بلاد بلا نقاش (s03)
+ENDPOINT_PART = 'expert-reviews'
+REVIEWER = 'هبة الجندي'               # يحملها الفيد في مفاتيح المراجعة للتجاهل؛ يجب ألا تظهر في أي صفحة
+SHOTS_SPEC = (('s01', WITH_TOPIC + '.html', 'topic'), ('s02', NO_TOPIC + '.html', 'no-topic'), ('s03', WITH_NOTE + '.html', 'country-note'), ('s04', '', 'index'))
 FAKE_FETCH = """
 window.__calls = [];
 window.fetch = function (url, init) {
-  window.__calls.push({url: String(url), method: init && init.method, credentials: init && init.credentials, body: init && init.body});
-  return Promise.resolve({status: 201, ok: true, json: function () { return Promise.resolve({ok: true}); }});
+  window.__calls.push({url: String(url), method: init && init.method});
+  return Promise.resolve({status: 404, ok: false, json: function () { return Promise.resolve({}); }});
 };
 """
 BANNED = ('يقوّم', 'API', 'JSON', 'Claude', 'DeepSeek', 'Anthropic', 'endpoint', 'token', 'undefined', 'null', 'NaN', 'slug', 'draft')
@@ -64,23 +65,15 @@ def build_feeds(tmp):
     label = dict(AREAS)
     terms = []
     for n, i in enumerate(seed):
-        # كل ثالث مصطلح مؤكَّد؛ والباقي «تحت التأكيد». المؤكَّد باسم معلن إلا كل ثالث مؤكَّد (يبقى «راجعه متخصص»).
-        rev = (n % 3 == 0) or i['id'] == 'force-majeure'
-        if i['id'] == UNDER:
-            rev = False
-        public = rev and (i['id'] == 'force-majeure' or n % 9 != 0)
-        if i['id'] == CONF_ANON:
-            public = False
         t = {'id': n + 1, 'slug': i['id'], 'ar': i['ar'], 'en': i['en'], 'fr': i.get('fr') or None, 'area': i['area'], 'area_label': label[i['area']],
              'definition_ar': i['definition_ar'], 'example_en': i.get('example_en') or None, 'example_ar': i.get('example_ar') or None,
              'false_friend_note_ar': i.get('false_friend_note_ar') or None,
-             'countries_note_ar': (i.get('countries_note_ar') or None) if rev else None,       # يحجبها الخادم لغير المؤكَّد
+             'countries_note_ar': (i.get('countries_note_ar') or None) if i['id'] != NO_TOPIC else None,       # تظهر متى وُجدت
              'related': [{'slug': r, 'ar': by[r]['ar'], 'en': by[r]['en']} for r in i.get('related', []) if r in by and r != i['id']],
-             'review_state': 'confirmed' if rev else 'under_review',
-             'reviewed_by_name': 'أ. هبة الجندي' if public else None, 'reviewed_by_role': 'محامية' if public else None,   # لا اسم إلا مؤكَّدًا وبموافقة
-             'reviewed_at': '2026-11-01T10:00:00' if rev else None,
-             'saha_topic_id': TOPIC if i['id'] == 'force-majeure' else None,
+             'saha_topic_id': TOPIC if i['id'] == WITH_TOPIC else None,
              'published_at': '2026-11-01T10:05:00', 'updated_at': '2026-11-01T10:05:00'}
+        if n % 3 == 0 or i['id'] in (WITH_TOPIC, WITH_NOTE):          # شكل الإعداد المفتوح: مفاتيح المراجعة موجودة وتُتجاهل
+            t.update({'review_state': 'confirmed', 'reviewed_by_name': 'أ. ' + REVIEWER, 'reviewed_by_role': 'محامية', 'reviewed_at': '2026-11-01T10:00:00'})
         terms.append(t)
     gf = os.path.join(tmp, '_glossary.json')
     json.dump({'source': 'dashboard', 'areas': [{'code': c, 'label': l} for c, l in AREAS], 'terms': terms}, open(gf, 'w', encoding='utf-8'), ensure_ascii=False)
@@ -207,73 +200,45 @@ def main():
                         page.goto('https://%s/glossary/%s' % (HOST, slug), wait_until='load')
                         page.wait_for_timeout(700)
                         body = page.inner_text('main')
-                        kinds = {'s01', 's02', 's03'}
-                        if code in kinds:
-                            # تحت التأكيد: الشارة مرة واحدة، لا «راجعه»، لا ملاحظة بلاد، زر المراجعة موجود
-                            expect(body.count(BADGE) == 1 and 'راجعه' not in body and 'في البلاد العربية' not in body, name + ': شارة تحت التأكيد أو تسرّب مراجع')
-                            expect(page.is_visible('summary.gl-sum') and 'أنت متخصص؟ راجِع هذا المصطلح' in body, name + ': زر المراجعة غائب')
-                            expect(page.locator('[lang="fr"]').count() == 0 and 'ناقشه في الساحة' not in body, name + ': ظهر ما يجب أن يغيب')
+                        # كل الصفحات: لا شارة ولا «راجعه» ولا «مؤكّد» ولا زر مراجعة ولا نموذج ولا خانة إدخال ولا اسم مراجع من الفيد
+                        for word in ('تحت التأكيد', 'راجعه', 'مؤكّد', 'أنت متخصص', 'تصفية'):
+                            expect(word not in body, name + ': ظهرت كلمة «%s»' % word)
+                        expect(REVIEWER not in page.content() and ENDPOINT_PART not in page.content(), name + ': اسم مراجع أو نقطة إرسال المراجعة في الصفحة')
+                        expect(page.locator('main form, main input, main select, main textarea, main summary, main details').count() == 0, name + ': نموذج أو خانة في المحتوى')
+                        if code != 's04':
+                            expect(page.locator('main button').count() == 0 and page.locator('[data-st], .gl-l-st, .gl-rev, .gl-review').count() == 0, name + ': زر أو علامة حالة في الصفحة')
                         if code == 's01':
-                            expect(not page.is_visible('#glr-name'), name + ': النموذج مفتوح والمفروض مغلق')
-                        if code in ('s02', 's03'):
-                            page.click('summary.gl-sum')
-                            page.wait_for_timeout(150)
-                            expect(page.is_visible('#glr-name'), name + ': النموذج لم يُفتح')
+                            expect('ناقشه في الساحة' in body and page.locator('a[href="https://app.elprofessor.net/?page=saha&topic=%s"]' % TOPIC).count() == 1, name + ': رابط الساحة')
+                            expect(page.locator('[lang="fr"]').count() >= 1 and 'في البلاد العربية' in body, name + ': الفرنسي أو ملاحظة البلاد')
                         if code == 's02':
-                            page.fill('#glr-email', 'ليس-بريدا')
-                            page.click('form[data-gl-review] button[type=submit]')
-                            page.wait_for_timeout(200)
-                            err = page.evaluate("() => { const e = document.querySelector('[data-gl-err]'); return e.hidden ? '' : e.textContent; }")
-                            expect(err and 'name' not in err and not page.evaluate('window.__calls.length'), name + ': لا رسالة تحقق أو خرج طلب %r' % err)
+                            expect('ناقشه في الساحة' not in body and page.locator('a[href*="page=saha"]').count() == 0, name + ': رابط الساحة على مصطلح بلا نقاش')
+                            expect(page.locator('[lang="fr"]').count() == 0 and 'في البلاد العربية' not in body, name + ': فرنسي أو ملاحظة بلاد على مصطلح بلا ما يبررهما')
                         if code == 's03':
-                            page.fill('#glr-name', 'سلمى أحمد')
-                            page.fill('#glr-email', 'salma@example.org')
-                            page.select_option('#glr-spec', 'other')
-                            page.fill('#glr-other', 'تحكيم دولي')
-                            page.check('input[name=verdict][value=suggest]')
-                            page.fill('#glr-text', 'أقترح إضافة مثال عن عقد توريد.')
-                            page.check('input[name=show_name]')
-                            page.click('form[data-gl-review] button[type=submit]')
-                            page.wait_for_timeout(300)
-                            calls = page.evaluate('window.__calls')
-                            sent = json.loads(calls[0]['body']) if len(calls) == 1 else {}
-                            expect(len(calls) == 1 and calls[0]['url'] == ENDPOINT and sent.get('kind') == 'glossary_term' and sent.get('ref') == slug[:-5]
-                                   and sent.get('verdict') == 'suggest' and sent.get('specialty') == 'other' and sent.get('specialty_other') == 'تحكيم دولي'
-                                   and sent.get('show_name') is True and sent.get('website') == '' and sent.get('email') == 'salma@example.org', name + ': جسم الإرسال %r' % calls)
-                            ok = page.inner_text('[data-gl-ok]')
-                            expect(ok == 'وصلت مراجعتك، شكرًا لك. سنراجعها ونتواصل معك.' and not page.is_visible('#glr-name'), name + ': رسالة النجاح %r' % ok)
-                        if code == 's04':
-                            expect('راجعه: أ. هبة الجندي، محامية' in body and BADGE not in body and 'ناقشه في الساحة' in body and 'في البلاد العربية' in body, name + ': مؤكَّد باسم ناقص')
-                            expect(page.locator('a[href="https://app.elprofessor.net/?page=saha&topic=%s"]' % TOPIC).count() == 1, name + ': رابط الساحة')
-                            expect(page.locator('[lang="fr"]').count() >= 1 and page.is_visible('summary.gl-sum'), name + ': الفرنسي أو زر المراجعة')
-                        if code == 's05':
-                            expect('راجعه متخصص' in body and 'راجعه:' not in body and 'هبة' not in body and BADGE not in body, name + ': مؤكَّد بلا اسم، تسرّب اسم أو شارة')
+                            expect('في البلاد العربية' in body and 'ناقشه في الساحة' not in body, name + ': ملاحظة البلاد غائبة أو ظهر رابط نقاش')
+                        if code in ('s01', 's02', 's03'):
+                            expect(page.locator('a[href="https://app.elprofessor.net/?page=chat"]').count() == 1, name + ': «اسأل خبيرًا»')
                         types = check_page(page, name, w)
-                        if code != 's06':
+                        if code != 's04':
                             expect('DefinedTerm' in types, name + ': JSON-LD DefinedTerm %r' % types)
                         else:
+                            n_areas = len({t['area'] for t in terms})
                             expect(page.locator('a[href^="/glossary/"]').count() >= 80 and page.locator('input[type=search], input[type=text]').count() == 0, name + ': روابط الفهرس أو خانة بحث')
-                            n_conf = sum(1 for t in terms if t['review_state'] == 'confirmed')
-                            n_all = len(terms)
-                            marks = page.evaluate("() => [...document.querySelectorAll('.gl-list li')].map(li => li.dataset.st)")
-                            expect(len(marks) == n_all and marks.count('confirmed') == n_conf, name + ': علامات الفهرس %d/%d' % (marks.count('confirmed'), len(marks)))
-                            expect(page.locator('[data-gl-f]').count() == 3 and page.is_visible('[data-gl-filter]'), name + ': أزرار التصفية')
-                            page.click('[data-gl-f=under_review]')
+                            expect(page.locator('.gl-areas a.chip').count() == n_areas and page.locator('main button, [data-gl-f], [data-gl-filter]').count() == 0, name + ': شرائح المجالات (%d) أو زر تصفية' % n_areas)
+                            expect(page.locator('.gl-list li').count() == len(terms) and page.locator('[data-st], .gl-l-st').count() == 0, name + ': عناصر الفهرس أو علامة حالة')
+                            # شريحة المجال تنقل إلى قسمه
+                            page.click('.gl-areas a.chip >> nth=0')
                             page.wait_for_timeout(200)
-                            shown = page.evaluate("() => [...document.querySelectorAll('.gl-list li')].filter(li => li.offsetParent).map(li => li.dataset.st)")
-                            expect(shown and set(shown) == {'under_review'} and len(shown) == n_all - n_conf, name + ': التصفية تحت التأكيد %d' % len(shown))
-                            page.click('[data-gl-f=all]')
-                            page.wait_for_timeout(200)
+                            expect(page.evaluate("() => location.hash.indexOf('#area-') === 0"), name + ': شريحة المجال لا تنقل إلى قسمها')
                         expect(page.evaluate('window.EP_PRERENDERED') is True, name + ': الصفحة ليست مُسبقة العرض')
                         canon = page.evaluate("() => (document.querySelector('link[rel=canonical]') || {}).href")
                         expect(canon and canon.startswith('https://elprofessor.net/glossary/'), name + ': canonical %r' % canon)
                         expect(page.evaluate("() => (document.querySelector('meta[name=description]') || {content: ''}).content.length") > 20, name + ': meta description')
-                        stray = [c for c in page.evaluate('window.__calls') if c['url'] != ENDPOINT]
-                        expect(not stray, name + ': طلب خارج نقطة المراجعة %r' % stray)
+                        calls = page.evaluate('window.__calls')
+                        expect(not calls, name + ': الصفحة نادت fetch %r' % calls)
                         fn = os.path.join(OUT, name + '-' + kind + '.png')
                         page.evaluate("() => { document.documentElement.style.scrollBehavior = 'auto'; window.scrollTo(0, 0); }")          # الترويسة الثابتة لا تظهر وسط اللقطة الكاملة
                         page.wait_for_timeout(700)
-                        page.screenshot(path=fn, full_page=code != 's06')
+                        page.screenshot(path=fn, full_page=code != 's04')
                         SHOTS.append(os.path.basename(fn))
                     page.close()
                     ctx.close()

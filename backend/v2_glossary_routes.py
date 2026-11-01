@@ -15,16 +15,22 @@
   POST   /seed/preview           معاينة الاستيراد (لا كتابة ولا تأكيد)     POST /seed/import   الاستيراد (يطلب التأكيد)
   GET    /topics                 نقاشات «الساحة» المنشورة (من جسر المنصة)
   POST   /<id>/attach-topic | detach-topic    ربط نقاش موجود بالمصطلح وفصله
-  GET|PUT /settings              إعداد `glossary.require_review` (الافتراضي مغلق؛ مفعّل = النشر بلا مراجعة ممنوع)
-  GET    /reviews                قائمة مراجعات المتخصصين (status · kind) + عدّاد
-  POST   /reviews/<id>/approve | reject      «اعتمد» (تأكيد ⇒ يختم المصطلح) · «ارفض»
+  POST   /<id>/saha-topic/preview | /saha-topic/open       فتح نقاش جديد في «الساحة» للمصطلح المنشور (معاينة بلا كتابة · ثم فتح بتأكيد)
+  POST   /saha-topics/bulk/preview | /bulk/open             نفسه لكل المنشور بلا نقاش (دفعات ≤٥٠ في نداء المنصة)
+  GET|PUT /settings              إعدادان: `glossary.require_review` (الافتراضي مغلق) و`glossary.expert_reviews_enabled` (الافتراضي مغلق)
+  GET    /reviews                قائمة مراجعات المتخصصين (status · kind) + عدّاد                    ┐ مغلقة (٤٠٤) ما دام
+  POST   /reviews/<id>/approve | reject      «اعتمد» (تأكيد ⇒ يختم المصطلح) · «ارفض»                ┘ `expert_reviews_enabled` مغلقًا
 الفيد العام (بلا توكن، منشور فقط، حقول عامة فقط، no-store): GET /api/content/glossary
-الاستمارة العامة (بلا توكن): POST /api/public/expert-reviews — مراجعة متخصص (kind = glossary_term | course | track)
+الاستمارة العامة (بلا توكن): POST /api/public/expert-reviews — مراجعة متخصص (kind = glossary_term | course | track)؛ مغلقة (٤٠٤ قبل قراءة الجسم) ما دام الإعداد مغلقًا
 
 القواعد (نفس `v2_saha_link_routes.py` و`v2_market4_routes.py`):
   * أدمن بس · المفتاح `DASH_V2_ENABLED` مقفول ⇒ ٤٠٤ بلا أي أثر · `no-store`.
   * كل كتابة تطلب `confirmed: true` بالضبط (لا يُخزَّن ولا يُمرَّر) · `by` من التوكن وحده (في سجل التدقيق) · قوائم بيضاء للحقول داخلًا وخارجًا.
   * تدقيق عند النجاح بس. نداء الجسر اللي ضاع رده ⇒ ٥٠٢ و`no_reply`.
+  * قرار المؤسس ٢٠٢٦-١١-٠١ (بعد الجولة ٢): «حتى القاموس مش لازم نبني تحتيه إنه أكّد وما تأكّدش… نفتحه للنقاش ونلمّ الاعتراضات». فالمراجعات مطفأة لا محذوفة:
+    `glossary.expert_reviews_enabled` (الافتراضي مغلق، لا يُكتب من `PUT /api/settings` العام) يحجب الاستمارة العامة وصندوق المراجعات وصف الجرس
+    وحقول المراجعة من الفيد؛ والواجهة تعرض «مسودة / منشور» فقط، و«راجعه» ختم داخلي في المحرّر لا يصل الموقع. شرط المراجعة يتعطّل معه.
+  * كل مصطلح منشور يُفتح له نقاش في «الساحة» عبر مسار البذر بلا نموذج ذكاء (`POST /api/bridge/topics/seed`) — `apply:false` معاينة، `apply:true` فتح.
   * الحالات: draft (للمؤسس وحده) ⇒ under_review (منشور وظاهر بلا ختم) ⇒ confirmed (منشور وعليه ختم). «منشور» = أيٌّ من الأخيرين.
     تعديل جوهري لمصطلح مؤكَّد يمسح الختم فيرجع «تحت التأكيد» ويبقى ظاهرًا. `glossary.require_review` (الافتراضي مغلق): مفعّل = لا نشر بلا ختم (٤٠٩)
     وتعديل جوهري لمؤكَّد يرجعه مسودة.
@@ -43,6 +49,12 @@ TOPIC_ID_RE = re.compile(r'^[A-Za-z0-9_-]{8,64}$')       # نفس SAHA_TOPIC_ID_
 SAHA_APP_URL = 'https://app.elprofessor.net/?page=saha&topic='
 _LIVE = ('open', 'published')                              # النقاش علنيّ فعلًا
 SETTING_KEY = 'glossary.require_review'
+EXPERT_KEY = 'glossary.expert_reviews_enabled'            # الافتراضي مغلق: لا استمارة ولا صندوق ولا جرس ولا حقول مراجعة في الفيد
+SEED_CAP = 50                                              # أكبر عدد عناصر في نداء بذر واحد عند المنصة
+TOPIC_TAG = 'القاموس'
+TOPIC_TITLE_TAIL = ': هل الترجمة والتعريف دقيقان؟'
+TOPIC_QUESTION = 'هل الترجمة أو التعريف دقيق في نظامك القانوني؟ اكتب اعتراضك أو اقتراحك.'
+SITE_PAGE = 'https://elprofessor.net/glossary/'
 STATES = ('draft', 'under_review', 'confirmed')
 PUBLISHED = ('under_review', 'confirmed')                  # «منشور» = ظاهر في الفيد والموقع
 
@@ -90,6 +102,7 @@ RATE_AR = 'محاولات كثيرة، جرّب بعد قليل'
 
 CONFIRM_AR = 'لازم تأكّد الأول من الشاشة'
 NOT_FOUND_AR = 'المصطلح غير موجود'
+NOT_FOUND_ROUTE_AR = 'غير موجود'
 NEEDS_REVIEW_AR = 'يُنشر بعد أن يراجعه خبير'
 BAD_PUBLIC_NAME_AR = 'اختر: يظهر اسم المراجع أو لا يظهر'
 ALREADY_PUBLISHED_AR = 'المصطلح منشور بالفعل'
@@ -111,6 +124,18 @@ BAD_SOURCE_AR = 'اختر مصدر الاستيراد'
 BAD_UPLOAD_AR = 'الملف يجب أن يحوي قائمة مصطلحات (items)'
 TOO_MANY_AR = 'الملف يتجاوز ٥٠٠ مصطلح'
 NO_REPLY_AR = 'لم يصل رد. حدّث الصفحة ثم أعد المحاولة.'
+SEED_NO_REPLY_AR = 'لم يصل رد. حدّث الصفحة ثم أعد المحاولة؛ إن كان النقاش قد فُتح فسيُربط بالمصطلح ولن يتكرر.'
+TOPIC_NOT_PUBLISHED_AR = 'انشر المصطلح أولًا ثم افتح نقاشه'
+BAD_TOPIC_TITLE_AR = 'عنوان النقاش من ٣ إلى ٢٠٠ حرف'
+BAD_TOPIC_QUESTION_AR = 'اكتب سؤال النقاش (حتى ٥٠٠٠ حرف)'
+TOPIC_EXISTS_NOT_LIVE_AR = 'يوجد نقاش بنفس العنوان لكنه غير منشور في الساحة'
+TOPIC_DUP_IN_BATCH_AR = 'تعذّر فتح النقاش لهذا المصطلح بسبب عنوان مكرر، غيّر عنوانه ثم أعد المحاولة'
+TOPIC_TITLE_LONG_AR = 'عنوان النقاش أطول من ٢٠٠ حرف، افتح نقاشه من شاشة المصطلح بعنوان أقصر'
+TOPIC_PLAN_NEW_AR = 'سيُفتح نقاش جديد في الساحة'
+TOPIC_PLAN_LINK_AR = 'يوجد نقاش بنفس العنوان، سيُربط به'
+NO_ELIGIBLE_AR = 'لا مصطلحات منشورة بلا نقاش'
+PLATFORM_DOWN_AR = 'تعذّر الاتصال بالمنصة'
+PLATFORM_REFUSED_AR = 'المنصة رفضت البيانات المرسلة'
 BAD_REPLY_AR = 'تعذّر قراءة رد المنصة'
 BAD_SETTING_AR = 'القيمة نعم أو لا'
 NO_REVIEW_AR = 'المراجعة غير موجودة'
@@ -278,9 +303,11 @@ def serialize_admin(t, frozen=None):
     }
 
 
-def serialize_public(t, published_by_slug):
-    """حقول الفيد العام. ⛔ بلا إيميلات ولا حالة داخلية ولا مصدر. `review_state`: under_review | confirmed.
-    ملاحظة الدول لا تُنشر إلا لمؤكَّد، واسم المراجع وصفته لا يُنشران إلا لمؤكَّد وافق على ظهور اسمه (الخادم يفرضها هنا لا الصفحة)."""
+def serialize_public(t, published_by_slug, reviews=False):
+    """حقول الفيد العام. ⛔ بلا إيميلات ولا حالة داخلية ولا مصدر.
+    `reviews` = `glossary.expert_reviews_enabled`. مغلقًا (الافتراضي): لا مفاتيح `review_state` ولا `reviewed_by_name|role` ولا `reviewed_at` أصلًا،
+    وملاحظة الدول تظهر متى وُجدت (المصطلح يُنشر ويُفتح للنقاش). مفعّلًا (شكل الجولة ٢): `review_state` = under_review | confirmed،
+    وملاحظة الدول لا تُنشر إلا لمؤكَّد، واسم المراجع وصفته لا يُنشران إلا لمؤكَّد وافق على ظهور اسمه (الخادم يفرضها هنا لا الصفحة)."""
     rev = t.status == 'confirmed' and reviewed(t)
     named = rev and bool(t.reviewer_name_public)
     rel = []
@@ -288,20 +315,97 @@ def serialize_public(t, published_by_slug):
         r = published_by_slug.get(s)
         if r is not None and r.id != t.id:
             rel.append({'slug': r.slug, 'ar': r.ar, 'en': r.en})
-    return {
+    row = {
         'id': t.id, 'slug': t.slug, 'ar': t.ar, 'en': t.en, 'fr': t.fr or None, 'area': t.area,
         'area_label': AREA_LABEL.get(t.area, AREA_LABEL['other']),
         'definition_ar': t.definition_ar, 'example_en': t.example_en or None, 'example_ar': t.example_ar or None,
         'false_friend_note_ar': t.false_friend_note_ar or None,
-        'countries_note_ar': (t.countries_note_ar or None) if rev else None,
+        'countries_note_ar': (t.countries_note_ar or None) if (rev or not reviews) else None,
         'related': rel,
-        'review_state': 'confirmed' if rev else 'under_review',
-        'reviewed_by_name': t.reviewed_by_name if named else None,
-        'reviewed_by_role': t.reviewed_by_role if named else None,
-        'reviewed_at': iso(t.reviewed_at) if rev else None,
+    }
+    if reviews:
+        row.update({
+            'review_state': 'confirmed' if rev else 'under_review',
+            'reviewed_by_name': t.reviewed_by_name if named else None,
+            'reviewed_by_role': t.reviewed_by_role if named else None,
+            'reviewed_at': iso(t.reviewed_at) if rev else None,
+        })
+    row.update({
         'saha_topic_id': t.saha_topic_id if (t.saha_topic_id and TOPIC_ID_RE.match(t.saha_topic_id)) else None,
         'published_at': iso(t.published_at), 'updated_at': iso(t.updated_at),
-    }
+    })
+    return row
+
+
+def flag_on(Setting, key):
+    """إعداد منطقي في جدول settings: غياب الصف أو قيمة غير مفهومة = مغلق، ولا يفتحه إلا `1/true/on/yes/نعم`."""
+    s = Setting.query.get(key)
+    if s is None or s.value is None:
+        return False
+    return str(s.value).strip().lower() in ('1', 'true', 'on', 'yes', 'نعم')
+
+
+def reviews_enabled(Setting):
+    """مراجعات المتخصصين مفعّلة؟ الافتراضي لا (قرار المؤسس ٢٠٢٦-١١-٠١). يقرؤه app.py لصف الجرس أيضًا."""
+    return flag_on(Setting, EXPERT_KEY)
+
+
+# ——————————————————————————————————————————————— نقاش «الساحة» لكل مصطلح (مسار البذر بلا نموذج ذكاء)
+
+def default_topic_title(t):
+    """«<العربي> (<الإنجليزي>): هل الترجمة والتعريف دقيقان؟». ليس فريدًا بالضرورة: الفريد في القاموس هو الـslug وحده، فمصطلحان
+    بالزوج نفسه (عربي وإنجليزي، أو ما يطويه تطبيع المنصة إلى عنوان واحد) يخرجان بعنوان واحد. في الدفعة الواحدة يُعامَل الثاني
+    كخطأ (`duplicate_in_batch`) فلا يُربط، وفي تشغيل لاحق يردّ البذر `duplicate_title` فيُربط بنقاش الأول، والتجربة تُظهر ذلك
+    «سيُربط بموجود» قبل أي كتابة. لتمييزهما يُعدَّل العنوان في ورقة المصطلح قبل الفتح."""
+    return '%s (%s)%s' % ((t.ar or '').strip(), (t.en or '').strip(), TOPIC_TITLE_TAIL)
+
+
+def topic_body(t):
+    """نص المنصة تحت السؤال: التعريف (+ المثال لو وُجد) ورابط صفحة المصطلح. ⛔ لا `source_article_slug`: المنصة تعرضه «من مقال» برابط /blog/."""
+    parts = [(t.definition_ar or '').strip()]
+    ex = [x.strip() for x in (t.example_en, t.example_ar) if x and x.strip()]
+    if ex:
+        parts.append('مثال:\n' + '\n'.join(ex))
+    parts.append(SITE_PAGE + t.slug + '.html')
+    return '\n\n'.join(p for p in parts if p)
+
+
+def topic_item(t, title=None, question=None):
+    """(عنصر البذر | None، رسالة عربية | None). العنوان والسؤال الافتراضيان من المصطلح، والمرسَل يُفحص بحدود المنصة."""
+    title = default_topic_title(t) if title is None else title
+    title = strip_ctrl(title).strip() if isinstance(title, str) else ''
+    if not 3 <= len(title) <= 200:
+        return None, BAD_TOPIC_TITLE_AR
+    question = TOPIC_QUESTION if question is None else question
+    question = strip_ctrl(question).strip() if isinstance(question, str) else ''
+    if not 1 <= len(question) <= 5000:
+        return None, BAD_TOPIC_QUESTION_AR
+    return {'title': title, 'question': question, 'body': topic_body(t), 'tags': [TOPIC_TAG]}, None
+
+
+def align_seed(titles, data):
+    """يطابق ردّ البذر (created/skipped) بعناصر الطلب بالعنوان (المنصة تردّه مقصوصًا كما أُرسل). ⇒ قائمة بنفس الترتيب من
+    ('created', صف) | ('skipped', صف) أو None لو الرد ناقص أو لا يطابق. العنوان المتكرر يستهلك صفوفه بالترتيب."""
+    if not isinstance(data, dict):
+        return None
+    pools = {'created': {}, 'skipped': {}}
+    for kind in pools:
+        rows = data.get(kind)
+        if not isinstance(rows, list):
+            return None
+        for r in rows:
+            if not isinstance(r, dict) or not isinstance(r.get('title'), str):
+                return None
+            pools[kind].setdefault(r['title'], []).append(r)
+    out = []
+    for t in titles:
+        if pools['created'].get(t):
+            out.append(('created', pools['created'][t].pop(0)))
+        elif pools['skipped'].get(t):
+            out.append(('skipped', pools['skipped'][t].pop(0)))
+        else:
+            return None
+    return out
 
 
 def clean_submission(d):
@@ -402,12 +506,13 @@ def register(app, ns):
     def now():
         return datetime.datetime.utcnow()
 
+    def reviews_on():
+        """مراجعات المتخصصين مفعّلة؟ الافتراضي لا."""
+        return flag_on(N('Setting'), EXPERT_KEY)
+
     def require_review():
-        """مفعّل = النشر بلا مراجعة ممنوع. الافتراضي مغلق؛ لا يفعّله إلا قيمة صريحة."""
-        s = N('Setting').query.get(SETTING_KEY)
-        if s is None or s.value is None:
-            return False
-        return str(s.value).strip().lower() in ('1', 'true', 'on', 'yes', 'نعم')
+        """مفعّل = النشر بلا مراجعة ممنوع. الافتراضي مغلق؛ لا يفعّله إلا قيمة صريحة. ويتعطّل كله ما دامت المراجعات مغلقة (لا فرق بين مسودة ومنشور غير الظهور)."""
+        return reviews_on() and flag_on(N('Setting'), SETTING_KEY)
 
     def push(tid):
         """طلب توليد الصفحات في الخلفية — فشله لا يُسقط الحفظ."""
@@ -419,11 +524,13 @@ def register(app, ns):
     def audit(action, target, meta=None):
         N('_audit')(action, target=str(target), meta=meta)
 
-    def head(write=True, tid=None):
-        """(رد جاهز | None، المصطلح | None، الجسم). المفتاح ثم التأكيد ثم الوجود — قبل أي أثر."""
+    def head(write=True, tid=None, reviews=False):
+        """(رد جاهز | None، المصطلح | None، الجسم). المفتاح ثم (المراجعات مفعّلة؟) ثم التأكيد ثم الوجود — قبل أي أثر."""
         closed = N('_v2_closed')()
         if closed:
             return closed, None, None
+        if reviews and not reviews_on():
+            return err(NOT_FOUND_ROUTE_AR, 404), None, None
         body = N('_v2_body')() if write else {}
         if write:
             bad = N('_v2_confirmed')(body)
@@ -451,7 +558,8 @@ def register(app, ns):
                     c['published_unreviewed'] += 1
             by_area[area if area in by_area else 'other'] += 1
         c['by_area'] = by_area
-        c['reviews_pending'] = N('ExpertReviewSubmission').query.filter_by(status='pending').count()
+        c['reviews_pending'] = N('ExpertReviewSubmission').query.filter_by(status='pending').count() if reviews_on() else 0
+        c['published_no_topic'] = T().query.filter(T().status.in_(PUBLISHED), db().or_(T().saha_topic_id.is_(None), T().saha_topic_id == '')).count()
         return c
 
     def areas_meta():
@@ -496,7 +604,7 @@ def register(app, ns):
         total = query.count()
         rows = query.order_by(M.en.asc(), M.id.asc()).offset(offset).limit(limit).all()
         return out(jsonify({'items': [serialize_admin(t) for t in rows], 'total': total, 'counts': counts(),
-                            'areas': areas_meta(), 'require_review': require_review(),
+                            'areas': areas_meta(), 'require_review': require_review(), 'reviews_enabled': reviews_on(),
                             'substantive_fields': list(SUBSTANTIVE)}))
 
     @app.route('/api/v2/content/glossary/<int:tid>', methods=['GET'], endpoint='v2_glossary_get')
@@ -505,7 +613,7 @@ def register(app, ns):
         bad, term, _b = head(write=False, tid=tid)
         if bad:
             return bad
-        return out(jsonify({'item': serialize_admin(term), 'require_review': require_review()}))
+        return out(jsonify({'item': serialize_admin(term), 'require_review': require_review(), 'reviews_enabled': reviews_on()}))
 
     # ——— إنشاء وتعديل وحذف
 
@@ -684,32 +792,40 @@ def register(app, ns):
         bad, _t, _b = head(write=False)
         if bad:
             return bad
-        return out(jsonify({'require_review': require_review(), 'under_review': counts()['under_review'],
+        return out(jsonify({'require_review': require_review(), 'expert_reviews_enabled': reviews_on(), 'under_review': counts()['under_review'],
                             'published_unreviewed': counts()['published_unreviewed']}))
+
+    def set_flag(key, v):
+        S = N('Setting')
+        s = S.query.get(key)
+        if s is None:
+            db().session.add(S(key=key, value='1' if v else '0'))
+        else:
+            s.value = '1' if v else '0'
+            s.updated_at = now()
 
     @app.route('/api/v2/content/glossary/settings', methods=['PUT'], endpoint='v2_glossary_settings_put')
     @guard
     def v2_glossary_settings_put():
+        """الإعدادان يُكتبان من هنا وحده (والعام `PUT /api/settings` يرفضهما). كل مفتاح مرسَل يجب أن يكون منطقيًّا، ومفتاح واحد على الأقل."""
         bad, _t, body = head()
         if bad:
             return bad
-        v = body.get('require_review')
-        if not isinstance(v, bool):
+        keys = (('require_review', SETTING_KEY), ('expert_reviews_enabled', EXPERT_KEY))
+        sent = [(k, sk) for k, sk in keys if k in body]
+        if not sent or any(not isinstance(body[k], bool) for k, _ in sent):
             return err(BAD_SETTING_AR)
-        S = N('Setting')
-        s = S.query.get(SETTING_KEY)
-        before = require_review()
-        if s is None:
-            db().session.add(S(key=SETTING_KEY, value='1' if v else '0'))
-        else:
-            s.value = '1' if v else '0'
-            s.updated_at = now()
+        before = {k: flag_on(N('Setting'), sk) for k, sk in keys}
+        for k, sk in sent:
+            set_flag(sk, body[k])
         db().session.commit()
-        if before != v:
-            audit('glossary.setting', SETTING_KEY, {'require_review': v})
+        changed = {k: body[k] for k, _ in sent if before[k] != body[k]}
+        if changed:
+            audit('glossary.setting', ','.join(sorted(changed)), changed)
         # عند التفعيل لا نُسقط شيئًا تلقائيًّا: نُخبر الشاشة بعدد «تحت التأكيد» ليقرّر الأدمن.
-        return out(jsonify({'ok': True, 'require_review': v, 'under_review': counts()['under_review'],
-                            'published_unreviewed': counts()['published_unreviewed']}))
+        c = counts()
+        return out(jsonify({'ok': True, 'require_review': require_review(), 'expert_reviews_enabled': reviews_on(),
+                            'under_review': c['under_review'], 'published_unreviewed': c['published_unreviewed']}))
 
     # ——— الاستيراد (معاينة ثم تأكيد)
 
@@ -867,6 +983,180 @@ def register(app, ns):
             push(tid)
         return out(jsonify({'ok': True, 'saha_topic_id': None}))
 
+    # ——— نقاش جديد في «الساحة» لكل مصطلح منشور (مسار البذر بلا نموذج ذكاء، لا `bridge_create_topic`)
+
+    def seed_call(items, apply):
+        """(ردّ البذر المقروء | None، رد خطأ جاهز | None). نداء واحد حتى SEED_CAP عنصرًا. ⛔ لا `by` ولا `confirmed` ولا `source_article_slug` ولا `segment` في الجسم.
+        ضياع الرد ⇒ ٥٠٢ و`no_reply` (وإعادة المحاولة آمنة: البذر لا يكرّر عنوانًا موجودًا فنربط به). ٤٢٢ يمرّ بنصّه العربي، وغيره ⇒ ٥٠٢."""
+        resp = N('_platform_proxy')('POST', '/api/bridge/topics/seed', json_body={'items': items, 'apply': bool(apply)}, timeout=40)
+        if not N('_resp_ok')(resp):
+            if N('_ef_no_reply')(resp):
+                audit('glossary.no_reply', 'saha-topic', {'attempt': 'apply' if apply else 'preview'})
+                return None, err(SEED_NO_REPLY_AR if apply else NO_REPLY_AR, 502, no_reply=True)
+            code = int(resp[1]) if isinstance(resp, tuple) else 502
+            msg = N('_proxy_json')(resp).get('error')
+            if code == 422 and isinstance(msg, str) and re.search('[\u0600-\u06ff]', msg):
+                return None, err(msg, 422)
+            if code == 422:
+                return None, err(PLATFORM_REFUSED_AR, 422)
+            return None, err(PLATFORM_DOWN_AR, 502)
+        data = N('_proxy_json')(resp)
+        if not isinstance(data, dict) or data.get('ok') is not True or data.get('applied') is not bool(apply):
+            return None, err(BAD_REPLY_AR, 502)
+        return data, None
+
+    def settle_seed(kind, row, live):
+        """نتيجة عنصر واحد ⇒ ('create', id | None) | ('link', id) | ('error', رسالة). id لا يكون None إلا في المعاينة. `live` = معرّفات النقاشات العلنية."""
+        if kind == 'created':
+            tid = row.get('id')
+            if tid is None:
+                return 'create', None
+            return ('create', tid) if isinstance(tid, str) and TOPIC_ID_RE.match(tid) else ('error', BAD_REPLY_AR)
+        reason, ex = row.get('reason'), row.get('existing_id')
+        if reason == 'duplicate_in_batch':
+            return 'error', TOPIC_DUP_IN_BATCH_AR
+        if reason == 'duplicate_title' and isinstance(ex, str) and TOPIC_ID_RE.match(ex):
+            return ('link', ex) if ex in (live or ()) else ('error', TOPIC_EXISTS_NOT_LIVE_AR)
+        return 'error', BAD_REPLY_AR
+
+    def needs_live(aligned):
+        return any(k == 'skipped' and r.get('reason') == 'duplicate_title' for k, r in aligned)
+
+    def live_ids():
+        rows, e = bridge_topics()
+        return ({r['id'] for r in rows} if rows is not None else None), e
+
+    def with_extra(resp, **extra):
+        body = dict(N('_proxy_json')(resp))
+        body.update(extra)
+        return out((jsonify(body), int(resp[1]) if isinstance(resp, tuple) else 502))
+
+    def topic_head(tid, write):
+        """المصطلح للنقاش: منشور فقط ولم يُربط بعد. المعاينة بلا تأكيد ولا كتابة."""
+        bad, t, body = head(write=write, tid=tid)
+        if bad:
+            return bad, None, None
+        if not write:
+            body = N('_v2_body')()
+        if not is_published(t):
+            return err(TOPIC_NOT_PUBLISHED_AR, 409), None, None
+        if t.saha_topic_id:
+            return err(HAS_TOPIC_AR, 409), None, None
+        return None, t, body
+
+    def link(t, topic_id, adopted):
+        t.saha_topic_id = topic_id
+        t.updated_at = now()
+        db().session.commit()
+        audit('glossary.saha_open', t.id, {'topic_id': topic_id, 'adopted': adopted})
+
+    def one_topic(tid, apply):
+        bad, t, body = topic_head(tid, apply)
+        if bad:
+            return bad
+        item, msg = topic_item(t, body.get('title'), body.get('question'))
+        if msg:
+            return err(msg)
+        data, e = seed_call([item], apply)
+        if e:
+            return e
+        al = align_seed([item['title']], data)
+        if al is None or len(al) != 1:
+            return err(BAD_REPLY_AR, 502)
+        live = None
+        if needs_live(al):
+            live, e = live_ids()
+            if e:
+                return e
+        res, topic = settle_seed(al[0][0], al[0][1], live)
+        if res == 'error':
+            return err(topic, 409 if topic == TOPIC_EXISTS_NOT_LIVE_AR else 502)
+        if not apply:
+            return out(jsonify({'ok': True, 'plan': 'create' if res == 'create' else 'link_existing', 'title': item['title'], 'question': item['question'],
+                                'message': TOPIC_PLAN_NEW_AR if res == 'create' else TOPIC_PLAN_LINK_AR, 'existing_id': topic if res == 'link' else None}))
+        link(t, topic, res == 'link')
+        if is_published(t):
+            push(tid)
+        return out(jsonify({'ok': True, 'saha_topic_id': topic, 'url': SAHA_APP_URL + topic, 'adopted': res == 'link'}))
+
+    @app.route('/api/v2/content/glossary/<int:tid>/saha-topic/preview', methods=['POST'], endpoint='v2_glossary_saha_preview')
+    @guard
+    def v2_glossary_saha_preview(tid):
+        return one_topic(tid, False)
+
+    @app.route('/api/v2/content/glossary/<int:tid>/saha-topic/open', methods=['POST'], endpoint='v2_glossary_saha_open')
+    @guard
+    def v2_glossary_saha_open(tid):
+        return one_topic(tid, True)
+
+    def bulk_run(apply):
+        """كل مصطلح منشور بلا نقاش: دفعات ≤SEED_CAP بالتتابع، وتتوقف عند أول فشل (ما تم ربطه قبله يبقى ويُذكر في `results`)."""
+        closed = N('_v2_closed')()
+        if closed:
+            return closed
+        if apply:
+            bad = N('_v2_confirmed')(N('_v2_body')())
+            if bad:
+                return bad
+        M = T()
+        terms = M.query.filter(M.status.in_(PUBLISHED), db().or_(M.saha_topic_id.is_(None), M.saha_topic_id == '')).order_by(M.en.asc(), M.id.asc()).all()
+        if not terms:
+            return err(NO_ELIGIBLE_AR, 409)
+        results, work = [], []
+        for t in terms:
+            base = {'id': t.id, 'ar': t.ar, 'en': t.en, 'slug': t.slug, 'topic_id': None, 'message': ''}
+            item, _m = topic_item(t)
+            if item is None:
+                results.append(dict(base, outcome='error', message=TOPIC_TITLE_LONG_AR))
+            else:
+                work.append((t, item, base))
+        batches = [work[i:i + SEED_CAP] for i in range(0, len(work), SEED_CAP)]
+        live, linked = None, []
+        names = {'create': 'created', 'link': 'linked_existing', 'error': 'error'}
+
+        def stop(resp):
+            done = sum(1 for r in results if r['outcome'] != 'error')
+            return with_extra(resp, stopped=True, results=results, done=done, remaining=len(terms) - len(results))
+
+        for chunk in batches:
+            data, e = seed_call([it for _t, it, _b in chunk], apply)
+            if e:
+                return stop(e)
+            al = align_seed([it['title'] for _t, it, _b in chunk], data)
+            if al is None or len(al) != len(chunk):
+                return stop(err(BAD_REPLY_AR, 502))
+            if live is None and needs_live(al):
+                live, e = live_ids()
+                if e:
+                    return stop(e)
+            for (t, _it, base), (kind, row) in zip(chunk, al):
+                res, topic = settle_seed(kind, row, live)
+                if res == 'error':
+                    results.append(dict(base, outcome='error', message=topic))
+                    continue
+                if apply:
+                    link(t, topic, res == 'link')
+                    linked.append(t.id)
+                results.append(dict(base, outcome=names[res], topic_id=topic if apply else None, existing_id=topic if res == 'link' else None,
+                                    message=TOPIC_PLAN_LINK_AR if res == 'link' else TOPIC_PLAN_NEW_AR))
+        counts_ = {n: sum(1 for r in results if r['outcome'] == n) for n in ('created', 'linked_existing', 'error')}
+        view = {'ok': True, 'applied': bool(apply), 'dry_run': not apply, 'total': len(terms), 'batches': len(batches), 'counts': counts_, 'results': results}
+        if apply:
+            audit('glossary.saha_bulk', 'bulk', {'terms': len(terms), 'batches': len(batches), **counts_})
+            for tid_ in linked:
+                push(tid_)
+        return out(jsonify(view))
+
+    @app.route('/api/v2/content/glossary/saha-topics/bulk/preview', methods=['POST'], endpoint='v2_glossary_saha_bulk_preview')
+    @guard
+    def v2_glossary_saha_bulk_preview():
+        return bulk_run(False)
+
+    @app.route('/api/v2/content/glossary/saha-topics/bulk/open', methods=['POST'], endpoint='v2_glossary_saha_bulk_open')
+    @guard
+    def v2_glossary_saha_bulk_open():
+        return bulk_run(True)
+
     # ——— مراجعات المتخصصين (الاستمارة العامة ⇒ صندوق «مراجعات القاموس»)
 
     def R():
@@ -898,7 +1188,7 @@ def register(app, ns):
     @app.route('/api/v2/content/glossary/reviews', methods=['GET'], endpoint='v2_glossary_reviews_list')
     @guard
     def v2_glossary_reviews_list():
-        bad, _t, _b = head(write=False)
+        bad, _t, _b = head(write=False, reviews=True)
         if bad:
             return bad
         status = (request.args.get('status') or 'pending').strip()
@@ -942,7 +1232,7 @@ def register(app, ns):
     @app.route('/api/v2/content/glossary/reviews/<int:rid>/approve', methods=['POST'], endpoint='v2_glossary_review_approve')
     @guard
     def v2_glossary_review_approve(rid):
-        bad, _t, body = head()
+        bad, _t, body = head(reviews=True)
         if bad:
             return bad
         r, e = pending_review(rid, body)
@@ -980,7 +1270,7 @@ def register(app, ns):
     @app.route('/api/v2/content/glossary/reviews/<int:rid>/reject', methods=['POST'], endpoint='v2_glossary_review_reject')
     @guard
     def v2_glossary_review_reject(rid):
-        bad, _t, body = head()
+        bad, _t, body = head(reviews=True)
         if bad:
             return bad
         r, e = pending_review(rid, body)
@@ -997,7 +1287,8 @@ def register(app, ns):
         M = T()
         pub = M.query.filter(M.status.in_(PUBLISHED)).all()
         by_slug = {t.slug: t for t in pub}
-        rows = [serialize_public(t, by_slug) for t in sorted(pub, key=lambda x: ((x.en or '').lower(), x.id))]
+        on = reviews_on()
+        rows = [serialize_public(t, by_slug, on) for t in sorted(pub, key=lambda x: ((x.en or '').lower(), x.id))]
         return {'source': 'dashboard', 'areas': areas_meta(), 'terms': rows}
 
     ns['_glossary_feed_payload'] = feed_payload            # يقرؤه المولّد (prerender) بلا نداء HTTP — نفس نمط `_prerender_feed_json`
@@ -1017,6 +1308,8 @@ def register(app, ns):
         """PUBLIC: مراجعة متخصص (تأكيد أو اقتراح تعديل). بلا توكن، وحراسته نسخة من `/api/messages`: حدّ فضفاض لكل نداء قبل أي شيء،
         ثم فخّ الحقل الخفي (يردّ نجاحًا وهميًّا ولا يخزّن)، ثم التحقق، ثم الحدّ الصارم. CORS من الإعداد العام للتطبيق.
         ⛔ لا يُخزَّن IP ولا متصفح: `_client_ip()` مفتاح دلو في الذاكرة فقط."""
+        if not reviews_on():                               # قرار المؤسس ٢٠٢٦-١١-٠١: لا استمارة. ٤٠٤ قبل قراءة الجسم ولا شيء يُخزَّن ولا حصة تُستهلك
+            return pub({'error': 'not_found'}, 404)
         d = request.get_json(silent=True)
         d = d if isinstance(d, dict) else {}
         ip = N('_client_ip')()

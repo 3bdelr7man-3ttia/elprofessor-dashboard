@@ -5,13 +5,16 @@
                        مسودات بلا ختم في مجالات مختلفة منها «أخرى» · قريب لم يُستورد بعد · أرقام لاتينية في المثال العربي لنختبر عرضها هندية.
                        وصفّ «published» في ROWS اختصار: يصير confirmed لو عليه ختم وإلا under_review.
   * `seed_reviews(h)` ⇒ مراجعات المتخصصين المعلّقة والمنتهية (مصطلح · دورة · مسار) في جدول `expert_review_submissions` (لا IP ولا متصفح).
-  * `GlossaryPlatform` ⇒ `GET /api/bridge/topics` فقط (المصطلح لا يُنشئ نقاشًا). أي كتابة تصل المنصة = عطل يلتقطه السكربت (`h.platform_calls`).
+  * `GlossaryPlatform` ⇒ `GET /api/bridge/topics` + مسار البذر `POST /api/bridge/topics/seed` (بلا نموذج ذكاء: معاينة افتراضية، فريد بالعنوان المطبَّع، `duplicate_in_batch`)،
+                       وكل نداء بذر يُسجَّل في `seed_calls` (apply · عدد العناصر · أول عنوان). أي كتابة أخرى تصل المنصة = عطل يلتقطه السكربت (`h.platform_calls`).
+  * `published_rows()` ⇒ مصطلحات منشورة بلا نقاش لشاشات «نقاشات المصطلحات»؛ و`expert` في `seed_terms` يضبط `glossary.expert_reviews_enabled` (الافتراضي الجديد مغلق؛ شاشات الجولة ٢ تُصوَّر وهو مفعّل).
   * `down = {path}` ⇒ ٥٠٣ لهذا المسار.
 ⛔ صفر شبكة: كله في الذاكرة. الأرقام في النصوص العربية لاتينية عمدًا في حقل واحد (example_ar) كي تثبت الشاشة أنها تعرضها هندية.
 """
 import copy
 import datetime
 import json
+import re
 
 TOPIC_PUB = 'c0ffee00-1111-4222-8333-444455556666'
 TOPIC_OPEN = 'aaaaaaaa-0000-4000-8000-000000000001'
@@ -29,12 +32,47 @@ REVIEWER = ('أ. هبة الجندي', 'محامية')
 D = datetime.datetime
 
 
+_MARKS = re.compile('[\u0640\u064b-\u0652\u0670\u06d6-\u06ed]')
+_FOLD = str.maketrans({'أ': 'ا', 'إ': 'ا', 'آ': 'ا', 'ٱ': 'ا', 'ى': 'ي', 'ة': 'ه', 'ؤ': 'و', 'ئ': 'ي'})
+
+
+def norm_title(t):
+    s = _MARKS.sub('', str(t or '').strip()).translate(_FOLD)
+    return re.sub(r'\s+', ' ', re.sub(r'[^\w\s]', ' ', s)).strip().casefold()
+
+
 class GlossaryPlatform(object):
     def __init__(self, topics=None):
         self.topics = copy.deepcopy(TOPICS if topics is None else topics)
         self.down = set()
+        self.seed_calls = []      # (apply, عدد العناصر، أول عنوان)
+
+    def _seed(self, body):
+        items = body.get('items') or []
+        apply = bool(body.get('apply'))
+        self.seed_calls.append((apply, len(items), items[0].get('title') if items else None))
+        known = {norm_title(t['title']): t['id'] for t in self.topics}
+        origin = {k: 'existing' for k in known}
+        created, skipped = [], []
+        for it in items:
+            title = it['title'].strip()
+            k = norm_title(title)
+            if k in known:
+                skipped.append({'title': title, 'normalized_title': k, 'existing_id': known[k] or None, 'reason': 'duplicate_title' if origin[k] == 'existing' else 'duplicate_in_batch'})
+                continue
+            nid = 'seeded%02d-0000-4000-8000-%012d' % (len(self.topics) + 1, len(self.topics) + 1)
+            if apply:
+                self.topics.append({'id': nid, 'title': title, 'status': 'open'})
+            known[k], origin[k] = (nid if apply else ''), 'batch'
+            created.append({'id': nid if apply else None, 'title': title, 'status': 'open', 'tags': it.get('tags')})
+        return 200, {'ok': True, 'applied': apply, 'dry_run': not apply, 'requested': len(items), 'created_count': len(created), 'skipped_count': len(skipped),
+                     'created': created, 'skipped': skipped}
 
     def handle(self, method, path, params, body):
+        if path == '/api/bridge/topics/seed' and method == 'POST':
+            if path in self.down:
+                return 503, {'detail': 'تعذر الاتصال'}
+            return self._seed(body)
         if path == '/api/bridge/topics' and method == 'GET':
             if path in self.down:
                 return 503, {'detail': 'تعذر الاتصال'}
@@ -81,19 +119,36 @@ ROWS = [
 ]
 
 
-def seed_terms(h, rows=None, require_review=None):
-    """يكتب المصطلحات في قاعدة الداشبورد (الحقيقية داخل العملية) ويضبط إعداد المراجعة (None = غياب الصف = مغلق، وهو الافتراضي)."""
+def published_rows():
+    """ROWS بعد نشر ستة مصطلحات بلا نقاش (بجانب «القوة القاهرة» المربوطة): للشاشات التي تعدّ «منشور بلا نقاش»."""
+    out = copy.deepcopy(ROWS)
+    for r in out:
+        if r['slug'] in ('hardship-clause', 'arbitral-award', 'burden-of-proof', 'trademark', 'consideration') and r['status'] == 'draft':
+            r['status'] = 'confirmed' if r['reviewed_at'] else 'under_review'
+            r['published_at'] = D(2026, 10, 20, 9)
+    return out
+
+
+def default_title(r):
+    return '%s (%s): هل الترجمة والتعريف دقيقان؟' % (r['ar'], r['en'])
+
+
+def seed_terms(h, rows=None, require_review=None, expert=True):
+    """يكتب المصطلحات في قاعدة الداشبورد (الحقيقية داخل العملية) ويضبط إعداد المراجعة (None = غياب الصف = مغلق، وهو الافتراضي)
+    وتفعيل مراجعات المتخصصين `expert` (False = غياب الصف = مغلق، وهو الافتراضي الجديد؛ True = شكل الجولة ٢)."""
     m = h.app
     with m.app.app_context():
         m.db.create_all()
         m.GlossaryTerm.query.delete()
         m.ExpertReviewSubmission.query.delete()
-        m.Setting.query.filter_by(key='glossary.require_review').delete()
+        m.Setting.query.filter(m.Setting.key.in_(['glossary.require_review', 'glossary.expert_reviews_enabled'])).delete(synchronize_session=False)
         m.AuditLog.query.filter(m.AuditLog.action.like('glossary%')).delete(synchronize_session=False)
         for r in (ROWS if rows is None else rows):
             m.db.session.add(m.GlossaryTerm(**copy.deepcopy(r)))
         if require_review is not None:
             m.db.session.add(m.Setting(key='glossary.require_review', value='1' if require_review else '0'))
+        if expert:
+            m.db.session.add(m.Setting(key='glossary.expert_reviews_enabled', value='1'))
         m.db.session.commit()
 
 
@@ -126,6 +181,13 @@ def setting(h):
     m = h.app
     with m.app.app_context():
         s = m.Setting.query.get('glossary.require_review')
+        return None if s is None else s.value
+
+
+def expert_setting(h):
+    m = h.app
+    with m.app.app_context():
+        s = m.Setting.query.get('glossary.expert_reviews_enabled')
         return None if s is None else s.value
 
 

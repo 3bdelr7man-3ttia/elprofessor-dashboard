@@ -837,7 +837,7 @@
     }
     // تدفّق كتابة واحد: [نموذج ⇒] مراجعة «قبل ⇐ بعد» ⇒ تأكيد. ⛔ لا نداء قبل ضغطة التأكيد الأخيرة.
     // o: {title, intro, form(vals) ⇒ html | null، init، collect(root)، hook({root, s, redo}), check(vals) ⇒ {ok, error, errors, lead, lines, warns, ...},
-    //     nextLabel, goLabel (يؤخذ من النتيجة لو غاب), send(res) ⇒ promise, done(out, res) ⇒ نص، extra: [{id, label, run(s)}]}
+    //     nextLabel, goLabel (يؤخذ من النتيجة لو غاب)، check قد يرجع وعدًا ⇒ نتيجة (معاينة من الخادم)، send(res) ⇒ promise, done(out, res) ⇒ نص، extra: [{id, label, run(s)}]}
     B.flow = function (o) {
       var s = B.sheet(o.title, '<div id="shStage"></div>');
       if (!s) return;
@@ -852,10 +852,19 @@
         q1('#shNo', s).onclick = close;
         (o.extra || []).forEach(function (x) { q1('#' + x.id, s).onclick = function () { x.run(s); }; });
         q1('#shNext', s).onclick = function () {
+          if (s.dataset.checking) return;
           vals = gather(s);
           var r = o.check(vals);
-          if (!r.ok) { showErrors(stage, r); return; }
-          review(r);
+          var land = function (x) { if (!x.ok) { showErrors(stage, x); return; } review(x); };
+          // check قد يرجع وعدًا (معاينة من الخادم بلا كتابة، مثل «افتح نقاشًا للمصطلح»): الزرّ يتعطّل أثناءها، والفشل يظهر في الورقة.
+          if (r && typeof r.then === 'function') {
+            var nx = q1('#shNext', s), label = nx.textContent;
+            s.dataset.checking = '1'; nx.disabled = true; nx.textContent = 'جارٍ التحقق…';
+            r.then(function (x) { delete s.dataset.checking; nx.disabled = false; nx.textContent = label; if (s.isConnected) land(x); },
+                   function () { delete s.dataset.checking; nx.disabled = false; nx.textContent = label; showErrors(stage, { ok: false, error: 'تعذّر التحقق، حاول مرة أخرى' }); });
+            return;
+          }
+          land(r);
         };
         if (o.hook) o.hook({ root: stage, s: s, redo: function (v) { vals = v || gather(s); formStage(); } });
         var first = q1('[data-f]', stage); if (first) setTimeout(function () { try { first.focus(); } catch (e) {} }, 30);

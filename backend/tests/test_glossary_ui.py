@@ -7,6 +7,8 @@ Run:  cd backend && python3 -B -m pytest -q -p no:cacheprovider tests/test_gloss
 «راجعه» ثم النشر · تعديل منشور مُراجَع (تحذير الختم والرجوع مسودة) · مصطلح جديد · نقاش الساحة · الحذف · الاستيراد (الأساسي · المرشّحة · ملف) · شرط المراجعة ·
 المصدر الواقع والحالات الفاضية والجسر الغايب · المفتاح مقفول · الجولة الثانية: الوضع الافتراضي (نشر بلا ختم ⇒ «تحت التأكيد» ⇒ ختم بموافقة ظهور الاسم ⇒ تعديل يعيده
 «تحت التأكيد») · صندوق «مراجعات القاموس» (اعتمد تأكيدًا · اقتراحًا يفتح المحرّر · تمّ لدورة · ارفض بملاحظة وبلا · تنبيه تغيّر المصطلح · حالات فاضية وواقعة).
+الجولة الثالثة (قرار المؤسس ٢٠٢٦-١١-٠١): المراجعات مطفأة افتراضيًا (مسودة / منشور فقط والختم داخلي) · «افتح نقاشًا لهذا المصطلح» (معاينة بلا كتابة ⇒ تأكيد) ·
+«نقاشات المصطلحات» دفعةً (تجربة ⇒ تأكيد ⇒ نتيجة لكل مصطلح)؛ والخطوات ٠١ إلى ١٥ بالإعداد مفعّلًا (شكل الجولة ٢ كما كان).
 ⛔ صفر شبكة: الداشبورد وقاعدته جوه العملية والمنصة بديل في الذاكرة. لو playwright أو المتصفح غير متاحين ⇒ يُتخطّى (فحوص الملفات بتشتغل دايمًا).
 """
 import json
@@ -61,9 +63,11 @@ def test_the_tab_the_module_and_the_registry_lines_are_wired_inside_the_content_
 def test_every_mutation_goes_through_the_review_sheet_with_the_exact_flag_and_the_preview_is_the_only_unconfirmed_call():
     code = _js()
     api_calls = [ln.strip() for ln in code.split('\n') if 'B.api(' in ln and 'B.api = ' not in ln]
-    assert len(api_calls) >= 11, len(api_calls)
+    assert len(api_calls) >= 14, len(api_calls)
+    previews = [ln for ln in api_calls if "/preview'" in ln]
+    assert len(previews) == 3 and all('confirmed' not in ln for ln in previews), previews          # التجارب الثلاث (استيراد · نقاش مصطلح · دفعة) لا تكتب
     for ln in api_calls:
-        assert 'confirmed: true' in ln or '/seed/preview' in ln, ln          # كل نداء كتابة فيه confirmed، والتجربة وحدها بلا (لا تكتب)
+        assert 'confirmed: true' in ln or "/preview'" in ln, ln                # كل نداء كتابة فيه confirmed، والتجارب وحدها بلا (لا تكتب)
     assert code.count('B.flow(') >= 10 and code.count('send: function') >= 10, 'كل ورقة كتابة لها `send` واحد يمرّ على التأكيد'
     vals = re.findall(r"confirmed\s*[:=]\s*(\S+)", code)
     assert vals and all(v.startswith('true') for v in vals), vals
@@ -81,6 +85,7 @@ def test_every_mutation_goes_through_the_review_sheet_with_the_exact_flag_and_th
 def test_the_screens_only_call_the_glossary_admin_routes():
     js = _js()
     assert set(re.findall(r"'(/v2/[^']*)'", js)) == {'/v2/content/glossary'}, 'مسار الجذر وحده حرفيًّا، والباقي لواحق منه'
+    assert "'/saha-topic/preview'" in js and "'/saha-topic/open'" in js and "'/saha-topics/bulk/preview'" in js and "'/saha-topics/bulk/open'" in js
     assert "'/seed/preview'" in js and "'/seed/import'" in js and "'/attach-topic'" in js and "'/detach-topic'" in js and "'/review'" in js and "'/unreview'" in js
     assert "'/publish'" in js and "'/unpublish'" in js and "'DELETE'" in js and "'PUT'" in js
 
@@ -96,16 +101,43 @@ def test_visitor_names_are_isolated_with_bdi_wherever_the_screens_print_them():
 def test_round_two_the_reviews_box_the_three_states_and_the_name_consent_are_wired():
     js, logic = _js(), _read('dashboard-cloud', 'v2s', 'glossary.js')
     assert "'/approve'" in js and "'/reject'" in js and "reviews: BASE + '/reviews?status=all&limit=500'" in js
-    assert "sub: 'reviews', name: 'مراجعات القاموس'" in js and "screens: { terms: screenList('all'), wait: screenList('wait'), term: screenTerm, reviews: screenReviews, review: screenReview" in js
+    assert "sub: 'reviews', name: 'مراجعات القاموس'" in js and "screens: { terms: screenList('all'), wait: screenList('wait'), term: screenTerm, topics: screenTopics, reviews: screenReviews, review: screenReview" in js
     assert "Kit.chk('reviewer_name_public'" in js and 'وافق المراجع على ظهور اسمه' in js, 'خانة موافقة المراجع على ظهور اسمه'
     assert 'اعتمد وافتح المحرّر' in logic and "'تمّ'" in logic and 'ارفض المراجعة' in logic and 'تغيّر نص المصطلح بعد وصول هذه المراجعة' in logic
     assert "['under_review', 'تحت التأكيد']" in logic and "['confirmed', 'مؤكّد']" in logic and 'سيرجع المصطلح إلى «تحت التأكيد» ويبقى ظاهرًا' in logic
-    assert 'requireReview: resp.require_review === true' in logic, 'الشرط مغلق افتراضيًا'
+    assert 'requireReview: on && resp.require_review === true' in logic and 'resp.reviews_enabled === true' in logic, 'الشرط ومراجعات المتخصصين مغلقان افتراضيًا'
     assert 'localStorage' not in js and 'require_review: false' not in js, 'لا إعداد بالجسم من الواجهة خارج ورقة التأكيد'
     nv = _read('dashboard-cloud', 'v2-logic.js')
     assert "glossary_review: { section: 'content', tab: 'glossary' }" in nv and "glossary_review: 'مراجعات القاموس تنتظر قرارك'" in nv, 'صفّ الجرس يفتح تبويب القاموس'
     css = _read('dashboard-cloud', 'v2s', 'glossary.css')
     assert '.g-sugbox' in css and '.g-sug' in css and '.g-rules' in css
+
+
+def test_round_three_reviews_are_switched_off_by_default_and_the_boxes_are_gated():
+    js, logic = _js(), _strip(_read('dashboard-cloud', 'v2s', 'glossary.js'))
+    assert "var on = reviewsOn();" in js and "if (on) {" in js and "list.push(Object.assign({ sub: 'import'" in js, 'مربّعات المراجعات والانتظار والشرط تُضاف حين تُفعَّل المراجعات فقط'
+    assert js.count('offScreen(') >= 4 and "B.empty('غير مفعّلة الآن'" in js, 'الشاشات الثلاث مغلقة بحالة صريحة لو وصلها أحد'
+    assert 'مراجعة داخلية، لا تظهر على الموقع' in js, 'ختم «راجعه» الداخلي موسوم'
+    assert "'منشور'" in logic and "'مسودة'" in logic and 'STATUS_CHIPS_OFF' in logic and 'reviewsOn: on' in logic
+    assert "(on ? '<div class=\"fld\">' + Kit.chk('reviewer_name_public'" in js, 'خانة موافقة الاسم لا تظهر والمراجعات مطفأة'
+    srv = _read('backend', 'v2_glossary_routes.py')
+    assert "EXPERT_KEY = 'glossary.expert_reviews_enabled'" in srv and 'def reviews_enabled(Setting)' in srv
+    app = _read('backend', 'app.py')
+    assert "'glossary.expert_reviews_enabled' in d" in app and '_v2s_glossary.reviews_enabled(Setting)' in app, 'الإعداد محجوب من الإعدادات العامة وصفّ الجرس مشروط'
+
+
+def test_round_three_the_topic_screens_are_wired_with_a_dry_run_before_every_write():
+    js, logic = _js(), _strip(_read('dashboard-cloud', 'v2s', 'glossary.js'))
+    assert "افتح نقاشًا لهذا المصطلح" in js and 'data-a="gtopen"' in js and 'أو اربط نقاشًا موجودًا في الساحة' in js, 'افتح جديدًا أولًا والربط بموجود ثانويًّا'
+    assert "sub: 'topics', name: 'نقاشات المصطلحات'" in js and 'جرّب فتح النقاشات (بلا فتح)' in js and "data-a=\"gbgo\"" in js
+    assert 'check: function (vals) {' in js and "B.api(path(r, '/saha-topic/preview'), f.body).then(" in js, 'ورقة المراجعة تأتي من معاينة الخادم لا من افتراض'
+    assert "res.body" in js and "no_reply: true" in js, 'الورقة تعرض ما تمّ قبل التوقف'
+    saha = _strip(_read('dashboard-cloud', 'v2s', 'saha.js'))
+    assert "typeof r.then === 'function'" in saha and "s.dataset.checking" in saha, 'محرّك الأوراق يقبل معاينة غير متزامنة'
+    for need in ('topicDefaults', 'topicFormCheck', 'topicOpenCheck', 'bulkView', 'bulkCheck', 'bulkStopText', 'canOpenTopic'):
+        assert need + ': ' + need in logic, need
+    css = _read('dashboard-cloud', 'v2s', 'glossary.css')
+    assert '.g-tl' in css
 
 
 def test_the_markup_text_has_no_forbidden_visible_copy_and_every_picker_has_other():
