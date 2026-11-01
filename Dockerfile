@@ -34,6 +34,8 @@ COPY backend/refresh_rules.py /app/refresh_rules.py
 # v2_<قسم>_routes.py: مسارات أقسام الجولة النهائية — app.py يستوردها عند الإقلاع (غيابها = الحاوية لا تقوم)
 COPY backend/v2_market_routes.py /app/v2_market_routes.py
 COPY backend/v2_books_routes.py /app/v2_books_routes.py
+# «السوق v4» (إدارة السوق): مسارات اقتراحات «أخرى» · مدى الأسعار · المكاتب · ملف الترخيص — app.py بيستوردها محروسة.
+COPY backend/v2_market4_routes.py /app/v2_market4_routes.py
 # «كتبنا وأدلّتنا»: مسارات الرفع والكتابة بالعقل + خط Cairo (OFL) للـPDF — app.py بيستوردها محروسة.
 COPY backend/v2_books_ours_routes.py /app/v2_books_ours_routes.py
 COPY backend/assets/fonts /app/assets/fonts

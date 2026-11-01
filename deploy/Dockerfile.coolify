@@ -26,6 +26,7 @@ COPY backend/v2_courses_routes.py /app/v2_courses_routes.py
 COPY backend/v2_courses2_routes.py /app/v2_courses2_routes.py
 COPY backend/v2_market_routes.py /app/v2_market_routes.py
 COPY backend/v2_books_routes.py /app/v2_books_routes.py
+COPY backend/v2_market4_routes.py /app/v2_market4_routes.py
 COPY backend/v2_content_routes.py /app/v2_content_routes.py
 COPY backend/v2_marketing_routes.py /app/v2_marketing_routes.py
 COPY backend/prerender.py /app/prerender.py

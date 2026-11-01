@@ -646,14 +646,15 @@ def test_norm_gives_a_bridge_row_the_same_shape_as_the_board_row():
 
 # ---------------------------------------------------------------- ٣) الملفات والخطّافات
 
-def test_the_section_has_three_tabs_and_old_links_still_land_on_the_board():
+def test_the_section_has_four_tabs_and_old_links_still_land_on_the_board():
     out = v2_node.logic('SECTIONS')
     mk = [s for s in out if s['key'] == 'market'][0]
+    # الرابعة «إدارة السوق» (السوق v4، docs/v2/market4/SPEC.md): مربّعات المهام الخمس في تبويب واحد بدل مربّع جديد في اللوحة.
     assert [[t['key'], t['label'], t['mod']] for t in mk['tabs']] == [['requests', 'الطلبات', 'market'], ['all', 'كل الطلبات', 'v2s_market_all'],
-                                                                      ['demand', 'ماذا يطلب الناس', 'v2s_market_demand']]
+                                                                      ['demand', 'ماذا يطلب الناس', 'v2s_market_demand'], ['manage', 'إدارة السوق', 'v2s_market_v4']]
     r = v2_node.logic('sectionFor', 'market', {}, None)
     assert (r['section'], r['tab'], r['mod']) == ('market', 'requests', 'market')
-    for tab in ('all', 'demand'):
+    for tab in ('all', 'demand', 'manage'):
         assert v2_node.logic('routeFor', '#s/market/' + tab, {})['tab'] == tab
         assert v2_node.logic('sectionHash', 'market', tab) == '#s/market/' + tab
     assert v2_node.logic('routeFor', '#market', {})['tab'] == 'requests'

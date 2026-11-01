@@ -486,6 +486,8 @@ body{font-family:'IBM Plex Sans Arabic',sans-serif;background:var(--bg);color:va
 <script src="v2s/home_copy.js"></script>
 <link rel="stylesheet" href="v2s/market.css">
 <script src="v2s/market.js"></script>
+<link rel="stylesheet" href="v2s/market4.css">
+<script src="v2s/market4.js"></script>
 <link rel="stylesheet" href="v2s/marketing.css">
 <script src="v2s/marketing.js"></script>
 <link rel="stylesheet" href="v2s/people.css">
@@ -1292,9 +1294,11 @@ function drawInbox(){
     ${fld('الخدمة المطلوب تقديمها',i.serviceLabel)}
     ${fld('حالة الطلب',i.statusLabel)}
     ${det}${att}
+    ${(i.apiKind==='join'&&window.V2S_MARKET4&&V2S_MARKET4.needsLicence(i))?V2S_MARKET4.licenceHtml(i,'inl'):''}
     <div class="field"><div class="lab">${i.whenLabel?'التقديم':'المهلة'}</div><div class="val" style="${i.slaWarn?'color:var(--conflict)':''}">${esc(i.sla)}</div></div>
     <div class="acts">${inboxActs(i,m)}</div></div>`;
   const refreshInbox=()=>{selected=null;viewInbox(document.getElementById('view'));};
+  if(i.apiKind==='join'&&window.V2S_MARKET4&&V2S_MARKET4.needsLicence(i))V2S_MARKET4.licenceWire(el,i,'inl');
   el.querySelectorAll('[data-a]').forEach(b=>b.onclick=()=>{
     const a=b.dataset.a;
     if(a==='goto'){
@@ -1306,7 +1310,15 @@ function drawInbox(){
     if(a==='msg_email'){mailReply(i.email,i.who);return;}
     if(a==='msg_reply'&&i.msgId!=null){EP.replyMessage({id:i.msgId,name:i.who},function(){EP.reload('inbox',refreshInbox);});return;}
     if(a==='msg_del'&&i.msgId!=null){EP.deleteMessage({id:i.msgId,name:i.who},function(){EP.reload('inbox',refreshInbox);});return;}
-    if(a==='approve'&&i.apiKind){EP.decideInboxItem(i,'approve',refreshInbox);return;}
+    if(a==='approve'&&i.apiKind){
+      // «السوق v4»: طلب مرخَّص ⇒ بلاد القيد المعتمدة تسافر مع القبول (ولا قبول بلا بلد واحد على الأقل).
+      if(i.apiKind==='join'&&window.V2S_MARKET4&&V2S_MARKET4.needsLicence(i)){
+        const lc=V2S_MARKET4.licenceCheck(el);
+        if(!lc.ok){toast(lc.error);return;}
+        EP.decideInboxItem(i,'approve',refreshInbox,'',{licensed_countries:lc.list});return;
+      }
+      EP.decideInboxItem(i,'approve',refreshInbox);return;
+    }
     if(a==='reject'&&i.apiKind){
       // سبب الرفض يسافر مع القرار — لأن المنصة تعرضه لصاحب الطلب. رفضٌ بلا سبب يُمنع هنا،
       // والبروكسي يمنعه ثانيةً على الخادم (لا نعتمد على المتصفّح وحده).

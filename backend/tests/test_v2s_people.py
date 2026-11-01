@@ -165,7 +165,10 @@ def test_ticket_buttons_follow_the_spec():
     ap = R['cols']['approval']['items'][0]
     assert ap['primary']['label'] == 'وافق على الدعوة' and ap['secondary'][0]['label'] == 'ارفض' and ap['brain'] == 'تحتاج موافقتك قبل أن يعمل رابطها'
     j = {t['id']: t for t in R['cols']['join']['items']}
-    assert j['join:jr-1']['primary']['label'] == 'اقبل' and [s['label'] for s in j['join:jr-1']['secondary']] == ['ارفض', 'اطلب استكمالًا']
+    # «السوق v4»: `join()` هنا طلب مرخَّص (`licensed: True`) ⇒ القبول من ورقة الطلب (بلاد القيد وملف الترخيص)، لا ضغطة واحدة
+    assert j['join:jr-1']['primary'] == {'label': 'افتح وراجع', 'act': {'do': 'sheet', 'sheet': 'join'}} and [s['label'] for s in j['join:jr-1']['secondary']] == ['ارفض', 'اطلب استكمالًا']
+    plain = v2p('requests', inp(inbox=[dict(join('jr-3'), licensed=False)]), NOW)['cols']['join']['items'][0]
+    assert plain['primary'] == {'label': 'اقبل', 'act': {'do': 'decide', 'action': 'approve'}}, 'غير المرخَّص يبقى بضغطة واحدة'
     assert j['join:jr-2']['primary'] == {'label': 'افتح وراجع', 'act': {'do': 'sheet', 'sheet': 'join'}} and j['join:jr-2']['extra'] == ['طُلب من صاحب الطلب: أرسل رقم القيد — بانتظار رده']
     f = {t['id']: t for t in R['cols']['founding']['items']}
     assert f['founding:fl-1']['primary']['label'] == 'تم التواصل' and f['founding:fl-1']['secondary'][0] == {'label': 'واتساب', 'act': {'do': 'link', 'url': 'https://wa.me/970599000000'}}

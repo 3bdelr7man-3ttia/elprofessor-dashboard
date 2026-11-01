@@ -2466,6 +2466,40 @@ def v2_shares_get():
     return closed or _v2_get('/api/bridge/shares')
 
 
+V2_MARKET_FLOOR = 25            # أرضية نصيب المنصة في «السوق» (الثانية بعد القضايا؛ المنصة تعيد الفحص)
+V2_MARKET_CURRENCIES = ('EGP', 'SAR', 'AED', 'QAR', 'KWD', 'OMR', 'USD')
+
+
+def _v2_market_ladder_error(m):
+    """شكل `changes.market` قبل ما يطلع للمنصة: سلّم لكل عملة (قائمة درجات `{max, platform_pct}`)، النسبة رقم ≥ الأرضية ≤ ١٠٠،
+    والحدود تزيد، وآخر درجة بلا سقف. ⛔ الأرضية تحرسها المنصة كمان — هنا طبقة ثانية بنفس الرقم. نص عربي أو None."""
+    if not isinstance(m, dict) or set(m.keys()) != {'ladder_by_currency'} or not isinstance(m['ladder_by_currency'], dict) or not m['ladder_by_currency']:
+        return 'سلّم السوق غير صالح'
+    for cur, ladder in m['ladder_by_currency'].items():
+        if cur not in V2_MARKET_CURRENCIES:
+            return 'عملة غير معروفة في سلّم السوق'
+        if not isinstance(ladder, list) or not ladder or len(ladder) > 6:
+            return 'سلّم السوق (%s) غير صالح' % cur
+        prev = -1.0
+        for i, step in enumerate(ladder):
+            if not isinstance(step, dict) or set(step.keys()) != {'max', 'platform_pct'}:
+                return 'سلّم السوق (%s) غير صالح' % cur
+            pct = step.get('platform_pct')
+            if isinstance(pct, bool) or not isinstance(pct, (int, float)) or pct != pct or pct > 100:
+                return 'نصيب المنصة في السوق لازم يكون رقمًا بين %d و١٠٠' % V2_MARKET_FLOOR
+            if pct < V2_MARKET_FLOOR:
+                return 'نصيب المنصة في السوق ما ينزلش عن %d٪' % V2_MARKET_FLOOR
+            cap = step.get('max')
+            if i == len(ladder) - 1:
+                if cap is not None:
+                    return 'آخر درجة في سلّم السوق (%s) لازم من غير سقف' % cur
+            else:
+                if isinstance(cap, bool) or not isinstance(cap, (int, float)) or cap != cap or cap <= prev:
+                    return 'حدود سلّم السوق (%s) لازم تزيد' % cur
+                prev = float(cap)
+    return None
+
+
 @app.route('/api/v2/shares', methods=['PUT'])
 @token_required
 @roles_required('admin')
@@ -2483,6 +2517,10 @@ def v2_shares_put():
         return _v2_ns((jsonify({'error': 'لا تعديل'}), 400))
     if version is None or version < 0:
         return _v2_ns((jsonify({'error': 'حدّث الصفحة ثم أعد المحاولة'}), 400))
+    if 'market' in changes:
+        bad_market = _v2_market_ladder_error(changes.get('market'))
+        if bad_market:
+            return _v2_ns((jsonify({'error': bad_market}), 400))
     return _v2_write('PUT', '/api/bridge/shares', {'changes': changes, 'version': version, 'confirmed': True},
                      'shares.update', 'shares', {'keys': sorted(changes.keys())[:10], 'version': version})
 
@@ -2727,6 +2765,9 @@ try:   # محرّر الدورات (SPEC-C §C1): تحميل محروس — غي
     import v2_courses2_routes; v2_courses2_routes.register(app, globals())
 except Exception: logger.exception('v2 courses2 routes not loaded')
 import v2_market_routes as _v2s_market; _v2s_market.register(app, globals())  # noqa: E402
+try:   # «السوق v4»: اقتراحات «أخرى» · مدى الأسعار · المكاتب · ملف الترخيص (docs/v2/market4/SPEC.md): تحميل محروس
+    import v2_market4_routes as _v2s_market4; _v2s_market4.register(app, globals())
+except Exception: logger.exception('v2 market4 routes not loaded')
 __import__('v2_books_routes').register(app, globals())
 try:   # «كتبنا وأدلّتنا» (docs/v2/books-ours/SPEC.md): تحميل محروس — غيابه لا يكسر الإقلاع
     import v2_books_ours_routes as _v2s_books_ours; _v2s_books_ours.register(app, globals())
@@ -2971,16 +3012,30 @@ def platform_join_request_decide(request_id, action):
         return jsonify({'error': 'اكتب سبب الرفض — مقدّم الطلب يقرأه كما هو'}), 400
     if action == 'request_info' and not note:
         return jsonify({'error': 'اكتب المطلوب بالضبط — مقدّم الطلب يقرأه كما تكتبه'}), 400
+    # «السوق v4»: بلاد قيد المحامي عند قبول خدمة مرخَّصة (ISO-2). تُمرَّر للمنصة وحدها عند «اعتمد»، وبلد غير مفهوم عند المنصة ⇒ ٤٢٢ والطلب لا يُمنح.
+    countries = []
+    if action == 'approve':
+        raw = body.get('licensed_countries')
+        if raw is not None:
+            if not isinstance(raw, list) or len(raw) > 12:
+                return jsonify({'error': 'اختر حتى ١٢ بلدًا لقيد المحامي'}), 400
+            for c in raw:
+                code = str(c).strip().upper() if isinstance(c, str) else ''
+                if not re.match(r'^[A-Z]{2}$', code):
+                    return jsonify({'error': 'بلد القيد غير مفهوم'}), 400
+                if code not in countries:
+                    countries.append(code)
     resp = _platform_proxy(
         'POST',
         f"/api/bridge/join-requests/{request_id}/decide",
         # `ask` مرآةٌ لنفس النصّ: عقد الجسر يسمّي طلبَ المستند `ask` صراحةً (لا «ملاحظة أدمن»)،
         # فلا يُكتب في `admin_note` على الوثيقة — وهي «سبب الرفض» الذي يقرؤه المقدّم.
         json_body={'decision': action, 'admin_note': note,
-                   **({'ask': note} if action == 'request_info' else {})},
+                   **({'ask': note} if action == 'request_info' else {}),
+                   **({'licensed_countries': countries} if countries else {})},
     )
     if _resp_ok(resp):
-        _audit(f'join_request.{action}', target=request_id, meta={'note': note})
+        _audit(f'join_request.{action}', target=request_id, meta=dict({'note': note}, **({'licensed_countries': countries} if countries else {})))
     return resp
 
 

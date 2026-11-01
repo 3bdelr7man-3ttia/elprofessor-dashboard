@@ -678,6 +678,10 @@
         if (r.licenceMissing) {
           card.warn = 'رقم القيد ناقص';
           card.primary = { label: 'افتح وراجع', act: OPEN };
+        } else if (r.licensed) {
+          // «السوق v4»: خدمة مرخَّصة ⇒ القبول من شاشة الطلب، حيث تختار بلد القيد وتفتح ملف الترخيص (لا قبول بضغطة واحدة).
+          card.reason = 'خدمة مرخَّصة: اختر بلد القيد وراجع ملف الترخيص قبل القبول';
+          card.primary = { label: 'افتح وراجع', act: OPEN };
         } else {
           card.primary = { label: 'اقبل', act: act({ do: 'decide', action: 'approve' }) };
           card.secondary = { label: 'افتح الطلب', act: OPEN };
@@ -1263,7 +1267,8 @@
     { key: 'market', label: 'سوق الخدمات', img: 'market', desc: 'طلبات الأعضاء وعروض الخبراء', tabs: [
       T('requests', 'الطلبات', 'market'),
       T('all', 'كل الطلبات', 'v2s_market_all'),
-      T('demand', 'ماذا يطلب الناس', 'v2s_market_demand')
+      T('demand', 'ماذا يطلب الناس', 'v2s_market_demand'),
+      T('manage', 'إدارة السوق', 'v2s_market_v4')
     ] },
     { key: 'books', label: 'الكتب', img: 'books', desc: 'كل كتاب وعمل، وعروض تنتظر المراجعة، وطلبات القرّاء', tabs: [
       T('offers', 'مراجعة العروض', 'v2b_offers'),
@@ -1781,6 +1786,26 @@
     });
     return out;
   }
+  // —— «السوق v4»: سلّم نصيب المنصة لكل عملة (`market.ladder_by_currency`)، أرضيته ٢٥ كالقضايا (`case_floor`).
+  var MARKET_CURS = ['EGP', 'SAR', 'AED', 'QAR', 'KWD', 'OMR', 'USD'];
+  var MARKET_CUR_NAME = { EGP: 'جنيه مصري', SAR: 'ريال سعودي', AED: 'درهم إماراتي', QAR: 'ريال قطري', KWD: 'دينار كويتي', OMR: 'ريال عُماني', USD: 'دولار أمريكي' };
+  function marketFloor(t) { return numOf(t && t.case_floor) || CASE_FLOOR; }
+  function marketLadders(m) {
+    var lad = m && typeof m === 'object' ? m.ladder_by_currency : null;
+    if (!lad || typeof lad !== 'object') return null;
+    return MARKET_CURS.filter(function (c) { return Array.isArray(lad[c]) && lad[c].length; }).map(function (c) {
+      var prev = 0;
+      var tiers = lad[c].map(function (s, i) {
+        var cap = s.max, pp = numOf(s.platform_pct), upTo;
+        if (cap == null) upTo = prev ? 'أكثر من ' + fmt(prev) : 'أي قيمة';
+        else upTo = i === 0 ? 'أقل من ' + fmt(cap) : 'من ' + fmt(prev) + ' إلى ' + fmt(cap);
+        var row = { upTo: upTo, platform: pp, owner: 100 - pp, platformText: pct(pp), ownerText: pct(100 - pp), max: cap == null ? null : cap };
+        if (cap != null) prev = cap;
+        return row;
+      });
+      return { cur: c, name: MARKET_CUR_NAME[c], tiers: tiers };
+    });
+  }
   function v2SharesView(resp) {
     var t = resp && (resp.shares && typeof resp.shares === 'object' ? resp.shares : null);
     if (!t || !t.books || !t.courses || !t.cases) return null;
@@ -1795,6 +1820,7 @@
     return { version: typeof t.version === 'number' ? t.version : (typeof resp.version === 'number' ? resp.version : 0), lines: lines, ladder: ladderRows(t.cases.ladder),
              floors: { platform: numOf(t.platform_floor) || PLATFORM_FLOOR, cases: numOf(t.case_floor) || CASE_FLOOR },
              floorText: 'نصيب المنصة لا ينزل عن ' + pct(numOf(t.platform_floor) || PLATFORM_FLOOR) + ' في أي بيع، والقضايا ' + pct(numOf(t.case_floor) || CASE_FLOOR) + ' كحدّ أدنى',
+             market: marketLadders(t.market), marketFloor: marketFloor(t), marketFloorText: 'نصيب المنصة في السوق لا ينزل عن ' + pct(marketFloor(t)),
              table: t, updatedBy: str(t.updated_by), updatedAt: t.updated_at || null };
   }
   // كل رقم قابل للقراءة بمسار: يُستعمل للمقارنة قبل/بعد (سجل التعديلات وورقة التأكيد).
@@ -1815,10 +1841,16 @@
     if (t.case_floor != null) out.case_floor = { label: 'الحد الأدنى للقضايا', v: pct(t.case_floor) };
     if (t.platform_floor != null) out.platform_floor = { label: 'الحد الأدنى للمنصة', v: pct(t.platform_floor) };
     if (t.affiliate && t.affiliate.rate != null) out['affiliate.rate'] = { label: 'عمولة الإحالة', v: pct(t.affiliate.rate) };
+    (marketLadders(t.market) || []).forEach(function (m) {
+      m.tiers.forEach(function (r, i) { out['market.' + m.cur + '.' + i] = { label: 'السوق، ' + m.name + '، الدرجة ' + ar(i + 1), v: r.upTo + '، المنصة ' + r.platformText }; });
+    });
     return out;
   }
   function v2SharesDiff(before, after) {
     var a = flatShares(before), b = flatShares(after), keys = {}, lines = [];
+    // سجل قبل ما يدخل سلّم السوق للجدول (أو بعده): ما نكتبش «لا شيء ⇒ المنصة ٣٥٪» لسطور ما اتغيّرتش فعلًا.
+    var hadM = !!(before && before.market), hasM = !!(after && after.market);
+    if (!hadM || !hasM) [a, b].forEach(function (o) { Object.keys(o).forEach(function (k) { if (k.indexOf('market.') === 0) delete o[k]; }); });
     Object.keys(a).concat(Object.keys(b)).forEach(function (k) { keys[k] = 1; });
     Object.keys(keys).forEach(function (k) {
       var x = a[k], y = b[k];
@@ -1856,6 +1888,33 @@
       });
       if (diff) { changes.cases = { ladder: lad }; after.cases.ladder = lad; }
     }
+    // سلّم السوق: input.market = {EGP:[{max, pct}, …], …} (نصوص). نصيب المنصة ≥ الأرضية (٢٥)، والحدود تزيد، وآخر درجة بلا سقف.
+    if (input.market && typeof input.market === 'object' && table.market && table.market.ladder_by_currency) {
+      var mFloor = marketFloor(table), mChanges = {}, mAfter = clone(table.market.ladder_by_currency);
+      MARKET_CURS.forEach(function (c) {
+        var rows = input.market[c], cur = mAfter[c];
+        if (!Array.isArray(rows) || !Array.isArray(cur)) return;
+        var next = clone(cur), changedC = false;
+        rows.forEach(function (r, i) {
+          if (!next[i] || !r) return;
+          if (r.pct != null && r.pct !== '') {
+            var p = pctIn(r.pct, 'نصيب المنصة في السوق (' + MARKET_CUR_NAME[c] + ')');
+            if (p == null) return;
+            if (p < mFloor) { if (!err) err = 'نصيب المنصة في السوق لا ينزل عن ' + pct(mFloor); return; }
+            if (p !== next[i].platform_pct) { next[i].platform_pct = p; changedC = true; }
+          }
+          if (i < next.length - 1 && r.max != null && r.max !== '') {
+            var n = parseAmount(r.max);
+            if (n === null || isNaN(n) || n <= 0) { if (!err) err = 'حدّ الدرجة (' + MARKET_CUR_NAME[c] + ') لازم يكون رقمًا أكبر من صفر'; return; }
+            if (n !== next[i].max) { next[i].max = n; changedC = true; }
+          }
+        });
+        var prev = -1;
+        next.forEach(function (s2, i) { if (i < next.length - 1) { if (s2.max != null && s2.max <= prev && !err) err = 'حدود السلّم (' + MARKET_CUR_NAME[c] + ') لازم تزيد من درجة إلى التي بعدها'; prev = s2.max == null ? prev : s2.max; } });
+        if (changedC) { mChanges[c] = next; mAfter[c] = next; }
+      });
+      if (Object.keys(mChanges).length) { changes.market = { ladder_by_currency: mChanges }; after.market = { ladder_by_currency: mAfter }; }
+    }
     if (input.affiliateRate != null && input.affiliateRate !== '') {
       var r = pctIn(input.affiliateRate, 'عمولة الإحالة');
       if (r != null && r !== table.affiliate.rate) { changes.affiliate = { rate: r }; after.affiliate = Object.assign({}, table.affiliate, { rate: r }); }
@@ -1870,7 +1929,7 @@
     if (!Array.isArray(h)) return null;
     return h.filter(function (r) { return r && typeof r === 'object'; }).map(function (r) {
       var at = ms(r.at);
-      return { by: str(r.by), email: str(r.by).toLowerCase(), at: isNaN(at) ? null : at, when: isNaN(at) ? '' : dateText(new Date(at).toISOString()) + ' · ' + agoText(at, now),
+      return { by: str(r.by), email: str(r.by).toLowerCase(), at: isNaN(at) ? null : at, when: isNaN(at) ? '' : dateText(new Date(at).toISOString()) + '، ' + agoText(at, now),
                lines: v2SharesDiff(r.before, r.after).lines };
     });
   }
@@ -1881,7 +1940,7 @@
     var al = resp.allowed && resp.allowed.withdraw_min ? resp.allowed.withdraw_min : {};
     var hist = (Array.isArray(resp.history) ? resp.history : []).filter(Boolean).map(function (r) {
       var at = ms(r.at), b = r.before && r.before.withdraw_min, a = r.after && r.after.withdraw_min;
-      return { by: str(r.by), when: isNaN(at) ? '' : dateText(new Date(at).toISOString()) + ' · ' + agoText(at, now), from: b == null ? '' : moneyText(b, 'EGP'), to: a == null ? '' : moneyText(a, 'EGP') };
+      return { by: str(r.by), when: isNaN(at) ? '' : dateText(new Date(at).toISOString()) + '، ' + agoText(at, now), from: b == null ? '' : moneyText(b, 'EGP'), to: a == null ? '' : moneyText(a, 'EGP') };
     });
     // ملاحظات تأثير التغيير: نصوصنا بفصحى، والمنصة بس بتقول إنها موجودة (`notes`) وبتبعت الثواني — ⛔ نصها العامي ما يُعرض.
     var nt = resp.notes && typeof resp.notes === 'object' ? resp.notes : null, notes = [];
@@ -4886,7 +4945,7 @@
     inboxCol('join', 'join', LBL_JOIN, 'طلبات تقديم الخدمة', function (t, card, r) {
       t.id = 'join:' + r.apiId;
       if (r.infoRequest) t.extra.push('طُلب من صاحب الطلب: ' + r.infoRequest + ' — بانتظار رده');
-      t.primary = r.licenceMissing ? { label: card.primary.label, act: { do: 'sheet', sheet: 'join' } } : { label: card.primary.label, act: { do: 'decide', action: 'approve' } };
+      t.primary = (r.licenceMissing || r.licensed) ? { label: card.primary.label, act: { do: 'sheet', sheet: 'join' } } : { label: card.primary.label, act: { do: 'decide', action: 'approve' } };
       t.secondary = [{ label: 'ارفض', act: { do: 'sheet', sheet: 'reject_join' } }, { label: 'اطلب استكمالًا', act: { do: 'sheet', sheet: 'info_join' } }];
     });
     inboxCol('founding', 'founding', LBL_FOUND, 'الخبراء المؤسسون', function (t, card, r) {

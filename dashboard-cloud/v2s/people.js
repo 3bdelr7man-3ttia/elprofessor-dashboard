@@ -637,13 +637,22 @@
     var sc = { title: row.who || 'مقدّم الطلب', side: true, build: function () {
       var files = (Array.isArray(row.attachments) ? row.attachments : []).map(function (a, i) { var u = safeHttps(a && a.url ? a.url : a); return u ? '<a href="' + esc(u) + '" target="_blank" rel="noopener">مرفق ' + esc(ar(i + 1)) + '</a>' : ''; }).filter(Boolean).join(' · ');
       var det = (row.details || []).map(function (d) { return [d.k, String(d.v)]; });
+      // «السوق v4» (٥): طلب مرخَّص ⇒ كتلة بلاد القيد (متعددة الاختيار) وزرّ «عرض ملف الترخيص». ولا قبول بلا بلد واحد على الأقل.
+      var M4 = window.V2S_MARKET4, lic = M4 && M4.needsLicence(row) ? M4.licenceHtml(row, 'v2pmL') : '';
       var h = (row.licenceMissing ? '<p class="v2pm-warn">' + esc(row.licenceNote || 'الترخيص بلا رقم قيد — لا يُقبل الطلب قبل استكماله') + '</p>' : '')
         + kvRows([['الخدمة', row.serviceLabel || row.from], ['الحالة', row.statusLabel], ['الترخيص', row.licensed ? 'مع ترخيص' : 'بلا ترخيص'], ['البريد', row.email || row.personEmail, true]].concat(det))
-        + (files ? '<p class="v2pm-files">' + files + '</p>' : '') + (row.infoRequest ? '<p class="v2pm-lead">طُلب من صاحب الطلب: ' + esc(row.infoRequest) + ' — بانتظار رده</p>' : '') + errBox()
+        + (files ? '<p class="v2pm-files">' + files + '</p>' : '') + (row.infoRequest ? '<p class="v2pm-lead">طُلب من صاحب الطلب: ' + esc(row.infoRequest) + ' — بانتظار رده</p>' : '') + lic + errBox()
         + acts(row.licenceMissing ? '' : btn('v2pmOk', 'اقبل', 'v2p-btn1'), btn('v2pmNo', 'ارفض', 'v2p-btn3'), btn('v2pmAsk', 'اطلب استكمالًا'));
       return { html: h, wire: function (root) {
         var ok = q('#v2pmOk', root);
-        if (ok) ok.onclick = function () { runBtn(root, this, function () { return ep().decideInboxItem(row, 'approve', null, ''); }, closeSheet); };
+        if (lic) M4.licenceWire(root, row, 'v2pmL');
+        if (ok) ok.onclick = function () {
+          runBtn(root, this, function () {
+            var extra = null;
+            if (lic) { var lc = M4.licenceCheck(root); if (!lc.ok) return { ok: false, error: lc.error }; extra = { licensed_countries: lc.list }; }
+            return ep().decideInboxItem(row, 'approve', null, '', extra);
+          }, closeSheet);
+        };
         q('#v2pmNo', root).onclick = function () { rejectJoinScreen(row, sc); };
         q('#v2pmAsk', root).onclick = function () { infoJoinScreen(row, sc); };
       } };

@@ -207,10 +207,23 @@
   // ⛔ مفيش سؤال بيختفي: مفتاح مش في القايمة دي بيتعرض وراها باسمه الخام.
   var JR_ANSWER_ORDER = ["capacity", "bar_number", "done_before", "delivery_time", "scope",
     "price", "work1", "work2"];
+  // «السوق v4» (٥): ملف الترخيص وبلد القيد من إجابات «أضف ترخيصك» — يظهران في كتلة الترخيص لا كنص خام. المعرّف يُستخرج من رابط
+  // المنصة، وما يُفتح إلا عبر مسار الداشبورد (`/api/v2/market/licence-files/<id>`) بتوكن المراجِع.
+  var JR_LICENCE_KEYS = ["licence", "licence_country", "licence_country_name"];
+  var JR_LICENCE_FILE_RE = /\/bridge\/market\/licence-files\/([A-Za-z0-9_-]{8,64})(?:[?#].*)?$/;
+  function jrLicence(answers) {
+    var a = answers && typeof answers === "object" ? answers : {};
+    var c = String(a.licence_country || "").trim().toUpperCase();
+    var m = JR_LICENCE_FILE_RE.exec(String(a.licence || "").trim());
+    return { country: /^[A-Z]{2}$/.test(c) ? c : "", countryName: String(a.licence_country_name || "").trim(), fileId: m ? m[1] : "", bar: String(a.bar_number || "").trim() };
+  }
+  function jrAttachments(list) {
+    return (Array.isArray(list) ? list : []).filter(function (u) { return !JR_LICENCE_FILE_RE.test(String((u && u.url) || u || "")); });
+  }
   function jrDetails(answers) {
     var out = [];
     if (!answers || typeof answers !== "object") return out;
-    var keys = Object.keys(answers);
+    var keys = Object.keys(answers).filter(function (k) { return JR_LICENCE_KEYS.indexOf(k) === -1; });
     var ordered = JR_ANSWER_ORDER.filter(function (k) { return keys.indexOf(k) !== -1; })
       .concat(keys.filter(function (k) { return JR_ANSWER_ORDER.indexOf(k) === -1; }));
     ordered.forEach(function (k) {
@@ -1933,8 +1946,10 @@
               infoRequest: jr.info_request || "",
               whenLabel: jrWhen(when),
               email: jr.user_email || "",
-              attachments: Array.isArray(jr.attachments) ? jr.attachments : [],
+              attachments: jrAttachments(jr.attachments),
               details: jrDetails(jr.answers),
+              licensedFamily: jr.licensed_family || "",
+              licence: jrLicence(jr.answers),
             });
           });
         }).catch(fail("طلبات تقديم الخدمة"))

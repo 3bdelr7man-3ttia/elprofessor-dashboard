@@ -306,7 +306,16 @@
       var ladder = '<li class="v3-sh v3-lad"><div class="v3-pid"><b>القضايا حسب القيمة</b><table class="v3-ladder"><thead><tr><th>قيمة القضية</th><th>صاحب العمل</th><th>المنصة</th></tr></thead><tbody>'
         + view.ladder.map(function (r) { return '<tr><td>' + esc(r.upTo) + '</td><td>' + esc(r.ownerText) + '</td><td>' + esc(r.platformText) + '</td></tr>'; }).join('') + '</tbody></table></div>'
         + '<button type="button" class="v3-btn2" data-a="share" data-k="ladder">عدّل</button></li>';
-      body = '<p class="v3-floor">' + esc(view.floorText) + '</p><ul class="v3-list">' + lines + ladder + '</ul>';
+      var market = '';
+      if (view.market && view.market.length) {
+        market = '<li class="v3-sh v3-lad v3-mkt"><div class="v3-pid"><b>السوق حسب سعر العرض</b><small>' + esc(view.marketFloorText) + '، وتُحسب النسبة على سعر العرض بعملته</small>'
+          + '<div class="v3-mk">' + view.market.map(function (m) {
+            return '<div class="v3-mkc"><h4>' + esc(m.name) + '</h4><ul>' + m.tiers.map(function (r) {
+              return '<li><span>' + esc(r.upTo) + '</span><b>المنصة ' + esc(r.platformText) + '</b></li>';
+            }).join('') + '</ul></div>';
+          }).join('') + '</div></div><button type="button" class="v3-btn2" data-a="share" data-k="market">عدّل</button></li>';
+      }
+      body = '<p class="v3-floor">' + esc(view.floorText) + '</p><ul class="v3-list">' + lines + ladder + market + '</ul>';
     }
     var hist = view ? L.v2SharesHistory(data('shares'), now()) : null;
     var histBody;
@@ -454,6 +463,7 @@
     bindForm(); if (o.wire) o.wire(s);
     return s;
   }
+  function adig(v) { return String(v == null ? '' : v).replace(/\d/g, function (d) { return '٠١٢٣٤٥٦٧٨٩'.charAt(+d); }); }
   function numInput(id, val, attrs) {
     return '<input ' + (id ? 'id="' + id + '" ' : '') + 'type="text" inputmode="decimal" autocomplete="off" dir="ltr" value="' + esc(val) + '" ' + (attrs || '') + '>';
   }
@@ -607,7 +617,7 @@
   }
 
   // —— النسب
-  var SH_TITLE = { books: 'نسبة الكتب', books_ads: 'نسبة الكتب مع إعلانات', ladder: 'القضايا حسب القيمة', affiliate: 'عمولة الإحالة' };
+  var SH_TITLE = { books: 'نسبة الكتب', books_ads: 'نسبة الكتب مع إعلانات', ladder: 'القضايا حسب القيمة', affiliate: 'عمولة الإحالة', market: 'السوق حسب سعر العرض' };
   function openShares(kind) {
     var E = ep(), view = L.v2SharesView(data('shares'));
     if (!view) { load('shares', true); notifyFail('تعذّر جلب جدول النسب الآن'); return; }
@@ -617,8 +627,26 @@
     else if (kind === 'ladder') body = view.ladder.map(function (r, i) {
       return '<div class="fld"><label for="v3_l' + i + '">نصيب المنصة (٪) — ' + esc(r.upTo) + '</label>' + numInput('v3_l' + i, String(r.platform), 'data-l="' + i + '"') + '</div>';
     }).join('');
+    else if (kind === 'market') body = (view.market || []).map(function (m) {
+      return '<fieldset class="v3-mkf" data-cur="' + m.cur + '"><legend>' + esc(m.name) + '</legend>' + m.tiers.map(function (r, i) {
+        var last = i === m.tiers.length - 1;
+        return '<div class="v3-mkr"><span class="v3-mkn">' + esc(r.upTo) + '</span>'
+          + (last ? '' : '<div class="v3-mkfld"><label for="v3_m_' + m.cur + '_' + i + '_max">الحدّ الأعلى</label>' + numInput('v3_m_' + m.cur + '_' + i + '_max', adig(r.max), 'data-mc="' + m.cur + '" data-mi="' + i + '" data-mk="max"') + '</div>')
+          + '<div class="v3-mkfld"><label for="v3_m_' + m.cur + '_' + i + '_pct">نصيب المنصة (٪)</label>' + numInput('v3_m_' + m.cur + '_' + i + '_pct', adig(r.platform), 'data-mc="' + m.cur + '" data-mi="' + i + '" data-mk="pct"') + '</div></div>';
+      }).join('') + '</fieldset>';
+    }).join('');
     else body = '<div class="fld"><label for="v3_af">عمولة الإحالة (٪ من قيمة البيع)</label>' + numInput('v3_af', String(t.affiliate.rate)) + '</div><p class="v3-fine">تُخصم من الطرفين بنسبة نصيب كلٍّ منهما.</p>';
+    function marketInput(s) {
+      var out = {};
+      qa('input[data-mc]', s).forEach(function (i) {
+        var c = i.getAttribute('data-mc'), k = +i.getAttribute('data-mi');
+        (out[c] = out[c] || [])[k] = (out[c][k] || {});
+        out[c][k][i.getAttribute('data-mk')] = i.value;
+      });
+      return out;
+    }
     function input(s) {
+      if (kind === 'market') return { market: marketInput(s) };
       if (kind === 'books') return { booksOwner: q('#v3_bo', s).value };
       if (kind === 'books_ads') return { booksAdsOwner: q('#v3_bao', s).value };
       if (kind === 'ladder') return { ladder: qa('input[data-l]', s).map(function (i) { return i.value; }) };
@@ -634,7 +662,7 @@
     }
     twoStage({
       title: SH_TITLE[kind] || 'النسب',
-      form: '<p class="mc-lead">' + esc(view.floorText) + '. إن كسر الرقم هذا الحد ترفضه المنصة وتعرض سببًا.</p>' + body,
+      form: '<p class="mc-lead">' + esc(kind === 'market' ? view.marketFloorText + '، وتعيد المنصة الفحص قبل الحفظ.' : view.floorText + '. إن كسر الرقم هذا الحد ترفضه المنصة وتعرض سببًا.') + '</p>' + body,
       wire: wireLive,
       collect: function (s) { var r = L.v2SharesChanges(t, input(s)); return r.ok ? { ok: true, payload: r } : { ok: false, error: r.error }; },
       snapshot: function (s) { return { cells: {}, raw: input(s) }; },
@@ -642,7 +670,9 @@
         var r = vals.raw || {};
         var set = function (id, v) { var i = q(id, s); if (i && v != null) i.value = v; };
         set('#v3_bo', r.booksOwner); set('#v3_bao', r.booksAdsOwner); set('#v3_af', r.affiliateRate);
-        (r.ladder || []).forEach(function (v, i) { set('#v3_l' + i, v); }); wireLive(s);
+        (r.ladder || []).forEach(function (v, i) { set('#v3_l' + i, v); });
+        Object.keys(r.market || {}).forEach(function (c) { (r.market[c] || []).forEach(function (row, i) { if (row) { set('#v3_m_' + c + '_' + i + '_max', row.max); set('#v3_m_' + c + '_' + i + '_pct', row.pct); } }); });
+        wireLive(s);
       },
       review: function (r) { var d = L.v2SharesDiff(t, r.after); return { lines: d.lines, changed: d.changed, lead: 'ستغيّر النسب. يسري على البيوع الجديدة فقط، وما بيع قبل اليوم يبقى بنسبته:' }; },
       busy: 'جارٍ الحفظ…',

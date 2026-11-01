@@ -1,0 +1,152 @@
+/* ============================================================================
+ * v2s/market4.css — «إدارة السوق» (السوق v4): مربّعات بصور · قوائم المهام · ورقة المدى وأوراق التأكيد · كتلة الترخيص المشتركة.
+ * كل القواعد تحت `.v2s-m4` أو `.m4-*` أو `#epModal.v2s-m4-sh`. الأزرار من النظام الموحّد (`.ep-b1` `.ep-b2` `.ep-bs`) بلا قياسات جديدة.
+ * الألوان: عنّابي #9E2B4E للزرّ الواحد والمحدَّد والرقم الساخن فقط · ورق #FBFAF7/#F6F1EA · حبر #21262E · أحمر #C8102E للخطأ وحده · ذهبي للتحذير اللطيف.
+ * ⛔ المفتاح مقفول ⇒ الملف بيتحمّل ومفيش عنصر في الصفحة بيحمل الأصناف دي.
+ * ========================================================================== */
+.v2s-m4{--wine:#9E2B4E;--paper:#FBFAF7;--paper2:#F6F1EA;--ink:#21262E;--red:#C8102E;--line:#E9E1D6;--mute:#6B665C;--gold:#B0760C;--green:#2E6B5A;color:var(--ink);font-family:'IBM Plex Sans Arabic','Cairo',sans-serif;max-width:1180px}
+.v2s-m4 *{box-sizing:border-box}
+.v2s-m4 h2,.v2s-m4 h3{margin:0;font-family:'Cairo',sans-serif}
+.v2s-m4 .mute{color:var(--mute)}
+.m4-lead{font:800 20px/1.6 'Cairo',sans-serif;margin:4px 0 16px}
+.m4-note{background:#E9F3EF;border:1px solid #BCD8CE;color:#1F4D3F;border-radius:12px;padding:10px 14px;font-size:14.5px;line-height:1.8;margin:0 0 12px}
+.m4-ro{background:var(--paper2);border-radius:12px;padding:10px 14px;color:var(--mute);font-size:14.5px;margin:0 0 12px}
+.m4-ro.soft{margin-top:4px}
+.m4-fine{font-size:13.5px;color:var(--mute);margin:0 0 8px;line-height:1.8}
+.m4-warn{display:flex;flex-wrap:wrap;align-items:center;gap:10px 14px;background:#FFF3D1;border:1px solid #EBD38E;color:#6B4A00;border-radius:12px;padding:10px 14px;font-size:14.5px;line-height:1.8;margin:0 0 14px}
+.m4-err{background:#FDECEF;border:1px solid #F2B5C0;color:#8E1228;border-radius:10px;padding:9px 12px;font-size:14px;line-height:1.75;margin:10px 0}
+.m4-empty{text-align:center;background:#fff;border:1px dashed #D9CFC0;border-radius:16px;padding:28px 16px;color:var(--ink)}
+.m4-empty b{display:block;font:800 17px/1.6 'Cairo',sans-serif}
+.m4-empty p{margin:6px 0 0;color:var(--mute);font-size:14.5px}
+.m4-skel{display:grid;gap:10px}
+.m4-skel i{display:block;height:84px;border-radius:14px;background:linear-gradient(90deg,#F1EBE0,#FBF8F2,#F1EBE0);background-size:200% 100%;animation:m4sk 1.4s ease-in-out infinite}
+@keyframes m4sk{0%{background-position:200% 0}100%{background-position:-200% 0}}
+@media (prefers-reduced-motion:reduce){.m4-skel i{animation:none}}
+
+/* —— المربّعات (كاشير المطاعم): صورة كبيرة، رقم كبير، اسم واحد */
+.m4-tiles{display:grid;grid-template-columns:repeat(4,1fr);gap:16px}
+.m4-tile{display:flex;flex-direction:column;align-items:stretch;padding:0;border:1px solid var(--line);border-radius:20px;background:#fff;overflow:hidden;cursor:pointer;text-align:start;font-family:inherit;color:var(--ink);min-height:44px;transition:transform .15s,box-shadow .15s,border-color .15s}
+.m4-tile:hover{transform:translateY(-2px);box-shadow:0 10px 24px rgba(33,38,46,.12);border-color:#D9CFC0}
+.m4-tile:focus-visible{outline:3px solid rgba(158,43,78,.35);outline-offset:2px}
+.m4-timg{display:block;aspect-ratio:16/10;background-size:cover;background-position:center}
+.m4-tbody{display:flex;flex-direction:column;gap:2px;padding:14px 16px 18px}
+.m4-n{font:800 40px/1.1 'Cairo',sans-serif;color:var(--ink)}
+.m4-tile.hot .m4-n{color:var(--wine)}
+.m4-tile.off .m4-n{color:var(--mute)}
+.m4-tname{font:800 18px/1.5 'Cairo',sans-serif}
+.m4-tbody small{font-size:14px;color:var(--mute);line-height:1.6}
+.m4-tile.hot{border-top:4px solid var(--wine)}
+
+/* —— رأس المهمة */
+.m4-bar{margin:0 0 10px}
+.m4-head{display:flex;align-items:center;gap:14px;margin:0 0 14px}
+.m4-himg{flex:none;width:84px;height:56px;border-radius:12px;background-size:cover;background-position:center;border:1px solid var(--line)}
+.m4-head h2{font-size:22px;line-height:1.5}
+.m4-head p{margin:2px 0 0;color:var(--mute);font-size:14.5px}
+
+/* —— البطاقات */
+.m4-cards{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(2,1fr);gap:14px}
+.m4-card{background:#fff;border:1px solid var(--line);border-radius:16px;padding:16px;display:flex;flex-direction:column;gap:8px;min-width:0}
+.m4-ch{display:flex;align-items:flex-start;justify-content:space-between;gap:10px}
+.m4-ch h3{font-size:17px;line-height:1.6;min-width:0;overflow-wrap:anywhere}
+.m4-st{flex:none;display:inline-flex;align-items:center;background:var(--paper2);border:1px solid var(--line);border-radius:999px;padding:1px 12px;font:700 13px/1.7 'Cairo',sans-serif}
+.m4-st.fixed{background:#EEF1F6;border-color:#D5DBE6}
+.m4-tag{display:inline-flex;background:#FFF3D1;border:1px solid #EBD38E;color:#6B4A00;border-radius:999px;padding:0 10px;font:700 12.5px/1.7 'Cairo',sans-serif}
+.m4-nt{margin:0;font-size:15px;line-height:1.9;overflow-wrap:anywhere;white-space:pre-wrap}
+.m4-meta{display:flex;flex-wrap:wrap;gap:4px 14px;margin:0;color:var(--mute);font-size:14px;line-height:1.7}
+.m4-who{unicode-bidi:plaintext;overflow-wrap:anywhere}
+.m4-acts{display:flex;flex-wrap:wrap;gap:10px;margin-top:6px}
+.m4-range{margin:0;font:800 16px/1.7 'Cairo',sans-serif;color:var(--ink)}
+.m4-range.none{color:var(--mute);font-weight:600}
+.m4-facts{display:flex;flex-wrap:wrap;gap:4px 16px;margin:0;font:700 15px/1.8 'Cairo',sans-serif}
+.m4-reg{color:var(--wine);font:800 15px/1.8 'Cairo',sans-serif;text-decoration:underline;min-height:44px;display:inline-flex;align-items:center}
+.m4-reg.none{color:var(--mute);text-decoration:none;font-weight:600}
+.m4-reg-row{margin:0}
+
+/* —— مدى الأسعار: الفلتر والبحث */
+.m4-ctl{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 12px}
+.m4-chip{display:inline-flex;align-items:center;justify-content:center;min-height:44px;padding:0 16px;border-radius:999px;border:1px solid var(--line);background:#fff;color:var(--ink);font:700 14.5px 'Cairo',sans-serif;cursor:pointer;white-space:nowrap}
+.m4-chip:hover{background:var(--paper2)}
+.m4-chip.on{background:var(--wine);border-color:var(--wine);color:#fff}
+.m4-search{margin:0 0 14px}
+.m4-search label{display:block;font:700 13.5px 'Cairo',sans-serif;color:var(--mute);margin-bottom:6px}
+.m4-sbox{display:flex;gap:8px;max-width:560px}
+.m4-sbox input{flex:1;min-width:0;min-height:48px;border:1px solid #D9CFC0;border-radius:12px;padding:0 14px;font-size:16px;background:var(--paper);color:var(--ink);font-family:inherit}
+.m4-sbox input:focus{border-color:var(--wine);box-shadow:0 0 0 3px rgba(158,43,78,.25);outline:0}
+.m4-count{font:700 14.5px 'Cairo',sans-serif;color:var(--mute);margin:0 0 10px}
+
+/* —— جدول الطلبات المفتوحة (الكمبيوتر) وبطاقاتها (الموبايل) */
+.m4-tbw{background:#fff;border:1px solid var(--line);border-radius:16px;overflow:hidden}
+.m4-tb{width:100%;border-collapse:collapse;font-size:15px}
+.m4-tb th{background:var(--paper2);text-align:start;font:800 13.5px 'Cairo',sans-serif;color:var(--mute);padding:11px 14px}
+.m4-tb td{padding:12px 14px;border-top:1px solid var(--line);vertical-align:top;line-height:1.7}
+.m4-tb td small{display:block;color:var(--mute);font-size:13px}
+.m4-cards.open{display:none}
+
+/* —— ورقة التأكيد والمدى */
+#epModal.v2s-m4-sh .modal{background:#FBFAF7;border-radius:20px;max-width:600px;font-family:'IBM Plex Sans Arabic','Cairo',sans-serif;color:#21262E;max-height:92vh;display:flex;flex-direction:column}
+#epModal.v2s-m4-sh .mb{padding:18px 20px;overflow-y:auto}
+#epModal.v2s-m4-sh .mc-lead{font-size:15.5px;line-height:1.9;margin:0 0 12px}
+#epModal.v2s-m4-sh .fld{margin:0 0 12px}
+#epModal.v2s-m4-sh .fld label{display:block;font:700 13.5px 'Cairo',sans-serif;color:#6B665C;margin-bottom:6px}
+#epModal.v2s-m4-sh .fld select,#epModal.v2s-m4-sh .fld textarea,#epModal.v2s-m4-sh .fld input{width:100%;min-height:48px;font-size:16px;border:1px solid #D9CFC0;border-radius:12px;background:#fff;padding:10px 14px;font-family:inherit;color:#21262E}
+#epModal.v2s-m4-sh .fld textarea{min-height:92px}
+#epModal.v2s-m4-sh .fld small{display:block;margin-top:6px;color:#6B665C;font-size:13.5px;line-height:1.7;min-height:1px}
+#epModal.v2s-m4-sh input:focus,#epModal.v2s-m4-sh textarea:focus,#epModal.v2s-m4-sh select:focus{border-color:#9E2B4E;box-shadow:0 0 0 3px rgba(158,43,78,.25);outline:0}
+#epModal.v2s-m4-sh .acts{display:flex;flex-wrap:wrap;gap:10px;margin-top:16px}
+#epModal.v2s-m4-sh .m4-scope{border:1px solid #E9E1D6;border-radius:14px;padding:10px 14px 14px;margin:0 0 12px;background:#fff}
+#epModal.v2s-m4-sh .m4-scope legend{font:700 13.5px 'Cairo',sans-serif;color:#6B665C;padding:0 6px}
+.m4-radio{display:flex;align-items:flex-start;gap:10px;min-height:48px;padding:8px 2px;cursor:pointer}
+.m4-radio input{width:22px;height:22px;margin-top:4px;accent-color:#9E2B4E;flex:none}
+.m4-radio span{display:flex;flex-direction:column;gap:2px;font-size:15px;line-height:1.7}
+.m4-radio small{color:#6B665C;font-size:13.5px}
+.m4-fine.warnline{color:#6B4A00}
+
+.m4-curs{display:grid;gap:10px}
+.m4-cur{background:#fff;border:1px solid #E9E1D6;border-radius:14px;padding:10px 12px}
+.m4-cur.bad{border-color:#F2B5C0;background:#FFF8F9}
+.m4-cur>b{font:800 15px/1.6 'Cairo',sans-serif}
+.m4-cf{display:grid;grid-template-columns:auto 1fr auto 1fr;align-items:center;gap:8px;margin-top:6px}
+.m4-cf label{font:700 13.5px 'Cairo',sans-serif;color:#6B665C}
+#epModal.v2s-m4-sh .m4-cf input{width:100%;min-width:0;min-height:48px;font-size:16px;border:1px solid #D9CFC0;border-radius:12px;background:#fff;padding:8px 12px;font-family:inherit;color:#21262E;text-align:start;font-variant-numeric:tabular-nums}
+.m4-ce{margin:4px 0 0;font-size:13.5px;line-height:1.7;min-height:0}
+.m4-ce:empty{display:none}
+.m4-ce.bad{color:#8E1228}
+.m4-ce.warn{color:#6B4A00}
+.m4-diff{list-style:none;margin:0 0 10px;padding:0;display:grid;gap:8px}
+.m4-diff li{display:flex;flex-wrap:wrap;justify-content:space-between;gap:4px 12px;background:#fff;border:1px solid #E9E1D6;border-radius:12px;padding:10px 12px;font-size:14.5px;line-height:1.7}
+.m4-diff li>span{display:flex;flex-wrap:wrap;align-items:center;gap:6px 8px}
+.m4-diff s{color:#6B665C}
+.m4-diff em{font-style:normal;font-weight:800;color:#9E2B4E}
+.m4-diff i{font-style:normal;color:#6B665C}
+.m4-warns{list-style:none;margin:0 0 10px;padding:10px 14px;background:#FFF3D1;border:1px solid #EBD38E;border-radius:12px;color:#6B4A00;font-size:14px;line-height:1.8;display:grid;gap:4px}
+
+/* —— كتلة الترخيص (داخل شاشة قبول طلب الانضمام) */
+.m4-lic{border:1px solid #E9E1D6;border-radius:14px;padding:10px 14px 14px;margin:12px 0;background:#fff;min-width:0}
+.m4-lic legend{font:800 14px 'Cairo',sans-serif;color:#9E2B4E;padding:0 6px}
+.m4-lic-info{margin:0 0 8px;font-size:14.5px;line-height:1.8}
+.m4-lic-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+.m4-lic-opt{display:flex;align-items:center;gap:8px;min-height:44px;padding:4px 10px;border:1px solid #E9E1D6;border-radius:10px;cursor:pointer;font-size:14.5px;background:#FBFAF7}
+.m4-lic-opt:has(input:checked){border-color:#9E2B4E;background:#FBF0F3}
+.m4-lic-opt input{width:20px;height:20px;accent-color:#9E2B4E;flex:none}
+.m4-lic-file{margin-top:8px;display:flex;flex-direction:column;align-items:flex-start;gap:10px}
+.m4-lic-img{max-width:100%;max-height:360px;border:1px solid #E9E1D6;border-radius:12px;background:#fff;display:block}
+.m4-lic-dl{display:inline-flex}
+
+@media (max-width:1100px){.m4-tiles{grid-template-columns:repeat(2,1fr)}}
+@media (max-width:760px){
+  .m4-lead{font-size:18px}
+  .m4-tiles{gap:12px}
+  .m4-n{font-size:34px}
+  .m4-tname{font-size:16px}
+  .m4-tbody{padding:12px 12px 14px}
+  .m4-cards{grid-template-columns:1fr}
+  .m4-tbw{display:none}
+  .m4-cards.open{display:grid}
+  .m4-head{gap:10px}.m4-himg{width:68px;height:48px}.m4-head h2{font-size:19px}
+  .m4-acts .ep-b1,.m4-acts .ep-b2{flex:1 1 140px}
+  #epModal.v2s-m4-sh .modal{max-width:100%}
+  #epModal.v2s-m4-sh .acts .ep-b1,#epModal.v2s-m4-sh .acts .ep-b2{flex:1 1 100%}
+  .m4-cf{grid-template-columns:auto 1fr}
+  .m4-lic-grid{grid-template-columns:repeat(2,1fr)}
+}

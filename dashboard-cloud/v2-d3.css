@@ -283,3 +283,22 @@
   .app.v2-shell.v2lg #view .row{grid-template-columns:minmax(0,1fr)!important}
   .app.v2-shell.v2lg #view .kpis{grid-template-columns:repeat(2,minmax(0,1fr))}
 }
+
+/* —— «السوق v4»: سلّم نصيب المنصة لكل عملة (عرض + ورقة التعديل) */
+.v3-mkt .v3-pid{width:100%}
+.v3-mk{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:10px;margin-top:8px}
+.v3-mkc{background:#fff;border:1px solid #EEE7DA;border-radius:12px;padding:8px 12px}
+.v3-mkc h4{margin:0 0 4px;font:800 14px 'Cairo',sans-serif}
+.v3-mkc ul{list-style:none;margin:0;padding:0;display:grid;gap:2px}
+.v3-mkc li{display:flex;justify-content:space-between;gap:8px;font-size:13.5px;line-height:1.8}
+.v3-mkc li span{color:var(--mute)}
+.v3-mkf{border:1px solid #E9E1D6;border-radius:12px;padding:6px 12px 10px;margin:0 0 10px;min-width:0}
+.v3-mkf legend{font:800 14px 'Cairo',sans-serif;padding:0 6px}
+.v3-mkr{display:grid;grid-template-columns:1fr 1fr;align-items:end;gap:6px 12px;padding:8px 0;border-top:1px dashed #EEE7DA}
+.v3-mkr:first-of-type{border-top:0}
+.v3-mkn{grid-column:1/-1;font:700 13.5px/1.7 'Cairo',sans-serif;color:var(--mute)}
+.v3-mkfld{display:flex;flex-direction:column;gap:4px;min-width:0}
+.v3-mkfld label{font:700 13px 'Cairo',sans-serif;color:var(--mute)}
+.v3-mkfld input{min-width:0;width:100%;min-height:48px;font-size:16px;border:1px solid #D9CFC0;border-radius:12px;padding:8px 12px;background:#fff;color:inherit;font-family:inherit}
+.v3-mkfld input:focus{border-color:#9E2B4E;box-shadow:0 0 0 3px rgba(158,43,78,.25);outline:0}
+@media (max-width:640px){.v3-mkr{grid-template-columns:1fr}}

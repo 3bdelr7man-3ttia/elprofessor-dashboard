@@ -29,7 +29,7 @@ NODE = __import__('shutil').which('node')
 needs_node = pytest.mark.skipif(not NODE, reason='needs node')
 PSEUDO_MODS = {'v2files', 'v2disputes', 'v2person',                       # D2: موديولات وهمية يرسمها V2D2 تحت الغلاف الجديد فقط
                'v2m_overview', 'v2m_payouts', 'v2m_receipts', 'v2m_prices', 'v2m_shares', 'v2m_ads', 'v2b_offers', 'v2b_requests',   # D3: يرسمها V2D3
-               'v2s_market_all', 'v2s_market_demand', 'v2s_books_ours',   # كتبنا (books.js) +
+               'v2s_market_all', 'v2s_market_demand', 'v2s_market_v4', 'v2s_books_ours',   # كتبنا (books.js) + إدارة السوق v4 (market4.js) +
                # الجولة النهائية · سوق الخدمات: يرسمها V2S_MARKET
                'v2p_invites', 'v2mk_social', 'v2mk_plan', 'v2r_demand', 'v2r_sunday', 'v2s_brain',
                'v2c_partners', 'v2c_assets', 'v2c_deals', 'v2c_ads'}  # + أقسام الجولة النهائية
@@ -91,7 +91,7 @@ def test_the_tabs_match_the_approved_table():
         # الجولة الأخيرة: «الدورات والمدرّبون» بشاشاته الجديدة (تبويب مخفي لصفحة الدورة)، والشاشة القديمة آخرًا في «كل السجلات»
         'courses': [['courses', 'الدورات', 'courses'], ['trainers', 'المدرّبون', 'team'], ['live', 'الدورات الحيّة', 'courses'], ['demand', 'ما يطلبه الناس', 'courses'],
                     ['offers', 'عروض الأسعار', 'courses'], ['course', 'صفحة الدورة', 'courses'], ['all', 'كل السجلات', 'courses']],
-        'market': [['requests', 'الطلبات', 'market'], ['all', 'كل الطلبات', 'v2s_market_all'], ['demand', 'ماذا يطلب الناس', 'v2s_market_demand']],
+        'market': [['requests', 'الطلبات', 'market'], ['all', 'كل الطلبات', 'v2s_market_all'], ['demand', 'ماذا يطلب الناس', 'v2s_market_demand'], ['manage', 'إدارة السوق', 'v2s_market_v4']],
         # D3: مراجعة العروض وطلبات القرّاء أولًا (موديولان وهميان ورا الغلاف)، والشاشة القديمة آخرًا
         'books': [['offers', 'مراجعة العروض', 'v2b_offers'], ['requests', 'طلبات القرّاء', 'v2b_requests'], ['books', 'الكتب والأعمال', 'knowledge'], ['ours', 'كتبنا', 'v2s_books_ours']],
         # الناس والدعوات (نهائي): الطلبات والدعوات (موديول وهمي v2p_invites) والمستخدمون والرسائل، وصفحة الشخص مخفية

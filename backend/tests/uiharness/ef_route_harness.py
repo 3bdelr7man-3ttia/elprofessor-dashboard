@@ -56,7 +56,11 @@ class _Resp(object):
     def __init__(self, status, payload):
         self.status_code = status
         self._p = payload
-        if isinstance(payload, bytes):         # رسالة الخبير الصوتية (الجولة ١٢): بايتات مش JSON
+        if isinstance(payload, tuple) and len(payload) == 2 and isinstance(payload[0], bytes):    # ملف بنوعه (ترخيص السوق v4): (بايتات، نوع)
+            self.content = payload[0]
+            self.text = ''
+            self.headers = {'Content-Type': payload[1]}
+        elif isinstance(payload, bytes):         # رسالة الخبير الصوتية (الجولة ١٢): بايتات مش JSON
             self.content = payload
             self.text = ''
             self.headers = {'Content-Type': 'audio/webm'}
@@ -67,7 +71,7 @@ class _Resp(object):
         self.ok = 200 <= status < 300
 
     def json(self):
-        if isinstance(self._p, bytes):
+        if isinstance(self._p, (bytes, tuple)):
             raise ValueError('not json')
         return self._p
 
