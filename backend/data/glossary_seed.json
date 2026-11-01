@@ -1,0 +1,1317 @@
+{
+ "items": [
+  {
+   "id": "consideration",
+   "ar": "المقابل (العوض)",
+   "en": "consideration",
+   "fr": "contrepartie",
+   "area": "contracts",
+   "definition_ar": "شيء ذو قيمة يقدّمه كل طرف للآخر ليصبح الوعد ملزمًا في القانون الإنجليزي. وفي القوانين العربية يقابله في الأغلب ركنا «المحل» و«السبب»، وليس نظيرًا مطابقًا.",
+   "example_en": "The consideration for the licence is a fee of USD 50,000.",
+   "example_ar": "مقابل الترخيص رسم قدره 50,000 دولار أمريكي.",
+   "false_friend_note_ar": "لا تترجمها «الاعتبار» ولا «الاعتبارات»؛ فهذه تعني الأمور التي تؤخذ في الحسبان. «الاعتبارية» صفة للشخص المعنوي فقط.",
+   "related": [
+    "offer-acceptance",
+    "void-voidable",
+    "good-faith",
+    "legal-personality"
+   ],
+   "countries_note_ar": null
+  },
+  {
+   "id": "indemnity",
+   "ar": "التعويض التعاقدي (التزام بالتعويض)",
+   "en": "indemnity",
+   "fr": "indemnisation",
+   "area": "contracts",
+   "definition_ar": "تعهد طرف بتحمّل خسائر الطرف الآخر وتعويضه عنها إذا وقعت أحداث محددة في العقد، وقد لا يلزم لذلك إثبات إخلال.",
+   "example_en": "The Supplier shall indemnify the Buyer against all losses arising from third-party claims.",
+   "example_ar": "يلتزم المورّد بتعويض المشتري عن كل الخسائر الناشئة عن مطالبات الغير.",
+   "false_friend_note_ar": "ليس مجرد «تعويض عن ضرر» (damages)؛ هو التزام تعاقدي مستقل بتحمّل الخسارة. وليس «تأمينًا» ولا «ضمانًا» (warranty).",
+   "related": [
+    "damages",
+    "warranty",
+    "liquidated-damages",
+    "guarantee"
+   ],
+   "countries_note_ar": null
+  },
+  {
+   "id": "warranty",
+   "ar": "الضمان (تعهد بصحة واقعة أو جودة)",
+   "en": "warranty",
+   "fr": "garantie",
+   "area": "contracts",
+   "definition_ar": "وعد تعاقدي بأن واقعة أو صفة معينة صحيحة، ويمنح الطرف الآخر تعويضًا إذا ثبت عكسها.",
+   "example_en": "The Seller warrants that the goods are free from defects.",
+   "example_ar": "يضمن البائع خلو البضاعة من العيوب.",
+   "false_friend_note_ar": "يختلف عن guarantee (كفالة طرف ثالث)، وعن representation (إقرار بواقعة قبل العقد أو فيه). وكلمة «الضمان» العربية أوسع ولا تفرّق بينها، فاختر صيغة واضحة في الترجمة.",
+   "related": [
+    "representation",
+    "guarantee",
+    "indemnity"
+   ],
+   "countries_note_ar": null
+  },
+  {
+   "id": "representation",
+   "ar": "الإقرار (التصريح بواقعة)",
+   "en": "representation",
+   "fr": "déclaration",
+   "area": "contracts",
+   "definition_ar": "بيان بواقعة قائمة يقدّمه طرف قبل العقد أو داخله، ليبني عليه الطرف الآخر قراره بالتعاقد. وتأتي عادة في عبارة «الإقرارات والضمانات».",
+   "example_en": "The Company represents that it is duly incorporated under the laws of the UAE.",
+   "example_ar": "تُقرّ الشركة بأنها مؤسَّسة تأسيسًا صحيحًا وفق قوانين دولة الإمارات.",
+   "false_friend_note_ar": "ليست «التمثيل» بمعنى النيابة عن شخص. وفي القانون الإنجليزي قد يؤدي بيان غير صحيح (misrepresentation) إلى إبطال العقد أو التعويض.",
+   "related": [
+    "warranty",
+    "void-voidable"
+   ],
+   "countries_note_ar": null
+  },
+  {
+   "id": "without-prejudice-to",
+   "ar": "دون الإخلال بـ",
+   "en": "without prejudice to",
+   "fr": "sans préjudice de",
+   "area": "general",
+   "definition_ar": "صيغة تعني أن النص لا يقلل من حقوق أو أحكام أخرى مذكورة بعده، وتكثر في التشريع والعقود.",
+   "example_en": "Without prejudice to Clause 12, either party may terminate this Agreement on 30 days' notice.",
+   "example_ar": "دون الإخلال بالبند 12، يجوز لأي من الطرفين إنهاء هذا العقد بإخطار مدته 30 يومًا.",
+   "false_friend_note_ar": "لا تترجمها «بدون تحيّز» ولا «بلا حكم مسبق». وهي غير عبارة without prejudice المكتوبة على مراسلات التسوية.",
+   "related": [
+    "without-prejudice-privilege"
+   ],
+   "countries_note_ar": null
+  },
+  {
+   "id": "without-prejudice-privilege",
+   "ar": "مراسلات تسوية دون مساس بالحقوق",
+   "en": "without prejudice (settlement communications)",
+   "fr": null,
+   "area": "litigation",
+   "definition_ar": "عبارة تُكتب على مراسلات التفاوض لتسوية نزاع، وتعني في القانون الإنجليزي أن ما فيها لا يُقدَّم للمحكمة دليلًا ضد كاتبها.",
+   "example_en": "This letter is sent without prejudice and subject to contract.",
+   "example_ar": "أُرسل هذا الخطاب دون مساس بالحقوق ورهنًا بإبرام عقد.",
+   "false_friend_note_ar": "لا تعتمد على الترجمة وحدها لتحصل على الحماية نفسها؛ قواعد قبول مراسلات التسوية دليلًا تختلف بين الأنظمة، فراجع النظام الإجرائي المعني.",
+   "related": [
+    "without-prejudice-to",
+    "interim-relief"
+   ],
+   "countries_note_ar": null
+  },
+  {
+   "id": "force-majeure",
+   "ar": "القوة القاهرة",
+   "en": "force majeure",
+   "fr": "force majeure",
+   "area": "contracts",
+   "definition_ar": "حدث خارج إرادة الطرفين لا يمكن توقعه ولا دفعه، يُعفي من تنفيذ الالتزام أو يؤخره بحسب العقد والقانون.",
+   "example_en": "Neither party is liable for delay caused by a Force Majeure Event.",
+   "example_ar": "لا يسأل أي من الطرفين عن التأخير الناشئ عن حدث قوة قاهرة.",
+   "false_friend_note_ar": "في القانون الإنجليزي لا توجد قاعدة عامة، وما يسري هو ما ينص عليه العقد فقط؛ أما القوانين العربية المدنية فتنص عليها وتفرّق بينها وبين «الظروف الطارئة».",
+   "related": [
+    "breach-of-contract",
+    "termination"
+   ],
+   "countries_note_ar": "في مصر يرد «القوة القاهرة» و«الحادث المفاجئ» معًا في القانون المدني، ونظرية الظروف الطارئة منفصلة عنهما. راجع القانون المحلي لكل دولة."
+  },
+  {
+   "id": "liquidated-damages",
+   "ar": "التعويض الاتفاقي (الشرط الجزائي)",
+   "en": "liquidated damages",
+   "fr": "clause pénale",
+   "area": "contracts",
+   "definition_ar": "مبلغ يتفق عليه الطرفان مقدمًا ليدفعه من يخلّ بالتزام معين، دون انتظار إثبات الضرر الفعلي.",
+   "example_en": "The Contractor shall pay liquidated damages of 0.5% of the contract price per week of delay.",
+   "example_ar": "يدفع المقاول تعويضًا اتفاقيًا قدره 0.5% من قيمة العقد عن كل أسبوع تأخير.",
+   "false_friend_note_ar": "في القانون الإنجليزي يُبطل المبلغ إذا كان عقوبة (penalty) لا تقديرًا معقولًا للضرر، أما في القوانين العربية فيجوز للقاضي عادة تخفيضه إذا كان مبالغًا فيه. وكلمة «غرامة» ليست ترجمة دقيقة. والمقابل الفرنسي clause pénale أوسع في الاستعمال.",
+   "related": [
+    "damages",
+    "breach-of-contract"
+   ],
+   "countries_note_ar": "مصطلح «الشرط الجزائي» شائع في مصر، و«التعويض الاتفاقي» هو التعبير الذي تستعمله التشريعات المدنية في عدد من الدول."
+  },
+  {
+   "id": "condition-precedent",
+   "ar": "الشرط الواقف",
+   "en": "condition precedent",
+   "fr": "condition suspensive",
+   "area": "contracts",
+   "definition_ar": "حدث يجب أن يقع أولًا قبل أن ينشأ التزام أو يبدأ نفاذ العقد.",
+   "example_en": "Completion is subject to satisfaction of the conditions precedent set out in Schedule 2.",
+   "example_ar": "يتوقف الإتمام على تحقق الشروط الواقفة الواردة في الملحق 2.",
+   "false_friend_note_ar": "لا تترجمها «شرط مسبق» فقط فتضيع دقتها القانونية. وكلمة condition وحدها في عقود البيع الإنجليزية قد تعني بندًا جوهريًا يختلف عن warranty.",
+   "related": [
+    "warranty",
+    "termination"
+   ],
+   "countries_note_ar": null
+  },
+  {
+   "id": "covenant",
+   "ar": "التعهد (التزام تعاقدي)",
+   "en": "covenant",
+   "fr": "engagement",
+   "area": "contracts",
+   "definition_ar": "التزام رسمي بفعل شيء أو الامتناع عنه، يكثر في عقود التمويل، مثل ألا يرهن المقترض أصوله.",
+   "example_en": "The Borrower covenants not to create any security over its assets.",
+   "example_ar": "يتعهد المقترض بعدم إنشاء أي ضمان على أصوله.",
+   "false_friend_note_ar": "ليست «العهد» بمعناه الديني ولا «الميثاق». تُترجم «تعهد» أو «التزام».",
+   "related": [
+    "warranty",
+    "pledge"
+   ],
+   "countries_note_ar": null
+  },
+  {
+   "id": "best-endeavours",
+   "ar": "بذل أقصى الجهود",
+   "en": "best endeavours",
+   "fr": null,
+   "area": "contracts",
+   "definition_ar": "التزام ببذل أقصى جهد ممكن لتحقيق نتيجة. ويفرّق القضاء الإنجليزي بينه وبين reasonable endeavours (جهود معقولة) وهي أخف.",
+   "example_en": "The Distributor shall use its best endeavours to promote the Products.",
+   "example_ar": "يبذل الموزّع أقصى جهوده للترويج للمنتجات.",
+   "false_friend_note_ar": "ليس ضمانًا بتحقق النتيجة. ويقابله في الفكر المدني العربي «الالتزام ببذل عناية»، لكنه لا يطابقه تمامًا فلا تعتمده دون مراجعة سياق العقد.",
+   "related": [
+    "breach-of-contract",
+    "good-faith"
+   ],
+   "countries_note_ar": null
+  },
+  {
+   "id": "severability",
+   "ar": "قابلية البنود للانفصال",
+   "en": "severability",
+   "fr": "clause de divisibilité",
+   "area": "contracts",
+   "definition_ar": "بند ينص على أنه إذا بطل نص أو تعذّر تنفيذه بقيت بقية العقد نافذة.",
+   "example_en": "If any provision is held invalid, the remaining provisions shall continue in full force.",
+   "example_ar": "إذا قُضي ببطلان أي نص، بقيت باقي النصوص نافذة بكامل أثرها.",
+   "false_friend_note_ar": "لا تترجمها «الفصل»، فهي توحي بفصل العامل من عمله.",
+   "related": [
+    "entire-agreement",
+    "void-voidable"
+   ],
+   "countries_note_ar": null
+  },
+  {
+   "id": "entire-agreement",
+   "ar": "بند الاتفاق الكامل",
+   "en": "entire agreement",
+   "fr": "clause d'intégralité",
+   "area": "contracts",
+   "definition_ar": "بند يقرر أن العقد المكتوب هو كل ما اتفق عليه الطرفان، وأن ما سبقه من وعود ومراسلات لا يُعتد به.",
+   "example_en": "This Agreement constitutes the entire agreement between the parties.",
+   "example_ar": "يمثل هذا العقد الاتفاق الكامل بين الطرفين.",
+   "false_friend_note_ar": null,
+   "related": [
+    "severability",
+    "representation",
+    "recitals"
+   ],
+   "countries_note_ar": null
+  },
+  {
+   "id": "waiver",
+   "ar": "التنازل عن حق",
+   "en": "waiver",
+   "fr": "renonciation",
+   "area": "contracts",
+   "definition_ar": "إسقاط طرف حقًا له أو تركه التمسك به، صراحةً أو ضمنًا.",
+   "example_en": "No failure to exercise a right shall operate as a waiver of that right.",
+   "example_ar": "عدم ممارسة الحق لا يُعد تنازلًا عنه.",
+   "false_friend_note_ar": "كلمة «تنازل» تُستعمل أيضًا لنقل الحقوق أو العقد (assignment)، فاحرص على التمييز بين إسقاط الحق ونقله.",
+   "related": [
+    "assignment",
+    "estoppel"
+   ],
+   "countries_note_ar": null
+  },
+  {
+   "id": "assignment",
+   "ar": "حوالة الحق (التنازل عن الحقوق)",
+   "en": "assignment",
+   "fr": "cession",
+   "area": "contracts",
+   "definition_ar": "نقل طرف حقوقه الناشئة عن عقد إلى شخص آخر. أما نقل الالتزامات فيسمى حوالة الدين ويحتاج غالبًا موافقة الدائن.",
+   "example_en": "Neither party may assign its rights under this Agreement without prior written consent.",
+   "example_ar": "لا يجوز لأي طرف التنازل عن حقوقه بموجب هذا العقد دون موافقة كتابية مسبقة.",
+   "false_friend_note_ar": "ليست «التكليف» ولا «المهمة» كما في الدراسة. وتختلف عن novation التي تُحلّ طرفًا جديدًا محل القديم بموافقة الجميع.",
+   "related": [
+    "novation",
+    "waiver"
+   ],
+   "countries_note_ar": "«حوالة الحق» هي التعبير الفني في القوانين المدنية العربية، ويشيع «التنازل» في صياغة العقود في الخليج."
+  },
+  {
+   "id": "novation",
+   "ar": "التجديد (إحلال طرف جديد محل القديم)",
+   "en": "novation",
+   "fr": "novation",
+   "area": "contracts",
+   "definition_ar": "اتفاق ينهي التزامًا أو عقدًا قائمًا ويحل محله التزام جديد أو طرف جديد بموافقة جميع الأطراف، فيتحرر الطرف القديم.",
+   "example_en": "The parties agree to a novation under which Company B replaces Company A.",
+   "example_ar": "يتفق الأطراف على تجديد تحل بموجبه الشركة (ب) محل الشركة (أ).",
+   "false_friend_note_ar": "كلمة «التجديد» قد توحي بتجديد مدة العقد (renewal) وهو أمر آخر. وليست assignment لأنها تحتاج موافقة الأطراف كلهم.",
+   "related": [
+    "assignment",
+    "termination"
+   ],
+   "countries_note_ar": null
+  },
+  {
+   "id": "breach-of-contract",
+   "ar": "الإخلال بالعقد",
+   "en": "breach of contract",
+   "fr": "inexécution du contrat",
+   "area": "contracts",
+   "definition_ar": "عدم تنفيذ طرف التزامًا ورد في العقد، كليًا أو جزئيًا أو في موعد متأخر.",
+   "example_en": "Failure to pay within 30 days constitutes a material breach.",
+   "example_ar": "عدم السداد خلال 30 يومًا يُعد إخلالًا جوهريًا.",
+   "false_friend_note_ar": "material في material breach تعني «جوهري» لا «مادي».",
+   "related": [
+    "termination",
+    "damages",
+    "liquidated-damages",
+    "specific-performance"
+   ],
+   "countries_note_ar": null
+  },
+  {
+   "id": "termination",
+   "ar": "إنهاء العقد (الفسخ)",
+   "en": "termination",
+   "fr": "résiliation",
+   "area": "contracts",
+   "definition_ar": "وضع حد للعقد قبل انتهاء مدته، بسبب إخلال أو استنادًا إلى بند يتيح الإنهاء.",
+   "example_en": "Either party may terminate this Agreement for convenience on 60 days' notice.",
+   "example_ar": "يجوز لأي طرف إنهاء هذا العقد دون إبداء سبب بإخطار مدته 60 يومًا.",
+   "false_friend_note_ar": "expiry (انتهاء المدة) غير termination (الإنهاء المبكر). و«الفسخ» في القوانين العربية يرتبط عادة بالإخلال وقد يحتاج حكمًا قضائيًا أو اتفاقًا صريحًا. والمقابل الفرنسي résiliation للعقود المستمرة، بينما résolution للإخلال بعقد فوري.",
+   "related": [
+    "breach-of-contract",
+    "rescission",
+    "force-majeure",
+    "notice-period"
+   ],
+   "countries_note_ar": null
+  },
+  {
+   "id": "rescission",
+   "ar": "الإبطال أو الفسخ بأثر رجعي",
+   "en": "rescission",
+   "fr": null,
+   "area": "contracts",
+   "definition_ar": "إلغاء العقد من أصله وإعادة الطرفين إلى حالتهما السابقة، بسبب عيب مثل الغلط أو التدليس أو الإكراه.",
+   "example_en": "The Buyer was entitled to rescind the contract for fraudulent misrepresentation.",
+   "example_ar": "كان من حق المشتري إبطال العقد بسبب التدليس.",
+   "false_friend_note_ar": "لا تخلطه بـ termination الذي ينهي العقد للمستقبل فقط. ولا تقابله كلمة فرنسية واحدة دقيقة، فنتركه بلا مقابل.",
+   "related": [
+    "termination",
+    "void-voidable",
+    "representation"
+   ],
+   "countries_note_ar": null
+  },
+  {
+   "id": "specific-performance",
+   "ar": "التنفيذ العيني",
+   "en": "specific performance",
+   "fr": "exécution forcée en nature",
+   "area": "contracts",
+   "definition_ar": "أمر المحكمة للمدين بتنفيذ التزامه نفسه، لا الاكتفاء بتعويض مالي.",
+   "example_en": "The court may order specific performance where damages are inadequate.",
+   "example_ar": "للمحكمة أن تأمر بالتنفيذ العيني إذا كان التعويض غير كافٍ.",
+   "false_friend_note_ar": "لا تترجمها «أداء محدد» ولا «أداء خاص». وهو في القانون الإنجليزي سلطة تقديرية للمحكمة، وفي القوانين المدنية العربية حق أصلي للدائن متى كان ممكنًا.",
+   "related": [
+    "damages",
+    "injunction",
+    "breach-of-contract"
+   ],
+   "countries_note_ar": null
+  },
+  {
+   "id": "damages",
+   "ar": "التعويض (عن الضرر)",
+   "en": "damages",
+   "fr": "dommages-intérêts",
+   "area": "contracts",
+   "definition_ar": "مبلغ تقضي به المحكمة لجبر ضرر لحق بطرف نتيجة إخلال أو فعل ضار.",
+   "example_en": "The Claimant seeks damages for loss of profit.",
+   "example_ar": "يطلب المدعي تعويضًا عن فوات الربح.",
+   "false_friend_note_ar": "damages (بالجمع) هي التعويض المالي، أما damage فهو الضرر نفسه. لا تترجم damages «أضرارًا».",
+   "related": [
+    "indemnity",
+    "liquidated-damages",
+    "tort",
+    "breach-of-contract"
+   ],
+   "countries_note_ar": null
+  },
+  {
+   "id": "recitals",
+   "ar": "الديباجة (التمهيد)",
+   "en": "recitals",
+   "fr": "préambule",
+   "area": "contracts",
+   "definition_ar": "الفقرات الافتتاحية التي تشرح خلفية العقد وأسباب إبرامه (تبدأ غالبًا بكلمة WHEREAS)، وتسبق البنود التنفيذية.",
+   "example_en": "WHEREAS the Company wishes to engage the Consultant to provide advisory services...",
+   "example_ar": "لما كانت الشركة ترغب في التعاقد مع المستشار لتقديم خدمات استشارية...",
+   "false_friend_note_ar": "لا تترجم whereas «بينما» في الديباجة؛ المقصود «لما كان». وفي كثير من العقود الإنجليزية لا تنشئ الديباجة التزامات بذاتها.",
+   "related": [
+    "entire-agreement",
+    "consideration"
+   ],
+   "countries_note_ar": null
+  },
+  {
+   "id": "offer-acceptance",
+   "ar": "الإيجاب والقبول",
+   "en": "offer and acceptance",
+   "fr": "offre et acceptation",
+   "area": "contracts",
+   "definition_ar": "أساس انعقاد العقد: عرض جازم من طرف ورد مطابق له من الطرف الآخر.",
+   "example_en": "A contract is formed once the offer is accepted without modification.",
+   "example_ar": "ينعقد العقد متى قُبل الإيجاب دون تعديل.",
+   "false_friend_note_ar": "offer القانوني «إيجاب» جازم، وليس مجرد «عرض» دعائي. وما يقابل العرض غير الجازم في الإنجليزية invitation to treat (دعوة إلى التعاقد).",
+   "related": [
+    "consideration",
+    "good-faith"
+   ],
+   "countries_note_ar": null
+  },
+  {
+   "id": "void-voidable",
+   "ar": "باطل / قابل للإبطال",
+   "en": "void / voidable",
+   "fr": "nul / annulable",
+   "area": "contracts",
+   "definition_ar": "العقد الباطل لا أثر له من الأصل. أما القابل للإبطال فينتج أثره حتى يطلب صاحب الحق إبطاله.",
+   "example_en": "A contract obtained by duress is voidable at the option of the innocent party.",
+   "example_ar": "العقد المبرم تحت الإكراه قابل للإبطال بطلب الطرف المتضرر.",
+   "false_friend_note_ar": "void ليست «فارغ». والفقه العربي يميّز البطلان المطلق من النسبي، وبعض القوانين المتأثرة بالفقه الإسلامي تضيف تقسيمات أخرى مثل «الموقوف».",
+   "related": [
+    "rescission",
+    "severability",
+    "representation"
+   ],
+   "countries_note_ar": null
+  },
+  {
+   "id": "guarantee",
+   "ar": "الكفالة (الضمان من طرف ثالث)",
+   "en": "guarantee",
+   "fr": "cautionnement",
+   "area": "contracts",
+   "definition_ar": "تعهد شخص ثالث بسداد دين أو تنفيذ التزام إذا أخل به المدين الأصلي.",
+   "example_en": "The Guarantor irrevocably guarantees the due payment of all sums owed by the Borrower.",
+   "example_ar": "يضمن الكفيل ضمانًا غير قابل للرجوع سداد كل المبالغ المستحقة على المقترض في مواعيدها.",
+   "false_friend_note_ar": "guarantee (كفالة دين طرف آخر) غير warranty (ضمان جودة أو صحة واقعة). وتترجمان معًا أحيانًا «ضمانًا» فيلتبس الأمر.",
+   "related": [
+    "warranty",
+    "indemnity",
+    "pledge"
+   ],
+   "countries_note_ar": "«الكفالة» هي المصطلح المدني في مصر والخليج. وفي المعاملات المصرفية يُستعمل «خطاب ضمان» لـ letter of guarantee."
+  },
+  {
+   "id": "pledge",
+   "ar": "الرهن الحيازي",
+   "en": "pledge",
+   "fr": "gage",
+   "area": "contracts",
+   "definition_ar": "ضمان عيني على مال منقول يُسلَّم للدائن أو لمن يتفق عليه حتى يُسدَّد الدين.",
+   "example_en": "The Borrower has pledged its shares in the Company to the Lender.",
+   "example_ar": "رهن المقترض أسهمه في الشركة للمُقرض.",
+   "false_friend_note_ar": "pledge ليست «تعهدًا» أو «وعدًا» في هذا السياق. وفي القانون الإنجليزي أنواع أخرى (lien وcharge) لا يطابقها لفظ عربي واحد.",
+   "related": [
+    "guarantee",
+    "covenant"
+   ],
+   "countries_note_ar": null
+  },
+  {
+   "id": "memorandum-of-understanding",
+   "ar": "مذكرة تفاهم",
+   "en": "memorandum of understanding (MoU)",
+   "fr": "protocole d'accord",
+   "area": "contracts",
+   "definition_ar": "وثيقة تسجل ما اتفق عليه الطرفان مبدئيًا، وقد تكون ملزمة أو غير ملزمة بحسب صياغتها.",
+   "example_en": "This MoU does not create legally binding obligations, except for Clause 7 (Confidentiality).",
+   "example_ar": "لا تُنشئ مذكرة التفاهم هذه التزامات ملزمة قانونًا، عدا البند 7 (السرية).",
+   "false_friend_note_ar": "الاسم لا يحدد القوة الملزمة؛ العبرة بالصياغة. ولا تخلطها بـ memorandum of association (عقد التأسيس).",
+   "related": [
+    "memorandum-of-association"
+   ],
+   "countries_note_ar": null
+  },
+  {
+   "id": "governing-law",
+   "ar": "القانون الواجب التطبيق",
+   "en": "governing law",
+   "fr": "loi applicable",
+   "area": "contracts",
+   "definition_ar": "القانون الذي يختاره الأطراف ليحكم تفسير العقد وآثاره.",
+   "example_en": "This Agreement shall be governed by and construed in accordance with the laws of England.",
+   "example_ar": "يخضع هذا العقد للقانون الإنجليزي ويُفسَّر وفقًا له.",
+   "false_friend_note_ar": "غير jurisdiction التي تحدد المحكمة المختصة لا القانون المطبَّق. وقد يُختار قانون دولة ومحاكم دولة أخرى.",
+   "related": [
+    "jurisdiction",
+    "arbitration-agreement"
+   ],
+   "countries_note_ar": null
+  },
+  {
+   "id": "good-faith",
+   "ar": "حسن النية",
+   "en": "good faith",
+   "fr": "bonne foi",
+   "area": "general",
+   "definition_ar": "التزام بالأمانة وعدم استعمال العقد للإضرار بالطرف الآخر. تفرضه القوانين المدنية العربية على تنفيذ العقود، بينما لا يعرف القانون الإنجليزي واجبًا عامًا بحسن النية في كل العقود.",
+   "example_en": "The parties shall negotiate in good faith to resolve any dispute.",
+   "example_ar": "يتفاوض الطرفان بحسن نية لحل أي نزاع.",
+   "false_friend_note_ar": "عبارة best endeavours أو reasonable endeavours لا تساوي حسن النية. وbona fide purchaser هو «المشتري حسن النية».",
+   "related": [
+    "best-endeavours",
+    "fiduciary-duty",
+    "consideration"
+   ],
+   "countries_note_ar": null
+  },
+  {
+   "id": "power-of-attorney",
+   "ar": "التوكيل / الوكالة",
+   "en": "power of attorney",
+   "fr": "procuration",
+   "area": "general",
+   "definition_ar": "مستند يفوّض به شخص (الموكِّل) شخصًا آخر (الوكيل) للتصرف نيابة عنه في أمور محددة أو عامة.",
+   "example_en": "The Attorney is authorised under this Power of Attorney to sign the sale contract on behalf of the Principal.",
+   "example_ar": "الوكيل مفوَّض بموجب هذا التوكيل بتوقيع عقد البيع نيابة عن الموكِّل.",
+   "false_friend_note_ar": "attorney في الأمريكية قد تعني «محامٍ»، لكن attorney في power of attorney هو الوكيل ولا يشترط أن يكون محاميًا.",
+   "related": [
+    "fiduciary-duty"
+   ],
+   "countries_note_ar": "يُقال «توكيل» (عام أو خاص) في مصر، و«وكالة» في الخليج غالبًا، وتُوثَّق عند الجهة الرسمية المختصة في كل دولة (الشهر العقاري في مصر، وكاتب العدل في دول الخليج)."
+  },
+  {
+   "id": "equity",
+   "ar": "حقوق الملكية (الأسهم) / قواعد الإنصاف",
+   "en": "equity",
+   "fr": null,
+   "area": "general",
+   "definition_ar": "كلمة لها معنيان: حقوق ملكية الشركة وأسهمها، أو مجموعة قواعد الإنصاف في القانون الإنجليزي التي تكمّل قواعد القانون العام.",
+   "example_en": "The investor took a 20% equity stake in the company.",
+   "example_ar": "حصل المستثمر على حصة ملكية قدرها 20% في الشركة.",
+   "false_friend_note_ar": "ليست «العدالة» أو «المساواة» في السياق المالي. وفي السياق القانوني الإنجليزي لا تعني «الإنصاف» بالمعنى الأخلاقي العام فقط، بل نظامًا من القواعد والجزاءات (مثل injunction وspecific performance). ولا مقابل فرنسي دقيق.",
+   "related": [
+    "trust",
+    "share-capital",
+    "injunction"
+   ],
+   "countries_note_ar": null
+  },
+  {
+   "id": "trust",
+   "ar": "الصندوق الاستئماني (الترست)",
+   "en": "trust",
+   "fr": null,
+   "area": "general",
+   "definition_ar": "علاقة يحتفظ فيها شخص (الأمين) بمال لمنفعة آخرين (المستفيدين) وفق شروط المنشئ.",
+   "example_en": "The assets are held on trust for the beneficiaries.",
+   "example_ar": "تُحفظ الأصول بصفة أمانة لمصلحة المستفيدين.",
+   "false_friend_note_ar": "ليس «الوقف» ولا «الثقة»؛ الوقف نظام مختلف في أصله وأحكامه. وليس «شركة احتكارية» كما في trust بمعنى التكتل الاقتصادي القديم.",
+   "related": [
+    "fiduciary-duty",
+    "equity",
+    "beneficial-owner"
+   ],
+   "countries_note_ar": "تتيح بعض المراكز المالية في الخليج (مثل مركز دبي المالي العالمي وسوق أبوظبي العالمي) تشريعات خاصة بالترست، بينما لا يعرفه القانون المدني العام في مصر والخليج بهذا الشكل."
+  },
+  {
+   "id": "tort",
+   "ar": "الفعل الضار (المسؤولية التقصيرية)",
+   "en": "tort",
+   "fr": "responsabilité délictuelle",
+   "area": "general",
+   "definition_ar": "خطأ يسبب ضررًا لغير الأطراف المتعاقدة، ولا ينشأ من عقد، ويستحق صاحب الضرر عنه تعويضًا.",
+   "example_en": "The Claimant sued in tort for negligence.",
+   "example_ar": "رفع المدعي دعوى مسؤولية تقصيرية بسبب الإهمال.",
+   "false_friend_note_ar": "tort ليست «جريمة» ولا «مظلمة». وهي المسؤولية غير العقدية، في مقابل المسؤولية العقدية (contract).",
+   "related": [
+    "damages",
+    "breach-of-contract"
+   ],
+   "countries_note_ar": null
+  },
+  {
+   "id": "memorandum-of-association",
+   "ar": "عقد التأسيس",
+   "en": "memorandum of association",
+   "fr": "acte constitutif",
+   "area": "corporate",
+   "definition_ar": "وثيقة تأسيس الشركة، تثبت اتفاق المؤسسين على إنشائها وبياناتها الأساسية مثل الاسم والغرض ورأس المال.",
+   "example_en": "The Memorandum of Association states the company's name, objects and share capital.",
+   "example_ar": "يبيّن عقد التأسيس اسم الشركة وأغراضها ورأس مالها.",
+   "false_friend_note_ar": "ليست «مذكرة تفاهم» (MoU) رغم اشتراكهما في كلمة memorandum.",
+   "related": [
+    "articles-of-association",
+    "share-capital",
+    "memorandum-of-understanding"
+   ],
+   "countries_note_ar": "تختلف الوثائق المطلوبة وأسماؤها بحسب نوع الشركة والبلد؛ فبعض الأنظمة تجمع عقد التأسيس والنظام الأساسي في وثيقة واحدة."
+  },
+  {
+   "id": "articles-of-association",
+   "ar": "النظام الأساسي",
+   "en": "articles of association",
+   "fr": "statuts",
+   "area": "corporate",
+   "definition_ar": "وثيقة تنظم الإدارة الداخلية للشركة: صلاحيات المديرين وحقوق الشركاء وقواعد الجمعيات العمومية.",
+   "example_en": "The Articles of Association set out the rules for general meetings.",
+   "example_ar": "ينظم النظام الأساسي قواعد انعقاد الجمعيات العمومية.",
+   "false_friend_note_ar": "articles هنا «مواد» وليست «مقالات».",
+   "related": [
+    "memorandum-of-association"
+   ],
+   "countries_note_ar": null
+  },
+  {
+   "id": "shareholders-agreement",
+   "ar": "اتفاق المساهمين (اتفاق الشركاء)",
+   "en": "shareholders' agreement",
+   "fr": "pacte d'actionnaires",
+   "area": "corporate",
+   "definition_ar": "عقد خاص بين المساهمين ينظم علاقاتهم: التصويت ونقل الأسهم والخروج، وقد يضيف ما لا يرد في النظام الأساسي.",
+   "example_en": "The Shareholders' Agreement gives the investor a right of first refusal.",
+   "example_ar": "يمنح اتفاق المساهمين المستثمر حق الأولوية في الشراء.",
+   "false_friend_note_ar": "لا يحل محل النظام الأساسي الذي يُودَع ويُعلَن، بينما يبقى هذا الاتفاق خاصًا في الأغلب.",
+   "related": [
+    "articles-of-association"
+   ],
+   "countries_note_ar": null
+  },
+  {
+   "id": "share-capital",
+   "ar": "رأس المال",
+   "en": "share capital",
+   "fr": "capital social",
+   "area": "corporate",
+   "definition_ar": "مجموع قيمة الأسهم أو الحصص التي تصدرها الشركة. ويُفرَّق بين المصرَّح به والمصدَر والمدفوع.",
+   "example_en": "The authorised share capital is AED 1,000,000.",
+   "example_ar": "رأس المال المصرَّح به مليون درهم إماراتي.",
+   "false_friend_note_ar": "authorised وissued وpaid-up ثلاثة أرقام مختلفة: المصرَّح به، المصدَر، المدفوع. لا تخلط بينها.",
+   "related": [
+    "memorandum-of-association",
+    "equity",
+    "limited-liability-company"
+   ],
+   "countries_note_ar": null
+  },
+  {
+   "id": "limited-liability-company",
+   "ar": "الشركة ذات المسؤولية المحدودة",
+   "en": "limited liability company",
+   "fr": "société à responsabilité limitée (SARL)",
+   "area": "corporate",
+   "definition_ar": "شركة يسأل الشركاء فيها بقدر حصصهم فقط.",
+   "example_en": "The Company is a limited liability company registered in Saudi Arabia.",
+   "example_ar": "الشركة ذات مسؤولية محدودة مسجلة في المملكة العربية السعودية.",
+   "false_friend_note_ar": "Ltd (بريطانية) وLLC (أمريكية) ترجمتهما العربية واحدة تقريبًا، لكن تنظيم كل منهما وضريبته مختلف، ولا تساوي إحداهما الأخرى تلقائيًا.",
+   "related": [
+    "share-capital",
+    "legal-personality"
+   ],
+   "countries_note_ar": null
+  },
+  {
+   "id": "beneficial-owner",
+   "ar": "المستفيد الحقيقي",
+   "en": "beneficial owner",
+   "fr": "bénéficiaire effectif",
+   "area": "corporate",
+   "definition_ar": "الشخص الطبيعي الذي يملك أو يسيطر فعليًا على شركة أو أصل، ولو كان الاسم المسجل لغيره.",
+   "example_en": "Banks must identify the ultimate beneficial owner of each corporate client.",
+   "example_ar": "على البنوك تحديد المستفيد الحقيقي النهائي لكل عميل شركة.",
+   "false_friend_note_ar": "لا تخلطه بـ beneficiary وهو المستفيد من ترست أو وصية أو بوليصة.",
+   "related": [
+    "trust",
+    "due-diligence"
+   ],
+   "countries_note_ar": null
+  },
+  {
+   "id": "due-diligence",
+   "ar": "الفحص النافي للجهالة (العناية الواجبة)",
+   "en": "due diligence",
+   "fr": "audit d'acquisition (due diligence)",
+   "area": "corporate",
+   "definition_ar": "فحص قانوني ومالي وتجاري يجريه مشترٍ أو مستثمر أو بنك قبل إتمام صفقة ليعرف المخاطر.",
+   "example_en": "The Buyer completed legal due diligence on the target company.",
+   "example_ar": "أنهى المشتري الفحص القانوني النافي للجهالة على الشركة المستهدفة.",
+   "false_friend_note_ar": "ليست «اجتهادًا واجبًا». ولا تخلطها بإجراءات الامتثال لمعرفة العميل (KYC) رغم تقاربها.",
+   "related": [
+    "beneficial-owner",
+    "representation",
+    "warranty"
+   ],
+   "countries_note_ar": "يشيع «الفحص النافي للجهالة» في صفقات الشركات في مصر والخليج، بينما تميل مجالات الامتثال والبنوك إلى «العناية الواجبة»."
+  },
+  {
+   "id": "legal-personality",
+   "ar": "الشخصية الاعتبارية",
+   "en": "legal personality",
+   "fr": "personnalité morale",
+   "area": "corporate",
+   "definition_ar": "صفة تمنح للشركة أو الهيئة فتصبح قادرة على التعاقد والتقاضي بذمة مالية مستقلة عن أصحابها.",
+   "example_en": "A company has separate legal personality from its shareholders.",
+   "example_ar": "للشركة شخصية اعتبارية مستقلة عن شخصية مساهميها.",
+   "false_friend_note_ar": "هنا فقط تصح كلمة «اعتبارية». ولا علاقة لها بـ consideration (المقابل).",
+   "related": [
+    "limited-liability-company",
+    "consideration"
+   ],
+   "countries_note_ar": null
+  },
+  {
+   "id": "fiduciary-duty",
+   "ar": "واجب الأمانة (الالتزام الائتماني)",
+   "en": "fiduciary duty",
+   "fr": null,
+   "area": "corporate",
+   "definition_ar": "واجب من يتصرف لمصلحة غيره (مدير، وكيل، أمين) بتقديم مصلحة الآخر على مصلحته وتجنّب تعارض المصالح.",
+   "example_en": "Directors owe fiduciary duties to the company.",
+   "example_ar": "يلتزم أعضاء مجلس الإدارة بواجبات الأمانة تجاه الشركة.",
+   "false_friend_note_ar": "كلمة «ائتماني» في العربية تدل غالبًا على الائتمان المصرفي (credit)، ولذلك يُفضَّل «واجب الأمانة».",
+   "related": [
+    "trust",
+    "good-faith"
+   ],
+   "countries_note_ar": null
+  },
+  {
+   "id": "estoppel",
+   "ar": "منع التناقض في المواقف (الإستوبل)",
+   "en": "estoppel",
+   "fr": "estoppel (interdiction de se contredire au détriment d'autrui)",
+   "area": "litigation",
+   "definition_ar": "قاعدة تمنع طرفًا من أن يتمسك بموقف يخالف ما قاله أو فعله سابقًا إذا اعتمد الآخر على ذلك فتضرر.",
+   "example_en": "The Landlord is estopped from denying that the lease was validly renewed.",
+   "example_ar": "يُمنع المؤجّر من إنكار أن عقد الإيجار جُدد تجديدًا صحيحًا.",
+   "false_friend_note_ar": "لا يوجد في العربية مصطلح واحد مستقر لها، فيُكتب غالبًا «الإستوبل» مع شرحها. ولا تخلطها بـ waiver (إسقاط الحق) أو res judicata.",
+   "related": [
+    "waiver",
+    "res-judicata",
+    "good-faith"
+   ],
+   "countries_note_ar": null
+  },
+  {
+   "id": "injunction",
+   "ar": "أمر قضائي بالمنع أو الإلزام",
+   "en": "injunction",
+   "fr": "injonction",
+   "area": "litigation",
+   "definition_ar": "أمر من المحكمة يلزم شخصًا بفعل شيء أو يمنعه من فعله، مؤقتًا أو نهائيًا.",
+   "example_en": "The court granted an injunction restraining the Defendant from using the trademark.",
+   "example_ar": "أصدرت المحكمة أمرًا قضائيًا يمنع المدعى عليه من استعمال العلامة التجارية.",
+   "false_friend_note_ar": "ليس «توجيهًا» ولا «تحذيرًا». ويُقابله جزئيًا في القوانين العربية الأوامر الوقتية ودعاوى الإلزام والمنع، لكنه ليس مطابقًا.",
+   "related": [
+    "interim-relief",
+    "specific-performance",
+    "trademark"
+   ],
+   "countries_note_ar": null
+  },
+  {
+   "id": "claimant",
+   "ar": "المدعي",
+   "en": "claimant (plaintiff)",
+   "fr": "demandeur",
+   "area": "litigation",
+   "definition_ar": "الطرف الذي يرفع الدعوى ويطلب حقًا أمام المحكمة.",
+   "example_en": "The Claimant filed its claim on 3 March.",
+   "example_ar": "قدّم المدعي دعواه في 3 مارس.",
+   "false_friend_note_ar": "claimant مصطلح إنجليزي بريطاني، وplaintiff أمريكي. ولا تترجم أيًا منهما «المشتكي» إلا في القضايا الجنائية.",
+   "related": [
+    "defendant",
+    "statement-of-claim"
+   ],
+   "countries_note_ar": null
+  },
+  {
+   "id": "defendant",
+   "ar": "المدعى عليه",
+   "en": "defendant",
+   "fr": "défendeur",
+   "area": "litigation",
+   "definition_ar": "الطرف الذي رُفعت عليه الدعوى المدنية.",
+   "example_en": "The Defendant filed a defence within 28 days.",
+   "example_ar": "قدّم المدعى عليه دفاعه خلال 28 يومًا.",
+   "false_friend_note_ar": "في القضايا الجنائية تعني defendant في الإنجليزية «المتهم» أيضًا، فاحرص على سياق الدعوى.",
+   "related": [
+    "claimant",
+    "statement-of-claim"
+   ],
+   "countries_note_ar": null
+  },
+  {
+   "id": "statement-of-claim",
+   "ar": "صحيفة الدعوى",
+   "en": "statement of claim (claim form)",
+   "fr": "acte introductif d'instance",
+   "area": "litigation",
+   "definition_ar": "المستند الذي يبدأ به المدعي الدعوى ويعرض فيه وقائعه وطلباته.",
+   "example_en": "The Statement of Claim was served on the Defendant on 10 June.",
+   "example_ar": "أُعلنت صحيفة الدعوى إلى المدعى عليه في 10 يونيو.",
+   "false_friend_note_ar": "إجراءات رفع الدعوى تختلف بين الأنظمة؛ لا تفترض أن لكل مصطلح إنجليزي وثيقة مماثلة تمامًا في الدولة التي ترفع فيها الدعوى.",
+   "related": [
+    "claimant",
+    "defendant",
+    "service-of-process"
+   ],
+   "countries_note_ar": "تُسمى «صحيفة الدعوى» في مصر ومعظم دول الخليج، و«لائحة الدعوى» في بعض الدول الأخرى مثل الأردن."
+  },
+  {
+   "id": "cassation",
+   "ar": "الطعن بالنقض (التمييز)",
+   "en": "appeal on points of law (cassation)",
+   "fr": "pourvoi en cassation",
+   "area": "litigation",
+   "definition_ar": "طعن أمام أعلى محكمة في صحة تطبيق القانون، لا في وقائع الدعوى من جديد.",
+   "example_en": "The judgment was challenged before the Court of Cassation.",
+   "example_ar": "طُعن في الحكم أمام محكمة النقض.",
+   "false_friend_note_ar": "ليس «استئنافًا ثالثًا». وفي القانون الإنجليزي لا توجد محكمة نقض بالمعنى نفسه؛ يقابلها جزئيًا الاستئناف إلى المحكمة العليا بإذن.",
+   "related": [
+    "statute-of-limitations"
+   ],
+   "countries_note_ar": "يُقال «النقض» في مصر، و«التمييز» في الكويت والأردن وإمارة دبي."
+  },
+  {
+   "id": "burden-of-proof",
+   "ar": "عبء الإثبات",
+   "en": "burden of proof",
+   "fr": "charge de la preuve",
+   "area": "litigation",
+   "definition_ar": "من يتحمل مسؤولية إثبات الواقعة المتنازع عليها، وإذا عجز خسر هذه النقطة.",
+   "example_en": "The burden of proof lies on the party who asserts the claim.",
+   "example_ar": "يقع عبء الإثبات على من يدّعي.",
+   "false_friend_note_ar": "لا تترجمها «عبء الدليل». وعبارة standard of proof (درجة الإثبات) مختلفة: ترجيح الاحتمالات في المدني، وما وراء الشك المعقول في الجنائي.",
+   "related": [
+    "beyond-reasonable-doubt",
+    "hearsay"
+   ],
+   "countries_note_ar": null
+  },
+  {
+   "id": "hearsay",
+   "ar": "الشهادة السماعية",
+   "en": "hearsay",
+   "fr": "ouï-dire",
+   "area": "litigation",
+   "definition_ar": "شهادة بما سمعه الشاهد من غيره، لا بما رآه أو علمه مباشرة.",
+   "example_en": "Hearsay evidence is generally inadmissible in criminal trials.",
+   "example_ar": "الأدلة السماعية غير مقبولة في الأصل في المحاكمات الجنائية.",
+   "false_friend_note_ar": "ليست «إشاعة» دائمًا. والقوانين العربية تقبل في مسائل محددة «شهادة التسامع» بضوابط.",
+   "related": [
+    "burden-of-proof"
+   ],
+   "countries_note_ar": null
+  },
+  {
+   "id": "interim-relief",
+   "ar": "الإجراءات الوقتية (التحفظية)",
+   "en": "interim relief",
+   "fr": "mesures provisoires",
+   "area": "litigation",
+   "definition_ar": "أوامر مؤقتة تصدرها المحكمة أو هيئة التحكيم لحماية حق قبل الفصل النهائي في الدعوى.",
+   "example_en": "The Claimant applied for interim relief to freeze the Defendant's assets.",
+   "example_ar": "طلب المدعي إجراءً وقتيًا بتجميد أصول المدعى عليه.",
+   "false_friend_note_ar": "relief هنا «حماية قضائية» أو «تدبير»، وليست «إغاثة».",
+   "related": [
+    "injunction",
+    "statute-of-limitations",
+    "without-prejudice-privilege"
+   ],
+   "countries_note_ar": "في مصر يرتبط بالقضاء المستعجل والأوامر على عرائض، وفي دول الخليج بالأوامر الوقتية والحجز التحفظي."
+  },
+  {
+   "id": "service-of-process",
+   "ar": "الإعلان القضائي",
+   "en": "service of process",
+   "fr": "signification",
+   "area": "litigation",
+   "definition_ar": "تسليم صحيفة الدعوى والأوراق القضائية للخصم بالطريقة التي يحددها القانون.",
+   "example_en": "Service of process on a foreign defendant may take several months.",
+   "example_ar": "قد يستغرق إعلان المدعى عليه الأجنبي عدة أشهر.",
+   "false_friend_note_ar": "service ليست «خدمة». وصحة الإعلان شرط للحكم الصادر، ولذلك يُدقَّق فيه عند طلب تنفيذ حكم أجنبي.",
+   "related": [
+    "statement-of-claim",
+    "recognition-and-enforcement"
+   ],
+   "countries_note_ar": null
+  },
+  {
+   "id": "statute-of-limitations",
+   "ar": "التقادم (مدة سقوط الحق في الدعوى)",
+   "en": "statute of limitations (limitation period)",
+   "fr": "prescription",
+   "area": "litigation",
+   "definition_ar": "مرور مدة يحددها القانون تسقط بعدها الحق في رفع الدعوى أو المطالبة.",
+   "example_en": "The claim is barred by the statute of limitations.",
+   "example_ar": "الدعوى ساقطة بالتقادم.",
+   "false_friend_note_ar": "لا تترجمها «قانون القيود». وفي بعض الأنظمة المتأثرة بالفقه الإسلامي قد يكون الأثر «عدم سماع الدعوى» لا سقوط الحق نفسه.",
+   "related": [
+    "interim-relief",
+    "res-judicata"
+   ],
+   "countries_note_ar": "تختلف مدد التقادم بين الدول وأنواع الدعاوى، فلا تنقل مدة من بلد إلى آخر."
+  },
+  {
+   "id": "res-judicata",
+   "ar": "حجية الأمر المقضي",
+   "en": "res judicata",
+   "fr": "autorité de la chose jugée",
+   "area": "litigation",
+   "definition_ar": "قاعدة تمنع إعادة النظر في نزاع سبق الفصل فيه بحكم نهائي بين الخصوم أنفسهم.",
+   "example_en": "The second claim is barred by res judicata.",
+   "example_ar": "الدعوى الثانية ممنوعة بحجية الأمر المقضي.",
+   "false_friend_note_ar": "تختلف شروطها بين الأنظمة، ففي القانون المدني العربي يشترط اتحاد الخصوم والمحل والسبب، بينما في القانون الإنجليزي أحكام موازية (cause of action estoppel وissue estoppel).",
+   "related": [
+    "estoppel",
+    "statute-of-limitations"
+   ],
+   "countries_note_ar": null
+  },
+  {
+   "id": "jurisdiction",
+   "ar": "الاختصاص القضائي",
+   "en": "jurisdiction",
+   "fr": "compétence",
+   "area": "litigation",
+   "definition_ar": "سلطة محكمة معينة في النظر في نزاع، من حيث المكان ونوع الدعوى. وتأتي أيضًا في بند يختار فيه الأطراف محكمة بعينها.",
+   "example_en": "The courts of Dubai shall have exclusive jurisdiction.",
+   "example_ar": "تختص محاكم دبي اختصاصًا حصريًا.",
+   "false_friend_note_ar": "ليست «الولاية» (التي تعني guardianship في الأحوال الشخصية)، ولا «السلطة القضائية» كجهاز. وتختلف عن governing law.",
+   "related": [
+    "governing-law",
+    "arbitration-agreement",
+    "guardianship"
+   ],
+   "countries_note_ar": null
+  },
+  {
+   "id": "disclosure",
+   "ar": "الإفصاح عن المستندات",
+   "en": "disclosure (discovery)",
+   "fr": null,
+   "area": "litigation",
+   "definition_ar": "إجراء في الدعاوى الإنجليزية والأمريكية يلزم كل طرف بإتاحة المستندات المتصلة بالنزاع للطرف الآخر، سواء أيدت موقفه أم ضرته.",
+   "example_en": "Each party must give disclosure of documents that support or harm its case.",
+   "example_ar": "على كل طرف أن يفصح عن المستندات التي تؤيد موقفه أو تضره.",
+   "false_friend_note_ar": "ليس «اكتشافًا». وكثير من الأنظمة المدنية لا تعرفه بصورته هذه، وتلزم كل طرف بتقديم ما يستند إليه فقط. ولا مقابل فرنسي مباشر نثق به.",
+   "related": [
+    "burden-of-proof",
+    "hearsay",
+    "service-of-process"
+   ],
+   "countries_note_ar": null
+  },
+  {
+   "id": "precedent",
+   "ar": "السابقة القضائية",
+   "en": "precedent (stare decisis)",
+   "fr": "précédent",
+   "area": "litigation",
+   "definition_ar": "حكم سابق يلتزم القضاة في القانون الإنجليزي بالسير على مبدئه في قضايا مماثلة.",
+   "example_en": "The court is bound by the precedent set by the Court of Appeal.",
+   "example_ar": "المحكمة ملزمة بالسابقة التي أرساها حكم محكمة الاستئناف.",
+   "false_friend_note_ar": "في الأنظمة العربية المدنية لا تُلزم الأحكام السابقة القضاة إلزامًا عامًا، وإن كان لأحكام المحاكم العليا قيمة إرشادية.",
+   "related": [
+    "res-judicata",
+    "cassation"
+   ],
+   "countries_note_ar": null
+  },
+  {
+   "id": "arbitration-agreement",
+   "ar": "اتفاق التحكيم (شرط التحكيم)",
+   "en": "arbitration agreement (clause)",
+   "fr": "convention d'arbitrage (clause compromissoire)",
+   "area": "arbitration",
+   "definition_ar": "اتفاق الأطراف على إحالة نزاعاتهم إلى التحكيم بدل القضاء.",
+   "example_en": "Any dispute shall be finally settled by arbitration under the ICC Rules.",
+   "example_ar": "تُسوّى أي منازعة نهائيًا بالتحكيم وفق قواعد غرفة التجارة الدولية.",
+   "false_friend_note_ar": "يُفرَّق بين «شرط التحكيم» الوارد في العقد قبل النزاع، و«مشارطة التحكيم» (compromis) التي تُبرم بعد نشوء النزاع.",
+   "related": [
+    "seat-of-arbitration",
+    "arbitral-tribunal",
+    "arbitral-award",
+    "governing-law"
+   ],
+   "countries_note_ar": null
+  },
+  {
+   "id": "seat-of-arbitration",
+   "ar": "مقر التحكيم",
+   "en": "seat of arbitration",
+   "fr": "siège de l'arbitrage",
+   "area": "arbitration",
+   "definition_ar": "المكان القانوني للتحكيم، وهو الذي يحدد القانون الإجرائي والمحاكم التي تراقب الحكم.",
+   "example_en": "The seat of arbitration shall be London.",
+   "example_ar": "يكون مقر التحكيم لندن.",
+   "false_friend_note_ar": "seat غير venue (مكان انعقاد الجلسات الفعلي). وقد تُعقد الجلسات في مدينة والمقر القانوني في أخرى.",
+   "related": [
+    "arbitration-agreement",
+    "arbitral-award",
+    "governing-law"
+   ],
+   "countries_note_ar": null
+  },
+  {
+   "id": "arbitral-award",
+   "ar": "حكم التحكيم",
+   "en": "arbitral award",
+   "fr": "sentence arbitrale",
+   "area": "arbitration",
+   "definition_ar": "القرار النهائي لهيئة التحكيم في النزاع، ويلزم الأطراف ويمكن طلب تنفيذه أمام القضاء.",
+   "example_en": "The Tribunal issued its final award on 15 May.",
+   "example_ar": "أصدرت الهيئة حكمها النهائي في 15 مايو.",
+   "false_friend_note_ar": "award ليست «جائزة» هنا. والمقابل الفرنسي sentence يعني حكمًا لا «جملة».",
+   "related": [
+    "arbitral-tribunal",
+    "recognition-and-enforcement",
+    "seat-of-arbitration"
+   ],
+   "countries_note_ar": null
+  },
+  {
+   "id": "arbitral-tribunal",
+   "ar": "هيئة التحكيم",
+   "en": "arbitral tribunal",
+   "fr": "tribunal arbitral",
+   "area": "arbitration",
+   "definition_ar": "الشخص أو الأشخاص الذين يفصلون في النزاع المحال إلى التحكيم.",
+   "example_en": "The Tribunal consists of three arbitrators.",
+   "example_ar": "تتكون الهيئة من ثلاثة محكّمين.",
+   "false_friend_note_ar": "tribunal ليست «محكمة قضائية» بالضرورة، وتترجم هنا «هيئة». ويختلف المعنى في الأجهزة الإدارية (administrative tribunal).",
+   "related": [
+    "arbitration-agreement",
+    "arbitral-award"
+   ],
+   "countries_note_ar": null
+  },
+  {
+   "id": "recognition-and-enforcement",
+   "ar": "الاعتراف بالحكم وتنفيذه",
+   "en": "recognition and enforcement",
+   "fr": "reconnaissance et exécution",
+   "area": "arbitration",
+   "definition_ar": "إجراء يُطلب فيه من محكمة دولة أن تعطي حكمًا أجنبيًا أو حكم تحكيم قوة التنفيذ داخل إقليمها.",
+   "example_en": "The Claimant sought recognition and enforcement of the award under the New York Convention.",
+   "example_ar": "طلب المدعي الاعتراف بحكم التحكيم وتنفيذه وفق اتفاقية نيويورك.",
+   "false_friend_note_ar": "الاعتراف غير التنفيذ؛ قد يُعترف بالحكم دون أن يُنفَّذ إلا بأمر لاحق. وشروط تنفيذ الأحكام القضائية الأجنبية أضيق من شروط أحكام التحكيم عادة.",
+   "related": [
+    "arbitral-award",
+    "service-of-process"
+   ],
+   "countries_note_ar": null
+  },
+  {
+   "id": "mens-rea",
+   "ar": "القصد الجنائي (الركن المعنوي)",
+   "en": "mens rea",
+   "fr": "élément moral",
+   "area": "criminal",
+   "definition_ar": "الحالة الذهنية المطلوبة لقيام الجريمة، كالعمد أو العلم أو الإهمال الجسيم، إلى جانب الفعل المادي.",
+   "example_en": "The prosecution must prove both the act and the mens rea.",
+   "example_ar": "يجب على النيابة إثبات الفعل والقصد الجنائي.",
+   "false_friend_note_ar": "لا تترجمها حرفيًا «العقل المذنب». والتقسيم العربي «الركن المادي والركن المعنوي» قريب لكنه ليس مطابقًا.",
+   "related": [
+    "beyond-reasonable-doubt",
+    "felony"
+   ],
+   "countries_note_ar": null
+  },
+  {
+   "id": "felony",
+   "ar": "الجناية",
+   "en": "felony",
+   "fr": "crime",
+   "area": "criminal",
+   "definition_ar": "أشد فئات الجرائم جسامة، وعقوبتها السجن لمدد طويلة أو أشد.",
+   "example_en": "He was convicted of a felony punishable by up to ten years' imprisonment.",
+   "example_ar": "أُدين بجناية عقوبتها السجن مدة تصل إلى عشر سنوات.",
+   "false_friend_note_ar": "التصنيف العربي (جناية وجنحة ومخالفة) ثلاثي على النمط الفرنسي، بينما الأمريكي felony/misdemeanor ثنائي، وعتبات العقوبة مختلفة، فلا تفترض تطابق الفئتين.",
+   "related": [
+    "misdemeanor",
+    "mens-rea",
+    "bail"
+   ],
+   "countries_note_ar": null
+  },
+  {
+   "id": "misdemeanor",
+   "ar": "الجنحة",
+   "en": "misdemeanor (misdemeanour)",
+   "fr": "délit",
+   "area": "criminal",
+   "definition_ar": "جريمة أقل جسامة من الجناية، عقوبتها الحبس مدة قصيرة أو الغرامة.",
+   "example_en": "The defendant was convicted of a misdemeanour and fined.",
+   "example_ar": "أُدين المتهم بجنحة وغُرّم.",
+   "false_friend_note_ar": "في الأمريكية تكتب misdemeanor، وفي البريطانية misdemeanour، والتصنيف البريطاني الحديث لا يستعمل الاسم نفسه بالصورة الأمريكية.",
+   "related": [
+    "felony",
+    "bail"
+   ],
+   "countries_note_ar": null
+  },
+  {
+   "id": "bail",
+   "ar": "الإفراج بكفالة",
+   "en": "bail",
+   "fr": "mise en liberté sous caution",
+   "area": "criminal",
+   "definition_ar": "إخلاء سبيل متهم قبل الحكم مقابل ضمان يضمن حضوره، مالي أو بشروط.",
+   "example_en": "The court granted bail subject to a travel ban.",
+   "example_ar": "قررت المحكمة الإفراج بكفالة مع المنع من السفر.",
+   "false_friend_note_ar": "bail ليست «الكفالة» بمعنى guarantee في العقود، وليست «الضمان» بمعناه المدني.",
+   "related": [
+    "felony",
+    "guarantee"
+   ],
+   "countries_note_ar": "يُقال «إخلاء السبيل بكفالة مالية» في مصر، و«الإفراج بكفالة» في الخليج، ومنها كفالة شخصية أيضًا."
+  },
+  {
+   "id": "beyond-reasonable-doubt",
+   "ar": "ما لا يدع مجالًا لشك معقول",
+   "en": "beyond reasonable doubt",
+   "fr": "au-delà de tout doute raisonnable",
+   "area": "criminal",
+   "definition_ar": "أعلى معيار للإثبات في القضايا الجنائية في القانون الإنجليزي؛ إذا بقي شك معقول وجب الحكم بالبراءة.",
+   "example_en": "The prosecution must prove guilt beyond reasonable doubt.",
+   "example_ar": "على النيابة إثبات الإدانة بما لا يدع مجالًا لشك معقول.",
+   "false_friend_note_ar": "يقابله في القوانين العربية مبدأ «الشك يُفسَّر لصالح المتهم» واقتناع القاضي. وفي القضايا المدنية المعيار أدنى هو balance of probabilities (ترجيح الاحتمالات).",
+   "related": [
+    "burden-of-proof",
+    "mens-rea"
+   ],
+   "countries_note_ar": null
+  },
+  {
+   "id": "probation",
+   "ar": "فترة التجربة",
+   "en": "probationary period",
+   "fr": "période d'essai",
+   "area": "labor",
+   "definition_ar": "مدة أولى من عقد العمل يجوز فيها لأي طرف إنهاء العقد بشروط أخف.",
+   "example_en": "The first six months of employment are a probationary period.",
+   "example_ar": "الأشهر الستة الأولى من التوظيف فترة تجربة.",
+   "false_friend_note_ar": "probation في القانون الجنائي تعني «الوضع تحت المراقبة» أو إيقاف التنفيذ، وهو أمر مختلف تمامًا.",
+   "related": [
+    "notice-period",
+    "unfair-dismissal"
+   ],
+   "countries_note_ar": "الحد الأقصى لفترة التجربة وشروط الإنهاء فيها يختلف بين الدول، فراجع قانون العمل المحلي."
+  },
+  {
+   "id": "end-of-service",
+   "ar": "مكافأة نهاية الخدمة",
+   "en": "end-of-service gratuity",
+   "fr": null,
+   "area": "labor",
+   "definition_ar": "مبلغ يستحقه العامل عند انتهاء عقد العمل، يُحسب غالبًا على مدة الخدمة وآخر أجر.",
+   "example_en": "End-of-service gratuity is calculated on the basis of the last basic salary and years of service.",
+   "example_ar": "تُحسب مكافأة نهاية الخدمة على أساس آخر أجر أساسي وسنوات الخدمة.",
+   "false_friend_note_ar": "gratuity في الأمريكية تعني «البقشيش» (tip)، لكنها هنا مكافأة قانونية. ولا مقابل فرنسي نثق به لنظام الخليج.",
+   "related": [
+    "unfair-dismissal",
+    "notice-period"
+   ],
+   "countries_note_ar": "المصطلح خليجي الاستعمال في الأساس. وفي مصر يُعالج الأمر عادة عبر التأمينات الاجتماعية والمعاش وما يُتفق عليه في العقد."
+  },
+  {
+   "id": "unfair-dismissal",
+   "ar": "الفصل التعسفي",
+   "en": "unfair (wrongful) dismissal",
+   "fr": "licenciement abusif",
+   "area": "labor",
+   "definition_ar": "إنهاء صاحب العمل عقد العامل دون سبب مشروع أو بغير الإجراءات التي يقررها القانون.",
+   "example_en": "The employee claimed unfair dismissal.",
+   "example_ar": "ادّعى العامل أن الفصل كان تعسفيًا.",
+   "false_friend_note_ar": "unfair dismissal (إنجليزية) وwrongful dismissal (إخلال بشروط العقد) ليسا متطابقين. و«التعسفي» تعني arbitrary أي دون مبرر.",
+   "related": [
+    "notice-period",
+    "probation",
+    "end-of-service"
+   ],
+   "countries_note_ar": null
+  },
+  {
+   "id": "notice-period",
+   "ar": "مدة الإخطار",
+   "en": "notice period",
+   "fr": "préavis",
+   "area": "labor",
+   "definition_ar": "المدة التي يجب أن يسبق بها الإخطار بإنهاء عقد العمل أو غيره من العقود المستمرة.",
+   "example_en": "The notice period under the employment contract is 30 days.",
+   "example_ar": "مدة الإخطار في عقد العمل 30 يومًا.",
+   "false_friend_note_ar": "notice ليست «ملاحظة»، بل «إخطار» أو «إنذار» بحسب السياق.",
+   "related": [
+    "termination",
+    "probation",
+    "unfair-dismissal"
+   ],
+   "countries_note_ar": null
+  },
+  {
+   "id": "maintenance",
+   "ar": "النفقة",
+   "en": "maintenance",
+   "fr": "pension alimentaire",
+   "area": "family",
+   "definition_ar": "مبلغ يلتزم به شخص لإعالة زوجه أو أولاده أو أقاربه بحكم القانون أو بحكم قضائي.",
+   "example_en": "The court ordered the father to pay child maintenance.",
+   "example_ar": "أمرت المحكمة الأب بدفع نفقة للطفل.",
+   "false_friend_note_ar": "maintenance ليست «الصيانة» هنا. وتتنوع أنواع النفقة في الأحوال الشخصية العربية (نفقة الزوجة، الصغار، الأقارب) بقدر لا يطابق تصنيف الإنجليزية.",
+   "related": [
+    "custody",
+    "guardianship"
+   ],
+   "countries_note_ar": null
+  },
+  {
+   "id": "custody",
+   "ar": "الحضانة",
+   "en": "custody",
+   "fr": "garde",
+   "area": "family",
+   "definition_ar": "رعاية الطفل اليومية والسكن معه بعد الفرقة، ويختلف عن الولاية على النفس والمال.",
+   "example_en": "The mother was granted custody of the children.",
+   "example_ar": "أسندت الحضانة إلى الأم.",
+   "false_friend_note_ar": "custody ليست «الولاية» (guardianship). وفي الجنائي تعني «الحبس» أيضًا (in custody).",
+   "related": [
+    "guardianship",
+    "maintenance"
+   ],
+   "countries_note_ar": null
+  },
+  {
+   "id": "guardianship",
+   "ar": "الولاية",
+   "en": "guardianship",
+   "fr": "tutelle",
+   "area": "family",
+   "definition_ar": "سلطة شرعية على شؤون القاصر أو فاقد الأهلية في نفسه أو ماله، ومعها مسؤولية رعايته.",
+   "example_en": "The court appointed a guardian for the minor's property.",
+   "example_ar": "عيّنت المحكمة وليًّا على مال القاصر.",
+   "false_friend_note_ar": "لا تقابل guardianship كلمة عربية واحدة: الولاية (على النفس أو المال) والوصاية والقوامة لكل منها حدودها. ولا تخلطها بالحضانة.",
+   "related": [
+    "custody",
+    "maintenance",
+    "jurisdiction"
+   ],
+   "countries_note_ar": null
+  },
+  {
+   "id": "will",
+   "ar": "الوصية",
+   "en": "will (testament)",
+   "fr": "testament",
+   "area": "family",
+   "definition_ar": "تصرف يضيفه صاحبه إلى ما بعد موته، في حدود ما يسمح به القانون.",
+   "example_en": "The will leaves the apartment to the testator's niece.",
+   "example_ar": "توصي الوصية بالشقة لابنة أخ الموصي.",
+   "false_friend_note_ar": "will ليست «الإرادة» هنا. وفي قوانين الأحوال الشخصية العربية تُقيَّد الوصية عمومًا بثلث التركة، ولا تصح لوارث في الأصل إلا بإجازة الورثة.",
+   "related": [
+    "trust",
+    "guardianship"
+   ],
+   "countries_note_ar": null
+  },
+  {
+   "id": "trademark",
+   "ar": "العلامة التجارية",
+   "en": "trademark",
+   "fr": "marque",
+   "area": "ip",
+   "definition_ar": "إشارة تميّز سلع أو خدمات منشأة عن غيرها وتحميها قوانين الملكية الفكرية بالتسجيل غالبًا.",
+   "example_en": "The Licensee shall not use the Trademark after termination.",
+   "example_ar": "لا يجوز للمرخَّص له استعمال العلامة التجارية بعد الإنهاء.",
+   "false_friend_note_ar": "trademark وtrade name (الاسم التجاري) وbrand (اسم السلعة عند الجمهور) ثلاثة أشياء مختلفة.",
+   "related": [
+    "passing-off",
+    "injunction",
+    "patent"
+   ],
+   "countries_note_ar": null
+  },
+  {
+   "id": "copyright",
+   "ar": "حق المؤلف",
+   "en": "copyright",
+   "fr": "droit d'auteur",
+   "area": "ip",
+   "definition_ar": "حق صاحب الإنتاج الأدبي أو الفني في استغلاله ومنع غيره من نسخه دون إذن.",
+   "example_en": "The copyright in the report belongs to the Consultant.",
+   "example_ar": "حق المؤلف في التقرير ملك للمستشار.",
+   "false_friend_note_ar": "لا تترجمها «حق النسخ». والقوانين العربية والفرنسية تحمي إلى جانبه «الحق الأدبي» للمؤلف، بينما الإنجليزية الأمريكية تركز على الجانب المالي.",
+   "related": [
+    "trademark",
+    "patent",
+    "trade-secret"
+   ],
+   "countries_note_ar": null
+  },
+  {
+   "id": "patent",
+   "ar": "براءة الاختراع",
+   "en": "patent",
+   "fr": "brevet",
+   "area": "ip",
+   "definition_ar": "حق استئثاري تمنحه الدولة لمدة محددة لمن اخترع منتجًا أو طريقة جديدة قابلة للتطبيق الصناعي.",
+   "example_en": "The patent expires 20 years from the filing date.",
+   "example_ar": "تنتهي البراءة بعد 20 سنة من تاريخ الإيداع.",
+   "false_friend_note_ar": "تُمنح للاختراع لا للفكرة المجردة. وكلمة patent كصفة تعني «ظاهر وواضح»، فلا تفهمها خطأً في نص عام.",
+   "related": [
+    "trademark",
+    "copyright",
+    "trade-secret"
+   ],
+   "countries_note_ar": null
+  },
+  {
+   "id": "trade-secret",
+   "ar": "السر التجاري",
+   "en": "trade secret",
+   "fr": "secret d'affaires",
+   "area": "ip",
+   "definition_ar": "معلومة تجارية لها قيمة لأنها غير معروفة، ويتخذ صاحبها إجراءات معقولة لحفظ سريتها.",
+   "example_en": "The Employee shall not disclose any trade secrets of the Company.",
+   "example_ar": "لا يفصح العامل عن أي أسرار تجارية للشركة.",
+   "false_friend_note_ar": "لا يحميه تسجيل كالبراءة؛ حمايته تقوم على حفظ السرية والالتزامات التعاقدية.",
+   "related": [
+    "patent",
+    "copyright"
+   ],
+   "countries_note_ar": null
+  },
+  {
+   "id": "passing-off",
+   "ar": "انتحال الشهرة (المنافسة غير المشروعة)",
+   "en": "passing off",
+   "fr": null,
+   "area": "ip",
+   "definition_ar": "فعل ضار في القانون الإنجليزي يمنع تاجرًا من إيهام الجمهور بأن بضاعته أو خدمته تخص تاجرًا آخر له سمعة.",
+   "example_en": "The Defendant was held liable for passing off its products as those of the Claimant.",
+   "example_ar": "حُكم بمسؤولية المدعى عليه عن تقديم منتجاته على أنها منتجات المدعي.",
+   "false_friend_note_ar": "ليس «التمرير». وتعالجه القوانين العربية تحت «المنافسة غير المشروعة» التي هي أوسع من passing off.",
+   "related": [
+    "trademark",
+    "tort",
+    "injunction"
+   ],
+   "countries_note_ar": null
+  }
+ ]
+}

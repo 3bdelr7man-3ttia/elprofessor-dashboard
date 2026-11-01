@@ -82,17 +82,17 @@ def ms_ago(h):
 # ====================================================================== ١) الخريطة والروابط
 
 EXPECTED_TABS = [['pipeline', 'خط النشر', 'topics'], ['articles', 'المقالات', 'topics'], ['topics', 'الموضوعات', 'topics'],
-                 ['news', 'الأخبار', 'topics'], ['comments', 'التعليقات', 'topics'], ['saha', 'الساحة', 'v2s_saha'], ['diwan', 'الديوان', 'v2s_diwan'],
+                 ['news', 'الأخبار', 'topics'], ['comments', 'التعليقات', 'topics'], ['saha', 'الساحة', 'v2s_saha'], ['diwan', 'الديوان', 'v2s_diwan'], ['glossary', 'القاموس', 'v2s_glossary'],
                  ['tutorials', 'دليل الاستخدام', 'topics'], ['site', 'الموقع', 'topics']]
 
 
 @needs_node
-def test_the_section_has_nine_tabs_seven_on_the_old_module_and_saha_diwan_on_their_own():
+def test_the_section_has_ten_tabs_seven_on_the_old_module_and_saha_diwan_glossary_on_their_own():
     got = _node("const s=L.sectionByKey('content');console.log(JSON.stringify({d:s.desc,t:s.tabs.map(t=>[t.key,t.label,t.mod]),st:s.tabs.map(t=>t.st)}))")
     assert got['t'] == EXPECTED_TABS
-    assert got['d'] == 'المقالات والموضوعات والأخبار والتعليقات والساحة والديوان ودليل الاستخدام'
+    assert got['d'] == 'المقالات والموضوعات والأخبار والتعليقات والساحة والديوان والقاموس ودليل الاستخدام'
     # «الساحة» و«الديوان» (docs/v2/saha-tiles/SPEC.md) موديولان خاصان بلا حالة داخلية للموديول القديم
-    assert [s.get('topicsTab') for s in got['st']] == ['pipeline', 'articles', 'pending', 'news', 'comments', None, None, 'tutorials', 'site']
+    assert [s.get('topicsTab') for s in got['st']] == ['pipeline', 'articles', 'pending', 'news', 'comments', None, None, None, 'tutorials', 'site']
 
 
 @needs_node
