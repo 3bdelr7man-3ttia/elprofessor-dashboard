@@ -92,6 +92,22 @@
 .v3-vis{display:inline-block;font:800 12.5px 'Cairo',sans-serif;border-radius:999px;padding:1px 12px;justify-self:start}
 .v3-vis.on{background:#E8F6EE;color:#0F5A37}
 .v3-vis.off{background:#F1EBE0;color:var(--mute)}
+/* —— أسعار الأدلّة: شريط البحث والشرائح، ومجموعات القائمة، وشارة «سعر خاص» / «يأخذ السعر العام» */
+.v3-ptools{display:grid;gap:12px;margin-bottom:16px}
+.v3-psearch{width:100%;min-height:48px;border:1px solid var(--line);border-radius:12px;padding:0 14px;background:#fff;color:var(--ink);font:600 16px 'Cairo',sans-serif}
+.v3-chips{display:flex;flex-wrap:wrap;gap:8px}
+.v3-chip{display:inline-flex;align-items:center;gap:8px;min-height:44px;padding:0 18px;border-radius:999px;border:1px solid var(--line);background:#fff;color:var(--ink);font:700 14.5px 'Cairo',sans-serif;cursor:pointer}
+.v3-chip span{font-weight:800;color:var(--mute)}
+.v3-chip.on{border-color:var(--wine);background:#FBF0F3;color:var(--wine)}
+.v3-chip.on span{color:var(--wine)}
+.v3-psec{margin-top:18px}
+.v3-psec:first-of-type{margin-top:0}
+.v3-ph{display:flex;align-items:center;gap:10px;font:800 16.5px/1.5 'Cairo',sans-serif;margin:0 0 10px}
+.v3-own{display:inline-block;font:800 12.5px 'Cairo',sans-serif;border-radius:999px;padding:1px 12px;justify-self:start}
+.v3-own.on{background:#F6E7EC;color:var(--wine)}
+.v3-own.gen{background:#fff;border:1px solid var(--line);color:var(--mute)}
+.v3-pacts{display:flex;flex-wrap:wrap;gap:8px;justify-content:flex-end}
+.v3m .v3-fromgen{margin-bottom:12px}
 .v3-floor{font:700 14px/1.7 'Cairo',sans-serif;color:#3A3730;background:var(--amber-bg);border-radius:12px;padding:8px 14px;margin-bottom:10px}
 .v3-sh{grid-template-columns:minmax(0,1fr) auto}
 .v3-lad{align-items:start}
@@ -167,7 +183,7 @@
 .v3m .v3-prow{display:grid;grid-template-columns:96px minmax(0,1fr) auto;gap:10px;align-items:center;min-height:52px}
 .v3m .v3-pc{font:700 14px 'Cairo',sans-serif}
 .v3m .v3-cur{font-size:13px;color:var(--mute);white-space:nowrap}
-.v3m .v3-prow input{width:100%;border:1px solid var(--line);border-radius:10px;padding:0 12px;min-height:48px;background:#fff;text-align:end}
+.v3m .v3-prow input{width:100%;border:1px solid var(--line);border-radius:10px;padding:0 12px;min-height:48px;background:#fff;text-align:end;font-size:16px}
 .v3m .v3-togg{min-height:52px;margin-bottom:12px}
 .v3m .v3-togg input{width:22px;height:22px}
 .v3m .v3-diff{width:100%;border-collapse:collapse;margin:8px 0;font-size:13.5px}
@@ -199,6 +215,9 @@
   .v3-pb{flex:1;min-width:0;min-height:52px;padding:0 6px}
   .v3-pay,.v3-rf,.v3-pr,.v3-sh,.v3-rq{grid-template-columns:minmax(0,1fr);gap:8px}
   .v3-pay .v3-btn1,.v3-rf .v3-btn1,.v3-pr .v3-btn2,.v3-sh .v3-btn2{width:100%}
+  .v3-pacts{flex-direction:column;justify-content:stretch}
+  .v3-chip{min-height:52px;padding:0 14px}
+  .v3m .v3-fromgen .btn{width:100%}
   .v3-pm{justify-items:start;text-align:start;grid-auto-flow:column;justify-content:space-between;align-items:baseline}
   .v3-adrow{grid-template-columns:minmax(0,1fr);min-height:72px}
   .v3-hist li{grid-template-columns:auto minmax(0,1fr)}

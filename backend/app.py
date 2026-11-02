@@ -2698,6 +2698,28 @@ def v2_prices_put(kind, item_id):
                      '%s:%s' % (kind, item_id), {'kind': kind, 'visible': visible, 'rev': rev})
 
 
+@app.route('/api/v2/prices/<kind>/<item_id>', methods=['DELETE'])
+@token_required
+@roles_required('admin')
+def v2_prices_reset_to_general(kind, item_id):
+    """«ارجع للسعر العام» (سعر خاص لكل دليل): يحذف السعر الخاص بدليل فيأخذ سعر الأدلّة العام. الكتب والسعر العام نفسه ترفضهما المنصة بـ٤٠٩."""
+    closed = _v2_closed()
+    if closed:
+        return closed
+    if kind != 'book' or not V2_ID_RE.match(item_id or ''):
+        return _v2_ns((jsonify({'error': 'غير موجود'}), 404))
+    body = _v2_body()
+    bad = _v2_confirmed(body)
+    if bad:
+        return bad
+    out = {'confirmed': True, 'note': _ef_note(body.get('note'), V2_NOTE_MAX)}
+    rev = _v2_money_int(body.get('rev'))
+    if rev is not None:
+        out['rev'] = rev
+    return _v2_write('DELETE', '/api/bridge/prices/%s/%s' % (kind, quote(item_id, safe='')), out, 'prices.reset_to_general',
+                     '%s:%s' % (kind, item_id), {'kind': kind, 'rev': rev})
+
+
 @app.route('/api/v2/book-offers', methods=['GET'])
 @token_required
 @roles_required('admin')

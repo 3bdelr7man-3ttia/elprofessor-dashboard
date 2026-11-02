@@ -675,7 +675,7 @@ PRICE_DETAIL = {'ok': True, 'countries': PRICES_LIST['countries'], 'currencies':
 def test_price_rows_show_the_lowest_price_per_country_and_visibility():
     p = L('v2Prices', PRICES_LIST)
     a, b = p['rows']
-    assert a['visible'] is True and a['minText'] == 'مصر: ١٥٠ جنيه · باقي البلاد: ٩ دولار' and a['hasPrices'] is True
+    assert a['visible'] is True and a['minText'] == 'مصر: ١٥٠ جنيه، باقي البلاد: ٩ دولار' and a['hasPrices'] is True
     assert b['visible'] is False and b['minText'] == 'لا أسعار بعد' and b['hasPrices'] is False
 
 

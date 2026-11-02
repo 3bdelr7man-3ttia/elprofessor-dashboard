@@ -16,7 +16,7 @@
   var U = L.util;
   var D3 = window.V2D3 = {};
   var MODS = { v2m_overview: 1, v2m_payouts: 1, v2m_receipts: 1, v2m_prices: 1, v2m_shares: 1, v2m_ads: 1, v2b_offers: 1, v2b_requests: 1 };
-  var S = { view: null, mod: '', sig: '', poll: null, minute: null, period: 'month', note: null, noteT: null, busy: {}, picked: {} };
+  var S = { view: null, mod: '', sig: '', poll: null, minute: null, period: 'month', note: null, noteT: null, busy: {}, picked: {}, pf: { group: 'all', q: '' } };
   var SESSION_AR = 'انتهت الجلسة — سجّل الدخول من جديد ثم جرّب';
   var FAIL_AR = 'تعذّر تنفيذ العملية';
 
@@ -278,13 +278,45 @@
       + '<p class="v3-mins">' + esc(r.minText) + '</p>'
       + '<button type="button" class="v3-btn2" data-a="price" data-kind="' + kind + '" data-id="' + esc(r.id) + '">عدّل</button></li>';
   }
+  // —— الأدلّة: كل دليل بسعره (سعر خاص أو يأخذ السعر العام) + صف السعر العام + شرائح وبحث (في الذاكرة فقط)
+  function guideRow(r) {
+    var own = r.group === 'guide' ? '<span class="v3-own ' + (r.badge === 'سعر خاص' ? 'on' : 'gen') + '">' + esc(r.badge) + '</span>' : '';
+    return '<li class="v3-pr" data-id="' + esc(r.id) + '" data-group="' + esc(r.group) + '"><div class="v3-pid"><b>' + esc(r.title) + '</b>' + own
+      + '<span class="v3-vis ' + (r.visible ? 'on' : 'off') + '">ظاهر للناس: ' + (r.visible ? 'نعم' : 'لا') + '</span></div>'
+      + '<p class="v3-mins">' + esc(r.minText) + '</p>'
+      + '<div class="v3-pacts"><button type="button" class="v3-btn2" data-a="price" data-kind="book" data-id="' + esc(r.id) + '">عدّل</button>'
+      + (r.group === 'guide' && r.hasOwn ? '<button type="button" class="v3-btn2" data-a="preset" data-id="' + esc(r.id) + '">ارجع للسعر العام</button>' : '') + '</div></li>';
+  }
+  var PRICE_SEC_HINT = { general: 'يُباع به كل دليل ليس له سعر خاص' };
+  function priceListHtml(view) {
+    if (view.empty) return '<p class="v3-none">لا نتيجة</p>';
+    return view.sections.map(function (sec) {
+      var rowsHtml = sec.rows.map(function (r) { return sec.key === 'book' ? priceRow('book', r) : guideRow(r); }).join('');
+      return '<div class="v3-psec" data-sec="' + sec.key + '"><h3 class="v3-ph">' + esc(sec.title) + (sec.key === 'general' ? '' : ' <span class="v3-cnt">' + esc(U.ar(sec.rows.length)) + '</span>') + '</h3>'
+        + (PRICE_SEC_HINT[sec.key] ? '<p class="v3-fine">' + esc(PRICE_SEC_HINT[sec.key]) + '</p>' : '') + '<ul class="v3-list">' + rowsHtml + '</ul></div>';
+    }).join('');
+  }
+  function priceTools(view) {
+    var chips = [['all', 'الكل'], ['book', 'الكتب'], ['guide', 'الأدلّة']].map(function (c) {
+      var on = S.pf.group === c[0];
+      return '<button type="button" class="v3-chip' + (on ? ' on' : '') + '" data-a="pgroup" data-g="' + c[0] + '" aria-pressed="' + on + '">' + c[1] + ' <span>' + esc(U.ar(view.counts[c[0]])) + '</span></button>';
+    }).join('');
+    return '<div class="v3-ptools"><input type="search" id="v3_psearch" class="v3-psearch" autocomplete="off" placeholder="ابحث باسم الكتاب أو الدليل" aria-label="ابحث باسم الكتاب أو الدليل" value="' + esc(S.pf.q) + '">'
+      + '<div class="v3-chips" role="group" aria-label="تصفية القائمة">' + chips + '</div></div>';
+  }
   function priceBlock(kind, title, key) {
     var st = srcState(key), res = L.v2Prices(data(key));
     var body;
     if (st === 'closed' && kind === 'course') body = '<div class="v3-empty"><b>الدورات مغلقة حتى الآن</b><p>أسعار الدورات تظهر هنا حين تُفتح من المنصة.</p></div>';
     else if (st === 'closed') body = '<div class="v3-empty"><b>متجر الكتب لم يُفتح بعد</b><p>أسعار الكتب تظهر هنا حين يُفتح المتجر.</p></div>';
     else if (!res) body = st === 'loading' || st === 'idle' ? loadingBlock(title) : unavailable(title);
-    else body = res.rows.length ? '<ul class="v3-list">' + res.rows.map(function (r) { return priceRow(kind, r); }).join('') + '</ul>' : '<p class="v3-none">لا أعمال بعد</p>';
+    else {
+      var view = kind === 'book' ? L.v2PricesView(res, S.pf) : null;
+      if (view && view.showTools) {
+        title = 'الكتب والأدلّة';
+        body = priceTools(view) + '<div id="v3_plist">' + priceListHtml(view) + '</div>';
+      } else body = res.rows.length ? '<ul class="v3-list">' + res.rows.map(function (r) { return priceRow(kind, r); }).join('') + '</ul>' : '<p class="v3-none">لا أعمال بعد</p>';
+    }
     return section(title, kind === 'book' ? 'أقل سعر في كل بلد' : 'أقل سعر في كل بلد، من المنصة', body);
   }
   function drawPrices(v) {
@@ -487,22 +519,42 @@
     var vis = q('#v3_vis', s); if (vis && vals.visible != null) vis.checked = vals.visible;
     var nt = q('#v3_note', s); if (nt && vals.note != null) nt.value = vals.note;
   }
-  function openPrice(kind, id, title, onDone) {
+  // `row` (اختياري، من قائمة الأسعار): دليل (يأخذ السعر العام أو له سعر خاص) أو صف السعر العام أو كتاب. الكتاب والدورة كما كانا بالظبط.
+  function openPrice(kind, id, title, onDone, row) {
     var E = ep();
+    var isGuide = !!(row && row.group === 'guide'), isGeneral = !!(row && row.group === 'guides_general');
+    var onGeneral = isGuide && row.badge !== 'سعر خاص';      // الدليل يأخذ السعر العام الآن: يبدأ من خانات فاضية
     var s0 = openSheet('أسعار: ' + title, '<p class="v3-load">…جارٍ جلب الأسعار</p>');
     if (!s0 || !E) return;
-    E.api('/v2/prices/' + kind + '/' + encodeURIComponent(id)).then(function (resp) {
-      var form = L.v2PriceForm(resp);
+    var genP = onGeneral ? E.api('/v2/prices/book/_guides').then(function (r) { return L.v2PriceForm(r); }).catch(function () { return null; }) : Promise.resolve(null);
+    Promise.all([E.api('/v2/prices/' + kind + '/' + encodeURIComponent(id)), genP]).then(function (rs) {
+      var form = L.v2PriceForm(rs[0]), gform = rs[1];
       if (!document.body.contains(s0)) return;
       window.closeModal();
       if (!form) { notifyFail('تعذّر قراءة أسعار هذا العمل'); return; }
+      // دليل بلا سعر خاص: «ظاهر للناس» يبدأ من ظهوره اليوم (يرثه من العام) فلا يختفي الدليل بحفظ سعره
+      if (onGeneral) form.visible = row.visible === true;
       var cells0 = {};
       form.versions.forEach(function (v) { cells0[v.key] = v.cells; });
+      var lead = isGeneral ? 'هذا السعر يُباع به كل دليل ليس له سعر خاص. اكتب السعر في كل بلد بعملته.'
+        : onGeneral ? 'هذا الدليل يأخذ السعر العام الآن. اكتب له سعرًا خاصًّا في كل بلد بعملته فيُباع به بدل السعر العام. اترك الخانة فارغة إن لم يكن له سعر في هذا البلد.'
+        : isGuide ? 'هذا الدليل له سعر خاص. اكتب السعر في كل بلد بعملته. وللعودة إلى السعر العام استخدم «ارجع للسعر العام» من القائمة.'
+        : 'اكتب السعر في كل بلد بعملته. اترك الخانة فارغة إن لم يكن للعمل سعر في هذا البلد.';
+      var fromGen = onGeneral && gform ? '<div class="v3-fromgen"><button type="button" class="btn btn-ghost" id="v3_fromgen">ابدأ من السعر العام</button></div>' : '';
       twoStage({
         title: 'أسعار: ' + form.title,
-        form: '<p class="mc-lead">اكتب السعر في كل بلد بعملته. اترك الخانة فارغة إن لم يكن للعمل سعر في هذا البلد.</p>' + priceFields(form, cells0)
+        form: '<p class="mc-lead">' + esc(lead) + '</p>' + fromGen + priceFields(form, cells0)
           + '<label class="tg v3-togg"><input type="checkbox" id="v3_vis"' + (form.visible ? ' checked' : '') + '> ظاهر للناس</label>'
           + '<div class="fld"><label for="v3_note">ملاحظة (اختيارية)</label><textarea id="v3_note" rows="2" maxlength="300"></textarea></div>',
+        wire: function (s) {
+          var b = q('#v3_fromgen', s);
+          if (!b || !gform) return;
+          b.onclick = function () {
+            var gc = {};
+            gform.versions.forEach(function (v) { gc[v.key] = v.cells; });
+            fillCells(s, { cells: gc });
+          };
+        },
         collect: function (s) {
           var cells = readCells(s), vis = !!q('#v3_vis', s).checked;
           var built = L.v2PriceBuild(form, { visible: vis, cells: cells });
@@ -511,7 +563,13 @@
         },
         snapshot: function (s) { return { cells: readCells(s), visible: !!q('#v3_vis', s).checked, note: q('#v3_note', s).value }; },
         fill: fillCells,
-        review: function (p) { var d = L.v2PriceDiff(form, p.built); return { lines: d.lines, changed: d.changed, lead: 'ستغيّر أسعار <b>' + esc(form.title) + '</b>. راجع ما سيتغير:' }; },
+        review: function (p) {
+          var d = L.v2PriceDiff(form, p.built);
+          return { lines: d.lines, changed: d.changed,
+                   lead: isGeneral ? 'ستغيّر <b>' + esc(form.title) + '</b>، ويسري على كل دليل ليس له سعر خاص. راجع ما سيتغير:'
+                     : onGeneral ? 'سيصبح لـ<b>' + esc(form.title) + '</b> سعر خاص بدل السعر العام. راجع ما سيتغير:'
+                     : 'ستغيّر أسعار <b>' + esc(form.title) + '</b>. راجع ما سيتغير:' };
+        },
         busy: 'جارٍ الحفظ…', btnConfirm: 'أكّد التعديل',
         send: function (p) {
           return E.api('/v2/prices/' + kind + '/' + encodeURIComponent(id), { method: 'PUT', body: { versions: p.built.versions, visible: p.built.visible, note: p.note, rev: form.rev, title: form.title, confirmed: true } });
@@ -522,6 +580,45 @@
     }).catch(function (e) {
       if (document.body.contains(s0)) window.closeModal();
       notifyFail(e && e.status === 404 ? 'هذا النوع لم يُفتح بعد' : 'تعذّر جلب أسعار هذا العمل');
+    });
+  }
+  // —— «ارجع للسعر العام»: ورقة مراجعة واحدة (قبل ⇒ بعد) ثم «أكّد». لا كتابة قبل الضغطة.
+  function openReset(row) {
+    var E = ep();
+    var s0 = openSheet('الرجوع للسعر العام: ' + row.title, '<p class="v3-load">…جارٍ جلب الأسعار</p>');
+    if (!s0 || !E) return;
+    var genP = E.api('/v2/prices/book/_guides').then(function (r) { return L.v2PriceForm(r); }).catch(function () { return null; });
+    Promise.all([E.api('/v2/prices/book/' + encodeURIComponent(row.id)), genP]).then(function (rs) {
+      var own = L.v2PriceForm(rs[0]), gen = rs[1];
+      if (!document.body.contains(s0)) return;
+      window.closeModal();
+      if (!own) { notifyFail('تعذّر قراءة أسعار هذا الدليل'); return; }
+      var d = L.v2PriceResetDiff(own, gen);
+      var s = openSheet('الرجوع للسعر العام: ' + own.title, '<div class="v3-stage" data-stage="review"><p class="mc-lead">سيعود <b>' + esc(own.title) + '</b> إلى السعر العام ويُحذف سعره الخاص. راجع ما سيتغير:</p>'
+        + diffTable(d.lines) + '<div class="fld"><label for="v3_rnote">ملاحظة (اختيارية)</label><textarea id="v3_rnote" rows="2" maxlength="300"></textarea></div><div id="v3err" role="alert"></div>'
+        + '<div class="acts"><button type="button" class="btn btn-primary" id="v3_rgo">أكّد الرجوع للسعر العام</button><button type="button" class="btn btn-ghost" id="v3_rno">إلغاء</button></div></div>');
+      if (!s) return;
+      S.sheetBusy = false;
+      var go = q('#v3_rgo', s), no = q('#v3_rno', s);
+      no.onclick = function () { window.closeModal(); };
+      go.onclick = function () {
+        if (go.dataset.busy) return;
+        go.dataset.busy = '1'; s.dataset.busy = '1'; S.sheetBusy = true; go.disabled = true; no.disabled = true; go.textContent = 'جارٍ الرجوع…';
+        q('#v3err', s).innerHTML = '';
+        E.api('/v2/prices/book/' + encodeURIComponent(row.id), { method: 'DELETE', body: { note: (q('#v3_rnote', s).value || '').trim(), rev: own.rev, confirmed: true } }).then(function () {
+          delete s.dataset.busy; S.sheetBusy = false;
+          window.closeModal();
+          setNote('عاد «' + own.title + '» إلى السعر العام'); load('pricesBook', true); redraw();
+        }).catch(function (e) {
+          delete s.dataset.busy; S.sheetBusy = false; delete go.dataset.busy; go.disabled = false; no.disabled = false; go.textContent = 'أكّد الرجوع للسعر العام';
+          var stale = e && e.status === 409;
+          q('#v3err', s).innerHTML = '<div class="v3-err">' + esc((e && (e.status === 422 || e.status === 400) ? 'رفضت المنصة هذا التعديل: ' : '') + errMsg(e) + (stale ? ' — أغلق هذه الورقة وافتحها من جديد' : '')) + '</div>';
+          if (stale || (e && e.data && e.data.no_reply)) load('pricesBook', true);
+        });
+      };
+    }).catch(function (e) {
+      if (document.body.contains(s0)) window.closeModal();
+      notifyFail(e && e.status === 404 ? 'هذا النوع لم يُفتح بعد' : 'تعذّر جلب أسعار هذا الدليل');
     });
   }
   function notifyFail(msg) { try { (window.toast || window.notify || function () {})(msg); } catch (e) {} }
@@ -761,9 +858,22 @@
       b.onclick = function () {
         var kind = b.getAttribute('data-kind'), id = b.getAttribute('data-id');
         var res = L.v2Prices(data(kind === 'book' ? 'pricesBook' : 'pricesCourse')), row = res && res.rows.filter(function (r) { return r.id === id; })[0];
-        openPrice(kind, id, row ? row.title : id);
+        openPrice(kind, id, row ? row.title : id, null, row && row.group !== 'book' ? row : null);
       };
     });
+    qa('[data-a="preset"]', v).forEach(function (b) {
+      b.onclick = function () {
+        var id = b.getAttribute('data-id'), res = L.v2Prices(data('pricesBook')), row = res && res.rows.filter(function (r) { return r.id === id && r.group === 'guide'; })[0];
+        if (row) openReset(row);
+      };
+    });
+    qa('[data-a="pgroup"]', v).forEach(function (b) { b.onclick = function () { S.pf.group = b.getAttribute('data-g'); redraw(); }; });
+    var ps = q('#v3_psearch', v);
+    if (ps) ps.oninput = function () {      // يعيد رسم القائمة وحدها فلا يضيع التركيز في الخانة
+      S.pf.q = ps.value;
+      var view = L.v2PricesView(L.v2Prices(data('pricesBook')), S.pf), box = q('#v3_plist', v);
+      if (view && box) { box.innerHTML = priceListHtml(view); wire(v); }
+    };
     qa('[data-a="share"]', v).forEach(function (b) { b.onclick = function () { openShares(b.getAttribute('data-k')); }; });
     qa('[data-a="minpay"]', v).forEach(function (b) { b.onclick = openMinPay; });
     qa('[data-a="ad"]', v).forEach(function (b) { b.onclick = function () { openAd(b.getAttribute('data-id'), b.getAttribute('data-kind')); }; });

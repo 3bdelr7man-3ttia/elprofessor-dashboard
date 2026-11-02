@@ -1701,17 +1701,55 @@
   }
 
   // —— الأسعار
-  function minLine(mins) { return mins.map(function (m) { return m.label + ': ' + m.amountText; }).join(' · '); }
+  function minLine(mins) { return mins.map(function (m) { return m.label + ': ' + m.amountText; }).join('، '); }
   function v2Prices(resp) {
     if (!resp || !Array.isArray(resp.items)) return null;
     var order = Array.isArray(resp.countries) ? resp.countries : Object.keys(COUNTRY_LABEL);
     var rows = resp.items.map(function (it) {
       var mp = it.min_price && typeof it.min_price === 'object' ? it.min_price : {};
       var mins = order.filter(function (c) { return mp[c]; }).map(function (c) { return { country: c, label: COUNTRY_LABEL[c] || c, amountText: moneyText(mp[c].amount, mp[c].currency) }; });
-      return { id: String(it.id), title: str(it.title) || String(it.id), visible: it.visible === true, hasPrices: it.has_prices === true, mins: mins,
-               minText: mins.length ? minLine(mins) : 'لا أسعار بعد', updatedAt: it.updated_at || null };
+      // `group` من المنصة: book | guide | guides_general. غيابها (منصة قديمة) = كتاب، فتبقى الشاشة كما كانت.
+      var group = it.group === 'guide' || it.group === 'guides_general' ? it.group : 'book';
+      var hasOwn = it.has_own === true, usesGeneral = it.uses_general === true;
+      return { id: String(it.id), title: group === 'guides_general' ? GENERAL_GUIDES_TITLE : (str(it.title) || String(it.id)), visible: it.visible === true, hasPrices: it.has_prices === true, mins: mins,
+               minText: mins.length ? minLine(mins) : 'لا أسعار بعد', updatedAt: it.updated_at || null,
+               group: group, hasOwn: hasOwn, usesGeneral: usesGeneral,
+               badge: group === 'guide' ? (hasOwn && !usesGeneral ? 'سعر خاص' : 'يأخذ السعر العام') : '' };
+    });
+    // دليل يأخذ السعر العام ولم تُرسل المنصة له أقل سعر: نعرض أقل سعر الصف العام (السعر الفعلي).
+    var gen = rows.filter(function (r) { return r.group === 'guides_general'; })[0];
+    rows.forEach(function (r) {
+      if (r.group === 'guide' && !r.mins.length && r.badge === 'يأخذ السعر العام' && gen && gen.mins.length) { r.mins = gen.mins; r.minText = gen.minText; }
     });
     return { rows: rows, countries: order, currencies: resp.currencies || {} };
+  }
+  var GENERAL_GUIDES_TITLE = 'السعر العام للأدلّة';
+  // بحث بلا حساسية للتشكيل والهمزات والياء/الألف المقصورة والتاء المربوطة وشكل الأرقام.
+  function normSearch(s) {
+    return digitsToLatin(String(s == null ? '' : s)).toLowerCase().replace(/[\u064B-\u065F\u0670\u0640]/g, '')
+      .replace(/[أإآٱ]/g, 'ا').replace(/ى/g, 'ي').replace(/ة/g, 'ه').replace(/\s+/g, ' ').trim();
+  }
+  // شاشة الأسعار: المجموعات الثلاث (الكتب · السعر العام للأدلّة · الأدلّة) بعد الشريحة والبحث. `opts` = {group: all|book|guide, q}.
+  // قائمة بلا أدلّة (منصة قديمة أو لا أدلّة) ⇒ showTools=false وقسم الكتب وحده بلا تصفية، كما كانت.
+  function v2PricesView(res, opts) {
+    opts = opts || {};
+    var g = opts.group === 'book' || opts.group === 'guide' ? opts.group : 'all', q = normSearch(opts.q);
+    var rows = res && Array.isArray(res.rows) ? res.rows : [];
+    var books = rows.filter(function (r) { return r.group === 'book'; });
+    var gen = rows.filter(function (r) { return r.group === 'guides_general'; });
+    var guides = rows.filter(function (r) { return r.group === 'guide'; });
+    var showTools = gen.length + guides.length > 0;
+    var counts = { all: rows.length, book: books.length, guide: guides.length };
+    if (!showTools) return { showTools: false, counts: counts, sections: [{ key: 'book', title: 'الكتب', rows: books }], empty: false };
+    function hit(r) { return !q || normSearch(r.title).indexOf(q) > -1; }
+    var sections = [];
+    if (g !== 'guide') sections.push({ key: 'book', title: 'الكتب', rows: books.filter(hit) });
+    if (g !== 'book') {
+      sections.push({ key: 'general', title: GENERAL_GUIDES_TITLE, rows: gen.filter(hit) });
+      sections.push({ key: 'guide', title: 'الأدلّة', rows: guides.filter(hit) });
+    }
+    sections = sections.filter(function (s) { return s.rows.length; });
+    return { showTools: true, counts: counts, sections: sections, empty: !sections.length };
   }
   var VERSION_LABEL = { read: 'القراءة على المنصة', pdf: 'نسخة PDF', standard: 'السعر العادي' };
   function digitsToLatin(s) {
@@ -1774,6 +1812,25 @@
     });
     if (form.visible !== built.visible) lines.push({ label: 'ظاهر للناس', from: form.visible ? 'نعم' : 'لا', to: built.visible ? 'نعم' : 'لا' });
     return { lines: lines, changed: lines.length > 0 };
+  }
+
+  // «ارجع للسعر العام»: قبل ⇒ بعد لكل خانة سعر يختلف فيها سعر الدليل الخاص (`own`) عن السعر العام (`gen`)، وأول سطر دايمًا يقول إن نوع السعر يتغيّر.
+  // `gen` = null (تعذّر جلب العام) ⇒ سطر النوع وحده. `own`/`gen` = v2PriceForm.
+  function v2PriceResetDiff(own, gen) {
+    var lines = [{ label: 'نوع السعر', from: 'سعر خاص', to: 'السعر العام' }];
+    if (own && gen) {
+      own.versions.forEach(function (v) {
+        var gv = gen.versions.filter(function (x) { return x.key === v.key; })[0];
+        own.countries.forEach(function (c) {
+          var a = parseAmount(v.cells[c.key]), b = gv ? parseAmount(gv.cells[c.key]) : null;
+          a = a === null || isNaN(a) ? null : a;
+          b = b === null || isNaN(b) ? null : b;
+          if (a === b) return;
+          lines.push({ label: v.label + ' · ' + c.label, from: a === null ? 'لا سعر' : moneyText(a, c.currency), to: b === null ? 'لا سعر' : moneyText(b, c.currency) });
+        });
+      });
+    }
+    return { lines: lines, changed: true };
   }
 
   // —— النسب
@@ -1995,6 +2052,7 @@
     if (!pricesResp || !Array.isArray(pricesResp.items)) return null;
     var vals = [], cur = '';
     pricesResp.items.forEach(function (it) {
+      if (it.group === 'guide' || it.group === 'guides_general') return;      // متوسط الكتب لا تدخله الأدلّة
       var m = it.min_price && it.min_price[country];
       if (m && numOf(m.amount) > 0 && it.visible === true) { vals.push(numOf(m.amount)); cur = m.currency; }
     });
@@ -2075,7 +2133,7 @@
     personKey: personKey, personEmailOf: personEmailOf, courseKey: courseKey, courseIdOf: courseIdOf, COLS: COLS, COL_LABEL: COL_LABEL, NA: NA,
     v2Period: v2Period, v2Income: v2Income, v2Held: v2Held, v2Owed: v2Owed, v2MoneyLine: v2MoneyLine, v2MoneyBoard: v2MoneyBoard,
     v2IncomeBars: v2IncomeBars, v2PayoutRows: v2PayoutRows, v2PayoutHistory: v2PayoutHistory, v2Stuck: v2Stuck, v2StuckFromQueue: v2StuckFromQueue,
-    v2RefundRule: v2RefundRule, v2Refunds: v2Refunds, v2Prices: v2Prices, v2PriceForm: v2PriceForm, v2PriceBuild: v2PriceBuild, v2PriceDiff: v2PriceDiff,
+    v2RefundRule: v2RefundRule, v2Refunds: v2Refunds, v2Prices: v2Prices, v2PriceForm: v2PriceForm, v2PriceBuild: v2PriceBuild, v2PriceDiff: v2PriceDiff, v2PricesView: v2PricesView, v2PriceResetDiff: v2PriceResetDiff,
     v2SharesView: v2SharesView, v2SharesDiff: v2SharesDiff, v2SharesChanges: v2SharesChanges, v2SharesHistory: v2SharesHistory,
     v2MinPayout: v2MinPayout, v2MinPayoutInput: v2MinPayoutInput, v2AdsLedger: v2AdsLedger, v2AdsEntries: v2AdsEntries,
     v2BookAverage: v2BookAverage, v2OfferLine: v2OfferLine, v2OffersQueue: v2OffersQueue, v2OfferPrefill: v2OfferPrefill, v2Requests: v2Requests,
@@ -4515,7 +4573,7 @@
     // أعمال في قوائم المراجعة ولم تصل في قائمة السوق: تبقى ظاهرة (لا يضيع عمل ينتظر قرارًا)
     [pend, rej].forEach(function (lst) { (lst || []).forEach(function (r) { var id = str(String(r.id == null ? '' : r.id)); if (id && !have[id]) { have[id] = r; base.push(r); } }); });
     base.forEach(function (k) { if (str(String(k.id == null ? '' : k.id))) add(marketRow(k, ctx, now)); });
-    (priceRes ? priceRes.rows : []).forEach(function (p) { add(storeRow(p, ctx, now)); });
+    (priceRes ? priceRes.rows : []).forEach(function (p) { if (p.group !== 'guide') add(storeRow(p, ctx, now)); });      // أدلّة المتجر لها شاشتها في «الأسعار»
     (offList || []).filter(function (o) { return o.status === 'rejected'; }).forEach(function (o) { add(offerRow(o)); });
 
     var lanes = {}, counts = {};
