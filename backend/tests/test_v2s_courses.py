@@ -537,9 +537,21 @@ def test_application_ticket_step_two_fields_present_and_robust():
     # أشكال غريبة ⇒ تُهمل بهدوء، والروابط غير الويب لا تمر
     odd = _co('appTickets', [dict(APPS[0], intro_video_url='javascript:alert(1)', experience_years={'x': 1}, courses_given=None, current_role=None)], {'now': NOW})[0]
     assert odd['introVideo'] == '' and odd['experience'] == {'years': '', 'role': '', 'courses': ''}
-    one = _co('appTickets', [dict(APPS[0], experience_years='1', courses_given='دورة واحدة', intro_video_url='  http://vimeo.com/1  ')], {'now': NOW})[0]
-    assert one['experience']['years'] == 'سنة واحدة' and one['experience']['courses'] == 'دورة واحدة' and one['introVideo'] == 'http://vimeo.com/1'
+    one = _co('appTickets', [dict(APPS[0], experience_years='1', courses_given='دورة واحدة', intro_video_url='  https://vimeo.com/1  ')], {'now': NOW})[0]
+    assert one['experience']['years'] == 'سنة واحدة' and one['experience']['courses'] == 'دورة واحدة' and one['introVideo'] == 'https://vimeo.com/1'
+    # http لا يمر (المنصة تفرض https فقط)
+    assert _co('appTickets', [dict(APPS[0], intro_video_url='http://vimeo.com/1')], {'now': NOW})[0]['introVideo'] == ''
     assert _co('appTickets', [dict(APPS[0], experience_years='أكثر من عشر سنوات')], {'now': NOW})[0]['experience']['years'] == 'أكثر من عشر سنوات'
+
+
+@needs_node
+def test_application_ticket_reads_sample_url_from_platform_doc():
+    # المنصة تحفظ رابط العيّنة باسم sample_url (لا portfolio_url) في مستند الطلب
+    base = {k: v for k, v in APPS[1].items() if k != 'portfolio_url'}
+    t = _co('appTickets', [dict(base, sample_url='https://t.test/sample')], {'now': NOW})[0]
+    assert t['links']['portfolio'] == 'https://t.test/sample' and 'نماذج أعمال' in t['line']
+    none = _co('appTickets', [base], {'now': NOW})[0]
+    assert none['links']['portfolio'] == '' and 'نماذج أعمال' not in none['line']
 
 
 def test_application_detail_sheet_renders_new_fields_and_only_web_links():
@@ -548,7 +560,7 @@ def test_application_detail_sheet_renders_new_fields_and_only_web_links():
     body = js[i:i + 2600]
     for w in ("'سنوات الخبرة'", "'العمل الحالي أو الأخير'", "'دورات قدّمها'", "'الفيديو التعريفي'", "a.introVideo", "a.experience", "a.links.cv", "a.links.portfolio"):
         assert w in body, w
-    assert "/^https?:" in body.split('function link')[1].split('\n')[0]                    # لا href إلا لرابط ويب
+    assert "/^https:" in body.split('function link')[1].split('\n')[0]                    # لا href إلا لرابط ويب
     assert 'استشار' not in body and '·' not in body
 
 

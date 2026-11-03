@@ -863,7 +863,7 @@
   }
   function openAppDetail(id) {
     var a = appById(id); if (!a) return;
-    function link(url, label) { return /^https?:\/\/\S+$/i.test(url || '') ? '<a href="' + esc(url) + '" target="_blank" rel="noopener noreferrer">' + esc(label) + '</a>' : ''; }
+    function link(url, label) { return /^https:\/\/\S+$/i.test(url || '') ? '<a href="' + esc(url) + '" target="_blank" rel="noopener noreferrer">' + esc(label) + '</a>' : ''; }
     var links = [link(a.links.linkedin, 'لينكدإن'), link(a.links.cv, 'السيرة الذاتية'), link(a.links.portfolio, 'نماذج الأعمال')].filter(Boolean).join('، ');
     var ex = a.experience || {};
     var s = openSheet('طلب ' + a.name, factsTable([['العنوان المهني', esc(a.headline || '—')], ['المجالات', esc(a.expertise.length ? a.expertise.join('، ') : 'بلا مجال محدّد')],

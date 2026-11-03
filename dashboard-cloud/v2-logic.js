@@ -3770,7 +3770,7 @@
   }
 
   // —— طلبات المدرّبين
-  function webUrl(v) { v = s(v); return /^https?:\/\/[^\s]+$/i.test(v) ? v : ''; }     // رابط ويب فقط (لا javascript: ولا data:)
+  function webUrl(v) { v = s(v); return /^https:\/\/[^\s]+$/i.test(v) ? v : ''; }     // https فقط، مثل المنصة (لا http ولا javascript: ولا data:)
   function appTickets(apps, opts) {
     opts = opts || {};
     var now = opts.now || 0;
@@ -3778,7 +3778,7 @@
     return apps.filter(function (a) { return a && typeof a === 'object'; }).map(function (a) {
       var exp = (Array.isArray(a.expertise) ? a.expertise : []).map(s).filter(Boolean);
       var summary = s(a.experience_summary);
-      var li = s(a.linkedin_url), cv = s(a.cv_url), pf = s(a.portfolio_url);
+      var li = s(a.linkedin_url), cv = s(a.cv_url), pf = s(a.portfolio_url) || s(a.sample_url);      // المنصة تحفظ رابط العيّنة باسم sample_url في مستند الطلب
       // حقول الخطوة الثانية من نموذج المدرّب (قد تغيب في الطلبات القديمة): فيديو تعريفي + تفاصيل الخبرة
       var video = webUrl(a.intro_video_url);
       var yrs = a.experience_years, yrsText = '';
