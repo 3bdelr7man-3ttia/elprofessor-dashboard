@@ -162,7 +162,7 @@ def flow(browser, h, pre, vp, mobile):
     ctx = browser.context(h, 'admin', vp, mobile)
     page = open_at(ctx, '#s/market', BOARD_READY)
     st = page.evaluate("() => ({hash: location.hash, tabs: [...document.querySelectorAll('.v2c-tab')].map(b => b.textContent.trim()), tile: (V2.tiles().filter(t => t.key === 'market')[0] || {}).count})")
-    if st['tabs'] != ['الطلبات', 'كل الطلبات', 'ماذا يطلب الناس']:
+    if st['tabs'] != ['الطلبات', 'كل الطلبات', 'ماذا يطلب الناس', 'إدارة السوق']:
         PROBLEMS.append('%s01: تبويبات السوق %r' % (pre, st['tabs']))
     # الرقم في سطر العقل = المربّع = عدد التذاكر غير المخفية في «طلب جديد» + «ينتظر خبيرًا» (حالتها مفتوحة)
     n_tick = page.evaluate("""() => { const T = V2S_MARKET._state.T; let n = 0; ['new', 'waiting'].forEach(c => T.cols[c].forEach(t => { if (t.row.status === 'open' && !t.row.hidden) n++; })); return n; }""")

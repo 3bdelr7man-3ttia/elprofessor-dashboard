@@ -473,7 +473,7 @@ def delivery_text(d):
         if lw:
             try:
                 y, m, dd = [int(x) for x in lw.split('-')]
-                t += ' · آخر إرسال: أسبوع %s' % _date_text(datetime.date(y, m, dd))
+                t += '، آخر إرسال: أسبوع %s' % _date_text(datetime.date(y, m, dd))
             except Exception:
                 pass
         return t

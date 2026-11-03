@@ -357,7 +357,7 @@ def test_ticket_lines_carry_only_facts_and_the_testimonial_consent_line_follows_
     T = {i['id']: i for i in B['cols']['wait']}
     assert T['m:m1']['brain'] == 'القرار يصل إلى صاحب الموضوع · الفئة: عقاري (اختيار آلي)'
     assert T['m:m2']['brain'] == 'القرار يصل إلى صاحب الموضوع · بلا فئة' and T['m:m2']['who']['text'] == 'بلا تخصص'
-    assert T['t:t1']['brain'] == 'دورة · التقييم ٥ من ٥، وافق كاتبه على النشر باسمه'
+    assert T['t:t1']['brain'] == 'دورة، التقييم ٥ من ٥، وافق كاتبه على النشر باسمه'
     assert T['c:c1']['brain'] == 'لم يحسمه الفحص الآلي' and T['c:c1']['who']['text'] == 'على: موضوع'
     assert T['w:w1']['brain'] == 'قصيدة، بلا رابط'
     for consent, tail in ((True, '، وافق كاتبه على النشر باسمه'), (False, ''), (None, '')):

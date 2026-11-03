@@ -945,7 +945,7 @@
     return { n: '…', note: 'جارٍ التحميل', off: true };
   };
   Kit.pill = function (text, cls) { return '<span class="sh-st' + (cls ? ' ' + cls : '') + '">' + esc(text) + '</span>'; };
-  Kit.link = function (url, text) { return url ? '<a class="sh-lnk" href="' + esc(url) + '" target="_blank" rel="noopener noreferrer">' + esc(text) + '</a>' : ''; };
+  Kit.link = function (url, text, title) { return url ? '<a class="sh-lnk" href="' + esc(url) + '"' + (title ? ' title="' + esc(title) + '"' : '') + ' target="_blank" rel="noopener noreferrer">' + esc(text) + '</a>' : ''; };
   Kit.who = function (email) { return email ? '<span class="sh-who" dir="ltr">' + esc(email) + '</span>' : ''; };
 
   // ============================================================================================================================
@@ -1142,7 +1142,7 @@
     else {
       var typed = B.f('prepUrl', d.url);
       body = '<div class="sh-panel"><p class="sh-fine">يظهر هذا الرابط زرًّا «جهّز طلبك بالإنجليزية» بجانب فرص المنح والزمالات.</p>'
-        + '<p class="sh-cur"><b>الرابط الحالي</b>' + (d.url ? Kit.link(d.url, d.url) : '<span class="sh-sub">لا يوجد رابط بعد</span>') + '</p>'
+        + '<p class="sh-cur"><b>الرابط الحالي</b>' + (d.url ? Kit.link(d.url, 'افتح الرابط', d.url) : '<span class="sh-sub">لا يوجد رابط بعد</span>') + '</p>'
         + '<div class="sh-sbox"><label for="shPrep">رابط الدورة</label><div class="sh-row"><input id="shPrep" type="url" dir="ltr" maxlength="2000" autocomplete="off" placeholder="https://" value="' + esc(typed) + '">'
         + '<button type="button" class="ep-b1" data-a="prepsave">راجع ثم احفظ</button></div></div>'
         + (d.url ? '<div class="sh-acts"><button type="button" class="ep-bs" data-a="prepclear">امسح الرابط</button></div>' : '') + '<div id="shPrepErr" role="alert"></div></div>';

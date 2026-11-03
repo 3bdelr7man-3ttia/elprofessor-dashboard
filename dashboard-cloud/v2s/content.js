@@ -437,7 +437,7 @@
       if (f.dupTitle) chipsHtml += pill('عنوانه مطابق لمقال منشور', 'amber');
       var pub = a.status === 'published';
       return '<button type="button" class="v2ct-card art" data-a="sread" data-id="' + esc(a.id) + '"><span class="v2ct-ct">' + esc(a.title) + '</span>'
-        + '<span class="v2ct-cm">' + esc(L.v2ContentByText(a.by) + (a.date ? ' · ' + arDigits(a.date) : '')) + '</span>'
+        + '<span class="v2ct-cm">' + esc(L.v2ContentByText(a.by) + (a.date ? '، ' + arDigits(a.date) : '')) + '</span>'
         + '<span class="v2ct-pills">' + pill(pub ? 'منشور' : 'مسودة', pub ? 'green' : 'amber') + chipsHtml + '</span></button>';
     }).join('') + '</div>';
     return strip + chips + cards;
@@ -890,7 +890,7 @@
           return '<li><b>' + esc(t.title) + '</b>' + pill(SRC_AR[t.source] || SRC_AR.human) + '<span>' + (t.engagement && isNum(t.engagement.comments) ? esc(ar(t.engagement.comments)) + ' تعليق' : 'التعليقات: ' + NA) + '</span></li>'; }).join('') + '</ul>' : '')
         + (sg ? '<h4>حسب الفئة المستهدفة</h4>' + bars(sg.lanes, 'label', 'count', 12) : '')
         + (an.by_category && an.by_category.length ? '<h4>حسب التخصص</h4>' + bars(an.by_category, 'category', 'count', 8) : '')
-        + (an.categories_in_demand && an.categories_in_demand.length ? '<h4>ما يسأل عنه الناس في المحادثة</h4><div class="v2ct-pills">' + an.categories_in_demand.map(function (c) { return pill((c.category || c.name || '') + (isNum(c.count) ? ' · ' + ar(c.count) : '')); }).join('') + '</div>' : '');
+        + (an.categories_in_demand && an.categories_in_demand.length ? '<h4>ما يسأل عنه الناس في المحادثة</h4><div class="v2ct-pills">' + an.categories_in_demand.map(function (c) { return pill((c.category || c.name || '') + (isNum(c.count) ? '، ' + ar(c.count) : '')); }).join('') + '</div>' : '');
     }
     return '<section class="v2ct-box"><header><h2>أرقام الموضوعات</h2><button type="button" class="v2ct-b2 sm" data-a="reloadNums">حدّث</button></header>' + inner + '</section>';
   }
@@ -1442,7 +1442,7 @@
   }
   function testimonialSheet(r) {
     var consent = r.consent_public === true ? 'وافق كاتبه على النشر باسمه' : '';
-    var s = openSheet('رأي متعلّم', '<p class="v2ct-kick">' + esc(r.course_title || 'دورة') + '</p><p class="v2ct-cm">' + person(r.name || 'متعلّم', r.user_email) + (r.rating != null && r.rating !== '' ? ' · التقييم ' + esc(ar(r.rating)) + ' من ٥' : '') + '</p>'
+    var s = openSheet('رأي متعلّم', '<p class="v2ct-kick">' + esc(r.course_title || 'دورة') + '</p><p class="v2ct-cm">' + person(r.name || 'متعلّم', r.user_email) + (r.rating != null && r.rating !== '' ? '، التقييم ' + esc(ar(r.rating)) + ' من ٥' : '') + '</p>'
       + '<p class="v2ct-val pre tall">' + esc(r.text || '') + '</p>' + (consent ? '<p class="v2ct-line">' + esc(consent) + '</p>' : '')
       + '<div class="v2ct-acts2"><button type="button" class="v2ct-b1" id="v2ctOk">اعتمد</button><button type="button" class="v2ct-b2" id="v2ctRej">ارفض</button><button type="button" class="v2ct-b2" id="v2ctNo">إغلاق</button></div>');
     if (!s) return;
@@ -1604,7 +1604,7 @@
     redraw();
   }
   function siteEditSheet(r) {
-    var s = openSheet('تعديل نص في الموقع', '<p class="v2ct-kick">' + esc(r.tagLabel + (r.part ? ' · جزء ' + ar(r.part) + ' من فقرة' : '')) + '</p>'
+    var s = openSheet('تعديل نص في الموقع', '<p class="v2ct-kick">' + esc(r.tagLabel + (r.part ? '، جزء ' + ar(r.part) + ' من فقرة' : '')) + '</p>'
       + '<div class="v2ct-fld"><label>النص الحالي</label><p class="v2ct-val" dir="auto">' + esc(r.text) + '</p></div>'
       + '<div class="v2ct-fld"><label for="siteNew">النص الجديد</label><textarea id="siteNew" rows="5" maxlength="600">' + esc(r.text) + '</textarea></div>'
       + '<p class="v2ct-fine">لن يظهر على الموقع حتى تعتمده. اكتب نصًا عاديًا بلا وسوم.</p><div id="v2ctErr"></div>'

@@ -489,7 +489,7 @@ def flow_saha(browser, h, pre, vp, mobile):
         got = check_writes(pre + '06-save', h, base, 1)
         if got:
             expect(got[0][3].get('prep_course_url') == 'https://learn.example.test/english', '%s06: جسم الحفظ %r' % (pre, got[0][3]))
-        page.wait_for_function("() => document.querySelector('.sh-cur') && document.querySelector('.sh-cur').innerText.includes('learn.example.test')", timeout=8000)
+        page.wait_for_function("() => { const a = document.querySelector('.sh-cur a'); return a && a.innerText.trim() === 'افتح الرابط' && a.getAttribute('href').includes('learn.example.test') && a.getAttribute('title').includes('learn.example.test') && !document.querySelector('.sh-cur').innerText.includes('learn.example.test'); }", timeout=8000)
         click(page, '[data-a="prepclear"]', 400)
         sheet_open(page)
         confirm(page, 1000)

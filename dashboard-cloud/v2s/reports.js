@@ -258,7 +258,7 @@
       var parts = [];
       parts.push(isNum(td.income_egp) ? moneyOf(td.income_egp) : NA);
       if (td.show_signups) parts.push(isNum(td.signups) ? UU(td.signups, ['حساب واحد', 'حسابان', 'حسابات', 'حسابًا']) : 'الحسابات: ' + NA);
-      tline = '<p class="v2r-today">اليوم حتى الآن: ' + esc(parts.join('، ')) + (td.income_other && td.income_other.length ? ' · وبعملة أخرى: ' + esc(td.income_other.map(function (x) { return U.moneyText(x.amount, x.currency); }).join('، ')) : '') + '</p>';
+      tline = '<p class="v2r-today">اليوم حتى الآن: ' + esc(parts.join('، ')) + (td.income_other && td.income_other.length ? '، وبعملة أخرى: ' + esc(td.income_other.map(function (x) { return U.moneyText(x.amount, x.currency); }).join('، ')) : '') + '</p>';
     }
     return '<section class="v3-card v2r-card v2r-chart"><header class="v3-ch v2r-chh"><h2>' + esc(title) + '</h2>' + legend + '</header>' + body
       + tline + (foot.length ? '<p class="v3-fine">' + esc(foot.join('، ')) + '</p>' : '') + '</section>';
@@ -345,7 +345,7 @@
   function secValue(r) {
     if (!r.value) return naText();
     var t = r.value.kind === 'money' ? moneyOf(r.value.egp) : r.value.text;
-    return esc(t) + (r.value.others && r.value.others.length ? ' <small class="v2r-oth" title="' + esc(r.value.others.map(function (x) { return U.moneyText(x.amount, x.currency); }).join('، ')) + '">· وبعملة أخرى</small>' : '');
+    return esc(t) + (r.value.others && r.value.others.length ? '<small class="v2r-oth" title="' + esc(r.value.others.map(function (x) { return U.moneyText(x.amount, x.currency); }).join('، ')) + '">، وبعملة أخرى</small>' : '');
   }
   function secChip(r) {
     var c = ['files', 'courses', 'books'].indexOf(r.key) > -1 && r.trend ? V.trendChip(r.trend) : r.chip;
@@ -472,7 +472,7 @@
     var recent = arr(d.recent_questions), unmet = arr(d.unmet), unclassified = d.unclassified || 0, f = S.d.f;
     var filtered = V.demandFilter(recent, f, now());
     var hidden = V.hiddenFilters(f);
-    var numsLine = '<div class="v2r-nrow"><p class="v2r-nums">' + esc(V.demandNumbers(d)) + (unclassified ? '' : ' · كل الأسئلة مصنّفة') + '</p>'
+    var numsLine = '<div class="v2r-nrow"><p class="v2r-nums">' + esc(V.demandNumbers(d)) + (unclassified ? '' : '، كل الأسئلة مصنّفة') + '</p>'
       + (unclassified ? '<button type="button" class="v3-btn2" data-a="classify">صنّف الأسئلة الجديدة (' + esc(ar(unclassified)) + ')</button>' : '') + '</div>';
     var top = unmet[0], restU = unmet.slice(1);
     var opp = '<section class="v3-card v2r-card v2r-opp' + (top ? '' : ' empty') + '"><header class="v3-ch"><h2>خدمات يطلبها الناس ولا نقدّمها</h2></header>';
@@ -481,7 +481,7 @@
       opp += '<div class="v2r-otop"><div><b class="v2r-ol">' + esc(top.label) + ': ' + esc(UU(top.count || 0, ['سؤال واحد', 'سؤالان', 'أسئلة', 'سؤالًا'])) + '</b>'
         + (top.sample_question ? '<p class="v2r-os">مثال: ' + esc(top.sample_question) + '</p>' : '') + '</div>'
         + '<button type="button" class="v3-btn1" data-a="open" data-sec="courses">افتح الدورات</button></div>'
-        + restU.map(function (u) { return '<div class="v2r-orow"><span><b>' + esc(u.label) + '</b> · ' + esc(UU(u.count || 0, ['سؤال واحد', 'سؤالان', 'أسئلة', 'سؤالًا'])) + '</span><a href="#" class="v2r-inl" data-a="open" data-sec="courses">← افتح الدورات</a></div>'; }).join('');
+        + restU.map(function (u) { return '<div class="v2r-orow"><span><b>' + esc(u.label) + '</b>، ' + esc(UU(u.count || 0, ['سؤال واحد', 'سؤالان', 'أسئلة', 'سؤالًا'])) + '</span><a href="#" class="v2r-inl" data-a="open" data-sec="courses">← افتح الدورات</a></div>'; }).join('');
     }
     opp += '<p class="v3-fine">من كل الأسئلة منذ البداية</p></section>';
     var rowsHtml = filtered.length ? filtered.map(function (r) {
@@ -694,7 +694,7 @@
         if (r && r.error) throw new Error('x');
         window.closeModal();
         var c = (r && r.classified) || 0, rem = r && r.remaining;
-        setNote('صُنّف ' + UU(c, ['سؤال واحد', 'سؤالان', 'أسئلة', 'سؤالًا']) + ' جديدًا' + (rem ? ' · بقي ' + ar(rem) : ''));
+        setNote('صُنّف ' + UU(c, ['سؤال واحد', 'سؤالان', 'أسئلة', 'سؤالًا']) + ' جديدًا' + (rem ? '، بقي ' + ar(rem) : ''));
         E.reload('analysis', redrawSoon);
       }).catch(function () {
         delete s.dataset.busy; delete go.dataset.busy; go.disabled = false; go.textContent = 'صنّف الآن';

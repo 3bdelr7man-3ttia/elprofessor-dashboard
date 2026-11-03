@@ -1276,7 +1276,7 @@ def flow_d3(browser, h, pre, viewport, mobile):
     ctx = browser.context(h, 'admin', tallvp, mobile)
     page = d3_open(ctx, '#s/books/offers', 'offers')
     of = page.evaluate("() => ({cards: document.querySelectorAll('.v3-offer').length, tabs: [...document.querySelectorAll('.v2c-tab')].map(b => b.textContent.trim()), brain: [...document.querySelectorAll('.v3-brain')].map(e => e.innerText)})")
-    if of['cards'] != 2 or of['tabs'] != ['مراجعة العروض', 'طلبات القرّاء', 'الكتب'] or not any('أعلى من متوسط الكتب في مصر' in b for b in of['brain']):
+    if of['cards'] != 2 or of['tabs'] != ['مراجعة العروض', 'طلبات القرّاء', 'الكتب', 'كتبنا'] or not any('أعلى من متوسط الكتب في مصر' in b for b in of['brain']):
         PROBLEMS.append('%s09: مراجعة العروض %r' % (pre, of))
     d3_shot(page, pre + '09-offers.jpg')
     page.click('[data-a="oapprove"] >> nth=0')

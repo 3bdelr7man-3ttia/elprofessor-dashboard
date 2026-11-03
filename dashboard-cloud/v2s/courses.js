@@ -117,7 +117,7 @@
   function coverHtml(c, cls) {
     var url = String(c.thumbnail_url || '').trim();
     var letter = C.cover(c.title).letter;
-    if (!url && /\b(big|thumb)\b/.test(cls || '')) return '';       // بلا صورة: لا مستطيل كبير بحرف، فالبطاقة تبدأ من الاسم (الجولة r6)
+    if (!url && /\b(big|thumb)\b/.test(cls || '') && window.matchMedia && window.matchMedia('(max-width:760px)').matches) return '';       // بلا صورة: لا مستطيل كبير بحرف، فالبطاقة تبدأ من الاسم (الجولة r6)
     return '<span class="v2co-cover ' + (cls || '') + (url ? ' has' : '') + '" aria-hidden="true"><i>' + esc(letter) + '</i>' + (url ? '<img class="v2co-img" src="' + esc(url) + '" alt="" loading="lazy">' : '') + '</span>';
   }
   function chip(text, tone) { return '<span class="v2co-chip ' + (tone || '') + '">' + esc(text) + '</span>'; }
@@ -965,7 +965,7 @@
       collect: function (s) {
         var st = q('#co_st', s).value, zl = q('#co_zl', s).value.trim(), sn = q('#co_sn', s).value.trim(), pin = !!q('#co_pin', s).checked;
         var p = { pin: pin, rows: [] };
-        if (st && st !== cur.start) { p.start_date = isoLocal(st); p.rows.push(['تاريخ البدء', cur.start ? U.dateText(sch.start_date) + ' · ' + C.liveTimeText(sch.start_date) : 'بلا موعد', U.dateText(p.start_date) + ' · ' + C.liveTimeText(p.start_date)]); }
+        if (st && st !== cur.start) { p.start_date = isoLocal(st); p.rows.push(['تاريخ البدء', cur.start ? U.dateText(sch.start_date) + '، ' + C.liveTimeText(sch.start_date) : 'بلا موعد', U.dateText(p.start_date) + '، ' + C.liveTimeText(p.start_date)]); }
         if (zl !== cur.zoom && zl) { p.zoom_link = zl; p.rows.push(['رابط اللقاء', cur.zoom ? 'موجود' : 'غير موجود', 'مُحدَّث']); }
         if (sn !== '' && sn !== cur.seats) {
           var n = Number(sn); if (!isFinite(n) || n < 0 || Math.floor(n) !== n) return { ok: false, error: 'عدد المقاعد غير صالح' };

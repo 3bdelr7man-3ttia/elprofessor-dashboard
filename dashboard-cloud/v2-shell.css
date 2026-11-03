@@ -65,12 +65,14 @@ html.v2-noscroll,html.v2-noscroll body{overflow:hidden}
 .v2c-tabs{display:flex;gap:6px;overflow-x:auto;max-width:100%;border-bottom:1px solid #E9E1D6;scrollbar-width:none;-webkit-overflow-scrolling:touch}
 .v2c-tabs::-webkit-scrollbar{display:none}
 /* تبويبات أكثر من العرض: تلاشٍ ظاهر على الطرف المقصوص + تمرير يستقر على تبويب كامل (الجولة r6) */
+@media(max-width:760px){
 .v2c-tabs{scroll-snap-type:x proximity;scroll-padding-inline:24px;--fl:1;--fr:1;
   -webkit-mask-image:linear-gradient(to right,rgba(0,0,0,var(--fl)) 0,#000 44px,#000 calc(100% - 44px),rgba(0,0,0,var(--fr)) 100%);
   mask-image:linear-gradient(to right,rgba(0,0,0,var(--fl)) 0,#000 44px,#000 calc(100% - 44px),rgba(0,0,0,var(--fr)) 100%)}
 .v2c-tabs.fade-l{--fl:0}
 .v2c-tabs.fade-r{--fr:0}
 .v2c-tab{scroll-snap-align:center}
+}
 .v2c-tab{flex:none;min-height:48px;padding:0 20px;border:0;border-bottom:4px solid transparent;margin-bottom:-1px;background:transparent;color:#6B665C;
   font:700 16px 'Cairo',sans-serif;cursor:pointer;white-space:nowrap;border-radius:10px 10px 0 0}
 .v2c-tab:hover{color:#21262E;background:rgba(158,43,78,.05)}

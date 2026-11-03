@@ -210,11 +210,11 @@ def test_contract_and_specialty_badges_are_on_the_row_and_old_files_have_none(op
     page = open_page()
     got = dict((k, v) for k, v in page.evaluate(
         "() => INBOX.filter(r => r.apiKind === 'expert_file').map(r => [r.apiId, (r.badges || []).map(b => b.t)])"))
-    assert 'عقد · %s صفحات' % _ar(page, 8) in got[K1] and 'عقارات وإيجارات' in got[K1]
+    assert 'عقد، %s صفحات' % _ar(page, 8) in got[K1] and 'عقارات وإيجارات' in got[K1]
     assert 'أخرى: قانون بحري' in got[K3]
     assert 'عمالي' in got[K2]
     assert all('عقد' not in t and 'عمالي' not in t for t in got[F1])                    # ملف قديم: زي ما كان
-    assert 'عقد · %s صفحات' % _ar(page, 6) in got[KR]
+    assert 'عقد، %s صفحات' % _ar(page, 6) in got[KR]
 
 
 def test_the_no_candidate_file_is_a_real_item_with_its_own_filter(open_page):
@@ -276,7 +276,7 @@ def test_drawer_shows_kind_and_specialty_chips(open_page):
     page = open_page()
     _row(page, K1)
     chips = page.inner_text('#drawer .ef-chips')
-    assert 'عقد · %s صفحات' % _ar(page, 8) in chips and 'عقارات وإيجارات' in chips
+    assert 'عقد، %s صفحات' % _ar(page, 8) in chips and 'عقارات وإيجارات' in chips
     assert page.inner_text('#drawer .ef-chip.k').startswith('عقد')
 
 
@@ -299,7 +299,7 @@ def test_the_assign_timeline_says_who_when_and_why(open_page):
     assert 'نفس بلد القانون · أقل حمل' in first
     assert 'اتبعت تلقائي لـ%s' % fx.EXPERTS['nada@experts.test'][0] in second and 'بعد اعتذار الخبير اللي قبله' in second
     assert all(i.get_attribute('class') == 'auto' for i in items)
-    assert page.query_selector('#drawer .ef-log li:last-child .when').inner_text().count('·') >= 1   # التاريخ والوقت النسبي
+    assert page.query_selector('#drawer .ef-log li:last-child .when').inner_text().count('،') >= 1   # التاريخ والوقت النسبي
 
 
 def test_declines_show_their_reason_and_not_my_field_stands_out(open_page):
@@ -388,7 +388,7 @@ def test_the_review_drawer_shows_the_contract_document_with_clauses_by_risk(open
     page.wait_for_selector('#drawer .ef-verdict')
     d = _drawer(page)
     assert 'مراجعة العقد زي ما هتوصل لـ' in d and 'مراجعة عقد من خبير معتمد لدى البروفيسور' in d
-    assert 'عقد توريد الأثاث.pdf' in d and 'عقد · %s صفحات' % _ar(page, 6) in d
+    assert 'عقد توريد الأثاث.pdf' in d and 'عقد، %s صفحات' % _ar(page, 6) in d
     verdict = page.query_selector('#drawer .ef-verdict')
     assert 'يوقّع بعد تعديل البنود' in verdict.inner_text() and 'sign_after_changes' in verdict.get_attribute('class')
     clauses = page.query_selector_all('#drawer .ef-clause')

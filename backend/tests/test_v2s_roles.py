@@ -401,7 +401,7 @@ def test_wallet_view_states_and_rate():
     assert L('walletView', dict(W, id=None)) == {'linked': False}
     v = L('walletView', W)
     assert v['linked'] and v['rate'] == 50 and v['canWithdraw'] and v['minEgp'] == 2500 and v['level'] == 'فضي'
-    assert v['pending'] == {'value': 'نحو ٢٬٠٠٠ جنيه', 'note': '٤٠ دولار · تراجعه الإدارة'}
+    assert v['pending'] == {'value': 'نحو ٢٬٠٠٠ جنيه', 'note': '٤٠ دولار، تراجعه الإدارة'}
     # الرصيد صفر والمستثمَر غير صفر ⇒ السعر من المستثمَر
     z = dict(W, balance=0, balance_egp=0)
     v = L('walletView', z)
@@ -426,7 +426,7 @@ def test_opp_card_dollars_and_the_zero_cases():
         assert L('oppCard', dict(o, status=st))['chip']['t'] == want
     z = L('oppCard', dict(o, expected_roi=0, target_amount=0, min_investment=0, current_funded=150, funding_percent=0))
     assert z['showBar'] is False and z['roiText'] == 'غير محدد بعد' and z['roiNote'] == '' and z['minText'] == 'غير محدد بعد'
-    assert z['progressText'] == 'جُمع ١٥٠ دولار · الهدف غير محدد بعد'
+    assert z['progressText'] == 'جُمع ١٥٠ دولار، الهدف غير محدد بعد'
     blob = json.dumps(z, ensure_ascii=False)
     assert not re.search('(?<![٠-٩])٠٪', blob) and not re.search('(?<![٠-٩])٠ دولار', blob) and 'جنيه' not in json.dumps(c, ensure_ascii=False)
     assert L('oppCard', dict(o, funding_percent=240))['pct'] == 100

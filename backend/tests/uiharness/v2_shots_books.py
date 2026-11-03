@@ -162,7 +162,7 @@ def flow_books(browser, h, pre, viewport, mobile):
             PROBLEMS.append('%s01: ترتيب الممرّات %r' % (pre, info['lanes']))
         if not info['search'] or not info['rejHidden'] or info['btn'] != 'ابدأ المراجعة' or 'وعرضان' not in (info['offlink'] or ''):
             PROBLEMS.append('%s01: القائمة ناقصة %r' % (pre, {k: info[k] for k in ('search', 'rejHidden', 'btn', 'offlink')}))
-        if info['tabs'] != ['مراجعة العروض', 'طلبات القرّاء', 'الكتب']:
+        if info['tabs'] != ['مراجعة العروض', 'طلبات القرّاء', 'الكتب', 'كتبنا']:
             PROBLEMS.append('%s01: تبويبات الكتب %r' % (pre, info))
         if lanes.get('review') != '٣' or lanes.get('noprice') != '١' or lanes.get('hiddenSold') != '١':
             PROBLEMS.append('%s01: عدّادات القرار %r' % (pre, lanes))
@@ -447,7 +447,7 @@ def flow_books(browser, h, pre, viewport, mobile):
         page.click('#bk_rev')
         page.wait_for_selector('#bk_go')
         diff = page.inner_text('#bk_s2')
-        for need in ('الآن', 'بعد التعديل', 'السعر', '٢٥٠ جنيه', '٢٩٩٫٥ جنيه', 'يسري على المشترين القادمين فقط', 'المنصة ٢٠٪'):
+        for need in ('الآن', 'بعد التعديل', 'السعر', '٢٥٠ جنيه', '٢٩٩٫٥٠ جنيه', 'يسري على المشترين القادمين فقط', 'المنصة ٢٠٪'):
             if need not in diff:
                 PROBLEMS.append('%s06b: المراجعة ناقصة «%s» %r' % (pre, need, diff))
         bshot(page, pre + '06b-edit-diff.jpg')

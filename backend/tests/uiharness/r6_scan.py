@@ -5,7 +5,8 @@
     cd backend && python3 -B tests/uiharness/r6_scan.py <script.py> <out_dir> <scan.json> [باقي الوسائط للسكربت]
 
 الفحوص (في كل لقطة موبايل):
-  dot      : «·» ملاصقة لرقم (عربي أو لاتيني)
+  dot      : «·» ملاصقة لرقم (عربي أو لاتيني)، في النص الظاهر أو في title وaria-label وplaceholder
+  comma    : مسافة قبل الفاصلة العربية «،» بعد رقم (أثر استبدال «·» الخاطئ: «١٢٨ ، انضمّ»)
   tap      : هدف لمس ظاهر أقل من ٤٤px في الطول أو العرض (أزرار وروابط وخانات، ما عدا الرابط المضمّن في فقرة)
   font     : نص ظاهر أصغر من ١٢px
   tabs     : شريط تبويبات أعرض من الشاشة (ومعه هل فيه إشارة تلاشٍ)
@@ -44,12 +45,21 @@ JS = r"""() => {
     if (e.className && typeof e.className === 'string') s += '.' + e.className.trim().split(/\s+/).slice(0, 2).join('.');
     return s;
   };
-  const out = {tap: [], font: [], tabs: [], hscroll: 0, dot: []};
+  const out = {tap: [], font: [], tabs: [], hscroll: 0, dot: [], comma: []};
   const sw = Math.max(document.documentElement.scrollWidth, document.body.scrollWidth);
   if (sw > W + 1) out.hscroll = sw;
   const txt = document.body.innerText || '';
   const m = txt.match(/.{0,10}(?:[0-9٠-٩]\s*[·•]|[·•]\s*[0-9٠-٩]).{0,10}/g);
   if (m) out.dot = m.slice(0, 6);
+  document.querySelectorAll('[title],[aria-label],[placeholder]').forEach((e) => {
+    ['title', 'aria-label', 'placeholder'].forEach((a) => {
+      const v = e.getAttribute(a) || '';
+      const mm = v.match(/.{0,10}(?:[0-9٠-٩]\s*[·•]|[·•]\s*[0-9٠-٩]).{0,10}/);
+      if (mm && out.dot.length < 6) out.dot.push('@' + a + ': ' + mm[0]);
+    });
+  });
+  const mc = txt.match(/.{0,10}[0-9٠-٩٪%]\s+،.{0,10}/g);
+  if (mc) out.comma = mc.slice(0, 6);
   // أهداف اللمس
   document.querySelectorAll('a[href],button,input:not([type=hidden]):not([type=checkbox]):not([type=radio]),select,textarea,[role=button],[role=tab],summary,[data-a],[onclick]').forEach((e) => {
     if (!vis(e)) return;
@@ -100,7 +110,7 @@ def _patched(self, *a, **k):
         name = os.path.basename(path)
         if name and vp.get('width', 9999) <= 460:
             d = self.evaluate(JS)
-            if d['dot'] or d['tap'] or d['font'] or d['tabs'] or d['hscroll']:
+            if d['dot'] or d['comma'] or d['tap'] or d['font'] or d['tabs'] or d['hscroll']:
                 RESULTS[name] = d
             else:
                 RESULTS.setdefault('__clean__', []).append(name)

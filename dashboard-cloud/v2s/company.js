@@ -353,7 +353,7 @@
     else if (agreed) amount = 'المتفق عليه ' + agreed;
     var ch = parts.paidKnown ? CO.partnerChip(r) : null;
     return '<div class="co-pr"><span class="co-av" style="background:' + partnerColor(parts, r.id) + '">' + esc((r.name || '?').trim().charAt(0)) + '</span>'
-      + '<div class="co-pt"><b>' + esc(r.name) + '</b><small>' + esc(roleLabel(r.role) + ' · ' + U.fmt(r.equity) + '٪') + '</small></div>'
+      + '<div class="co-pt"><b>' + esc(r.name) + '</b><small>' + esc(roleLabel(r.role) + '، ' + U.fmt(r.equity) + '٪') + '</small></div>'
       + '<div class="co-pa">' + (amount ? '<span>' + esc(amount) + '</span>' : '') + (compactNoChip ? '' : chip(ch)) + '</div></div>';
   }
   function partnersCard(b) {
@@ -371,7 +371,7 @@
         + '<div class="co-prs">' + shown.map(function (r) { return partnerRow(r, parts); }).join('') + '</div>'
         + (parts.rows.length > 3 ? lnk('الكل (' + arN(parts.rows.length) + ')', 'goto', ' data-t="partners"') : '')
         + '<div class="co-foot"><b>آخر الحركات</b>' + (moves === null ? '<span>' + na() + '</span>' : (moves.length ? moves.map(function (m) {
-            return '<p><span>' + esc(m.description || 'حركة') + '</span><em>' + esc(U.dateText(m.date) + ' · ' + money(m.amount, m.currency)) + '</em></p>'; }).join('') : '<p><span>لا حركات مسجّلة</span></p>')) + '</div>';
+            return '<p><span>' + esc(m.description || 'حركة') + '</span><em>' + esc(U.dateText(m.date) + '، ' + money(m.amount, m.currency)) + '</em></p>'; }).join('') : '<p><span>لا حركات مسجّلة</span></p>')) + '</div>';
     }
     return card('المؤسسون والشركاء', lnkc('أضف شريكًا', 'addPartner', 'co-hd') , body + '<div class="co-btm">' + btn2('أضف شريكًا', 'addPartner') + '</div>', 'co-c-partners');
   }
@@ -429,7 +429,7 @@
         + (c.deal === 'fixed' || c.deal === 'fixed_plus_percent' ? kv('المبلغ الثابت', esc(money(c.fixed_amount, c.currency))) : '')
         + kv('مستحق لنا', due ? esc(money(due.amount, due.currency)) : na(), 'due');
     }
-    return '<article class="co-adm"><h3>' + esc(c.name) + '</h3><p class="co-deal">' + esc((c.offer ? c.offer + ' · ' : '') + CO.dealText(c)) + '</p>' + inner + '</article>';
+    return '<article class="co-adm"><h3>' + esc(c.name) + '</h3><p class="co-deal">' + esc((c.offer ? c.offer + '، ' : '') + CO.dealText(c)) + '</p>' + inner + '</article>';
   }
   function unsentResults(ads) {
     var out = [];
@@ -460,7 +460,7 @@
       var cnt = !cc ? null : 'الآن: ' + [cc.courses == null ? 'الدورات ' + NA : U.U(cc.courses, ['دورة مسجّلة واحدة', 'دورتان مسجّلتان', 'دورات مسجّلة', 'دورة مسجّلة']),
         cc.students == null ? 'الطلاب ' + NA : U.U(cc.students, ['طالب واحد', 'طالبان', 'طلاب', 'طالبًا'])].join('، ');
       if (!cc) nowLine = 'الآن: دورات وطلاب ' + NA;
-      else if (cur) nowLine = cnt + ' — هدف ' + CO.monthName(cur.month) + ': ' + U.U(cur.target_courses || 0, ['دورة واحدة', 'دورتان', 'دورات', 'دورة']) + ' · ' + U.U(cur.target_students || 0, ['طالب واحد', 'طالبان', 'طلاب', 'طالبًا']) + '.';
+      else if (cur) nowLine = cnt + ' — هدف ' + CO.monthName(cur.month) + ': ' + U.U(cur.target_courses || 0, ['دورة واحدة', 'دورتان', 'دورات', 'دورة']) + '، ' + U.U(cur.target_students || 0, ['طالب واحد', 'طالبان', 'طلاب', 'طالبًا']) + '.';
       else nowLine = cnt + '.';      // سطر «لم يُحدَّد هدف» يأتي من سطر العقل أعلاه: لا تكرار
       var rows = CO.targetRows(fc, dash, now()) || [];
       var shown = S.oldTargets ? rows : rows.slice(-6);
@@ -603,7 +603,7 @@
     if (!assets) eq = isLoad('assets') ? loadingBlock('المعدات') : '<div class="co-empty"><b>المعدات ' + na() + '.</b>' + btn2('أعد المحاولة', 'retry') + '</div>';
     else {
       var totV = assets.reduce(function (s, a) { return s + (a.value_egp || 0); }, 0), totR = assets.reduce(function (s, a) { return s + (a.monthly_rent_egp || 0); }, 0);
-      eq = '<p class="co-sumline">' + esc(U.U(assets.length, ['بند واحد', 'بندان', 'بنود', 'بندًا']) + ' · القيمة ' + money(totV, 'EGP') + ' · إيجار شهري للشركة ' + money(totR, 'EGP')) + '</p>'
+      eq = '<p class="co-sumline">' + esc(U.U(assets.length, ['بند واحد', 'بندان', 'بنود', 'بندًا']) + '، القيمة ' + money(totV, 'EGP') + '، إيجار شهري للشركة ' + money(totR, 'EGP')) + '</p>'
         + (assets.length ? '<div class="co-list">' + assets.map(function (a) {
           return '<div class="co-lr" data-id="a' + esc(a.id) + '"><div class="co-lm"><b>' + esc(a.name) + '</b><small>' + esc((CO.CAT_LABEL[a.category] || a.category || 'معدة') + ' · ملك: ' + (a.owner || 'الشركة')) + '</small></div>'
             + '<div class="co-la"><b>' + ((a.value_egp || 0) > 0 ? esc(money(a.value_egp, 'EGP')) : 'بلا قيمة مسجّلة') + '</b>' + ((a.monthly_rent_egp || 0) > 0 ? '<small>إيجار ' + esc(money(a.monthly_rent_egp, 'EGP')) + ' شهريًا</small>' : '') + chip({ text: CO.STATUS_LABEL[a.status] || a.status || 'معدة', tone: 'neutral' }) + '</div>'
@@ -615,7 +615,7 @@
     if (!sorted) sb = isLoad('subs') ? loadingBlock('الاشتراكات') : '<div class="co-empty"><b>الاشتراكات ' + na() + '.</b>' + btn2('أعد المحاولة', 'retry') + '</div>';
     else {
       var m = lines(subsMonthly(sorted)), y = lines(subsYearly(sorted));
-      sb = '<p class="co-sumline">' + (sorted.length ? 'شهريًا: ' + esc(m || '—') + ' · سنويًا: ' + esc(y || '—') : 'لا اشتراكات مسجّلة بعد.') + '</p>'
+      sb = '<p class="co-sumline">' + (sorted.length ? 'شهريًا: ' + esc(m || '—') + '، سنويًا: ' + esc(y || '—') : 'لا اشتراكات مسجّلة بعد.') + '</p>'
         + (sorted.length ? '<div class="co-list">' + sorted.map(function (s, i) {
           var rc = CO.renewChip(s, t), stopped = s.status === 'stopped';
           var vis = stopped ? btn2('أعد تشغيله', 'resumeSub', ' data-id="' + esc(s.id) + '"')
@@ -691,7 +691,7 @@
         + '<span data-l="مستحق لنا">' + (due ? '<b>' + esc(money(due.amount, due.currency)) + '</b>' : na()) + '</span><span data-l="الحالة">' + resultStatus(r) + '</span>'
         + '<span class="act">' + btn2('كشف الحساب', 'statement', ' data-id="' + esc(r.id) + '" data-c="' + esc(c.id) + '"') + '</span></div>'; }).join('') + '</div>'
       + (res.length > 6 ? lnk(showAll ? 'أخفِ الأقدم' : 'الأقدم', 'oldAds', ' data-c="' + esc(c.id) + '"') : '') : '<p class="co-none">لم تُسجَّل نتائج بعد.</p>';
-    return '<section class="co-card co-cl"><header class="co-ch"><div><h2>' + esc(c.name) + '</h2><p class="co-deal">' + esc((c.offer ? c.offer + ' · ' : '') + CO.dealText(c)) + '</p></div></header>'
+    return '<section class="co-card co-cl"><header class="co-ch"><div><h2>' + esc(c.name) + '</h2><p class="co-deal">' + esc((c.offer ? c.offer + '، ' : '') + CO.dealText(c)) + '</p></div></header>'
       + ledgerLine(c) + (c.status === 'active' ? visitLine(c.ref_code) : '') + tbl
       + '<div class="co-bar">' + btn2('سجّل نتيجة شهر', 'addResult', ' data-c="' + esc(c.id) + '"') + lnk('عدّل الاتفاق', 'editClient', ' data-c="' + esc(c.id) + '"') + '</div></section>';
   }
@@ -1023,7 +1023,7 @@
     sheet({
       title: 'انقلها إلى الاشتراكات', btnReview: 'راجع', btnConfirm: 'أكّد النقل',
       form: '<p class="co-lead sm">اختر البنود التي ستنتقل:</p><div class="co-perms one">' + rows.map(function (a) {
-        return '<label class="co-ck"><input type="checkbox" class="co-imp" value="' + esc(a.id) + '" checked><span>' + esc(a.name + ' · ' + money(a.monthly_rent_egp, 'EGP') + ' شهريًا') + '</span></label>'; }).join('') + '</div>',
+        return '<label class="co-ck"><input type="checkbox" class="co-imp" value="' + esc(a.id) + '" checked><span>' + esc(a.name + '، ' + money(a.monthly_rent_egp, 'EGP') + ' شهريًا') + '</span></label>'; }).join('') + '</div>',
       collect: function (s) { var ids = qa('.co-imp:checked', s).map(function (c) { return +c.value; }); return ids.length ? { ok: true, payload: { ids: ids } } : { ok: false, error: 'اختر بندًا واحدًا على الأقل' }; },
       review: function (p) { return { lead: 'راجع قبل التأكيد', items: ['ستُنقل ' + U.U(p.ids.length, ['بند واحد', 'بندان', 'بنود', 'بندًا']) + ' من المعدات إلى الاشتراكات (شهريًا، بالجنيه، بلا موعد تجديد — أضف الموعد بعدها).'] }; },
       send: function (p) { return api('POST', '/v2/company/subscriptions/import', { asset_ids: p.ids, confirmed: true }); },

@@ -147,7 +147,7 @@
     if (!r.refundable) btn = '<p class="v3-norefund">' + esc(r.noRefundText || 'الكتب لا تُسترد') + '</p>';
     else btn = '<button type="button" class="v3-btn1" data-a="refund" data-id="' + esc(r.id) + '">' + esc(r.button || 'افتح وقرّر') + '</button>';
     return '<li class="v3-rf" data-id="' + esc(r.id) + '"><div class="v3-pid"><b>' + esc(r.title) + '</b>'
-      + '<span>' + (r.person ? personLink(r.who, r.person.email) : esc(r.who)) + (r.since ? ' · ' + esc(r.since) : '') + '</span>'
+      + '<span>' + (r.person ? personLink(r.who, r.person.email) : esc(r.who)) + (r.since ? '، ' + esc(r.since) : '') + '</span>'
       + '<div class="v3-brain">' + BRAIN + '<p>' + esc(r.brain) + '</p></div></div>'
       + '<div class="v3-pm"><b class="v3-amt">' + esc(r.amountText) + '</b></div>' + btn + '</li>';
   }
@@ -397,7 +397,7 @@
   // ------------------------------------------------------------------ الكتب: مراجعة العروض
   function offerCard(o) {
     return '<article class="v3-t tone-wait v3-offer" data-id="' + esc(o.id) + '"><div class="v3-strip"><span class="v3-type">عرض ' + esc(o.typeText) + ' للمراجعة</span>' + (o.since ? '<time class="v3-time">' + esc(o.since) + '</time>' : '') + '</div>'
-      + '<div class="v3-body"><h3>' + esc(o.title) + '</h3><p class="v3-line">' + (o.ownerEmail ? personLink(o.ownerName, o.ownerEmail) : esc(o.ownerName)) + (o.agreementText ? ' · ' + esc(o.agreementText) : '') + '</p>'
+      + '<div class="v3-body"><h3>' + esc(o.title) + '</h3><p class="v3-line">' + (o.ownerEmail ? personLink(o.ownerName, o.ownerEmail) : esc(o.ownerName)) + (o.agreementText ? '، ' + esc(o.agreementText) : '') + '</p>'
       + (o.about ? '<p class="v3-line v3-mute">' + esc(o.about) + '</p>' : '')
       + '<p class="v3-amount">' + (o.suggestedText ? 'السعر المقترح: ' + esc(o.suggestedText) : '<span class="v3-mute">لم يقترح سعرًا</span>') + '</p>'
       + (o.brain ? '<div class="v3-brain">' + BRAIN + '<p>' + esc(o.brain) + '</p></div>' : '')
@@ -420,7 +420,7 @@
     var res = L.v2Requests(data('requests'), now());
     var body;
     function gRow(g, approved) {
-      return '<li class="v3-rq" data-id="' + esc(g.firstId) + '"><div class="v3-pid"><b>' + esc(g.topic) + '</b><span>' + esc(g.typeText) + ' · ' + esc(g.countText) + (g.lastText ? ' · آخر طلب ' + esc(g.lastText) : '') + '</span></div>'
+      return '<li class="v3-rq" data-id="' + esc(g.firstId) + '"><div class="v3-pid"><b>' + esc(g.topic) + '</b><span>' + esc(g.typeText) + '، ' + esc(g.countText) + (g.lastText ? '، آخر طلب ' + esc(g.lastText) : '') + '</span></div>'
         + (approved ? '<span class="v3-vis on">معتمد</span>' : '<div class="v3-acts two"><button type="button" class="v3-btn1" data-a="rqok" data-key="' + esc(g.key) + '">اعتمد</button><button type="button" class="v3-btn2" data-a="rqhide" data-key="' + esc(g.key) + '">اخفِ</button></div>') + '</li>';
     }
     if (!res) body = srcState('requests') === 'closed' ? '<div class="v3-empty"><b>متجر الكتب لم يُفتح بعد</b></div>' : (srcState('requests') === 'loading' || srcState('requests') === 'idle' ? loadingBlock('طلبات القرّاء') : unavailable('طلبات القرّاء'));

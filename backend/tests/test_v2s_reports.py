@@ -793,7 +793,7 @@ DELIVERY_ROWS = [
     ({'setting': False, 'bridge': 'ok', 'platform_enabled': True, 'last_sent_week': None}, 'الإرسال كل أحد: متوقف'),
     ({'setting': True, 'bridge': 'ok', 'platform_enabled': True, 'last_sent_week': None}, 'يصلك هذا التقرير كل أحد ٨ صباحًا على تليجرام'),
     ({'setting': True, 'bridge': 'ok', 'platform_enabled': True, 'last_sent_week': '2026-10-18'},
-     'يصلك هذا التقرير كل أحد ٨ صباحًا على تليجرام · آخر إرسال: أسبوع ١٨ أكتوبر'),
+     'يصلك هذا التقرير كل أحد ٨ صباحًا على تليجرام، آخر إرسال: أسبوع ١٨ أكتوبر'),
     ({'setting': True, 'bridge': 'ok', 'platform_enabled': False, 'last_sent_week': None}, 'الإرسال مفعّل هنا، والمنصة لم تفعّله بعد'),
 ]
 

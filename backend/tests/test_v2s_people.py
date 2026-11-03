@@ -459,7 +459,7 @@ def test_messages_read_the_platform_field_names_oldest_first_and_flag_the_old_on
     assert f['ld-2']['title'] == 'بلا' and f['ld-2']['sub'] == 'يريد: عرض' and f['ld-2']['primary']['label'] == 'ردّ بالبريد'
     assert f['ld-3']['primary'] == {'label': 'تمت المتابعة', 'act': {'do': 'resolve'}} and f['ld-3']['title'] == 'بلا اسم'
     assert f['ld-1']['brain'] == 'طلب التواصل دون إنشاء حساب'
-    assert M['head']['text'].startswith('تنتظر الرد ٨: ٢ من الموقع · ٣ من المحادثة · ٣ طلبات تواصل.')
+    assert M['head']['text'].startswith('تنتظر الرد ٨: ٢ من الموقع، ٣ من المحادثة، ٣ طلبات تواصل.')
 
 
 @needs_node

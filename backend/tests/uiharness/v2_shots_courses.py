@@ -185,9 +185,10 @@ def flow_main(browser, h, pre, vp, mobile):
       timers: [...document.querySelectorAll('.v2co-col[data-col="review"] .v2co-time')].map(t => [t.textContent.trim(), t.className])})""")
     if info['tabs'] != ['الدورات', 'المدرّبون', 'الدورات الحيّة', 'ما يطلبه الناس', 'عروض الأسعار', 'كل السجلات']:
         PROBLEMS.append('%s01: تبويبات القسم %r' % (pre, info['tabs']))
-    if info['sum'] != '١١ دورة منشورة · ٣ تحت البناء · دورتان تنتظرانك':
+    if info['sum'] != '١١ دورة منشورة، ٣ تحت البناء، دورتان تنتظرانك':
         PROBLEMS.append('%s01: سطر الملخّص %r' % (pre, info['sum']))
-    if info['imgs'] != 0 or info['covers'] < 8:
+    # على الموبايل لا مستطيل حرف كبير بلا صورة (الجولة r6)؛ على الشاشات الأوسع تبقى الأغلفة الورقية
+    if info['imgs'] != 0 or (info['covers'] != 0 if mobile else info['covers'] < 8):
         PROBLEMS.append('%s01: الأغلفة الورقية بلا صور: covers=%s imgs=%s' % (pre, info['covers'], info['imgs']))
     if sorted(info['main']) != sorted(['افتح وراجع', 'أعِدها بملاحظات']):
         PROBLEMS.append('%s01: أزرار التذاكر %r' % (pre, info['main']))

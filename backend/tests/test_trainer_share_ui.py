@@ -346,7 +346,7 @@ console.log(JSON.stringify({
     assert out['codeIgnoredWhenNotViaCode'] == {'trainer': 40, 'platform': 60}
     assert out['inactive'] == {'trainer': 50, 'platform': 50}
     assert out['garbage'] == {'trainer': 35, 'platform': 65}
-    assert out['line'] == 'نصيب المدرّب الآن: ٦٠٪ · المنصة ٤٠٪'
+    assert out['line'] == 'نصيب المدرّب الآن: ٦٠٪، المنصة ٤٠٪'
 
 
 @needs_node

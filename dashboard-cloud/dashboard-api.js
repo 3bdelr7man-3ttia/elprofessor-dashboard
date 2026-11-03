@@ -186,7 +186,7 @@
     var day = String(iso || "").slice(0, 10);
     if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) return "";
     var age = jrAge(iso);
-    return "قُدِّم " + day + (age ? " · " + age : "");
+    return "قُدِّم " + day + (age ? "، " + age : "");
   }
   // تسميات حقول نموذج الانضمام (platform-app/src/v2/SectionGate.jsx). عرضٌ فقط: أي مفتاح جديد
   // هناك يظهر هنا باسمه الخام بدل أن يختفي — فلا يضيع ما كتبه المتقدّم لو تقدّم النموذج علينا.
@@ -516,7 +516,7 @@
   function efKindLabel(f) {
     if (!efIsContract(f)) return "";
     var n = efPagesOf(f);
-    return "عقد" + (n ? " · " + money(n) + (n === 1 ? " صفحة" : n <= 10 ? " صفحات" : " صفحة") : "");
+    return "عقد" + (n ? "، " + money(n) + (n === 1 ? " صفحة" : n <= 10 ? " صفحات" : " صفحة") : "");
   }
   // اسم تخصص من مفتاحه؛ «أخرى» بنصها الحر لو اتكتب. مفتاح مش معروف ⇒ "" (ما بيتعرضش).
   function efSpecName(key, other) {
@@ -648,12 +648,12 @@
         || !!(urg && urg.state === "waiting") || noCand,
       who: f.client_first_name || "عميل",
       sub: [f.title, f.law_label, f.tier_label].filter(Boolean).join(" · "),
-      sub2: "الطرف التاني: " + (f.counterparty_name || "ما اتكتبش") + (since ? " · " + since : ""),
+      sub2: "الطرف التاني: " + (f.counterparty_name || "ما اتكتبش") + (since ? "، " + since : ""),
       // سبب وقوف الفلوس ظاهر على الصفّ نفسه (مش في التلميح بس) — بكلام المنصة.
       warnLine: blocked.map(function (b) { return b.label; }).join(" · "),
       amountLabel: efMoney(f.amount, f.currency),
       amountSub: "أجر الخبير " + efMoney(f.expert_amount, f.currency),
-      note: "أجر الخبير " + efMoney(f.expert_amount, f.currency) + " · الطرف التاني: " + (f.counterparty_name || "ما اتكتبش"),
+      note: "أجر الخبير " + efMoney(f.expert_amount, f.currency) + "، الطرف التاني: " + (f.counterparty_name || "ما اتكتبش"),
       badges: badges,
       ref: "EF-" + String(f.id || "").slice(0, 8),
       searchText: [f.title, f.counterparty_name, f.assigned_name, f.expert_name, f.client_first_name,
@@ -804,7 +804,7 @@
       sla: since ? "اتبعت للمراجعة " + since : "مستني مراجعتك", slaWarn: !!attn,
       who: f.client_first_name || "عميل",
       sub: [f.title, f.law_label, f.tier_label].filter(Boolean).join(" · "),
-      sub2: "الخبير: " + (f.expert_name || "—") + " · " + (n ? "ملفات اتسلّمت قبل كده: " + money(n) : "أول ملف على المنصة"),
+      sub2: "الخبير: " + (f.expert_name || "—") + "، " + (n ? "ملفات اتسلّمت قبل كده: " + money(n) : "أول ملف على المنصة"),
       warnLine: efBlocked(f).map(function (b) { return b.label; }).join(" · "),
       amountLabel: efMoney(f.amount, f.currency),
       amountSub: "أجر الخبير " + efMoney(f.expert_amount, f.currency),
@@ -1813,7 +1813,7 @@
               out: "خبير مؤسس — طلب انضمام كمدرّب", from: "درّب معنا", src: "shield", dest: "team",
               triage: "human", sla: relTime(at) || "بانتظار قرارك", slaWarn: false,
               note: "التخصّص: " + spec + (l.years_experience ? " · الخبرة: " + l.years_experience : "")
-                + (country ? " · البلد: " + country : "") + " — كلّمه على واتساب، وعلّم الخطوة من هنا.",
+                + (country ? "، البلد: " + country : "") + " — كلّمه على واتساب، وعلّم الخطوة من هنا.",
               ref: "FND-" + l.id, who: l.name || "بلا اسم", email: l.email || "",
               statusLabel: LABEL[st] || st,
               details: [
@@ -1849,8 +1849,8 @@
             realRows.push({
               out: "زائر مسجَّل — طلب فتح المنصّة", from: "المنصّة", src: "users", dest: "invites",
               triage: "human", sla: relTime(reqAt) || "بانتظار قرارك", slaWarn: false,
-              note: "سجّل حسابه ودخل زائرًا" + (roleLabel ? " · " + roleLabel : "") + (u.country ? " · " + u.country : "")
-                + (u.signup_country ? " · داخل من " + countryLabelOf(u.signup_country) : "")
+              note: "سجّل حسابه ودخل زائرًا" + (roleLabel ? "، " + roleLabel : "") + (u.country ? "، " + u.country : "")
+                + (u.signup_country ? "، داخل من " + countryLabelOf(u.signup_country) : "")
                 + " — افتح له المنصّة من هنا، أو ارفض بملاحظة ويفضل زائرًا.",
               ref: "PU-" + u.id, who: u.full_name || u.name || "بلا اسم", email: u.email || "",
               statusLabel: "طلب الفتح",
@@ -1859,7 +1859,7 @@
                 { k: "الهاتف", v: u.phone || "" },
                 { k: "الصفة", v: roleLabel },
                 { k: "البلد", v: u.country || "" },
-                { k: "داخل منين", v: countryLabelOf(u.signup_country) + (u.signup_ip ? " · " + u.signup_ip : "") },
+                { k: "داخل منين", v: countryLabelOf(u.signup_country) + (u.signup_ip ? "، " + u.signup_ip : "") },
                 { k: "التخصّص", v: specLabel },
                 { k: "ليه عايز ينضم", v: u.why || "" },
                 { k: "سجّل", v: arDate(u.created_at) || "" },
@@ -1962,7 +1962,7 @@
             realRows.push({
               out: "دفعة يدوية بانتظار التأكيد", from: "الدفع المحلي", src: "wallet", dest: "escrow",
               triage: "human", sla: "طابِق الإيصال وأكّد", slaWarn: true,
-              note: (p.product_label || p.product_type || "منتج") + " · " + (p.amount != null ? p.amount : "") + " " + (p.currency || "EGP") + (p.method ? " · " + p.method : "") + (p.reference_number ? " · مرجع " + p.reference_number : "") + " — أكّد بعد مطابقة الإيصال.",
+              note: (p.product_label || p.product_type || "منتج") + "، " + (p.amount != null ? p.amount : "") + " " + (p.currency || "EGP") + (p.method ? "، " + p.method : "") + (p.reference_number ? "، مرجع " + p.reference_number : "") + " — أكّد بعد مطابقة الإيصال.",
               ref: "PAY-" + p.id, who: p.user_name || p.user_email || p.user_phone || "—",
               apiKind: "manual_payment", personEmail: p.user_email || "", apiId: p.id, canReject: true,
               // المبلغ والعملة على الصفّ نفسه (لا انتزاع من نصّ الملاحظة): تبويب «الدفعات

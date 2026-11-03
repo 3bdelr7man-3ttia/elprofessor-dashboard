@@ -305,12 +305,12 @@
     }).join('') + '</ul>';
     var ed = E.lesson && lessonById(E.lesson) ? lessonEditorHtml(E.lesson) : '<div class="v2co-empty"><b>اختر درسًا لتحريره</b><p>يظهر محتوى الدرس هنا حسب نوعه: تفاعلي أو مسجّل أو مباشر.</p></div>';
     var cur = E.lesson && lessonById(E.lesson), open = window.innerWidth >= 900 || !cur;   // في الموبايل تنطوي القائمة بعد اختيار درس ليظهر المحرّر
-    var sel = '<details class="v2ce-lsel"' + (open ? ' open' : '') + '><summary>' + (cur ? 'الدرس ' + ar(cur.no) + ' · ' + esc(cur.lesson.title || 'بلا عنوان') + ' — غيّر الدرس' : 'اختر درسًا') + '</summary>' + list + '</details>';
+    var sel = '<details class="v2ce-lsel"' + (open ? ' open' : '') + '><summary>' + (cur ? 'الدرس ' + ar(cur.no) + ': ' + esc(cur.lesson.title || 'بلا عنوان') + ' — غيّر الدرس' : 'اختر درسًا') + '</summary>' + list + '</details>';
     return '<div class="v2ce-split"><aside class="v2ce-side">' + sel + '</aside><div class="v2ce-main" data-ce-lesson>' + ed + '</div></div>';
   }
   function lessonEditorHtml(id) {
     var x = lessonById(id), l = x.lesson, d = draftOf(id);
-    var head = '<div class="v2ce-lh"><h2 class="v2co-h2">الدرس ' + ar(x.no) + ' · ' + esc(K.KIND_AR[l.kind] || '') + '</h2>' + (lessonDirty(id) ? chip('تعديلات لم تُحفظ', 'amber') : (l.state_ar ? chip(l.state_ar, STATE_TONE[l.state]) : '')) + '</div>';
+    var head = '<div class="v2ce-lh"><h2 class="v2co-h2">الدرس ' + ar(x.no) + ': ' + esc(K.KIND_AR[l.kind] || '') + '</h2>' + (lessonDirty(id) ? chip('تعديلات لم تُحفظ', 'amber') : (l.state_ar ? chip(l.state_ar, STATE_TONE[l.state]) : '')) + '</div>';
     var body = field('les', 'title', d.title, { label: 'عنوان الدرس', max: 200 });
     if (l.kind === 'interactive') body += interactiveHtml(id, d);
     else if (l.kind === 'recorded') body += recordedHtml(id, d, l);
@@ -431,7 +431,7 @@
       out += '<div class="v2ce-script">' + para(dr.transcript) + '</div>';
       add = '<button type="button" class="v2co-btn1" data-ce="as-add" data-scope="' + scope + '">أضفه إلى الدرس</button>';
     } else if (r.kind === 'from_material' && dr.units) {
-      out += '<p class="v2co-fine">' + esc(ar(r.units || dr.units.length) + ' وحدات · ' + ar(r.lessons || 0) + ' دروس') + '</p>' + dr.units.map(function (u) {
+      out += '<p class="v2co-fine">' + esc(ar(r.units || dr.units.length) + ' وحدات، ' + ar(r.lessons || 0) + ' دروس') + '</p>' + dr.units.map(function (u) {
         return '<div class="v2ce-du"><b>' + esc(u.title) + '</b><ul>' + (u.lessons || []).map(function (l) { return '<li>' + esc(l.title) + (l.state_ar ? ' ' + chip(l.state_ar, 'amber') : '') + '</li>'; }).join('') + '</ul></div>'; }).join('');
       add = '<button type="button" class="v2co-btn1" data-ce="as-build">أنشئ الهيكل منها</button>';
     } else if (r.kind === 'free' || typeof r.answer === 'string') {
@@ -446,7 +446,7 @@
     var c = E.course, st = c.status, gaps = c.gaps || [], notes = (c.notes && c.notes.items) || [];
     var gp = gaps.length ? '<div class="v2co-warn" role="status">' + esc(K.gapsLine(c)) + '</div>' : '<div class="v2co-ok" role="status">' + esc(K.gapsLine(c)) + '</div>';
     var nt = '<section class="v2co-card v2ce-card"><h2 class="v2co-h2">ملاحظات المراجعة</h2>' + (c.notes && c.notes.summary_ar ? '<p class="v2co-fine">' + esc(c.notes.summary_ar) + '</p>' : '')
-      + (notes.length ? '<ul class="v2ce-notes">' + notes.map(function (n) { return '<li><div class="v2ce-nh"><b>' + esc(n.target_label || '') + (n.target_title ? ' · ' + esc(n.target_title) : '') + '</b>' + chip(n.status_ar || '', n.status === 'edited' ? 'green' : 'amber') + '</div><p>' + esc(n.text) + '</p></li>'; }).join('') + '</ul>' : '<p class="v2co-none">لا ملاحظات على هذه الدورة</p>') + '</section>';
+      + (notes.length ? '<ul class="v2ce-notes">' + notes.map(function (n) { return '<li><div class="v2ce-nh"><b>' + esc(n.target_label || '') + (n.target_title ? '، ' + esc(n.target_title) : '') + '</b>' + chip(n.status_ar || '', n.status === 'edited' ? 'green' : 'amber') + '</div><p>' + esc(n.text) + '</p></li>'; }).join('') + '</ul>' : '<p class="v2co-none">لا ملاحظات على هذه الدورة</p>') + '</section>';
     var dirty = dirtyList();
     var warn = dirty.length ? '<div class="v2co-warn" role="status">عندك تعديلات لم تُحفظ: ' + esc(dirty.join('، ')) + '. احفظها قبل النشر.</div>' : '';
     var acts = '';
@@ -539,8 +539,8 @@
   function openReturn() {
     var k = kit(), c = E.course, rows = [{ kind: 'course', id: '', label: 'الدورة كلها' }];
     ((c.outline && c.outline.units) || []).forEach(function (u, ui) {
-      rows.push({ kind: 'unit', id: u.id, label: 'الوحدة ' + ar(ui + 1) + ' · ' + (u.title || '') });
-      (u.lessons || []).forEach(function (l) { rows.push({ kind: 'lesson', id: l.id, label: 'الدرس ' + ar(l.no || 0) + ' · ' + (l.title || '') }); });
+      rows.push({ kind: 'unit', id: u.id, label: 'الوحدة ' + ar(ui + 1) + ': ' + (u.title || '') });
+      (u.lessons || []).forEach(function (l) { rows.push({ kind: 'lesson', id: l.id, label: 'الدرس ' + ar(l.no || 0) + ': ' + (l.title || '') }); });
     });
     var form = '<p class="v2co-lead">اختر ما تعلّق عليه، واكتب ملاحظة لكل اختيار. تصل الملاحظات إلى صاحب الدورة.</p>' + rows.map(function (r, i) {
       return '<div class="v2ce-rr"><label class="v2ce-chk"><input type="checkbox" data-rr="' + i + '"> ' + esc(r.label) + '</label><textarea rows="2" maxlength="600" data-rrt="' + i + '" aria-label="ملاحظة ' + esc(r.label) + '" hidden></textarea></div>';

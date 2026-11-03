@@ -269,7 +269,10 @@ def flow_glossary(browser, h, pre, vp, mobile):
         chips = page.evaluate("() => [...document.querySelectorAll('[data-k=gst]')].map(b => b.textContent.trim())")
         expect(chips == ['الكل', 'مؤكّد', 'تحت التأكيد', 'مسودة'], '%s02: شرائح الحالة %r' % (pre, chips))
         areas = page.evaluate("() => [...document.querySelectorAll('[data-k=garea]')].map(b => b.textContent.trim())")
-        expect(len(areas) == 11 and areas[0] == 'الكل' and areas[-1].startswith('أخرى') and areas[1].startswith('عقود (٥)'), '%s02: شرائح المجال %r' % (pre, areas))
+        # ١٤ شريحة: «الكل» + ٩ مجالات قديمة + المجالات الجديدة (عقارات، بنوك ومصارف، البيانات والخصوصية) + «أخرى» أخيرة. العدد دائرة منفصلة: «عقود ٥» بلا أقواس.
+        expect(len(areas) == 14 and areas[0] == 'الكل' and areas[-1].startswith('أخرى') and areas[1].startswith('عقود ٥'), '%s02: شرائح المجال %r' % (pre, areas))
+        new_idx = [next((i for i, a in enumerate(areas) if a.startswith(n)), -1) for n in ('عقارات', 'بنوك ومصارف', 'البيانات والخصوصية')]
+        expect(all(i > 0 for i in new_idx) and max(new_idx) < len(areas) - 1 and new_idx == sorted(new_idx), '%s02: المجالات الجديدة قبل «أخرى» وبالترتيب %r' % (pre, areas))
         mshot(page, pre + '02-list.jpg')
         for q, n in (('قاهره', 1), ('ARBITRAL', 1), ('sentence', 1), ('هيئة', 1), ('hardship-clause', 1), ('zzzz', 0), ('', 14)):
             page.fill('#shQ', q)
@@ -409,7 +412,7 @@ def flow_glossary(browser, h, pre, vp, mobile):
         vals = page.evaluate("() => ({ar: f_ar.value, en: f_en.value, area: f_area.value, slug: f_slug.value, slugDisabled: f_slug.disabled, opts: [...f_area.options].map(o => o.textContent.trim()), "
                              "chips: [...document.querySelectorAll('.g-rc')].map(c => c.innerText.replace(/\\s+/g, ' ').trim())})")
         expect(vals['ar'] == 'القوة القاهرة' and vals['en'] == 'force majeure' and vals['area'] == 'contracts' and vals['slug'] == 'force-majeure' and vals['slugDisabled'], '%s06: النموذج %r' % (pre, vals))
-        expect(vals['opts'][-1] == 'أخرى' and len(vals['opts']) == 10, '%s06: «أخرى» آخر المجالات %r' % (pre, vals['opts']))
+        expect(vals['opts'][-1] == 'أخرى' and len(vals['opts']) == 13 and vals['opts'][-4:-1] == ['عقارات', 'بنوك ومصارف', 'البيانات والخصوصية'], '%s06: «أخرى» آخر المجالات %r' % (pre, vals['opts']))
         expect(len(vals['chips']) == 3 and vals['chips'][0].startswith('استحالة التنفيذ') and 'لم يُستورد بعد' in vals['chips'][2], '%s06: القريبة في النموذج %r' % (pre, vals['chips']))
         expect('لا يتغيّر بعد أول نشر' in sheet_text(page), '%s06: ملاحظة تجمّد الرابط' % pre)
         click(page, '#shNext', 300)
@@ -469,7 +472,7 @@ def flow_glossary(browser, h, pre, vp, mobile):
         click(page, '[data-a="gnew"]', 400)
         sheet_open(page)
         opts = page.evaluate("() => [...document.querySelectorAll('#f_area option')].map(o => o.textContent.trim())")
-        expect(opts[0] == 'اختر المجال' and opts[-1] == 'أخرى' and len(opts) == 11, '%s07: المجال بـ«أخرى» %r' % (pre, opts))
+        expect(opts[0] == 'اختر المجال' and opts[-1] == 'أخرى' and len(opts) == 14 and opts[-4:-1] == ['عقارات', 'بنوك ومصارف', 'البيانات والخصوصية'], '%s07: المجال بـ«أخرى» %r' % (pre, opts))
         click(page, '#shNext', 300)
         errs = page.evaluate("() => [...document.querySelectorAll('[data-e]')].filter(e => e.textContent.trim()).map(e => e.dataset.e)")
         expect({'ar', 'en', 'area', 'definition_ar'} <= set(errs), '%s07: الناقص مرفوض %r' % (pre, errs))

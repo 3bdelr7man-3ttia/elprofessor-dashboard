@@ -276,7 +276,7 @@
     if (L2.state !== 'ready') return '<section class="v2p-later"><div class="v2p-lh"><b>' + title + '</b></div><p class="v2p-none">' + (L2.state === 'missing' ? 'هذه البيانات غير متاحة بعد من المنصة' : 'تعذّر جلب هذه القائمة — أعد المحاولة') + '</p>'
       + (L2.state === 'failed' ? '<button type="button" class="v2p-btn2" data-a="retry" data-key="pendingUsers">أعد المحاولة</button>' : '') + '</section>';
     var open = S.laterOpen;
-    var cnt = '(' + ar(L2.rows.length) + ')' + (L2.total != null && L2.total > L2.rows.length ? ' · معروض ' + ar(L2.shown) + ' من ' + ar(L2.total) : '');
+    var cnt = '(' + ar(L2.rows.length) + ')' + (L2.total != null && L2.total > L2.rows.length ? '، معروض ' + ar(L2.shown) + ' من ' + ar(L2.total) : '');
     var h = '<section class="v2p-later"><button type="button" class="v2p-lh" data-a="later" aria-expanded="' + open + '"><b>' + title + ' ' + esc(cnt) + '</b><span class="v2p-caret" aria-hidden="true">' + (open ? '▴' : '▾') + '</span></button>';
     if (open) {
       h += L2.rows.length ? '<ul class="v2p-lrows">' + L2.rows.map(function (r) {
@@ -980,7 +980,7 @@
       var head = '<div class="v2pm-uh"><span class="v2p-av">' + U.avatarMark(String(name).charAt(0).toUpperCase()) + '</span><div><b>' + esc(name) + '</b><div class="v2p-uch">'
         + '<span class="v2p-ch2 k-' + esc(u.role || 'member') + '">' + esc(P.ROLE[u.role] || 'عضو') + '</span>' + (u.trainer_status === 'approved' ? '<span class="v2p-ch2 k-trainer">مدرّب</span>' : '') + (u.is_test ? '<span class="v2p-ch2 k-test">تجريبي</span>' : '') + (u.is_active === false ? '<span class="v2p-ch2 k-off">موقوف</span>' : '') + '</div>'
         + '<span class="v2p-em">' + esc(u.email || '') + '</span>' + (u.phone ? '<span class="v2p-em">' + esc(u.phone) + '</span>' : '')
-        + '<span class="v2p-um">' + esc('انضمّ ' + (U.dateText(u.created_at) || NA) + ' · آخر دخول ' + (u.last_login_at ? U.agoText(u.last_login_at, now()) : 'غير متاح')) + '</span></div></div>';
+        + '<span class="v2p-um">' + esc('انضمّ ' + (U.dateText(u.created_at) || NA) + '، آخر دخول ' + (u.last_login_at ? U.agoText(u.last_login_at, now()) : 'غير متاح')) + '</span></div></div>';
       var roleBtns = ['admin', 'staff', 'member', 'investor'].map(function (r) {
         var cur = u.role === r, dis = guard.locked && !cur;
         return '<button type="button" class="v2pm-rb' + (cur ? ' on' : '') + '" data-role="' + r + '"' + (dis ? ' disabled' : '') + ' aria-pressed="' + cur + '">' + esc(P.ROLE[r]) + '</button>';
@@ -997,7 +997,7 @@
         + '<div class="v2pm-sub"><h5>الوسوم</h5>' + fld('وسوم يدوية — افصل بينها بفاصلة', 'v2pmTags', { value: tagsVal != null ? tagsVal : tags.join('، ') }) + '<button type="button" class="v2p-btn2" id="v2pmTagsGo">احفظ الوسوم</button>' + okLine(msg.tags)
         + (SEGLABEL(u.segment) ? '<p class="v2pm-mute">تصنيف المحادثة: ' + esc(SEGLABEL(u.segment)) + ' — يُحدَّد تلقائيًا ولا يُعدَّل من هنا</p>' : '') + '<div class="v2pm-err" data-err="tags" role="alert"></div></div>'
         + '<div class="v2pm-sub"><h5>الحذف</h5><button type="button" class="v2p-btn3" id="v2pmDel">احذف الحساب نهائيًا</button></div></div>';
-      var summ = 'الباقة: ' + planName + ' · ' + (tags.length ? U.U(tags.length, ['وسم واحد', 'وسمان', 'وسوم', 'وسمًا']) : 'بلا وسوم');
+      var summ = 'الباقة: ' + planName + '، ' + (tags.length ? U.U(tags.length, ['وسم واحد', 'وسمان', 'وسوم', 'وسمًا']) : 'بلا وسوم');
       var part3 = '<section class="v2pm-part"><button type="button" class="v2pm-gh" id="v2pmMore" aria-expanded="' + moreOpen + '"><b>المزيد</b><span>' + esc(summ) + '</span><i aria-hidden="true">' + (moreOpen ? '▴' : '▾') + '</i></button>' + (moreOpen ? more : '') + '</section>';
       return { html: head + part1 + part2 + part3, wire: function (root) {
         var setErr = function (k, t) { var e = q('[data-err="' + k + '"]', root); if (e) e.textContent = t; };

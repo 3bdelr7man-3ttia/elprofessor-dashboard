@@ -40,15 +40,15 @@
     if (frac) s += '٫' + (frac < 10 ? '٠' : '') + ar(frac).replace(/٠+$/, function (z) { return frac % 10 ? z : ''; });
     return neg + s;
   }
-  // مبلغ: المبلغ الصحيح كما في fmt. أما بالكسر فمنزلتان دائمًا وفاصل الآلاف مسافة رفيعة، فلا تختلط فاصلة الآلاف بفاصلة الكسر في الخط
-  // («٣ ٥٠٠٫٥٠» لا «٣٬٥٠٠٫٥» التي تُقرأ ٣٥٠٠٥) — الجولة r6.
+  // مبلغ: المبلغ الصحيح كما في fmt. أما بالكسر فمنزلتان دائمًا (٫٥٠ لا ٫٥ التي تُقرأ ٥) وبنفس فاصل الآلاف «٬» الظاهر في كل المبالغ،
+  // فلا يختلف شكل التجميع بين مبلغ صحيح ومبلغ بكسر في القائمة الواحدة — الجولة r6.
   function fmtMoney(n) {
     n = Number(n);
     if (!isFinite(n)) return '—';
     var whole = Math.floor(Math.abs(n)), frac = Math.round((Math.abs(n) - whole) * 100);
     if (frac === 100) { whole += 1; frac = 0; }
     if (!frac) return fmt(n);
-    var s = String(whole).replace(/\B(?=(\d{3})+(?!\d))/g, '\u202F').replace(/\d/g, function (d) { return DIG.charAt(+d); });
+    var s = String(whole).replace(/\B(?=(\d{3})+(?!\d))/g, '٬').replace(/\d/g, function (d) { return DIG.charAt(+d); });
     return (n < 0 ? '-' : '') + s + '٫' + (frac < 10 ? '٠' : '') + ar(frac);
   }
   // صيغة العدد العربية: forms = [المفرد الكامل, المثنّى الكامل, «عدد + جمع», «عدد + تمييز مفرد»]
@@ -1917,7 +1917,7 @@
       out['books.' + k + '.platform'] = { label: n + ' · المنصة', v: pct(t.books[k].platform) };
     });
     if (t.courses) [['base', 'الأساسية'], ['code_max', 'بالكود'], ['ads_max_bonus', 'زيادة الإعلانات'], ['owner_cap', 'السقف']].forEach(function (p) {
-      if (t.courses[p[0]] != null) out['courses.' + p[0]] = { label: 'الدورات · ' + p[1], v: p[0] === 'ads_max_bonus' ? ar(t.courses[p[0]]) + ' نقطة' : pct(t.courses[p[0]]) };
+      if (t.courses[p[0]] != null) out['courses.' + p[0]] = { label: 'الدورات: ' + p[1], v: p[0] === 'ads_max_bonus' ? ar(t.courses[p[0]]) + ' نقطة' : pct(t.courses[p[0]]) };
     });
     var lad = ladderRows(t.cases && t.cases.ladder);
     lad.forEach(function (r, i) { out['cases.' + i] = { label: 'القضايا · ' + r.upTo, v: 'المنصة ' + r.platformText }; });
@@ -2954,7 +2954,7 @@
       if (d.bridge === 'absent') return 'الإرسال كل أحد: ' + NA + ' — ينتظر تجهيز الإرسال على المنصة';
       if (d.bridge === 'failed') return 'الإرسال كل أحد: تعذّر التحقق الآن';
       if (!d.setting) return 'الإرسال كل أحد: متوقف';
-      if (d.platform_enabled) return 'يصلك هذا التقرير كل أحد ٨ صباحًا على تليجرام' + (d.last_sent_week && weekText(d.last_sent_week) ? ' · آخر إرسال: أسبوع ' + weekText(d.last_sent_week) : '');
+      if (d.platform_enabled) return 'يصلك هذا التقرير كل أحد ٨ صباحًا على تليجرام' + (d.last_sent_week && weekText(d.last_sent_week) ? '، آخر إرسال: أسبوع ' + weekText(d.last_sent_week) : '');
       return 'الإرسال مفعّل هنا، والمنصة لم تفعّله بعد';
     }
     function periodLine(win, prev) { return (win && win.label ? win.label : '') + (prev && prev.label ? ' مقارنة ب' + prev.label : ''); }
@@ -3980,7 +3980,7 @@
     var facts = courseFacts(c, { schedule: schedule, checklist: checklist, now: now });
     var story = c.story && num(c.story.lessons) > 0 ? c.story : null;
     var pr = priceOf(c);
-    var lessons = story ? U.ar(story.lessons) + ' في ' + U.ar(story.units) + ' أجزاء · نحو ' + U.ar(story.minutes) + ' دقيقة' : U.ar(lessonsOf(c));
+    var lessons = story ? U.ar(story.lessons) + ' في ' + U.ar(story.units) + ' أجزاء، نحو ' + U.ar(story.minutes) + ' دقيقة' : U.ar(lessonsOf(c));
     var sales;
     if (stat && arr(stat.sales)) {
       var parts = stat.sales.filter(function (x) { return x && num(x.amount) != null; }).map(function (x) { return U.moneyText(x.amount, x.currency); });
@@ -4423,7 +4423,7 @@
   function items(resp) { return resp && Array.isArray(resp.items) ? resp.items.filter(function (x) { return x && typeof x === 'object'; }) : null; }
   function mapBy(list, key) { var m = {}; (list || []).forEach(function (x) { var k = str(String(x[key] == null ? '' : x[key])); if (k) m[k] = x; }); return m; }
   function typeText(t) { return TYPE_TEXT[str(t)] || 'عمل'; }
-  function splitText(o, p) { return 'صاحب العمل ' + ar(o) + '٪ · المنصة ' + ar(p) + '٪'; }
+  function splitText(o, p) { return 'صاحب العمل ' + ar(o) + '٪، المنصة ' + ar(p) + '٪'; }
   function agreementOf(a) {
     if (!a || typeof a !== 'object') return '';
     var o = num(a.owner_pct), p = num(a.platform_pct);
@@ -4999,7 +4999,7 @@
         var at = ms(r.at);
         var brain = gen != null ? 'دعوات الجيل ' + ar(gen) + ' وما بعده تحتاج موافقتك قبل أن يعمل رابطها' : 'تحتاج موافقتك قبل أن يعمل رابطها';
         items.push({ id: 'invite:' + r.id, kind: 'approval', tag: 'دعوة من عضو', age: isNaN(at) ? '' : agoText(at, now), title: str(r.name) || 'بلا اسم',
-          sub: 'الداعي: ' + (str(r.invitedByLabel) || '—') + (r.generation != null ? ' · الجيل ' + ar(r.generation) : ''), brain: brain, reason: '', warn: '',
+          sub: 'الداعي: ' + (str(r.invitedByLabel) || '—') + (r.generation != null ? '، الجيل ' + ar(r.generation) : ''), brain: brain, reason: '', warn: '',
           extra: str(r.note) ? ['ملاحظة الداعي: ' + str(r.note)] : [], link: r.registered && r.email ? String(r.email).toLowerCase() : null, ts: at, ref: r,
           primary: { label: 'وافق على الدعوة', act: { do: 'approve_invite' } }, secondary: [{ label: 'ارفض', act: { do: 'sheet', sheet: 'reject_invite' } }] });
       });
@@ -5195,7 +5195,7 @@
     }
     var m = metrics || {};
     var slot = function (v) { return typeof v === 'number' ? ar(v) : NA; };
-    out.head = 'الحسابات ' + (total != null ? ar(total) : (truncated ? NA : ar(raw.length))) + ' · انضمّ هذا الأسبوع ' + slot(m.signups_7d) + ' · اليوم ' + slot(m.signups_today)
+    out.head = 'الحسابات ' + (total != null ? ar(total) : (truncated ? NA : ar(raw.length))) + '، انضمّ هذا الأسبوع ' + slot(m.signups_7d) + '، اليوم ' + slot(m.signups_today)
       + ' · مدرّبون معتمدون ' + slot(m.trainers_approved) + ' · باقات مدفوعة ' + slot(m.paid_plan);
     return out;
   }
@@ -5268,7 +5268,7 @@
     if (s3 === 'failed') failed.push('طلبات التواصل');
     out.head.failedLabels = failed;
     var oldest = Infinity; all.forEach(function (t) { if (!isNaN(t.ts) && t.ts < oldest) oldest = t.ts; });
-    if (all.length) out.head.text = 'تنتظر الرد ' + ar(all.length) + ': ' + ar(out.cols.site.items.length) + ' من الموقع · ' + ar(out.cols.chat.items.length) + ' من المحادثة · '
+    if (all.length) out.head.text = 'تنتظر الرد ' + ar(all.length) + ': ' + ar(out.cols.site.items.length) + ' من الموقع، ' + ar(out.cols.chat.items.length) + ' من المحادثة، '
       + (out.cols.follow.items.length ? UF(out.cols.follow.items.length, ['طلب تواصل واحد', 'طلبا تواصل', 'طلبات تواصل', 'طلب تواصل']) : '٠ طلبات تواصل') + '.' + (isFinite(oldest) ? ' أقدمها ' + agoText(oldest, now) + '.' : '');
     else if (loaded) out.head.text = 'لا رسائل تنتظر الرد.';
     else if (!failed.length) out.head.text = '…جارٍ الجلب';
@@ -5470,7 +5470,7 @@
     });
     if (isArr(src.testimonials)) src.testimonials.forEach(function (r) {
       var b = [];
-      b.push((r.course_title || 'دورة') + (r.rating != null && r.rating !== '' ? ' · التقييم ' + ar(r.rating) + ' من ٥' : ''));
+      b.push((r.course_title || 'دورة') + (r.rating != null && r.rating !== '' ? '، التقييم ' + ar(r.rating) + ' من ٥' : ''));
       if (r.consent_public === true) b.push('وافق كاتبه على النشر باسمه');
       wait.push(mk({ id: 't:' + r.id, kind: 'testimonial', col: 'wait', order: 1, ref: r, title: shortText(r.text, 80) || 'رأي بلا نص', at: r.created_at,
         strip: 'رأي متعلّم', who: { text: r.name || 'متعلّم', email: r.user_email || '' }, brain: b.join('، '), go: null }, now, 'wait'));
@@ -6089,7 +6089,7 @@
     lines.push('كشف حملة «' + r.name + '» — ' + ownerLine(owner && owner.owner_kind ? owner : null));
     lines.push([r.platformLabel ? 'المنصة: ' + r.platformLabel : '', duration(r)].filter(Boolean).join('، '));
     lines.push('صُرف: ' + money(r.spent, r.currency) + ' من ميزانية ' + money(r.budget, r.currency));
-    lines.push('زيارات: ' + U.ar(r.clicks) + ' · سجّلوا: ' + U.ar(r.leads) + ' · دفعوا: ' + U.ar(r.conversions));
+    lines.push('زيارات: ' + U.ar(r.clicks) + '، سجّلوا: ' + U.ar(r.leads) + '، دفعوا: ' + U.ar(r.conversions));
     lines.push('الدخل المسجّل: ' + money(r.revenue, r.currency));
     lines.push('الأرقام كما سُجّلت في لوحة البروفيسور بتاريخ ' + U.dateText(todayISO) + '.');
     return lines.filter(Boolean).join('\n');
@@ -6291,7 +6291,7 @@
     var pend = num(w.pending_withdrawals);
     var pending;
     if (pend === 0) pending = { value: '٠ جنيه', note: 'لا طلبات قيد المراجعة' };
-    else if (rate) pending = { value: 'نحو ' + fmt(Math.round(pend * rate)) + ' جنيه', note: moneyText(pend, 'USD') + ' · تراجعه الإدارة' };
+    else if (rate) pending = { value: 'نحو ' + fmt(Math.round(pend * rate)) + ' جنيه', note: moneyText(pend, 'USD') + '، تراجعه الإدارة' };
     else pending = { value: moneyText(pend, 'USD'), note: 'تراجعه الإدارة' };
     return {
       linked: true, rate: rate, balanceEgp: bal, investedEgp: num(w.total_invested_egp), returnsEgp: num(w.total_returns_egp),
@@ -6357,7 +6357,7 @@
       title: str(o.course_title) || 'فرصة استثمار', trainer: str(o.trainer_name), students: ar(o.students_count),
       fundedText: moneyText(funded, 'USD'), targetText: showBar ? moneyText(target, 'USD') : '', pct: pct, showBar: showBar,
       progressText: showBar ? 'جُمع ' + moneyText(funded, 'USD') + ' من ' + moneyText(target, 'USD') + '، ' + ar(pct) + '٪'
-                            : 'جُمع ' + moneyText(funded, 'USD') + ' · الهدف غير محدد بعد',
+                            : 'جُمع ' + moneyText(funded, 'USD') + '، الهدف غير محدد بعد',
       roiText: roi > 0 ? fmt(roi) + '٪' : 'غير محدد بعد', roiNote: roi > 0 ? 'رقم تقديري حدّدته الإدارة' : '',
       minText: min > 0 ? moneyText(min, 'USD') : 'غير محدد بعد',
       start: dateText(o.expected_start), end: dateText(o.expected_end), chip: { t: ch.t, tone: ch.tone }

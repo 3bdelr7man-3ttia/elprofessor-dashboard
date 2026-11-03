@@ -583,8 +583,8 @@
     em.className = 'v2h-bn tone-' + b.tone + (b.dot ? ' dot' : '');
     bb.classList.toggle('v2h-hd', !!(b.dot && b.text));        // عدّ + صحة معًا: النقطة على زاوية الزر لا فوق الرقم
     var label = 'التنبيهات';
-    if (b.text && b.text !== '!') label = 'التنبيهات · ' + b.text + ' جديدة';
-    else if (b.dot || b.text === '!') label = 'التنبيهات · حالة المنصة تحتاج نظرة';
+    if (b.text && b.text !== '!') label = 'التنبيهات: ' + b.text + ' جديدة';
+    else if (b.dot || b.text === '!') label = 'التنبيهات: حالة المنصة تحتاج نظرة';
     bb.setAttribute('aria-label', label);
   }
   function bellHtml() {

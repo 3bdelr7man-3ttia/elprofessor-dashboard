@@ -190,6 +190,10 @@
   // خط أمان أخير (الجولة r6): لا «·» ملاصقة لرقم في أي نص ظاهر، حتى لو جاء النص من الخادم أو من شاشة قديمة. تُستبدل بفاصلة عربية.
   var dotObs = null, dotQ = [], dotT = null;
   var DOT_SKIP = /^(SCRIPT|STYLE|TEXTAREA|INPUT|OPTION|NOSCRIPT)$/;
+  // الرقم وحده يُلتقط؛ المسافة قبل «·» تُحذف فلا تبقى مسافة قبل الفاصلة
+  function dotFix(v) {
+    return v.replace(/([0-9٠-٩٪%])\s*·\s*/g, '$1، ').replace(/\s*·\s*(?=[0-9٠-٩])/g, '، ');
+  }
   function fixDotsIn(root) {
     if (!root || !document.createTreeWalker) return;
     var base = root.nodeType === 3 ? root.parentNode : root;
@@ -200,8 +204,16 @@
     list.forEach(function (t) {
       var p = t.parentNode, v = t.nodeValue;
       if (!p || v.indexOf('·') < 0 || DOT_SKIP.test(p.nodeName)) return;
-      var nv = v.replace(/([0-9٠-٩٪%]\s*)·\s*/g, '$1، ').replace(/\s*·\s*(?=[0-9٠-٩])/g, '، ');
+      var nv = dotFix(v);
       if (nv !== v) t.nodeValue = nv;
+    });
+    // الخصائص الظاهرة للمستخدم (العنوان المنبثق، وصف القارئ، النص البديل) تُعالج بنفس القاعدة
+    var els = base.nodeType === 1 ? [base].concat([].slice.call(base.querySelectorAll('[title],[aria-label],[placeholder]'))) : [];
+    els.forEach(function (e) {
+      ['title', 'aria-label', 'placeholder'].forEach(function (a) {
+        var av = e.getAttribute && e.getAttribute(a);
+        if (av && av.indexOf('·') >= 0) { var nv2 = dotFix(av); if (nv2 !== av) e.setAttribute(a, nv2); }
+      });
     });
   }
   SH.fixDots = fixDotsIn;

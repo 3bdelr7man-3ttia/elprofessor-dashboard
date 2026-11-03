@@ -726,7 +726,7 @@
   // ------------------------------------------------------------------ القائمة
   function guidesCard() {
     var cs = oSrc('codes'), ps = oSrc('gprice'), codes = cs.state === 'ready' && cs.data && Array.isArray(cs.data.codes) ? cs.data.codes : null;
-    var sum = codes ? (codes.length ? U.ar(codes.length) + (codes.length === 1 ? ' كود' : ' أكواد') + ' · ' + U.ar(codes.filter(function (c) { return c.active; }).length) + ' مفعّل' : 'لا أكواد بعد')
+    var sum = codes ? (codes.length ? U.ar(codes.length) + (codes.length === 1 ? ' كود' : ' أكواد') + '، ' + U.ar(codes.filter(function (c) { return c.active; }).length) + ' مفعّل' : 'لا أكواد بعد')
       : (cs.state === 'loading' || cs.state === 'idle' ? '…جارٍ الجلب' : 'غير متاح بعد');
     var price = ps.state === 'ready' ? priceLines(ps.data) : null;
     var priceTxt = price ? (price.length ? price.join('، ') : 'لم يُحدَّد سعر بعد') : (ps.state === 'loading' || ps.state === 'idle' ? '…جارٍ الجلب' : 'غير متاح بعد');
@@ -841,10 +841,10 @@
   function stepContent(b, nextIs) {
     var fl = oFileLine(b), has = !!(b.file && b.file.uploaded);
     var h = '<li class="ou-step ' + (has ? 'done' : 'todo') + '" data-step="content">' + stepHead(1, 'المحتوى', has, 'تم', 'لم يتم بعد');
-    if (has) h += '<p class="ou-line">الملف الحالي: <b dir="auto">' + esc(b.file.name || 'ملف PDF') + '</b>' + (fl ? ' · ' + esc(fl) : '') + (b.file.uploaded_at ? ' · رُفع ' + esc(U.agoText(b.file.uploaded_at, now())) : '') + '</p>';
+    if (has) h += '<p class="ou-line">الملف الحالي: <b dir="auto">' + esc(b.file.name || 'ملف PDF') + '</b>' + (fl ? '، ' + esc(fl) : '') + (b.file.uploaded_at ? '، رُفع ' + esc(U.agoText(b.file.uploaded_at, now())) : '') + '</p>';
     else h += '<p class="ou-line mute">لا يوجد ملف بعد. ارفع ملف PDF جاهزًا، أو اكتبه مع العقل.</p>';
     if (O.pending) {
-      h += '<p class="ou-line">الملف المختار: <b dir="auto">' + esc(O.pending.name) + '</b> · ' + esc(fmtSize(O.pending.size)) + '</p>';
+      h += '<p class="ou-line">الملف المختار: <b dir="auto">' + esc(O.pending.name) + '</b>، ' + esc(fmtSize(O.pending.size)) + '</p>';
       h += confirmBox('file', 'سيُرفع هذا الملف' + (has ? '، ويحلّ محلّ الملف الحالي' : '') + '.', 'ارفع الملف');
     } else {
       h += '<div class="ou-acts"><button type="button" class="' + (nextIs && !O.writer ? 'ep-b1' : 'ep-b2') + '" data-a="pick">' + (has ? 'ارفع ملفًا آخر' : 'ارفع ملف PDF') + '</button>'

@@ -476,9 +476,9 @@ def test_the_four_numbers_with_a_plain_line_each_and_the_net_is_not_available():
     n = {x['key']: x for x in b['numbers']}
     assert [x['key'] for x in b['numbers']] == ['income', 'held', 'owed', 'net']
     assert [x['label'] for x in b['numbers']] == ['دخل', 'محجوز حتى يُسلَّم العمل', 'مستحق للخبراء والمدرّبين', 'صافي البروفيسور']
-    assert n['income']['text'] == '١\u202f٣٠٠٫٥٠ جنيه' and 'بعملة أخرى' in n['income']['others'] and '٣٠ دولار' in n['income']['others']
-    assert n['held']['text'] == '١\u202f٦٠٠٫٢٥ جنيه' and '٢٠٠ دولار' in n['held']['others'] and n['held']['count'] == 3, 'المحرَّر لا يُحسب'
-    assert n['owed']['text'] == '٦٠٠٫٥٠ جنيه' and '٣\u202f٥٠٠٫٥٠ ريال' in n['owed']['others'], 'الكسور محفوظة والريال لا يدخل الجنيه'
+    assert n['income']['text'] == '١٬٣٠٠٫٥٠ جنيه' and 'بعملة أخرى' in n['income']['others'] and '٣٠ دولار' in n['income']['others']
+    assert n['held']['text'] == '١٬٦٠٠٫٢٥ جنيه' and '٢٠٠ دولار' in n['held']['others'] and n['held']['count'] == 3, 'المحرَّر لا يُحسب'
+    assert n['owed']['text'] == '٦٠٠٫٥٠ جنيه' and '٣٬٥٠٠٫٥٠ ريال' in n['owed']['others'], 'الكسور محفوظة والريال لا يدخل الجنيه'
     assert n['net']['na'] is True and n['net']['text'] == 'غير متاح بعد' and n['net']['why']
     for x in b['numbers']:
         assert x['note'] and re.search(r'[؀-ۿ]', x['note'])
@@ -491,7 +491,7 @@ def test_the_four_numbers_with_a_plain_line_each_and_the_net_is_not_available():
 @needs_node
 def test_money_text_formats_each_currency_in_arabic_digits():
     cases = [((1200, 'EGP'), '١٬٢٠٠ جنيه'), ((600.5, 'EGP'), '٦٠٠٫٥٠ جنيه'), ((0.25, 'EGP'), '٠٫٢٥ جنيه'), ((30, 'USD'), '٣٠ دولار'),
-             ((3500.5, 'SAR'), '٣\u202f٥٠٠٫٥٠ ريال'), ((99, 'AED'), '٩٩ درهم'), ((12, 'KWD'), '١٢ دينار'), ((5, 'XYZ'), '٥ XYZ'), ((1234567, 'EGP'), '١٬٢٣٤٬٥٦٧ جنيه')]
+             ((3500.5, 'SAR'), '٣٬٥٠٠٫٥٠ ريال'), ((99, 'AED'), '٩٩ درهم'), ((12, 'KWD'), '١٢ دينار'), ((5, 'XYZ'), '٥ XYZ'), ((1234567, 'EGP'), '١٬٢٣٤٬٥٦٧ جنيه')]
     got = [L('util.moneyText', a, c) for (a, c), _ in cases]
     assert got == [w for _, w in cases]
     line = L('v2MoneyLine', [{'currency': 'EGP', 'amount': 1000}, {'currency': 'USD', 'amount': 30}, {'currency': 'SAR', 'amount': 100}])
@@ -528,7 +528,7 @@ def test_payout_rows_are_oldest_first_with_exact_amounts_and_a_since_timer():
     rows = L('v2PayoutRows', [_payout('po-a', 'منى', 600.5, hours=3), _payout('po-b', 'فيصل', 3500.5, 'SAR', hours=30), _payout('po-c', 'نور', 100, status='paid')], NOW)
     assert [r['id'] for r in rows] == ['po-b', 'po-a'], 'المسدَّد خارج، والأقدم أولًا'
     b, a = rows
-    assert b['amountText'] == '٣\u202f٥٠٠٫٥٠ ريال' and b['fx'] is True and b['since'] == 'منذ ٣٠ س' and b['what'] == 'سحب من المحفظة'
+    assert b['amountText'] == '٣٬٥٠٠٫٥٠ ريال' and b['fx'] is True and b['since'] == 'منذ ٣٠ س' and b['what'] == 'سحب من المحفظة'
     assert a['amountText'] == '٦٠٠٫٥٠ جنيه', 'المبلغ بالكسور مش مقرَّب'
     assert a['card']['primary']['act'] == {'do': 'payout_settle', 'id': 'po-a'} and a['card']['secondary']['act']['do'] == 'payout_reject'
     assert a['card']['primary']['money']['amount'] == 600.5 and a['email'] == 'po-a@example.test'

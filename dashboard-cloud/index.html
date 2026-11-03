@@ -1068,7 +1068,7 @@ function opsQueuePanel(){
     const efSent=efQMode==='closed'?0:(Number(Q.expert_files_assigned_unclaimed)||0), efPay=Number(Q.expert_files_awaiting_payment)||0, efOpen=Number(Q.expert_files_open_total)||0;
     const efTrial=efQMode==='allowlist'?efTrialLine(Q.expert_files_allowlist_size):'';
     const fyiParts=[efSent?money(efSent)+' ملف اتبعت لخبير ولسه ما اتستلمش':'',efPay?money(efPay)+' ملف مستني الدفع':'',efOpen?money(efOpen)+' ملف مفتوح إجمالًا':'',efTrial].filter(Boolean);
-    const fyi=fyiParts.length?`<div class="ef-fyi" style="padding:0 16px 12px;font-size:12px;color:var(--muted)">للعلم: ${fyiParts.join(' · ')}</div>`:'';
+    const fyi=fyiParts.length?`<div class="ef-fyi" style="padding:0 16px 12px;font-size:12px;color:var(--muted)">للعلم: ${fyiParts.join('، ')}</div>`:'';
     body=chips+fyi+al;
   }
   return `<section class="panel" style="margin-bottom:14px"><div class="ph"><h3>كل اللي مستنيك — من المنصة</h3><span class="hint">أرقام المنصة نفسها (نفس ما يطبعه الدايجست)</span></div>${body}</section>`;
@@ -1098,10 +1098,10 @@ function viewInbox(v){
   const cLate=inboxLateCount();
   const missing=inboxFailedList();
   const KP=[
-    {cls:'k-1',ic:'inbox',t:'وارد جديد',v:cAll,f:'all',sub:missing.length?('عددٌ ناقص — تعذّر جلب '+esc(missing.join(' · '))):'كل البنود · اضغط للفرز',warn:!!missing.length},
+    {cls:'k-1',ic:'inbox',t:'وارد جديد',v:cAll,f:'all',sub:missing.length?('عددٌ ناقص — تعذّر جلب '+esc(missing.join('، '))):'كل البنود، اضغط للفرز',warn:!!missing.length},
     {cls:'k-2',ic:'users',t:'بانتظار اعتماد بشري',v:cHuman,f:'human',sub:'قرارك مطلوب'},
     {cls:'k-3',ic:'check',t:'عالجها الذكاء آليًّا',v:cAuto,f:'auto',sub:'بلا تدخّل منك'},
-    {cls:'k-4',ic:'clock',t:'متأخّر عن المهلة',v:cLate,f:'late',sub:cLate?('فات ميعاده أو قارَبه · '+money(cLate)+' بندًا'):'لا شيء فات ميعاده'}];
+    {cls:'k-4',ic:'clock',t:'متأخّر عن المهلة',v:cLate,f:'late',sub:cLate?('فات ميعاده أو قارَبه، '+money(cLate)+' بندًا'):'لا شيء فات ميعاده'}];
   const ke=document.getElementById('kpis');
   KP.forEach(k=>ke.insertAdjacentHTML('beforeend',`<div class="kpi ${k.cls}" data-f="${k.f}"><div class="top"><span class="ic">${svg(k.ic)}</span>${k.t}</div><b>${money(k.v)}${k.warn?'<small style="font-size:13px;color:var(--conflict)"> +؟</small>':''}</b><div class="sub"${k.warn?' style="color:var(--conflict)"':''}>${k.sub}</div></div>`));
   ke.querySelectorAll('.kpi').forEach(c=>c.onclick=()=>{activeFilter=c.dataset.f;renderInbox();});
@@ -1452,7 +1452,7 @@ function efAssignLogHtml(f){
   if(!log.length)return '';
   return `<div class="field"><div class="lab">مين اتبعتله الملف</div><ol class="ef-log">`
     +log.map(e=>`<li class="${e.auto?'auto':'hand'}"><div class="who">${esc((e.auto?'اتبعت تلقائي لـ':'اتبعت بإيدك لـ')+e.who)}</div>`
-      +`<div class="when">${esc([e.reason,e.at?efDate(e.at)+' · '+efRel(e.at):''].filter(Boolean).join(' · '))}</div>`
+      +`<div class="when">${esc([e.reason,e.at?efDate(e.at)+'، '+efRel(e.at):''].filter(Boolean).join('، '))}</div>`
       +(e.why?`<div class="why">${esc(e.why)}</div>`:'')+`</li>`).join('')
     +`</ol></div>`;
 }
@@ -1462,7 +1462,7 @@ function efDeclinedHtml(declined){
   return declined.map(d=>{
     const why=(E.efDeclineWhy?E.efDeclineWhy(d):'')||d.reason||'من غير سبب';
     const nmf=d.reason_code==='not_my_field'?` <span class="ef-pill warn">مش تخصصه</span>`:'';
-    const at=d.reason_code&&d.at?' · '+efRel(d.at):'';
+    const at=d.reason_code&&d.at?'، '+efRel(d.at):'';
     return `<div>${esc((d.name||d.email||'—')+' — '+why+at)}${nmf}</div>`;
   }).join('');
 }
@@ -1535,7 +1535,7 @@ function efStrip(kind,text){
 // «محتاج تدخّلك» في الدرج: سطر لكل ختم بسببه (كلام المنصة) ومن إمتى.
 function efBlockedStrips(f){
   const E=efX();
-  return (E.efBlocked?E.efBlocked(f):[]).map(b=>efStrip('late','محتاج تدخّلك — '+b.label+(b.at&&efRel(b.at)?' · اتوقّفت '+efRel(b.at):''))).join('');
+  return (E.efBlocked?E.efBlocked(f):[]).map(b=>efStrip('late','محتاج تدخّلك — '+b.label+(b.at&&efRel(b.at)?'، اتوقّفت '+efRel(b.at):''))).join('');
 }
 function efField(lab,valHtml,subText,valStyle){
   return `<div class="field"><div class="lab">${esc(lab)}</div><div class="val"${valStyle?` style="${valStyle}"`:''}>${valHtml}</div>${subText?`<div style="font-size:11.5px;color:var(--muted);margin-top:3px;line-height:1.6">${esc(subText)}</div>`:''}</div>`;
@@ -1590,7 +1590,7 @@ function drawExpertFile(el,i){
   if(pre)fields+=efField('ميعاد الاستلام',esc(off?'واقف — الخدمة مقفولة':(hl>0?'فاضل '+(E.efHours?E.efHours(hl):money(Math.floor(hl))+' ساعة'):'عدّى')),
     !off&&hl>0&&!back?'لو ما اتستلمش قبل الميعاد، فلوس العميل بترجع لوحدها':'',
     (off||hl<=12)?'color:var(--conflict)':'');
-  if(f.status==='assigned')fields+=efField('اتبعت لـ',esc((f.assigned_name||f.assigned_to||'—')+(f.assigned_at?' · '+efRel(f.assigned_at):'')+(f.assign_overdue?' — الملف ما اتستلمش من ١٢ ساعة':'')),'',f.assign_overdue?'color:var(--conflict)':'');
+  if(f.status==='assigned')fields+=efField('اتبعت لـ',esc((f.assigned_name||f.assigned_to||'—')+(f.assigned_at?'، '+efRel(f.assigned_at):'')+(f.assign_overdue?' — الملف ما اتستلمش من ١٢ ساعة':'')),'',f.assign_overdue?'color:var(--conflict)':'');
   if(f.expert_name||f.expert_email)fields+=efField('الخبير',esc(f.expert_name||f.expert_email));
   if(work&&f.writing_due_at){const late=i.efLane==='late';fields+=efField('ميعاد الرأي',esc(efDate(f.writing_due_at)+(late?' — عدّى':'')),'',late?'color:var(--conflict)':'');}
   if(f.release_amount!=null&&f.release_amount!==''&&!pre&&!work)fields+=efField('لو اتحوّل للخبير',esc(efM(f.release_amount,f.currency)+' لـ'+(f.expert_name||f.expert_email||'الخبير')));
@@ -2451,7 +2451,7 @@ function renderEsc(){
       el.insertAdjacentHTML('beforeend',`<div class="row esc-row" style="grid-template-columns:1.4fr 1fr 1fr 130px;cursor:default">
         <div class="c c1"><div class="src-ic" style="background:var(--agree-bg);color:var(--agree)">${svg('check')}</div><div><div class="parties">${esc(r.expert)}</div><div class="from">${esc(r.id)} · حُرِّر ${esc(r.when)}</div></div></div>
         <div class="c"><div class="amt">${money(r.amount)} <small>جنيه</small></div></div>
-        <div class="c"><div class="from">للخبير <b style="color:var(--agree)">${net==null?'غير متاح بعد':money(net)}</b> · نصيب المنصة <b style="color:var(--gold)">${comm==null?'غير متاح بعد':money(comm)}</b></div></div>
+        <div class="c"><div class="from">للخبير <b style="color:var(--agree)">${net==null?'غير متاح بعد':money(net)}</b>، نصيب المنصة <b style="color:var(--gold)">${comm==null?'غير متاح بعد':money(comm)}</b></div></div>
         <div class="c"><span class="status s-auto"><span class="d"></span>مكتمل</span></div>
       </div>`);});
   }
@@ -2742,7 +2742,7 @@ function renderFin(){
     const rlines=(P.revenue_lines||[]).map(r=>`<div class="row esc-row" style="grid-template-columns:1.6fr 1fr 130px;cursor:default"><div class="c c1"><div class="src-ic" style="background:var(--agree-bg);color:var(--agree)">${svg('wallet')}</div><div><div class="parties">${esc(r.label||r.key)}</div><div class="from">${money(r.count||0)} عملية</div></div></div><div class="c"><div class="amt" style="color:var(--agree)">${money(r.amount||0)} <small>${cur(r.currency)}</small></div></div><div class="c"><span class="status s-auto"><span class="d"></span>${cur(r.currency)}</span></div></div>`).join('');
     const clines=((P.costs&&P.costs.lines)||[]).map(c=>`<div class="row esc-row" style="grid-template-columns:1.6fr 1fr;cursor:default"><div class="c c1"><div class="src-ic" style="background:var(--conflict-bg);color:var(--conflict)">${svg('trend')}</div><div><div class="parties">${esc(c.label||c.key)}</div></div></div><div class="c"><div class="amt" style="color:var(--conflict)">−${money(c.amount||0)} <small>جنيه</small></div></div></div>`).join('');
     const other=P.revenue_other_currencies||{};
-    const otherTxt=Object.keys(other).length?('إيراد بعملات أخرى (لا يُجمع مع الجنيه): '+Object.keys(other).map(k=>money(other[k])+' '+esc(k)).join(' · ')):'';
+    const otherTxt=Object.keys(other).length?('إيراد بعملات أخرى (لا يُجمع مع الجنيه): '+Object.keys(other).map(k=>money(other[k])+' '+esc(k)).join('، ')):'';
     body.innerHTML=`
       <div style="padding:14px 20px 0;display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px" class="pnl-top">
         <div><div style="font-size:11px;font-weight:800;color:var(--muted)">شهر التقرير</div><div style="font-family:Cairo;font-weight:800;font-size:15px;color:var(--navy)">${esc(P.month||'—')}</div></div>
@@ -2803,7 +2803,7 @@ function renderFin(){
     h.textContent=inv?'سحوبات المستثمرين':'سحوبات المحافظ';n.textContent=WD.length;
     hint.textContent=inv?'دفتر اللوحة — الاعتماد يتمّ من هنا':'دفتر المنصّة — نفس عدّاد الشارة تمامًا';
     WD.forEach((w,idx)=>{const st=WSTATUS[w.status]||WSTATUS.pending;const src=w.kind==='investor'?'مستثمر · دفتر اللوحة':'محفظة المنصّة';body.insertAdjacentHTML('beforeend',`<div class="row esc-row${selected==='w'+idx?' sel':''}" data-w="${idx}" style="grid-template-columns:1.5fr 1fr 1fr 130px">
-      <div class="c c1"><div class="src-ic">${svg('wallet')}</div><div><div class="parties">${esc(w.who)}</div><div class="from">${esc(src)} · إلى ${esc(w.dest)} · ${esc(w.when)}</div></div></div>
+      <div class="c c1"><div class="src-ic">${svg('wallet')}</div><div><div class="parties">${esc(w.who)}</div><div class="from">${esc(src)}، إلى ${esc(w.dest)}، ${esc(w.when)}</div></div></div>
       <div class="c"><div class="amt">${money(w.amount)} <small>${esc(efCur(w.currency||'EGP'))}</small></div></div>
       <div class="c"><div class="from">${esc(w.dest)}</div></div>
       <div class="c"><span class="status ${st.cls}"><span class="d"></span>${st.t}</span></div></div>`);});
@@ -3083,7 +3083,7 @@ function drawUser(){
     </div>
     ${u.segment?`<div style="margin-top:6px;font-size:11.5px;color:var(--muted)">تصنيف الشات التلقائي: <b style="color:var(--ink-2)">${SEG_LABEL[u.segment]||esc(u.segment)}</b> <span style="opacity:.7">(لا يُعدَّل يدويًّا)</span></div>`:''}`:'';
   inline.innerHTML=`<div class="uedit-in">
-    <div class="uedit-h"><div><b>${esc(u.name)}</b> <span style="color:var(--muted);font-size:12px">· ${esc(u.email)} · ${esc(u.phone)}</span></div><button class="uedit-x" title="إغلاق">✕</button></div>
+    <div class="uedit-h"><div><b>${esc(u.name)}</b> <span style="color:var(--muted);font-size:12px">· ${esc(u.email)}، ${esc(u.phone)}</span></div><button class="uedit-x" title="إغلاق">✕</button></div>
     <div class="uedit-grid">
       <div><div class="lab">التوثيق</div><span class="status ${vf.cls}" style="${vf.cls?'':'background:var(--surface-2);color:var(--muted)'}"><span class="d" style="${vf.cls?'':'background:var(--muted)'}"></span>${vf.t}</span></div>
       <div><div class="lab">الباقة · التدريب</div><div class="val" style="font-size:12.5px">${u.plan} · ${u.trainer==='approved'?'مدرّب معتمد':u.trainer==='pending'?'طلب قيد المراجعة':'—'}</div></div>
@@ -3389,7 +3389,7 @@ function renderCourses(){
       <div class="c c1"><div class="src-ic" style="background:var(--memory-bg);color:var(--memory)">${svg('book')}</div><div><div class="parties">${esc(c.title)}${ownerBadge}</div><div class="from">${esc(c.inst)}</div></div></div>
       <div class="c"><div class="from"><b style="color:var(--ink)">${esc(c.enrolled)}</b> مسجّل</div></div>
       <div class="c"><div class="from">إيراد <b style="color:var(--navy)">${rev==null?'غير متاح بعد':money(rev)+' جنيه'}</b></div></div>
-      <div class="c"><div class="from">${ours==null?'النسبة: <b>غير متاح بعد</b>':'نصيب المنصة <b style="color:var(--agree)">'+ours+'٪</b>'+(c.owner==='platform'?'':' · نصيب صاحب الدورة <b style="color:var(--gold)">'+(100-ours)+'٪</b>')}</div></div>
+      <div class="c"><div class="from">${ours==null?'النسبة: <b>غير متاح بعد</b>':'نصيب المنصة <b style="color:var(--agree)">'+ours+'٪</b>'+(c.owner==='platform'?'':'، نصيب صاحب الدورة <b style="color:var(--gold)">'+(100-ours)+'٪</b>')}</div></div>
       <div class="c"><span class="status ${st.cls}" style="${st.cls?'':'background:var(--surface-2);color:var(--muted)'}"><span class="d" style="${st.cls?'':'background:var(--muted)'}"></span>${st.t}</span></div></div>`);});
     el.querySelectorAll('.row').forEach(x=>x.onclick=()=>{selected='c'+x.dataset.c;renderCourses();drawCourse();});
   } else if(courseTab==='programs'){const PRG=csPrograms();h.textContent='طلبات البرامج';document.getElementById('cN').textContent=PRG.length;
@@ -3417,7 +3417,7 @@ function renderCourses(){
     OFR.forEach((o,idx)=>el.insertAdjacentHTML('beforeend',`<div class="row esc-row${selected==='o'+idx?' sel':''}" data-o="${idx}" style="grid-template-columns:1.6fr 1fr 1fr 110px">
       <div class="c c1"><div class="src-ic" style="background:var(--gold-bg);color:var(--gold)">${svg('wallet')}</div><div><div class="parties">${esc(o.course)}</div><div class="from">${esc(o.buyer)} · ${SEG_LABEL[o.segment]||esc(o.segment)}</div></div></div>
       <div class="c"><div class="from">عرضه <b style="color:var(--navy)">${money(o.offered)} ${esc(o.currency)}</b></div></div>
-      <div class="c"><div class="from">العادل <b style="color:var(--gold)">${money(o.list)}</b> · الحد ${money(o.floor)}</div></div>
+      <div class="c"><div class="from">العادل <b style="color:var(--gold)">${money(o.list)}</b>، الحد ${money(o.floor)}</div></div>
       <div class="c"><span class="status s-wait"><span class="d"></span>بانتظار</span></div></div>`));
     el.querySelectorAll('.row').forEach(x=>x.onclick=()=>{selected='o'+x.dataset.o;renderCourses();drawCourse();});
   }
@@ -3491,10 +3491,10 @@ function drawCourse(){
     <div class="note-ai">${svg('sparkles','ic')}<div>${c.is_active?'الدورة ظاهرة للطلاب على app.elprofessor.net.':(sty?'الدورة موجودة لكنها <b>مش ظاهرة للطلاب</b> — شوفها الأول من «معاينة»، ولما تكون جاهزة اضغط «نشر على المنصة».':'الدورة موجودة لكنها <b>مش ظاهرة للطلاب</b> — اضغط «نشر على المنصة» تظهر فورًا.')}</div></div>
     <div class="field"><div class="lab">الحالة</div><div class="val"><span class="status ${st[0]}"><span class="d"></span>${st[1]}</span></div></div>
     <div class="field"><div class="lab">النوع · السعر</div><div class="val">${PC_TYPE[c.type]||esc(c.type||'')} · ${pr}</div></div>
-    <div class="field"><div class="lab">المحاضر · المسجّلون</div><div class="val">${esc(c.instructor_name||'—')} · ${money(c.total_enrolled||0)} مسجّل</div></div>
-    ${sty?`<div class="field"><div class="lab">الدروس</div><div class="val">${money(sty.lessons)} درس · ${money(sty.units)} أجزاء · حوالي ${money(sty.minutes)} دقيقة</div></div>
+    <div class="field"><div class="lab">المحاضر، المسجّلون</div><div class="val">${esc(c.instructor_name||'—')}، ${money(c.total_enrolled||0)} مسجّل</div></div>
+    ${sty?`<div class="field"><div class="lab">الدروس</div><div class="val">${money(sty.lessons)} درس، ${money(sty.units)} أجزاء، حوالي ${money(sty.minutes)} دقيقة</div></div>
     <div class="field"><div class="lab">المحتوى</div><div class="val" style="line-height:1.7">دورة تفاعلية — اضغط «معاينة» تشوفها زي ما المتدرّب هيشوفها بالظبط.</div></div>`
-    :`<div class="field"><div class="lab">الدروس</div><div class="val">${money(c.lesson_count||0)} درس${c.source==='titch'?' · منهج Titch':''}</div></div>
+    :`<div class="field"><div class="lab">الدروس</div><div class="val">${money(c.lesson_count||0)} درس${c.source==='titch'?'، منهج Titch':''}</div></div>
     <div class="field"><div class="lab">المنهج (الأقسام والمحاضرات)</div><div id="pcTree" class="val" style="line-height:1.7"><span style="color:var(--muted)">…جارٍ التحميل</span></div></div>`}
     ${c.created_at?`<div class="field"><div class="lab">أُنشئت</div><div class="val" style="direction:ltr;text-align:right">${esc(String(c.created_at).slice(0,10))}</div></div>`:''}
     ${c.short_description?`<div class="field"><div class="lab">الوصف</div><div class="val" style="line-height:1.6">${esc(c.short_description)}</div></div>`:''}
@@ -3536,7 +3536,7 @@ function drawCourse(){
   else {const sc=csSchedules()[i];if(!sc){el.innerHTML='';return;}el.innerHTML=`<div class="dh"><div class="k">موعد دورة حيّة</div><h3>${esc(sc.title)}</h3></div><div class="db">
     <div class="note-ai">${svg('sparkles','ic')}<div>راجِع موعد المدرّب وثبّته، وحطّ رابط Zoom وعدد المقاعد. التثبيت بيأكّد الموعد للطلاب.</div></div>
     <div class="field"><div class="lab">المدرّب</div><div class="val">${esc(sc.instructor_name||'—')}</div></div>
-    <div class="field"><div class="lab">المقاعد</div><div class="val">${money(sc.booked_count||0)}${sc.max_seats?(' / '+money(sc.max_seats)):''}${sc.quorum_met?' · <b style="color:var(--agree)">اكتمل</b>':''}</div></div>
+    <div class="field"><div class="lab">المقاعد</div><div class="val">${money(sc.booked_count||0)}${sc.max_seats?(' / '+money(sc.max_seats)):''}${sc.quorum_met?'، <b style="color:var(--agree)">اكتمل</b>':''}</div></div>
     <div class="fld" style="margin:6px 0"><label>رابط Zoom</label><input id="sc_zoom" value="${esc(sc.zoom_link||'')}" placeholder="https://zoom.us/j/..." style="direction:ltr;text-align:right"></div>
     <div class="row2"><div class="fld"><label>بداية الموعد</label><input id="sc_start" value="${esc(sc.start_date||'')}" placeholder="2026-05-15T15:00:00Z" style="direction:ltr;text-align:right"></div>
     <div class="fld"><label>عدد المقاعد</label><input id="sc_seats" type="number" value="${sc.max_seats||0}"></div></div>
@@ -4056,8 +4056,8 @@ function viewInvestment(v){
     ${Pst==='error'?`<div class="policy" style="border-inline-start-color:var(--conflict);background:var(--conflict-bg);color:var(--conflict)">${svg('scale','ic')}<div>تعذّر جلب الشركاء من الخادم — جدول الملكية تحت <b>ناقص</b>. <b style="cursor:pointer;text-decoration:underline" onclick="EP.reload('partners',()=>viewInvestment(document.getElementById('view')))">إعادة المحاولة</b></div></div>`:''}
     ${(Ivst==='loading'||Pst==='loading')?`<div class="policy">${svg('brief','ic')}<div>…جارٍ تحميل الملكية ورأس المال من الخادم</div></div>`:''}
     <div class="kpis">
-      <div class="kpi k-1"><div class="top"><span class="ic">${svg('hands')}</span>الملّاك</div><b>${money(ownersN)}</b><div class="sub">${money(realPartners.length)} شريك · ${money(IVR.length)} مستثمر</div></div>
-      <div class="kpi k-3"><div class="top"><span class="ic">${svg('wallet')}</span>إجمالي رأس المال</div><b>${money(capPartners+capInvestors)} <small style="font-size:13px">ج</small></b><div class="sub">شركاء ${money(capPartners)} · مستثمرون ${money(capInvestors)} · عوائد موزّعة ${money(totRet)}</div></div>
+      <div class="kpi k-1"><div class="top"><span class="ic">${svg('hands')}</span>الملّاك</div><b>${money(ownersN)}</b><div class="sub">${money(realPartners.length)} شريك، ${money(IVR.length)} مستثمر</div></div>
+      <div class="kpi k-3"><div class="top"><span class="ic">${svg('wallet')}</span>إجمالي رأس المال</div><b>${money(capPartners+capInvestors)} <small style="font-size:13px">ج</small></b><div class="sub">شركاء ${money(capPartners)}، مستثمرون ${money(capInvestors)}، عوائد موزّعة ${money(totRet)}</div></div>
       <div class="kpi k-2"><div class="top"><span class="ic">${svg('trend')}</span>أكبر حصة</div><b>${maxEq.equity?money(maxEq.equity)+'٪':'—'}</b><div class="sub">${maxEq.name?esc(maxEq.name):'لا شركاء مسجّلون'}</div></div>
       <div class="kpi k-4"><div class="top"><span class="ic">${svg('brief')}</span>حصص غير موزّعة</div><b>${money(reserveEq)}٪</b><div class="sub">احتياطي الشركة</div></div>
     </div>
@@ -4691,7 +4691,7 @@ function blogTopicsModal(){
     if(err){box.textContent=err;return;}
     box.innerHTML='<div style="color:var(--muted);font-size:12px;margin-bottom:10px">العنوان والوصف يظهران على صفحة الموضوع وفي رقائق «الموضوعات» بالمدوّنة. الرابط ثابت ولا يتغيّر.</div>'+
       rows.map(function(t,i){return '<div class="fld" style="border-top:1px solid var(--line);padding-top:10px">'+
-        '<label><span style="direction:ltr;display:inline-block">/blog/topic/'+topEsc(t.slug)+'</span> · '+(t.count||0)+' مقال منشور</label>'+
+        '<label><span style="direction:ltr;display:inline-block">/blog/topic/'+topEsc(t.slug)+'</span>، '+(t.count||0)+' مقال منشور</label>'+
         '<input data-i="'+i+'" data-f="label" value="'+topEsc(t.label)+'" maxlength="120">'+
         '<textarea data-i="'+i+'" data-f="description" style="min-height:60px;margin-top:6px" maxlength="400">'+topEsc(t.description||'')+'</textarea>'+
         '<div class="acts" style="margin-top:6px"><button class="btn btn-primary" data-save="'+i+'">حفظ</button>'+
@@ -4975,7 +4975,7 @@ function renderTopics(){
   if(!items.length){el.innerHTML='<div style="padding:40px;text-align:center;color:var(--muted)">'+(topicsCat!=='all'?'لا مواضيع في هذه الفئة داخل هذا التبويب.':TOPIC_TAB_META[tab].empty)+'</div>';return;}
   items.forEach((t)=>{var m=TOPIC_SRC[t.source]||TOPIC_SRC.human;var hl=(t.id===TOPIC_HIGHLIGHT_ID);el.insertAdjacentHTML('beforeend',`<div class="row esc-row${hl?' sel':''}" data-row="${t.id}" style="grid-template-columns:2fr 1.3fr 0.9fr 250px;cursor:pointer${hl?';outline:2px solid var(--gold);outline-offset:-2px;background:var(--gold-bg)':''}">
     <div class="c c1"><div class="src-ic" style="background:${m.bg};color:${m.fg}">${svg(m.ic)}</div><div><div class="parties">${topEsc(t.title)}${hl?' <span class="chip" style="padding:1px 8px;font-size:10.5px;cursor:default;background:var(--gold-bg);color:var(--gold);border-color:transparent;font-weight:800">'+svg('sparkles','ic')+'جديد</span>':''}</div><div class="from" style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">${topSrcBadge(t.source)}${t.category?'<span class="chip" style="padding:1px 8px;font-size:10.5px;cursor:default">'+topEsc(t.category)+'</span>':''}${tpSegBadge(t.segment_label,t.segment_auto)}${t.linked_article_id?topArticledBadge():(t.ai_answer?'<b style="color:var(--ink);font-size:11.5px">مسوّدة ذكاء ✓</b>':'')}</div></div></div>
-    <div class="c"><div class="from">${t.country?topEsc(t.country)+' · ':''}${svg('doc','ic')} ${money(t.comments||0)} تعليق معتمد</div><div class="from" style="opacity:.7">${t.date||'—'}</div></div>
+    <div class="c"><div class="from">${t.country?topEsc(t.country)+'، ':''}${svg('doc','ic')} ${money(t.comments||0)} تعليق معتمد</div><div class="from" style="opacity:.7">${t.date||'—'}</div></div>
     <div class="c"><span class="status ${(t.status==='published'||t.status==='open')?'s-auto':(t.status==='rejected'?'s-late':'s-wait')}"><span class="d"></span>${topStatusAr(t.status)}</span></div>
     <div class="c" style="gap:6px;flex-wrap:wrap">${topRowActions(t)}</div></div>`);});
   // فتح المراجعة بالنقر على الصف كامل (إصلاح: الصف كان لا يفتح شيئًا) — الأزرار توقف الانتشار.
@@ -5456,7 +5456,7 @@ function drawExpert(email){
   var el=document.getElementById('drawer');if(!el)return;
   var e=(window.EXPERTS||[]).find(function(x){return x.email===email;});
   if(!e){el.innerHTML='<div class="empty">'+svg('cap','ic')+'<p>اختر خبيرًا لعرض تفاصيله وحسابه.</p></div>';return;}
-  el.innerHTML=`<div class="dh"><div class="k">خبير · مدرّب معتمد${e.online?' · <span style="color:var(--agree);font-weight:800">متصل الآن</span>':''}</div><h3>${esc(e.name)}</h3></div><div class="db">
+  el.innerHTML=`<div class="dh"><div class="k">خبير، مدرّب معتمد${e.online?'، <span style="color:var(--agree);font-weight:800">متصل الآن</span>':''}</div><h3>${esc(e.name)}</h3></div><div class="db">
     ${e.bio?`<div class="field"><div class="lab">نبذة</div><div class="val" style="line-height:1.7">${esc(e.bio)}</div></div>`:''}
     <div class="field"><div class="lab">التخصصات</div><div class="val">${e.expertise.length?e.expertise.map(esc).join('، '):'—'}</div></div>
     <div class="uedit-grid" style="margin-top:6px">
@@ -5525,7 +5525,7 @@ function viewTeam(v){
     ${foundingLeadsPanel()}
     <div class="tabbar" id="teamTabs">
       <div class="tab${teamTab==='experts'?' on':''}" data-t="experts">الخبراء (${money(experts.length)})</div>
-      <div class="tab${teamTab==='trainers'?' on':''}" data-t="trainers">المدربون (${money(experts.length)}${pendingTrainers.length?' · '+money(pendingTrainers.length)+' بانتظار':(inboxFailedList().length?' · ؟ بانتظار':'')})</div>
+      <div class="tab${teamTab==='trainers'?' on':''}" data-t="trainers">المدربون (${money(experts.length)}${pendingTrainers.length?'، '+money(pendingTrainers.length)+' بانتظار':(inboxFailedList().length?'، ؟ بانتظار':'')})</div>
       <div class="tab${teamTab==='admins'?' on':''}" data-t="admins">الفريق الإداري (${money(admins.length)})</div>
     </div>
     <div class="inboxwrap">
@@ -5822,7 +5822,7 @@ function renderGoals(liveGoals){
       '<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px"><span class="dest" style="background:var(--surface-2);color:var(--ink-2);font-size:10.5px">'+esc(g.cat)+'</span><div style="flex:1;font-weight:700;font-size:13.5px;color:var(--ink)">'+esc(g.title)+'</div><span class="status '+st.cls+'" style="font-size:10.5px"><span class="d"></span>'+st.t+'</span></div>'+
       '<div style="display:flex;align-items:center;gap:12px"><div style="flex:1;height:8px;background:var(--surface-2);border-radius:4px;overflow:hidden"><div style="height:100%;width:'+pct+'%;background:'+barC+';border-radius:4px"></div></div>'+
       '<div style="font-size:12px;font-weight:700;color:var(--navy);white-space:nowrap">'+g.current+' / '+g.target+' '+esc(g.unit)+'</div></div>'+
-      '<div style="font-size:11px;color:var(--muted);margin-top:6px">المسؤول: '+esc(g.owner)+' · الموعد: '+esc(g.due)+' · '+pct+'٪</div></div>');
+      '<div style="font-size:11px;color:var(--muted);margin-top:6px">المسؤول: '+esc(g.owner)+'، الموعد: '+esc(g.due)+'، '+pct+'٪</div></div>');
   });
   if(!liveGoals)el.querySelectorAll('.grow').forEach(function(r){r.onmouseenter=function(){r.style.background='var(--surface-2)';};r.onmouseleave=function(){r.style.background='';};r.onclick=function(){goalModal(+r.dataset.i);};});
 }
@@ -6195,7 +6195,7 @@ function drawMarketReq(){
     return '<div style="padding:9px 0;border-bottom:1px solid var(--line)"><div style="display:flex;justify-content:space-between;gap:8px;align-items:center">'+
       '<b style="font-size:12.5px">'+esc(o.expert_display||o.expert_email||'خبير')+'</b>'+
       '<span style="font-size:12px;font-weight:800;color:var(--agree)">'+money(o.price)+' '+esc(o.currency||'')+'</span></div>'+
-      '<div style="font-size:11.5px;color:var(--muted);margin-top:3px">'+(o.eta_days?('خلال '+money(o.eta_days)+' يوم · '):'')+esc(o.status||'')+(accepted?' ✓ مقبول':'')+'</div>'+
+      '<div style="font-size:11.5px;color:var(--muted);margin-top:3px">'+(o.eta_days?('خلال '+money(o.eta_days)+' يوم، '):'')+esc(o.status||'')+(accepted?' ✓ مقبول':'')+'</div>'+
       (o.message?'<div style="font-size:12px;margin-top:4px;line-height:1.7">'+esc(o.message)+'</div>':'')+'</div>';
   }).join('');
   el.innerHTML='<div class="dh"><div class="k">'+esc(mkLaneAr(r.kind))+' · '+esc(mkNeedAr(r.need_kind))+'</div><h3>'+esc(r.title)+'</h3></div><div class="db">'+
@@ -6250,7 +6250,7 @@ function mkDemandPanel(){
     return '<div style="display:flex;align-items:center;gap:8px;padding:5px 0;font-size:12.5px"><span style="width:110px;flex:none">'+esc(label)+'</span>'+
       '<div style="flex:1;height:10px;background:var(--surface-2);border-radius:6px;overflow:hidden"><div style="width:'+w+'%;height:100%;background:var(--human)"></div></div>'+
       '<b style="width:34px;text-align:left;flex:none">'+money(x.count||0)+'</b>'+
-      (extra.length?'<span style="font-size:11px;color:var(--muted);flex:none">'+esc(extra.join(' · '))+'</span>':'')+'</div>';
+      (extra.length?'<span style="font-size:11px;color:var(--muted);flex:none">'+esc(extra.join('، '))+'</span>':'')+'</div>';
   }).join(''):'<div style="color:var(--muted);font-size:12.5px">لسه مفيش احتياجات مسجّلة — أول طلب من الشات هيبدأ العدّ.</div>';
   // «حسب التخصص»: الجسر ما بيبعتش by_specialty — التخصص بيجي على كل اقتراح دورة. نجمّعه هنا،
   // ولو مفيش تخصصات خالص نرجع لأقوى المصطلحات المتكرّرة (top_topics) ونقولها صراحةً في العنوان
@@ -6280,7 +6280,7 @@ function mkDemandPanel(){
       [S.market_requests?money(S.market_requests)+' طلب سوق':'',
        S.training_interests?money(S.training_interests)+' اهتمام تدريب':'',
        S.course_interests?money(S.course_interests)+' اهتمام دورة':'',
-       S.chat?money(S.chat)+' إشارة شات':''].filter(Boolean).join(' · ');
+       S.chat?money(S.chat)+' إشارة شات':''].filter(Boolean).join('، ');
     var tag=(c.origin==='chat_terms')
       ?'<span style="font-size:10px;font-weight:800;color:var(--muted);border:1px solid var(--line);border-radius:6px;padding:1px 5px">مستنبط من الشات</span>'
       :'<span style="font-size:10px;font-weight:800;color:var(--human);border:1px solid var(--human);border-radius:6px;padding:1px 5px">مطلوب صريح</span>';
@@ -6295,7 +6295,7 @@ function mkDemandPanel(){
   if(G.unanswered_requests!=null)noteBits.push(money(G.unanswered_requests)+' طلب مفتوح بلا عرض واحد');
   if(G.total_requests!=null)noteBits.push('من إجمالي '+money(G.total_requests)+' طلب');
   if(G.chat_rows!=null)noteBits.push(money(G.chat_rows)+' إشارة شات');
-  var note=A.note||A.engagement_note||(noteBits.length?(noteBits.join(' · ')+(A.window_days?(' — آخر '+money(A.window_days)+' يوم'):'')):'');
+  var note=A.note||A.engagement_note||(noteBits.length?(noteBits.join('، ')+(A.window_days?(' — آخر '+money(A.window_days)+' يوم'):'')):'');
   return head+
     '<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">'+
       '<div><div style="font-size:12px;font-weight:800;color:var(--muted);margin-bottom:4px">'+svg('sparkles','ic')+' الطلب حسب نوع الاحتياج</div>'+needHtml+'</div>'+
@@ -6575,7 +6575,7 @@ function invStageCounters(blind,loading){
   return '<div class="inv-stages" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:8px;margin-bottom:14px">'+
     INV_STAGES.map(function(s,ix){
       return '<div style="background:var(--surface-2);border:1px solid var(--line);border-radius:10px;padding:9px 12px">'+
-        '<div style="font-size:11.5px;font-weight:800;color:var(--muted)">'+money(ix+1)+' · '+esc(s.t)+'</div>'+
+        '<div style="font-size:11.5px;font-weight:800;color:var(--muted)">'+money(ix+1)+'، '+esc(s.t)+'</div>'+
         '<b style="font-family:Cairo;font-size:20px;font-weight:900;display:block;margin-top:4px;line-height:1">'+val(s.k)+'</b></div>';
     }).join('')+'</div>';
 }
@@ -6879,7 +6879,7 @@ function inviteRowHtml(i){
   if(i.specialtyLabel&&i.specialtyLabel!=='—')meta.push(esc(i.specialtyLabel));
   var stageCell='<div style="flex:1 1 150px;min-width:0;font-size:12px">'+
     '<div style="font-weight:800;font-size:12.5px;color:'+(i.stage==='registered'?'var(--agree)':(terminal?'var(--muted)':'var(--ink)'))+'">'+esc(i.stageLabel||'—')+'</div>'+
-    (meta.length?('<div style="color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+meta.join(' · ')+'</div>'):'')+
+    (meta.length?('<div style="color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+meta.join('، ')+'</div>'):'')+
     ((!terminal&&i.daysLeftLabel&&i.daysLeftLabel!=='—')?('<div style="color:'+(i.daysLeftLabel==='انتهت'?'var(--conflict)':'var(--muted)')+'">'+esc(i.daysLeftLabel)+'</div>'):'')+
   '</div>';
   // «دعاه» (د٨): اسم الداعي؛ المؤسس ⇒ «المؤسس»؛ غائب ⇒ «—» — invitedByLabel محسوبة في
@@ -6902,8 +6902,8 @@ function inviteRowHtml(i){
   // قيد الموافقة/مرفوضة ما اتبعتتش أصلًا — «أُنشئت» لا «اتبعتت».
   var stampVerb=(i.status==='awaiting_approval'||i.status==='rejected')?'أُنشئت ':'اتبعتت ';
   var stamps='<span>'+stampVerb+esc(i.when||'—')+'</span>'+
-    (i.openedWhen?('<span style="color:var(--human)"> · فتحها '+esc(i.openedWhen)+'</span>'):'')+
-    (i.regWhen?('<span style="color:var(--agree)"> · سجّل '+esc(i.regWhen)+'</span>'):'');
+    (i.openedWhen?('<span style="color:var(--human)">، فتحها '+esc(i.openedWhen)+'</span>'):'')+
+    (i.regWhen?('<span style="color:var(--agree)">، سجّل '+esc(i.regWhen)+'</span>'):'');
   return '<div class="trow inv-row'+(invSel===i.id?' sel':'')+'" data-inv-row="'+esc(i.id)+'" style="display:flex;flex-wrap:wrap;align-items:center;gap:10px;row-gap:8px;padding:10px 6px;border-bottom:1px solid var(--line);cursor:pointer;border-radius:8px;'+(invSel===i.id?'background:var(--surface-2)':'')+'">'+
     '<div class="src-ic" style="width:34px;height:34px;border-radius:9px;display:grid;place-items:center;flex:none;background:var(--gold-bg);color:var(--gold)">'+svg('mail')+'</div>'+
     '<div style="flex:1 1 180px;min-width:0">'+
@@ -7074,7 +7074,7 @@ function inviteDetailBody(i,full){
     }).join('');
   }
   var decl=full.declaration||null;
-  var declHtml=decl?('أقرّ في '+esc(fmtWhen(decl.accepted_at))+' · نسخة الشروط '+esc(decl.terms_version!=null?String(decl.terms_version):'—')):'—';
+  var declHtml=decl?('أقرّ في '+esc(fmtWhen(decl.accepted_at))+'، نسخة الشروط '+esc(decl.terms_version!=null?String(decl.terms_version):'—')):'—';
   var founding=full.founding?'نعم':'لا';
   // «المثال» (ملحق ٣ج — و٨): القسم يُختار بوجود محتوى «التجربة» القديم لا بصدق `demo` —
   // الجسر يرجّع `demo: null` لكل دعوةٍ بعد ج٣ لسه ما سألتش، فلو حكمنا بـ`!!full.demo` كانت
@@ -7201,7 +7201,7 @@ function pendingUsersKpi(){
   return '<div class="kpi k-1"><div class="top"><span class="ic">'+svg('users')+'</span>ينتظر الفتح</div><b id="puKpiN">'+
     (blind?'—':(loading?'…':money(req)))+'</b>'+
     '<div class="sub" style="font-size:12px">'+(blind?((D&&D.missing)?'الجسر لسه مش منشور — مش «صفر»':'تعذّر جلب الصفوف — مش «صفر»')
-      :(loading?'…':(rest?('زوّار طلبوا فتح المنصّة · و'+money(rest)+' سجّلوا ولسه ما طلبوش'):'زوّار سجّلوا وطلبوا فتح المنصّة')))+'</div></div>';
+      :(loading?'…':(rest?('زوّار طلبوا فتح المنصّة، و'+money(rest)+' سجّلوا ولسه ما طلبوش'):'زوّار سجّلوا وطلبوا فتح المنصّة')))+'</div></div>';
 }
 function pendingUsersPanel(){
   var st=(window.EP&&EP.state.pendingUsers)||'idle';

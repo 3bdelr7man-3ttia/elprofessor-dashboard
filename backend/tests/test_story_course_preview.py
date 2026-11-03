@@ -60,7 +60,7 @@ def test_drawer_shows_preview_and_story_counts():
     assert 'href="${esc(pcPreviewUrl(c))}" target="_blank" rel="noopener"' in src
     assert '${svg(\'book\')}معاينة</a>' in src
     assert '${sty&&c.slug?' in src                              # للدورات التفاعلية بس
-    assert 'درس · ${money(sty.units)} أجزاء · حوالي ${money(sty.minutes)} دقيقة' in src
+    assert 'درس، ${money(sty.units)} أجزاء، حوالي ${money(sty.minutes)} دقيقة' in src
     # الدورة التفاعلية ملهاش منهج قديم: لا زرار «المنهج والمحاضرات» ولا تحميل للفيديوهات.
     assert "${sty?'':`<button class=\"btn btn-human\" data-a=\"pcvideo\"" in src
     assert 'if(window.EP&&c.id&&!sty){EP.loadCourseVideos' in src

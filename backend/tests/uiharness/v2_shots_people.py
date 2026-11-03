@@ -386,7 +386,7 @@ def flow_pipeline(browser, h, pre, vp, mobile):
     sheet_wait(page)
     page.wait_for_timeout(600)
     lines = page.evaluate("() => [...document.querySelectorAll('#epModal .v2pm-gh')].map(b => b.innerText.replace(/\\s+/g, ' ').trim())")
-    expect(len(lines) == 3 and 'مفتوح' in lines[0] and 'حصة العضو: غير متاح بعد · الموافقة من الجيل ٢' in lines[1] and '١ من ٦ فيديوهات مضبوطة' in lines[2], pre + '11: سطور الإعدادات %r' % lines)
+    expect(len(lines) == 3 and 'مفتوح' in lines[0] and 'حصة العضو: غير متاح بعد، الموافقة من الجيل ٢' in lines[1] and '١ من ٦ فيديوهات مضبوطة' in lines[2], pre + '11: سطور الإعدادات %r' % lines)
     pshot(page, pre + '11-settings-collapsed.jpg', sheet_side=True)
     page.click('#epModal .v2pm-gh[data-g="invite"]')
     page.wait_for_selector('#v2pmF_quota')

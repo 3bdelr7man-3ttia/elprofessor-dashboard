@@ -742,7 +742,7 @@ def test_link_statement_and_validate():
     row = C(7, name='حملة الصيف', platform='google_ads', spent=1500, budget=3000, clicks=320, leads=18, conversions=0, revenue_attributed=0, start_date='2026-10-01', end_date='2026-10-20')
     stm = _mk("m.statement(rows[0],{owner_kind:'course',owner_id:'x',owner_title:'أساسيات التسويق'},'%s')" % TODAY, [row])
     assert stm.split('\n') == ['كشف حملة «حملة الصيف» — لأساسيات التسويق', 'المنصة: جوجل، من ١ أكتوبر ٢٠٢٦ إلى ٢٠ أكتوبر ٢٠٢٦', 'صُرف: ١٬٥٠٠ جنيه من ميزانية ٣٬٠٠٠ جنيه',
-                                'زيارات: ٣٢٠ · سجّلوا: ١٨ · دفعوا: ٠', 'الدخل المسجّل: ٠ جنيه', 'الأرقام كما سُجّلت في لوحة البروفيسور بتاريخ ٣٠ أكتوبر ٢٠٢٦.'], '«الأصفار تبقى: قيم مسجّلة»'
+                                'زيارات: ٣٢٠، سجّلوا: ١٨، دفعوا: ٠', 'الدخل المسجّل: ٠ جنيه', 'الأرقام كما سُجّلت في لوحة البروفيسور بتاريخ ٣٠ أكتوبر ٢٠٢٦.'], '«الأصفار تبقى: قيم مسجّلة»'
     bare = _mk("m.statement(rows[0],null,'%s')" % TODAY, [C(8, name='بلا مالك', platform='', spent=0, budget=0)])
     assert bare.split('\n')[0] == 'كشف حملة «بلا مالك» — للبروفيسور' and bare.split('\n')[1] == 'بلا تاريخ', 'سطر المنصة المفقودة يُحذف'
 
@@ -935,7 +935,7 @@ def test_the_social_tab_has_one_button_and_no_needs_block():
 def test_the_plan_tab_lists_the_published_articles_and_the_drafts_line():
     pub = {'items': [{'id': 7, 'title': 'مقال عن الإيجار', 'published_at': '2026-10-29T08:00:00Z'}, {'id': 9, 'title': 'مقال ثانٍ', 'published_at': '2026-10-27T08:00:00Z'}], 'drafts': 3}
     h = _html('plan', _model(src={'published': {'state': 'ready', 'data': pub}}))
-    assert 'مقال عن الإيجار' in h and '٢٩ أكتوبر ٢٠٢٦ · منذ يوم' in h and 'https://elprofessor.net/article.html?id=7' in h and 'rel="noopener"' in h and 'target="_blank"' in h
+    assert 'مقال عن الإيجار' in h and '٢٩ أكتوبر ٢٠٢٦، منذ يوم' in h and 'https://elprofessor.net/article.html?id=7' in h and 'rel="noopener"' in h and 'target="_blank"' in h
     assert 'مسودات مقالات لم تُنشر بعد: ٣' in h and 'data-s="content"' in h and 'افتح المحتوى' in h
     assert 'خطة النشر على السوشيال' in h and 'قريبًا' in h and 'mk-madar' not in h and '<img' not in h and 'v3-btn1' not in h
     empty = _html('plan', _model(src={'published': {'state': 'ready', 'data': {'items': [], 'drafts': 0}}}))

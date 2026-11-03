@@ -352,7 +352,7 @@ def test_offers_in_review_draft_and_live_are_never_rows_and_rejected_offers_are(
     assert res['offersWaiting'] == 2, 'عدّاد عروض «مراجعة العروض» بس'
     off = _rowmap(res)['of:off-12']
     assert off['kind'] == 'offer' and off['reviewNote'] == 'الموضوع خارج تخصص المنصة' and off['priceText'] == '٢٠٠ جنيه' and off['salesText'] == ''
-    assert off['agreementText'] == 'النشر على المنصة: صاحب العمل ٦٠٪ · المنصة ٤٠٪'
+    assert off['agreementText'] == 'النشر على المنصة: صاحب العمل ٦٠٪، المنصة ٤٠٪'
     assert len(keys) == len(set(keys))
 
 
@@ -361,10 +361,10 @@ def test_a_store_book_takes_its_owner_from_the_store_and_falls_back_to_the_live_
     by = _rowmap(W())
     assert by['st:bk-tenant-guide']['ownerName'] == 'أ. نادية فؤاد' and by['st:bk-tenant-guide']['catalogId'] == 'bk-tenant-guide'
     assert by['st:bk-startup-law']['agreementText'] == 'كتاب من البروفيسور' and by['st:bk-startup-law']['ownerName'] == 'البروفيسور'
-    assert by['st:bk-tenant-guide']['agreementText'] == 'النشر مع إعلانات على حسابك: صاحب العمل ٦٥٪ · المنصة ٣٥٪'
+    assert by['st:bk-tenant-guide']['agreementText'] == 'النشر مع إعلانات على حسابك: صاحب العمل ٦٥٪، المنصة ٣٥٪'
     closed = _rowmap(W(store='closed'))
     assert closed['st:bk-tenant-guide']['ownerName'] == 'أ. نادية فؤاد', 'الجسر غير مبني ⇒ من العرض الحي'
-    assert closed['st:bk-tenant-guide']['agreementText'] == 'النشر مع إعلانات على حسابك: صاحب العمل ٦٥٪ · المنصة ٣٥٪'
+    assert closed['st:bk-tenant-guide']['agreementText'] == 'النشر مع إعلانات على حسابك: صاحب العمل ٦٥٪، المنصة ٣٥٪'
     assert closed['st:bk-hidden']['ownerNA'] is True and closed['st:bk-hidden']['ownerName'] == '', 'لا مصدر ⇒ «غير متاح بعد» لا «البروفيسور»'
     assert closed['st:bk-labor']['catalogId'] == 'bk-labor'
 
@@ -419,7 +419,7 @@ def test_without_the_new_fields_a_work_for_sale_has_no_agreement_and_no_split_cl
     assert by['kn:kn-4']['createdAt'] is None and by['kn:kn-4']['createdText'] == '' and by['kn:kn-4']['hasFile'] is None
     p1 = _rowmap(W(_src(p1=True)))['kn:kn-4']
     assert p1['legacySplit'] is True and p1['platformPct'] == 20
-    assert p1['agreementText'] == 'صاحب العمل ٨٠٪ · المنصة ٢٠٪ — النسبة القديمة، إلى أن يُنقل إلى قائمة الأسعار الموحّدة'
+    assert p1['agreementText'] == 'صاحب العمل ٨٠٪، المنصة ٢٠٪ — النسبة القديمة، إلى أن يُنقل إلى قائمة الأسعار الموحّدة'
     assert p1['priceText'] == '٢٥٠ جنيه' and _rowmap(W())['kn:kn-6']['priceText'] == 'مجاني للجميع'
 
 

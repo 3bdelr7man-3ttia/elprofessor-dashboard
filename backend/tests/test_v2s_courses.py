@@ -648,7 +648,7 @@ def test_page_model():
     assert m['tiles']['sales'] == {'text': 'غير متاح بعد', 'na': True} and m['completion'] == 'نسبة الإكمال: غير متاح بعد'
     story = next(x for x in _courses(True) if x['id'] == 'pc-02')
     ms = _co('pageModel', story, None, None, None, None, {'now': NOW})
-    assert ms['tiles']['lessons'] == '٣٩ في ٥ أجزاء · نحو ٤٢٠ دقيقة' and ms['interactive'] is True and ms['hasPreview'] is True
+    assert ms['tiles']['lessons'] == '٣٩ في ٥ أجزاء، نحو ٤٢٠ دقيقة' and ms['interactive'] is True and ms['hasPreview'] is True
     draft = next(x for x in _courses(True) if x['id'] == 'pc-14')
     md = _co('pageModel', draft, None, None, None, None, {'now': NOW})
     assert md['danger'] == 'delete' and md['main'] is None and md['secondary'][0]['key'] == 'publishNow'

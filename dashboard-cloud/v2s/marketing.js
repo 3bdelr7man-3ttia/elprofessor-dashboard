@@ -111,7 +111,7 @@
     if (b.state === 'items') {
       var it = b.items[0], idx = total - b.items.length + 1;
       return '<section class="mk-brainstrip" aria-label="' + esc(T.brainLabel) + '"><img class="mk-bav" src="' + img('brain-avatar') + '" alt="">'
-        + '<div class="mk-bt"><small>' + esc(T.brainLabel) + (total > 1 ? ' · اقتراح ' + U.ar(idx) + ' من ' + U.ar(total) : '') + '</small><p class="mk-bs">' + esc(it.text) + '</p>'
+        + '<div class="mk-bt"><small>' + esc(T.brainLabel) + (total > 1 ? '، اقتراح ' + U.ar(idx) + ' من ' + U.ar(total) : '') + '</small><p class="mk-bs">' + esc(it.text) + '</p>'
         + (it.line ? '<p class="mk-bl">' + esc(it.line) + '</p>' : '') + '</div>'
         + '<div class="mk-bb"><button type="button" class="v3-btn1" data-a="brain" data-kind="' + esc(it.kind) + '" data-id="' + esc(it.id) + '">' + esc(it.btn) + '</button>'
         + (it.later ? '<button type="button" class="mk-later" data-a="later" data-kind="' + esc(it.kind) + '" data-id="' + esc(it.id) + '">' + esc(T.later) + '</button>' : '') + '</div></section>';
@@ -282,7 +282,7 @@
     if (pub.state === 'ready' && pub.data && Array.isArray(pub.data.items)) {
       var d = pub.data;
       body = (d.items.length ? '<ul class="v3-list">' + d.items.map(function (a) {
-        return '<li class="mk-pub"><div class="v3-pid"><b>' + esc(a.title || '') + '</b><time>' + esc(U.dateText(a.published_at) + ' · ' + U.agoText(a.published_at, m.now)) + '</time></div>'
+        return '<li class="mk-pub"><div class="v3-pid"><b>' + esc(a.title || '') + '</b><time>' + esc(U.dateText(a.published_at) + '، ' + U.agoText(a.published_at, m.now)) + '</time></div>'
           + '<a class="v3-btn2" href="https://elprofessor.net/article.html?id=' + encodeURIComponent(a.id) + '" target="_blank" rel="noopener">' + esc(T.planOpenSite) + '</a></li>';
       }).join('') + '</ul>' : '<p class="v3-none">' + esc(T.planNone) + '</p>')
         + (Number(d.drafts) > 0 ? '<div class="mk-drafts"><span>' + esc(T.planDrafts + U.ar(d.drafts)) + '</span><button type="button" class="v3-btn2" data-a="goto" data-s="content" data-t="">' + esc(T.planOpenContent) + '</button></div>' : '');
@@ -380,7 +380,7 @@
     var r = MK.ratio(row.revenue, row.spent);
     var cells = [[T.nBudget, money(row.budget, row.currency)], [T.colSpent, money(row.spent, row.currency)], [T.colVisits, U.ar(row.clicks)], [T.colLeads, U.ar(row.leads)],
                  [T.colPaid, U.ar(row.conversions)], [T.colRev, money(row.revenue, row.currency)], [T.colRatio, row.noResults || r == null ? '—' : U.fmt(r)]];
-    var viaBox = att ? '<div class="mk-viabox"><b>' + esc(T.viaLabel) + ':</b> ' + esc(via ? 'جاء عبره هذا الشهر: سجّلوا ' + U.ar(via.signups) + ' · دفعوا ' + U.ar(via.paid) + (via.totals.length ? ' · دخل ' + MK.moneyListText(via.totals) : '') : T.viaNobody) + '</div>'
+    var viaBox = att ? '<div class="mk-viabox"><b>' + esc(T.viaLabel) + ':</b> ' + esc(via ? 'جاء عبره هذا الشهر: سجّلوا ' + U.ar(via.signups) + '، دفعوا ' + U.ar(via.paid) + (via.totals.length ? '، دخل ' + MK.moneyListText(via.totals) : '') : T.viaNobody) + '</div>'
       : '<p class="v3-fine">' + esc(T.linkSoon) + '</p>';
     var runWord = row.status === 'active' ? T.actStop : T.actRun;
     var s = openSheet('حملة: ' + row.name, '<dl class="mk-dl">' + lines.map(function (l) { return '<dt>' + esc(l[0]) + '</dt><dd>' + esc(l[1]) + '</dd>'; }).join('') + '</dl>'
@@ -470,7 +470,7 @@
     var m = model(), rows = campaignRows(m), items = rows ? MK.legacyUsd(rows, isReady(m, 'owners') ? m.src.owners.data.legacy_max_id : 0) : [];
     if (!items.length) return;
     var s = openSheet(T.legacyTitle, '<p class="mc-lead">' + esc(T.legacyLead) + '</p><ul class="mk-leg">' + items.map(function (r) {
-      return '<li><b>' + esc(r.name) + '</b><span>صُرف ' + esc(U.fmt(r.spent)) + ' · الميزانية ' + esc(U.fmt(r.budget)) + '</span></li>'; }).join('') + '</ul><div id="mkerr" role="alert"></div>'
+      return '<li><b>' + esc(r.name) + '</b><span>صُرف ' + esc(U.fmt(r.spent)) + '، الميزانية ' + esc(U.fmt(r.budget)) + '</span></li>'; }).join('') + '</ul><div id="mkerr" role="alert"></div>'
       + '<div class="acts"><button type="button" class="btn btn-primary" id="mk_all">' + esc(T.legacyAllEgp) + '</button><button type="button" class="btn" id="mk_keep">' + esc(T.legacyKeep) + '</button>'
       + '<button type="button" class="btn btn-ghost" id="mk_later">' + esc(T.legacyLater) + '</button></div>');
     if (!s) return;

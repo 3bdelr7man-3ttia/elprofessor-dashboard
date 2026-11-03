@@ -445,7 +445,7 @@ def test_person_view_model_from_a_full_response():
     assert files['summary'] == '٤ ملفات' and files['items'][0]['title'] == 'عقد'
     assert 'دورتان' in courses['summary'] and '٣١' in courses['summary'] and courses['items'][0]['meta'] == 'منشورة'
     rows = {r['k']: r for r in money['rows']}
-    assert rows['طلبات سحب معلقة']['v'] == 'طلب واحد — ١٬٢٠٠ جنيه' and rows['ما حُوّل من قبل']['v'] == 'طلبان — ٣\u202f٣٥٠٫٥٠ جنيه'
+    assert rows['طلبات سحب معلقة']['v'] == 'طلب واحد — ١٬٢٠٠ جنيه' and rows['ما حُوّل من قبل']['v'] == 'طلبان — ٣٬٣٥٠٫٥٠ جنيه'
     assert rows['رصيد المحفظة']['na'] is True and rows['رصيد المحفظة']['v'] == 'غير متاح بعد'
     lrows = {r['k']: r for r in learn['rows']}
     assert lrows['دورات سجّل فيها أو دفع ثمنها']['v'] == 'لا تسجيلات' and lrows['الكتب المشتراة']['na'] is True

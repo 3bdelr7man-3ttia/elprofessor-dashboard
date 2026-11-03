@@ -69,7 +69,7 @@
     var trainer = Math.min(CAP, floor + bo);
     return { trainer: trainer, platform: 100 - trainer };
   }
-  function totalLine(t) { return 'نصيب المدرّب الآن: ' + ar(t.trainer) + '٪ · المنصة ' + ar(t.platform) + '٪'; }
+  function totalLine(t) { return 'نصيب المدرّب الآن: ' + ar(t.trainer) + '٪، المنصة ' + ar(t.platform) + '٪'; }
 
   var ERR = {
     base: 'اكتب نسبة أساسية صحيحة بين ' + ar(BASE_MIN) + ' و' + ar(BASE_MAX),
@@ -290,7 +290,7 @@
       if (!p.owners) dep = '<p class="v2ts-none sm">لا أعمال إعلانية لهذا المدرّب حتى الآن</p>';
       else if (!p.rows.length) dep = '<p class="v2ts-none sm">لا إيداعات إعلانات حتى الآن</p>';
       else dep = '<ul class="v2ts-dep">' + p.rows.map(function (r) { return '<li><span>' + esc(r.country || '') + '</span><b>' + esc(r.text) + '</b></li>'; }).join('') + '</ul>';
-      sal = p.sales ? '<p class="v2ts-sales">مبيعات قبل أول إيداع: <b>' + esc(ar(p.sales.before)) + '</b> · بعده: <b>' + esc(ar(p.sales.after)) + '</b></p>'
+      sal = p.sales ? '<p class="v2ts-sales">مبيعات قبل أول إيداع: <b>' + esc(ar(p.sales.before)) + '</b>، بعده: <b>' + esc(ar(p.sales.after)) + '</b></p>'
         : '<p class="v2ts-na-line">' + esc('المبيعات قبل الإيداع وبعده: ' + NA) + '</p>';
     }
     var title = p && p.kind === 'balance' && p.rows.length ? 'رصيد إعلانات المدرّب الآن' : 'إيداعات الإعلانات';
@@ -303,7 +303,7 @@
     if (!p.history.length) return '<p class="v2ts-none sm">لا تغييرات سابقة</p>';
     return '<ul class="v2ts-hist">' + p.history.slice().reverse().slice(0, 12).map(function (h) {
       var per = periodText(h.from, h.until);
-      return '<li><time>' + esc(dateText(h.at)) + '</time><b>' + esc((h.base != null ? 'الأساسية ' + ar(h.base) + '٪' : '') + (h.bonus > 0 ? ' · زيادة +' + ar(h.bonus) : '')) + '</b>'
+      return '<li><time>' + esc(dateText(h.at)) + '</time><b>' + esc((h.base != null ? 'الأساسية ' + ar(h.base) + '٪' : '') + (h.bonus > 0 ? '، زيادة +' + ar(h.bonus) : '')) + '</b>'
         + (per && h.bonus > 0 ? '<span>' + esc(per) + '</span>' : '') + (h.reason ? '<span>' + esc(h.reason) + '</span>' : '')
         + (h.by ? '<small dir="ltr">' + esc(h.by) + '</small>' : '') + '</li>';
     }).join('') + '</ul>';

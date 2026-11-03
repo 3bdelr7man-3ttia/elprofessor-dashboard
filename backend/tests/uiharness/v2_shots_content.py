@@ -198,7 +198,7 @@ def flow(browser, h, pre, viewport, mobile):
     expect(st['hero'].startswith('ابدأ بموضوعات الأعضاء: ٣ ينتظر صاحبه قرارك'), pre + '01: سطر العقل «%s»' % st['hero'])
     expect(any(f.startswith('نُشر على الموقع اليوم: ١') for f in st['facts']) and any('هذا الأسبوع: ٣' in f for f in st['facts']), pre + '01: حقائق النشر %r' % st['facts'])
     expect(any(f.startswith('صفحات محركات البحث حُدّثت منذ') for f in st['facts']), pre + '01: حالة صفحات البحث %r' % st['facts'])
-    expect(st['tabs'] == ['خط النشر', 'المقالات', 'الموضوعات', 'الأخبار', 'التعليقات', 'دليل الاستخدام'] and st['h1'] == 'المحتوى', pre + '01: التبويبات %r' % st['tabs'])
+    expect(st['tabs'] == ['خط النشر', 'المقالات', 'الموضوعات', 'الأخبار', 'التعليقات', 'الساحة', 'الديوان', 'القاموس', 'دليل الاستخدام', 'الموقع'] and st['h1'] == 'المحتوى', pre + '01: التبويبات %r' % st['tabs'])
     expect(not st['old'], pre + '01: أثر لشاشة قديمة في #view')
     cshot(page, pre + '01-pipeline.jpg')
     if mob:

@@ -467,7 +467,7 @@ def flow(browser, h, pre, viewport, mobile):
     wr = writes(h, n0)
     if len(wr) != 1 or (wr[0][0], wr[0][1]) != ('POST', '/api/bridge/chat-insights/classify') or str(wr[0][2].get('limit')) != '100':
         PROBLEMS.append('%s16b: نداء التصنيف %r' % (pre, wr))
-    if 'صُنّف ١٢ سؤالًا جديدًا · بقي ٣' not in page.inner_text('.v3-ok'):
+    if 'صُنّف ١٢ سؤالًا جديدًا، بقي ٣' not in page.inner_text('.v3-ok'):
         PROBLEMS.append('%s16b: نص النجاح %r' % (pre, page.inner_text('.v3-ok')))
     shot(page, pre + '16b-classified.jpg')
     browser.close()
@@ -528,7 +528,7 @@ def flow(browser, h, pre, viewport, mobile):
     if writes(h, n0):
         PROBLEMS.append(pre + '20: تشغيل الإرسال كتب على المنصة')
     txt = page.inner_text('.v2r-dstat')
-    if txt != 'يصلك هذا التقرير كل أحد ٨ صباحًا على تليجرام · آخر إرسال: أسبوع ١٨ أكتوبر':
+    if txt != 'يصلك هذا التقرير كل أحد ٨ صباحًا على تليجرام، آخر إرسال: أسبوع ١٨ أكتوبر':
         PROBLEMS.append('%s20: حالة الإرسال %r' % (pre, txt))
     shot(page, pre + '20-sunday-delivery-on.jpg')
     page.click('[data-a="dsend"]')
