@@ -290,9 +290,9 @@ def test_with_experts_shows_the_three_closest_then_n_on_time(real):
 @needs_node
 def test_the_header_line_reads_the_auto_assign_switch(real):
     on = _tickets(real, autoAssign=True, brainToday=3)
-    assert on['header'] == 'التوزيع التلقائي يعمل · وزّع ٣ ملفات اليوم' and on['autoOn'] is True
-    assert _tickets(real, autoAssign=True, brainToday=1)['header'] == 'التوزيع التلقائي يعمل · وزّع ملفًا واحدًا اليوم'
-    assert _tickets(real, autoAssign=True, brainToday=0)['header'] == 'التوزيع التلقائي يعمل · لم يوزّع شيئًا اليوم'
+    assert on['header'] == 'التوزيع التلقائي يعمل. وزّع ٣ ملفات اليوم' and on['autoOn'] is True
+    assert _tickets(real, autoAssign=True, brainToday=1)['header'] == 'التوزيع التلقائي يعمل. وزّع ملفًا واحدًا اليوم'
+    assert _tickets(real, autoAssign=True, brainToday=0)['header'] == 'التوزيع التلقائي يعمل. لم يوزّع شيئًا اليوم'
     off = _tickets(real, autoAssign=False)
     assert off['header'].startswith('التوزيع التلقائي متوقف') and off['autoOn'] is False
     # بلا قيمة: من الطابور (`expert_files_auto_assign`) وإلا مفيش سطر (لا ادّعاء)
@@ -445,7 +445,7 @@ def test_person_view_model_from_a_full_response():
     assert files['summary'] == '٤ ملفات' and files['items'][0]['title'] == 'عقد'
     assert 'دورتان' in courses['summary'] and '٣١' in courses['summary'] and courses['items'][0]['meta'] == 'منشورة'
     rows = {r['k']: r for r in money['rows']}
-    assert rows['طلبات سحب معلقة']['v'] == 'طلب واحد — ١٬٢٠٠ جنيه' and rows['ما حُوّل من قبل']['v'] == 'طلبان — ٣٬٣٥٠٫٥ جنيه'
+    assert rows['طلبات سحب معلقة']['v'] == 'طلب واحد — ١٬٢٠٠ جنيه' and rows['ما حُوّل من قبل']['v'] == 'طلبان — ٣\u202f٣٥٠٫٥٠ جنيه'
     assert rows['رصيد المحفظة']['na'] is True and rows['رصيد المحفظة']['v'] == 'غير متاح بعد'
     lrows = {r['k']: r for r in learn['rows']}
     assert lrows['دورات سجّل فيها أو دفع ثمنها']['v'] == 'لا تسجيلات' and lrows['الكتب المشتراة']['na'] is True

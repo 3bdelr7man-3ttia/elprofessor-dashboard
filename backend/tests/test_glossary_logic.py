@@ -153,7 +153,8 @@ def test_the_area_list_matches_the_server_and_has_other_everywhere():
     areas = G('AREAS')
     assert [tuple(a) for a in areas] == list(gr.AREAS) and areas[-1] == ['other', 'أخرى']
     chips = G('areaChips', {'byArea': {'contracts': 3, 'other': 0}})
-    assert chips[0] == ['all', 'الكل'] and chips[1] == ['contracts', 'عقود (٣)'] and chips[-1] == ['other', 'أخرى'] and len(chips) == 11
+    assert chips[0] == ['all', 'الكل'] and chips[1] == ['contracts', 'عقود', '٣'] and chips[-1] == ['other', 'أخرى'] and len(chips) == len(gr.AREAS) + 1
+    assert [a[0] for a in areas][-4:] == ['realestate', 'banking', 'data', 'other'] and dict(gr.AREAS)['realestate'] == 'عقارات' and dict(gr.AREAS)['banking'] == 'بنوك ومصارف' and dict(gr.AREAS)['data'] == 'البيانات والخصوصية'
     assert G('SUBSTANTIVE') == list(gr.SUBSTANTIVE)
     assert {f[0]: f[2] for f in G('FIELDS')} == gr.MAX_LEN
     assert G('RELATED_MAX') == gr.RELATED_MAX and G('IMPORT_MAX') == gr.IMPORT_MAX

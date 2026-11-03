@@ -630,7 +630,7 @@ const ESCROW=[];
 const STATUS={held:{cls:'s-wait',t:'محجوز'},confirm:{cls:'s-human',t:'بانتظار تأكيد'},dispute:{cls:'s-late',t:'نزاع'}};
 const DISPUTES=[];
 const RELEASED=[];
-const money=n=>(n==null||isNaN(n))?'—':Number(n).toLocaleString('ar-EG');
+const money=n=>(n==null||isNaN(n))?'—':(Number.isInteger(Number(n))?Number(n).toLocaleString('ar-EG'):Number(n).toLocaleString('ar-EG',{minimumFractionDigits:2,maximumFractionDigits:2}).replace(/٬/g,'\u202F'));   // كسر ⇒ منزلتان وفاصل آلاف مسافة رفيعة (لا فاصلة تشبه فاصلة الكسر)
 // HTML-escape for safe interpolation into innerHTML (global — used by drawers/modals/views).
 function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
 
@@ -1290,8 +1290,8 @@ function drawInbox(){
   const fld=(lab,val,style)=>val?`<div class="field"><div class="lab">${lab}</div><div class="val"${style?` style="${style}"`:''}>${esc(val)}</div></div>`:'';
   // «ما أرفقه» — إجابات النموذج كما كتبها، وروابطه مستخرَجة. لا يُنقّب المراجِع في مكان آخر.
   const det=(i.details||[]).map(d=>fld(esc(d.k),d.v)).join('');
-  const att=(i.attachments||[]).length?`<div class="field"><div class="lab">روابط أرفقها</div><div class="val">${(i.attachments||[]).map(u=>`<div><a href="${esc(u)}" target="_blank" rel="noopener noreferrer" style="color:var(--ai);word-break:break-all;direction:ltr;display:inline-block">${esc(u)}</a></div>`).join('')}</div></div>`:'';
-  el.innerHTML=`<div class="dh"><div class="k">بند وارد · ${esc(i.ref)}</div><h3>${esc(i.out)}</h3></div><div class="db">
+  const att=(i.attachments||[]).length?`<div class="field"><div class="lab">روابط أرفقها</div><div class="val">${(i.attachments||[]).map((u,n,all)=>`<div><a href="${esc(u)}" title="${esc(u)}" target="_blank" rel="noopener noreferrer" style="color:var(--ai);display:inline-flex;align-items:center;min-height:44px;font-weight:700">افتح الرابط${all.length>1?' '+(n+1).toLocaleString('ar-EG'):''}</a></div>`).join('')}</div></div>`:'';
+  el.innerHTML=`<div class="dh"><div class="k">${/^JR-/i.test(String(i.ref||''))?'طلب تقديم خدمة':'بند وارد · '+esc(i.ref)}</div><h3>${esc(i.out)}</h3></div><div class="db">
     ${licStrip}${askStrip}
     <div class="route"><span class="step">المنصة · ${esc(i.from)}</span><span class="arrow">←</span><span class="step" style="color:${m.c};font-weight:800">${m.label}</span></div>
     <div class="note-ai">${svg('sparkles','ic')}<div>${esc(i.note)}</div></div>

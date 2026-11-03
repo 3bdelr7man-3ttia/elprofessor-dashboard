@@ -1030,7 +1030,7 @@ def test_legacy_subs_deal_action_sum_lines_sorting():
     assert da(status='active', ends_on='2027-06-01', amount=5) == 'receive'
     assert da(status='active', ends_on='2027-06-01') == 'edit' and da(status='active') == 'edit'
     assert da(status='draft', ends_on='2026-11-01', amount=5) == 'edit' and da(status='ended') == 'renew' and da(status='active', ends_on='2026-10-01') == 'renew'
-    assert _lg('sumLines', [{'currency': 'EGP', 'amount': 400000}, {'currency': 'USD', 'amount': 4500}]) == '٤٠٠٬٠٠٠ جنيه · ٤٬٥٠٠ دولار'
+    assert _lg('sumLines', [{'currency': 'EGP', 'amount': 400000}, {'currency': 'USD', 'amount': 4500}]) == '٤٠٠٬٠٠٠ جنيه، ٤٬٥٠٠ دولار'
     assert _lg('sumLines', None) == '' and _lg('sumLines', [{'currency': 'EGP', 'amount': 0}]) == ''
     subs = [{'id': 1, 'status': 'stopped', 'renews_on': '2026-01-01'}, {'id': 2, 'status': 'active', 'renews_on': None}, {'id': 3, 'status': 'active', 'renews_on': '2026-12-01'},
             {'id': 4, 'status': 'active', 'renews_on': '2026-10-01'}]

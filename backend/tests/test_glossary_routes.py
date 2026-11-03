@@ -362,7 +362,7 @@ def test_list_area_filter_includes_other_and_validates(ctx, plat):
     assert [i['slug'] for i in r['items']] == ['misc-thing'] and r['total'] == 1
     assert [i['slug'] for i in call(ctx, 'GET', '?area=litigation').get_json()['items']] == ['plaintiff']
     assert call(ctx, 'GET', '?area=nonsense').status_code == 400
-    assert {a['code'] for a in r['areas']} == {'contracts', 'litigation', 'corporate', 'general', 'arbitration', 'criminal', 'ip', 'labor', 'family', 'other'}
+    assert {a['code'] for a in r['areas']} == {'contracts', 'litigation', 'corporate', 'general', 'arbitration', 'criminal', 'ip', 'labor', 'family', 'realestate', 'banking', 'data', 'other'}
     assert dict((a['code'], a['label']) for a in r['areas'])['other'] == 'أخرى'
 
 
@@ -739,6 +739,24 @@ def test_import_keeps_related_even_if_target_absent_and_course1_source(ctx, plat
     assert j['imported'] == 31 and GlossaryTerm.query.filter_by(source='course1').count() == 31
     h = GlossaryTerm.query.filter_by(slug='hereby').one()
     assert h.status == 'draft' and h.fr is None and h.reviewed_at is None
+
+
+def test_new_areas_realestate_banking_data_end_to_end(ctx, plat):
+    labels = {'realestate': 'عقارات', 'banking': 'بنوك ومصارف', 'data': 'البيانات والخصوصية'}
+    rows = [{'id': 'title-deed', 'ar': 'سند الملكية', 'en': 'title deed', 'area': 'realestate', 'definition_ar': 'وثيقة.'},
+            {'id': 'cheque', 'ar': 'الشيك', 'en': 'cheque', 'area': 'banking', 'definition_ar': 'ورقة.'},
+            {'id': 'personal-data', 'ar': 'البيانات الشخصية', 'en': 'personal data', 'area': 'data', 'definition_ar': 'بيانات.'}]
+    p = call(ctx, 'POST', '/seed/preview', {'source': 'upload', 'payload': {'items': rows}}).get_json()
+    assert (p['total'], p['new_count'], p['invalid_count']) == (3, 3, 0)
+    assert {x['area_label'] for x in p['sample']} == set(labels.values())
+    assert call(ctx, 'POST', '/seed/import', {'source': 'upload', 'payload': {'items': rows}}).get_json()['imported'] == 3
+    for code, label in labels.items():
+        r = call(ctx, 'GET', '?area=' + code).get_json()
+        assert r['total'] == 1 and r['items'][0]['area'] == code and r['items'][0]['area_label'] == label
+    c = call(ctx, 'GET', '').get_json()['counts']['by_area']
+    assert c['realestate'] == c['banking'] == c['data'] == 1 and c['other'] == 0
+    t = GlossaryTerm.query.filter_by(slug='cheque').one()
+    assert call(ctx, 'PUT', '/%d' % t.id, {'area': 'data'}).status_code == 200 and call(ctx, 'PUT', '/%d' % t.id, {'area': 'tax'}).status_code == 400
 
 
 def test_import_upload_validates_every_row(ctx, plat):

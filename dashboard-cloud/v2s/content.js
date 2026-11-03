@@ -144,7 +144,7 @@
   // ------------------------------------------------------------------ أجزاء مشتركة
   function warnStrip(labels, tail) {
     if (!labels.length) return '';
-    return '<div class="v2ct-warn" role="status">تعذّر جلب: ' + esc(labels.join(' · ')) + ' — ' + esc(tail || 'ما يظهر ناقص، وليس معناه أنه لا شيء') + ' <button type="button" class="v2ct-b2 sm" data-a="retry">أعد المحاولة</button></div>';
+    return '<div class="v2ct-warn" role="status">تعذّر جلب: ' + esc(labels.join('، ')) + ' — ' + esc(tail || 'ما يظهر ناقص، وليس معناه أنه لا شيء') + ' <button type="button" class="v2ct-b2 sm" data-a="retry">أعد المحاولة</button></div>';
   }
   function noteStrip() { return S.note ? '<div class="v2ct-ok" role="status">' + esc(S.note) + '</div>' : ''; }
   function setNote(text) {
@@ -298,8 +298,12 @@
   }
 
   // سطر ترويسة القسم من أعمدة خط النشر نفسها (لا من مربّع اللوحة): ينتظرك · مسودات · أفكار. تعذّر مصدر الانتظار ⇒ «غير متاح بعد».
+  // لكل تبويب سطره: أرقام خط النشر تظهر تحت «خط النشر» وحده، وغيره سطر ثابت قصير (الجولة r6)
+  var TAB_LINE = { articles: 'مقالات الموقع والمنصة', topics: 'موضوعات الأعضاء وأفكار الكتابة', news: 'أخبار المنصة قبل نشرها وبعده', comments: 'تعليقات الأعضاء على المقالات',
+                   saha: 'نقاشات وأخبار ووظائف المجتمع', diwan: 'إبداعات الأعضاء وتحدّيات ٩٠ يومًا', glossary: 'مصطلحات قانونية بثلاث لغات', tutorials: 'دليل استخدام المنصة', site: 'صفحات الموقع التسويقي' };
   API.head = function () {
     var B;
+    try { var st = host().state ? host().state() : null; if (st && st.section === 'content' && TAB_LINE[st.tab]) return TAB_LINE[st.tab]; } catch (e0) {}
     try { B = L.v2ContentBoard(boardSrc(), now()); } catch (e) { return null; }
     if (!B || !B.counts) return null;
     var c = B.counts;
@@ -308,7 +312,7 @@
     if (c.wait) p.push(U.U(c.wait, ['قرار واحد ينتظرك', 'قراران ينتظرانك', 'قرارات تنتظرك', 'قرارًا ينتظرك']));
     if (c.draft) p.push(U.U(c.draft, ['مسودة', 'مسودتان', 'مسودات', 'مسودة']));
     if (c.idea) p.push(U.U(c.idea, ['فكرة', 'فكرتان', 'أفكار', 'فكرة']));
-    return p.length ? p.join(' · ') + (B.partial && (B.partial.wait || B.partial.draft) ? ' — العدد ناقص' : '') : 'لا شيء ينتظر قرارك';
+    return p.length ? p.join('، ') + (B.partial && (B.partial.wait || B.partial.draft) ? ' — العدد ناقص' : '') : 'لا شيء ينتظر قرارك';
   };
 
   // ================================================================== ١) خط النشر
@@ -858,7 +862,7 @@
     if (cat) pills += pill(cat);
     pills += segLabelPill(t);
     if (t.linked_article_id) pills += pill('له مقال', 'green');
-    var meta = [t.country, chip === 'board' && t.comments ? ar(t.comments) + ' تعليق معتمد' : '', t.date].filter(Boolean).join(' · ');
+    var meta = [t.country, chip === 'board' && t.comments ? ar(t.comments) + ' تعليق معتمد' : '', t.date].filter(Boolean).join('، ');
     var btn;
     if (gen) btn = '<p class="v2ct-status" role="status">جارٍ الكتابة…</p>';
     else btn = '<button type="button" class="v2ct-b1" data-a="tmain" data-id="' + esc(t.id) + '" data-chip="' + chip + '">' + esc(topicMainLabel(chip, t)) + '</button>';
@@ -1113,7 +1117,7 @@
     return '<article class="v2ct-card news" data-id="n:' + esc(n.id) + '"><h3><button type="button" class="v2ct-open" data-a="nopen" data-id="' + esc(n.id) + '">' + esc(n.title) + '</button></h3>'
       + '<p class="v2ct-pills">' + pill('خبر') + (n.specialty ? pill(n.specialty) : '') + pill(pub ? 'منشور' : 'مسودة', pub ? 'green' : 'amber') + '</p>'
       + '<p class="v2ct-sum">' + esc(String(n.summary || '').trim() || 'بلا ملخص بعد') + '</p><p class="v2ct-srcs">' + srcs + '</p>'
-      + '<p class="v2ct-cm">' + esc([n.country, n.date].filter(Boolean).join(' · ')) + '</p>'
+      + '<p class="v2ct-cm">' + esc([n.country, n.date].filter(Boolean).join('، ')) + '</p>'
       + '<div class="v2ct-acts"><button type="button" class="v2ct-b1" data-a="nmain" data-id="' + esc(n.id) + '">' + esc(label) + '</button></div></article>';
   }
   function newsById(id) { return (newsList() || []).filter(function (n) { return String(n.id) === String(id); })[0] || null; }
@@ -1320,7 +1324,8 @@
     if (s0 !== 'ready') return loadingBlock('دليل الاستخدام');
     var list = (window.TUTORIALS || []).slice().sort(function (a, b) { return (a.order || 0) - (b.order || 0); });
     var p = list.filter(function (t) { return t.is_published; }).length, d = list.length - p, v = list.filter(function (t) { return t.video_url; }).length;
-    var facts = '<p class="v2ct-line">' + esc(ar(p) + ' قسمًا منشورًا · ' + ar(d) + ' مسودة · ' + ar(v) + ' بفيديو') + '</p>';
+    if (!list.length) return '<div class="v2ct-empty"><b>لا أقسام في الدليل بعد</b><button type="button" class="v2ct-b1" data-a="newtut">أضف أول قسم</button></div>';       // حالة فاضية واحدة بزر واحد
+    var facts = '<p class="v2ct-line">' + esc(U.U(p, ['قسم واحد منشور', 'قسمان منشوران', 'أقسام منشورة', 'قسمًا منشورًا']) + '، ' + U.U(d, ['مسودة واحدة', 'مسودتان', 'مسودات', 'مسودة']) + '، ' + U.U(v, ['قسم بفيديو', 'قسمان بفيديو', 'أقسام بفيديو', 'قسمًا بفيديو'])) + '</p>';
     var groups = {}, order = [];
     list.forEach(function (t) { var g = t.section || 'بلا تصنيف'; if (!groups[g]) { groups[g] = []; order.push(g); } groups[g].push(t); });
     var body = order.length ? order.map(function (g) {

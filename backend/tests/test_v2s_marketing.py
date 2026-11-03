@@ -495,8 +495,8 @@ def test_board_sums_each_currency_alone_and_never_mixes():
     b = _mk("m.board(rows,'all',{})", raw)['numbers']
     assert b[0]['value'] == '١٬٥٠٠ جنيه' and b[0]['othersText'] == 'وبعملة أخرى: ٣٠٠ ريال' and b[0]['primary']['currency'] == 'EGP'
     assert b[1]['value'] == '٥٬٢٠٠ جنيه' and 'وبعملة أخرى: ٩٠٠ ريال' == b[1]['othersText']
-    assert b[1]['note'] == 'كل جنيه رجع ٣٫٥ · منذ بداية كل حملة'            # ٥٢٠٠ ÷ ١٥٠٠ بالجنيه فقط (الريال خارجها)
-    assert b[0]['note'] == 'من ٣ حملات مسجّلة · منذ بداية كل حملة'
+    assert b[1]['note'] == 'كل جنيه رجع ٣٫٥، منذ بداية كل حملة'            # ٥٢٠٠ ÷ ١٥٠٠ بالجنيه فقط (الريال خارجها)
+    assert b[0]['note'] == 'من ٣ حملات مسجّلة، منذ بداية كل حملة'
     # لا جنيه إطلاقًا: أكبر عملة هي الأساسية
     only = [C(1, spent=100, currency='SAR'), C(2, spent=400, currency='USD')]
     n = _mk("m.board(rows,'all',{})", only)['numbers'][0]
@@ -507,7 +507,7 @@ def test_board_sums_each_currency_alone_and_never_mixes():
 def test_board_filter_and_zero_rows_never_show_a_zero():
     raw = [C(1, spent=700, currency='EGP'), C(2, spent=900, status='paused', currency='EGP')]
     act = _mk("m.board(rows,'active',{})", raw)['numbers']
-    assert act[0]['value'] == '٧٠٠ جنيه' and act[0]['note'] == 'حملة واحدة نشطة · منذ بداية كل حملة'
+    assert act[0]['value'] == '٧٠٠ جنيه' and act[0]['note'] == 'حملة واحدة نشطة، منذ بداية كل حملة'
     assert _mk("m.board(rows,'all',{})", raw)['numbers'][0]['value'] == '١٬٦٠٠ جنيه'
     none = _mk("m.board(rows,'active',{})", [])['numbers']
     for i in (0, 1):
@@ -554,7 +554,7 @@ def test_board_number_three_needs_the_attribution_bridge_and_counts_only_unpaid_
     assert off['value'] == 'غير متاح بعد' and off['na'] is True and off['note'] == 'هذا الشهر: المنصة لا تسجّل بعد من أين جاء كل دافع.'
     inc = [{'currency': 'EGP', 'amount': 13500}, {'currency': 'SAR', 'amount': 300}]
     withinc = _mk("m.board(rows,'all',{attribution:null,income:%s})" % json.dumps(inc), base)['numbers'][2]
-    assert withinc['note'].endswith('دخل المنصة كله هذا الشهر: ١٣٬٥٠٠ جنيه · ٣٠٠ ريال، ولا نعرف بعد كم منه جاء من إعلان.')
+    assert withinc['note'].endswith('دخل المنصة كله هذا الشهر: ١٣٬٥٠٠ جنيه، ٣٠٠ ريال، ولا نعرف بعد كم منه جاء من إعلان.')
     att = mkfx.attribution_summary()
     on = _mk("m.board(rows,'all',{attribution:%s,income:null})" % json.dumps(att), base)['numbers'][2]
     # غير المدفوعة فقط: 1250 + 2300 + 900 + 700 = 5150 جنيه، و150 ريال. المدفوع (3400) و«بلا مصدر» (5200) خارج.
@@ -702,13 +702,13 @@ def test_rows_sort_chip_organic_and_via():
     assert by[2]['ratioText'] == '٣' and by[2]['ratioTone'] == 'good' and by[1]['ratioTone'] == 'good'
     assert by[4]['ratioText'] == '—' and by[5]['ratioText'] == '—'
     # عبر الرابط: من campaigns[c{id}] فقط، والأرقام المكتوبة ما تتبدّلش
-    assert v['viaColumn'] is True and by[2]['via'] == {'signups': 9, 'paid': 3, 'totals': [{'currency': 'EGP', 'amount': 2100.0}]} and by[2]['viaText'] == 'سجّلوا ٩ · دفعوا ٣'
+    assert v['viaColumn'] is True and by[2]['via'] == {'signups': 9, 'paid': 3, 'totals': [{'currency': 'EGP', 'amount': 2100.0}]} and by[2]['viaText'] == 'سجّلوا ٩، دفعوا ٣'
     assert by[1]['via']['signups'] == 4 and by[3]['via'] is None and by[3]['viaText'] == '—'
     assert by[2]['leads'] == '٧' and by[2]['conversions'] == '٣', 'المكتوب كما هو'
     org = v['organic']
     assert org['name'] == 'بلا إعلان' and org['sub'] == 'من المنصة · هذا الشهر · البحث والسوشيال والدعوات والدخول المباشر' and org['na'] is False
     assert org['signups'] == '٧٢' and org['paid'] == '٢١' and org['ratioText'] == 'بلا صرف'          # غير المدفوعة فقط: 20+30+8+14 و5+9+3+4
-    assert org['revenueText'] == '٥٬١٥٠ جنيه · ١٥٠ ريال'
+    assert org['revenueText'] == '٥٬١٥٠ جنيه، ١٥٠ ريال'
     off = _mk("m.rows(rows,null,'all',null)", raw)
     assert off['viaColumn'] is False and off['organic']['na'] is True and off['organic']['naText'] == 'غير متاح بعد — المنصة لا تسجّل بعد من أين جاء كل دافع'
     assert all(r['via'] is None and r['viaText'] == '' and r['owner'] == '' for r in off['rows'])
@@ -723,9 +723,9 @@ def test_by_platform_shared_rows_and_missing_revenue():
     p = _mk("m.byPlatform(rows)", raw)
     assert set(p) == {'facebook', 'instagram', 'linkedin', 'youtube', 'tiktok'}, 'جوجل مش بطاقة سوشيال'
     assert p['facebook']['n'] == 2 and p['facebook']['big'] == '١٬٥٠٠ جنيه' and p['facebook']['sharedText'] == '(مشتركة مع إنستجرام)' and p['facebook']['conversions'] == 5
-    assert p['facebook']['fact'] == 'حملتان · دفعوا ٥ · كل جنيه رجع ١٫٧'
+    assert p['facebook']['fact'] == 'حملتان، دفعوا ٥، كل جنيه رجع ١٫٧'
     assert p['instagram']['n'] == 2 and p['instagram']['sharedText'] == '(مشتركة مع فيسبوك)' and p['instagram']['big'] == '١٬٠٠٠ جنيه'
-    assert p['tiktok']['big'] == '٣٠٠ ريال' and p['tiktok']['fact'] == 'حملة واحدة · دفعوا ٠ · لم يُسجَّل دخل بعد'
+    assert p['tiktok']['big'] == '٣٠٠ ريال' and p['tiktok']['fact'] == 'حملة واحدة، دفعوا ٠، لم يُسجَّل دخل بعد'
     assert p['linkedin']['big'] == 'لا حملات مسجّلة على هذه المنصة' and p['linkedin']['na'] is True and p['youtube']['n'] == 0
     only = _mk("m.byPlatform(rows)", [C(1, platform='instagram', spent=0)])
     assert only['instagram']['big'] == 'لم يُسجَّل صرف بعد' and only['instagram']['na'] is True
@@ -741,7 +741,7 @@ def test_link_statement_and_validate():
         assert url == 'https://elprofessor.net/?utm_source=%s&utm_medium=paid&utm_campaign=c12' % src, plat_
     row = C(7, name='حملة الصيف', platform='google_ads', spent=1500, budget=3000, clicks=320, leads=18, conversions=0, revenue_attributed=0, start_date='2026-10-01', end_date='2026-10-20')
     stm = _mk("m.statement(rows[0],{owner_kind:'course',owner_id:'x',owner_title:'أساسيات التسويق'},'%s')" % TODAY, [row])
-    assert stm.split('\n') == ['كشف حملة «حملة الصيف» — لأساسيات التسويق', 'المنصة: جوجل · من ١ أكتوبر ٢٠٢٦ إلى ٢٠ أكتوبر ٢٠٢٦', 'صُرف: ١٬٥٠٠ جنيه من ميزانية ٣٬٠٠٠ جنيه',
+    assert stm.split('\n') == ['كشف حملة «حملة الصيف» — لأساسيات التسويق', 'المنصة: جوجل، من ١ أكتوبر ٢٠٢٦ إلى ٢٠ أكتوبر ٢٠٢٦', 'صُرف: ١٬٥٠٠ جنيه من ميزانية ٣٬٠٠٠ جنيه',
                                 'زيارات: ٣٢٠ · سجّلوا: ١٨ · دفعوا: ٠', 'الدخل المسجّل: ٠ جنيه', 'الأرقام كما سُجّلت في لوحة البروفيسور بتاريخ ٣٠ أكتوبر ٢٠٢٦.'], '«الأصفار تبقى: قيم مسجّلة»'
     bare = _mk("m.statement(rows[0],null,'%s')" % TODAY, [C(8, name='بلا مالك', platform='', spent=0, budget=0)])
     assert bare.split('\n')[0] == 'كشف حملة «بلا مالك» — للبروفيسور' and bare.split('\n')[1] == 'بلا تاريخ', 'سطر المنصة المفقودة يُحذف'
@@ -898,8 +898,8 @@ def test_the_organic_row_and_via_column_follow_the_attribution_state():
     assert 'mk-via-c' not in off and 'غير متاح بعد — المنصة لا تسجّل بعد من أين جاء كل دافع' in off and 'mk-via"' not in off
     att = mkfx.attribution_summary({'winning': 1, 'losing': 2})
     on = _html('marketing', _model(src={'attribution': {'state': 'ready', 'data': att}}))
-    assert 'mk-via-c' in on and 'عبر الرابط' in on and 'من المنصة · هذا الشهر' in on and 'سجّلوا ٩ · دفعوا ٣' in on and 'بلا صرف' in on
-    assert 'غير متاح بعد — المنصة لا تسجّل' not in on and 'class="mk-via"' in on and 'class="mk-viarow"' in on
+    assert 'mk-via-c' in on and 'عبر الرابط' in on and 'من المنصة · هذا الشهر' in on and 'سجّلوا ٩، دفعوا ٣' in on and 'بلا صرف' in on
+    assert 'غير متاح بعد — المنصة لا تسجّل' not in on and 'class="mk-via"' in on and 'class="mk-viarow mk-x"' in on
 
 
 @needs_node

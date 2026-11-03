@@ -156,10 +156,25 @@
       left = '<small>القرار التالي</small><b>لا توجد قرارات بانتظارك الآن — العقل يعمل</b>';
     }
     var sub = (brainN != null && brainN > 0) ? '<span class="v2-brainline">العقل وزّع ' + esc(U.U(brainN, ['ملفًا واحدًا', 'ملفين', 'ملفات', 'ملفًا'])) + ' اليوم</span>' : '';
-    var warn = d.failed.length ? '<span class="v2-warnline">تعذّر جلب: ' + esc(d.failed.join(' · ')) + ' — القائمة ناقصة</span>' : '';
-    if (d.truncated.length) warn += '<span class="v2-warnline">معروض جزء فقط من: ' + esc(d.truncated.join(' · ')) + ' — القائمة ناقصة</span>';
+    var warn = d.failed.length ? '<span class="v2-warnline">تعذّر جلب: ' + esc(d.failed.join('، ')) + ' — القائمة ناقصة</span>' : '';
+    if (d.truncated.length) warn += '<span class="v2-warnline">معروض جزء فقط من: ' + esc(d.truncated.join('، ')) + ' — القائمة ناقصة</span>';
     return '<section class="v2-next" aria-label="القرار التالي"><img class="v2-av" src="' + img('brain-avatar') + '" alt="">'
       + '<div class="v2-nt">' + left + sub + warn + '</div>' + btn + '</section>';
+  }
+  // الموبايل: أقصى حقيقتين في المربع (الباقي داخل القسم نفسه). غير الموبايل أو بلا قائمة حقائق ⇒ النص كاملًا.
+  function tileText(t) {
+    try {
+      if (window.matchMedia && window.matchMedia('(max-width:760px)').matches && Array.isArray(t.facts) && t.facts.length > 2) return t.facts.slice(0, 2).join('، ');
+    } catch (e) {}
+    return t.next;
+  }
+  // نص بحروف لاتينية متصلة (رقم حساب دولي · بريد) يُعزل اتجاهه فلا يختلط بالعربية حوله.
+  var LTR_RE = /[A-Za-z]{2}\d{2}(?: ?[A-Za-z0-9]{2,5}){3,}|[\w.+-]+@[\w-]+(?:\.[\w-]+)+/g;
+  function ltr(text) {
+    var out = '', last = 0, str = String(text == null ? '' : text), m;
+    LTR_RE.lastIndex = 0;
+    while ((m = LTR_RE.exec(str))) { out += esc(str.slice(last, m.index)) + '<bdi dir="ltr">' + esc(m[0]) + '</bdi>'; last = m.index + m[0].length; }
+    return out + esc(str.slice(last));
   }
   function tileHtml(t, d) {
     var loading = tileLoading(t);
@@ -167,7 +182,7 @@
     if (loading) circle = '<span class="v2-cnt ld">…</span>';
     else if (t.failed) circle = '<span class="v2-cnt fail">' + esc(L.FAILED_TEXT) + '</span>';
     else if (t.count) circle = '<span class="v2-cnt' + (t.hot ? ' hot' : '') + '"' + (t.partial ? ' title="العدد ناقص — تعذّر جلب بعض المصادر"' : '') + '>' + esc(U.ar(t.count)) + (t.partial ? '+' : '') + '</span>';
-    var nextTxt = loading ? '' : t.next;
+    var nextTxt = loading ? '' : tileText(t);
     return '<button class="v2-tile" data-tile="' + esc(t.key) + '" style="--rgb:' + (TILE_RGB[t.key] || '33,38,46') + ';background-image:url(' + img(t.img) + ')">'
       + circle + '<span class="v2-tt"><b>' + esc(t.label) + '</b><small>' + esc(nextTxt) + '</small></span></button>';
   }
@@ -220,8 +235,8 @@
   }
   function incompleteLine(d) {
     var p = [];
-    if (d.failed.length) p.push('تعذّر جلب: ' + d.failed.join(' · '));
-    if (d.truncated.length) p.push('معروض جزء فقط من: ' + d.truncated.join(' · '));
+    if (d.failed.length) p.push('تعذّر جلب: ' + d.failed.join('، '));
+    if (d.truncated.length) p.push('معروض جزء فقط من: ' + d.truncated.join('، '));
     return p.join(' — ');
   }
   function counter() { return U.ar(S.total - S.deck.length + 1) + ' من ' + U.ar(S.total); }
@@ -260,7 +275,7 @@
     var showOpen = !isBrain && !(c.primary && c.primary.act.do === 'open') && !(c.secondary && c.secondary.act.do === 'open');
     if (showOpen) acts += '<button class="v2-btn3" data-a="open"' + (S.busy ? ' disabled' : '') + '>غيّر / افتح</button>';
     acts += '<button class="v2-btn3" data-a="later"' + (S.busy ? ' disabled' : '') + '>لاحقًا</button>';
-    var facts = (c.facts || []).filter(function (f) { return f.v; }).map(function (f) { return '<div><small>' + esc(f.k) + '</small><b>' + esc(f.v) + '</b></div>'; }).join('');
+    var facts = (c.facts || []).filter(function (f) { return f.v; }).map(function (f) { return '<div><small>' + esc(f.k) + '</small><b>' + ltr(f.v) + '</b></div>'; }).join('');
     v.innerHTML = '<div class="v2 v2-focus">'
       + '<div class="v2-ftop"><button class="v2-link" data-a="back">' + BACK + 'اللوحة</button><span class="v2-count">' + esc(counter()) + '</span><span class="v2-prog"><i style="width:' + pct + '%"></i></span></div>'
       + '<div class="v2-fgrid' + (done ? '' : ' solo') + '"><article class="v2-card' + (S.leaving === c.id ? ' v2-out' : '') + '" data-id="' + esc(c.id) + '" data-bid="' + esc(c.id) + '" data-kind="' + esc(c.kind) + '">'
@@ -274,6 +289,11 @@
       + (S.err ? '<div class="v2-err" role="alert">' + esc(S.err) + '</div>' : '')
       + '<div class="v2-acts">' + acts + '</div></div></article>' + done + '</div></div>';
     v.querySelector('[data-a="back"]').onclick = leaveFocus;
+    // الموبايل: الشريط السفلي ثابت، فالحشو تحت البطاقة على قد ارتفاعه الفعلي لا رقمًا ثابتًا (لا فراغ زائد حين يكون الشريط سطرًا واحدًا)
+    try {
+      var bar = v.querySelector('.v2-acts'), cb = v.querySelector('.v2-cbody');
+      if (bar && cb && window.getComputedStyle(bar).position === 'fixed') cb.style.paddingBottom = (bar.offsetHeight + 16) + 'px';
+    } catch (e) {}
     var q = function (a, fn) { var b = v.querySelector('[data-a="' + a + '"]'); if (b) b.onclick = fn; };
     q('primary', function () { run(c, c.primary.act); });
     q('refresh', function () { refreshLocked(c); });
@@ -453,8 +473,8 @@
       + '<table class="mc-tab">' + rows.map(function (r) { return '<tr><td>' + esc(r[0]) + '</td><td>' + (r[0] === 'المبلغ' ? '<b>' + esc(r[1]) + '</b>' : esc(r[1])) + '</td></tr>'; }).join('') + '</table>'
       + field + '<div id="v2m_err"></div>'
       + '<div class="acts"><button class="btn ' + (o.btnCls || 'btn-primary') + '" id="v2m_go">' + esc(o.btn) + '</button>'
-      + (o.alt ? '<button class="btn btn-ghost v2m-alt" id="v2m_alt">' + esc(o.alt.label) + '</button>' : '')
-      + '<button class="btn btn-ghost" id="v2m_x">رجوع</button></div>');
+      + '<button class="btn btn-ghost" id="v2m_x">رجوع</button></div>'
+      + (o.alt ? '<p class="v2m-altrow"><button type="button" class="v2m-altlink" id="v2m_alt">' + esc(o.alt.label) + '</button></p>' : ''));      // الرفض رابط أحمر صغير مستقل: زرّان فقط في الورقة
     var go = s.querySelector('#v2m_go'), x = s.querySelector('#v2m_x'), err = s.querySelector('#v2m_err'), f = s.querySelector('#v2m_f');
     var xTop = s.querySelector('[data-x]');
     var close = function () { if (!s.dataset.busy) window.closeModal(); };
@@ -494,7 +514,7 @@
   function payoutModal(c, which) {
     var m = c.primary.money, E = ep(), r = c.row;
     var amt = U.moneyText(m.amount, m.currency);
-    var rows = [['المبلغ', U.fmt(m.amount)], ['العملة', m.curName], ['الاسم', m.name], ['الطريقة', m.method], ['الوجهة', m.dest]];
+    var rows = [['المبلغ', U.fmtMoney(m.amount)], ['العملة', m.curName], ['الاسم', m.name], ['الطريقة', m.method], ['الوجهة', m.dest]];
     var path = '/platform-wallet-payouts/' + encodeURIComponent(r.pid) + '/' + which;
     if (which === 'settle') {
       confirmModal({
@@ -523,7 +543,7 @@
     confirmModal({
       title: 'تأكيد الدفع', cardId: c.id,
       lead: 'ستؤكد استلام <b>' + esc(amt) + '</b> من <b>' + esc(m.name) + '</b>' + (m.what ? ' عن «' + esc(m.what) + '»' : '') + '. عند التأكيد يُفعَّل المنتج لصاحبه ويصله إشعار. تأكد من مطابقة الإيصال.',
-      rows: [['المبلغ', U.fmt(m.amount)], ['العملة', m.curName], ['الاسم', m.name], ['الطريقة', m.method], ['المرجع', m.ref]],
+      rows: [['المبلغ', U.fmtMoney(m.amount)], ['العملة', m.curName], ['الاسم', m.name], ['الطريقة', m.method], ['المرجع', m.ref]],
       btn: 'أكّد ' + amt, busy: 'جارٍ التأكيد…',
       run: function () { return Promise.resolve(E.decideInboxItem(c.row, 'approve', null, '', { confirmed: true })); },
       onOk: function () { finish(c, 'أُكّد دفع ' + amt + ' من ' + m.name); }
@@ -535,7 +555,7 @@
     confirmModal({
       title: 'رفض الدفعة', cardId: c.id,
       lead: 'سترفض دفعة <b>' + esc(amt) + '</b> من <b>' + esc(m.name) + '</b>. لا يُفعَّل شيء، ويصله السبب الذي تكتبه.',
-      rows: [['المبلغ', U.fmt(m.amount)], ['العملة', m.curName], ['الاسم', m.name], ['الطريقة', m.method], ['المرجع', m.ref]],
+      rows: [['المبلغ', U.fmtMoney(m.amount)], ['العملة', m.curName], ['الاسم', m.name], ['الطريقة', m.method], ['المرجع', m.ref]],
       field: { label: 'سبب الرفض (مطلوب)', max: 500, area: true },
       btn: 'ارفض الدفعة', btnCls: 'btn-human', busy: 'جارٍ الرفض…',
       run: function (reason) { return Promise.resolve(E.decideInboxItem(c.row, 'reject', null, reason)); },

@@ -496,7 +496,7 @@ def test_tile_counts_come_straight_from_the_queue():
                inbox=[{'apiKind': 'book', 'ref': 'K1'}, {'apiKind': 'book', 'ref': 'K2'}, {'apiKind': 'join', 'ref': 'J1'}])
     # الملفات: متأخر (١+٢) + تنتظر مراجعتك ٣ + تنتظر توزيع ٤ + فلوس واقفة ٥
     assert t['files']['count'] == 15 and t['files']['hot'] is True
-    assert t['files']['next'] == '٣ متأخر · ٣ تنتظر مراجعتك · ٤ تنتظر خبيرًا · ٥ ملفات أموالها متوقفة'
+    assert t['files']['next'] == '٣ متأخر، ٣ تنتظر مراجعتك، ٤ تنتظر خبيرًا، ٥ ملفات أموالها متوقفة'
     # النزاعات: ملفات ١ + قضايا ٢ + استشارات ٣ + قديمة ٤ + استرداد ٥ + دفع بلا ملف ٦
     assert t['disputes']['count'] == 21 and t['disputes']['hot'] is True
     assert t['courses']['count'] == 2 + 3 + 1 and t['courses']['dest'] == 'courses'
@@ -820,12 +820,12 @@ def test_the_payout_card_shows_the_exact_amount_that_will_be_transferred():
     m = c['primary']['money']
     assert m['amount'] == 150.5 and c['secondary']['money']['amount'] == 150.5
     assert '١٥٠٫٥' in c['sub'] and '١٥١' not in c['sub'] and '١٥٠٫٥' in c['brain']
-    assert c['facts'][0]['v'] == '١٥٠٫٥ جنيه'
+    assert c['facts'][0]['v'] == '١٥٠٫٥٠ جنيه'
     # ما فيش raw.amount ⇒ نرجع لـamount
     p2 = dict(PAYOUT, amount=300, raw={'method': 'x', 'created_at': _iso(1)})
     assert _payout_card([], [], payout=p2)['primary']['money']['amount'] == 300
     # التنسيق النهائي اللي بتبنى منه نافذة التأكيد وزرّها
-    assert v2_node.logic('util.fmt', 150.5) == '١٥٠٫٥' and v2_node.logic('util.moneyText', 150.5, 'EGP') == '١٥٠٫٥ جنيه'
+    assert v2_node.logic('util.fmt', 150.5) == '١٥٠٫٥' and v2_node.logic('util.moneyText', 150.5, 'EGP') == '١٥٠٫٥٠ جنيه'
     assert v2_node.logic('util.fmt', 3500.5) == '٣٬٥٠٠٫٥'
 
 
@@ -839,7 +839,7 @@ def test_a_file_card_suggests_the_auto_pick_with_a_plain_reason():
     c = v2_node.logic('v2Card', row, {'now': NOW})
     assert c['kind'] == 'file_waiting' and c['tag'] == 'ملف ينتظر خبيرًا'
     assert c['brain'] == 'أقترح أ. ثانية'
-    assert c['reason'] == 'يراجع العقود · نفس التخصص · نفس بلد القانون · عدد الملفات المفتوحة: ٢'
+    assert c['reason'] == 'يراجع العقود، نفس التخصص، نفس بلد القانون، عدد الملفات المفتوحة: ٢'
     assert c['primary'] == {'label': 'أرسله إلى أ. ثانية', 'act': {'do': 'send', 'email': 'b@x', 'name': 'أ. ثانية'}}
     assert c['secondary']['label'] == 'افتح الملف'
     # مفيش مرشّح مؤهّل ⇒ «لا يوجد خبير متاح» وزرّ الفتح

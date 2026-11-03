@@ -22,7 +22,7 @@
 .co-btn2:hover{background:#FBF0F3}
 .co-btn1:disabled,.co-btn2:disabled{opacity:.55;cursor:default}
 .co-btn2.co-dng{color:var(--red)}
-.co-link{border:0;background:transparent;color:var(--wine);font:800 14.5px 'Cairo',sans-serif;min-height:44px;padding:0 6px;cursor:pointer;text-decoration:underline}
+.co-link{border:0;background:transparent;color:var(--wine);font:800 14.5px 'Cairo',sans-serif;min-height:44px;min-width:44px;padding:0 6px;cursor:pointer;text-decoration:underline}
 .co-link.co-del{color:var(--red)}
 .co-link:hover{background:rgba(158,43,78,.07);border-radius:8px}
 
@@ -291,3 +291,16 @@
 #epModal:has(.com){background:rgba(33,38,46,.55)}
 #epModal .modal:has(.com){border-radius:20px;background:#FBFAF7;box-shadow:0 24px 64px rgba(33,38,46,.38)}
 #epModal .modal:has(.com) .mb{padding:20px}
+
+/* «نظرة» على الموبايل: كل بطاقة ٣ أسطر ورابط «الكل»، والتفاصيل في تبويباتها (الجولة r6) */
+@media (max-width:699px){
+  .co[data-board="invest"] .co-prs .co-pr:nth-child(n+4),
+  .co[data-board="invest"] .co-mini .co-mr:nth-child(n+4),
+  .co[data-board="invest"] .co-adg .co-adm:nth-child(n+3),
+  .co[data-board="invest"] .co-foot{display:none}
+  .co-adm{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .co-adm>h3,.co-adm>.co-deal,.co-adm>.co-per,.co-adm>.co-none{grid-column:1 / -1}
+  .co-adm .co-kv{display:grid;gap:0;align-content:start;background:#fff;border-radius:10px;padding:6px 10px}
+  .co-adm .co-kv b{text-align:start}
+}
+@media (max-width:699px){.co-tech{display:none}}

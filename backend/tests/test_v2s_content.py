@@ -297,9 +297,9 @@ def test_more_button_points_at_the_first_hidden_kinds_tab_or_expands_in_place():
 def test_facts_words_image_meta_reviewer_and_line():
     f = _logic('v2ContentFacts', {'title': 'عنوان', 'status': 'draft', 'words': 840, 'has_image': True, 'has_meta': False, 'reviewed_by': 'نادية'}, [])
     assert f['words'] == 840 and f['hasImage'] is True and f['hasMeta'] is False and f['reviewer'] == 'نادية' and f['dupTitle'] is False
-    assert f['line'] == '٨٤٠ كلمة · بصورة · بلا وصف لمحركات البحث · راجعه نادية'
+    assert f['line'] == '٨٤٠ كلمة، بصورة، بلا وصف لمحركات البحث، راجعه نادية'
     g = _logic('v2ContentFacts', {'title': 'عنوان', 'status': 'draft', 'words': 12, 'has_image': False, 'has_meta': True, 'reviewed_by': None}, [])
-    assert g['line'] == '١٢ كلمة · بلا صورة · بوصف لمحركات البحث · لم يراجعه أحد'
+    assert g['line'] == '١٢ كلمة، بلا صورة، بوصف لمحركات البحث، لم يراجعه أحد'
     h = _logic('v2ContentFacts', {'title': 'عنوان', 'status': 'draft'}, [])         # الحالة غير معروفة: لا حقائق مخترعة
     assert h['words'] is None and h['line'] == ''
 
@@ -357,10 +357,10 @@ def test_ticket_lines_carry_only_facts_and_the_testimonial_consent_line_follows_
     T = {i['id']: i for i in B['cols']['wait']}
     assert T['m:m1']['brain'] == 'القرار يصل إلى صاحب الموضوع · الفئة: عقاري (اختيار آلي)'
     assert T['m:m2']['brain'] == 'القرار يصل إلى صاحب الموضوع · بلا فئة' and T['m:m2']['who']['text'] == 'بلا تخصص'
-    assert T['t:t1']['brain'] == 'دورة · التقييم ٥ من ٥ · وافق كاتبه على النشر باسمه'
+    assert T['t:t1']['brain'] == 'دورة · التقييم ٥ من ٥، وافق كاتبه على النشر باسمه'
     assert T['c:c1']['brain'] == 'لم يحسمه الفحص الآلي' and T['c:c1']['who']['text'] == 'على: موضوع'
-    assert T['w:w1']['brain'] == 'قصيدة · بلا رابط'
-    for consent, tail in ((True, ' · وافق كاتبه على النشر باسمه'), (False, ''), (None, '')):
+    assert T['w:w1']['brain'] == 'قصيدة، بلا رابط'
+    for consent, tail in ((True, '، وافق كاتبه على النشر باسمه'), (False, ''), (None, '')):
         r = {'id': 't9', 'text': 'x', 'course_title': 'دورة', 'rating': None, 'created_at': ago(1)}
         if consent is not None:
             r['consent_public'] = consent
@@ -800,11 +800,11 @@ def test_write_now_says_so_when_the_platform_was_already_writing():
 @needs_node
 def test_home_tile_speaks_the_boards_words_and_always_lands_on_the_ideas_list():
     got = _node("""const T=L.v2Tiles(%s);const t=(T.tiles||T).filter(x=>x.key==='content')[0];console.log(JSON.stringify(t));""" % json.dumps({'topics_drafts': 3, 'testimonials_pending': 2}))
-    assert got['next'] == 'رأيان لمتعلّمَين · ٣ أفكار في الأرشيف' and got['land'] == 'topics_drafts' and got['dest'] == 'topics'
+    assert got['next'] == 'رأيان لمتعلّمَين، ٣ أفكار في الأرشيف' and got['land'] == 'topics_drafts' and got['dest'] == 'topics'
     one = _node("const T=L.v2Tiles(%s);console.log(JSON.stringify((T.tiles||T).filter(x=>x.key==='content')[0]))" % json.dumps({'topics_drafts': 1, 'testimonials_pending': 1}))
-    assert one['next'] == 'رأي متعلّم واحد · فكرة في الأرشيف'
+    assert one['next'] == 'رأي متعلّم واحد، فكرة في الأرشيف'
     many = _node("const T=L.v2Tiles(%s);console.log(JSON.stringify((T.tiles||T).filter(x=>x.key==='content')[0]))" % json.dumps({'topics_drafts': 12, 'testimonials_pending': 4}))
-    assert many['next'] == '٤ آراء متعلّمين · ١٢ فكرة في الأرشيف'
+    assert many['next'] == '٤ آراء متعلّمين، ١٢ فكرة في الأرشيف'
     only = _node("const T=L.v2Tiles(%s);console.log(JSON.stringify((T.tiles||T).filter(x=>x.key==='content')[0]))" % json.dumps({'topics_drafts': 0, 'testimonials_pending': 5}))
     assert only['next'] == '٥ آراء متعلّمين' and only['land'] == 'topics_drafts'
     zero = _node("const T=L.v2Tiles(%s);console.log(JSON.stringify((T.tiles||T).filter(x=>x.key==='content')[0]))" % json.dumps({'topics_drafts': 0, 'testimonials_pending': 0}))

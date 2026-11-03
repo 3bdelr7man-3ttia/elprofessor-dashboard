@@ -136,7 +136,7 @@
     var supply = H.lanes.training_offer > 0 ? '<button type="button" class="v2s-mk-link" data-a="supply">عروض المدرّبين (' + ar(H.lanes.training_offer) + ')</button>' : '';
     var testBtn = T.testCount > 0 ? '<button type="button" class="v2s-mk-chip tog' + (S.showTest ? ' on' : '') + '" data-a="test" aria-pressed="' + S.showTest + '">' + (S.showTest ? 'أخفِ التجريبي' : 'أظهر التجريبي (' + ar(T.testCount) + ')') + '</button>' : '';
     var desk = '<div class="v2s-mk-ctl v2s-mk-desk"><div class="v2s-mk-chips" role="tablist" aria-label="نوع الطلب">' + laneChips(H) + '</div>' + supply + testBtn + '</div>';
-    var mob = '<div class="v2s-mk-ctl v2s-mk-mob"><button type="button" class="v2s-mk-fbtn" data-a="fopen">تصفية (' + esc(laneLabel(S.lane)) + ')</button>'
+    var mob = '<div class="v2s-mk-ctl v2s-mk-mob"><button type="button" class="v2s-mk-fbtn" data-a="fopen">تصفية</button>'
       + (S.lane !== 'all' ? '<button type="button" class="v2s-mk-chip on rm" data-a="lane" data-lane="all" aria-label="أزل التصفية">' + esc(laneLabel(S.lane)) + ' ✕</button>' : '') + '</div>';
     var trunc = H.truncated ? warn('معروض ' + ar(H.shownRows) + ' من ' + ar(H.total) + ' طلب، فالأعمدة ناقصة. القائمة الكاملة في «كل الطلبات»', '<button type="button" class="v2d-btn2" data-a="goall">افتح كل الطلبات</button>') : '';
     var seg = '', cols = '';
@@ -257,7 +257,7 @@
         var when = o.created_at ? U.agoText(o.created_at, nowMs()) : '';
         var course = o.course ? (typeof o.course === 'string' ? o.course : (o.course.title || '')) : '';
         return '<li class="' + (acc ? 'acc' : '') + '"><div class="of-h"><b>' + esc(o.expert_display || 'خبير') + '</b>' + (price ? '<span class="of-p">' + esc(price) + '</span>' : '') + '</div>'
-          + '<p class="of-m">' + esc([eta, st, when].filter(Boolean).join(' · ')) + '</p>' + (o.message ? '<p class="of-t">' + esc(o.message) + '</p>' : '')
+          + '<p class="of-m">' + esc([eta, st, when].filter(Boolean).join('، ')) + '</p>' + (o.message ? '<p class="of-t">' + esc(o.message) + '</p>' : '')
           + (course ? '<p class="of-c">الدورة المرفقة: ' + esc(course) + '</p>' : '') + '</li>';
       }).join('') + '</ul>';
     }

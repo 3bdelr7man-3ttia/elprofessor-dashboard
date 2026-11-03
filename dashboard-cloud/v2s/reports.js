@@ -137,7 +137,7 @@
     Object.keys(SRC_LABEL).forEach(function (k) { if (s[k] === 'failed' || s[k] === 'partial') bad.push(SRC_LABEL[k]); });
     var out = '';
     if (s.window === 'failed') out += '<div class="v3-warn" role="status">التوقيت غير متاح، الأيام محسوبة بتوقيت جرينتش</div>';
-    if (bad.length) out += '<div class="v3-warn" role="status">تعذّر الوصول إلى: ' + esc(bad.join(' · ')) + ' — ما يظهر ناقص، وليس معناه أنه لا شيء</div>';
+    if (bad.length) out += '<div class="v3-warn" role="status">تعذّر الوصول إلى: ' + esc(bad.join('، ')) + ' — ما يظهر ناقص، وليس معناه أنه لا شيء</div>';
     return out;
   }
   function noteStrip() { return S.note ? '<div class="v3-ok" role="status">' + esc(S.note) + '</div>' : ''; }
@@ -250,18 +250,18 @@
     var drawnChart = body.indexOf('<svg') > -1;
     var legend = leg.items.length && drawnChart ? '<ul class="v2r-legend' + (dl.visits_available ? ' hasv' : '') + '">' + leg.items.map(function (it) { return '<li class="k-' + it.key + '"><i></i>' + esc(it.label) + '</li>'; }).join('') + '</ul>' : '';
     var foot = [];
-    if (leg.notes.length) foot.push(leg.notes.join(' · '));
+    if (leg.notes.length) foot.push(leg.notes.join('، '));
     var other = (dl.income_other || []).map(function (x) { return U.moneyText(x.amount, x.currency); });
-    if (other.length) foot.push('دخل بعملة أخرى في الفترة: ' + other.join(' · '));
+    if (other.length) foot.push('دخل بعملة أخرى في الفترة: ' + other.join('، '));
     var td = d.today, tline = '';
     if (td) {
       var parts = [];
       parts.push(isNum(td.income_egp) ? moneyOf(td.income_egp) : NA);
       if (td.show_signups) parts.push(isNum(td.signups) ? UU(td.signups, ['حساب واحد', 'حسابان', 'حسابات', 'حسابًا']) : 'الحسابات: ' + NA);
-      tline = '<p class="v2r-today">اليوم حتى الآن: ' + esc(parts.join(' · ')) + (td.income_other && td.income_other.length ? ' · وبعملة أخرى: ' + esc(td.income_other.map(function (x) { return U.moneyText(x.amount, x.currency); }).join(' · ')) : '') + '</p>';
+      tline = '<p class="v2r-today">اليوم حتى الآن: ' + esc(parts.join('، ')) + (td.income_other && td.income_other.length ? ' · وبعملة أخرى: ' + esc(td.income_other.map(function (x) { return U.moneyText(x.amount, x.currency); }).join('، ')) : '') + '</p>';
     }
     return '<section class="v3-card v2r-card v2r-chart"><header class="v3-ch v2r-chh"><h2>' + esc(title) + '</h2>' + legend + '</header>' + body
-      + tline + (foot.length ? '<p class="v3-fine">' + esc(foot.join(' · ')) + '</p>' : '') + '</section>';
+      + tline + (foot.length ? '<p class="v3-fine">' + esc(foot.join('، ')) + '</p>' : '') + '</section>';
   }
   function svgChart(d, rows, pts, W, H, leg) {
     var n = rows.length, g = '', line = '', labels = '';
@@ -345,7 +345,7 @@
   function secValue(r) {
     if (!r.value) return naText();
     var t = r.value.kind === 'money' ? moneyOf(r.value.egp) : r.value.text;
-    return esc(t) + (r.value.others && r.value.others.length ? ' <small class="v2r-oth" title="' + esc(r.value.others.map(function (x) { return U.moneyText(x.amount, x.currency); }).join(' · ')) + '">· وبعملة أخرى</small>' : '');
+    return esc(t) + (r.value.others && r.value.others.length ? ' <small class="v2r-oth" title="' + esc(r.value.others.map(function (x) { return U.moneyText(x.amount, x.currency); }).join('، ')) + '">· وبعملة أخرى</small>' : '');
   }
   function secChip(r) {
     var c = ['files', 'courses', 'books'].indexOf(r.key) > -1 && r.trend ? V.trendChip(r.trend) : r.chip;
@@ -421,7 +421,16 @@
     } else {
       cards = brainStrip(d.brain, d.brain_primary, w) + sectionsCard(d, d.delivery) + chartCard(d) + funnel + (d.scope === 'all' ? originsBlock(d.origins, 'compact') : '');
     }
-    v.innerHTML = '<div class="v3 v2r" data-tab="report">' + printHead(d) + controls(d) + fresh + period + head + warnStrip(d.sources) + cards + '</div>';
+    // الموبايل: الأرقام أولًا، والقسم والفترة والتحميل داخل «تصفية» مطوية (الجولة r6)
+    var ctl = controls(d) + fresh + period;
+    try {
+      if (window.matchMedia && window.matchMedia('(max-width:760px)').matches) {
+        var sc = V.SCOPES.filter(function (x) { return x[0] === S.scope; })[0], pr = V.PERIODS.filter(function (x) { return x[0] === S.period; })[0];
+        ctl = '<details class="v2r-fdet"' + (S.fdet ? ' open' : '') + '><summary>تصفية: ' + esc((sc ? sc[1] : '') + (pr ? '، ' + pr[1] : '')) + '</summary>' + ctl + '</details>';
+      }
+    } catch (e0) {}
+    v.innerHTML = '<div class="v3 v2r" data-tab="report">' + printHead(d) + ctl + head + warnStrip(d.sources) + cards + '</div>';
+    var fd = v.querySelector('.v2r-fdet'); if (fd) fd.addEventListener('toggle', function () { S.fdet = fd.open; });
     wire(v, d);
   }
 
@@ -645,7 +654,7 @@
         var idn = d.identity, who;
         if (idn && idn.email) who = '<a class="v3-person" href="' + esc(L.sectionHash('people', 'person', idn.email)) + '" data-person="' + esc(idn.email) + '">' + esc(idn.full_name || idn.email) + '</a>';
         else who = 'زائر بلا حساب';
-        var meta = [d.category ? catLabel(d.category) : '', /[\u0600-\u06ff]/.test(d.intent || '') ? d.intent : ''].filter(Boolean).map(esc).join(' · ');
+        var meta = [d.category ? catLabel(d.category) : '', /[\u0600-\u06ff]/.test(d.intent || '') ? d.intent : ''].filter(Boolean).map(esc).join('، ');
         var msgs = Array.isArray(d.messages) ? d.messages : [];
         var turns = msgs.length ? msgs.map(function (m) {
           var me = m.role === 'user';

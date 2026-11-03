@@ -143,6 +143,7 @@ body:has(> .app.v2-shell) .v2-pill{z-index:75}
 .app.v2-shell .v2h-tscrim,.app.v2-shell .v2h-types{display:none}
 
 @media(max-width:1179px){
+  .app.v2-shell .v2h-dwp:focus{outline:0}
   .app.v2-shell .v2h-wrap{grid-template-columns:minmax(0,1fr)}
   .app.v2-shell .v2h-tl{grid-template-columns:repeat(2,minmax(0,1fr))}
   /* الدرج ورقة جانبية فوق ستار: الحاوية هي الستار (ثابتة بملء الشاشة)، و`.v2h-dwp` هي الورقة نفسها */
@@ -162,7 +163,16 @@ body:has(> .app.v2-shell) .v2-pill{z-index:75}
   /* الرأس مضغوط: كل شريط سطر واحد حتى تظهر أول تذكرة فوق ٦٠٠px */
   .app.v2-shell .v2h-bl{align-items:center;padding:6px 12px;margin-bottom:8px}
   .app.v2-shell .v2h-bl img{width:32px;height:32px}
-  .app.v2-shell .v2h-bl span{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+  .app.v2-shell .v2h-bl span{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;white-space:normal;overflow:hidden;min-width:0}
+  /* سطر العقل + التوزيع + «للعلم» شريط واحد قابل للطيّ (الجولة r6) */
+  .app.v2-shell .v2h-fold{margin-bottom:8px}
+  .app.v2-shell .v2h-fold>summary{list-style:none;cursor:pointer;display:flex;align-items:center;gap:8px;min-height:48px}
+  .app.v2-shell .v2h-fold>summary::-webkit-details-marker{display:none}
+  .app.v2-shell .v2h-fold>summary::after{content:"";flex:none;width:10px;height:10px;border-inline-end:2px solid var(--h-mute);border-bottom:2px solid var(--h-mute);transform:rotate(45deg);margin-inline:6px 4px;transition:transform .15s}
+  .app.v2-shell .v2h-fold[open]>summary::after{transform:rotate(-135deg)}
+  .app.v2-shell .v2h-fold>summary .v2h-bl{flex:1;min-width:0;margin-bottom:0}
+  .app.v2-shell .v2h-foldt{flex:1;font:800 15px 'Cairo',sans-serif;color:var(--h-wine)}
+  .app.v2-shell .v2h-fold[open]>summary{margin-bottom:8px}
   .app.v2-shell .v2h-auto{flex-wrap:wrap;padding:6px 12px;margin-bottom:8px;gap:4px 10px}
   .app.v2-shell .v2h-autot{flex:1 1 0}
   .app.v2-shell .v2h-autot span{display:none}
@@ -314,6 +324,8 @@ body:has(> .app.v2-shell) .v2h-bx{min-height:44px;padding:0 16px;border-radius:1
 body:has(> .app.v2-shell) .v2h-bs{padding:8px 18px 16px;border-top:1px solid #E9E1D6}
 body:has(> .app.v2-shell) .v2h-bs:first-of-type{border-top:0}
 body:has(> .app.v2-shell) .v2h-bs h3{margin:6px 0 8px;font:800 16px 'Cairo',sans-serif;color:#9E2B4E}
+body:has(> .app.v2-shell) .v2h-hbd{margin-top:10px}
+body:has(> .app.v2-shell) .v2h-hbd summary{display:flex;align-items:center;min-height:44px;font:800 13.5px 'Cairo',sans-serif;color:#6B665C;cursor:pointer}
 body:has(> .app.v2-shell) .v2h-bs h4{margin:14px 0 6px;font:800 13.5px 'Cairo',sans-serif;color:#6B665C}
 body:has(> .app.v2-shell) .v2h-bsh{display:flex;align-items:center;justify-content:space-between;gap:10px}
 body:has(> .app.v2-shell) .v2h-bsh .v2h-lnk{min-height:44px;border:0;background:transparent;color:#9E2B4E;font:800 14px 'Cairo',sans-serif;text-decoration:underline;cursor:pointer}
@@ -378,7 +390,7 @@ html.v2h-login .ep-login .bd .sub:focus-visible{outline:3px solid rgba(158,43,78
   html.v2h-login .ep-login .card{margin-top:-24px}
   html.v2h-login .ep-login .bd input{font-size:16px}
 }
-.app.v2-pre::after{content:"جارٍ فتح لوحتك…";position:fixed;inset:0;display:grid;place-items:center;padding-top:150px;background:#FBFAF7;font:800 18px 'Cairo',sans-serif;color:#21262E;z-index:5}
+.app.v2-pre::after{content:"…جارٍ فتح لوحتك";position:fixed;inset:0;display:grid;place-items:center;padding-top:150px;background:#FBFAF7;font:800 18px 'Cairo',sans-serif;color:#21262E;z-index:5}
 .app.v2-pre::before{content:"";position:fixed;z-index:6;left:50%;top:calc(50% - 40px);width:120px;height:120px;margin:-60px 0 0 -60px;border-radius:50%;background:#F6F1EA url(../v2/img/brain-avatar.jpg) center/cover;border:4px solid #F6F1EA;box-shadow:0 8px 24px rgba(33,38,46,.14)}
 @media(prefers-reduced-motion:no-preference){
   .app.v2-pre::after,.app.v2-pre::before{animation:v2hfade .5s ease-out}

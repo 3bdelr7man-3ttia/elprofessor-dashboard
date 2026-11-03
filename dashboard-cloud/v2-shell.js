@@ -122,7 +122,11 @@
     if (t && !t.failed && t.next) {
       var loading = false;
       try { loading = !!(window.V2 && V2.tileLoading && V2.tileLoading(sec.key)); } catch (e) {}
-      if (!loading) return t.next;
+      if (!loading) {
+        // الموبايل: سطر الترويسة حقيقتان على الأكثر (الباقي داخل الشاشات)
+        try { if (window.matchMedia && window.matchMedia('(max-width:760px)').matches && Array.isArray(t.facts) && t.facts.length > 2) return t.facts.slice(0, 2).join('، '); } catch (e) {}
+        return t.next;
+      }
     }
     return sec.desc;
   }
@@ -151,6 +155,18 @@
         }
       }
       lastTabSig = sig;
+      if (strip) { strip.addEventListener('scroll', function () { tabsFade(strip); }, { passive: true }); tabsFade(strip); }
+    } catch (e) {}
+  }
+  // تلاشٍ على الطرف الذي فيه تبويبات مخفية (الجولة r6): لا تبويب يُقصّ بلا إشارة. الأصناف فيزيائية: fade-l يسار · fade-r يمين.
+  function tabsFade(strip) {
+    try {
+      var max = strip.scrollWidth - strip.clientWidth, pos = Math.abs(strip.scrollLeft);
+      var rtl = getComputedStyle(strip).direction === 'rtl';
+      var hidStart = pos > 2, hidEnd = max - pos > 2;            // مخفي من جهة البداية/النهاية
+      if (max <= 2) { hidStart = hidEnd = false; }
+      strip.classList.toggle('fade-r', rtl ? hidStart : hidEnd);
+      strip.classList.toggle('fade-l', rtl ? hidEnd : hidStart);
     } catch (e) {}
   }
   SH.head = function () { if (SH.on) { drawHead(tiles()); wire(); } };
@@ -170,6 +186,37 @@
       // معرّفات مثل ESC-D303 و PAY-1 تبقى كما هي (رقم بعد حرف لاتيني أو شرطة)
       t.nodeValue = v.replace(/(^|[^A-Za-z\d_\-@.\/:#])(\d+)/g, function (m, pre, d) { return pre + d.replace(/\d/g, function (x) { return '٠١٢٣٤٥٦٧٨٩'.charAt(+x); }); });
     });
+  }
+  // خط أمان أخير (الجولة r6): لا «·» ملاصقة لرقم في أي نص ظاهر، حتى لو جاء النص من الخادم أو من شاشة قديمة. تُستبدل بفاصلة عربية.
+  var dotObs = null, dotQ = [], dotT = null;
+  var DOT_SKIP = /^(SCRIPT|STYLE|TEXTAREA|INPUT|OPTION|NOSCRIPT)$/;
+  function fixDotsIn(root) {
+    if (!root || !document.createTreeWalker) return;
+    var base = root.nodeType === 3 ? root.parentNode : root;
+    if (!base) return;
+    var list = [];
+    if (root.nodeType === 3) list.push(root);
+    else { var w = document.createTreeWalker(root, 4, null), n; while ((n = w.nextNode())) list.push(n); }
+    list.forEach(function (t) {
+      var p = t.parentNode, v = t.nodeValue;
+      if (!p || v.indexOf('·') < 0 || DOT_SKIP.test(p.nodeName)) return;
+      var nv = v.replace(/([0-9٠-٩٪%]\s*)·\s*/g, '$1، ').replace(/\s*·\s*(?=[0-9٠-٩])/g, '، ');
+      if (nv !== v) t.nodeValue = nv;
+    });
+  }
+  SH.fixDots = fixDotsIn;
+  function guardDots() {
+    if (dotObs || !window.MutationObserver || !document.body) return;
+    dotObs = new MutationObserver(function (muts) {
+      muts.forEach(function (m) {
+        if (m.type === 'characterData') dotQ.push(m.target);
+        else (m.addedNodes || []).forEach(function (n) { if (n.nodeType === 1 || n.nodeType === 3) dotQ.push(n); });
+      });
+      if (dotT || !dotQ.length) return;
+      dotT = setTimeout(function () { dotT = null; var q2 = dotQ; dotQ = []; q2.forEach(function (n) { if (document.body.contains(n)) fixDotsIn(n); }); }, 20);
+    });
+    dotObs.observe(document.body, { childList: true, subtree: true, characterData: true });
+    fixDotsIn(document.body);
   }
   SH.legacyDigits = function (on) {
     var view = q('#view');
@@ -262,10 +309,11 @@
       else if (e.shiftKey && cur === first) { e.preventDefault(); last.focus(); }
       else if (!e.shiftKey && cur === last) { e.preventDefault(); first.focus(); }
     });
-    window.addEventListener('resize', function () { if (window.innerWidth >= 1180) SH.closeSheet(); });
+    window.addEventListener('resize', function () { if (window.innerWidth >= 1180) SH.closeSheet(); var st = q('#v2sec .v2c-tabs'); if (st) tabsFade(st); });
     // كل المصادر تُحمَّل مرة عند الإقلاع، والشارات تتحدّث حين تتغيّر الأعداد (بلا عدّ ثانٍ ولا طلب إضافي).
     try { if (window.V2 && V2.loadAll) V2.loadAll(function () { SH.refresh(); }); } catch (e) {}
     SH.nav();
+    guardDots();
     if (!poll) poll = setInterval(SH.refresh, 1000);
   };
   SH.refresh = function () {

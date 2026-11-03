@@ -158,7 +158,7 @@
       + '<small>' + esc(T.colAsTyped) + '</small></th><th style="width:11%" title="' + esc(T.typedTitle) + '">' + esc(T.colPaid) + '<small>' + esc(T.colAsTyped) + '</small></th><th style="width:19%">' + esc(T.colRev)
       + '</th><th style="width:11%">' + esc(T.colRatio) + '</th></tr></thead>';
     var body = vm.rows.map(function (r) {
-      var fold = '<span class="mk-sub">' + esc([r.platform, r.statusLabel].filter(Boolean).join(' · ')) + (r.owner ? ' · ' + esc(r.owner) : '') + '</span>';
+      var fold = '<span class="mk-sub">' + esc([r.platform, r.statusLabel].filter(Boolean).join('، ')) + (r.owner ? ' · ' + esc(r.owner) : '') + '</span>';
       var via = r.via ? '<span class="mk-via">عبر الرابط هذا الشهر: ' + esc(r.viaText) + '</span>' : '';
       return '<tr' + rowAttrs(r) + '><td><div class="mk-name"><b>' + nameBtn(r) + '</b>' + fold + via + '</div></td><td>' + esc(r.spentText) + '</td>'
         + (r.noResults ? '<td colspan="3"><span class="mk-chip nores">' + esc(T.noResultsChip) + '</span></td>'
@@ -174,11 +174,11 @@
     var cards = vm.rows.map(function (r) {
       var grid = r.noResults
         ? '<div><span>' + esc(T.colSpent) + '</span><b>' + esc(r.spentText) + '</b></div><div class="mk-nores-row"><span class="mk-chip nores">' + esc(T.noResultsChip) + '</span></div>'
-        : '<div><span>' + esc(T.colSpent) + '</span><b>' + esc(r.spentText) + '</b></div><div><span>' + esc(T.colVisits) + '</span><b>' + esc(r.clicks) + '</b></div><div><span>' + esc(T.colLeads) + '</span><b>' + esc(r.leads) + '</b></div>'
-          + '<div><span>' + esc(T.colPaid) + '</span><b>' + esc(r.conversions) + '</b></div><div><span>' + esc(T.colRev) + '</span><b>' + esc(r.revenueText) + '</b></div><div><span>' + esc(T.colRatio) + '</span><b>' + ratioCell(r) + '</b></div>';
+        : '<div><span>' + esc(T.colSpent) + '</span><b>' + esc(r.spentText) + '</b></div><div class="mk-x"><span>' + esc(T.colVisits) + '</span><b>' + esc(r.clicks) + '</b></div><div class="mk-x"><span>' + esc(T.colLeads) + '</span><b>' + esc(r.leads) + '</b></div>'
+          + '<div><span>' + esc(T.colPaid) + '</span><b>' + esc(r.conversions) + '</b></div><div class="mk-x"><span>' + esc(T.colRev) + '</span><b>' + esc(r.revenueText) + '</b></div><div class="mk-x"><span>' + esc(T.colRatio) + '</span><b>' + ratioCell(r) + '</b></div>';
       return '<article class="mk-ccard" data-a="rowopen" data-id="' + esc(r.id) + '"><div class="mk-ch"><b>' + nameBtn(r) + '</b>' + statusChip(r) + '</div>'
-        + '<p class="mk-sub">' + esc([r.owner, r.platform].filter(Boolean).join(' · ')) + '</p><div class="mk-mg">' + grid + '</div>'
-        + (r.via ? '<p class="mk-viarow">عبر الرابط هذا الشهر: ' + esc(r.viaText) + '</p>' : '') + '</article>';
+        + '<p class="mk-sub">' + esc([r.owner, r.platform].filter(Boolean).join('، ')) + '</p><div class="mk-mg">' + grid + '</div>'
+        + (r.via ? '<p class="mk-viarow mk-x">عبر الرابط هذا الشهر: ' + esc(r.viaText) + '</p>' : '') + '<span class="mk-details">التفاصيل</span></article>';
     }).join('');
     var o = vm.organic;
     cards += '<article class="mk-ccard mk-organic"><div class="mk-ch"><b>' + esc(o.name) + '</b></div><p class="mk-sub">' + esc(o.sub) + '</p>'
@@ -202,11 +202,13 @@
   function tailHtml(m) {
     var st = { campaigns: m.src.campaigns.state, income: m.src.income.state, ads: m.src.ads.state, attribution: m.src.attribution.state };
     var sv = MK.sources(st);
-    var chips = sv.seen.map(function (s) { return '<li class="mk-src s-' + s.state + '"><i></i>' + esc(s.label) + '</li>'; }).join('');
+    var chips = sv.seen.map(function (s) { return '<li class="mk-src s-' + s.state + '"><i></i>' + esc(s.label) + (s.state === 'error' ? ' (تعذّر)' : s.state === 'loading' ? ' (جارٍ)' : s.state === 'ready' ? '' : ' (لم يصل)') + '</li>'; }).join('');
     var needs = sv.needs.map(function (n) { return '<li class="mk-need"><span class="mk-nt">' + esc(n.title) + '</span><span class="mk-nw">' + esc(n.why) + '</span><span class="mk-nc">' + esc(n.chip) + '</span></li>'; }).join('');
-    return '<footer class="mk-tail"><div class="mk-seen"><b>' + esc(T.seenTitle) + '</b><ul class="mk-srcs">' + chips + '</ul>'
+    var tailWrapOpen = '', tailWrapClose = '';
+    try { if (window.matchMedia && window.matchMedia('(max-width:760px)').matches) { tailWrapOpen = '<details class="mk-taild"><summary>ما يراه العقل وما يحتاجه</summary>'; tailWrapClose = '</details>'; } } catch (e0) {}
+    return tailWrapOpen + '<footer class="mk-tail"><div class="mk-seen"><b>' + esc(T.seenTitle) + '</b><ul class="mk-srcs">' + chips + '</ul>'
       + (sv.failed.length ? '<button type="button" class="v3-link" data-a="retry">' + esc(T.retry) + '</button>' : '') + '</div>'
-      + '<div class="mk-needs"><b>' + esc(T.needsTitle) + '</b><ul class="mk-needlist">' + needs + '</ul><button type="button" class="v3-link" data-a="how">' + esc(T.howLink) + '</button></div></footer>';
+      + '<div class="mk-needs"><b>' + esc(T.needsTitle) + '</b><ul class="mk-needlist">' + needs + '</ul><button type="button" class="v3-link" data-a="how">' + esc(T.howLink) + '</button></div></footer>' + tailWrapClose;
   }
   function tableCard(m, rows) {
     var body;

@@ -36,6 +36,12 @@ UTC = datetime.timezone.utc
 ALLOWED_WRITES = {('POST', '/api/bridge/chat-insights/classify'), ('POST', '/api/bridge/reports/weekly/deliver')}
 
 
+def open_filt(page):
+    """الموبايل: القسم والفترة داخل «تصفية» مطوية (r6) — نفتحها قبل أي نقرة عليها."""
+    page.evaluate("() => { const d = document.querySelector('.v2r-fdet'); if (d) d.open = true; }")
+    page.wait_for_timeout(60)
+
+
 def cairo_today():
     tz = ZoneInfo('Africa/Cairo') if ZoneInfo else UTC
     return datetime.datetime.now(UTC).astimezone(tz).date()
@@ -219,12 +225,14 @@ def flow(browser, h, pre, viewport, mobile):
     shot(page, pre + '04-basis.jpg')
     page.click('[data-a="why"]')
     # ٠٢) الأسبوع ٠٣) ٣ أشهر
+    open_filt(page)
     page.click('[data-a="period"][data-period="week"]')
     page.wait_for_function("() => /week/.test(location.hash)", timeout=10000)
     wait_report(page)
     if page.evaluate("() => document.querySelectorAll('.v2r-svg .v2r-hit').length") != 7:
         PROBLEMS.append(pre + '02: نقاط الأسبوع ليست ٧')
     shot(page, pre + '02-week.jpg')
+    open_filt(page)
     page.click('[data-a="period"][data-period="quarter"]')
     page.wait_for_function("() => /quarter/.test(location.hash)", timeout=10000)
     wait_report(page)
@@ -235,11 +243,14 @@ def flow(browser, h, pre, viewport, mobile):
     # ٠٥) الدورات ٠٦) السوق ٠٧) التسويق
     def choose(scope):
         if w <= 600:
+            open_filt(page)
             page.select_option('select.v2r-sel', scope)
         else:
+            open_filt(page)
             page.click('[data-a="scope"][data-scope="%s"]' % scope)
         page.wait_for_function("(s) => new RegExp('scope=' + s).test(location.hash)", arg=scope, timeout=10000)
         wait_report(page)
+    open_filt(page)
     page.click('[data-a="period"][data-period="month"]')
     wait_report(page)
     choose('courses')
@@ -255,6 +266,7 @@ def flow(browser, h, pre, viewport, mobile):
         PROBLEMS.append('%s07: نطاق التسويق %r' % (pre, mk))
     shot(page, pre + '07-scope-marketing.jpg')
     if w <= 600:
+        open_filt(page)
         page.focus('select.v2r-sel')
         shot(page, pre + '07b-scope-select.jpg')
     browser.close()
@@ -291,12 +303,15 @@ def flow(browser, h, pre, viewport, mobile):
     st = page.evaluate("() => [location.hash, document.querySelector('.v2r-funnel h2').textContent, document.querySelector('.v3-pb.on').textContent]")
     if st != ['#s/reports/report?scope=books&period=week', 'رحلة الكتب', 'الأسبوع']:
         PROBLEMS.append('%s26: العنوان المباشر %r' % (pre, st))
+    open_filt(page)
     page.click('[data-a="scope"][data-scope="all"]' if w > 600 else '[data-a="period"][data-period="month"]')
     page.wait_for_timeout(500)
     wait_report(page)
+    open_filt(page)
     page.click('[data-a="scope"][data-scope="courses"]' if w > 600 else '[data-a="period"][data-period="quarter"]')
     page.wait_for_timeout(500)
     wait_report(page)
+    open_filt(page)
     page.click('[data-a="scope"][data-scope="files"]') if w > 600 else None
     page.wait_for_timeout(300)
     if w > 600:

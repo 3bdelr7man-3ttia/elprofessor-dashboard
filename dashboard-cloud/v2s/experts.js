@@ -51,7 +51,7 @@
   }
   function leadHtml(t) {
     var id = t.id, busy = !!S.busy[id], err = S.err[id] || '', done = S.done[id] || '';
-    var meta = [t.specs.length ? t.specs.join('، ') : 'لم يحدّد تخصصه', t.country, t.years ? 'خبرة ' + t.years : ''].filter(Boolean).join(' · ');
+    var meta = [t.specs.length ? t.specs.join('، ') : 'لم يحدّد تخصصه', t.country, t.years ? 'خبرة ' + t.years : ''].filter(Boolean).join('، ');
     var acts = '';
     if (done) acts = '<p class="v2ex-ok" role="status">' + esc(done) + '</p>';
     else if (t.primary) {
@@ -90,7 +90,7 @@
     var p = [];
     if (B.converted) p.push(ar(B.converted) + ' صاروا مدرّبين');
     if (B.rejected) p.push(ar(B.rejected) + ' ليسوا مناسبين');
-    return '<p class="v2ex-fine">تمت معالجتهم: ' + esc(p.join(' · ')) + '</p>';
+    return '<p class="v2ex-fine">تمت معالجتهم: ' + esc(p.join('، ')) + '</p>';
   }
   function expertHtml(r) {
     var num = function (label, v) { return '<div><dt>' + esc(label) + '</dt><dd>' + esc(v == null ? NA : ar(v)) + '</dd></div>'; };

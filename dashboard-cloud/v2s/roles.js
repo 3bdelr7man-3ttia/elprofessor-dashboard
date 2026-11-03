@@ -295,7 +295,7 @@
       var meta = [];
       if (c.trainer) meta.push('يقدّمها: ' + c.trainer);
       meta.push('المسجّلون: ' + c.students);
-      return '<article class="v2ro-opp"><header><div class="v2ro-rb"><h3>' + esc(c.title) + '</h3><p class="v2ro-meta">' + esc(meta.join(' · ')) + '</p></div>' + chip(c.chip) + '</header>'
+      return '<article class="v2ro-opp"><header><div class="v2ro-rb"><h3>' + esc(c.title) + '</h3><p class="v2ro-meta">' + esc(meta.join('، ')) + '</p></div>' + chip(c.chip) + '</header>'
         + (c.showBar ? '<div class="v2ro-bar" role="img" aria-label="' + esc(c.progressText) + '"><i style="width:' + c.pct + '%"></i></div>' : '')
         + '<p class="v2ro-prog">' + esc(c.progressText) + '</p>'
         + '<dl class="v2ro-facts">' + facts.map(function (f) { return '<div><dt>' + esc(f[0]) + '</dt><dd>' + esc(f[1]) + (f[2] ? '<small>' + esc(f[2]) + '</small>' : '') + '</dd></div>'; }).join('') + '</dl></article>';

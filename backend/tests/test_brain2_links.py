@@ -553,7 +553,7 @@ def test_ui_contract_in_brain_js_and_css():
     js = open(os.path.join(ROOT, 'dashboard-cloud', 'v2s', 'brain.js'), encoding='utf-8').read()
     css = open(os.path.join(ROOT, 'dashboard-cloud', 'v2s', 'brain.css'), encoding='utf-8').read()
     # تحت بطاقة المفاتيح لا فوقها
-    assert js.index("'</section>'\n      + connectedCard();") > js.index('<h2>المفاتيح والكاتب</h2>')
+    assert js.index("'</section>'\n      + advancedWrap(connectedCard());") > js.index('<h2>من يكتب للعقل</h2>')
     assert '<h2>الأنظمة المتصلة</h2>' in js and 'أضف نظامًا' in js and 'جرّب الاتصال' in js and 'احذفه' in js and 'رموز الدخول لهذه اللوحة' in js
     assert 'أنشئ رمزًا' in js and 'ألغِه' in js and 'انسخ الرمز' in js and 'يظهر الرمز مرة واحدة فقط' in js
     # رمز النظام الآخر: كلمة سر تُمسح بعد الحفظ ومع الإغلاق

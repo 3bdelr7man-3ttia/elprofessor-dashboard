@@ -1,5 +1,5 @@
 /* ============================================================================
- * v2s/books.js — تبويب «الكتب والأعمال» (قسم «الكتب»): قائمة بممرّات قرار + صفحة عمل + أوراق التأكيد.
+ * v2s/books.js — تبويب «الكتب» (قسم «الكتب»): قائمة بممرّات قرار + صفحة عمل + أوراق التأكيد.
  * ⛔ لا منطق عمل هنا: الحالة والممرّ ونص المبيعات وسطر العقل والفرق قبل ⇒ بعد كلها من `v2-logic.js` (دوال `v2k*` النقية).
  * ⛔ المفتاح مقفول: الملف بيتحمّل دايمًا، لكنه ما بيرسم شيئًا إلا لو index.html نادى `V2SX.render('knowledge', …)`، وده ما بيحصل إلا
  *   والغلاف الجديد شغّال (`owns()` ⇒ `V2SHELL.on`). الغلاف مقفول أو دور غير الأدمن ⇒ الشاشة القديمة زي ما هي.
@@ -133,7 +133,7 @@
   function noteStrip() { return S.note ? '<div class="v3-ok" role="status">' + esc(S.note) + '</div>' : ''; }
   function warnStrip(labels) {
     if (!labels.length) return '';
-    return '<div class="v3-warn" role="status">تعذّر جلب: ' + esc(labels.join(' · ')) + ' — ما يظهر ناقص، وليس معناه أنه لا شيء</div>';
+    return '<div class="v3-warn" role="status">تعذّر جلب: ' + esc(labels.join('، ')) + ' — ما يظهر ناقص، وليس معناه أنه لا شيء</div>';
   }
   function rowByKey(res, key) { return res ? res.rows.filter(function (r) { return r.key === key; })[0] || null : null; }
   function srcAll() {
@@ -179,7 +179,7 @@
     if (r.kind === 'offer') { if (r.priceAmount != null) parts.push('السعر المقترح: ' + esc(r.priceText)); }
     else if (r.salesNA) parts.push('<span class="bk-na">' + esc(r.salesText) + '</span>');
     else if (r.salesText) parts.push(esc(r.salesText));
-    return parts.join(' · ');
+    return parts.join('، ');
   }
   function brainLine(r) { return r.brain ? '<div class="v3-brain">' + BRAIN + '<p>' + esc(r.brain.text) + '</p></div>' : ''; }
   function decisionItem(r) {
@@ -317,7 +317,7 @@
     var caret = focusSearch ? document.activeElement.selectionStart : 0;
     var all = CORE.every(settled);
     if (!all) {
-      v.innerHTML = '<div class="v3 v2s-books" data-board="works">' + noteStrip() + '<div class="v3-empty"><b>…جارٍ جلب الكتب والأعمال</b></div></div>';
+      v.innerHTML = '<div class="v3 v2s-books" data-board="works">' + noteStrip() + '<div class="v3-empty"><b>…جارٍ جلب الكتب</b></div></div>';
       S.res = null; return;
     }
     var res = L.v2kWorks(srcAll(), now());
@@ -328,13 +328,13 @@
       if (!res.rows.length) res = { loadingOnly: true };
     }
     if (res && res.loadingOnly) {
-      v.innerHTML = '<div class="v3 v2s-books" data-board="works">' + noteStrip() + '<div class="v3-empty"><b>…جارٍ جلب الكتب والأعمال</b></div></div>';
+      v.innerHTML = '<div class="v3 v2s-books" data-board="works">' + noteStrip() + '<div class="v3-empty"><b>…جارٍ جلب الكتب</b></div></div>';
       S.res = null; return;
     }
     S.res = res;
     if (res) res.pending = late.length > 0;
     if (!res) {
-      v.innerHTML = '<div class="v3 v2s-books" data-board="works">' + noteStrip() + '<div class="v3-empty"><b>الكتب والأعمال: غير متاح بعد</b><p>تعذّر الوصول إلى هذه البيانات الآن، فلا تعتبر الشاشة فارغة.</p>' + retryBtn() + '</div></div>';
+      v.innerHTML = '<div class="v3 v2s-books" data-board="works">' + noteStrip() + '<div class="v3-empty"><b>الكتب: غير متاح بعد</b><p>تعذّر الوصول إلى هذه البيانات الآن، فلا تعتبر الشاشة فارغة.</p>' + retryBtn() + '</div></div>';
       wire(v); return;
     }
     if (S.open) {
@@ -552,14 +552,14 @@
   var CATS = [['memo_template', 'صيغ ونماذج'], ['law', 'قوانين وتشريعات'], ['ruling', 'أحكام'], ['custom', 'أخرى']];
   function openLibrary() {
     var f = '<p class="mc-lead">ملفات تقرأ منها إجابات المنصة ومحرّر المذكرات، ولا تُعرض للبيع. يُستورد حتى ' + U.ar(40) + ' ملفًا في كل مرة. الملفات المصوّرة (صور صفحات) لا تُقرأ بعد وتُتخطى. '
-      + 'يلزم ربط حساب Google Drive من المنصة مرة واحدة قبل أول استيراد.</p>'
-      + '<div class="fld"><label for="bk_lf">رابط المجلد في Google Drive</label><input id="bk_lf" type="text" dir="ltr" autocomplete="off" placeholder="الصق رابط المجلد"></div>'
+      + 'يلزم ربط حساب جوجل درايف من المنصة مرة واحدة قبل أول استيراد.</p>'
+      + '<div class="fld"><label for="bk_lf">رابط المجلد في جوجل درايف</label><input id="bk_lf" type="text" dir="ltr" autocomplete="off" placeholder="الصق رابط المجلد"></div>'
       + '<div class="fld"><label for="bk_lc">نوع الملفات</label><select id="bk_lc">' + CATS.map(function (c) { return '<option value="' + c[0] + '">' + esc(c[1]) + '</option>'; }).join('') + '</select></div>';
     formSheet({
       title: 'استيراد إلى مكتبة المراجع', btn: 'استورد', busy: 'جارٍ الاستيراد… قد يستغرق دقيقة', mode: 'library', html: f,
       collect: function (s) {
         var id = L.v2kFolderId(q('#bk_lf', s).value);
-        return id ? { ok: true, payload: { folder_id: id, category: q('#bk_lc', s).value, max_files: 40 } } : { ok: false, error: 'الصق رابط مجلد من Google Drive' };
+        return id ? { ok: true, payload: { folder_id: id, category: q('#bk_lc', s).value, max_files: 40 } } : { ok: false, error: 'الصق رابط مجلد من جوجل درايف' };
       },
       send: function (body) { return ep().api('/platform-library/ingest-folder', { method: 'POST', body: body }); },
       onOk: function (res, s) {
@@ -710,7 +710,7 @@
     var parts = [];
     if (f.pages) parts.push(arDigits(f.pages) + ' صفحة');
     if (f.size) parts.push(fmtSize(f.size));
-    return parts.join(' · ');
+    return parts.join('، ');
   }
   function oStatusPill(b) { return b.status === 'live' ? '<span class="bk-st st-live">في المتجر</span>' : '<span class="bk-st st-hidden">مسودة</span>'; }
   function oTypePill(b) { return '<span class="bk-type">' + esc(oTypeText(b.type)) + '</span>'; }
@@ -729,7 +729,7 @@
     var sum = codes ? (codes.length ? U.ar(codes.length) + (codes.length === 1 ? ' كود' : ' أكواد') + ' · ' + U.ar(codes.filter(function (c) { return c.active; }).length) + ' مفعّل' : 'لا أكواد بعد')
       : (cs.state === 'loading' || cs.state === 'idle' ? '…جارٍ الجلب' : 'غير متاح بعد');
     var price = ps.state === 'ready' ? priceLines(ps.data) : null;
-    var priceTxt = price ? (price.length ? price.join(' · ') : 'لم يُحدَّد سعر بعد') : (ps.state === 'loading' || ps.state === 'idle' ? '…جارٍ الجلب' : 'غير متاح بعد');
+    var priceTxt = price ? (price.length ? price.join('، ') : 'لم يُحدَّد سعر بعد') : (ps.state === 'loading' || ps.state === 'idle' ? '…جارٍ الجلب' : 'غير متاح بعد');
     return '<article class="ou-card ou-guides" data-card="guides"><h3>الأدلّة</h3><p class="ou-about">سعر واحد لكل الأدلّة، وأكواد تفتح الدليل لمن تعطيهم إياها.</p>'
       + '<dl class="ou-sums"><div><dt>السعر</dt><dd>' + esc(priceTxt) + '</dd></div><div><dt>أكواد الفتح</dt><dd>' + esc(sum) + '</dd></div></dl>'
       + '<div class="ou-acts"><button type="button" class="ep-b2" data-a="gprice">سعر الأدلّة</button><button type="button" class="ep-b2" data-a="codes">أكواد الفتح</button></div></article>';
@@ -782,7 +782,7 @@
       + '<div class="fld"><label for="ou_ins">ماذا تريد أن يُكتب؟</label><textarea id="ou_ins" rows="4" maxlength="2000" placeholder="مثال: دليل مبسّط لعقود الإيجار للمستأجرين الجدد، بأسلوب هادئ وأمثلة قصيرة">' + esc(O.f.instruction) + '</textarea></div>'
       + '<div class="fld"><label for="ou_out">الفصول المطلوبة (اختياري، سطر لكل فصل)</label><textarea id="ou_out" rows="3" maxlength="3000">' + esc(O.f.outline) + '</textarea></div>'
       + '<div class="ou-acts"><button type="button" class="ep-b1" data-a="draft"' + (st === 'writing' || O.busy ? ' disabled' : '') + '>' + (st === 'writing' ? 'العقل يكتب الآن…' : (O.f.draft ? 'اكتب مسودة جديدة' : 'اكتب المسودة')) + '</button></div>'
-      + '<p class="ou-fine">تُحفظ المسودة هنا لتراجعها وتعدّلها. لا يُرفع شيء قبل أن تضغط «اعمل PDF وارفعه».</p>';
+      + '<p class="ou-fine">تُحفظ المسودة هنا لتراجعها وتعدّلها. لا يُرفع شيء قبل أن تضغط «اعمل ملف PDF وارفعه».</p>';
     if (st === 'writing') h += '<p class="ou-writing" role="status">…العقل يكتب المسودة، قد يستغرق دقيقة. يمكنك البقاء في هذه الصفحة.</p>';
     if (st === 'failed' && dv.error) h += '<div class="v3-err" role="alert">' + esc(dv.error) + (O.f.draft ? ' (المسودة السابقة ما زالت محفوظة)' : '') + '</div>';
     h += oErrStrip('writer');
@@ -834,7 +834,7 @@
     });
     h += '<div class="ou-acts"><button type="button" class="ep-bs" data-a="chadd"' + (d.chapters.length >= 12 ? ' disabled' : '') + '>أضف فصلًا</button></div>'
       + '<div class="ou-acts"><button type="button" class="ep-b2" data-a="savedraft"' + (O.f.dirty ? '' : ' disabled') + '>' + (O.f.dirty ? 'احفظ التعديل' : 'التعديل محفوظ') + '</button>'
-      + '<button type="button" class="ep-b1" data-a="mkpdf">اعمل PDF وارفعه</button></div>'
+      + '<button type="button" class="ep-b1" data-a="mkpdf">اعمل ملف PDF وارفعه</button></div>'
       + confirmBox('pdf', 'سيُنشأ ملف PDF من هذه المسودة ويُرفع' + (b.file && b.file.uploaded ? '، ويحلّ محلّ الملف الحالي' : '') + '.' + (liveMarks() ? ' ' + reviewPhrase(liveMarks()) + '.' : ''), 'اعمل الملف وارفعه') + oErrStrip('pdf') + '</div>';
     return h;
   }
@@ -847,7 +847,7 @@
       h += '<p class="ou-line">الملف المختار: <b dir="auto">' + esc(O.pending.name) + '</b> · ' + esc(fmtSize(O.pending.size)) + '</p>';
       h += confirmBox('file', 'سيُرفع هذا الملف' + (has ? '، ويحلّ محلّ الملف الحالي' : '') + '.', 'ارفع الملف');
     } else {
-      h += '<div class="ou-acts"><button type="button" class="' + (nextIs && !O.writer ? 'ep-b1' : 'ep-b2') + '" data-a="pick">' + (has ? 'ارفع ملفًا آخر' : 'ارفع PDF') + '</button>'
+      h += '<div class="ou-acts"><button type="button" class="' + (nextIs && !O.writer ? 'ep-b1' : 'ep-b2') + '" data-a="pick">' + (has ? 'ارفع ملفًا آخر' : 'ارفع ملف PDF') + '</button>'
         + '<button type="button" class="ep-b2" data-a="write" aria-expanded="' + (O.writer ? 'true' : 'false') + '">' + (O.writer ? 'أخفِ الكتابة مع العقل' : 'اكتبه مع العقل') + '</button></div>';
     }
     h += '<input type="file" id="ou_file" accept="application/pdf,.pdf" hidden>' + oErrStrip('file');
@@ -1187,7 +1187,7 @@
   }
 
   function oRender(v) {
-    S.view = null;           // تبويب «الكتب والأعمال» ما يرسم فوق هذه الشاشة وهي ظاهرة
+    S.view = null;           // تبويب «الكتب» ما يرسم فوق هذه الشاشة وهي ظاهرة
     O.view = v; O.away = false;
     if (O.mode === 'codes' && O.rows === null) O.rows = codesFromSource();
     oEnsureList();

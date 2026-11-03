@@ -98,12 +98,12 @@ def test_expert_cards_say_why_an_expert_is_hidden_and_never_invent_numbers():
     sami, hala, nour = B['rows']
     assert sami['hidden'] and 'تجريبيًّا' in ' '.join(sami['reasons']) and sami['brain'].startswith('لا يظهر في دليل الخبراء للناس')
     assert sami['specs'] == ['تخصص آخر'] and sami['rating'] == 'لا تقييم بعد'
-    assert hala['email'] == 'h@x.test' and hala['rating'] == '٤٫٨ (١٢)' and hala['brain'] == 'يظهر في دليل الخبراء للناس.'
+    assert hala['email'] == 'h@x.test' and hala['rating'] == '٤٫٨ من ١٢ تقييمًا' and hala['brain'] == 'يظهر في دليل الخبراء للناس.'
     assert nour['hidden'] is False and 'غير متاح بعد' in nour['brain'], 'ظهوره في الدليل مجهول ⇒ لا حكم'
     assert B['online'] == 1 and B['hidden'] == 1
     assert v2_node.logic('v2s.experts.expertBoard', None) is None
     line = v2_node.logic('v2s.experts.summaryLine', B, {'open': [1, 2]})
-    assert line == '٣ خبراء معتمدون · متصل الآن · خبير لا يظهر للناس · ردّان على دعوة المؤسس ينتظرانك', line
+    assert line == '٣ خبراء معتمدون، متصل الآن، خبير لا يظهر للناس، ردّان على دعوة المؤسس ينتظرانك', line
     assert v2_node.logic('v2s.experts.summaryLine', None, None) == 'الخبراء: غير متاح بعد'
 
 
@@ -246,7 +246,7 @@ def test_content_badge_counts_decisions_only_and_keeps_the_ideas_as_text():
     q = {'topics_drafts': 311, 'testimonials_pending': 1, 'topics_pending_review': 2, 'opinions_pending': 3, 'creative_pending': 4}
     t = {x['key']: x for x in v2_node.logic('v2Tiles', q, ex)}['content']
     assert t['count'] == 10, 'الشارة = ما ينتظر قرارًا فقط (٢+١+٣+٤) لا ٣١١ مسودة فكرة'
-    assert t['next'] == 'موضوعان من أعضاء · رأي متعلّم واحد · ٣ تعليقات · ٤ أعمال إبداعية · ٣١١ فكرة في الأرشيف', t['next']
+    assert t['next'] == 'موضوعان من أعضاء، رأي متعلّم واحد، ٣ تعليقات، ٤ أعمال إبداعية، ٣١١ فكرة في الأرشيف', t['next']
     only = {x['key']: x for x in v2_node.logic('v2Tiles', {'topics_drafts': 311}, ex)}['content']
     assert only['count'] == 0 and only['next'] == '٣١١ فكرة في الأرشيف'
 

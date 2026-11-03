@@ -288,8 +288,16 @@ button.v2r-dbar:hover{background:#FBF0F3}
   .v2r *{transition:none!important}
 }
 
+/* موبايل: «تصفية» مطوية فوق الأرقام (الجولة r6) */
+.v2r-fdet{margin:0 0 10px;background:#fff;border:1px solid var(--line);border-radius:14px;padding:0 14px 6px}
+.v2r-fdet>summary{list-style:none;cursor:pointer;display:flex;align-items:center;justify-content:space-between;gap:10px;min-height:48px;font:800 14.5px 'Cairo',sans-serif;color:var(--wine)}
+.v2r-fdet>summary::-webkit-details-marker{display:none}
+.v2r-fdet>summary::after{content:"";width:10px;height:10px;border-inline-end:2px solid var(--mute);border-bottom:2px solid var(--mute);transform:rotate(45deg);flex:none}
+.v2r-fdet[open]>summary::after{transform:rotate(-135deg)}
+
 /* —— الطباعة: ورق أبيض وحبر، بلا غلاف ولا أزرار. كل قاعدة مشروطة بوجود شاشة التقارير في الصفحة (body:has(.v2r)) فلا تمسّ طباعة أي قسم آخر */
 @media print{
+  body:has(.v2r) .v2r-fdet{display:none!important}
   html:has(.v2r),body:has(.v2r){background:#fff!important;height:auto!important;overflow:visible!important}
   body:has(.v2r) .app{display:block!important;height:auto!important}
   body:has(.v2r) .rail,body:has(.v2r) .v2-side,body:has(.v2r) .v2-sheet,body:has(.v2r) .topbar,body:has(.v2r) .v2-sec,body:has(.v2r) .v2-sbar,body:has(.v2r) .toasts,body:has(.v2r) #v2sbar,body:has(.v2r) #v2sec,body:has(.v2r) .menu-btn,body:has(.v2r) .v2r-top,body:has(.v2r) .v2r-fresh,body:has(.v2r) .v2r-wn,body:has(.v2r) .v2r-wa,body:has(.v2r) .v2r-dp,body:has(.v2r) .v2r-whyt,body:has(.v2r) .v2r-bwhy,body:has(.v2r) .v2r-ftog,body:has(.v2r) .v3-btn1,body:has(.v2r) .v3-btn2,body:has(.v2r) .v2r-bbtn,body:has(.v2r) .v2r-inl,body:has(.v2r) .v2r-chev,body:has(.v2r) .v2r-ptxt,body:has(.v2r) .v2r-copybox,body:has(.v2r) .v3-ok{display:none!important}

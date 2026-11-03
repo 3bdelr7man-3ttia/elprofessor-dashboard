@@ -193,3 +193,4 @@
 @media(prefers-reduced-motion:reduce){
   .v2d-t,.v2d-pgrid.sk i{transition:none;animation:none}
 }
+.v2d-av .v2-ic{width:46%;height:46%}

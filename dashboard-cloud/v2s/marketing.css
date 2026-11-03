@@ -76,6 +76,7 @@
 .mk-mg b{font:800 14.5px/1.5 'Cairo',sans-serif;overflow-wrap:anywhere}
 .mk-ccard .mk-nores-row{grid-column:1/-1}
 .mk-ccard.mk-organic{background:var(--paper2);cursor:default}
+.mk-details{display:none}
 .mk-viarow{background:var(--paper2);border-radius:10px;padding:6px 10px;font-size:13px;color:#3A3730}
 
 /* —— سطر أرصدة الإعلانات + ذيل العقل */
@@ -197,3 +198,26 @@
   #epModal .modal:has(.mkm) .mb{max-height:84vh}
   .mkm .acts .btn{flex:1 1 calc(50% - 6px)}
 }
+
+/* موبايل: رقمان في البطاقة (صُرف · دفعوا) والباقي في «التفاصيل» (الجولة r6) */
+@media(max-width:760px){
+  .mk-ccard .mk-mg{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .mk-ccard .mk-x{display:none}
+  .mk-ccard .mk-details{display:inline-flex;align-items:center;min-height:44px;color:var(--wine);font:800 14px 'Cairo',sans-serif}
+  .mk-ccard.mk-organic .mk-mg{grid-template-columns:repeat(3,minmax(0,1fr))}
+}
+@media(max-width:760px){
+  .mk .v3-ptxt.v3-lead{display:none}
+  .mk .mk-card .v3-ch p{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+}
+/* أرقام التسويق الأربعة ٢×٢ بدل أربع بطاقات طويلة متتالية (الجولة r6) */
+@media(max-width:760px){
+  .mk .v3-nums{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+  .mk .v3-num{padding:10px 12px;border-radius:14px}
+  .mk .v3-num h3{font-size:13.5px}
+  .mk .v3-num .v3-big{font-size:21px}
+  .mk .v3-num .v3-note,.mk .v3-num .v3-oth{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;font-size:12.5px}
+}
+.mk-taild{margin-top:12px}
+.mk-taild>summary{cursor:pointer;display:flex;align-items:center;min-height:48px;padding:0 14px;border:1px solid var(--line);border-radius:14px;background:#fff;font:800 14.5px 'Cairo',sans-serif;color:var(--mute)}
+.mk-taild[open]>summary{margin-bottom:10px}

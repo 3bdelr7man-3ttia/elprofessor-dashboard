@@ -446,7 +446,7 @@ def test_the_header_line_totals_and_lanes():
     counts = {'by_status': {'open': 12, 'matched': 3}, 'by_lane': {'request': 9, 'course_request': 4, 'training_offer': 2}}
     h = L('header', rows, counts, 15, NOW)
     assert h['brainText'] == 'العقل: طلبان بلا عرض، أقدمها منذ يومين' and h['N'] == 2 and h['brainTs'] is not None
-    assert h['totals'] == 'في السوق الآن: ١٢ مفتوح · ٣ تمّت مطابقته · ٠ أُغلق'
+    assert h['totals'] == 'في السوق الآن: ١٢ مفتوح، ٣ تمّت مطابقته، ٠ أُغلق'
     assert h['lanes'] == {'request': 9, 'course_request': 4, 'public_service': 0, 'training_offer': 2, 'all': 13}
     assert h['truncated'] is True and h['total'] == 15
     h1 = L('header', [R('a', created_at=_iso(5))], None, 1, NOW)
@@ -592,7 +592,7 @@ def test_demand_view_model():
     assert [n['label'] for n in d['byNeed']] == ['خبير', 'دورة أو تدريب', 'خدمة', 'كتاب أو معرفة'] and d['byNeed'][0]['pct'] == 100 and d['byNeed'][0]['zero'] == 6
     assert d['specs']['title'] == 'حسب التخصص' and d['specs']['fallback'] is False and [i['label'] for i in d['specs']['items']] == ['تسويق', 'عقود']
     assert d['courses'][0]['explicit'] is True and d['courses'][0]['originLabel'] == 'طلبها شخص صراحة' and d['courses'][2]['originLabel'] == 'مستنتجة من المحادثات'
-    assert d['courses'][0]['reason'] == '٦ طلب في السوق · ٥ اهتمام بالتدريب · ٢ اهتمام بدورة · ٤ من المحادثات'
+    assert d['courses'][0]['reason'] == '٦ طلب في السوق، ٥ اهتمام بالتدريب، ٢ اهتمام بدورة، ٤ من المحادثات'
     assert d['courses'][1]['reason'] == '٢٠ انضمام لطلبات المنصة' and d['courses'][1]['countText'] == '٢٠ إشارة'
     assert d['topBrain'] == 'العقل: أكثر ما طُلب صراحةً «أساسيات صياغة العقود التجارية» (١٧ إشارة)', 'أول مقترح صراحةً بترتيب المنصة'
     # الاستنتاج وحده لا يُرقّى
@@ -745,5 +745,5 @@ def test_plain_copy_has_no_board_loanword():
 def test_header_totals_say_when_test_rows_are_included():
     rows = [R('a', created_at=_iso(50)), R('t', is_test=True, created_at=_iso(5))]
     counts = {'by_status': {'open': 2}}
-    assert L('header', rows, counts, 2, NOW)['totals'].endswith('(يشمل التجريبي)')
-    assert '(يشمل التجريبي)' not in L('header', rows[:1], counts, 1, NOW)['totals']
+    assert L('header', rows, counts, 2, NOW)['totals'].endswith('(فيها طلبات تجريبية)')
+    assert '(فيها طلبات تجريبية)' not in L('header', rows[:1], counts, 1, NOW)['totals']

@@ -368,7 +368,7 @@ def test_course_row_chip_meta_and_share():
             'revenue_split': {'trainer_percent': 40}}
     r = L('courseRow', base)
     assert r['chip'] == {'t': 'مفتوحة', 'tone': 'green'} and r['share'] == 'نصيبك من الدورة: ٤٠٪'
-    assert r['meta'].startswith('المسجّلون: ٣ · ١٬٥٠٠ جنيه') and 'تبدأ ١ سبتمبر ٢٠٢٦' in r['meta']
+    assert r['meta'].startswith('المسجّلون: ٣، ١٬٥٠٠ جنيه') and 'تبدأ ١ سبتمبر ٢٠٢٦' in r['meta']
     for st, want in (('draft', 'مسودة'), ('completed', 'انتهت'), ('archived', 'مؤرشفة'), ('zzz', 'غير معروفة')):
         assert L('courseRow', dict(base, status=st))['chip']['t'] == want
     for rs in (None, {}, {'trainer_percent': 0}):
@@ -420,7 +420,7 @@ def test_opp_card_dollars_and_the_zero_cases():
     o = {'course_title': 'برنامج', 'trainer_name': 'م. ليلى', 'students_count': 25, 'target_amount': 5000, 'current_funded': 300, 'funding_percent': 6,
          'expected_roi': 35, 'min_investment': 200, 'expected_start': '2026-11-10', 'expected_end': None, 'status': 'open'}
     c = L('oppCard', o)
-    assert c['showBar'] and c['pct'] == 6 and c['progressText'] == 'جُمع ٣٠٠ دولار من ٥٬٠٠٠ دولار · ٦٪'
+    assert c['showBar'] and c['pct'] == 6 and c['progressText'] == 'جُمع ٣٠٠ دولار من ٥٬٠٠٠ دولار، ٦٪'
     assert c['roiText'] == '٣٥٪' and c['roiNote'] == 'رقم تقديري حدّدته الإدارة' and c['minText'] == '٢٠٠ دولار' and c['end'] == ''
     for st, want in (('hot', 'إقبال مرتفع'), ('invite_only', 'بدعوة'), ('funded', 'اكتمل التمويل'), ('open', 'مفتوحة'), ('zzz', 'غير معروفة')):
         assert L('oppCard', dict(o, status=st))['chip']['t'] == want
@@ -532,7 +532,7 @@ def test_people_filter_counts_capped_and_row():
     assert cap['capped'] and cap['note'] == 'المعروض أحدث ٣ من ٩٠٠ عضوًا؛ ابحث بالاسم أو البريد لعرض غيرهم.'
     assert L('peopleCapped', {'users': PEOPLE[:3], 'count': 3}) == {'capped': False, 'count': 3, 'note': ''}
     row = L('personRow', PEOPLE[0], {'student': 'طلاب'})
-    assert row['name'] == 'هالة سمير' and [c['t'] for c in row['chips']] == ['عضو', 'مدرّب'] and row['meta'] == 'انضم ٢٣ أبريل ٢٠٢٦ · احترافية'
+    assert row['name'] == 'هالة سمير' and [c['t'] for c in row['chips']] == ['عضو', 'مدرّب'] and row['meta'] == 'انضم ٢٣ أبريل ٢٠٢٦، احترافية'
     pub = {d['k']: d['v'] for d in row['details']}
     assert pub['يظهر في الدليل العام'] == 'غير متاح بعد' and pub['الهاتف'] == '0100' and pub['الفئة'] == '—'
     assert {d['k']: d['v'] for d in L('personRow', dict(PEOPLE[0], public_ready=True, segment='student'), {'student': 'طلاب'})['details']}['الفئة'] == 'طلاب'
@@ -553,7 +553,7 @@ def test_course_status_rows_and_filters():
     assert [g['t'] for g in got] == ['منشورة', 'بانتظار الاعتماد', 'مرفوضة', 'مؤرشفة', 'مسودة', 'منشورة']
     assert got[2]['tone'] == 'red' and got[1]['tone'] == 'amber' and got[0]['tone'] == 'green'
     r = L('pcourseRow', PC[0])
-    assert r['meta'] == 'هالة · مسجّلة مدفوعة · ٤٥٠ جنيه · المسجّلون: ٢٤ · الدروس: ١٢'
+    assert r['meta'] == 'هالة، مسجّلة مدفوعة، ٤٥٠ جنيه، المسجّلون: ٢٤، الدروس: ١٢'
     r = L('pcourseRow', PC[5])
     assert 'بلا مدرّب' in r['meta'] and 'مجانية' in r['meta'] and 'الدروس: ٢٤' in r['meta'] and 'Titch' not in json.dumps(r, ensure_ascii=False)
     assert L('pcourseCounts', PC) == {'all': 6, 'published': 2, 'pending': 1, 'draft': 1}
@@ -567,7 +567,7 @@ TP = [{'title': 'أ', 'status': 'published', 'source': 'expert', 'category': 'ع
 @needs_node
 def test_topic_rows_counts_and_summary_cut():
     r = L('topicRow', TP[0])
-    assert r['chip'] == {'t': 'منشور', 'tone': 'green'} and r['meta'] == 'خبير · عقود · التعليقات: ٤ · التفاعلات: ٢١ · ١ أكتوبر ٢٠٢٦'
+    assert r['chip'] == {'t': 'منشور', 'tone': 'green'} and r['meta'] == 'خبير، عقود، التعليقات: ٤، التفاعلات: ٢١، ١ أكتوبر ٢٠٢٦'
     r = L('topicRow', TP[1])
     assert r['title'] == 'سؤال' and r['chip']['t'] == 'بانتظار المراجعة' and 'التعليقات' not in r['meta'], 'لا رقم مختلق لمصدر غائب'
     assert L('topicRow', TP[2])['chip']['t'] == 'مسودة' and L('topicRow', TP[2])['key'] == 'draft'

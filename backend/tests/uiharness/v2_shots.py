@@ -592,7 +592,7 @@ def flow_d1b(browser, h, pre, viewport, mobile):
     page.evaluate("() => goEscrowManual()")
     page.wait_for_timeout(300)
     st = sec_state(page)
-    if st['hash'] != '#s/money/receipts' or st['h1'] != 'الفلوس' or st['on'] != 'الإيصالات والمدفوعات العالقة':
+    if st['hash'] != '#s/money/receipts' or st['h1'] != 'الفلوس' or st['on'] != 'الإيصالات':
         PROBLEMS.append(pre + '26: دفعات يدوية (goEscrowManual) ما هبطتش على «الفلوس ‹ الإيصالات»: %r' % st)
     sshot(page, pre + '26-money-receipts.jpg')
     page.evaluate("() => { location.hash = '#invites'; }")
@@ -654,7 +654,7 @@ def flow_d1b(browser, h, pre, viewport, mobile):
                                        ('#messages', '#s/people/messages', 'الناس والدعوات', 'الرسائل'), ('#invites', '#s/people/invites', 'الناس والدعوات', 'الطلبات'),
                                        ('#escrow', '#s/disputes/escrow', 'النزاعات والاستردادات', 'كل السجلات'), ('#tutorials', '#s/content/tutorials', 'المحتوى', 'دليل الاستخدام'),
                                        ('#partners', '#s/company/invest', 'الشركة ورأس المال', 'نظرة'), ('#inbox', '#s/home/inbox', 'اللوحة', 'كل الوارد'),
-                                       ('#team', '#s/files/experts', 'ملفات الخبراء', 'الخبراء'), ('#s/money/receipts', '#s/money/receipts', 'الفلوس', 'الإيصالات والمدفوعات العالقة')):
+                                       ('#team', '#s/files/experts', 'ملفات الخبراء', 'الخبراء'), ('#s/money/receipts', '#s/money/receipts', 'الفلوس', 'الإيصالات')):
         ctx = browser.context(h, 'admin', viewport, mobile)
         page = open_shell(ctx, old)
         st = sec_state(page)
@@ -1046,7 +1046,7 @@ def flow_d3(browser, h, pre, viewport, mobile):
         PROBLEMS.append('%s01: صافي البروفيسور لازم «غير متاح بعد»: %r' % (pre, info['nums']))
     if any(n[2] for n in info['nums'] if n[0] != 'صافي البروفيسور'):
         PROBLEMS.append('%s01: رقم غير متاح مع أن كل المصادر شغّالة: %r' % (pre, info['nums']))
-    if info['tabs'] != ['نظرة', 'التحويلات', 'الإيصالات والمدفوعات العالقة', 'الأسعار', 'النسب والإعدادات', 'إعلانات الأعمال', 'كل السجلات']:
+    if info['tabs'] != ['نظرة', 'التحويلات', 'الإيصالات', 'الأسعار', 'النسب والإعدادات', 'إعلانات الأعمال', 'كل السجلات']:
         PROBLEMS.append('%s01: تبويبات الفلوس %r' % (pre, info['tabs']))
     if info['seg'] != ['اليوم', 'الشهر', 'السنة'] or info['pays'] != 2 or info['bars'] != 4 or info['refunds'] < 3 or not info['norefund']:
         PROBLEMS.append('%s01: نظرة ناقصة %r' % (pre, {k: info[k] for k in ('seg', 'pays', 'bars', 'refunds', 'norefund')}))
@@ -1147,7 +1147,7 @@ def flow_d3(browser, h, pre, viewport, mobile):
     page.click('#v3_cancel')
     browser.close()
 
-    # —— ٥) الإيصالات والمدفوعات العالقة
+    # —— ٥) الإيصالات
     h.ef = d3fx.D3Platform(d2=True)
     ctx = browser.context(h, 'admin', tallvp, mobile)
     page = d3_open(ctx, '#s/money/receipts', 'receipts')
@@ -1203,7 +1203,7 @@ def flow_d3(browser, h, pre, viewport, mobile):
     ctx = browser.context(h, 'admin', tallvp, mobile)
     page = d3_open(ctx, '#s/money/shares', 'shares')
     sh = page.evaluate("() => ({lines: [...document.querySelectorAll('.v3-sh .v3-pid')].map(e => e.innerText.replace(/\\s+/g, ' ')), floor: (document.querySelector('.v3-floor') || {}).textContent, ladder: document.querySelectorAll('.v3-ladder tbody tr').length})")
-    if not any('صاحب العمل ٦٠٪ · المنصة ٤٠٪' in l for l in sh['lines']) or sh['ladder'] != 4 or '٣٥٪' not in (sh['floor'] or ''):
+    if not any('لصاحب العمل ٦٠٪ للمنصة ٤٠٪' in l for l in sh['lines']) or sh['ladder'] != 4 or '٣٥٪' not in (sh['floor'] or ''):
         PROBLEMS.append('%s07: النسب %r' % (pre, sh))
     d3_shot(page, pre + '07-shares.jpg')
     page.click('[data-a="share"][data-k="books"]')
@@ -1276,7 +1276,7 @@ def flow_d3(browser, h, pre, viewport, mobile):
     ctx = browser.context(h, 'admin', tallvp, mobile)
     page = d3_open(ctx, '#s/books/offers', 'offers')
     of = page.evaluate("() => ({cards: document.querySelectorAll('.v3-offer').length, tabs: [...document.querySelectorAll('.v2c-tab')].map(b => b.textContent.trim()), brain: [...document.querySelectorAll('.v3-brain')].map(e => e.innerText)})")
-    if of['cards'] != 2 or of['tabs'] != ['مراجعة العروض', 'طلبات القرّاء', 'الكتب والأعمال'] or not any('أعلى من متوسط الكتب في مصر' in b for b in of['brain']):
+    if of['cards'] != 2 or of['tabs'] != ['مراجعة العروض', 'طلبات القرّاء', 'الكتب'] or not any('أعلى من متوسط الكتب في مصر' in b for b in of['brain']):
         PROBLEMS.append('%s09: مراجعة العروض %r' % (pre, of))
     d3_shot(page, pre + '09-offers.jpg')
     page.click('[data-a="oapprove"] >> nth=0')

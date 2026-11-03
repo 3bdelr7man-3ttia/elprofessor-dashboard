@@ -241,7 +241,7 @@ def test_tone_and_flags_every_branch():
     assert r['t'] == ['late', 'money', 'money', 'done', 'wait', 'money', 'late']
     ft = [[x['t'] for x in f] for f in r['f']]
     assert ft == [[], ['مستعجل', 'مراجعة عقد', 'لا خبير متاح', 'يحتاج تدخّلك'], ['خدمة مرخّصة'], ['خدمة مرخّصة بلا رقم قيد'], ['حساب عليه علامات'], ['من الموقع'], ['من المنصة'], ['خدمة مرخّصة بلا رقم قيد']]
-    assert r['f'][4][0]['tip'] == 'أ · ب'
+    assert r['f'][4][0]['tip'] == 'أ، ب'
     assert not any('خدمة مرخّصة' in a and 'بلا' in b for a, b in zip(ft[2], ft[2]))
 
 
@@ -415,7 +415,7 @@ def test_copy_seed_entries_from_the_spec():
 @needs_node
 def test_copy_keeps_surrounding_whitespace_and_interpolated_parts():
     r = _node("console.log(JSON.stringify([L.v2hCopy('  رجّع الفلوس\\n'), L.v2hCopy('هترجّع '), L.v2hCopy(' كاملين لمحفظة '), L.v2hCopy('📩 رجعت ٥٠٠ ج لمحفظة طارق ✓')]))")
-    assert r == ['  أعد الأموال إلى صاحب الطلب\n', 'ستُعيد ', ' كاملةً إلى محفظة ', '📩 أُعيد ٥٠٠ ج إلى محفظة طارق ✓']
+    assert r == ['  أعد الأموال إلى صاحب الطلب\n', 'ستُعيد ', ' كاملةً إلى محفظة ', 'أُعيد ٥٠٠ ج إلى محفظة طارق']
 
 
 @needs_node
@@ -601,7 +601,7 @@ def test_bell_dot_sits_on_the_button_corner_not_on_the_count():
 def test_mobile_header_is_compacted_so_the_first_ticket_is_near_the_top():
     m = HOME_CSS[HOME_CSS.index('@media(max-width:760px){\n  .app.v2-shell .v2h-top'):]
     m = m[:m.index('@media(min-width:761px)')]
-    assert '.v2h-top{flex-wrap:nowrap' in m and '.v2h-autot span{display:none}' in m and '.v2h-bl span{display:block;white-space:nowrap' in m
+    assert '.v2h-top{flex-wrap:nowrap' in m and '.v2h-autot span{display:none}' in m and '.v2h-bl span{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2' in m
 
 
 # ---------------------------------------------------------------- ٥) الكتابة المرئية في home.js

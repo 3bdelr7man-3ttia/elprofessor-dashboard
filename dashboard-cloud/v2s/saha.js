@@ -797,7 +797,7 @@
     B.empty = function (title, text) { return '<div class="sh-empty"><b>' + esc(title) + '</b>' + (text ? '<p>' + esc(text) + '</p>' : '') + '</div>'; };
     B.chips = function (key, list, cur) {
       return '<div class="sh-ctl" role="group">' + list.map(function (c) {
-        return '<button type="button" class="sh-chip' + (String(c[0]) === String(cur) ? ' on' : '') + '" data-a="chip" data-k="' + key + '" data-v="' + esc(c[0]) + '" aria-pressed="' + (String(c[0]) === String(cur)) + '">' + esc(c[1]) + '</button>';
+        return '<button type="button" class="sh-chip' + (String(c[0]) === String(cur) ? ' on' : '') + '" data-a="chip" data-k="' + key + '" data-v="' + esc(c[0]) + '" aria-pressed="' + (String(c[0]) === String(cur)) + '">' + esc(c[1]) + (c[2] ? ' <i class="sh-cn">' + esc(c[2]) + '</i>' : '') + '</button>';
       }).join('') + '</div>';
     };
     // جدول للكمبيوتر وبطاقات للموبايل من نفس تعريف الأعمدة؛ cols: [{h, c(r) ⇒ html}] (الأول عنوان البطاقة)، acts(r) ⇒ html أزرار.

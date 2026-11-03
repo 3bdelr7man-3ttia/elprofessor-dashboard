@@ -57,7 +57,7 @@
   function ar(n) { return UT.ar(n); }
 
   // ------------------------------------------------------------------ الحالة
-  var S = H.S = { q: '', seg: null, page: 60, key: '', timer: null, sig: '', opener: null, wasOpen: false,
+  var S = H.S = { fold: false, q: '', seg: null, page: 60, key: '', timer: null, sig: '', opener: null, wasOpen: false,
                   auto: { confirm: false, busy: false, err: '' }, typesOpen: false, lastCtx: '' };
 
   // ------------------------------------------------------------------ بيانات الوارد
@@ -187,27 +187,27 @@
   function strip(cls, html) { return '<div class="v2h-strip ' + cls + '">' + html + '</div>'; }
   function drawHead(b, ctx) {
     var el = document.getElementById('v2hHead'); if (!el) return;
-    var st = inboxStatus(), failed = failedList(), trunc = truncList(), html = '';
+    var st = inboxStatus(), failed = failedList(), trunc = truncList(), html = '', brainHtml = '', rest = '';
     var bs = st === 'ready' && failed.length ? 'partial' : st;
     var log = [];
     try { log = L.v2BrainLog(rowsAll(), b.now) || []; } catch (e) {}
     var line = L.v2hBrainLine(b.base, (ctx === 'home' || ctx === 'files') ? log.length : 0, bs);   // توزيع العقل للملفات: لا يُذكر في شاشتي النزاعات والرسائل
-    if (line) html += '<p class="v2h-bl"><img src="' + img('brain-avatar') + '" alt=""><span><b>العقل:</b> ' + esc(line) + '</span></p>';
+    if (line) brainHtml = '<p class="v2h-bl"><img src="' + img('brain-avatar') + '" alt=""><span><b>العقل:</b> ' + esc(line) + '</span></p>';
     if (st === 'error') {
       html += strip('bad', '<span>تعذّر جلب الوارد — لا نعرف إن كان شيء ينتظرك</span><button type="button" class="v2h-lnk" data-a="retry">أعد المحاولة</button>');
     } else if (failed.length) {
-      html += strip('bad', '<span>تعذّر جلب: ' + esc(failed.join(' · ')) + ' — العدد ناقص، وما ظهر ليس كل شيء</span><button type="button" class="v2h-lnk" data-a="retry">أعد المحاولة</button>');
+      html += strip('bad', '<span>تعذّر جلب: ' + esc(failed.join('، ')) + ' — العدد ناقص، وما ظهر ليس كل شيء</span><button type="button" class="v2h-lnk" data-a="retry">أعد المحاولة</button>');
     }
     if (trunc.length) {
-      html += strip('warn', '<span>معروض جزء فقط من: ' + esc(trunc.map(function (t) { return String(t).split(':')[0].trim(); }).join(' · ')) + ' — الباقي موجود ولا يظهر هنا</span>');
+      html += strip('warn', '<span>معروض جزء فقط من: ' + esc(trunc.map(function (t) { return String(t).split(':')[0].trim(); }).join('، ')) + ' — الباقي موجود ولا يظهر هنا</span>');
     }
-    if (inboxUnknown()) { el.innerHTML = html; return; }          // الوارد لم يصل: لا شرائط خدمة ولا توزيع ولا «للعلم» فوق مجهول
+    if (inboxUnknown()) { el.innerHTML = brainHtml + html; return; }          // الوارد لم يصل: لا شرائط خدمة ولا توزيع ولا «للعلم» فوق مجهول
     // وضع الخدمة
     var mode = call('efServiceMode');
     var hasFiles = rowsAll().some(function (r) { return r.apiKind === 'expert_file' || (r.apiKind === 'dispute' && r.dsrc === 'file'); });
     if (ctx !== 'messages' && hasFiles && (mode === 'closed' || mode === 'allowlist')) {
       var n = ep() && ep().data ? ep().data.efAllowlistSize : null;
-      html += strip('info', '<span>' + esc(L.v2hServiceLine(mode, typeof n === 'number' ? n : null)) + '</span>');
+      rest += strip('info', '<span>' + esc(L.v2hServiceLine(mode, typeof n === 'number' ? n : null)) + '</span>');
     }
     // التوزيع التلقائي
     var f = getFilter();
@@ -221,18 +221,23 @@
         ? '<div class="v2h-conf" role="group" aria-label="تأكيد إيقاف التوزيع التلقائي"><p>' + esc(autoLine.confirm) + '</p>'
           + '<div class="v2h-confa"><button type="button" class="v2h-btn1 sm" data-a="auto_go"' + (a.busy ? ' disabled' : '') + '>' + (a.busy ? 'جارٍ التنفيذ…' : 'نعم، أوقفه') + '</button>'
           + '<button type="button" class="v2h-btn2" data-a="auto_x"' + (a.busy ? ' disabled' : '') + '>رجوع</button></div></div>' : '';
-      html += '<div class="v2h-auto' + (on ? '' : ' off') + '" role="group" aria-label="التوزيع التلقائي"><div class="v2h-autot"><b>' + esc(autoLine.head) + '</b> <span>' + esc(autoLine.body) + '</span></div>' + btn
+      rest += '<div class="v2h-auto' + (on ? '' : ' off') + '" role="group" aria-label="التوزيع التلقائي"><div class="v2h-autot"><b>' + esc(autoLine.head) + '</b> <span>' + esc(autoLine.body) + '</span></div>' + btn
         + (a.err ? '<p class="v2h-err" aria-live="polite">' + esc(a.err) + '</p>' : '') + conf + '</div>';
     }
     // للعلم
     var nf = fyiRows().length;
     if (f === 'fyi') {
       var back = ctx === 'files' ? 't:files' : 'all';
-      html += strip('info fyi', '<span>' + esc(L.v2hFyiLine(nf, null, true)) + '</span><button type="button" class="v2h-lnk" data-a="fyi_back" data-f="' + back + '">رجوع إلى الكل</button>');
+      rest += strip('info fyi', '<span>' + esc(L.v2hFyiLine(nf, null, true)) + '</span><button type="button" class="v2h-lnk" data-a="fyi_back" data-f="' + back + '">رجوع إلى الكل</button>');
     } else if (nf > 0 && mode !== 'closed' && ((ctx === 'home' && f === 'all') || (ctx === 'files' && f === 't:files'))) {
-      html += strip('info fyi', '<span>' + esc(L.v2hFyiLine(nf, call('efAutoOn'), false)) + '</span><button type="button" class="v2h-lnk" data-a="fyi_on">اعرضها</button>');
+      rest += strip('info fyi', '<span>' + esc(L.v2hFyiLine(nf, call('efAutoOn'), false)) + '</span><button type="button" class="v2h-lnk" data-a="fyi_on">اعرضها</button>');
     }
-    el.innerHTML = html;
+    // الموبايل: سطر العقل والتوزيع والعلم في شريط واحد قابل للطيّ، فتظهر أول بطاقة فوق الطيّة. الكمبيوتر: كما كان.
+    if (mobile() && rest) {
+      el.innerHTML = html + '<details class="v2h-fold"' + (S.fold ? ' open' : '') + '><summary>' + (brainHtml || '<span class="v2h-foldt">التوزيع والملاحظات</span>') + '</summary>' + rest + '</details>';
+      var fd = el.querySelector('.v2h-fold');
+      if (fd) fd.addEventListener('toggle', function () { S.fold = fd.open; });
+    } else el.innerHTML = brainHtml + html + rest;
   }
 
   // ------------------------------------------------------------------ الشرائح والشريط الصغير
@@ -321,7 +326,7 @@
       else if (!rowsAll().length && st === 'error') h = '<div class="v2h-empty"><b>لا نعرف الآن ما ينتظرك</b></div>';
       else if (q && b.base.length) h = '<div class="v2h-empty"><b>لا بنود تطابق «' + esc(q) + '»</b><button type="button" class="v2h-btn2" data-a="clearq">امسح البحث</button></div>';
       else if (!ctxHas || (b.filter === ctxDefault && !b.base.length)) {
-        if (failed.length) h = '<div class="v2h-empty"><b>لا بنود ظهرت، لكن تعذّر جلب ' + esc(failed.join(' · ')) + ' — لا تعتبر القائمة فارغة</b></div>';
+        if (failed.length) h = '<div class="v2h-empty"><b>لا بنود ظهرت، لكن تعذّر جلب ' + esc(failed.join('، ')) + ' — لا تعتبر القائمة فارغة</b></div>';
         else h = '<div class="v2h-empty"><img src="' + img('brain-avatar') + '" alt=""><b>لا شيء ينتظرك هنا الآن</b></div>';
       } else h = '<div class="v2h-empty"><b>لا بنود في هذا الاختيار</b><button type="button" class="v2h-btn2" data-a="showall" data-f="' + esc(ctxDefault) + '">اعرض الكل</button></div>';
       el.removeAttribute('data-seg');
@@ -381,7 +386,7 @@
     var html = document.documentElement;
     if (lock) html.classList.add('v2-noscroll');
     else if (!(S.typesOpen && mobile())) html.classList.remove('v2-noscroll');
-    if (open && narrow() && !S.wasOpen) { var cb = qs('.v2h-dbar button', d); if (cb) { try { cb.focus({ preventScroll: true }); } catch (e) {} } }
+    if (open && narrow() && !S.wasOpen) { var cb = qs('.v2h-dwp', d); if (cb) { try { cb.setAttribute('tabindex', '-1'); cb.focus({ preventScroll: true }); } catch (e) {} } }      // التركيز على الورقة نفسها لا على «رجوع»: فلا حلقة مزدوجة عليه
     if (!open && S.wasOpen && narrow() && S.opener != null) {
       var t = qs('.v2h-btn1[data-i="' + S.opener + '"]');
       if (t) { try { t.focus({ preventScroll: true }); } catch (e) {} }
@@ -602,7 +607,7 @@
         if (shown.length < hh.alerts.length) h += '<button type="button" class="v2h-lnk" data-a="hmore">اعرض باقي التنبيهات (' + ar(hh.alerts.length - shown.length) + ')</button>';
       }
       if (hh.heartbeats && hh.heartbeats.length) {
-        h += '<h4>آخر تشغيل للمهام الدورية</h4><ul class="v2h-hb">' + hh.heartbeats.map(function (b) { return '<li><span>' + esc(b.label) + '</span><b>' + esc(b.ago) + '</b></li>'; }).join('') + '</ul>';
+        h += '<details class="v2h-hbd"><summary>آخر تشغيل للمهام الدورية</summary><ul class="v2h-hb">' + hh.heartbeats.map(function (b) { return '<li><span>' + esc(b.label) + '</span><b>' + esc(b.ago) + '</b></li>'; }).join('') + '</ul></details>';
       }
     }
     h += '</section>';

@@ -1,5 +1,5 @@
 /* ============================================================================
- * v2s/books.css — تبويب «الكتب والأعمال» (قسم «الكتب»). كل القواعد تحت `.v2s-books` (الصفحة) أو `.v2s-bm` (داخل الورقة) أو `#epModal`:
+ * v2s/books.css — تبويب «الكتب» (قسم «الكتب»). كل القواعد تحت `.v2s-books` (الصفحة) أو `.v2s-bm` (داخل الورقة) أو `#epModal`:
  * ⛔ المفتاح مقفول ⇒ الملف بيتحمّل ومفيش عنصر في الصفحة بيحمل الأصناف دي.
  * بتعتمد على ألوان وأزرار v2-d3.css (`.v3` · `.v3m`): عنّابي #9E2B4E · ورق #FBFAF7 · حبر #21262E · أحمر #C8102E للمتأخر والمرفوض بس.
  * ========================================================================== */
@@ -119,7 +119,10 @@
   .v2s-books .bk-fold{min-height:52px}
   .v2s-books .bk-row{grid-template-columns:minmax(0,1fr)}
   .v2s-books .bk-row .v3-btn2{width:100%}
-  .v2s-books .bk-addrow .v3-btn2,.v2s-books .v3-empty .v3-btn1,.v2s-books .v3-empty .v3-btn2{width:100%}
+  /* الأزرار على قد نصّها (قرار r6) وتتمركز كلها: لا واحد يمين وآخر يسار */
+  .v2s-books .bk-addrow{display:flex;justify-content:center}
+  .v2s-books .bk-libline{text-align:center}
+  .v2s-books .v3-empty{display:grid;justify-items:center;text-align:center}
   .v2s-books .bk-acts{flex-direction:column;align-items:stretch}
   .v2s-books .bk-acts .v3-btn1,.v2s-books .bk-acts .v3-btn2,.v2s-books .bk-acts .v3-link{width:100%;flex:none}
   .v2s-books .bk-whead{padding:14px 16px}

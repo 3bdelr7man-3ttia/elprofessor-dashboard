@@ -61,7 +61,8 @@ PUBLISHED = ('under_review', 'confirmed')                  # «منشور» = ظ
 AREAS = (
     ('contracts', 'عقود'), ('litigation', 'تقاضٍ'), ('corporate', 'شركات'), ('general', 'عام'),
     ('arbitration', 'تحكيم'), ('criminal', 'جنائي'), ('ip', 'ملكية فكرية'), ('labor', 'عمل'),
-    ('family', 'أسرة'), ('other', 'أخرى'),
+    ('family', 'أسرة'), ('realestate', 'عقارات'), ('banking', 'بنوك ومصارف'), ('data', 'البيانات والخصوصية'),
+    ('other', 'أخرى'),
 )
 AREA_CODES = tuple(a for a, _ in AREAS)
 AREA_LABEL = dict(AREAS)

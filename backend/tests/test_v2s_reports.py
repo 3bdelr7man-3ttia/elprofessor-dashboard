@@ -1048,7 +1048,7 @@ def test_demand_numbers_line():
                                                                                                                       {'country': 'unknown', 'count': 9}, {'country': 'uae', 'count': 0}],
          'expert_opinions': {'requested': 112, 'paid': 61, 'conversion_rate': 0.545}}
     t = v2_node.logic('v2r.demandNumbers', d)
-    assert t == '١٬٨٤٠ سؤالًا · ٤١٢ تحتاج رأي خبير (٢٢٪) · ٥٣٠ عضو و١٬٣١٠ زائر · دفع ٦١ من ١١٢ مقابل رأي خبير (٥٥٪) · من بلدين'.replace('١٬٨٤٠', '١٬٨٤٠'), t
+    assert t == '١٬٨٤٠ سؤالًا، ٤١٢ تحتاج رأي خبير (٢٢٪)، ٥٣٠ عضو و١٬٣١٠ زائر، دفع ٦١ من ١١٢ مقابل رأي خبير (٥٥٪)، من بلدين'.replace('١٬٨٤٠', '١٬٨٤٠'), t
     d.pop('expert_opinions')
     t = v2_node.logic('v2r.demandNumbers', d)
     assert 'الدفع مقابل رأي خبير: غير متاح بعد' in t and '· دفع ' not in t

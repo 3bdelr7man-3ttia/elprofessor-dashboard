@@ -37,7 +37,7 @@
 .v2s-mk-ctl{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;margin-bottom:12px}
 .v2s-mk-chips{display:flex;flex-wrap:wrap;gap:8px}
 .v2s-mk-chips.col{flex-direction:column;align-items:stretch}
-.v2s-mk-chips.strip{flex-wrap:nowrap;overflow-x:auto;max-width:100%;scrollbar-width:none;padding:2px}
+.v2s-mk-chips.strip{flex-wrap:wrap;max-width:100%;padding:2px}      /* الشرائح تلتف على سطرين بدل تمرير جانبي يقصّ بعضها (الجولة r6) */
 .v2s-mk-chips.strip::-webkit-scrollbar{display:none}
 .v2s-mk-chip{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:44px;padding:0 16px;border-radius:999px;border:1px solid var(--line);background:#fff;color:var(--ink);font:700 14px 'Cairo',sans-serif;cursor:pointer;white-space:nowrap;flex:none}
 .v2s-mk-chip:hover{background:var(--paper2)}

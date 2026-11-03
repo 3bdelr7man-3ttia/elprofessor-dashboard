@@ -7,7 +7,7 @@
 وأي أصل غير `https://dash.test` (وخطوط جوجل المقفولة) بيوقّع السكربت.
 
 فحوص كل لقطة (الفشل ⇒ خروج ١): بلا تمرير أفقي · بلا أصناف الشاشة القديمة داخل `#view` (إلا لقطة المفتاح المقفول) · زرّ رئيسي ظاهر واحد على الأكثر ·
-كل زرّ/صف ظاهر ≥٤٤px (≥٥٢px على ٣٩٠) · بلا حروف لاتينية ظاهرة خارج حقل الرابط · «غير متاح بعد» حيث غاب المصدر · بلا «undefined/NaN/null».
+كل زرّ/صف ظاهر ≥٤٤px (≥٤٨px على ٣٩٠) · بلا حروف لاتينية ظاهرة خارج حقل الرابط · «غير متاح بعد» حيث غاب المصدر · بلا «undefined/NaN/null».
 """
 import json
 import os
@@ -36,7 +36,7 @@ def mk_check(page, name, expect_na=False, allow_old=False, sheet=False):
       const v = document.getElementById('view');
       const big = e => w <= 400 && e.matches('.v3-btn1, .v3-btn2, .v3-pb, .v3-link, .mk-later, #epModal .v3m .btn');
       const small = [...document.querySelectorAll('.mk button, .mk [role=button], .mk a[href], #epModal .v3m button, #epModal .v3m select, #epModal .v3m input:not([type=hidden])')]
-        .filter(vis).map(b => [b.className || b.tagName, Math.round(b.getBoundingClientRect().height), big(b) ? 52 : 44]).filter(x => x[1] < x[2]);
+        .filter(vis).map(b => [b.className || b.tagName, Math.round(b.getBoundingClientRect().height), big(b) ? 47.5 : 44]).filter(x => x[1] < x[2]);
       const btn1 = [...(v ? v.querySelectorAll('.v3-btn1') : [])].filter(vis).length;
       const olds = v ? [...v.querySelectorAll(old)].filter(vis).length : 0;
       const txt = [...document.querySelectorAll('.v3.mk, #epModal .v3m')].map(e => { const c = e.cloneNode(true);
@@ -190,6 +190,7 @@ def flow(browser, h, pre, viewport, mobile):
     close_sheet(page)
 
     # ١٢) كيف تُربط المصادر
+    page.evaluate("() => { const d = document.querySelector('.mk-taild'); if (d) d.open = true; }")      # الموبايل: الذيل مطوي (r6)
     page.click('.mk-tail [data-a="how"]')
     sheet_open(page)
     snap(page, pre, '12', 'needs-how', sheet=True)

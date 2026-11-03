@@ -369,7 +369,7 @@
       var moves = b.sum && b.sum.capital_moves ? b.sum.capital_moves.slice(0, 3) : null;
       body = '<div class="co-stats">' + stat('رأس المال المتفق عليه', agreedBox) + stat('دُفع منه', paidBox) + '</div>' + equityBar(parts)
         + '<div class="co-prs">' + shown.map(function (r) { return partnerRow(r, parts); }).join('') + '</div>'
-        + (parts.rows.length > 5 ? lnk('الكل (' + arN(parts.rows.length) + ')', 'goto', ' data-t="partners"') : '')
+        + (parts.rows.length > 3 ? lnk('الكل (' + arN(parts.rows.length) + ')', 'goto', ' data-t="partners"') : '')
         + '<div class="co-foot"><b>آخر الحركات</b>' + (moves === null ? '<span>' + na() + '</span>' : (moves.length ? moves.map(function (m) {
             return '<p><span>' + esc(m.description || 'حركة') + '</span><em>' + esc(U.dateText(m.date) + ' · ' + money(m.amount, m.currency)) + '</em></p>'; }).join('') : '<p><span>لا حركات مسجّلة</span></p>')) + '</div>';
     }
@@ -458,10 +458,10 @@
       var cur = CO.currentTarget(fc, now()), cc = CO.currentCounts(dash);
       var nowLine;
       var cnt = !cc ? null : 'الآن: ' + [cc.courses == null ? 'الدورات ' + NA : U.U(cc.courses, ['دورة مسجّلة واحدة', 'دورتان مسجّلتان', 'دورات مسجّلة', 'دورة مسجّلة']),
-        cc.students == null ? 'الطلاب ' + NA : U.U(cc.students, ['طالب واحد', 'طالبان', 'طلاب', 'طالبًا'])].join(' · ');
+        cc.students == null ? 'الطلاب ' + NA : U.U(cc.students, ['طالب واحد', 'طالبان', 'طلاب', 'طالبًا'])].join('، ');
       if (!cc) nowLine = 'الآن: دورات وطلاب ' + NA;
       else if (cur) nowLine = cnt + ' — هدف ' + CO.monthName(cur.month) + ': ' + U.U(cur.target_courses || 0, ['دورة واحدة', 'دورتان', 'دورات', 'دورة']) + ' · ' + U.U(cur.target_students || 0, ['طالب واحد', 'طالبان', 'طلاب', 'طالبًا']) + '.';
-      else nowLine = cnt + ' — لم يُحدَّد هدف.';
+      else nowLine = cnt + '.';      // سطر «لم يُحدَّد هدف» يأتي من سطر العقل أعلاه: لا تكرار
       var rows = CO.targetRows(fc, dash, now()) || [];
       var shown = S.oldTargets ? rows : rows.slice(-6);
       var thead = '<div class="co-tr head"><span>الشهر</span><span>هدف الدخل</span><span>الدخل الفعلي</span><span>هدف الدورات</span><span>هدف الطلاب</span><span></span></div>';
@@ -757,7 +757,7 @@
     else {
       var dom = set.company_domain || (window.location && location.host) || '';
       coBody = fld('الاسم', inp('co_name', set.company_name || '')) + fld('بداية السنة المالية', inp('co_fy', set.fiscal_year_start || '')) + fld('يوم التقرير الشهري', inp('co_rd', set.monthly_report_day || ''))
-        + '<p class="co-kv"><span>عنوان اللوحة</span><b dir="ltr">' + esc(dom) + '</b></p><div class="co-bar">' + btn1('احفظ بيانات الشركة', 'saveCompany') + '</div>';
+        + '<p class="co-kv co-tech"><span>عنوان اللوحة</span><b dir="ltr">' + esc(dom) + '</b></p><div class="co-bar">' + btn1('احفظ بيانات الشركة', 'saveCompany') + '</div>';
     }
     // العملة
     var fx = set && set.exchange_rate != null && set.exchange_rate !== '' ? set.exchange_rate : null;

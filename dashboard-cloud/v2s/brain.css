@@ -273,3 +273,7 @@
 @media(max-width:760px){
   .v2sb-addrr .v3-btn2{width:100%;min-height:52px}
 }
+.v2sb-advd{margin:12px 0}
+.v2sb-advd>summary{cursor:pointer;display:flex;align-items:center;min-height:48px;padding:0 14px;border:1px solid var(--line);border-radius:14px;background:#fff;font:800 14.5px 'Cairo',sans-serif;color:var(--mute)}
+.v2sb-advd[open]>summary{margin-bottom:10px}
+.v2sb-gs{font:700 12.5px 'Cairo',sans-serif;color:#8A5A00;background:#FFF3D1;border-radius:999px;padding:1px 10px;margin-inline-start:auto}

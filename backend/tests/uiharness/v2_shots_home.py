@@ -46,6 +46,12 @@ GRAB_JS = """() => { const c = window.V2SEC && V2SEC.home && V2SEC.home.copy; if
 VIS = "const vis = e => !!e && !!(e.getClientRects().length) && getComputedStyle(e).visibility !== 'hidden' && getComputedStyle(e).display !== 'none';"
 
 
+def open_fold(page):
+    """الموبايل: سطر العقل والتوزيع و«للعلم» في شريط واحد مطوي (r6) — نفتحه قبل أي نقرة داخله."""
+    page.evaluate("() => { const d = document.querySelector('.v2h-fold'); if (d) d.open = true; }")
+    page.wait_for_timeout(80)
+
+
 def hshot(page, name, kind='inbox', check_targets=True):
     """لقطة + فحوص الغلاف والجولة (§١٣)."""
     page.evaluate("() => { const c = document.querySelector('.content'); if (c) c.scrollTop = 0; window.scrollTo(0, 0); }")
@@ -575,6 +581,7 @@ def flow_inbox(browser, h, pre, vp, mobile):
     page.evaluate("() => { EP.state.opsQueue = 'ready'; V2SEC.home.list(); }")
     # ١٨) أوقفه: التأكيد داخل الصفحة (بلا إرسال)
     page.evaluate("() => { document.getElementById('v2hQueue').open = false; window.scrollTo(0, 0); }")
+    open_fold(page)
     page.click('[data-a="auto_off"]')
     page.wait_for_selector('.v2h-conf')
     page.wait_for_timeout(200)
@@ -582,6 +589,7 @@ def flow_inbox(browser, h, pre, vp, mobile):
     page.click('[data-a="auto_x"]')
     page.wait_for_timeout(200)
     # ١٩) للعلم
+    open_fold(page)
     page.click('[data-a="fyi_on"]')
     page.wait_for_timeout(350)
     if page.evaluate("() => activeFilter") != 'fyi':

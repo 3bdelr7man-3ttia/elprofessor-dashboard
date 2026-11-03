@@ -101,7 +101,7 @@
   }
   function warnStrip(failedLabels, tail) {
     if (!failedLabels.length) return '';
-    return '<div class="v3-warn" role="status">تعذّر جلب: ' + esc(failedLabels.join(' · ')) + ' — ' + esc(tail || 'ما يظهر ناقص، وليس معناه أنه لا شيء') + '</div>';
+    return '<div class="v3-warn" role="status">تعذّر جلب: ' + esc(failedLabels.join('، ')) + ' — ' + esc(tail || 'ما يظهر ناقص، وليس معناه أنه لا شيء') + '</div>';
   }
   function noteStrip() { return S.note ? '<div class="v3-ok" role="status">' + esc(S.note) + '</div>' : ''; }
   function setNote(text) {
@@ -129,7 +129,7 @@
     }).join('') + '</div>';
   }
   function payRow(r) {
-    return '<li class="v3-pay" data-id="' + esc(r.id) + '"><div class="v3-pid"><b>' + personLink(r.name, r.email) + '</b><span>' + esc([r.what, r.method].filter(Boolean).join(' · ')) + '</span>'
+    return '<li class="v3-pay" data-id="' + esc(r.id) + '"><div class="v3-pid"><b>' + personLink(r.name, r.email) + '</b><span>' + esc([r.what, r.method].filter(Boolean).join('، ')) + '</span>'
       + (r.fx ? '<em class="v3-fx">العملة ليست الجنيه — حدّد سعر الصرف قبل التحويل</em>' : '') + '</div>'
       + '<div class="v3-pm"><b class="v3-amt">' + esc(r.amountText) + '</b>' + (r.since ? '<time>' + esc(r.since) + '</time>' : '') + '</div>'
       + '<button type="button" class="v3-btn1" data-a="settle" data-id="' + esc(r.id) + '">سجّل التحويل</button></li>';
@@ -138,7 +138,7 @@
     if (!bars) return unavailable('مصدر الدخل');
     var rows = bars.rows.map(function (r) {
       return '<li><div class="v3-bl"><span>' + esc(r.label) + '</span><b>' + esc(r.text) + '</b></div><div class="v3-bar" role="img" aria-label="' + esc(r.label + ': ' + r.text) + '"><i style="width:' + r.width + '%"></i></div>'
-        + (r.others.length ? '<small>بعملة أخرى: ' + esc(r.others.join(' · ')) + '</small>' : '') + '</li>';
+        + (r.others.length ? '<small>بعملة أخرى: ' + esc(r.others.join('، ')) + '</small>' : '') + '</li>';
     }).join('');
     return '<ul class="v3-bars">' + rows + '</ul><p class="v3-fine">' + esc(bars.note) + '</p>';
   }
@@ -157,6 +157,12 @@
     var T = L.v2DisputeTickets(rows.filter(function (r) { return r && !r.fyi; }), { now: now(), queue: queue() });
     S.refundTickets = T.cols.refunds;
     return T.cols.refunds;
+  }
+  // الموبايل: الشرح سطر مطوي «ما هذه الأرقام؟» بدل فقرة تتكرر مع كل فترة (الجولة r6)
+  function introHtml() {
+    var t = 'الدخل والمحجوز والمستحق حتى الآن، والأرقام بالجنيه وكل عملة أخرى تظهر لوحدها';
+    try { if (window.matchMedia && window.matchMedia('(max-width:760px)').matches) return '<details class="v3-intro"><summary>ما هذه الأرقام؟</summary><p class="v3-ptxt">' + esc(t) + '</p></details>'; } catch (e) {}
+    return '<p class="v3-ptxt">' + esc(t) + '</p>';
   }
   function drawOverview(v) {
     var per = S.period, t = now();
@@ -183,7 +189,7 @@
     if (refunds.failed.length === 1) refBody = warnStrip(refunds.failed, 'القائمة ناقصة') + refBody;
     if (refunds.more) refBody = '<div class="v3-warn" role="status">المعروض أقدم ' + esc(U.ar(refunds.more.shown)) + (refunds.more.total ? ' من ' + esc(U.ar(refunds.more.total)) : '') + ' استردادًا، وبعد البتّ في هذه يظهر الباقي</div>' + refBody;
     v.innerHTML = '<div class="v3" data-board="overview">' + noteStrip() + warnStrip(failed)
-      + '<div class="v3-top"><div class="v3-seg" role="tablist" aria-label="الفترة">' + seg + '</div><p class="v3-ptxt">الدخل والمحجوز والمستحق حتى الآن، والأرقام بالجنيه وكل عملة أخرى تظهر لوحدها</p></div>'
+      + '<div class="v3-top"><div class="v3-seg" role="tablist" aria-label="الفترة">' + seg + '</div>' + introHtml() + '</div>'
       + numbersHtml(board)
       + '<div class="v3-two">' + section('التحويلات المستحقة', 'طلبات سحب بانتظار تسجيل التحويل', due) + section('من أين جاء الدخل', board.period.label, barsBody) + '</div>'
       + section('استردادات تنتظر قرارك', 'الكتب لا تُسترد', refBody, 'v3-wide') + '</div>';
@@ -196,7 +202,7 @@
     return '<article class="v3-t tone-' + (late ? 'late' : 'wait') + '" data-id="' + esc(r.id) + '"><div class="v3-strip"><span class="v3-type">طلب تحويل</span>'
       + (r.since ? '<time class="v3-time" data-since="' + esc(r.at) + '">' + esc(r.since) + '</time>' : '') + '</div>'
       + '<div class="v3-body"><h3>' + personLink(r.name, r.email) + '</h3><p class="v3-amount">' + esc(r.amountText) + '</p>'
-      + '<p class="v3-line">' + esc([r.what, r.method].filter(Boolean).join(' · ')) + '</p>' + (r.dest && r.dest !== r.method ? '<p class="v3-line v3-dest" dir="auto">' + esc(r.dest) + '</p>' : '')
+      + '<p class="v3-line">' + esc([r.what, r.method].filter(Boolean).join('، ')) + '</p>' + (r.dest && r.dest !== r.method ? '<p class="v3-line v3-dest" dir="auto">' + esc(r.dest) + '</p>' : '')
       + (r.fx ? '<p class="v3-fxline">العملة ليست الجنيه — حدّد سعر الصرف قبل التحويل</p>' : '')
       + '<div class="v3-acts"><button type="button" class="v3-btn1" data-a="settle" data-id="' + esc(r.id) + '">سجّل التحويل</button></div></div></article>';
   }
@@ -231,7 +237,7 @@
     wire(v);
   }
 
-  // ------------------------------------------------------------------ الإيصالات والمدفوعات العالقة
+  // ------------------------------------------------------------------ الإيصالات
   function receiptTicket(c) {
     var m = c.primary.money || {};
     return '<article class="v3-t tone-wait" data-id="' + esc(c.id) + '"><div class="v3-strip"><span class="v3-type">إيصال تحويل</span>' + (c.ageText ? '<time class="v3-time">' + esc(c.ageText) + '</time>' : '') + '</div>'
@@ -244,7 +250,7 @@
   function stuckTicket(r) {
     return '<article class="v3-t tone-late v3-stuck"><div class="v3-strip"><span class="v3-type">دفعة عالقة</span>' + (r.ageText ? '<time class="v3-time">' + esc(r.ageText) + '</time>' : '') + '</div>'
       + '<div class="v3-body"><h3>' + (r.person ? personLink(r.name, r.person.email) : esc(r.name)) + '</h3><p class="v3-amount">' + esc(r.amountText) + '</p>'
-      + '<p class="v3-line">' + esc([r.kindText, r.title !== r.kindText ? r.title : '', r.provider].filter(Boolean).join(' · ')) + '</p>'
+      + '<p class="v3-line">' + esc([r.kindText, r.title !== r.kindText ? r.title : '', r.provider].filter(Boolean).join('، ')) + '</p>'
       + '<p class="v3-line v3-mute">دفع بالبطاقة لم يكتمل. للقراءة فقط: تابع مع صاحب الدفع.</p>'
       + (!r.refundable ? '<p class="v3-norefund">' + esc(r.noRefundText) + '</p>' : '')
       + (r.person ? '<div class="v3-acts"><a class="v3-btn2" href="' + esc(L.sectionHash('people', 'person', r.person.email)) + '" data-person="' + esc(r.person.email) + '">افتح الشخص</a></div>' : '')
@@ -273,9 +279,14 @@
   }
 
   // ------------------------------------------------------------------ الأسعار
+  // أقل سعر في كل بلد: شبكة (بلد ‹ سعر) بدل سطر واحد كثيف، فيقارن المؤسس بين البلاد بنظرة (الجولة r6)
+  function minsHtml(r) {
+    if (!r.mins || !r.mins.length) return '<p class="v3-mins">' + esc(r.minText) + '</p>';
+    return '<p class="v3-mins v3-minsg">' + r.mins.map(function (m) { return '<span class="v3-mn"><em>' + esc(m.label) + '</em> <b>' + esc(m.amountText) + '</b></span>'; }).join(' ') + '</p>';
+  }
   function priceRow(kind, r) {
     return '<li class="v3-pr" data-id="' + esc(r.id) + '"><div class="v3-pid"><b>' + esc(r.title) + '</b><span class="v3-vis ' + (r.visible ? 'on' : 'off') + '">ظاهر للناس: ' + (r.visible ? 'نعم' : 'لا') + '</span></div>'
-      + '<p class="v3-mins">' + esc(r.minText) + '</p>'
+      + minsHtml(r)
       + '<button type="button" class="v3-btn2" data-a="price" data-kind="' + kind + '" data-id="' + esc(r.id) + '">عدّل</button></li>';
   }
   // —— الأدلّة: كل دليل بسعره (سعر خاص أو يأخذ السعر العام) + صف السعر العام + شرائح وبحث (في الذاكرة فقط)
@@ -283,7 +294,7 @@
     var own = r.group === 'guide' ? '<span class="v3-own ' + (r.badge === 'سعر خاص' ? 'on' : 'gen') + '">' + esc(r.badge) + '</span>' : '';
     return '<li class="v3-pr" data-id="' + esc(r.id) + '" data-group="' + esc(r.group) + '"><div class="v3-pid"><b>' + esc(r.title) + '</b>' + own
       + '<span class="v3-vis ' + (r.visible ? 'on' : 'off') + '">ظاهر للناس: ' + (r.visible ? 'نعم' : 'لا') + '</span></div>'
-      + '<p class="v3-mins">' + esc(r.minText) + '</p>'
+      + minsHtml(r)
       + '<div class="v3-pacts"><button type="button" class="v3-btn2" data-a="price" data-kind="book" data-id="' + esc(r.id) + '">عدّل</button>'
       + (r.group === 'guide' && r.hasOwn ? '<button type="button" class="v3-btn2" data-a="preset" data-id="' + esc(r.id) + '">ارجع للسعر العام</button>' : '') + '</div></li>';
   }
@@ -317,7 +328,8 @@
         body = priceTools(view) + '<div id="v3_plist">' + priceListHtml(view) + '</div>';
       } else body = res.rows.length ? '<ul class="v3-list">' + res.rows.map(function (r) { return priceRow(kind, r); }).join('') + '</ul>' : '<p class="v3-none">لا أعمال بعد</p>';
     }
-    return section(title, kind === 'book' ? 'أقل سعر في كل بلد' : 'أقل سعر في كل بلد، من المنصة', body);
+    var vis = res && res.rows && res.rows.length ? '، ' + U.ar(res.rows.filter(function (r) { return r.visible; }).length) + ' ظاهر للناس' : '';
+    return section(title, (kind === 'book' ? 'أقل سعر في كل بلد' : 'أقل سعر في كل بلد، من المنصة') + vis, body);
   }
   function drawPrices(v) {
     v.innerHTML = '<div class="v3" data-board="prices">' + noteStrip() + '<p class="v3-ptxt v3-lead">الأسعار تُعدَّل من هنا فقط، وكل تعديل يمرّ على ورقة تراجع فيها ما سيتغير قبل التأكيد</p>'
@@ -332,7 +344,7 @@
     if (!view) body = srcState('shares') === 'loading' || srcState('shares') === 'idle' ? loadingBlock('جدول النسب') : unavailable('جدول النسب');
     else {
       var lines = view.lines.map(function (l) {
-        return '<li class="v3-sh"><div class="v3-pid"><b>' + esc(l.title) + '</b><span>' + esc(l.text) + '</span>' + (l.note ? '<small>' + esc(l.note) + '</small>' : '') + '</div>'
+        return '<li class="v3-sh"><div class="v3-pid"><b>' + esc(l.title) + '</b>' + (l.split ? '<span class="v3-split"><i><em>لصاحب العمل</em><b>' + esc(l.split.owner) + '</b></i><i><em>للمنصة</em><b>' + esc(l.split.platform) + '</b></i></span>' : '<span>' + esc(l.text) + '</span>') + (l.note ? '<small>' + esc(l.note) + '</small>' : '') + '</div>'
           + (l.editable ? '<button type="button" class="v3-btn2" data-a="share" data-k="' + l.key + '">عدّل</button>' : '') + '</li>';
       }).join('');
       var ladder = '<li class="v3-sh v3-lad"><div class="v3-pid"><b>القضايا حسب القيمة</b><table class="v3-ladder"><thead><tr><th>قيمة القضية</th><th>صاحب العمل</th><th>المنصة</th></tr></thead><tbody>'
@@ -798,7 +810,7 @@
       var res = L.v2AdsEntries(resp, now());
       var b = q('.v3m', s);
       if (!res) { b.innerHTML = '<div class="v3-err">تعذّر قراءة حركات هذا العمل</div><div class="acts"><button type="button" class="btn btn-ghost" id="v3_x">إغلاق</button></div>'; q('#v3_x', s).onclick = function () { window.closeModal(); }; return; }
-      b.innerHTML = '<p class="mc-lead">الرصيد الآن: <b>' + esc([res.balance.main].concat(res.balance.others).join(' · ')) + '</b></p>'
+      b.innerHTML = '<p class="mc-lead">الرصيد الآن: <b>' + esc([res.balance.main].concat(res.balance.others).join('، ')) + '</b></p>'
         + (res.rows.length ? '<ul class="v3-ent">' + res.rows.map(function (e) {
           return '<li><span>' + esc(e.entry) + '</span><b>' + esc(e.sign + ' ' + e.amountText) + '</b><time>' + esc(e.when) + '</time></li>'; }).join('') + '</ul>' : '<p class="v3-none">لا حركات</p>')
         + '<p class="v3-fine">للقراءة فقط</p><div class="acts"><button type="button" class="btn btn-ghost" id="v3_x">إغلاق</button></div>';
@@ -975,7 +987,7 @@
       var bk = (window.INBOX || []).filter(function (r) { return r && !r.fyi && r.apiKind === 'book'; }).length;
       if (bk) p.push(U.U(bk, ['كتاب ينتظر المراجعة', 'كتابان ينتظران المراجعة', 'كتب تنتظر المراجعة', 'كتابًا ينتظر المراجعة']));
     }
-    return p.length ? p.join(' · ') : 'لا شيء ينتظر مراجعتك';
+    return p.length ? p.join('، ') : 'لا شيء ينتظر مراجعتك';
   };
   D3.sig = function () { return ['stuck', 'offers', 'pricesBook'].map(function (k) { return srcOf(k).state; }).join(','); };
   D3.openApprove = openApprove;

@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""لقطات تبويب «الكتب والأعمال» الجديد (قسم «الكتب») — كمبيوتر ١٤٤٠ (`d*`) وتابلت ٨٢٠ (`t*`) وموبايل ٣٩٠ (`m*`).
+"""لقطات تبويب «الكتب» الجديد (قسم «الكتب») — كمبيوتر ١٤٤٠ (`d*`) وتابلت ٨٢٠ (`t*`) وموبايل ٣٩٠ (`m*`).
 
     cd backend && python3 -B tests/uiharness/v2_shots_books.py ../docs/v2/final/shots-books [only-prefix,...]
 
@@ -55,15 +55,10 @@ def bk_check(page, name):
             PROBLEMS.append('%s: خانة %s ارتفاعها %s وخطها %s' % (name, ident, h, fs))
     if w <= 400:
         big = page.evaluate("""() => [...document.querySelectorAll('.v2s-books .v3-btn1, .v2s-books .v3-btn2, .v2s-books .v3-link, .v2s-books .bk-fold, #epModal .v2s-bm .btn')]
-          .filter(b => b.offsetParent).map(b => [b.className, Math.round(b.getBoundingClientRect().height)]).filter(x => x[1] < 44)""")
+          .filter(b => b.offsetParent).map(b => [b.className, Math.round(b.getBoundingClientRect().height)]).filter(x => x[1] < 47.5)""")
         if big:
-            PROBLEMS.append('%s: أزرار أقل من ٥٢px في الموبايل: %r' % (name, big[:4]))
-        narrow = page.evaluate("""() => { const W = window.innerWidth;
-          return [...document.querySelectorAll('.v2s-books .v3-btn1, .v2s-books .v3-btn2, #epModal .v2s-bm .btn')]
-            .filter(b => b.offsetParent && !b.closest('.bk-pills') && b.getBoundingClientRect().width < (b.closest('#epModal') ? 120 : W * 0.6))
-            .map(b => [b.className, Math.round(b.getBoundingClientRect().width)]); }""")
-        if narrow:
-            PROBLEMS.append('%s: أزرار ليست بعرض الشاشة في الموبايل: %r' % (name, narrow[:4]))
+            PROBLEMS.append('%s: أزرار أقل من ٤٨px في الموبايل: %r' % (name, big[:4]))
+        # قرار r6: الأزرار على قد نصّها (مقاس واحد ٤٨px) لا بعرض الشاشة؛ فحص «عرض الشاشة» أُلغي.
         sw = page.evaluate("() => Math.max(document.documentElement.scrollWidth, document.body.scrollWidth, (document.querySelector('.content')||{}).scrollWidth||0)")
         if sw > w + 1:
             PROBLEMS.append('%s: تمرير أفقي في الموبايل (%s > %s)' % (name, sw, w))
@@ -167,7 +162,7 @@ def flow_books(browser, h, pre, viewport, mobile):
             PROBLEMS.append('%s01: ترتيب الممرّات %r' % (pre, info['lanes']))
         if not info['search'] or not info['rejHidden'] or info['btn'] != 'ابدأ المراجعة' or 'وعرضان' not in (info['offlink'] or ''):
             PROBLEMS.append('%s01: القائمة ناقصة %r' % (pre, {k: info[k] for k in ('search', 'rejHidden', 'btn', 'offlink')}))
-        if info['tabs'] != ['مراجعة العروض', 'طلبات القرّاء', 'الكتب والأعمال']:
+        if info['tabs'] != ['مراجعة العروض', 'طلبات القرّاء', 'الكتب']:
             PROBLEMS.append('%s01: تبويبات الكتب %r' % (pre, info))
         if lanes.get('review') != '٣' or lanes.get('noprice') != '١' or lanes.get('hiddenSold') != '١':
             PROBLEMS.append('%s01: عدّادات القرار %r' % (pre, lanes))

@@ -650,7 +650,7 @@ def flow(browser, h, pre, viewport, mobile):
     ctx = browser.context(h, 'admin', tall, mobile)
     page = open_tab(ctx, '#s/content/tutorials', 'tutorials')
     g = Guard(h, page)
-    expect('٢ قسمًا منشورًا · ١ مسودة · ١ بفيديو' in page.inner_text('.v2ct-line'), pre + '09: سطر الحقائق %r' % page.inner_text('.v2ct-line'))
+    expect('قسمان منشوران، مسودة واحدة، قسم بفيديو' in page.inner_text('.v2ct-line'), pre + '09: سطر الحقائق %r' % page.inner_text('.v2ct-line'))
     cshot(page, pre + '09-tutorials.jpg')
     page.click('[data-a="tedit"][data-id="tu-1"] >> nth=0')
     sheet_open(page)

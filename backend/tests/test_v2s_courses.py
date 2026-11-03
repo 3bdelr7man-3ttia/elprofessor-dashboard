@@ -453,11 +453,11 @@ def test_board_sort_orders_and_the_review_timer_rules():
 @needs_node
 def test_summary_line_forms():
     f = lambda p, b, r: _co('summaryLine', {'published': p, 'building': b, 'review': r})
-    assert f(11, 3, 2) == '١١ دورة منشورة · ٣ تحت البناء · دورتان تنتظرانك'
-    assert f(1, 0, 0) == 'دورة واحدة منشورة · ٠ تحت البناء · لا شيء ينتظرك'
-    assert f(2, 1, 1) == 'دورتان منشورتان · ١ تحت البناء · دورة واحدة تنتظرك'
-    assert f(5, 12, 7) == '٥ دورات منشورة · ١٢ تحت البناء · ٧ دورات تنتظرك'
-    assert f(30, 1, 11) == '٣٠ دورة منشورة · ١ تحت البناء · ١١ دورة تنتظرك'
+    assert f(11, 3, 2) == '١١ دورة منشورة، ٣ تحت البناء، دورتان تنتظرانك'
+    assert f(1, 0, 0) == 'دورة واحدة منشورة، ٠ تحت البناء، لا شيء ينتظرك'
+    assert f(2, 1, 1) == 'دورتان منشورتان، ١ تحت البناء، دورة واحدة تنتظرك'
+    assert f(5, 12, 7) == '٥ دورات منشورة، ١٢ تحت البناء، ٧ دورات تنتظرك'
+    assert f(30, 1, 11) == '٣٠ دورة منشورة، ١ تحت البناء، ١١ دورة تنتظرك'
     assert _co('summaryLine', None) == 'الدورات: غير متاح بعد'
 
 
@@ -525,9 +525,9 @@ APPS = cfx.base_apps()
 def test_application_tickets():
     t = _co('appTickets', APPS, {'now': NOW})
     by = {x['id']: x for x in t}
-    assert by['ta-1']['suggestion'] == 'accept' and by['ta-1']['line'] == '٣ مجالات · لينكدإن · سيرة ذاتية · نماذج أعمال'
-    assert by['ta-2']['suggestion'] == 'open' and by['ta-2']['line'] == 'بلا مجال محدّد · بلا روابط · نبذة الخبرة قصيرة · ينقص الطلب: سيرة ذاتية أو لينكدإن، نبذة خبرة كافية، مجال واحد على الأقل'
-    assert by['ta-3']['suggestion'] == 'accept' and by['ta-3']['line'] == 'مجالان · لينكدإن · جاء من دعوة الخبراء المؤسسين'
+    assert by['ta-1']['suggestion'] == 'accept' and by['ta-1']['line'] == '٣ مجالات، لينكدإن، سيرة ذاتية، نماذج أعمال'
+    assert by['ta-2']['suggestion'] == 'open' and by['ta-2']['line'] == 'بلا مجال محدّد، بلا روابط، نبذة الخبرة قصيرة، ينقص الطلب: سيرة ذاتية أو لينكدإن، نبذة خبرة كافية، مجال واحد على الأقل'
+    assert by['ta-3']['suggestion'] == 'accept' and by['ta-3']['line'] == 'مجالان، لينكدإن، جاء من دعوة الخبراء المؤسسين'
     assert by['ta-1']['chips'] == ['عقود', 'شركات', 'ملكية فكرية'] and by['ta-1']['moreChips'] == 0
     one = _co('appTickets', [dict(APPS[0], expertise=['أ', 'ب', 'ج', 'د', 'هـ'])], {'now': NOW})[0]
     assert one['chips'] == ['أ', 'ب', 'ج'] and one['moreChips'] == 2
@@ -579,7 +579,7 @@ def test_live_tickets_rows():
     low = dict(sch[0])
     q = lambda s: [{'slug': s['slug'], 'title': s['title'], 'live_status': s['live_status'], 'reserved_count': s['reserved_count'], 'quorum': s['quorum']}]
     t = _co('liveTickets', [zoom], q(zoom), {'now': NOW})['decide'][0]
-    assert t['line'] == 'اكتمل الحد الأدنى: ٨ من ٨ · رابط اللقاء موجود' and t['main']['key'] == 'confirm' and [x['key'] for x in t['secondary']] == ['cancel']
+    assert t['line'] == 'اكتمل الحد الأدنى: ٨ من ٨، رابط اللقاء موجود' and t['main']['key'] == 'confirm' and [x['key'] for x in t['secondary']] == ['cancel']
     t = _co('liveTickets', [nozoom], q(nozoom), {'now': NOW})['decide'][0]
     assert t['line'] == 'اكتمل الحد الأدنى، وينقص رابط اللقاء' and t['main']['key'] == 'zoom'
     t = _co('liveTickets', [low], q(low), {'now': NOW})['decide'][0]
@@ -642,7 +642,7 @@ def test_page_model():
                           'stall_lesson': {'index': 4, 'title': 'الجزاءات', 'learners': 5}}]}
     st = _co('statFor', stats, c)
     m = _co('pageModel', c, None, st, None, None, {'now': NOW})
-    assert m['tiles']['sales']['text'] == '١٬٠٠٠ جنيه + ٥٠ ريال' and m['completion'] == 'يكملها ٦٤٪ · يتوقف أغلبهم عند الدرس ٤: الجزاءات'
+    assert m['tiles']['sales']['text'] == '١٬٠٠٠ جنيه + ٥٠ ريال' and m['completion'] == 'يكملها ٦٤٪، يتوقف أغلبهم عند الدرس ٤: الجزاءات'
     assert m['state'] == 'published' and m['bid']['show'] is True and m['danger'] == 'archive' and m['secondary'][0]['key'] == 'hide'
     m = _co('pageModel', c, None, None, None, None, {'now': NOW})
     assert m['tiles']['sales'] == {'text': 'غير متاح بعد', 'na': True} and m['completion'] == 'نسبة الإكمال: غير متاح بعد'

@@ -95,7 +95,7 @@
   }
   function warnStrip(labels, tail) {
     if (!labels.length) return '';
-    return '<div class="v2co-warn" role="status">تعذّر جلب: ' + esc(labels.join(' · ')) + ' — ' + esc(tail || 'ما يظهر ناقص، وليس معناه أنه لا شيء') + '</div>';
+    return '<div class="v2co-warn" role="status">تعذّر جلب: ' + esc(labels.join('، ')) + ' — ' + esc(tail || 'ما يظهر ناقص، وليس معناه أنه لا شيء') + '</div>';
   }
   // شريط النجاح يظهر في الشاشة (وفي صفحة الدورة نفسها) التي وقع فيها الحدث فقط، لا في كل ما بعدها.
   function noteKey() { return S.screen === 'course' ? 'course:' + ((host().state && host().state().course) || '') : S.screen; }
@@ -117,6 +117,7 @@
   function coverHtml(c, cls) {
     var url = String(c.thumbnail_url || '').trim();
     var letter = C.cover(c.title).letter;
+    if (!url && /\b(big|thumb)\b/.test(cls || '')) return '';       // بلا صورة: لا مستطيل كبير بحرف، فالبطاقة تبدأ من الاسم (الجولة r6)
     return '<span class="v2co-cover ' + (cls || '') + (url ? ' has' : '') + '" aria-hidden="true"><i>' + esc(letter) + '</i>' + (url ? '<img class="v2co-img" src="' + esc(url) + '" alt="" loading="lazy">' : '') + '</span>';
   }
   function chip(text, tone) { return '<span class="v2co-chip ' + (tone || '') + '">' + esc(text) + '</span>'; }
@@ -309,12 +310,12 @@
       var sales = st.sales.map(function (x) { return U.moneyText(x.amount, x.currency); }).filter(Boolean).join(' + ');
       var bits = ['المبيعات: ' + (sales || 'لا مبيعات بعد')];
       if (st.completion_pct != null) bits.push('يكملها ' + ar(st.completion_pct) + '٪');
-      l2 = '<span class="v2co-l2">' + esc(bits.join(' · ')) + '</span>'
+      l2 = '<span class="v2co-l2">' + esc(bits.join('، ')) + '</span>'
         + (st.stall_lesson && st.stall_lesson.index != null ? '<span class="v2co-l2 amber">يتوقف أغلبهم عند الدرس ' + esc(ar(st.stall_lesson.index)) + '</span>' : '');
     } else l2 = '<span class="v2co-l2 mute">المبيعات ونسبة الإكمال: ' + NA + '</span>';
     return '<button type="button" class="v2co-pr" data-a="open" data-id="' + esc(c.id) + '">' + coverHtml(c, 'thumb')
       + '<span class="v2co-prb"><b>' + esc(c.title || 'دورة بلا عنوان') + '</b>'
-      + '<span class="v2co-l1">' + esc(learners + ' · ' + (C.priceOf(c).free ? 'مجانية' : priceLine(c))) + (c.bid_enabled ? ' ' + chip('يقبل عروض الأسعار', 'wine') : '') + '</span>'
+      + '<span class="v2co-l1">' + esc(learners + '، ' + (C.priceOf(c).free ? 'مجانية' : priceLine(c))) + (c.bid_enabled ? ' ' + chip('يقبل عروض الأسعار', 'wine') : '') + '</span>'
       + (hidden ? '<span class="v2co-l2 amber">لا تظهر للناس بعد: لا دروس فيها</span>' : '') + l2 + '</span></button>';
   }
   function trainerRank(r) { return r.inReview ? 0 : (r.rejected ? 1 : (r.building ? 2 : (r.tone !== 'none' ? 3 : 4))); }
@@ -477,7 +478,7 @@
     var sec = t.secondary.map(function (x) { return '<button type="button" class="v2co-btn2' + (x.key === 'cancel' ? ' red' : '') + '" data-a="live-' + x.key + '" data-slug="' + esc(t.slug) + '">' + esc(x.label) + '</button>'; }).join('');
     return '<article class="v2co-t tone-late" data-slug="' + esc(t.slug) + '"><div class="v2co-strip"><span class="v2co-type">دورة حيّة تحتاج قرارك</span>' + strip + '</div>'
       + '<div class="v2co-body"><h3><button type="button" class="v2co-open" data-a="live-open" data-slug="' + esc(t.slug) + '">' + esc(t.title) + '</button></h3>'
-      + '<p class="v2co-who">' + esc([t.trainer, t.startText].filter(Boolean).join(' · ')) + '</p>'
+      + '<p class="v2co-who">' + esc([t.trainer, t.startText].filter(Boolean).join('، ')) + '</p>'
       + '<div class="v2co-brain">' + BRAIN + '<p>' + esc(t.line) + '</p></div>'
       + '<div class="v2co-acts stack"><button type="button" class="v2co-btn1" data-a="live-' + t.main.key + '" data-slug="' + esc(t.slug) + '">' + esc(t.main.label) + '</button>' + sec + '</div></div></article>';
   }
@@ -487,7 +488,7 @@
       + (r.canceled ? '<button type="button" class="v2co-btn2" data-a="live-paid" data-slug="' + esc(r.slug) + '">من دفع</button>' : '') + '</span>';
     var seats = r.booked != null && r.max != null ? ar(r.booked) + ' من ' + ar(r.max) : NA;
     return '<li class="v2co-lv"><span class="v2co-vc1"><button type="button" class="v2co-open" data-a="live-open" data-slug="' + esc(r.slug) + '">' + esc(r.title) + '</button><small>' + esc(r.trainer) + '</small></span>'
-      + '<span class="v2co-vc2">' + esc([r.dateText, r.timeText].filter(Boolean).join(' · ')) + '</span>'
+      + '<span class="v2co-vc2">' + esc([r.dateText, r.timeText].filter(Boolean).join('، ')) + '</span>'
       + '<span class="v2co-vc3"><em>المقاعد: </em>' + esc(seats) + '</span><span class="v2co-vc4"><em>الحد الأدنى: </em>' + esc(r.quorum != null ? ar(r.quorum) : NA) + '</span>'
       + '<span class="v2co-vc5">' + chip(r.statusText, r.status === 'confirmed' ? 'green' : (r.canceled ? 'grey' : 'amber')) + '</span>'
       + '<span class="v2co-vc6"><em>رابط اللقاء: </em>' + (r.hasZoom ? 'موجود' : 'غير موجود') + '</span>' + acts + '</li>';
@@ -863,7 +864,7 @@
   function openAppDetail(id) {
     var a = appById(id); if (!a) return;
     function link(url, label) { return url ? '<a href="' + esc(url) + '" target="_blank" rel="noopener noreferrer">' + esc(label) + '</a>' : ''; }
-    var links = [link(a.links.linkedin, 'لينكدإن'), link(a.links.cv, 'السيرة الذاتية'), link(a.links.portfolio, 'نماذج الأعمال')].filter(Boolean).join(' · ');
+    var links = [link(a.links.linkedin, 'لينكدإن'), link(a.links.cv, 'السيرة الذاتية'), link(a.links.portfolio, 'نماذج الأعمال')].filter(Boolean).join('، ');
     var s = openSheet('طلب ' + a.name, factsTable([['العنوان المهني', esc(a.headline || '—')], ['المجالات', esc(a.expertise.length ? a.expertise.join('، ') : 'بلا مجال محدّد')],
       ['نبذة الخبرة', esc(a.summary || '—')], ['الروابط', links || 'بلا روابط'], ['تاريخ التقديم', esc(a.createdAt ? U.dateText(a.createdAt) : '—')]])
       + '<div class="v2co-brain">' + BRAIN + '<p>' + esc(a.line) + '</p></div><div class="v2co-macts">'
@@ -1319,7 +1320,7 @@
     if (b.counts.review) p.push(U.U(b.counts.review, ['دورة واحدة تنتظر قرارك', 'دورتان تنتظران قرارك', 'دورات تنتظر قرارك', 'دورة تنتظر قرارك']));
     var apps = C.appTickets(rowsOf('apps', 'applications'), { now: now() });
     if (apps && apps.length) p.push(U.U(apps.length, ['طلب مدرّب جديد', 'طلبان من مدرّبين', 'طلبات من مدرّبين', 'طلبًا من مدرّبين']));
-    return p.length ? p.join(' · ') : 'لا شيء ينتظر قرارك';
+    return p.length ? p.join('، ') : 'لا شيء ينتظر قرارك';
   };
   CO.openCourse = function (id) { goPage(id); };
   // «أنشئ دورة» من خارج قسم الدورات (السوق: دورة من طلب): نفس الورقة الجديدة؛ opts.done(res) يُستدعى بعد النجاح بدل الانتقال لصفحة الدورة.

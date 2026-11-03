@@ -62,8 +62,8 @@
     var provider = fl.provider === 'live' ? ['حيّ', 'يرسم عند مزوّد خارجي، ويُحسب كل عمل على السقف اليومي'] : (fl.provider === 'mock' ? ['تجريبي', 'الصور تُرسم داخل النظام بلا أي تكلفة'] : ['غير معروف', '']);
     var facts = [
       { k: 'وضع الرسم', v: provider[0], note: provider[1] },
-      { k: 'الأدوات للأعضاء', v: fl.tools_enabled ? 'مفتوحة' : 'مغلقة', note: fl.tools_enabled ? 'يراها من تناسبه من الأعضاء' : 'الأعضاء لا يرونها الآن. يفتحها الفريق التقني حين تقرّر' },
-      { k: 'شحن الرصيد', v: fl.topup_enabled ? 'مفتوح' : 'مغلق', note: fl.topup_enabled ? '' : 'الأدوات المدفوعة تعرض «الرصيد لا يكفي» لمن رصيده ناقص' }
+      { k: 'الأدوات للأعضاء', off: !fl.tools_enabled, v: fl.tools_enabled ? 'مفتوحة' : 'مغلقة', note: fl.tools_enabled ? 'يراها من تناسبه من الأعضاء' : 'الأعضاء لا يرونها الآن. يفتحها الفريق التقني حين تقرّر' },
+      { k: 'شحن الرصيد', off: !fl.topup_enabled, v: fl.topup_enabled ? 'مفتوح' : 'مغلق', note: fl.topup_enabled ? '' : 'الأدوات المدفوعة تعرض «الرصيد لا يكفي» لمن رصيده ناقص' }
     ];
     var warns = [];
     if (resp.ffmpeg === false) warns.push('الفيديو غير جاهز على الخادم بعد، فلا تُشغّل «فيديو ترند»');
@@ -598,7 +598,7 @@
       + '<p class="tl-spendline"><b>' + esc(o.spendLine) + '</b>' + (o.remainingLine ? '<span>' + esc(o.remainingLine) + '</span>' : '') + '</p></div>'
       + '<div class="tl-stats"><div><b>' + esc(o.jobsText) + '</b><span>عمل اليوم</span></div><div><b>' + esc(o.okText) + '</b><span>نجحت</span></div><div class="' + (o.failHot ? 'hot' : '') + '"><b>' + esc(o.failText) + '</b><span>لم تنجح</span></div></div>'
       + (o.jobs ? '' : '<p class="tl-fine">أرقام أعمال اليوم غير متاحة بعد</p>')
-      + '<ul class="tl-facts">' + o.facts.map(function (f) { return '<li><b>' + esc(f.k) + '</b><span class="tl-fv">' + esc(f.v) + '</span>' + (f.note ? '<small>' + esc(f.note) + '</small>' : '') + '</li>'; }).join('') + '</ul>'
+      + '<ul class="tl-facts">' + o.facts.map(function (f) { return '<li' + (f.off ? ' class="off"' : '') + '><b>' + esc(f.k) + '</b><span class="tl-fv">' + esc(f.v) + '</span>' + (f.note ? '<small>' + esc(f.note) + '</small>' : '') + '</li>'; }).join('') + '</ul>'
       + o.warns.map(function (w) { return '<p class="tl-warn soft" role="status">' + esc(w) + '</p>'; }).join('')
       + '</section>';
   }

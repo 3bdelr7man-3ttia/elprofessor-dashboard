@@ -51,6 +51,8 @@
 .sh-ctl{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 12px}
 .sh-chip{display:inline-flex;align-items:center;justify-content:center;min-height:44px;padding:0 16px;border-radius:999px;border:1px solid var(--line);background:#fff;color:var(--ink);font:700 14.5px 'Cairo',sans-serif;cursor:pointer;white-space:nowrap}
 .sh-chip:hover{background:var(--paper2)}
+.sh-chip .sh-cn{font-style:normal;margin-inline-start:8px;min-width:24px;height:24px;padding:0 6px;border-radius:999px;background:var(--paper2);color:var(--ink);display:inline-grid;place-items:center;font:800 13px/1 'Cairo',sans-serif}
+.sh-chip.on .sh-cn{background:rgba(255,255,255,.22);color:#fff}
 .sh-chip.on{background:var(--wine);border-color:var(--wine);color:#fff}
 .sh-count{font:700 14.5px 'Cairo',sans-serif;color:var(--mute);margin:0 0 10px}
 .sh-sbox{margin:0 0 14px;max-width:640px}
@@ -159,8 +161,7 @@
   .sh-cards.sh-m{display:grid}
   .sh-stats{grid-template-columns:repeat(2,1fr);gap:10px}
   .sh-stat-card{padding:12px}
-  .sh-ctl{flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none;padding-bottom:2px}
-  .sh-ctl::-webkit-scrollbar{display:none}
+  .sh-ctl{flex-wrap:wrap;padding-bottom:2px}      /* الشرائح تلتف بدل تمرير جانبي يقصّ بعضها (الجولة r6) */
   .sh-head{gap:10px}.sh-himg{width:68px;height:48px}.sh-head h2{font-size:19px}
   .sh-acts .ep-b1,.sh-acts .ep-b2{flex:1 1 140px}
   .sh-row{flex-direction:column}
@@ -168,4 +169,13 @@
   #epModal.v2s-sh-sh .acts .ep-b1,#epModal.v2s-sh-sh .acts .ep-b2,#epModal.v2s-sh-sh .acts .ep-bs{flex:1 1 100%}
   #epModal.v2s-sh-sh .sh-rowgrid{grid-template-columns:1fr}
   #epModal.v2s-sh-sh .sh-kinds{grid-template-columns:repeat(2,1fr)}
+}
+
+/* الإحصاءات: ثلاث في صف، وأربع ٢×٢ — لا بطاقة وحدها في صف (الجولة r6) */
+@media(max-width:760px){
+  .sh-nums{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .sh-nums:has(li:nth-child(3):last-child){grid-template-columns:repeat(3,minmax(0,1fr))}
+  .sh-nums li{padding:8px 10px}
+  .sh-nums b{font-size:22px}
+  .sh-nums span{font-size:13px}
 }

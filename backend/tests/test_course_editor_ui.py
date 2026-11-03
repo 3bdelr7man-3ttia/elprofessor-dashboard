@@ -321,9 +321,9 @@ def test_list_merge_helpers():
     c2 = [{'id': 'pc-12', 'slug': 's', 'status': 'draft', 'status_ar': 'مسودة', 'kinds': ['interactive', 'recorded'], 'lessons_count': 4, 'open_notes': 2},
           {'id': 'crs-ed1', 'slug': 'neg', 'status': 'draft', 'status_ar': 'مسودة', 'kinds': [], 'lessons_count': 0, 'open_notes': 0}]
     assert C('c2Bits', c2[0]) == {'status': 'مسودة', 'kinds': ['تفاعلي', 'مسجّل'], 'lessons': 4, 'open': 2}
-    assert C('c2Line', c2[0]) == 'تفاعلي · مسجّل · ٤ دروس · ٢ ملاحظات مفتوحة'
+    assert C('c2Line', c2[0]) == 'تفاعلي، مسجّل، ٤ دروس، ٢ ملاحظات مفتوحة'
     assert C('c2Line', c2[1]) == '٠ درسًا' or C('c2Line', c2[1]).startswith('٠')
-    assert C('c2Line', dict(c2[0], lessons_count=1, open_notes=1, kinds=['live'])) == 'مباشر · ١ درس · ١ ملاحظة مفتوحة'
+    assert C('c2Line', dict(c2[0], lessons_count=1, open_notes=1, kinds=['live'])) == 'مباشر، ١ درس، ١ ملاحظة مفتوحة'
     assert C('c2Line', None) == ''
     assert [x['id'] for x in C('c2Extras', c2, [{'id': 'pc-12'}])] == ['crs-ed1']
     assert [x['id'] for x in C('c2Extras', c2, [{'id': 'zzz', 'slug': 'neg'}])] == ['pc-12']

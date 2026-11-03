@@ -57,7 +57,8 @@
 
   // ------------------------------------------------------------------ جداول التسميات
   var AREAS = [['contracts', 'عقود'], ['litigation', 'تقاضٍ'], ['corporate', 'شركات'], ['general', 'عام'], ['arbitration', 'تحكيم'],
-               ['criminal', 'جنائي'], ['ip', 'ملكية فكرية'], ['labor', 'عمل'], ['family', 'أسرة'], [OTHER, 'أخرى']];
+               ['criminal', 'جنائي'], ['ip', 'ملكية فكرية'], ['labor', 'عمل'], ['family', 'أسرة'],
+               ['realestate', 'عقارات'], ['banking', 'بنوك ومصارف'], ['data', 'البيانات والخصوصية'], [OTHER, 'أخرى']];
   var STATUS_CHIPS = [['all', 'الكل'], ['confirmed', 'مؤكّد'], ['under_review', 'تحت التأكيد'], ['draft', 'مسودة']];
   var STATUS_CHIPS_OFF = [['all', 'الكل'], ['published', 'منشور'], ['draft', 'مسودة']];
   function statusChips(on) { return on ? STATUS_CHIPS : STATUS_CHIPS_OFF; }
@@ -80,7 +81,7 @@
   function areaText(code) { return labelOf(AREAS, str(code)) || labelOf(AREAS, OTHER); }
   function areaChips(counts) {
     var by = counts && counts.byArea ? counts.byArea : null;
-    return [['all', 'الكل']].concat(AREAS.map(function (a) { var n = by ? by[a[0]] : 0; return [a[0], n ? a[1] + ' (' + ar(n) + ')' : a[1]]; }));
+    return [['all', 'الكل']].concat(AREAS.map(function (a) { var n = by ? by[a[0]] : 0; return n ? [a[0], a[1], ar(n)] : [a[0], a[1]]; }));      // العدّاد عنصر ثالث يُرسم دائرة داخل الشريحة (لا أقواس)
   }
   function countWord(n, forms, none) { return n ? U(n, forms) : none; }
 

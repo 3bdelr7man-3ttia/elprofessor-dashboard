@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""مسارا قراءة لتبويب «الكتب والأعمال» الجديد (قسم «الكتب»).
+"""مسارا قراءة لتبويب «الكتب» الجديد (قسم «الكتب»).
 
 مسارات قراءة فقط، أدمن فقط، ورا نفس مفتاح `DASH_V2_ENABLED` المقفول:
   • GET /api/v2/books/review?status=pending_review|rejected  ← /api/bridge/knowledge/review (حالة المراجعة + هل في ملف)

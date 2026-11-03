@@ -134,7 +134,7 @@
   }
   function warnStrips(failed, partial) {
     var out = '';
-    if (failed && failed.length) out += '<div class="v2p-warn" role="status">تعذّر جلب: ' + esc(failed.join(' · ')) + ' — القائمة ناقصة وليس معناه أنه لا شيء ينتظرك</div>';
+    if (failed && failed.length) out += '<div class="v2p-warn" role="status">تعذّر جلب: ' + esc(failed.join('، ')) + ' — القائمة ناقصة وليس معناه أنه لا شيء ينتظرك</div>';
     (partial || []).forEach(function (t) { out += '<div class="v2p-warn" role="status">' + esc(t) + '</div>'; });
     return out;
   }
@@ -256,7 +256,7 @@
     var inv = readyData('invites');
     if (inv && inv.count != null && inv.count > (inv.rows || []).length) partial.push('معروض ' + ar((inv.rows || []).length) + ' من ' + ar(inv.count) + ' دعوة — القائمة ناقصة');
     var tr = (window.INBOX_TRUNCATED || []).map(function (x) { return String(x).split(':')[0].trim(); }).filter(function (l) { return ['زوّار ينتظرون الفتح', 'طلبات تقديم الخدمة', 'ليدات خبير مؤسس'].indexOf(l) > -1; });
-    if (tr.length) partial.push('معروض جزء فقط من: ' + tr.map(function (l) { return { 'زوّار ينتظرون الفتح': 'الزوّار', 'طلبات تقديم الخدمة': 'طلبات تقديم الخدمة', 'ليدات خبير مؤسس': 'الخبراء المؤسسون' }[l]; }).join(' · ') + ' — القائمة ناقصة');
+    if (tr.length) partial.push('معروض جزء فقط من: ' + tr.map(function (l) { return { 'زوّار ينتظرون الفتح': 'الزوّار', 'طلبات تقديم الخدمة': 'طلبات تقديم الخدمة', 'ليدات خبير مؤسس': 'الخبراء المؤسسون' }[l]; }).join('، ') + ' — القائمة ناقصة');
     var head = '<div class="v2p-top"><p class="v2p-brain">' + BRAIN + '<span>' + esc(R.head.text) + '</span></p><button type="button" class="v2p-btn2" data-a="refresh">حدّث</button></div>'
       + (R.head.invitesLine ? '<p class="v2p-jump"><a href="' + esc(R.head.invitesLine.href) + '" data-a="goto-pipeline">' + esc(R.head.invitesLine.text) + '</a></p>' : '');
     var body;
@@ -281,7 +281,7 @@
     if (open) {
       h += L2.rows.length ? '<ul class="v2p-lrows">' + L2.rows.map(function (r) {
         return '<li class="v2p-lrow" data-id="' + esc(r.id) + '"><div class="v2p-lid"><b>' + personLink(r.name, r.email) + '</b>' + (r.rejected ? '<span class="v2p-chip2 red">رُفض طلب سابق</span>' : '')
-          + '<span class="v2p-em">' + esc(r.email) + '</span><span class="v2p-mute">' + esc([r.signedText, r.lastText, r.aiText].filter(Boolean).join(' · ')) + '</span></div>'
+          + '<span class="v2p-em">' + esc(r.email) + '</span><span class="v2p-mute">' + esc([r.signedText, r.lastText, r.aiText].filter(Boolean).join('، ')) + '</span></div>'
           + '<div class="v2p-lacts"><button type="button" class="v2p-btn2" data-a="later-open" data-id="' + esc(r.id) + '">افتح المنصة</button><button type="button" class="v2p-btn3" data-a="later-del" data-id="' + esc(r.id) + '">احذف نهائيًا</button></div></li>';
       }).join('') + '</ul>' : '<p class="v2p-none">لا أحد هنا الآن</p>';
     }
@@ -307,7 +307,7 @@
     var head = '<div class="v2p-top"><div class="v2p-brain tall">' + BRAIN + '<div class="v2p-bl">' + brain.map(function (l, i) { return '<span' + (i ? ' class="s"' : '') + '>' + esc(l) + '</span>'; }).join('') + '</div></div>'
       + '<div class="v2p-topacts"><button type="button" class="v2p-btn1 inline" data-a="new-invite">+ دعوة جديدة</button><button type="button" class="v2p-gear" data-a="settings" aria-label="إعدادات الدعوة" title="إعدادات الدعوة">' + GEAR + '</button></div></div>';
     var sub = PL.partial ? ' (من آخر ' + ar(PL.partial.shown) + ' دعوة)' : '';
-    var steps = PL.steps.map(function (s2) { return s2.label + ' ' + (s2.n == null ? NA : ar(s2.n)); }).join(' · ');
+    var steps = PL.steps.map(function (s2) { return s2.label + ' ' + (s2.n == null ? NA : ar(s2.n)); }).join('، ');
     var awaitingLink = '<a class="v2p-lnk" href="' + esc('#s/people/invites') + '" data-a="goto-requests">افتح الطلبات</a>';
     var cards = '<div class="v2p-nums">'
       + numCard('k-sent', 'أُرسلت', PL.cards.sent, [sub])
@@ -384,7 +384,7 @@
       body += '<section class="v2p-later"><button type="button" class="v2p-lh" data-a="expand" data-k="messages:replied" aria-expanded="' + !!open + '"><b>رسائل رُدّ عليها (' + esc(ar(M.replied.length)) + ')</b><span class="v2p-caret" aria-hidden="true">' + (open ? '▴' : '▾') + '</span></button>'
         + (open ? '<ul class="v2p-lrows">' + M.replied.map(function (r) {
           S.items[r.id] = r;
-          return '<li class="v2p-lrow"><div class="v2p-lid"><b>' + esc(r.name) + '</b><span class="v2p-mute">' + esc([r.topic, r.dateText].filter(Boolean).join(' · ')) + '</span></div><div class="v2p-lacts"><button type="button" class="v2p-btn3" data-a="msg-del" data-id="' + esc(r.id) + '">احذف</button></div></li>';
+          return '<li class="v2p-lrow"><div class="v2p-lid"><b>' + esc(r.name) + '</b><span class="v2p-mute">' + esc([r.topic, r.dateText].filter(Boolean).join('، ')) + '</span></div><div class="v2p-lacts"><button type="button" class="v2p-btn3" data-a="msg-del" data-id="' + esc(r.id) + '">احذف</button></div></li>';
         }).join('') + '</ul>' : '') + '</section>';
     }
     v.innerHTML = '<div class="v2p" data-tab="messages">' + head + warn + body + '</div>';
@@ -403,7 +403,7 @@
   function userRowHtml(u) {
     S.items['user:' + u.id] = u;
     var chips = u.chips.map(function (c) { return '<span class="v2p-ch2 k-' + esc(c.key) + (c.gold ? ' gold' : '') + '">' + esc(c.label) + '</span>'; }).join('');
-    return '<article class="v2p-u' + (u.active ? '' : ' off') + '" data-a="person" data-email="' + esc(u.email) + '"><span class="v2p-av" aria-hidden="true">' + esc(u.initial) + '</span><div class="v2p-uid">'
+    return '<article class="v2p-u' + (u.active ? '' : ' off') + '" data-a="person" data-email="' + esc(u.email) + '"><span class="v2p-av" aria-hidden="true">' + U.avatarMark(u.initial) + '</span><div class="v2p-uid">'
       + '<h3>' + personLink(u.name, u.email) + '</h3><div class="v2p-uch">' + chips + '</div><p class="v2p-em">' + esc(u.email) + '</p>'
       + '<p class="v2p-um">' + esc(u.planText + ' · انضمّ ' + u.joinedText + ' · آخر دخول ' + u.lastText) + (u.fromSearch ? ' · من البحث' : '') + '</p></div>'
       + '<button type="button" class="v2p-btn2" data-a="person" data-email="' + esc(u.email) + '">افتح صفحة الشخص</button></article>';
@@ -608,7 +608,7 @@
     var sc = { title: name, build: function () {
       var rowsH = kvRows([['البريد', email, true], ['الهاتف', pu && pu.phone, true], ['الصفة', dash(pu && pu.roleLabel) || (inboxRow && inboxRow.puRole)], ['التخصص', dash(pu && pu.specialtyLabel)],
         ['البلد', dash(pu && pu.countryLabel) || (inboxRow && inboxRow.puCountry)], ['بلد التسجيل', dash(pu && pu.signupCountryLabel)], ['سبب الانضمام', pu && pu.why], ['سجّل في', pu && pu.signedAt],
-        ['طلب الفتح منذ', pu && pu.requestedAt ? U.agoText(pu.requestedAt, now()).replace(/^منذ /, '') : ''], ['الأسئلة المستعملة', pu && pu.aiUsed != null ? ar(pu.aiUsed) : ''], ['يحتاج مراجعة', flags.join(' · ')]]);
+        ['طلب الفتح منذ', pu && pu.requestedAt ? U.agoText(pu.requestedAt, now()).replace(/^منذ /, '') : ''], ['الأسئلة المستعملة', pu && pu.aiUsed != null ? ar(pu.aiUsed) : ''], ['يحتاج مراجعة', flags.join('، ')]]);
       var h = rowsH + '<div id="v2pmRej" hidden>' + fld('سبب الرفض (اختياري) — يُحفظ على الطلب، فاكتب ما لا تمانع أن يقرأه صاحبه', 'v2pmNote', { area: true, max: 300 }) + '</div>' + errBox()
         + acts(btn('v2pmOpen', 'افتح المنصة', 'v2p-btn1'), btn('v2pmRej0', 'ارفض ويبقى زائرًا'), btn('v2pmDel', 'احذف الحساب نهائيًا', 'v2p-btn3'));
       return { html: h, wire: function (root) {
@@ -635,7 +635,7 @@
   }
   function joinScreen(row) {
     var sc = { title: row.who || 'مقدّم الطلب', side: true, build: function () {
-      var files = (Array.isArray(row.attachments) ? row.attachments : []).map(function (a, i) { var u = safeHttps(a && a.url ? a.url : a); return u ? '<a href="' + esc(u) + '" target="_blank" rel="noopener">مرفق ' + esc(ar(i + 1)) + '</a>' : ''; }).filter(Boolean).join(' · ');
+      var files = (Array.isArray(row.attachments) ? row.attachments : []).map(function (a, i) { var u = safeHttps(a && a.url ? a.url : a); return u ? '<a href="' + esc(u) + '" target="_blank" rel="noopener">مرفق ' + esc(ar(i + 1)) + '</a>' : ''; }).filter(Boolean).join('، ');
       var det = (row.details || []).map(function (d) { return [d.k, String(d.v)]; });
       // «السوق v4» (٥): طلب مرخَّص ⇒ كتلة بلاد القيد (متعددة الاختيار) وزرّ «عرض ملف الترخيص». ولا قبول بلا بلد واحد على الأقل.
       var M4 = window.V2S_MARKET4, lic = M4 && M4.needsLicence(row) ? M4.licenceHtml(row, 'v2pmL') : '';
@@ -865,7 +865,7 @@
       var g3 = V && V.forbidden ? '<p class="v2pm-mute">للإدارة فقط</p>' : (!V || V.missing ? '<p class="v2pm-mute">' + NA + '</p>' : VK.map(function (k) {
         return fld(VL[k], 'v2pmV_' + k, { value: form['v_' + k] != null ? form['v_' + k] : (V[k] || ''), ltr: true, type: 'url', ph: 'الصق رابط الفيديو' });
       }).join('') + '<p class="v2pm-mute">يظهر الفيديو بدل النص المكتوب لكل صفة.</p><button type="button" class="v2p-btn1" id="v2pmSaveV">احفظ الفيديوهات</button>');
-      return { html: group('founding', 'باب المؤسسين', 'باب المؤسسين: ' + fo, g1) + group('invite', 'الدعوة', 'حصة العضو: ' + iq + ' · الموافقة من الجيل ' + ig, g2) + group('videos', 'فيديو لكل صفة', vline, g3), wire: function (root) {
+      return { html: group('founding', 'باب المؤسسين', 'باب المؤسسين: ' + fo, g1) + group('invite', 'الدعوة', 'حصة العضو: ' + iq + '، الموافقة من الجيل ' + ig, g2) + group('videos', 'فيديو لكل صفة', vline, g3), wire: function (root) {
         qa('.v2pm-gh', root).forEach(function (b2) { b2.onclick = function () { var g = b2.getAttribute('data-g'); openG = openG === g ? '' : g; showScreen(sc); }; });
         qa('input', root).forEach(function (i2) { i2.addEventListener('input', function () {
           var m = /^v2pmF_(.+)$/.exec(i2.id), mv = /^v2pmV_(.+)$/.exec(i2.id);
@@ -977,7 +977,7 @@
       var pk = dataOf('packages') && eff('packages') === 'ready' ? dataOf('packages').packages : null;
       var planName = P.planLabel(u.plan_id, pk);
       var tags = Array.isArray(u.tags) ? u.tags : [];
-      var head = '<div class="v2pm-uh"><span class="v2p-av">' + esc(String(name).charAt(0).toUpperCase()) + '</span><div><b>' + esc(name) + '</b><div class="v2p-uch">'
+      var head = '<div class="v2pm-uh"><span class="v2p-av">' + U.avatarMark(String(name).charAt(0).toUpperCase()) + '</span><div><b>' + esc(name) + '</b><div class="v2p-uch">'
         + '<span class="v2p-ch2 k-' + esc(u.role || 'member') + '">' + esc(P.ROLE[u.role] || 'عضو') + '</span>' + (u.trainer_status === 'approved' ? '<span class="v2p-ch2 k-trainer">مدرّب</span>' : '') + (u.is_test ? '<span class="v2p-ch2 k-test">تجريبي</span>' : '') + (u.is_active === false ? '<span class="v2p-ch2 k-off">موقوف</span>' : '') + '</div>'
         + '<span class="v2p-em">' + esc(u.email || '') + '</span>' + (u.phone ? '<span class="v2p-em">' + esc(u.phone) + '</span>' : '')
         + '<span class="v2p-um">' + esc('انضمّ ' + (U.dateText(u.created_at) || NA) + ' · آخر دخول ' + (u.last_login_at ? U.agoText(u.last_login_at, now()) : 'غير متاح')) + '</span></div></div>';

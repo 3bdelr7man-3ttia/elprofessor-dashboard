@@ -93,12 +93,12 @@ def test_the_tabs_match_the_approved_table():
                     ['offers', 'عروض الأسعار', 'courses'], ['course', 'صفحة الدورة', 'courses'], ['all', 'كل السجلات', 'courses']],
         'market': [['requests', 'الطلبات', 'market'], ['all', 'كل الطلبات', 'v2s_market_all'], ['demand', 'ماذا يطلب الناس', 'v2s_market_demand'], ['manage', 'إدارة السوق', 'v2s_market_v4']],
         # D3: مراجعة العروض وطلبات القرّاء أولًا (موديولان وهميان ورا الغلاف)، والشاشة القديمة آخرًا
-        'books': [['offers', 'مراجعة العروض', 'v2b_offers'], ['requests', 'طلبات القرّاء', 'v2b_requests'], ['books', 'الكتب والأعمال', 'knowledge'], ['ours', 'كتبنا', 'v2s_books_ours']],
+        'books': [['offers', 'مراجعة العروض', 'v2b_offers'], ['requests', 'طلبات القرّاء', 'v2b_requests'], ['books', 'الكتب', 'knowledge'], ['ours', 'كتبنا', 'v2s_books_ours']],
         # الناس والدعوات (نهائي): الطلبات والدعوات (موديول وهمي v2p_invites) والمستخدمون والرسائل، وصفحة الشخص مخفية
         'people': [['invites', 'الطلبات', 'invites'], ['pipeline', 'الدعوات', 'v2p_invites'], ['users', 'المستخدمون', 'users'], ['messages', 'الرسائل', 'inbox'],
                    ['person', 'صفحة الشخص', 'v2person']],
         # D3: «الفلوس» بهيكلها الجديد، والشاشتان القديمتان (المالية والباقات) في آخر تبويب «كل السجلات» + تبويب مخفي للإيصالات القديمة
-        'money': [['overview', 'نظرة', 'v2m_overview'], ['payouts', 'التحويلات', 'v2m_payouts'], ['receipts', 'الإيصالات والمدفوعات العالقة', 'v2m_receipts'],
+        'money': [['overview', 'نظرة', 'v2m_overview'], ['payouts', 'التحويلات', 'v2m_payouts'], ['receipts', 'الإيصالات', 'v2m_receipts'],
                   ['prices', 'الأسعار', 'v2m_prices'], ['shares', 'النسب والإعدادات', 'v2m_shares'], ['ads', 'إعلانات الأعمال', 'v2m_ads'],
                   ['all', 'كل السجلات', 'finance']],
         # الجولة الأخيرة: «المحتوى» بست تبويبات كلها على الموديول القديم `topics` (تُميَّز بـ`topicsTab`) وبلا «كل السجلات»

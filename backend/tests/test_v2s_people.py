@@ -199,7 +199,7 @@ def test_inbox_ticket_text_is_v2Card_field_by_field_and_never_says_mashbooh():
     for col in R['cols'].values():
         for t in col['items']:
             assert 'مشبوه' not in json.dumps(t, ensure_ascii=False)
-    assert tickets['pu-2']['warn'] == 'يحتاج مراجعة: إيميل بنقط · اسم عشوائي'
+    assert tickets['pu-2']['warn'] == 'يحتاج مراجعة: إيميل بنقط، اسم عشوائي'
 
 
 @needs_node

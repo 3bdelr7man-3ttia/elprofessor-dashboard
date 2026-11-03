@@ -184,7 +184,7 @@ def flow_requests(browser, h, pre, vp, mobile):
         fs = page.evaluate("""() => { const r = e => e ? e.getBoundingClientRect() : null, sb = document.querySelector('#v2sbar'), t = document.querySelector('.v2p-col.on .v2p-t'),
           br = document.querySelector('.v2p-brain'), rf = document.querySelector('[data-a="refresh"]');
           return {sbar: !!sb && getComputedStyle(sb).display !== 'none', ticket: t ? Math.round(r(t).top) : null, sameRow: !!(br && rf) && Math.abs(r(br).top - r(rf).top) < 60, h: innerHeight}; }""")
-        expect(not fs['sbar'] and fs['sameRow'] and fs['ticket'] is not None and fs['ticket'] < fs['h'] - 250, pre + '01: الشاشة الأولى في الموبايل %r' % fs)
+        expect(not fs['sbar'] and not fs['sameRow'] and fs['ticket'] is not None and fs['ticket'] < fs['h'] - 250, pre + '01: الشاشة الأولى في الموبايل %r' % fs)
     if mobile:
         for i, (k, nm) in enumerate((('visitors', 'a'), ('approval', 'b'), ('join', 'c'), ('founding', 'd'))):
             page.click('.v2d-segb[data-col="%s"]' % k)

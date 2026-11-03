@@ -61,7 +61,7 @@
       if (n.legacy) p.push(U.U(n.legacy, ['استشارة قديمة', 'استشارتان قديمتان', 'استشارات قديمة', 'استشارة قديمة']));
       if (!p.length) return 'لا نزاعات مفتوحة';
     }
-    return p.join(' · ') + (miss ? ' — العدد ناقص' : '');
+    return p.join('، ') + (miss ? ' — العدد ناقص' : '');
   };
 
   // ------------------------------------------------------------------ تحميل وجمع
@@ -98,9 +98,9 @@
     var out = '';
     var failed = plainLabels(g.failed.filter(function (l) { return labels.indexOf(l) > -1; }));
     if (stateOf('opsQueue') === 'error') failed.push('بيانات المنصة');
-    if (failed.length) out += '<div class="v2d-warn" role="status">تعذّر جلب: ' + esc(failed.join(' · ')) + ' — القائمة ناقصة وليس معناه أنه لا شيء ينتظرك</div>';
+    if (failed.length) out += '<div class="v2d-warn" role="status">تعذّر جلب: ' + esc(failed.join('، ')) + ' — القائمة ناقصة وليس معناه أنه لا شيء ينتظرك</div>';
     var trunc = plainLabels(g.trunc.map(function (t) { return String(t).split(':')[0].trim(); }).filter(function (l) { return labels.indexOf(l) > -1; }));
-    if (trunc.length) out += '<div class="v2d-warn" role="status">معروض جزء فقط من: ' + esc(trunc.join(' · ')) + ' — القائمة ناقصة</div>';
+    if (trunc.length) out += '<div class="v2d-warn" role="status">معروض جزء فقط من: ' + esc(trunc.join('، ')) + ' — القائمة ناقصة</div>';
     return out;
   }
   function loadingOrError(g, title) {
@@ -359,7 +359,7 @@
       wirePerson(v); return;
     }
     var chips = vm.chips.map(function (c) { return '<span class="v2d-chip chip-' + esc(c.key) + '">' + esc(c.label) + '</span>'; }).join('');
-    var av = vm.photo ? '<img class="v2d-av" src="' + esc(vm.photo) + '" alt="">' : '<span class="v2d-av">' + esc(vm.initial) + '</span>';
+    var av = vm.photo ? '<img class="v2d-av" src="' + esc(vm.photo) + '" alt="">' : '<span class="v2d-av">' + U.avatarMark(vm.initial) + '</span>';
     var meta = [];
     if (vm.lastLogin) meta.push('آخر دخول ' + vm.lastLogin);
     meta.push('البلد: ' + vm.countryText);
@@ -371,7 +371,7 @@
     else log = '<ul class="v2d-log">' + vm.log.map(function (e) { return '<li><time>' + esc(e.when) + '</time><span>' + esc(e.text) + '</span><small>' + esc(e.ago) + '</small></li>'; }).join('') + '</ul>';
     v.innerHTML = '<div class="v2d" data-board="person">' + back + warn
       + '<header class="v2d-ph">' + av + '<div class="v2d-pid"><h1 class="v2d-name">' + esc(vm.name) + '</h1><div class="v2d-chips">' + chips + (vm.active ? '' : '<span class="v2d-chip chip-off">الحساب موقوف</span>') + '</div>'
-      + '<p class="v2d-join">' + esc(vm.joinLine) + '</p>' + (meta.length ? '<p class="v2d-meta">' + esc(meta.join(' · ')) + '</p>' : '') + '</div>'
+      + '<p class="v2d-join">' + esc(vm.joinLine) + '</p>' + (meta.length ? '<p class="v2d-meta">' + esc(meta.join('، ')) + '</p>' : '') + '</div>'
       + '<div class="v2d-pact"><a class="v2d-btn1" href="' + esc(mail) + '" data-a="mail">مراسلة</a>' + (window.V2SEC&&V2SEC.people&&V2SEC.people.manageBtn?V2SEC.people.manageBtn(email):'') + '</div></header>'
       + '<div class="v2d-pgrid">' + vm.cards.map(personCard).join('') + '</div>'
       + '<section class="v2d-plog"><h3>السجل' + (vm.logPartial ? ' <small>(جزء منه — تعذّر جلب بعض المصادر)</small>' : '') + '</h3>' + log + '</section></div>';

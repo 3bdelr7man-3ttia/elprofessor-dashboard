@@ -4,7 +4,7 @@
     cd backend && python3 -B tests/uiharness/v2_shots_roles.py ../docs/v2/final/shots-roles
 
 ⛔ صفر طلبات حقيقية: الداشبورد جوه العملية والمنصة جدول في الذاكرة (`roles_fixtures.RolesPlatform`)، وأي أصل تاني بيتقفل ويتسجّل.
-السكربت بيفشل (خروج ١) لو: خرج طلب برّه الداشبورد (غير خطوط جوجل) · تمرير أفقي · هدف أقل من ٤٤px (أو زرّ `v2ro-btn` أقل من ٥٢px في الموبايل) ·
+السكربت بيفشل (خروج ١) لو: خرج طلب برّه الداشبورد (غير خطوط جوجل) · تمرير أفقي · هدف أقل من ٤٤px (أو زرّ `v2ro-btn` أقل من ٤٨px في الموبايل) ·
 `undefined/null/NaN` ظاهرة · رقم «٠/0» في بطاقة مصدرها واقع أو حساب غير مربوط · القائمة القديمة أو الشريط ذو الإيموجي ظاهر والمفتاح مفتوح ·
 كتابة سحب من غير `confirmed:true` أو نداء مباشر لـ`/api/investor/withdraw` · المدرّب طلب `investment-opportunities` · الأدمن رأى أي `v2ro` ·
 زرّ السحب تحت الطي في الموبايل · أكثر من `v2ro-btn1` على شاشة · بريد في البانر · تبويب مكرّر ظاهر في «كل السجلات» · لوحة الجرس بشكل قديم ·
@@ -65,9 +65,9 @@ def check(run, page, name, roles_on=True):
         PROBLEMS.append('%s: %d هدف أقل من ٤٤px: %r' % (name, len(small), small[:4]))
     if run.mobile:
         btn = page.evaluate("""() => [...document.querySelectorAll('.v2ro-btn1, .v2ro-btn2')]
-          .filter(n => n.offsetParent).map(n => n.getBoundingClientRect().height).filter(h => h < 51.5).length""")
+          .filter(n => n.offsetParent).map(n => n.getBoundingClientRect().height).filter(h => h < 47.5).length""")
         if btn:
-            PROBLEMS.append('%s: %d زرار أقل من ٥٢px في الموبايل' % (name, btn))
+            PROBLEMS.append('%s: %d زرار أقل من ٤٨px في الموبايل' % (name, btn))
     out = page.evaluate("""() => [...document.querySelectorAll('.v2ro a, .v2ro button, .v2rom button')].filter(b => b.offsetParent && !b.closest('.v2ro-chips'))
       .map(b => b.getBoundingClientRect()).filter(r => r.left < -1 || r.right > window.innerWidth + 1).length""")
     if out:

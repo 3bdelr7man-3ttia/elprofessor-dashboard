@@ -1188,7 +1188,7 @@ def test_keys_card_contract_in_brain_js_and_css():
     js = _read('dashboard-cloud', 'v2s', 'brain.js')
     css = _read('dashboard-cloud', 'v2s', 'brain.css')
     assert "keysCard() + '<div class=\"v3-top v2sb-top\">'" in js, 'البطاقة فوق القرصين'
-    assert '<h2>المفاتيح والكاتب</h2>' in js and 'أضف مفتاحًا' in js and 'جرّبه' in js and 'احذفه' in js and 'ينتهي بـ' in js
+    assert '<h2>من يكتب للعقل</h2>' in js and 'أضف مفتاحًا' in js and 'جرّبه' in js and 'احذفه' in js and 'ينتهي بـ' in js
     # حقل المفتاح كلمة سر لا يُعاد عرضها، ويُمسح من الصفحة بعد الحفظ ومع الإغلاق
     assert 'id="v2sbkKey" type="password"' in js and 'autocomplete="new-password"' in js
     assert "key.value = ''" in js and 'r.body.key = ' in js

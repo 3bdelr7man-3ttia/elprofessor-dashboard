@@ -242,3 +242,14 @@ p.tl-gflag{margin:0;font-size:13.5px;line-height:1.7;background:#FFF3D1;border-r
   .tl-savebar .ep-b1{flex:1 1 100%}
   .tl-shot{width:100%;max-width:none}
 }
+.tl-thumb[hidden]{display:none}
+
+/* الموبايل: حالات الاستوديو شرائح صغيرة بدل ثلاثة صفوف بعنوان ونص، والمغلق منها بلون يميّزه (الجولة r6) */
+.tl-facts li.off .tl-fv{color:#8A5A00}
+.tl-sw:not(.on){border-color:#E7C9C9;background:#FBF1F1;color:#8E1228}
+@media (max-width:700px){
+  .tl-facts{display:flex;flex-wrap:wrap;gap:8px}
+  .tl-facts li{flex:none;padding:4px 14px;border-radius:999px;gap:6px}
+  .tl-facts li.off{background:#FFF3D1;border-color:#EBD38E}
+  .tl-facts small{display:none}
+}

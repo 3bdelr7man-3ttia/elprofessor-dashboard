@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""«الكتب والأعمال» (قسم «الكتب»، تبويبها الأخير) على الهيكل الجديد، ورا نفس المفتاح المقفول.
+"""«الكتب» (قسم «الكتب»، تبويبها الأخير) على الهيكل الجديد، ورا نفس المفتاح المقفول.
 
 Run:  cd backend && python3 -B -m pytest -q -p no:cacheprovider tests/test_v2s_books.py
 
@@ -489,7 +489,7 @@ def test_brain_lines_fire_on_their_exact_basis_and_not_without_it():
 def test_brain_summary_counts_market_works_only_and_has_one_action():
     res = W()
     s = L('v2kBrainSummary', res)
-    assert s['text'] == 'في انتظار مراجعتك: ٣ أعمال من السوق · بلا سعر: كتاب واحد · مخفي وبيعت منه نسخ: عمل واحد'
+    assert s['text'] == '٣ أعمال تنتظر مراجعتك'
     assert s['action'] == {'label': 'ابدأ المراجعة', 'lane': 'review'}, 'العرضان في «مراجعة العروض» لا يُعدّان هنا'
     no_review = _src()
     no_review['knowledge']['items'] = [k for k in no_review['knowledge']['items'] if k['status'] != 'pending_review']
@@ -501,7 +501,7 @@ def test_brain_summary_counts_market_works_only_and_has_one_action():
     quiet['prices']['items'] = [p for p in quiet['prices']['items'] if p['id'] != 'bk-new']
     quiet['revPending'] = {'items': [], 'count': 0}
     s = L('v2kBrainSummary', W(quiet))
-    assert s == {'text': 'لا شيء ينتظرك في الكتب والأعمال الآن.', 'action': None}
+    assert s == {'text': 'لا شيء ينتظرك في الكتب الآن.', 'action': None}
     s = L('v2kBrainSummary', W(_src(p1=False, revPending=None)))
     assert s['text'].endswith(' — وبعض المصادر لم تصل، فقد يكون العدد أكبر') and s['action']['lane'] == 'noprice'
     s = L('v2kBrainSummary', W(_src(prices=None)))
@@ -544,7 +544,7 @@ def test_edit_diff_shows_only_what_changes_and_sends_only_what_changed():
     d = L('v2kEditDiff', row, dict(base, title='عنوان جديد'))
     assert d['changed'] and d['body'] == {'title': 'عنوان جديد'} and d['lines'] == [{'label': 'العنوان', 'from': row['title'], 'to': 'عنوان جديد'}]
     d = L('v2kEditDiff', row, dict(base, priceText='١٥٠٫٥'))
-    assert d['body'] == {'price_egp': 150.5} and d['lines'] == [{'label': 'السعر', 'from': '٢٥٠ جنيه', 'to': '١٥٠٫٥ جنيه'}]
+    assert d['body'] == {'price_egp': 150.5} and d['lines'] == [{'label': 'السعر', 'from': '٢٥٠ جنيه', 'to': '١٥٠٫٥٠ جنيه'}]
     d = L('v2kEditDiff', row, dict(base, bid=True))
     assert d['body'] == {'bid_enabled': True} and d['lines'] == [{'label': '«اعرض سعرك»', 'from': 'غير مفعّل', 'to': 'مفعّل'}]
     d = L('v2kEditDiff', row, {'title': '  عنوان  ', 'priceText': '300', 'bid': True})
@@ -685,7 +685,7 @@ def test_the_books_section_tabs_are_unchanged_and_the_description_is_the_new_tex
     secs = {s['key']: s for s in L('SECTIONS')}
     books = secs['books']
     assert [(t['key'], t['label'], t['mod']) for t in books['tabs']] == [('offers', 'مراجعة العروض', 'v2b_offers'), ('requests', 'طلبات القرّاء', 'v2b_requests'),
-                                                                        ('books', 'الكتب والأعمال', 'knowledge'),
+                                                                        ('books', 'الكتب', 'knowledge'),
                                                                         ('ours', 'كتبنا', 'v2s_books_ours')]
     assert books['desc'] == 'كل كتاب وعمل، وعروض تنتظر المراجعة، وطلبات القرّاء' and books['img'] == 'books'
     assert not [t for t in books['tabs'] if 'كل السجلات' in t['label']], 'لا «كل السجلات»: كل ما في الشاشة القديمة له بيت جديد'
@@ -721,7 +721,7 @@ def test_the_registry_owns_the_knowledge_module_only_under_the_new_shell():
 
 
 JS_ALL = _read('dashboard-cloud', 'v2s', 'books.js')
-# تبويب «كتبنا» (v2s_books_ours) له ملف اختباره: tests/test_books_ours_ui.py + test_books_ours_routes.py. هنا شاشة «الكتب والأعمال» وحدها.
+# تبويب «كتبنا» (v2s_books_ours) له ملف اختباره: tests/test_books_ours_ui.py + test_books_ours_routes.py. هنا شاشة «الكتب» وحدها.
 _OURS_AT = JS_ALL.index('  // ====', JS_ALL.index('«كتبنا» — تبويب'))
 JS = JS_ALL[:_OURS_AT - 1] + JS_ALL[JS_ALL.index('  R.mods.knowledge = {'):]
 CODE = _strip_comments(JS)
@@ -769,7 +769,7 @@ def test_the_only_images_on_the_tab_are_the_books_photo_and_the_brain_avatar():
 
 def test_every_failed_source_has_a_visible_not_available_path():
     assert 'تعذّر جلب: ' in CODE and 'function warnStrip(' in CODE
-    assert 'الكتب والأعمال: غير متاح بعد' in CODE and 'تعذّر الوصول إلى هذه البيانات الآن، فلا تعتبر الشاشة فارغة.' in CODE and 'data-a="retry"' in CODE
+    assert 'الكتب: غير متاح بعد' in CODE and 'تعذّر الوصول إلى هذه البيانات الآن، فلا تعتبر الشاشة فارغة.' in CODE and 'data-a="retry"' in CODE
     assert 'لم يصل ما نعرضه بعد' in CODE, 'مصدر واقع ولا صفوف ≠ «لا أعمال بعد»'
     assert 'أعمال السوق التي تنتظر المراجعة: ' in CODE, 'ممرّ المراجعة لا يدّعي «لا شيء» والمصدر واقع'
 
@@ -833,6 +833,6 @@ def test_the_owner_link_is_a_44px_target_on_every_width_and_the_edge_fixes_are_i
     assert re.search(r'\.bk-item \.v3-person\{[^}]*min-height:44px', CSS)
     assert not re.search(r'\.bk-row \.v3-person\{[^}]*padding:6px', CSS)
     mob = CSS[CSS.index('@media(max-width:760px)'):]
-    assert re.search(r'\.bk-addrow \.v3-btn2,[^{]*\.v3-empty \.v3-btn1,[^{]*\.v3-empty \.v3-btn2\{width:100%\}', mob), 'كل الأزرار بعرض الشاشة في الموبايل'
+    assert re.search(r'\.bk-addrow\{display:flex;justify-content:center\}', mob) and re.search(r'\.v3-empty\{display:grid;justify-items:center', mob), 'الأزرار على قد نصّها ومتمركزة في الموبايل (قرار r6)'
     assert re.search(r'#epModal \.v2s-bm \.fld label\{color:#21262E\}', CSS), 'عناوين الخانات بحبر لا رمادي بارد'
     assert re.search(r'#epModal \.v2s-bm \.fld input,[^{]*\{border-color:#E9E1D6\}', CSS)

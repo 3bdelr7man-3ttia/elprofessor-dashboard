@@ -177,7 +177,7 @@
   }
   function groupHtml(g, isOpen, count) {
     return '<div class="v2sb-grp' + (isOpen ? ' open' : '') + '"><button type="button" class="v2sb-gh" data-a="grp" data-g="' + esc(g.key) + '" aria-expanded="' + isOpen + '">'
-      + '<span class="v2sb-gt">' + esc(g.title) + '</span>' + (count == null ? '' : '<span class="v2sb-gc">' + esc(U.ar(count)) + '</span>') + CHEV + '</button>'
+      + '<span class="v2sb-gt">' + esc(g.title) + '</span>' + (g.stopped ? '<span class="v2sb-gs">' + esc(U.ar(g.stopped)) + ' متوقّفة</span>' : '') + (count == null ? '' : '<span class="v2sb-gc">' + esc(U.ar(count)) + '</span>') + CHEV + '</button>'
       + (isOpen ? '<div class="v2sb-rows">' + g.rowsHtml + '</div>' : '') + '</div>';
   }
   function isOpen(key) {
@@ -212,7 +212,7 @@
   }
   function rulesCard() {
     var st = srcState('rules'), res = L.v2sBrainRules(rulesInput());
-    var groups = [writesGroup()].concat(res.groups.map(function (g) { return { key: g.key, title: g.title, count: g.rows.length, rowsHtml: g.rows.map(ruleRow).join('') }; }));
+    var groups = [writesGroup()].concat(res.groups.map(function (g) { return { key: g.key, title: g.title, count: g.rows.length, stopped: g.rows.filter(function (r) { return r.stopped; }).length, rowsHtml: g.rows.map(ruleRow).join('') }; }));
     var req = (data('rules') && data('rules').requested) || [];
     if (req.length) groups.push({ key: 'requested', title: 'قواعد طلبتها', count: req.length, rowsHtml: req.map(requestedRow).join('') });
     var warn = (st === 'error' || st === 'closed') ? '<div class="v3-warn" role="status">تعذّر جلب حالة القواعد الآن. ما يظهر «' + NA + '» ليس معناه أنه متوقف. ' + retryBtn('retry-rules') + '</div>' : '';
@@ -315,9 +315,9 @@
     else if (!info) body = '<div class="v3-empty v2sb-na"><b>' + NA + '</b><p>لا نعرف المفاتيح المحفوظة، فلا تعتبر القائمة فارغة.</p>' + retryBtn('retry-keys') + '</div>';
     else body = info.rows.length ? '<div class="v2sb-kl">' + info.rows.map(keyRowHtml).join('') + '</div>'
       : '<p class="v2sb-none">لا مفاتيح محفوظة هنا، فيكتب العقل بإعداد الخادم الأصلي.</p>';
-    return '<section class="v3-card v2sb-keys" aria-label="المفاتيح والكاتب"><header class="v3-ch"><h2>المفاتيح والكاتب</h2><p>اختر من يكتب للعقل، وبدّله في أي وقت.</p></header>'
+    return '<section class="v3-card v2sb-keys" aria-label="المفاتيح والكاتب"><header class="v3-ch"><h2>من يكتب للعقل</h2><p>اختر من يكتب للعقل، وبدّله في أي وقت.</p></header>'
       + body + (info ? '<button type="button" class="v3-btn1 v2sb-kadd" data-a="kadd"' + (info.rows.length >= 12 ? ' disabled' : '') + '>أضف مفتاحًا</button>' : '') + '</section>'
-      + connectedCard();      // «الأنظمة المتصلة» (SPEC-B B5) تحت بطاقة المفاتيح مباشرة
+      + advancedWrap(connectedCard());      // «الأنظمة المتصلة» (SPEC-B B5) تحت بطاقة المفاتيح مباشرة
   }
   function refreshKeys() { load('keys', true, true); load('status', true, true); load('switches', true, true); }
 
@@ -339,6 +339,13 @@
       + '<span class="v2sb-chip tone-' + esc(t.tone) + '">' + esc(t.stateLabel) + '</span></div>'
       + '<p class="v2sb-km">' + esc(t.scopeLabel) + '</p><p class="v2sb-ks">' + esc(t.usedText) + '</p></div>'
       + (t.revoked ? '' : '<div class="v2sb-kact"><button type="button" class="v3-btn2 v2sb-kb v2sb-kdel" data-a="trevoke" data-id="' + esc(t.id) + '">ألغِه</button></div>') + '</article>';
+  }
+  // الموبايل: الأنظمة المتصلة ورموز الدخول كلام تقني للمؤسس ⇒ تحت «متقدّم» مطوية. الكمبيوتر: كما كانت.
+  function advancedWrap(html) {
+    try {
+      if (window.matchMedia && window.matchMedia('(max-width:760px)').matches) return '<details class="v2sb-advd"><summary>متقدّم</summary>' + html + '</details>';
+    } catch (e) {}
+    return html;
   }
   function connectedCard() {
     var ls = srcState('links'), ts = srcState('mcpTokens'), li = linksInfo(), ti = tokensInfo(), lbody, tbody;
