@@ -522,6 +522,37 @@ APPS = cfx.base_apps()
 
 
 @needs_node
+def test_application_ticket_step_two_fields_present_and_robust():
+    full = dict(APPS[1], experience_years=7, current_role='محامٍ في مكتب تجاري', courses_given=['صياغة العقود', 'الإثبات'],
+                intro_video_url='https://youtu.be/abc123', cv_url='https://cv.test/t.pdf', portfolio_url='https://t.test/sample')
+    t = _co('appTickets', [full], {'now': NOW})[0]
+    assert t['introVideo'] == 'https://youtu.be/abc123'
+    assert t['experience'] == {'years': '٧ سنوات', 'role': 'محامٍ في مكتب تجاري', 'courses': 'صياغة العقود، الإثبات'}
+    assert t['links']['cv'] == 'https://cv.test/t.pdf' and t['links']['portfolio'] == 'https://t.test/sample'
+    assert 'فيديو تعريفي' in t['line'] and 'سيرة ذاتية' in t['line'] and 'نماذج أعمال' in t['line']
+    # الحقول تغيب (طلب قديم) ⇒ لا انهيار ولا ذكر لها
+    old = _co('appTickets', [APPS[0]], {'now': NOW})[0]
+    assert old['introVideo'] == '' and old['experience'] == {'years': '', 'role': '', 'courses': ''}
+    assert 'فيديو' not in old['line'] and old['line'] == '٣ مجالات، لينكدإن، سيرة ذاتية، نماذج أعمال'
+    # أشكال غريبة ⇒ تُهمل بهدوء، والروابط غير الويب لا تمر
+    odd = _co('appTickets', [dict(APPS[0], intro_video_url='javascript:alert(1)', experience_years={'x': 1}, courses_given=None, current_role=None)], {'now': NOW})[0]
+    assert odd['introVideo'] == '' and odd['experience'] == {'years': '', 'role': '', 'courses': ''}
+    one = _co('appTickets', [dict(APPS[0], experience_years='1', courses_given='دورة واحدة', intro_video_url='  http://vimeo.com/1  ')], {'now': NOW})[0]
+    assert one['experience']['years'] == 'سنة واحدة' and one['experience']['courses'] == 'دورة واحدة' and one['introVideo'] == 'http://vimeo.com/1'
+    assert _co('appTickets', [dict(APPS[0], experience_years='أكثر من عشر سنوات')], {'now': NOW})[0]['experience']['years'] == 'أكثر من عشر سنوات'
+
+
+def test_application_detail_sheet_renders_new_fields_and_only_web_links():
+    js = _read('dashboard-cloud', 'v2s', 'courses.js')
+    i = js.index('function openAppDetail')
+    body = js[i:i + 2600]
+    for w in ("'سنوات الخبرة'", "'العمل الحالي أو الأخير'", "'دورات قدّمها'", "'الفيديو التعريفي'", "a.introVideo", "a.experience", "a.links.cv", "a.links.portfolio"):
+        assert w in body, w
+    assert "/^https?:" in body.split('function link')[1].split('\n')[0]                    # لا href إلا لرابط ويب
+    assert 'استشار' not in body and '·' not in body
+
+
+@needs_node
 def test_application_tickets():
     t = _co('appTickets', APPS, {'now': NOW})
     by = {x['id']: x for x in t}

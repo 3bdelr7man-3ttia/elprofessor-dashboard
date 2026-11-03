@@ -75,7 +75,7 @@
   var FIELDS = [['ar', 'المصطلح بالعربية', 300, true, false], ['en', 'المصطلح بالإنجليزية', 300, true, true], ['fr', 'المصطلح بالفرنسية', 300, false, true],
                 ['definition_ar', 'التعريف', 3000, true, false], ['example_en', 'المثال بالإنجليزية', 1500, false, true], ['example_ar', 'المثال بالعربية', 1500, false, false],
                 ['false_friend_note_ar', 'الخطأ الشائع', 2000, false, false], ['countries_note_ar', 'ملاحظة الدول', 2000, false, false]];
-  var IMPORT_SOURCES = [['seed', 'القاموس الأساسي (٨٠)'], ['course1', 'مرشّحة من دورة القراءة (٣١)'], ['upload', 'ملف من جهازك']];
+  var IMPORT_SOURCES = [['seed', 'القاموس الأساسي (٨٠)'], ['course1', 'مرشّحة من دورة القراءة (٣١)'], ['ext', 'توسعة القاموس (١٥٠)'], ['upload', 'ملف من جهازك']];
   var PROBLEM_LABELS = FIELDS.map(function (f) { return [f[0], f[1]]; }).concat([['slug', 'رابط المصطلح'], ['area', 'المجال'], ['related', 'المصطلحات القريبة']]);
 
   function areaText(code) { return labelOf(AREAS, str(code)) || labelOf(AREAS, OTHER); }

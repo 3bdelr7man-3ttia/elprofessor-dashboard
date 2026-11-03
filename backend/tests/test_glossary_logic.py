@@ -382,7 +382,7 @@ def test_import_file_check_body_and_preview_view():
     assert all(b['ok'] and b['count'] == 1 for b in both)
     assert G('importBody', 'seed', None) == {'source': 'seed'} and G('importBody', 'upload', both[0]) == {'source': 'upload', 'payload': {'items': [{'id': 'a-b'}]}}
     assert G('importCanPreview', 'upload', None)['ok'] is False and G('importCanPreview', 'seed', None)['ok'] is True and G('importCanPreview', 'x', None)['ok'] is False
-    assert [s[1] for s in G('IMPORT_SOURCES')] == ['القاموس الأساسي (٨٠)', 'مرشّحة من دورة القراءة (٣١)', 'ملف من جهازك']
+    assert [s[1] for s in G('IMPORT_SOURCES')] == ['القاموس الأساسي (٨٠)', 'مرشّحة من دورة القراءة (٣١)', 'توسعة القاموس (١٥٠)', 'ملف من جهازك']
     v = G('importView', {'source': 'seed', 'total': 80, 'new_count': 78, 'skip_existing': 1, 'skip_duplicate_in_file': 0, 'invalid_count': 1,
                          'problems': [{'row': 7, 'slug': 'bad-one', 'problem': 'definition_ar: النص أطول من 3000 حرفًا (definition_ar)'}, {'row': 9, 'slug': None, 'problem': 'الحقل مطلوب: ar'}],
                          'sample': [{'slug': 'a-b', 'ar': 'أ', 'en': 'a', 'area': 'litigation', 'area_label': 'تقاضٍ'}]})

@@ -701,6 +701,38 @@ def test_builtin_sources_are_shipped_and_valid():
     assert gr.load_source('seed', base='/nonexistent') is None
 
 
+def test_ext_source_is_shipped_valid_and_disjoint():
+    seed, c1, ext = gr.load_source('seed'), gr.load_source('course1'), gr.load_source('ext')
+    assert 'ext' in gr.SOURCES and gr._DATA_FILES['ext'] == 'glossary_ext.json'
+    assert len(ext) == 150
+    areas = set()
+    for i, raw in enumerate(ext):
+        f, probs = gr.clean_row(raw, i)
+        assert not probs, (raw.get('id'), probs)
+        areas.add(f['area'])
+    assert {'realestate', 'banking', 'data'} <= areas and areas <= set(gr.AREA_CODES)
+    assert len({r['id'] for r in seed + c1 + ext}) == 261                                    # لا تعارض مع المصدرين الآخرين
+
+
+def test_ext_preview_and_import_make_drafts_only(ctx, plat):
+    _term('exclusion-clause', 'نص محلي', 'exclusion clause', definition_ar='تعريف كتبه الأدمن')
+    j = call(ctx, 'POST', '/seed/preview', {'source': 'ext'}, confirmed=False).get_json()
+    assert (j['source'], j['total'], j['new_count'], j['skip_existing'], j['invalid_count']) == ('ext', 150, 149, 1, 0)
+    assert GlossaryTerm.query.count() == 1 and plat.pushes == []
+    r = call(ctx, 'POST', '/seed/import', {'source': 'ext'})
+    j = r.get_json()
+    assert r.status_code == 200 and j['imported'] == 149 and j['skip_existing'] == 1 and GlossaryTerm.query.count() == 150
+    mine = GlossaryTerm.query.filter_by(slug='exclusion-clause').one()
+    assert mine.ar == 'نص محلي' and mine.source == 'manual'                                  # لا يُكتب فوق ما كتبه الأدمن
+    rows = GlossaryTerm.query.filter(GlossaryTerm.slug != 'exclusion-clause').all()
+    assert {t.status for t in rows} == {'draft'} and {t.source for t in rows} == {'ext'}
+    assert all(t.reviewed_at is None and t.published_at is None and t.saha_topic_id is None for t in rows)
+    assert {'realestate', 'banking', 'data'} <= {t.area for t in rows}
+    assert plat.pushes == []
+    assert audits('glossary.seed_import')[0][2]['source'] == 'ext'
+    assert call(ctx, 'POST', '/seed/import', {'source': 'ext'}).get_json()['imported'] == 0   # مرّة ثانية ⇒ كله يُتخطّى
+
+
 def test_preview_is_read_only_and_counts(ctx, plat):
     _term('consideration', 'المقابل', 'consideration')
     r = call(ctx, 'POST', '/seed/preview', {'source': 'seed'}, confirmed=False)
@@ -976,7 +1008,9 @@ def test_registered_guarded_in_app_and_docker_ships_it():
     d = _read('Dockerfile')
     assert 'COPY backend/v2_glossary_routes.py /app/v2_glossary_routes.py' in d
     assert 'backend/data/glossary_seed.json' in d and 'backend/data/glossary_course1.json' in d and '/app/data/' in d
+    assert 'backend/data/glossary_ext.json' in d
     assert os.path.isfile(os.path.join(BACKEND, 'data', 'glossary_seed.json')) and os.path.isfile(os.path.join(BACKEND, 'data', 'glossary_course1.json'))
+    assert os.path.isfile(os.path.join(BACKEND, 'data', 'glossary_ext.json'))
 
 
 def test_module_does_not_import_app_and_model_is_created_at_boot():

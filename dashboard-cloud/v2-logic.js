@@ -3770,6 +3770,7 @@
   }
 
   // —— طلبات المدرّبين
+  function webUrl(v) { v = s(v); return /^https?:\/\/[^\s]+$/i.test(v) ? v : ''; }     // رابط ويب فقط (لا javascript: ولا data:)
   function appTickets(apps, opts) {
     opts = opts || {};
     var now = opts.now || 0;
@@ -3778,11 +3779,20 @@
       var exp = (Array.isArray(a.expertise) ? a.expertise : []).map(s).filter(Boolean);
       var summary = s(a.experience_summary);
       var li = s(a.linkedin_url), cv = s(a.cv_url), pf = s(a.portfolio_url);
+      // حقول الخطوة الثانية من نموذج المدرّب (قد تغيب في الطلبات القديمة): فيديو تعريفي + تفاصيل الخبرة
+      var video = webUrl(a.intro_video_url);
+      var yrs = a.experience_years, yrsText = '';
+      if (typeof yrs === 'number' && isFinite(yrs) && yrs >= 0) yrsText = yrs === 0 ? '' : U.U(Math.round(yrs), ['سنة واحدة', 'سنتان', 'سنوات', 'سنة']);
+      else if (typeof yrs === 'string' && s(yrs)) yrsText = /^\d+$/.test(s(yrs)) && +s(yrs) > 0 ? U.U(+s(yrs), ['سنة واحدة', 'سنتان', 'سنوات', 'سنة']) : s(yrs).slice(0, 80);
+      var given = a.courses_given;
+      given = Array.isArray(given) ? given.map(function (x) { return s(x && typeof x === 'object' ? (x.title || x.name) : x); }).filter(Boolean).join('، ') : (typeof given === 'number' ? '' : s(given));
+      var experience = { years: yrsText, role: s(a.current_role).slice(0, 200), courses: given.slice(0, 600) };
       var facts = [exp.length ? U.U(exp.length, ['مجال واحد', 'مجالان', 'مجالات', 'مجالًا']) : 'بلا مجال محدّد'];
       var links = [];
       if (li) links.push('لينكدإن');
       if (cv) links.push('سيرة ذاتية');
       if (pf) links.push('نماذج أعمال');
+      if (video) links.push('فيديو تعريفي');
       if (links.length) facts = facts.concat(links); else facts.push('بلا روابط');
       if (summary.length < 40) facts.push('نبذة الخبرة قصيرة');
       if (s(a.founding_lead_id)) facts.push('جاء من دعوة الخبراء المؤسسين');
@@ -3797,7 +3807,7 @@
       return { id: s(a.id) || String(a.id || ''), name: s(a.user_name) || s(a.user_email) || 'مقدّم الطلب', email: s(a.user_email).toLowerCase(), headline: s(a.headline),
                expertise: exp, chips: exp.slice(0, 3), moreChips: Math.max(0, exp.length - 3), timer: timer, text: timer ? L.v2TimerText(timer, now) : '', tone: h == null ? 'none' : tone(h),
                line: facts.join('، ') + (ok ? '' : '، ينقص الطلب: ' + missing.join('، ')), suggestion: ok ? 'accept' : 'open', missing: missing,
-               links: { linkedin: li, cv: cv, portfolio: pf }, summary: summary, createdAt: s(a.created_at) };
+               links: { linkedin: li, cv: cv, portfolio: pf }, introVideo: video, experience: experience, summary: summary, createdAt: s(a.created_at) };
     }).sort(function (x, y) { return (x.timer ? x.timer.at : Infinity) - (y.timer ? y.timer.at : Infinity); });
   }
 

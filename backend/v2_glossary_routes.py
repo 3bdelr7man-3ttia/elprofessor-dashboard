@@ -76,8 +76,8 @@ MAX_LEN = {'ar': 300, 'en': 300, 'fr': 300, 'definition_ar': 3000, 'example_en':
 REQUIRED = ('ar', 'en', 'definition_ar')
 RELATED_MAX = 20
 IMPORT_MAX = 500
-SOURCES = ('seed', 'course1', 'upload')
-_DATA_FILES = {'seed': 'glossary_seed.json', 'course1': 'glossary_course1.json'}
+SOURCES = ('seed', 'course1', 'ext', 'upload')
+_DATA_FILES = {'seed': 'glossary_seed.json', 'course1': 'glossary_course1.json', 'ext': 'glossary_ext.json'}
 _URL_RE = re.compile(r'https?://|www\.', re.I)
 _CTRL_RE = re.compile(r'[\x00-\x08\x0b\x0c\x0e-\x1f]')
 # محارف الاتجاه (LRM/RLM · LRE…RLO · LRI…PDI): تقلب ما بعدها في الصفحة، فتُحذف من كل نص يأتي من الزائر أو يصير ختمًا عامًّا
@@ -247,7 +247,7 @@ def clean_row(raw, index=0):
 
 
 def load_source(name, base=None):
-    """الصفوف الخام لمصدر مدمج (seed | course1) من backend/data. None لو الملف غاب أو لم يُقرأ."""
+    """الصفوف الخام لمصدر مدمج (seed | course1 | ext) من backend/data. None لو الملف غاب أو لم يُقرأ."""
     path = os.path.join(base or os.path.join(os.path.dirname(os.path.abspath(__file__)), 'data'), _DATA_FILES[name])
     try:
         with open(path, encoding='utf-8') as fh:

@@ -721,7 +721,7 @@ class GlossaryTerm(db.Model):
     reviewed_at = db.Column(db.DateTime)
     reviewer_name_public = db.Column(db.Boolean, default=False, nullable=False)
     saha_topic_id = db.Column(db.String(80))
-    source = db.Column(db.String(20), default='manual')  # seed | course1 | upload | manual
+    source = db.Column(db.String(20), default='manual')  # seed | course1 | ext | upload | manual
     created_at = db.Column(db.DateTime, default=datetime.datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.datetime.utcnow)
     published_at = db.Column(db.DateTime)

@@ -863,10 +863,12 @@
   }
   function openAppDetail(id) {
     var a = appById(id); if (!a) return;
-    function link(url, label) { return url ? '<a href="' + esc(url) + '" target="_blank" rel="noopener noreferrer">' + esc(label) + '</a>' : ''; }
+    function link(url, label) { return /^https?:\/\/\S+$/i.test(url || '') ? '<a href="' + esc(url) + '" target="_blank" rel="noopener noreferrer">' + esc(label) + '</a>' : ''; }
     var links = [link(a.links.linkedin, 'لينكدإن'), link(a.links.cv, 'السيرة الذاتية'), link(a.links.portfolio, 'نماذج الأعمال')].filter(Boolean).join('، ');
+    var ex = a.experience || {};
     var s = openSheet('طلب ' + a.name, factsTable([['العنوان المهني', esc(a.headline || '—')], ['المجالات', esc(a.expertise.length ? a.expertise.join('، ') : 'بلا مجال محدّد')],
-      ['نبذة الخبرة', esc(a.summary || '—')], ['الروابط', links || 'بلا روابط'], ['تاريخ التقديم', esc(a.createdAt ? U.dateText(a.createdAt) : '—')]])
+      ['نبذة الخبرة', esc(a.summary || '—')], ['سنوات الخبرة', esc(ex.years || '')], ['العمل الحالي أو الأخير', esc(ex.role || '')], ['دورات قدّمها', esc(ex.courses || '')],
+      ['الفيديو التعريفي', link(a.introVideo, 'شاهد الفيديو')], ['الروابط', links || 'بلا روابط'], ['تاريخ التقديم', esc(a.createdAt ? U.dateText(a.createdAt) : '—')]])
       + '<div class="v2co-brain">' + BRAIN + '<p>' + esc(a.line) + '</p></div><div class="v2co-macts">'
       + (a.suggestion === 'accept' ? '<button type="button" class="v2co-btn1" id="co_acc">اقبله وأرسل الاتفاقية</button>' : '')
       + '<button type="button" class="v2co-btn2" id="co_rej">ارفض الطلب</button></div>'
