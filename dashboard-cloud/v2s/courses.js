@@ -19,7 +19,7 @@
   var CO = window.V2CO = {};
   var NA = C.NA;
   var S = { view: null, screen: '', sig: '', poll: null, minute: null, list: false, filter: 'all', search: '', col: '', tr: '', note: null, noteT: null,
-            busy: {}, sheetBusy: false, nowOverride: 0, fresh: {}, editing: '' };
+            busy: {}, sheetBusy: false, nowOverride: 0, fresh: {}, editing: '', appsView: 'pending' };
   try { var sc = localStorage.getItem('v2co_col'); if (sc === 'review' || sc === 'building' || sc === 'published') S.col = sc; } catch (e) {}
   try { var st = localStorage.getItem('v2co_tr'); if (st === 'apps' || st === 'list') S.tr = st; } catch (e) {}
 
@@ -36,10 +36,10 @@
 
   // ------------------------------------------------------------------ مصادر (كلٌّ تفشل لوحدها)
   var SRC = {};
-  var PATHS = { courses: '/platform-courses', apps: '/platform-trainer-applications?status=pending', experts: '/platform-experts', schedules: '/platform-schedules',
+  var PATHS = { courses: '/platform-courses', apps: '/platform-trainer-applications?status=pending', appsCancelled: '/platform-trainer-applications?status=cancelled', experts: '/platform-experts', schedules: '/platform-schedules',
                 offers: '/platform-course-offers?status=pending', progStats: '/platform-program-requests/stats', programs: '/platform-program-requests?status=pending',
                 stats: '/v2/courses/stats', shares: '/v2/shares', courses2: '/v2/courses2' };
-  var LABEL = { courses: 'الدورات', apps: 'طلبات المدرّبين', experts: 'المدرّبون', schedules: 'مواعيد الدورات الحيّة', offers: 'عروض الأسعار', progStats: 'أكثر الدورات طلبًا',
+  var LABEL = { courses: 'الدورات', apps: 'طلبات المدرّبين', appsCancelled: 'الطلبات الملغاة', experts: 'المدرّبون', schedules: 'مواعيد الدورات الحيّة', offers: 'عروض الأسعار', progStats: 'أكثر الدورات طلبًا',
                 programs: 'طلبات البرامج', stats: 'المبيعات ونسبة الإكمال', shares: 'جدول النسب', courses2: 'دورات المحرّر' };
   var OPTIONAL = { stats: 1, shares: 1, courses2: 1 };            // ٤٠٤ فيها = «غير متاح بعد» بهدوء، لا شريط تحذير
   function pathOf(k) {
@@ -429,17 +429,38 @@
   }
 
   // ------------------------------------------------------------------ المدرّبون
+  // R10: صفة الانضمام + الخدمات المطلوبة + حالة الفيديو. الطلب القديم بلا join_as يظهر «مدرّب» بلا سطر فيديو إلا لو فيه فيديو.
+  var VIDEO_TONE = { sent: 'green', later: 'amber', overdue: 'red', missing: 'amber', cancelled: 'grey' };
+  function appChipsHtml(a) {
+    var out = chip(a.joinAsText, 'wine');
+    if (a.claimed.length) out += chip('يقدّم ' + U.U(a.claimed.length, ['خدمة واحدة', 'خدمتين', 'خدمات', 'خدمة']), 'grey');      // أسماء الخدمات في ورقة الطلب
+    if (a.video && a.video.text) out += chip(a.video.text, VIDEO_TONE[a.video.kind] || 'grey');
+    return '<p class="v2co-chips">' + out + '</p>';
+  }
+  function appVideoActs(a) {
+    if (!a.video || !a.video.open) return '';
+    return '<div class="v2co-acts two"><button type="button" class="v2co-btn2" data-a="apppostpone" data-id="' + esc(a.id) + '">تأجيل يومين</button>'
+      + '<button type="button" class="v2co-btn2" data-a="appcancel" data-id="' + esc(a.id) + '">إلغاء</button></div>';
+  }
+  function acceptLabel(a) { return a.joinAs === 'expert' ? 'اقبله خبيرًا' : 'اقبله وأرسل الاتفاقية'; }
   function appTicketHtml(a) {
     var more = a.moreChips ? chip('+' + ar(a.moreChips), 'grey') : '';
     return '<article class="v2co-t tone-' + esc(a.tone === 'none' ? 'ok' : a.tone) + '" data-id="' + esc(a.id) + '">'
-      + '<div class="v2co-strip"><span class="v2co-type">طلب مدرّب جديد</span>' + timeHtml(a.text, a.tone, a.timer && a.timer.at) + '</div>'
+      + '<div class="v2co-strip"><span class="v2co-type">' + (a.hasJoin ? 'طلب انضمام جديد' : 'طلب مدرّب جديد') + '</span>' + timeHtml(a.text, a.tone, a.timer && a.timer.at) + '</div>'
       + '<div class="v2co-body"><h3><button type="button" class="v2co-open" data-a="appopen" data-id="' + esc(a.id) + '">' + esc(a.name) + '</button></h3>'
       + (a.headline ? '<p class="v2co-who">' + esc(a.headline) + '</p>' : '')
+      + appChipsHtml(a)
       + (a.chips.length ? '<p class="v2co-chips">' + a.chips.map(function (x) { return chip(x, 'grey'); }).join('') + more + '</p>' : '')
       + '<div class="v2co-brain">' + BRAIN + '<p>' + esc(a.line) + '</p></div>'
-      + '<div class="v2co-acts two">' + (a.suggestion === 'accept' ? '<button type="button" class="v2co-btn1" data-a="appaccept" data-id="' + esc(a.id) + '">اقبله وأرسل الاتفاقية</button>'
+      + '<div class="v2co-acts two">' + (a.suggestion === 'accept' ? '<button type="button" class="v2co-btn1" data-a="appaccept" data-id="' + esc(a.id) + '">' + acceptLabel(a) + '</button>'
         : '<button type="button" class="v2co-btn1" data-a="appopen" data-id="' + esc(a.id) + '">افتح الطلب</button>')
-      + '<button type="button" class="v2co-btn2" data-a="appreject" data-id="' + esc(a.id) + '">ارفض</button></div></div></article>';
+      + '<button type="button" class="v2co-btn2" data-a="appreject" data-id="' + esc(a.id) + '">ارفض</button></div>' + appVideoActs(a) + '</div></article>';
+  }
+  // طلب أُلغي (مهلة الفيديو): للقراءة فقط، لا قبول ولا رفض.
+  function appCancelledHtml(a) {
+    return '<article class="v2co-t tone-ok" data-id="' + esc(a.id) + '"><div class="v2co-strip"><span class="v2co-type">طلب انضمام</span></div>'
+      + '<div class="v2co-body"><h3>' + esc(a.name) + '</h3>' + appChipsHtml(a)
+      + '<p class="v2co-fine">' + esc(a.cancelledAt ? 'أُلغي في ' + U.dateText(a.cancelledAt) : 'أُلغي') + '، ويستطيع مقدّم الطلب التقديم من جديد.</p></div></article>';
   }
   function trainerRowHtml(r) {
     return '<li class="v2co-trw">' + avatar(r.name) + '<div class="v2co-trt"><b>' + personLink(r.name, r.email) + '</b>' + (r.countsText ? '<span class="v2co-l1">' + esc(r.countsText) + '</span>' : '')
@@ -448,6 +469,12 @@
       + '<div class="v2co-menu">' + (r.email ? '<a class="v2co-mi" href="' + esc(L.sectionHash('people', 'person', r.email)) + '" data-person="' + esc(r.email) + '">افتح صفحة الشخص</a>' : '')
       + '<button type="button" class="v2co-mi red" data-a="tstop" data-email="' + esc(r.email) + '">أوقف كمدرّب</button></div></details></li>';
   }
+  function overdueCount() { var n = C.videoOverdueCount(rowsOf('apps', 'applications'), now()); return typeof n === 'number' ? n : 0; }
+  function overdueStrip() {
+    var n = overdueCount(); if (!n) return '';
+    return '<div class="v2co-warn v2co-overdue" role="status"><span>' + esc(C.videoOverdueLine(n)) + '</span>'
+      + '<button type="button" class="v2co-btn2" data-a="appsweep">إلغاء المتأخر</button></div>';
+  }
   function drawTrainers(v) {
     var apps = C.appTickets(rowsOf('apps', 'applications'), { now: now() });
     var rows = C.trainerRows(rowsOf('experts', 'experts'), rowsOf('courses', 'courses'), { now: now() });
@@ -455,6 +482,18 @@
     var appsHtml;
     if (!apps) appsHtml = pending('apps') ? loadingBlock('طلبات المدرّبين') : unavailable('طلبات المدرّبين');
     else appsHtml = apps.length ? '<div class="v2co-tgrid two">' + apps.map(appTicketHtml).join('') + '</div>' : '<div class="v2co-empty"><b>لا طلبات انضمام جديدة</b></div>';
+    // R10: الملغاة (مهلة الفيديو) في تصفية جانبية، وتنبيه «فات موعد الفيديو» بزر إلغاء المتأخر
+    var cancelled = C.appTickets(rowsOf('appsCancelled', 'applications'), { now: now() });
+    var cView = S.appsView === 'cancelled';
+    if (cView) {
+      if (!cancelled) appsHtml = pending('appsCancelled') ? loadingBlock('الطلبات الملغاة') : unavailable('الطلبات الملغاة');
+      else appsHtml = cancelled.length ? '<div class="v2co-tgrid two">' + cancelled.map(appCancelledHtml).join('') + '</div>' : '<div class="v2co-empty"><b>لا طلبات ملغاة</b></div>';
+    }
+    var fchips = '<div class="v2co-fchips" role="group" aria-label="تصفية الطلبات">'
+      + '<button type="button" class="v2co-fchip' + (cView ? '' : ' on') + '" aria-pressed="' + (!cView) + '" data-a="appsview" data-v="pending">قيد المراجعة <b>' + esc(apps ? ar(apps.length) : '—') + '</b></button>'
+      + '<button type="button" class="v2co-fchip' + (cView ? ' on' : '') + '" aria-pressed="' + cView + '" data-a="appsview" data-v="cancelled">أُلغيت <b>' + esc(cancelled ? ar(cancelled.length) : '—') + '</b></button></div>';
+    appsHtml = fchips + appsHtml;
+    var overdue = overdueStrip();
     var listHtml;
     if (!rows) listHtml = pending('experts') ? loadingBlock('المدرّبين') : unavailable('المدرّبين');
     else {
@@ -465,7 +504,7 @@
     var seg = S.tr || (apps && apps.length ? 'apps' : (apps ? 'list' : 'apps'));
     var segHtml = '<button type="button" role="tab" class="v2co-segb' + (seg === 'apps' ? ' on' : '') + '" aria-selected="' + (seg === 'apps') + '" data-a="trseg" data-seg="apps"><span>الطلبات</span><b>' + esc(apps ? ar(apps.length) : '—') + '</b></button>'
       + '<button type="button" role="tab" class="v2co-segb' + (seg === 'list' ? ' on' : '') + '" aria-selected="' + (seg === 'list') + '" data-a="trseg" data-seg="list"><span>المدرّبون</span><b>' + esc(rows ? ar(rows.filter(function (r) { return r.listed; }).length) : '—') + '</b></button>';
-    v.innerHTML = '<div class="v2co" data-screen="trainers">' + noteStrip() + warnStrip(failed)
+    v.innerHTML = '<div class="v2co" data-screen="trainers">' + noteStrip() + warnStrip(failed) + overdue
       + '<div class="v2co-seg" role="tablist" aria-label="الطلبات والمدرّبون">' + segHtml + '</div>'
       + '<div class="v2co-two" data-active="' + seg + '"><section class="v2co-colbox" data-col="apps"><h2 class="v2co-h2">طلبات المدرّبين <span class="v2co-cnt">' + esc(apps ? ar(apps.length) : '—') + '</span></h2>' + appsHtml + '</section>'
       + '<section class="v2co-colbox card" data-col="list"><h2 class="v2co-h2">المدرّبون</h2>' + listHtml + '</section></div></div>';
@@ -833,17 +872,20 @@
   }
   function appById(id) { var l = C.appTickets(rowsOf('apps', 'applications'), { now: now() }) || []; for (var i = 0; i < l.length; i++) if (l[i].id === id) return l[i]; return null; }
   function afterApp(text) {
-    setNote(text); load('apps', true); load('experts', true); redraw();
+    setNote(text); load('apps', true); load('appsCancelled', true); load('experts', true); redraw();
+    try { if (ep() && ep().reload) ep().reload('inbox', function () { redraw(); }); } catch (e) {}      // تنبيه «فات موعد الفيديو» في الرئيسية يتحدّث
   }
   function openAppAccept(id) {
     var a = appById(id); if (!a) return;
     flow({
-      title: 'اقبل المدرّب',
-      form: '<p class="v2co-lead">قبول ' + esc(a.name) + ' مدرّبًا؟</p>' + listHtml(['يصل إلى مقدّم الطلب بريد فيه اتفاقية التدريب ليوقّعها.', 'لا تُنشر أي دورة لمقدّم الطلب قبل توقيع الاتفاقية.'].map(esc)),
+      title: a.joinAs === 'expert' ? 'اقبل الخبير' : 'اقبل المدرّب',
+      form: a.joinAs === 'expert'
+        ? '<p class="v2co-lead">قبول ' + esc(a.name) + ' خبيرًا؟</p>' + listHtml(['يصل إلى مقدّم الطلب بريد القبول.', 'لا اتفاقية تدريب في هذه الحالة.'].map(esc))
+        : '<p class="v2co-lead">قبول ' + esc(a.name) + (a.joinAs === 'both' ? ' خبيرًا ومدرّبًا؟' : ' مدرّبًا؟') + '</p>' + listHtml(['يصل إلى مقدّم الطلب بريد فيه اتفاقية التدريب ليوقّعها.', 'لا تُنشر أي دورة لمقدّم الطلب قبل توقيع الاتفاقية.'].map(esc)),
       collect: function () { return { ok: true, payload: {} }; },
-      btnConfirm: 'اقبل وأرسل الاتفاقية', busy: 'جارٍ القبول…',
+      btnConfirm: a.joinAs === 'expert' ? 'اقبل الخبير' : 'اقبل وأرسل الاتفاقية', busy: 'جارٍ القبول…',
       send: function () { return decideP({ apiKind: 'trainer', apiId: id }, 'approve', ''); },
-      onOk: function () { afterApp('قُبل ' + a.name + ' مدرّبًا، وأُرسلت إليه الاتفاقية'); },
+      onOk: function () { afterApp(a.joinAs === 'expert' ? 'قُبل ' + a.name + ' خبيرًا' : 'قُبل ' + a.name + (a.joinAs === 'both' ? ' خبيرًا ومدرّبًا' : ' مدرّبًا') + '، وأُرسلت إليه الاتفاقية'); },
       onStale: function () { load('apps', true); }
     });
   }
@@ -861,6 +903,43 @@
       onStale: function () { load('apps', true); }
     });
   }
+  // R10: إلغاء طلب لم يصل فيديوه (ليس رفضًا) · تأجيل المهلة يومين · إلغاء كل المتأخر. الخادم يفرض الحالات (٤٠٩ لو القرار اتأخد).
+  function openAppCancel(id) {
+    var a = appById(id); if (!a) return;
+    flow({
+      title: 'إلغاء الطلب',
+      form: '<p class="v2co-lead">إلغاء طلب ' + esc(a.name) + '؟</p>' + listHtml(['يصله بريد محايد، وليس رفضًا.', 'يستطيع التقديم من جديد.'].map(esc)),
+      collect: function () { return { ok: true, payload: {} }; },
+      btnConfirm: 'ألغِ الطلب', danger: true, busy: 'جارٍ الإلغاء…',
+      send: function () { return post('/platform-trainer-applications/' + encodeURIComponent(id) + '/cancel', {}); },
+      onOk: function () { afterApp('أُلغي طلب ' + a.name); },
+      onStale: function () { load('apps', true); }
+    });
+  }
+  function openAppPostpone(id) {
+    var a = appById(id); if (!a) return;
+    flow({
+      title: 'تأجيل مهلة الفيديو',
+      form: '<p class="v2co-lead">تأجيل مهلة فيديو ' + esc(a.name) + ' يومين؟</p>' + listHtml(['يمتدّ آخر موعد للفيديو ٤٨ ساعة.'].map(esc)),
+      collect: function () { return { ok: true, payload: {} }; },
+      btnConfirm: 'أجّل يومين', busy: 'جارٍ التأجيل…',
+      send: function () { return post('/platform-trainer-applications/' + encodeURIComponent(id) + '/postpone', {}); },
+      onOk: function () { afterApp('أُجّلت مهلة فيديو ' + a.name + ' يومين'); },
+      onStale: function () { load('apps', true); }
+    });
+  }
+  function openAppSweep() {
+    var n = overdueCount(); if (!n) return;
+    flow({
+      title: 'إلغاء المتأخر',
+      form: '<p class="v2co-lead">' + esc(C.videoOverdueLine(n)) + '</p>' + listHtml(['يُلغى كل طلب فات موعد فيديوه ولم يصل فيديوه.', 'يصل أصحابها بريد محايد، وليس رفضًا.'].map(esc)),
+      collect: function () { return { ok: true, payload: {} }; },
+      btnConfirm: 'ألغِ المتأخر', danger: true, busy: 'جارٍ الإلغاء…',
+      send: function () { return post('/platform-trainer-applications/expire-sweep', {}); },
+      onOk: function (res) { var k = res && typeof res.cancelled === 'number' ? res.cancelled : 0; afterApp(k ? 'أُلغي ' + U.U(k, ['طلب واحد', 'طلبان', 'طلبات', 'طلبًا']) : 'لا طلب متأخر الآن'); },
+      onStale: function () { load('apps', true); }
+    });
+  }
   function openAppDetail(id) {
     var a = appById(id); if (!a) return;
     function link(url, label) { return /^https:\/\/\S+$/i.test(url || '') ? '<a href="' + esc(url) + '" target="_blank" rel="noopener noreferrer">' + esc(label) + '</a>' : ''; }
@@ -868,14 +947,18 @@
     var ex = a.experience || {};
     var s = openSheet('طلب ' + a.name, factsTable([['العنوان المهني', esc(a.headline || '—')], ['المجالات', esc(a.expertise.length ? a.expertise.join('، ') : 'بلا مجال محدّد')],
       ['نبذة الخبرة', esc(a.summary || '—')], ['سنوات الخبرة', esc(ex.years || '')], ['العمل الحالي أو الأخير', esc(ex.role || '')], ['دورات قدّمها', esc(ex.courses || '')],
-      ['الفيديو التعريفي', link(a.introVideo, 'شاهد الفيديو')], ['الروابط', links || 'بلا روابط'], ['تاريخ التقديم', esc(a.createdAt ? U.dateText(a.createdAt) : '—')]])
+      ['الفيديو التعريفي', link(a.introVideo, 'شاهد الفيديو')], ['الروابط', links || 'بلا روابط'], ['تاريخ التقديم', esc(a.createdAt ? U.dateText(a.createdAt) : '—')],
+      ['تنضم بصفة', esc(a.joinAsText)], ['الخدمات التي يقدّمها', esc(a.claimed.join('، '))], ['رقم التواصل', a.phone ? '<bdi dir="ltr">' + esc(a.phone.replace(/\d/g, function (d) { return '٠١٢٣٤٥٦٧٨٩'.charAt(+d); })) + '</bdi>' : ''], ['حالة الفيديو', esc(a.video && a.video.text)]])
       + '<div class="v2co-brain">' + BRAIN + '<p>' + esc(a.line) + '</p></div><div class="v2co-macts">'
-      + (a.suggestion === 'accept' ? '<button type="button" class="v2co-btn1" id="co_acc">اقبله وأرسل الاتفاقية</button>' : '')
-      + '<button type="button" class="v2co-btn2" id="co_rej">ارفض الطلب</button></div>'
+      + (a.suggestion === 'accept' ? '<button type="button" class="v2co-btn1" id="co_acc">' + acceptLabel(a) + '</button>' : '')
+      + '<button type="button" class="v2co-btn2" id="co_rej">ارفض الطلب</button>'
+      + (a.video && a.video.open ? '<button type="button" class="v2co-btn2" id="co_pp2">تأجيل يومين</button><button type="button" class="v2co-btn2" id="co_cx">إلغاء</button>' : '') + '</div>'
       + (a.email ? '<p class="v2co-fine"><a class="v2co-person" href="' + esc(L.sectionHash('people', 'person', a.email)) + '" data-person="' + esc(a.email) + '" id="co_pp">افتح صفحة الشخص</a></p>' : ''));
     if (!s) return;
     var acc = q('#co_acc', s); if (acc) acc.onclick = function () { closeSheet(); openAppAccept(id); };
     q('#co_rej', s).onclick = function () { closeSheet(); openAppReject(id); };
+    var ppo = q('#co_pp2', s); if (ppo) ppo.onclick = function () { closeSheet(); openAppPostpone(id); };
+    var cxo = q('#co_cx', s); if (cxo) cxo.onclick = function () { closeSheet(); openAppCancel(id); };
     var pp = q('#co_pp', s); if (pp) pp.onclick = function (e) { e.preventDefault(); closeSheet(); if (host().openPerson) host().openPerson(a.email); };
   }
   function openStopTrainer(email) {
@@ -1162,6 +1245,10 @@
     appopen: function (el) { openAppDetail(el.getAttribute('data-id')); },
     appaccept: function (el) { openAppAccept(el.getAttribute('data-id')); },
     appreject: function (el) { openAppReject(el.getAttribute('data-id')); },
+    apppostpone: function (el) { openAppPostpone(el.getAttribute('data-id')); },
+    appcancel: function (el) { openAppCancel(el.getAttribute('data-id')); },
+    appsweep: function () { openAppSweep(); },
+    appsview: function (el) { S.appsView = el.getAttribute('data-v') === 'cancelled' ? 'cancelled' : 'pending'; if (S.appsView === 'cancelled') load('appsCancelled'); redraw(); },
     tstop: function (el) { var d = el.closest('details'); if (d) d.removeAttribute('open'); openStopTrainer(el.getAttribute('data-email')); },
     'live-open': function (el) { var c = courseBySlug(el.getAttribute('data-slug')); if (c) goPage(c.id); },
     'live-confirm': function (el) { openLiveDecision(el.getAttribute('data-slug'), 'confirm'); },
@@ -1224,7 +1311,7 @@
   }
   var NEEDS = {
     board: function () { load('courses'); load('apps'); load('experts'); load('schedules'); load('courses2'); },
-    trainers: function () { load('courses'); load('apps'); load('experts'); },
+    trainers: function () { load('courses'); load('apps'); load('appsCancelled'); load('experts'); },
     live: function () { load('courses'); load('schedules'); epEnsure(['opsQueue']); },
     demand: function () { load('progStats'); load('programs'); epEnsure(['analysis']); },
     offers: function () { load('offers'); },

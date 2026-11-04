@@ -3770,6 +3770,35 @@
   }
 
   // —— طلبات المدرّبين
+  // R10: الاستمارة الواحدة (خبير / مدرّب / الاثنان). الطلب القديم بلا `join_as` يُقرأ مدرّبًا، كما تقرأه المنصة.
+  var JOIN_AS_TEXT = { expert: 'خبير', trainer: 'مدرّب', both: 'خبير ومدرّب' };
+  // حالة الفيديو على الطلب: sent أُرسل · later لاحقًا (قبل الموعد) · overdue لاحقًا وفات الموعد · missing لم يُرسل ولا موعد · cancelled أُلغي · none لا فيديو مطلوب/غير معروف.
+  function videoState(a, now, joinAs, hasJoin, video) {
+    var st = s(a.status);
+    if (st === 'cancelled') return { kind: 'cancelled', text: s(a.cancel_reason) === 'video_overdue' ? 'أُلغي تلقائيًا' : 'أُلغي', open: false };
+    if (joinAs === 'expert') return { kind: 'none', text: '', open: false };
+    if (video) return { kind: 'sent', text: 'أُرسل الفيديو', open: false };
+    var due = s(a.video_due_at), dueAt = tms(due);
+    var open = st === 'pending';                                  // الإلغاء والتأجيل على الطلب المعلّق وحده (مثل كنسة المنصة)
+    if (!isNaN(dueAt)) {
+      var over = !!now && dueAt <= now;
+      return { kind: over ? 'overdue' : 'later', text: 'لاحقًا: آخر موعد ' + U.dateText(due) + (over ? '، وقد فات' : ''), open: open, overdue: over && open };
+    }
+    if (hasJoin) return { kind: 'missing', text: 'لم يُرسل الفيديو بعد', open: open };
+    return { kind: 'none', text: '', open: false };
+  }
+  function videoOverdueCount(apps, now) {
+    var l = arr(apps); if (!l) return null;
+    return l.filter(function (a) {
+      if (!a || typeof a !== 'object' || (s(a.status) || 'pending') !== 'pending') return false;
+      if (s(a.join_as).toLowerCase() === 'expert') return false;
+      if (webUrl(a.intro_video_url)) return false;
+      var d = tms(a.video_due_at);
+      return !isNaN(d) && !!now && d <= now;
+    }).length;
+  }
+  // نص التنبيه بالحرف من المواصفة (R10 §E.3): «طلبات انضمام فات موعد الفيديو: N»
+  function videoOverdueLine(n) { return 'طلبات انضمام فات موعد الفيديو: ' + U.ar(n); }
   function webUrl(v) { v = s(v); return /^https:\/\/[^\s]+$/i.test(v) ? v : ''; }     // https فقط، مثل المنصة (لا http ولا javascript: ولا data:)
   function appTickets(apps, opts) {
     opts = opts || {};
@@ -3779,6 +3808,9 @@
       var exp = (Array.isArray(a.expertise) ? a.expertise : []).map(s).filter(Boolean);
       var summary = s(a.experience_summary);
       var li = s(a.linkedin_url), cv = s(a.cv_url), pf = s(a.portfolio_url) || s(a.sample_url);      // المنصة تحفظ رابط العيّنة باسم sample_url في مستند الطلب
+      var jr = s(a.join_as).toLowerCase(), hasJoin = jr === 'expert' || jr === 'trainer' || jr === 'both', joinAs = hasJoin ? jr : 'trainer';
+      var phone = s(a.contact_phone) || s(a.user_phone);
+      var claimed = (Array.isArray(a.claimed_slugs) ? a.claimed_slugs : []).map(s).filter(Boolean).slice(0, 12);
       // حقول الخطوة الثانية من نموذج المدرّب (قد تغيب في الطلبات القديمة): فيديو تعريفي + تفاصيل الخبرة
       var video = webUrl(a.intro_video_url);
       var yrs = a.experience_years, yrsText = '';
@@ -3793,13 +3825,19 @@
       if (cv) links.push('سيرة ذاتية');
       if (pf) links.push('نماذج أعمال');
       if (video) links.push('فيديو تعريفي');
+      if (hasJoin && phone) links.push('رقم تواصل');
       if (links.length) facts = facts.concat(links); else facts.push('بلا روابط');
-      if (summary.length < 40) facts.push('نبذة الخبرة قصيرة');
+      if (!hasJoin && summary.length < 40) facts.push('نبذة الخبرة قصيرة');
       if (s(a.founding_lead_id)) facts.push('جاء من دعوة الخبراء المؤسسين');
       var missing = [];
-      if (!(li || cv)) missing.push('سيرة ذاتية أو لينكدإن');
-      if (summary.length < 40) missing.push('نبذة خبرة كافية');
-      if (!exp.length) missing.push('مجال واحد على الأقل');
+      if (hasJoin) {      // الاستمارة الواحدة لا فيها سيرة ولا نبذة: يكفيها وسيلة تواصل ومجال
+        if (!(li || cv || pf || phone)) missing.push('رابط أو رقم للتواصل');
+        if (!exp.length && !s(a.headline)) missing.push('مجال واحد على الأقل');
+      } else {
+        if (!(li || cv)) missing.push('سيرة ذاتية أو لينكدإن');
+        if (summary.length < 40) missing.push('نبذة خبرة كافية');
+        if (!exp.length) missing.push('مجال واحد على الأقل');
+      }
       var ok = !missing.length;
       var at = tms(a.created_at); if (isNaN(at)) at = tms(a.updated_at);
       var timer = isNaN(at) ? null : { at: at, mode: 'since' };
@@ -3807,7 +3845,9 @@
       return { id: s(a.id) || String(a.id || ''), name: s(a.user_name) || s(a.user_email) || 'مقدّم الطلب', email: s(a.user_email).toLowerCase(), headline: s(a.headline),
                expertise: exp, chips: exp.slice(0, 3), moreChips: Math.max(0, exp.length - 3), timer: timer, text: timer ? L.v2TimerText(timer, now) : '', tone: h == null ? 'none' : tone(h),
                line: facts.join('، ') + (ok ? '' : '، ينقص الطلب: ' + missing.join('، ')), suggestion: ok ? 'accept' : 'open', missing: missing,
-               links: { linkedin: li, cv: cv, portfolio: pf }, introVideo: video, experience: experience, summary: summary, createdAt: s(a.created_at) };
+               links: { linkedin: li, cv: cv, portfolio: pf }, introVideo: video, experience: experience, summary: summary, createdAt: s(a.created_at),
+               hasJoin: hasJoin, joinAs: joinAs, joinAsText: JOIN_AS_TEXT[joinAs], claimed: claimed, phone: phone, status: s(a.status) || 'pending', cancelledAt: s(a.cancelled_at),
+               video: videoState(a, now, joinAs, hasJoin, video) };
     }).sort(function (x, y) { return (x.timer ? x.timer.at : Infinity) - (y.timer ? y.timer.at : Infinity); });
   }
 
@@ -4026,7 +4066,7 @@
              live: live, danger: st === 'archived' ? null : (canHard ? 'delete' : 'archive'), reviewNote: s(c.review_note), hasPreview: !!(story && s(c.slug)), enrolled: num(c.total_enrolled) || 0 };
   }
 
-  L.v2s.courses = { tone: tone, reviewTimer: reviewTimer, cover: cover, board: board, summaryLine: summaryLine, courseFacts: courseFacts, appTickets: appTickets,
+  L.v2s.courses = { tone: tone, reviewTimer: reviewTimer, cover: cover, board: board, summaryLine: summaryLine, courseFacts: courseFacts, appTickets: appTickets, videoOverdueCount: videoOverdueCount, videoOverdueLine: videoOverdueLine,
                     trainerRows: trainerRows, liveTickets: liveTickets, offerTickets: offerTickets, demand: demand, pageModel: pageModel, stateOf: stateOf,
                     lessonsOf: lessonsOf, hiddenFromPublic: hiddenFromPublic, lessonsPhrase: lessonsPhrase, trainerOf: trainerOf, priceOf: priceOf, statFor: statFor, liveTimeText: liveTimeText,
                     TYPE_LABEL: TYPE_LABEL, STATE_LABEL: STATE_LABEL, SOURCE_LABEL: SOURCE_LABEL, SEG_LABEL: SEG_LABEL, LIVE_STATUS: LIVE_STATUS, NA: NA, WARN_H: WARN_H, LATE_H: LATE_H };

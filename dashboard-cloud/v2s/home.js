@@ -58,7 +58,7 @@
 
   // ------------------------------------------------------------------ الحالة
   var S = H.S = { fold: false, q: '', seg: null, page: 60, key: '', timer: null, sig: '', opener: null, wasOpen: false,
-                  auto: { confirm: false, busy: false, err: '' }, typesOpen: false, lastCtx: '' };
+                  auto: { confirm: false, busy: false, err: '' }, sweep: { confirm: false, busy: false, err: '' }, typesOpen: false, lastCtx: '' };
 
   // ------------------------------------------------------------------ بيانات الوارد
   function rowsAll() { return Array.isArray(window.INBOX) ? window.INBOX : []; }
@@ -156,6 +156,7 @@
   }
   function signature() {
     return ['inbox', 'opsQueue', 'pendingUsers', 'escrow'].map(stateOf).join(',') + '|' + rowsAll().length + '|' + failedList().length + '|' + (ctxNow())
+      + '|' + String(window.INBOX_VIDEO_OVERDUE)
       + (window.V2BRAIN && window.V2BRAIN.sig ? '|' + window.V2BRAIN.sig() : '');
   }
 
@@ -202,6 +203,18 @@
       html += strip('warn', '<span>معروض جزء فقط من: ' + esc(trunc.map(function (t) { return String(t).split(':')[0].trim(); }).join('، ')) + ' — الباقي موجود ولا يظهر هنا</span>');
     }
     if (inboxUnknown()) { el.innerHTML = brainHtml + html; return; }          // الوارد لم يصل: لا شرائط خدمة ولا توزيع ولا «للعلم» فوق مجهول
+    // R10 §E.3: طلبات انضمام فات موعد فيديوها. الإلغاء من الداشبورد (لا n8n دلوقتي)، بتأكيد قبل التنفيذ، وهو إلغاء لا رفض.
+    var vo = window.INBOX_VIDEO_OVERDUE;
+    if (ctx === 'home' && typeof vo === 'number' && vo > 0 && L.v2s && L.v2s.courses && L.v2s.courses.videoOverdueLine) {
+      var sw = S.sweep;
+      html += '<div class="v2h-strip warn" role="group" aria-label="الطلبات المتأخرة"><span>' + esc(L.v2s.courses.videoOverdueLine(vo)) + '</span>'
+        + (sw.confirm
+          ? '<button type="button" class="v2h-btn1 sm" data-a="sweep_go"' + (sw.busy ? ' disabled' : '') + '>' + (sw.busy ? 'جارٍ التنفيذ…' : 'نعم، ألغِ المتأخر') + '</button>'
+            + '<button type="button" class="v2h-btn2" data-a="sweep_x"' + (sw.busy ? ' disabled' : '') + '>رجوع</button>'
+            + '<p class="v2h-snote">يُلغى كل طلب فات موعد فيديوه، ويصل أصحابها بريد محايد وليس رفضًا.</p>'
+          : '<button type="button" class="v2h-btn2" data-a="sweep_ask">إلغاء المتأخر</button>')
+        + (sw.err ? '<p class="v2h-err" aria-live="polite">' + esc(sw.err) + '</p>' : '') + '</div>';
+    }
     // وضع الخدمة
     var mode = call('efServiceMode');
     var hasFiles = rowsAll().some(function (r) { return r.apiKind === 'expert_file' || (r.apiKind === 'dispute' && r.dsrc === 'file'); });
@@ -480,6 +493,9 @@
       if (act === 'auto_off') { S.auto = { confirm: true, busy: false, err: '' }; drawHead(build(), ctxNow()); var x = qs('[data-a="auto_x"]'); if (x) x.focus(); return; }
       if (act === 'auto_x') { S.auto = { confirm: false, busy: false, err: '' }; drawHead(build(), ctxNow()); var o = qs('[data-a="auto_off"]'); if (o) o.focus(); return; }
       if (act === 'auto_on' || act === 'auto_go') { setAuto(act === 'auto_on'); return; }
+      if (act === 'sweep_ask') { S.sweep = { confirm: true, busy: false, err: '' }; drawHead(build(), ctxNow()); var sx = qs('[data-a="sweep_x"]'); if (sx) sx.focus(); return; }
+      if (act === 'sweep_x') { S.sweep = { confirm: false, busy: false, err: '' }; drawHead(build(), ctxNow()); var sa = qs('[data-a="sweep_ask"]'); if (sa) sa.focus(); return; }
+      if (act === 'sweep_go') { runSweep(); return; }
       var f = el.getAttribute('data-f');
       if (f && !act) { S.typesOpen = false; applyTypes(); chooseFilter(f); return; }
     });
@@ -518,6 +534,21 @@
   }
   function cardForIdx(i) { var r = rowsAll()[i]; return r ? cardOf(r, Date.now()) : null; }
 
+  function runSweep() {
+    var E = ep(); if (!E || !E.trainerExpireSweep || S.sweep.busy) return;
+    S.sweep = { confirm: true, busy: true, err: '' };
+    drawHead(build(), ctxNow());
+    var done = function () { if (mounted()) softRedraw(); };
+    E.trainerExpireSweep(done).then(function (r) {
+      if (r && r.ok) S.sweep = { confirm: false, busy: false, err: '' };
+      else {
+        var msg = (r && r.error) || 'تعذّر تنفيذ العملية';
+        try { msg = (window.V2 && V2.plainError) ? V2.plainError(r) : msg; } catch (e) {}
+        S.sweep = { confirm: true, busy: false, err: msg };
+      }
+      done();
+    });
+  }
   function setAuto(value) {
     var E = ep(); if (!E || !E.expertFileAutoAssign || S.auto.busy) return;
     S.auto = { confirm: !value, busy: true, err: '' };

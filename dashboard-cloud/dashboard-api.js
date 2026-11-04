@@ -1757,6 +1757,7 @@
       var realRows = [];
       var failed = [];
       var truncated = [];
+      var videoOverdue = null;     // R10: طلبات انضمام فات موعد فيديوها (من قائمة الجسر نفسها). null = المصدر لم يصل ⇒ لا تنبيه ولا صفر كاذب
       function shortNote(s) { s = String(s || "").trim(); return s.length > 90 ? s.slice(0, 90) + "…" : s; }
       // ⛔ «العدّاد لا يكذب»: كل طابور هنا كان يبتلع خطأه بصمت، فطابورٌ تعذّر جلبه كان يبدو
       // **فارغًا** — والشاشة تقول «لا وارد جديد» فوق طلبات قائمة لم تصل. الابتلاع يبقى (طابور
@@ -1779,6 +1780,7 @@
       jobs.push(
         get("/platform-trainer-applications?status=pending").then(function (a) {
           var apps = (a && a.applications) || [];
+          try { var VL = window.V2L && window.V2L.v2s && window.V2L.v2s.courses; if (VL && VL.videoOverdueCount) videoOverdue = VL.videoOverdueCount(apps, Date.now()); } catch (e) { videoOverdue = null; }
           apps.forEach(function (ap) {
             realRows.push({
               out: "طلب انضمام كمدرّب", from: "درّب معنا", src: "cap", dest: "team",
@@ -2175,6 +2177,8 @@
         // ما قُصَّ فعلًا (مصدره وعدده) — الشاشة تعلنه؛ فارغٌ = لم يُقَصّ شيء.
         EP.data.inboxTruncated = truncated;
         window.INBOX_TRUNCATED = truncated;
+        EP.data.trainerVideoOverdue = videoOverdue;
+        window.INBOX_VIDEO_OVERDUE = videoOverdue;
       });
     },
 
@@ -2998,6 +3002,18 @@
         note(on ? "التوزيع التلقائي اشتغل ✓" : "التوزيع التلقائي اتقفل ✓");
         EP.reload("inbox", after);
         return { ok: true, auto_assign: on };
+      })
+      .catch(function (e) { return efFailed(e, after); });
+  };
+  // R10 §E.3: «إلغاء المتأخر» — كنسة المنصة تُلغي كل طلب `pending` فيديوه ناقص وفات موعده (إلغاء لا رفض). مفيش جدولة n8n دلوقتي،
+  // فالمؤسس بيناديها من الزر. يرجّع {ok, cancelled} أو {ok:false, error}. بعدها الوارد يتحدّث فيختفي التنبيه.
+  EP.trainerExpireSweep = function (after) {
+    return post("/platform-trainer-applications/expire-sweep", {})
+      .then(function (r) {
+        var n = r && typeof r.cancelled === "number" ? r.cancelled : 0;
+        note(n ? "أُلغيت الطلبات المتأخرة ✓" : "لا طلب متأخر الآن");
+        EP.reload("inbox", after);
+        return { ok: true, cancelled: n };
       })
       .catch(function (e) { return efFailed(e, after); });
   };

@@ -3043,19 +3043,35 @@ def platform_trainer_decide(application_id, action):
 
     `get_json(silent=True)` (not `request.json`): a body-less POST raises 415 in Flask 3, which
     is exactly the reason-less rejection that must come back with the SENTENCE, not a page."""
-    if action not in ('approve', 'reject'):
+    if action not in ('approve', 'reject', 'cancel', 'postpone'):
         return jsonify({'error': 'إجراء غير معروف'}), 400
     body = request.get_json(silent=True) or {}
     note = str(body.get('admin_note') or '').strip()[:1000]
     if action == 'reject' and not note:
         return jsonify({'error': 'اكتب سبب الرفض — مقدّم الطلب يقرأه كما هو'}), 400
+    # R10: «إلغاء» (مهلة الفيديو، ليس رفضًا: لا سبب مطلوب) و«تأجيل يومين» (٤٨ ساعة ثابتة على المنصة، بلا جسم).
     resp = _platform_proxy(
         'POST',
         f"/api/bridge/trainer-applications/{application_id}/{action}",
-        json_body={'admin_note': note},
+        json_body=None if action == 'postpone' else {'admin_note': note},
     )
     if _resp_ok(resp):
         _audit(f'trainer_application.{action}', target=application_id, meta={'note': note})
+    return resp
+
+
+@app.route('/api/platform-trainer-applications/expire-sweep', methods=['POST'])
+@token_required
+@roles_required('admin', 'employee')   # نفس من يقرّر في الطلبات (الإلغاء هنا ليس رفضًا)
+def platform_trainer_expire_sweep():
+    """R10 §E.3: «إلغاء المتأخر» — كنسة المنصة تُلغي كل طلب انضمام `pending` فيديوه ناقص وفات موعده (cancelled، ليس رفضًا،
+    ويصل صاحبه بريد محايد). مفيش جدولة n8n دلوقتي: المؤسس يضغط الزر في الرئيسية أو في «الدورات والمدرّبون». مسار الجسر
+    idempotent. الرد {checked, cancelled, ids}."""
+    resp = _platform_proxy('POST', '/api/bridge/trainer-applications/expire-sweep')
+    if _resp_ok(resp):
+        got = _proxy_json(resp) or {}
+        _audit('trainer_application.expire_sweep', target='all',
+               meta={'cancelled': got.get('cancelled'), 'checked': got.get('checked')})
     return resp
 
 

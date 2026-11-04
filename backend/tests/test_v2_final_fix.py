@@ -217,6 +217,8 @@ def test_one_sheet_header_rule_lives_in_the_shell_and_no_section_overrides_it():
 def test_cancel_buttons_say_back_in_every_section_sheet():
     for name in ('books', 'market', 'courses', 'company', 'roles', 'reports'):
         js = _strip(_read('dashboard-cloud', 'v2s', name + '.js'))
+        if name == 'courses':      # R10: «إلغاء» هنا فعل على الطلب نفسه (مهلة الفيديو) وليس زرّ خروج من ورقة، وله زرّ «رجوع» مستقل
+            js = js.replace('data-a="appcancel" data-id="\' + esc(a.id) + \'">إلغاء</button>', '').replace('id="co_cx">إلغاء</button>', '')
         assert not re.search(r">(إلغاء|تراجع)</button>", js), name
         assert "'إلغاء'" not in js, name
     assert 'id="mkNo">رجوع<' in _read('dashboard-cloud', 'v2s', 'market.js') and "o.cancel || 'رجوع'" in _read('dashboard-cloud', 'v2s', 'books.js')

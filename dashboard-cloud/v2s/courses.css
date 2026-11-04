@@ -56,6 +56,10 @@
 .v2co-chip.amber{background:var(--amber-bg);color:#6B4A00;border-color:#EBD38E}
 .v2co-chip.wine{background:#FBF0F3;color:var(--wine);border-color:#EBC3CE}
 .v2co-chip.grey{background:#F1EDE5;color:#5C574D}
+.v2co-chip.red{background:#FCEDEF;color:#8E1228;border-color:#F0B9C1}
+.v2co-overdue{display:flex;flex-wrap:wrap;align-items:center;gap:8px 14px}
+.v2co-overdue>span{flex:1 1 220px;min-width:0;font-weight:700}
+.v2co-overdue .v2co-btn2{flex:0 0 auto;width:auto}
 .v2co-chips{display:flex;flex-wrap:wrap;gap:6px}
 .v2co-st{display:block;font-size:13px;color:var(--mute);line-height:1.6}
 .v2co-st.amber,.v2co-l2.amber{color:#8A4B00}

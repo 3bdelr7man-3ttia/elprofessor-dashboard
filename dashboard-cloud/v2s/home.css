@@ -60,6 +60,7 @@ body:has(> .app.v2-shell) .v2-pill{z-index:75}
 .app.v2-shell .v2h-autot{flex:1 1 280px;min-width:0}
 .app.v2-shell .v2h-autot b{font:800 14.5px 'Cairo',sans-serif}
 .app.v2-shell .v2h-err{flex:1 1 100%;color:#8E1228;font-weight:700;font-size:13.5px}
+.app.v2-shell .v2h-snote{flex:1 1 100%;margin:0;font-weight:600;font-size:13.5px}
 .app.v2-shell .v2h-conf{flex:1 1 100%;background:#fff;border:1px solid var(--h-line);border-radius:12px;padding:12px 14px}
 .app.v2-shell .v2h-conf p{font-size:14px;line-height:1.85;margin-bottom:10px}
 .app.v2-shell .v2h-confa{display:flex;flex-wrap:wrap;gap:10px}
