@@ -125,7 +125,8 @@ def last_run(run_id):
 
 
 def skipped(run_id):
-    return json.loads(last_run(run_id).skipped_json or '{}')
+    """الرموز القديمة فقط (بلا `_report`: سجل «آخر تشغيل» له اختباراته في test_brain2_run_status.py)."""
+    return {k: v for k, v in json.loads(last_run(run_id).skipped_json or '{}').items() if k != '_report'}
 
 
 F1 = {'title': 'مقال أول', 'score': 40}

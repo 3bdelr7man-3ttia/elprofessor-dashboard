@@ -653,3 +653,23 @@ Shots: `uiharness/v2_shots_brain2.py` with `brain2_fixtures.py`, at desktop, tab
 - [ ] The course editor is excluded, and its hook is present.
 - [ ] The model default is `claude-sonnet-5-5`, the compose file has the new default, and the `DASHBOARD_AI_MODEL` mismatch guard works.
 - [ ] Deploy note for the founder: when the Anthropic key is added, remove or update `ANTHROPIC_MODEL` and `DASHBOARD_AI_MODEL` in Coolify.
+
+## R16 addendum (2026-11-08): the brain must visibly run
+
+Founder: «المخ بتاع الداش بورد يعالج ويشتغل». Root causes found: the only trigger was n8n `POST /api/ai/agents/run-cron`
+(its AI-team nodes were disabled to save cost), the kick ran *after* eleven synchronous agents (worker timeout / early
+return skipped it), and every run outcome lived only in `skipped_json`, which no screen showed.
+
+- **Autorun** (`brain2/autorun.py`): an in-process thread checks every 5 minutes and starts one run per Cairo slot
+  (`DASH_BRAIN_AUTORUN_HOURS`, default `9,20`; `DASH_BRAIN_AUTORUN=0` disables). Runs are `trigger='cron'`, `by='auto'`.
+  Never starts under pytest, with `DASH_V2_ENABLED` off, or with `DASH_BRAIN_WRITE=0`.
+- **Cron route**: `_v2_brain2_kick('cron')` now runs first; `?agent=brain` kicks the brain only (no agent calls).
+- **Run report**: `execute_run` stores `skipped_json['_report']` = `{producers:{id:{state,targets,proposed,done_alone,failed,exists,…}},
+  stop, ai_reason, writer, tg:{sent,failed,skipped}}`. States: `done|none|off|source_down|gather_error|not_reached`.
+  `GET /runs/latest` returns `run.report` = Arabic lines from `brain2/run_report.py` (no technical detail, no key values).
+- **No key**: checked once per run before any AI call (no call, no day-counter bump) ⇒ stop `no_key`; `/switches` returns
+  `writer_fix {text, where}` naming the «من يكتب للعقل» slot.
+- **Model errors**: 3 consecutive AI transport errors stop the run (`ai_error`) with the white Arabic reason.
+- **Telegram**: asks go through the public `telegram.send_ask` per item; outcomes counted in the report.
+  `TELEGRAM_DEFAULT_ON` now covers every decision draft (link-only outside `TELEGRAM_OK`).
+- **UI**: «آخر تشغيل للعقل» card at the top of the brain rules view with «شغّل الآن» (`V2L.v2sBrainRunCard`).

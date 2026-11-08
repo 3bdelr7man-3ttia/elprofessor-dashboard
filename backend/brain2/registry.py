@@ -37,8 +37,12 @@ except ImportError:
 #  * TELEGRAM_OK: منتجات يجوز اعتماد اقتراحها أو رفضه بزر من تليجرام. أي منتج خارجها (فلوس، مقفول بقرار) يصله رابط
 #    «افتح في اللوحة» فقط ولا يعتمده تليجرام أبدًا. الآراء (kind=opinion) لا تُرسل إلى تليجرام مطلقًا.
 #  * TELEGRAM_DEFAULT_ON: المنتجات التي يكون «اسألني على تليجرام» فيها مفعّلًا قبل أن يلمسه المؤسس.
+#  * R16 (المؤسس 2026-11-08: «فين التنبيهات والقرارات على التليجرام… وكل القرارات»): كل منتج يكتب اقتراحًا ينتظر قرار
+#    المؤسس يُرسل إلى تليجرام افتراضيًا. خارج TELEGRAM_OK يصل برابط «افتح في اللوحة» فقط (لا اعتماد من تليجرام)،
+#    والمفتاح لكل منتج يبقى في يد المؤسس. الملاحظات «وحده» لا تُرسل أصلًا (لا تنتظر قرارًا).
 TELEGRAM_OK = frozenset({'reply_draft', 'file_review', 'course_review'})
-TELEGRAM_DEFAULT_ON = frozenset({'reply_draft', 'file_review', 'course_review'})
+TELEGRAM_DEFAULT_ON = frozenset({'reply_draft', 'file_review', 'course_review',
+                                 'market_match', 'site_review', 'course_lesson_draft'})
 
 
 # اقتراحات الأنظمة المتصلة (SPEC-B B5a): المعرّف `mcp:<اسم الرمز>`؛ بلا `apply` فاعتمادها «احتفظ بها» فقط، ولا تظهر في شاشة القواعد.

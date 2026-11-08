@@ -20,6 +20,23 @@
 .v2sb-disc span{font-size:12.5px;color:var(--mute)}
 .v2sb-seg{display:none}
 
+/* —— بطاقة «آخر تشغيل للعقل» */
+.v2sb-runcard{margin-bottom:14px;border-inline-start:4px solid #C9BFB3}
+.v2sb-runcard.tone-ok{border-inline-start-color:#2E7D5B}
+.v2sb-runcard.tone-run{border-inline-start-color:#9E2B4E}
+.v2sb-runcard.tone-warn{border-inline-start-color:#C27C0E}
+.v2sb-runcard.tone-bad{border-inline-start-color:#C8102E}
+.v2sb-runcard .v3-ch{margin-bottom:6px}
+.v2sb-rchead{font:700 16px/1.7 'Cairo',sans-serif;color:var(--ink);margin:0 0 6px}
+.v2sb-rclist{display:grid;gap:4px;margin:0 0 8px}
+.v2sb-rclist li{position:relative;padding-inline-start:18px;font-size:14.5px;line-height:1.7;color:var(--ink);overflow-wrap:anywhere}
+.v2sb-rclist li::before{content:'';position:absolute;inset-inline-start:2px;top:.72em;width:8px;height:8px;border-radius:50%;background:#2E7D5B}
+.v2sb-rclist li.bad::before{background:#C8102E}
+.v2sb-rcfix{background:#FBF1E6;border:1px solid #F0D9BF;border-radius:12px;padding:8px 12px;font-size:14.5px;line-height:1.75;margin:0 0 10px;overflow-wrap:anywhere}
+.v2sb-rcact{display:flex;flex-wrap:wrap;align-items:center;gap:8px 10px}
+.v2sb-rcact .v2sb-hint{flex-basis:100%}
+.v2sb-rcauto{margin-top:6px}
+
 /* —— الأعمدة */
 .v2sb-cols{display:flex;gap:18px;align-items:flex-start}
 .v2sb-rules{flex:1.3;min-width:0;margin-bottom:0}
