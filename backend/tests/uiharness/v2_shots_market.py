@@ -15,6 +15,7 @@ undefined/NaN/null ظاهرة · كلمة تقنية لاتينية ظاهرة �
 """
 import json
 import os
+os.environ.setdefault('DASH_SCHEDULER', '0')   # R16: مراقبة التشغيل/الملخص اليومي ما يشتغلوش جوّه الأداة (كانوا بيبعتوا تليجرام عبر الجسر المزيّف)
 import re
 import sys
 
