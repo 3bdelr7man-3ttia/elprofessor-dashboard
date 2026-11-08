@@ -6,7 +6,9 @@
 
 الساحة (`/api/v2/saha/*`):
     الأخبار      GET news · PUT news/<id> (اعتماد/إلغاء/تعديل) · POST news/run (تشغيل الخط الآلي)
-    النقاشات     GET topics (للاختيار) · الآراء GET opinions · POST opinions/<id>/hide · POST opinions/<id>/restore
+    النقاشات     GET topics · POST topics/<id>/hide · POST topics/<id>/restore (R17: إخفاء/إرجاع النقاش)
+                 الآراء GET opinions · POST opinions/<id>/hide · POST opinions/<id>/restore
+    الصلة بالقانون POST legal-gate/check (تجربة بلا كتابة: قائمة غير المرتبط) · POST legal-gate/apply (ختم = إخفاء، بتأكيد)
     الفرص        GET opportunities · GET/PUT/DELETE opportunities/<id> · POST opportunities · POST opportunities/<id>/decide
     الإعداد      GET/PUT settings (رابط دورة «جهّز طلبك بالإنجليزية»)
     الاستيراد    POST opportunities/seed/preview (تجربة بلا كتابة) · POST opportunities/seed/import (حقيقي)
@@ -85,6 +87,12 @@ WORK_FIELDS = ('id', 'slug', 'title', 'kind', 'creator_email', 'creator_name', '
 COMMENT_FIELDS = ('id', 'work_id', 'work_title', 'user_email', 'display_name', 'body', 'status', 'created_at', 'hidden_at')
 CHALLENGE_FIELDS = ('id', 'slug', 'title', 'brief', 'kind_allowed', 'word_cap', 'opens_at', 'closes_at', 'results_at', 'status', 'created_at',
                     'updated_at', 'entries_count')
+GATE_COLLECTIONS = ('news', 'topics', 'articles')
+GATE_COUNTS = ('scanned', 'would_hide', 'would_pass', 'changed', 'skipped_human', 'skipped_linked', 'skipped_human_origin', 'skipped_unselected',
+               'stamped', 'archived')
+GATE_LIST_MAX = 300
+GATE_IDS_MAX = GATE_LIST_MAX * len(('news', 'topics', 'articles'))
+TOPICS_LIST_MAX = 200
 REMINDER_COUNTS = ('opportunities', 'sent', 'skipped_already', 'skipped_toggle_off', 'errors')
 REPORT_NUMBERS = ('window_days', 'visitors', 'legal_open_share', 'signups', 'share_card_clicks', 'return_7d')
 
@@ -481,6 +489,7 @@ def check_seed(seed):
 # ------------------------------------------------------------------ عرض الردود (قوايم بيضا)
 def view_news(r):
     row = _pick(r, NEWS_FIELDS)
+    row['legal'] = view_gate(r.get('legal_gate'))
     row['source_url'] = _http_url(r.get('source_url'))
     row['cover_url'] = _http_url(r.get('cover_url'))
     row['extra_sources'] = [{'name': str(s.get('name') or '')[:200], 'url': _http_url(s.get('url'))} for s in (r.get('extra_sources') or [])
@@ -490,8 +499,36 @@ def view_news(r):
     return row
 
 
+def view_gate(gate):
+    """ختم حارس الصلة بالقانون (R17) كما تعرضه الشاشة: ok/by/reason بس، وأي قيمة غريبة ⇒ None/''."""
+    if not isinstance(gate, dict):
+        return None
+    ok = gate.get('ok')
+    by = gate.get('by') if gate.get('by') in ('rule', 'ai', 'human') else ''
+    return {'ok': ok if isinstance(ok, bool) else None, 'by': by, 'reason': str(gate.get('reason') or '')[:80]}
+
+
 def view_topic(r):
-    return _pick(r, TOPIC_FIELDS)
+    row = _pick(r, TOPIC_FIELDS)
+    row['legal'] = view_gate(r.get('legal_gate'))
+    return row
+
+
+def view_backfill(d):
+    """رد فحص/ختم الصلة بالقانون: أعداد صحيحة (الغايب صفر لأنه عدّ فعلي من المنصة) + قائمة غير المرتبط مفلترة."""
+    d = d if isinstance(d, dict) else {}
+    cols = d.get('collections') if isinstance(d.get('collections'), dict) else {}
+    out = {'dry_run': d.get('applied') is not True, 'applied': d.get('applied') is True, 'collections': {}}
+    for c in GATE_COLLECTIONS:
+        rep = cols.get(c)
+        if not isinstance(rep, dict):
+            out['collections'][c] = None
+            continue
+        row = {k: (_int(rep.get(k)) or 0) for k in GATE_COUNTS}
+        row['hidden'] = [{'id': str(h.get('id') or '')[:200], 'title': str(h.get('title') or '')[:200], 'reason': str(h.get('reason') or '')[:80],
+                          'status': str(h.get('status') or '')[:20]} for h in (rep.get('hidden') or []) if isinstance(h, dict)][:GATE_LIST_MAX]
+        out['collections'][c] = row
+    return out
 
 
 def view_opinion(r):
@@ -675,10 +712,13 @@ def register(app, g):
         data, fail = send('POST', '/api/bridge/news/run', fields, 'saha.news_run', 'news', 'saha', timeout=110)
         if fail:
             return fail
-        per = [_pick(p, ('country', 'fetched', 'created', 'errors')) for p in (data.get('per_country') or []) if isinstance(p, dict)]
+        per = [_pick(p, ('country', 'fetched', 'created', 'errors', 'held_for_review', 'skipped_not_legal')) for p in (data.get('per_country') or [])
+               if isinstance(p, dict)]
         total = _int(data.get('total_created')) or 0
-        return done('saha.news_run', 'news', {'total_created': total, 'countries': len(per)},
-                    {'ok': True, 'ran_at': data.get('ran_at') if isinstance(data.get('ran_at'), str) else None, 'total_created': total, 'per_country': per})
+        held = _int(data.get('total_held_for_review')) or 0          # R17: مسودات خام صلتها بالقانون غير واضحة (تنتظر قرارًا بشريًّا)
+        return done('saha.news_run', 'news', {'total_created': total, 'countries': len(per), 'held_for_review': held},
+                    {'ok': True, 'ran_at': data.get('ran_at') if isinstance(data.get('ran_at'), str) else None, 'total_created': total,
+                     'total_held_for_review': held, 'per_country': per})
 
     # ================================================================== الساحة · النقاشات والآراء
     @app.route('/api/v2/saha/topics', methods=['GET'], endpoint='v2saha_topics')
@@ -688,14 +728,17 @@ def register(app, g):
         if bad:
             return bad
         status = pick_enum('status', TOPIC_STATUSES + ('all',), 'open')
+        hidden_only = (request.args.get('hidden') or '') == '1'      # R17: «المخفية» بأي حالة (عشان أي نقاش مخفي يرجع من الشاشة)
         data, fail = read('/api/bridge/topics', {'status': status} if status != 'all' else None)
         if fail:
             return fail
         rows = _rows(data, 'topics')
         if rows is None:
             return err(BAD_REPLY_AR, 502)
-        items = [view_topic(r) for r in rows if isinstance(r, dict)][:200]
-        return ns(jsonify({'items': items, 'total': len(rows), 'status': status}))
+        views = [view_topic(r) for r in rows if isinstance(r, dict)]
+        if hidden_only:
+            views = [v for v in views if (v.get('legal') or {}).get('ok') is False]
+        return ns(jsonify({'items': views[:TOPICS_LIST_MAX], 'total': len(views), 'status': status, 'hidden_only': hidden_only}))
 
     @app.route('/api/v2/saha/opinions', methods=['GET'], endpoint='v2saha_opinions')
     @admin
@@ -731,6 +774,56 @@ def register(app, g):
     @admin
     def v2saha_opinion_restore(oid):
         return opinion_move(oid, 'approve', 'saha.opinion_restore')      # الإظهار = اعتماده (المنصة تمنح نقاطه وتبلّغ صاحب النقاش)
+
+    # ================================================================== الساحة · إخفاء/إرجاع النقاش + الصلة بالقانون (R17)
+    def topic_move(tid, path, action):
+        bad, _b = guard([tid])
+        if bad:
+            return bad
+        data, fail = send('POST', '/api/bridge/topics/%s/%s' % (q(tid), path), {}, action, tid, 'saha')
+        if fail:
+            return fail
+        row = view_topic(data)
+        return done(action, tid, {'hidden': (row.get('legal') or {}).get('ok') is False}, row)
+
+    @app.route('/api/v2/saha/topics/<tid>/hide', methods=['POST'], endpoint='v2saha_topic_hide')
+    @admin
+    def v2saha_topic_hide(tid):
+        return topic_move(tid, 'hide', 'saha.topic_hide')        # ختم بشري ok:false — يختفي من اللوحة بلا حذف ولا تغيير حالة
+
+    @app.route('/api/v2/saha/topics/<tid>/restore', methods=['POST'], endpoint='v2saha_topic_restore')
+    @admin
+    def v2saha_topic_restore(tid):
+        return topic_move(tid, 'restore', 'saha.topic_restore')  # ختم بشري ok:true — يرجع ويغلب أي فحص قاعدي جاي
+
+    @app.route('/api/v2/saha/legal-gate/check', methods=['POST'], endpoint='v2saha_gate_check')
+    @admin
+    def v2saha_gate_check():
+        bad, _b = guard(mode='body')
+        if bad:
+            return bad
+        data, fail = send('POST', '/api/bridge/legal-gate/backfill', {'apply': False}, 'saha.legal_gate_check', 'legal_gate', 'saha',
+                          timeout=60, by=False)
+        return fail or ns(jsonify(view_backfill(data)))          # تجربة: بلا كتابة ولا تدقيق
+
+    @app.route('/api/v2/saha/legal-gate/apply', methods=['POST'], endpoint='v2saha_gate_apply')
+    @admin
+    def v2saha_gate_apply():
+        bad, b = guard()
+        if bad:
+            return bad
+        # R17: الإخفاء يشمل **بس** اللي اتعلّم عليه من نتيجة الفحص (مش كل غير المرتبط جملةً)
+        ids = b.get('ids')
+        if not isinstance(ids, list) or not ids or len(ids) > GATE_IDS_MAX or not all(isinstance(i, str) and ID_OK.match(i) for i in ids):
+            return err('اختر من نتيجة الفحص ما تريد إخفاءه أولًا')
+        data, fail = send('POST', '/api/bridge/legal-gate/backfill', {'apply': True, 'ids': sorted(set(ids))}, 'saha.legal_gate_apply', 'legal_gate',
+                          'saha', timeout=60)
+        if fail:
+            return fail
+        view = view_backfill(data)
+        meta = {c: ((view['collections'].get(c) or {}).get('would_hide') or 0) for c in GATE_COLLECTIONS}
+        meta['picked'] = len(set(ids))
+        return done('saha.legal_gate_apply', 'legal_gate', meta, view)
 
     # ================================================================== الساحة · الفرص (وظائف ومنح وزمالات وتدريب ومسابقات وأخرى)
     @app.route('/api/v2/saha/opportunities', methods=['GET'], endpoint='v2saha_opps')

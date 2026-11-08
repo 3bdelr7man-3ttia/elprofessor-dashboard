@@ -61,7 +61,7 @@ def test_every_mutation_goes_through_the_review_sheet_with_the_exact_flag_and_th
     api_calls = [ln.strip() for ln in code.split('\n') if 'B.api(' in ln and 'B.api = ' not in ln]
     assert len(api_calls) >= 14, len(api_calls)
     for ln in api_calls:
-        assert 'confirmed: true' in ln or '/seed/preview' in ln, ln          # كل نداء كتابة فيه confirmed، والتجربة وحدها بلا (لا تكتب)
+        assert 'confirmed: true' in ln or '/seed/preview' in ln or '/legal-gate/check' in ln, ln   # كل نداء كتابة فيه confirmed، والتجربتان وحدهما بلا (لا تكتبان)
     assert code.count('B.flow(') >= 14 and code.count('runWrite(') >= 2
     vals = re.findall(r"confirmed\s*[:=]\s*(\S+)", code)
     assert vals and all(v.startswith('true') for v in vals), vals
@@ -75,6 +75,7 @@ def test_the_screens_only_call_their_own_admin_routes():
     paths = set(re.findall(r"'(/v2/(?:saha|diwan)/[^'?]*)", _js()))
     assert paths <= {'/v2/saha/news', '/v2/saha/news/run', '/v2/saha/opportunities', '/v2/saha/opportunities/seed/preview', '/v2/saha/opportunities/seed/import', '/v2/saha/settings',
                      '/v2/saha/reminders', '/v2/saha/reminders/run', '/v2/saha/topics', '/v2/saha/opinions', '/v2/saha/opinions/', '/v2/saha/news/', '/v2/saha/opportunities/',
+                     '/v2/saha/topics/', '/v2/saha/legal-gate/check', '/v2/saha/legal-gate/apply',
                      '/v2/diwan/works', '/v2/diwan/works/', '/v2/diwan/comments', '/v2/diwan/comments/', '/v2/diwan/challenges', '/v2/diwan/challenges/', '/v2/diwan/report'}, paths
     assert '/v2/saha/reminders/cron' not in _js(), 'المسار الدوري للسرّ المشترك لا للمتصفح'
     assert 'seed/preview' in _js() and 'saha/opportunities/seed/import' in _js()

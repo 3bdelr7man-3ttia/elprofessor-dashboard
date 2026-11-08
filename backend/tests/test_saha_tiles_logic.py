@@ -246,7 +246,51 @@ def test_opinions_and_topics_rows():
     assert rows['o2']['canHide'] and not rows['o2']['canShow'] and not rows['o3']['canHide'] and rows['o3']['canShow'] and rows['o3']['showLabel'] == 'أعد إظهاره'
     assert rows['o3']['statusText'] == 'مخفي' and got['countText'] == '٣ آراء'
     assert S('opinionAction', 'hide', {})['goLabel'] == 'أخفِ الرأي' and S('opinionAction', 'show', {})['goLabel'] == 'أظهر الرأي'
-    assert S('topics', {'items': [{'id': 't1', 'title': 'نقاش'}, {'title': 'بلا معرّف'}]}) == {'rows': [{'id': 't1', 'title': 'نقاش'}]}
+    t = S('topics', {'items': [{'id': 't1', 'title': 'نقاش'}, {'title': 'بلا معرّف'}]})
+    assert [(r['id'], r['title']) for r in t['rows']] == [('t1', 'نقاش')] and t['countText'] == 'نقاش واحد'
+
+
+@needs_node
+def test_topic_rows_show_the_legal_gate_and_the_hide_restore_sheet():
+    """R17 — النقاش المختوم ok:false «مخفي» (يدويًا أو لعدم الصلة) وزرّه «أرجِع»؛ الغايب أو الختم المجهول ⇒ ظاهر."""
+    t = S('topics', {'items': [{'id': 'a', 'title': 'أ', 'status': 'open', 'opinions_count': 3, 'legal': {'ok': False, 'by': 'human'}},
+                               {'id': 'b', 'title': 'ب', 'status': 'open', 'legal': {'ok': False, 'by': 'rule'}},
+                               {'id': 'c', 'title': 'ج', 'status': 'open', 'legal': {'ok': None}},
+                               {'id': 'd', 'title': 'د', 'status': 'zzz'}]})
+    rows = {r['id']: r for r in t['rows']}
+    assert rows['a']['hidden'] and rows['a']['hiddenText'] == 'مخفي يدويًا' and rows['a']['opinions'] == 3
+    assert rows['b']['hidden'] and rows['b']['hiddenText'] == 'مخفي لعدم الصلة بالقانون'
+    assert not rows['c']['hidden'] and rows['c']['statusText'] == 'مفتوح' and rows['d']['statusText'] == 'حالة غير معروفة'
+    assert rows['d']['opinions'] is None                                   # الغايب «لا رقم» مش صفر
+    assert t['hiddenCount'] == 2 and t['countText'] == '٤ نقاشات'
+    assert S('topicAction', 'hide')['goLabel'] == 'أخفِ النقاش' and S('topicAction', 'show')['goLabel'] == 'أرجِع النقاش'
+    _clean_copy(t, S('topicAction', 'hide'), S('topicAction', 'show'))
+
+
+@needs_node
+def test_gate_check_view_counts_lists_reasons_and_marks_missing_sources():
+    resp = {'applied': False, 'collections': {
+        'news': {'would_hide': 2, 'hidden': [{'id': 'n1', 'title': 'خبر رياضي', 'reason': 'off-theme'}, {'id': 'n2', 'title': '', 'reason': 'negative'}, {'title': 'بلا معرّف'}]},
+        'topics': {'would_hide': 0, 'hidden': []}, 'articles': None}}
+    v = S('gateView', resp)
+    assert [(c['key'], c['n']) for c in v['counts']] == [('news', 2), ('topics', 0)] and v['failed'] == ['المقالات']
+    assert [(r['id'], r['kind'], r['title'], r['reason']) for r in v['rows']] == [
+        ('n1', 'الأخبار', 'خبر رياضي', 'لا يتناول موضوعًا قانونيًا'), ('n2', 'الأخبار', 'بلا عنوان', 'حوادث أو سياسة أو منوّعات')]
+    assert v['total'] == 2 and v['applied'] is False and v['totalText'] == 'عنصران غير مرتبطين بالقانون'
+    assert S('gateReason', 'zzz') == 'غير مرتبط بالقانون'
+    assert S('gateView', {'collections': {}}) is None                       # ولا مجموعة اتفحصت ⇒ لا نتيجة، مش «كله مرتبط»
+    ok_all = {'collections': {'news': {'would_hide': 0}, 'topics': {'would_hide': 0}, 'articles': {'would_hide': 0}}}
+    assert S('gateView', ok_all)['totalText'] == 'كل ما فُحص مرتبط بالقانون'
+    assert S('gateView', {'collections': {'news': {'would_hide': 0}}})['totalText'] == 'لا شيء غير مرتبط بالقانون فيما أمكن فحصه'
+    assert S('gateView', None) is None and S('gateView', {'x': 1}) is None
+    assert S('gatePicked', v, {'n2': True}) == ['n1'] and S('gatePicked', v, None) == ['n1', 'n2'] and v['listed'] == 2
+    after = S('gateView', {'applied': True, 'collections': {'news': {'would_hide': 2, 'skipped_unselected': 1, 'hidden': []},
+                                                            'topics': {'would_hide': 0}, 'articles': {'would_hide': 0}}})
+    assert after['total'] == 1 and after['totalText'] == 'عنصر واحد غير مرتبط بالقانون'      # بعد الإخفاء: المختار بس
+    done = S('gateDone', dict(v, total=12))
+    assert done == 'أُخفي ١٢ عنصرًا من الساحة، ويمكن إرجاع أي نقاش منها'
+    assert S('gateDone', dict(v, total=0)) == 'لم يكن هناك ما يُخفى'
+    _clean_copy(v, done)
 
 
 @needs_node
@@ -471,3 +515,23 @@ def test_jobs_cannot_be_deleted_and_challenge_close_is_end_of_day():
     ch = S('challengeCheck', _ch_form(None, title='تحدّي الرسالة', kinds=['story'], opens_at='2026-12-01', closes_at='2026-12-20', status='draft'), 'create', None)
     assert ch['body']['closes_at'].endswith('T23:59:59+02:00') and ch['body']['opens_at'] == '2026-12-01'
     assert [l for l in ch['lines'] if l['label'] == 'يُغلق'][0]['to'] == '٢٠ ديسمبر ٢٠٢٦'
+
+
+@needs_node
+def test_news_rows_show_the_legal_gate_and_a_one_step_restore():
+    """R17 — الخبر المنشور المختوم ok:false «مخفي لعدم الصلة بالقانون» وله «أرجِع» = PUT status published (ختم بشري)."""
+    d = S('news', {'items': [{'id': 'a', 'title': 'أ', 'status': 'published', 'legal': {'ok': False, 'by': 'rule'}},
+                             {'id': 'b', 'title': 'ب', 'status': 'draft', 'legal': {'ok': False, 'by': 'rule'}},
+                             {'id': 'c', 'title': 'ج', 'status': 'published', 'legal': {'ok': False, 'by': 'human'}},
+                             {'id': 'e', 'title': 'هـ', 'status': 'published', 'legal': None}]}, 0)
+    rows = {r['id']: r for r in d['rows']}
+    assert rows['a']['hidden'] and rows['a']['hiddenText'] == 'مخفي لعدم الصلة بالقانون'
+    assert rows['b']['hiddenText'] == 'صلته بالقانون غير واضحة' and rows['c']['hiddenText'] == 'مخفي يدويًا'
+    assert not rows['e']['hidden'] and rows['e']['hiddenText'] == ''
+    chk = S('newsCheck', S('newsForm', rows['a']), rows['a'], 'restore')
+    assert chk['ok'] and chk['body'] == {'status': 'published'}
+    run = S('newsRunDone', {'total_created': 2, 'total_held_for_review': 3})
+    assert run == 'أُضيفت مسودتان تنتظر مراجعتك، ومعها ٣ أخبار صلته بالقانون غير واضحة ينتظر قرارك'
+    assert S('newsRunDone', {'total_created': 0, 'total_held_for_review': 1}) == 'اكتمل الجلب، وأُضيف خبر واحد صلته بالقانون غير واضحة ينتظر قرارك'
+    assert S('newsRunDone', {'total_created': 0}) == 'اكتمل الجلب، ولم تُضَف مسودات جديدة'
+    _clean_copy(d, chk, run)

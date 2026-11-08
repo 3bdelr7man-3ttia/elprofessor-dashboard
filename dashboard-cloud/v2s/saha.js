@@ -1,7 +1,7 @@
 /* ============================================================================
  * v2s/saha.js — الجزء الأول: المنطق النقي لمربّعات «الساحة» و«الديوان» في الداشبورد (لا DOM ولا شبكة ولا ساعة خفية؛ `now` يُمرَّر صراحةً).
  *   الساحة:  ١) الأخبار (مسودات تنتظر · منشورة) وتعديلها واعتمادها · ٢) الفرص (قوائم · مراجعة الطابور بالنوع · النموذج الكامل قبل ⇐ بعد)
- *            ٣) رابط دورة التحضير · ٤) استيراد الفرص (تجربة ثم تأكيد) · ٥) الآراء (إخفاء وإظهار) · ٦) التذكير (آخر تشغيل).
+ *            ٣) رابط دورة التحضير · ٤) استيراد الفرص (تجربة ثم تأكيد) · ٥) الآراء (إخفاء وإظهار) · ٥ب) النقاشات (إخفاء وإرجاع + فحص الصلة بالقانون ثم إخفاء غير المرتبط) · ٦) التذكير (آخر تشغيل).
  *   الديوان: ٧) الأعمال (اعتماد · رفض بسبب · تمييز · إخفاء · قفل التعليقات) · ٨) التعليقات · ٩) التحديات (نموذج · لجنة · جوائز · فائزون) · ١٠) التقرير.
  * ⛔ المصدر الفاشل = null (والشاشة تكتب «غير متاح بعد»)، والرقم الغايب «لا رقم بعد» لا صفر مخترع. كل رقم ظاهر بأرقام هندية، و«·» لا تلاصق رقمًا (نستعمل «،»).
  * ⛔ نصوص ظاهرة: فصحى بسيطة محايدة للجنس، بلا مصطلحات تقنية، ولا عنوان يبدأ بـ«الذكاء». التحقق هنا يطابق الخادم (v2_saha_routes.py) والتحقق النهائي عنده وعند المنصة.
@@ -113,6 +113,13 @@
   function items(resp) { return resp && Array.isArray(resp.items) ? resp.items.filter(function (r) { return r && typeof r === 'object' && str(String(r.id == null ? '' : r.id)); }) : null; }
 
   // ------------------------------------------------------------------ ١ · الأخبار
+  // R17: ختم حارس الصلة على الخبر (`legal.ok === false`) ⇒ المنشور مخفي فعلًا عن القرّاء، والمسودة صلتها غير واضحة.
+  function newsHidden(r) { return !!(r && r.legal && typeof r.legal === 'object' && r.legal.ok === false); }
+  function newsHiddenText(r) {
+    if (!newsHidden(r)) return '';
+    if (r.legal.by === 'human') return 'مخفي يدويًا';
+    return r.status === 'published' ? 'مخفي لعدم الصلة بالقانون' : 'صلته بالقانون غير واضحة';
+  }
   function news(resp, now) {
     var list = items(resp);
     if (!list) return null;
@@ -121,7 +128,8 @@
       return { id: String(r.id), title: str(r.title) || 'خبر بلا عنوان', summary: str(r.summary), body: short(r.body, 700), source: str(r.source_name), sourceUrl: httpUrl(r.source_url),
                country: str(r.country), category: str(r.category) || 'أخرى', featured: r.featured === true, cover: httpUrl(r.cover_url), published: r.status === 'published',
                statusText: r.status === 'published' ? 'منشور' : 'مسودة', when: when(r.published_at || r.created_at, now), ts: ms(r.created_at), product: rp ? str(rp.label) : '',
-               hasTopic: !!str(r.topic_id), extra: Array.isArray(r.extra_sources) ? r.extra_sources.length : 0 };
+               hasTopic: !!str(r.topic_id), extra: Array.isArray(r.extra_sources) ? r.extra_sources.length : 0,
+               hidden: newsHidden(r), hiddenText: newsHiddenText(r) };
     });
     var n = rows.length;
     return { rows: rows, total: isNum(resp.total) ? resp.total : n,
@@ -148,6 +156,11 @@
     var yn = function (v) { return v ? 'نعم' : 'لا'; };
     if (intent === 'approve') { body.status = 'published'; lines.push({ label: 'الحالة', from: 'مسودة', to: 'منشور' }); }
     if (intent === 'unpublish') { body.status = 'draft'; lines.push({ label: 'الحالة', from: 'منشور', to: 'مسودة' }); }
+    if (intent === 'restore') {
+      body.status = 'published';
+      return { ok: true, body: body, lines: [{ label: 'الظهور', from: 'مخفي', to: 'ظاهر للقرّاء' }], errors: {},
+               lead: 'سيظهر الخبر «' + row.title + '» للقرّاء في الساحة مرة أخرى:' };
+    }
     ch('title', 'العنوان', b.title, title);
     ch('summary', 'الملخص', b.summary, summary, function (v) { return v ? short(v, 120) : 'فارغ'; });
     ch('category', 'التصنيف', b.category, form.category);
@@ -169,8 +182,11 @@
   }
   function newsRunDone(res) {
     var total = res && isNum(res.total_created) ? res.total_created : 0;
-    if (!total) return 'اكتمل الجلب، ولم تُضَف مسودات جديدة';
-    return 'أُضيفت ' + U(total, ['مسودة واحدة', 'مسودتان', 'مسودات', 'مسودة']) + ' تنتظر مراجعتك';
+    var held = res && isNum(res.total_held_for_review) ? res.total_held_for_review : 0;
+    var heldText = held ? U(held, ['خبر واحد', 'خبران', 'أخبار', 'خبرًا']) + ' صلته بالقانون غير واضحة ينتظر قرارك' : '';
+    if (!total && !held) return 'اكتمل الجلب، ولم تُضَف مسودات جديدة';
+    if (!total) return 'اكتمل الجلب، وأُضيف ' + heldText;
+    return 'أُضيفت ' + U(total, ['مسودة واحدة', 'مسودتان', 'مسودات', 'مسودة']) + ' تنتظر مراجعتك' + (held ? '، ومعها ' + heldText : '');
   }
 
   // ------------------------------------------------------------------ ٢ · الفرص
@@ -377,10 +393,59 @@
     var n = rows.length;
     return { rows: rows, total: isNum(resp.total) ? resp.total : n, countText: n ? U(n, ['رأي واحد', 'رأيان', 'آراء', 'رأيًا']) : 'لا آراء هنا' };
   }
+  // ------------------------------------------------------------------ ٥ب · النقاشات (إخفاء وإرجاع) والصلة بالقانون (R17)
+  var TOPIC_CHIPS = [['open', 'المفتوحة'], ['hidden', 'المخفية']];
+  var TOPIC_STATUS_TEXT = { open: 'مفتوح', published: 'منشور', draft: 'مسودة', pending_review: 'ينتظر المراجعة', merged: 'مدموج', rejected: 'مرفوض', archived: 'مؤرشف' };
+  var GATE_LABELS = [['news', 'الأخبار'], ['topics', 'النقاشات'], ['articles', 'المقالات']];
+  var GATE_REASONS = { 'off-theme': 'لا يتناول موضوعًا قانونيًا', negative: 'حوادث أو سياسة أو منوّعات', 'weak-legal-signal': 'صلته بالقانون ضعيفة',
+                       'no-pillar': 'خارج مجالات المنصة' };
+  function gateReason(r) { return GATE_REASONS[str(r)] || 'غير مرتبط بالقانون'; }
   function topics(resp) {
     var list = items(resp);
     if (!list) return null;
-    return { rows: list.map(function (r) { return { id: String(r.id), title: str(r.title) || 'نقاش بلا عنوان' }; }) };
+    var rows = list.map(function (r) {
+      var lg = r.legal && typeof r.legal === 'object' ? r.legal : null, hidden = !!(lg && lg.ok === false), st = str(r.status);
+      return { id: String(r.id), title: str(r.title) || 'نقاش بلا عنوان', status: st, statusText: TOPIC_STATUS_TEXT[st] || 'حالة غير معروفة',
+               hidden: hidden, hiddenText: hidden ? (lg.by === 'human' ? 'مخفي يدويًا' : 'مخفي لعدم الصلة بالقانون') : '',
+               opinions: isNum(r.opinions_count) ? r.opinions_count : null };
+    });
+    var n = rows.length;
+    return { rows: rows, hiddenCount: rows.filter(function (r) { return r.hidden; }).length,
+             countText: n ? U(n, ['نقاش واحد', 'نقاشان', 'نقاشات', 'نقاشًا']) : 'لا نقاشات هنا' };
+  }
+  function topicAction(kind) {
+    if (kind === 'hide') return { lead: 'سيختفي هذا النقاش من الساحة وعدّاداتها، وتبقى آراؤه محفوظة ويمكن إرجاعه في أي وقت:', goLabel: 'أخفِ النقاش', done: 'أُخفي النقاش' };
+    return { lead: 'سيرجع هذا النقاش إلى الساحة كما كان:', goLabel: 'أرجِع النقاش', done: 'رجع النقاش إلى الساحة' };
+  }
+  // رد الفحص/الإخفاء ⇒ {rows: [{id, kind, title, reason}], counts: [{key, label, n}], failed: [تسميات]، total، listed، applied، totalText} أو null
+  // بعد الإخفاء: العدد = ما اتعلّم عليه فعلًا (غير المرتبط ناقص اللي اتشال من الاختيار).
+  function gateView(resp) {
+    if (!resp || typeof resp !== 'object' || !resp.collections || typeof resp.collections !== 'object') return null;
+    var rows = [], counts = [], failed = [];
+    GATE_LABELS.forEach(function (g) {
+      var c = resp.collections[g[0]];
+      if (!c || typeof c !== 'object') { failed.push(g[1]); return; }
+      var n = isNum(c.would_hide) ? c.would_hide : 0;
+      if (resp.applied === true && isNum(c.skipped_unselected)) n = Math.max(0, n - c.skipped_unselected);
+      counts.push({ key: g[0], label: g[1], n: n });
+      (Array.isArray(c.hidden) ? c.hidden : []).forEach(function (h) {
+        if (h && typeof h === 'object' && str(String(h.id == null ? '' : h.id))) rows.push({ id: String(h.id), kind: g[1], title: str(h.title) || 'بلا عنوان', reason: gateReason(h.reason) });
+      });
+    });
+    if (!counts.length) return null;            // ولا مجموعة اتفحصت ⇒ مفيش نتيجة (مش «كله مرتبط»)
+    var total = counts.reduce(function (a, c) { return a + c.n; }, 0);
+    return { rows: rows, counts: counts, failed: failed, total: total, listed: rows.length, applied: resp.applied === true,
+             totalText: total ? U(total, ['عنصر واحد غير مرتبط بالقانون', 'عنصران غير مرتبطين بالقانون', 'عناصر غير مرتبطة بالقانون', 'عنصرًا غير مرتبط بالقانون'])
+               : (failed.length ? 'لا شيء غير مرتبط بالقانون فيما أمكن فحصه' : 'كل ما فُحص مرتبط بالقانون') };
+  }
+  // الاختيار من نتيجة الفحص: كل المعروض متعلَّم عليه إلا اللي اتشال (`off` = {id: true})
+  function gatePicked(v, off) {
+    off = off && typeof off === 'object' ? off : {};
+    return (v && v.rows ? v.rows : []).filter(function (r) { return !off[r.id]; }).map(function (r) { return r.id; });
+  }
+  function gateDone(v) {
+    if (!v) return 'اكتمل الإخفاء';
+    return v.total ? 'أُخفي ' + U(v.total, ['عنصر واحد', 'عنصران', 'عناصر', 'عنصرًا']) + ' من الساحة، ويمكن إرجاع أي نقاش منها' : 'لم يكن هناك ما يُخفى';
   }
   function opinionAction(kind, row) {
     if (kind === 'hide') return { lead: 'سيُخفى هذا الرأي عن القرّاء ولا يُحتسب في عدّاد النقاش:', goLabel: 'أخفِ الرأي', done: 'أُخفي الرأي' };
@@ -670,7 +735,7 @@
     news: news, newsForm: newsForm, newsCheck: newsCheck, newsRunCheck: newsRunCheck, newsRunDone: newsRunDone,
     opps: opps, oppFilter: oppFilter, oppCountText: oppCountText, pendingText: pendingText, oppForm: oppForm, oppCheck: oppCheck, oppDecision: oppDecision, oppDone: oppDone,
     prepView: prepView, prepCheck: prepCheck, seedView: seedView, seedDone: seedDone, seedCheck: seedCheck,
-    opinions: opinions, topics: topics, opinionAction: opinionAction, reminders: reminders, reminderTile: reminderTile, reminderRunDone: reminderRunDone,
+    opinions: opinions, topics: topics, opinionAction: opinionAction, topicAction: topicAction, gateView: gateView, gateDone: gateDone, gatePicked: gatePicked, TOPIC_CHIPS: TOPIC_CHIPS, newsHidden: newsHidden, gateReason: gateReason, reminders: reminders, reminderTile: reminderTile, reminderRunDone: reminderRunDone,
     works: works, workAction: workAction, workActions: workActions, comments: comments, challenges: challenges, challengeForm: challengeForm, challengeCheck: challengeCheck,
     prizeTypeText: prizeTypeText, winnersCheck: winnersCheck, winnersDone: winnersDone, report: report, reportTile: reportTile
   };
@@ -958,9 +1023,10 @@
     settings: '/v2/saha/settings',
     rem: '/v2/saha/reminders',
     topics: '/v2/saha/topics?status=open',
+    topicsHidden: '/v2/saha/topics?status=all&hidden=1',
     ops: function (st, topic) { return '/v2/saha/opinions?status=' + st + (topic ? '&topic_id=' + encodeURIComponent(topic) : ''); }
   };
-  var HUB = [P.news('draft'), P.rev, P.opps, P.settings, P.ops('pending', ''), P.rem];
+  var HUB = [P.news('draft'), P.rev, P.opps, P.settings, P.ops('pending', ''), P.rem, P.topics];
   var now = function () { return Date.now(); };
   var B = null;
   function row(rows, id) { for (var i = 0; i < (rows || []).length; i++) if (rows[i].id === id) return rows[i]; return null; }
@@ -970,6 +1036,8 @@
   function opsView(st, topic) { var d = B.data(P.ops(st, topic)); return d ? X.opinions(d, now()) : null; }
   function remView() { var d = B.data(P.rem); return d ? X.reminders(d, now()) : null; }
   function setView() { var d = B.data(P.settings); return d ? X.prepView(d) : null; }
+  function topicsPath(st) { return st === 'hidden' ? P.topicsHidden : P.topics; }
+  function topicsView(st) { var d = B.data(topicsPath(st || 'open')); return d ? X.topics(d) : null; }
 
   // —— المربّعات
   function tiles() {
@@ -980,12 +1048,17 @@
     var ot = Kit.count(B, P.ops('pending', ''), function () { var v = opsView('pending', ''); return v ? { n: ar(v.rows.length), note: v.rows.length ? 'رأي ينتظر قرارك' : 'لا آراء تنتظر', hot: v.rows.length > 0 } : null; });
     var rm = Kit.count(B, P.rem, function () { var t = X.reminderTile(remView()); return { n: t.n, note: t.sub, off: t.off, word: t.word, hot: t.hot }; });
     var imp = { n: 'جرّب', note: 'استيراد فرص جاهزة', word: true };
+    var tp = Kit.count(B, P.topics, function () {
+      var v = topicsView();
+      return v ? { n: ar(v.rows.length), note: v.hiddenCount ? 'نقاش مفتوح، منها ' + ar(v.hiddenCount) + ' مخفية' : (v.rows.length ? 'نقاش مفتوح في الساحة' : 'لا نقاشات مفتوحة') } : null;
+    });
     return [
       Object.assign({ sub: 'news', name: 'أخبار للمراجعة', img: 'content' }, n),
       Object.assign({ sub: 'review', name: 'مراجعة الإعلانات والفرص', img: 'files' }, rv),
       Object.assign({ sub: 'opps', name: 'الفرص', img: 'marketing' }, op),
       Object.assign({ sub: 'import', name: 'استيراد الفرص', img: 'reports' }, imp),
       Object.assign({ sub: 'prep', name: 'رابط دورة التحضير', img: 'courses' }, pr),
+      Object.assign({ sub: 'topics', name: 'النقاشات', img: 'disputes' }, tp),
       Object.assign({ sub: 'opinions', name: 'الآراء', img: 'people' }, ot),
       Object.assign({ sub: 'reminders', name: 'التذكير', img: 'company' }, rm)
     ];
@@ -1003,8 +1076,9 @@
       { h: 'الخبر', c: function (r) { return '<b class="sh-t">' + esc(r.title) + '</b>' + (r.summary ? '<span class="sh-sub">' + esc(r.summary.length > 140 ? r.summary.slice(0, 140) + '…' : r.summary) + '</span>' : ''); } },
       { h: 'التصنيف', c: function (r) { return esc(r.category) + (r.featured ? ' ' + Kit.pill('مميَّز', 'gold') : ''); } },
       { h: 'المصدر', c: function (r) { return Kit.link(r.sourceUrl, r.source || 'فتح المصدر') || esc(r.source); } },
-      { h: 'الحالة', c: function (r) { return Kit.pill(r.statusText) + (r.when ? '<span class="sh-sub">' + esc(r.when) + '</span>' : ''); } }
+      { h: 'الحالة', c: function (r) { return Kit.pill(r.statusText) + (r.hidden ? ' ' + Kit.pill(r.hiddenText, 'mute') : '') + (r.when ? '<span class="sh-sub">' + esc(r.when) + '</span>' : ''); } }
     ], function (r) {
+      if (r.published && r.hidden) return '<button type="button" class="ep-b1" data-a="newsrestore" data-id="' + esc(r.id) + '">أرجِع</button><button type="button" class="ep-bs" data-a="newsun" data-id="' + esc(r.id) + '">ألغِ النشر</button>';
       return r.published ? '<button type="button" class="ep-b2" data-a="newsedit" data-id="' + esc(r.id) + '">عدّل</button><button type="button" class="ep-bs" data-a="newsun" data-id="' + esc(r.id) + '">ألغِ النشر</button>'
         : '<button type="button" class="ep-b1" data-a="newsapprove" data-id="' + esc(r.id) + '">راجع واعتمد</button>';
     });
@@ -1029,6 +1103,10 @@
   function newsUnpublish(r) {
     B.flow({ title: 'سحب الخبر من الساحة', check: function () { return X.newsCheck(X.newsForm(r), r, 'unpublish'); }, goLabel: 'ألغِ النشر',
       send: function (res) { return B.api('/v2/saha/news/' + encodeURIComponent(r.id), Object.assign({}, res.body, { confirmed: true }), 'PUT'); }, done: function () { return 'سُحب الخبر من الساحة وعاد مسودة'; } });
+  }
+  function newsRestore(r) {
+    B.flow({ title: 'إرجاع الخبر للقرّاء', check: function () { return X.newsCheck(X.newsForm(r), r, 'restore'); }, goLabel: 'أرجِع الخبر',
+      send: function (res) { return B.api('/v2/saha/news/' + encodeURIComponent(r.id), Object.assign({}, res.body, { confirmed: true }), 'PUT'); }, done: function () { return 'رجع الخبر ظاهرًا للقرّاء'; } });
   }
   function newsRun() {
     B.flow({ title: 'جلب أخبار جديدة', intro: 'ستجلب المنصة أخبارًا جديدة من مصادرها وتصوغها مسودات تنتظر مراجعتك، ولا يُنشر منها شيء قبل اعتمادك. قد يستغرق ذلك دقيقة.',
@@ -1244,6 +1322,78 @@
       send: function () { return B.api('/v2/saha/opinions/' + encodeURIComponent(r.id) + '/' + (kind === 'hide' ? 'hide' : 'restore'), { confirmed: true }); }, done: function () { return a.done; } });
   }
 
+  // —— ٥ب · النقاشات: إخفاء وإرجاع + فحص الصلة بالقانون (تجربة بلا حفظ ثم تأكيد)
+  function gatePanel() {
+    var gv = B.f('gateRes', null) ? X.gateView(B.f('gateRes', null)) : null;
+    if (!gv) return '';
+    var off = B.f('gateOff', {}) || {}, picked = X.gatePicked(gv, off);
+    // كل عنصر متعلَّم عليه افتراضيًّا، و«استبعاد من الإخفاء» يشيله من الإخفاء (القرار البشري لكل عنصر)
+    var list = gv.applied ? '' : gv.rows.map(function (r) {
+      var out = !!off[r.id];
+      return '<li' + (out ? ' class="sh-off"' : '') + '><b>' + esc(r.kind) + '</b> ' + esc(r.title) + ' <span class="sh-sub">' + esc(out ? 'سيبقى كما هو' : r.reason) + '</span> '
+        + '<button type="button" class="ep-bs" data-a="gatetoggle" data-id="' + esc(r.id) + '">' + (out ? 'إعادة للإخفاء' : 'استبعاد من الإخفاء') + '</button></li>';
+    }).join('');
+    var more = !gv.applied && gv.total > gv.listed ? '<p class="sh-fine">' + esc('تظهر هنا أول ' + ar(gv.listed) + ' فقط، والإخفاء يشمل المعروض هنا وحده.') + '</p>' : '';
+    return '<div class="sh-panel" data-r="gate"><h3>' + esc(gv.applied ? 'تم الإخفاء' : 'نتيجة الفحص') + '</h3><p class="sh-fine">' + esc(gv.applied ? gv.totalText : 'لم يتغير شيء بعد. ' + gv.totalText) + '</p>'
+      + '<ul class="sh-nums">' + gv.counts.map(function (c) { return '<li><b>' + esc(ar(c.n)) + '</b><span>' + esc(c.label) + '</span></li>'; }).join('') + '</ul>'
+      + (gv.failed.length ? '<p class="sh-fine">' + esc(X.NA + ': ' + gv.failed.join('، ')) + '</p>' : '')
+      + (list ? '<ul class="sh-warns">' + list + '</ul>' + more : '')
+      + (!gv.applied && picked.length ? '<div class="sh-acts"><button type="button" class="ep-b1" data-a="gateapply">أخفِ المحدد (' + esc(ar(picked.length)) + ')</button></div>' : '') + '</div>';
+  }
+  function screenTopics() {
+    var st = B.f('topSt', 'open'), p = topicsPath(st);
+    B.need(p);
+    var d = topicsView(st), body, busy = B.f('gateBusy', false), err = B.f('gateErr', '');
+    var top = '<div class="sh-top"><button type="button" class="ep-b1" data-a="gatecheck"' + (busy ? ' disabled' : '') + '>' + (busy ? 'جارٍ الفحص…' : 'افحص الصلة بالقانون') + '</button></div>'
+      + '<p class="sh-fine">الفحص يعرض الأخبار والنقاشات والمقالات غير المرتبطة بالقانون بلا أن يغيّر شيئًا، ثم تقرر إخفاءها.</p>'
+      + (err ? '<div class="sh-err" role="alert">' + esc(err) + '</div>' : '');
+    if (!d) body = B.stateBlock(p, 'النقاشات');
+    else if (!d.rows.length) body = st === 'hidden' ? B.empty('لا نقاشات مخفية', 'كل نقاش يُخفى يظهر هنا ويمكن إرجاعه')
+      : B.empty('لا نقاشات مفتوحة', 'تظهر هنا النقاشات المفتوحة في الساحة');
+    else body = '<p class="sh-count">' + esc(d.countText) + '</p>' + B.list(d.rows, [
+      { h: 'النقاش', c: function (r) { return '<b class="sh-t">' + esc(r.title) + '</b>'; } },
+      { h: 'الآراء', c: function (r) { return esc(r.opinions == null ? X.NO_NUM : ar(r.opinions)); } },
+      { h: 'الحالة', c: function (r) { return Kit.pill(r.hidden ? r.hiddenText : r.statusText, r.hidden ? 'mute' : ''); } }
+    ], function (r) {
+      return r.hidden ? '<button type="button" class="ep-b2" data-a="topicshow" data-id="' + esc(r.id) + '">أرجِع</button>'
+        : '<button type="button" class="ep-b2" data-a="topichide" data-id="' + esc(r.id) + '">أخفِ</button>';
+    });
+    return { title: 'النقاشات', sub: d ? d.countText : '', img: 'disputes', html: top + gatePanel() + B.chips('topSt', X.TOPIC_CHIPS, st) + body };
+  }
+  function gateCheck() {
+    if (B.f('gateBusy', false)) return;
+    B.set('gateBusy', true); B.set('gateErr', ''); B.redraw();
+    B.api('/v2/saha/legal-gate/check', {}).then(function (d) {
+        var ok = !!X.gateView(d);
+        B.set('gateBusy', false); B.set('gateRes', ok ? d : null); B.set('gateOff', {}); B.set('gateErr', ok ? '' : 'تعذّر الفحص الآن، حاول مرة أخرى'); B.redraw();
+      })
+      .catch(function (e) { B.set('gateBusy', false); B.set('gateRes', null); B.set('gateErr', X.writeError(e && e.status, e && e.data)); B.redraw(); });
+  }
+  function gateToggle(id) {
+    var off = Object.assign({}, B.f('gateOff', {}) || {});
+    if (off[id]) delete off[id]; else off[id] = true;
+    B.set('gateOff', off); B.redraw();
+  }
+  function gateApplyFlow() {
+    var v = X.gateView(B.f('gateRes', null));
+    if (!v || v.applied) return;
+    var ids = X.gatePicked(v, B.f('gateOff', {}));
+    if (!ids.length) return;
+    var byKind = {};
+    v.rows.forEach(function (r) { if (ids.indexOf(r.id) > -1) byKind[r.kind] = (byKind[r.kind] || 0) + 1; });
+    B.flow({ title: 'إخفاء غير المرتبط بالقانون', check: function () {
+        return { ok: true, lead: 'سيختفي من الساحة ما حددته من نتيجة الفحص، بلا حذف. ويمكن إرجاع أي نقاش منه من هذه الشاشة:', goLabel: 'أخفِ المحدد',
+                 lines: Object.keys(byKind).map(function (k) { return { label: k, to: ar(byKind[k]) }; }) };
+      },
+      send: function () { return B.api('/v2/saha/legal-gate/apply', { confirmed: true, ids: ids }); },
+      done: function (out) { return X.gateDone(X.gateView(out)); }, after: function (out) { B.set('gateRes', out); } });
+  }
+  function topicFlow(r, kind) {
+    var a = X.topicAction(kind);
+    B.flow({ title: kind === 'hide' ? 'إخفاء النقاش' : 'إرجاع النقاش', check: function () { return { ok: true, lead: a.lead, goLabel: a.goLabel, lines: [{ label: 'النقاش', to: r.title }] }; },
+      send: function () { return B.api('/v2/saha/topics/' + encodeURIComponent(r.id) + '/' + (kind === 'hide' ? 'hide' : 'restore'), { confirmed: true }); }, done: function () { return a.done; } });
+  }
+
   // —— ٦ · التذكير
   function screenReminders() {
     B.need(P.rem);
@@ -1268,10 +1418,11 @@
   B = Kit.board({
     key: 'saha', mod: 'v2s_saha', label: 'الساحة', lead: 'اختر ما تريد إدارته في الساحة',
     hub: function () { return HUB; }, tiles: tiles,
-    screens: { news: screenNews, review: screenReview, opps: screenOpps, import: screenImport, prep: screenPrep, opinions: screenOpinions, reminders: screenReminders },
+    screens: { news: screenNews, review: screenReview, opps: screenOpps, import: screenImport, prep: screenPrep, topics: screenTopics, opinions: screenOpinions, reminders: screenReminders },
     act: {
       newsrun: function () { newsRun(); },
       newsapprove: function (b, a, id) { var r = row((newsView(b.f('newsSt', 'draft')) || {}).rows, id); if (r) newsFlow(r, 'approve'); },
+      newsrestore: function (b, a, id) { var r = row((newsView(b.f('newsSt', 'draft')) || {}).rows, id); if (r) newsRestore(r); },
       newsedit: function (b, a, id) { var r = row((newsView(b.f('newsSt', 'draft')) || {}).rows, id); if (r) newsFlow(r, 'edit'); },
       newsun: function (b, a, id) { var r = row((newsView(b.f('newsSt', 'draft')) || {}).rows, id); if (r) newsUnpublish(r); },
       oppapprove: function (b, a, id) { var r = row((revView() || {}).rows, id); if (r) decideFlow(r, 'approve'); },
@@ -1285,7 +1436,12 @@
       seedclear: function (b) { b.set('seedFile', null); b.set('seedPrev', null); b.redraw(); },
       ophide: function (b, a, id) { var r = row((opsView(b.f('opSt', 'pending'), b.f('opTopic', '')) || {}).rows, id); if (r) opinionFlow(r, 'hide'); },
       opshow: function (b, a, id) { var r = row((opsView(b.f('opSt', 'pending'), b.f('opTopic', '')) || {}).rows, id); if (r) opinionFlow(r, 'show'); },
-      remrun: function () { remFlow(); }
+      remrun: function () { remFlow(); },
+      gatecheck: gateCheck,
+      gateapply: function () { gateApplyFlow(); },
+      gatetoggle: function (b, a, id) { gateToggle(id); },
+      topichide: function (b, a, id) { var r = row((topicsView(b.f('topSt', 'open')) || {}).rows, id); if (r) topicFlow(r, 'hide'); },
+      topicshow: function (b, a, id) { var r = row((topicsView(b.f('topSt', 'open')) || {}).rows, id); if (r) topicFlow(r, 'show'); }
     }
   });
   window.V2S_SAHA = B;
