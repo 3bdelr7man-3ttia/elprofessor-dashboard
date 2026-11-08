@@ -1054,14 +1054,16 @@ def test_brain2_wiring_in_brain_js():
     assert "'/v2/brain/switches/' + encodeURIComponent(id), { method: 'PUT', body: { mode: mode, confirmed: true } }" in js
     assert "'/v2/brain/items/' + encodeURIComponent(id) + '/discard', { method: 'POST', body: { confirmed: true } }" in js
     assert "'/v2/brain/run', { method: 'POST', body: { confirmed: true } }" in js and js.count("'/v2/brain/run'") == 1
-    for t in ('حُفظ الاختيار', 'بدأ العقل الكتابة', 'حُذفت الملاحظة', 'اكتب الاقتراحات الآن', 'نعم، ابدأ', 'ما يكتبه العقل', 'اقتراحات يكتبها العقل من بيانات حقيقية',
+    for t in ('حُفظ الاختيار', 'بدأ العقل الكتابة', 'حُذفت الملاحظة', 'تشغيل العقل الآن', 'نعم، ابدأ', 'ما يكتبه العقل', 'اقتراحات يكتبها العقل من بيانات حقيقية',
               'أين ترى نتيجته', 'من يكتب الآن', 'كتابات العقل اليوم', 'تُحذف هذه الملاحظة. لم تغيّر شيئًا في المنصة.'):
         assert t in js, t
     assert 'role="radiogroup"' in js and 'role="radio"' in js and 'openSection(r.link.section)' in js
     # «ابدأ القرارات» تفتح الرئيسية ثم تضغط زرّ البدء الموجود، لا مدخل آخر
     assert "openSection('home')" in js and '[data-a="start"]' in js
     # الزرّ يعطَّل أثناء جولة نشطة: من حالة المصدر لا من حالة محلية فقط
-    assert 'L.v2sBrainRunInfo(sw, runState(), now())' in js and '(ri.canStart ? \'\' : \' disabled\')' in js
+    assert 'L.v2sBrainRunInfo(swInfo(), runState(), now())' in js and '(c.canRun ? \'\' : \' disabled\')' in js
+    # R16: زرّ تشغيل واحد فقط (بطاقة «آخر تشغيل للعقل») — لا زرّان لنفس الفعل
+    assert js.count('data-a="runnow"') == 1 and 'اكتب الاقتراحات الآن' not in js
     # لا نعرض صفرًا ولا null: القرصان يمرّان على «غير متاح بعد»
     assert 'L.v2sBrainWriterText(' in js and 'L.v2sBrainWritesToday(' in js
     css = _read('dashboard-cloud', 'v2s', 'brain.css')

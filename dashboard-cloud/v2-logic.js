@@ -2414,7 +2414,7 @@
     var st = v2sBrainTime(r.started_at), fin = r.finished_at;
     return { known: true, active: !fin && st != null && (now || 0) - st < BR_RUN_FRESH };
   }
-  // زرّ «اكتب الاقتراحات الآن»: {canStart, active, reason, n, lead}. sw = ناتج v2sBrainSwitches|null · run = ناتج v2sBrainRunState.
+  // زرّ «شغّل الآن» (بطاقة «آخر تشغيل للعقل»): {canStart, active, reason, n, lead}. sw = ناتج v2sBrainSwitches|null · run = ناتج v2sBrainRunState.
   function v2sBrainRunInfo(sw, run, now) {
     var bt = sw && sw.brainToday ? sw.brainToday : { used: null, cap: null };
     var left = bt.used != null && bt.cap != null ? Math.max(0, bt.cap - bt.used) : null;
@@ -2450,7 +2450,7 @@
     if (sw && sw.autorun) out.auto = sw.autorun.on && sw.autorun.nextMs != null ? 'التشغيل التلقائي القادم: ' + brSlotText(sw.autorun.nextMs, now) : 'التشغيل التلقائي متوقّف';
     if (sw && sw.writesOn === false) { out.canRun = false; out.reason = 'كتابة العقل موقوفة من إعداد الخادم'; }
     if (!runKnown) { out.when = 'غير متاح بعد'; }
-    else if (r === null || typeof r !== 'object') { out.when = 'لم يعمل العقل بعد'; out.headline = 'لا يوجد تشغيل سابق. اضغط «شغّل الآن» ليبدأ.'; }
+    else if (r === null || typeof r !== 'object') { out.when = 'لم يعمل العقل بعد'; out.headline = 'لا يوجد تشغيل سابق.'; out.first = true; }
     else {
       var rep = r.report && typeof r.report === 'object' ? r.report : null;
       var st = v2sBrainTime(r.started_at), fin = v2sBrainTime(r.finished_at);
@@ -2468,7 +2468,9 @@
       if (out.fix !== sw.writerFix.where) { out.where = sw.writerFix.where; if (!out.failed.length) out.failed = [sw.writerFix.text]; }
       out.reason = 'لا كاتب مفعّل الآن';
     }
-    out.tone = { ok: 'ok', nothing: 'ok', running: 'run', partial: 'warn', failed: 'bad', stale: 'warn' }[out.state] || (out.failed.length ? 'bad' : 'na');
+    // قبل أول تشغيل: نذكر الزرّ فقط لو كان يعمل فعلًا (لا دعوة لزرّ معطّل).
+    if (out.first) { if (out.canRun) out.headline += ' البدء بزرّ «شغّل الآن».'; delete out.first; }
+    out.tone = { ok: 'ok', nothing: 'ok', running: 'run', partial: 'warn', failed: 'bad', stale: 'warn', busy: 'warn' }[out.state] || (out.failed.length ? 'bad' : 'na');
     return out;
   }
   // قرصا المساعدين الجديدان.

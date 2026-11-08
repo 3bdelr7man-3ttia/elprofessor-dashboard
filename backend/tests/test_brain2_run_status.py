@@ -106,9 +106,12 @@ def test_missing_key_says_exactly_where_and_makes_no_call(api, monkeypatch):
     assert engine.brain_today(db) == 0, 'لا عدّ نداء بلا مفتاح'
     rep = raw_report(r.get_json()['run_id'])
     assert rep['stop'] == 'no_key' and rep['writer'] is None
-    assert rep['producers']['first']['state'] == 'done' and rep['producers']['second']['state'] == 'not_reached'
+    assert rep['producers']['first']['state'] == 'interrupted' and rep['producers']['second']['state'] == 'not_reached'
     s = latest(api)['report']
     assert s['state'] == 'failed' and s['failed'][0] == run_report.KEY_MISSING and s['fix'] == run_report.KEY_WHERE
+    assert s['headline'] == 'لم يكتب العقل شيئًا في آخر تشغيل.'
+    assert '«منتج first»: لم يكتمل لأن التشغيل توقّف في أثنائه.' in s['failed']
+    assert not any('first' in d for d in s['done']), 'المنتج الذي قُطع ليس «لا يوجد ما يُكتب عنه»'
     assert '«منتج second»: لم يصل إليه الدور لأن التشغيل توقّف.' in s['failed']
     assert 'من يكتب للعقل' in s['fix'] and 'أضف مفتاحًا' in s['fix'] and 'الأساسي' in s['fix']
     sw = api.get('/api/v2/brain/switches').get_json()
@@ -137,6 +140,9 @@ def test_three_model_errors_in_a_row_stop_the_run_with_the_reason(api, monkeypat
     s = latest(api)['report']
     assert s['failed'][0].startswith('لم يرد الموديل أكثر من مرة متتالية (تعذّر الاتصال بخدمة الذكاء)')
     assert 'جرّبه' in s['fix']
+    # ثلاثة صفوف فاشلة ليست «كتابات»: العنوان لا يقول «كتب» والحالة فشل
+    assert latest(api)['items'] == engine.AI_ERR_STOP
+    assert s['state'] == 'failed' and s['headline'] == 'لم يكتب العقل شيئًا في آخر تشغيل.' and 'وكتب' not in s['headline']
 
 
 # ───────────────────────────────────────────────────────────── تليجرام
@@ -145,7 +151,7 @@ def test_telegram_outcomes_show_in_the_run(api, monkeypatch):
     use(monkeypatch, draft('reply_draft', [('pmsg:1', F1), ('pmsg:2', F2)]))
     api.post('/api/v2/brain/run', {'confirmed': True})
     s = latest(api)['report']
-    assert 'تليجرام: أُرسل سؤالين للقرار.' in s['done']
+    assert 'تليجرام: أُرسل سؤالان للقرار.' in s['done']
 
 
 def test_telegram_failure_is_visible_with_what_to_check(api, monkeypatch):
@@ -153,7 +159,7 @@ def test_telegram_failure_is_visible_with_what_to_check(api, monkeypatch):
     use(monkeypatch, draft('reply_draft', [('pmsg:1', F1)]))
     api.post('/api/v2/brain/run', {'confirmed': True})
     s = latest(api)['report']
-    assert 'تليجرام: لم يصل سؤالًا واحدًا؛ المنصة لم تؤكّد الإرسال.' in s['failed']
+    assert 'تليجرام: لم يصل سؤال واحد؛ المنصة لم تؤكّد الإرسال.' in s['failed']
     assert 'بوت تليجرام' in s['fix'] and 'ابدأ القرارات' in s['fix']
     assert rows()[0].status == 'proposed', 'الاقتراح نفسه في الوارد («ابدأ القرارات») حتى لو لم يصل تليجرام'
 
@@ -295,6 +301,9 @@ def test_copy_rules_on_run_report_strings():
         assert not re.search(r'[A-Za-z]', s), s
         assert 'يقوّم' not in s and 'استشار' not in s and '·' not in s and not s.startswith('الذكاء'), s
         assert not re.search(r'[0-9]', s), 'أرقام عربية فقط: ' + s
+        # صيغة محايدة: لا أفعال أمر خارج أسماء الأزرار المقتبسة «…»
+        bare = re.sub(r'«[^»]*»', '', s)
+        assert not re.search(r'(^|\s)(افتح|اختر|الصق|اجعل|اجعله|اضغط|أضف|فأضف|ثم اضغط)(\s|$|،|\.)', bare), s
 
 
 def test_counts_are_arabic_and_grammatical():
@@ -302,3 +311,63 @@ def test_counts_are_arabic_and_grammatical():
     assert c(1, run_report.F_PROPOSAL) == 'اقتراحًا واحدًا' and c(2, run_report.F_PROPOSAL) == 'اقتراحين'
     assert c(3, run_report.F_PROPOSAL) == '٣ اقتراحات' and c(11, run_report.F_PROPOSAL) == '١١ اقتراحًا'
     assert c(20, run_report.F_WRITE) == '٢٠ كتابة' and c(103, run_report.F_NOTE) == '١٠٣ ملاحظات'
+
+
+# ───────────────────────────────────────────────────────────── العنوان لا يعد بما لم يُكتب
+
+class _Run:
+    def __init__(self, items=0, trigger='admin'):
+        self.items, self.trigger = items, trigger
+        self.started_at = self.finished_at = datetime.datetime(2098, 1, 1, 12, 0)
+
+
+def test_failed_only_run_does_not_say_it_wrote():
+    rep = {'producers': {'x': {'state': 'done', 'targets': 2, 'failed': 2}}}
+    s = run_report.describe(_Run(items=2), rep)
+    assert s['state'] == 'failed' and s['headline'] == 'لم يكتب العقل شيئًا في آخر تشغيل.'
+    assert any('تعذّرت الكتابة مرتين' in f for f in s['failed'])
+
+
+def test_discarded_only_run_reads_nothing_not_wrote():
+    rep = {'producers': {'x': {'state': 'done', 'targets': 1, 'discarded': 1}}}
+    s = run_report.describe(_Run(items=1), rep)
+    assert s['state'] == 'nothing' and s['headline'] == 'عمل العقل ولم يجد جديدًا يكتب عنه.'
+
+
+def test_headline_counts_only_real_writes():
+    rep = {'producers': {'x': {'state': 'done', 'targets': 4, 'proposed': 1, 'failed': 2, 'discarded': 1}}}
+    s = run_report.describe(_Run(items=4), rep)
+    assert s['state'] == 'partial' and s['headline'] == 'عمل العقل وكتب كتابة واحدة، وتعذّر جزء.'
+    ok = run_report.describe(_Run(items=3), {'producers': {'x': {'state': 'done', 'proposed': 2, 'done_alone': 1}}})
+    assert ok['state'] == 'ok' and ok['headline'] == 'عمل العقل وكتب ٣ كتابات.'
+
+
+def test_target_errors_are_listed_as_failures():
+    s = run_report.describe(_Run(), {'producers': {'x': {'state': 'done', 'targets': 1, 'errors': 1}}})
+    assert s['state'] == 'failed' and any('حدث عطل أثناء الكتابة مرة واحدة' in f for f in s['failed'])
+    assert not s['done']
+
+
+def test_busy_run_reads_busy_not_nothing(api, monkeypatch):
+    use(monkeypatch, fp(targets=[('a:1', F1)]))
+    monkeypatch.setattr(engine, 'submit', lambda ns, kind, fn: {'queued': False, 'reason': 'busy'})
+    r = api.post('/api/v2/brain/run', {'confirmed': True})
+    assert r.status_code == 409 and engine.active_run(db) is None
+    s = latest(api)['report']
+    assert s['state'] == 'busy' and s['headline'] == 'لم يبدأ هذا التشغيل لأن تشغيلًا آخر كان يعمل.'
+    assert s['failed'] == ['كان تشغيل آخر يعمل في الوقت نفسه، فلم يبدأ هذا.']
+    # صف قديم بـ{'busy': 1} فقط (قبل هذا الإصلاح) يُقرأ كذلك
+    Run = engine._models(db)[2]
+    db.session.add(Run(id='b' * 32, trigger='admin', started_at=engine.utcnow() + datetime.timedelta(seconds=5),
+                       finished_at=engine.utcnow() + datetime.timedelta(seconds=6), skipped_json='{"busy": 1}'))
+    db.session.commit()
+    assert latest(api)['report']['state'] == 'busy'
+
+
+def test_autorun_catches_up_only_a_recent_missed_slot(env, monkeypatch):
+    monkeypatch.delenv('DASH_BRAIN_AUTORUN_HOURS', raising=False)
+    slot = datetime.datetime(2098, 3, 10, 18, 0)        # ٢٠:٠٠ القاهرة
+    assert autorun.due(db, slot + datetime.timedelta(hours=2, minutes=59)) is True
+    late = slot + datetime.timedelta(hours=3, minutes=1)  # إعادة نشر بعد ٢٣:٠٠ القاهرة ⇒ لا جولة حتى ٠٩:٠٠
+    assert autorun.due(db, late) is False
+    assert autorun.tick(NS, late) is None and engine._models(db)[2].query.count() == 0

@@ -6,7 +6,7 @@
  *   `POST /api/ai/agents/run` من أزرار التشغيل وحدها (قفل واحد: ضغطة ثانية لا ترسل شيئًا). ولا نداء للدالتين الجاهزتين في dashboard-api.js
  *   (تشغيل المساعدين ومفتاح التوزيع) لأن نصوصهما عامية ولا تُرجعان وعدًا نكمل عليه.
  * ⛔ لا زرّ تراجع: لا فعل تلقائي له تراجع حقيقي بعد. الأمر الصادق للتوزيع الذي لم يُستلم هو «أرسله لخبير آخر» من درج الملف.
- * الجولة الثانية (SPEC brain2 §4.4): مجموعة «ما يكتبه العقل» (`/v2/brain/switches` · PUT بتأكيد) · «اكتب الاقتراحات الآن» (`POST /v2/brain/run` بتأكيد) ·
+ * الجولة الثانية (SPEC brain2 §4.4): مجموعة «ما يكتبه العقل» (`/v2/brain/switches` · PUT بتأكيد) · «شغّل الآن» في بطاقة «آخر تشغيل للعقل» (`POST /v2/brain/run` بتأكيد) ·
  *   صفوف السجل من `/v2/brain/items` وحذف الملاحظة (`POST …/discard` بتأكيد) · قرصا المساعدين. كل مصدر يفشل لوحده ⇒ «غير متاح بعد» لا صفر.
  * المفاتيح والكاتب (SPEC-B B1): بطاقة في تبويب المساعدين فوق القرصين — `/v2/brain/keys` (GET · POST · PUT · DELETE · POST …/test)، كل كتابة بتأكيد.
  *   ⛔ النص الصريح للمفتاح يمرّ من حقل كلمة سر واحد إلى POST ثم يُمسح من الصفحة؛ والقائمة لا تعرف إلا آخر ٤ أحرف.
@@ -202,11 +202,9 @@
     if (pendingSrc('switches')) body = hint + skeleton(2);
     else if (!sw) body = hint + '<div class="v3-warn" role="status">' + NA + '. ما يكتبه العقل لا نعرف حالته الآن. ' + retryBtn('retry-switches') + '</div>';
     else {
-      var ri = L.v2sBrainRunInfo(sw, runState(), now());
+      // زرّ التشغيل الوحيد في بطاقة «آخر تشغيل للعقل» أعلى الشاشة (لا زرّان لنفس الفعل).
       count = sw.rows.length;
-      body = hint + sw.rows.map(modeRow).join('')
-        + '<div class="v2sb-runnow"><button type="button" class="v3-btn2 v2sb-runbtn" data-a="runnow"' + (ri.canStart ? '' : ' disabled') + '>اكتب الاقتراحات الآن</button>'
-        + (ri.reason ? '<p class="v2sb-hint v2sb-runwhy" role="status">' + esc(ri.reason) + '</p>' : '') + '</div>';
+      body = hint + sw.rows.map(modeRow).join('');
     }
     return { key: 'writes', title: 'ما يكتبه العقل', count: count, rowsHtml: body };
   }
@@ -812,11 +810,11 @@
     };
   }
 
-  // —— «اكتب الاقتراحات الآن»
+  // —— «شغّل الآن» (من بطاقة «آخر تشغيل للعقل»)
   function openRunNow() {
     var ri = L.v2sBrainRunInfo(swInfo(), runState(), now()), E = ep();
     if (!ri.canStart || !E) return;
-    var s = openSheet('اكتب الاقتراحات الآن', '<p class="mc-lead">' + esc(ri.lead) + '</p><div id="v2sbErr" role="alert"></div>'
+    var s = openSheet('تشغيل العقل الآن', '<p class="mc-lead">' + esc(ri.lead) + '</p><div id="v2sbErr" role="alert"></div>'
       + '<div class="acts"><button type="button" class="btn btn-human" id="v2sbGo">نعم، ابدأ</button><button type="button" class="btn btn-ghost" id="v2sbNo">رجوع</button></div>');
     if (!s) return;
     var go = q('#v2sbGo', s), no = q('#v2sbNo', s);

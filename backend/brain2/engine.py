@@ -878,7 +878,7 @@ def start_run(ns, trigger, actor, only=None):
     sub = submit(ns, 'run', lambda: execute_run(ns, run_id, only, actor))
     if not sub.get('queued') or sub.get('duplicate'):
         # جولة أخرى لا تزال في الطابور/تعمل: لن يُنفَّذ هذا الصف أبدًا، فنختمه بدل أن يبقى «يعمل» فيقفل الجولات ١٥ دقيقة.
-        _finish_run(ns, run_id, 0, 0, {'busy': 1})
+        _finish_run(ns, run_id, 0, 0, {'busy': 1, '_stop': 'busy'})
         return 409, {'error': ERR_RUNNING}
     return 202, {'run_id': run_id}
 
@@ -929,7 +929,7 @@ def _gather(p, ctx, state):
 
 def execute_run(ns, run_id, only, actor):
     """جولة كاملة. كل منتج ينتهي بحالة مرئية في سجل الجولة (`_report`): كتب · لا جديد · لا شيء يُكتب عنه · متوقّف ·
-    تعذّرت قراءة مصدره · لم يصل إليه الدور. وسبب التوقف وأسئلة تليجرام كذلك — فلا تشغيل يمرّ بلا أثر يراه المؤسس."""
+    تعذّرت قراءة مصدره · لم يكتمل (توقّف التشغيل في أثنائه) · لم يصل إليه الدور. وسبب التوقف وأسئلة تليجرام كذلك — فلا تشغيل يمرّ بلا أثر يراه المؤسس."""
     state = _new_state(run_cap())
     ctx = Ctx(ns=ns, now=_aware(), actor=str(actor))
     only_set = set([only] if isinstance(only, str) else (only or []))
@@ -999,9 +999,10 @@ def execute_run(ns, run_id, only, actor):
             for p in order:
                 r = _rep(state, p.id)
                 if p.id == current:
+                    # توقّف التشغيل وهذا المنتج في منتصف أهدافه: ليس «لا شيء يُكتب عنه» بل «لم يكتمل».
                     reached = False
                     if not r.get('state'):
-                        r['state'] = 'done' if r.get('targets') else 'none'
+                        r['state'] = 'interrupted'
                     continue
                 if not reached and not r.get('state'):
                     r['state'] = 'not_reached'

@@ -52,7 +52,7 @@ def test_card_shows_the_server_lines_as_is_and_the_button():
 @needs_node
 def test_card_before_any_run_and_unknown_source():
     c = card({'run': None}, _sw())
-    assert c['when'] == 'لم يعمل العقل بعد' and 'شغّل الآن' in c['headline'] and c['canRun'] is True
+    assert c['when'] == 'لم يعمل العقل بعد' and c['headline'] == 'لا يوجد تشغيل سابق. البدء بزرّ «شغّل الآن».' and c['canRun'] is True
     u = card(None, _sw())
     assert u['known'] is False and u['when'] == 'غير متاح بعد' and u['failed'] == [], 'مصدر لم يصل ⇒ لا جملة مخترعة'
 
@@ -63,6 +63,7 @@ def test_missing_key_is_named_with_its_place_even_before_a_run():
     c = card({'run': None}, _sw(writer=None, writer_fix=fix))
     assert c['canRun'] is False and c['reason'] == 'لا كاتب مفعّل الآن'
     assert c['failed'] == [fix['text']] and c['where'] == fix['where'] and c['tone'] == 'bad'
+    assert c['headline'] == 'لا يوجد تشغيل سابق.', 'لا دعوة لزرّ معطّل'
     # التقرير نفسه ذكر المكان ⇒ لا تكرار
     rep = dict(REPORT, state='failed', failed=[fix['text']], fix=fix['where'], done=[])
     c2 = card({'run': {'started_at': '2026-10-30T11:00:00Z', 'finished_at': '2026-10-30T11:00:05Z', 'report': rep}}, _sw(writer=None, writer_fix=fix))
@@ -75,7 +76,10 @@ def test_running_and_server_writes_off():
                       'report': {'state': 'running', 'headline': 'العقل يعمل الآن.', 'done': [], 'failed': [], 'fix': ''}}}, _sw())
     assert c['state'] == 'running' and c['canRun'] is False and c['tone'] == 'run'
     off = card({'run': None}, _sw(writes_on=False))
-    assert off['canRun'] is False and off['reason'] == 'كتابة العقل موقوفة من إعداد الخادم'
+    assert off['canRun'] is False and off['reason'] == 'كتابة العقل موقوفة من إعداد الخادم' and 'شغّل الآن' not in off['headline']
+    busy = card({'run': {'started_at': '2026-10-30T11:00:00Z', 'finished_at': '2026-10-30T11:00:00Z', 'active': False,
+                         'report': {'state': 'busy', 'headline': 'لم يبدأ هذا التشغيل لأن تشغيلًا آخر كان يعمل.', 'done': [], 'failed': [], 'fix': ''}}}, _sw())
+    assert busy['tone'] == 'warn'
     stopped = card({'run': None}, _sw(autorun={'on': False, 'next_at': None}))
     assert stopped['auto'] == 'التشغيل التلقائي متوقّف'
 

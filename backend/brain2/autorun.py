@@ -7,7 +7,7 @@
 القواعد:
   * المواعيد من `DASH_BRAIN_AUTORUN_HOURS` (ساعات القاهرة بفواصل، الافتراضي «9,20»). `DASH_BRAIN_AUTORUN=0` يوقفه.
   * كل موعد يبدأ جولة واحدة فقط (صف جولة بـ`trigger='cron'` بعد بداية الموعد يكفي)، ولو كان الخادم نائمًا وقتها
-    تبدأ عند أول فحص بعده. الجولة نفسها بلا تكرار (البصمة)، فالتكرار لا يكلّف إلا الجديد.
+    تبدأ عند أول فحص بعده، بشرط ألا يكون فات عليه أكثر من `CATCHUP_HOURS` (٣ ساعات). الجولة نفسها بلا تكرار (البصمة)، فالتكرار لا يكلّف إلا الجديد.
   * الفحص كل ٥ دقائق في خيط خلفي واحد؛ لا يعمل داخل الاختبارات (`pytest` محمّل) ولا لو `DASH_V2_ENABLED` مقفول
     أو `DASH_BRAIN_WRITE=0`.
   * ⛔ لا نداء ذكاء هنا: يفتح الجولة عبر `engine.start_run` فقط، والجولة تمرّ بكل السقوف المعتادة.
@@ -25,6 +25,9 @@ logger = logging.getLogger(__name__)
 TICK_SECONDS = 300
 FIRST_DELAY_SECONDS = 90
 DEFAULT_HOURS = (9, 20)
+# موعد فات بلا جولة يُعوَّض فقط خلال هذه الساعات بعده؛ بعدها ننتظر الموعد التالي — فإعادة نشر الخادم بعيدًا عن
+# أي موعد لا تبدأ جولة (ولا تكلفة) بعد ٩٠ ثانية من الإقلاع.
+CATCHUP_HOURS = 3
 _STATE = {'thread': None}
 
 
@@ -89,7 +92,7 @@ def due(db, now_utc=None):
     """هل فات موعد بلا جولة تلقائية بعده؟"""
     now_utc = now_utc or engine.utcnow()
     slot = last_slot(now_utc)
-    if slot is None:
+    if slot is None or (now_utc - slot) > datetime.timedelta(hours=CATCHUP_HOURS):
         return False
     Run = engine._models(db)[2]
     hit = Run.query.filter(Run.trigger == 'cron', Run.started_at >= slot).first()

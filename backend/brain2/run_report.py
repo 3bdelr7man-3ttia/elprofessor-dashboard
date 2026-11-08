@@ -16,17 +16,19 @@ from brain2 import registry
 _AR_DIGITS = str.maketrans('0123456789', '٠١٢٣٤٥٦٧٨٩')
 
 # أين يُضبط مفتاح الموديل (خانة «من يكتب للعقل» الموجودة في تبويب «المساعدون»).
-KEY_WHERE = ('من قسم «العقل» افتح تبويب «المساعدون»، ثم بطاقة «من يكتب للعقل» وزرّ «أضف مفتاحًا». '
-             'اختر الجهة من القائمة، والصق مفتاحها، واجعل دوره «الأساسي»، ثم اضغط «جرّبه».')
+KEY_WHERE = ('الإضافة من قسم «العقل» ← تبويب «المساعدون» ← بطاقة «من يكتب للعقل» ← زرّ «أضف مفتاحًا»: '
+             'اختيار الجهة من القائمة، ولصق مفتاحها، وجعل دوره «الأساسي»، ثم تجربته بزرّ «جرّبه».')
 KEY_MISSING = 'لا يوجد مفتاح موديل يكتب به العقل، فلم يُكتب شيء.'
-KEY_TEST = ('من تبويب «المساعدون» افتح بطاقة «من يكتب للعقل» واضغط «جرّبه» على المفتاح الأساسي. '
-            'لو فشل الاختبار فأضف مفتاحًا جديدًا واجعله «الأساسي».')
+KEY_TEST = ('تجربة المفتاح الأساسي بزرّ «جرّبه» في بطاقة «من يكتب للعقل» (تبويب «المساعدون»)، '
+            'ولو فشلت التجربة: إضافة مفتاح جديد وجعله «الأساسي».')
 
 # الأسماء: [واحد، اثنان، جمع ٣–١٠، تمييز ١١ فأكثر] (نفس صيغة `U()` في الواجهة).
 F_PROPOSAL = ['اقتراحًا واحدًا', 'اقتراحين', 'اقتراحات', 'اقتراحًا']
 F_NOTE = ['ملاحظة واحدة', 'ملاحظتين', 'ملاحظات', 'ملاحظة']
 F_TIME = ['مرة واحدة', 'مرتين', 'مرات', 'مرة']
 F_QUESTION = ['سؤالًا واحدًا', 'سؤالين', 'أسئلة', 'سؤالًا']
+# صيغة الرفع حين يكون العدد فاعلًا أو نائب فاعل («أُرسل سؤالان»، «لم يصل سؤال واحد»).
+F_QUESTION_NOM = ['سؤال واحد', 'سؤالان', 'أسئلة', 'سؤالًا']
 F_WRITE = ['كتابة واحدة', 'كتابتين', 'كتابات', 'كتابة']
 
 
@@ -80,7 +82,7 @@ def _producer_lines(pid, r, done, failed):
     st = r.get('state') or ''
     proposed, noted = int(r.get('proposed') or 0), int(r.get('done_alone') or 0)
     fails, exists = int(r.get('failed') or 0), int(r.get('exists') or 0)
-    discarded = int(r.get('discarded') or 0)
+    discarded, errors = int(r.get('discarded') or 0), int(r.get('errors') or 0)
     wrote = False
     if proposed:
         done.append(lab + ': كتب ' + count(proposed, F_PROPOSAL) + ' تنتظر قرارك.')
@@ -93,13 +95,17 @@ def _producer_lines(pid, r, done, failed):
         wrote = True
     if fails:
         failed.append(lab + ': تعذّرت الكتابة ' + count(fails, F_TIME) + ' (لم يرد الموديل أو جاء المكتوب غير صالح).')
+    if errors:
+        failed.append(lab + ': حدث عطل أثناء الكتابة ' + count(errors, F_TIME) + '.')
     if st == 'source_down':
         failed.append(lab + ': تعذّرت قراءة بياناته من المنصة الآن.')
     elif st == 'gather_error':
         failed.append(lab + ': حدث عطل أثناء جمع بياناته.')
     elif st == 'not_reached':
         failed.append(lab + ': لم يصل إليه الدور لأن التشغيل توقّف.')
-    elif not wrote and not fails:
+    elif st == 'interrupted':
+        failed.append(lab + ': لم يكتمل لأن التشغيل توقّف في أثنائه.')
+    elif not wrote and not fails and not errors:
         if st == 'off':
             done.append(lab + ': متوقّف من القواعد.')
         elif exists:
@@ -119,12 +125,12 @@ def _tg_lines(tg, done, failed):
     bad = int(tg.get('failed') or 0)
     sk = tg.get('skipped') if isinstance(tg.get('skipped'), dict) else {}
     if sent:
-        done.append('تليجرام: أُرسل ' + count(sent, F_QUESTION) + ' للقرار.')
+        done.append('تليجرام: أُرسل ' + count(sent, F_QUESTION_NOM) + ' للقرار.')
     if bad:
-        failed.append('تليجرام: لم يصل ' + count(bad, F_QUESTION) + '؛ المنصة لم تؤكّد الإرسال.')
+        failed.append('تليجرام: لم يصل ' + count(bad, F_QUESTION_NOM) + '؛ المنصة لم تؤكّد الإرسال.')
         fix = 'يلزم التأكد من ربط بوت تليجرام في المنصة. الاقتراحات نفسها موجودة في «ابدأ القرارات».'
     if sk.get('cap'):
-        failed.append('تليجرام: لم يُرسل ' + count(sk['cap'], F_QUESTION) + ' لأن أسئلة اليوم بلغت حدّها.')
+        failed.append('تليجرام: لم يُرسل ' + count(sk['cap'], F_QUESTION_NOM) + ' لأن أسئلة اليوم بلغت حدّها.')
     if sk.get('no_proxy'):
         failed.append('تليجرام: الربط مع المنصة غير مضبوط، فلم يُرسل شيء.')
         fix = fix or 'يلزم ضبط ربط اللوحة بالمنصة في إعدادات الخادم.'
@@ -156,22 +162,29 @@ def describe(run, report, now=None, run_cap=None):
         fix = fx
     tfix = _tg_lines(report.get('tg'), done, failed)
     fix = fix or tfix
-    made = int(run.items or 0)
-    if stop in ('no_key', 'no_writer', 'off', 'error', 'busy', 'ai_error'):
-        state = 'failed' if not made else 'partial'
-    elif failed:
-        state = 'partial' if (made or done) else 'failed'
+    # ⛔ «كتب» تُقال فقط عمّا كُتب فعلًا (اقتراح ينتظر القرار أو ملاحظة نُفّذت وحدها). `run.items` يعدّ الصفوف الفاشلة
+    # والمستبعدة أيضًا، فلا يصلح للعنوان إلا لجولة قديمة بلا سجل.
+    if report:
+        written = sum(int(r.get('proposed') or 0) + int(r.get('done_alone') or 0) for r in by.values() if isinstance(r, dict))
     else:
-        state = 'ok' if made else 'nothing'
-    if not report and not stop:
+        written = int(run.items or 0)
+    if stop == 'busy':
+        state = 'busy'
+    elif not written:
+        state = 'failed' if failed else 'nothing'
+    else:
+        state = 'partial' if failed else 'ok'
+    if not report:
         # جولة قديمة قبل هذا السجل: نذكر ما نعرفه فقط.
-        done = ['كتب ' + count(made, F_WRITE) + '.'] if made else ['لم يكتب شيئًا جديدًا.']
-    if state == 'ok':
-        head = 'عمل العقل وكتب ' + count(made, F_WRITE) + '.'
+        done = ['كتب ' + count(written, F_WRITE) + '.'] if written else ['لم يكتب شيئًا جديدًا.']
+    if state == 'busy':
+        head = 'لم يبدأ هذا التشغيل لأن تشغيلًا آخر كان يعمل.'
+    elif state == 'ok':
+        head = 'عمل العقل وكتب ' + count(written, F_WRITE) + '.'
     elif state == 'nothing':
         head = 'عمل العقل ولم يجد جديدًا يكتب عنه.'
     elif state == 'partial':
-        head = 'عمل العقل وكتب ' + count(made, F_WRITE) + '، وتعذّر جزء.' if made else 'عمل العقل وتعذّر جزء.'
+        head = 'عمل العقل وكتب ' + count(written, F_WRITE) + '، وتعذّر جزء.'
     else:
         head = 'لم يكتب العقل شيئًا في آخر تشغيل.'
     return {'state': state, 'trigger_text': trig, 'done': done[:14], 'failed': failed[:10], 'fix': fix, 'headline': head}

@@ -101,8 +101,8 @@ def register(app, ns):
         report = skipped.pop('_report', None)
         active = r.finished_at is None and r.started_at is not None and \
             r.started_at > engine.utcnow() - datetime.timedelta(minutes=engine.RUN_LOCK_MINUTES)
-        if report is None and skipped.get('_stop'):
-            report = {'stop': skipped.get('_stop')}
+        if report is None and (skipped.get('_stop') or skipped.get('busy')):
+            report = {'stop': skipped.get('_stop') or 'busy'}
         try:
             summary = run_report.describe(r, report or {}, engine.utcnow(), engine.run_cap())
         except Exception:   # noqa: BLE001 — الملخّص لا يُسقط المسار

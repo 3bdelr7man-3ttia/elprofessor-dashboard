@@ -369,7 +369,7 @@ def flow(browser, h, pre, viewport, mobile):
       hint: (document.querySelector('.v2sb-whint') || {}).textContent,
       rows: [...document.querySelectorAll('.v2sb-row.has-md')].map(r => ({id: r.getAttribute('data-key'), title: r.querySelector('.v2sb-rt').textContent,
         radios: [...r.querySelectorAll('[role=radio]')].map(b => [b.textContent, b.getAttribute('aria-checked')]), group: r.querySelector('[role=radiogroup]').getAttribute('aria-label'), st: r.querySelector('.v2sb-st').textContent})),
-      run: (document.querySelector('.v2sb-runbtn') || {}).textContent, runOff: !!(document.querySelector('.v2sb-runbtn') || {}).disabled})""")
+      run: (document.querySelector('.v2sb-rcrun') || {}).textContent, runOff: !!(document.querySelector('.v2sb-rcrun') || {}).disabled})""")
     rows = {r['id']: r for r in info['rows']}
     if info['grp'][0] != ['ما يكتبه العقل', 'true'] or info['hint'] != 'اقتراحات يكتبها العقل من بيانات حقيقية' or len(rows) != 8:
         PROBLEMS.append(pre + '18: مجموعة «ما يكتبه العقل» %r' % info['grp'])
@@ -382,11 +382,11 @@ def flow(browser, h, pre, viewport, mobile):
     for k in ('w:seo_notes', 'w:campaign_comment', 'w:weekly_read', 'w:forecast_comment'):
         if rows[k]['radios'] != [['وحده', 'true'], ['يسألني', 'false'], ['متوقّف', 'false']]:
             PROBLEMS.append(pre + '18: %s لازم ثلاثة خيارات: %r' % (k, rows[k]['radios']))
-    if rows['w:seo_notes']['group'] != 'ملاحظات الظهور في البحث على المسودات' or info['run'] != 'اكتب الاقتراحات الآن' or info['runOff']:
+    if rows['w:seo_notes']['group'] != 'ملاحظات الظهور في البحث على المسودات' or info['run'] != 'شغّل الآن' or info['runOff']:
         PROBLEMS.append(pre + '18: اسم المجموعة أو زرّ الكتابة %r' % info['run'])
     page.evaluate("() => document.querySelector('.v2sb-rules').scrollIntoView({block: 'start'})")
     b_shot(page, pre + '18-switches.jpg', keep_scroll=True)
-    page.evaluate("() => document.querySelector('.v2sb-runnow').scrollIntoView({block: 'center'})")
+    page.evaluate("() => document.querySelector('.v2sb-rcact').scrollIntoView({block: 'center'})")
     b_shot(page, pre + '18b-switches-run-button.jpg', keep_scroll=True)
     # تغيير اختيار: ورقة التأكيد ⇐ PUT بـconfirmed ⇐ «حُفظ الاختيار»
     page.evaluate("() => document.querySelector('.v2sb-row[data-key=\"w:seo_notes\"]').scrollIntoView({block: 'center'})")
@@ -467,13 +467,13 @@ def flow(browser, h, pre, viewport, mobile):
     writes_ok(rec5, pre + '20')
     page.close()
 
-    # —— 21 · اكتب الاقتراحات الآن
+    # —— 21 · «شغّل الآن» (الزرّ الوحيد، في بطاقة «آخر تشغيل للعقل»)
     setup(h)
     rec6 = Rec()
     page = open_brain(browser_ctx(browser, h, tall, mobile), rec6)
-    page.wait_for_function("() => document.querySelector('.v2sb-runbtn')", timeout=15000)
-    page.evaluate("() => document.querySelector('.v2sb-runnow').scrollIntoView({block: 'center'})")
-    page.click('.v2sb-runbtn')
+    page.wait_for_function("() => document.querySelector('.v2sb-rcrun')", timeout=15000)
+    page.evaluate("() => document.querySelector('.v2sb-rcact').scrollIntoView({block: 'center'})")
+    page.click('.v2sb-rcrun')
     page.wait_for_selector('#epModal .v2sbm #v2sbGo')
     lead = txt(page, '#epModal .mc-lead')
     if lead != 'يكتب العقل الآن ما ينقص من اقتراحات، بحد أقصى ٢٠ كتابة.' or 'نعم، ابدأ' not in txt(page, '#epModal'):
@@ -484,11 +484,11 @@ def flow(browser, h, pre, viewport, mobile):
     n0 = len(rec6.writes)
     page.click('#v2sbGo')
     page.wait_for_function("() => !document.getElementById('epModal')", timeout=15000)
-    page.wait_for_function("() => document.querySelector('.v2sb-runbtn').disabled", timeout=15000)
+    page.wait_for_function("() => document.querySelector('.v2sb-rcrun').disabled", timeout=15000)
     runs = [x for x in rec6.writes[n0:] if x[0] == 'POST' and x[1] == '/api/v2/brain/run']
     if len(runs) != 1 or json.loads(runs[0][2]) != {'confirmed': True}:
         PROBLEMS.append(pre + '21: نداء التشغيل %r' % runs)
-    if 'بدأ العقل الكتابة' not in page.inner_text('#toasts') or 'العقل يكتب الآن' not in txt(page, '.v2sb-runnow'):
+    if 'بدأ العقل الكتابة' not in page.inner_text('#toasts') or 'العقل يكتب الآن' not in txt(page, '.v2sb-rcact'):
         PROBLEMS.append(pre + '21: توست أو سبب التعطيل غايب')
     b_shot(page, pre + '21b-run-active.jpg', keep_scroll=True, keep_toast=True)
     writes_ok(rec6, pre + '21')
@@ -496,14 +496,14 @@ def flow(browser, h, pre, viewport, mobile):
     # جولة جارية من قبل ⇒ الزرّ معطّل من أول لحظة · سقف اليوم ⇒ معطّل بسببه
     setup(h, active=True)
     page = open_brain(browser_ctx(browser, h, tall, mobile), Rec())
-    page.wait_for_function("() => document.querySelector('.v2sb-runbtn')", timeout=15000)
-    if not page.evaluate("() => document.querySelector('.v2sb-runbtn').disabled"):
+    page.wait_for_function("() => document.querySelector('.v2sb-rcrun')", timeout=15000)
+    if not page.evaluate("() => document.querySelector('.v2sb-rcrun').disabled"):
         PROBLEMS.append(pre + '21: جولة جارية والزرّ مفتوح')
     page.close()
     setup(h, used=60, cap=60)
     page = open_brain(browser_ctx(browser, h, tall, mobile), Rec())
-    page.wait_for_function("() => document.querySelector('.v2sb-runbtn')", timeout=15000)
-    if not page.evaluate("() => document.querySelector('.v2sb-runbtn').disabled") or 'بلغ العقل حدّ كتابته اليوم' not in txt(page, '.v2sb-runnow'):
+    page.wait_for_function("() => document.querySelector('.v2sb-rcrun')", timeout=15000)
+    if not page.evaluate("() => document.querySelector('.v2sb-rcrun').disabled") or 'بلغ العقل حدّ كتابته اليوم' not in txt(page, '.v2sb-rcact'):
         PROBLEMS.append(pre + '21: سقف اليوم لازم يعطّل الزرّ بسببه')
     page.close()
 
@@ -511,7 +511,7 @@ def flow(browser, h, pre, viewport, mobile):
     setup(h, down={'/api/v2/brain/switches', '/api/v2/brain/items', '/api/v2/brain/runs/latest'})
     page = open_brain(browser_ctx(browser, h, tall, mobile), Rec())
     page.wait_for_function("() => document.querySelector('.v2sb-whint') && document.querySelector('.v2sb-whint').parentElement.querySelector('.v3-warn')", timeout=15000)
-    info = page.evaluate("""() => ({md: document.querySelectorAll('.v2sb-md').length, run: !!document.querySelector('.v2sb-runbtn'),
+    info = page.evaluate("""() => ({md: document.querySelectorAll('.v2sb-md').length, run: false,
       warn: document.querySelector('.v2sb-whint').parentElement.querySelector('.v3-warn').textContent,
       log: document.querySelector('.v2sb-log-card').textContent})""")
     if info['md'] or info['run'] or 'غير متاح بعد' not in info['warn'] or 'ما كتبه العقل اليوم: غير متاح بعد' not in info['log']:

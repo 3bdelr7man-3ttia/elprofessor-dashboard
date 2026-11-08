@@ -673,3 +673,18 @@ return skipped it), and every run outcome lived only in `skipped_json`, which no
 - **Telegram**: asks go through the public `telegram.send_ask` per item; outcomes counted in the report.
   `TELEGRAM_DEFAULT_ON` now covers every decision draft (link-only outside `TELEGRAM_OK`).
 - **UI**: «آخر تشغيل للعقل» card at the top of the brain rules view with «شغّل الآن» (`V2L.v2sBrainRunCard`).
+
+### R16 fix round (review)
+
+- **Headline honesty**: the card's headline and state count only real writes (`proposed + done_alone` over the report's
+  producers), never `run.items` (which also counts failed and discarded rows). Zero real writes ⇒ `failed` (with failures)
+  or `nothing`; the headline never says «كتب» then. `run.items` is used only for old runs with no report.
+- **Interrupted producer**: the producer running when a run stops gets state `interrupted` and a failed line
+  («لم يكتمل لأن التشغيل توقّف في أثنائه»), not «لا يوجد ما يُكتب عنه». Target exceptions (`errors`) are listed as failures.
+- **Busy**: a row closed because another run was queued stores `_stop: 'busy'` (old `{'busy': 1}` rows are mapped too) and
+  reads as state `busy` (warn tone), not «لم يجد جديدًا».
+- **Autorun catch-up**: a missed slot is caught up only within `CATCHUP_HOURS = 3`; a deploy far from any slot starts nothing.
+- **One run button**: the old «اكتب الاقتراحات الآن» line button is gone; «شغّل الآن» on the card is the only one.
+  Before the first run the card mentions the button only when it is enabled.
+- **Copy**: key-placement and test hints use verbal nouns (no imperatives outside quoted button names); Telegram counts in
+  subject position use nominative forms («أُرسل سؤالان», «لم يصل سؤال واحد»).

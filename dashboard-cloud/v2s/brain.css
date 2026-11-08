@@ -93,10 +93,6 @@
 .v2sb-tg:disabled{opacity:.6;cursor:wait}
 .v2sb-tg:focus-visible{outline:3px solid rgba(158,43,78,.45);outline-offset:2px}
 .v2sb-whint{margin:2px 6px 4px}
-.v2sb-runnow{display:grid;gap:4px;justify-items:start;padding:10px 6px 4px}
-.v2sb-runbtn{min-height:48px;padding:0 22px}
-.v2sb-runbtn:disabled{opacity:.55;cursor:not-allowed}
-.v2sb-runwhy{margin:0}
 .v2sb-wdiscs{flex:1 1 100%}
 .v2sb-wdiscs .v2sb-disc{flex:1 1 0;min-width:0}
 
@@ -241,7 +237,6 @@
   .v2sb-row.has-md .v2sb-md{display:flex;flex:1}
   .v2sb-row.has-md .v2sb-md button{flex:1;min-width:0;min-height:52px;padding:0 6px}
   .v2sb-row.has-md .v2sb-st{grid-row:3}
-  .v2sb-runbtn{width:100%;min-height:52px}
   .v2sb-row.has-sw .v2sb-sw{display:flex;flex:1}
   .v2sb-row.has-sw .v2sb-sw button{flex:1;min-height:52px}
   .v2sb-row.has-sw .v2sb-st{grid-row:3}

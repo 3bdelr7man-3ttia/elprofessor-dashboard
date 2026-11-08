@@ -836,7 +836,7 @@ def test_start_run_marks_the_new_row_finished_when_another_run_is_queued(env, mo
     Run = engine._models(db)[2]
     db.session.expire_all()
     (r,) = Run.query.all()
-    assert r.finished_at is not None and json.loads(r.skipped_json) == {'busy': 1}
+    assert r.finished_at is not None and json.loads(r.skipped_json) == {'busy': 1, '_stop': 'busy'}
     assert engine.active_run(db) is None, 'الصف الميت لا يقفل الجولات ١٥ دقيقة'
 
 
