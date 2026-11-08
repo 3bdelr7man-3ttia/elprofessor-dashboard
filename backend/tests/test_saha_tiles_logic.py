@@ -278,8 +278,15 @@ def test_gate_check_view_counts_lists_reasons_and_marks_missing_sources():
         ('n1', 'الأخبار', 'خبر رياضي', 'لا يتناول موضوعًا قانونيًا'), ('n2', 'الأخبار', 'بلا عنوان', 'حوادث أو سياسة أو منوّعات')]
     assert v['total'] == 2 and v['applied'] is False and v['totalText'] == 'عنصران غير مرتبطين بالقانون'
     assert S('gateReason', 'zzz') == 'غير مرتبط بالقانون'
-    assert S('gateView', {'collections': {}})['totalText'] == 'كل ما فُحص مرتبط بالقانون'
+    assert S('gateView', {'collections': {}}) is None                       # ولا مجموعة اتفحصت ⇒ لا نتيجة، مش «كله مرتبط»
+    ok_all = {'collections': {'news': {'would_hide': 0}, 'topics': {'would_hide': 0}, 'articles': {'would_hide': 0}}}
+    assert S('gateView', ok_all)['totalText'] == 'كل ما فُحص مرتبط بالقانون'
+    assert S('gateView', {'collections': {'news': {'would_hide': 0}}})['totalText'] == 'لا شيء غير مرتبط بالقانون فيما أمكن فحصه'
     assert S('gateView', None) is None and S('gateView', {'x': 1}) is None
+    assert S('gatePicked', v, {'n2': True}) == ['n1'] and S('gatePicked', v, None) == ['n1', 'n2'] and v['listed'] == 2
+    after = S('gateView', {'applied': True, 'collections': {'news': {'would_hide': 2, 'skipped_unselected': 1, 'hidden': []},
+                                                            'topics': {'would_hide': 0}, 'articles': {'would_hide': 0}}})
+    assert after['total'] == 1 and after['totalText'] == 'عنصر واحد غير مرتبط بالقانون'      # بعد الإخفاء: المختار بس
     done = S('gateDone', dict(v, total=12))
     assert done == 'أُخفي ١٢ عنصرًا من الساحة، ويمكن إرجاع أي نقاش منها'
     assert S('gateDone', dict(v, total=0)) == 'لم يكن هناك ما يُخفى'
@@ -508,3 +515,23 @@ def test_jobs_cannot_be_deleted_and_challenge_close_is_end_of_day():
     ch = S('challengeCheck', _ch_form(None, title='تحدّي الرسالة', kinds=['story'], opens_at='2026-12-01', closes_at='2026-12-20', status='draft'), 'create', None)
     assert ch['body']['closes_at'].endswith('T23:59:59+02:00') and ch['body']['opens_at'] == '2026-12-01'
     assert [l for l in ch['lines'] if l['label'] == 'يُغلق'][0]['to'] == '٢٠ ديسمبر ٢٠٢٦'
+
+
+@needs_node
+def test_news_rows_show_the_legal_gate_and_a_one_step_restore():
+    """R17 — الخبر المنشور المختوم ok:false «مخفي لعدم الصلة بالقانون» وله «أرجِع» = PUT status published (ختم بشري)."""
+    d = S('news', {'items': [{'id': 'a', 'title': 'أ', 'status': 'published', 'legal': {'ok': False, 'by': 'rule'}},
+                             {'id': 'b', 'title': 'ب', 'status': 'draft', 'legal': {'ok': False, 'by': 'rule'}},
+                             {'id': 'c', 'title': 'ج', 'status': 'published', 'legal': {'ok': False, 'by': 'human'}},
+                             {'id': 'e', 'title': 'هـ', 'status': 'published', 'legal': None}]}, 0)
+    rows = {r['id']: r for r in d['rows']}
+    assert rows['a']['hidden'] and rows['a']['hiddenText'] == 'مخفي لعدم الصلة بالقانون'
+    assert rows['b']['hiddenText'] == 'صلته بالقانون غير واضحة' and rows['c']['hiddenText'] == 'مخفي يدويًا'
+    assert not rows['e']['hidden'] and rows['e']['hiddenText'] == ''
+    chk = S('newsCheck', S('newsForm', rows['a']), rows['a'], 'restore')
+    assert chk['ok'] and chk['body'] == {'status': 'published'}
+    run = S('newsRunDone', {'total_created': 2, 'total_held_for_review': 3})
+    assert run == 'أُضيفت مسودتان تنتظر مراجعتك، ومعها ٣ أخبار صلته بالقانون غير واضحة ينتظر قرارك'
+    assert S('newsRunDone', {'total_created': 0, 'total_held_for_review': 1}) == 'اكتمل الجلب، وأُضيف خبر واحد صلته بالقانون غير واضحة ينتظر قرارك'
+    assert S('newsRunDone', {'total_created': 0}) == 'اكتمل الجلب، ولم تُضَف مسودات جديدة'
+    _clean_copy(d, chk, run)

@@ -36,6 +36,7 @@ OK_WRITES = [('PUT', re.compile(B + r'news/[^/]+$')), ('POST', re.compile(B + r'
              ('POST', re.compile(B + r'jobs$')), ('PUT', re.compile(B + r'jobs/[^/]+$')), ('DELETE', re.compile(B + r'jobs/[^/]+$')), ('POST', re.compile(B + r'jobs/[^/]+/decide$')),
              ('PUT', re.compile(B + r'opportunities/settings$')), ('POST', re.compile(B + r'opportunities/import-seed$')), ('POST', re.compile(B + r'opportunities/run-reminders$')),
              ('POST', re.compile(B + r'creative/[^/]+/decide$')), ('PUT', re.compile(B + r'creative/[^/]+$')), ('POST', re.compile(B + r'diwan/comments/[^/]+/hide$')),
+             ('POST', re.compile(B + r'topics/[^/]+/(hide|restore)$')), ('POST', re.compile(B + r'legal-gate/backfill$')),
              ('POST', re.compile(B + r'diwan/challenges$')), ('PUT', re.compile(B + r'diwan/challenges/[^/]+$')), ('POST', re.compile(B + r'diwan/challenges/[^/]+/winners$'))]
 SCOPE_JS = """() => [...document.querySelectorAll('.v2s-sh, #epModal.v2s-sh-sh')].map(e => { const c = e.cloneNode(true);
   c.querySelectorAll('[dir="ltr"], [dir="auto"], .sh-who, script, style, input, textarea, select, option').forEach(n => n.remove()); return c.innerText; }).join('\\n')"""
@@ -101,8 +102,9 @@ def mshot(page, name, keep=True, target=None):
 
 
 def writes_since(h, since):
-    """كتابات المنصة منذ `since` (التجربة `dry_run=true` ليست كتابة)."""
-    return [c for c in h.platform_calls[since:] if c[0] in ('PUT', 'POST', 'PATCH', 'DELETE') and not (c[2] or {}).get('dry_run')]
+    """كتابات المنصة منذ `since` (التجربة `dry_run=true` ليست كتابة، ولا فحص الصلة بالقانون بلا `apply:true`)."""
+    return [c for c in h.platform_calls[since:] if c[0] in ('PUT', 'POST', 'PATCH', 'DELETE') and not (c[2] or {}).get('dry_run')
+            and not (c[1].endswith('/legal-gate/backfill') and (c[3] or {}).get('apply') is not True)]
 
 
 def check_writes(name, h, since, expected):
@@ -221,7 +223,7 @@ def flow_saha(browser, h, pre, vp, mobile):
         tabs = page.evaluate("() => [...document.querySelectorAll('.v2c-tab')].map(b => b.textContent.trim())")
         expect('الساحة' in tabs and 'الديوان' in tabs and 'القاموس' in tabs and len(tabs) == 10, '%s01: تبويبات المحتوى %r' % (pre, tabs))
         imgs = page.evaluate("() => [...document.querySelectorAll('.sh-timg')].map(e => getComputedStyle(e).backgroundImage.replace(/.*\\//, ''))")
-        expect(len(imgs) == 7 and all('.jpg' in i for i in imgs), '%s01: صور المربّعات %r' % (pre, imgs))
+        expect(len(imgs) == 8 and all('.jpg' in i for i in imgs), '%s01: صور المربّعات %r' % (pre, imgs))
         mshot(page, pre + '01-hub.jpg')
         browser.close()
 
@@ -535,6 +537,52 @@ def flow_saha(browser, h, pre, vp, mobile):
         got = check_writes(pre + '07-restore', h, base, 2)
         if len(got) == 2:
             expect(got[1][1].endswith('/opinions/op-5/approve'), '%s07: مسار الإظهار %r' % (pre, got[1][1]))
+        browser.close()
+
+    # —— ٠٧ت) النقاشات: إخفاء/إرجاع + فحص الصلة بالقانون ثم إخفاء المختار (R17)
+    if want('07t'):
+        ef = sfx.SahaTilesPlatform()
+        page = sopen(browser, h, ef, vp, mobile)
+        go_sub(page, 'topics')
+        wait_rows(page, 2, '[data-a="topichide"]')
+        mshot(page, pre + '07t-topics.jpg')
+        base = len(h.platform_calls)
+        click(page, '[data-a="topichide"][data-id="tp-1"]', 400)
+        sheet_open(page)
+        mshot(page, pre + '07t2-topic-hide.jpg', keep=True)
+        check_writes(pre + '07t-before', h, base, 0)
+        confirm(page, 1000)
+        sheet_gone(page)
+        got = check_writes(pre + '07t-hide', h, base, 1)
+        if got:
+            expect(got[0][1].endswith('/topics/tp-1/hide'), '%s07t: مسار الإخفاء %r' % (pre, got[0][1]))
+        click(page, '[data-a="chip"][data-v="hidden"]', 700)
+        wait_rows(page, 1, '[data-a="topicshow"]')
+        mshot(page, pre + '07t3-topics-hidden.jpg')
+        click(page, '[data-a="topicshow"][data-id="tp-1"]', 400)
+        sheet_open(page)
+        confirm(page, 1000)
+        sheet_gone(page)
+        got = check_writes(pre + '07t-restore', h, base, 2)
+        if len(got) == 2:
+            expect(got[1][1].endswith('/topics/tp-1/restore'), '%s07t: مسار الإرجاع %r' % (pre, got[1][1]))
+        click(page, '[data-a="chip"][data-v="open"]', 700)
+        click(page, '[data-a="gatecheck"]', 1200)
+        page.wait_for_selector('.sh-panel[data-r="gate"]', timeout=10000)
+        mshot(page, pre + '07t4-gate-check.jpg', target='.sh-panel[data-r="gate"]')
+        panel = page.inner_text('.sh-panel[data-r="gate"]')
+        expect('لم يتغير شيء بعد' in panel and 'نتيجة مباراة الأمس' in panel, '%s07t: نتيجة الفحص %r' % (pre, panel[:120]))
+        click(page, '[data-a="gatetoggle"][data-id="nw-off"]', 400)       # الخبر ده يفضل كما هو
+        expect('أخفِ المحدد (١)' in page.inner_text('.sh-panel[data-r="gate"]'), '%s07t: عدد المختار' % pre)
+        click(page, '[data-a="gateapply"]', 400)
+        sheet_open(page)
+        mshot(page, pre + '07t5-gate-apply.jpg', keep=True)
+        confirm(page, 1200)
+        sheet_gone(page)
+        got = check_writes(pre + '07t-apply', h, base, 3)                    # الفحص تجربة مش كتابة
+        if len(got) == 3:
+            expect(got[2][3].get('apply') is True and got[2][3].get('ids') == ['tp-2'], '%s07t: جسم الإخفاء %r' % (pre, got[2][3]))
+        expect('تم الإخفاء' in page.inner_text('.sh-panel[data-r="gate"]'), '%s07t: حالة ما بعد الإخفاء' % pre)
         browser.close()
 
     # —— ٠٨) التذكير

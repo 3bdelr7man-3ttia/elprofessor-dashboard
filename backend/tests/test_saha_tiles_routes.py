@@ -140,7 +140,8 @@ class FakePlatform(object):
             n[0].update({k: v for k, v in body.items() if k != 'by'})
             return 200, n[0]
         if method == 'POST' and path == '/api/bridge/news/run':
-            return 200, {'ok': True, 'ran_at': 'now', 'total_created': 2, 'per_country': [{'country': 'EG', 'fetched': 9, 'created': 2, 'errors': 0, 'x': 1}]}
+            return 200, {'ok': True, 'ran_at': 'now', 'total_created': 2, 'total_held_for_review': 1, 'total_skipped_not_legal': 4,
+                         'per_country': [{'country': 'EG', 'fetched': 9, 'created': 2, 'errors': 0, 'held_for_review': 1, 'skipped_not_legal': 4, 'x': 1}]}
         if method == 'GET' and path == '/api/bridge/topics':
             return 200, [t for t in self.topics if not params.get('status') or t['status'] == params['status']]
         if method == 'POST' and path.startswith('/api/bridge/topics/') and path.rsplit('/', 1)[1] in ('hide', 'restore'):
@@ -325,7 +326,7 @@ WRITES = [('PUT', S + '/news/n-1', {'status': 'published', 'confirmed': True}),
           ('POST', S + '/opinions/op-1/restore', dict(C)),
           ('POST', S + '/topics/tp-1/hide', dict(C)),
           ('POST', S + '/topics/tp-1/restore', dict(C)),
-          ('POST', S + '/legal-gate/apply', dict(C)),
+          ('POST', S + '/legal-gate/apply', {'confirmed': True, 'ids': ['n-9']}),
           ('POST', S + '/opportunities', OPP_NEW),
           ('PUT', S + '/opportunities/job-1', {'featured': True, 'confirmed': True}),
           ('DELETE', S + '/opportunities/job-1', dict(C)),
@@ -443,10 +444,11 @@ def test_news_cover_and_related_product_can_be_cleared(ctx, plat):
 
 def test_news_run_sends_only_the_known_options(ctx, plat):
     r = _call(ctx, 'POST', S + '/news/run', {'per_country_limit': 2, 'countries': ['eg', 'SA', 'eg'], 'derive_topics': False, 'x': 1, 'confirmed': True})
-    assert r.status_code == 200 and r.get_json()['total_created'] == 2 and r.get_json()['per_country'] == [{'country': 'EG', 'fetched': 9, 'created': 2, 'errors': 0}]
+    assert r.status_code == 200 and r.get_json()['total_created'] == 2 and r.get_json()['per_country'] == [{'country': 'EG', 'fetched': 9, 'created': 2, 'errors': 0,
+                                                                                                  'held_for_review': 1, 'skipped_not_legal': 4}]
     assert plat.writes()[0]['json'] == {'per_country_limit': 2, 'countries': ['EG', 'SA'], 'derive_topics': False, 'by': ADMIN_EMAIL}
     assert plat.writes()[0]['timeout'] >= 100
-    assert _audits('saha.news_run')[-1][2] == {'total_created': 2, 'countries': 1}
+    assert _audits('saha.news_run')[-1][2] == {'total_created': 2, 'countries': 1, 'held_for_review': 1}
     for bad in ({'per_country_limit': 0}, {'per_country_limit': 9}, {'per_country_limit': '3'}, {'countries': ['EGY']}, {'countries': 'EG'}, {'derive_topics': 'no'}):
         n = len(plat.writes())
         assert _call(ctx, 'POST', S + '/news/run', dict(bad, confirmed=True)).status_code == 422, bad
@@ -505,11 +507,35 @@ def test_legal_gate_check_is_a_dry_run_without_confirmation_or_audit(ctx, plat):
 
 
 def test_legal_gate_apply_needs_confirmation_and_never_archives(ctx, plat):
-    assert _call(ctx, 'POST', S + '/legal-gate/apply', {}).status_code == 400 and plat.ef.backfills == []
-    r = _call(ctx, 'POST', S + '/legal-gate/apply', {'confirmed': True, 'archive': True, 'apply': False})
+    assert _call(ctx, 'POST', S + '/legal-gate/apply', {'ids': ['n-9']}).status_code == 400 and plat.ef.backfills == []
+    r = _call(ctx, 'POST', S + '/legal-gate/apply', {'confirmed': True, 'archive': True, 'apply': False, 'ids': ['n-9', 'n-9']})
     assert r.status_code == 200 and r.get_json()['applied'] is True
-    assert plat.ef.backfills == [{'apply': True, 'by': ADMIN_EMAIL}]                  # الجسم قايمة بيضا: لا archive ولا قيم من الشاشة
-    assert _audits('saha.legal_gate_apply')[-1][2] == {'news': 1, 'topics': 0, 'articles': 0}
+    # الجسم قايمة بيضا: لا archive، والمختار بس (بلا تكرار)
+    assert plat.ef.backfills == [{'apply': True, 'ids': ['n-9'], 'by': ADMIN_EMAIL}]
+    assert _audits('saha.legal_gate_apply')[-1][2] == {'news': 1, 'topics': 0, 'articles': 0, 'picked': 1}
+
+
+def test_legal_gate_apply_hides_only_what_was_ticked(ctx, plat):
+    for bad in ({'confirmed': True}, {'confirmed': True, 'ids': []}, {'confirmed': True, 'ids': 'n-9'},
+                {'confirmed': True, 'ids': ['a b']}, {'confirmed': True, 'ids': [1]}, {'confirmed': True, 'ids': ['x'] * 901}):
+        r = _call(ctx, 'POST', S + '/legal-gate/apply', bad)
+        assert r.status_code == 400, bad
+    assert plat.ef.backfills == []
+    assert 'اختر' in _call(ctx, 'POST', S + '/legal-gate/apply', {'confirmed': True}).get_json()['error']
+
+
+def test_hidden_topics_list_covers_every_status(ctx, plat):
+    plat.ef.topics.append({'id': 'tp-h', 'title': 'نقاش منشور مخفي', 'status': 'published', 'source': 'news', 'created_at': 'y',
+                           'legal_gate': {'ok': False, 'by': 'rule', 'reason': 'off-theme'}})
+    t = _call(ctx, 'GET', S + '/topics?status=all&hidden=1').get_json()
+    assert plat.calls('/api/bridge/topics')[-1]['params'] in (None, {})
+    assert [x['id'] for x in t['items']] == ['tp-h'] and t['hidden_only'] is True and t['total'] == 1
+
+
+def test_news_run_reports_the_items_held_for_review(ctx, plat):
+    r = _call(ctx, 'POST', S + '/news/run', dict(C)).get_json()
+    assert r['total_held_for_review'] == 1 and 'x' not in r['per_country'][0]
+    assert r['per_country'][0]['held_for_review'] == 1 and r['per_country'][0]['skipped_not_legal'] == 4
 
 
 # ---------------------------------------------------------------- ٤) الفرص

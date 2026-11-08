@@ -146,7 +146,7 @@ class SahaTilesPlatform(v2fx.V2Platform):
     def _route(self, method, path, params, body):
         m = method.upper()
         if path.startswith(("/api/bridge/news", "/api/bridge/jobs", "/api/bridge/opinions", "/api/bridge/opportunities", "/api/bridge/creative",
-                            "/api/bridge/diwan", "/api/bridge/topics")):
+                            "/api/bridge/diwan", "/api/bridge/topics", "/api/bridge/legal-gate")):
             forced = self.forced.get((m, path))
             if forced is not None:
                 return forced
@@ -192,6 +192,32 @@ class SahaTilesPlatform(v2fx.V2Platform):
             return 200, copy.deepcopy(n)
         if path == "/api/bridge/topics" and m == "GET":
             return 200, [t for t in copy.deepcopy(self.sd_topics) if not params.get("status") or t["status"] == params["status"]]
+        mm = re.match(r"^/api/bridge/topics/([^/]+)/(hide|restore)$", path)
+        if mm and m == "POST":       # R17: ختم بشري على النقاش (إخفاء/إرجاع) بلا تغيير حالة
+            t = self._find(self.sd_topics, mm.group(1))
+            if t is None:
+                return 404, {"detail": "Topic not found"}
+            self._rec(m, path, params, body)
+            t["legal_gate"] = {"ok": mm.group(2) == "restore", "by": "human", "reason": "human:" + mm.group(2)}
+            return 200, copy.deepcopy(t)
+        if path == "/api/bridge/legal-gate/backfill" and m == "POST":   # R17: فحص الصلة (تجربة) أو إخفاء المختار
+            self._rec(m, path, params, body)
+            applied = body.get("apply") is True
+            picked = set(body.get("ids") or [])
+            off = [t for t in self.sd_topics if t["id"] in ("tp-2",)]
+            news_off = [{"id": "nw-off", "title": "نتيجة مباراة الأمس في الدوري", "reason": "off-theme", "status": "published"}]
+            rows = [{"id": t["id"], "title": t["title"], "reason": "off-theme", "status": t["status"]} for t in off]
+            if applied:
+                for t in off:
+                    if t["id"] in picked:
+                        t["legal_gate"] = {"ok": False, "by": "rule", "reason": "off-theme"}
+            un_t = len([r for r in rows if applied and r["id"] not in picked])
+            un_n = len([r for r in news_off if applied and r["id"] not in picked])
+            return 200, {"ok": True, "dry_run": not applied, "applied": applied, "archive": False, "version": "lg1", "collections": {
+                "news": {"scanned": 4, "would_hide": 1, "would_pass": 3, "skipped_unselected": un_n, "hidden": news_off},
+                "topics": {"scanned": len(self.sd_topics), "would_hide": len(rows), "would_pass": len(self.sd_topics) - len(rows),
+                           "skipped_unselected": un_t, "hidden": rows},
+                "articles": {"scanned": 0, "would_hide": 0, "would_pass": 0, "hidden": []}}}
         if path == "/api/bridge/opinions" and m == "GET":
             rows = [o for o in self.sd_opinions if (params.get("status") in (None, "all") or o["status"] == params["status"]) and (not params.get("topic_id") or o["topic_id"] == params["topic_id"])]
             return 200, copy.deepcopy(rows)
