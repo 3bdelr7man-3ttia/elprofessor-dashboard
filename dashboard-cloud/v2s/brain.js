@@ -6,7 +6,7 @@
  *   `POST /api/ai/agents/run` من أزرار التشغيل وحدها (قفل واحد: ضغطة ثانية لا ترسل شيئًا). ولا نداء للدالتين الجاهزتين في dashboard-api.js
  *   (تشغيل المساعدين ومفتاح التوزيع) لأن نصوصهما عامية ولا تُرجعان وعدًا نكمل عليه.
  * ⛔ لا زرّ تراجع: لا فعل تلقائي له تراجع حقيقي بعد. الأمر الصادق للتوزيع الذي لم يُستلم هو «أرسله لخبير آخر» من درج الملف.
- * الجولة الثانية (SPEC brain2 §4.4): مجموعة «ما يكتبه العقل» (`/v2/brain/switches` · PUT بتأكيد) · «اكتب الاقتراحات الآن» (`POST /v2/brain/run` بتأكيد) ·
+ * الجولة الثانية (SPEC brain2 §4.4): مجموعة «ما يكتبه العقل» (`/v2/brain/switches` · PUT بتأكيد) · «شغّل الآن» في بطاقة «آخر تشغيل للعقل» (`POST /v2/brain/run` بتأكيد) ·
  *   صفوف السجل من `/v2/brain/items` وحذف الملاحظة (`POST …/discard` بتأكيد) · قرصا المساعدين. كل مصدر يفشل لوحده ⇒ «غير متاح بعد» لا صفر.
  * المفاتيح والكاتب (SPEC-B B1): بطاقة في تبويب المساعدين فوق القرصين — `/v2/brain/keys` (GET · POST · PUT · DELETE · POST …/test)، كل كتابة بتأكيد.
  *   ⛔ النص الصريح للمفتاح يمرّ من حقل كلمة سر واحد إلى POST ثم يُمسح من الصفحة؛ والقائمة لا تعرف إلا آخر ٤ أحرف.
@@ -202,11 +202,9 @@
     if (pendingSrc('switches')) body = hint + skeleton(2);
     else if (!sw) body = hint + '<div class="v3-warn" role="status">' + NA + '. ما يكتبه العقل لا نعرف حالته الآن. ' + retryBtn('retry-switches') + '</div>';
     else {
-      var ri = L.v2sBrainRunInfo(sw, runState(), now());
+      // زرّ التشغيل الوحيد في بطاقة «آخر تشغيل للعقل» أعلى الشاشة (لا زرّان لنفس الفعل).
       count = sw.rows.length;
-      body = hint + sw.rows.map(modeRow).join('')
-        + '<div class="v2sb-runnow"><button type="button" class="v3-btn2 v2sb-runbtn" data-a="runnow"' + (ri.canStart ? '' : ' disabled') + '>اكتب الاقتراحات الآن</button>'
-        + (ri.reason ? '<p class="v2sb-hint v2sb-runwhy" role="status">' + esc(ri.reason) + '</p>' : '') + '</div>';
+      body = hint + sw.rows.map(modeRow).join('');
     }
     return { key: 'writes', title: 'ما يكتبه العقل', count: count, rowsHtml: body };
   }
@@ -253,6 +251,22 @@
     }
     return '<section class="v3-card v2sb-log-card" aria-label="سجل اليوم"><header class="v3-ch"><h2>سجل اليوم</h2><p>' + esc(arDate(now())) + '</p></header>' + notes + body + '</section>';
   }
+  // —— بطاقة «آخر تشغيل للعقل»: متى، وماذا كتب، وماذا تعذّر ولماذا، وما يلزم إصلاحه، وزرّ «شغّل الآن».
+  function runCard() {
+    var c = L.v2sBrainRunCard(srcState('run') === 'ready' ? data('run') : null, swInfo(), now());
+    var sr = srcState('run');
+    if (sr === 'idle' || sr === 'loading') return '<section class="v3-card v2sb-runcard" aria-label="آخر تشغيل للعقل">' + skeleton(1) + '</section>';
+    var li = function (t, cls) { return '<li class="' + cls + '">' + esc(t) + '</li>'; };
+    var list = (c.done.length || c.failed.length) ? '<ul class="v2sb-rclist">' + c.failed.map(function (t) { return li(t, 'bad'); }).join('') + c.done.map(function (t) { return li(t, 'ok'); }).join('') + '</ul>' : '';
+    var fix = (c.fix || c.where) ? '<div class="v2sb-rcfix" role="status"><b>المطلوب:</b> ' + esc([c.fix, c.where].filter(Boolean).join(' ')) + '</div>' : '';
+    var keysBtn = c.where || c.reason === 'لا كاتب مفعّل الآن' ? '<button type="button" class="v3-btn2" data-a="gokeys">افتح «من يكتب للعقل»</button>' : '';
+    var retry = !c.known ? ' ' + retryBtn('retry-run') : '';
+    return '<section class="v3-card v2sb-runcard tone-' + esc(c.tone) + '" aria-label="آخر تشغيل للعقل"><header class="v3-ch"><h2>آخر تشغيل للعقل</h2><p>' + esc(c.when) + retry + '</p></header>'
+      + (c.headline ? '<p class="v2sb-rchead">' + esc(c.headline) + '</p>' : '') + list + fix
+      + '<div class="v2sb-rcact"><button type="button" class="v3-btn1 v2sb-rcrun" data-a="runnow"' + (c.canRun ? '' : ' disabled') + '>' + (c.state === 'running' ? 'العقل يعمل الآن…' : 'شغّل الآن') + '</button>' + keysBtn
+      + (c.reason && c.state !== 'running' ? '<p class="v2sb-hint" role="status">' + esc(c.reason) + '</p>' : '') + '</div>'
+      + (c.auto ? '<p class="v2sb-hint v2sb-rcauto">' + esc(c.auto) + '</p>' : '') + '</section>';
+  }
   function drawRules(v) {
     var ent = entries(), Q = queue();
     var line = L.v2sBrainLine({ queue: Q, settings: data('rules'), entries: ent, proposed: L.v2sBrainProposed(itemsList()) });
@@ -265,7 +279,7 @@
     v.innerHTML = '<div class="v3 v2sb" data-board="brain-log" data-seg="' + S.seg + '" data-ready="' + (loadingAll ? 0 : 1) + '">' + noteStrip()
       + '<div class="v3-top v2sb-top">' + (loadingAll && !ent ? lineHtml('…جارٍ جلب ما فعله العقل اليوم', null) : lineHtml(line.text, line.button))
       + '<div class="v2sb-discs">' + disc(d1, 'وُزّع وحده اليوم', !ent) + disc(d2, 'غيّرت خبيره يدويًا', !ent) + '</div></div>'
-      + seg + '<div class="v2sb-cols">' + rulesCard() + logCard() + '</div></div>';
+      + runCard() + seg + '<div class="v2sb-cols">' + rulesCard() + logCard() + '</div></div>';
     wire(v);
   }
 
@@ -796,11 +810,11 @@
     };
   }
 
-  // —— «اكتب الاقتراحات الآن»
+  // —— «شغّل الآن» (من بطاقة «آخر تشغيل للعقل»)
   function openRunNow() {
     var ri = L.v2sBrainRunInfo(swInfo(), runState(), now()), E = ep();
     if (!ri.canStart || !E) return;
-    var s = openSheet('اكتب الاقتراحات الآن', '<p class="mc-lead">' + esc(ri.lead) + '</p><div id="v2sbErr" role="alert"></div>'
+    var s = openSheet('تشغيل العقل الآن', '<p class="mc-lead">' + esc(ri.lead) + '</p><div id="v2sbErr" role="alert"></div>'
       + '<div class="acts"><button type="button" class="btn btn-human" id="v2sbGo">نعم، ابدأ</button><button type="button" class="btn btn-ghost" id="v2sbNo">رجوع</button></div>');
     if (!s) return;
     var go = q('#v2sbGo', s), no = q('#v2sbNo', s);
@@ -1003,6 +1017,7 @@
       else if (a === 'tg') { var tr = swRow(b.getAttribute('data-id')); if (tr && tr.tgToggle && !S.modeBusy) openTelegram(tr.id, !tr.telegram); }
       else if (a === 'mrule') openModeRule(b.getAttribute('data-id'));
       else if (a === 'runnow') openRunNow();
+      else if (a === 'gokeys') { if (host().openSection) host().openSection('brain', 'helpers'); }
       else if (a === 'kadd') openKeyAdd();
       else if (a === 'kedit') openKeyEdit(b.getAttribute('data-id'));
       else if (a === 'ktest') openKeyConfirm('test', b.getAttribute('data-id'));
@@ -1018,6 +1033,7 @@
       else if (a === 'retry-tokens') { load('mcpTokens', true); }
       else if (a === 'retry-keys') { load('keys', true); }
       else if (a === 'retry-switches') { load('switches', true); }
+      else if (a === 'retry-run') { load('run', true); }
       else if (a === 'retry-items') { load('items', true); }
       else if (a === 'seg') { S.seg = b.getAttribute('data-s'); try { localStorage.setItem('v2sb_seg', S.seg); } catch (x) {} redraw(true); }
       else if (a === 'grp') { var g = b.getAttribute('data-g'); S.open[g] = !isOpen(g); redraw(true); }

@@ -125,7 +125,8 @@ def last_run(run_id):
 
 
 def skipped(run_id):
-    return json.loads(last_run(run_id).skipped_json or '{}')
+    """الرموز القديمة فقط (بلا `_report`: سجل «آخر تشغيل» له اختباراته في test_brain2_run_status.py)."""
+    return {k: v for k, v in json.loads(last_run(run_id).skipped_json or '{}').items() if k != '_report'}
 
 
 F1 = {'title': 'مقال أول', 'score': 40}
@@ -835,7 +836,7 @@ def test_start_run_marks_the_new_row_finished_when_another_run_is_queued(env, mo
     Run = engine._models(db)[2]
     db.session.expire_all()
     (r,) = Run.query.all()
-    assert r.finished_at is not None and json.loads(r.skipped_json) == {'busy': 1}
+    assert r.finished_at is not None and json.loads(r.skipped_json) == {'busy': 1, '_stop': 'busy'}
     assert engine.active_run(db) is None, 'الصف الميت لا يقفل الجولات ١٥ دقيقة'
 
 

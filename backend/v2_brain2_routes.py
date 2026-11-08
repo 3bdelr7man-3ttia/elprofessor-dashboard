@@ -16,7 +16,7 @@ import re
 
 from flask import jsonify, request
 
-from brain2 import engine, registry, telegram
+from brain2 import autorun, engine, registry, run_report, telegram
 
 logger = logging.getLogger(__name__)
 
@@ -50,8 +50,11 @@ def kick(ns, trigger='cron'):
     """يبدأ جولة كتابة في الخيط الخلفي بلا انتظار. أي فشل يُسجَّل ولا يكسر المنادي (نداء الكرون الأصلي)."""
     try:
         if not ns['_v2_enabled']() or not engine.writes_enabled():
+            logger.warning('brain2: kick skipped (v2 flag or brain writing is off)')
             return None
         status, payload = engine.start_run(ns, 'cron' if trigger == 'cron' else 'admin', 'cron')
+        if status != 202:
+            logger.warning('brain2: kick did not start a run (%s)', payload.get('error'))
         return payload.get('run_id') if status == 202 else None
     except Exception:   # noqa: BLE001
         logger.exception('brain2: kick failed')
@@ -60,6 +63,10 @@ def kick(ns, trigger='cron'):
 
 def register(app, ns):
     db = ns['db']
+    try:
+        autorun.start(ns)     # «العقل يشتغل لوحده» بمواعيد القاهرة (لا شيء داخل الاختبارات)
+    except Exception:   # noqa: BLE001
+        logger.exception('brain2: autorun did not start')
     Item, Switch, Run = engine._models(db)
     token_required = ns['token_required']
     roles_required = ns['roles_required']
@@ -90,11 +97,22 @@ def register(app, ns):
             skipped = json.loads(r.skipped_json) if r.skipped_json else {}
         except (TypeError, ValueError):
             skipped = {}
+        skipped = skipped if isinstance(skipped, dict) else {}
+        report = skipped.pop('_report', None)
         active = r.finished_at is None and r.started_at is not None and \
             r.started_at > engine.utcnow() - datetime.timedelta(minutes=engine.RUN_LOCK_MINUTES)
+        if report is None and (skipped.get('_stop') or skipped.get('busy')):
+            report = {'stop': skipped.get('_stop') or 'busy'}
+        try:
+            summary = run_report.describe(r, report or {}, engine.utcnow(), engine.run_cap())
+        except Exception:   # noqa: BLE001 — الملخّص لا يُسقط المسار
+            logger.exception('brain2: run summary failed')
+            summary = None
+        # ⛔ `skipped` يبقى رموزًا قديمة فقط؛ الملخّص العربي في `report` (لا تفاصيل تقنية ولا قيم مفاتيح).
         return {'id': r.id, 'trigger': r.trigger, 'started_at': _iso(r.started_at),
                 'finished_at': _iso(r.finished_at), 'ai_calls': r.ai_calls or 0, 'items': r.items or 0,
-                'skipped': skipped if isinstance(skipped, dict) else {}, 'by': r.by or '', 'active': bool(active)}
+                'skipped': skipped, 'by': ('تلقائي' if r.by in ('auto', 'cron') else (r.by or '')), 'active': bool(active),
+                'report': summary}
 
     def gate():
         return L('_v2_closed')()
@@ -134,7 +152,11 @@ def register(app, ns):
                           'updated_by': (r.updated_by or None) if r else None})
         ws = engine.writer_state(ns)
         payload = {'switches': items, 'writer': ws['writer'],
-                   'brain_today': {'used': engine.brain_today(db), 'cap': engine.day_cap()}}
+                   'brain_today': {'used': engine.brain_today(db), 'cap': engine.day_cap()},
+                   'autorun': autorun.status(ns), 'writes_on': engine.writes_enabled()}
+        if ws['writer'] is None:
+            # أين يُضبط المفتاح بالضبط (خانة «من يكتب للعقل»). ⛔ لا قيمة مفتاح ولا اسم متغيّر بيئة سرّي.
+            payload['writer_fix'] = {'text': run_report.KEY_MISSING, 'where': run_report.KEY_WHERE}
         if ws['label']:
             payload['writer_label'] = ws['label']      # اسم مفتاح القاعدة الشغّال (SPEC-B B1) — يغيب مع مزوّد البيئة
         return out(payload)

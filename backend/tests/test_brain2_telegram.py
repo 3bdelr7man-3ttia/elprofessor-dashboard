@@ -59,16 +59,19 @@ def draft(pid='file_review', n=1, apply=None, **kw):
 
 def test_registry_flags():
     assert registry.TELEGRAM_OK == {'reply_draft', 'file_review', 'course_review'}
-    assert registry.TELEGRAM_DEFAULT_ON == {'reply_draft', 'file_review', 'course_review'}
+    # R16: كل اقتراح ينتظر قرارًا يصل تليجرام افتراضيًا؛ الاعتماد من هناك للثلاثة فقط (TELEGRAM_OK).
+    assert registry.TELEGRAM_DEFAULT_ON == {'reply_draft', 'file_review', 'course_review',
+                                            'market_match', 'site_review', 'course_lesson_draft'}
     assert 'opinion' not in registry.TELEGRAM_OK
     ids = [p.id for p in registry.PRODUCERS]
     assert 'file_review' in ids and len(ids) == len(set(ids))
 
 
-def test_default_on_only_for_the_three_and_never_for_opinions(env):
-    for pid in ('reply_draft', 'file_review', 'course_review'):
+def test_default_on_for_decision_drafts_and_never_for_opinions(env):
+    for pid in ('reply_draft', 'file_review', 'course_review', 'market_match', 'site_review'):
         assert telegram.enabled(NS, fp(pid=pid, alone=False, kind='draft')) is True
-    assert telegram.enabled(NS, fp(pid='market_match', alone=False, kind='draft')) is False
+    assert telegram.enabled(NS, fp(pid='seo_notes', kind='note')) is False
+    assert telegram.decide_allowed_producer(fp(pid='market_match', alone=False, kind='draft')) is False
     assert telegram.enabled(NS, fp(pid='opinion', kind='opinion')) is False
     assert telegram.toggle_allowed(fp(pid='opinion', kind='opinion')) is False
 
@@ -122,13 +125,22 @@ def test_notes_running_alone_get_no_ask(env, monkeypatch):
 
 
 def test_off_switch_default_off_and_failed_rows_send_nothing(env, monkeypatch):
-    prod, _ = draft(pid='market_match')
+    prod, _ = draft(pid='custom_draft')
     use(monkeypatch, prod)
     run()
     assert len(rows()) == 1 and _asks(env) == [], 'منتج افتراضه مطفأ'
     use(monkeypatch, fp(pid='file_review', alone=False, kind='draft', targets=[('x:1', F2)], validate=lambda d, t: None))
     run()
     assert _asks(env) == [], 'صف فاشل لا يُسأل عنه'
+
+
+def test_market_match_now_asks_with_open_link_only(env, monkeypatch):
+    # R16: اقتراح ربط السوق ينتظر قرارًا ⇒ يصل تليجرام افتراضيًا، لكن بزرّ «افتح في اللوحة» فقط (لا اعتماد من هناك).
+    prod, _ = draft(pid='market_match')
+    use(monkeypatch, prod)
+    run()
+    (a,) = _asks(env)
+    assert [b['action'] for b in a['json']['buttons']] == ['open']
 
 
 def test_telegram_switch_off_for_default_on_producer(env, monkeypatch):
@@ -382,7 +394,7 @@ def test_switches_show_telegram_state(api, monkeypatch):
         fp(pid='opinion', kind='opinion', section='home'))
     by = {s['id']: s for s in api.get('/api/v2/brain/switches').get_json()['switches']}
     assert by['file_review']['telegram'] is True and by['file_review']['telegram_ok'] is True
-    assert by['market_match']['telegram'] is False and by['market_match']['telegram_ok'] is False
+    assert by['market_match']['telegram'] is True and by['market_match']['telegram_ok'] is False   # رابط فقط
     assert by['opinion']['telegram'] is False and by['opinion']['telegram_can_toggle'] is False
     assert by['file_review']['telegram_can_toggle'] is True
 

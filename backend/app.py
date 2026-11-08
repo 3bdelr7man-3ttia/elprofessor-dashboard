@@ -8864,7 +8864,13 @@ def ai_agents_run_cron():
     secret = request.headers.get('X-ELP-Metrics-Secret', '')
     if not (PLATFORM_METRICS_SECRET and secret and secrets.compare_digest(secret, PLATFORM_METRICS_SECRET)):
         return jsonify({'error': 'unauthorized'}), 401
-    agent = (request.args.get('agent') or (request.json or {}).get('agent') or 'all').strip().lower()
+    agent = (request.args.get('agent') or (request.get_json(silent=True) or {}).get('agent') or 'all').strip().lower()
+    # «العقل» أولًا وبلا انتظار: قبل المساعدين لا بعدهم. المساعدون متزامنون، وقد يتجاوزون مهلة العامل (١٢٠ ثانية)
+    # أو يرمون فيرجع المسار مبكرًا — وكان هذا يمنع جولة العقل كلها بصمت.
+    _v2_brain2_kick('cron')
+    if agent in ('brain', 'none'):
+        _audit('ai.agents_run_cron', target=agent, meta={'ran': 0})
+        return jsonify({'ok': True, 'ran': []})   # للعقل وحده: بلا نداءات المساعدين الأحد عشر
     ran = []
     try:
         if agent == 'all':
@@ -8880,7 +8886,6 @@ def ai_agents_run_cron():
         logging.getLogger(__name__).exception('ai_agents_run_cron failed')
         return jsonify({'ok': False, 'ran': ran}), 200  # never 5xx to the cron
     _audit('ai.agents_run_cron', target=agent, meta={'ran': len(ran)})
-    _v2_brain2_kick('cron')  # لا ينتظر: الكتابة في خيط «العقل» الخلفي
     return jsonify({'ok': True, 'ran': ran})
 
 

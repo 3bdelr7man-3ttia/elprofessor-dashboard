@@ -424,11 +424,29 @@ class StopRun(Exception):
 
 
 def _new_state(run_cap_value=None):
-    return {'calls': 0, 'items': 0, 'run_cap': run_cap_value, 'per': {}, 'skipped': {}, 'template_calls': 0, 'asks': []}
+    return {'calls': 0, 'items': 0, 'run_cap': run_cap_value, 'per': {}, 'skipped': {}, 'template_calls': 0, 'asks': [],
+            'rep': {}, 'ai_errs': 0, 'ai_reason': ''}
 
 
 def _skip(state, key):
     state['skipped'][key] = state['skipped'].get(key, 0) + 1
+
+
+def _rep(state, pid):
+    """سجل منتج واحد في هذه الجولة (رموز وأعداد فقط) — يقرؤه `run_report` ليقول للمؤسس ماذا حدث ولماذا."""
+    rep = state.setdefault('rep', {})
+    if pid not in rep:
+        rep[pid] = {'state': '', 'targets': 0}
+    return rep[pid]
+
+
+def _rep_add(state, pid, key, n=1):
+    r = _rep(state, pid)
+    r[key] = int(r.get(key) or 0) + n
+
+
+# أخطاء موديل متتالية توقف الجولة (مفتاح خاطئ أو خدمة معطّلة): لا نحرق النداءات على أهداف كلها ستفشل.
+AI_ERR_STOP = 3
 
 
 def _dump(o):
@@ -472,6 +490,7 @@ def _store(ns, p, t, ref, label, h, fj, body, source, state, run_id, failed_erro
         logger.exception('brain2: store failed for %s %s', p.id, ref)
         return 'exists', None
     state['items'] += 1
+    _rep_add(state, p.id, status)
     if status == 'proposed' and failed_error is None and p.kind != 'opinion':
         state.setdefault('asks', []).append(row.id)     # سؤال تليجرام واحد لكل اقتراح جديد (يُرسَل بعد الجولة في الخيط الخلفي)
     return ('failed' if failed_error is not None else source), row
@@ -521,6 +540,8 @@ def process_target(ns, p, t, state, run_id=None):
         remaining = None
     if remaining is not None and remaining < RESERVE_MIN:
         raise StopRun('reserve')
+    if state.get('writer_checked') and state.get('writer') is None:
+        raise StopRun('no_key')      # لا مفتاح موديل: لا نداء ولا عدّ نداء (قبل `_bump_day`)
 
     state['calls'] += 1
     state['per'][p.id] = state['per'].get(p.id, 0) + 1
@@ -536,10 +557,23 @@ def process_target(ns, p, t, state, run_id=None):
         logger.error('brain2: ai call failed for %s (%s)', p.id, type(exc).__name__)
         err = 'ai_error'
         text = None
+        state['ai_errs'] = state.get('ai_errs', 0) + 1
+        reason = getattr(exc, 'reason_ar', '')
+        if isinstance(reason, str) and reason.strip():
+            state['ai_reason'] = reason.strip()[:160]     # جملة عربية بيضاء من `AIUnavailable` (لا تفاصيل تقنية)
     if err is None:
+        state['ai_errs'] = 0
         body, err = _parse(ns, p, t, text)
     if err is None:
         return _store(ns, p, t, ref, label, h, fj, body, 'ai', state, run_id)[0]
+    if err == 'ai_error' and state.get('run_cap') is not None and state.get('ai_errs', 0) >= AI_ERR_STOP:
+        # نخزّن صف هذا الهدف (قالب أو فاشل) ثم نوقف الجولة: الباقي سيفشل بالسبب نفسه.
+        _fail_store(ns, p, t, ref, label, h, fj, err, state, run_id)
+        raise StopRun('ai_error')
+    return _fail_store(ns, p, t, ref, label, h, fj, err, state, run_id)
+
+
+def _fail_store(ns, p, t, ref, label, h, fj, err, state, run_id):
     # فشل: قالب لو للمنتج قالب، وإلا صف فاشل بلا بطاقة. لا إعادة محاولة.
     tb = None
     if p.template is not None:
@@ -844,25 +878,37 @@ def start_run(ns, trigger, actor, only=None):
     sub = submit(ns, 'run', lambda: execute_run(ns, run_id, only, actor))
     if not sub.get('queued') or sub.get('duplicate'):
         # جولة أخرى لا تزال في الطابور/تعمل: لن يُنفَّذ هذا الصف أبدًا، فنختمه بدل أن يبقى «يعمل» فيقفل الجولات ١٥ دقيقة.
-        _finish_run(ns, run_id, 0, 0, {'busy': 1})
+        _finish_run(ns, run_id, 0, 0, {'busy': 1, '_stop': 'busy'})
         return 409, {'error': ERR_RUNNING}
     return 202, {'run_id': run_id}
 
 
 def _finish_run(ns, run_id, calls, items, skipped):
+    """يختم صف الجولة. ⛔ لا يجوز أن يبقى صف «يعمل» بعد انتهاء الخيط: الجلسة قد تكون في حالة خطأ من عطل سابق،
+    فنبدأ بـrollback، ونحاول مرة ثانية بقاموس سجل مبسّط لو فشل الحفظ (مثلًا سجل غير قابل للتحويل)."""
     db = ns['db']
     Run = _models(db)[2]
-    try:
-        run = Run.query.get(run_id)
-        if run is not None:
+    for attempt in (0, 1):
+        try:
+            try:
+                db.session.rollback()
+            except Exception:   # noqa: BLE001
+                pass
+            run = Run.query.get(run_id)
+            if run is None:
+                return
             run.finished_at = utcnow()
             run.ai_calls = calls
             run.items = items
-            run.skipped_json = _dump(skipped)
+            run.skipped_json = _dump(skipped) if attempt == 0 else _dump({'_stop': (skipped or {}).get('_stop', 'error')})
             db.session.commit()
-    except Exception:   # noqa: BLE001
-        db.session.rollback()
-        logger.exception('brain2: finishing run failed')
+            return
+        except Exception:   # noqa: BLE001
+            try:
+                db.session.rollback()
+            except Exception:   # noqa: BLE001
+                pass
+            logger.exception('brain2: finishing run failed (attempt %d)', attempt + 1)
 
 
 def _gather(p, ctx, state):
@@ -874,66 +920,135 @@ def _gather(p, ctx, state):
         targets, errors = fn(ctx)
         for e in errors or []:
             if isinstance(e, dict):
-                _skip(state, 'reply_draft:%s:%s' % (str(e.get('source', '?'))[:20], str(e.get('reason', 'down'))[:20]))
+                src = str(e.get('source', '?'))[:20]
+                _skip(state, 'reply_draft:%s:%s' % (src, str(e.get('reason', 'down'))[:20]))
+                _rep(state, p.id).setdefault('sources_down', []).append(src)
         return targets
     return p.gather(ctx)
 
 
 def execute_run(ns, run_id, only, actor):
+    """جولة كاملة. كل منتج ينتهي بحالة مرئية في سجل الجولة (`_report`): كتب · لا جديد · لا شيء يُكتب عنه · متوقّف ·
+    تعذّرت قراءة مصدره · لم يكتمل (توقّف التشغيل في أثنائه) · لم يصل إليه الدور. وسبب التوقف وأسئلة تليجرام كذلك — فلا تشغيل يمرّ بلا أثر يراه المؤسس."""
     state = _new_state(run_cap())
     ctx = Ctx(ns=ns, now=_aware(), actor=str(actor))
     only_set = set([only] if isinstance(only, str) else (only or []))
+    order = [p for p in list(registry.PRODUCERS) if p.kind != 'opinion' and (not only_set or p.id in only_set)]
     try:
-        for p in list(registry.PRODUCERS):
-            if p.kind == 'opinion' or (only_set and p.id not in only_set):
-                continue
+        state['writer'] = writer_of(ns)
+        state['writer_checked'] = True
+    except Exception:   # noqa: BLE001
+        logger.exception('brain2: writer check failed')
+    current = None
+    try:
+        for p in order:
+            current = p.id
+            rep = _rep(state, p.id)
             try:
                 mode = effective_mode(ns, p)
             except Exception:   # noqa: BLE001
                 logger.exception('brain2: mode failed for %s', p.id)
+                rep['state'] = 'gather_error'
                 continue
             if mode == 'off':
                 _skip(state, p.id + ':off')
+                rep['state'] = 'off'
                 continue
             try:
                 targets = _gather(p, ctx, state)
             except Exception as exc:   # noqa: BLE001
-                if exc.__class__.__name__ != 'SourceDown':
+                down = exc.__class__.__name__ == 'SourceDown'
+                if down:
+                    logger.warning('brain2: source down for %s: %s', p.id, str(exc)[:200])
+                else:
                     logger.exception('brain2: gather failed for %s', p.id)
-                _skip(state, p.id + (':source_down' if exc.__class__.__name__ == 'SourceDown' else ':gather_error'))
+                _skip(state, p.id + (':source_down' if down else ':gather_error'))
+                rep['state'] = 'source_down' if down else 'gather_error'
                 continue
             seen = set()
             for t in targets or []:
                 if not isinstance(t, Target) or t.ref in seen:
                     continue
                 seen.add(t.ref)
+                rep['targets'] += 1
                 try:
-                    process_target(ns, p, t, state, run_id)
+                    out = process_target(ns, p, t, state, run_id)
                 except StopRun:
                     raise
                 except Exception:   # noqa: BLE001
                     ns['db'].session.rollback()
                     logger.exception('brain2: target failed %s %s', p.id, t.ref)
                     _skip(state, p.id + ':error')
+                    _rep_add(state, p.id, 'errors')
+                    continue
+                if out == 'exists':
+                    _rep_add(state, p.id, 'exists')
+                elif out == 'skip':
+                    _rep_add(state, p.id, 'skips')
+            rep['state'] = 'done' if rep['targets'] else 'none'
+            current = None
     except StopRun as stop:
         state['skipped']['_stop'] = stop.reason
     except Exception:   # noqa: BLE001
         logger.exception('brain2: run crashed')
         state['skipped']['_stop'] = 'error'
     finally:
+        stop = state['skipped'].get('_stop')
+        if stop:
+            reached = True
+            for p in order:
+                r = _rep(state, p.id)
+                if p.id == current:
+                    # توقّف التشغيل وهذا المنتج في منتصف أهدافه: ليس «لا شيء يُكتب عنه» بل «لم يكتمل».
+                    reached = False
+                    if not r.get('state'):
+                        r['state'] = 'interrupted'
+                    continue
+                if not reached and not r.get('state'):
+                    r['state'] = 'not_reached'
+        tg = _send_asks(ns, state.get('asks'))
+        report = {'producers': {pid: r for pid, r in state.get('rep', {}).items()},
+                  'writer': state.get('writer') if state.get('writer_checked') else 'unknown'}
+        if stop:
+            report['stop'] = stop
+        if state.get('ai_reason'):
+            report['ai_reason'] = state['ai_reason']
+        if tg:
+            report['tg'] = tg
+        state['skipped']['_report'] = report
         _finish_run(ns, run_id, state['calls'], state['items'], state['skipped'])
-        _send_asks(ns, state.get('asks'))
 
 
 def _send_asks(ns, ids):
-    """أسئلة تليجرام للاقتراحات الجديدة، في الخيط الخلفي بعد ختم الجولة. أي فشل يُسجَّل ولا يكسر الجولة."""
+    """أسئلة تليجرام للاقتراحات الجديدة، في الخيط الخلفي، عبر الدالة العامة `telegram.send_ask` (اقتراح واحد لكل نداء).
+    يرجع عدّاد النتائج {'sent', 'failed', 'skipped': {سبب: عدد}} ليظهر في «آخر تشغيل». أي فشل يُسجَّل ولا يكسر الجولة."""
     if not ids:
-        return
+        return None
+    out = {'sent': 0, 'failed': 0, 'skipped': {}}
     try:
         from brain2 import telegram
-        telegram.send_asks(ns, ids)
     except Exception:   # noqa: BLE001
-        logger.exception('brain2: telegram asks failed')
+        logger.exception('brain2: telegram module missing')
+        return None
+    for item_id in ids:
+        try:
+            res = telegram.send_ask(ns, item_id)
+        except Exception:   # noqa: BLE001
+            logger.exception('brain2: telegram ask failed for %s', item_id)
+            try:
+                ns['db'].session.rollback()
+            except Exception:   # noqa: BLE001
+                pass
+            res = 'failed'
+        res = str(res or 'failed')
+        if res == 'sent':
+            out['sent'] += 1
+        elif res.startswith('skip:'):
+            k = res[5:][:20]
+            out['skipped'][k] = out['skipped'].get(k, 0) + 1
+        else:
+            out['failed'] += 1
+    return out
 
 
 def submit_opinion(ns, kind, card_id, facts):

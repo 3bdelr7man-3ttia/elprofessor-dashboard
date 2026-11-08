@@ -2363,7 +2363,11 @@
     var used = bt && typeof bt.used === 'number' && isFinite(bt.used) && bt.used >= 0 ? bt.used : null;
     var cap = bt && typeof bt.cap === 'number' && isFinite(bt.cap) && bt.cap > 0 ? bt.cap : null;
     var w = resp && !Array.isArray(resp) ? resp.writer : undefined;
-    return { rows: rows, writer: w === 'main' || w === 'backup' || w === null ? w : undefined, writerLabel: resp && !Array.isArray(resp) ? brKeyLabel(resp.writer_label) : '', brainToday: { used: used, cap: cap } };
+    var obj = resp && !Array.isArray(resp) && typeof resp === 'object' ? resp : {};
+    var wf = obj.writer_fix && typeof obj.writer_fix === 'object' ? { text: str(obj.writer_fix.text), where: str(obj.writer_fix.where) } : null;
+    var au = obj.autorun && typeof obj.autorun === 'object' ? { on: obj.autorun.on === true, nextMs: v2sBrainTime(obj.autorun.next_at) } : null;
+    return { rows: rows, writer: w === 'main' || w === 'backup' || w === null ? w : undefined, writerLabel: brKeyLabel(obj.writer_label), brainToday: { used: used, cap: cap },
+             writerFix: wf && wf.text ? wf : null, autorun: au, writesOn: obj.writes_on === false ? false : true };
   }
   // ورقة تأكيد تغيير الاختيار: {title, lead, go}.
   function v2sBrainSwitchSheet(row, mode) {
@@ -2445,7 +2449,7 @@
     var st = v2sBrainTime(r.started_at), fin = r.finished_at;
     return { known: true, active: !fin && st != null && (now || 0) - st < BR_RUN_FRESH };
   }
-  // زرّ «اكتب الاقتراحات الآن»: {canStart, active, reason, n, lead}. sw = ناتج v2sBrainSwitches|null · run = ناتج v2sBrainRunState.
+  // زرّ «شغّل الآن» (بطاقة «آخر تشغيل للعقل»): {canStart, active, reason, n, lead}. sw = ناتج v2sBrainSwitches|null · run = ناتج v2sBrainRunState.
   function v2sBrainRunInfo(sw, run, now) {
     var bt = sw && sw.brainToday ? sw.brainToday : { used: null, cap: null };
     var left = bt.used != null && bt.cap != null ? Math.max(0, bt.cap - bt.used) : null;
@@ -2457,6 +2461,52 @@
     var lead = left != null || !sw ? 'يكتب العقل الآن ما ينقص من اقتراحات، بحد أقصى ' + U(n, ['كتابة واحدة', 'كتابتين', 'كتابات', 'كتابة']) + '.'
       : 'يكتب العقل الآن ما ينقص من اقتراحات.';
     return { canStart: !reason, active: !!(run && run.active), reason: reason, n: n, lead: lead };
+  }
+  // بطاقة «آخر تشغيل للعقل»: ردّ GET /runs/latest + ناتج v2sBrainSwitches ⇒ ما يُعرض حرفيًا.
+  //   {known, state, tone, when, headline, done[], failed[], fix, where, auto, canRun, reason}
+  //   ⛔ الجمل من الخادم (`run.report`) بلا تعديل؛ هنا الوقت والزر والمفتاح الناقص فقط. مصدر لم يصل ⇒ known:false (لا «لم يعمل بعد» كاذبة).
+  function brStrList(a) { return Array.isArray(a) ? a.map(str).filter(Boolean) : []; }
+  function brSlotText(t, now) {
+    if (t == null) return '';
+    var d = new Date(t), n = new Date(now || 0), day;
+    var tomorrow = new Date(n.getFullYear(), n.getMonth(), n.getDate() + 1);
+    if (d.toDateString() === n.toDateString()) day = 'اليوم';
+    else if (d.toDateString() === tomorrow.toDateString()) day = 'غدًا';
+    else day = DAYS_AR[d.getDay()];
+    return day + ' الساعة ' + brClock(t);
+  }
+  var DAYS_AR = ['الأحد', 'الاثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت'];
+  function v2sBrainRunCard(resp, sw, now) {
+    var runKnown = !!(resp && typeof resp === 'object');
+    var r = runKnown ? (resp.run !== undefined ? resp.run : resp) : undefined;
+    var info = v2sBrainRunInfo(sw, v2sBrainRunState(runKnown ? resp : null, now), now);
+    var out = { known: runKnown, state: 'none', tone: 'na', when: '', headline: '', done: [], failed: [], fix: '', where: '', auto: '',
+                canRun: info.canStart, reason: info.reason };
+    if (sw && sw.autorun) out.auto = sw.autorun.on && sw.autorun.nextMs != null ? 'التشغيل التلقائي القادم: ' + brSlotText(sw.autorun.nextMs, now) : 'التشغيل التلقائي متوقّف';
+    if (sw && sw.writesOn === false) { out.canRun = false; out.reason = 'كتابة العقل موقوفة من إعداد الخادم'; }
+    if (!runKnown) { out.when = 'غير متاح بعد'; }
+    else if (r === null || typeof r !== 'object') { out.when = 'لم يعمل العقل بعد'; out.headline = 'لا يوجد تشغيل سابق.'; out.first = true; }
+    else {
+      var rep = r.report && typeof r.report === 'object' ? r.report : null;
+      var st = v2sBrainTime(r.started_at), fin = v2sBrainTime(r.finished_at);
+      var at = fin != null ? fin : st;
+      out.when = 'آخر تشغيل: ' + (at != null ? (agoText(at, now || Date.now()) || 'الآن') : 'غير متاح بعد') + (rep && str(rep.trigger_text) ? '، ' + str(rep.trigger_text) : '');
+      out.state = rep ? str(rep.state) || 'none' : (r.active ? 'running' : 'none');
+      if (r.active) out.state = 'running';
+      out.headline = rep ? str(rep.headline) : (r.active ? 'العقل يعمل الآن.' : '');
+      out.done = rep ? brStrList(rep.done) : [];
+      out.failed = rep ? brStrList(rep.failed) : [];
+      out.fix = rep ? str(rep.fix) : '';
+    }
+    // المفتاح الناقص يُقال دائمًا، حتى قبل أول تشغيل، ومعه المكان بالضبط.
+    if (sw && sw.writer === null && sw.writerFix) {
+      if (out.fix !== sw.writerFix.where) { out.where = sw.writerFix.where; if (!out.failed.length) out.failed = [sw.writerFix.text]; }
+      out.reason = 'لا كاتب مفعّل الآن';
+    }
+    // قبل أول تشغيل: نذكر الزرّ فقط لو كان يعمل فعلًا (لا دعوة لزرّ معطّل).
+    if (out.first) { if (out.canRun) out.headline += ' البدء بزرّ «شغّل الآن».'; delete out.first; }
+    out.tone = { ok: 'ok', nothing: 'ok', running: 'run', partial: 'warn', failed: 'bad', stale: 'warn', busy: 'warn' }[out.state] || (out.failed.length ? 'bad' : 'na');
+    return out;
   }
   // قرصا المساعدين الجديدان.
   function v2sBrainWriterText(writer, known, label) {
@@ -2852,7 +2902,7 @@
     v2sBrainStopped: v2sBrainStopped, v2sBrainStoppedAll: v2sBrainStoppedAll, v2sBrainLine: v2sBrainLine, v2sBrainHelpers: v2sBrainHelpers,
     v2sBrainAgentInfo: v2sBrainAgentInfo, v2sBrainCap: v2sBrainCap, v2sBrainHelpersLine: v2sBrainHelpersLine, v2sBrainConfirmAll: v2sBrainConfirmAll,
     v2sBrainSwitches: v2sBrainSwitches, v2sBrainSwitchSheet: v2sBrainSwitchSheet, v2sBrainTelegramSheet: v2sBrainTelegramSheet, v2sBrainItems: v2sBrainItems, v2sBrainItemRows: v2sBrainItemRows,
-    v2sBrainProposed: v2sBrainProposed, v2sBrainRunState: v2sBrainRunState, v2sBrainRunInfo: v2sBrainRunInfo,
+    v2sBrainProposed: v2sBrainProposed, v2sBrainRunState: v2sBrainRunState, v2sBrainRunInfo: v2sBrainRunInfo, v2sBrainRunCard: v2sBrainRunCard,
     v2sBrainWriterText: v2sBrainWriterText, v2sBrainWritesToday: v2sBrainWritesToday, v2sBrainWriterPick: v2sBrainWriterPick,
     v2sBrainKeys: v2sBrainKeys, v2sBrainKeyForm: v2sBrainKeyForm, v2sBrainKeySheet: v2sBrainKeySheet,
     v2sBrainLinks: v2sBrainLinks, v2sBrainLinkForm: v2sBrainLinkForm, v2sBrainMcpTokens: v2sBrainMcpTokens, v2sBrainMcpTokenForm: v2sBrainMcpTokenForm, v2sBrainMcpSheet: v2sBrainMcpSheet
