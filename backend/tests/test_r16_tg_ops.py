@@ -413,3 +413,25 @@ def test_ui_asks_before_overwriting_a_foreign_webhook():
     src = _ui('index.html')
     assert "r.reason==='webhook_elsewhere'" in src and '{force:true}' in src
     assert 'bridge_secret_mismatch:' in src
+
+
+def test_payfail_card_and_money_tile_in_node():
+    import sys as _sys
+    _sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), 'uiharness'))
+    import v2_node
+    if not v2_node.NODE:
+        pytest.skip('needs node')
+    order = {'apiKind': 'payfail', 'apiId': 'pay-1', 'who': 'b@x.test', 'personEmail': 'b@x.test', 'pfScope': 'order',
+             'pfWhy': 'البوابة رفضت الدفع', 'pfGateway': 'stripe', 'pfProduct': 'دورة', 'amount': 249, 'currency': 'EGP',
+             'ts': 0, 'triage': 'human'}
+    gw = dict(order, apiId='gw_stripe_not_ready', pfScope='gateway', who='بوابة stripe', personEmail='', pfAttempts=4)
+    c = v2_node.logic('v2Card', order, {'now': 0})
+    assert c['kind'] == 'payfail' and c['tag'] == 'دفع فشل' and c['primary']['label'] == 'تمام، اطّلعت'
+    g = v2_node.logic('v2Card', gw, {'now': 0})
+    assert g['tag'] == 'الدفع بالبطاقة مش شغّال' and 'محاولات' in g['warn']
+    assert not re.search(r'·\s*[٠-٩0-9]|[٠-٩0-9]\s*·', json_dump(c) + json_dump(g))
+
+
+def json_dump(o):
+    import json
+    return json.dumps(o, ensure_ascii=False)
