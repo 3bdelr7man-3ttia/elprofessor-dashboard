@@ -455,6 +455,7 @@
       case 'pending_user': return 'فُتحت المنصة لـ' + c.title;
       case 'founding': return 'عُلّمت الخطوة: ' + c.title;
       case 'signup': return 'تمّ الاطّلاع على تسجيل ' + c.title;
+      case 'payfail': return 'تمّ الاطّلاع على دفع فشل: ' + c.title;
       default: return 'تم: ' + c.title;
     }
   }

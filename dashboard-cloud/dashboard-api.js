@@ -1843,13 +1843,33 @@
             realRows.push({
               out: "تسجيل جديد على المنصة", from: "المنصة", src: "shield", dest: "invites",
               triage: "human", sla: relTime(at) || "جديد", slaWarn: false,
-              note: "سجّل " + (PROV[s.provider] || "") + (s.country ? "، البلد: " + s.country : ""),
+              note: "التسجيل " + (PROV[s.provider] || "") + (s.country ? "، البلد: " + s.country : ""),
               ref: "SGN-" + s.user_id, who: s.full_name || s.email || "بلا اسم", email: s.email || "",
               apiKind: "signup", personEmail: s.email || "", apiId: s.user_id, canReject: false, ts: Date.parse(at) || 0,
               sgProvider: PROV[s.provider] || "", sgCountry: s.country || "", sgFlags: flags,
             });
           });
         }).catch(fail("التسجيلات الجديدة"))
+      );
+      // R16 «دفع فشل»: البوابة رفضت الدفع، أو صفحة الدفع ما فتحتش، أو البوابة كلها مش جاهزة ⇒ تليجرام ⇒ صفّ هنا
+      // بإجراء «تمام، اطّلعت» (نفس زرّ تليجرام). عطل البوابة صفّ واحد بعدد المحاولات، مش صفّ لكل مشتري.
+      jobs.push(
+        get("/platform-payment-failures").then(function (r) {
+          var list = Array.isArray(r) ? r : ((r && (r.failures || r.rows)) || []);
+          list.forEach(function (f) {
+            var at = f.last_at || f.created_at || "";
+            var gw = f.scope === "gateway";
+            realRows.push({
+              out: gw ? "الدفع بالبطاقة مش شغّال" : "عملية دفع فشلت", from: "المنصة", src: "shield", dest: "finance",
+              triage: "human", sla: relTime(at) || "جديد", slaWarn: gw,
+              note: f.why || "", ref: "PF-" + f.id, who: gw ? ("بوابة " + (f.gateway || "الدفع")) : (f.user_email || "مشترٍ"),
+              email: gw ? "" : (f.user_email || ""), apiKind: "payfail", personEmail: gw ? "" : (f.user_email || ""), apiId: f.id,
+              canReject: false, ts: Date.parse(at) || 0,
+              pfScope: f.scope || "order", pfWhy: f.why || "", pfGateway: f.gateway || "", pfProduct: f.product_label || "",
+              pfAttempts: Number(f.attempts) || 0, amount: f.amount, currency: f.currency || "",
+            });
+          });
+        }).catch(fail("دفعات فشلت"))
       );
       // «زائر مسجَّل — طلب فتح المنصّة» (التسجيل المفتوح، قرار المؤسس 2026-10-10): الحساب الجديد
       // بلا دعوة يدخل زائرًا ويطلب دعوته من جوّه (صفة · بلد · هاتف) ⇒ تليجرام ⇒ **صفّ هنا بإجراء**
@@ -2866,6 +2886,10 @@
         // R16: «تمام، اطّلعت» يقفل صفّ التسجيل (نفس زرّ تليجرام). لا رفض هنا: المسح النهائي له بابه.
         if (action !== "approve") { if (after) after(); return Promise.resolve({ ok: false, error: "لا رفض لتسجيل" }); }
         path = "/platform-signups/" + encodeURIComponent(i.apiId) + "/ack"; break;
+      case "payfail":
+        // R16: «تمام، اطّلعت» يقفل صفّ «دفع فشل» (نفس زرّ تليجرام). لا رفض: مفيش قرار على عملية فشلت.
+        if (action !== "approve") { if (after) after(); return Promise.resolve({ ok: false, error: "لا رفض هنا" }); }
+        path = "/platform-payment-failures/" + encodeURIComponent(i.apiId) + "/ack"; break;
       case "topic":    path = "/platform-pending-topics/" + i.apiId + "/" + action; break;
       case "creative": path = "/platform-creative/" + i.apiId + "/" + action; break;
       case "manual_payment":

@@ -282,3 +282,134 @@ def test_new_visible_copy_follows_the_rules():
     for t in texts:
         assert 'استشار' not in t and 'يقوّم' not in t
         assert not re.search(r'·\s*[٠-٩0-9]|[٠-٩0-9]\s*·', t)
+
+
+# ───────────────────────────────────────────────────────── جولة الإصلاح (مراجعة مستقلة)
+
+def test_failed_down_alert_is_retried_next_round_not_lost(net):
+    """«خادم المنصة واقع» بيعدّي من المنصة نفسها ⇒ لو التنبيه ما وصلش، الحالة ما تتعلّمش «واقع» والجولة الجاية تعيد."""
+    def get(url, **k):
+        return R(503)
+    net.replies = [R(502)]                                   # الجسر نفسه واقع
+    tg_ops.check_uptime(NS, get=get)
+    assert tg_ops.check_uptime(NS, get=get) == []            # الفشل التاني: حاول وما وصلش
+    n = len(net.calls)
+    assert n >= 3
+    st = tg_ops.uptime_state(NS)
+    assert all(u['down'] for u in st) and all(u['alert_failed'] for u in st)
+    net.replies = [R(200, {'ok': True, 'reason': 'ok'})]
+    third = tg_ops.check_uptime(NS, get=get)                  # الجولة الجاية: يعيد ويوصل
+    assert len(third) == 3 and len(net.calls) > n
+    assert tg_ops.check_uptime(NS, get=get) == []             # ووصل ⇒ لا تكرار
+
+
+def test_failed_recovery_alert_is_retried(net):
+    state = {'code': 503}
+
+    def get(url, **k):
+        return R(state['code'])
+    tg_ops.check_uptime(NS, get=get)
+    assert len(tg_ops.check_uptime(NS, get=get)) == 3        # «واقع» وصل
+    state['code'] = 200
+    net.replies = [R(502)]
+    assert tg_ops.check_uptime(NS, get=get) == []             # «رجع» ما وصلش
+    net.replies = [R(200, {'ok': True, 'reason': 'ok'})]
+    assert len(tg_ops.check_uptime(NS, get=get)) == 3        # يتعاد ويوصل
+    assert tg_ops.check_uptime(NS, get=get) == []
+
+
+def test_bridge_mode_warns_that_api_down_alerts_need_a_dashboard_token(net, monkeypatch):
+    w = tg_ops.config(NS)['warnings']
+    assert any('TELEGRAM_OPS_BOT_TOKEN' in x and 'TELEGRAM_ADMIN_CHAT_ID' in x for x in w)
+    monkeypatch.setenv('TELEGRAM_OPS_BOT_TOKEN', 'TK')
+    monkeypatch.setenv('TELEGRAM_ADMIN_CHAT_ID', '42')
+    assert tg_ops.config(NS)['mode'] == 'direct'
+    assert not any('TELEGRAM_OPS_BOT_TOKEN' in x for x in tg_ops.config(NS)['warnings'])
+
+
+def test_send_is_not_retried_after_a_read_timeout_but_is_after_a_connect_error(net):
+    import requests as rq
+    seen = []
+    orig = net.request
+
+    def request(method, url, json=None, headers=None, timeout=None, **k):
+        seen.append(timeout)
+        return orig(method, url, json=json, headers=headers, timeout=timeout)
+    net.request = request
+    tg_ops.requests.request = request
+    net.replies = [rq.exceptions.ReadTimeout('slow')]
+    out = tg_ops.send(NS, 'x', kind='uptime')
+    assert out['reason'] == 'network' and len(net.calls) == 1          # لا تكرار للرسالة
+    assert seen[0] >= 40                                                 # أطول من أسوأ حالة في المنصة
+    net.calls.clear()
+    net.replies = [rq.exceptions.ConnectionError('refused'), R(200, {'ok': True, 'reason': 'ok'})]
+    assert tg_ops.send(NS, 'x')['ok'] is True and len(net.calls) == 2  # الطلب ما اتبعتش ⇒ إعادة آمنة
+    net.calls.clear()
+    net.replies = [R(503)]
+    tg_ops.send(NS, 'x')
+    assert len(net.calls) == 1                                           # ٥xx بعد الإرسال ⇒ لا إعادة
+
+
+def test_bridge_401_says_secret_mismatch(net):
+    net.replies = [R(401)]
+    out = tg_ops.selftest(NS)
+    assert out['reason'] == 'bridge_secret_mismatch'
+
+
+def test_arm_passes_force_and_reports_foreign_webhook(net):
+    client = flask_app.test_client()
+    with flask_app.app_context():
+        admin = _mkuser('r16-admin@x.test', 'admin')
+    net.replies = [R(200, {'ok': False, 'reason': 'webhook_elsewhere', 'host': 'n8n.example.org'})]
+    js = client.post('/api/telegram/arm-webhook', headers=admin, json={}).get_json()
+    assert js['reason'] == 'webhook_elsewhere' and js['host'] == 'n8n.example.org'
+    assert net.calls[-1][2] == {'force': False}
+    net.replies = [R(200, {'ok': True, 'reason': 'ok'})]
+    js = client.post('/api/telegram/arm-webhook', headers=admin, json={'force': True}).get_json()
+    assert js['ok'] is True and net.calls[-1][2] == {'force': True}
+
+
+def test_payment_failures_inbox_proxy_and_ack(net):
+    client = flask_app.test_client()
+    with flask_app.app_context():
+        admin = _mkuser('r16-admin@x.test', 'admin')
+        viewer = _mkuser('r16-viewer@x.test', 'viewer')
+    seen = []
+
+    def proxy(method, path, params=None, json_body=None, timeout=12, **k):
+        seen.append((method, path, json_body))
+        from flask import jsonify
+        return jsonify({'ok': True, 'failures': []})
+
+    old = NS['_platform_proxy']
+    NS['_platform_proxy'] = proxy
+    try:
+        assert client.get('/api/platform-payment-failures', headers=viewer).status_code == 403
+        assert client.get('/api/platform-payment-failures', headers=admin).status_code == 200
+        assert client.post('/api/platform-payment-failures/pay-1/ack', headers=admin).status_code == 200
+        assert client.post('/api/platform-payment-failures/bad%20id/ack', headers=admin).status_code == 400
+    finally:
+        NS['_platform_proxy'] = old
+    assert seen[0][:2] == ('GET', '/api/bridge/payment-failures/recent')
+    assert seen[1][1] == '/api/bridge/payment-failures/pay-1/ack' and seen[1][2]['by'] == 'r16-admin@x.test'
+
+
+def test_payment_failure_rows_reach_the_inbox_with_an_action():
+    api = _ui('dashboard-api.js')
+    assert 'get("/platform-payment-failures")' in api and 'apiKind: "payfail"' in api
+    assert 'case "payfail":' in api and '"/platform-payment-failures/" + encodeURIComponent(i.apiId) + "/ack"' in api
+    logic = _ui('v2-logic.js')
+    assert "case 'payfail': {" in logic and "payfail: 'money'" in logic
+    assert "rowsOfKind(rows, 'payfail')" in logic
+    assert "payments_failed_new" in logic and 'payments_failed_new' in tg_ops.DIGEST_LABELS
+
+
+def test_signup_note_is_gender_neutral():
+    api = _ui('dashboard-api.js')
+    assert 'note: "التسجيل " + (PROV[s.provider]' in api and 'note: "سجّل "' not in api
+
+
+def test_ui_asks_before_overwriting_a_foreign_webhook():
+    src = _ui('index.html')
+    assert "r.reason==='webhook_elsewhere'" in src and '{force:true}' in src
+    assert 'bridge_secret_mismatch:' in src

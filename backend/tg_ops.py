@@ -27,10 +27,13 @@ import requests
 logger = logging.getLogger(__name__)
 
 REASONS = ('ok', 'no_token', 'no_chat', 'bad_token', 'wrong_chat', 'bot_not_allowed', 'telegram_error',
-           'network', 'no_bridge_secret', 'bridge_error', 'empty')
+           'network', 'no_bridge_secret', 'bridge_secret_mismatch', 'bridge_error', 'empty')
 RETRY_DELAYS = (0.5, 1.5)
 LOG_KEEP = 200
 STATUS_ROWS = 20
+# المنصة نفسها بتحاول تليجرام ٣ مرّات بمهلة ٨ ثواني (+ getWebhookInfo في «جرّب التنبيهات») ⇒ أسوأ حالة ~٣٤ ثانية.
+# مهلة نداء الإرسال من اللوحة لازم تبقى أطول من كده، وإلا اللوحة تعيد المحاولة والرسالة تتكرّر.
+SEND_TIMEOUT = 45
 SELFTEST_TEXT = ('🔔 رسالة تجربة من لوحة البروفيسور.\n'
                  'لو وصلت، يبقى تنبيهات التسجيل والدفع والطلبات شغّالة.')
 DASHBOARD_URL = 'https://dashboard.elprofessor.net/'
@@ -101,6 +104,10 @@ def config(ns):
     warnings = []
     if m == 'bridge' and not _secret(ns):
         warnings.append('اللوحة مش مربوطة بالمنصة (METRICS_SECRET فاضي) — ولا رسالة هتخرج من اللوحة.')
+    if m == 'bridge':
+        # تنبيه «خادم المنصة واقع» بيعدّي من خادم المنصة نفسه ⇒ مش هيوصل وهو واقع (هيتعاد كل ٥ دقايق لحد ما يوصل).
+        warnings.append('تنبيه «خادم المنصة واقع» بيعدّي من المنصة نفسها، فمش هيوصل وهي واقعة. عشان يوصل: '
+                        'حطّ TELEGRAM_OPS_BOT_TOKEN وTELEGRAM_ADMIN_CHAT_ID على سيرفر اللوحة كمان.')
     if (os.environ.get('DASH_SCHEDULER') or '').strip() == '0':
         warnings.append('المراقبة والملخص اليومي متوقّفين (DASH_SCHEDULER=0).')
     return {'mode': m, 'dashboard_token_set': bool(_token()), 'dashboard_chat_set': bool(_chat()),
@@ -198,13 +205,17 @@ def _direct(text, links):
             time.sleep(wait)
 
 
-def _bridge(ns, path, body=None, method='POST', timeout=20):
-    """نداء جسر المنصة. يرجع (dict|None, reason, detail)."""
+def _bridge(ns, path, body=None, method='POST', timeout=20, once=False):
+    """نداء جسر المنصة. يرجع (dict|None, reason, detail).
+
+    `once=True` للنداءات اللي بتبعت رسالة فعلًا (send · selftest): إعادة المحاولة بس لو الاتصال نفسه ما اتعملش
+    (الطلب ما وصلش المنصة أصلًا). مهلة قراءة أو ٥xx ⇒ لا إعادة، لأن المنصة ممكن تكون بعتت والرسالة تتكرّر."""
     secret = _secret(ns)
     if not secret:
         return None, 'no_bridge_secret', ''
     delays = list(RETRY_DELAYS)
     while True:
+        retry = True
         try:
             r = requests.request(method, _platform_url(ns) + path, json=body,
                                  headers={'X-ELP-Metrics-Secret': secret}, timeout=timeout)
@@ -214,12 +225,19 @@ def _bridge(ns, path, body=None, method='POST', timeout=20):
                 except Exception:   # noqa: BLE001
                     js = None
                 return (js if isinstance(js, dict) else {}), 'ok', ''
+            if r.status_code == 401:
+                return None, 'bridge_secret_mismatch', 'HTTP 401'
             if r.status_code < 500:
                 return None, 'bridge_error', 'HTTP %s' % r.status_code
             err = ('bridge_error', 'HTTP %s' % r.status_code)
+            retry = not once
         except Exception as exc:   # noqa: BLE001
             err = ('network', type(exc).__name__)
-        if not delays:
+            # ConnectionError (ومنها ConnectTimeout) = الطلب ما اتبعتش. ReadTimeout = اتبعت ومستنيين الردّ.
+            if once:
+                retry = isinstance(exc, requests.exceptions.ConnectionError) and \
+                    not isinstance(exc, requests.exceptions.ReadTimeout)
+        if not delays or not retry:
             return None, err[0], err[1]
         wait = delays.pop(0)
         if wait:
@@ -237,7 +255,8 @@ def send(ns, text, kind='ops', links=None):
             res = _direct(text, links)
         else:
             js, why, detail = _bridge(ns, '/api/bridge/telegram/send',
-                                      {'text': text[:3500], 'kind': kind, 'links': list(links or [])[:4]})
+                                      {'text': text[:3500], 'kind': kind, 'links': list(links or [])[:4]},
+                                      timeout=SEND_TIMEOUT, once=True)
             if js is None:
                 res = {'ok': False, 'reason': why, 'detail': detail, 'tries': 1}
             else:
@@ -279,7 +298,7 @@ def selftest(ns):
     if m == 'direct':
         res = send(ns, SELFTEST_TEXT, kind='selftest', links=[{'text': 'افتح اللوحة', 'url': DASHBOARD_URL}])
         return {'ok': res['ok'], 'reason': res['reason'], 'detail': res['detail'], 'mode': m, 'platform': None}
-    js, why, detail = _bridge(ns, '/api/bridge/telegram/selftest', {})
+    js, why, detail = _bridge(ns, '/api/bridge/telegram/selftest', {}, timeout=SEND_TIMEOUT, once=True)
     if js is None:
         res = {'ok': False, 'reason': why, 'detail': detail, 'tries': 1}
         _log(ns, 'selftest', m, res)
@@ -291,12 +310,14 @@ def selftest(ns):
             'platform': {'config': js.get('config') or {}, 'webhook': js.get('webhook') or {}}}
 
 
-def arm_webhook(ns):
-    js, why, detail = _bridge(ns, '/api/bridge/telegram/arm-webhook', {})
+def arm_webhook(ns, force=False):
+    """«شغّل أزرار القرار». الويب-هوك مربوط بمكان تاني ⇒ المنصة ترجّع `webhook_elsewhere` ومضيفه، واللوحة تسأل
+    المؤسس قبل ما تبعت `force`."""
+    js, why, detail = _bridge(ns, '/api/bridge/telegram/arm-webhook', {'force': bool(force)}, once=True)
     if js is None:
         return {'ok': False, 'reason': why, 'detail': detail}
     return {'ok': js.get('ok') is True, 'reason': js.get('reason') or '', 'detail': str(js.get('detail') or ''),
-            'webhook': js.get('webhook')}
+            'host': str(js.get('host') or '')[:120], 'webhook': js.get('webhook')}
 
 
 def platform_status(ns):
@@ -363,19 +384,31 @@ def check_uptime(ns, get=None):
         st = kv_get(ns, key, {}) or {}
         fails = int(st.get('fails') or 0)
         down = bool(st.get('down'))
+        # ⛔ الحالة تتغيّر بس لما التنبيه يوصل فعلًا: تنبيه ما وصلش (مثلًا «خادم المنصة واقع» وهو بيعدّي من
+        # المنصة نفسها) يتعاد في الجولة الجاية بعد ٥ دقايق، مش يضيع.
         if up:
             if down:
-                send(ns, '🟢 %s رجع يشتغل\n%s' % (label, url), kind='uptime', links=[{'text': 'افتح', 'url': url}])
+                res = send(ns, '🟢 %s رجع يشتغل\n%s' % (label, url), kind='uptime', links=[{'text': 'افتح', 'url': url}])
+                if not res.get('ok'):
+                    kv_set(ns, key, {'fails': 0, 'down': True, 'last': why, 'alert_failed': res.get('reason')})
+                    continue
                 sent.append(('up', url))
             kv_set(ns, key, {'fails': 0, 'down': False, 'last': why})
             continue
         fails += 1
+        alert_failed = ''
         if fails >= FAILS_TO_ALERT and not down:
-            send(ns, '🔴 %s مش شغّال (فشل %s مرّات متتالية)\n%s\nالسبب: %s' % (label, fails, url, why),
-                 kind='uptime', links=[{'text': 'افتح', 'url': url}])
-            sent.append(('down', url))
-            down = True
-        kv_set(ns, key, {'fails': fails, 'down': down, 'last': why})
+            res = send(ns, '🔴 %s مش شغّال (فشل %s مرّات متتالية)\n%s\nالسبب: %s' % (label, fails, url, why),
+                       kind='uptime', links=[{'text': 'افتح', 'url': url}])
+            if res.get('ok'):
+                sent.append(('down', url))
+                down = True
+            else:
+                alert_failed = res.get('reason') or 'network'
+        st = {'fails': fails, 'down': down, 'last': why}
+        if alert_failed:
+            st['alert_failed'] = alert_failed
+        kv_set(ns, key, st)
     return sent
 
 
@@ -383,14 +416,17 @@ def uptime_state(ns):
     out = []
     for label, url in watch_targets():
         st = kv_get(ns, 'uptime:' + url, {}) or {}
-        out.append({'label': label, 'url': url, 'down': bool(st.get('down')), 'fails': int(st.get('fails') or 0),
-                    'last': st.get('last') or ''})
+        # «واقع» للعرض = الخادم بيفشل فعلًا (حتى لو التنبيه نفسه لسه ما وصلش).
+        failing = bool(st.get('down')) or int(st.get('fails') or 0) >= FAILS_TO_ALERT
+        out.append({'label': label, 'url': url, 'down': failing, 'fails': int(st.get('fails') or 0),
+                    'last': st.get('last') or '', 'alert_failed': st.get('alert_failed') or ''})
     return out
 
 
 # ════════════════════════════════════════════════════════════════════ الملخص اليومي
 DIGEST_LABELS = {
     'signups_new': 'تسجيلات جديدة لم تُراجع',
+    'payments_failed_new': 'دفعات فشلت لم تُراجع',
     'trainer_applications': 'طلبات مدرّبين',
     'courses_pending': 'دورات تنتظر الاعتماد',
     'live_needs_decision': 'دورات حيّة تحتاج قرارًا',
@@ -571,7 +607,8 @@ def register(app, ns):
     @token_required
     @roles_required('admin')
     def tg_ops_arm():
-        out = arm_webhook(ns)
+        body = request.get_json(silent=True) or {}
+        out = arm_webhook(ns, force=body.get('force') is True)
         try:
             ns['_audit']('telegram.arm_webhook', target=out.get('reason') or '', meta={'ok': bool(out.get('ok'))})
         except Exception:   # noqa: BLE001
@@ -602,6 +639,28 @@ def register(app, ns):
                                      json_body={'by': ns['_actor_email']() or 'dashboard'})
         try:
             ns['_audit']('signup.ack', target=user_id)
+        except Exception:   # noqa: BLE001
+            pass
+        return resp
+
+    # —— «دفع فشل» في الوارد (نفس القاعدة): رفض البوابة · صفحة دفع ما فتحتش · بوابة كاملة مش جاهزة.
+    @app.route('/api/platform-payment-failures', methods=['GET'], endpoint='tg_ops_payfails')
+    @token_required
+    @roles_required('admin')
+    def tg_ops_payfails():
+        return ns['_platform_proxy']('GET', '/api/bridge/payment-failures/recent', params={'limit': 200})
+
+    @app.route('/api/platform-payment-failures/<row_id>/ack', methods=['POST'], endpoint='tg_ops_payfail_ack')
+    @token_required
+    @roles_required('admin')
+    def tg_ops_payfail_ack(row_id):
+        import re as _re
+        if not _re.match(r'^[A-Za-z0-9_-]{1,64}$', row_id or ''):
+            return no_store({'error': 'معرّف غير صالح'}, 400)
+        resp = ns['_platform_proxy']('POST', '/api/bridge/payment-failures/%s/ack' % row_id,
+                                     json_body={'by': ns['_actor_email']() or 'dashboard'})
+        try:
+            ns['_audit']('payment_failure.ack', target=row_id)
         except Exception:   # noqa: BLE001
             pass
         return resp

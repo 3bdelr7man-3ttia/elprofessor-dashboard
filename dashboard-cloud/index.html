@@ -5942,9 +5942,9 @@ function viewSettings(v){
 const TG_REASON={ok:'وصلت ✓',no_token:'مفيش توكن بوت على سيرفر المنصة (TELEGRAM_OPS_BOT_TOKEN)',no_chat:'رقم محادثة المؤسس فاضي (TELEGRAM_ADMIN_CHAT_ID)',
   bad_token:'توكن البوت غلط أو اتلغى',wrong_chat:'رقم المحادثة غلط: البوت مش لاقي المحادثة',bot_not_allowed:'البوت مش جوّه المجموعة أو معمول له حظر',
   telegram_error:'تليجرام رفض الرسالة',network:'السيرفر ما وصلش لتليجرام',no_bridge_secret:'اللوحة مش مربوطة بالمنصة (METRICS_SECRET)',
-  bridge_error:'المنصة ما ردّتش صح',no_webhook_secret:'TELEGRAM_WEBHOOK_SECRET فاضي على سيرفر المنصة',no_public_url:'عنوان المنصة العام مش مضبوط',
+  bridge_error:'المنصة ما ردّتش صح',bridge_secret_mismatch:'سرّ الربط بين اللوحة والمنصة مختلف (METRICS_SECRET لازم يبقى نفس القيمة في الاتنين)',webhook_elsewhere:'الويب-هوك مربوط بمكان تاني',no_webhook_secret:'TELEGRAM_WEBHOOK_SECRET فاضي على سيرفر المنصة',no_public_url:'عنوان المنصة العام مش مضبوط',
   already_sent:'الملخص اتبعت النهارده خلاص',retry_later:'محاولة قريبة فشلت، هتتعاد بعد ساعة',empty:'مفيش نص'};
-const TG_KIND={signup:'تسجيل جديد',selftest:'رسالة تجربة',uptime:'مراقبة التشغيل',digest:'الملخص اليومي',brain_ask:'سؤال العقل',ops:'تنبيه',dashboard:'من اللوحة'};
+const TG_KIND={signup:'تسجيل جديد',payment_failed:'دفع فشل',selftest:'رسالة تجربة',uptime:'مراقبة التشغيل',digest:'الملخص اليومي',brain_ask:'سؤال العقل',ops:'تنبيه',dashboard:'من اللوحة'};
 function tgReason(r){return TG_REASON[r]||('سبب آخر: '+(r||'—'));}
 function tgWhen(at){try{return new Date(at).toLocaleString('ar-EG',{dateStyle:'short',timeStyle:'short'});}catch(e){return at||'';}}
 function tgRows(list){
@@ -5970,22 +5970,38 @@ function tgRender(st){
     ${tgRows(st.attempts)}`;
 }
 function tgLoad(){if(!window.EP)return;EP.get('/telegram/status?platform=1').then(tgRender).catch(()=>tgRender(null));}
+function tgBox(ok,html){return `<div class="policy" style="margin:6px 0;${ok?'':'border-inline-start-color:var(--conflict);background:var(--conflict-bg);color:var(--conflict)'}">${svg(ok?'check':'scale','ic')}<div>${html}</div></div>`;}
+function tgRun(a,b,body){
+  const out=document.getElementById('tgResult');
+  const path=a==='test'?'/telegram/selftest':a==='arm'?'/telegram/arm-webhook':'/telegram/digest';
+  if(b)b.disabled=true;if(out)out.innerHTML='<div style="padding:6px 0;color:var(--muted)">…جارٍ</div>';
+  EP.post(path,body||{}).then(r=>{
+    const ok=!!(r&&r.ok);
+    // الويب-هوك مربوط بمكان تاني (n8n غالبًا): لا نكتب فوقه إلا بتأكيد صريح جوه الصفحة.
+    if(a==='arm'&&r&&r.reason==='webhook_elsewhere'){
+      if(out){out.innerHTML=tgBox(false,`<b>الويب-هوك مربوط بمكان تاني${r.host?` (<span style="direction:ltr;unicode-bidi:isolate">${esc(r.host)}</span>)`:''}، غالبًا n8n.</b> لو شغّلت أزرار القرار هنا، اللي مربوط هناك (زي أوامر تليجرام النصية) هيقف. تكمّل؟
+        <div style="display:flex;gap:8px;margin-top:8px"><button class="btn btn-primary" style="flex:none;min-width:auto;padding:6px 14px" data-tgc="yes">أيوه، شغّلها هنا</button>
+        <button class="btn btn-human" style="flex:none;min-width:auto;padding:6px 14px" data-tgc="no">لا، سيبه</button></div>`);
+        const y=out.querySelector('[data-tgc="yes"]'),n=out.querySelector('[data-tgc="no"]');
+        if(y)y.onclick=()=>tgRun('arm',null,{force:true});
+        if(n)n.onclick=()=>{out.innerHTML='';};}
+      return;
+    }
+    let extra='';
+    if(a==='test'&&r&&r.platform&&r.platform.webhook){const w=r.platform.webhook;
+      if(w.ok){
+        if(w.url_set&&w.points_here)extra=' أزرار القرار متوصّلة.';
+        else if(w.url_set)extra=' الويب-هوك مربوط بمكان تاني'+(w.host?' ('+w.host+')':'')+'، n8n غالبًا: أزرار القرار مش هتوصل للمنصة. «شغّل أزرار القرار» هيسألك قبل ما يغيّره.';
+        else extra=' أزرار القرار مش متوصّلة: اضغط «شغّل أزرار القرار».';
+      }
+      if(w.last_error_message)extra+=' آخر خطأ من تليجرام: '+w.last_error_message;}
+    if(out)out.innerHTML=tgBox(ok,`<b>${ok?(a==='arm'?'أزرار القرار اتشغّلت ✓':a==='digest'?'الملخص اتبعت ✓':'الرسالة وصلت ✓'):'ما وصلتش'}</b>${ok?'':' — '+esc(tgReason(r&&r.reason))}${r&&r.detail?` <span style="direction:ltr;unicode-bidi:isolate">${esc(r.detail)}</span>`:''}${esc(extra)}`);
+  }).catch(e=>{if(out)out.innerHTML=`<div class="policy" style="margin:6px 0;color:var(--conflict)">${esc((e&&e.message)||'تعذّر التنفيذ')}</div>`;})
+    .then(()=>{if(b)b.disabled=false;tgLoad();});
+}
 function tgPanelWire(){
   const p=document.getElementById('tgPanel');if(!p||!window.EP)return;
-  p.querySelectorAll('[data-tg]').forEach(b=>b.onclick=()=>{
-    const a=b.dataset.tg, out=document.getElementById('tgResult');
-    const path=a==='test'?'/telegram/selftest':a==='arm'?'/telegram/arm-webhook':'/telegram/digest';
-    b.disabled=true;if(out)out.innerHTML='<div style="padding:6px 0;color:var(--muted)">…جارٍ</div>';
-    EP.post(path,{}).then(r=>{
-      const ok=!!(r&&r.ok);
-      let extra='';
-      if(a==='test'&&r&&r.platform&&r.platform.webhook){const w=r.platform.webhook;
-        extra=w.ok?(w.url_set&&w.points_here?' أزرار القرار متوصّلة.':' أزرار القرار مش متوصّلة: اضغط «شغّل أزرار القرار».'):'';
-        if(w.last_error_message)extra+=' آخر خطأ من تليجرام: '+w.last_error_message;}
-      if(out)out.innerHTML=`<div class="policy" style="margin:6px 0;${ok?'':'border-inline-start-color:var(--conflict);background:var(--conflict-bg);color:var(--conflict)'}">${svg(ok?'check':'scale','ic')}<div><b>${ok?(a==='arm'?'أزرار القرار اتشغّلت ✓':a==='digest'?'الملخص اتبعت ✓':'الرسالة وصلت ✓'):'ما وصلتش'}</b>${ok?'':' — '+esc(tgReason(r&&r.reason))}${r&&r.detail?` <span style="direction:ltr;unicode-bidi:isolate">${esc(r.detail)}</span>`:''}${esc(extra)}</div></div>`;
-    }).catch(e=>{if(out)out.innerHTML=`<div class="policy" style="margin:6px 0;color:var(--conflict)">${esc((e&&e.message)||'تعذّر التنفيذ')}</div>`;})
-      .then(()=>{b.disabled=false;tgLoad();});
-  });
+  p.querySelectorAll('[data-tg]').forEach(b=>b.onclick=()=>tgRun(b.dataset.tg,b));
   tgLoad();
 }
 // قائمة الأدمن/الموظفين الحقيقيين من SQLite (/api/users). إيقاف/تعديل محميّان بآخر-مدير على الخادم.

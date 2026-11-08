@@ -311,12 +311,15 @@
       t.dest = 'finance'; t.land = 'wallet_payouts_pending';
       if (!Q) return failTile(t);
       var B = v2MoneyBadge(Q).parts, po = B.payouts, mp = B.receipts, st = B.stuck, rf = B.refunds;
-      t.count = po + mp + st + rf; t.hot = st > 0;
+      // R16 «دفع فشل»: صفوف الوارد نفسها (زي «تسجيل جديد» في الأعضاء) — صفر لو القراءة فشلت.
+      var pf = (rows && !inboxFailedHas(extras, 'دفعات فشلت')) ? rowsOfKind(rows, 'payfail').length : 0;
+      t.count = po + mp + st + rf + pf; t.hot = st > 0 || pf > 0;
       var p = [];
       if (po) p.push(U(po, ['تحويل واحد', 'تحويلان', 'تحويلات', 'تحويلًا']));
       if (mp) p.push(U(mp, ['إيصال', 'إيصالان', 'إيصالات', 'إيصالًا']));
       if (st) p.push(U(st, ['دفعة عالقة', 'دفعتان عالقتان', 'دفعات عالقة', 'دفعة عالقة']));
       if (rf) p.push(U(rf, ['استرداد ينتظر قرارك', 'استردادان ينتظران قرارك', 'استردادات تنتظر قرارك', 'استردادًا ينتظر قرارك']));
+      if (pf) p.push(U(pf, ['دفع فشل', 'دفعتان فشلتا', 'دفعات فشلت', 'دفعة فشلت']));
       t.facts = p.slice(); t.next = p.length ? p.join('، ') : 'التحويلات والإيصالات';
       if (st) { t.dest = 'finance'; t.land = 'stuck_card_payments'; }
       else if (po) { t.dest = 'finance'; t.land = 'wallet_payouts_pending'; }
@@ -367,13 +370,13 @@
   var IMG_OF = {
     file_waiting: 'files', file_late: 'files', file_attention: 'files', review: 'files', verify: 'files',
     dispute: 'disputes', unactivated: 'disputes', legacy: 'disputes',
-    payout: 'money', manual_payment: 'money', stuck_payment: 'money', book_offer: 'books',
+    payout: 'money', manual_payment: 'money', stuck_payment: 'money', payfail: 'money', book_offer: 'books',
     trainer: 'people', join: 'people', pending_user: 'people', signup: 'people', founding: 'people', lead: 'people', message: 'people', open_message: 'people',
     book: 'books', program: 'courses', course: 'courses', live: 'courses', topic: 'content', creative: 'content', other: 'people'
   };
   // الترتيب (قرار المؤسس): ملفات مستعجلة/متأخرة ⇐ نزاعات ⇐ استردادات ⇐ تحويلات ⇐ إيصالات ⇐ آراء للمراجعة ⇐
   // مدرّبون وانضمام ⇐ زوّار ⇐ خبراء مؤسسون ⇐ محتوى وكتب وبرامج ⇐ رسائل. الملف العادي المنتظر بين الأولى والثانية.
-  var RANK = { file_urgent: 10, file_waiting: 15, dispute: 20, refund: 30, payout: 40, stuck_payment: 45, manual_payment: 50, review: 60,
+  var RANK = { file_urgent: 10, file_waiting: 15, dispute: 20, refund: 30, payout: 40, stuck_payment: 45, payfail: 47, manual_payment: 50, review: 60,
                trainer: 70, join: 70, pending_user: 80, signup: 85, founding: 90, book_offer: 95, content: 100, message: 110 };
 
   function kindOf(r) {
@@ -381,6 +384,7 @@
     if (r.apiKind === 'brain_item') return 'brain_item';       // brain2: اقتراح كتبه العقل (يُبنى بـv2bItemCard)
     if (r.apiKind === 'payout' || r.kind === 'payout') return 'payout';
     if (r.apiKind === 'stuck_payment') return 'stuck_payment';
+    if (r.apiKind === 'payfail') return 'payfail';
     if (r.apiKind === 'book_offer') return 'book_offer';
     if (r.apiKind === 'course_q') return 'course';
     if (r.apiKind === 'live_q') return 'live';
@@ -417,6 +421,7 @@
       case 'unactivated': case 'legacy': return RANK.refund;
       case 'payout': return RANK.payout;
       case 'stuck_payment': return RANK.stuck_payment;
+      case 'payfail': return RANK.payfail;
       case 'book_offer': return RANK.book_offer;
       case 'manual_payment': return RANK.manual_payment;
       case 'review': return RANK.review;
@@ -668,6 +673,21 @@
         card.facts = [{ k: 'المبلغ', v: sk.amountText }, { k: 'الطريقة', v: sk.provider }];
         break;
       }
+      case 'payfail': {
+        // R16: «دفع فشل» ينبّه تليجرام ⇒ صفّ هنا بإجراء (قاعدة الوارد). «تمام» يقفله هنا وفي تليجرام معًا.
+        var gwRow = r.pfScope === 'gateway';
+        card.tag = gwRow ? 'الدفع بالبطاقة مش شغّال' : 'دفع فشل';
+        card.title = gwRow ? ('بوابة ' + (str(r.pfGateway) || 'الدفع')) : (who || 'مشترٍ');
+        card.sub = clean([str(r.pfProduct), moneyText(r.amount, r.currency), str(r.pfGateway)]).join('، ');
+        card.brain = clean([card.tag, str(r.pfWhy), card.ageText]).join('، ');
+        if (gwRow) card.warn = 'كل مشتري بالبطاقة بيقف هنا لحد ما البوابة تتظبط' + (r.pfAttempts > 1 ? '، محاولات: ' + r.pfAttempts : '');
+        card.reason = str(r.pfWhy) || 'عملية دفع ما كملتش';
+        card.primary = { label: 'تمام، اطّلعت', act: act({ do: 'decide', action: 'approve' }) };
+        card.secondary = (!gwRow && r.personEmail) ? { label: 'افتح الشخص', act: act({ do: 'person', email: r.personEmail }) }
+          : { label: 'افتح', act: OPEN };
+        card.facts = [{ k: 'المبلغ', v: moneyText(r.amount, r.currency) || '—' }, { k: 'البوابة', v: str(r.pfGateway) || '—' }];
+        break;
+      }
       case 'book_offer': {
         var of = r.offerRow || {};
         card.tag = 'عرض كتاب للمراجعة';
@@ -811,7 +831,7 @@
     if (PERSON_TITLE[kind]) { var pe = personEmailOfRow(r); if (pe) card.person = { email: pe, name: card.title }; }
     return card;
   }
-  var PERSON_TITLE = { payout: 1, manual_payment: 1, stuck_payment: 1, trainer: 1, join: 1, pending_user: 1, signup: 1, founding: 1 };
+  var PERSON_TITLE = { payout: 1, manual_payment: 1, stuck_payment: 1, payfail: 1, trainer: 1, join: 1, pending_user: 1, signup: 1, founding: 1 };
   function v2Decisions(rows, payouts, queue, opts) {
     opts = opts || {};
     var now = opts.now || 0;
@@ -3505,7 +3525,7 @@
     expert_files_unactivated: 'ملفات دُفعت ولم تصل إلى التوزيع', wallet_payouts_pending: 'طلبات سحب من المحافظ',
     stuck_card_payments: 'دفعات بطاقة عالقة', course_interests_24h: 'اهتمام بالدورات في آخر ٢٤ ساعة',
     training_interests_24h: 'مهتمون بالتدريب في آخر ٢٤ ساعة', course_split_pending: 'اقتسام إيراد معلّق',
-    testimonials_pending: 'شهادات تنتظر المراجعة', topics_drafts: 'مسودات موضوعات', founding_leads_new: 'طلبات خبير مؤسس جديدة', signups_new: 'تسجيلات جديدة لم تُراجع',
+    testimonials_pending: 'شهادات تنتظر المراجعة', topics_drafts: 'مسودات موضوعات', founding_leads_new: 'طلبات خبير مؤسس جديدة', signups_new: 'تسجيلات جديدة لم تُراجع', payments_failed_new: 'دفعات فشلت لم تُراجع',
     pending_users_requested: 'زوّار ينتظرون فتح المنصة', lead_magnet_awaiting_asset: 'ملفات وُعد بها ولم تُسلَّم',
     live_needs_decision: 'دورات حيّة تحتاج قرارًا'
   };
@@ -7273,7 +7293,7 @@
 
   var MONEY = { payout: 1, manual_payment: 1, stuck_payment: 1, unactivated: 1, legacy: 1, file_attention: 1, dispute: 1 };
   var DECIDE = { trainer: 1, join: 1, pending_user: 1, book_offer: 1, book: 1, creative: 1, topic: 1, program: 1 };
-  var INFO = { review: 1, lead: 1, message: 1, open_message: 1, course: 1, live: 1, verify: 1, founding: 1, signup: 1, other: 1 };
+  var INFO = { review: 1, lead: 1, message: 1, open_message: 1, course: 1, live: 1, verify: 1, founding: 1, signup: 1, payfail: 1, other: 1 };
   var RECOMMEND = { decide: ['approve', 'reject', 'open'], info: ['open', 'wait'] };
   // المفاتيح المسموحة (SPEC §3.2): مشتركة + لكل نوع. الخادم يعيد التنقية بنفس القائمة.
   var COMMON_KEYS = ['tag', 'age', 'sub', 'warn', 'reason', 'static_line', 'facts', 'money_text'];
