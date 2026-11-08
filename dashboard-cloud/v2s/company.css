@@ -304,3 +304,17 @@
   .co-adm .co-kv b{text-align:start}
 }
 @media (max-width:699px){.co-tech{display:none}}
+
+/* —— R18 «فحص الإعدادات» + لوحة «تنبيهات تليجرام» في الإعدادات */
+.co-cklist{list-style:none;margin:0;padding:0;display:grid;gap:8px}
+.co-ckr{display:flex;align-items:flex-start;gap:10px;background:#fff;border:1px solid var(--line);border-radius:12px;padding:10px 12px}
+.co-ckr.bad{border-color:#F2B5C0;background:#FDF3F5}
+.co-ck-mark{flex:none;display:inline-grid;place-items:center;width:28px;height:28px;border-radius:50%;background:var(--paper2);color:var(--mute);font:800 15px/1 'Cairo',sans-serif}
+.co-ck-mark.ok{background:var(--green-bg);color:var(--green)}
+.co-ck-mark.bad{background:#FDECEF;color:var(--red)}
+.co-ckm{display:flex;flex-direction:column;gap:2px;min-width:0}
+.co-ckm b{font:700 14.5px/1.6 'Cairo',sans-serif}
+.co-ckm small{color:var(--mute);font-size:13.5px;overflow-wrap:anywhere;unicode-bidi:plaintext}
+.co-fix{margin:4px 0 0;font-size:13.5px;line-height:1.8;color:#8E1228;overflow-wrap:anywhere;unicode-bidi:plaintext}
+.co-tgs{color:var(--mute);font-size:13.5px;line-height:1.8;padding-top:6px;overflow-wrap:anywhere}
+.co-tgb .co-btn2{flex:0 1 auto}

@@ -1833,7 +1833,9 @@
       );
       // R16 «تسجيل جديد» (قرار المؤسس 2026-11-08: «فين التنبيهات لما حد يسجل»): كل حساب جديد (بريد أو جوجل) ينبّه
       // تليجرام ⇒ صفّ هنا بإجراء «تمام، اطّلعت» (نفس زرّ تليجرام). آخر ١٤ يومًا مما لم يُطّلع عليه — من جسر المنصة.
-      jobs.push(
+      // R18: الصفّين دول (والدفع الفاشل تحت) مساراتهم للأدمن بس ⇒ الموظف ما يطلبهمش (كان بيشوف «تعذّر جلب» على الفاضي).
+      var r16Admin = String(EP.role || "").trim().toLowerCase() === "admin";
+      if (r16Admin) jobs.push(
         get("/platform-signups").then(function (r) {
           var list = Array.isArray(r) ? r : ((r && (r.signups || r.rows)) || []);
           var PROV = { google: "بجوجل", email: "بالبريد وكود التأكيد", password: "بالبريد وكلمة السر", invite: "برابط دعوة" };
@@ -1853,7 +1855,7 @@
       );
       // R16 «دفع فشل»: البوابة رفضت الدفع، أو صفحة الدفع ما فتحتش، أو البوابة كلها مش جاهزة ⇒ تليجرام ⇒ صفّ هنا
       // بإجراء «تمام، اطّلعت» (نفس زرّ تليجرام). عطل البوابة صفّ واحد بعدد المحاولات، مش صفّ لكل مشتري.
-      jobs.push(
+      if (r16Admin) jobs.push(
         get("/platform-payment-failures").then(function (r) {
           var list = Array.isArray(r) ? r : ((r && (r.failures || r.rows)) || []);
           list.forEach(function (f) {

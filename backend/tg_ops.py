@@ -18,6 +18,7 @@ import datetime
 import json
 import logging
 import os
+import re
 import sys
 import threading
 import time
@@ -459,8 +460,35 @@ def _ar_num(n):
     return str(int(n)).translate(str.maketrans('0123456789', '٠١٢٣٤٥٦٧٨٩'))
 
 
-def digest_text(ns, queue):
-    """نصّ الملخص من طابور المنصة (`/api/bridge/ops/queue`) وحالة المراقبة وفشل الإرسال آخر ٢٤ ساعة."""
+OPP_DIGEST_LABELS = (
+    ('drafts_waiting', 'فرص تنتظر المراجعة'),
+    ('possible_duplicates', 'منها غالبًا مكررة'),
+    ('published_24h', 'فرص نُشرت آخر ٢٤ ساعة'),
+    ('held_news_24h', 'أخبار محجوزة للمراجعة آخر ٢٤ ساعة'),
+)
+
+
+def _count_of(v):
+    return v if isinstance(v, int) and not isinstance(v, bool) and v > 0 else 0
+
+
+def opp_digest_lines(summary):
+    """R18: أسطر «محرّك الفرص» من `/api/bridge/opportunities/summary`. ملخص غايب/غريب ⇒ [] (الملخص يخرج من غيرها)."""
+    if not isinstance(summary, dict) or not any(k in summary for k in [x[0] for x in OPP_DIGEST_LABELS] + ['last_run', 'autorun']):
+        return []          # رد بلا أي مفتاح من العقد (جسم غريب) = لا بيانات، مش «لا جديد»
+    rows =['• %s: %s' % (label, _ar_num(_count_of(summary.get(key)))) for key, label in OPP_DIGEST_LABELS if _count_of(summary.get(key))]
+    last = summary.get('last_run') if isinstance(summary.get('last_run'), dict) else {}
+    errs = _count_of(last.get('errors'))
+    if errs:
+        rows.append('• أعطال في آخر تشغيل لجلب الفرص: %s' % _ar_num(errs))
+    au = summary.get('autorun') if isinstance(summary.get('autorun'), dict) else {}
+    if au.get('enabled') is False:
+        rows.append('• التشغيل اليومي لجلب الفرص متوقّف (يُفتح من «الساحة ← محرّك الفرص»)')
+    return ['🔎 الفرص:'] + (rows or ['• لا جديد ينتظر قرارك'])
+
+
+def digest_text(ns, queue, opp=None):
+    """نصّ الملخص من طابور المنصة (`/api/bridge/ops/queue`) وملخص محرّك الفرص (R18) وحالة المراقبة وفشل الإرسال آخر ٢٤ ساعة."""
     lines = ['☀️ ملخص اليوم من لوحة البروفيسور']
     items = []
     if isinstance(queue, dict):
@@ -477,7 +505,8 @@ def digest_text(ns, queue):
         lines.extend(items)
     else:
         lines.append('لا شيء ينتظر قرارك في الوارد.')
-    down = [u['label'] for u in uptime_state(ns) if u['down']]
+    lines.extend(opp_digest_lines(opp))
+    down =[u['label'] for u in uptime_state(ns) if u['down']]
     if down:
         lines.append('🔴 متوقّف الآن: ' + '، '.join(down))
     Model = _STATE['model']
@@ -517,10 +546,138 @@ def send_digest(ns, force=False):
             return {'ok': False, 'reason': 'retry_later', 'detail': ''}
         kv_set(ns, 'digest:tried_at', time.time())
     js, why, _detail = _bridge(ns, '/api/bridge/ops/queue', None, method='GET', timeout=20)
-    res = send(ns, digest_text(ns, js), kind='digest', links=[{'text': 'افتح الوارد', 'url': DASHBOARD_URL}])
+    try:      # R18: ملخص الفرص — أي فشل ⇒ الملخص يخرج من غير أسطره
+        opp, _w, _d = _bridge(ns, '/api/bridge/opportunities/summary', None, method='GET', timeout=15)
+    except Exception:   # noqa: BLE001
+        opp = None
+    try:
+        text = digest_text(ns, js, opp)
+    except Exception:   # noqa: BLE001
+        logger.exception('tg_ops: digest with opportunities failed — sending without it')
+        text = digest_text(ns, js)
+    res = send(ns, text, kind='digest', links=[{'text': 'افتح الوارد', 'url': DASHBOARD_URL}])
     if res['ok']:
         kv_set(ns, key, today)
     return res
+
+
+# ════════════════════════════════════════════════════════════════════ فحص الإعدادات (R18)
+CHECK_KEY_RE = re.compile(r'^[A-Za-z0-9_.:-]{1,60}$')
+CHECK_ITEMS_MAX = 60
+
+
+CHECK_SOURCE_AR = {'settings': 'محفوظ في المنصة', 'env': 'من إعدادات الخادم', 'default': 'القيمة الافتراضية'}
+CHECK_MODE_AR = {'live': 'حيّ', 'test': 'تجريبي', 'unknown': 'شكله غير معروف'}
+CHECK_WORD_AR = {'once': 'مرة واحدة', 'monthly': 'كل شهر', 'month': 'كل شهر'}
+# المنصة بتوجّه لـ«الداشبورد ← الفرص» — المكان الحقيقي عندنا في الساحة ⇒ النص ده يغلب نصّها للبندين دول بس.
+CHECK_FIX_OVERRIDE = {
+    'opp_autorun': 'من الداشبورد ← المحتوى ← الساحة ← محرّك الفرص ← التشغيل: تشغيل المفتاح',
+    'opp_digest': 'من الداشبورد ← المحتوى ← الساحة ← محرّك الفرص ← إيميل الأسبوع: تشغيل المفتاح بعد رسالة تجربة',
+}
+CHECK_TOKEN_RE = re.compile(r'^[A-Za-z0-9_-]{1,20}$')
+
+
+def _check_scalar(v):
+    """قيمة غير سرّية للعرض: منطقي/رقم/نص قصير. نص طويل بلا مسافات (شكل مفتاح) ⇒ «مضبوط» بدل القيمة — احتياط لو المنصة غلطت."""
+    if isinstance(v, bool) or v is None:
+        return v
+    if isinstance(v, (int, float)):
+        return v
+    if isinstance(v, str):
+        s = v.strip()
+        if len(s) >= 24 and ' ' not in s:
+            return 'مضبوط'
+        return s[:120]
+    return None
+
+
+def _check_word(v):
+    """قيمة داخل قاموس المنصة ⇒ نص عربي قصير: رقم كما هو، وكلمة معروفة بترجمتها، وكلمة قصيرة لاتينية كما هي (اسم وضع)، وغير ذلك ''."""
+    if isinstance(v, bool):
+        return 'نعم' if v else 'لا'
+    if isinstance(v, int):
+        return str(v)
+    if isinstance(v, str):
+        s = v.strip().lower()
+        if s in CHECK_WORD_AR:
+            return CHECK_WORD_AR[s]
+        return s if CHECK_TOKEN_RE.match(s) else ''
+    return ''
+
+
+def _check_hours(v):
+    hs = [p for p in str(v or '').replace(' ', '').split(',') if p.isdigit() and int(p) <= 23][:6]
+    return ('الساعة ' + ' و'.join(hs)) if hs else ''
+
+
+def _with_source(text, d):
+    src = CHECK_SOURCE_AR.get(d.get('source')) if isinstance(d.get('source'), str) else None
+    return f'{text} ({src})' if text and src else text
+
+
+def _check_value(v):
+    """قيمة البند ⇒ نص/رقم/منطقي للعرض. قواميس المنصة (R18 `ops_config`) تتسطّح لنص عربي قصير من حقول معروفة بس
+    (limit · value · source · set · mode · enabled · hours · error)، وأي حقل تاني يتشال — مفيش قيمة سرّية بتعدّي."""
+    if not isinstance(v, dict):
+        return _check_scalar(v)
+    if v.get('error') is True:
+        return 'تعذّرت القراءة'
+    if 'limit' in v:
+        n = v.get('limit')
+        return _with_source(str(n) if isinstance(n, int) and not isinstance(n, bool) else '', v) or None
+    if 'value' in v:
+        return _with_source(_check_word(v.get('value')), v) or None
+    if 'mode' in v or ('set' in v and len(v) == 1):
+        if v.get('set') is not True:
+            return 'غير مضبوط'
+        mode = CHECK_MODE_AR.get(v.get('mode')) if isinstance(v.get('mode'), str) else None
+        return f'مضبوط، {mode}' if mode else 'مضبوط'
+    if 'enabled' in v:
+        parts = ['يعمل' if v.get('enabled') is True else 'متوقّف']
+        if v.get('enabled') is True and 'hours' in v:
+            parts.append(_check_hours(v.get('hours')))
+        return _with_source('، '.join(p for p in parts if p), v)
+    if 'set' in v:
+        return 'مضبوط' if v.get('set') is True else 'غير مضبوط'
+    return None
+
+
+def view_check_item(r):
+    if not isinstance(r, dict) or not CHECK_KEY_RE.match(str(r.get('key') or '')):
+        return None
+    ok = r.get('ok')
+    key = str(r['key'])
+    fix = str(r.get('fix_ar') or '')[:400]
+    if fix and key in CHECK_FIX_OVERRIDE:
+        fix = CHECK_FIX_OVERRIDE[key]
+    return {'key': key, 'label_ar': str(r.get('label_ar') or '')[:160], 'value': _check_value(r.get('value')),
+            'ok': ok if isinstance(ok, bool) else None, 'fix_ar': fix, 'where': 'platform'}
+
+
+def dashboard_checks(ns):
+    """بنود سيرفر اللوحة نفسه — أعلام بس، بلا أي قيمة سرّية."""
+    sched_off = (os.environ.get('DASH_SCHEDULER') or '').strip() == '0'
+    return [
+        {'key': 'dash.bridge_secret', 'label_ar': 'ربط اللوحة بالمنصة', 'value': bool(_secret(ns)), 'ok': bool(_secret(ns)), 'where': 'dashboard',
+         'fix_ar': 'في Coolify ← اللوحة ← المتغيرات: METRICS_SECRET بنفس قيمته على الباك إند'},
+        {'key': 'dash.scheduler', 'label_ar': 'مراقبة التشغيل والملخص اليومي من اللوحة', 'value': not sched_off, 'ok': not sched_off, 'where': 'dashboard',
+         'fix_ar': 'في Coolify ← اللوحة ← المتغيرات: امسح DASH_SCHEDULER (أو خليه 1)'},
+    ]
+
+
+def config_check(ns):
+    """GET `/api/bridge/ops/config-check` + بنود اللوحة. فشل المنصة ⇒ بنود اللوحة وحدها + سبب مقروء (لا قائمة مخترعة)."""
+    js, why, detail = _bridge(ns, '/api/bridge/ops/config-check', None, method='GET', timeout=15)
+    out = {'platform_ok': js is not None, 'platform_error': '' if js is not None else why, 'platform_missing': detail == 'HTTP 404'}
+    items = []
+    if js is not None:
+        raw = js.get('items') if isinstance(js.get('items'), list) else []
+        items = [x for x in (view_check_item(r) for r in raw[:CHECK_ITEMS_MAX]) if x]
+        if not isinstance(js.get('items'), list):
+            out['platform_ok'], out['platform_error'] = False, 'bridge_error'
+    out['items'] = items + dashboard_checks(ns)
+    out['bad'] = sum(1 for x in out['items'] if x['ok'] is False)
+    return out
 
 
 # ════════════════════════════════════════════════════════════════════ المؤقِّت
@@ -614,6 +771,13 @@ def register(app, ns):
         except Exception:   # noqa: BLE001
             pass
         return no_store(out)
+
+    @app.route('/api/ops/config-check', methods=['GET'], endpoint='tg_ops_config_check')
+    @token_required
+    @roles_required('admin')
+    def tg_ops_config_check():
+        # R18 «فحص الإعدادات» في الشركة ← الإعدادات: قراءة بس، بلا تدقيق ولا كتابة.
+        return no_store(config_check(ns))
 
     @app.route('/api/telegram/digest', methods=['POST'], endpoint='tg_ops_digest')
     @token_required

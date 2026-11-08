@@ -5919,7 +5919,10 @@ function viewSettings(v){
         <button class="btn btn-human" style="flex:none;min-width:auto;padding:8px 16px" data-tg="digest">ابعت ملخص اليوم</button>
       </div>
       <div id="tgResult" style="padding:0 16px"></div>
-      <div id="tgBody" style="padding:6px 16px 14px;color:var(--muted)">…جارٍ جلب الحالة</div></section>`;
+      <div id="tgBody" style="padding:6px 16px 14px;color:var(--muted)">…جارٍ جلب الحالة</div></section>
+    <section class="panel" style="margin-top:16px" id="cfgPanel"><div class="ph"><h3>فحص الإعدادات</h3><span class="hint">سقف الأسئلة والتجربة المجانية والتليجرام والبريد والدفع والفرص</span>
+      <button class="btn btn-human" id="cfgRe" style="flex:none;min-width:auto;padding:7px 14px;font-size:12px;margin-inline-start:auto">إعادة الفحص</button></div>
+      <div id="cfgBody" style="padding:10px 16px 14px;color:var(--muted)">…جارٍ الفحص</div></section>`;
   v.querySelectorAll('[data-a]').forEach(b=>b.onclick=()=>{const a=b.dataset.a;
     if(a==='fx'){var fx=document.getElementById('fxInput');var val=fx?parseFloat(fx.value):NaN;
       if(window.EP&&EP.data.settings){if(isNaN(val)||val<=0){toast('أدخل سعر صرف صالحًا');return;}EP.saveSettings({exchange_rate:val},()=>viewSettings(document.getElementById('view')));return;}
@@ -5936,7 +5939,22 @@ function viewSettings(v){
   renderDashUsers();
   renderRolePerms();
   tgPanelWire();
+  cfgPanelWire();
 }
+// R18 «فحص الإعدادات»: كل بند بعلامة خضرا/حمرا، وتحت الأحمر بالظبط إيه يتغيّر وفين (قراءة بس، بلا أي قيمة سرّية).
+function cfgRender(r){
+  const body=document.getElementById('cfgBody');if(!body)return;
+  const v=(window.V2L&&V2L.co&&V2L.co.cfgCheck)?V2L.co.cfgCheck(r):null;
+  if(!v){body.innerHTML='<div style="color:var(--conflict)">تعذّر الفحص الآن.</div>';return;}
+  body.innerHTML=`<div style="font-weight:800;color:${v.bad?'var(--conflict)':'var(--agree)'};margin-bottom:6px">${esc(v.head)}</div>
+    ${v.platformNote?`<div style="margin-bottom:6px">${esc(v.platformNote)}</div>`:''}
+    ${v.rows.map(x=>`<div style="display:flex;gap:10px;align-items:flex-start;padding:7px 0;border-bottom:1px solid var(--line);font-size:12.5px">
+      <span style="font-weight:800;color:${x.ok===false?'var(--conflict)':x.ok===true?'var(--agree)':'var(--muted)'}">${x.ok===false?'✗':x.ok===true?'✓':'•'}</span>
+      <span style="flex:1"><b style="color:var(--ink)">${esc(x.label)}</b>${x.value?` <span style="unicode-bidi:plaintext">${esc(x.value)}</span>`:''}
+      ${x.ok===false&&x.fix?`<div style="color:var(--conflict);margin-top:3px;unicode-bidi:plaintext">${esc(x.fix)}</div>`:''}</span></div>`).join('')}`;
+}
+function cfgLoad(){if(!window.EP)return;EP.get('/ops/config-check').then(cfgRender).catch(()=>cfgRender(null));}
+function cfgPanelWire(){const b=document.getElementById('cfgRe');if(b)b.onclick=()=>{const body=document.getElementById('cfgBody');if(body)body.innerHTML='…جارٍ الفحص';cfgLoad();};cfgLoad();}
 
 // R16 «تنبيهات تليجرام»: زرّ واحد يقول للمؤسس هل الرسائل بتوصل، ولو لأ ليه بالظبط.
 const TG_REASON={ok:'وصلت ✓',no_token:'مفيش توكن بوت على سيرفر المنصة (TELEGRAM_OPS_BOT_TOKEN)',no_chat:'رقم محادثة المؤسس فاضي (TELEGRAM_ADMIN_CHAT_ID)',

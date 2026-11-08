@@ -486,6 +486,181 @@
     return err ? t + '، وتعذّر ' + U(err, ['تذكير', 'تذكيران', 'تذكيرات', 'تذكيرًا']) : t;
   }
 
+  // ------------------------------------------------------------------ ٦ب · محرّك الفرص (R18): التشغيل اليومي · آخر تشغيل · المراجعة · المصادر · إيميل الأسبوع
+  var ENG_CHIPS = [['run', 'التشغيل'], ['review', 'للمراجعة'], ['sources', 'المصادر'], ['digest', 'إيميل الأسبوع']];
+  var ENG_SRC_TEXT = { settings: 'مضبوط من هنا', env: 'مضبوط من إعدادات الخادم', 'default': 'الوضع الأول (مقفول)' };
+  var DAY_TEXT = { sat: 'سبت', sun: 'أحد', mon: 'اثنين', tue: 'ثلاثاء', wed: 'أربعاء', thu: 'خميس', fri: 'جمعة' };
+  var ENG_RUN_ROWS = [['fetched', 'جُلبت من المصادر'], ['published', 'نُشرت مباشرة'], ['drafts', 'مسودات للمراجعة'], ['errors', 'أعطال']];
+  // رموز المنصة نفسها (`opp_digest.send_test` و`preview`) — رمز مجهول ⇒ نص عام.
+  var TEST_REASONS = { 'no-brevo-key': 'مفتاح خدمة البريد غير مضبوط على المنصة، والتفاصيل في الشركة ← الإعدادات ← فحص الإعدادات',
+                       'no-items': 'لا فرص جديدة هذا الأسبوع في أي مسار، فلا شيء يُرسل',
+                       'brevo-rejected': 'خدمة البريد رفضت الإرسال، وغالبًا السبب عنوان الإرسال أو المفتاح (فحص الإعدادات في الشركة ← الإعدادات)',
+                       'bad-email': 'البريد الإلكتروني غير صحيح', unsubscribed: 'صاحب هذا البريد أوقف رسائل المنصة' };
+  var PREVIEW_REASONS = { 'no-user': 'هذا البريد ليس لعضو على المنصة', 'no-track': 'صاحب هذا البريد لم يختر مسارًا بعد، فلن تصله الرسالة',
+                          'no-items': 'لا فرص جديدة في مسار صاحب هذا البريد هذا الأسبوع، فلن تصله رسالة',
+                          unsubscribed: 'صاحب هذا البريد أوقف رسائل المنصة، فلن تصله الرسالة', pending: 'الحساب ينتظر فتح الدخول، فلن تصله الرسالة',
+                          inactive: 'الحساب موقوف، فلن تصله الرسالة', 'test-account': 'هذا حساب تجريبي، فلن تصله الرسالة' };
+  function hourText(h) {
+    if (!isNum(h) || h < 0 || h > 23) return '';
+    if (h === 0) return '١٢ منتصف الليل';
+    if (h < 12) return ar(h) + ' صباحًا';
+    if (h === 12) return '١٢ ظهرًا';
+    return ar(h - 12) + ' مساءً';
+  }
+  function hoursList(s) { return str(s).split(',').filter(function (p) { return /^\d{1,2}$/.test(p) && +p <= 23; }).map(Number); }
+  function hoursText(s) {
+    var hs = hoursList(s);
+    if (!hs.length) return '';
+    var t = hs.map(hourText);
+    return t.length === 1 ? t[0] : t.slice(0, -1).join('، ') + ' و' + t[t.length - 1];
+  }
+  // آخر تشغيل ⇒ {when, rows: [{key, label, n}], errors, failed, busy, headline} أو null لو مفيش تشغيل.
+  function engRun(r, now) {
+    if (!r || typeof r !== 'object') return null;
+    var rows = ENG_RUN_ROWS.map(function (x) { return { key: x[0], label: x[1], n: isNum(r[x[0]]) ? r[x[0]] : 0 }; });
+    var errors = isNum(r.errors) ? r.errors : 0;
+    var headline = r.busy ? 'كان هناك تشغيل آخر يعمل' : r.failed ? 'تعذّر آخر تشغيل' : errors ? 'اكتمل آخر تشغيل وفيه أعطال' : 'اكتمل آخر تشغيل';
+    return { when: when(r.at, now), rows: rows, errors: errors, failed: r.failed === true, busy: r.busy === true, headline: headline };
+  }
+  // resp = GET engine/autorun ⇒ {on, source, sourceText, hours, hoursText, running, statusText, last} أو null
+  function engAuto(resp, now) {
+    if (!resp || typeof resp !== 'object' || typeof resp.enabled !== 'boolean') return null;
+    var hs = hoursText(resp.hours) || hourText(7);
+    return { on: resp.enabled, source: str(resp.source), sourceText: ENG_SRC_TEXT[str(resp.source)] || '', hours: str(resp.hours) || '7', hoursText: hs,
+             running: resp.running === true, statusText: resp.enabled ? 'يعمل كل يوم الساعة ' + hs + ' بتوقيت القاهرة' : 'التشغيل اليومي متوقّف',
+             last: engRun(resp.last_result, now) };
+  }
+  // الضغط على المفتاح ⇒ ورقة المراجعة
+  function engAutoToggle(cur) {
+    var on = !(cur && cur.on);
+    var lines = [{ label: 'التشغيل اليومي', from: cur ? (cur.on ? 'يعمل' : 'متوقّف') : '', to: on ? 'يعمل' : 'متوقّف' }];
+    var lead = on ? 'ستجلب المنصة الفرص من مصادرها كل يوم الساعة ' + (cur ? cur.hoursText : hourText(7)) + ' بتوقيت القاهرة. ما يأتي من مصدر موثوق يُنشر مباشرة، والباقي مسودات تنتظر المراجعة:'
+      : 'سيتوقّف الجلب اليومي للفرص، ويبقى التشغيل اليدوي «تشغيل الآن» متاحًا:';
+    var warns = cur && cur.source === 'env' ? ['الاختيار المحفوظ هنا يغلب إعداد الخادم من الآن.'] : [];
+    return { ok: true, body: { enabled: on }, lead: lead, lines: lines, warns: warns, goLabel: on ? 'تشغيل الجلب اليومي' : 'إيقاف الجلب اليومي',
+             done: on ? 'التشغيل اليومي يعمل الآن' : 'توقّف التشغيل اليومي' };
+  }
+  // تغيير المواعيد: «٧» أو «٧، ١٩» ⇒ {ok, body, lines, ...}
+  function engHoursCheck(text, cur) {
+    var raw = toLatin(text).replace(/[،]/g, ',').replace(/\s+/g, '');
+    var parts = raw.split(',').filter(function (p) { return p !== ''; });
+    if (!parts.length || parts.length > 6 || !parts.every(function (p) { return /^\d{1,2}$/.test(p) && +p <= 23; })) {
+      return { ok: false, error: 'الساعة من ٠ إلى ٢٣، ولأكثر من موعد فاصلة بينها (حتى ست ساعات)', errors: { hours: 'الساعة من ٠ إلى ٢٣' } };
+    }
+    var hs = parts.map(Number).filter(function (h, i, a) { return a.indexOf(h) === i; }).sort(function (a, b) { return a - b; });
+    var norm = hs.join(',');
+    if (cur && norm === cur.hours) return { ok: false, error: 'هذه هي المواعيد الحالية نفسها', errors: {} };
+    var on = cur ? cur.on : false;
+    // المواعيد وحدها: حالة المفتاح تُقرأ طازة على الخادم قبل الإرسال، فلا يرجع التشغيل لقيمة قديمة على الشاشة.
+    return { ok: true, body: { hours: norm }, lead: 'ستتغيّر مواعيد الجلب اليومي (بتوقيت القاهرة)، ويبقى التشغيل اليومي على حاله:', goLabel: 'حفظ المواعيد',
+             lines: [{ label: 'المواعيد', from: cur ? cur.hoursText : '', to: hoursText(norm) }], warns: on ? [] : ['التشغيل اليومي متوقّف الآن، والمواعيد تُستعمل حين يعمل.'] };
+  }
+  function engRunDone(res) {
+    var r = engRun(res, 0);
+    if (!r) return 'اكتمل التشغيل';
+    if (r.busy) return 'هناك تشغيل آخر يعمل الآن، وستظهر نتيجته في «آخر تشغيل»';
+    if (r.failed) return 'تعذّر التشغيل على المنصة، والمحاولة ممكنة بعد قليل';
+    var n = function (k) { return r.rows.filter(function (x) { return x.key === k; })[0].n; };
+    var t = 'اكتمل التشغيل: ' + line([n('published') ? 'نُشرت ' + U(n('published'), ['فرصة واحدة', 'فرصتان', 'فرص', 'فرصة']) : 'لم يُنشر شيء',
+                                      n('drafts') ? U(n('drafts'), ['مسودة واحدة', 'مسودتان', 'مسودات', 'مسودة']) + ' للمراجعة' : '']);
+    return r.errors ? t + '، ومعه ' + U(r.errors, ['عطل واحد', 'عطلان', 'أعطال', 'عطلًا']) : t;
+  }
+  // المصادر ⇒ {rows: [{id, name, host, enabled, trusted, lastText, lastBad}], on, trusted, countText} أو null
+  function engSources(resp, now) {
+    var list = items(resp);
+    if (!list) return null;
+    var rows = list.map(function (r) {
+      var lr = r.last_run && typeof r.last_run === 'object' ? r.last_run : null;
+      var lastText = lr ? line([when(lr.at, now), lr.ok === false ? 'تعذّر الجلب' : (isNum(lr.fetched) ? 'جُلب ' + U(lr.fetched, ['عنصر واحد', 'عنصران', 'عناصر', 'عنصرًا']) : '')]) || 'لم يُجلب بعد' : 'لم يُجلب بعد';
+      if (lr && lr.ok !== false && lr.fetched === 0) lastText = line([when(lr.at, now), 'لم يُجلب شيء']);
+      return { id: String(r.id), name: str(r.name) || str(r.host) || 'مصدر بلا اسم', host: str(r.host), url: httpUrl(r.url), enabled: r.enabled === true, trusted: r.trusted === true,
+               lastText: lastText, lastBad: !!(lr && lr.ok === false) };
+    });
+    var n = rows.length;
+    return { rows: rows, on: rows.filter(function (r) { return r.enabled; }).length, trusted: rows.filter(function (r) { return r.trusted; }).length,
+             countText: n ? U(n, ['مصدر واحد', 'مصدران', 'مصادر', 'مصدرًا']) : 'لا مصادر بعد' };
+  }
+  function engSourceToggle(row, field) {
+    var v = !row[field];
+    if (field === 'trusted') {
+      return { ok: true, body: { trusted: v }, goLabel: v ? 'توثيق المصدر' : 'إلغاء التوثيق', done: v ? 'صار المصدر موثوقًا' : 'لم يعد المصدر موثوقًا',
+               lead: v ? 'ما يأتي من «' + row.name + '» سيُنشر مباشرة بعد فحص صلته بالقانون، بلا مراجعة:' : 'ما يأتي من «' + row.name + '» سيصير مسودات تنتظر المراجعة:',
+               lines: [{ label: 'موثوق', from: row.trusted ? 'نعم' : 'لا', to: v ? 'نعم' : 'لا' }] };
+    }
+    return { ok: true, body: { enabled: v }, goLabel: v ? 'تشغيل المصدر' : 'إيقاف المصدر', done: v ? 'المصدر يعمل الآن' : 'توقّف المصدر',
+             lead: v ? 'سيُجلب من «' + row.name + '» في كل تشغيل:' : 'لن يُجلب من «' + row.name + '» حتى يُشغَّل من جديد، وتبقى فرصه السابقة كما هي:',
+             lines: [{ label: 'التشغيل', from: row.enabled ? 'يعمل' : 'متوقّف', to: v ? 'يعمل' : 'متوقّف' }] };
+  }
+  // سبب الفحص: رمز معروف ⇒ نصّه العربي، ونص عربي من المنصة يعدّي، وغير ذلك (رمز لاتيني مجهول) لا يظهر.
+  function reviewReason(x) { x = str(x); return GATE_REASONS[x] || (/[\u0600-\u06FF]/.test(x) ? arDigits(x) : ''); }
+  // «للمراجعة» ⇒ {rows, dupCount, countText} أو null. srcRows لاسم المصدر.
+  function engReview(resp, srcRows, now) {
+    var list = items(resp);
+    if (!list) return null;
+    var names = {};
+    (srcRows || []).forEach(function (s) { names[s.id] = s.name; });
+    var rows = list.map(function (r) {
+      var dl = dayText(r.deadline);
+      return { id: String(r.id), title: str(r.title) || 'فرصة بلا عنوان', kindText: kindText(r.kind) || 'أخرى', provider: str(r.provider),
+               deadlineText: dl ? 'آخر موعد ' + dl : 'بلا موعد معلن', source: names[str(r.source_id)] || '', dup: !!str(r.possible_duplicate_of),
+               reason: reviewReason(r.legal_reason), when: when(r.created_at, now) };
+    });
+    var n = rows.length;
+    return { rows: rows, dupCount: rows.filter(function (r) { return r.dup; }).length,
+             countText: n ? U(n, ['مسودة واحدة تنتظر', 'مسودتان تنتظران', 'مسودات تنتظر', 'مسودة تنتظر']) : 'لا مسودات تنتظر' };
+  }
+  // ملخص الفرص (للمربّع) ⇒ {drafts, dups, published, held, autoOn} (الغايب null)
+  function engSummary(resp) {
+    if (!resp || typeof resp !== 'object') return null;
+    var num = function (k) { return isNum(resp[k]) ? resp[k] : null; };
+    var au = resp.autorun && typeof resp.autorun === 'object' ? resp.autorun : {};
+    return { drafts: num('drafts_waiting'), dups: num('possible_duplicates'), published: num('published_24h'), held: num('held_news_24h'), autoOn: au.enabled === true };
+  }
+  function engTile(sum) {
+    if (!sum) return null;
+    if (sum.drafts == null) return { n: sum.autoOn ? 'يعمل' : 'متوقّف', note: sum.autoOn ? 'التشغيل اليومي يعمل' : 'التشغيل اليومي متوقّف', word: true, off: !sum.autoOn };
+    return { n: ar(sum.drafts), note: (sum.drafts ? 'مسودة تنتظر مراجعتك' : 'لا مسودات تنتظر') + (sum.autoOn ? '' : '، والتشغيل اليومي متوقّف'), hot: sum.drafts > 0 };
+  }
+  // إيميل الأسبوع ⇒ {on, scheduleText, lastText}
+  function engDigest(resp, now) {
+    if (!resp || typeof resp !== 'object' || typeof resp.enabled !== 'boolean') return null;
+    var day = DAY_TEXT[str(resp.day)] || '', hr = hourText(resp.hour);
+    var sched = day ? 'كل ' + day + (hr ? ' الساعة ' + hr : '') : '';
+    var last = resp.last_sent_at ? line([when(resp.last_sent_at, now), isNum(resp.last_count) ? 'أُرسل إلى ' + U(resp.last_count, ['عضو واحد', 'عضوين', 'أعضاء', 'عضوًا']) : '']) : 'لم يُرسل بعد';
+    if (resp.last_sent_at && resp.last_count === 0) last = line([when(resp.last_sent_at, now), 'لم يكن هناك من يُرسل إليه']);
+    return { on: resp.enabled, scheduleText: sched, statusText: resp.enabled ? 'يعمل' + (sched ? '، ' + sched : '') : 'متوقّف', lastText: last };
+  }
+  function engDigestToggle(cur) {
+    var on = !(cur && cur.on);
+    return { ok: true, body: { enabled: on }, goLabel: on ? 'تشغيل إيميل الأسبوع' : 'إيقاف إيميل الأسبوع', done: on ? 'إيميل الأسبوع يعمل الآن' : 'توقّف إيميل الأسبوع',
+             lead: on ? 'سيصل كل عضو مرة في الأسبوع بريد «فرص الأسبوع في مسارك» بالفرص الجديدة في مساره، ولمن أوقف الرسائل لا يُرسل شيء:' : 'لن يُرسل بريد «فرص الأسبوع في مسارك» حتى يُشغَّل من جديد:',
+             lines: [{ label: 'إيميل الأسبوع', from: cur ? (cur.on ? 'يعمل' : 'متوقّف') : '', to: on ? 'يعمل' : 'متوقّف' }] };
+  }
+  function engEmailCheck(text) {
+    var e = str(text);
+    if (!/^[^\s@<>"']{1,64}@[^\s@<>"']{1,190}\.[A-Za-z]{2,24}$/.test(e)) return { ok: false, error: 'البريد الإلكتروني غير صحيح' };
+    return { ok: true, email: e.toLowerCase() };
+  }
+  // المعاينة ⇒ {subject, html, trackText, countText, warn, ...}. اسم المسار العربي بس (الرمز اللاتيني لا يظهر).
+  // `warn` = سبب عدم الإرسال لو المنصة قالت `will_send: false`، ولو مفيش نص للرسالة يحلّ السبب محلّ العدّ.
+  function engPreview(resp) {
+    if (!resp || typeof resp !== 'object') return null;
+    var c = isNum(resp.count) ? resp.count : null, html = typeof resp.html === 'string' ? resp.html : '';
+    var reason = PREVIEW_REASONS[str(resp.reason)] || '';
+    var warn = resp.will_send === false ? (reason || 'لن تصل هذه الرسالة لصاحب هذا البريد') : '';
+    var countText = c == null ? '' : (c ? U(c, ['فرصة واحدة', 'فرصتان', 'فرص', 'فرصة']) : 'لا فرص في هذا الأسبوع');
+    if (!html && warn) countText = '';
+    return { subject: str(resp.subject) || 'بلا عنوان', html: html, trackText: str(resp.track_title), countText: countText, warn: warn,
+             willSend: resp.will_send === true, tooBig: resp.too_big === true };
+  }
+  function engTestDone(res) {
+    res = res || {};
+    if (res.sent === true) {
+      return str(res.reason) === 'sample-track' ? 'أُرسلت رسالة التجربة بفرص مسار آخر، لأن هذا البريد بلا مسار' : 'أُرسلت رسالة التجربة، ويمكن فتح البريد للتأكد';
+    }
+    return 'لم تُرسل رسالة التجربة: ' + (TEST_REASONS[str(res.reason)] || 'المنصة لم ترسلها');
+  }
+
   // ------------------------------------------------------------------ ٧ · الديوان · الأعمال
   function works(resp, now) {
     var list = items(resp);
@@ -736,6 +911,9 @@
     opps: opps, oppFilter: oppFilter, oppCountText: oppCountText, pendingText: pendingText, oppForm: oppForm, oppCheck: oppCheck, oppDecision: oppDecision, oppDone: oppDone,
     prepView: prepView, prepCheck: prepCheck, seedView: seedView, seedDone: seedDone, seedCheck: seedCheck,
     opinions: opinions, topics: topics, opinionAction: opinionAction, topicAction: topicAction, gateView: gateView, gateDone: gateDone, gatePicked: gatePicked, TOPIC_CHIPS: TOPIC_CHIPS, newsHidden: newsHidden, gateReason: gateReason, reminders: reminders, reminderTile: reminderTile, reminderRunDone: reminderRunDone,
+    ENG_CHIPS: ENG_CHIPS, hourText: hourText, hoursText: hoursText, engRun: engRun, engAuto: engAuto, engAutoToggle: engAutoToggle, engHoursCheck: engHoursCheck, engRunDone: engRunDone,
+    engSources: engSources, engSourceToggle: engSourceToggle, engReview: engReview, engSummary: engSummary, engTile: engTile, engDigest: engDigest, engDigestToggle: engDigestToggle,
+    engEmailCheck: engEmailCheck, engPreview: engPreview, engTestDone: engTestDone,
     works: works, workAction: workAction, workActions: workActions, comments: comments, challenges: challenges, challengeForm: challengeForm, challengeCheck: challengeCheck,
     prizeTypeText: prizeTypeText, winnersCheck: winnersCheck, winnersDone: winnersDone, report: report, reportTile: reportTile
   };
@@ -1024,9 +1202,11 @@
     rem: '/v2/saha/reminders',
     topics: '/v2/saha/topics?status=open',
     topicsHidden: '/v2/saha/topics?status=all&hidden=1',
-    ops: function (st, topic) { return '/v2/saha/opinions?status=' + st + (topic ? '&topic_id=' + encodeURIComponent(topic) : ''); }
+    ops: function (st, topic) { return '/v2/saha/opinions?status=' + st + (topic ? '&topic_id=' + encodeURIComponent(topic) : ''); },
+    engAuto: '/v2/saha/engine/autorun', engSum: '/v2/saha/engine/summary', engSrc: '/v2/saha/engine/sources', engRev: '/v2/saha/engine/review?limit=50',
+    engDig: '/v2/saha/engine/digest'
   };
-  var HUB = [P.news('draft'), P.rev, P.opps, P.settings, P.ops('pending', ''), P.rem, P.topics];
+  var HUB = [P.news('draft'), P.rev, P.opps, P.settings, P.ops('pending', ''), P.rem, P.topics, P.engSum];
   var now = function () { return Date.now(); };
   var B = null;
   function row(rows, id) { for (var i = 0; i < (rows || []).length; i++) if (rows[i].id === id) return rows[i]; return null; }
@@ -1038,6 +1218,11 @@
   function setView() { var d = B.data(P.settings); return d ? X.prepView(d) : null; }
   function topicsPath(st) { return st === 'hidden' ? P.topicsHidden : P.topics; }
   function topicsView(st) { var d = B.data(topicsPath(st || 'open')); return d ? X.topics(d) : null; }
+  function engAutoView() { var d = B.data(P.engAuto); return d ? X.engAuto(d, now()) : null; }
+  function engSrcView() { var d = B.data(P.engSrc); return d ? X.engSources(d, now()) : null; }
+  function engRevView() { var d = B.data(P.engRev); return d ? X.engReview(d, (engSrcView() || {}).rows, now()) : null; }
+  function engDigView() { var d = B.data(P.engDig); return d ? X.engDigest(d, now()) : null; }
+  function engSumView() { var d = B.data(P.engSum); return d ? X.engSummary(d) : null; }
 
   // —— المربّعات
   function tiles() {
@@ -1052,6 +1237,7 @@
       var v = topicsView();
       return v ? { n: ar(v.rows.length), note: v.hiddenCount ? 'نقاش مفتوح، منها ' + ar(v.hiddenCount) + ' مخفية' : (v.rows.length ? 'نقاش مفتوح في الساحة' : 'لا نقاشات مفتوحة') } : null;
     });
+    var eg = Kit.count(B, P.engSum, function () { return X.engTile(engSumView()); });
     return [
       Object.assign({ sub: 'news', name: 'أخبار للمراجعة', img: 'content' }, n),
       Object.assign({ sub: 'review', name: 'مراجعة الإعلانات والفرص', img: 'files' }, rv),
@@ -1059,6 +1245,7 @@
       Object.assign({ sub: 'import', name: 'استيراد الفرص', img: 'reports' }, imp),
       Object.assign({ sub: 'prep', name: 'رابط دورة التحضير', img: 'courses' }, pr),
       Object.assign({ sub: 'topics', name: 'النقاشات', img: 'disputes' }, tp),
+      Object.assign({ sub: 'engine', name: 'محرّك الفرص', img: 'brain' }, eg),
       Object.assign({ sub: 'opinions', name: 'الآراء', img: 'people' }, ot),
       Object.assign({ sub: 'reminders', name: 'التذكير', img: 'company' }, rm)
     ];
@@ -1414,11 +1601,162 @@
       send: function () { return B.api('/v2/saha/reminders/run', { confirmed: true }); }, done: function (out) { return X.reminderRunDone(out); } });
   }
 
+  // —— ٦ب · محرّك الفرص (R18)
+  function switchBtn(act, on, label, stateText) {
+    return '<button type="button" class="sh-switch' + (on ? ' on' : '') + '" role="switch" aria-checked="' + (on ? 'true' : 'false') + '" data-a="' + act + '">'
+      + '<i aria-hidden="true"></i><span><b>' + esc(label) + '</b><small>' + esc(stateText) + '</small></span></button>';
+  }
+  function nums(rows) { return '<ul class="sh-nums">' + rows.map(function (r) { return '<li><b>' + esc(ar(r.n)) + '</b><span>' + esc(r.label) + '</span></li>'; }).join('') + '</ul>'; }
+  function engRunTab() {
+    B.need(P.engAuto); B.need(P.engSum);
+    var a = engAutoView(), sum = engSumView(), html;
+    if (!a) return B.stateBlock(P.engAuto, 'حالة التشغيل اليومي');
+    html = '<div class="sh-panel" data-r="auto">' + switchBtn('engauto', a.on, 'التشغيل اليومي', a.on ? 'يعمل' : 'متوقّف')
+      + '<p class="sh-fine">' + esc(a.on ? a.statusText + '.' : 'لا يُجلب شيء تلقائيًا الآن. حين يعمل: كل يوم الساعة ' + a.hoursText + ' بتوقيت القاهرة.') + (a.sourceText ? ' ' + esc(a.sourceText) + '.' : '') + '</p>'
+      + (a.running ? '<p class="sh-fine">يعمل تشغيل الآن، وتظهر نتيجته هنا حين ينتهي.</p>' : '')
+      + '<div class="sh-acts"><button type="button" class="ep-bs" data-a="enghours">تغيير المواعيد</button></div></div>';
+    var last = a.last;
+    if (!last && sum) { var sd = B.data(P.engSum); last = sd ? X.engRun(sd.last_run, now()) : null; }
+    html += '<div class="sh-panel" data-r="last"><h3>آخر تشغيل</h3>'
+      + (last ? '<div class="sh-stat"><b class="sh-big ' + (last.failed ? 'red' : last.errors || last.busy ? 'gold' : 'green') + '">' + esc(last.headline) + '</b>' + (last.when ? '<span class="sh-sub">' + esc(last.when) + '</span>' : '') + '</div>'
+        + (last.failed || last.busy ? '' : nums(last.rows)) : '<p class="sh-fine">لم يحدث أي تشغيل بعد. يمكن تشغيله الآن باليد.</p>')
+      + '<p class="sh-fine">التشغيل قد يستغرق دقائق. لو لم يصل رد فالتشغيل مستمر على المنصة، وتظهر نتيجته هنا بعد قليل.</p>'
+      + '<div class="sh-acts"><button type="button" class="ep-b1" data-a="engrun"' + (a.running ? ' disabled' : '') + '>تشغيل الآن</button></div></div>';
+    if (sum) {
+      var day = [[sum.published, 'فرص نُشرت آخر ٢٤ ساعة'], [sum.drafts, 'مسودات تنتظر المراجعة'], [sum.dups, 'منها غالبًا مكررة'], [sum.held, 'أخبار محجوزة للمراجعة آخر ٢٤ ساعة']]
+        .filter(function (x) { return x[0] != null; }).map(function (x) { return { n: x[0], label: x[1] }; });
+      if (day.length) html += '<div class="sh-panel" data-r="day"><h3>الصورة الآن</h3>' + nums(day) + '</div>';
+    }
+    return html;
+  }
+  function engReviewTab() {
+    B.need(P.engRev); B.need(P.engSrc);
+    var d = engRevView();
+    if (!d) return B.stateBlock(P.engRev, 'مسودات المحرّك');
+    if (!d.rows.length) return B.empty('لا مسودات تنتظر', 'ما يأتي من مصدر غير موثوق يظهر هنا للقرار فيه');
+    return '<p class="sh-count">' + esc(d.countText) + (d.dupCount ? '، ' + esc(U.U(d.dupCount, ['واحدة منها غالبًا مكررة', 'اثنتان منها غالبًا مكررتان', 'منها غالبًا مكررة', 'منها غالبًا مكررة'])) : '') + '</p>'
+      + '<ul class="sh-cards big">' + d.rows.map(function (r) {
+        var facts = [r.kindText, r.provider, r.source ? 'من ' + r.source : ''].filter(Boolean).join('، ');
+        return '<li class="sh-card big" data-id="' + esc(r.id) + '"><div class="sh-ch"><h3>' + esc(r.title) + '</h3><span class="sh-pills">' + (r.dup ? Kit.pill('غالبًا مكررة', 'gold') : '') + '</span></div>'
+          + (facts ? '<p class="sh-meta"><span>' + esc(facts) + '</span></p>' : '')
+          + '<p class="sh-meta"><b>الموعد</b><span>' + esc(r.deadlineText) + '</span>' + (r.when ? '<span>' + esc(r.when) + '</span>' : '') + '</p>'
+          + (r.reason ? '<p class="sh-meta"><b>ملاحظة الفحص</b><span>' + esc(r.reason) + '</span></p>' : '')
+          + '<div class="sh-acts"><button type="button" class="ep-b1" data-a="engpub" data-id="' + esc(r.id) + '">نشر</button><button type="button" class="ep-b2" data-a="engrej" data-id="' + esc(r.id) + '">رفض</button>'
+          + '<button type="button" class="ep-bs" data-a="engedit" data-id="' + esc(r.id) + '">فتح للتعديل</button></div></li>';
+      }).join('') + '</ul>';
+  }
+  function engSourcesTab() {
+    B.need(P.engSrc);
+    var d = engSrcView(), lead = '<p class="sh-fine">ما يأتي من مصدر موثوق يُنشر مباشرة، والباقي يصل مسودة تنتظر المراجعة.</p>';
+    if (!d) return lead + B.stateBlock(P.engSrc, 'المصادر');
+    if (!d.rows.length) return lead + B.empty('لا مصادر بعد', 'تُضاف القائمة الأولى من المصادر المعروفة بضغطة، وكلها تبدأ غير موثوقة') + '<div class="sh-acts"><button type="button" class="ep-b1" data-a="engseed">إضافة المصادر الأولى</button></div>';
+    return lead + '<p class="sh-count">' + esc(X.line([d.countText, U.U(d.on, ['واحد يعمل', 'اثنان يعملان', 'تعمل', 'تعمل']), d.trusted ? U.U(d.trusted, ['واحد موثوق', 'اثنان موثوقان', 'موثوقة', 'موثوقًا']) : 'لا مصدر موثوق'])) + '</p>'
+      + B.list(d.rows, [
+        { h: 'المصدر', c: function (r) { return '<b class="sh-t">' + esc(r.name) + '</b>' + (r.host ? '<span class="sh-who" dir="ltr">' + esc(r.host) + '</span>' : ''); } },
+        { h: 'آخر جلب', c: function (r) { return r.lastBad ? Kit.pill(r.lastText, 'gold') : esc(r.lastText); } },
+        { h: 'يعمل', c: function (r) { return Kit.pill(r.enabled ? 'يعمل' : 'متوقّف', r.enabled ? 'green' : 'mute'); } },
+        { h: 'موثوق', c: function (r) { return Kit.pill(r.trusted ? 'موثوق' : 'غير موثوق', r.trusted ? 'green' : 'mute'); } }
+      ], function (r) {
+        return '<button type="button" class="ep-b2" data-a="engsrcon" data-id="' + esc(r.id) + '">' + (r.enabled ? 'إيقاف' : 'تشغيل') + '</button>'
+          + '<button type="button" class="ep-bs" data-a="engsrctr" data-id="' + esc(r.id) + '">' + (r.trusted ? 'إلغاء التوثيق' : 'توثيق المصدر') + '</button>';
+      });
+  }
+  function myEmail() { var E = ep(), u = (E && E.user) || {}; return typeof u.email === 'string' ? u.email : ''; }
+  function engDigestTab() {
+    B.need(P.engDig);
+    var d = engDigView();
+    if (!d) return B.stateBlock(P.engDig, 'إيميل الأسبوع');
+    var mail = B.f('engMail', myEmail()), busy = B.f('engPrevBusy', false), err = B.f('engPrevErr', ''), pv = X.engPreview(B.f('engPrev', null));
+    var html = '<div class="sh-panel" data-r="digest">' + switchBtn('engdig', d.on, 'إيميل «فرص الأسبوع في مسارك»', d.statusText)
+      + '<p class="sh-fine">يصل كل عضو مرة في الأسبوع بالفرص الجديدة في مساره. آخر إرسال: ' + esc(d.lastText) + '.</p></div>'
+      + '<div class="sh-panel" data-r="preview"><h3>معاينة وتجربة</h3><p class="sh-fine">المعاينة تعرض الرسالة كما ستصل لهذا البريد بلا أن تُرسل شيئًا.</p>'
+      + '<div class="sh-sbox"><label for="shEngMail">البريد (بريدك أو بريد عضو)</label><input id="shEngMail" type="text" inputmode="email" dir="ltr" maxlength="254" autocomplete="off" value="' + esc(mail) + '"></div>'
+      + '<div class="sh-acts"><button type="button" class="ep-b2" data-a="engprev"' + (busy ? ' disabled' : '') + '>' + (busy ? 'جارٍ التحضير…' : 'معاينة') + '</button>'
+      + '<button type="button" class="ep-bs" data-a="engtest">إرسال تجربة لهذا البريد</button></div>' + (err ? '<div class="sh-err" role="alert">' + esc(err) + '</div>' : '') + '</div>';
+    if (pv) {
+      var pvFacts = X.line([pv.trackText ? 'المسار: ' + pv.trackText : '', pv.countText]);
+      html += '<div class="sh-panel" data-r="pv"><h3>' + esc(pv.subject) + '</h3>' + (pvFacts ? '<p class="sh-fine">' + esc(pvFacts) + '</p>' : '')
+        + (pv.warn ? '<p class="sh-warn" role="status" data-r="pvwarn">' + esc(pv.warn) + '</p>' : '')
+        + (pv.html ? '<iframe class="sh-pv" title="معاينة الرسالة" sandbox="" referrerpolicy="no-referrer" srcdoc="' + esc(pv.html) + '"></iframe>' : (pv.warn ? '' : '<p class="sh-fine">لا نص للرسالة.</p>'))
+        + (pv.tooBig ? '<p class="sh-fine">الرسالة طويلة، فظهر أولها فقط.</p>' : '') + '<p class="sh-fine">الصور تظهر في البريد الحقيقي وقد لا تظهر هنا.</p></div>';
+    }
+    return html;
+  }
+  function screenEngine() {
+    var tab = B.f('engTab', 'run'), sum = engSumView();
+    var chips = X.ENG_CHIPS.map(function (c) { return c[0] === 'review' && sum && sum.drafts ? [c[0], c[1], ar(sum.drafts)] : c; });
+    var body = tab === 'review' ? engReviewTab() : tab === 'sources' ? engSourcesTab() : tab === 'digest' ? engDigestTab() : engRunTab();
+    return { title: 'محرّك الفرص', sub: 'جلب الفرص كل يوم من مصادر معروفة', img: 'brain', html: B.chips('engTab', chips, tab) + body, after: function (v) {
+      var i = q1('#shEngMail', v);
+      if (i) i.addEventListener('input', function () { B.set('engMail', i.value); });
+    } };
+  }
+  function engFlow(title, res, path, method, after) {
+    B.flow({ title: title, check: function () { return res; }, send: function () { return B.api(path, Object.assign({}, res.body, { confirmed: true }), method); },
+      done: function (out) { return typeof res.done === 'function' ? res.done(out) : res.done; }, after: after });
+  }
+  function engAutoFlow() { var a = engAutoView(); if (a) engFlow('التشغيل اليومي', X.engAutoToggle(a), '/v2/saha/engine/autorun', 'PUT'); }
+  function engHoursFlow() {
+    var a = engAutoView();
+    if (!a) return;
+    B.flow({ title: 'مواعيد التشغيل اليومي', intro: 'الساعة بنظام ٢٤ ساعة بتوقيت القاهرة، ولأكثر من موعد فاصلة بينها (مثل ٧، ١٩).',
+      form: function (v) { return fld('الساعة', inp('hours', (v || {}).hours, { max: 30, mode: 'numeric' }), 'hours', 'من ٠ إلى ٢٣'); }, init: { hours: ar(a.hours).replace(/,/g, '، ') },
+      check: function (v) { return X.engHoursCheck(v.hours, engAutoView()); }, nextLabel: 'مراجعة ثم حفظ',
+      send: function (res) { return B.api('/v2/saha/engine/autorun', Object.assign({}, res.body, { confirmed: true }), 'PUT'); }, done: function () { return 'حُفظت مواعيد التشغيل اليومي'; } });
+  }
+  function engRunFlow() {
+    B.flow({ title: 'تشغيل المحرّك الآن', check: function () {
+        return { ok: true, lead: 'ستجلب المنصة الفرص الآن من كل المصادر التي تعمل. ما يأتي من مصدر موثوق يُنشر مباشرة، والباقي مسودات تنتظر المراجعة. قد يستغرق ذلك دقائق.', goLabel: 'بدء التشغيل', lines: [] };
+      },
+      send: function () { return B.api('/v2/saha/engine/run', { confirmed: true }); }, done: function (out) { return X.engRunDone(out); } });
+  }
+  function engSeedFlow() {
+    B.flow({ title: 'إضافة المصادر الأولى', check: function () {
+        return { ok: true, lead: 'ستُضاف قائمة المصادر المعروفة الجاهزة على المنصة، وكلها تبدأ غير موثوقة فيصل ما يأتي منها مسودات. لا يتغيّر مصدر موجود.', goLabel: 'إضافة المصادر', lines: [] };
+      },
+      send: function () { return B.api('/v2/saha/engine/sources/import-seed', { confirmed: true }); },
+      done: function (out) { var n = out && typeof out.created === 'number' ? out.created : 0; return n ? 'أُضيف ' + U.U(n, ['مصدر واحد', 'مصدران', 'مصادر', 'مصدرًا']) : 'لم يكن هناك مصدر جديد يُضاف'; } });
+  }
+  function engSourceFlow(r, field) {
+    engFlow(field === 'trusted' ? 'توثيق المصدر' : 'تشغيل المصدر', X.engSourceToggle(r, field), '/v2/saha/engine/sources/' + encodeURIComponent(r.id), 'PUT');
+  }
+  // «فتح للتعديل»: الصف الكامل من مسار الفرصة الموجود ثم نفس نموذج التعديل (قراءة بلا كتابة؛ الحفظ يمرّ على ورقة المراجعة).
+  function engEdit(id) {
+    var E = ep();
+    if (!E || !E.api || B.f('engEditBusy', false)) return;
+    B.set('engEditBusy', true);
+    E.api('/v2/saha/opportunities/' + encodeURIComponent(id)).then(function (d) {
+      B.set('engEditBusy', false);
+      var v = X.opps({ items: [d] }, now()), r = v && v.rows[0];
+      if (r) oppFlow(r); else B.setNote('تعذّر فتح الفرصة الآن، والمحاولة ممكنة بعد قليل');
+      B.redraw();
+    }).catch(function (e) { B.set('engEditBusy', false); B.setNote(X.writeError(e && e.status, e && e.data)); B.redraw(); });
+  }
+  function engDigestFlow() { var d = engDigView(); if (d) engFlow('إيميل الأسبوع', X.engDigestToggle(d), '/v2/saha/engine/digest', 'PUT'); }
+  function engMailNow() { var i = q1('#shEngMail'); if (i) B.set('engMail', i.value); return X.engEmailCheck(i ? i.value : B.f('engMail', '')); }
+  function engPreviewRun() {
+    if (B.f('engPrevBusy', false)) return;
+    var ck = engMailNow();
+    if (!ck.ok) { B.set('engPrevErr', ck.error); B.redraw(); return; }
+    B.set('engPrevBusy', true); B.set('engPrevErr', ''); B.redraw();
+    B.api('/v2/saha/engine/digest/preview', { email: ck.email }).then(function (d) { B.set('engPrevBusy', false); B.set('engPrev', d); B.redraw(); })
+      .catch(function (e) { B.set('engPrevBusy', false); B.set('engPrev', null); B.set('engPrevErr', X.writeError(e && e.status, e && e.data)); B.redraw(); });
+  }
+  function engTestFlow() {
+    var ck = engMailNow();
+    if (!ck.ok) { B.set('engPrevErr', ck.error); B.redraw(); return; }
+    B.set('engPrevErr', '');
+    B.flow({ title: 'إرسال رسالة تجربة', check: function () {
+        return { ok: true, lead: 'ستُرسل رسالة «فرص الأسبوع في مسارك» مرة واحدة إلى هذا البريد فقط:', goLabel: 'إرسال التجربة', lines: [{ label: 'البريد', to: ck.email }] };
+      },
+      send: function () { return B.api('/v2/saha/engine/digest/send-test', { email: ck.email, confirmed: true }); }, done: function (out) { return X.engTestDone(out); } });
+  }
+
   // ------------------------------------------------------------------ التسجيل
   B = Kit.board({
     key: 'saha', mod: 'v2s_saha', label: 'الساحة', lead: 'اختر ما تريد إدارته في الساحة',
     hub: function () { return HUB; }, tiles: tiles,
-    screens: { news: screenNews, review: screenReview, opps: screenOpps, import: screenImport, prep: screenPrep, topics: screenTopics, opinions: screenOpinions, reminders: screenReminders },
+    screens: { news: screenNews, review: screenReview, opps: screenOpps, import: screenImport, prep: screenPrep, topics: screenTopics, opinions: screenOpinions, reminders: screenReminders, engine: screenEngine },
     act: {
       newsrun: function () { newsRun(); },
       newsapprove: function (b, a, id) { var r = row((newsView(b.f('newsSt', 'draft')) || {}).rows, id); if (r) newsFlow(r, 'approve'); },
@@ -1441,7 +1779,19 @@
       gateapply: function () { gateApplyFlow(); },
       gatetoggle: function (b, a, id) { gateToggle(id); },
       topichide: function (b, a, id) { var r = row((topicsView(b.f('topSt', 'open')) || {}).rows, id); if (r) topicFlow(r, 'hide'); },
-      topicshow: function (b, a, id) { var r = row((topicsView(b.f('topSt', 'open')) || {}).rows, id); if (r) topicFlow(r, 'show'); }
+      topicshow: function (b, a, id) { var r = row((topicsView(b.f('topSt', 'open')) || {}).rows, id); if (r) topicFlow(r, 'show'); },
+      engauto: function () { engAutoFlow(); },
+      enghours: function () { engHoursFlow(); },
+      engrun: function () { engRunFlow(); },
+      engseed: function () { engSeedFlow(); },
+      engsrcon: function (b, a, id) { var r = row((engSrcView() || {}).rows, id); if (r) engSourceFlow(r, 'enabled'); },
+      engsrctr: function (b, a, id) { var r = row((engSrcView() || {}).rows, id); if (r) engSourceFlow(r, 'trusted'); },
+      engpub: function (b, a, id) { var r = row((engRevView() || {}).rows, id); if (r) decideFlow(r, 'approve'); },
+      engrej: function (b, a, id) { var r = row((engRevView() || {}).rows, id); if (r) decideFlow(r, 'reject'); },
+      engedit: function (b, a, id) { engEdit(id); },
+      engdig: function () { engDigestFlow(); },
+      engprev: engPreviewRun,
+      engtest: function () { engTestFlow(); }
     }
   });
   window.V2S_SAHA = B;

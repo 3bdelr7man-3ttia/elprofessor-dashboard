@@ -13,6 +13,10 @@
     الإعداد      GET/PUT settings (رابط دورة «جهّز طلبك بالإنجليزية»)
     الاستيراد    POST opportunities/seed/preview (تجربة بلا كتابة) · POST opportunities/seed/import (حقيقي)
     التذكير      GET reminders (آخر تشغيل) · POST reminders/run (الآن) · POST reminders/cron (كل ساعة، بالسرّ)
+    محرّك الفرص (R18) GET/PUT engine/autorun (مفتاح التشغيل اليومي ومواعيده) · GET engine/sources · PUT engine/sources/<id> (يعمل/موثوق)
+                 POST engine/sources/import-seed · POST engine/run (شغّل الآن) · GET engine/summary · GET engine/review (مسودات المحرّك)
+                 GET/PUT engine/digest (إيميل «فرص الأسبوع في مسارك») · POST engine/digest/preview (معاينة بلا إرسال) · POST engine/digest/send-test
+                 النشر/الرفض من «للمراجعة» = `opportunities/<id>/decide` نفسه. جسم كتابات المحرّك بالعقد بالظبط (بلا `by`).
 الديوان (`/api/v2/diwan/*`):
     الأعمال      GET works · POST works (رفع الفريق) · POST works/<id>/decide · PUT works/<id> (تمييز/إخفاء/قفل التعليقات)
     التعليقات    GET comments · POST comments/<id>/hide
@@ -595,6 +599,161 @@ def view_seed(d, dry_run):
     return out
 
 
+# ------------------------------------------------------------------ محرّك الفرص (R18): التشغيل اليومي · المصادر · المراجعة · إيميل الأسبوع
+SOURCE_ID_RE = re.compile(r'^[a-z0-9_-]{1,60}$')
+EMAIL_RE = re.compile(r'^[^\s@<>"\']{1,64}@[^\s@<>"\']{1,190}\.[A-Za-z]{2,24}$')
+AUTORUN_SOURCES = ('settings', 'env', 'default')
+DAYS = ('sat', 'sun', 'mon', 'tue', 'wed', 'thu', 'fri')
+RUN_COUNTS = ('fetched', 'new', 'published', 'drafts', 'filled', 'expired')
+ERROR_SKIPS = ('source-error', 'item-error', 'robots')  # أعطال فعلية في الجولة = نفس عدّ المنصة (`opp_engine._ERROR_KEYS`) + ١ لو فيه `error`
+PREVIEW_REASONS = ('no-user', 'no-track', 'no-items', 'unsubscribed', 'pending', 'inactive', 'test-account')
+TEST_REASONS = ('no-brevo-key', 'no-items', 'brevo-rejected', 'bad-email', 'unsubscribed', 'sample-track')
+REVIEW_MAX = 100
+PREVIEW_HTML_MAX = 300 * 1024
+SCRIPT_RE = re.compile(r'<script\b[^>]*>.*?(</script\s*>|$)', re.I | re.S)
+SOURCE_SEND = ('name', 'kind', 'url', 'item', 'kind_default', 'country', 'trusted', 'enabled', 'max_items', 'notes')
+
+
+def clean_hours(v):
+    """«7» أو «7,19» (حتى ٦ مواعيد ٠..٢٣ بلا تكرار) ⇒ نص مطبَّع، وغير كده خطأ عربي. الأرقام الهندية مقبولة."""
+    if not isinstance(v, str):
+        raise Bad('المواعيد غير صالحة')
+    raw = v.translate(str.maketrans('٠١٢٣٤٥٦٧٨٩،', '0123456789,')).replace(' ', '')
+    parts = [p for p in raw.split(',') if p != '']
+    if not parts or len(parts) > 6 or not all(p.isdigit() and len(p) <= 2 and 0 <= int(p) <= 23 for p in parts):
+        raise Bad('الساعة من ٠ إلى ٢٣، ولأكثر من موعد فاصلة بينها (حتى ست ساعات)')
+    out = []
+    for p in parts:
+        if int(p) not in out:
+            out.append(int(p))
+    return ','.join(str(h) for h in sorted(out))
+
+
+def view_hours(v):
+    """ساعات التشغيل كما ترجعها المنصة (نص «7,19» أو قائمة [7, 19]) ⇒ نص مطبَّع أو ''."""
+    if isinstance(v, list):
+        hs = [h for h in v if _int(h) is not None and 0 <= h <= 23]
+    elif isinstance(v, str):
+        hs = [int(p) for p in v.replace(' ', '').split(',') if p.isdigit() and 0 <= int(p) <= 23]
+    elif _int(v) is not None and 0 <= v <= 23:
+        hs = [v]
+    else:
+        hs = []
+    return ','.join(str(h) for h in sorted(set(hs))[:6])
+
+
+def view_run(d):
+    """نتيجة جولة (رد «شغّل الآن» أو `last_result` أو `last_run` في الملخص) ⇒ أعداد صحيحة + عدد الأعطال. غير قاموس ⇒ None."""
+    if not isinstance(d, dict):
+        return None
+    out = {k: (_int(d.get(k)) or 0) for k in RUN_COUNTS}
+    sk = d.get('skipped')
+    if isinstance(sk, dict):
+        out['skipped'] = sum(n for k, n in ((k, _int(x)) for k, x in sk.items()) if n and k not in ERROR_SKIPS)   # الأعطال تتعدّ مرة واحدة
+        errs = sum((_int(sk.get(k)) or 0) for k in ERROR_SKIPS)
+    else:
+        out['skipped'] = _int(sk) or 0
+        errs = 0
+    if isinstance(d.get('error'), str) and d['error'].strip():
+        errs += 1
+    out['errors'] = _int(d.get('errors')) if _int(d.get('errors')) is not None else errs
+    at = d.get('ran_at') if isinstance(d.get('ran_at'), str) else d.get('at') if isinstance(d.get('at'), str) else ''
+    out['at'] = at[:40]
+    out['ok'] = d.get('ok') is not False
+    out['busy'] = d.get('busy') is True
+    out['failed'] = d.get('ok') is False and not out['busy']
+    return out
+
+
+def view_autorun(d):
+    d = d if isinstance(d, dict) else {}
+    src = d.get('source') if d.get('source') in AUTORUN_SOURCES else ''
+    last = view_run(d.get('last_result'))
+    if last is not None and not last['at'] and isinstance(d.get('last_run_at'), str):
+        last['at'] = d['last_run_at'][:40]
+    return {'enabled': d.get('enabled') is True, 'source': src, 'hours': view_hours(d.get('hours')), 'running': d.get('running') is True,
+            'last_result': last}
+
+
+def _host(url):
+    from urllib.parse import urlparse
+    try:
+        return (urlparse(url).hostname or '')[:200]
+    except Exception:   # noqa: BLE001
+        return ''
+
+
+def view_source(r):
+    url = _http_url(r.get('url'))
+    lr = r.get('last_run') if isinstance(r.get('last_run'), dict) else None
+    last = None
+    if lr:
+        last = {k: (_int(lr.get(k)) or 0) for k in ('fetched', 'new', 'published', 'drafts')}
+        last['at'] = str(lr.get('at') or '')[:40]
+        last['ok'] = lr.get('ok') is not False and not lr.get('error')
+    return {'id': str(r.get('id') or '')[:60], 'name': str(r.get('name') or '')[:120], 'url': url, 'host': _host(url),
+            'kind': r.get('kind') if r.get('kind') in ('rss', 'html') else '', 'enabled': r.get('enabled') is True,
+            'trusted': r.get('trusted') is True, 'country': str(r.get('country') or '')[:40], 'last_run': last}
+
+
+def source_body(cur, enabled, trusted):
+    """جسم PUT للمصدر: الصف كما هو عند المنصة + الحقلين المتغيّرين بس (المنصة تطلب الصف كاملًا، فلا يضيع المحدِّد ولا الملاحظات)."""
+    out = {k: cur[k] for k in SOURCE_SEND if k in cur and cur[k] is not None}
+    item = out.get('item')
+    out['item'] = {k: str(v) for k, v in item.items() if isinstance(k, str)} if isinstance(item, dict) else {}
+    if enabled is not None:
+        out['enabled'] = enabled
+    if trusted is not None:
+        out['trusted'] = trusted
+    return out
+
+
+def view_summary(d):
+    d = d if isinstance(d, dict) else {}
+    out = {k: _int(d.get(k)) for k in ('drafts_waiting', 'possible_duplicates', 'published_24h', 'held_news_24h')}   # الغايب None (مش صفر)
+    au = d.get('autorun') if isinstance(d.get('autorun'), dict) else {}
+    out['autorun'] = {'enabled': au.get('enabled') is True, 'source': au.get('source') if au.get('source') in AUTORUN_SOURCES else ''}
+    out['last_run'] = view_run(d.get('last_run'))
+    out['digest'] = view_digest(d.get('digest'))
+    return out
+
+
+def view_digest(d):
+    d = d if isinstance(d, dict) else {}
+    hour = _int(d.get('hour'))
+    return {'enabled': d.get('enabled') is True, 'day': d.get('day') if d.get('day') in DAYS else '',
+            'hour': hour if hour is not None and 0 <= hour <= 23 else None,
+            'last_sent_at': d.get('last_sent_at')[:40] if isinstance(d.get('last_sent_at'), str) else None,
+            'last_count': _int(d.get('last_count'))}
+
+
+def view_review(r):
+    tracks = r.get('tracks') if isinstance(r.get('tracks'), list) else []
+    dup = r.get('possible_duplicate_of')
+    return {'id': str(r.get('id') or '')[:200], 'title': str(r.get('title') or '')[:300], 'kind': r.get('kind') if r.get('kind') in KINDS else 'other',
+            'provider': str(r.get('provider') or '')[:200], 'deadline': str(r.get('deadline') or '')[:40], 'source_id': str(r.get('source_id') or '')[:60],
+            'tracks': [str(t)[:60] for t in tracks if isinstance(t, str)][:8], 'possible_duplicate_of': str(dup)[:200] if isinstance(dup, str) and dup else '',
+            'legal_reason': str(r.get('legal_reason') or '')[:200], 'created_at': str(r.get('created_at') or '')[:40]}
+
+
+def view_preview(d):
+    d = d if isinstance(d, dict) else {}
+    html = d.get('html') if isinstance(d.get('html'), str) else ''
+    html = SCRIPT_RE.sub('', html)          # الإطار معزول أصلًا (sandbox فاضي)، ومفيش سكربت يوصل الشاشة كمان
+    reason = d.get('reason') if d.get('reason') in PREVIEW_REASONS else ''
+    will = d.get('will_send')
+    return {'subject': str(d.get('subject') or '')[:300], 'html': html[:PREVIEW_HTML_MAX], 'count': _int(d.get('count')),
+            'track': str(d.get('track') or '')[:120], 'track_title': str(d.get('track_title') or '')[:120] if isinstance(d.get('track_title'), str) else '',
+            'reason': reason, 'will_send': will if isinstance(will, bool) else None, 'too_big': len(html) > PREVIEW_HTML_MAX}
+
+
+def clean_email(v):
+    v = v.strip() if isinstance(v, str) else ''
+    if not EMAIL_RE.match(v):
+        raise Bad('البريد الإلكتروني غير صحيح')
+    return v.lower()
+
+
 def register(app, g):
     token_required = g['token_required']
     roles_required = g['roles_required']
@@ -1053,6 +1212,183 @@ def register(app, g):
         if view['sent'] or view['errors']:
             g['_audit']('saha.reminders_cron', target='reminders', meta={k: view[k] for k in REMINDER_COUNTS}, actor='cron')
         return ns(jsonify(view))
+
+    # ================================================================== الساحة · محرّك الفرص (R18)
+    # النشر/الرفض من «للمراجعة» = مسار القرار الموجود `POST opportunities/<id>/decide` (جسر `jobs/<id>/decide`) — لا مسار جديد.
+    def engine_read(path, view, params=None):
+        data, fail = read(path, params)
+        if fail:
+            return fail
+        if not isinstance(data, dict):
+            return err(BAD_REPLY_AR, 502)
+        return ns(jsonify(view(data)))
+
+    @app.route('/api/v2/saha/engine/autorun', methods=['GET'], endpoint='v2saha_engine_autorun')
+    @admin
+    def v2saha_engine_autorun():
+        bad, _ = guard(mode='read')
+        return bad or engine_read('/api/bridge/opportunities/autorun', view_autorun)
+
+    @app.route('/api/v2/saha/engine/autorun', methods=['PUT'], endpoint='v2saha_engine_autorun_put')
+    @admin
+    def v2saha_engine_autorun_put():
+        bad, b = guard()
+        if bad:
+            return bad
+        hours = clean_hours(b['hours']) if b.get('hours') is not None else None
+        if b.get('enabled') is None and hours is not None:
+            # تغيير المواعيد وحده: حالة المفتاح تتقري طازة قبل الإرسال (العقد يطلب `enabled`)، فلا يرجع المفتاح لقيمة قديمة على الشاشة.
+            cur, fail = read('/api/bridge/opportunities/autorun')
+            if fail:
+                return fail
+            if not isinstance(cur, dict) or not isinstance(cur.get('enabled'), bool):
+                return err(BAD_REPLY_AR, 502)
+            fields = {'enabled': cur['enabled']}
+        else:
+            fields = {'enabled': v_bool(b.get('enabled'), 'التشغيل اليومي')}
+        if hours is not None:
+            fields['hours'] = hours
+        action = ('saha.engine_autorun_hours' if b.get('enabled') is None else
+                  'saha.engine_autorun_on' if fields['enabled'] else 'saha.engine_autorun_off')
+        data, fail = send('PUT', '/api/bridge/opportunities/autorun', fields, action, 'opp_autorun', 'saha', by=False)   # الجسم بالعقد بالظبط
+        if fail:
+            return fail
+        view = view_autorun(data)
+        return done(action, 'opp_autorun', {'enabled': fields['enabled'], 'hours': fields.get('hours', ''), 'source': view['source']}, view)
+
+    @app.route('/api/v2/saha/engine/sources', methods=['GET'], endpoint='v2saha_engine_sources')
+    @admin
+    def v2saha_engine_sources():
+        bad, _ = guard(mode='read')
+        if bad:
+            return bad
+        data, fail = read('/api/bridge/opportunities/sources')
+        return fail or list_reply(data, 'sources', view_source)
+
+    @app.route('/api/v2/saha/engine/sources/<sid>', methods=['PUT'], endpoint='v2saha_engine_source_put')
+    @admin
+    def v2saha_engine_source_put(sid):
+        bad, b = guard([sid])
+        if bad:
+            return bad
+        if not SOURCE_ID_RE.match(sid or ''):
+            return err(BAD_ID_AR)
+        enabled = v_bool(b['enabled'], 'التشغيل') if b.get('enabled') is not None else None
+        trusted = v_bool(b['trusted'], 'موثوق') if b.get('trusted') is not None else None
+        if enabled is None and trusted is None:
+            raise Bad('لا يوجد تغيير')
+        data, fail = read('/api/bridge/opportunities/sources')          # الصف الحالي (المنصة تطلب المصدر كاملًا)
+        if fail:
+            return fail
+        rows = _rows(data, 'sources')
+        if rows is None:
+            return err(BAD_REPLY_AR, 502)
+        cur = [r for r in rows if isinstance(r, dict) and str(r.get('id') or '') == sid]
+        if not cur:
+            return err('لم يعد هذا المصدر موجودًا على المنصة', 404)
+        body = source_body(cur[0], enabled, trusted)
+        action = 'saha.engine_source'
+        data, fail = send('PUT', '/api/bridge/opportunities/sources/%s' % q(sid), body, action, sid, 'saha', by=False)
+        if fail:
+            return fail
+        meta = {k: v for k, v in (('enabled', enabled), ('trusted', trusted)) if v is not None}
+        return done(action, sid, meta, view_source(data if data else dict(cur[0], **meta)))
+
+    @app.route('/api/v2/saha/engine/sources/import-seed', methods=['POST'], endpoint='v2saha_engine_sources_seed')
+    @admin
+    def v2saha_engine_sources_seed():
+        bad, _b = guard()
+        if bad:
+            return bad
+        data, fail = send('POST', '/api/bridge/opportunities/sources/import-seed', None, 'saha.engine_sources_seed', 'opp_sources', 'saha', timeout=40, by=False)
+        if fail:
+            return fail
+        out = {'created': _int(data.get('created')) or 0, 'kept': _int(data.get('kept')) or 0,
+               'errors': len(data.get('errors')) if isinstance(data.get('errors'), list) else 0}
+        return done('saha.engine_sources_seed', 'opp_sources', out, out)
+
+    @app.route('/api/v2/saha/engine/run', methods=['POST'], endpoint='v2saha_engine_run')
+    @admin
+    def v2saha_engine_run():
+        bad, _b = guard()
+        if bad:
+            return bad
+        data, fail = send('POST', '/api/bridge/opportunities/run', {}, 'saha.engine_run', 'opp_run', 'saha', timeout=110, by=False)
+        if fail:
+            return fail
+        view = view_run(data) or view_run({})
+        return done('saha.engine_run', 'opp_run', {k: view[k] for k in ('fetched', 'published', 'drafts', 'errors', 'busy', 'failed')}, view)
+
+    @app.route('/api/v2/saha/engine/summary', methods=['GET'], endpoint='v2saha_engine_summary')
+    @admin
+    def v2saha_engine_summary():
+        bad, _ = guard(mode='read')
+        return bad or engine_read('/api/bridge/opportunities/summary', view_summary)
+
+    @app.route('/api/v2/saha/engine/review', methods=['GET'], endpoint='v2saha_engine_review')
+    @admin
+    def v2saha_engine_review():
+        bad, _ = guard(mode='read')
+        if bad:
+            return bad
+        raw = (request.args.get('limit') or '50').strip()
+        limit = int(raw) if raw.isdigit() and 1 <= int(raw) <= REVIEW_MAX else 50
+        data, fail = read('/api/bridge/opportunities/review', {'limit': limit})
+        if fail:
+            return fail
+        rows = _rows(data, 'items')
+        if rows is None:
+            return err(BAD_REPLY_AR, 502)
+        items = [view_review(r) for r in rows if isinstance(r, dict) and ID_OK.match(str(r.get('id') or ''))][:limit]
+        return ns(jsonify({'items': items, 'total': _count(data, items)}))
+
+    @app.route('/api/v2/saha/engine/digest', methods=['GET'], endpoint='v2saha_engine_digest')
+    @admin
+    def v2saha_engine_digest():
+        bad, _ = guard(mode='read')
+        return bad or engine_read('/api/bridge/opportunities/digest', view_digest)
+
+    @app.route('/api/v2/saha/engine/digest', methods=['PUT'], endpoint='v2saha_engine_digest_put')
+    @admin
+    def v2saha_engine_digest_put():
+        bad, b = guard()
+        if bad:
+            return bad
+        enabled = v_bool(b.get('enabled'), 'إيميل الأسبوع')
+        action = 'saha.engine_digest_on' if enabled else 'saha.engine_digest_off'
+        data, fail = send('PUT', '/api/bridge/opportunities/digest', {'enabled': enabled}, action, 'opp_digest', 'saha', by=False)
+        if fail:
+            return fail
+        return done(action, 'opp_digest', {'enabled': enabled}, view_digest(data))
+
+    @app.route('/api/v2/saha/engine/digest/preview', methods=['POST'], endpoint='v2saha_engine_digest_preview')
+    @admin
+    def v2saha_engine_digest_preview():
+        # معاينة بلا إرسال ولا كتابة (مثل تجربة الاستيراد): لا تأكيد ولا تدقيق. البريد في الجسم لا في عنوان اللوحة.
+        bad, b = guard(mode='body')
+        if bad:
+            return bad
+        email = clean_email(b.get('email'))
+        data, fail = read('/api/bridge/opportunities/digest/preview', {'email': email})
+        if fail:
+            return fail
+        if not isinstance(data, dict):
+            return err(BAD_REPLY_AR, 502)
+        return ns(jsonify(view_preview(data)))
+
+    @app.route('/api/v2/saha/engine/digest/send-test', methods=['POST'], endpoint='v2saha_engine_digest_test')
+    @admin
+    def v2saha_engine_digest_test():
+        bad, b = guard()          # يرسل بريدًا حقيقيًا واحدًا ⇒ تأكيد
+        if bad:
+            return bad
+        email = clean_email(b.get('email'))
+        data, fail = send('POST', '/api/bridge/opportunities/digest/send-test', {'email': email}, 'saha.engine_digest_test', 'opp_digest', 'saha',
+                          timeout=40, by=False)
+        if fail:
+            return fail
+        out = {'sent': data.get('sent') is True, 'reason': data.get('reason') if data.get('reason') in TEST_REASONS else ''}
+        return done('saha.engine_digest_test', 'opp_digest', {'sent': out['sent']}, out)          # بلا البريد في السجل
 
     # ================================================================== الديوان · الأعمال
     @app.route('/api/v2/diwan/works', methods=['GET'], endpoint='v2diwan_works')

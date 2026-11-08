@@ -3,7 +3,7 @@
 
     cd backend && python3 -B tests/uiharness/v2_shots_saha.py ../docs/v2/saha-tiles/shots [only-prefix,...]
 
-الخطوات: ٠١ مربّعات الساحة · ٠٢ الأخبار (مراجعة ثم نشر · سحب · جلب جديد) · ٠٣ طابور الفرص بالنوع (اعتماد · رفض بسبب · رد المنصة) · ٠٤ قائمة الفرص والنموذج الكامل
+الخطوات (R18: ٠٨م محرّك الفرص): ٠١ مربّعات الساحة · ٠٢ الأخبار (مراجعة ثم نشر · سحب · جلب جديد) · ٠٣ طابور الفرص بالنوع (اعتماد · رفض بسبب · رد المنصة) · ٠٤ قائمة الفرص والنموذج الكامل
 (إضافة · تعديل · حذف) · ٠٥ استيراد الفرص (تجربة ثم تأكيد · ملف مرفوع) · ٠٦ رابط دورة التحضير · ٠٧ الآراء · ٠٨ التذكير (مقفول ثم مفتوح) ·
 ٠٩ مربّعات الديوان · ١٠ الأعمال · ١١ التعليقات · ١٢ التحديات (نموذج · لجنة · الفائزون) · ١٣ التقرير (لا رقم بعد) · ١٤ المصدر الواقع والجسر الغايب · ١٥ الحالات الفاضية · ١٦ المفتاح مقفول.
 
@@ -38,7 +38,12 @@ OK_WRITES = [('PUT', re.compile(B + r'news/[^/]+$')), ('POST', re.compile(B + r'
              ('PUT', re.compile(B + r'opportunities/settings$')), ('POST', re.compile(B + r'opportunities/import-seed$')), ('POST', re.compile(B + r'opportunities/run-reminders$')),
              ('POST', re.compile(B + r'creative/[^/]+/decide$')), ('PUT', re.compile(B + r'creative/[^/]+$')), ('POST', re.compile(B + r'diwan/comments/[^/]+/hide$')),
              ('POST', re.compile(B + r'topics/[^/]+/(hide|restore)$')), ('POST', re.compile(B + r'legal-gate/backfill$')),
-             ('POST', re.compile(B + r'diwan/challenges$')), ('PUT', re.compile(B + r'diwan/challenges/[^/]+$')), ('POST', re.compile(B + r'diwan/challenges/[^/]+/winners$'))]
+             ('POST', re.compile(B + r'diwan/challenges$')), ('PUT', re.compile(B + r'diwan/challenges/[^/]+$')), ('POST', re.compile(B + r'diwan/challenges/[^/]+/winners$')),
+             ('PUT', re.compile(B + r'opportunities/autorun$')), ('PUT', re.compile(B + r'opportunities/sources/[a-z0-9_-]+$')),
+             ('POST', re.compile(B + r'opportunities/sources/import-seed$')), ('POST', re.compile(B + r'opportunities/run$')),
+             ('PUT', re.compile(B + r'opportunities/digest$')), ('POST', re.compile(B + r'opportunities/digest/send-test$'))]
+# R18: كتابات «محرّك الفرص» جسمها بالعقد بالظبط ⇒ بلا `by` (عكس باقي الجسور).
+ENGINE_RX = re.compile(B + r'opportunities/(autorun|sources/[a-z0-9_-]+|run|digest|digest/send-test)$')
 SCOPE_JS = """() => [...document.querySelectorAll('.v2s-sh, #epModal.v2s-sh-sh')].map(e => { const c = e.cloneNode(true);
   c.querySelectorAll('[dir="ltr"], [dir="auto"], .sh-who, script, style, input, textarea, select, option').forEach(n => n.remove()); return c.innerText; }).join('\\n')"""
 
@@ -115,7 +120,10 @@ def check_writes(name, h, since, expected):
             PROBLEMS.append('%s: كتابة غير مسموحة %s %s' % (name, m, p))
         if (body is not None and not isinstance(body, dict)) or (body and 'confirmed' in body):
             PROBLEMS.append('%s: confirmed سافر للمنصة %s %s' % (name, m, p))
-        if 'import-seed' not in p and (not isinstance(body, dict) or not str(body.get('by') or '').strip()):
+        if ENGINE_RX.match(p):
+            if isinstance(body, dict) and 'by' in body:
+                PROBLEMS.append('%s: جسم المحرّك فيه by (العقد بالظبط) %s %s' % (name, m, p))
+        elif 'import-seed' not in p and (not isinstance(body, dict) or not str(body.get('by') or '').strip()):
             PROBLEMS.append('%s: كتابة بلا by %s %s' % (name, m, p))
         if 'import-seed' in p and body and 'by' in body:
             PROBLEMS.append('%s: الاستيراد لا يحمل by (جسم غير فاضي = الملف نفسه) %s' % (name, p))
@@ -220,11 +228,12 @@ def flow_saha(browser, h, pre, vp, mobile):
         nums = tile_numbers(page)
         expect(nums.get('news') == ('٣', 'خبر ينتظر مراجعتك') and nums.get('review') == ('٦', 'إعلان ينتظر قرارك') and nums.get('opps', ('',))[0] == '١١'
                and nums.get('opinions') == ('٢', 'رأي ينتظر قرارك') and nums.get('prep', ('',))[0] == 'مضبوط' and nums.get('import', ('',))[0] == 'جرّب'
-               and nums.get('reminders') == ('—', 'لم يُشغَّل بعد'), '%s01: أرقام مربّعات الساحة %r' % (pre, nums))
+               and nums.get('reminders') == ('—', 'لم يُشغَّل بعد') and nums.get('engine') == ('٢', 'مسودة تنتظر مراجعتك، والتشغيل اليومي متوقّف'),
+               '%s01: أرقام مربّعات الساحة %r' % (pre, nums))
         tabs = page.evaluate("() => [...document.querySelectorAll('.v2c-tab')].map(b => b.textContent.trim())")
         expect('الساحة' in tabs and 'الديوان' in tabs and 'القاموس' in tabs and len(tabs) == 10, '%s01: تبويبات المحتوى %r' % (pre, tabs))
         imgs = page.evaluate("() => [...document.querySelectorAll('.sh-timg')].map(e => getComputedStyle(e).backgroundImage.replace(/.*\\//, ''))")
-        expect(len(imgs) == 8 and all('.jpg' in i for i in imgs), '%s01: صور المربّعات %r' % (pre, imgs))
+        expect(len(imgs) == 9 and all('.jpg' in i for i in imgs), '%s01: صور المربّعات %r' % (pre, imgs))
         mshot(page, pre + '01-hub.jpg')
         browser.close()
 
@@ -624,6 +633,168 @@ def flow_saha(browser, h, pre, vp, mobile):
         expect(nums[1].startswith('٥') and len(nums) == 5, '%s08: أرقام آخر تشغيل %r' % (pre, nums))
         mshot(page, pre + '08e-reminders-open.jpg')
         browser.close()
+
+
+    # —— ٠٨م) محرّك الفرص (R18): المفتاح · المواعيد · تشغيل الآن · للمراجعة · المصادر · إيميل الأسبوع
+    if want('08m'):
+        flow_engine(browser, h, pre, vp, mobile)
+
+
+def sheet_text(page):
+    return page.evaluate("() => (document.getElementById('epModal') || {innerText: ''}).innerText")
+
+
+def flow_engine(browser, h, pre, vp, mobile):
+    ef = sfx.SahaTilesPlatform()
+    page = sopen(browser, h, ef, vp, mobile)
+    go_sub(page, 'engine')
+    page.wait_for_selector('.sh-panel[data-r="auto"]', timeout=10000)
+    sw = page.evaluate("() => { const b = document.querySelector('.sh-switch'); return b ? [b.getAttribute('aria-checked'), b.innerText.replace(/\\s+/g, ' ')] : null; }")
+    expect(sw and sw[0] == 'false' and 'متوقّف' in sw[1], '%s08m: المفتاح في البداية %r' % (pre, sw))
+    last = page.inner_text('.sh-panel[data-r="last"]')
+    expect('اكتمل آخر تشغيل وفيه أعطال' in last and '٢٤' in last, '%s08m: آخر تشغيل %r' % (pre, last[:160]))
+    mshot(page, pre + '08m-engine-run.jpg')
+    base = len(h.platform_calls)
+    # المفتاح ⇒ ورقة مراجعة ثم تأكيد
+    click(page, '[data-a="engauto"]', 400)
+    sheet_open(page)
+    expect('يعمل' in sheet_text(page) and 'متوقّف' in sheet_text(page), '%s08m: ورقة المفتاح بلا قبل ⇐ بعد' % pre)
+    mshot(page, pre + '08m2-engine-switch-sheet.jpg', keep=True)
+    check_writes(pre + '08m-before', h, base, 0)
+    confirm(page, 1000)
+    sheet_gone(page)
+    got = check_writes(pre + '08m-switch', h, base, 1)
+    if got:
+        expect(got[0][3] == {'enabled': True}, '%s08m: جسم المفتاح %r' % (pre, got[0][3]))
+    page.wait_for_function("() => (document.querySelector('.sh-switch') || {}).getAttribute && document.querySelector('.sh-switch').getAttribute('aria-checked') === 'true'", timeout=10000)
+    expect('التشغيل اليومي يعمل الآن' in note_text(page), '%s08m: رسالة المفتاح %r' % (pre, note_text(page)))
+    # المواعيد
+    click(page, '[data-a="enghours"]', 400)
+    sheet_open(page)
+    page.fill('#f_hours', '٧، ١٩')
+    click(page, '#shNext', 400)
+    stage(page, '٧ صباحًا و٧ مساءً')
+    mshot(page, pre + '08m3-engine-hours.jpg', keep=True)
+    confirm(page, 1000)
+    sheet_gone(page)
+    got = check_writes(pre + '08m-hours', h, base, 2)
+    if len(got) == 2:
+        expect(got[1][3] == {'enabled': True, 'hours': '7,19'}, '%s08m: جسم المواعيد %r' % (pre, got[1][3]))
+    # شغّل الآن
+    click(page, '[data-a="engrun"]', 400)
+    sheet_open(page)
+    confirm(page, 1200)
+    sheet_gone(page)
+    got = check_writes(pre + '08m-run', h, base, 3)
+    if len(got) == 3:
+        expect(got[2][1].endswith('/opportunities/run') and got[2][3] == {}, '%s08m: جسم التشغيل %r' % (pre, got[2][3]))
+    expect(note_text(page) == 'اكتمل التشغيل: نُشرت فرصة واحدة، ٣ مسودات للمراجعة', '%s08m: رسالة التشغيل %r' % (pre, note_text(page)))
+    mshot(page, pre + '08m4-engine-after-run.jpg')
+    # للمراجعة: الشارة ثم نشر ورفض بسبب (مسار القرار الموجود)
+    click(page, '[data-a="chip"][data-v="review"]', 700)
+    wait_rows(page, 2, '.sh-card[data-id]')
+    badge = page.evaluate("() => [...document.querySelectorAll('.sh-card[data-id]')].map(c => [c.dataset.id, c.innerText.includes('غالبًا مكررة')])")
+    expect(badge == [['job-30', False], ['job-31', True]], '%s08m: شارة «غالبًا مكررة» %r' % (pre, badge))
+    expect('صلته بالقانون ضعيفة' in page.inner_text('.sh-card[data-id="job-31"]') and 'منح الاتحاد الأوروبي' in page.inner_text('.sh-card[data-id="job-30"]'),
+           '%s08m: سبب الفحص واسم المصدر' % pre)
+    mshot(page, pre + '08m5-engine-review.jpg')
+    click(page, '[data-a="engpub"][data-id="job-30"]', 400)
+    sheet_open(page)
+    confirm(page, 1000)
+    sheet_gone(page)
+    got = check_writes(pre + '08m-publish', h, base, 4)
+    if len(got) == 4:
+        expect(got[3][1] == '/api/bridge/jobs/job-30/decide' and got[3][3].get('decision') == 'approve', '%s08m: نشر المسودة %r' % (pre, got[3]))
+    wait_rows(page, 1, '.sh-card[data-id]')
+    click(page, '[data-a="engrej"][data-id="job-31"]', 400)
+    sheet_open(page)
+    page.fill('#f_reason', 'مكررة مع فرصة منشورة')
+    click(page, '#shNext', 400)
+    confirm(page, 1000)
+    sheet_gone(page)
+    got = check_writes(pre + '08m-reject', h, base, 5)
+    if len(got) == 5:
+        expect(got[4][3].get('decision') == 'reject' and got[4][3].get('reason') == 'مكررة مع فرصة منشورة', '%s08m: رفض المسودة %r' % (pre, got[4][3]))
+    page.wait_for_selector('.v2s-sh .sh-empty', timeout=10000)
+    # المصادر: توثيق مصدر (الصف كاملًا بالحقل المتغيّر)
+    click(page, '[data-a="chip"][data-v="sources"]', 700)
+    wait_rows(page, 3, '[data-a="engsrctr"]')
+    mshot(page, pre + '08m6-engine-sources.jpg')
+    click(page, '[data-a="engsrctr"][data-id="eu-grants"]', 400)
+    sheet_open(page)
+    expect('مباشرة' in sheet_text(page), '%s08m: ورقة التوثيق لا تشرح النشر المباشر' % pre)
+    confirm(page, 1000)
+    sheet_gone(page)
+    got = check_writes(pre + '08m-trust', h, base, 6)
+    if len(got) == 6:
+        expect(got[5][1].endswith('/sources/eu-grants') and got[5][3].get('trusted') is True and got[5][3].get('url') == 'https://grants.example.test/eu'
+               and got[5][3].get('enabled') is True, '%s08m: جسم التوثيق %r' % (pre, got[5][3]))
+    # إيميل الأسبوع: المفتاح · المعاينة بلا كتابة · رسالة التجربة بتأكيد
+    click(page, '[data-a="chip"][data-v="digest"]', 700)
+    page.wait_for_selector('.sh-panel[data-r="digest"]', timeout=10000)
+    mshot(page, pre + '08m7-engine-digest.jpg')
+    click(page, '[data-a="engdig"]', 400)
+    sheet_open(page)
+    confirm(page, 1000)
+    sheet_gone(page)
+    got = check_writes(pre + '08m-digest', h, base, 7)
+    if len(got) == 7:
+        expect(got[6][3] == {'enabled': True}, '%s08m: جسم إيميل الأسبوع %r' % (pre, got[6][3]))
+    page.fill('#shEngMail', 'member@example.test')
+    click(page, '[data-a="engprev"]', 900)
+    page.wait_for_selector('iframe.sh-pv', timeout=10000)
+    fr = page.evaluate("() => { const f = document.querySelector('iframe.sh-pv'); return [f.getAttribute('sandbox'), (f.getAttribute('srcdoc') || '').includes('لايدن')]; }")
+    expect(fr == ['', True], '%s08m: إطار المعاينة معزول وفيه الرسالة %r' % (pre, fr))
+    check_writes(pre + '08m-preview', h, base, 7)
+    pvt = page.inner_text('.sh-panel[data-r="pv"]')
+    expect('المسار: القانون الدولي' in pvt and 'intl-law' not in pvt and not page.query_selector('[data-r="pvwarn"]'),
+           '%s08m: المعاينة باسم المسار العربي بلا تنبيه %r' % (pre, pvt[:200]))
+    mshot(page, pre + '08m8-engine-preview.jpg', target='.sh-panel[data-r="pv"]')
+    # صاحب البريد أوقف الرسائل: المعاينة تظهر ومعها إن الرسالة مش هتوصله
+    page.fill('#shEngMail', 'unsub@example.test')
+    click(page, '[data-a="engprev"]', 900)
+    page.wait_for_selector('[data-r="pvwarn"]', timeout=10000)
+    wt = page.inner_text('[data-r="pvwarn"]')
+    expect('أوقف رسائل المنصة' in wt and page.query_selector('iframe.sh-pv') is not None, '%s08m: تنبيه إيقاف الرسائل %r' % (pre, wt))
+    mshot(page, pre + '08m8b-engine-preview-unsub.jpg', target='.sh-panel[data-r="pv"]')
+    # بريد مش لعضو: السبب مكان «لا فرص»
+    page.fill('#shEngMail', 'nobody@example.test')
+    click(page, '[data-a="engprev"]', 900)
+    page.wait_for_function("() => { const w = document.querySelector('[data-r=\"pvwarn\"]'); return w && w.innerText.includes('ليس لعضو'); }", timeout=10000)
+    pvt = page.inner_text('.sh-panel[data-r="pv"]')
+    expect('لا فرص' not in pvt and 'لا نص للرسالة' not in pvt and page.query_selector('iframe.sh-pv') is None, '%s08m: بريد ليس لعضو %r' % (pre, pvt[:200]))
+    check_writes(pre + '08m-preview2', h, base, 7)
+    page.fill('#shEngMail', 'member@example.test')
+    click(page, '[data-a="engtest"]', 400)
+    sheet_open(page)
+    expect('member@example.test' in sheet_text(page), '%s08m: ورقة التجربة لا تعرض البريد' % pre)
+    confirm(page, 1000)
+    sheet_gone(page)
+    got = check_writes(pre + '08m-test', h, base, 8)
+    if len(got) == 8:
+        expect(got[7][3] == {'email': 'member@example.test'}, '%s08m: جسم رسالة التجربة %r' % (pre, got[7][3]))
+    expect(note_text(page).startswith('أُرسلت رسالة التجربة') and 'مسار آخر' in note_text(page), '%s08m: نتيجة التجربة %r' % (pre, note_text(page)))
+    back_hub(page)
+    nums = tile_numbers(page)
+    expect(nums.get('engine') == ('٠', 'لا مسودات تنتظر'), '%s08m: مربّع المحرّك بعد المراجعة %r' % (pre, nums.get('engine')))
+    browser.close()
+    # منصة فاضية: «لا مصادر بعد» ⇒ «إضافة المصادر الأولى»
+    ef2 = sfx.SahaTilesPlatform(empty=True)
+    page = sopen(browser, h, ef2, vp, mobile)
+    go_sub(page, 'engine')
+    expect('لم يحدث أي تشغيل بعد' in page.inner_text('.sh-panel[data-r="last"]'), '%s08m: آخر تشغيل في البداية' % pre)
+    click(page, '[data-a="chip"][data-v="sources"]', 700)
+    page.wait_for_selector('.v2s-sh .sh-empty', timeout=10000)
+    mshot(page, pre + '08m9-engine-sources-empty.jpg')
+    base = len(h.platform_calls)
+    click(page, '[data-a="engseed"]', 400)
+    sheet_open(page)
+    confirm(page, 1000)
+    sheet_gone(page)
+    check_writes(pre + '08m-seed', h, base, 1)
+    wait_rows(page, 3, '[data-a="engsrctr"]')
+    expect('أُضيف ٣ مصادر' in note_text(page), '%s08m: رسالة إضافة المصادر %r' % (pre, note_text(page)))
+    browser.close()
 
 
 # ======================================================================= الديوان

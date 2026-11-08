@@ -1119,7 +1119,7 @@ def test_sections_company_entry_and_old_links():
 def test_settings_page_has_the_telegram_card_with_the_test_button():
     """R16: «جرّب التنبيهات» كانت في صفحة الإعدادات القديمة بس — المؤسس ما لقاهاش في «الشركة ‹ الإعدادات» (2026-11-08)."""
     src = _read('dashboard-cloud', 'v2s', 'company.js')
-    assert "card('تنبيهات تليجرام', '', tgBody)" in src
+    assert "card('تنبيهات تليجرام', '', tgBody" in src
     for a in ('test', 'arm', 'digest'):
         assert 'data-tg="%s"' % a in src
     assert 'جرّب التنبيهات' in src and 'id="tgResult"' in src and 'id="tgBody"' in src

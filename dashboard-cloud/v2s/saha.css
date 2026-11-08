@@ -115,6 +115,21 @@
 .sh-stat-card small{font-size:13.5px;color:var(--mute);line-height:1.6}
 .sh-h3{font-size:17px;margin:6px 0 8px}
 
+/* —— محرّك الفرص (R18): مفتاح كبير للتشغيل اليومي ولإيميل الأسبوع + معاينة الرسالة في إطار معزول */
+.sh-switch{display:flex;align-items:center;gap:14px;width:100%;max-width:520px;min-height:64px;padding:10px 16px;margin:0 0 10px;border:1px solid var(--line);border-radius:16px;background:var(--paper);color:var(--ink);font-family:inherit;text-align:start;cursor:pointer}
+.sh-switch:hover{border-color:#D9CFC0}
+.sh-switch:focus-visible{outline:3px solid rgba(158,43,78,.35);outline-offset:2px}
+.sh-switch i{flex:none;position:relative;width:56px;height:32px;border-radius:999px;background:#CFC6B8;transition:background .15s}
+.sh-switch i::after{content:'';position:absolute;top:4px;inset-inline-start:4px;width:24px;height:24px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(33,38,46,.25);transition:inset-inline-start .15s}
+.sh-switch.on i{background:var(--green)}
+.sh-switch.on i::after{inset-inline-start:28px}
+.sh-switch span{display:flex;flex-direction:column;min-width:0}
+.sh-switch b{font:800 17px/1.5 'Cairo',sans-serif;overflow-wrap:anywhere}
+.sh-switch small{font-size:14px;color:var(--mute);line-height:1.6}
+.sh-switch.on small{color:var(--green)}
+@media (prefers-reduced-motion:reduce){.sh-switch i,.sh-switch i::after{transition:none}}
+.sh-pv{display:block;width:100%;height:520px;border:1px solid var(--line);border-radius:12px;background:#fff;margin:6px 0 8px}
+
 /* —— ورقة المراجعة والتأكيد */
 #epModal.v2s-sh-sh .modal{background:#FBFAF7;border-radius:20px;max-width:640px;font-family:'IBM Plex Sans Arabic','Cairo',sans-serif;color:#21262E;max-height:92vh;display:flex;flex-direction:column}
 #epModal.v2s-sh-sh .mb{padding:18px 20px;overflow-y:auto}
@@ -167,6 +182,7 @@
   .sh-head{gap:10px}.sh-himg{width:68px;height:48px}.sh-head h2{font-size:19px}
   .sh-acts .ep-b1,.sh-acts .ep-b2{flex:1 1 140px}
   .sh-row{flex-direction:column}
+  .sh-pv{height:420px}
   #epModal.v2s-sh-sh .modal{max-width:100%}
   #epModal.v2s-sh-sh .acts .ep-b1,#epModal.v2s-sh-sh .acts .ep-b2,#epModal.v2s-sh-sh .acts .ep-bs{flex:1 1 100%}
   #epModal.v2s-sh-sh .sh-rowgrid{grid-template-columns:1fr}

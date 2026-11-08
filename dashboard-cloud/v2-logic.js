@@ -3376,7 +3376,30 @@
     return c ? { courses: num(c.total_courses), students: num(c.total_students) } : null;
   }
 
+  // R18 «فحص الإعدادات» (الشركة ← الإعدادات): رد `/api/ops/config-check` ⇒ {rows: [{key, label, value, ok, fix, where}], bad, head, platformNote} أو null.
+  // القيمة المعروضة: منطقي ⇒ «مضبوط/غير مضبوط»، رقم بأرقام هندية، نص كما هو. ⛔ لا قيمة سرّية تصل هنا أصلًا (الخادم يرسل أعلامًا فقط).
+  function cfgValue(v) {
+    if (v === true) return 'مضبوط';
+    if (v === false) return 'غير مضبوط';
+    if (typeof v === 'number' && isFinite(v)) return L.util.ar(v);
+    return typeof v === 'string' ? v.trim().replace(/\d/g, function (d) { return '٠١٢٣٤٥٦٧٨٩'.charAt(+d); }) : '';
+  }
+  function cfgCheck(resp) {
+    if (!resp || typeof resp !== 'object' || !Array.isArray(resp.items)) return null;
+    var rows = resp.items.filter(function (r) { return r && typeof r === 'object' && typeof r.key === 'string' && r.key; }).map(function (r) {
+      return { key: r.key, label: (typeof r.label_ar === 'string' && r.label_ar.trim()) || 'إعداد بلا اسم', value: cfgValue(r.value), ok: r.ok === true ? true : r.ok === false ? false : null,
+               fix: typeof r.fix_ar === 'string' ? r.fix_ar.trim() : '', where: r.where === 'dashboard' ? 'dashboard' : 'platform' };
+    });
+    rows.sort(function (a, b) { return (a.ok === false ? 0 : 1) - (b.ok === false ? 0 : 1); });        // الأحمر أولًا
+    var bad = rows.filter(function (r) { return r.ok === false; }).length;
+    var note = '';
+    if (resp.platform_ok === false) note = resp.platform_missing === true ? 'فحص إعدادات المنصة غير متاح بعد، والظاهر هنا إعدادات اللوحة وحدها.' : 'تعذّر الوصول إلى المنصة الآن، والظاهر هنا إعدادات اللوحة وحدها.';
+    return { rows: rows, bad: bad, platformNote: note,
+             head: bad ? L.util.U(bad, ['إعداد واحد يحتاج تعديلًا', 'إعدادان يحتاجان تعديلًا', 'إعدادات تحتاج تعديلًا', 'إعدادًا يحتاج تعديلًا']) : (note ? 'لا مشكلة فيما أمكن فحصه' : 'كل الإعدادات سليمة') };
+  }
+
   L.co = {
+    cfgCheck: cfgCheck, cfgValue: cfgValue,
     NA: NA, naText: NA, MONTHS: MONTHS, ROLE_LABEL: ROLE_LABEL, CAT_LABEL: CAT_LABEL, STATUS_LABEL: STATUS_LABEL, KIND_LABEL: KIND_LABEL, CYCLE_LABEL: CYCLE_LABEL,
     daysUntil: daysUntil, dayText: dayText, monthText: monthText, monthName: monthName, nowKey: nowKey, sumLines: sumLines, remaining: remaining,
     partnerChip: partnerChip, agreementChip: agreementChip, renewChip: renewChip, dealAction: dealAction, subsSorted: subsSorted, agreementGroups: agreementGroups,

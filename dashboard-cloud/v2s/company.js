@@ -41,10 +41,12 @@
   var PATHS = {
     summary: '/v2/company/summary', partners: '/partners', contribs: '/v2/company/contributions', cash: '/cashflow', invest: '/investments',
     opps: '/investment-opportunities', wd: '/admin/withdrawals', assets: '/assets', subs: '/v2/company/subscriptions', deals: '/v2/company/agreements',
-    ads: '/v2/company/ad-clients', ledger: '/v2/ads-ledger', forecast: '/forecast', dash: '/dashboard'
+    ads: '/v2/company/ad-clients', ledger: '/v2/ads-ledger', forecast: '/forecast', dash: '/dashboard',
+    cfg: '/ops/config-check'                       // R18 «فحص الإعدادات» (قراءة بس)
   };
   var LABEL = { summary: 'ملخّص الشركة', partners: 'الشركاء', contribs: 'دفعات الشركاء', cash: 'حركات رأس المال', invest: 'سجل الاستثمارات', assets: 'المعدات',
-                subs: 'الاشتراكات', deals: 'الاتفاقات', ads: 'عملاء الإعلانات', ledger: 'أرصدة الإعلانات', forecast: 'الأهداف الشهرية', dash: 'الدفتر المالي', visits: 'الزيارات' };
+                subs: 'الاشتراكات', deals: 'الاتفاقات', ads: 'عملاء الإعلانات', ledger: 'أرصدة الإعلانات', forecast: 'الأهداف الشهرية', dash: 'الدفتر المالي', visits: 'الزيارات',
+                cfg: 'فحص الإعدادات' };
   var SILENT = { opps: 1, wd: 1 };
   function srcOf(k) { return SRC[k] || (SRC[k] = { state: 'idle', data: null, status: 0, seq: 0 }); }
   function load(k, force) {
@@ -806,9 +808,24 @@
         + (rows.length > S.auditN ? lnk('المزيد', 'auditMore') : '') + '<div class="co-bar">' + btn2('أخفِ السجل', 'auditClose') + '</div>';
     }
     S.view.innerHTML = '<div class="co" data-board="settings">' + noteStrip() + warnStrip(fl) + '<div class="co-two">'
-      + '<div class="co-col">' + card('بيانات الشركة', '', coBody) + card('العملة', '', fxBody) + card('صلاحيات الموظف', '', permBody) + card('الاستخدام في آخر ٧ أيام', '', useBody) + '</div>'
-      + '<div class="co-col">' + card('تنبيهات تليجرام', '', tgBody) + card('فريق الإدارة', '', teamBody) + card('التحليل المكتوب', '', aiBody) + card('سجل العمليات', '', auditBody) + '</div></div></div>';
+      + '<div class="co-col">' + card('فحص الإعدادات', '', cfgBody(), 'co-cfg', 'coCfg') + card('بيانات الشركة', '', coBody) + card('العملة', '', fxBody) + card('صلاحيات الموظف', '', permBody) + card('الاستخدام في آخر ٧ أيام', '', useBody) + '</div>'
+      + '<div class="co-col">' + card('تنبيهات تليجرام', '', tgBody, 'co-tg') + card('فريق الإدارة', '', teamBody) + card('التحليل المكتوب', '', aiBody) + card('سجل العمليات', '', auditBody) + '</div></div></div>';
     wireTg();
+  }
+  // R18 «فحص الإعدادات»: كل بند بعلامة خضرا/حمرا، وتحت الأحمر بالظبط إيه يتغيّر وفين. قراءة بس (لا كتابة من هنا).
+  function cfgBody() {
+    var st = srcState('cfg'), v = st === 'ready' ? CO.cfgCheck(data('cfg')) : null;
+    if (!v) {
+      if (st === 'idle' || st === 'loading') return loadingBlock('فحص الإعدادات');
+      return '<div class="co-empty"><b>فحص الإعدادات ' + na() + '.</b>' + btn2('إعادة الفحص', 'cfgRe') + '</div>';
+    }
+    var rows = v.rows.map(function (r) {
+      var mark = r.ok === false ? '<span class="co-ck-mark bad" aria-label="يحتاج تعديلًا">✗</span>' : r.ok === true ? '<span class="co-ck-mark ok" aria-label="سليم">✓</span>' : '<span class="co-ck-mark" aria-label="للعلم">•</span>';
+      return '<li class="co-ckr' + (r.ok === false ? ' bad' : '') + '">' + mark + '<div class="co-ckm"><b>' + esc(r.label) + '</b>' + (r.value ? '<small dir="auto">' + esc(r.value) + '</small>' : '')
+        + (r.ok === false && r.fix ? '<p class="co-fix" dir="auto">' + esc(r.fix) + '</p>' : '') + '</div></li>';
+    }).join('');
+    return '<p class="co-lead sm"><b>' + esc(v.head) + '</b></p>' + (v.platformNote ? '<p class="co-none">' + esc(v.platformNote) + '</p>' : '')
+      + (rows ? '<ul class="co-cklist">' + rows + '</ul>' : '') + '<div class="co-bar">' + btn2('إعادة الفحص', 'cfgRe') + '</div>';
   }
   // تنبيهات تليجرام (R16): نفس منطق اللوحة القديمة (tgRun/tgRender/tgLoad في index.html) جوه كارت هنا —
   // كانت في صفحة الإعدادات القديمة بس، فالمؤسس ما لقاهاش في «الشركة ‹ الإعدادات». الحالة بتتجاب مرة كل ٣٠ ثانية بالكتير.
@@ -1451,6 +1468,8 @@
         case 'auditOpen': S.auditOpen = true; S.auditN = 20; if (E) E.reload('audit', null); redraw(); break;
         case 'auditClose': S.auditOpen = false; redraw(); break;
         case 'auditMore': S.auditN = 120; redraw(); break;
+        case 'cfgRe': load('cfg', true); redraw(); break;
+        case 'tg': break;                                   // أزرار تليجرام موصولة من tgPanelWire (index.html)
       }
     };
   }
@@ -1462,7 +1481,7 @@
     v2c_assets: { src: ['assets', 'subs', 'summary'], ep: [] },
     v2c_deals: { src: ['deals'], ep: [], visits: true },
     v2c_ads: { src: ['ads'], ep: [], visits: true },
-    settings: { src: [], ep: ['settings', 'dashUsers', 'usage', 'aiModels'] },
+    settings: { src: ['cfg'], ep: ['settings', 'dashUsers', 'usage', 'aiModels'] },
     targets: { src: [], ep: [] }
   };
   function ensureFor(mod) {

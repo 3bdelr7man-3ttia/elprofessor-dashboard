@@ -122,6 +122,23 @@ REPORT = {"window_days": 30, "visitors": None, "legal_open_share": None, "signup
 REPORT_FULL = dict(REPORT, visitors=1240, legal_open_share=0.35, signups=18, share_card_clicks=57, return_7d=0.31)
 
 
+ENG_SOURCES = [
+    {"id": "eu-grants", "name": "منح الاتحاد الأوروبي", "kind": "html", "url": "https://grants.example.test/eu", "item": {"item_xpath": "//li", "title_xpath": ".//a"},
+     "kind_default": "grant", "country": "various", "trusted": False, "enabled": True, "max_items": 15, "notes": "",
+     "last_run": {"at": "2026-11-01T05:00:00Z", "ok": True, "fetched": 9, "new": 3, "published": 0, "drafts": 3, "error": ""}},
+    {"id": "un-jobs", "name": "وظائف الأمم المتحدة", "kind": "rss", "url": "https://jobs.example.test/un", "item": {}, "kind_default": "job", "country": "various",
+     "trusted": True, "enabled": True, "max_items": 15, "notes": "", "last_run": {"at": "2026-11-01T05:00:00Z", "ok": False, "fetched": 0, "error": "timeout"}},
+    {"id": "law-fellows", "name": "زمالات كليات القانون", "kind": "rss", "url": "https://fellows.example.test/feed", "item": {}, "kind_default": "fellowship",
+     "country": "GB", "trusted": False, "enabled": False, "max_items": 15, "notes": "", "last_run": None},
+]
+ENG_REVIEW = [
+    {"id": "job-30", "title": "منحة دراسات القانون الدولي في لايدن", "kind": "grant", "provider": "جامعة لايدن", "deadline": "2026-12-15", "source_id": "eu-grants",
+     "tracks": ["intl"], "possible_duplicate_of": "", "legal_reason": "", "created_at": "2026-11-01T05:01:00Z"},
+    {"id": "job-31", "title": "زمالة حقوق الإنسان", "kind": "fellowship", "provider": "مركز جنيف", "deadline": "", "source_id": "eu-grants",
+     "tracks": [], "possible_duplicate_of": "job-1", "legal_reason": "weak-legal-signal", "created_at": "2026-11-01T05:02:00Z"},
+]
+
+
 class SahaTilesPlatform(v2fx.V2Platform):
     def __init__(self, empty=False, **kw):
         super(SahaTilesPlatform, self).__init__(empty=empty, **kw)
@@ -141,6 +158,14 @@ class SahaTilesPlatform(v2fx.V2Platform):
         self.missing = set()
         self.down = set()
         self.made = 0
+        # R18 «محرّك الفرص»
+        self.eng_autorun = {"enabled": False, "source": "default", "hours": "7", "running": False,
+                            "last_result": None if empty else {"ok": True, "ran_at": "2026-11-01T05:00:00Z", "fetched": 24, "new": 7, "published": 2, "drafts": 5, "filled": 1,
+                                                               "expired": 0, "skipped": {"not-legal": 9, "source-error": 1}}}
+        self.eng_sources = [] if empty else copy.deepcopy(ENG_SOURCES)
+        self.eng_review = [] if empty else copy.deepcopy(ENG_REVIEW)
+        self.eng_digest = {"enabled": False, "day": "sun", "hour": 10, "last_sent_at": None, "last_count": 0}
+        self.eng_test_reason = "sample-track"     # بريد بلا مسار ⇒ فرص مسار آخر (رمز المنصة الحقيقي)
 
     # ---------------------------------------------------------------- التوجيه
     def _route(self, method, path, params, body):
@@ -171,6 +196,9 @@ class SahaTilesPlatform(v2fx.V2Platform):
         return next((r for r in rows if r["id"] == rid), None)
 
     def _sd(self, m, path, params, body):
+        eng = self._sd_engine(m, path, params, body)
+        if eng is not None:
+            return eng
         if path == "/api/bridge/news" and m == "GET":
             rows = [n for n in self.sd_news if not params.get("status") or n["status"] == params["status"]]
             return 200, {"news": copy.deepcopy(rows), "count": len(rows)}
@@ -308,6 +336,82 @@ class SahaTilesPlatform(v2fx.V2Platform):
             if not self.reminders_enabled:
                 return 200, {"enabled": False, "opportunities": 0, "sent": 0, "skipped_already": 0, "skipped_toggle_off": 0, "errors": 0}
             return 200, {"enabled": True, "opportunities": 3, "sent": 5, "skipped_already": 1, "skipped_toggle_off": 2, "errors": 0}
+        return None
+
+    def _sd_engine(self, m, path, params, body):
+        """R18 — جسور «محرّك الفرص» بالعقد: الكتابات بلا `by` (الجسم بالعقد بالظبط)."""
+        B = "/api/bridge/opportunities"
+        mj = re.match(r"^/api/bridge/jobs/(job-3\d)(/decide)?$", path)        # مسودات المحرّك: نفس جسر القرار (المسودة تُنشر مباشرة)
+        if mj:
+            r = self._find(self.eng_review, mj.group(1))
+            if r is None:
+                return 404, {"detail": "Job not found"}
+            row = _job(mj.group(1).split("-")[1], r["title"], kind=r["kind"], review="draft", provider=r["provider"], deadline=r["deadline"] or None)
+            if m == "GET" and not mj.group(2):
+                return 200, row
+            if m == "POST" and mj.group(2):
+                bad = self._by(body)
+                if bad:
+                    return bad
+                self._rec(m, path, params, body)
+                self.eng_review = [x for x in self.eng_review if x["id"] != r["id"]]
+                row["review_status"] = "published" if body["decision"] == "approve" else "rejected"
+                return 200, row
+            return None
+        if path == B + "/autorun":
+            if m == "PUT":
+                self._rec(m, path, params, body)
+                self.eng_autorun.update({"enabled": body["enabled"], "source": "settings"})
+                if "hours" in body:
+                    self.eng_autorun["hours"] = body["hours"]
+            return 200, copy.deepcopy(self.eng_autorun)
+        if path == B + "/sources" and m == "GET":
+            return 200, {"sources": copy.deepcopy(self.eng_sources), "count": len(self.eng_sources)}
+        mm = re.match(r"^/api/bridge/opportunities/sources/([a-z0-9_-]+)$", path)
+        if mm and m == "PUT" and mm.group(1) != "import-seed":
+            src = self._find(self.eng_sources, mm.group(1))
+            if src is None:
+                return 404, {"detail": "Source not found"}
+            self._rec(m, path, params, body)
+            src.update({k: body[k] for k in ("trusted", "enabled") if k in body})
+            return 200, copy.deepcopy(src)
+        if path == B + "/sources/import-seed" and m == "POST":
+            self._rec(m, path, params, body)
+            added = [s for s in ENG_SOURCES if not self._find(self.eng_sources, s["id"])]
+            self.eng_sources.extend(copy.deepcopy(added))
+            return 200, {"created": len(added), "kept": len(ENG_SOURCES) - len(added), "errors": []}
+        if path == B + "/run" and m == "POST":
+            self._rec(m, path, params, body)
+            res = {"ok": True, "ran_at": "2026-11-01T09:00:00Z", "fetched": 11, "new": 4, "published": 1, "drafts": 3, "filled": 0, "expired": 0,
+                   "skipped": {"not-legal": 5}}
+            self.eng_autorun["last_result"] = res
+            return 200, res
+        if path == B + "/summary" and m == "GET":
+            return 200, {"drafts_waiting": len(self.eng_review), "possible_duplicates": len([r for r in self.eng_review if r["possible_duplicate_of"]]),
+                         "published_24h": 0 if self.sd_empty else 2, "held_news_24h": 0 if self.sd_empty else 1,
+                         "autorun": {"enabled": self.eng_autorun["enabled"], "source": self.eng_autorun["source"]},
+                         "last_run": None, "digest": copy.deepcopy(self.eng_digest)}
+        if path == B + "/review" and m == "GET":
+            return 200, {"items": copy.deepcopy(self.eng_review)}
+        if path == B + "/digest":
+            if m == "PUT":
+                self._rec(m, path, params, body)
+                self.eng_digest["enabled"] = body["enabled"]
+            return 200, copy.deepcopy(self.eng_digest)
+        if path == B + "/digest/preview" and m == "GET":
+            # شكل `opp_digest.preview` الحقيقي: رمز المسار + اسمه العربي + السبب + هل هتتبعت
+            if str(params.get("email") or "").startswith("unsub"):
+                return 200, {"subject": "فرص الأسبوع في مسارك", "count": 2, "track": "intl-law", "track_title": "القانون الدولي",
+                             "reason": "unsubscribed", "will_send": False, "html": "<p>منحة دراسات القانون الدولي في لايدن</p>"}
+            if str(params.get("email") or "").startswith("nobody"):
+                return 200, {"subject": "فرص الأسبوع في مسارك", "html": "", "count": 0, "track": "", "reason": "no-user", "will_send": False}
+            return 200, {"subject": "فرص الأسبوع في مسارك", "count": 2, "track": "intl-law", "track_title": "القانون الدولي", "reason": "", "will_send": True,
+                         "html": "<div dir=\"rtl\" style=\"font-family:sans-serif;padding:16px\"><h2>فرص الأسبوع في مسارك</h2><p>منحة دراسات القانون الدولي في لايدن</p>"
+                                 "<p>زمالة حقوق الإنسان</p><script>document.title='x'</script></div>"}
+        if path == B + "/digest/send-test" and m == "POST":
+            self._rec(m, path, params, body)
+            ok = self.eng_test_reason in ("", "sample-track")
+            return 200, {"sent": ok, "reason": self.eng_test_reason}
         return None
 
     def _sd_diwan(self, m, path, params, body):
