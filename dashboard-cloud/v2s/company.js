@@ -807,7 +807,29 @@
     }
     S.view.innerHTML = '<div class="co" data-board="settings">' + noteStrip() + warnStrip(fl) + '<div class="co-two">'
       + '<div class="co-col">' + card('بيانات الشركة', '', coBody) + card('العملة', '', fxBody) + card('صلاحيات الموظف', '', permBody) + card('الاستخدام في آخر ٧ أيام', '', useBody) + '</div>'
-      + '<div class="co-col">' + card('فريق الإدارة', '', teamBody) + card('التحليل المكتوب', '', aiBody) + card('سجل العمليات', '', auditBody) + '</div></div></div>';
+      + '<div class="co-col">' + card('تنبيهات تليجرام', '', tgBody) + card('فريق الإدارة', '', teamBody) + card('التحليل المكتوب', '', aiBody) + card('سجل العمليات', '', auditBody) + '</div></div></div>';
+    wireTg();
+  }
+  // تنبيهات تليجرام (R16): نفس منطق اللوحة القديمة (tgRun/tgRender/tgLoad في index.html) جوه كارت هنا —
+  // كانت في صفحة الإعدادات القديمة بس، فالمؤسس ما لقاهاش في «الشركة ‹ الإعدادات». الحالة بتتجاب مرة كل ٣٠ ثانية بالكتير.
+  var tgBody = '<p class="co-lead sm">أي تسجيل جديد أو دفع فشل بيوصلك رسالة على تليجرام. «جرّب التنبيهات» بيبعت رسالة تجربة، ولو ما وصلتش بيقول السبب.</p>'
+    + '<div class="co-bar"><button type="button" class="co-btn2" data-tg="test">جرّب التنبيهات</button></div>'
+    + '<div class="co-bar"><button type="button" class="co-link" data-tg="arm">شغّل أزرار القرار</button>'
+    + '<button type="button" class="co-link" data-tg="digest">ابعت ملخص اليوم</button></div>'
+    + '<div id="tgResult"></div><div id="tgBody" class="co-lead sm">…جارٍ جلب الحالة</div>';
+  function wireTg() {
+    var host = document.getElementById('tgResult');
+    var panel = host && host.parentNode;
+    if (!panel || typeof tgRun !== 'function') return;
+    [].slice.call(panel.querySelectorAll('[data-tg]')).forEach(function (b) {
+      b.onclick = function (e) { if (e && e.stopPropagation) e.stopPropagation(); tgRun(b.getAttribute('data-tg'), b); };
+    });
+    var E = ep();
+    if (!E || typeof tgRender !== 'function') return;
+    var t = Date.now();
+    if (S.tgStatus !== undefined && t - (S.tgAt || 0) < 30000) { tgRender(S.tgStatus); return; }
+    S.tgAt = t;
+    E.get('/telegram/status?platform=1').then(function (r) { S.tgStatus = r; tgRender(r); }).catch(function () { S.tgStatus = null; tgRender(null); });
   }
 
   // ------------------------------------------------------------------ الأوراق

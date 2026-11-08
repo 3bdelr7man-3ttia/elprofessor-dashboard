@@ -1114,3 +1114,13 @@ def test_sections_company_entry_and_old_links():
             assert r['tab'] == tab, (mod, r)
     assert v2_node.logic('sectionFor', 'partners', {}, None)['tab'] == 'invest'
     assert v2_node.logic('routeFor', '#s/company/ads', {})['mod'] == 'v2c_ads'
+
+
+def test_settings_page_has_the_telegram_card_with_the_test_button():
+    """R16: «جرّب التنبيهات» كانت في صفحة الإعدادات القديمة بس — المؤسس ما لقاهاش في «الشركة ‹ الإعدادات» (2026-11-08)."""
+    src = _read('dashboard-cloud', 'v2s', 'company.js')
+    assert "card('تنبيهات تليجرام', '', tgBody)" in src
+    for a in ('test', 'arm', 'digest'):
+        assert 'data-tg="%s"' % a in src
+    assert 'جرّب التنبيهات' in src and 'id="tgResult"' in src and 'id="tgBody"' in src
+    assert re.search(r"S\.view\.innerHTML = '<div class=\"co\" data-board=\"settings\">[\s\S]*?\n    wireTg\(\);", src)
