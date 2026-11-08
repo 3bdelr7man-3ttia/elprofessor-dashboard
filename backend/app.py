@@ -10806,7 +10806,7 @@ def _sync_platform_articles():
         arts = (r.json() or {}).get('articles', []) if r.status_code == 200 else []
     except Exception:
         return {'error': 'تعذّر الاتصال بالمنصة'}, 502
-    imported = published = drafts = duplicates = linked = 0
+    imported = published = drafts = duplicates = linked = gated = 0
     pool = Article.query.filter_by(status='published').all()
     for a in arts:
         title = (a.get('title') or '').strip()
@@ -10828,6 +10828,12 @@ def _sync_platform_articles():
         # html-escaped at render on the site).
         autopublish_all = os.environ.get('BLOG_AUTOPUBLISH_ALL', 'true').strip().lower() == 'true'
         is_published = autopublish_all or is_feature or (a.get('status') == 'published')
+        # R17 — حارس الصلة بالقانون: مقال ختمته المنصة `legal_gate.ok=false` ما يتنشرش آليًّا أبدًا (حتى مع
+        # BLOG_AUTOPUBLISH_ALL) — بيدخل المدوّنة مسودة للمراجعة. غياب الختم (مقال قديم/شرح المنصة) = زي زمان.
+        gate = a.get('legal_gate')
+        if isinstance(gate, dict) and gate.get('ok') is False:
+            is_published = False
+            gated += 1
         art = Article(
             title=title[:500],
             excerpt=(a.get('excerpt') or '')[:1000],
@@ -10870,7 +10876,7 @@ def _sync_platform_articles():
             drafts += 1
         _delete_platform_article(a.get('id'))  # only AFTER a successful import
     out = {'ok': True, 'imported': imported, 'published': published, 'drafts': drafts,
-           'duplicates': duplicates, 'with_related_links': linked}
+           'duplicates': duplicates, 'with_related_links': linked, 'held_not_legal': gated}
     # مقال جديد منشور = صفحة الزواحف بتاعته لسه مش موجودة على الاستضافة. الدفع هنا
     # هو اللي بيمنع تكرار انحسار يوليو ٢٠٢٦ (٣٦ مقال قواقع فاضية اتناشر يوم).
     # لاحق (Thread) عمدًا: المزامنة لازم ترجّع بسرعة، والتوليد+الرفع بياخدوا دقيقة.

@@ -118,6 +118,7 @@ class FakePlatform(object):
         self.reminders_enabled = False
         self.reminder_stats = {'opportunities': 2, 'sent': 5, 'skipped_already': 1, 'skipped_toggle_off': 0, 'errors': 0}
         self.forced = {}
+        self.backfills = []
         self.down = set()
         self.missing = set()
 
@@ -142,6 +143,22 @@ class FakePlatform(object):
             return 200, {'ok': True, 'ran_at': 'now', 'total_created': 2, 'per_country': [{'country': 'EG', 'fetched': 9, 'created': 2, 'errors': 0, 'x': 1}]}
         if method == 'GET' and path == '/api/bridge/topics':
             return 200, [t for t in self.topics if not params.get('status') or t['status'] == params['status']]
+        if method == 'POST' and path.startswith('/api/bridge/topics/') and path.rsplit('/', 1)[1] in ('hide', 'restore'):
+            _, _, _, _, tid, act = path.split('/')
+            t = [x for x in self.topics if x['id'] == tid]
+            if not t:
+                return 404, {'detail': 'Topic not found'}
+            t[0]['legal_gate'] = {'ok': act == 'restore', 'by': 'human', 'reason': 'human:' + act, 'themes': ['x'], 'secret': 1}
+            return 200, t[0]
+        if method == 'POST' and path == '/api/bridge/legal-gate/backfill':
+            self.backfills.append(dict(body))
+            applied = body.get('apply') is True
+            hidden = [{'id': 'n-9', 'title': 'خبر رياضي', 'reason': 'off-theme', 'status': 'published', 'x': 1}]
+            return 200, {'ok': True, 'dry_run': not applied, 'applied': applied, 'archive': False, 'version': 'lg1',
+                         'collections': {'news': {'scanned': 5, 'would_hide': 1, 'would_pass': 4, 'changed': 1, 'skipped_human': 0,
+                                                  'skipped_linked': 0, 'stamped': 5 if applied else 0, 'archived': 0, 'hidden': hidden, 'leak': 'x'},
+                                         'topics': {'scanned': 2, 'would_hide': 0, 'would_pass': 2, 'hidden': []},
+                                         'articles': {'error': 'read_failed'}, 'users': {'scanned': 9}}}
         if method == 'GET' and path == '/api/bridge/opinions':
             rows = [o for o in self.opinions if (params.get('status') in (None, 'all') or o['status'] == params['status'])
                     and (not params.get('topic_id') or o['topic_id'] == params['topic_id'])]
@@ -306,6 +323,9 @@ WRITES = [('PUT', S + '/news/n-1', {'status': 'published', 'confirmed': True}),
           ('POST', S + '/news/run', dict(C)),
           ('POST', S + '/opinions/op-1/hide', dict(C)),
           ('POST', S + '/opinions/op-1/restore', dict(C)),
+          ('POST', S + '/topics/tp-1/hide', dict(C)),
+          ('POST', S + '/topics/tp-1/restore', dict(C)),
+          ('POST', S + '/legal-gate/apply', dict(C)),
           ('POST', S + '/opportunities', OPP_NEW),
           ('PUT', S + '/opportunities/job-1', {'featured': True, 'confirmed': True}),
           ('DELETE', S + '/opportunities/job-1', dict(C)),
@@ -329,7 +349,7 @@ ADMIN_ONLY = READS + [S + '/opportunities/seed/preview']
 def test_every_route_is_admin_only(ctx, plat, role):
     for path in READS:
         assert _call(ctx, 'GET', path, role=role).status_code == 403, (role, path)
-    for m, path, body in WRITES + [('POST', S + '/opportunities/seed/preview', {})]:
+    for m, path, body in WRITES + [('POST', S + '/opportunities/seed/preview', {}), ('POST', S + '/legal-gate/check', {})]:
         assert _call(ctx, m, path, body, role=role).status_code == 403, (role, m, path)
     for path in READS:
         assert _call(ctx, 'GET', path, role=None).status_code == 401
@@ -342,7 +362,7 @@ def test_every_route_is_closed_when_the_switch_is_off_with_no_platform_call(ctx,
     monkeypatch.delenv('DASH_V2_ENABLED', raising=False)
     for path in READS:
         assert _call(ctx, 'GET', path).status_code == 404, path
-    for m, path, body in WRITES + [('POST', S + '/opportunities/seed/preview', {})]:
+    for m, path, body in WRITES + [('POST', S + '/opportunities/seed/preview', {}), ('POST', S + '/legal-gate/check', {})]:
         assert _call(ctx, m, path, body).status_code == 404, path
     assert _call(ctx, 'POST', S + '/reminders/cron', None, role=None, headers={'X-ELP-Metrics-Secret': SECRET}).status_code == 404
     assert plat.seen == []
@@ -438,7 +458,8 @@ def test_news_run_sends_only_the_known_options(ctx, plat):
 def test_topics_and_opinions_are_whitelisted_and_filtered(ctx, plat):
     t = _call(ctx, 'GET', S + '/topics').get_json()
     assert plat.calls('/api/bridge/topics')[0]['params'] == {'status': 'open'}
-    assert t['items'][0] == {'id': 'tp-1', 'title': 'نقاش', 'status': 'open', 'source': 'human', 'opinions_count': 2, 'expert_opinions_count': 1, 'created_at': 'x'}
+    assert t['items'][0] == {'id': 'tp-1', 'title': 'نقاش', 'status': 'open', 'source': 'human', 'opinions_count': 2, 'expert_opinions_count': 1, 'created_at': 'x',
+                             'legal': None}
     o = _call(ctx, 'GET', S + '/opinions?topic_id=tp-1&status=all').get_json()
     assert plat.calls('/api/bridge/opinions')[0]['params'] == {'status': 'all', 'topic_id': 'tp-1'}
     assert len(o['items']) == 1 and 'ai_moderation' not in o['items'][0] and o['items'][0]['side'] == 'a'
@@ -454,6 +475,41 @@ def test_hide_is_a_reject_on_the_platform_and_restore_an_approve(ctx, plat):
     assert _audits('saha.opinion_hide')[-1][1] == 'op-1'
     _call(ctx, 'POST', S + '/opinions/op-1/restore', dict(C))
     assert plat.writes()[-1]['path'] == '/api/bridge/opinions/op-1/approve' and _audits('saha.opinion_restore')[-1][1] == 'op-1'
+
+
+def test_topic_hide_and_restore_are_human_stamps_on_the_platform(ctx, plat):
+    r = _call(ctx, 'POST', S + '/topics/tp-1/hide', dict(C))
+    assert r.status_code == 200 and r.get_json()['legal'] == {'ok': False, 'by': 'human', 'reason': 'human:hide'}
+    assert 'author_email' not in r.get_json() and 'ai_answer' not in r.get_json()
+    assert plat.writes()[0]['path'] == '/api/bridge/topics/tp-1/hide' and plat.writes()[0]['json'] == {'by': ADMIN_EMAIL}
+    assert _audits('saha.topic_hide')[-1][1:3] == ('tp-1', {'hidden': True})
+    r = _call(ctx, 'POST', S + '/topics/tp-1/restore', dict(C))
+    assert r.get_json()['legal']['ok'] is True and _audits('saha.topic_restore')[-1][2] == {'hidden': False}
+    assert _call(ctx, 'POST', S + '/topics/nope/hide', dict(C)).status_code == 404
+    assert _call(ctx, 'POST', S + '/topics/a%20b/hide', dict(C)).status_code == 400
+    t = _call(ctx, 'GET', S + '/topics').get_json()['items'][0]
+    assert t['legal'] == {'ok': True, 'by': 'human', 'reason': 'human:restore'}       # بلا الثيمات ولا أي حقل زيادة
+
+
+def test_legal_gate_check_is_a_dry_run_without_confirmation_or_audit(ctx, plat):
+    r = _call(ctx, 'POST', S + '/legal-gate/check', {})
+    assert r.status_code == 200
+    d = r.get_json()
+    assert d['dry_run'] is True and d['applied'] is False
+    assert plat.ef.backfills == [{'apply': False}]                                     # ولا `by` ولا تأكيد ولا archive
+    news = d['collections']['news']
+    assert news['would_hide'] == 1 and news['hidden'] == [{'id': 'n-9', 'title': 'خبر رياضي', 'reason': 'off-theme', 'status': 'published'}]
+    assert 'leak' not in news and d['collections']['articles']['scanned'] == 0 and 'users' not in d['collections']
+    assert d['collections']['topics']['stamped'] == 0
+    assert _audits('saha.legal_gate_check') == []
+
+
+def test_legal_gate_apply_needs_confirmation_and_never_archives(ctx, plat):
+    assert _call(ctx, 'POST', S + '/legal-gate/apply', {}).status_code == 400 and plat.ef.backfills == []
+    r = _call(ctx, 'POST', S + '/legal-gate/apply', {'confirmed': True, 'archive': True, 'apply': False})
+    assert r.status_code == 200 and r.get_json()['applied'] is True
+    assert plat.ef.backfills == [{'apply': True, 'by': ADMIN_EMAIL}]                  # الجسم قايمة بيضا: لا archive ولا قيم من الشاشة
+    assert _audits('saha.legal_gate_apply')[-1][2] == {'news': 1, 'topics': 0, 'articles': 0}
 
 
 # ---------------------------------------------------------------- ٤) الفرص

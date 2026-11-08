@@ -246,7 +246,44 @@ def test_opinions_and_topics_rows():
     assert rows['o2']['canHide'] and not rows['o2']['canShow'] and not rows['o3']['canHide'] and rows['o3']['canShow'] and rows['o3']['showLabel'] == 'أعد إظهاره'
     assert rows['o3']['statusText'] == 'مخفي' and got['countText'] == '٣ آراء'
     assert S('opinionAction', 'hide', {})['goLabel'] == 'أخفِ الرأي' and S('opinionAction', 'show', {})['goLabel'] == 'أظهر الرأي'
-    assert S('topics', {'items': [{'id': 't1', 'title': 'نقاش'}, {'title': 'بلا معرّف'}]}) == {'rows': [{'id': 't1', 'title': 'نقاش'}]}
+    t = S('topics', {'items': [{'id': 't1', 'title': 'نقاش'}, {'title': 'بلا معرّف'}]})
+    assert [(r['id'], r['title']) for r in t['rows']] == [('t1', 'نقاش')] and t['countText'] == 'نقاش واحد'
+
+
+@needs_node
+def test_topic_rows_show_the_legal_gate_and_the_hide_restore_sheet():
+    """R17 — النقاش المختوم ok:false «مخفي» (يدويًا أو لعدم الصلة) وزرّه «أرجِع»؛ الغايب أو الختم المجهول ⇒ ظاهر."""
+    t = S('topics', {'items': [{'id': 'a', 'title': 'أ', 'status': 'open', 'opinions_count': 3, 'legal': {'ok': False, 'by': 'human'}},
+                               {'id': 'b', 'title': 'ب', 'status': 'open', 'legal': {'ok': False, 'by': 'rule'}},
+                               {'id': 'c', 'title': 'ج', 'status': 'open', 'legal': {'ok': None}},
+                               {'id': 'd', 'title': 'د', 'status': 'zzz'}]})
+    rows = {r['id']: r for r in t['rows']}
+    assert rows['a']['hidden'] and rows['a']['hiddenText'] == 'مخفي يدويًا' and rows['a']['opinions'] == 3
+    assert rows['b']['hidden'] and rows['b']['hiddenText'] == 'مخفي لعدم الصلة بالقانون'
+    assert not rows['c']['hidden'] and rows['c']['statusText'] == 'مفتوح' and rows['d']['statusText'] == 'حالة غير معروفة'
+    assert rows['d']['opinions'] is None                                   # الغايب «لا رقم» مش صفر
+    assert t['hiddenCount'] == 2 and t['countText'] == '٤ نقاشات'
+    assert S('topicAction', 'hide')['goLabel'] == 'أخفِ النقاش' and S('topicAction', 'show')['goLabel'] == 'أرجِع النقاش'
+    _clean_copy(t, S('topicAction', 'hide'), S('topicAction', 'show'))
+
+
+@needs_node
+def test_gate_check_view_counts_lists_reasons_and_marks_missing_sources():
+    resp = {'applied': False, 'collections': {
+        'news': {'would_hide': 2, 'hidden': [{'id': 'n1', 'title': 'خبر رياضي', 'reason': 'off-theme'}, {'id': 'n2', 'title': '', 'reason': 'negative'}, {'title': 'بلا معرّف'}]},
+        'topics': {'would_hide': 0, 'hidden': []}, 'articles': None}}
+    v = S('gateView', resp)
+    assert [(c['key'], c['n']) for c in v['counts']] == [('news', 2), ('topics', 0)] and v['failed'] == ['المقالات']
+    assert [(r['id'], r['kind'], r['title'], r['reason']) for r in v['rows']] == [
+        ('n1', 'الأخبار', 'خبر رياضي', 'لا يتناول موضوعًا قانونيًا'), ('n2', 'الأخبار', 'بلا عنوان', 'حوادث أو سياسة أو منوّعات')]
+    assert v['total'] == 2 and v['applied'] is False and v['totalText'] == 'عنصران غير مرتبطين بالقانون'
+    assert S('gateReason', 'zzz') == 'غير مرتبط بالقانون'
+    assert S('gateView', {'collections': {}})['totalText'] == 'كل ما فُحص مرتبط بالقانون'
+    assert S('gateView', None) is None and S('gateView', {'x': 1}) is None
+    done = S('gateDone', dict(v, total=12))
+    assert done == 'أُخفي ١٢ عنصرًا من الساحة، ويمكن إرجاع أي نقاش منها'
+    assert S('gateDone', dict(v, total=0)) == 'لم يكن هناك ما يُخفى'
+    _clean_copy(v, done)
 
 
 @needs_node
