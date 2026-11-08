@@ -290,7 +290,8 @@
       var iv = typeof extras.invitesAwaiting === 'number' ? extras.invitesAwaiting : null;
       var jn = (rows && !inboxFailedHas(extras, 'طلبات تقديم الخدمة')) ? rowsOfKind(rows, 'join').length : null;
       var ld = Q ? qn(Q, 'founding_leads_new') : null;
-      var parts = [v, iv, jn, ld];
+      var sg = (rows && !inboxFailedHas(extras, 'التسجيلات الجديدة')) ? rowsOfKind(rows, 'signup').length : null;   // R16
+      var parts = [v, iv, jn, ld, sg];
       var known = parts.filter(function (x) { return x !== null; });
       if (!known.length) return failTile(t);
       t.count = known.reduce(function (a, b) { return a + b; }, 0);
@@ -300,6 +301,7 @@
       if (iv) p.push(U(iv, ['دعوة تنتظر موافقتك', 'دعوتان تنتظران موافقتك', 'دعوات تنتظر موافقتك', 'دعوة تنتظر موافقتك']));
       if (jn) p.push(U(jn, ['طلب انضمام', 'طلبا انضمام', 'طلبات انضمام', 'طلب انضمام']));
       if (ld) p.push(U(ld, ['خبير مؤسس', 'خبيران مؤسسان', 'خبراء مؤسسون', 'خبيرًا مؤسسًا']));
+      if (sg) p.push(U(sg, ['تسجيل جديد', 'تسجيلان جديدان', 'تسجيلات جديدة', 'تسجيلًا جديدًا']));
       t.facts = p.slice(); t.next = p.length ? p.join('، ') : 'الأعضاء والدعوات';
       if (t.partial || hasTrunc(extras)) markPartial(t);
     })(T.people);
@@ -366,13 +368,13 @@
     file_waiting: 'files', file_late: 'files', file_attention: 'files', review: 'files', verify: 'files',
     dispute: 'disputes', unactivated: 'disputes', legacy: 'disputes',
     payout: 'money', manual_payment: 'money', stuck_payment: 'money', book_offer: 'books',
-    trainer: 'people', join: 'people', pending_user: 'people', founding: 'people', lead: 'people', message: 'people', open_message: 'people',
+    trainer: 'people', join: 'people', pending_user: 'people', signup: 'people', founding: 'people', lead: 'people', message: 'people', open_message: 'people',
     book: 'books', program: 'courses', course: 'courses', live: 'courses', topic: 'content', creative: 'content', other: 'people'
   };
   // الترتيب (قرار المؤسس): ملفات مستعجلة/متأخرة ⇐ نزاعات ⇐ استردادات ⇐ تحويلات ⇐ إيصالات ⇐ آراء للمراجعة ⇐
   // مدرّبون وانضمام ⇐ زوّار ⇐ خبراء مؤسسون ⇐ محتوى وكتب وبرامج ⇐ رسائل. الملف العادي المنتظر بين الأولى والثانية.
   var RANK = { file_urgent: 10, file_waiting: 15, dispute: 20, refund: 30, payout: 40, stuck_payment: 45, manual_payment: 50, review: 60,
-               trainer: 70, join: 70, pending_user: 80, founding: 90, book_offer: 95, content: 100, message: 110 };
+               trainer: 70, join: 70, pending_user: 80, signup: 85, founding: 90, book_offer: 95, content: 100, message: 110 };
 
   function kindOf(r) {
     if (!r) return null;
@@ -395,7 +397,7 @@
       }
       case 'dispute': return 'dispute';
       case 'legacy': return 'legacy';
-      case 'manual_payment': case 'trainer': case 'join': case 'pending_user': case 'founding':
+      case 'manual_payment': case 'trainer': case 'join': case 'pending_user': case 'founding': case 'signup':
       case 'book': case 'program': case 'topic': case 'creative': case 'verify':
         return r.apiKind;
       case 'lead': case 'message': return r.apiKind;
@@ -420,6 +422,7 @@
       case 'review': return RANK.review;
       case 'trainer': case 'join': return RANK.trainer;
       case 'pending_user': return RANK.pending_user;
+      case 'signup': return RANK.signup;
       case 'founding': return RANK.founding;
       case 'lead': case 'message': case 'open_message': case 'other': return RANK.message;
       default: return RANK.content;      // كتب · برامج · مواضيع · إبداع · توثيق · دورات
@@ -727,6 +730,18 @@
         }
         break;
       }
+      case 'signup': {
+        // R16: كل تسجيل جديد ينبّه تليجرام ⇒ صفّ هنا بإجراء (قاعدة الوارد). «تمام» يقفله هنا وفي تليجرام معًا.
+        card.tag = 'تسجيل جديد';
+        card.title = who || 'عضو جديد';
+        card.sub = clean([str(r.sgProvider), str(r.sgCountry)]).join('، ');
+        card.brain = clean([who || 'عضو جديد', str(r.sgProvider), card.ageText]).join('، ');
+        if (r.sgFlags) card.warn = 'يحتاج نظرة: ' + r.sgFlags;
+        card.reason = 'حساب جديد على المنصة';
+        card.primary = { label: 'تمام، اطّلعت', act: act({ do: 'decide', action: 'approve' }) };
+        card.secondary = { label: 'افتح', act: OPEN };
+        break;
+      }
       case 'founding': {
         var labels = { contacted: 'تم التواصل', invited: 'أُرسلت الدعوة', converted: 'تم التحويل إلى مدرّب' };
         card.tag = 'خبير مؤسس';
@@ -796,7 +811,7 @@
     if (PERSON_TITLE[kind]) { var pe = personEmailOfRow(r); if (pe) card.person = { email: pe, name: card.title }; }
     return card;
   }
-  var PERSON_TITLE = { payout: 1, manual_payment: 1, stuck_payment: 1, trainer: 1, join: 1, pending_user: 1, founding: 1 };
+  var PERSON_TITLE = { payout: 1, manual_payment: 1, stuck_payment: 1, trainer: 1, join: 1, pending_user: 1, signup: 1, founding: 1 };
   function v2Decisions(rows, payouts, queue, opts) {
     opts = opts || {};
     var now = opts.now || 0;
@@ -3490,7 +3505,7 @@
     expert_files_unactivated: 'ملفات دُفعت ولم تصل إلى التوزيع', wallet_payouts_pending: 'طلبات سحب من المحافظ',
     stuck_card_payments: 'دفعات بطاقة عالقة', course_interests_24h: 'اهتمام بالدورات في آخر ٢٤ ساعة',
     training_interests_24h: 'مهتمون بالتدريب في آخر ٢٤ ساعة', course_split_pending: 'اقتسام إيراد معلّق',
-    testimonials_pending: 'شهادات تنتظر المراجعة', topics_drafts: 'مسودات موضوعات', founding_leads_new: 'طلبات خبير مؤسس جديدة',
+    testimonials_pending: 'شهادات تنتظر المراجعة', topics_drafts: 'مسودات موضوعات', founding_leads_new: 'طلبات خبير مؤسس جديدة', signups_new: 'تسجيلات جديدة لم تُراجع',
     pending_users_requested: 'زوّار ينتظرون فتح المنصة', lead_magnet_awaiting_asset: 'ملفات وُعد بها ولم تُسلَّم',
     live_needs_decision: 'دورات حيّة تحتاج قرارًا'
   };
@@ -7258,7 +7273,7 @@
 
   var MONEY = { payout: 1, manual_payment: 1, stuck_payment: 1, unactivated: 1, legacy: 1, file_attention: 1, dispute: 1 };
   var DECIDE = { trainer: 1, join: 1, pending_user: 1, book_offer: 1, book: 1, creative: 1, topic: 1, program: 1 };
-  var INFO = { review: 1, lead: 1, message: 1, open_message: 1, course: 1, live: 1, verify: 1, founding: 1, other: 1 };
+  var INFO = { review: 1, lead: 1, message: 1, open_message: 1, course: 1, live: 1, verify: 1, founding: 1, signup: 1, other: 1 };
   var RECOMMEND = { decide: ['approve', 'reject', 'open'], info: ['open', 'wait'] };
   // المفاتيح المسموحة (SPEC §3.2): مشتركة + لكل نوع. الخادم يعيد التنقية بنفس القائمة.
   var COMMON_KEYS = ['tag', 'age', 'sub', 'warn', 'reason', 'static_line', 'facts', 'money_text'];

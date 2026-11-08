@@ -1831,6 +1831,26 @@
           });
         }).catch(fail("ليدات خبير مؤسس"))
       );
+      // R16 «تسجيل جديد» (قرار المؤسس 2026-11-08: «فين التنبيهات لما حد يسجل»): كل حساب جديد (بريد أو جوجل) ينبّه
+      // تليجرام ⇒ صفّ هنا بإجراء «تمام، اطّلعت» (نفس زرّ تليجرام). آخر ١٤ يومًا مما لم يُطّلع عليه — من جسر المنصة.
+      jobs.push(
+        get("/platform-signups").then(function (r) {
+          var list = Array.isArray(r) ? r : ((r && (r.signups || r.rows)) || []);
+          var PROV = { google: "بجوجل", email: "بالبريد وكود التأكيد", password: "بالبريد وكلمة السر", invite: "برابط دعوة" };
+          list.forEach(function (s) {
+            var at = s.created_at || "";
+            var flags = (Array.isArray(s.flag_labels) ? s.flag_labels : []).join("، ");   // التسميات العربية من المنصة
+            realRows.push({
+              out: "تسجيل جديد على المنصة", from: "المنصة", src: "shield", dest: "invites",
+              triage: "human", sla: relTime(at) || "جديد", slaWarn: false,
+              note: "سجّل " + (PROV[s.provider] || "") + (s.country ? "، البلد: " + s.country : ""),
+              ref: "SGN-" + s.user_id, who: s.full_name || s.email || "بلا اسم", email: s.email || "",
+              apiKind: "signup", personEmail: s.email || "", apiId: s.user_id, canReject: false, ts: Date.parse(at) || 0,
+              sgProvider: PROV[s.provider] || "", sgCountry: s.country || "", sgFlags: flags,
+            });
+          });
+        }).catch(fail("التسجيلات الجديدة"))
+      );
       // «زائر مسجَّل — طلب فتح المنصّة» (التسجيل المفتوح، قرار المؤسس 2026-10-10): الحساب الجديد
       // بلا دعوة يدخل زائرًا ويطلب دعوته من جوّه (صفة · بلد · هاتف) ⇒ تليجرام ⇒ **صفّ هنا بإجراء**
       // (قاعدة ثابتة: أي صفّ يُنبّه تليجرام لازم له صفّ في الوارد). القرار: «افتح له المنصّة» ⇒
@@ -2842,6 +2862,10 @@
         body = { access: action === "approve" ? "member" : "pending", note: reason };
         alsoReload = "pendingUsers"; break;
       case "join":     path = "/platform-join-requests/" + i.apiId + "/" + action; break;
+      case "signup":
+        // R16: «تمام، اطّلعت» يقفل صفّ التسجيل (نفس زرّ تليجرام). لا رفض هنا: المسح النهائي له بابه.
+        if (action !== "approve") { if (after) after(); return Promise.resolve({ ok: false, error: "لا رفض لتسجيل" }); }
+        path = "/platform-signups/" + encodeURIComponent(i.apiId) + "/ack"; break;
       case "topic":    path = "/platform-pending-topics/" + i.apiId + "/" + action; break;
       case "creative": path = "/platform-creative/" + i.apiId + "/" + action; break;
       case "manual_payment":

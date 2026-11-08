@@ -454,6 +454,7 @@
       case 'join': return 'قُبل طلب ' + c.title;
       case 'pending_user': return 'فُتحت المنصة لـ' + c.title;
       case 'founding': return 'عُلّمت الخطوة: ' + c.title;
+      case 'signup': return 'تمّ الاطّلاع على تسجيل ' + c.title;
       default: return 'تم: ' + c.title;
     }
   }

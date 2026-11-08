@@ -18,7 +18,7 @@ COPY brain2 ./brain2
 # خط Cairo (OFL) لإنشاء PDF «كتبنا» (v2_books_ours_routes)
 COPY assets ./assets
 # وحدات المستوى الأعلى التي يستوردها app.py عند الإقلاع (غيابها = الحاوية لا تقوم) — تطابق Dockerfile الجذر.
-COPY mcp_server.py site_edit.py prerender.py refresh_rules.py ./
+COPY mcp_server.py site_edit.py prerender.py refresh_rules.py tg_ops.py ./
 RUN mkdir -p /data
 
 EXPOSE 5000

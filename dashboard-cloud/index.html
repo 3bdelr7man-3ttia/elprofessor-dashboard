@@ -5911,7 +5911,15 @@ function viewSettings(v){
       <button class="btn btn-human" id="adminAdd" style="flex:none;min-width:auto;padding:7px 14px;font-size:12px;margin-inline-start:auto">+ مدير/موظف</button></div>
       <div id="dashUsersBody" style="padding:6px 0"></div></section>
     <section class="panel" style="margin-top:16px"><div class="ph"><h3>صلاحيات الأدوار</h3><span class="hint">أي الأقسام يشوفها كل دور — يُطبَّق على الواجهة والخادم</span></div>
-      <div id="rolePermsBody" style="padding:12px 16px"></div></section>`;
+      <div id="rolePermsBody" style="padding:12px 16px"></div></section>
+    <section class="panel" style="margin-top:16px" id="tgPanel"><div class="ph"><h3>تنبيهات تليجرام</h3><span class="hint">التسجيل والدفع والطلبات وأسئلة العقل ومراقبة التشغيل</span></div>
+      <div style="padding:12px 16px;display:flex;flex-wrap:wrap;gap:8px">
+        <button class="btn btn-primary" style="flex:none;min-width:auto;padding:8px 16px" data-tg="test">جرّب التنبيهات</button>
+        <button class="btn btn-human" style="flex:none;min-width:auto;padding:8px 16px" data-tg="arm">شغّل أزرار القرار</button>
+        <button class="btn btn-human" style="flex:none;min-width:auto;padding:8px 16px" data-tg="digest">ابعت ملخص اليوم</button>
+      </div>
+      <div id="tgResult" style="padding:0 16px"></div>
+      <div id="tgBody" style="padding:6px 16px 14px;color:var(--muted)">…جارٍ جلب الحالة</div></section>`;
   v.querySelectorAll('[data-a]').forEach(b=>b.onclick=()=>{const a=b.dataset.a;
     if(a==='fx'){var fx=document.getElementById('fxInput');var val=fx?parseFloat(fx.value):NaN;
       if(window.EP&&EP.data.settings){if(isNaN(val)||val<=0){toast('أدخل سعر صرف صالحًا');return;}EP.saveSettings({exchange_rate:val},()=>viewSettings(document.getElementById('view')));return;}
@@ -5927,6 +5935,58 @@ function viewSettings(v){
   var aa=document.getElementById('adminAdd');if(aa)aa.onclick=function(){addAdminModal(null);};
   renderDashUsers();
   renderRolePerms();
+  tgPanelWire();
+}
+
+// R16 «تنبيهات تليجرام»: زرّ واحد يقول للمؤسس هل الرسائل بتوصل، ولو لأ ليه بالظبط.
+const TG_REASON={ok:'وصلت ✓',no_token:'مفيش توكن بوت على سيرفر المنصة (TELEGRAM_OPS_BOT_TOKEN)',no_chat:'رقم محادثة المؤسس فاضي (TELEGRAM_ADMIN_CHAT_ID)',
+  bad_token:'توكن البوت غلط أو اتلغى',wrong_chat:'رقم المحادثة غلط: البوت مش لاقي المحادثة',bot_not_allowed:'البوت مش جوّه المجموعة أو معمول له حظر',
+  telegram_error:'تليجرام رفض الرسالة',network:'السيرفر ما وصلش لتليجرام',no_bridge_secret:'اللوحة مش مربوطة بالمنصة (METRICS_SECRET)',
+  bridge_error:'المنصة ما ردّتش صح',no_webhook_secret:'TELEGRAM_WEBHOOK_SECRET فاضي على سيرفر المنصة',no_public_url:'عنوان المنصة العام مش مضبوط',
+  already_sent:'الملخص اتبعت النهارده خلاص',retry_later:'محاولة قريبة فشلت، هتتعاد بعد ساعة',empty:'مفيش نص'};
+const TG_KIND={signup:'تسجيل جديد',selftest:'رسالة تجربة',uptime:'مراقبة التشغيل',digest:'الملخص اليومي',brain_ask:'سؤال العقل',ops:'تنبيه',dashboard:'من اللوحة'};
+function tgReason(r){return TG_REASON[r]||('سبب آخر: '+(r||'—'));}
+function tgWhen(at){try{return new Date(at).toLocaleString('ar-EG',{dateStyle:'short',timeStyle:'short'});}catch(e){return at||'';}}
+function tgRows(list){
+  if(!list||!list.length)return '<div style="padding:8px 0">لا محاولات مسجّلة بعد.</div>';
+  return list.map(a=>`<div style="display:flex;gap:10px;align-items:center;padding:7px 0;border-bottom:1px solid var(--line);font-size:12.5px">
+    <span style="font-weight:800;color:${a.ok?'var(--agree)':'var(--conflict)'}">${a.ok?'✓':'✗'}</span>
+    <span style="font-weight:700;min-width:110px">${esc(TG_KIND[a.kind]||a.kind||'')}</span>
+    <span style="flex:1">${esc(tgReason(a.reason))}${a.detail?` <span style="color:var(--muted);direction:ltr;unicode-bidi:isolate">${esc(a.detail)}</span>`:''}</span>
+    <span style="color:var(--muted);white-space:nowrap">${esc(tgWhen(a.at))}</span></div>`).join('');
+}
+function tgRender(st){
+  const body=document.getElementById('tgBody');if(!body)return;
+  if(!st){body.innerHTML='<div style="color:var(--conflict)">تعذّر جلب حالة التنبيهات.</div>';return;}
+  const cfg=st.config||{}, pf=st.platform||{}, pcfg=pf.config||{};
+  const warns=[].concat(cfg.warnings||[],pcfg.warnings||[]);
+  const up=(st.uptime||[]).map(u=>`<span class="chip${u.down?'':' on'}" style="cursor:default">${u.down?'🔴':'🟢'} ${esc(u.label)}</span>`).join(' ');
+  body.innerHTML=`
+    ${warns.length?`<div class="policy" style="border-inline-start-color:var(--conflict);background:var(--conflict-bg);color:var(--conflict);margin:6px 0">${svg('scale','ic')}<div>${warns.map(esc).join('<br>')}</div></div>`:''}
+    <div style="margin:8px 0;display:flex;flex-wrap:wrap;gap:6px;align-items:center"><b style="color:var(--ink)">مراقبة التشغيل كل ٥ دقايق:</b> ${up||'—'}</div>
+    <div style="font-weight:800;color:var(--ink);margin-top:12px">على سيرفر المنصة (التسجيل والدفع والطلبات)</div>
+    ${pf.error?`<div style="padding:8px 0;color:var(--conflict)">${esc(tgReason(pf.error))}</div>`:tgRows(pf.attempts)}
+    <div style="font-weight:800;color:var(--ink);margin-top:12px">من اللوحة (أسئلة العقل والمراقبة والملخص)</div>
+    ${tgRows(st.attempts)}`;
+}
+function tgLoad(){if(!window.EP)return;EP.get('/telegram/status?platform=1').then(tgRender).catch(()=>tgRender(null));}
+function tgPanelWire(){
+  const p=document.getElementById('tgPanel');if(!p||!window.EP)return;
+  p.querySelectorAll('[data-tg]').forEach(b=>b.onclick=()=>{
+    const a=b.dataset.tg, out=document.getElementById('tgResult');
+    const path=a==='test'?'/telegram/selftest':a==='arm'?'/telegram/arm-webhook':'/telegram/digest';
+    b.disabled=true;if(out)out.innerHTML='<div style="padding:6px 0;color:var(--muted)">…جارٍ</div>';
+    EP.post(path,{}).then(r=>{
+      const ok=!!(r&&r.ok);
+      let extra='';
+      if(a==='test'&&r&&r.platform&&r.platform.webhook){const w=r.platform.webhook;
+        extra=w.ok?(w.url_set&&w.points_here?' أزرار القرار متوصّلة.':' أزرار القرار مش متوصّلة: اضغط «شغّل أزرار القرار».'):'';
+        if(w.last_error_message)extra+=' آخر خطأ من تليجرام: '+w.last_error_message;}
+      if(out)out.innerHTML=`<div class="policy" style="margin:6px 0;${ok?'':'border-inline-start-color:var(--conflict);background:var(--conflict-bg);color:var(--conflict)'}">${svg(ok?'check':'scale','ic')}<div><b>${ok?(a==='arm'?'أزرار القرار اتشغّلت ✓':a==='digest'?'الملخص اتبعت ✓':'الرسالة وصلت ✓'):'ما وصلتش'}</b>${ok?'':' — '+esc(tgReason(r&&r.reason))}${r&&r.detail?` <span style="direction:ltr;unicode-bidi:isolate">${esc(r.detail)}</span>`:''}${esc(extra)}</div></div>`;
+    }).catch(e=>{if(out)out.innerHTML=`<div class="policy" style="margin:6px 0;color:var(--conflict)">${esc((e&&e.message)||'تعذّر التنفيذ')}</div>`;})
+      .then(()=>{b.disabled=false;tgLoad();});
+  });
+  tgLoad();
 }
 // قائمة الأدمن/الموظفين الحقيقيين من SQLite (/api/users). إيقاف/تعديل محميّان بآخر-مدير على الخادم.
 function renderDashUsers(){

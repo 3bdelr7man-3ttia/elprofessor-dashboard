@@ -72,6 +72,8 @@ COPY backend/v2_roles_routes.py /app/v2_roles_routes.py
 # الجولة الأخيرة · أقسام الداشبورد (كل قسم ملفاته: v2s/<key>.js|css ومساراته v2_<key>_routes.py) — سطران مشتركان لكل الأقسام.
 # «الأدوات / الاستوديو» (docs/v2/tools/SPEC.md): app.py بيستوردها محروسة.
 COPY backend/v2_tools_routes.py /app/v2_tools_routes.py
+# R16 «تليجرام اللوحة» (المُرسِل الواحد · جرّب التنبيهات · المراقبة · الملخص اليومي): app.py بيستوردها محروسة.
+COPY backend/tg_ops.py /app/tg_ops.py
 
 EXPOSE 8080
 

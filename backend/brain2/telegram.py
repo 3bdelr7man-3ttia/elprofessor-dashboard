@@ -224,12 +224,12 @@ def send_ask(ns, item_id):
     payload = build_ask(p, row, body, meta, facts)
     if payload is None:
         return 'skip:empty'
+    # R16: الإرسال من مُرسِل اللوحة الواحد (`tg_ops.ask_brain`) — نفس جسر `ASK_PATH`، ومحاولته تُكتب في
+    # سجلّ الإرسال الذي يعرضه زرّ «جرّب التنبيهات». ⛔ لا نداء تليجرام ولا جسر إرسال آخر في «العقل».
     sent = False
     try:
-        resp = proxy('POST', ASK_PATH, json_body=payload, timeout=10)
-        if ns['_resp_ok'](resp):
-            js = ns['_proxy_json'](resp)
-            sent = js.get('sent') is True
+        import tg_ops
+        sent = tg_ops.ask_brain(ns, proxy, payload)
     except Exception:   # noqa: BLE001
         logger.exception('brain2: telegram ask raised')
     _record(ns, item_id, sent)
