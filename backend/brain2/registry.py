@@ -54,6 +54,13 @@ try:
 except ImportError:
     logger.exception('brain2: producers_training failed to import')
 
+# «اسأل» ⇒ مواضيع خبراء (2026-11-09): تصحيحات «مفيش نص يحسمها» ⇒ موضوع عام ⇒ اعتماد المؤسس ⇒ ينزل للخبراء.
+try:
+    from brain2 import producers_topics_from_ask as _ask_topic
+    PRODUCERS.extend(_ask_topic.PRODUCERS)
+except ImportError:
+    logger.exception('brain2: producers_topics_from_ask failed to import')
+
 # «اسألني على تليجرام» (SPEC-B §B2). ⛔ لا يغيّر العقد: اشتراك على مستوى المنتج.
 #  * TELEGRAM_OK: منتجات يجوز اعتماد اقتراحها أو رفضه بزر من تليجرام. أي منتج خارجها (فلوس، مقفول بقرار) يصله رابط
 #    «افتح في اللوحة» فقط ولا يعتمده تليجرام أبدًا. الآراء (kind=opinion) لا تُرسل إلى تليجرام مطلقًا.
@@ -64,7 +71,7 @@ except ImportError:
 TELEGRAM_OK = frozenset({'reply_draft', 'file_review', 'course_review'})
 TELEGRAM_DEFAULT_ON = frozenset({'reply_draft', 'file_review', 'course_review',
                                  'market_match', 'site_review', 'course_lesson_draft', 'ask_correction', 'library_contribution',
-                                 'training_item'})
+                                 'training_item', 'ask_topic'})
 
 
 # اقتراحات الأنظمة المتصلة (SPEC-B B5a): المعرّف `mcp:<اسم الرمز>`؛ بلا `apply` فاعتمادها «احتفظ بها» فقط، ولا تظهر في شاشة القواعد.
