@@ -46,9 +46,13 @@ GUIDE_OWN = {
 class ItemPricesPlatform(d3fx.D3Platform):
     """`D3Platform` + جسر الأسعار الجديد للأدلّة. `price_log` = سطور السجل (تعديل/حذف) لكل دليل."""
 
-    def __init__(self, empty=False, d2=False, course_prices=False, guide_min_effective=True, no_guides=False, **kw):
+    def __init__(self, empty=False, d2=False, course_prices=False, guide_min_effective=True, no_guides=False,
+                 short_guides=(), min_words=None, **kw):
         super(ItemPricesPlatform, self).__init__(empty=empty, d2=d2, course_prices=course_prices, **kw)
         self.guide_min_effective = guide_min_effective
+        # حد البيع (المنصة 2026-11-09): الأدلّة دي أقصر من الحد (source=short)، والباقي فوقه. `min_words` = guides_min_words.
+        self.short_guides = set(short_guides)
+        self.min_words = min_words
         self.guides = [] if (empty or no_guides) else list(GUIDES)
         self.general = None if empty else copy.deepcopy(GENERAL_DOC)
         self.guide_docs = {} if (empty or no_guides) else {k: dict(copy.deepcopy(v), title=dict(GUIDES)[k]) for k, v in GUIDE_OWN.items()}
@@ -96,15 +100,24 @@ class ItemPricesPlatform(d3fx.D3Platform):
         for slug, title in self.guides:
             own = self.guide_docs.get(slug)
             has_own = self._has_prices(own)
+            words = (1200 if slug in self.short_guides else 5200) if self.min_words else None
             if has_own:
                 row = self._row(slug, own, "guide", has_own=True, uses_general=False)
+            elif slug in self.short_guides:
+                row = {"id": slug, "title": title, "group": "guide", "visible": False, "has_prices": False, "min_price": {},
+                       "updated_at": None, "has_own": bool(own), "uses_general": False, "source": "short"}
             else:
                 gen = self._row("_guides", self.general, "guides_general") if self.general is not None else {"visible": False, "min_price": {}, "updated_at": None}
                 row = {"id": slug, "title": title, "group": "guide", "visible": gen["visible"], "has_prices": self._has_prices(self.general),
                        "min_price": gen["min_price"] if self.guide_min_effective else {}, "updated_at": gen["updated_at"],
                        "has_own": bool(own), "uses_general": True}
+            if words is not None:
+                row["words"] = words
             items.append(row)
-        return {"ok": True, "kind": "book", "countries": COUNTRIES, "currencies": CURRENCIES, "count": len(items), "items": items}
+        out = {"ok": True, "kind": "book", "countries": COUNTRIES, "currencies": CURRENCIES, "count": len(items), "items": items}
+        if self.min_words:
+            out["guides_min_words"] = self.min_words
+        return out
 
     # ---------------------------------------------------------------- الأسعار
     def _prices(self, method, kind, item_id, body):

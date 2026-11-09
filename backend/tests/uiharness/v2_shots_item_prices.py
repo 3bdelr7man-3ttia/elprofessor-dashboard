@@ -357,6 +357,32 @@ def flow(browser, h, pre, viewport, mobile):
         ishot(page, pre + '11-closed.jpg')
         browser.close()
 
+    # —— ١٢ حد البيع: «دليل قصير» بلا سعر + سطر «فوق الحد / تحت الحد» + نموذج الدليل القصير
+    if want(pre + '12'):
+        ef = ipfx.ItemPricesPlatform(d2=True, short_guides=('guide-labor', 'guide-trademark'), min_words=4000)
+        page = iopen(browser, h, ef, tall, mobile)
+        page.click('.v3-chip[data-g="guide"]')
+        page.wait_for_timeout(250)
+        g = {r['id']: r for s_ in rows(page) for r in s_['rows']}
+        if g['guide-labor']['badge'] != 'دليل قصير' or 'يُقرأ كاملًا بلا سعر' not in g['guide-labor']['mins']:
+            fail('%s12: الدليل القصير %r' % (pre, g['guide-labor']))
+        if g['guide-sole']['badge'] != 'يأخذ السعر العام':
+            fail('%s12: دليل فوق الحد %r' % (pre, g['guide-sole']['badge']))
+        size = page.inner_text('.v3-size') if page.locator('.v3-size').count() else ''
+        if 'حد البيع ٤٠٠٠ كلمة (نحو ١٥ صفحة)' not in size or 'فوق الحد ويُباع: ٣' not in size or 'بلا سعر: ٢' not in size:
+            fail('%s12: سطر الحد %r' % (pre, size))
+        ishot(page, pre + '12a-short-list.jpg')
+        n0 = len(h.platform_calls)
+        row_btn(page, 'guide-labor', 'price').click()
+        page.wait_for_selector('#epModal input[data-v="read"][data-c="eg"]')
+        txt = page.inner_text('#epModal')
+        if 'أقصر من حد البيع' not in txt or page.locator('#v3_fromgen').count() != 0 or not page.is_checked('#v3_vis'):
+            fail('%s12: نموذج الدليل القصير %r' % (pre, txt[:200]))
+        if writes(h, n0):
+            fail('%s12: كتابة قبل التأكيد' % pre)
+        ishot(page, pre + '12b-short-form.jpg')
+        browser.close()
+
 
 def main():
     from playwright.sync_api import sync_playwright

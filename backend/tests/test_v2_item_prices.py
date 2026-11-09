@@ -441,3 +441,27 @@ def test_the_short_guide_form_says_it_reads_in_full_and_starts_visible():
     assert 'هذا الدليل أقصر من حد البيع، فيُقرأ كاملًا بلا سعر' in js
     assert "if (isShort && !row.hasOwn) form.visible = true;" in js
     assert '.v3-own.short{' in open(os.path.join(ROOT, 'dashboard-cloud', 'v2-d3.css'), encoding='utf-8').read()
+
+
+@needs_node
+def test_the_guides_section_counts_how_many_are_above_and_below_the_minimum():
+    resp = _list_resp()
+    resp['guides_min_words'] = 4000
+    for it in resp['items']:
+        if it['id'] == 'guide-sole':
+            it.update({'source': 'short', 'uses_general': False, 'words': 1200})
+        elif it['id'] == 'guide-rent':
+            it['words'] = 5200
+    res = L('v2Prices', resp)
+    assert res['minWords'] == 4000
+    view = L('v2PricesView', res, {'group': 'all', 'q': 'لا يطابق شيئًا'})
+    assert view['size'] == {'minWords': 4000, 'above': 1, 'below': 1}, 'العدد من كل الأدلّة لا من البحث'
+    old = _list_resp()
+    old.pop('guides_min_words', None)
+    assert L('v2PricesView', L('v2Prices', old), {'group': 'all', 'q': ''})['size'] is None
+
+
+def test_the_size_line_says_the_minimum_in_words_and_pages():
+    js = open(os.path.join(ROOT, 'dashboard-cloud', 'v2-d3.js'), encoding='utf-8').read()
+    assert "'حد البيع ' + U.ar(z.minWords) + ' كلمة (نحو '" in js
+    assert 'وتحت الحد ويُقرأ كاملًا بلا سعر: ' in js

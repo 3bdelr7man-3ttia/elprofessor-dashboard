@@ -1774,6 +1774,7 @@
       return { id: String(it.id), title: group === 'guides_general' ? GENERAL_GUIDES_TITLE : (str(it.title) || String(it.id)), visible: it.visible === true, hasPrices: it.has_prices === true, mins: mins,
                minText: short ? 'يُقرأ كاملًا بلا سعر' : mins.length ? minLine(mins) : 'لا أسعار بعد', updatedAt: it.updated_at || null,
                group: group, hasOwn: hasOwn, usesGeneral: usesGeneral, short: short,
+               words: typeof it.words === 'number' && it.words >= 0 ? it.words : null,
                badge: group === 'guide' ? (short ? 'دليل قصير' : hasOwn && !usesGeneral ? 'سعر خاص' : 'يأخذ السعر العام') : '' };
     });
     // دليل يأخذ السعر العام ولم تُرسل المنصة له أقل سعر: نعرض أقل سعر الصف العام (السعر الفعلي).
@@ -1781,7 +1782,8 @@
     rows.forEach(function (r) {
       if (r.group === 'guide' && !r.mins.length && r.badge === 'يأخذ السعر العام' && gen && gen.mins.length) { r.mins = gen.mins; r.minText = gen.minText; }
     });
-    return { rows: rows, countries: order, currencies: resp.currencies || {} };
+    var minWords = typeof resp.guides_min_words === 'number' && resp.guides_min_words > 0 ? resp.guides_min_words : null;
+    return { rows: rows, countries: order, currencies: resp.currencies || {}, minWords: minWords };
   }
   var GENERAL_GUIDES_TITLE = 'السعر العام للأدلّة';
   // بحث بلا حساسية للتشكيل والهمزات والياء/الألف المقصورة والتاء المربوطة وشكل الأرقام.
@@ -1809,7 +1811,13 @@
       sections.push({ key: 'guide', title: 'الأدلّة', rows: guides.filter(hit) });
     }
     sections = sections.filter(function (s) { return s.rows.length; });
-    return { showTools: true, counts: counts, sections: sections, empty: !sections.length };
+    // حد البيع (المنصة 2026-11-09): كم دليلًا فوقه يُباع وكم تحته يُقرأ كاملًا — من كل الأدلّة لا من نتيجة البحث.
+    var minWords = res && res.minWords ? res.minWords : null, size = null;
+    if (minWords) {
+      size = { minWords: minWords, above: 0, below: 0 };
+      guides.forEach(function (r) { if (r.short) size.below++; else if (r.words !== null && r.words >= minWords) size.above++; });
+    }
+    return { showTools: true, counts: counts, sections: sections, empty: !sections.length, size: size };
   }
   var VERSION_LABEL = { read: 'القراءة على المنصة', pdf: 'نسخة PDF', standard: 'السعر العادي' };
   function digitsToLatin(s) {

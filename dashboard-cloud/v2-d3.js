@@ -299,12 +299,18 @@
       + (r.group === 'guide' && r.hasOwn ? '<button type="button" class="v3-btn2" data-a="preset" data-id="' + esc(r.id) + '">ارجع للسعر العام</button>' : '') + '</div></li>';
   }
   var PRICE_SEC_HINT = { general: 'يُباع به كل دليل ليس له سعر خاص' };
+  // «حد البيع ٤٠٠٠ كلمة (نحو ١٥ صفحة). فوق الحد ويُباع: ٣، وتحت الحد ويُقرأ كاملًا بلا سعر: ٥»
+  function sizeLine(z) {
+    return 'حد البيع ' + U.ar(z.minWords) + ' كلمة (نحو ' + U.ar(Math.round(z.minWords / 270)) + ' صفحة). فوق الحد ويُباع: '
+      + U.ar(z.above) + '، وتحت الحد ويُقرأ كاملًا بلا سعر: ' + U.ar(z.below);
+  }
   function priceListHtml(view) {
     if (view.empty) return '<p class="v3-none">لا نتيجة</p>';
     return view.sections.map(function (sec) {
       var rowsHtml = sec.rows.map(function (r) { return sec.key === 'book' ? priceRow('book', r) : guideRow(r); }).join('');
       return '<div class="v3-psec" data-sec="' + sec.key + '"><h3 class="v3-ph">' + esc(sec.title) + (sec.key === 'general' ? '' : ' <span class="v3-cnt">' + esc(U.ar(sec.rows.length)) + '</span>') + '</h3>'
-        + (PRICE_SEC_HINT[sec.key] ? '<p class="v3-fine">' + esc(PRICE_SEC_HINT[sec.key]) + '</p>' : '') + '<ul class="v3-list">' + rowsHtml + '</ul></div>';
+        + (PRICE_SEC_HINT[sec.key] ? '<p class="v3-fine">' + esc(PRICE_SEC_HINT[sec.key]) + '</p>' : '')
+        + (sec.key === 'guide' && view.size ? '<p class="v3-fine v3-size">' + esc(sizeLine(view.size)) + '</p>' : '') + '<ul class="v3-list">' + rowsHtml + '</ul></div>';
     }).join('');
   }
   function priceTools(view) {
