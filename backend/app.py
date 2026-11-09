@@ -16,6 +16,7 @@ from werkzeug.security import generate_password_hash, check_password_hash
 from dotenv import load_dotenv
 import jwt
 import requests
+import article_integrity as _ai   # R19 — فحص اكتمال المتن قبل النشر الآلي
 import refresh_rules as _rr   # E2/E3/§3.2-5 — نسخة مطابقة بايتًا لـ elprofessor/backend/services/refresh_rules.py
 
 load_dotenv()
@@ -10818,6 +10819,7 @@ def _sync_platform_articles():
     except Exception:
         return {'error': 'تعذّر الاتصال بالمنصة'}, 502
     imported = published = drafts = duplicates = linked = gated = 0
+    held_incomplete = []
     pool = Article.query.filter_by(status='published').all()
     for a in arts:
         title = (a.get('title') or '').strip()
@@ -10845,6 +10847,14 @@ def _sync_platform_articles():
         if isinstance(gate, dict) and gate.get('ok') is False:
             is_published = False
             gated += 1
+        # R19 — حارس الاكتمال: المتن المبتور (وسط جملة/عنوان/جدول، أو «٦ خطوات» تقف عند ٤) ما يتنشرش آليًّا أبدًا
+        # حتى مع BLOG_AUTOPUBLISH_ALL — بيدخل مسودة، وسببه يرجع في ردّ المزامنة (held_incomplete).
+        md_blocks = _md_to_blocks(a.get('body') or '', title)
+        incomplete = _ai.incomplete_reasons(md_blocks, title)
+        if incomplete:
+            is_published = False
+            held_incomplete.append({'platform_id': a.get('id'), 'title': title[:80], 'reasons': incomplete})
+            app.logger.warning('sync: held as draft — body looks truncated: %r %s', title[:60], incomplete)
         art = Article(
             title=title[:500],
             excerpt=(a.get('excerpt') or '')[:1000],
@@ -10852,7 +10862,7 @@ def _sync_platform_articles():
             kicker='عن المنصة' if is_feature else 'تحليل قانوني',
             by=_sync_byline(a.get('author')),
             date=_ar_date_from(a.get('published_at') or a.get('created_at')),
-            body=json.dumps(_md_to_blocks(a.get('body') or '', title), ensure_ascii=False),
+            body=json.dumps(md_blocks, ensure_ascii=False),
             meta_description=(a.get('meta_description') or a.get('excerpt') or '')[:400],
             keywords=json.dumps([str(k) for k in (a.get('keywords') or [])][:12], ensure_ascii=False),
             faq=json.dumps([f for f in (a.get('faq') or []) if isinstance(f, dict) and f.get('q') and f.get('a')][:8],
@@ -10887,7 +10897,8 @@ def _sync_platform_articles():
             drafts += 1
         _delete_platform_article(a.get('id'))  # only AFTER a successful import
     out = {'ok': True, 'imported': imported, 'published': published, 'drafts': drafts,
-           'duplicates': duplicates, 'with_related_links': linked, 'held_not_legal': gated}
+           'duplicates': duplicates, 'with_related_links': linked, 'held_not_legal': gated,
+           'held_incomplete': held_incomplete}
     # مقال جديد منشور = صفحة الزواحف بتاعته لسه مش موجودة على الاستضافة. الدفع هنا
     # هو اللي بيمنع تكرار انحسار يوليو ٢٠٢٦ (٣٦ مقال قواقع فاضية اتناشر يوم).
     # لاحق (Thread) عمدًا: المزامنة لازم ترجّع بسرعة، والتوليد+الرفع بياخدوا دقيقة.
