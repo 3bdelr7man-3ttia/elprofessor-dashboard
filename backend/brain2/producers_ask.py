@@ -163,7 +163,7 @@ def _already_decided(ctx, fid):
         from brain2.engine import _models
         Item = _models(ctx.ns['db'])[0]
         return Item.query.filter(Item.producer == PRODUCER_ID, Item.target_ref == 'askfb:' + fid,
-                                 Item.status.in_(('approved', 'edited', 'applying', 'unknown'))).first() is not None
+                                 Item.status.in_(('approved', 'edited', 'applying', 'unknown', 'rejected'))).first() is not None
     except Exception:   # noqa: BLE001
         return False
 

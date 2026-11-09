@@ -2937,7 +2937,11 @@ def _platform_proxy(method, path, params=None, json_body=None, timeout=12, data=
         else:
             msg = detail
         return jsonify({'error': msg or 'تعذر تنفيذ العملية'}), r.status_code
-    return jsonify(r.json() if r.content else {})
+    try:
+        payload = r.json() if r.content else {}
+    except Exception:   # ردّ ٢٠٠ بجسم مش JSON (صفحة خطأ من بروكسي مثلًا) = نفس ٥٠٢ الهادي
+        return jsonify({'error': 'تعذر الاتصال بالمنصة'}), 502
+    return jsonify(payload)
 
 
 # F-134/ب (قرار المؤسس 2026-09-08) — الدورة التي تنشئها الإدارة نيابةً عن مدرّب تحمل بريده،

@@ -7597,7 +7597,7 @@
       ageText: isNaN(t) ? '' : UT.agoText(t, now), ts: isNaN(t) ? Infinity : t,
       primary: { label: note ? 'احتفظ بها' : (s_(item.approve_label) || 'اعتمد'), act: { do: 'brain_approve', id: item.id } },
       secondary: { label: note ? 'احذفها' : 'ارفض', act: { do: 'brain_reject', id: item.id } },
-      edit: (note || edits.length) ? null : { label: 'عدّل', act: { do: 'brain_edit', id: item.id } },
+      edit: (note || edits.length || item.text_editable === false) ? null : { label: 'عدّل', act: { do: 'brain_edit', id: item.id } },
       edits: edits,
       open: { do: 'open' }, link: null, facts: [], fields: fields, img: SEC_IMG[item.section] || 'brain',
       brainItem: item, src: { text: '', tone: '' }, row: { apiKind: 'brain_item', item: item }

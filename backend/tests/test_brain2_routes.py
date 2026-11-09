@@ -205,7 +205,7 @@ def test_switch_put_rules(api, monkeypatch):
 # ───────────────────────────────────────────────────────────── العناصر
 
 ITEM_KEYS = {'id', 'producer', 'section', 'kind', 'target_label', 'body', 'status', 'source', 'created_at', 'decided_at',
-             'decided_by', 'tag', 'approve_label', 'last_error'}
+             'decided_by', 'tag', 'approve_label', 'last_error', 'text_editable', 'reject_reason'}
 
 
 def test_items_allow_list_has_no_meta_and_no_facts(api, monkeypatch):
@@ -679,3 +679,16 @@ def test_site_message_sender_not_found_and_bad_ids(sender_env):
     assert _sender(sender_env + 100000).get_json() == {'error': 'not_found'}
     for bad in ('abc', '1a', '-1', '1.5', '١٢٣', '1' * 20, '%20', '0x10'):
         assert _sender(bad).status_code == 404, bad
+
+
+def test_platform_proxy_non_json_200_body_is_the_quiet_502(monkeypatch):
+    class R(object):
+        status_code = 200
+        content = b'<html>proxy error</html>'
+        def json(self): raise ValueError('not json')
+
+    monkeypatch.setattr(appmod, 'PLATFORM_METRICS_SECRET', 'x')
+    monkeypatch.setattr(appmod.requests, 'request', lambda *a, **k: R())
+    with flask_app.test_request_context('/'):
+        resp, status = appmod._platform_proxy('GET', '/api/bridge/x')
+        assert status == 502 and resp.get_json() == {'error': 'تعذر الاتصال بالمنصة'}

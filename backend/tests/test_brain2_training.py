@@ -13,6 +13,8 @@ import pytest
 import app as appmod
 from brain2 import producers_training as pt, registry
 from brain2.contract import Ctx, SourceDown, Target
+from test_brain2_routes import api, rows, ADMIN   # noqa: F401
+from test_brain2_engine import env   # noqa: F401
 
 UTC = datetime.timezone.utc
 AP = 'eg-administrative-prosecution'
@@ -172,3 +174,68 @@ def test_on_reject_posts_reason_with_default_for_short():
     assert body == {'decision': 'reject', 'reason': 'الجواب مش دقيق.', 'by': 'admin@test'}
     assert seen[1][1]['reason'] == pt.DEFAULT_REJECT_REASON, 'المنصة بتشترط ٣ حروف'
     assert pt.on_reject(_ctx(FakePlatform(), lambda *a: ({'error': 'x'}, 500)), _target(), 'سبب').ok is False
+
+
+# ------------------------------------------------------------------ مراجعة التحقق (2026-11-09)
+
+def test_long_question_and_answer_card_fits_draft_limit():
+    from brain2.engine import check_body
+    f = {'expert_name': 'أ. ' + 'ن' * 80, 'specialty_label': 'ت' * 80, 'type': 'qa', 'question': 'س' * 300,
+         'expert_answer': 'ج' * 700, 'source': 'م' * 300}
+    t = Target(ref='trainitem:t1', label='x', facts=f, meta={'item_id': 't1', 'track': AP})
+    tpl = pt.template(t)
+    assert len(tpl['text']) <= 900 and check_body(tpl, f, 'draft') is None
+    assert '…' in tpl['text'] and len(f['question']) == 300 and len(f['expert_answer']) == 700, 'الكامل يبقى في facts'
+    b = pt.validate({'verdict': 'no_text', 'article_refs': [], 'note_ar': 'ن' * 200}, t)
+    assert len(b['text']) <= 900 and check_body(b, f, 'draft') is None
+    assert 'س' * 149 + '…' in b['text'] and 'س' * 150 not in b['text']
+
+
+def test_training_is_not_text_editable_and_route_refuses_edited_text(api, monkeypatch):
+    from brain2.contract import Producer
+    from test_brain2_engine import use
+    import brain2.engine as eng
+    assert registry.by_id('training_item').text_editable is False
+    t = Target(ref='trainitem:t1', label='x', facts={'question': 'س'}, meta={'item_id': 't1'})
+    prod = Producer(id='training_item', section='home', kind='draft', label='l', sentence='s', lock_reason='r',
+                    may_run_alone=False, default_mode='ask', per_run_cap=5, gather=lambda c: [t],
+                    prompt=lambda x: ('', 'u'), validate=lambda d, x: {'text': 'بند'},
+                    apply=lambda c, b, x: pytest.fail('ما يتنفذش'), text_editable=False, tag='t', approve_label='ok')
+    use(monkeypatch, prod)
+    assert eng.start_run(appmod.__dict__, 'admin', ADMIN)[0] == 202
+    (r,) = rows()
+    resp = api.post('/api/v2/brain/items/%s/approve' % r.id, {'confirmed': True, 'text': 'نص معدّل'})
+    assert resp.status_code == 400 and 'لا يُعدَّل' in resp.get_json()['error']
+    assert rows()[0].status == 'proposed'
+    item = api.get('/api/v2/brain/items?status=proposed').get_json()['items'][0]
+    assert item['text_editable'] is False
+
+
+def test_gather_skips_decided_training_items_and_retries_failed_reject(api, monkeypatch):
+    import brain2.engine as eng
+    from brain2.contract import Producer
+    from test_brain2_engine import use
+    from brain2.contract import ApplyResult
+    t = Target(ref='trainitem:t1', label='x', facts={'question': 'س', 'expert_answer': 'ج'}, meta={'item_id': 't1'})
+    prod = Producer(id='training_item', section='home', kind='draft', label='l', sentence='s', lock_reason='r',
+                    may_run_alone=False, default_mode='ask', per_run_cap=5, gather=lambda c: [t],
+                    prompt=lambda x: ('', 'u'), validate=lambda d, x: {'text': 'بند'},
+                    apply=lambda c, b, x: ApplyResult(ok=True),
+                    on_reject=lambda c, tt, r: ApplyResult(ok=False, error='x'), tag='t', approve_label='ok')
+    use(monkeypatch, prod)
+    assert eng.start_run(appmod.__dict__, 'admin', ADMIN)[0] == 202
+    (r,) = rows()
+    j = api.post('/api/v2/brain/items/%s/reject' % r.id, {'confirmed': True}).get_json()
+    assert j['notified'] is False and rows()[0].last_error == 'notify_failed'
+    seen = []
+    ns = dict(appmod.__dict__)
+    ns.update({'_platform_proxy': _plat([_item('t1')]), '_resp_ok': lambda r_: r_[1] == 200,
+               '_proxy_json': lambda r_: r_[0],
+               '_v2_write': lambda m, p, b, a, tg, meta: (seen.append(b), ({'ok': True}, 200))[1]})
+    ctx = Ctx(ns=ns, now=datetime.datetime.now(UTC), actor='admin@test')
+    assert pt.gather(ctx) == []
+    assert len(seen) == 1 and seen[0]['decision'] == 'reject'
+    assert rows()[0].last_error is None
+    eng._models(appmod.db)[0].query.delete()
+    appmod.db.session.commit()
+    assert len(pt.gather(ctx)) == 1

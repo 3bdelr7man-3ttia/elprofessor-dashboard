@@ -16,6 +16,7 @@ import json
 import re
 
 from brain2.contract import ApplyResult, Producer, SourceDown, Target
+from brain2.decided import already_decided, retry_reject
 
 PRODUCER_ID = 'training_item'
 LIST_LIMIT = 10
@@ -132,6 +133,9 @@ def gather(ctx):
         answer = str(it.get('answer') or '').strip()
         if not _ID_RE.match(iid) or not question or not answer:
             continue
+        retry_reject(ctx, PRODUCER_ID, 'trainitem:' + iid, on_reject)
+        if already_decided(ctx, PRODUCER_ID, 'trainitem:' + iid):
+            continue
         spec = str(it.get('specialty') or '')
         facts = {
             'expert_name': str(it.get('expert_name') or '')[:NAME_MAX],
@@ -162,15 +166,31 @@ def prompt(target):
     return (SYSTEM_AR or '') + _ROLE, user
 
 
+CARD_Q, CARD_A, TEXT_MAX = 150, 450, 900      # نص البطاقة ≤ سقف المسودة (٩٠٠)؛ النص الكامل يبقى في facts
+
+
+def _clip(text, limit):
+    text = text or ''
+    return text if len(text) <= limit else text[:limit - 1].rstrip() + '…'
+
+
 def _card(facts, verdict, note=''):
-    head = 'من جلسة تدريب: %s' % (facts.get('expert_name') or 'خبير')
+    """⛔ النص ≤ سقف المسودة (٩٠٠): السؤال ≤١٥٠ والجواب ≤٤٥٠ (بـ«…»)، والنص الكامل يبقى في facts."""
+    head = 'من جلسة تدريب: %s' % _clip(facts.get('expert_name') or 'خبير', 40)
     if facts.get('specialty_label'):
-        head += '، ' + facts['specialty_label']
-    lines = [head, 'السؤال: ' + (facts.get('question') or ''), 'جواب الخبير: ' + (facts.get('expert_answer') or '')]
-    if facts.get('source'):
-        lines.append('المصدر: ' + facts['source'])
-    lines.append(VERDICTS[verdict] + ((' — ' + note) if note else ''))
-    return '\n'.join(lines)
+        head += '، ' + _clip(facts['specialty_label'], 40)
+    tail = VERDICTS[verdict] + ((' — ' + note) if note else '')
+    limit_a = CARD_A
+    while True:
+        lines = [head, 'السؤال: ' + _clip(facts.get('question'), CARD_Q),
+                 'جواب الخبير: ' + _clip(facts.get('expert_answer'), limit_a)]
+        if facts.get('source'):
+            lines.append('المصدر: ' + _clip(facts['source'], 80))
+        lines.append(tail)
+        text = '\n'.join(lines)
+        if len(text) <= TEXT_MAX or limit_a <= 100:
+            return text[:TEXT_MAX]
+        limit_a = max(100, limit_a - (len(text) - TEXT_MAX))
 
 
 def _expert_words(facts):
@@ -279,6 +299,6 @@ PRODUCERS = [
         sentence='ما يعلّمه الخبراء للبروف في جلسة التدريب يقارنه العقل بالنص ويوصي، ولا يتعلمه البروف إلا باعتمادك.',
         lock_reason=LOCK_REASON, may_run_alone=False, default_mode='ask', per_run_cap=5,
         gather=gather, prompt=prompt, validate=validate, template=template, apply=apply, on_reject=on_reject,
-        tag='تدريب البروف', approve_label=LABEL_APPROVE,
+        tag='تدريب البروف', approve_label=LABEL_APPROVE, text_editable=False,
     ),
 ]

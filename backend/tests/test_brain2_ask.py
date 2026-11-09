@@ -235,3 +235,29 @@ def test_gather_skips_correction_already_approved(monkeypatch):
     ctx = _ctx(_plat([_fb('f1')]))
     ctx.ns['db'] = object()
     assert pa.gather(ctx) == [], 'تصحيح معتمد قبل كده ⇒ لا بطاقة جديدة بعد نقاش'
+
+
+def test_gather_skips_correction_already_rejected(monkeypatch):
+    import brain2.engine as eng
+    seen = {}
+
+    class _Col(object):
+        def __eq__(self, o): return True
+        def in_(self, vals):
+            seen['statuses'] = tuple(vals)
+            return True
+
+    class _Q(object):
+        def filter(self, *a, **k): return self
+        def first(self): return object()
+
+    class _Item(object):
+        producer = target_ref = _Col()
+        status = _Col()
+        query = _Q()
+
+    monkeypatch.setattr(eng, '_models', lambda db: (_Item,))
+    ctx = _ctx(_plat([_fb('f1')]))
+    ctx.ns['db'] = object()
+    assert pa.gather(ctx) == []
+    assert 'rejected' in seen['statuses']

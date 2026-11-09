@@ -17,6 +17,7 @@ import re
 from flask import jsonify, request
 
 from brain2 import autorun, engine, registry, run_report, telegram
+from brain2.decided import NOTIFY_FAILED
 
 logger = logging.getLogger(__name__)
 
@@ -37,6 +38,7 @@ ERR_UNKNOWN_PRODUCER = 'قاعدة غير معروفة'
 ERR_DISCARD = 'لا تُحذف هذه الكتابة من هنا'
 ERR_BAD_TELEGRAM = 'اختيار تليجرام غير صالح'
 ERR_TG_NOT_FOR_OPINION = 'الآراء لا تُرسل إلى تليجرام'
+ERR_LOCKED_TEXT = 'نص هذا البند لا يُعدَّل؛ اعتمده كما هو أو ارفضه'
 ERR_NO_TEXT_EDIT = 'لا يُعدّل نص هذا الاقتراح هنا؛ افتح الموقع وعدّل الكتلة نفسها'
 TG_ID_RE = re.compile(r'^\d{1,20}$')
 
@@ -90,7 +92,9 @@ def register(app, ns):
                 'decided_at': _iso(r.decided_at), 'decided_by': r.decided_by or '',
                 'tag': (p.tag if p else '') or '',
                 'approve_label': (body.get('approve_label') if isinstance(body, dict) else '') or (p.approve_label if p else '') or '',
-                'last_error': r.last_error or ''}
+                'last_error': r.last_error or '',
+                'text_editable': bool(p.text_editable) if p else True,
+                'reject_reason': bool(p and callable(getattr(p, 'on_reject', None)))}
 
     def run_out(r):
         try:
@@ -254,6 +258,9 @@ def register(app, ns):
         text = None
         if body.get('text') is not None:
             cur = Item.query.get(item_id)
+            cur_p = registry.by_id(cur.producer) if cur is not None else None
+            if cur_p is not None and cur_p.text_editable is False:
+                return out({'error': ERR_LOCKED_TEXT}, 400)        # التنفيذ ما يقرأ النص المعدَّل: نرفض بدل ما نخدع المؤسس
             cur_body = engine._loads(cur.body_json, {}) if cur is not None else {}
             if isinstance(cur_body.get('edits'), list) and cur_body.get('edits'):
                 return out({'error': ERR_NO_TEXT_EDIT}, 400)       # مراجعة/تعديل الموقع: التعديلات هي الاقتراح، لا نصّه
@@ -283,26 +290,45 @@ def register(app, ns):
             return out({'error': engine.ERR_DECIDED}, 409)
         L('_audit')(audit, target=item_id, meta={'producer': r.producer})
         if new_status == 'rejected':
-            _notify_reject(r, actor, reason)
+            if not _notify_reject(r, actor, reason):
+                return out({'ok': True, 'id': item_id, 'status': new_status, 'notified': False})
         return out({'ok': True, 'id': item_id, 'status': new_status})
 
+    def _mark_notify(item_id, ok, reason=''):
+        """يسجّل نتيجة الإبلاغ على الصف: فشل ⇒ last_error='notify_failed' + السبب (لإعادة المحاولة في الجمع القادم)."""
+        try:
+            vals = {'last_error': None} if ok else {'last_error': NOTIFY_FAILED}
+            if not ok:
+                vals['applied_json'] = json.dumps({'reject_reason': (reason or '')[:300]}, ensure_ascii=False)
+            Item.query.filter(Item.id == item_id).update(vals, synchronize_session=False)
+            db.session.commit()
+        except Exception:   # noqa: BLE001
+            db.session.rollback()
+            logger.exception('brain2: could not record notify result')
+
     def _notify_reject(r, actor, reason=''):
-        """خطّاف الرفض الاختياري للمنتج (`on_reject`): بيبلّغ النظام الخارجي بالرفض وسببه. الرفض نفسه حصل، وأي فشل هنا يتسجّل بس."""
+        """خطّاف الرفض الاختياري (`on_reject`). الرفض نفسه حصل دايمًا؛ بيرجّع False لو الإبلاغ فشل (والصف يتعلّم لإعادة المحاولة)."""
         p = registry.by_id(r.producer)
         hook = getattr(p, 'on_reject', None)
         if not callable(hook):
-            return
+            return True
+        item_id = r.id
         try:
             from brain2.contract import Ctx, Target
             facts, body = engine._loads(r.facts_json, {}), engine._loads(r.body_json, {})
             if not (isinstance(reason, str) and reason.strip()) and body.get('recommend') == 'reject':
                 reason = body.get('why') or ''
+            reason = reason if isinstance(reason, str) else ''
             target = Target(ref=r.target_ref, label=r.target_label or '', facts=facts, meta=engine._loads(r.meta_json, {}))
-            res = hook(Ctx(ns=ns, now=engine._aware(), actor=str(actor)), target, reason if isinstance(reason, str) else '')
-            if not getattr(res, 'ok', False):
-                logger.warning('brain2: on_reject not delivered for %s', r.producer)
+            res = hook(Ctx(ns=ns, now=engine._aware(), actor=str(actor)), target, reason)
+            if getattr(res, 'ok', False):
+                return True
+            logger.warning('brain2: on_reject not delivered for %s', r.producer)
         except Exception:   # noqa: BLE001
             logger.exception('brain2: on_reject raised for %s', r.producer)
+            reason = reason if isinstance(reason, str) else ''
+        _mark_notify(item_id, False, reason)
+        return False
 
     @app.route('/api/v2/brain/items/<item_id>/reject', methods=['POST'], endpoint='v2_brain2_reject')
     @token_required

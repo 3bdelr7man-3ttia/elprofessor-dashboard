@@ -47,6 +47,7 @@ class Producer:
     template: Optional[Callable[[Target], Optional[dict]]] = None
     apply: Optional[Callable[[Ctx, dict, Target], ApplyResult]] = None
     on_reject: Optional[Callable[..., ApplyResult]] = None   # اختياري (2026-11-09): يبلّغ النظام الخارجي بالرفض + سببه
+    text_editable: bool = True     # False ⇒ نص البطاقة لا يُعدَّل (التنفيذ ما يقرأه): الخادم يرفض والواجهة تخفي «عدّل»
     tag: str = ''                  # card tag (Arabic)
     approve_label: str = ''        # main button (Arabic)
     listed: bool = True            # False = hidden hook

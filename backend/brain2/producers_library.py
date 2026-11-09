@@ -18,6 +18,7 @@ import logging
 import re
 
 from brain2.contract import ApplyResult, Producer, SourceDown, Target
+from brain2.decided import already_decided, retry_reject
 
 logger = logging.getLogger(__name__)
 
@@ -114,16 +115,6 @@ def _int(v):
     return v if isinstance(v, int) and not isinstance(v, bool) and v >= 0 else 0
 
 
-def _already_decided(ctx, cid):
-    try:
-        from brain2.engine import _models
-        Item = _models(ctx.ns['db'])[0]
-        return Item.query.filter(Item.producer == PRODUCER_ID, Item.target_ref == 'libc:' + cid,
-                                 Item.status.in_(('approved', 'edited', 'applying', 'unknown'))).first() is not None
-    except Exception:   # noqa: BLE001
-        return False
-
-
 def gather(ctx):
     out = []
     for it in _list(ctx):
@@ -132,7 +123,8 @@ def gather(ctx):
         kind = str(it.get('kind') or '')
         if not _ID_RE.match(cid) or not title or kind not in KINDS:
             continue
-        if _already_decided(ctx, cid):
+        _retry_reject(ctx, 'libc:' + cid)
+        if already_decided(ctx, PRODUCER_ID, 'libc:' + cid):
             continue
         track = str(it.get('suggested_track') or '')
         facts = {
@@ -189,9 +181,11 @@ def _literally_in(key, facts):
     hay = ' '.join(str(facts.get(k) or '') for k in ('title', 'law_number', 'preview'))
     try:
         from brain2.engine import norm_digits
-        return norm_digits(key) in norm_digits(hay)
+        key, hay = norm_digits(key), norm_digits(hay)
     except Exception:   # noqa: BLE001
-        return key in hay
+        pass
+    # حدود رقمية: 47/1973 لا تطابق داخل 147/1973 ولا 47/19730
+    return re.search(r'(?<!\d)' + re.escape(key) + r'(?!\d)', hay) is not None
 
 
 def validate(raw, target):
@@ -224,6 +218,9 @@ def validate(raw, target):
     ex = _int(f.get('existing_articles'))
     if (ex == 0) != (duplicate == 'none'):
         return None
+    if rec == 'accept' and (not raw['number_matches'] or duplicate == 'same'):
+        rec = 'review'                   # الرقم مش مطابق أو عندنا نفس النسخة ⇒ مفيش قبول، قرارك بنفسك
+        reason = reason or ('الرقم مش مطابق' if not raw['number_matches'] else 'عندنا نفس النسخة')
     if rec == 'accept':
         if not (raw['is_legal'] and raw['kind_ok']):
             return None
@@ -300,6 +297,10 @@ def apply(ctx, body, target):
     n = _int((js or {}).get('articles_added')) if isinstance(js, dict) else 0
     line = 'اتضافت للمكتبة (%d مادة)' % n if n else 'اتقبلت وحُفظت في المكتبة'
     return ApplyResult(ok=True, info={'articles_added': n, 'line': line})
+
+
+def _retry_reject(ctx, ref):
+    return retry_reject(ctx, PRODUCER_ID, ref, on_reject)
 
 
 def on_reject(ctx, target, reason=''):

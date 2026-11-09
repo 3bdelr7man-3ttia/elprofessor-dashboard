@@ -178,6 +178,7 @@
     if (lab === 'اربطه بالدورة') return { title: 'ربط الطلب بدورة', body: 'يُربط الطلب بالدورة المقترحة على المنصة بعد التأكيد.', go: 'نعم، اربطه', save: 'احفظ واعتمد', copy: false };
     return { title: lab || 'اعتماد الاقتراح', body: 'يُنفَّذ هذا الاقتراح بعد تأكيدك.', go: 'نعم، اعتمده', save: 'احفظ واعتمد', copy: false };
   }
+  var NOT_NOTIFIED_TEXT = 'اترفضت هنا، بس المنصة ما وصلهاش الرفض — هنعيد المحاولة';
   function rejectInfo(item) {
     if (item.kind === 'note') return { title: 'حذف الملاحظة', body: 'تُحذف هذه الملاحظة. لم تغيّر شيئًا في المنصة.', go: 'نعم، احذفها' };
     return { title: 'رفض الاقتراح', body: 'يُرفض هذا الاقتراح ولا يُنفَّذ شيء.', go: 'نعم، ارفضه' };
@@ -218,6 +219,8 @@
     var path = which === 'reject' ? (item.kind === 'note' && item.status === 'done_alone' ? 'discard' : 'reject') : 'approve';
     var body = { confirmed: true };
     if (which === 'approve' && text != null) body.text = text;
+    var rs = which === 'reject' ? s.querySelector('#v2b_reason') : null;
+    if (rs && String(rs.value || '').trim()) body.reason = String(rs.value).trim().slice(0, 300);
     var fail = function (msg, lock, text) {
       delete s.dataset.busy; x.disabled = false;
       err.innerHTML = '<div class="v2b-err" role="alert">' + esc(msg) + '</div>'
@@ -235,6 +238,7 @@
         reload();
         cb({ ok: true, text: doneToast(which, item, text != null && text !== ui.original) });
       };
+      if (which === 'reject' && d && d.notified === false) { toast(NOT_NOTIFIED_TEXT); finish(); return; }
       if (!ct) { toast(doneToast(which, item, text != null && text !== ui.original)); finish(); return; }
       copyText(ct).then(function (okc) {
         if (okc) { toast('نُسخ النص'); finish(); return; }
@@ -266,7 +270,10 @@
   function confirmSheet(card, item, which, cb) {
     var info = which === 'reject' ? rejectInfo(item) : approveInfo(item);
     var edits = which === 'approve' ? ((card && card.edits) || (L.v2bItemCard(item, Date.now()) || {}).edits || []) : [];
-    var s = sheet(info.title, '<p class="v2b-p">' + esc(info.body) + '</p>' + (edits.length ? editsList(edits) : quote(item.body && item.body.text))
+    var reasonBox = (which === 'reject' && item.reject_reason)
+      ? '<div class="fld"><label for="v2b_reason">سبب الرفض (يوصل للي ساهم)</label><textarea id="v2b_reason" class="v2b-ta" rows="3" maxlength="300">'
+        + esc((item.body && item.body.why) || '') + '</textarea></div>' : '';
+    var s = sheet(info.title, '<p class="v2b-p">' + esc(info.body) + '</p>' + (edits.length ? editsList(edits) : quote(item.body && item.body.text)) + reasonBox
       + '<div id="v2b_err"></div><div class="acts"><button type="button" class="btn ' + (which === 'reject' ? 'btn-human' : 'btn-primary') + '" id="v2b_go">' + esc(info.go) + '</button>'
       + '<button type="button" class="btn btn-ghost" id="v2b_x">رجوع</button></div>');
     if (!s) return;

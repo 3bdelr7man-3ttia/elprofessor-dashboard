@@ -325,3 +325,76 @@ def test_dashboard_reject_falls_back_to_brain_reason_and_survives_hook_failure(a
 def test_a_ruling_without_articles_can_still_be_accepted():
     from brain2 import producers_library as pl
     assert 'ruling' not in pl.SPLIT_KINDS and 'law' in pl.SPLIT_KINDS
+
+
+# ------------------------------------------------------------------ مراجعة التحقق (2026-11-09)
+
+def test_accept_downgrades_to_review_on_number_mismatch_or_same_copy():
+    b = pl.validate(_raw(number_matches=False), _target())
+    assert b['recommend'] == 'review' and b['why']
+    b = pl.validate(_raw(duplicate='same'), _target(existing_articles=5))
+    assert b['recommend'] == 'review'
+    assert pl.validate(_raw(), _target())['recommend'] == 'accept'
+    # reject يفضل reject
+    assert pl.validate(_raw(number_matches=False, recommend='reject', reason_ar='x'), _target())['recommend'] == 'reject'
+
+
+def test_law_key_match_respects_digit_boundaries():
+    t = _target(title='قانون رقم 147/1973', law_number='147/1973', law_key_guess='147/1973',
+                preview='مادة 1 - نص تجريبي.')
+    assert pl.validate(_raw(law_key='47/1973'), t) is None, '47/1973 جوه 147/1973 مش مطابقة'
+    assert pl.validate(_raw(law_key='147/1973'), t) is not None
+    t2 = _target(title='قانون 47/19730', law_number='', preview='x')
+    assert pl.validate(_raw(law_key='47/1973'), t2) is None
+
+
+class _NS(dict):
+    pass
+
+
+def _gather_ctx(write, items):
+    ns = dict(appmod.__dict__)
+    ns.update({'_platform_proxy': _plat(items), '_v2_write': write,
+               '_resp_ok': lambda r: isinstance(r, tuple) and r[1] == 200,
+               '_proxy_json': lambda r: r[0] if isinstance(r, tuple) else {}})
+    return Ctx(ns=ns, now=datetime.datetime.now(UTC), actor=ADMIN)
+
+
+def test_reject_hook_failure_reports_notified_false_then_gather_retries(api, monkeypatch):
+    iid = _seed_reject(monkeypatch, api, lambda c, t, r: ApplyResult(ok=False, error='x'))
+    r = api.post('/api/v2/brain/items/%s/reject' % iid, {'confirmed': True, 'reason': 'مكرر عندنا'})
+    assert r.status_code == 200
+    assert r.get_json() == {'ok': True, 'id': iid, 'status': 'rejected', 'notified': False}
+    (row,) = rows()
+    assert row.status == 'rejected' and row.last_error == 'notify_failed'
+    # الجمع القادم: المنصة لسه بتعرضه pending ⇒ نعيد الإبلاغ (بنفس السبب) ومانقترحوش تاني
+    seen = []
+
+    def write(method, path, body, action, target, meta):
+        seen.append(body)
+        return ({'status': 'rejected'}, 200)
+
+    assert pl.gather(_gather_ctx(write, [_item('c1')])) == []
+    assert len(seen) == 1 and seen[0]['decision'] == 'reject' and seen[0]['reason'] == 'مكرر عندنا'
+    assert rows()[0].last_error is None
+    assert pl.gather(_gather_ctx(write, [_item('c1')])) == [] and len(seen) == 1, 'نجح مرة ⇒ لا إعادة'
+
+
+def test_reject_hook_success_has_no_notified_flag(api, monkeypatch):
+    iid = _seed_reject(monkeypatch, api, lambda c, t, r: ApplyResult(ok=True))
+    j = api.post('/api/v2/brain/items/%s/reject' % iid, {'confirmed': True}).get_json()
+    assert 'notified' not in j and rows()[0].last_error is None
+
+
+def test_gather_skips_items_already_decided_by_platform_id(api, monkeypatch):
+    for st in ('approved', 'rejected', 'applying', 'unknown'):
+        iid = _seed_reject(monkeypatch, api, lambda c, t, r: ApplyResult(ok=True))
+        row = rows()[0]
+        row.status = st
+        appmod.db.session.commit()
+        got = pl.gather(_gather_ctx(lambda *a: ({}, 200), [_item('c1')]))
+        assert got == [], st
+        from brain2 import engine as eng
+        eng._models(appmod.db)[0].query.delete()
+        appmod.db.session.commit()
+    assert len(pl.gather(_gather_ctx(lambda *a: ({}, 200), [_item('c1')]))) == 1
