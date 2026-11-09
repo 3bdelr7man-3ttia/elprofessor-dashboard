@@ -42,7 +42,8 @@ CODES_PATH = '/api/bridge/guides/codes'
 # ⛔ مفاتيح السعر والنسبة: تُشال من أول مستوى في أي جسم (ومش بنبعتها للجسر أصلًا).
 _MONEY_EXACT = {'pricing', 'versions', 'visible', 'is_free', 'trainer_share_pct', 'share_pct', 'owner_pct', 'platform_pct', 'commission', 'amount', 'currency'}
 
-BOOK_FIELDS = ('id', 'slug', 'title', 'about', 'type', 'status', 'created_by', 'created_at', 'updated_at')
+BOOK_FIELDS = ('id', 'slug', 'title', 'about', 'type', 'status', 'author', 'free', 'created_by', 'created_at', 'updated_at')
+AUTHOR_MAX = 200
 FILE_FIELDS = ('name', 'size', 'pages', 'uploaded', 'uploaded_at')
 CODE_FIELDS = ('code', 'note', 'max_uses', 'active', 'uses')
 
@@ -421,7 +422,7 @@ def register(app, g):
         return quote(x, safe='')
 
     def clean_book_fields(b, partial):
-        """(حقول نظيفة، رسالة خطأ | None) من قايمة بيضا: العنوان · النبذة · النوع."""
+        """(حقول نظيفة، رسالة خطأ | None) من قايمة بيضا: العنوان · النبذة · النوع · المؤلف · مجاني."""
         b = strip_money(b)
         out = {}
         if 'title' in b or not partial:
@@ -440,6 +441,16 @@ def register(app, g):
             if b.get('type') not in TYPES:
                 return None, 'اختر نوعًا من القائمة'
             out['type'] = b['type']
+        # كتاب قديم صار ملكًا عامًا: باسم مؤلفه الحقيقي، ومجاني (فارغ ⇒ «البروفيسور»)
+        if 'author' in b:
+            a = b.get('author')
+            if not isinstance(a, str) or len(' '.join(a.split())) > AUTHOR_MAX:
+                return None, 'اسم المؤلف طويل (حتى ٢٠٠ حرف)'
+            out['author'] = ' '.join(a.split())
+        if 'free' in b:
+            if not isinstance(b.get('free'), bool):
+                return None, 'اختر «مجاني» أو اتركه'
+            out['free'] = b['free']
         return out, None
 
     # ------------------------------------------------------------------ ١ · القايمة

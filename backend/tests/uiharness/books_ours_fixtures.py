@@ -138,6 +138,8 @@ class OursPlatform(bfx.BooksPlatform):
                     return 200, {'ok': True, 'book': copy.deepcopy(self.idem[key]), 'duplicate': True}
                 self.counter += 1
                 b = _book('ours-new-%d' % self.counter, body['title'], body['type'], body.get('about', ''), 'draft', None, created_by=body['by'], created_at=iso(0), updated_at=iso(0))
+                b['author'] = ' '.join(str(body.get('author') or '').split()) or 'البروفيسور'
+                b['free'] = body.get('free') is True
                 self.ours.append(b)
                 self._ensure_price(b)
                 if key:
@@ -158,6 +160,10 @@ class OursPlatform(bfx.BooksPlatform):
             for k in ('title', 'about', 'type'):
                 if k in body:
                     b[k] = body[k]
+            if 'author' in body:
+                b['author'] = ' '.join(str(body['author'] or '').split()) or 'البروفيسور'
+            if 'free' in body:
+                b['free'] = body['free'] is True
             b['updated_at'] = iso(0)
             return 200, {'ok': True, 'book': copy.deepcopy(b)}
         if tail == '/file' and method == 'POST':

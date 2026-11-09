@@ -713,7 +713,7 @@
     return parts.join('، ');
   }
   function oStatusPill(b) { return b.status === 'live' ? '<span class="bk-st st-live">في المتجر</span>' : '<span class="bk-st st-hidden">مسودة</span>'; }
-  function oTypePill(b) { return '<span class="bk-type">' + esc(oTypeText(b.type)) + '</span>'; }
+  function oTypePill(b) { return '<span class="bk-type">' + esc(oTypeText(b.type)) + '</span>' + (b.free ? '<span class="bk-type">مجاني</span>' : ''); }
   function oNoteStrip() { return O.note ? '<div class="v3-ok" role="status">' + esc(O.note) + '</div>' : ''; }
   function oErrStrip(where) { return O.err && O.err.where === where ? '<div class="v3-err" role="alert">' + esc(O.err.text) + '</div>' : ''; }
   function oSetErr(where, e) { O.err = { where: where, text: typeof e === 'string' ? e : oErr(e) }; }
@@ -738,6 +738,7 @@
     var fl = oFileLine(b), has = !!fl;
     var dr = b.draft === 'ready' ? '<p class="ou-fine">مسودة العقل محفوظة</p>' : (b.draft === 'writing' ? '<p class="ou-fine">العقل يكتب الآن</p>' : '');
     return '<article class="ou-card" data-slug="' + esc(b.slug) + '"><div class="ou-pills">' + oTypePill(b) + oStatusPill(b) + '</div><h3>' + esc(b.title) + '</h3>'
+      + (b.author && b.author !== 'البروفيسور' ? '<p class="ou-fine">تأليف: ' + esc(b.author) + '</p>' : '')
       + '<p class="ou-file ' + (has ? 'ok' : 'no') + '">' + (has ? 'الملف جاهز · ' + esc(fl) : 'لا يوجد ملف بعد') + '</p>' + dr
       + '<div class="ou-acts"><button type="button" class="ep-b2" data-a="open" data-slug="' + esc(b.slug) + '" aria-label="افتح ' + esc(b.title) + '">افتح</button></div></article>';
   }
@@ -855,6 +856,8 @@
     return h + '</li>';
   }
   function stepPrice(b, nextIs) {
+    if (b.free) return '<li class="ou-step done" data-step="price">' + stepHead(2, 'السعر', true, 'مجاني', '')
+      + '<p class="ou-line">مجاني للجميع: كتاب قديم صار ملكًا عامًا، فلا سعر له.</p><p class="ou-fine">لإلغاء ذلك اضغط «عدّل بيانات الكتاب».</p></li>';
     var ps = oSrc('price:' + b.slug), lines = ps.state === 'ready' ? priceLines(ps.data) : (ps.state === 'closed' ? [] : null);
     var has = !!(lines && lines.length);
     var h = '<li class="ou-step ' + (has ? 'done' : 'todo') + '" data-step="price">' + stepHead(2, 'السعر', has, 'تم', 'لم يتم بعد');
@@ -890,11 +893,11 @@
     oAdoptDraft(b.slug);
     var has = !!(b.file && b.file.uploaded);
     var ps = oSrc('price:' + b.slug), pl = ps.state === 'ready' ? priceLines(ps.data) : null, hasPrice = !!(pl && pl.length);
-    var next = !has ? 'content' : (!hasPrice && pl !== null ? 'price' : (b.status !== 'live' ? 'store' : ''));
+    var next = !has ? 'content' : (!b.free && !hasPrice && pl !== null ? 'price' : (b.status !== 'live' ? 'store' : ''));
     v.innerHTML = '<div class="v3 v2s-books v2s-ours" data-board="ours-book">' + oNoteStrip()
       + '<button type="button" class="v3-link bk-back" data-a="back">→ كتبنا</button>'
-      + '<header class="ou-bhead"><div class="ou-pills">' + oTypePill(b) + oStatusPill(b) + '</div><h2>' + esc(b.title) + '</h2>' + (b.about ? '<p class="ou-about">' + esc(b.about) + '</p>' : '')
-      + '<div class="ou-acts"><button type="button" class="ep-bs" data-a="edit">عدّل العنوان والنبذة والنوع</button></div></header>'
+      + '<header class="ou-bhead"><div class="ou-pills">' + oTypePill(b) + oStatusPill(b) + '</div><h2>' + esc(b.title) + '</h2>' + (b.author && b.author !== 'البروفيسور' ? '<p class="ou-fine">تأليف: ' + esc(b.author) + '</p>' : '') + (b.about ? '<p class="ou-about">' + esc(b.about) + '</p>' : '')
+      + '<div class="ou-acts"><button type="button" class="ep-bs" data-a="edit">عدّل بيانات الكتاب</button></div></header>'
       + '<ol class="ou-steps">' + stepContent(b, next === 'content') + stepPrice(b, next === 'price') + stepStore(b, next === 'store') + '</ol></div>';
     oWire(v);
   }
@@ -1061,6 +1064,11 @@
     return '<select id="' + id + '">' + OTYPES.map(function (t) { return '<option value="' + t[0] + '"' + (t[0] === cur ? ' selected' : '') + '>' + esc(t[1]) + '</option>'; }).join('') + '</select>';
   }
   function rid() { var a = []; for (var i = 0; i < 16; i++) a.push(Math.floor(Math.random() * 256).toString(16).replace(/^(.)$/, '0$1')); return 'o-' + a.join(''); }
+  // كتاب قديم صار ملكًا عامًا: يُكتب باسم مؤلفه الحقيقي، ويُعرض مجانًا بلا سعر
+  function authorFields(author, free) {
+    return '<div class="fld"><label for="ou_au">اسم المؤلف</label><input id="ou_au" type="text" maxlength="200" value="' + esc(author || '') + '" autocomplete="off"><p class="v3-fine">اتركه فارغًا ليظهر باسم «البروفيسور»</p></div>'
+      + '<label class="tg v3-togg"><input type="checkbox" id="ou_fr"' + (free ? ' checked' : '') + '> مجاني للجميع (كتاب قديم صار ملكًا عامًا)</label>';
+  }
   function openNewBook() {
     var key = rid();
     formSheet({
@@ -1068,11 +1076,12 @@
       html: '<p class="mc-lead">يُنشأ الكتاب مسودة لا يراها أحد. بعدها ترفع ملفه أو تكتبه مع العقل، وتحدّد السعر، ثم تعرضه في المتجر.</p>'
         + '<div class="fld"><label for="ou_t">العنوان</label><input id="ou_t" type="text" maxlength="160" autocomplete="off"></div>'
         + '<div class="fld"><label for="ou_a">نبذة قصيرة</label><textarea id="ou_a" rows="3" maxlength="2000"></textarea></div>'
-        + '<div class="fld"><label for="ou_ty">النوع</label>' + typeSelect('ou_ty', 'book') + '</div>',
+        + '<div class="fld"><label for="ou_ty">النوع</label>' + typeSelect('ou_ty', 'book') + '</div>'
+        + authorFields('', false),
       collect: function (s) {
         var t = (q('#ou_t', s).value || '').trim();
         if (!t) return { ok: false, error: 'اكتب عنوان الكتاب' };
-        return { ok: true, payload: { title: t, about: (q('#ou_a', s).value || '').trim(), type: q('#ou_ty', s).value, idem_key: key, confirmed: true } };
+        return { ok: true, payload: { title: t, about: (q('#ou_a', s).value || '').trim(), type: q('#ou_ty', s).value, author: (q('#ou_au', s).value || '').trim(), free: !!q('#ou_fr', s).checked, idem_key: key, confirmed: true } };
       },
       send: function (body) { return ep().api('/v2/books/ours', { method: 'POST', body: body }); },
       onOk: function (res) {
@@ -1087,11 +1096,12 @@
       title: 'بيانات الكتاب', btn: 'احفظ', busy: 'جارٍ الحفظ…', mode: 'ours',
       html: '<div class="fld"><label for="ou_t">العنوان</label><input id="ou_t" type="text" maxlength="160" value="' + esc(b.title) + '" autocomplete="off"></div>'
         + '<div class="fld"><label for="ou_a">نبذة قصيرة</label><textarea id="ou_a" rows="3" maxlength="2000">' + esc(b.about || '') + '</textarea></div>'
-        + '<div class="fld"><label for="ou_ty">النوع</label>' + typeSelect('ou_ty', b.type) + '</div>',
+        + '<div class="fld"><label for="ou_ty">النوع</label>' + typeSelect('ou_ty', b.type) + '</div>'
+        + authorFields(b.author === 'البروفيسور' ? '' : b.author, !!b.free),
       collect: function (s) {
         var t = (q('#ou_t', s).value || '').trim();
         if (!t) return { ok: false, error: 'اكتب عنوان الكتاب' };
-        return { ok: true, payload: { title: t, about: (q('#ou_a', s).value || '').trim(), type: q('#ou_ty', s).value, confirmed: true } };
+        return { ok: true, payload: { title: t, about: (q('#ou_a', s).value || '').trim(), type: q('#ou_ty', s).value, author: (q('#ou_au', s).value || '').trim(), free: !!q('#ou_fr', s).checked, confirmed: true } };
       },
       send: function (body) { return ep().api('/v2/books/ours/' + encodeURIComponent(b.slug), { method: 'PUT', body: body }); },
       onOk: function () { closeSheet(); oReloadList(); oSetNote('حُفظت بيانات الكتاب'); oRedraw(); }

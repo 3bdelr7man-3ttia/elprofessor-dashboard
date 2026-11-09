@@ -222,6 +222,27 @@ def flow_ours(browser, h, pre, viewport, mobile):
         oshot(page, pre + '02b-new-opened.jpg', keep=False)
         browser.close()
 
+    # —— ٢ج) كتاب قديم صار ملكًا عامًا: باسم مؤلفه ومجاني (المؤسس 2026-11-09)
+    if want('02c'):
+        page = oopen(browser, h, bof.OursPlatform(), viewport, mobile)
+        base = len(h.platform_calls)
+        click(page, '[data-a="new"]', 500)
+        page.fill('#ou_t', 'المحاماة')
+        page.fill('#ou_a', 'أول كتاب عربي عن مهنة المحاماة وتاريخها، الطبعة الأصلية سنة ١٩٠٠.')
+        page.fill('#ou_au', 'أحمد فتحي زغلول')
+        page.check('#ou_fr')
+        oshot(page, pre + '02c-public-domain-new.jpg')
+        click(page, '#bk_go', 900)
+        got = check_writes(pre + '02c', h, base, 1)
+        if got and (got[0][3].get('author') != 'أحمد فتحي زغلول' or got[0][3].get('free') is not True):
+            PROBLEMS.append('%s02c: المؤلف أو «مجاني» ما وصلوش %r' % (pre, got[0][3]))
+        page.wait_for_function("() => document.querySelector('[data-board=\"ours-book\"]')", timeout=15000)
+        txt = page.inner_text('#view')
+        if 'مجاني للجميع' not in txt or 'حدّد السعر' in txt:
+            PROBLEMS.append('%s02c: خطوة السعر ما قالتش «مجاني»' % pre)
+        oshot(page, pre + '02d-public-domain-opened.jpg')
+        browser.close()
+
     # —— ٣) صفحة الكتاب بالخطوات + رفع PDF
     if want('03'):
         page = oopen(browser, h, bof.OursPlatform(), viewport, mobile)

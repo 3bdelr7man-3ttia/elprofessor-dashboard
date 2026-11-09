@@ -720,3 +720,25 @@ def test_weasyprint_is_imported_lazily_only():
         if line.startswith(('import ', 'from ')):
             assert 'weasyprint' not in line, line
     assert src.count('import HTML') == 1 and '    try:\n        from weasyprint import HTML' in src
+
+
+def test_public_domain_author_and_free_pass_through_validated(ctx, plat):
+    """كتب الملك العام (المؤسس 2026-11-09): اسم المؤلف الحقيقي و«مجاني» يعبران للمنصة بعد الفحص، و`is_free` يظل محذوفًا."""
+    r = _call(ctx, 'POST', B, {'title': 'المحاماة', 'type': 'book', 'author': '  أحمد فتحي   زغلول ', 'free': True, 'is_free': True, 'confirmed': True})
+    assert r.status_code == 200
+    assert plat.writes()[-1]['json'] == {'title': 'المحاماة', 'about': '', 'type': 'book', 'author': 'أحمد فتحي زغلول', 'free': True,
+                                         'confirmed': True, 'by': ADMIN_EMAIL}
+    n = len(plat.writes())
+    assert _call(ctx, 'POST', B, {'title': 'عنوان', 'type': 'book', 'author': 'م' * 201, 'confirmed': True}).status_code == 400
+    assert _call(ctx, 'POST', B, {'title': 'عنوان', 'type': 'book', 'free': 'yes', 'confirmed': True}).status_code == 400
+    assert _call(ctx, 'PUT', B + '/ours-startup-law', {'author': 5, 'confirmed': True}).status_code == 400
+    assert len(plat.writes()) == n
+    r = _call(ctx, 'PUT', B + '/ours-startup-law', {'author': '', 'free': False, 'confirmed': True})
+    assert r.status_code == 200 and plat.writes()[-1]['json'] == {'author': '', 'free': False, 'confirmed': True, 'by': ADMIN_EMAIL}
+
+
+def test_the_ours_sheets_carry_author_and_free():
+    js = _read('dashboard-cloud', 'v2s', 'books.js')
+    assert js.count("authorFields(") == 3 and "id=\"ou_au\"" in js and "id=\"ou_fr\"" in js
+    assert js.count("free: !!q('#ou_fr', s).checked") == 2
+    assert 'مجاني للجميع: كتاب قديم صار ملكًا عامًا، فلا سعر له.' in js
