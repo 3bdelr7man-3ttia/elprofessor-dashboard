@@ -12,6 +12,7 @@
   var MOD = 'v2s_asklib';
   var AP = 'eg-administrative-prosecution';
   var NA = 'غير متاح بعد';
+  var SCAN_CAP = 500;   // = SCAN_LIMIT في v2_asklib_routes.py (كان ناقص ⇒ ReferenceError في رسم «جاهز» ⇒ الشاشة بتقول «تعذّر الجلب» دايمًا)
   var DIG = '٠١٢٣٤٥٦٧٨٩';
   var ST_AR = { library: 'مكتبة', proposed: 'مقترحة', verified: 'معتمدة', rejected: 'مرفوضة' };
   var S = { view: null, state: 'idle', data: null, err: '', filter: 'ap', q: '', rows: {}, note: '', noteT: null };

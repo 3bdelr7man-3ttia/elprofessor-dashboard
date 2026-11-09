@@ -320,3 +320,13 @@ def test_scan_passes_pending_and_waits_longer_than_default():
     assert m.view_scan({'items': []})['pending'] == 0
     src = open(m.__file__, encoding='utf-8').read()
     assert "'/api/bridge/ask/library-scan', params={'limit': SCAN_LIMIT}, timeout=30" in src
+
+
+def test_asklib_js_declares_every_constant_it_uses():
+    """SCAN_CAP كان مستخدم من غير تعريف ⇒ ReferenceError في رسم «جاهز» ⇒ «تعذّر جلب مستندات المكتبة» دايمًا."""
+    import os, re
+    src = open(os.path.join(os.path.dirname(__file__), '..', '..', 'dashboard-cloud', 'v2s', 'asklib.js'), encoding='utf-8').read()
+    code = re.sub(r"//[^\n]*|'(?:\\.|[^'\\])*'", '', src)
+    used = set(re.findall(r'(?<![.\w])([A-Z][A-Z_0-9]{2,})\b', code))   # مش خاصية (window.X)
+    declared = set(re.findall(r'var\s+([A-Z][A-Z_0-9]+)', code))
+    assert used <= declared, used - declared
