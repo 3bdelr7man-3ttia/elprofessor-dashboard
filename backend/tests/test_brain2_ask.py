@@ -146,3 +146,92 @@ def test_apply_writes_one_correction_through_v2_write():
 def test_apply_refuses_empty_text():
     res = pa.apply(_ctx(FakePlatform()), {'text': ' '}, _target())
     assert res.ok is False and res.error
+
+
+# ---------------------------------------------------------------- نقاش المصحِّح مع المراجِع (discussion)
+
+def _disc(n, size=50):
+    return [{'role': 'user' if i % 2 == 0 else 'critic', 'text': ('م%d ' % i) * size, 'at': '2026-11-09T10:0%d:00' % i} for i in range(n)]
+
+
+def test_gather_adds_last_four_discussion_messages_cut_to_300():
+    out = pa.gather(_ctx(_plat([_fb('f1', discussion=_disc(6, 200))])))
+    d = out[0].facts['discussion']
+    assert len(d) == 4 and [m['text'][:2] for m in d] == ['م2', 'م3', 'م4', 'م5'], 'آخر ٤'
+    assert all(len(m['text']) <= pa.DISC_MSG_MAX and set(m) == {'role', 'text'} for m in d)
+
+
+def test_gather_ignores_missing_or_malformed_discussion():
+    for bad in (None, 'نص', {'a': 1}, [1, 'x', {'role': 'admin', 'text': 'x'}, {'role': 'user', 'text': ' '}]):
+        out = pa.gather(_ctx(_plat([_fb('f1', discussion=bad)])))
+        assert 'discussion' not in out[0].facts, bad
+    assert 'discussion' not in pa.gather(_ctx(_plat([_fb('f1')])))[0].facts
+
+
+def test_gather_with_discussion_still_fits_the_byte_cap_and_keeps_correction_whole():
+    big = _fb('f1', answer='كلام ' * 2000, correction='تصحيح ' * 150, discussion=_disc(6, 200))
+    arts = [{'ref': '[ق 999/2099 م %d]' % i, 'text': 'نص ' * 400} for i in (1, 2, 3)]
+    f = pa.gather(_ctx(_plat([big], arts)))[0].facts
+    assert len(json.dumps(f, ensure_ascii=False, sort_keys=True).encode('utf-8')) <= pa.FACTS_MAX_BYTES
+    assert f['correction'] == ('تصحيح ' * 150).strip()[:pa.C_MAX], 'التصحيح آخر ما يُقصّ'
+
+
+def test_fit_trims_discussion_before_the_correction():
+    f = {'wrong_answer': 'ر' * 200, 'correction': 'ت' * 700, 'discussion': _disc(4, 100)}
+    f['discussion'] = [dict(m, text=m['text'][:300]) for m in f['discussion']]
+    pa.FACTS_MAX_BYTES, old = 3900, pa.FACTS_MAX_BYTES
+    try:
+        f['question'] = 'س' * 300
+        f['articles'] = [{'ref': 'r', 'text': 'ن' * 140}] * 3
+        pa._fit(f)
+    finally:
+        pa.FACTS_MAX_BYTES = old
+    assert len(f['correction']) == 700 and len(f['discussion']) < 4
+    assert len(json.dumps(f, ensure_ascii=False, sort_keys=True).encode('utf-8')) <= pa.FACTS_MAX_BYTES
+
+
+def test_prompt_carries_discussion_and_the_role_tells_the_reviewer_to_weigh_the_cited_ground():
+    t = _target()
+    t.facts['discussion'] = [{'role': 'user', 'text': 'السند المادة 4 من القانون التجريبي'}]
+    system, user = pa.prompt(t)
+    assert 'السند المادة 4' in user and 'discussion' in system and 'سندًا' in system
+    assert 'لا يُغني عن نص معطى' in system, 'السند المذكور وحده لا يكفي لحكم agrees'
+
+
+def test_fit_with_discussion_keeps_the_articles():
+    big = _fb('f1', answer='ج' * 900, correction='ت' * 250, discussion=_disc(4, 100))
+    big['question'] = 'س' * 150
+    arts = [{'ref': '[ق 999/2099 م %d]' % i, 'text': 'ن' * 700} for i in (1, 2, 3)]
+    f = pa.gather(_ctx(_plat([big], arts)))[0].facts
+    assert f.get('articles'), 'النقاش يتقلّص قبل ما أي مادة تتمس'
+    assert len(f['articles']) == 3
+    assert len(json.dumps(f, ensure_ascii=False, sort_keys=True).encode('utf-8')) <= pa.FACTS_MAX_BYTES
+
+
+def test_refs_may_come_from_user_discussion_but_not_from_critic():
+    t = _target()
+    t.facts['correction'] = 'تختص الجهة التجريبية بالأمر.'
+    t.facts['discussion'] = [{'role': 'user', 'text': 'السند المادة 4 من القانون'},
+                             {'role': 'critic', 'text': 'ربما المادة 7 أيضًا'}]
+    body = {'verdict': 'agrees', 'why': 'x', 'text': 'تختص الجهة التجريبية بالأمر.', 'article_refs': ['المادة 4']}
+    assert pa.validate(body, t) is not None
+    assert pa.validate(dict(body, article_refs=['المادة 7']), t) is None, 'رد المراجِع مش مصدر مراجع'
+    assert pa.validate(dict(body, article_refs=[], text='تختص بالمادة 7.'), t) is None, 'رقم من رد المراجِع'
+    assert pa.validate(dict(body, article_refs=[], text='السند المادة 4.'), t) is not None
+
+
+def test_gather_skips_correction_already_approved(monkeypatch):
+    import brain2.engine as eng
+
+    class _Q(object):
+        def filter(self, *a, **k): return self
+        def first(self): return object()
+
+    class _Item(object):
+        producer = target_ref = status = type('C', (), {'in_': staticmethod(lambda x: True), '__eq__': lambda s, o: True})()
+        query = _Q()
+
+    monkeypatch.setattr(eng, '_models', lambda db: (_Item,))
+    ctx = _ctx(_plat([_fb('f1')]))
+    ctx.ns['db'] = object()
+    assert pa.gather(ctx) == [], 'تصحيح معتمد قبل كده ⇒ لا بطاقة جديدة بعد نقاش'

@@ -1,0 +1,47 @@
+/* ============================================================================
+ * v2s/asklib.css — «أدخل قوانين المكتبة». كل القواعد تحت `.v2s-al` أو `.al-*` أو `.v2s-al-sb`. الأزرار من النظام الموحّد (`.ep-b1` `.ep-b2` `.ep-bs`) بلا قياسات جديدة.
+ * هوية البروفيسور: عنّابي #9E2B4E · ورق #FBFAF7/#F6F1EA · حبر #21262E. ⛔ المفتاح مقفول ⇒ لا عنصر يحمل الأصناف.
+ * ========================================================================== */
+.v2s-al{--wine:#9E2B4E;--paper2:#F6F1EA;--ink:#21262E;--red:#C8102E;--line:#E9E1D6;--mute:#6B665C;color:var(--ink);font-family:'IBM Plex Sans Arabic','Cairo',sans-serif;max-width:1180px}
+.v2s-al *{box-sizing:border-box}
+.v2s-al h3,.v2s-al h4{margin:0;font-family:'Cairo',sans-serif}
+.al-lead{font:700 15px/1.8 'Cairo',sans-serif;margin:0 0 14px}
+.al-mute{color:var(--mute);font-size:14.5px;margin:0}
+.al-ok{background:#E9F3EF;border:1px solid #BCD8CE;color:#1F4D3F;border-radius:12px;padding:10px 14px;font-size:14.5px;line-height:1.8;margin:0 0 12px}
+.al-err{background:#FDECEF;border:1px solid #F2B5C0;color:#8E1228;border-radius:10px;padding:9px 12px;font-size:14px;line-height:1.75;margin:10px 0}
+.al-warn{background:#FFF3D1;border:1px solid #EBD38E;color:#6B4A00;border-radius:12px;padding:9px 14px;font-size:14px;line-height:1.8;margin:8px 0}
+.al-warnbox{display:flex;flex-wrap:wrap;align-items:center;gap:10px 14px;background:#FFF3D1;border:1px solid #EBD38E;color:#6B4A00;border-radius:12px;padding:10px 14px;font-size:14.5px}
+.al-empty{text-align:center;background:#fff;border:1px dashed #D9CFC0;border-radius:16px;padding:28px 16px}
+.al-empty b{display:block;font:800 17px/1.6 'Cairo',sans-serif}
+.al-empty p{margin:6px 0 0;color:var(--mute);font-size:14.5px}
+.al-skel{display:grid;gap:10px}
+.al-skel i{display:block;height:84px;border-radius:14px;background:linear-gradient(90deg,#F1EBE0,#FBF8F2,#F1EBE0);background-size:200% 100%;animation:alsk 1.4s ease-in-out infinite}
+@keyframes alsk{0%{background-position:200% 0}100%{background-position:-200% 0}}
+@media (prefers-reduced-motion:reduce){.al-skel i{animation:none}}
+.al-sum{background:#fff;border:1px solid var(--line);border-radius:16px;padding:14px 16px;margin-bottom:16px}
+.al-sum h3{font-size:17px;margin-bottom:10px}
+.al-cells{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:10px}
+.al-cell{background:var(--paper2);border-radius:12px;padding:10px 12px;display:grid;gap:2px}
+.al-cell b{font:800 14.5px/1.6 'Cairo',sans-serif}
+.al-cell span{font-size:14px;color:var(--mute)}
+.al-bar{display:flex;flex-wrap:wrap;gap:10px 14px;align-items:center;margin-bottom:14px}
+.al-seg{display:flex;flex-wrap:wrap;gap:6px}
+.al-tab{min-height:44px;padding:0 16px;border-radius:999px;border:1px solid var(--line);background:#fff;color:var(--ink);font:700 14px 'Cairo',sans-serif;cursor:pointer}
+.al-tab.on{background:var(--wine);border-color:var(--wine);color:#fff}
+.al-q{flex:1 1 220px;min-height:44px;border:1px solid var(--line);border-radius:12px;padding:0 14px;font:500 15px 'IBM Plex Sans Arabic','Cairo',sans-serif;background:#fff}
+.al-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:14px;align-items:start}
+.al-card{background:#fff;border:1px solid var(--line);border-radius:16px;padding:14px 16px;box-shadow:0 2px 8px rgba(33,38,46,.06)}
+.al-top{display:flex;flex-wrap:wrap;gap:6px 10px;align-items:flex-start;justify-content:space-between}
+.al-top h4{font-size:16.5px;line-height:1.6;min-width:0}
+.al-chip{display:inline-flex;background:#F6E8EC;border:1px solid #E8C5CF;color:#7A1F3C;border-radius:999px;padding:1px 12px;font:700 12.5px/1.7 'Cairo',sans-serif;white-space:nowrap}
+.al-chip.off{background:var(--paper2);border-color:var(--line);color:var(--mute)}
+.al-meta{margin:4px 0 0;color:var(--mute);font-size:14px;line-height:1.7}
+.al-form{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:12px 0 4px}
+.al-form label{display:grid;gap:4px;font:700 13px 'Cairo',sans-serif;color:var(--mute)}
+.al-form select,.al-form input{min-height:44px;border:1px solid var(--line);border-radius:10px;padding:0 10px;font:500 15px 'IBM Plex Sans Arabic','Cairo',sans-serif;background:#fff;color:var(--ink);min-width:0}
+.al-acts{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
+.al-prev{margin-top:12px;border-top:1px dashed var(--line);padding-top:10px}
+.al-arts{margin:0;padding:0;list-style:none;display:grid;gap:6px;max-height:320px;overflow:auto}
+.al-arts li{background:var(--paper2);border-radius:10px;padding:8px 10px;display:grid;gap:2px;font-size:14px;line-height:1.7}
+.al-arts li span{color:var(--ink)}
+@media (max-width:560px){.al-form{grid-template-columns:1fr}.al-grid{grid-template-columns:1fr}}

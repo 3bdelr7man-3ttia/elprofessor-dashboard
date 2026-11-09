@@ -1349,7 +1349,7 @@
       T('ads', 'إعلانات الأعمال', 'v2m_ads'),
       T('all', 'كل السجلات', 'finance', { finTab: 'summary' }, { finTab: { not: [] } })
     ] },
-    { key: 'content', label: 'المحتوى', img: 'content', desc: 'المقالات والموضوعات والأخبار والتعليقات والساحة والديوان والقاموس ودليل الاستخدام', tabs: [
+    { key: 'content', label: 'المحتوى', img: 'content', desc: 'المقالات والموضوعات والأخبار والتعليقات والساحة والديوان والقاموس وقوانين المكتبة ودليل الاستخدام', tabs: [
       T('pipeline',  'خط النشر',       'topics', { topicsTab: 'pipeline' },  { topicsTab: ['pipeline'] }),
       T('articles',  'المقالات',        'topics', { topicsTab: 'articles' },  { topicsTab: ['articles', 'blog', 'auto'] }),
       T('topics',    'الموضوعات',       'topics', { topicsTab: 'pending' },   { topicsTab: ['pending', 'ideas', 'incoming', 'working', 'board', 'rejected', 'archived'] }),
@@ -1358,6 +1358,7 @@
       T('saha',      'الساحة',          'v2s_saha'),
       T('diwan',     'الديوان',         'v2s_diwan'),
       T('glossary',  'القاموس',         'v2s_glossary'),
+      T('asklib',    'أدخل قوانين المكتبة', 'v2s_asklib'),
       T('tutorials', 'دليل الاستخدام', 'topics', { topicsTab: 'tutorials' }, { topicsTab: ['tutorials'] }),
       T('site',      'الموقع',          'topics', { topicsTab: 'site' },      { topicsTab: ['site'] })
     ] },

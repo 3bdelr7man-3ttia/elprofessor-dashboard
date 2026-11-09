@@ -22,6 +22,7 @@ from brain2.contract import ApplyResult, Producer, SourceDown, Target
 PRODUCER_ID = 'ask_correction'
 LIST_LIMIT = 10
 Q_MAX, A_MAX, C_MAX, TEXT_MAX, ART_MAX = 600, 900, 1200, 600, 700
+DISC_MAX_MSGS, DISC_MSG_MAX = 4, 300      # نقاش المصحِّح مع المراجِع: آخر ٤ رسايل، كل واحدة ≤٣٠٠ حرف
 FACTS_MAX_BYTES = 3900
 TRACKS = {'eg-administrative-prosecution': 'النيابة الإدارية'}
 LABEL_APPROVE = 'اعتمده مصدرًا لـ«اسأل»'
@@ -34,10 +35,13 @@ _ROLE = (
     'قارن كلامه بالمواد المعطاة في articles وحدها (إن وُجدت)، ولا تستعمل معلوماتك أنت عن القانون. '
     'في verdict اختر: agrees إن كانت مادة معطاة تقول ما يقوله صراحةً · contradicts إن كانت مادة معطاة تقول عكسه صراحةً · '
     'no_text إن لم تحسم المواد المعطاة المسألة (أو لم تُعطَ مواد). '
+    'قد يوجد في discussion نقاش قصير بين المصحِّح (user) والمراجِع (critic): إن ذكر المصحِّح فيه سندًا '
+    '(رقم مادة أو قانون أو حكم) فاعتبره في المقارنة مع articles، لكنه لا يُغني عن نص معطى في articles: '
+    'سنده المذكور لا يجعلك تحكم agrees إلا إذا أيّدته مادة معطاة. '
     'في why جملة واحدة تذكر المرجع بين المعقوفين كما ورد في articles إن وُجد. '
     'في text صغ كلام المصحِّح «ملاحظة خبير» واضحة في جملة إلى ثلاث جمل (حتى ٦٠٠ حرف) من كلامه وحده: '
     'لا تضف معلومة ولا رقمًا ليس في كلامه. '
-    'وفي article_refs ضع أرقام المواد والقوانين كما وردت في كلام المصحِّح حرفيًا فقط، أو قائمة فارغة. '
+    'وفي article_refs ضع أرقام المواد والقوانين كما وردت حرفيًا في تصحيحه أو في رسائله هو في النقاش (ليس في ردود المراجِع)، أو قائمة فارغة. '
     'الشكل المطلوب: {"verdict":"agrees|contradicts|no_text","why":"…","text":"…","article_refs":["…"]}'
 )
 
@@ -104,9 +108,21 @@ def _size(facts):
 
 
 def _fit(facts):
-    """facts ≤ FACTS_MAX_BYTES: نقصّ الإجابة الغلط الأول، وبعدها نصوص المواد، وبعدها التصحيح."""
-    for key, floor in (('wrong_answer', 200), ('articles', 0), ('correction', 300)):
+    """facts ≤ FACTS_MAX_BYTES: نقصّ الإجابة الغلط الأول، وبعدها النقاش (يتقلّص لرسالة قصيرة أو يختفي)،
+    وبعدها نصوص المواد، وآخرًا التصحيح. المواد أهم من النقاش: من غيرها المراجعة تبقى «مفيش نص يحسم»."""
+    for key, floor in (('wrong_answer', 200), ('discussion', 0), ('articles', 0), ('correction', 300)):
         while _size(facts) > FACTS_MAX_BYTES:
+            if key == 'discussion':
+                disc = facts.get('discussion') or []
+                if not disc:
+                    break
+                if len(disc) > 1:
+                    disc.pop(0)                 # الأقدم الأول
+                elif len(disc[0]['text']) > 80:
+                    disc[0]['text'] = disc[0]['text'][:80]
+                else:
+                    facts.pop('discussion', None)
+                continue
             if key == 'articles':
                 arts = facts.get('articles') or []
                 if not arts:
@@ -126,6 +142,32 @@ def _fit(facts):
     return facts
 
 
+def _discussion(raw):
+    """آخر ٤ رسايل من خيط النقاش (لو الجسر رجّعه)، كل واحدة مقصوصة. شكل غير مفهوم ⇒ لا نقاش."""
+    if not isinstance(raw, list):
+        return []
+    out = []
+    for m in raw:
+        if not isinstance(m, dict):
+            continue
+        text = str(m.get('text') or '').strip()
+        role = m.get('role')
+        if text and role in ('user', 'critic'):
+            out.append({'role': role, 'text': text[:DISC_MSG_MAX]})
+    return out[-DISC_MAX_MSGS:]
+
+
+def _already_decided(ctx, fid):
+    """اتعتمد/اتنفّذ قبل كده لنفس التصحيح؟ (نمنع بطاقة تانية بعد نقاش جديد ⇒ تصحيح مكرر في «اسأل»)."""
+    try:
+        from brain2.engine import _models
+        Item = _models(ctx.ns['db'])[0]
+        return Item.query.filter(Item.producer == PRODUCER_ID, Item.target_ref == 'askfb:' + fid,
+                                 Item.status.in_(('approved', 'edited', 'applying', 'unknown'))).first() is not None
+    except Exception:   # noqa: BLE001
+        return False
+
+
 def gather(ctx):
     out = []
     for it in _list(ctx):
@@ -133,6 +175,8 @@ def gather(ctx):
         corr = str(it.get('correction') or '').strip()
         track = str(it.get('track') or '')
         if not _ID_RE.match(fid) or len(corr) < 10 or track not in TRACKS:
+            continue
+        if _already_decided(ctx, fid):
             continue
         facts = {
             'track': TRACKS[track],
@@ -144,6 +188,9 @@ def gather(ctx):
         arts = _articles(ctx, track, facts['question'] + ' ' + facts['correction'])
         if arts:
             facts['articles'] = arts
+        disc = _discussion(it.get('discussion'))
+        if disc:
+            facts['discussion'] = disc
         _fit(facts)
         out.append(Target(ref='askfb:' + fid, label=('تصحيح «اسأل»: ' + facts['question'])[:120], facts=facts,
                           meta={'feedback_id': fid, 'track': track}))
@@ -161,6 +208,15 @@ def prompt(target):
     return (SYSTEM_AR or '') + _ROLE, user
 
 
+def _refs_source(facts):
+    """النص اللي المراجع تتطابق معاه: التصحيح + رسايل المصحِّح (user) في النقاش. ردود المراجِع (critic) خارج."""
+    parts = [facts.get('correction') or '']
+    for m in facts.get('discussion') or []:
+        if isinstance(m, dict) and m.get('role') == 'user':
+            parts.append(str(m.get('text') or ''))
+    return '\n'.join(parts)
+
+
 def _refs_ok(refs, correction):
     if not isinstance(refs, list) or len(refs) > 10:
         return None
@@ -174,14 +230,26 @@ def _refs_ok(refs, correction):
     return out
 
 
+def _numbers_from_corrector(text, facts):
+    """كل رقم في الصياغة لازم يكون في كلام المصحِّح (التصحيح + رسايله)، مش في رد المراجِع."""
+    try:
+        from brain2.engine import norm_digits
+    except Exception:   # noqa: BLE001
+        return True
+    src = norm_digits(_refs_source(facts))
+    return all(run in src for run in re.findall(r'\d+', norm_digits(text)))
+
+
 def validate(raw, target):
     if not isinstance(raw, dict):
         return None
     text = raw.get('text')
     if not isinstance(text, str) or not text.strip() or len(text.strip()) > TEXT_MAX:
         return None
-    refs = _refs_ok(raw.get('article_refs') or [], target.facts.get('correction') or '')
+    refs = _refs_ok(raw.get('article_refs') or [], _refs_source(target.facts))
     if refs is None:
+        return None
+    if not _numbers_from_corrector(text, target.facts):
         return None
     verdict = raw.get('verdict')
     if verdict not in VERDICTS:

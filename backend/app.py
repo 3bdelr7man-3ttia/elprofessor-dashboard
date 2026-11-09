@@ -2862,6 +2862,9 @@ except Exception: logger.exception('v2 saha routes not loaded')
 try:   # «الأدوات / الاستوديو» (docs/v2/tools/SPEC.md): تحميل محروس — غيابه لا يكسر الإقلاع
     import v2_tools_routes as _v2s_tools; _v2s_tools.register(app, globals())
 except Exception: logger.exception('v2 tools routes not loaded')
+try:   # «أدخل قوانين المكتبة» (المحتوى ‹ أدخل قوانين المكتبة): تحميل محروس — غيابه لا يكسر الإقلاع
+    import v2_asklib_routes as _v2s_asklib; _v2s_asklib.register(app, globals())
+except Exception: logger.exception('v2 asklib routes not loaded')
 __import__('v2_books_routes').register(app, globals())
 try:   # «كتبنا وأدلّتنا» (docs/v2/books-ours/SPEC.md): تحميل محروس — غيابه لا يكسر الإقلاع
     import v2_books_ours_routes as _v2s_books_ours; _v2s_books_ours.register(app, globals())
