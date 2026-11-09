@@ -1240,9 +1240,23 @@ def test_prerender_py_has_no_diff_against_the_branch_base():
     if git.returncode != 0:
         pytest.skip('القاعدة غير متاحة في هذا المستودع')
     # فرع «ناقشها في الساحة» (docs/v2/saha-link) يضيف تحققًا لزرّ الساحة في prerender.py عمدًا: إضافات فقط، ولا سطر محذوف ولا معدَّل.
-    d = subprocess.run(['git', '-C', ROOT, 'diff', '--numstat', BASE_COMMIT, '--', 'backend/prerender.py'], capture_output=True, text=True)
-    removed = sum(int(l.split()[1]) for l in d.stdout.splitlines() if l.strip())
-    assert removed == 0, 'prerender.py: سطور اتحذفت أو اتعدّلت'
+    # R19 (2026-11-09): الاستثناء الوحيد = فحوص القياس القديمة (GTM مرّتين + <noscript> لـGTM وميتا) اللي بقت غلط بعد
+    # موافقة الكوكيز في R16 — اتبدّلت بعقد «مقطع واحد مشروط بالموافقة وبلا noscript». أي سطر تاني اتحذف = فشل زي زمان.
+    d = subprocess.run(['git', '-C', ROOT, 'diff', '-U0', BASE_COMMIT, '--', 'backend/prerender.py'], capture_output=True, text=True)
+    removed = [l[1:].strip() for l in d.stdout.splitlines() if l.startswith('-') and not l.startswith('---')]
+    allowed = {
+        '# القياس/التتبّع: gtag(\'config\') من pixel.js فقط، ولا Meta داخل GTM',
+        'if html.count(GTM_ID) != 2:',
+        'bad("%s appears %d times (expected 2: head snippet + noscript iframe)"',
+        '% (GTM_ID, html.count(GTM_ID)))',
+        'if html.count("googletagmanager.com/ns.html") != 1:',
+        'bad("GTM noscript iframe count != 1")',
+        'if html.count("facebook.com/tr?id=") != 1:',
+        'bad("Meta noscript pixel count != 1")',
+        'errs.append("blog.html %s count != 2" % GTM_ID)',
+        'bad("%s count != 2" % GTM_ID)',
+    }
+    assert [l for l in removed if l not in allowed] == [], 'prerender.py: سطور اتحذفت أو اتعدّلت'
     app_src = _read('backend', 'app.py')
     assert "import v2_content_routes as _v2s_content; _v2s_content.register(app, globals())" in app_src
     assert app_src.index('_v2s_content.register') < app_src.index('# ---- v2 section routes end')

@@ -648,18 +648,25 @@ def verify_article(html, a, r, meta, ctx):
         except Exception as exc:                # noqa: BLE001
             bad("a JSON-LD block does not parse: %s" % exc)
 
-    # القياس/التتبّع: gtag('config') من pixel.js فقط، ولا Meta داخل GTM
-    if html.count(GTM_ID) != 2:
-        bad("%s appears %d times (expected 2: head snippet + noscript iframe)"
+    # القياس/التتبّع: gtag('config') من pixel.js فقط، ولا Meta داخل GTM.
+    # R16 (الموقع 390e122، 2026-11-08): القياس بعد موافقة الكوكيز بس ⇒ مقطع GTM واحد مشروط بـep_consent، ومفيش
+    # <noscript> لا لـGTM ولا لبكسل ميتا (دول بيشتغلوا من غير موافقة). المتحقّق كان لسه بيطلبهم فكل صفحة كانت بتفشل
+    # والمقالات المسبقة ما اتجددتش من ساعتها — اتصلّح في R19 (2026-11-09).
+    if html.count(GTM_ID) != 1:
+        bad("%s appears %d times (expected 1: the consent-gated head snippet)"
             % (GTM_ID, html.count(GTM_ID)))
-    if html.count("googletagmanager.com/ns.html") != 1:
-        bad("GTM noscript iframe count != 1")
+    elif "ep_consent" not in html:
+        bad("the GTM snippet is not gated on ep_consent (tracking before consent)")
+    if "googletagmanager.com/ns.html" in html:
+        bad("a GTM noscript iframe is present (it fires without consent)")
     if html.count("/pixel.js?v=") != 1:
         bad("pixel.js count != 1")
+    if html.count("/consent.js?v=") != 1:
+        bad("consent.js count != 1")
     if "gtag('config'" in html or 'gtag("config"' in html:
         bad("an inline gtag('config') leaked into the page")
-    if html.count("facebook.com/tr?id=") != 1:
-        bad("Meta noscript pixel count != 1")
+    if "facebook.com/tr?id=" in html:
+        bad("a Meta noscript pixel is present (it fires without consent)")
 
     # الترميز: <meta charset> لا بد أن يبقى داخل أول ١٠٢٤ بايت (استنتاج الترميز)
     pos = html.encode("utf-8").find(b'<meta charset="UTF-8">')
@@ -766,8 +773,11 @@ def verify_blog(html, articles):
                     % (html.count('<a class="post" href="/blog/'), len(articles) - 1))
     if html.count('<a class="feat" href="/blog/') != 1:
         errs.append("blog.html featured card count != 1")
-    if html.count(GTM_ID) != 2:
-        errs.append("blog.html %s count != 2" % GTM_ID)
+    # R16/R19: مقطع GTM واحد مشروط بالموافقة، وبلا <noscript> (شوف verify_article)
+    if html.count(GTM_ID) != 1:
+        errs.append("blog.html %s count != 1 (the consent-gated snippet)" % GTM_ID)
+    if "googletagmanager.com/ns.html" in html or "facebook.com/tr?id=" in html:
+        errs.append("blog.html has a noscript tracker (fires without consent)")
     if "gtag('config'" in html:
         errs.append("blog.html has an inline gtag('config')")
     if html.count("<script>window.EP_PRERENDERED=true;</script>") != 1:
@@ -1181,8 +1191,8 @@ def verify_topic_page(html, topic, meta):
             json.loads(m.group(1))
         except Exception as exc:                # noqa: BLE001
             bad("a JSON-LD block does not parse: %s" % exc)
-    if html.count(GTM_ID) != 2:
-        bad("%s count != 2" % GTM_ID)
+    if html.count(GTM_ID) != 1:   # R16/R19: مقطع واحد مشروط بالموافقة، بلا <noscript>
+        bad("%s count != 1 (the consent-gated snippet)" % GTM_ID)
     if html.count("pixel.js?v=") != 1:
         bad("pixel.js count != 1")
     for leak in ("content-loader.js", "var ELE=", "EP_RENDER", 'id="grid"', 'id="filters"'):
