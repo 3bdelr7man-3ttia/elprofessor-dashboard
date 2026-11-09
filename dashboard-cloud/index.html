@@ -7923,14 +7923,18 @@ function v2ShellBoot(){
 }
 // مرة واحدة عند الإقلاع. ⛔ الإقلاع القديم بيترسم فورًا من غير ما ينتظر المفتاح (مقفول = نفس التوقيت بالحرف).
 // لما الرد يوصل بـenabled:true بس: القائمة تتعاد وبنفتح اللوحة. أي فشل/تأخير (> ٣ ثواني)/٤٠٣ = مقفول.
+// آخر رد حاسم متذكَّر للمفتاح — قراية بس (الكتابة من الرد الحاسم جوه v2LoadFlag، والفشل/التأخير ما بيلمسهاش).
+function v2Remembered(){try{return localStorage.getItem('ep_v2_shell')==='1';}catch(e){return false;}}
 function v2LoadFlag(cb){
-  var done=false;
+  var done=false,mem=v2Remembered();
   function fin(on){if(done)return;done=true;if(on){try{v2Enable();}catch(e){window.V2_ON=false;}}cb(!!window.V2_ON);}
   try{EP.api('/v2/config').then(function(r){
     // D1-B: تذكّر آخر رد حاسم (مفتوح/مقفول) فيُخفى الشريط القديم من أول إطار في الفتحة الجاية. فشل أو تأخير = لا يُمسّ التذكّر.
     try{if(r&&r.enabled===true)localStorage.setItem('ep_v2_shell','1');else localStorage.setItem('ep_v2_shell','0');}catch(e){}
-    fin(!!(r&&r.enabled===true));}).catch(function(){fin(false);});}catch(e){fin(false);}
-  setTimeout(function(){fin(false);},3000);
+    fin(!!(r&&r.enabled===true));}).catch(function(){fin(mem);});}catch(e){fin(false);}
+  // R19 (المؤسس 2026-11-09: «كل ما بعمل ريفرش بتظهر الداشبورد القديمة»): الخادم بعامل واحد ومشغول بطلبات الإقلاع،
+  // فـ/v2/config كان بيعدّي الـ٣ ثواني ⇒ رجوع للقديمة. دلوقتي التأخير/الفشل بيرجع لآخر رد حاسم متذكَّر (مش «مقفول» دايمًا).
+  setTimeout(function(){fin(mem);},8000);
 }
 window.EP_BOOT=function(){
   // D1-B: الأدمن اللي المفتاح كان مفتوح عنده آخر مرة: الشريط القديم مخفي لحد ما الرد يوصل (مفيش ومضة قائمة قديمة).
