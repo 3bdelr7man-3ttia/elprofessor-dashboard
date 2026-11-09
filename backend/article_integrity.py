@@ -111,3 +111,24 @@ def repair_tail(blocks):
         del blocks[idx[-1]]
         acts.append('drop_heading')
     return blocks, acts
+
+
+# ---------------------------------------------------------------------------
+# R19 — قاعدة المؤسس (2026-11-09): «أي حاجة ملهاش رابط أو مش هتعرف توصل للرابط بتاعها ما تنشرهاش»
+# ---------------------------------------------------------------------------
+_HTTP_URL = re.compile(r'^https?://[^\s/$.?#][^\s]*$', re.I)
+
+
+def has_source_url(value):
+    """رابط مصدر http(s) صالح؟ (بلا شبكة — المنصّة هي اللي فحصت أنه يفتح قبل توليد المقال)."""
+    return bool(_HTTP_URL.match(str(value or '').strip()))
+
+
+def news_without_source(a):
+    """مقال مولَّد من خبر (category=news أو له source_news_id) وبلا `source_url` http(s) ⇒ True.
+    هذا الحزام الثاني عند مدخل المدوّنة: المنصّة ما بتولّد مقال خبر بلا رابط، لكن مسودة قديمة أو مسار تاني
+    ممكن يعدّي — فالمزامنة تدخله مسودة ولا تنشره آليًّا."""
+    if not isinstance(a, dict):
+        return False
+    is_news = (a.get('category') == 'news') or bool(a.get('source_news_id'))
+    return is_news and not has_source_url(a.get('source_url'))

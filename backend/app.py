@@ -10820,6 +10820,7 @@ def _sync_platform_articles():
         return {'error': 'تعذّر الاتصال بالمنصة'}, 502
     imported = published = drafts = duplicates = linked = gated = 0
     held_incomplete = []
+    held_no_source = []
     pool = Article.query.filter_by(status='published').all()
     for a in arts:
         title = (a.get('title') or '').strip()
@@ -10855,6 +10856,12 @@ def _sync_platform_articles():
             is_published = False
             held_incomplete.append({'platform_id': a.get('id'), 'title': title[:80], 'reasons': incomplete})
             app.logger.warning('sync: held as draft — body looks truncated: %r %s', title[:60], incomplete)
+        # R19 — قاعدة المؤسس (2026-11-09) «ملهوش رابط ما يتنشرش»: مقال خبر بلا رابط مصدر http(s) ما يتنشرش آليًّا
+        # أبدًا (حتى مع BLOG_AUTOPUBLISH_ALL) — بيدخل مسودة وبيرجع في ردّ المزامنة (held_no_source).
+        if _ai.news_without_source(a):
+            is_published = False
+            held_no_source.append({'platform_id': a.get('id'), 'title': title[:80]})
+            app.logger.warning('sync: held as draft — news article has no source link: %r', title[:60])
         art = Article(
             title=title[:500],
             excerpt=(a.get('excerpt') or '')[:1000],
@@ -10898,7 +10905,7 @@ def _sync_platform_articles():
         _delete_platform_article(a.get('id'))  # only AFTER a successful import
     out = {'ok': True, 'imported': imported, 'published': published, 'drafts': drafts,
            'duplicates': duplicates, 'with_related_links': linked, 'held_not_legal': gated,
-           'held_incomplete': held_incomplete}
+           'held_incomplete': held_incomplete, 'held_no_source': held_no_source}
     # مقال جديد منشور = صفحة الزواحف بتاعته لسه مش موجودة على الاستضافة. الدفع هنا
     # هو اللي بيمنع تكرار انحسار يوليو ٢٠٢٦ (٣٦ مقال قواقع فاضية اتناشر يوم).
     # لاحق (Thread) عمدًا: المزامنة لازم ترجّع بسرعة، والتوليد+الرفع بياخدوا دقيقة.
