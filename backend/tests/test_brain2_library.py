@@ -320,3 +320,8 @@ def test_dashboard_reject_falls_back_to_brain_reason_and_survives_hook_failure(a
     r = api.post('/api/v2/brain/items/%s/reject' % iid, {'confirmed': True})
     assert r.status_code == 200 and rows()[0].status == 'rejected', 'فشل الإبلاغ ما يلغيش الرفض'
     assert calls == ['مش نص قانون']
+
+
+def test_a_ruling_without_articles_can_still_be_accepted():
+    from brain2 import producers_library as pl
+    assert 'ruling' not in pl.SPLIT_KINDS and 'law' in pl.SPLIT_KINDS

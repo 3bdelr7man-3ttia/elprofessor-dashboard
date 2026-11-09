@@ -27,6 +27,8 @@ TITLE_MAX, PREVIEW_MAX, NAME_MAX, NUM_MAX = 150, 1200, 60, 40
 FACTS_MAX_BYTES = 3900
 TRACKS = {'eg-administrative-prosecution': 'النيابة الإدارية'}
 LEGAL_KINDS = ('law', 'regulation', 'decision', 'ruling')
+# أنواع لازم تتقسّم لمواد عشان تتقبل. الحكم ملوش مواد (بيتحفظ مرجع «حكم»)، والقرار من غير مواد بيتحفظ مرجع كمان.
+SPLIT_KINDS = ('law', 'regulation')
 KINDS = LEGAL_KINDS + ('own_book', 'other')
 LABEL_APPROVE = 'ضيفها للمكتبة'
 LOCK_REASON = 'يسألك دائمًا لأن إضافة نص للمكتبة تغيّر إجابات «اسأل» لكل الناس.'
@@ -170,6 +172,8 @@ def _card_text(facts, legal, number_ok, duplicate):
     n = _int(facts.get('articles_found'))
     if facts.get('kind') == 'own_book':
         lines.append('كتاب مؤلفه: بيتحفظ كمرجع من غير تقسيم لمواد')
+    elif facts.get('kind') == 'ruling':
+        lines.append('حكم: بيتحفظ مرجع «حكم» من غير تقسيم لمواد')
     else:
         lines.append('اتقسّم %d مادة' % n if n else 'ما اتقسّمش لمواد')
     ex = _int(facts.get('existing_articles'))
@@ -227,8 +231,8 @@ def validate(raw, target):
             return None                  # كتاب مش من مؤلفه ⇒ مفيش قبول
         if f.get('kind') not in KINDS or f.get('kind') == 'other':
             return None
-        if f.get('kind') in LEGAL_KINDS and not _int(f.get('articles_found')):
-            return None                  # نص قانوني ما اتقسّمش لمواد ⇒ مش جاهز للقبول
+        if f.get('kind') in SPLIT_KINDS and not _int(f.get('articles_found')):
+            return None                  # قانون/لائحة ما اتقسّمش لمواد ⇒ مش جاهز للقبول
     if f.get('kind') == 'own_book':
         track, law_key = '', ''          # الكتاب بيتحفظ كمرجع بس
     elif not track:
@@ -245,10 +249,12 @@ def template(target):
     f = target.facts
     n, ex = _int(f.get('articles_found')), _int(f.get('existing_articles'))
     kind = f.get('kind')
-    legal = n > 0
+    legal = n > 0 or kind in ('ruling', 'decision')
     duplicate = 'older_copy' if ex > 0 else 'none'
     if kind in LEGAL_KINDS and n > 0:
         rec, why = 'accept', 'فحص تلقائي: اتقسّمت لمواد، راجعها بنفسك'
+    elif kind in ('ruling', 'decision'):
+        rec, why = 'review', 'حكم أو قرار: راجع إنه نص رسمي بنفسك'
     elif kind in LEGAL_KINDS:
         rec, why = 'reject', 'ما اتقسّمتش لمواد'
     else:
