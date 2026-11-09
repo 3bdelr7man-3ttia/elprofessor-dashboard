@@ -265,7 +265,7 @@ def register(app, ns):
         status, payload = engine.apply_item(ns, item_id, L('_actor_email')(), text)
         return out(payload, status)
 
-    def _decide(item_id, new_status, allowed_status, audit, extra_filter=None):
+    def _decide(item_id, new_status, allowed_status, audit, extra_filter=None, reason=''):
         bad = bad_id(item_id)
         if bad:
             return bad
@@ -282,7 +282,27 @@ def register(app, ns):
         if changed != 1:
             return out({'error': engine.ERR_DECIDED}, 409)
         L('_audit')(audit, target=item_id, meta={'producer': r.producer})
+        if new_status == 'rejected':
+            _notify_reject(r, actor, reason)
         return out({'ok': True, 'id': item_id, 'status': new_status})
+
+    def _notify_reject(r, actor, reason=''):
+        """خطّاف الرفض الاختياري للمنتج (`on_reject`): بيبلّغ النظام الخارجي بالرفض وسببه. الرفض نفسه حصل، وأي فشل هنا يتسجّل بس."""
+        p = registry.by_id(r.producer)
+        hook = getattr(p, 'on_reject', None)
+        if not callable(hook):
+            return
+        try:
+            from brain2.contract import Ctx, Target
+            facts, body = engine._loads(r.facts_json, {}), engine._loads(r.body_json, {})
+            if not (isinstance(reason, str) and reason.strip()) and body.get('recommend') == 'reject':
+                reason = body.get('why') or ''
+            target = Target(ref=r.target_ref, label=r.target_label or '', facts=facts, meta=engine._loads(r.meta_json, {}))
+            res = hook(Ctx(ns=ns, now=engine._aware(), actor=str(actor)), target, reason if isinstance(reason, str) else '')
+            if not getattr(res, 'ok', False):
+                logger.warning('brain2: on_reject not delivered for %s', r.producer)
+        except Exception:   # noqa: BLE001
+            logger.exception('brain2: on_reject raised for %s', r.producer)
 
     @app.route('/api/v2/brain/items/<item_id>/reject', methods=['POST'], endpoint='v2_brain2_reject')
     @token_required
@@ -291,10 +311,11 @@ def register(app, ns):
         closed = gate()
         if closed:
             return closed
-        _, bad = confirmed_body()
+        body, bad = confirmed_body()
         if bad:
             return bad
-        return _decide(item_id, 'rejected', 'proposed', 'brain.reject')
+        reason = engine.clean_text(body.get('reason'))[:300] if isinstance(body.get('reason'), str) else ''
+        return _decide(item_id, 'rejected', 'proposed', 'brain.reject', reason=reason)
 
     @app.route('/api/v2/brain/items/<item_id>/discard', methods=['POST'], endpoint='v2_brain2_discard')
     @token_required

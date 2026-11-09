@@ -62,7 +62,8 @@ def test_registry_flags():
     # R16: كل اقتراح ينتظر قرارًا يصل تليجرام افتراضيًا؛ الاعتماد من هناك للثلاثة فقط (TELEGRAM_OK).
     # «دقة اسأل» (2026-11-09): تصحيحات «اسأل» تنتظر قرار المؤسس ⇒ تليجرام افتراضيًا، والاعتماد من اللوحة بس.
     assert registry.TELEGRAM_DEFAULT_ON == {'reply_draft', 'file_review', 'course_review',
-                                            'market_match', 'site_review', 'course_lesson_draft', 'ask_correction'}
+                                            'market_match', 'site_review', 'course_lesson_draft', 'ask_correction',
+                                            'library_contribution'}
     assert 'opinion' not in registry.TELEGRAM_OK
     ids = [p.id for p in registry.PRODUCERS]
     assert 'file_review' in ids and len(ids) == len(set(ids))

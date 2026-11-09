@@ -46,6 +46,7 @@ class Producer:
     validate: Callable[[dict, Target], Optional[dict]]   # -> body {'text': str, ...} | None
     template: Optional[Callable[[Target], Optional[dict]]] = None
     apply: Optional[Callable[[Ctx, dict, Target], ApplyResult]] = None
+    on_reject: Optional[Callable[..., ApplyResult]] = None   # اختياري (2026-11-09): يبلّغ النظام الخارجي بالرفض + سببه
     tag: str = ''                  # card tag (Arabic)
     approve_label: str = ''        # main button (Arabic)
     listed: bool = True            # False = hidden hook
