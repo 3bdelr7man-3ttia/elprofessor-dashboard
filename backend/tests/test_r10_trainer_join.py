@@ -232,7 +232,9 @@ def test_video_state_table():
     miss = _co('appTickets', [_app(join_as='trainer')], {'now': NOW})[0]['video']
     assert miss == {'kind': 'missing', 'text': 'لم يُرسل الفيديو بعد', 'open': True}
     exp = _co('appTickets', [_app(join_as='expert', video_due_at=due_past)], {'now': NOW})[0]['video']
-    assert exp['kind'] == 'none' and exp['open'] is False                  # الخبير وحده بلا فيديو
+    assert exp['kind'] == 'overdue' and exp['open'] is True                # R20: الخبير عليه فيديو كمان، بنفس المهلة
+    assert _co('appTickets', [_app(join_as='expert', intro_video_url='https://youtu.be/abc')], {'now': NOW})[0]['video']['kind'] == 'sent'
+    assert _co('appTickets', [_app(join_as='expert')], {'now': NOW})[0]['video']['kind'] == 'missing'
     auto = _co('appTickets', [_app(join_as='trainer', status='cancelled', cancel_reason='video_overdue', cancelled_at=_iso(NOW))], {'now': NOW})[0]
     assert auto['video'] == {'kind': 'cancelled', 'text': 'أُلغي تلقائيًا', 'open': False} and auto['status'] == 'cancelled'
     hand = _co('appTickets', [_app(join_as='trainer', status='cancelled', cancel_reason='manual')], {'now': NOW})[0]['video']
@@ -244,14 +246,14 @@ def test_overdue_count_matches_the_platform_sweep_rule():
     past, future = _iso(NOW - 1000), _iso(NOW + 3600 * 1000)
     rows = [_app(id='a', join_as='trainer', video_due_at=past),                                     # يُحسب
             _app(id='b', join_as='both', video_due_at=past),                                        # يُحسب
-            _app(id='c', join_as='expert', video_due_at=past),                                      # خبير وحده: لا
+            _app(id='c', join_as='expert', video_due_at=past),                                      # يُحسب (R20: الخبير عليه فيديو كمان)
             _app(id='d', join_as='trainer', video_due_at=past, intro_video_url='https://youtu.be/x'),  # الفيديو وصل: لا
             _app(id='e', join_as='trainer', video_due_at=future),                                   # لم يفت: لا
             _app(id='f', join_as='trainer'),                                                        # بلا موعد: لا
             _app(id='g', join_as='trainer', video_due_at=past, status='needs_info'),               # الكنسة تتخطّاه: لا
             _app(id='h', join_as='trainer', video_due_at=past, status='cancelled'),                # ملغي: لا
             _app(id='i', video_due_at=past)]                                                        # طلب قديم بموعد ⇒ مدرّب ⇒ يُحسب
-    assert _co('videoOverdueCount', rows, NOW) == 3
+    assert _co('videoOverdueCount', rows, NOW) == 4
     assert _co('videoOverdueCount', [], NOW) == 0
     assert _co('videoOverdueCount', None, NOW) is None                     # مصدر فاشل ⇒ لا صفر كاذب
     assert _co('videoOverdueLine', 3) == 'طلبات انضمام فات موعد الفيديو: ٣'
@@ -306,3 +308,17 @@ def test_backend_routes_are_registered_once():
     src = _read('backend', 'app.py')
     assert src.count("'/api/platform-trainer-applications/expire-sweep'") == 1
     assert "('approve', 'reject', 'cancel', 'postpone')" in src
+
+
+@needs_node
+def test_r20_inbox_labels_are_role_aware_and_carry_the_country_and_years():
+    """R20: «طلب انضمام — خبير/مدرّب» من join_as، بلا «مؤسس»؛ والبلد والخبرة (شريحة) بيظهروا على التذكرة."""
+    t = _co('appTickets', [_app(join_as='expert', country='SA', experience_band='6-10')], {'now': NOW})[0]
+    assert 'البلد: ' in t['line'] and t['experience']['years'] == 'من ٦ إلى ١٠ سنوات'
+    assert _co('appTickets', [_app(join_as='expert')], {'now': NOW})[0]['experience']['years'] == ''
+    assert 'المؤسسين' not in _co('appTickets', [_app(founding_lead_id='L1', join_as='expert')], {'now': NOW})[0]['line']
+    api = _read('dashboard-cloud', 'dashboard-api.js')
+    assert 'out: "خبير مؤسس — طلب انضمام كمدرّب"' not in api and 'out: "طلب انضمام كمدرّب"' not in api
+    assert 'out: "طلب انضمام" + (role ? " — " + role : "")' in api and 'JOIN_AS_LBL' in api
+    logic = _read('dashboard-cloud', 'v2-logic.js')
+    assert "card.tag = 'طلب انضمام' + (trRole ? ' — ' + trRole : '')" in logic and "card.tag = 'خبير مؤسس'" not in logic

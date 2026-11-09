@@ -570,7 +570,7 @@ def test_application_tickets():
     by = {x['id']: x for x in t}
     assert by['ta-1']['suggestion'] == 'accept' and by['ta-1']['line'] == '٣ مجالات، لينكدإن، سيرة ذاتية، نماذج أعمال'
     assert by['ta-2']['suggestion'] == 'open' and by['ta-2']['line'] == 'بلا مجال محدّد، بلا روابط، نبذة الخبرة قصيرة، ينقص الطلب: سيرة ذاتية أو لينكدإن، نبذة خبرة كافية، مجال واحد على الأقل'
-    assert by['ta-3']['suggestion'] == 'accept' and by['ta-3']['line'] == 'مجالان، لينكدإن، جاء من دعوة الخبراء المؤسسين'
+    assert by['ta-3']['suggestion'] == 'accept' and by['ta-3']['line'] == 'مجالان، لينكدإن، جاء من نموذج الخبراء القديم'
     assert by['ta-1']['chips'] == ['عقود', 'شركات', 'ملكية فكرية'] and by['ta-1']['moreChips'] == 0
     one = _co('appTickets', [dict(APPS[0], expertise=['أ', 'ب', 'ج', 'د', 'هـ'])], {'now': NOW})[0]
     assert one['chips'] == ['أ', 'ب', 'ج'] and one['moreChips'] == 2

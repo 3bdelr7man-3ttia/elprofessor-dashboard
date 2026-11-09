@@ -1781,11 +1781,14 @@
         get("/platform-trainer-applications?status=pending").then(function (a) {
           var apps = (a && a.applications) || [];
           try { var VL = window.V2L && window.V2L.v2s && window.V2L.v2s.courses; if (VL && VL.videoOverdueCount) videoOverdue = VL.videoOverdueCount(apps, Date.now()); } catch (e) { videoOverdue = null; }
+          // R20 (قرار المؤسس 2026-11-09): «طلب انضمام — خبير/مدرّب» حسب `join_as` على الطلب. بلا `join_as` ⇒ «طلب انضمام» بلا تخمين.
+          var JOIN_AS_LBL = { expert: "خبير", trainer: "مدرّب", both: "خبير ومدرّب" };
           apps.forEach(function (ap) {
+            var role = JOIN_AS_LBL[String(ap.join_as || "").toLowerCase()] || "";
             realRows.push({
-              out: "طلب انضمام كمدرّب", from: "درّب معنا", src: "cap", dest: "team",
-              triage: "human", sla: "بوابة التوثيق", slaWarn: false,
-              note: (ap.headline || "طلب مدرّب جديد") + " — اعتمد الصفة وحدّد نسبة الإيراد.",
+              out: "طلب انضمام" + (role ? " — " + role : ""), from: "درّب معنا", src: "cap", dest: "team",
+              triage: "human", sla: "بوابة التوثيق", slaWarn: false, trJoin: String(ap.join_as || "").toLowerCase(),
+              note: (ap.headline || "طلب انضمام جديد") + " — اعتمد الصفة وحدّد نسبة الإيراد.",
               ref: "TRN-" + ap.id, who: ap.user_name || ap.full_name || ap.user_email || ap.email || "—",
               apiKind: "trainer", personEmail: ap.user_email || ap.email || "", apiId: ap.id, ts: Date.parse(ap.created_at || ap.submitted_at || "") || 0,
               trHeadline: ap.headline || "", trSpec: ap.specialty || ap.specialization || "", trYears: ap.years_experience || "", trAttach: Array.isArray(ap.attachments) ? ap.attachments.length : 0,
@@ -1812,7 +1815,7 @@
             var country = l.country || l.governorate || "";
             var spec = l.specialization || "ما حدّدش";
             realRows.push({
-              out: "خبير مؤسس — طلب انضمام كمدرّب", from: "درّب معنا", src: "shield", dest: "team",
+              out: "طلب انضمام", from: "درّب معنا", src: "shield", dest: "team",
               triage: "human", sla: relTime(at) || "بانتظار قرارك", slaWarn: false,
               note: "التخصّص: " + spec + (l.years_experience ? " · الخبرة: " + l.years_experience : "")
                 + (country ? "، البلد: " + country : "") + " — كلّمه على واتساب، وعلّم الخطوة من هنا.",

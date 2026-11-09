@@ -704,10 +704,12 @@
       case 'trainer': {
         var facts = clean([str(r.trSpec), str(r.trYears) && ('الخبرة: ' + str(r.trYears)),
                            r.trAttach ? U(r.trAttach, ['مرفق واحد', 'مرفقان', 'مرفقات', 'مرفقًا']) : '']);
-        card.tag = 'مدرّب جديد';
-        card.title = who || 'مدرّب';
+        // R20: «طلب انضمام — خبير/مدرّب» حسب صفة المتقدّم (join_as). صفة غير معروفة ⇒ «طلب انضمام» بلا تخمين.
+        var trRole = { expert: 'خبير', trainer: 'مدرّب', both: 'خبير ومدرّب' }[str(r.trJoin)];
+        card.tag = 'طلب انضمام' + (trRole ? ' — ' + trRole : '');
+        card.title = who || 'مقدّم الطلب';
         card.sub = shorten(str(r.trHeadline) || str(r.note).replace(/\s*—\s*اعتمد.*$/, ''), 140);
-        card.brain = clean([who || 'مدرّب', card.sub].concat(facts)).join('، ');
+        card.brain = clean([who || 'مقدّم الطلب', card.sub].concat(facts)).join('، ');
         card.reason = 'اطّلع على الطلب كاملًا إن أردت قبل القبول';
         card.primary = { label: 'اقبل الطلب', act: act({ do: 'decide', action: 'approve' }) };
         card.secondary = { label: 'افتح الطلب', act: OPEN };
@@ -765,10 +767,10 @@
       }
       case 'founding': {
         var labels = { contacted: 'تم التواصل', invited: 'أُرسلت الدعوة', converted: 'تم التحويل إلى مدرّب' };
-        card.tag = 'خبير مؤسس';
+        card.tag = 'طلب انضمام';
         card.title = who || 'خبير';
         card.sub = shorten(r.note, 150);
-        card.brain = clean([who, str(r.fSpec), str(r.fCountry)]).join('، ') || 'طلب انضمام كخبير مؤسس';
+        card.brain = clean([who, str(r.fSpec), str(r.fCountry)]).join('، ') || 'طلب انضمام';
         card.reason = 'تواصل عبر واتساب ثم علّم الخطوة';
         card.primary = { label: labels[r.nextStatus] || 'تم التواصل', act: act({ do: 'decide', action: 'approve' }) };
         card.secondary = { label: 'افتح', act: OPEN };
@@ -3932,11 +3934,18 @@
   // —— طلبات المدرّبين
   // R10: الاستمارة الواحدة (خبير / مدرّب / الاثنان). الطلب القديم بلا `join_as` يُقرأ مدرّبًا، كما تقرأه المنصة.
   var JOIN_AS_TEXT = { expert: 'خبير', trainer: 'مدرّب', both: 'خبير ومدرّب' };
+  // R20: سنوات الخبرة شرائح تحفظها المنصة بمفتاحها (مرآة EXPERIENCE_BANDS في account.py) والبلد رمز ISO. للعرض فقط.
+  var EXPERIENCE_BAND_TEXT = { '0-2': 'أقل من ٣ سنوات', '3-5': 'من ٣ إلى ٥ سنوات', '6-10': 'من ٦ إلى ١٠ سنوات', '11-15': 'من ١١ إلى ١٥ سنة', '16+': 'أكثر من ١٥ سنة' };
+  function countryText(code) {
+    code = s(code).toUpperCase();
+    if (!/^[A-Z]{2}$/.test(code)) return '';
+    try { return new Intl.DisplayNames(['ar'], { type: 'region' }).of(code) || code; } catch (e) { return code; }
+  }
   // حالة الفيديو على الطلب: sent أُرسل · later لاحقًا (قبل الموعد) · overdue لاحقًا وفات الموعد · missing لم يُرسل ولا موعد · cancelled أُلغي · none لا فيديو مطلوب/غير معروف.
   function videoState(a, now, joinAs, hasJoin, video) {
     var st = s(a.status);
     if (st === 'cancelled') return { kind: 'cancelled', text: s(a.cancel_reason) === 'video_overdue' ? 'أُلغي تلقائيًا' : 'أُلغي', open: false };
-    if (joinAs === 'expert') return { kind: 'none', text: '', open: false };
+    // R20 (قرار المؤسس 2026-11-09): الفيديو في آخر الطلب لكل الصفات، فالخبير عليه فيديو كمان.
     if (video) return { kind: 'sent', text: 'أُرسل الفيديو', open: false };
     var due = s(a.video_due_at), dueAt = tms(due);
     var open = st === 'pending';                                  // الإلغاء والتأجيل على الطلب المعلّق وحده (مثل كنسة المنصة)
@@ -3951,7 +3960,6 @@
     var l = arr(apps); if (!l) return null;
     return l.filter(function (a) {
       if (!a || typeof a !== 'object' || (s(a.status) || 'pending') !== 'pending') return false;
-      if (s(a.join_as).toLowerCase() === 'expert') return false;
       if (webUrl(a.intro_video_url)) return false;
       var d = tms(a.video_due_at);
       return !isNaN(d) && !!now && d <= now;
@@ -3976,6 +3984,7 @@
       var yrs = a.experience_years, yrsText = '';
       if (typeof yrs === 'number' && isFinite(yrs) && yrs >= 0) yrsText = yrs === 0 ? '' : U.U(Math.round(yrs), ['سنة واحدة', 'سنتان', 'سنوات', 'سنة']);
       else if (typeof yrs === 'string' && s(yrs)) yrsText = /^\d+$/.test(s(yrs)) && +s(yrs) > 0 ? U.U(+s(yrs), ['سنة واحدة', 'سنتان', 'سنوات', 'سنة']) : s(yrs).slice(0, 80);
+      if (!yrsText && EXPERIENCE_BAND_TEXT[s(a.experience_band)]) yrsText = EXPERIENCE_BAND_TEXT[s(a.experience_band)];
       var given = a.courses_given;
       given = Array.isArray(given) ? given.map(function (x) { return s(x && typeof x === 'object' ? (x.title || x.name) : x); }).filter(Boolean).join('، ') : (typeof given === 'number' ? '' : s(given));
       var experience = { years: yrsText, role: s(a.current_role).slice(0, 200), courses: given.slice(0, 600) };
@@ -3987,8 +3996,9 @@
       if (video) links.push('فيديو تعريفي');
       if (hasJoin && phone) links.push('رقم تواصل');
       if (links.length) facts = facts.concat(links); else facts.push('بلا روابط');
+      if (countryText(a.country)) facts.push('البلد: ' + countryText(a.country));
       if (!hasJoin && summary.length < 40) facts.push('نبذة الخبرة قصيرة');
-      if (s(a.founding_lead_id)) facts.push('جاء من دعوة الخبراء المؤسسين');
+      if (s(a.founding_lead_id)) facts.push('جاء من نموذج الخبراء القديم');
       var missing = [];
       if (hasJoin) {      // الاستمارة الواحدة لا فيها سيرة ولا نبذة: يكفيها وسيلة تواصل ومجال
         if (!(li || cv || pf || phone)) missing.push('رابط أو رقم للتواصل');
