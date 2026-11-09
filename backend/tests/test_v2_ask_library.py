@@ -311,3 +311,12 @@ def test_ingest_with_zero_articles_is_refused_before_write_and_no_audit(ctx, pla
 def test_law_number_over_twenty_chars_is_refused_in_arabic_before_the_platform(ctx, plat):
     r = call(ctx, 'POST', A + '/preview', body(law='القانون رقم 117 لسنة 1958'))
     assert r.status_code == 400 and r.get_json()['error'] == 'رقم القانون غير صالح (مثال 117/1958)' and plat.seen == []
+
+
+def test_scan_passes_pending_and_waits_longer_than_default():
+    import v2_asklib_routes as m
+    v = m.view_scan({'items': [], 'tracks': [], 'count': 0, 'pending': 7})
+    assert v['pending'] == 7
+    assert m.view_scan({'items': []})['pending'] == 0
+    src = open(m.__file__, encoding='utf-8').read()
+    assert "'/api/bridge/ask/library-scan', params={'limit': SCAN_LIMIT}, timeout=30" in src

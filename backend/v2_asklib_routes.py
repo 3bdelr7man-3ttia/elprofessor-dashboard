@@ -60,7 +60,8 @@ def view_scan(d):
     for t in d.get('tracks') if isinstance(d.get('tracks'), list) else []:
         if isinstance(t, dict) and _TRACK_RE.match(str(t.get('id') or '')):
             tracks.append({'id': str(t['id']), 'label': _s(t.get('label'), 80) or str(t['id'])})
-    return {'items': items, 'tracks': tracks, 'count': _n(d.get('count')) if _n(d.get('count')) is not None else len(items)}
+    return {'items': items, 'tracks': tracks, 'count': _n(d.get('count')) if _n(d.get('count')) is not None else len(items),
+            'pending': _n(d.get('pending')) or 0}
 
 
 def view_stats(d):
@@ -157,7 +158,7 @@ def register(app, ns):
         closed = N('_v2_closed')()
         if closed:
             return closed
-        resp = N('_platform_proxy')('GET', '/api/bridge/ask/library-scan', params={'limit': SCAN_LIMIT})
+        resp = N('_platform_proxy')('GET', '/api/bridge/ask/library-scan', params={'limit': SCAN_LIMIT}, timeout=30)
         if not N('_resp_ok')(resp):
             return bad(resp)
         scan = view_scan(json_of(resp))

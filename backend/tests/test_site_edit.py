@@ -890,7 +890,9 @@ def test_restore_failure_is_reported_with_its_status(api, site):
 # ───────────────────────────────────────────────────────────── ربط التسليم
 
 def test_wiring_registry_dockerfile_and_guarded_registration():
-    assert [p.id for p in registry.PRODUCERS][-2:] == ['site_review', 'site_edit_manual']
+    ids = [p.id for p in registry.PRODUCERS]
+    i = ids.index('site_review')
+    assert ids[i:i + 2] == ['site_review', 'site_edit_manual']  # متجاورين (منتجات تانية ممكن تتسجّل بعدهم)
     d = open(os.path.join(ROOT, 'Dockerfile'), encoding='utf-8').read()
     for line in ('COPY backend/site_edit.py /app/site_edit.py', 'COPY backend/v2_site_routes.py /app/v2_site_routes.py', 'COPY backend/brain2 /app/brain2'):
         assert line in d, line

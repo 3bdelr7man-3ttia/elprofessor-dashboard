@@ -53,6 +53,14 @@
 
   // ------------------------------------------------------------------ الرسم
   function statsHtml() {
+    return pendingHtml() + statsCore();
+  }
+  // المنصة بتعدّ المواد في الخلفية (المسح بقى خفيف) ⇒ سطر هادي بدل «غير متاح بعد» من غير تفسير.
+  function pendingHtml() {
+    var n = S.data && S.data.pending;
+    return n ? '<p class="al-mute" data-al-pending>لسه بنعدّ المواد في ' + esc(ar(n)) + ' مستند، حدّث بعد دقيقة. <button type="button" class="ep-bs" data-a="retry">حدّث</button></p>' : '';
+  }
+  function statsCore() {
     var st = S.data && S.data.stats;
     if (!st) return '<section class="al-sum"><h3>قاعدة النصوص</h3><p class="al-mute">ملخص القاعدة: ' + NA + '</p></section>';
     var tracks = Object.keys(st.articles || {});
