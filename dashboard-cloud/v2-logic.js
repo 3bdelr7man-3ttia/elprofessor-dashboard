@@ -1769,10 +1769,12 @@
       // `group` من المنصة: book | guide | guides_general. غيابها (منصة قديمة) = كتاب، فتبقى الشاشة كما كانت.
       var group = it.group === 'guide' || it.group === 'guides_general' ? it.group : 'book';
       var hasOwn = it.has_own === true, usesGeneral = it.uses_general === true;
+      // `source: short` (المنصة 2026-11-09): دليل أقصر من حد البيع، فلا سعر له ويُقرأ كاملًا.
+      var short = group === 'guide' && it.source === 'short';
       return { id: String(it.id), title: group === 'guides_general' ? GENERAL_GUIDES_TITLE : (str(it.title) || String(it.id)), visible: it.visible === true, hasPrices: it.has_prices === true, mins: mins,
-               minText: mins.length ? minLine(mins) : 'لا أسعار بعد', updatedAt: it.updated_at || null,
-               group: group, hasOwn: hasOwn, usesGeneral: usesGeneral,
-               badge: group === 'guide' ? (hasOwn && !usesGeneral ? 'سعر خاص' : 'يأخذ السعر العام') : '' };
+               minText: short ? 'يُقرأ كاملًا بلا سعر' : mins.length ? minLine(mins) : 'لا أسعار بعد', updatedAt: it.updated_at || null,
+               group: group, hasOwn: hasOwn, usesGeneral: usesGeneral, short: short,
+               badge: group === 'guide' ? (short ? 'دليل قصير' : hasOwn && !usesGeneral ? 'سعر خاص' : 'يأخذ السعر العام') : '' };
     });
     // دليل يأخذ السعر العام ولم تُرسل المنصة له أقل سعر: نعرض أقل سعر الصف العام (السعر الفعلي).
     var gen = rows.filter(function (r) { return r.group === 'guides_general'; })[0];

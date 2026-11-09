@@ -410,3 +410,34 @@ def test_the_delete_route_is_the_only_new_write_and_has_the_new_audit_name():
     block = src[i:i + 1800]
     assert '@roles_required(\'admin\')' in block and '_v2_confirmed(body)' in block and "'prices.reset_to_general'" in block
     assert block.count('_v2_write(') == 1 and "_actor_email" not in block, 'by يوضع في _v2_write من التوكن'
+
+
+# ═══ الدليل القصير (المنصة 2026-11-09): أقصر من حد البيع ⇒ بلا سعر ويُقرأ كاملًا ═══════════════
+
+@needs_node
+def test_a_short_guide_is_marked_and_never_borrows_the_general_minimum():
+    resp = _list_resp()
+    for it in resp['items']:
+        if it['id'] == 'guide-sole':
+            it.update({'source': 'short', 'uses_general': False, 'min_price': {}, 'words': 1200})
+    g = {r['id']: r for r in L('v2Prices', resp)['rows']}
+    assert g['guide-sole']['short'] is True and g['guide-sole']['badge'] == 'دليل قصير'
+    assert g['guide-sole']['minText'] == 'يُقرأ كاملًا بلا سعر'
+    assert g['guide-rent']['short'] is False and g['guide-rent']['badge'] == 'سعر خاص'
+
+
+@needs_node
+def test_a_short_source_on_a_book_row_changes_nothing():
+    resp = _list_resp()
+    for it in resp['items']:
+        if it['id'] == 'bk-tenant-guide':
+            it['source'] = 'short'
+    g = {r['id']: r for r in L('v2Prices', resp)['rows']}
+    assert g['bk-tenant-guide']['short'] is False and g['bk-tenant-guide']['badge'] == ''
+
+
+def test_the_short_guide_form_says_it_reads_in_full_and_starts_visible():
+    js = open(os.path.join(ROOT, 'dashboard-cloud', 'v2-d3.js'), encoding='utf-8').read()
+    assert 'هذا الدليل أقصر من حد البيع، فيُقرأ كاملًا بلا سعر' in js
+    assert "if (isShort && !row.hasOwn) form.visible = true;" in js
+    assert '.v3-own.short{' in open(os.path.join(ROOT, 'dashboard-cloud', 'v2-d3.css'), encoding='utf-8').read()

@@ -291,7 +291,7 @@
   }
   // —— الأدلّة: كل دليل بسعره (سعر خاص أو يأخذ السعر العام) + صف السعر العام + شرائح وبحث (في الذاكرة فقط)
   function guideRow(r) {
-    var own = r.group === 'guide' ? '<span class="v3-own ' + (r.badge === 'سعر خاص' ? 'on' : 'gen') + '">' + esc(r.badge) + '</span>' : '';
+    var own = r.group === 'guide' ? '<span class="v3-own ' + (r.badge === 'سعر خاص' ? 'on' : r.short ? 'short' : 'gen') + '">' + esc(r.badge) + '</span>' : '';
     return '<li class="v3-pr" data-id="' + esc(r.id) + '" data-group="' + esc(r.group) + '"><div class="v3-pid"><b>' + esc(r.title) + '</b>' + own
       + '<span class="v3-vis ' + (r.visible ? 'on' : 'off') + '">ظاهر للناس: ' + (r.visible ? 'نعم' : 'لا') + '</span></div>'
       + minsHtml(r)
@@ -535,7 +535,8 @@
   function openPrice(kind, id, title, onDone, row) {
     var E = ep();
     var isGuide = !!(row && row.group === 'guide'), isGeneral = !!(row && row.group === 'guides_general');
-    var onGeneral = isGuide && row.badge !== 'سعر خاص';      // الدليل يأخذ السعر العام الآن: يبدأ من خانات فاضية
+    var isShort = isGuide && row.short === true;            // أقصر من حد البيع: بلا سعر ويُقرأ كاملًا
+    var onGeneral = isGuide && !isShort && row.badge !== 'سعر خاص';      // الدليل يأخذ السعر العام الآن: يبدأ من خانات فاضية
     var s0 = openSheet('أسعار: ' + title, '<p class="v3-load">…جارٍ جلب الأسعار</p>');
     if (!s0 || !E) return;
     var genP = onGeneral ? E.api('/v2/prices/book/_guides').then(function (r) { return L.v2PriceForm(r); }).catch(function () { return null; }) : Promise.resolve(null);
@@ -546,9 +547,12 @@
       if (!form) { notifyFail('تعذّر قراءة أسعار هذا العمل'); return; }
       // دليل بلا سعر خاص: «ظاهر للناس» يبدأ من ظهوره اليوم (يرثه من العام) فلا يختفي الدليل بحفظ سعره
       if (onGeneral) form.visible = row.visible === true;
+      // دليل قصير بلا سعر: كتابة سعر له تعني بيعه، فيبدأ «ظاهر للناس» مختارًا
+      if (isShort && !row.hasOwn) form.visible = true;
       var cells0 = {};
       form.versions.forEach(function (v) { cells0[v.key] = v.cells; });
       var lead = isGeneral ? 'هذا السعر يُباع به كل دليل ليس له سعر خاص. اكتب السعر في كل بلد بعملته.'
+        : isShort ? 'هذا الدليل أقصر من حد البيع، فيُقرأ كاملًا بلا سعر ولا يظهر في المتجر. إن كتبت له سعرًا خاصًّا يُباع به.'
         : onGeneral ? 'هذا الدليل يأخذ السعر العام الآن. اكتب له سعرًا خاصًّا في كل بلد بعملته فيُباع به بدل السعر العام. اترك الخانة فارغة إن لم يكن له سعر في هذا البلد.'
         : isGuide ? 'هذا الدليل له سعر خاص. اكتب السعر في كل بلد بعملته. وللعودة إلى السعر العام استخدم «ارجع للسعر العام» من القائمة.'
         : 'اكتب السعر في كل بلد بعملته. اترك الخانة فارغة إن لم يكن للعمل سعر في هذا البلد.';
