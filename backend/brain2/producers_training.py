@@ -239,8 +239,16 @@ def _decision(ctx, target, payload, action):
     resp = _fn(ctx, '_v2_write')('POST', path, payload, action, iid, {'via': 'brain'})
     ns = ctx.ns
     if ns['_resp_ok'](resp):
-        return ApplyResult(ok=True, info={'item_id': iid, 'line': 'اتعتمدت، والبروف هيتعلمها' if payload['decision'] == 'accept'
-                                          else 'اتبلّغ الرفض'})
+        if payload['decision'] != 'accept':
+            return ApplyResult(ok=True, info={'item_id': iid, 'line': 'اتبلّغ الرفض'})
+        # ⛔ ما نقولش «البروف هيتعلمها» غير لو المنصة كتبت التصحيح فعلًا (تخصص ليه قاعدة نصوص).
+        try:
+            written = ns['_proxy_json'](resp).get('correction_written') is True
+        except Exception:  # noqa: BLE001
+            written = False
+        line = ('اتعتمدت، والبروف هيتعلمها' if written
+                else 'اتعتمدت، بس التخصص ده لسه ملوش قاعدة نصوص، فالبروف مش هيستعملها دلوقتي')
+        return ApplyResult(ok=True, info={'item_id': iid, 'line': line, 'correction_written': written})
     js = ns['_proxy_json'](resp)
     err = js.get('error') if isinstance(js.get('error'), str) else ''
     if js.get('no_reply') is True:
