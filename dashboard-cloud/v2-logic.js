@@ -1775,6 +1775,7 @@
                minText: short ? 'يُقرأ كاملًا بلا سعر' : mins.length ? minLine(mins) : 'لا أسعار بعد', updatedAt: it.updated_at || null,
                group: group, hasOwn: hasOwn, usesGeneral: usesGeneral, short: short,
                words: typeof it.words === 'number' && it.words >= 0 ? it.words : null,
+               minRaw: mp, seller: typeof it.seller === 'string' ? it.seller : null, free: it.free === true,
                badge: group === 'guide' ? (short ? 'دليل قصير' : hasOwn && !usesGeneral ? 'سعر خاص' : 'يأخذ السعر العام') : '' };
     });
     // دليل يأخذ السعر العام ولم تُرسل المنصة له أقل سعر: نعرض أقل سعر الصف العام (السعر الفعلي).
@@ -1786,6 +1787,45 @@
     return { rows: rows, countries: order, currencies: resp.currencies || {}, minWords: minWords };
   }
   var GENERAL_GUIDES_TITLE = 'السعر العام للأدلّة';
+  // —— «الأسعار المبدئية» (المؤسس 2026-11-09: «نحط سعر عشان حاجة تظهر بأسعارها ونقفل الموضوع، ونغيّرها بعدين»).
+  // الأدلّة (السعر العام) ١٤٩ ج و٥$، وكل كتاب من كتبنا أو الكتالوج قراءة ٢٩٩ ج و١٠$ وPDF ٣٦٩ ج و١٢$ (أغلى ~٢٠٪).
+  // ⛔ كتب الخبراء والكتب المجانية مستثناة. الخليج بلا سعر خاص فيأخذ سعر الدولار. منصة لا تقول «بتاع مين» ⇒ لا كتب.
+  var STARTER = { guide: { eg: 149, default: 5 }, read: { eg: 299, default: 10 }, pdf: { eg: 369, default: 12 } };
+  var STARTER_SELLERS = { seed: 1, ours: 1, catalog: 1 };
+  function starterRow(prices, cur) {
+    var out = {};
+    Object.keys(prices).forEach(function (c) { out[c] = { amount: prices[c], currency: cur[c] || (c === 'eg' ? 'EGP' : 'USD') }; });
+    return out;
+  }
+  function starterDone(r, p) {
+    var m = r.minRaw || {};
+    return r.visible === true && !!m.eg && !!m['default'] && Number(m.eg.amount) === p.eg && Number(m['default'].amount) === p['default'];
+  }
+  function v2StarterPrices(res) {
+    if (!res || !Array.isArray(res.rows)) return null;
+    var cur = res.currencies || {}, targets = [], done = 0, skipped = { expert: 0, free: 0 };
+    var gen = res.rows.filter(function (r) { return r.group === 'guides_general'; })[0];
+    var hasGuides = res.rows.some(function (r) { return r.group === 'guide'; });
+    if (gen || hasGuides) {
+      if (gen && starterDone(gen, STARTER.guide)) done++;
+      else targets.push({ id: '_guides', title: GENERAL_GUIDES_TITLE, kind: 'general', from: gen && gen.mins.length ? gen.minText : 'لا أسعار بعد',
+                          to: 'مصر: ' + moneyText(STARTER.guide.eg, cur.eg || 'EGP') + '، باقي البلاد: ' + moneyText(STARTER.guide['default'], cur['default'] || 'USD'),
+                          versions: { read: starterRow(STARTER.guide, cur) } });
+    }
+    res.rows.forEach(function (r) {
+      if (r.group !== 'book') return;
+      if (r.seller === 'expert') { skipped.expert++; return; }
+      if (!STARTER_SELLERS[r.seller]) return;
+      if (r.free) { skipped.free++; return; }
+      if (starterDone(r, STARTER.read)) { done++; return; }
+      targets.push({ id: r.id, title: r.title, kind: 'book', from: r.mins.length ? r.minText : 'لا أسعار بعد',
+                     to: 'مصر: ' + moneyText(STARTER.read.eg, cur.eg || 'EGP') + '، باقي البلاد: ' + moneyText(STARTER.read['default'], cur['default'] || 'USD'),
+                     versions: { read: starterRow(STARTER.read, cur), pdf: starterRow(STARTER.pdf, cur) } });
+    });
+    var books = targets.filter(function (t) { return t.kind === 'book'; }).length;
+    return { targets: targets, books: books, general: targets.length - books, done: done, skipped: skipped,
+             applied: !targets.length && done > 0, offer: targets.length > 0 };
+  }
   // بحث بلا حساسية للتشكيل والهمزات والياء/الألف المقصورة والتاء المربوطة وشكل الأرقام.
   function normSearch(s) {
     return digitsToLatin(String(s == null ? '' : s)).toLowerCase().replace(/[\u064B-\u065F\u0670\u0640]/g, '')
@@ -2201,7 +2241,7 @@
     personKey: personKey, personEmailOf: personEmailOf, courseKey: courseKey, courseIdOf: courseIdOf, COLS: COLS, COL_LABEL: COL_LABEL, NA: NA,
     v2Period: v2Period, v2Income: v2Income, v2Held: v2Held, v2Owed: v2Owed, v2MoneyLine: v2MoneyLine, v2MoneyBoard: v2MoneyBoard,
     v2IncomeBars: v2IncomeBars, v2PayoutRows: v2PayoutRows, v2PayoutHistory: v2PayoutHistory, v2Stuck: v2Stuck, v2StuckFromQueue: v2StuckFromQueue,
-    v2RefundRule: v2RefundRule, v2Refunds: v2Refunds, v2Prices: v2Prices, v2PriceForm: v2PriceForm, v2PriceBuild: v2PriceBuild, v2PriceDiff: v2PriceDiff, v2PricesView: v2PricesView, v2PriceResetDiff: v2PriceResetDiff,
+    v2RefundRule: v2RefundRule, v2Refunds: v2Refunds, v2Prices: v2Prices, v2PriceForm: v2PriceForm, v2PriceBuild: v2PriceBuild, v2PriceDiff: v2PriceDiff, v2PricesView: v2PricesView, v2PriceResetDiff: v2PriceResetDiff, v2StarterPrices: v2StarterPrices,
     v2SharesView: v2SharesView, v2SharesDiff: v2SharesDiff, v2SharesChanges: v2SharesChanges, v2SharesHistory: v2SharesHistory,
     v2MinPayout: v2MinPayout, v2MinPayoutInput: v2MinPayoutInput, v2AdsLedger: v2AdsLedger, v2AdsEntries: v2AdsEntries,
     v2BookAverage: v2BookAverage, v2OfferLine: v2OfferLine, v2OffersQueue: v2OffersQueue, v2OfferPrefill: v2OfferPrefill, v2Requests: v2Requests,

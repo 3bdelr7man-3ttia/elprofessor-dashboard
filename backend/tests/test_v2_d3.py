@@ -1005,7 +1005,8 @@ def test_the_money_sheets_reuse_the_existing_confirmation_and_add_no_new_decisio
     # المسارات الجديدة: كل كتابة PUT/POST بتبعت confirmed:true، والـPATCH (طلبات القرّاء) بلا فلوس
     js = _strip_comments(_read('dashboard-cloud', 'v2-d3.js'))
     calls = re.findall(r"E\.api\([^;]*?method: '(PUT|POST|PATCH)'[^;]*?\}\s*\)", js, re.S)
-    assert calls.count('PUT') == 3 and calls.count('POST') == 2 and calls.count('PATCH') == 1, calls
+    # PUT الرابع (2026-11-09): زر «الأسعار المبدئية» — نفس مسار تعديل السعر بعد ورقة مراجعة و«أكّد التطبيق».
+    assert calls.count('PUT') == 4 and calls.count('POST') == 2 and calls.count('PATCH') == 1, calls
     for m in re.finditer(r"E\.api\(([^;]*?method: '(PUT|POST)'[^;]*?)\)\.then|E\.api\(([^;]*?method: '(PUT|POST)'[^;]*?)\);\s*\}", js, re.S):
         assert 'confirmed: true' in (m.group(1) or m.group(3)), m.group(0)[:160]
     assert 'fetch(' not in js and 'XMLHttpRequest' not in js

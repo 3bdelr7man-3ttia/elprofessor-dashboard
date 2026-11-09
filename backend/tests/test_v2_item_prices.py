@@ -465,3 +465,58 @@ def test_the_size_line_says_the_minimum_in_words_and_pages():
     js = open(os.path.join(ROOT, 'dashboard-cloud', 'v2-d3.js'), encoding='utf-8').read()
     assert "'حد البيع ' + U.ar(z.minWords) + ' كلمة (نحو '" in js
     assert 'وتحت الحد ويُقرأ كاملًا بلا سعر: ' in js
+
+
+# ═══ «الأسعار المبدئية» (المؤسس 2026-11-09): زر واحد للأدلّة العام وكتبنا، وكتب الخبراء والمجاني مستثناة ═══
+
+def _starter_resp(**kw):
+    return ipfx.ItemPricesPlatform(d2=True, sellers={'bk-tenant-guide': 'seed', 'bk-startup-law': 'ours', 'bk-labor': 'expert', 'bk-new': 'free'}, **kw)._list()
+
+
+@needs_node
+def test_the_starter_targets_the_general_guides_price_and_our_books_only():
+    st = L('v2StarterPrices', L('v2Prices', _starter_resp()))
+    ids = [t['id'] for t in st['targets']]
+    assert ids == ['_guides', 'bk-tenant-guide', 'bk-startup-law']
+    assert st['books'] == 2 and st['general'] == 1 and st['skipped'] == {'expert': 1, 'free': 1} and st['offer'] is True
+    g, b = st['targets'][0], st['targets'][1]
+    assert g['versions'] == {'read': {'eg': {'amount': 149, 'currency': 'EGP'}, 'default': {'amount': 5, 'currency': 'USD'}}}
+    assert b['versions'] == {'read': {'eg': {'amount': 299, 'currency': 'EGP'}, 'default': {'amount': 10, 'currency': 'USD'}},
+                             'pdf': {'eg': {'amount': 369, 'currency': 'EGP'}, 'default': {'amount': 12, 'currency': 'USD'}}}
+    assert b['to'] == 'مصر: ٢٩٩ جنيه، باقي البلاد: ١٠ دولار'
+
+
+@needs_node
+def test_the_starter_pdf_is_dearer_by_about_a_fifth_and_no_gulf_price_is_invented():
+    st = L('v2StarterPrices', L('v2Prices', _starter_resp()))
+    for t in st['targets']:
+        for row in t['versions'].values():
+            assert set(row) == {'eg', 'default'}
+    b = st['targets'][1]['versions']
+    for c in ('eg', 'default'):
+        assert 1.2 <= b['pdf'][c]['amount'] / b['read'][c]['amount'] <= 1.25
+
+
+@needs_node
+def test_once_applied_the_starter_says_so_and_offers_nothing():
+    resp = _starter_resp()
+    for it in resp['items']:
+        if it['id'] == '_guides':
+            it.update({'visible': True, 'min_price': {'eg': {'amount': 149, 'currency': 'EGP'}, 'default': {'amount': 5, 'currency': 'USD'}}})
+        if it['id'] in ('bk-tenant-guide', 'bk-startup-law'):
+            it.update({'visible': True, 'min_price': {'eg': {'amount': 299, 'currency': 'EGP'}, 'default': {'amount': 10, 'currency': 'USD'}}})
+    st = L('v2StarterPrices', L('v2Prices', resp))
+    assert st['targets'] == [] and st['applied'] is True and st['offer'] is False and st['done'] == 3
+
+
+@needs_node
+def test_a_platform_that_does_not_say_who_sells_a_book_gets_no_book_prices():
+    st = L('v2StarterPrices', L('v2Prices', _list_resp()))
+    assert [t['id'] for t in st['targets']] == ['_guides']
+
+
+def test_the_starter_button_writes_only_after_the_confirm_and_says_what_stays():
+    js = open(os.path.join(ROOT, 'dashboard-cloud', 'v2-d3.js'), encoding='utf-8').read()
+    assert 'طبّق الأسعار المبدئية' in js and "id=\"v3_sgo\">أكّد التطبيق" in js
+    assert "go.onclick = function () {" in js.split('function openStarter')[1].split('function priceBlock')[0]
+    assert 'كتب الخبراء لا تتغير' in js and 'الأسعار المبدئية مطبّقة' in js

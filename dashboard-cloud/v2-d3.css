@@ -111,6 +111,11 @@
 .v3-own{display:inline-block;font:800 12.5px 'Cairo',sans-serif;border-radius:999px;padding:1px 12px;justify-self:start}
 .v3-own.on{background:#F6E7EC;color:var(--wine)}
 .v3-own.gen{background:#fff;border:1px solid var(--line);color:var(--mute)}
+.v3-starter{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:12px;border:1px solid var(--line);border-radius:14px;padding:14px 16px;margin:0 0 14px}
+.v3-starter-txt{flex:1 1 320px;min-width:0}
+.v3-starter-txt b{display:block;font:800 15px 'Cairo',sans-serif;margin-bottom:4px}
+.v3-starter-txt p{margin:0;color:var(--mute);font-size:14px;line-height:1.7}
+.v3-starter-done{margin:0 0 12px}
 .v3-own.short{background:#fff;border:1px dashed var(--line);color:var(--mute)}
 .v3-pacts{display:flex;flex-wrap:wrap;gap:8px;justify-content:flex-end}
 .v3m .v3-fromgen{margin-bottom:12px}

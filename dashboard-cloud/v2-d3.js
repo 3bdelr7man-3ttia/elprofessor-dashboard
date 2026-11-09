@@ -321,6 +321,57 @@
     return '<div class="v3-ptools"><input type="search" id="v3_psearch" class="v3-psearch" autocomplete="off" placeholder="ابحث باسم الكتاب أو الدليل" aria-label="ابحث باسم الكتاب أو الدليل" value="' + esc(S.pf.q) + '">'
       + '<div class="v3-chips" role="group" aria-label="تصفية القائمة">' + chips + '</div></div>';
   }
+  // —— «الأسعار المبدئية»: زر واحد يضع سعر الأدلّة العام وسعر كل كتاب من كتبنا مرة واحدة (المؤسس 2026-11-09). بعده: سطر «مطبّقة».
+  var STARTER_TEXT = 'الأدلّة ' + U.ar(149) + ' جنيه و' + U.ar(5) + ' دولار، والكتب ' + U.ar(299) + ' جنيه و' + U.ar(10) + ' دولار للقراءة و'
+    + U.ar(369) + ' جنيه و' + U.ar(12) + ' دولار لنسخة PDF. الخليج يأخذ سعر الدولار، وكتب الخبراء لا تتغير.';
+  function starterCard(st) {
+    if (!st) return '';
+    if (st.applied) return '<p class="v3-fine v3-starter-done">الأسعار المبدئية مطبّقة. وتتغير أي وقت من «عدّل».</p>';
+    if (!st.offer) return '';
+    return '<div class="v3-starter"><div class="v3-starter-txt"><b>الأسعار المبدئية</b><p>' + esc(STARTER_TEXT) + '</p></div>'
+      + '<button type="button" class="v3-btn2" data-a="starter">طبّق الأسعار المبدئية</button></div>';
+  }
+  function openStarter() {
+    var E = ep(), st = L.v2StarterPrices(L.v2Prices(data('pricesBook')));
+    if (!E || !st || !st.offer) return;
+    var skip = [];
+    if (st.skipped.expert) skip.push('كتب الخبراء: ' + U.ar(st.skipped.expert));
+    if (st.skipped.free) skip.push('الكتب المجانية: ' + U.ar(st.skipped.free));
+    var what = [];
+    if (st.general) what.push('السعر العام للأدلّة');
+    if (st.books) what.push('الكتب (' + U.ar(st.books) + ')');
+    var lead = 'سيُطبَّق على: ' + what.join('، و') + '. وكلها «ظاهر للناس». ' + esc(STARTER_TEXT) + (skip.length ? ' ولن يتغير: ' + skip.join('، ') + '.' : '');
+    var lines = st.targets.map(function (t) { return { label: t.title, from: t.from, to: t.to }; });
+    var s = openSheet('الأسعار المبدئية', '<div class="v3-stage" data-stage="review"><p class="mc-lead">' + lead + '</p>' + diffTable(lines, ['العمل', 'الآن', 'بعد التطبيق'])
+      + '<div id="v3err" role="alert"></div><div class="acts"><button type="button" class="btn btn-primary" id="v3_sgo">أكّد التطبيق</button><button type="button" class="btn btn-ghost" id="v3_sno">إلغاء</button></div></div>');
+    if (!s) return;
+    S.sheetBusy = false;
+    var go = q('#v3_sgo', s), no = q('#v3_sno', s);
+    no.onclick = function () { window.closeModal(); };
+    go.onclick = function () {
+      if (go.dataset.busy) return;
+      go.dataset.busy = '1'; s.dataset.busy = '1'; S.sheetBusy = true; go.disabled = true; no.disabled = true;
+      q('#v3err', s).innerHTML = '';
+      var ok = 0, failed = [], i = 0;
+      function next() {
+        if (i >= st.targets.length) return Promise.resolve();
+        var t = st.targets[i++];
+        go.textContent = 'جارٍ التطبيق… ' + U.ar(i) + ' من ' + U.ar(st.targets.length);
+        return E.api('/v2/prices/book/' + encodeURIComponent(t.id), { method: 'PUT', body: { versions: t.versions, visible: true,
+          note: 'الأسعار المبدئية (المؤسس 2026-11-09)', confirmed: true } })
+          .then(function () { ok++; }, function (e) { failed.push(t.title + ': ' + errMsg(e)); }).then(next);
+      }
+      next().then(function () {
+        delete s.dataset.busy; S.sheetBusy = false;
+        load('pricesBook', true);
+        if (!failed.length) { window.closeModal(); setNote('طُبّقت الأسعار المبدئية (' + U.ar(ok) + ')'); redraw(); return; }
+        delete go.dataset.busy; go.disabled = true; no.disabled = false; no.textContent = 'إغلاق'; go.textContent = 'أكّد التطبيق';
+        q('#v3err', s).innerHTML = '<div class="v3-err">طُبّق ' + esc(U.ar(ok)) + ' وتعذّر ' + esc(U.ar(failed.length)) + '. أغلق الورقة واضغط الزر من جديد لإكمال الباقي فقط:<br>'
+          + failed.map(esc).join('<br>') + '</div>';
+        redraw();
+      });
+    };
+  }
   function priceBlock(kind, title, key) {
     var st = srcState(key), res = L.v2Prices(data(key));
     var body;
@@ -331,7 +382,7 @@
       var view = kind === 'book' ? L.v2PricesView(res, S.pf) : null;
       if (view && view.showTools) {
         title = 'الكتب والأدلّة';
-        body = priceTools(view) + '<div id="v3_plist">' + priceListHtml(view) + '</div>';
+        body = starterCard(L.v2StarterPrices(res)) + priceTools(view) + '<div id="v3_plist">' + priceListHtml(view) + '</div>';
       } else body = res.rows.length ? '<ul class="v3-list">' + res.rows.map(function (r) { return priceRow(kind, r); }).join('') + '</ul>' : '<p class="v3-none">لا أعمال بعد</p>';
     }
     var vis = res && res.rows && res.rows.length ? '، ' + U.ar(res.rows.filter(function (r) { return r.visible; }).length) + ' ظاهر للناس' : '';
@@ -889,6 +940,7 @@
         if (row) openReset(row);
       };
     });
+    qa('[data-a="starter"]', v).forEach(function (b) { b.onclick = function () { openStarter(); }; });
     qa('[data-a="pgroup"]', v).forEach(function (b) { b.onclick = function () { S.pf.group = b.getAttribute('data-g'); redraw(); }; });
     var ps = q('#v3_psearch', v);
     if (ps) ps.oninput = function () {      // يعيد رسم القائمة وحدها فلا يضيع التركيز في الخانة

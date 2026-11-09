@@ -383,6 +383,43 @@ def flow(browser, h, pre, viewport, mobile):
         ishot(page, pre + '12b-short-form.jpg')
         browser.close()
 
+    # —— ١٣ «الأسعار المبدئية»: البطاقة ⇒ ورقة المراجعة (لا كتابة) ⇒ أكّد ⇒ ٣ كتابات بالظبط ⇒ «مطبّقة»
+    if want(pre + '13'):
+        sellers = {'bk-tenant-guide': 'seed', 'bk-startup-law': 'ours', 'bk-labor': 'expert', 'bk-new': 'free'}
+        page = iopen(browser, h, ipfx.ItemPricesPlatform(d2=True, sellers=sellers), tall, mobile)
+        if page.locator('[data-a="starter"]').count() != 1:
+            fail('%s13: زر الأسعار المبدئية مش ظاهر' % pre)
+        ishot(page, pre + '13a-starter-card.jpg')
+        n0 = len(h.platform_calls)
+        page.click('[data-a="starter"]')
+        page.wait_for_selector('#v3_sgo')
+        txt = page.inner_text('#epModal')
+        for must in ('السعر العام للأدلّة', 'دليل المستأجر في عقود الإيجار', 'قانون الشركات الناشئة', 'كتب الخبراء: ١', 'الكتب المجانية: ١'):
+            if must not in txt:
+                fail('%s13: ورقة المراجعة ناقصة «%s»' % (pre, must))
+        if 'الوجيز في قانون العمل' in txt.split('العمل')[-1] and 'الوجيز في قانون العمل' in page.inner_text('#epModal table'):
+            fail('%s13: كتاب الخبير في القايمة' % pre)
+        if writes(h, n0):
+            fail('%s13: كتابة قبل «أكّد التطبيق»' % pre)
+        ishot(page, pre + '13b-starter-review.jpg')
+        page.click('#v3_sgo')
+        page.wait_for_function("() => !document.querySelector('#v3_sgo')", timeout=15000)
+        page.wait_for_function("() => /الأسعار المبدئية مطبّقة/.test(document.querySelector('.v3').innerText)", timeout=15000)
+        got = writes(h, n0)
+        paths = sorted(p_ for m, p_, _q, _b in got)
+        if [m for m, *_ in got] != ['PUT'] * 3 or paths != sorted(['/api/bridge/prices/book/_guides', '/api/bridge/prices/book/bk-tenant-guide', '/api/bridge/prices/book/bk-startup-law']):
+            fail('%s13: الكتابات %r' % (pre, [(m, p_) for m, p_, _q, _b in got]))
+        for m, p_, _q, b in got:
+            b = b or {}
+            if b.get('confirmed') is not True or b.get('visible') is not True:
+                fail('%s13: %s بلا confirmed/visible' % (pre, p_))
+            if p_.endswith('_guides') and set((b.get('versions') or {}).keys()) - {'read', 'pdf'} != set() or (p_.endswith('_guides') and (b.get('versions') or {}).get('pdf')):
+                fail('%s13: السعر العام للأدلّة فيه PDF' % pre)
+        if page.locator('[data-a="starter"]').count():
+            fail('%s13: الزر لسه ظاهر بعد التطبيق' % pre)
+        ishot(page, pre + '13c-starter-applied.jpg')
+        browser.close()
+
 
 def main():
     from playwright.sync_api import sync_playwright

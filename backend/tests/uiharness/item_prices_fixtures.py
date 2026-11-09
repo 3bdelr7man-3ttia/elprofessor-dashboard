@@ -47,12 +47,14 @@ class ItemPricesPlatform(d3fx.D3Platform):
     """`D3Platform` + جسر الأسعار الجديد للأدلّة. `price_log` = سطور السجل (تعديل/حذف) لكل دليل."""
 
     def __init__(self, empty=False, d2=False, course_prices=False, guide_min_effective=True, no_guides=False,
-                 short_guides=(), min_words=None, **kw):
+                 short_guides=(), min_words=None, sellers=None, **kw):
         super(ItemPricesPlatform, self).__init__(empty=empty, d2=d2, course_prices=course_prices, **kw)
         self.guide_min_effective = guide_min_effective
         # حد البيع (المنصة 2026-11-09): الأدلّة دي أقصر من الحد (source=short)، والباقي فوقه. `min_words` = guides_min_words.
         self.short_guides = set(short_guides)
         self.min_words = min_words
+        # «الأسعار المبدئية»: {id الكتاب: seed|ours|catalog|expert} و`free` في نفس الصف لو القيمة "free".
+        self.sellers = dict(sellers or {})
         self.guides = [] if (empty or no_guides) else list(GUIDES)
         self.general = None if empty else copy.deepcopy(GENERAL_DOC)
         self.guide_docs = {} if (empty or no_guides) else {k: dict(copy.deepcopy(v), title=dict(GUIDES)[k]) for k, v in GUIDE_OWN.items()}
@@ -94,7 +96,11 @@ class ItemPricesPlatform(d3fx.D3Platform):
     def _list(self):
         items = []
         for iid, d in self.prices.items():
-            items.append(self._row(iid, d, "book"))
+            row = self._row(iid, d, "book")
+            if iid in self.sellers:
+                sv = self.sellers[iid]
+                row.update({"seller": "catalog" if sv == "free" else sv, "free": sv == "free"})
+            items.append(row)
         if self.general is not None:
             items.append(self._row("_guides", self.general, "guides_general"))
         for slug, title in self.guides:
