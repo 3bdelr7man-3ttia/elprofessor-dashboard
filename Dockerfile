@@ -33,6 +33,8 @@ COPY backend/prerender.py /app/prerender.py
 COPY backend/refresh_rules.py /app/refresh_rules.py
 # article_integrity.py: فحص اكتمال المتن قبل النشر الآلي (R19) — app.py يستورده عند الإقلاع (غيابه = الحاوية لا تقوم)
 COPY backend/article_integrity.py /app/article_integrity.py
+# r19_article_completions.py: متن ٤ مقالات اتكمّلت (R19) — app.py يستورده مرة واحدة عند الإقلاع
+COPY backend/r19_article_completions.py /app/r19_article_completions.py
 # v2_<قسم>_routes.py: مسارات أقسام الجولة النهائية — app.py يستوردها عند الإقلاع (غيابها = الحاوية لا تقوم)
 COPY backend/v2_market_routes.py /app/v2_market_routes.py
 COPY backend/v2_books_routes.py /app/v2_books_routes.py

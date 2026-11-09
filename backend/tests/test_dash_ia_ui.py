@@ -641,7 +641,7 @@ def test_the_pending_row_shows_where_the_visitor_connected_from_next_to_what_he_
     _go(page, server, 'inbox')
     page.click('#rows .row:has-text("كريم عادل")')
     page.wait_for_timeout(300)
-    assert 'داخل منين' in page.inner_text('#drawer') and '🇺🇸 أمريكا · 8.8.8.8' in page.inner_text('#drawer')
+    assert 'داخل منين' in page.inner_text('#drawer') and '🇺🇸 أمريكا، 8.8.8.8' in page.inner_text('#drawer')
 
 
 def test_the_inbox_drawer_offers_purge_next_to_open_and_reject(page, server):

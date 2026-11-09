@@ -62,9 +62,10 @@ def ctx(monkeypatch):
         db.create_all()
         ArticleVersion.query.delete()
         Article.query.delete()
-        s = db.session.get(Setting, appmod.R19_FIX_KEY)
-        if s is not None:
-            db.session.delete(s)
+        for k in (appmod.R19_FIX_KEY, appmod.R19_COMPLETE_KEY):
+            s = db.session.get(Setting, k)
+            if s is not None:
+                db.session.delete(s)
         db.session.commit()
         yield pushed
 
@@ -92,3 +93,20 @@ def test_fix_trims_the_listed_tails_drafts_the_broken_ones_and_runs_once(ctx):
     db.session.commit()
     assert appmod._r19_fix_truncated_articles() is None
     assert db.session.get(Article, 354).status == 'published'
+
+
+# ——— تكميل المسحوبين (مرة واحدة) ———
+
+def test_completion_publishes_only_still_drafted_articles_once(ctx):
+    import r19_article_completions as c
+    body354 = c.COMPLETED_BODIES['354']
+    assert ai.incomplete_reasons(body354, 'مكتب محاماة دولي: ٦ خطوات') == []
+    _mk(354, [PARA, '• تعارض المصالح: إفصاح دوري، لا مرة'], status='draft')
+    _mk(286, [PARA], status='published')          # المؤسس نشره بإيده ⇒ ما نكتبش فوقه
+    db.session.commit()
+    rep = appmod._r19_complete_drafted_articles()
+    assert rep['published'] == [354] and 286 in rep['skipped']
+    a = db.session.get(Article, 354)
+    assert a.status == 'published' and json.loads(a.body) == body354
+    assert json.loads(db.session.get(Article, 286).body) == [PARA]
+    assert appmod._r19_complete_drafted_articles() is None

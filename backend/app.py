@@ -12010,6 +12010,36 @@ def _r19_fix_truncated_articles():
         _prerender_push_async('r19-truncated-fix')
     return report
 
+
+R19_COMPLETE_KEY = 'r19_drafted_articles_completed'
+
+
+def _r19_complete_drafted_articles():
+    """R19 (المؤسس 2026-11-09 «خلّص كل الحاجات اللي فاضلة»): ٤ من الـ٥ اللي اترجعوا مسودة اتكمّلوا
+    (`r19_article_completions.py`) ⇒ المتن الكامل + نشر. ⛔ مرة واحدة بعلامة، وبس لو المقال لسه مسودة
+    (المؤسس لو نشره أو عدّله بإيده ما نكتبش فوقه)، وبس لو المتن الجديد عدّى فحص الاكتمال."""
+    if db.session.get(Setting, R19_COMPLETE_KEY) is not None:
+        return None
+    import r19_article_completions as _r19c
+    report = {'published': [], 'skipped': []}
+    for key, body in _r19c.COMPLETED_BODIES.items():
+        aid = int(key)
+        a = db.session.get(Article, aid)
+        if a is None or a.status != 'draft' or _ai.incomplete_reasons(body, a.title or ''):
+            report['skipped'].append(aid)
+            continue
+        a.body = json.dumps(body, ensure_ascii=False)
+        a.status = 'published'
+        if not a.published_at:
+            a.published_at = datetime.datetime.utcnow()
+        report['published'].append(aid)
+    db.session.add(Setting(key=R19_COMPLETE_KEY, value=json.dumps(report, ensure_ascii=False)))
+    db.session.commit()
+    logger.warning('r19 drafted articles completed: %s', report)
+    if report['published']:
+        _prerender_push_async('r19-articles-completed')
+    return report
+
 with app.app_context():
     db.create_all()
     ensure_runtime_schema()
@@ -12022,6 +12052,11 @@ with app.app_context():
         _r19_fix_truncated_articles()   # مرة واحدة (علامة في settings) — قصّ ذيل ١٠ مقالات مبتورة وسحب ٥ لمسودة
     except Exception as _exc:  # noqa: BLE001
         logger.warning('r19 truncated-articles fix skipped: %s', _exc)
+        db.session.rollback()
+    try:
+        _r19_complete_drafted_articles()   # مرة واحدة — ٤ من المسحوبين اتكمّلوا ويرجعوا منشورين
+    except Exception as _exc:  # noqa: BLE001
+        logger.warning('r19 article completion skipped: %s', _exc)
         db.session.rollback()
     seed()  # admin/user init only — always safe
     reset_business_data()  # ENV-GATED full wipe (RESET_BUSINESS_DATA) — no-op when unset

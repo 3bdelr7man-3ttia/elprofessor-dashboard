@@ -1845,10 +1845,21 @@
             realRows.push({
               out: "تسجيل جديد على المنصة", from: "المنصة", src: "shield", dest: "invites",
               triage: "human", sla: relTime(at) || "جديد", slaWarn: false,
-              note: "التسجيل " + (PROV[s.provider] || "") + (s.country ? "، البلد: " + s.country : ""),
+              // R19 (المؤسس 2026-11-09: «ناس بتسجل ومش عارف جاية منين، من أنهي بلد»): «داخل من» = بلد الاتصال
+              // و«جه منين» = القناة (فيسبوك/جوجل/الموقع/دعوة… + إعلان مدفوع + الحملة) — جاهزين من المنصة.
+              note: "التسجيل " + (PROV[s.provider] || "") + (s.where ? "، داخل من " + s.where : (s.country ? "، البلد: " + s.country : ""))
+                + (s.came ? "، جه منين: " + s.came : ""),
               ref: "SGN-" + s.user_id, who: s.full_name || s.email || "بلا اسم", email: s.email || "",
+              statusLabel: "تسجيل جديد",
+              details: [
+                { k: "داخل منين", v: s.where || "" },
+                { k: "جه منين", v: s.came || "" },
+                { k: "الطريقة", v: PROV[s.provider] || "" },
+                { k: "الإيميل", v: s.email || "" },
+              ].filter(function (d) { return d.v; }),
               apiKind: "signup", personEmail: s.email || "", apiId: s.user_id, canReject: false, ts: Date.parse(at) || 0,
               sgProvider: PROV[s.provider] || "", sgCountry: s.country || "", sgFlags: flags,
+              sgWhere: s.where || "", sgCame: s.came || "",
             });
           });
         }).catch(fail("التسجيلات الجديدة"))

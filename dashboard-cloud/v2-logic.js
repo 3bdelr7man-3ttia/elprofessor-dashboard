@@ -754,7 +754,8 @@
         // R16: كل تسجيل جديد ينبّه تليجرام ⇒ صفّ هنا بإجراء (قاعدة الوارد). «تمام» يقفله هنا وفي تليجرام معًا.
         card.tag = 'تسجيل جديد';
         card.title = who || 'عضو جديد';
-        card.sub = clean([str(r.sgProvider), str(r.sgCountry)]).join('، ');
+        // R19: «داخل من» بلد الاتصال و«جه منين» القناة (المنصة بتبعتهم جاهزين) — قبلهم البلد المكتوب بس.
+        card.sub = clean([r.sgWhere ? 'داخل من ' + str(r.sgWhere) : str(r.sgCountry), r.sgCame ? 'جه منين: ' + str(r.sgCame) : '', str(r.sgProvider)]).join('، ');
         card.brain = clean([who || 'عضو جديد', str(r.sgProvider), card.ageText]).join('، ');
         if (r.sgFlags) card.warn = 'يحتاج نظرة: ' + r.sgFlags;
         card.reason = 'حساب جديد على المنصة';
