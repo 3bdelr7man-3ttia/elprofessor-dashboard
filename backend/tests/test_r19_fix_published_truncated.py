@@ -62,7 +62,7 @@ def ctx(monkeypatch):
         db.create_all()
         ArticleVersion.query.delete()
         Article.query.delete()
-        for k in (appmod.R19_FIX_KEY, appmod.R19_COMPLETE_KEY):
+        for k in (appmod.R19_FIX_KEY, appmod.R19_COMPLETE_KEY, appmod.R19_HIDE_NEWS_KEY):
             s = db.session.get(Setting, k)
             if s is not None:
                 db.session.delete(s)
@@ -110,3 +110,18 @@ def test_completion_publishes_only_still_drafted_articles_once(ctx):
     assert a.status == 'published' and json.loads(a.body) == body354
     assert json.loads(db.session.get(Article, 286).body) == [PARA]
     assert appmod._r19_complete_drafted_articles() is None
+
+
+# ——— إخفاء الأخبار العامة بلا مصدر (مرة واحدة) ———
+
+def test_hide_unrelated_news_drafts_only_the_listed_published_ones_once(ctx):
+    _mk(7, [PARA])
+    _mk(299, [PARA])                     # شرح قانون عملي ⇒ يفضل منشور
+    _mk(9, [PARA], status='draft')       # مسودة أصلًا ⇒ يتسجّل skipped
+    db.session.commit()
+    rep = appmod._r19_hide_unrelated_news()
+    assert rep['drafted'] == [7] and 9 in rep['skipped']
+    assert db.session.get(Article, 7).status == 'draft' and db.session.get(Article, 299).status == 'published'
+    db.session.get(Article, 7).status = 'published'
+    db.session.commit()
+    assert appmod._r19_hide_unrelated_news() is None and db.session.get(Article, 7).status == 'published'

@@ -12047,6 +12047,33 @@ def _r19_complete_drafted_articles():
         _prerender_push_async('r19-articles-completed')
     return report
 
+
+# R19 (المؤسس 2026-11-09): «أي حاجة ملهاش رابط ما تتنشرش» + «الأخبار دي لو مش متعلقة بينا خفيها».
+# ٥٠ مقال «تحليل قانوني» منشور مفيهوش رابط مصدر. اللي اتخفى = ٢٠ خبر عام عن جهات/وقائع مش موجّه لجمهورنا
+# (الخطوط السعودية، غرامة جوجل، نادي بريشيا، شركة المياه، نزاهة…). اللي فضل منشور = شروحات قانون/لائحة بـ«ما يجب فعله».
+# ⛔ مسودة مش حذف — يرجع بزرار «نشر» لو اتلقاله رابط مصدر.
+R19_HIDE_NEWS_IDS = (7, 9, 25, 29, 41, 44, 55, 94, 106, 110, 132, 146, 168, 177, 180, 198, 204, 218, 227, 246)
+R19_HIDE_NEWS_KEY = 'r19_unrelated_news_hidden'
+
+
+def _r19_hide_unrelated_news():
+    if db.session.get(Setting, R19_HIDE_NEWS_KEY) is not None:
+        return None
+    report = {'drafted': [], 'skipped': []}
+    for aid in R19_HIDE_NEWS_IDS:
+        a = db.session.get(Article, aid)
+        if a is None or a.status != 'published':
+            report['skipped'].append(aid)
+            continue
+        a.status = 'draft'
+        report['drafted'].append(aid)
+    db.session.add(Setting(key=R19_HIDE_NEWS_KEY, value=json.dumps(report, ensure_ascii=False)))
+    db.session.commit()
+    logger.warning('r19 unrelated news hidden: %s', report)
+    if report['drafted']:
+        _prerender_push_async('r19-hide-unrelated-news')
+    return report
+
 with app.app_context():
     db.create_all()
     ensure_runtime_schema()
@@ -12064,6 +12091,11 @@ with app.app_context():
         _r19_complete_drafted_articles()   # مرة واحدة — ٤ من المسحوبين اتكمّلوا ويرجعوا منشورين
     except Exception as _exc:  # noqa: BLE001
         logger.warning('r19 article completion skipped: %s', _exc)
+        db.session.rollback()
+    try:
+        _r19_hide_unrelated_news()   # مرة واحدة — ٢٠ خبر عام بلا رابط مصدر ⇒ مسودة (قرار المؤسس)
+    except Exception as _exc:  # noqa: BLE001
+        logger.warning('r19 hide unrelated news skipped: %s', _exc)
         db.session.rollback()
     seed()  # admin/user init only — always safe
     reset_business_data()  # ENV-GATED full wipe (RESET_BUSINESS_DATA) — no-op when unset
