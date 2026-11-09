@@ -47,3 +47,67 @@ def incomplete_reasons(blocks, title=''):
     if sum(1 for b in main if b.startswith('```')) % 2:
         reasons.append('unclosed_code_fence')
     return reasons
+
+
+# ---------------------------------------------------------------------------
+# R19 — إصلاح ذيل مقال مبتور (مرة واحدة على المقالات المنشورة اللي اتقاست 2026-11-09)
+# ---------------------------------------------------------------------------
+_SENT_END = ('.', '!', '؟', '?', '…')
+
+
+def _main_indices(blocks):
+    """مواضع كتل المتن (نفس منطق refresh_rules.content_blocks) — عشان نعدّل المتن ونسيب أقسام الروابط زي ما هي."""
+    out, skipping = [], False
+    for i, b in enumerate(blocks or []):
+        s = str(b)
+        if s.strip() in _rr.LINK_HEADINGS:
+            skipping = True
+            continue
+        if skipping and _rr.is_link_bullet(s):
+            continue
+        skipping = False
+        if s.strip():
+            out.append(i)
+    return out
+
+
+def _last_sentence_end(s):
+    """آخر موضع علامة نهاية جملة — مع تجاهل نقطة ترقيم البنود («5.») عشان القصّ ما يسيبش رقم بند لوحده."""
+    for j in range(len(s) - 1, -1, -1):
+        if s[j] in _SENT_END:
+            if s[j] == '.' and j > 0 and s[j - 1].translate(_AR_DIGITS).isdigit():
+                continue
+            return j
+    return -1
+
+
+def repair_tail(blocks):
+    """يقصّ آخر كتلة مبتورة لآخر جملة كاملة (أو يشيلها لو مفيهاش جملة كاملة)، ثم يشيل عنوانًا بقى في الآخر بلا متن.
+    بيرجّع (الكتل الجديدة، الإجراءات). ⛔ ما بيكتبش كلام جديد — قصّ بس."""
+    blocks = list(blocks or [])
+    acts = []
+    idx = _main_indices(blocks)
+    if not idx:
+        return blocks, acts
+    i = idx[-1]
+    s = str(blocks[i]).rstrip()
+    if not s.startswith('## ') and not s.startswith('|') and not s.endswith(_TERMINALS):
+        lines = s.split('\n')
+        while len(lines) > 1 and not lines[-1].rstrip().endswith(_TERMINALS):
+            lines.pop()   # قائمة في كتلة واحدة: سطر البند المقطوع يتشال كله
+        if len(lines) < len(s.split('\n')) and lines[-1].rstrip().endswith(_TERMINALS):
+            blocks[i] = '\n'.join(lines).rstrip()
+            acts.append('drop_line')
+        else:
+            cut = _last_sentence_end(s)
+            if cut >= 40:
+                blocks[i] = s[:cut + 1]
+                acts.append('trim_sentence')
+            else:
+                del blocks[i]
+                acts.append('drop_fragment')
+    idx = _main_indices(blocks)
+    if idx and str(blocks[idx[-1]]).strip().startswith('## '):
+        del blocks[idx[-1]]
+        acts.append('drop_heading')
+    return blocks, acts

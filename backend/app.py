@@ -11966,6 +11966,50 @@ def serve_frontend(path):
             return send_from_directory(static_dir, 'index.html')
     return jsonify({'status': 'ok', 'message': 'ElProfessor Dashboard API is running'})
 
+
+# R19 (2026-11-09، قرار المؤسس «المقالات المتقطعة ظبطها»): ١٥ مقال منشور كانوا مبتورين لأن المنصة كانت بتحفظ رد
+# التوليد المقطوع عند max_tokens (اتقفل من الأصل في المنصة 669ce53 + حارس المزامنة هنا). ده إصلاح المنشور فعلًا:
+#   • القصّ (بلا كلام جديد): آخر جملة كاملة، وشيل عنوان فاضل في الآخر — للي ناقصهم ذيل بس.
+#   • المسودة: اللي العنوان بيعد بحاجة مش موجودة (٣٥٤ «٦ خطوات» واقفة عند ٤ · ٢٨٦ «٧ بنود» عند ٥) أو بقايا قصيرة
+#     (٢٦٣ · ٢٥١ · ٢١٩) — بيرجعوا للمسودات لحد ما يتكمّلوا.
+# مرة واحدة بعلامة في settings، وكل خطوة متكررة من غير ضرر (القصّ على مقال سليم ما بيعملش حاجة).
+R19_TRIM_IDS = (134, 112, 205, 230, 177, 335, 300, 306, 344, 269)
+R19_DRAFT_IDS = (354, 286, 263, 251, 219)
+R19_FIX_KEY = 'r19_truncated_articles_fix'
+
+
+def _r19_fix_truncated_articles():
+    if db.session.get(Setting, R19_FIX_KEY) is not None:
+        return None
+    report = {'trimmed': {}, 'drafted': [], 'skipped': []}
+    for aid in R19_TRIM_IDS:
+        a = db.session.get(Article, aid)
+        if a is None or a.status != 'published':
+            report['skipped'].append(aid)
+            continue
+        try:
+            blocks = json.loads(a.body or '[]')
+        except Exception:  # noqa: BLE001
+            report['skipped'].append(aid)
+            continue
+        new, acts = _ai.repair_tail(blocks)
+        if acts:
+            a.body = json.dumps(new, ensure_ascii=False)
+            report['trimmed'][aid] = acts
+    for aid in R19_DRAFT_IDS:
+        a = db.session.get(Article, aid)
+        if a is None or a.status != 'published':
+            report['skipped'].append(aid)
+            continue
+        a.status = 'draft'
+        report['drafted'].append(aid)
+    db.session.add(Setting(key=R19_FIX_KEY, value=json.dumps(report, ensure_ascii=False)))
+    db.session.commit()
+    logger.warning('r19 truncated-articles fix applied: %s', report)
+    if report['trimmed'] or report['drafted']:
+        _prerender_push_async('r19-truncated-fix')
+    return report
+
 with app.app_context():
     db.create_all()
     ensure_runtime_schema()
@@ -11973,6 +12017,11 @@ with app.app_context():
         _seed_blog_topics()   # سجلّ موضوعات المدوّنة — يُدرج الناقص فقط، لا يكتب فوق تحرير المؤسس
     except Exception as _exc:  # noqa: BLE001 — الإقلاع لا يسقط بسبب السجلّ
         logger.warning('blog topics seed skipped: %s', _exc)
+        db.session.rollback()
+    try:
+        _r19_fix_truncated_articles()   # مرة واحدة (علامة في settings) — قصّ ذيل ١٠ مقالات مبتورة وسحب ٥ لمسودة
+    except Exception as _exc:  # noqa: BLE001
+        logger.warning('r19 truncated-articles fix skipped: %s', _exc)
         db.session.rollback()
     seed()  # admin/user init only — always safe
     reset_business_data()  # ENV-GATED full wipe (RESET_BUSINESS_DATA) — no-op when unset
