@@ -9,7 +9,7 @@
 (function (root) {
   'use strict';
   var DIG = '٠١٢٣٤٥٦٧٨٩';
-  var NOTE_MIN = 5, NOTE_MAX = 1000;
+  var NOTE_MIN = 5, NOTE_MAX = 300;   // نفس حد المنصة
   var NEED_REASON_AR = 'اكتب سبب طلب مستند آخر بوضوح — يقرؤه الخبير كما تكتبه';
   var FILE_ERR = { 404: 'الوثيقة غير متاحة', 422: 'تعذّر عرض هذا الملف', other: 'تعذّر جلب الوثيقة، حاول مرة أخرى' };
 

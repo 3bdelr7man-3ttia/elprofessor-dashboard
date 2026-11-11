@@ -3255,7 +3255,7 @@ def platform_identity_doc_decide(user_id):
     decision = str(body.get('decision') or '').strip()
     if decision not in _IDOC_DECISIONS:
         return jsonify({'error': 'اختر: وثّق الهوية أو محتاج مستند أوضح'}), 400
-    note = str(body.get('note') or '').strip()[:1000]
+    note = str(body.get('note') or '').strip()[:300]   # نفس حد المنصة (DecideIn.note max_length=300)
     if decision == 'needs_another' and len(note) < _IDOC_NOTE_MIN:
         return jsonify({'error': _IDOC_NOTE_AR}), 400
     resp = _platform_proxy('POST', f"/api/bridge/identity-docs/{quote(user_id, safe='')}/decide",
