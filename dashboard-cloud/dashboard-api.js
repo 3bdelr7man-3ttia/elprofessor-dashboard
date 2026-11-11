@@ -2012,6 +2012,32 @@
           });
         }).catch(fail("طلبات تقديم الخدمة"))
       );
+      // R22 — «هوية محفوظة»: وثيقة هوية خبير بانتظار قرار المؤسس (وثّق · محتاج مستند أوضح). الاسم الحقيقي والوثيقة للمؤسس وحده،
+      // والبروكسي للأدمن بس ⇒ غير الأدمن (٤٠٣) ومنصة لسه ما نشرتش الجسر (٤٠٤) = لا صفوف بلا وسم «فشل» (مش عطل: مفيش طابور أصلًا).
+      jobs.push(
+        get("/platform-identity-docs?status=pending").then(function (a) {
+          var items = (a && a.items) || [];
+          items.forEach(function (d) {
+            // المعروض بانتظار القرار فقط: الموثَّق وصاحب «محتاج مستند أوضح» ينتظر وثيقة جديدة منه (وقتها يرجع «بانتظار القرار»).
+            if (!d || !d.user_id || (d.status && d.status !== "pending")) return;
+            var when = d.submitted_at || "";
+            var whenAr = jrWhen(when).replace(/\d/g, function (x) { return "٠١٢٣٤٥٦٧٨٩".charAt(+x); });   // أرقام هندية كباقي الشاشة
+            var title = String(d.title || "").trim();
+            var name = String(d.name || "").trim();
+            realRows.push({
+              out: "توثيق هوية — " + (title || "خبير"),
+              from: "الخبراء", src: "cap", dest: "team", triage: "human",
+              sla: whenAr || "بانتظار قرارك", slaWarn: false,
+              note: "راجع وثيقة هويته وقرّر: وثّق الهوية، أو اطلب مستندًا أوضح.",
+              ref: "IDD-" + d.user_id, who: name || d.email || "—",
+              apiKind: "identity_doc", personEmail: d.email || "", apiId: d.user_id, ts: Date.parse(when) || 0,
+              approveLabel: "وثّق الهوية", canReject: true, rejectNeedsReason: true,
+              email: d.email || "", idName: name, idTitle: title, idFileId: String(d.file_id || ""),
+              whenLabel: whenAr,
+            });
+          });
+        }).catch(function (e) { if (!e || (e.status !== 404 && e.status !== 403)) fail("توثيق الهوية")(); })
+      );
       // R1 — دفعات محلية (InstaPay/فودافون) بانتظار التأكيد. التأكيد ينفّذ المنح + الإيميل على المنصة (لا نكرّره هنا).
       jobs.push(
         get("/platform-manual-payments?status=pending_review").then(function (a) {
@@ -2882,6 +2908,18 @@
     if (action === "request_info") {
       return post("/platform-join-requests/" + i.apiId + "/request_info", body)
         .then(function () { note("أُرسل الطلب إلى صاحبه، ويبقى الطلب مفتوحًا ✓"); EP.reload("inbox", after); return { ok: true }; })
+        .catch(function (e) { var r = efFailed(e, null); if (after) after(); return r; });
+    }
+    // R22 — قرار وثيقة الهوية: اعتماد ⇒ verify، ورفض ⇒ needs_another («محتاج مستند أوضح»). السبب يقرؤه الخبير حرفًا،
+    // فالقرار الثاني بلا سبب (٥ أحرف على الأقل) ممنوع هنا قبل أي نداء، والبروكسي يمنعه ثانيةً على الخادم.
+    if (i.apiKind === "identity_doc") {
+      var verify = action === "approve";
+      if (!verify && reason.length < 5) {
+        if (after) after();
+        return Promise.resolve({ ok: false, error: "اكتب سبب طلب مستند آخر بوضوح — يقرؤه الخبير كما تكتبه" });
+      }
+      return post("/platform-identity-docs/" + encodeURIComponent(i.apiId) + "/decide", { decision: verify ? "verify" : "needs_another", note: reason })
+        .then(function () { note(verify ? "وُثّقت الهوية ✓" : "طُلب من الخبير مستند أوضح ✓"); EP.reload("inbox", after); return { ok: true }; })
         .catch(function (e) { var r = efFailed(e, null); if (after) after(); return r; });
     }
     switch (i.apiKind) {

@@ -3160,6 +3160,111 @@ def platform_join_request_decide(request_id, action):
     return resp
 
 
+# R22 — «هوية محفوظة»: وثيقة هوية الخبير يراجعها المؤسس ويحسم (وثّق / محتاج مستند أوضح). ثلاثة مسارات رفيعة فوق جسر المنصة،
+# بنفس السرّ ونداء واحد (⛔ ولا نداء من الداشبورد لنفسه: gunicorn بعامل واحد). للأدمن وحده: فيها الاسم الحقيقي وصورة الوثيقة.
+_IDOC_STATUSES = ('pending', 'all')
+_IDOC_DECISIONS = ('verify', 'needs_another')
+_IDOC_ID_RE = re.compile(r'^[A-Za-z0-9_-]{1,64}$')
+_IDOC_FILE_RE = re.compile(r'^[A-Za-z0-9_-]{8,64}$')
+_IDOC_FIELDS = ('user_id', 'email', 'name', 'title', 'status', 'submitted_at', 'note', 'verified_at', 'file_id')
+_IDOC_MAX_ITEMS = 200
+_IDOC_FILE_MAX = 11 * 1024 * 1024
+_IDOC_NOTE_MIN = 5
+_IDOC_NOTE_AR = 'اكتب سبب طلب مستند آخر بوضوح (٥ أحرف على الأقل) — يقرؤه الخبير كما تكتبه'
+_IDOC_NOSTORE = {'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff'}
+
+
+def _idoc_sniff(raw):
+    """نوع الوثيقة من البايتات وحدها (pdf · png · jpeg · webp) — ما نثقش في رأس الرد. غير كده ⇒ None."""
+    for magic, kind in ((b'%PDF-', 'application/pdf'), (b'\x89PNG\r\n\x1a\n', 'image/png'), (b'\xff\xd8\xff', 'image/jpeg')):
+        if raw.startswith(magic):
+            return kind
+    if raw[:4] == b'RIFF' and raw[8:12] == b'WEBP':
+        return 'image/webp'
+    return None
+
+
+@app.route('/api/platform-identity-docs', methods=['GET'])
+@token_required
+@roles_required('admin')
+def platform_identity_docs():
+    """قائمة وثائق الهوية المحفوظة: `status=pending` (الافتراضي) أو `all`. الردّ بقايمة بيضا بالحقول وبسقف عدد — وفيها الاسم الحقيقي،
+    فهي للمؤسس وحده، و`no-store`."""
+    status = (request.args.get('status') or 'pending').strip()
+    if status not in _IDOC_STATUSES:
+        status = 'pending'
+    resp = _platform_proxy('GET', '/api/bridge/identity-docs', params={'status': status})
+    if not _resp_ok(resp):
+        return resp
+    try:
+        raw = (resp[0] if isinstance(resp, tuple) else resp).get_json(silent=True)
+    except Exception:
+        raw = None
+    # قايمة فاضية صريحة (`[]`) = «لا وثائق» زي باقي الجسور الفاضية؛ أي شكل تاني غير `{items: [...]}` = ردّ مش مفهوم ⇒ ٥٠٢.
+    body = raw if isinstance(raw, dict) else {}
+    items = raw if isinstance(raw, list) else body.get('items')
+    if not isinstance(items, list):
+        return jsonify({'error': 'تعذر قراءة رد المنصة'}), 502
+    clean = [{k: it.get(k) for k in _IDOC_FIELDS if k in it} for it in items[:_IDOC_MAX_ITEMS] if isinstance(it, dict)]
+    out = jsonify({'items': clean, 'total': body.get('total') if isinstance(body.get('total'), int) else len(clean)})
+    out.headers['Cache-Control'] = 'no-store'
+    return out
+
+
+@app.route('/api/platform-identity-docs/files/<file_id>', methods=['GET'])
+@token_required
+@roles_required('admin')
+def platform_identity_doc_file(file_id):
+    """بايتات وثيقة الهوية زي ما هي (نفس نمط ملف الترخيص): النوع من البايتات لا من الرأس، `no-store` + `nosniff` + CSP محبوس،
+    ومعرّف الملف بنمط صارم قبل أي نداء. نداء واحد وبنفس السرّ. المتصفح بيجيبها بالتوكن ⇒ blob."""
+    if not _IDOC_FILE_RE.match(file_id or ''):
+        return jsonify({'error': 'معرّف غير صالح'}), 400
+    if not PLATFORM_METRICS_SECRET:
+        return jsonify({'error': 'لم يتم ضبط الربط بعد'}), 503
+    try:
+        r = requests.request('GET', f"{PLATFORM_API_URL}/api/bridge/identity-docs/files/{quote(file_id, safe='')}",
+                             headers={'X-ELP-Metrics-Secret': PLATFORM_METRICS_SECRET}, timeout=20)
+    except Exception:
+        return jsonify({'error': 'تعذر الاتصال بالمنصة'}), 502
+    if r.status_code == 404:
+        return jsonify({'error': 'الوثيقة غير متاحة'}), 404
+    if r.status_code != 200:
+        return jsonify({'error': 'تعذر جلب الوثيقة من المنصة'}), 502
+    raw = r.content or b''
+    kind = _idoc_sniff(raw)
+    if not raw or len(raw) > _IDOC_FILE_MAX or kind is None:
+        return jsonify({'error': 'تعذّر عرض هذا الملف'}), 422
+    _audit('identity_doc.file_view', target=file_id, meta={'type': kind, 'size': len(raw)})
+    resp = Response(raw, status=200, mimetype=kind, headers=dict(_IDOC_NOSTORE))
+    resp.headers['Content-Security-Policy'] = "default-src 'none'; sandbox"
+    resp.headers['Content-Disposition'] = 'inline; filename="identity-document"'
+    return resp
+
+
+@app.route('/api/platform-identity-docs/<user_id>/decide', methods=['POST'])
+@token_required
+@roles_required('admin')
+def platform_identity_doc_decide(user_id):
+    """قرار المؤسس على وثيقة هوية: `verify` (وثّق) أو `needs_another` (محتاج مستند أوضح). نفس قاعدتي طلبات الانضمام:
+      ١. «محتاج مستند أوضح» بلا سبب ممنوع (٥ أحرف على الأقل) — الخبير يقرأ السبب حرفًا، وسبب فارغ صمتٌ في ثوب فعل. الحارس هنا على الخادم.
+      ٢. القرار يتسجّل في تدقيقنا (الجسر ما يختمش بريد من قرّر). لا خبير بلا وثيقة ⇒ ٤٠٩ من المنصة وتعدّي كما هي.
+    `get_json(silent=True)`: جسم غايب يرجع بالجملة لا بصفحة ٤١٥."""
+    if not _IDOC_ID_RE.match(user_id or ''):
+        return jsonify({'error': 'معرّف غير صالح'}), 400
+    body = request.get_json(silent=True) or {}
+    decision = str(body.get('decision') or '').strip()
+    if decision not in _IDOC_DECISIONS:
+        return jsonify({'error': 'اختر: وثّق الهوية أو محتاج مستند أوضح'}), 400
+    note = str(body.get('note') or '').strip()[:1000]
+    if decision == 'needs_another' and len(note) < _IDOC_NOTE_MIN:
+        return jsonify({'error': _IDOC_NOTE_AR}), 400
+    resp = _platform_proxy('POST', f"/api/bridge/identity-docs/{quote(user_id, safe='')}/decide",
+                           json_body={'decision': decision, 'note': note})
+    if _resp_ok(resp):
+        _audit(f'identity_doc.{decision}', target=user_id, meta={'note': note})
+    return resp
+
+
 @app.route('/api/platform-pending-topics', methods=['GET'])
 @token_required
 @roles_required('admin', 'employee')   # employee may VIEW topics pending review

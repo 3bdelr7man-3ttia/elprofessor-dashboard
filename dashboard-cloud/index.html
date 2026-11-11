@@ -489,6 +489,7 @@ body{font-family:'IBM Plex Sans Arabic',sans-serif;background:var(--bg);color:va
 <link rel="stylesheet" href="v2s/home.css">
 <script src="v2s/home.js"></script>
 <script src="v2s/home_copy.js"></script>
+<script src="v2s/identity_docs.js"></script>
 <link rel="stylesheet" href="v2s/market.css">
 <script src="v2s/market.js"></script>
 <link rel="stylesheet" href="v2s/market4.css">
@@ -1264,6 +1265,21 @@ function inboxActs(i,m){
   a+=`<button class="btn btn-ghost" data-a="goto">فتح ${m.label}</button>`;
   return a;
 }
+// R22 «هوية محفوظة» — درج وثيقة هوية خبير (v2s/identity_docs.js): عرض الوثيقة ثم «وثّق الهوية» أو «محتاج مستند أوضح» بسببٍ مكتوب.
+// ⛔ بعد القرار الناجح فقط يُعاد رسم الوارد (والفشل يبقي الدرج وسببَ الفشل ظاهرًا)، ولا قرار بلا سبب قبل أي نداء.
+function drawIdentityDoc(el,i){
+  let done=false;
+  const refreshInbox=()=>{selected=null;viewInbox(document.getElementById('view'));};
+  el.innerHTML=V2S_IDENTITY.drawerHtml(i);
+  V2S_IDENTITY.wire(el,i,{
+    api:(p,o)=>EP.api(p,o),
+    decide:(act,reason)=>{
+      if(!window.EP)return Promise.resolve({ok:false,error:'الربط غير متاح'});
+      return EP.decideInboxItem(i,act,()=>{if(done)refreshInbox();},reason).then(r=>{if(r&&r.ok)done=true;return r;});
+    },
+    close:()=>{selected=null;renderInbox();}
+  });
+}
 function drawInbox(){
   const el=document.getElementById('drawer');if(!el)return;
   el.classList.remove('ef-scroll');   // درج «مستنية مراجعتك» بس اللي بيتمرّر لوحده (drawReview)
@@ -1275,6 +1291,7 @@ function drawInbox(){
   if(i.apiKind==='expert_file'&&i.efLane==='case_disputed'){drawCase(el,i);return;}
   if(i.apiKind==='expert_file'){drawExpertFile(el,i);return;}
   if(i.apiKind==='dispute'){drawDispute(el,i);return;}
+  if(i.apiKind==='identity_doc'&&window.V2S_IDENTITY){drawIdentityDoc(el,i);return;}
   if(i.apiKind==='legacy'){drawLegacy(el,i);return;}
   const m=MODULES_LOOKUP[i.dest],tr=TRI[i.triage];
   // ⚠️ الفئة المرخَّصة (مرافعة · توثيق · مراجعة حسابات · ترجمة معتمدة): تُقرأ قبل أي زرّ.

@@ -452,6 +452,7 @@
     switch (c.kind) {
       case 'trainer': return 'قُبل المدرّب ' + c.title;
       case 'join': return 'قُبل طلب ' + c.title;
+      case 'identity_doc': return 'وُثّقت هوية ' + c.title;
       case 'pending_user': return 'فُتحت المنصة لـ' + c.title;
       case 'founding': return 'عُلّمت الخطوة: ' + c.title;
       case 'signup': return 'تمّ الاطّلاع على تسجيل ' + c.title;

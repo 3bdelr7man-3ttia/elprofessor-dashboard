@@ -371,7 +371,7 @@
     file_waiting: 'files', file_late: 'files', file_attention: 'files', review: 'files', verify: 'files',
     dispute: 'disputes', unactivated: 'disputes', legacy: 'disputes',
     payout: 'money', manual_payment: 'money', stuck_payment: 'money', payfail: 'money', book_offer: 'books',
-    trainer: 'people', join: 'people', pending_user: 'people', signup: 'people', founding: 'people', lead: 'people', message: 'people', open_message: 'people',
+    trainer: 'people', join: 'people', identity_doc: 'people', pending_user: 'people', signup: 'people', founding: 'people', lead: 'people', message: 'people', open_message: 'people',
     book: 'books', program: 'courses', course: 'courses', live: 'courses', topic: 'content', creative: 'content', other: 'people'
   };
   // الترتيب (قرار المؤسس): ملفات مستعجلة/متأخرة ⇐ نزاعات ⇐ استردادات ⇐ تحويلات ⇐ إيصالات ⇐ آراء للمراجعة ⇐
@@ -401,7 +401,7 @@
       }
       case 'dispute': return 'dispute';
       case 'legacy': return 'legacy';
-      case 'manual_payment': case 'trainer': case 'join': case 'pending_user': case 'founding': case 'signup':
+      case 'manual_payment': case 'trainer': case 'join': case 'identity_doc': case 'pending_user': case 'founding': case 'signup':
       case 'book': case 'program': case 'topic': case 'creative': case 'verify':
         return r.apiKind;
       case 'lead': case 'message': return r.apiKind;
@@ -425,7 +425,7 @@
       case 'book_offer': return RANK.book_offer;
       case 'manual_payment': return RANK.manual_payment;
       case 'review': return RANK.review;
-      case 'trainer': case 'join': return RANK.trainer;
+      case 'trainer': case 'join': case 'identity_doc': return RANK.trainer;
       case 'pending_user': return RANK.pending_user;
       case 'signup': return RANK.signup;
       case 'founding': return RANK.founding;
@@ -735,6 +735,17 @@
         }
         break;
       }
+      case 'identity_doc': {
+        // R22 «هوية محفوظة»: وثيقة هوية خبير بانتظار قرار المؤسس. الوثيقة نفسها والزرّان (وثّق · محتاج مستند أوضح) في صفحة البند،
+        // فلا قرار بضغطة من البطاقة: الوثيقة تُرى أولًا.
+        card.tag = 'توثيق هوية';
+        card.title = who || 'مقدّم الطلب';
+        card.sub = str(r.idTitle);
+        card.brain = 'وثيقة هوية محفوظة بانتظار مراجعتك' + (str(r.idTitle) ? ' — صفته المعلنة «' + str(r.idTitle) + '»' : '');
+        card.reason = 'افتح الوثيقة وقارن اسمها بصفته قبل أن تقرّر';
+        card.primary = { label: 'راجع الوثيقة', act: OPEN };
+        break;
+      }
       case 'pending_user': {
         var flags = Array.isArray(r.flagLabels) ? r.flagLabels : [];
         card.tag = 'زائر ينتظر الفتح';
@@ -834,7 +845,7 @@
     if (PERSON_TITLE[kind]) { var pe = personEmailOfRow(r); if (pe) card.person = { email: pe, name: card.title }; }
     return card;
   }
-  var PERSON_TITLE = { payout: 1, manual_payment: 1, stuck_payment: 1, payfail: 1, trainer: 1, join: 1, pending_user: 1, signup: 1, founding: 1 };
+  var PERSON_TITLE = { payout: 1, manual_payment: 1, stuck_payment: 1, payfail: 1, trainer: 1, join: 1, identity_doc: 1, pending_user: 1, signup: 1, founding: 1 };
   function v2Decisions(rows, payouts, queue, opts) {
     opts = opts || {};
     var now = opts.now || 0;
