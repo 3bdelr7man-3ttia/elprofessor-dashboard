@@ -264,7 +264,7 @@ def test_visible_copy_has_no_colloquial_label_no_fetch_words_and_one_currency_ma
         code = _strip(_read('dashboard-cloud', name))
         body = code.split('var V2H_COLLOQUIAL')[0] if name == 'v2-logic.js' else code
         assert 'الحاجة الجاية' not in body and 'لسه مقفولة' not in body, name
-    assert 'القرار التالي' not in _read('dashboard-cloud', 'v2-home.js') and 'الدورات مغلقة حتى الآن' in _read('dashboard-cloud', 'v2-d3.js')      # R24 م٢: «القرار التالي» اتبدّل بالهيرو «ن قرار مستنيك»
+    assert 'القرار التالي' not in _read('dashboard-cloud', 'v2-home.js') and 'متجر الكتب لم يُفتح بعد' in _read('dashboard-cloud', 'v2-d3.js')      # r25: لوحة أسعار الدورات اتشالت (السعر من صفحة الدورة) فنص «الدورات مغلقة» راح · R24 م٢: «القرار التالي» اتبدّل بالهيرو «ن قرار مستنيك»
     assert "'الحاجة الجاية', 'لسه مقفولة'" in _read('dashboard-cloud', 'v2-logic.js')
     for name in ('v2-logic.js', 'v2-d3.js', 'v2s/courses.js', 'v2s/content.js', 'v2s/books.js', 'v2s/reports.js', 'v2s/people.js'):
         assert 'تعذّر الجلب' not in _read('dashboard-cloud', name), name
