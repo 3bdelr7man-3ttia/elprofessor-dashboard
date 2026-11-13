@@ -1052,6 +1052,8 @@
     // brain2: اقتراحات العقل المنتظرة (proposed فقط) بطاقاتٌ في آخر الترتيب.
     pass(opts.brainItems, function (it) { return it && it.id ? 'brain_item:' + it.id : null; }, wrapBrain).forEach(function (it) {
       if (!it || !it.id || (it.status != null && it.status !== 'proposed')) return;
+      // مراجعة طلب الانضمام بتتعرض جوه بطاقة الطلب نفسه («راجعت ملف الطلب») — بطاقة لوحدها = نفس الشخص مرتين.
+      if (it.producer === 'application_review') return;
       src.push(wrapBrain(it));
     });
     var Q = queue || null;

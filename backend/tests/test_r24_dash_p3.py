@@ -1320,7 +1320,8 @@ def test_ask_family_producers_live_in_content_by_their_registry_section():
 @needs_node
 def test_every_proposed_brain_item_lands_in_exactly_one_strip_and_the_numbers_agree():
     items = all_sections_fixture()
-    proposed = [x for x in items if x['status'] == 'proposed']
+    # مراجعة طلب الانضمام بتتعرض جوه بطاقة الطلب نفسه، فمش بطاقة قرار لوحدها (مش «بتتسقط»).
+    proposed = [x for x in items if x['status'] == 'proposed' and x['producer'] != 'application_review']
     snoozed_ids = [proposed[0]['id'], proposed[3]['id']]
     until = '2099-01-01T08:00:00Z'
     snooze = {'map': {'brain_item:' + sid: {'key': 'brain_item:' + sid, 'kind': 'snooze', 'until': until, 'fingerprint': ''} for sid in snoozed_ids}, 'ok': True, 'at': 1}
