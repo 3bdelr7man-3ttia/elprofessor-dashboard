@@ -2929,11 +2929,11 @@ def _v2_brain2_kick(trigger='cron'):
 
 
 import v2_courses_routes; v2_courses_routes.register(app, globals())
+try: import v2_trainer_share_routes as _v2ts; _v2ts.register(app, globals())  # نسبة المدرّب (C2b): تحميل محروس
+except Exception: logger.exception('v2 trainer share routes not loaded')
 try:   # r25: أسعار الصرف لسطر «تقريبًا بالدولار» في تقارير الفلوس (تحديث مرة في اليوم) — تحميل محروس
     import v2_fx_routes as _v2fx; _v2fx.register(app, globals())
 except Exception: logger.exception('v2 fx routes not loaded')
-try: import v2_trainer_share_routes as _v2ts; _v2ts.register(app, globals())  # نسبة المدرّب (C2b): تحميل محروس
-except Exception: logger.exception('v2 trainer share routes not loaded')
 try:   # محرّر الدورات (SPEC-C §C1): تحميل محروس — غيابه لا يكسر الإقلاع
     import v2_courses2_routes; v2_courses2_routes.register(app, globals())
 except Exception: logger.exception('v2 courses2 routes not loaded')
