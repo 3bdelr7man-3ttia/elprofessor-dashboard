@@ -578,7 +578,7 @@ def test_cards_returns_only_the_decision_tickets():
             R('gathering', open_demand=True, join_goal=9, joined_count=2)]
     c = L('cards', rows, NOW)
     assert [x['id'] for x in c] == ['goal', 'move'] and c[0]['kind'] == 'market' and c[0]['primary']['act'] == 'link' and c[1]['primary']['act'] == 'relane'
-    assert all(set(x) == {'kind', 'id', 'title', 'line', 'primary'} for x in c)
+    assert all(set(x) == {'kind', 'id', 'title', 'line', 'primary', 'at'} for x in c)      # r25: `at` (وقت الطلب) لترتيب بطاقات الشريط
 
 
 DEMAND = mfx.DEMAND
