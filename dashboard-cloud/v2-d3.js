@@ -261,8 +261,19 @@
     if (!rows) return null;
     return rows.filter(function (r) { return r && !r.fyi && r.apiKind === 'manual_payment'; }).map(function (r) { return L.v2Card(r, { now: now(), inboxRows: null }); }).filter(Boolean);
   }
+  // R24: قوايم القسم بتعدّي من نفس دالة الإخفاء المشتركة (`v2SnoozeSplit`) — المؤجَّل/المتجاهَل ما يظهرش في المربّع ولا هنا.
+  function snzVisible(list, keyFn) {
+    var E = ep(), sz = E && E.data && E.data.snooze;
+    if (!sz || !sz.map || !Array.isArray(list)) return list;
+    return L.v2SnoozeSplit(list, keyFn, sz.map, now()).visible;
+  }
+  function stuckVisible(stuck) {
+    if (!stuck || !Array.isArray(stuck.rows)) return stuck;
+    var vis = snzVisible(stuck.rows, function (sk) { return sk && sk.id ? 'stuck_payment:' + sk.id : null; });
+    return vis === stuck.rows ? stuck : Object.assign({}, stuck, { rows: vis, count: Math.max(0, (Number(stuck.count) || 0) - (stuck.rows.length - vis.length)) });
+  }
   function drawReceipts(v) {
-    var cards = receiptCards(), stuck = L.v2Stuck(data('stuck'), now());
+    var cards = receiptCards(), stuck = stuckVisible(L.v2Stuck(data('stuck'), now()));
     S.receiptCards = cards || [];
     var colA, colB;
     if (cards === null) colA = isLoading('inbox') ? loadingBlock('الإيصالات') : unavailable('الإيصالات');
@@ -461,7 +472,10 @@
       + '<div class="v3-acts two"><button type="button" class="v3-btn1" data-a="oapprove" data-id="' + esc(o.id) + '">اعتمد هذه الأسعار</button>'
       + '<button type="button" class="v3-btn2" data-a="oreject" data-id="' + esc(o.id) + '">ارفض</button></div></div></article>';
   }
-  function offerRows() { return L.v2OffersQueue(data('offers'), data('pricesBook'), now()); }
+  function offerRows() {
+    var rows = L.v2OffersQueue(data('offers'), data('pricesBook'), now());
+    return rows ? snzVisible(rows, function (o) { return o && o.id ? 'book_offer:' + o.id : null; }) : rows;
+  }
   function drawOffers(v) {
     var rows = offerRows();
     S.offerRows = rows || [];
@@ -1041,7 +1055,7 @@
     if (st === 'closed') return 'متجر الكتب لم يُفتح بعد';
     if (st === 'error') return L.NA;
     if (st !== 'ready') return null;
-    var offers = L.v2OffersQueue(data('offers'), data('pricesBook'), now());
+    var offers = offerRows();
     if (!offers) return L.NA;
     var p = [];
     if (offers.length) p.push(U.U(offers.length, ['عرض ينتظر المراجعة', 'عرضان ينتظران المراجعة', 'عروض تنتظر المراجعة', 'عرضًا ينتظر المراجعة']));

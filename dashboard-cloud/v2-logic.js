@@ -205,13 +205,18 @@
     var rows = Array.isArray(extras.inbox) ? extras.inbox : null;
     var T = {};
     TILE_DEFS.forEach(function (d) { T[d.key] = baseTile(d); });
+    // R24 م١: البنود المؤجَّلة/المتجاهَلة (صفوفها من نفس دالة الإخفاء المشتركة) بتتشال من الأعداد اللي جاية من طابور المنصة
+    // (الطابور بيعدّها ما يعرفش إنها اتأجّلت) — فالمربّع والقايمة الجانبية و«ابدأ القرارات» يطلعوا بنفس الرقم.
+    var HK = {};
+    (Array.isArray(extras.hidden) ? extras.hidden : []).forEach(function (hr) { var hk = kindOf(hr); if (hk) HK[hk] = (HK[hk] || 0) + 1; });
+    function less(n) { var m = n; for (var i = 1; i < arguments.length; i++) m -= (HK[arguments[i]] || 0); return Math.max(0, m); }
 
     // —— ملفات الخبراء
     (function (t) {
       t.dest = 'inbox'; t.land = 'expert_files_awaiting_assignment';
       if (!Q) return failTile(t);
-      var late = qn(Q, 'expert_files_late'), over = qn(Q, 'expert_files_assign_overdue');
-      var rev = qn(Q, 'expert_files_in_review'), aw = qn(Q, 'expert_files_awaiting_assignment'), bl = qn(Q, 'expert_files_blocked');
+      var late = less(qn(Q, 'expert_files_late'), 'file_late'), over = qn(Q, 'expert_files_assign_overdue');
+      var rev = less(qn(Q, 'expert_files_in_review'), 'review'), aw = less(qn(Q, 'expert_files_awaiting_assignment'), 'file_waiting'), bl = less(qn(Q, 'expert_files_blocked'), 'file_attention');
       var hot = late + over;
       t.count = hot + rev + aw + bl; t.hot = hot > 0;
       var p = [];
@@ -228,8 +233,8 @@
     (function (t) {
       t.dest = 'inbox'; t.land = 'expert_files_disputed';
       if (!Q) return failTile(t);
-      var d = qn(Q, 'expert_files_disputed') + qn(Q, 'expert_files_case_disputed') + qn(Q, 'consultation_disputes');
-      var leg = qn(Q, 'consultations_legacy'), ref = qn(Q, 'manual_refunds_pending'), un = qn(Q, 'expert_files_unactivated');
+      var d = less(qn(Q, 'expert_files_disputed') + qn(Q, 'expert_files_case_disputed') + qn(Q, 'consultation_disputes'), 'dispute');
+      var leg = less(qn(Q, 'consultations_legacy'), 'legacy'), ref = qn(Q, 'manual_refunds_pending'), un = less(qn(Q, 'expert_files_unactivated'), 'unactivated');
       t.count = d + leg + ref + un; t.hot = d > 0;
       var p = [];
       if (d) p.push(U(d, ['نزاع واحد', 'نزاعان', 'نزاعات', 'نزاعًا']));
@@ -244,7 +249,7 @@
     (function (t) {
       t.dest = 'courses'; t.land = 'courses_pending';
       if (!Q) return failTile(t);
-      var c = qn(Q, 'courses_pending'), tr = qn(Q, 'trainer_applications_pending'), lv = listLen(Q.live_needs_decision);
+      var c = qn(Q, 'courses_pending'), tr = less(qn(Q, 'trainer_applications_pending'), 'trainer'), lv = listLen(Q.live_needs_decision);
       t.count = c + tr + lv;
       var p = [];
       if (c) p.push(U(c, ['دورة تنتظر الاعتماد', 'دورتان تنتظران الاعتماد', 'دورات تنتظر الاعتماد', 'دورة تنتظر الاعتماد']));
@@ -276,20 +281,21 @@
       t.facts = n ? [t.next] : [];
       if (hasTrunc(extras)) markPartial(t);      // قائمة الوارد مقصوصة ⇒ العدّ من صفوفها ناقص معلَن
       // D3: عروض الكتب في طابور المراجعة الجديد (رقم من الجسر؛ تعذّر جلبه ⇒ العدد ناقص معلَن لا صفر).
-      if (typeof extras.bookOffers === 'number' && extras.bookOffers > 0) {
-        t.count += extras.bookOffers;
-        t.next = U(extras.bookOffers, ['عرض ينتظر المراجعة', 'عرضان ينتظران المراجعة', 'عروض تنتظر المراجعة', 'عرضًا ينتظر المراجعة']) + (n ? '، ' + t.next : '');
-        t.facts = [U(extras.bookOffers, ['عرض ينتظر المراجعة', 'عرضان ينتظران المراجعة', 'عروض تنتظر المراجعة', 'عرضًا ينتظر المراجعة'])].concat(n ? t.facts : []);
-      } else if (extras.bookOffers === null) markPartial(t);
+      var bo = typeof extras.bookOffers === 'number' ? less(extras.bookOffers, 'book_offer') : extras.bookOffers;
+      if (typeof bo === 'number' && bo > 0) {
+        t.count += bo;
+        t.next = U(bo, ['عرض ينتظر المراجعة', 'عرضان ينتظران المراجعة', 'عروض تنتظر المراجعة', 'عرضًا ينتظر المراجعة']) + (n ? '، ' + t.next : '');
+        t.facts = [U(bo, ['عرض ينتظر المراجعة', 'عرضان ينتظران المراجعة', 'عروض تنتظر المراجعة', 'عرضًا ينتظر المراجعة'])].concat(n ? t.facts : []);
+      } else if (bo === null) markPartial(t);
     })(T.books);
 
     // —— الناس والدعوات: أربعة مصادر؛ ناقص أحدها ⇒ المجموع جزئي ومعلَن (لا رقم يكذب).
     (function (t) {
       t.dest = 'invites';
-      var v = typeof extras.pendingVisitors === 'number' ? extras.pendingVisitors : null;
+      var v = typeof extras.pendingVisitors === 'number' ? less(extras.pendingVisitors, 'pending_user') : null;
       var iv = typeof extras.invitesAwaiting === 'number' ? extras.invitesAwaiting : null;
       var jn = (rows && !inboxFailedHas(extras, 'طلبات تقديم الخدمة')) ? rowsOfKind(rows, 'join').length : null;
-      var ld = Q ? qn(Q, 'founding_leads_new') : null;
+      var ld = Q ? less(qn(Q, 'founding_leads_new'), 'founding') : null;
       var sg = (rows && !inboxFailedHas(extras, 'التسجيلات الجديدة')) ? rowsOfKind(rows, 'signup').length : null;   // R16
       var parts = [v, iv, jn, ld, sg];
       var known = parts.filter(function (x) { return x !== null; });
@@ -310,7 +316,7 @@
     (function (t) {
       t.dest = 'finance'; t.land = 'wallet_payouts_pending';
       if (!Q) return failTile(t);
-      var B = v2MoneyBadge(Q).parts, po = B.payouts, mp = B.receipts, st = B.stuck, rf = B.refunds;
+      var B = v2MoneyBadge(Q).parts, po = less(B.payouts, 'payout'), mp = less(B.receipts, 'manual_payment'), st = less(B.stuck, 'stuck_payment'), rf = B.refunds;
       // R16 «دفع فشل»: صفوف الوارد نفسها (زي «تسجيل جديد» في الأعضاء) — صفر لو القراءة فشلت.
       var pf = (rows && !inboxFailedHas(extras, 'دفعات فشلت')) ? rowsOfKind(rows, 'payfail').length : 0;
       t.count = po + mp + st + rf + pf; t.hot = st > 0 || pf > 0;
@@ -332,7 +338,7 @@
       if (!Q) return failTile(t);
       // الشارة تعدّ ما ينتظر قرارًا فقط (موضوعات الأعضاء · آراء المتعلّمين · التعليقات · الأعمال) كأعمدة «ينتظرك»؛
       // مسودات الأفكار أرشيف يُذكر نصًّا في السطر ولا يدخل العدّاد (٣١١ فكرة ليست ٣١١ قرارًا).
-      var d = qn(Q, 'topics_drafts'), s = qn(Q, 'testimonials_pending'), tp = qn(Q, 'topics_pending_review'), op = qn(Q, 'opinions_pending'), cr = qn(Q, 'creative_pending');
+      var d = qn(Q, 'topics_drafts'), s = qn(Q, 'testimonials_pending'), tp = less(qn(Q, 'topics_pending_review'), 'topic'), op = qn(Q, 'opinions_pending'), cr = less(qn(Q, 'creative_pending'), 'creative');
       t.count = tp + s + op + cr;
       var p = [];
       if (tp) p.push(U(tp, ['موضوع من عضو', 'موضوعان من أعضاء', 'موضوعات من أعضاء', 'موضوعًا من أعضاء']));
@@ -543,7 +549,9 @@
       case 'brain_item': {
         // brain2: البطاقة جاهزة من `v2bItemCard` (آخر الملف). ما فيها صف وارد ولا شخص.
         var mk = root.V2L && root.V2L.v2bItemCard;
-        return (mk && r.item) ? mk(r.item, now) : null;
+        var bc = (mk && r.item) ? mk(r.item, now) : null;
+        if (bc) { bc.key = 'brain_item:' + String(r.item.id); bc.fp = ''; bc.bucket = 'decision'; bc.fyiKind = ''; bc.dismiss = false; }   // R24: اقتراح العقل قراره عنده (اعتمد/ارفض) — بعدين بس
+        return bc;
       }
       case 'file_waiting': case 'file_late': {
         var late = kind === 'file_late';
@@ -843,56 +851,96 @@
     }
     // D2: صاحب الاسم (لو عنوان البطاقة اسم شخص وعندنا بريده) ⇒ الاسم يفتح صفحته.
     if (PERSON_TITLE[kind]) { var pe = personEmailOfRow(r); if (pe) card.person = { email: pe, name: card.title }; }
+    // R24 م١: مفتاح «بعدين/تجاهل» + بصمة الحالة + هل هي قرار فعلًا ولا «للعلم» (فعلها الأساسي مش بيقفلها).
+    card.key = snoozeKeyOfRow(r);
+    card.fp = snoozeFingerprint(r);
+    var bk = bucketOf(kind, card, r);
+    card.bucket = bk.bucket; card.fyiKind = bk.fyiKind || '';
+    card.dismiss = !!(card.key && DISMISS_OK[snoozeTypeOf(kind)]);
     return card;
   }
   var PERSON_TITLE = { payout: 1, manual_payment: 1, stuck_payment: 1, payfail: 1, trainer: 1, join: 1, identity_doc: 1, pending_user: 1, signup: 1, founding: 1 };
-  function v2Decisions(rows, payouts, queue, opts) {
+  // R24 م١: تجميع البطاقات مرة واحدة ⇒ قرارات (فعلها الأساسي بيقفلها فعلًا) + «للعلم» (الباقي) + المؤجَّل/المتجاهَل.
+  //   ⛔ `v2Decisions` بقت **قرارات بس**. دفعة عالقة · عدّادات الدورات/الحيّة · تسجيل · دفع فشل · طلب مستني رد صاحبه ·
+  //   ملف اتبعت ولسه ما استلمهوش · خبير مؤسس في المتابعة · وأي بند فعله الأساسي «افتح» بس = «للعلم» (بيتفتح في بيته).
+  //   `opts.snooze = {map, now}` ⇒ نفس الدالة المشتركة (`v2SnoozeSplit`) على كل المصادر (الوارد · التحويلات · العالقة · العروض · العقل).
+  function v2Split(rows, payouts, queue, opts) {
     opts = opts || {};
     var now = opts.now || 0;
     var cardOpts = { now: now, inboxRows: Array.isArray(rows) ? rows : null, inboxFailed: opts.inboxFailed,
                      inboxTruncated: opts.inboxTruncated };   // الوارد ما وصلش / قصّ مش معلوم / مقصوص ⇒ null ⇒ جملة المراجعة تتشال
-    var src = [];
-    (Array.isArray(rows) ? rows : []).forEach(function (r) { if (r && !r.fyi) src.push(r); });
-    (Array.isArray(payouts) ? payouts : []).forEach(function (p) {
-      if (p && (p.status == null || p.status === 'pending') && p.pid) src.push(Object.assign({}, p, { apiKind: 'payout' }));
+    var sn = opts.snooze && opts.snooze.map ? opts.snooze : null;
+    var hidden = Array.isArray(opts.hidden) ? opts.hidden.slice() : [];       // [{row, entry, key}] اتشالت قبل كده (من محمّل الوارد/التحويلات)
+    var returned = {};
+    // صفوف البطاقات للمصادر اللي مش من الوارد (نفس شكل الصف في الحالتين: المرئي والمخفي).
+    function wrapPayout(p) { return Object.assign({}, p, { apiKind: 'payout' }); }
+    function wrapStuck(sk) { return { apiKind: 'stuck_payment', apiId: sk.id, ref: sk.id, stuck: sk, email: sk.email, who: sk.name, ts: sk.ageHours != null ? now - sk.ageHours * HOUR : undefined }; }
+    function wrapOffer(of) { return { apiKind: 'book_offer', apiId: of.id, ref: of.id, offerRow: of, who: of.ownerName, ts: isFinite(of.at) ? of.at : undefined }; }
+    function wrapBrain(it) { return { apiKind: 'brain_item', apiId: it.id, ref: it.id, item: it, ts: ms(it.created_at) }; }
+    function pass(list, keyOf, wrap) {
+      list = Array.isArray(list) ? list : [];
+      if (!sn) return list;
+      var sp = v2SnoozeSplit(list, keyOf, sn.map, now, wrap ? function (x) { return snoozeFingerprint(wrap(x)); } : snoozeFingerprint);
+      sp.hidden.forEach(function (h) { hidden.push({ row: wrap ? wrap(h.item) : h.item, entry: h.entry, key: h.key }); });
+      Object.keys(sp.returned).forEach(function (k) { returned[k] = sp.returned[k]; });
+      return sp.visible;
+    }
+    var src = [], fyiSrc = [];
+    pass(Array.isArray(rows) ? rows : [], snoozeKeyOfRow).forEach(function (r) { if (r && !r.fyi) src.push(r); });
+    pass(Array.isArray(opts.fyiRows) ? opts.fyiRows : [], snoozeKeyOfRow).forEach(function (r) { if (r) fyiSrc.push(r); });
+    pass(Array.isArray(payouts) ? payouts : [], function (p) { return p && p.pid ? 'payout:' + p.pid : null }, wrapPayout).forEach(function (p) {
+      if (p && (p.status == null || p.status === 'pending') && p.pid) src.push(wrapPayout(p));
     });
-    // D3: دفعات عالقة (صفوف `stuckRow`) وعروض كتب بانتظار المراجعة (صفوف `v2OffersQueue`) — كلٌّ منهما بطاقة قرار عادية.
-    (Array.isArray(opts.stuck) ? opts.stuck : []).forEach(function (sk) {
+    // D3: دفعات عالقة (صفوف `stuckRow`) وعروض كتب بانتظار المراجعة (صفوف `v2OffersQueue`) — كلٌّ منهما بطاقة عادية.
+    // الدفعة العالقة «للعلم» دايمًا (ما فيهاش فعل مالي من هنا) — فبتتبني في `fyiSrc` مش في القرارات.
+    pass(opts.stuck, function (sk) { return sk && sk.id ? 'stuck_payment:' + sk.id : null; }, wrapStuck).forEach(function (sk) {
       if (!sk || !sk.id) return;
-      src.push({ apiKind: 'stuck_payment', apiId: sk.id, ref: sk.id, stuck: sk, email: sk.email, who: sk.name, ts: sk.ageHours != null ? now - sk.ageHours * HOUR : undefined });
+      fyiSrc.push(wrapStuck(sk));
     });
-    (Array.isArray(opts.offers) ? opts.offers : []).forEach(function (of) {
+    pass(opts.offers, function (of) { return of && of.id ? 'book_offer:' + of.id : null; }, wrapOffer).forEach(function (of) {
       if (!of || !of.id) return;
-      src.push({ apiKind: 'book_offer', apiId: of.id, ref: of.id, offerRow: of, who: of.ownerName, ts: isFinite(of.at) ? of.at : undefined });
+      src.push(wrapOffer(of));
     });
     // brain2: اقتراحات العقل المنتظرة (proposed فقط) بطاقاتٌ في آخر الترتيب.
-    (Array.isArray(opts.brainItems) ? opts.brainItems : []).forEach(function (it) {
+    pass(opts.brainItems, function (it) { return it && it.id ? 'brain_item:' + it.id : null; }, wrapBrain).forEach(function (it) {
       if (!it || !it.id || (it.status != null && it.status !== 'proposed')) return;
-      src.push({ apiKind: 'brain_item', apiId: it.id, ref: it.id, item: it, ts: ms(it.created_at) });
+      src.push(wrapBrain(it));
     });
     var Q = queue || null;
     if (Q) {
       var titles = Q.courses_pending && Array.isArray(Q.courses_pending.titles) ? Q.courses_pending.titles.filter(Boolean) : [];
       var cp = qn(Q, 'courses_pending');
-      if (titles.length) titles.forEach(function (tt, i) { src.push({ apiKind: 'course_q', apiId: 'c' + i, title: String(tt), ref: 'CRS-' + i }); });
-      else if (cp > 0) src.push({ apiKind: 'course_q', apiId: 'c', summary: cp, title: '', ref: 'CRS' });
+      if (titles.length) titles.forEach(function (tt, i) { fyiSrc.push({ apiKind: 'course_q', apiId: 'c' + i, title: String(tt), ref: 'CRS-' + i }); });
+      else if (cp > 0) fyiSrc.push({ apiKind: 'course_q', apiId: 'c', summary: cp, title: '', ref: 'CRS' });
       (Array.isArray(Q.live_needs_decision) ? Q.live_needs_decision : []).forEach(function (l, i) {
-        if (l && typeof l === 'object') src.push({ apiKind: 'live_q', apiId: 'l' + i, title: l.title || l.slug || '', reserved: l.reserved_count, quorum: l.quorum, ref: 'LIV-' + i });
+        if (l && typeof l === 'object') fyiSrc.push({ apiKind: 'live_q', apiId: 'l' + i, title: l.title || l.slug || '', reserved: l.reserved_count, quorum: l.quorum, ref: 'LIV-' + i });
       });
     }
-    var cards = [];
-    src.forEach(function (r, i) {
-      var c = v2Card(r, cardOpts);
-      if (c) { c._i = i; cards.push(c); }
-    });
-    cards.sort(function (a, b) {
+    function build(list) {
+      var out = [];
+      list.forEach(function (r, i) {
+        var c = v2Card(r, cardOpts);
+        if (c) { c._i = i; var rw = (c.key && returned[c.key]) || r.returnedWhy; if (rw) c.returned = rw; out.push(c); }
+      });
+      return out;
+    }
+    var all = build(src).concat(build(fyiSrc).map(function (c) { c._i += 100000; return c; }));
+    all.sort(function (a, b) {
       if (a.group !== b.group) return a.group - b.group;
       if (a.ts !== b.ts) return a.ts < b.ts ? -1 : 1;   // Infinity مقارنة صحيحة: المجهول آخرًا
       return a._i - b._i;
     });
-    cards.forEach(function (c) { delete c._i; });
-    return cards;
+    all.forEach(function (c) { delete c._i; });
+    var decisions = all.filter(function (c) { return c.bucket === 'decision'; });
+    var fyiCards = all.filter(function (c) { return c.bucket !== 'decision'; });
+    var snoozed = [];
+    hidden.forEach(function (h) {
+      var c = h.row ? v2Card(h.row, cardOpts) : null;
+      if (c) snoozed.push({ key: h.key || c.key, entry: h.entry, card: c });
+    });
+    return { decisions: decisions, fyi: v2FyiGroups(fyiCards), snoozed: snoozed, hiddenRows: hidden.map(function (h) { return h.row; }) };
   }
+  function v2Decisions(rows, payouts, queue, opts) { return v2Split(rows, payouts, queue, opts).decisions; }
 
   function v2Next(decisions) {
     return Array.isArray(decisions) && decisions.length ? decisions[0] : null;
@@ -2248,8 +2296,177 @@
     return { parts: parts, total: parts.payouts + parts.receipts + parts.stuck + parts.refunds };
   }
 
+  // ------------------------------------------------------------------ R24 م١ · «بعدين» و«تجاهل» + «للعلم»
+  // الدوال دي هي **المكان الوحيد** اللي بيقرّر إيه المخفي: اللوحة (`v2Decisions`) والمربّعات والقايمة الجانبية وقوايم الأقسام كلها
+  // بتعدّي منها. البيانات من جدول `decision_snooze` على خادم الداشبورد (`/api/v2/decisions/snoozed`) — مش ذاكرة المتصفح.
+  //   مفتاح البند = `<نوع>:<معرّف المنصة>` (الملفات كلها نوع `file` عشان تغيّر الحارة ما يكسرش التأجيل).
+  //   مؤجَّل: `until` في المستقبل ⇒ مخفي، وبعد ما يعدّي يرجع لوحده («رجع لأن مدة التأجيل خلصت»).
+  //   متجاهَل: `kind:'dismiss'` بلا `until` ⇒ مخفي لحد ما تحالته تتغيّر أو ترجّعه.
+  //   بصمة الحالة وقت التأجيل (`fingerprint`) ≠ بصمة البند دلوقتي ⇒ يرجع («رجع لأن حالته اتغيّرت»).
+  var SNZ_TYPE = { file_waiting: 'file', file_late: 'file', file_attention: 'file', open_message: 'site_message' };
+  function snoozeTypeOf(kind) { return SNZ_TYPE[kind] || kind; }
+  // «تجاهل» بس للأنواع اللي مالهاش قرار على المنصة (نفس القايمة البيضا على الخادم `DISMISS_ALLOWED`). الفلوس وصاحبها مستني رد: «ارفض بسبب».
+  var DISMISS_OK = { signup: 1, payfail: 1, site_message: 1, message: 1, lead: 1, stuck_payment: 1, alert: 1, other: 1 };
+  function snoozeKeyOfRow(r) {
+    if (!r) return null;
+    var kind = kindOf(r);
+    if (!kind || kind === 'course' || kind === 'live') return null;      // عدّادات الطابور: مالهاش معرّف ثابت
+    var id = r.apiId != null ? r.apiId : (r.pid != null ? r.pid : (r.msgSource === 'site' && r.msgId != null ? r.msgId : null));
+    if (id == null || id === '') return null;
+    return snoozeTypeOf(kind) + ':' + String(id);
+  }
+  // بصمة «حالة» البند (مش بياناته): لو اتغيّرت بعد التأجيل البند يرجع. ⛔ مفيش عدّاد محاولات ولا ساعات هنا — بيتغيّروا كل ثانية فالتأجيل ما بيثبتش.
+  function snoozeFingerprint(r) {
+    if (!r) return '';
+    var f = r.ef || {};
+    var parts = [r.efLane, f.status, r.unact ? 'unact' : '', r.needsAttention ? 'attn' : '', r.nextStatus, r.waiting ? 'waiting' : '',
+                 r.pfScope, (Array.isArray(r.flagLabels) && r.flagLabels.length) ? 'flags' : '', r.fyi ? 'fyi' : ''];
+    return parts.filter(function (x) { return x; }).join('|');
+  }
+  function snoozeIndex(rows) {
+    var m = {};
+    (Array.isArray(rows) ? rows : []).forEach(function (e) { if (e && typeof e.key === 'string') m[e.key] = e; });
+    return m;
+  }
+  // قرار الإخفاء لبند واحد: {hidden, returned}. `fp` بصمته دلوقتي (فاضي = ما نقارنش).
+  function snoozeState(entry, fp, now) {
+    if (!entry) return { hidden: false, returned: '' };
+    if (entry.kind === 'dismiss') {
+      if (entry.fingerprint && fp !== entry.fingerprint) return { hidden: false, returned: 'رجع لأن حالته اتغيّرت' };
+      return { hidden: true, returned: '' };
+    }
+    var until = ms(entry.until);
+    if (isNaN(until)) return { hidden: false, returned: '' };            // تأجيل بلا ميعاد مفهوم ⇒ ما نخفيش حاجة على عمى
+    if (until <= (now || 0)) return { hidden: false, returned: 'رجع لأن مدة التأجيل خلصت' };
+    if (entry.fingerprint && fp !== entry.fingerprint) return { hidden: false, returned: 'رجع لأن حالته اتغيّرت' };
+    return { hidden: true, returned: '' };
+  }
+  // ⛔ الدالة المشتركة الوحيدة: قايمة بنود + دالة مفتاح ⇒ {visible, hidden:[{item,key,entry}], returned:{key:نص}}.
+  function v2SnoozeSplit(list, keyOf, map, now, fpOf) {
+    var out = { visible: [], hidden: [], returned: {} };
+    (Array.isArray(list) ? list : []).forEach(function (item) {
+      var key = keyOf ? keyOf(item) : null;
+      var entry = key && map ? map[key] : null;
+      if (!entry) { out.visible.push(item); return; }
+      var st = snoozeState(entry, fpOf ? fpOf(item) : '', now);
+      if (st.hidden) out.hidden.push({ item: item, key: key, entry: entry });
+      else { out.visible.push(item); if (st.returned) out.returned[key] = st.returned; }
+    });
+    return out;
+  }
+  // اختيارات «بعدين»: بكرة · بعد ٣ أيام · الأسبوع الجاي (٨ الصبح بتوقيت الجهاز). «اختار يوم» بتتحسب من التاريخ المكتوب.
+  function snoozeAt(now, days) { var d = new Date(now); d.setDate(d.getDate() + days); d.setHours(8, 0, 0, 0); return d.toISOString(); }
+  function snoozePicks(now) {
+    return [{ key: 'tomorrow', label: 'بكرة', until: snoozeAt(now, 1) },
+            { key: 'd3', label: 'بعد ٣ أيام', until: snoozeAt(now, 3) },
+            { key: 'week', label: 'الأسبوع الجاي', until: snoozeAt(now, 7) }];
+  }
+  // «اختار يوم»: `YYYY-MM-DD` ⇒ ٨ الصبح من اليوم ده؛ مش تاريخ أو مش في المستقبل ⇒ null.
+  function snoozeUntilFromDate(text, now) {
+    var m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(text || '').trim());
+    if (!m) return null;
+    var d = new Date(+m[1], +m[2] - 1, +m[3], 8, 0, 0, 0);
+    if (isNaN(d.getTime()) || d.getMonth() !== +m[2] - 1) return null;
+    return d.getTime() > (now || 0) ? d.toISOString() : null;
+  }
+  var AR_DAYS = ['الأحد', 'الاثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت'];
+  var AR_MONTHS = ['يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو', 'يوليو', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر', 'ديسمبر'];
+  function snoozeUntilText(iso) {
+    var t = ms(iso);
+    if (isNaN(t)) return '';
+    var d = new Date(t);
+    return AR_DAYS[d.getDay()] + ' ' + ar(d.getDate()) + ' ' + AR_MONTHS[d.getMonth()];
+  }
+  // سطر القايمة: «مؤجّلة (ن)» و«اتشالت (ن)» من نتيجة `v2Split(...).snoozed` (البند اللي لسه موجود على المنصة بس).
+  function v2SnoozeLists(snoozed) {
+    var later = [], gone = [];
+    (Array.isArray(snoozed) ? snoozed : []).forEach(function (x) {
+      if (!x || !x.entry || !x.card) return;
+      var item = { key: x.key, title: x.card.title, tag: x.card.tag, kind: x.entry.kind, reason: x.entry.reason || '',
+                   until: x.entry.until || '', untilText: x.entry.kind === 'dismiss' ? '' : 'لحد ' + snoozeUntilText(x.entry.until), card: x.card };
+      (x.entry.kind === 'dismiss' ? gone : later).push(item);
+    });
+    return { later: later, gone: gone };
+  }
+
+  // —— قرار ولا «للعلم»: البطاقة بتدخل «ابدأ القرارات» بس لو فعلها الأساسي بيقفلها فعلًا على المنصة.
+  var CLOSING_DO = { send: 1, decide: 1, resolve: 1, payout_settle: 1, pay_confirm: 1, offer_approve: 1, brain_approve: 1 };
+  function bucketOf(kind, card, r) {
+    if (r && r.fyi) return { bucket: 'fyi', fyiKind: 'file_sent' };                       // ملف اتبعت ولسه ما استلمهوش
+    switch (kind) {
+      case 'stuck_payment': return { bucket: 'fyi', fyiKind: 'stuck_payment' };
+      case 'signup': return { bucket: 'fyi', fyiKind: 'signup' };
+      case 'course': return { bucket: 'fyi', fyiKind: 'course' };
+      case 'live': return { bucket: 'fyi', fyiKind: 'live' };
+      case 'payfail': return { bucket: 'fyi', fyiKind: (r && r.pfScope === 'gateway') ? 'gateway' : 'payfail' };
+      case 'join': if (r && r.waiting) return { bucket: 'fyi', fyiKind: 'join_waiting' }; break;     // مستني رد صاحبه
+      case 'founding': if (r && r.nextStatus && r.nextStatus !== 'contacted') return { bucket: 'fyi', fyiKind: 'founding_follow' }; break;   // تواصلت/دعيته = متابعة
+    }
+    var a = card && card.primary && card.primary.act && card.primary.act.do;
+    if (a && CLOSING_DO[a]) return { bucket: 'decision', fyiKind: '' };
+    return { bucket: 'fyi', fyiKind: 'open_' + kind };
+  }
+  // سطور «للعلم»: [المفتاح، النوع (info = للعلم بس · open = قراره في صفحته)، ٤ صيغ عدد، الترتيب]
+  var FYI_DEFS = {
+    gateway: ['info', ['بوابة الدفع بالبطاقة فيها مشكلة', 'بوابتان للدفع بالبطاقة فيهما مشكلة', 'بوابات دفع بالبطاقة فيها مشكلة', 'بوابة دفع بالبطاقة فيها مشكلة'], 1],
+    payfail: ['info', ['عملية دفع فشلت', 'عمليتا دفع فشلتا', 'عمليات دفع فشلت', 'عملية دفع فشلت'], 2],
+    stuck_payment: ['info', ['دفعة بالبطاقة لسه ما كملتش', 'دفعتان بالبطاقة لسه ما كملوش', 'دفعات بالبطاقة لسه ما كملتش', 'دفعة بالبطاقة لسه ما كملتش'], 3],
+    file_sent: ['info', ['ملف اتبعت لخبير ولسه ما استلمهوش', 'ملفان اتبعتوا لخبراء ولسه ما اتستلموش', 'ملفات اتبعتت لخبراء ولسه ما اتستلمتش', 'ملف اتبعتت لخبراء ولسه ما اتستلمتش'], 4],
+    join_waiting: ['info', ['طلب انضمام مستني رد صاحبه', 'طلبا انضمام مستنيين رد أصحابهم', 'طلبات انضمام مستنية رد أصحابها', 'طلب انضمام مستني رد أصحابه'], 5],
+    founding_follow: ['info', ['خبير مؤسس في المتابعة', 'خبيران مؤسسان في المتابعة', 'خبراء مؤسسين في المتابعة', 'خبير مؤسس في المتابعة'], 6],
+    signup: ['info', ['تسجيل جديد', 'تسجيلان جديدان', 'تسجيلات جديدة', 'تسجيل جديد'], 7],
+    course: ['open', ['دورة مستنية الاعتماد', 'دورتان مستنيتان الاعتماد', 'دورات مستنية الاعتماد', 'دورة مستنية الاعتماد'], 8],
+    live: ['open', ['دورة حيّة محتاجة قرار', 'دورتان حيّتان محتاجتان قرار', 'دورات حيّة محتاجة قرار', 'دورة حيّة محتاجة قرار'], 9],
+    open_dispute: ['open', ['نزاع', 'نزاعان', 'نزاعات', 'نزاع'], 10],
+    open_legacy: ['open', ['استشارة قديمة', 'استشارتان قديمتان', 'استشارات قديمة', 'استشارة قديمة'], 11],
+    open_unactivated: ['open', ['دفع من غير ملف', 'دفعتان من غير ملف', 'دفعات من غير ملف', 'دفعة من غير ملف'], 12],
+    open_file_attention: ['open', ['ملف أمواله متوقفة', 'ملفان أموالهما متوقفة', 'ملفات أموالها متوقفة', 'ملف أمواله متوقفة'], 13],
+    open_file_waiting: ['open', ['ملف محتاج تختار له خبير', 'ملفان محتاجان تختار لهما خبير', 'ملفات محتاجة تختار لها خبير', 'ملف محتاج تختار له خبير'], 14],
+    open_file_late: ['open', ['ملف متأخر محتاج تختار له خبير', 'ملفان متأخران محتاجان تختار لهما خبير', 'ملفات متأخرة محتاجة تختار لها خبير', 'ملف متأخر محتاج تختار له خبير'], 15],
+    open_review: ['open', ['رأي خبير جديد مستني مراجعتك', 'رأيان مستنيان مراجعتك', 'آراء مستنية مراجعتك', 'رأي مستني مراجعتك'], 16],
+    open_identity_doc: ['open', ['وثيقة هوية مستنية مراجعتك', 'وثيقتا هوية مستنيتان مراجعتك', 'وثائق هوية مستنية مراجعتك', 'وثيقة هوية مستنية مراجعتك'], 17],
+    open_pending_user: ['open', ['زائر عليه علامة مراجعة', 'زائران عليهما علامة مراجعة', 'زوّار عليهم علامة مراجعة', 'زائر عليه علامة مراجعة'], 18],
+    open_join: ['open', ['طلب انضمام محتاج مراجعة', 'طلبا انضمام محتاجا مراجعة', 'طلبات انضمام محتاجة مراجعة', 'طلب انضمام محتاج مراجعة'], 19],
+    open_verify: ['open', ['طلب توثيق من غير خبير', 'طلبا توثيق من غير خبير', 'طلبات توثيق من غير خبير', 'طلب توثيق من غير خبير'], 20],
+    open_book: ['open', ['كتاب مستني المراجعة', 'كتابان مستنيان المراجعة', 'كتب مستنية المراجعة', 'كتاب مستني المراجعة'], 21],
+    open_program: ['open', ['طلب برنامج', 'طلبا برنامج', 'طلبات برامج', 'طلب برنامج'], 22],
+    open_topic: ['open', ['موضوع مستني المراجعة', 'موضوعان مستنيان المراجعة', 'موضوعات مستنية المراجعة', 'موضوع مستني المراجعة'], 23],
+    open_creative: ['open', ['عمل إبداعي مستني المراجعة', 'عملان إبداعيان مستنيان المراجعة', 'أعمال إبداعية مستنية المراجعة', 'عمل إبداعي مستني المراجعة'], 24],
+    open_open_message: ['open', ['رسالة من الموقع مستنية ردّك', 'رسالتان من الموقع مستنيتان ردّك', 'رسائل من الموقع مستنية ردّك', 'رسالة من الموقع مستنية ردّك'], 25],
+    open_lead: ['open', ['عميل محتمل', 'عميلان محتملان', 'عملاء محتملون', 'عميل محتمل'], 26],
+    open_message: ['open', ['رسالة', 'رسالتان', 'رسائل', 'رسالة'], 27],
+    open_other: ['open', ['بند محتاج مراجعة', 'بندان محتاجان مراجعة', 'بنود محتاجة مراجعة', 'بند محتاج مراجعة'], 28]
+  };
+  function v2FyiGroups(cards) {
+    var by = {}, order = [];
+    (Array.isArray(cards) ? cards : []).forEach(function (c) {
+      var k = c.fyiKind || 'open_other';
+      if (!FYI_DEFS[k]) k = 'open_other';
+      if (!by[k]) { by[k] = []; order.push(k); }
+      by[k].push(c);
+    });
+    order.sort(function (a, b) { return FYI_DEFS[a][2] - FYI_DEFS[b][2]; });
+    var groups = order.map(function (k) {
+      var list = by[k], def = FYI_DEFS[k];
+      var n = k === 'course' ? list.reduce(function (a, c) { return a + (Number(c.row && c.row.summary) || 1); }, 0) : list.length;
+      var label = U(n, def[1]);
+      if (k === 'gateway') {
+        var att = list.reduce(function (a, c) { return a + (Number(c.row && c.row.pfAttempts) || 0); }, 0);
+        if (att > 1) label += ' (' + U(att, ['محاولة', 'محاولتان', 'محاولات', 'محاولة']) + ')';
+      }
+      return { key: k, kind: def[0], label: label, n: n, cards: list, img: (list[0] && list[0].img) || 'people' };
+    });
+    var total = 0, info = 0;
+    groups.forEach(function (g) { total += g.n; if (g.kind === 'info') info += g.n; });
+    return { groups: groups, total: total, info: info, open: total - info };
+  }
+  // «للعلم» لوحده (لو اللي بينادي ما يحتاجش القرارات).
+  function v2Fyi(rows, payouts, queue, opts) { return v2Split(rows, payouts, queue, opts).fyi; }
+
   var api = {
-    v2Tiles: v2Tiles, v2Decisions: v2Decisions, v2Card: v2Card, v2Next: v2Next, v2NextLine: v2NextLine,
+    v2Tiles: v2Tiles, v2Decisions: v2Decisions, v2Split: v2Split, v2Fyi: v2Fyi, v2SnoozeSplit: v2SnoozeSplit, v2SnoozeLists: v2SnoozeLists,
+    snoozeKeyOfRow: snoozeKeyOfRow, snoozeFingerprint: snoozeFingerprint, snoozeIndex: snoozeIndex, snoozeState: snoozeState, snoozePicks: snoozePicks,
+    snoozeUntilFromDate: snoozeUntilFromDate, snoozeUntilText: snoozeUntilText, DISMISS_OK: DISMISS_OK, FYI_DEFS: FYI_DEFS, v2Card: v2Card, v2Next: v2Next, v2NextLine: v2NextLine,
     v2Health: v2Health, v2BrainLog: v2BrainLog,
     v2Tickets: v2Tickets, v2DisputeTickets: v2DisputeTickets, v2TimerText: v2TimerText, v2TimerTone: v2TimerTone, v2Person: v2Person,
     personKey: personKey, personEmailOf: personEmailOf, courseKey: courseKey, courseIdOf: courseIdOf, COLS: COLS, COL_LABEL: COL_LABEL, NA: NA,

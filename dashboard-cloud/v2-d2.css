@@ -194,3 +194,7 @@
   .v2d-t,.v2d-pgrid.sk i{transition:none;animation:none}
 }
 .v2d-av .v2-ic{width:46%;height:46%}
+
+/* R24 — سطر متابعة الخبير المؤسس على صفحة الشخص (مسار متابعة، مش بطاقة قرار) */
+.v2d-follow{background:#EEF4FF;border:1px solid #BFD3F6;color:#1F4A8A;border-radius:12px;padding:10px 14px;margin-bottom:10px;font-size:14px;line-height:1.7}
+.v2d-follow .v2d-btn2{margin-inline-start:10px;min-height:44px}

@@ -881,10 +881,15 @@ def test_the_books_tile_adds_the_offers_and_a_failed_offers_source_is_partial_no
 def test_two_new_decision_cards_a_stuck_payment_and_a_book_offer():
     stuck = L('v2Stuck', {'items': d3fx.STUCK_ITEMS}, NOW)['rows']
     offers = L('v2OffersQueue', {'offers': d3fx.OFFERS}, PRICES_LIST, NOW)
-    cards = L('v2Decisions', [], [], None, {'now': NOW, 'stuck': stuck, 'offers': offers})
-    kinds = [c['kind'] for c in cards]
-    assert kinds.count('stuck_payment') == 3 and kinds.count('book_offer') == 2
-    assert kinds.index('stuck_payment') < kinds.index('book_offer'), 'المال قبل مراجعة الكتب'
+    # R24 م١: العرض قرار (اعتمد/ارفض)، والدفعة العالقة «للعلم» — مفيش فعل مالي منها، فمش في شريط القرارات.
+    out = L('v2Split', [], [], None, {'now': NOW, 'stuck': stuck, 'offers': offers})
+    decisions = out['decisions']
+    assert [c['kind'] for c in decisions].count('stuck_payment') == 0 and [c['kind'] for c in decisions].count('book_offer') == 2
+    fyi = [c for g in out['fyi']['groups'] for c in g['cards']]
+    kinds = [c['kind'] for c in fyi]
+    assert kinds.count('stuck_payment') == 3
+    assert [g['key'] for g in out['fyi']['groups']] == ['stuck_payment'] and out['fyi']['groups'][0]['kind'] == 'info'
+    cards = decisions + fyi
     sp = next(c for c in cards if c['kind'] == 'stuck_payment' and c['title'] == 'نور الهدى سالم')
     assert sp['tag'] == 'دفعة عالقة' and sp['primary'] == {'label': 'افتح الشخص', 'act': {'do': 'person', 'email': 'nour@example.test'}}
     assert sp['person'] == {'email': 'nour@example.test', 'name': 'نور الهدى سالم'} and 'money' not in json.dumps(sp['primary']) and sp['secondary'] is None

@@ -615,6 +615,18 @@ def _decisions(real, **opts):
     return v2_node.logic('v2Decisions', [r for r in real['inbox'] if not r.get('fyi')], payouts, real['data']['opsQueue'], o)
 
 
+def _split(real, **opts):
+    """R24 م١: القرارات + «للعلم» من نفس الصفوف (الشريط قرارات بس)."""
+    o = {'now': NOW, 'inboxFailed': real['failed'], 'fyiRows': [r for r in real['inbox'] if r.get('fyi')]}
+    o.update(opts)
+    payouts = real['data']['walletPayouts']['rows']
+    return v2_node.logic('v2Split', [r for r in real['inbox'] if not r.get('fyi')], payouts, real['data']['opsQueue'], o)
+
+
+def _fyi_cards(real, **opts):
+    return [c for g in _split(real, **opts)['fyi']['groups'] for c in g['cards']]
+
+
 @needs_node
 def test_the_real_pipeline_loads_every_source(real):
     assert real['failed'] == [], real['failed']
@@ -664,12 +676,14 @@ def test_the_known_kinds_come_in_the_approved_relative_order(real):
     first_at = {}
     for i, c in enumerate(cards):
         first_at.setdefault(c['kind'], i)
-    seq = ['dispute', 'unactivated', 'payout', 'manual_payment', 'review', 'trainer', 'pending_user', 'founding', 'book', 'lead']
+    # R24 م١: الشريط قرارات بس (اللي فعله الأساسي بيقفله)؛ النزاع والملف المحجوز والاستشارة القديمة والرأي والكتاب «للعلم» بتتفتح في بيوتها.
+    seq = ['payout', 'manual_payment', 'trainer', 'pending_user', 'founding', 'lead']
     present = [k for k in seq if k in first_at]
-    assert present == ['dispute', 'unactivated', 'payout', 'manual_payment', 'review', 'trainer', 'pending_user', 'founding', 'book', 'lead']
+    assert present == ['payout', 'manual_payment', 'trainer', 'pending_user', 'founding', 'lead']
     assert [first_at[k] for k in present] == sorted(first_at[k] for k in present)
-    assert first_at['legacy'] > first_at['dispute'] and first_at['legacy'] < first_at['payout']
-    assert first_at['join'] > first_at['review'] and first_at['join'] < first_at['pending_user']
+    fyi_kinds = {c['kind'] for c in _fyi_cards(real)}
+    assert {'dispute', 'unactivated', 'legacy', 'review', 'book'} <= fyi_kinds
+    assert not ({'dispute', 'unactivated', 'legacy', 'review', 'book'} & set(first_at))
 
 
 @needs_node
@@ -693,7 +707,7 @@ def test_within_a_group_the_oldest_comes_first(real):
 def test_oldest_first_on_a_hand_built_group():
     mk = lambda i, h: {'apiKind': 'expert_file', 'apiId': i, 'efLane': 'waiting', 'ref': i, 'who': 'م',
                        'ef': {'id': i, 'title': 't' + i, 'status': 'awaiting_assignment', 'hours_left': 5,
-                              'paid_at': _iso(h), 'candidates': []}}
+                              'paid_at': _iso(h), 'candidates': [{'email': 'e@x.test', 'name': 'خبير', 'auto_pick': True}]}}
     cards = v2_node.logic('v2Decisions', [mk('a', 2), mk('b', 30), mk('c', 10)], [], None, {'now': NOW, 'inboxFailed': []})
     assert [c['title'] for c in cards] == ['tb', 'tc', 'ta']
 
@@ -716,12 +730,15 @@ DECIDING = ('send', 'decide', 'resolve', 'payout_settle', 'pay_confirm', 'payout
 
 @needs_node
 def test_things_that_need_reading_are_never_a_one_click_approve(real):
-    cards = _decisions(real)
+    # R24 م١: اللي محتاج قراية مش في الشريط أصلًا: «للعلم» وفعله «افتح» بس — مفيش ضغطة واحدة بتعتمده.
+    decisions = _decisions(real)
+    assert not [c for c in decisions if c['kind'] in READ_FIRST]
+    cards = _fyi_cards(real)
     seen = set()
     for c in cards:
         if c['kind'] in READ_FIRST:
             seen.add(c['kind'])
-            assert c['primary']['act']['do'] in ('open', 'goto'), c['kind']
+            assert c['bucket'] == 'fyi' and c['primary']['act']['do'] in ('open', 'goto'), c['kind']
             assert 'افتح' in c['primary']['label'], c['kind']
             assert c['secondary'] is None or c['secondary']['act']['do'] in ('open', 'goto'), c['kind']
     assert {'review', 'dispute', 'unactivated', 'legacy', 'book', 'topic', 'course', 'live'} <= seen
@@ -731,11 +748,12 @@ def test_things_that_need_reading_are_never_a_one_click_approve(real):
 
 @needs_node
 def test_a_suspicious_visitor_and_an_unlicensed_applicant_are_opened_not_approved(real):
-    cards = _decisions(real)
+    cards = _decisions(real) + _fyi_cards(real)      # R24: المشتبه فيه «للعلم» (بيتفتح للمراجعة)، والعادي قرار
     visitors = [c for c in cards if c['kind'] == 'pending_user']
     assert visitors
     flagged = [c for c in visitors if c['warn']]
     plain = [c for c in visitors if not c['warn']]
+    assert all(c['bucket'] == 'fyi' for c in flagged) and all(c['bucket'] == 'decision' for c in plain)
     assert flagged and all(c['primary']['act']['do'] == 'open' for c in flagged)
     assert all(c['warn'].startswith('يحتاج مراجعة: ') and 'مشبوه' not in c['warn'] for c in flagged)   # «الناس والدعوات»: كلمة «مشبوه» ممنوعة في النص الظاهر
     assert plain and all(c['primary']['act'] == {'do': 'decide', 'action': 'approve'} for c in plain)
@@ -909,7 +927,7 @@ def test_nothing_waiting_yields_no_cards():
 
 @needs_node
 def test_other_rows_get_their_plain_cards(real):
-    cards = {c['kind']: c for c in _decisions(real)}
+    cards = {c['kind']: c for c in _decisions(real) + _fyi_cards(real)}
     assert cards['trainer']['primary']['label'] == 'اقبل الطلب' and cards['trainer']['secondary']['label'] == 'افتح الطلب'
     assert cards['founding']['primary']['label'] == 'تم التواصل'
     assert cards['lead']['primary'] == {'label': 'تم', 'act': {'do': 'resolve'}}
@@ -1008,7 +1026,8 @@ def test_health_alerts_are_rebuilt_in_plain_arabic_and_never_printed_raw():
 
 
 # كلام ظاهر ما يرجعش: عامية المؤسس وتجسيد الجنس واصطلاحات الشاشة.
-BANNED_IN_SOURCE = ['فلوسها واقفة', 'فلوس ملف واقفة', 'الفلوس واقفة', 'بعدين', 'من الدرج', 'طابور المنصة', 'اقبله', 'افتح له المنصة',
+BANNED_IN_SOURCE = ['فلوسها واقفة', 'فلوس ملف واقفة', 'الفلوس واقفة', 'من الدرج',   # «بعدين» اتشالت من القايمة: بقت اسم الزرار المعتمد (R24)
+                    'طابور المنصة', 'اقبله', 'افتح له المنصة',
                     "'لديه ", 'تواصلت معه', 'كلّمه على واتساب', 'إلى محفظته', 'عليه نزاع', 'يطلب تقديم', 'قبل فتح المنصة له',
                     'سجّل ودخل زائرًا', 'ينشر اسمه', 'ليس لديه']
 

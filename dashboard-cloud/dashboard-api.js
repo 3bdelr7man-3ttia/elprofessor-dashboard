@@ -898,6 +898,45 @@
             efCandAway: efCandAway, efDeclineWhy: efDeclineWhy, efAssignLog: efAssignLog, efNoCandidate: efNoCandidate,
             PRE: EF_PRE, WORK: EF_WORK, relTime: relTime, arDate: arDate };
 
+  // R24 م١: «بعدين» و«تجاهل» على خادم الداشبورد (جدول decision_snooze). بيتحمّل **مرة واحدة** مع تحميل الوارد (والتحويلات تشاركه
+  // لو جت في نفس اللحظة) — مش مفتاح تحميل لوحده. أي عطل (أو ٤٠٣ لموظف، أو ٤٠٤ لمفتاح مقفول) ⇒ ما فيش مخفي: بنعرض كل حاجة
+  // بدل ما نخفي على عمى، و`ok:false` بس للعطل الحقيقي (الشاشة بتكتب «تعذّر جلب المؤجّلة»).
+  var _snzP = null, _snzAt = 0;
+  function loadSnooze() {
+    var now = Date.now();
+    if (_snzP && now - _snzAt < 4000) return _snzP;
+    _snzAt = now;
+    _snzP = get("/v2/decisions/snoozed").then(function (r) {
+      var rows = (r && Array.isArray(r.rows)) ? r.rows : [];
+      var L = window.V2L;
+      EP.data.snooze = { rows: rows, map: L && L.snoozeIndex ? L.snoozeIndex(rows) : {}, ok: true, at: now };
+      return EP.data.snooze;
+    }).catch(function (e) {
+      var quiet = e && (e.status === 403 || e.status === 404);
+      EP.data.snooze = { rows: [], map: {}, ok: quiet, at: now };
+      return EP.data.snooze;
+    });
+    return _snzP;
+  }
+  EP.loadSnooze = loadSnooze;
+  // بعد أي بعدين/تجاهل/رجّعها: القايمة المخزّنة قديمة ⇒ تتجاب من جديد مع أول تحميل.
+  EP.snoozeInvalidate = function () { _snzP = null; _snzAt = 0; };
+  // R24: الفعل نفسه — {ok, error}. `until` ISO · `reason` للتجاهل · `fingerprint` بصمة الحالة. بيحدّث الوارد والتحويلات بعد النجاح.
+  function snoozeCall(key, action, body, doneText) {
+    return post("/v2/decisions/" + encodeURIComponent(key) + "/" + action, body || {}).then(function () {
+      EP.snoozeInvalidate();
+      note(doneText);
+      EP.reload("inbox"); EP.reload("walletPayouts");
+      return { ok: true };
+    }).catch(function (e) {
+      var d = (e && e.data) || {};
+      return { ok: false, error: (typeof d.error === "string" && d.error) || "تعذّر الحفظ — حاول تاني", refused: !!d.refused };
+    });
+  }
+  EP.snoozeItem = function (key, until, fingerprint) { return snoozeCall(key, "snooze", { until: until, fingerprint: fingerprint || "" }, "اتأجّل ✓"); };
+  EP.dismissItem = function (key, reason, fingerprint) { return snoozeCall(key, "dismiss", { reason: reason, fingerprint: fingerprint || "" }, "اتشال ✓"); };
+  EP.restoreItem = function (key) { return snoozeCall(key, "restore", {}, "رجع ✓"); };
+
   var LOADERS = {
     // نظرة عامة: /api/dashboard (+ /api/platform-metrics لعدد المستخدمين الحيّ)
     dashboard: function () {
@@ -928,8 +967,10 @@
     // الشارة ١ وتقول القائمة ٠. الشكل هنا شكل عرضٍ جاهز (نفس نمط محمّل `investment`) كي لا
     // تُشتقّ الحقول مرّتين في الشاشة.
     walletPayouts: function () {
-      return get("/platform-wallet-payouts").then(function (r) {
+      return Promise.all([get("/platform-wallet-payouts"), loadSnooze()]).then(function (res) {
+        var r = res[0], snz = res[1];
         var list = (r && Array.isArray(r.payouts)) ? r.payouts : [];
+        var hiddenPayouts = [];
         EP.data.walletPayouts = {
           count: list.length,
           rows: list.map(function (p) {
@@ -948,6 +989,15 @@
             };
           }),
         };
+        // R24: التحويل المؤجَّل بيتشال من القايمة (نفس دالة الإخفاء المشتركة) ويتحط في `hidden` لسطر «مؤجّلة».
+        var L = window.V2L;
+        if (L && L.v2SnoozeSplit && snz && snz.map) {
+          var sp = L.v2SnoozeSplit(EP.data.walletPayouts.rows, function (p) { return p && p.pid ? "payout:" + p.pid : null; }, snz.map, Date.now(), L.snoozeFingerprint);
+          EP.data.walletPayouts.rows = sp.visible;
+          EP.data.walletPayouts.hidden = sp.hidden.map(function (h) { return { row: h.item, entry: h.entry, key: h.key }; });
+          EP.data.walletPayouts.returned = sp.returned;
+          EP.data.walletPayouts.count = sp.visible.length;
+        }
       });
     },
 
@@ -1791,6 +1841,8 @@
               note: (ap.headline || "طلب انضمام جديد") + " — اعتمد الصفة وحدّد نسبة الإيراد.",
               ref: "TRN-" + ap.id, who: ap.user_name || ap.full_name || ap.user_email || ap.email || "—",
               apiKind: "trainer", personEmail: ap.user_email || ap.email || "", apiId: ap.id, ts: Date.parse(ap.created_at || ap.submitted_at || "") || 0,
+              // R24: «ارفض بسبب» في الدرج (كان الرفض في «الدورات ⇒ المدرّبين» بس). السبب يوصل لمقدّم الطلب كما هو، فبلا سبب ممنوع هنا وعلى الخادم.
+              canReject: true, rejectNeedsReason: true,
               trHeadline: ap.headline || "", trSpec: ap.specialty || ap.specialization || "", trYears: ap.years_experience || "", trAttach: Array.isArray(ap.attachments) ? ap.attachments.length : 0,
             });
           });
@@ -1861,6 +1913,7 @@
                 { k: "الإيميل", v: s.email || "" },
               ].filter(function (d) { return d.v; }),
               apiKind: "signup", personEmail: s.email || "", apiId: s.user_id, canReject: false, ts: Date.parse(at) || 0,
+              approveLabel: "تمام، اطّلعت",   // R24: كان العنوان الافتراضي «اعتمد وحوّل للموديول» ⇒ المؤسس يفتكر إنه بيعتمد حاجة
               sgProvider: PROV[s.provider] || "", sgCountry: s.country || "", sgFlags: flags,
               sgWhere: s.where || "", sgCame: s.came || "",
             });
@@ -1881,6 +1934,7 @@
               note: f.why || "", ref: "PF-" + f.id, who: gw ? ("بوابة " + (f.gateway || "الدفع")) : (f.user_email || "مشترٍ"),
               email: gw ? "" : (f.user_email || ""), apiKind: "payfail", personEmail: gw ? "" : (f.user_email || ""), apiId: f.id,
               canReject: false, ts: Date.parse(at) || 0,
+              approveLabel: "تمام، اطّلعت",   // R24: نفس زرّ تليجرام — مش اعتماد
               pfScope: f.scope || "order", pfWhy: f.why || "", pfGateway: f.gateway || "", pfProduct: f.product_label || "",
               pfAttempts: Number(f.attempts) || 0, amount: f.amount, currency: f.currency || "",
             });
@@ -1989,6 +2043,7 @@
                 : (shortNote(jr.note) || "بلا ملاحظة مكتوبة من المتقدّم — القرار من الاستمارة تحت."),
               ref: "JR-" + jr.id, who: jr.user_name || jr.user_email || "—",
               apiKind: "join", personEmail: jr.user_email || "", apiId: jr.id, ts: Date.parse(when) || 0,
+              waiting: waiting,   // R24: مستني رد صاحبه (needs_info) ⇒ «للعلم» مش قرار
               // «رفض بسبب»: المنصة تعرض `admin_note` لصاحب الطلب حرفًا كسبب رفضه، فالرفض هنا
               // لا يمرّ بلا سبب مكتوب (محروس في الواجهة وفي البروكسي معًا).
               canReject: true, rejectNeedsReason: true,
@@ -2180,6 +2235,8 @@
               // ⛔ الردّ صار من درج الوارد نفسه (لا «فتح الرسائل» ثم بحثٌ عن الصفّ): الصفّ
               // يحمل ما يحتاجه الردّ والحذف — فلا يبقى فعلٌ وحيدٌ خلف شاشةٍ مبتلَعة.
               msgSource: "site", msgId: m.id, email: m.email || "", ts: Date.parse(m.created_at || "") || 0,
+              // R24: مفتاح ثابت (كان `efRowKey` = '||' لكل الرسائل ⇒ «افتح» بعد إعادة تحميل كان بيفتح رسالة غلط) + مفتاح «بعدين/تجاهل».
+              apiKind: "site_message", apiId: m.id,
               body: m.body || "", topic: m.topic || "", phone: m.phone || "",
             });
           });
@@ -2221,6 +2278,9 @@
           });
         }).catch(function () {})
       );
+      // R24 م١: المؤجَّل/المتجاهَل من خادم الداشبورد — بيتحمّل مرة واحدة هنا، والفلتر بعد ما الصفوف كلها توصل.
+      var snz = null;
+      jobs.push(loadSnooze().then(function (r) { snz = r; }));
       return Promise.all(jobs).then(function () {
         // نزاع على ملف بيظهر مرة واحدة (د٨): من قايمة الملفات (أغنى — السبب والرأيين). صفّه في قايمة
         // الاستشارات بيتشال **بس لو صفّ الملف نفسه وصل فعلًا** — خدمة الملفات مقفولة أو قايمتها وقعت أو
@@ -2249,7 +2309,18 @@
         EP.data.efServiceOpen = efOpen !== null ? efOpen
           : (qMode ? qMode !== "closed" : null);
         realRows = sortInboxRows(realRows);
+        // R24 م١: ⛔ الفلتر الوحيد للمؤجَّل/المتجاهَل — `window.INBOX` بقى **المرئي بس**، فاللوحة والمربّعات والقايمة الجانبية وكل قوايم
+        // الأقسام (اللي بتقرا INBOX) بتشيله مرة واحدة من هنا. المخفي في `INBOX_SNOOZED` لسطر «مؤجّلة (ن)» / «اتشالت (ن)».
+        var snoozeL = window.V2L;
+        var snoozeSplit = (snoozeL && snoozeL.v2SnoozeSplit && snz && snz.map)
+          ? snoozeL.v2SnoozeSplit(realRows, snoozeL.snoozeKeyOfRow, snz.map, Date.now(), snoozeL.snoozeFingerprint)
+          : { visible: realRows, hidden: [], returned: {} };
+        realRows = snoozeSplit.visible;
+        // «رجع لأن…» على الصف نفسه (الواجهة بتكتبها على البطاقة)
+        realRows.forEach(function (rr) { var k = snoozeL && snoozeL.snoozeKeyOfRow ? snoozeL.snoozeKeyOfRow(rr) : null; if (k && snoozeSplit.returned[k]) rr.returnedWhy = snoozeSplit.returned[k]; });
         EP.data.inbox = realRows;
+        window.INBOX_SNOOZED = snoozeSplit.hidden.map(function (h) { return { row: h.item, entry: h.entry, key: h.key }; });
+        window.INBOX_SNOOZE_OK = !snz || snz.ok !== false;
         // الوارد = الصفوف الحقيقية فقط (لا دمج لأي بيانات تصميمية).
         window.INBOX = realRows;
         // أسماء الطوابير التي تعذّر جلبها — الشاشة تعلنها فوق العدّاد، فالعدد ناقصٌ معلومًا
@@ -2884,11 +2955,28 @@
     post("/platform-users", body)
       .then(function () { note("أُضيف المستخدم " + data.name + " وأُسند دوره"); EP.reload("users", after); })
       .catch(function (e) {
-        // الجسر لا يدعم الإنشاء بعد → احتفظ بالسلوك المحلي الحالي بدل كسر الشاشة.
-        quietToast((e && e.message) || "تُضيف محليًا — الإنشاء عبر الجسر غير متاح بعد");
-        if (onLocal) onLocal();
+        // R24: ⛔ مفيش مستخدم وهمي بيتضاف محليًا لما الكتابة تفشل — كان `onLocal()` بيرسم صف مش موجود على المنصة. بنقول إنه ما اتضافش.
+        quietToast((e && e.message && e.status !== 404) ? e.message : "المستخدم ما اتضافش — حاول تاني");
         if (after) after();
       });
+  };
+
+  // R24: «افتح المنصة» لزائر = كمان «اطّلعت» على تسجيله (نفس الشخص كان بيطلع في طابورين، والتاني يفضل مفتوح بعد ما اتفتحله).
+  // بنلاقي صف التسجيل بنفس البريد (أو نفس معرّف الحساب) في الوارد المرئي أو المؤجَّل، وننادي مسار الـack الموجود على بروكسي الداشبورد.
+  // best-effort: فشله ما يبوّظش فتح المنصة (الفتح اتم فعلًا) — والصف بيفضل يظهر «للعلم» وتقدر تطّلع عليه.
+  EP.ackSignupFor = function (email, userId) {
+    var em = String(email || "").trim().toLowerCase();
+    var pool = [].concat(Array.isArray(window.INBOX) ? window.INBOX : [],
+                         (Array.isArray(window.INBOX_SNOOZED) ? window.INBOX_SNOOZED : []).map(function (h) { return h && h.row; }));
+    var hit = null;
+    pool.forEach(function (r) {
+      if (hit || !r || r.apiKind !== "signup" || r.apiId == null) return;
+      var same = (em && String(r.email || r.personEmail || "").trim().toLowerCase() === em) || (userId != null && String(r.apiId) === String(userId));
+      if (same) hit = r;
+    });
+    if (!hit) return Promise.resolve({ ok: true, skipped: true });
+    return post("/platform-signups/" + encodeURIComponent(hit.apiId) + "/ack", {}).then(function () { return { ok: true, acked: true }; })
+      .catch(function () { return { ok: false }; });
   };
 
   // اعتماد/رفض بند وارد حقيقي (مدرّب/برنامج/انضمام/موضوع/إبداع/كتاب/دفعة يدوية).
@@ -2964,6 +3052,10 @@
           ? (action === "approve" ? "فُتحت المنصة للزائر ✓" : "رُفض الطلب وبقي زائرًا")
           : (action === "approve" ? "تم الاعتماد ✓" : "تم الرفض"));
         if (alsoReload) EP.reload(alsoReload);
+        // R24: فتح المنصة لزائر ⇒ «اطّلعت» على تسجيله كمان (قبل إعادة تحميل الوارد، عشان الصفين يختفوا مع بعض).
+        if (i.apiKind === "pending_user" && action === "approve") {
+          return EP.ackSignupFor(i.email || i.personEmail, i.apiId).then(function () { EP.reload("inbox", after); return { ok: true }; });
+        }
         EP.reload("inbox", after);
         return { ok: true };
       })
@@ -2984,8 +3076,9 @@
         note(body.access === "member"
           ? "فُتحت المنصة لـ" + (row.name || row.email || "") + " ✓"
           : "رُفض طلب " + (row.name || row.email || "") + " وبقي زائرًا");
-        EP.reload("inbox");
-        EP.reload("pendingUsers", after);
+        // R24: نفس «افتح المنصة» من الوارد — «اطّلعت» على تسجيله كمان.
+        var ackP = body.access === "member" ? EP.ackSignupFor(row.email, row.id) : Promise.resolve();
+        ackP.then(function () { EP.reload("inbox"); EP.reload("pendingUsers", after); });
       })
       .catch(function (e) {
         quietToast(e && e.status === 404
@@ -4231,9 +4324,9 @@
       }).catch(function (e) {
         if (e && e.status === 401) { /* api() عرض الدخول بالفعل */ EP.authed = false; }
         else {
-          // الخادم غير متاح — أقلع على البيانات التصميمية حتى لا نحجب اللوحة كليًّا.
+          // الخادم غير متاح — الشاشات بتفتح فاضية وبتقول «ما وصلتش البيانات» (R24: مفيش بيانات تصميمية بديلة).
           EP.user = null; boot();
-          quietToast("تعذّر التحقق من الجلسة — عرض مؤقت بالبيانات التصميمية.");
+          quietToast("تعذّر التحقق من الجلسة — ما وصلتش البيانات، حاول تاني.");
         }
       });
     } else {

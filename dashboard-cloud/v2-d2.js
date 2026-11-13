@@ -339,6 +339,24 @@
     }
     return '<section class="v2d-pc"><h3>' + esc(c.title) + '</h3>' + body + '</section>';
   }
+  // R24: الخبير المؤسس بعد «تم التواصل» (تواصلت/دعيته) = مسار متابعة على صفحة الشخص، مش بطاقة قرار بترجع. الصف في الوارد (المرئي أو المؤجَّل).
+  var FOUND_STEP_AR = { invited: 'تمت دعوته', converted: 'صار مدرّبًا' };
+  function foundingFollowRow(email) {
+    var em = String(email || '').trim().toLowerCase();
+    if (!em) return null;
+    var pool = [].concat(Array.isArray(window.INBOX) ? window.INBOX : [], (Array.isArray(window.INBOX_SNOOZED) ? window.INBOX_SNOOZED : []).map(function (h) { return h && h.row; }));
+    for (var i = 0; i < pool.length; i++) {
+      var r = pool[i];
+      if (r && r.apiKind === 'founding' && r.nextStatus && r.nextStatus !== 'contacted' && String(r.personEmail || r.email || '').trim().toLowerCase() === em) return r;
+    }
+    return null;
+  }
+  function followLine(email) {
+    var f = foundingFollowRow(email);
+    if (!f) return '';
+    return '<p class="v2d-follow" role="status">خبير مؤسس في المتابعة' + (f.statusLabel ? ': ' + esc(f.statusLabel) : '') + ' — الخطوة الجاية «' + esc(FOUND_STEP_AR[f.nextStatus] || f.approveLabel || '') + '» '
+      + '<button type="button" class="v2d-btn2" data-a="founding-step">علّم الخطوة</button></p>';
+  }
   function drawPerson(v) {
     var P = S.person, email = P.email;
     var back = '<a class="v2d-back" href="' + esc(L.sectionHash('people', 'users')) + '" data-a="back">' + HEAD_ICON + 'المستخدمون</a>';
@@ -373,11 +391,21 @@
       + '<header class="v2d-ph">' + av + '<div class="v2d-pid"><h1 class="v2d-name">' + esc(vm.name) + '</h1><div class="v2d-chips">' + chips + (vm.active ? '' : '<span class="v2d-chip chip-off">الحساب موقوف</span>') + '</div>'
       + '<p class="v2d-join">' + esc(vm.joinLine) + '</p>' + (meta.length ? '<p class="v2d-meta">' + esc(meta.join('، ')) + '</p>' : '') + '</div>'
       + '<div class="v2d-pact"><a class="v2d-btn1" href="' + esc(mail) + '" data-a="mail">مراسلة</a>' + (window.V2SEC&&V2SEC.people&&V2SEC.people.manageBtn?V2SEC.people.manageBtn(email):'') + '</div></header>'
+      + followLine(email)
       + '<div class="v2d-pgrid">' + vm.cards.map(personCard).join('') + '</div>'
       + '<section class="v2d-plog"><h3>السجل' + (vm.logPartial ? ' <small>(جزء منه — تعذّر جلب بعض المصادر)</small>' : '') + '</h3>' + log + '</section></div>';
     wirePerson(v);
   }
   function wirePerson(v) {
+    var fs = v.querySelector('[data-a="founding-step"]');
+    if (fs) fs.onclick = function () {
+      var E = ep(), f = foundingFollowRow(S.person.email);
+      if (!E || !f || fs.disabled) return;
+      fs.disabled = true; fs.textContent = 'جارٍ التسجيل…';
+      Promise.resolve(E.decideInboxItem(f, 'approve', null, '')).then(function (res) {
+        if (res && res.ok) { fs.textContent = 'اتسجّلت الخطوة'; } else { fs.disabled = false; fs.textContent = (res && res.error) || 'تعذّر التسجيل — حاول تاني'; }
+      });
+    };
     var r = v.querySelectorAll('[data-a="retry"]');
     r.forEach(function (b) { b.onclick = function () { loadPerson(S.person.email, true); }; });
     v.querySelectorAll('[data-a="back"]').forEach(function (a) {

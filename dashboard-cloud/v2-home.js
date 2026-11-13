@@ -17,7 +17,9 @@
   var SOURCES = ['opsQueue', 'inbox', 'walletPayouts', 'invites', 'pendingUsers', 'market'];
   var S = {
     mode: 'board',        // board | focus | brain
-    deck: [], total: 0, done: [],
+    deck: [], total: 0, done: [], later: [],    // R24: later = اللي أجّلته في الجلسة دي (للسطر الأخير)
+    lines: '', fg: {}, cards: {},               // R24: القايمة المفتوحة (later | gone) · مجموعات «للعلم» المفتوحة · بطاقات للأزرار
+    flash: '',
     busy: false, err: '', lockedId: '',
     panel: null,          // health | user
     view: null, sig: '', timer: null, leaving: ''
@@ -52,7 +54,10 @@
   function gather() {
     var E = ep(), D = (E && E.data) || {}, now = Date.now();
     var Q = stateOf('opsQueue') === 'ready' ? (D.opsQueue || null) : null;
-    var rows = stateOf('inbox') === 'ready' ? (window.INBOX || []).filter(function (r) { return !r.fyi; }) : null;
+    // R24: `window.INBOX` مرئي بس (المؤجَّل/المتجاهَل اتشال في المحمّل). صفوف «ملف اتبعت ولسه ما استلمهوش» (`fyi`) بتروح «للعلم» مش القرارات.
+    var allRows = stateOf('inbox') === 'ready' ? (window.INBOX || []) : null;
+    var rows = allRows ? allRows.filter(function (r) { return !r.fyi; }) : null;
+    var fyiRows = allRows ? allRows.filter(function (r) { return !!r.fyi; }) : [];
     var inboxFailed = (window.INBOX_FAILED && window.INBOX_FAILED.length) ? window.INBOX_FAILED.slice() : [];
     var payouts = (stateOf('walletPayouts') === 'ready' && D.walletPayouts) ? (D.walletPayouts.rows || []) : null;
     var pu = (stateOf('pendingUsers') === 'ready' && D.pendingUsers && !D.pendingUsers.missing)
@@ -70,13 +75,22 @@
     // brain2: اقتراحات العقل المنتظرة (مصفوفة · null إن تعذّر · undefined قبل الوصول). غيابها لا يغيّر شيئًا.
     var brainItems = null;
     try { var bp = window.V2BRAIN && V2BRAIN.pending ? V2BRAIN.pending() : null; if (Array.isArray(bp)) brainItems = bp; } catch (e) {}
-    return { E: E, D: D, now: now, Q: Q, rows: rows, inboxFailed: inboxFailed, payouts: payouts, inboxTrunc: inboxTrunc, extras: extras, d3: d3, brainItems: brainItems };
+    // R24: «بعدين/تجاهل» من خادم الداشبورد. الفلتر الواحد (`L.v2Split` ⇐ `v2SnoozeSplit`) على كل المصادر، والمخفي بيتشال من أعداد المربّعات
+    // بنفس الصفوف — فالمربّع والقايمة الجانبية والشريط و«ابدأ القرارات» بيطلعوا بنفس الرقم.
+    var sz = E && E.data && E.data.snooze;
+    var snooze = (sz && sz.map) ? { map: sz.map, now: now } : null;
+    var hiddenBase = [].concat(Array.isArray(window.INBOX_SNOOZED) ? window.INBOX_SNOOZED : [],
+                               (payouts && D.walletPayouts && Array.isArray(D.walletPayouts.hidden)) ? D.walletPayouts.hidden : []);
+    var split = L.v2Split(rows, payouts, Q, { now: now, inboxFailed: inboxFailed, inboxTruncated: inboxTrunc, fyiRows: fyiRows, hidden: hiddenBase, snooze: snooze,
+                                              stuck: d3 ? d3.stuck : null, offers: d3 ? d3.offers : null, brainItems: brainItems });
+    extras.hidden = split.hiddenRows;
+    return { E: E, D: D, now: now, Q: Q, rows: rows, inboxFailed: inboxFailed, payouts: payouts, inboxTrunc: inboxTrunc, extras: extras, d3: d3, brainItems: brainItems,
+             split: split, snoozeOk: !(sz && sz.ok === false) };
   }
   function compute() {
     var g = gather(), Q = g.Q, rows = g.rows, now = g.now, inboxFailed = g.inboxFailed, inboxTrunc = g.inboxTrunc;
     var tiles = L.v2Tiles(Q, g.extras);
-    var decisions = L.v2Decisions(rows, g.payouts, Q, { now: now, inboxFailed: inboxFailed, inboxTruncated: inboxTrunc,
-                                                          stuck: g.d3 ? g.d3.stuck : null, offers: g.d3 ? g.d3.offers : null, brainItems: g.brainItems });
+    var decisions = g.split.decisions;
     var truncated = (inboxTrunc || []).map(function (t) { return String(t).split(':')[0].trim(); });
     var failed = [];
     if (stateOf('opsQueue') === 'error') failed.push('بيانات المنصة');
@@ -86,6 +100,7 @@
     if (g.d3) g.d3.failed.forEach(function (n) { if (failed.indexOf(n) < 0) failed.push(n); });
     return {
       now: now, Q: Q, rows: rows, tiles: tiles, decisions: decisions, failed: failed, truncated: truncated,
+      fyi: g.split.fyi, lists: L.v2SnoozeLists(g.split.snoozed), snoozeOk: g.snoozeOk,
       health: L.v2Health(Q, now), next: L.v2Next(decisions),
       brainLog: rows ? L.v2BrainLog(rows, now) : null,
       loading: isLoading('opsQueue') || isLoading('inbox') || isLoading('walletPayouts')
@@ -95,7 +110,8 @@
     var E = ep();
     return SOURCES.map(stateOf).join(',') + '|' + ((window.INBOX || []).length) + '|' + (E && E.data.walletPayouts ? E.data.walletPayouts.count : '')
       + (window.V2D3 ? '|' + V2D3.sig() : '') + (window.V2SEC && V2SEC.brain && V2SEC.brain.sig ? '|' + V2SEC.brain.sig() : '')
-      + (window.V2BRAIN && V2BRAIN.sig ? '|' + V2BRAIN.sig() : '');
+      + (window.V2BRAIN && V2BRAIN.sig ? '|' + V2BRAIN.sig() : '')
+      + '|' + ((E && E.data && E.data.snooze && E.data.snooze.at) || 0) + '|' + ((window.INBOX_SNOOZED || []).length);
   }
 
   // ------------------------------------------------------------------ الرسم
@@ -192,8 +208,10 @@
 
   function drawBoard(v, d) {
     var tiles = d.tiles.map(function (t) { return tileHtml(t, d); }).join('');
-    v.innerHTML = '<div class="v2">' + header(d) + nextBar(d) + '<section class="v2-grid" aria-label="الأقسام">' + tiles + '</section></div>';
+    S.cards = {};
+    v.innerHTML = '<div class="v2">' + header(d) + nextBar(d) + fyiBox(d) + linesBar(d) + '<section class="v2-grid" aria-label="الأقسام">' + tiles + '</section></div>';
     wireCommon(v, d);
+    wireLists(v, d);
     var st = v.querySelector('[data-a="start"]');
     if (st) st.onclick = function () { startFocus(d); };
     v.querySelectorAll('[data-tile]').forEach(function (b) { b.onclick = function () { openTile(b.getAttribute('data-tile'), d); }; });
@@ -224,7 +242,7 @@
 
   // —— وضع التركيز: بطاقة واحدة
   function startFocus(d) {
-    S.deck = d.decisions.slice(); S.total = S.deck.length; S.done = []; S.err = ''; S.lockedId = ''; S.busy = false; S.busyText = '';
+    S.deck = d.decisions.slice(); S.total = S.deck.length; S.done = []; S.later = []; S.err = ''; S.lockedId = ''; S.busy = false; S.busyText = '';
     S.mode = 'focus'; redraw();
   }
   // ⛔ نهاية القرارات لا تطمئن فوق جلب فاشل أو قائمة مقصوصة.
@@ -257,8 +275,11 @@
       v.innerHTML = '<div class="v2 v2-focus"><div class="v2-end"><img src="' + img('brain-avatar') + '" alt="">'
         + '<h2>' + endText(d) + '</h2>'
         + (incompleteLine(d) ? '<p class="v2-warnline">' + esc(incompleteLine(d)) + '</p>' : '')
-        + '<button class="v2-start" data-a="back">العودة إلى اللوحة</button>' + done + '</div></div>';
+        + (S.later.length ? '<p class="v2-endnote">' + esc('أجّلت ' + U.U(S.later.length, ['قرارًا واحدًا', 'قرارين', 'قرارات', 'قرارًا'])) + ' — هترجع لك في ميعادها</p>' : '')
+        + '<button class="v2-start" data-a="back">العودة إلى اللوحة</button>'
+        + (S.later.length ? '<button class="v2-btn3 v2-endlater" data-a="showlater">اعرض المؤجّلة</button>' : '') + done + '</div></div>';
       v.querySelector('[data-a="back"]').onclick = leaveFocus;
+      var sl = v.querySelector('[data-a="showlater"]'); if (sl) sl.onclick = function () { S.lines = 'later'; leaveFocus(); };
       return;
     }
     var locked = S.lockedId === c.id;
@@ -274,7 +295,8 @@
     if (isBrain && c.edit) acts += '<button class="v2-btn2" data-a="edit"' + ((S.busy || locked) ? ' disabled' : '') + '>' + esc(c.edit.label) + '</button>';
     var showOpen = !isBrain && !(c.primary && c.primary.act.do === 'open') && !(c.secondary && c.secondary.act.do === 'open');
     if (showOpen) acts += '<button class="v2-btn3" data-a="open"' + (S.busy ? ' disabled' : '') + '>غيّر / افتح</button>';
-    acts += '<button class="v2-btn3" data-a="later"' + (S.busy ? ' disabled' : '') + '>لاحقًا</button>';
+    if (c.key) acts += '<button class="v2-btn3" data-a="later"' + (S.busy ? ' disabled' : '') + '>بعدين</button>';     // R24: بيفتح اختيار الميعاد وبيتحفظ على الخادم
+    if (c.dismiss) acts += '<button class="v2-btn3" data-a="dismiss"' + (S.busy ? ' disabled' : '') + '>تجاهل</button>';
     var facts = (c.facts || []).filter(function (f) { return f.v; }).map(function (f) { return '<div><small>' + esc(f.k) + '</small><b>' + ltr(f.v) + '</b></div>'; }).join('');
     v.innerHTML = '<div class="v2 v2-focus">'
       + '<div class="v2-ftop"><button class="v2-link" data-a="back">' + BACK + 'اللوحة</button><span class="v2-count">' + esc(counter()) + '</span><span class="v2-prog"><i style="width:' + pct + '%"></i></span></div>'
@@ -283,6 +305,7 @@
       + '<div class="v2-cbody"><h2>' + (c.person && window.V2D2 ? V2D2.link(c.title, c.person.email) : esc(c.title)) + '</h2>' + (c.sub ? '<p class="v2-csub">' + esc(c.sub) + '</p>' : '')
       + '<div class="v2-brain"><img src="' + img('brain-avatar') + '" alt=""><div><b>' + esc(c.brainHead) + '</b><p' + (isBrain ? ' class="v2b-draft"' : '') + '>' + esc(c.brain) + '</p>' + (c.reason ? '<p class="v2-reason">' + esc(c.reason) + '</p>' : '') + brainSrc(c) + '</div></div>'
       + brainFields(c)
+      + (c.returned ? '<div class="v2-returned">' + esc(c.returned) + '</div>' : '')
       + (c.warn ? '<div class="v2-cwarn">' + esc(c.warn) + '</div>' : '')
       + (facts ? '<div class="v2-facts">' + facts + '</div>' : '')
       + (c.link ? '<p class="v2-linkp"><a href="' + esc(c.link.url) + '" target="_blank" rel="noopener noreferrer">' + esc(c.link.label) + '</a></p>' : '')
@@ -300,7 +323,8 @@
     q('secondary', function () { run(c, c.secondary.act); });
     q('edit', function () { if (c.edit) run(c, c.edit.act); });
     q('open', function () { openCard(c); });
-    q('later', function () { S.deck.push(S.deck.shift()); S.err = ''; redraw(); });
+    q('later', function () { snoozeModal(c); });
+    q('dismiss', function () { dismissModal(c); });
     if (S.err) { var er = v.querySelector('.v2-err'); if (er && er.scrollIntoView) { try { er.scrollIntoView({ block: 'center' }); } catch (e) {} } }
     if (S.scrollTop) { S.scrollTop = false; try { var ct = document.querySelector('.content'); if (ct) ct.scrollTop = 0; } catch (e) {} }
   }
@@ -310,6 +334,138 @@
     var E = ep(); if (E) { E.reload('opsQueue'); E.reload('inbox'); E.reload('walletPayouts'); }
     try { if (window.V2BRAIN && V2BRAIN.reload) V2BRAIN.reload(); } catch (e) {}
     redraw();
+  }
+
+  // ------------------------------------------------------------------ R24 م١ · «للعلم» · «مؤجّلة» · «اتشالت» · بعدين · تجاهل
+  // «للعلم»: كل اللي مش قرار بضغطة (دفعة عالقة · تسجيل · دفع فشل · ملف اتبعت ولسه ما اتستلمش · طلب مستني رد صاحبه · خبير في المتابعة)
+  // + البنود اللي قرارها في صفحتها (نزاع · رأي · هوية · …) معلَّمة «قراره في صفحته». مفيش فيها زراير قرار مالية: «افتح» بيودّي لبيتها.
+  function cardBtns(c) {
+    var out = '<button type="button" class="v2-mini" data-a="fopen" data-id="' + esc(c.id) + '">افتح</button>';
+    if (c.bucket === 'fyi' && c.primary && c.primary.act && c.primary.act.do === 'decide' && (c.kind === 'signup' || (c.kind === 'payfail' && c.fyiKind !== 'gateway'))) {
+      out += '<button type="button" class="v2-mini pri" data-a="fack" data-id="' + esc(c.id) + '"' + (S.busy ? ' disabled' : '') + '>' + esc(c.primary.label) + '</button>';
+    }
+    if (c.key) out += '<button type="button" class="v2-mini" data-a="fsnooze" data-id="' + esc(c.id) + '">بعدين</button>';
+    if (c.dismiss) out += '<button type="button" class="v2-mini" data-a="fdismiss" data-id="' + esc(c.id) + '">' + (c.fyiKind === 'gateway' ? 'اسكتها' : 'تجاهل') + '</button>';
+    return out;
+  }
+  function fyiBox(d) {
+    var f = d.fyi;
+    var warn = d.snoozeOk === false ? '<p class="v2-warnline dark">تعذّر جلب المؤجّلة — ممكن تشوف بنودًا كنت أجّلتها</p>' : '';
+    if (!f || !f.total) return warn;
+    var rows = f.groups.map(function (g) {
+      var openG = !!S.fg[g.key];
+      var items = '';
+      g.cards.forEach(function (c) { S.cards[c.id] = c; });
+      if (openG) {
+        items = '<ul class="v2-fi">' + g.cards.map(function (c) {
+          return '<li><span class="v2-fit"><b>' + (c.person && window.V2D2 ? V2D2.link(c.title, c.person.email) : esc(c.title)) + '</b>'
+            + '<small>' + esc(joinSmall([c.ageText, c.sub])) + '</small>'
+            + (c.returned ? '<em class="v2-returned">' + esc(c.returned) + '</em>' : '') + '</span><span class="v2-fib">' + cardBtns(c) + '</span></li>';
+        }).join('') + '</ul>';
+      }
+      return '<div class="v2-fg' + (openG ? ' on' : '') + '"><button type="button" class="v2-fgh" data-a="fg" data-k="' + esc(g.key) + '" aria-expanded="' + openG + '">'
+        + '<span class="v2-fgl">' + esc(g.label) + '</span>' + (g.kind === 'open' ? '<em class="v2-fgc">قراره في صفحته</em>' : '') + '<span class="v2-fgx">' + (openG ? 'إخفاء' : 'التفاصيل') + '</span></button>' + items + '</div>';
+    }).join('');
+    return warn + '<section class="v2-fyi" aria-label="للعلم"><h3>للعلم (' + esc(U.ar(f.total)) + ')</h3><div class="v2-fl">' + rows + '</div></section>';
+  }
+  function joinSmall(arr) { return (arr || []).filter(Boolean).join('، '); }
+  // سطر «مؤجّلة (ن)» و«اتشالت (ن)»: بيفتح القايمة وفيها «رجّعها».
+  function linesBar(d) {
+    var la = d.lists.later, go = d.lists.gone;
+    if (!la.length && !go.length) return '';
+    var chip = function (k, label, n) { return n ? '<button type="button" class="v2-chip' + (S.lines === k ? ' on' : '') + '" data-a="lines" data-k="' + k + '" aria-expanded="' + (S.lines === k) + '">' + label + ' (' + esc(U.ar(n)) + ')</button>' : ''; };
+    var panel = '';
+    var list = S.lines === 'later' ? la : S.lines === 'gone' ? go : null;
+    if (list && list.length) {
+      panel = '<ul class="v2-sl">' + list.map(function (x) {
+        return '<li><span class="v2-slt"><b>' + esc(x.title) + '</b><small>' + esc(joinSmall([x.tag, x.kind === 'dismiss' ? ('السبب: ' + x.reason) : x.untilText])) + '</small></span>'
+          + '<button type="button" class="v2-mini pri" data-a="restore" data-k="' + esc(x.key) + '"' + (S.busy ? ' disabled' : '') + '>رجّعها</button></li>';
+      }).join('') + '</ul>';
+    }
+    return '<section class="v2-lines" aria-label="المؤجّل والمتشال">' + chip('later', 'مؤجّلة', la.length) + chip('gone', 'اتشالت', go.length) + panel + '</section>';
+  }
+  function wireLists(v, d) {
+    v.querySelectorAll('[data-a="fg"]').forEach(function (b) { b.onclick = function () { var k = b.getAttribute('data-k'); S.fg[k] = !S.fg[k]; redraw(); }; });
+    v.querySelectorAll('[data-a="lines"]').forEach(function (b) { b.onclick = function () { var k = b.getAttribute('data-k'); S.lines = S.lines === k ? '' : k; redraw(); }; });
+    var byId = function (b) { return S.cards[b.getAttribute('data-id')]; };
+    v.querySelectorAll('[data-a="fopen"]').forEach(function (b) { b.onclick = function () { var c = byId(b); if (c) openCard(c); }; });
+    v.querySelectorAll('[data-a="fack"]').forEach(function (b) { b.onclick = function () { var c = byId(b); if (c) run(c, c.primary.act); }; });
+    v.querySelectorAll('[data-a="fsnooze"]').forEach(function (b) { b.onclick = function () { var c = byId(b); if (c) snoozeModal(c); }; });
+    v.querySelectorAll('[data-a="fdismiss"]').forEach(function (b) { b.onclick = function () { var c = byId(b); if (c) dismissModal(c); }; });
+    v.querySelectorAll('[data-a="restore"]').forEach(function (b) { b.onclick = function () { restoreItem(b.getAttribute('data-k')); }; });
+  }
+  function restoreItem(key) {
+    var E = ep(); if (!E || !E.restoreItem || S.busy) return;
+    S.busy = true; redraw();
+    E.restoreItem(key).then(function (res) {
+      S.busy = false;
+      if (!res || !res.ok) { S.err = (res && res.error) || 'تعذّر الحفظ — حاول تاني'; say(S.err); }
+      redraw();
+    });
+  }
+  // البطاقة طلعت من اللوحة بعد «بعدين»/«تجاهل» (مش «أنجزت»): بتتشال من الكوتشينة وتتحسب في «أجّلت م».
+  function dropCard(c, text, counted) {
+    if (counted) S.later.unshift({ text: text, at: Date.now() });
+    S.err = ''; S.busy = false; S.lockedId = '';
+    var go = function () { S.deck = S.deck.filter(function (x) { return x.id !== c.id; }); S.leaving = ''; S.scrollTop = true; redraw(); };
+    if (S.mode !== 'focus' || reduced()) go();
+    else { S.leaving = c.id; redraw(); setTimeout(go, 240); }
+  }
+  function ymd(d) { return d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2) + '-' + ('0' + d.getDate()).slice(-2); }
+  function snoozeModal(c) {
+    var E = ep();
+    if (typeof window.openModal !== 'function' || !E || !E.snoozeItem || !c || !c.key) return;
+    var now = Date.now(), picks = L.snoozePicks(now), tom = new Date(now); tom.setDate(tom.getDate() + 1);
+    var s = window.openModal('بعدين لحد إمتى؟',
+      '<div class="mc-lead">«' + esc(c.title) + '» هيختفي من القرارات ويرجع لك في الميعاد اللي تختاره.</div>'
+      + '<div class="v2z-picks">' + picks.map(function (p, i) { return '<button type="button" class="btn btn-ghost v2z-pick" data-i="' + i + '"><b>' + esc(p.label) + '</b><small>' + esc(L.snoozeUntilText(p.until)) + '</small></button>'; }).join('') + '</div>'
+      + '<div class="fld"><label for="v2z_d">أو اختار يوم</label><input id="v2z_d" type="date" min="' + ymd(tom) + '"></div>'
+      + '<div id="v2z_err"></div>'
+      + '<div class="acts"><button class="btn btn-primary" id="v2z_go" disabled>بعدين لليوم ده</button><button class="btn btn-ghost" id="v2z_x">رجوع</button></div>');
+    var err = s.querySelector('#v2z_err'), dt = s.querySelector('#v2z_d'), go = s.querySelector('#v2z_go'), x = s.querySelector('#v2z_x');
+    var busy = false;
+    var close = function () { if (!busy) window.closeModal(); };
+    var xt = s.querySelector('[data-x]'); if (xt) xt.onclick = close;
+    x.onclick = close; s.onclick = function (e) { if (e.target === s) close(); };
+    dt.addEventListener('input', function () { go.disabled = !dt.value; });
+    var fire = function (until) {
+      if (busy) return;
+      if (!until) { err.innerHTML = '<div class="ef-err">اختار يوم جاي</div>'; return; }
+      busy = true; err.innerHTML = '';
+      s.querySelectorAll('button').forEach(function (b) { b.disabled = true; });
+      Promise.resolve(E.snoozeItem(c.key, until, c.fp)).then(function (res) {
+        busy = false;
+        if (res && res.ok) { window.closeModal(); dropCard(c, 'أُجّل «' + c.title + '» لحد ' + L.snoozeUntilText(until), true); return; }
+        s.querySelectorAll('button').forEach(function (b) { b.disabled = false; }); go.disabled = !dt.value;
+        err.innerHTML = '<div class="ef-err">' + esc((res && res.error) || 'تعذّر الحفظ — حاول تاني') + '</div>';
+      });
+    };
+    s.querySelectorAll('.v2z-pick').forEach(function (b) { b.onclick = function () { fire(picks[+b.getAttribute('data-i')].until); }; });
+    go.onclick = function () { fire(L.snoozeUntilFromDate(dt.value, Date.now())); };
+  }
+  function dismissModal(c) {
+    var E = ep();
+    if (typeof window.openModal !== 'function' || !E || !E.dismissItem || !c || !c.key) return;
+    var s = window.openModal(c.fyiKind === 'gateway' ? 'اسكت التنبيه' : 'تجاهل البند',
+      '<div class="mc-lead">«' + esc(c.title) + '» هيتشال من القرارات و«للعلم» وتلاقيه في «اتشالت» لو حبيت ترجّعه. لو حالته اتغيّرت على المنصة هيرجع لوحده.</div>'
+      + '<div class="fld"><label for="v2z_r">السبب (مطلوب، قصير)</label><input id="v2z_r" type="text" maxlength="200" autocomplete="off"></div>'
+      + '<div id="v2z_err"></div>'
+      + '<div class="acts"><button class="btn btn-primary" id="v2z_go" disabled>تجاهل</button><button class="btn btn-ghost" id="v2z_x">رجوع</button></div>');
+    var err = s.querySelector('#v2z_err'), r = s.querySelector('#v2z_r'), go = s.querySelector('#v2z_go'), x = s.querySelector('#v2z_x'), busy = false;
+    var close = function () { if (!busy) window.closeModal(); };
+    var xt = s.querySelector('[data-x]'); if (xt) xt.onclick = close;
+    x.onclick = close; s.onclick = function (e) { if (e.target === s) close(); };
+    var sync = function () { go.disabled = busy || String(r.value || '').trim().length < 3; };
+    r.addEventListener('input', sync); sync(); setTimeout(function () { try { r.focus(); } catch (e) {} }, 30);
+    go.onclick = function () {
+      if (busy || go.disabled) return;
+      busy = true; go.disabled = true; x.disabled = true; err.innerHTML = '';
+      Promise.resolve(E.dismissItem(c.key, String(r.value || '').trim(), c.fp)).then(function (res) {
+        busy = false; x.disabled = false;
+        if (res && res.ok) { window.closeModal(); dropCard(c, 'اتشال «' + c.title + '»', false); return; }
+        sync(); err.innerHTML = '<div class="ef-err">' + esc((res && res.error) || 'تعذّر الحفظ — حاول تاني') + '</div>';
+      });
+    };
   }
 
   // ------------------------------------------------------------------ التنفيذ
@@ -325,7 +481,6 @@
       if (stateOf('walletPayouts') !== 'ready' || !E.data.walletPayouts) return true;
       return (E.data.walletPayouts.rows || []).some(function (p) { return p.pid === c.row.pid; });
     }
-    if (c.kind === 'course' || c.kind === 'live' || c.kind === 'stuck_payment') return true;
     if (c.kind === 'book_offer') {
       var d3 = window.V2D3 ? V2D3.cardSources() : null;
       return !d3 || !d3.offers.length || d3.offers.some(function (o) { return o.id === (c.row.offerRow || {}).id; });
@@ -368,9 +523,19 @@
       if (dest) { showPill(); host().openSection('money', dest); return; }
     }
     if (a.do === 'goto') { showPill(); if (host().goOps) host().goOps(a.mod, a.land); return; }
+    // R24: الصف اتحل/اختفى ⇒ بنقول كده بدل ما نرمي المؤسس على «كل الوارد» من غير ما يتفتح حاجة، ونحدّث الأعداد.
+    var opened = host().openRow ? host().openRow(c.row) : true;
+    if (opened === false) { removePill(); gone(c); return; }
     showPill();
-    if (host().openRow) host().openRow(c.row);
   }
+  function gone(c) {
+    S.err = 'البند ده اتحل بالفعل';
+    say(S.err);
+    S.deck = S.deck.filter(function (x) { return x.id !== c.id; });
+    reload();
+    redraw();
+  }
+  function say(t) { try { (window.toast || window.notify || function () {})(t); } catch (e) {} }
   function showPill() {
     removePill();
     var b = document.createElement('button');

@@ -2350,6 +2350,8 @@ function opinionsCompareModal(i,det){
 
 /* ===== ESCROW VIEW ===== */
 // مصادر البيانات الحيّة (وقوائم فارغة لو الخادم غير متاح — لا بديل تصميمي).
+// R24: لو البيانات ما وصلتش ⇒ الشاشة تقول كده وبس (لا صفوف تجريبية، ولا نجاح وهمي لزرار).
+const ESC_NO_DATA_AR='ما وصلتش البيانات — حاول تاني';
 function escSessions(){return (window.EP&&EP.data.escrow)?EP.data.escrow.sessions:ESCROW;}
 function escDisputes(){return (window.EP&&EP.data.escrow)?EP.data.escrow.disputes:DISPUTES;}
 function escReleased(){return (window.EP&&EP.data.escrow)?EP.data.escrow.released:RELEASED;}
@@ -2398,7 +2400,7 @@ function viewEscrow(v){
     ${v2LegacyNote()}
     ${suspendedBanner}
     <div class="policy">${svg('shield','ic')}<div><b>سياسة الضمان:</b> تحرير تلقائي للخبير بعد <b>٧٢ ساعة</b> من الجلسة إن لم يعترض صاحب الطلب · نافذة فتح النزاع <b>٤٨ ساعة</b> · نصيب المنصة يُراجع في «النسب والإعدادات» تحت «الفلوس»: <b style="cursor:pointer;text-decoration:underline" id="escShareLink">افتحه</b>.</div></div>
-    ${Est==='error'?`<div class="policy" style="border-inline-start-color:var(--conflict);background:var(--conflict-bg);color:var(--conflict)">${svg('scale','ic')}<div>تعذّر الوصول إلى الضمان الآن — لا تُعرض أي بيانات بديلة. <b style="cursor:pointer;text-decoration:underline" onclick="EP.reload('escrow',()=>viewEscrow(document.getElementById('view')))">إعادة المحاولة</b></div></div>`:''}
+    ${Est==='error'?`<div class="policy" style="border-inline-start-color:var(--conflict);background:var(--conflict-bg);color:var(--conflict)">${svg('scale','ic')}<div>${ESC_NO_DATA_AR}. <b style="cursor:pointer;text-decoration:underline" onclick="EP.reload('escrow',()=>viewEscrow(document.getElementById('view')))">حاول تاني</b></div></div>`:''}
     ${Est==='loading'?`<div class="policy">${svg('shield','ic')}<div>…جارٍ تحميل جلسات الضمان</div></div>`:''}
     ${escKpis}
     <div class="tabbar" id="escTabs">
@@ -2508,7 +2510,8 @@ function drawEsc(){
       <div class="acts"><button class="btn btn-human" data-a="ref">${svg('back')}لصالح صاحب الطلب (استرداد)</button><button class="btn btn-primary" data-a="rel">${svg('check')}لصالح الخبير (تحرير)</button><button class="btn btn-ghost" data-a="split">تقسيم</button></div></div>`;
     el.querySelectorAll('[data-a]').forEach(b=>b.onclick=()=>{const a=b.dataset.a;
       if(live&&d.did){var dec=a==='ref'?'student':a==='rel'?'expert':'split';EP.disputeResolve(d.did,dec,()=>{selected=null;viewEscrow(document.getElementById('view'));});return;}
-      toast(a==='ref'?'القرار: استرداد كامل لصاحب الطلب':a==='rel'?'القرار: تحرير المبلغ للخبير':'القرار: تقسيم المبلغ بين الطرفين');});
+      // R24: ⛔ مفيش رسالة نجاح من غير كتابة حقيقية — لو البيانات ما وصلتش (مفيش `did`) بنقول كده بدل «القرار: …» وهمي.
+      toast(ESC_NO_DATA_AR);});
     return;
   }
   const e=escSessions()[selected];if(!e){el.innerHTML='';return;}
@@ -2529,11 +2532,9 @@ function drawEsc(){
       if(a==='dispute'){EP.escrowOpenDispute(e.sid,()=>{escTab='disputes';selected=null;viewEscrow(document.getElementById('view'));});return;}
       if(a==='opendsp'){escTab='disputes';selected=null;viewEscrow(document.getElementById('view'));return;}
     }
-    if(a==='release')toast('تم تحرير المبلغ للخبير');
-    else if(a==='refund')toast('تم استرداد '+money(e.amount)+' جنيه لصاحب الطلب');
-    else if(a==='dispute'){escTab='disputes';toast('فُتح نزاع على '+e.id);}
-    else if(a==='opendsp'){escTab='disputes';selected='d0';viewEscrow(document.getElementById('view'));}
-    if(a==='dispute')viewEscrow(document.getElementById('view'));
+    // R24: بلا اتصال حقيقي مفيش تحرير ولا استرداد ولا نزاع — ولا رسالة نجاح. زرّ «فتح النزاع» بس بينقل للتبويب (مفيش كتابة فيه).
+    if(a==='opendsp'){escTab='disputes';selected=null;viewEscrow(document.getElementById('view'));return;}
+    toast(ESC_NO_DATA_AR);
   });
 }
 
@@ -3127,7 +3128,7 @@ function drawUser(){
   if(tagsSave)tagsSave.onclick=()=>{var raw=(inline.querySelector('.utags').value||'');var arr=raw.split(/[،,]/).map(x=>x.trim()).filter(Boolean).slice(0,20);EP.setUserTags(u,arr,()=>renderUsers());};
   inline.querySelectorAll('.urole').forEach(b=>b.onclick=()=>{const rid=b.dataset.r;if(rid===u.role)return;if(lastAdmin&&rid!=='admin'){toast('ممنوع: لا يمكن إزالة آخر أدمن');return;}
     if(window.EP&&EP.data.users&&u.platform){const prev=u.role;u.role=rid;renderUsers();EP.setUserRole(u,rid,prev,()=>renderUsers());return;}
-    u.role=rid;renderUsers();toast('تم تغيير دور '+u.name+' إلى «'+ROLE[rid].t+'»');});
+    toast(ESC_NO_DATA_AR);});   // R24: بلا اتصال حقيقي مفيش تغيير دور ولا رسالة نجاح
   inline.querySelectorAll('[data-a]').forEach(b=>{const a=b.dataset.a;
     // «اعتماد كمدرّب» لسه من «الوارد» (طلب المدرّب هو اللي بيوقّع العقد ويمنح المفاتيح) —
     // زر معطّل بسبب معلن أصدق من زر يكذب.
@@ -3265,8 +3266,10 @@ function addUserModal(edit){
   s.querySelector('#u_x').onclick=closeModal;
   s.querySelector('#u_s').onclick=function(){
     var nm=s.querySelector('#u_n').value.trim()||'مستخدم جديد';
-    var data={name:nm,email:s.querySelector('#u_e').value.trim()||'user@mail.com',phone:s.querySelector('#u_p').value.trim()||'—',role:s.querySelector('#u_r').value,plan:s.querySelector('#u_pl').value.trim()||'مجانية',trainer:s.querySelector('#u_tr').checked?'approved':'none',verified:edit?e.verified:'pending',joined:edit?e.joined:'الآن'};
-    var addLocal=function(){USERS.push(Object.assign({id:'u'+(USERS.length+1)},data));renderUsers();};
+    // R24: بريد وهمي كان بيتبعت لو الخانة فاضية — البريد مفتاح الهوية فلازم يتكتب.
+    if(!edit&&!s.querySelector('#u_e').value.trim()){toast('اكتب البريد الأول');return;}
+    var data={name:nm,email:s.querySelector('#u_e').value.trim(),phone:s.querySelector('#u_p').value.trim()||'—',role:s.querySelector('#u_r').value,plan:s.querySelector('#u_pl').value.trim()||'مجانية',trainer:s.querySelector('#u_tr').checked?'approved':'none',verified:edit?e.verified:'pending',joined:edit?e.joined:'الآن'};
+    var addLocal=null;   // R24: مفيش إضافة محلية وهمية لو الكتابة فشلت
     // التعديل بلا واجهة خلفية: كان يكتب في الكائن المحلي ويعلن الحفظ. نعلن الحقيقة بدلًا من ذلك.
     if(edit){closeModal();toast('تعديل بيانات المستخدم يتم من المنصة — غير مفعّل هنا بعد');return;}
     // إضافة شخص جديد + إسناد دوره. عند اتصال الجسر الحيّ نكتب للـ API (POST /platform-users)؛
@@ -3590,8 +3593,8 @@ function drawCourse(){
     if(a==='editc'){editCourseModal(csCourses()[+selected.slice(1)]);return;}
     if(a==='delc'){var cd=csCourses()[+selected.slice(1)];if(cd&&cd.cid&&window.EP){if(confirm('متأكد تحذف «'+cd.title+'»؟ هتختفي من المنصة كمان.')){EP.deleteCourse(cd.cid,function(){selected=null;viewCourses(document.getElementById('view'));});}return;}}
     if(a==='video'){courseCurriculumModal(csCourses()[+selected.slice(1)]);}
-    else if(a==='pub'&&window.EP&&EP.data.courses){var cc=csCourses()[+selected.slice(1)];if(cc&&cc.cid){EP.updateCourse(cc.cid,{status:'active'},()=>{selected=null;viewCourses(document.getElementById('view'));});return;}toast('تم نشر الدورة');}
-    else toast(a==='pub'?'تم نشر الدورة':a==='sched'?'فتح الجدولة':a==='edit'?'فتح التعديل':'تم');});
+    else if(a==='pub'&&window.EP&&EP.data.courses){var cc=csCourses()[+selected.slice(1)];if(cc&&cc.cid){EP.updateCourse(cc.cid,{status:'active'},()=>{selected=null;viewCourses(document.getElementById('view'));});return;}toast(ESC_NO_DATA_AR);}
+    else toast(ESC_NO_DATA_AR);});   // R24: كانت بترسل «تم نشر الدورة»/«تم» من غير أي كتابة
 }
 // شجرة المنهج للقراءة فقط (تُعرض في دِرَج الدورة): أقسام ← محاضرات + دروس Titch وكويزها.
 function pcTreeHtml(dt){
@@ -5945,13 +5948,13 @@ function viewSettings(v){
   v.querySelectorAll('[data-a]').forEach(b=>b.onclick=()=>{const a=b.dataset.a;
     if(a==='fx'){var fx=document.getElementById('fxInput');var val=fx?parseFloat(fx.value):NaN;
       if(window.EP&&EP.data.settings){if(isNaN(val)||val<=0){toast('أدخل سعر صرف صالحًا');return;}EP.saveSettings({exchange_rate:val},()=>viewSettings(document.getElementById('view')));return;}
-      toast('تم حفظ سعر الصرف');return;}
+      toast(ESC_NO_DATA_AR);return;}
     if(a==='cosave'){
       if(window.EP&&EP.data.settings){
         var body={company_name:(document.getElementById('set_co')||{}).value||'',fiscal_year_start:(document.getElementById('set_fy')||{}).value||'',monthly_report_day:(document.getElementById('set_rd')||{}).value||''};
         EP.saveSettings(body,()=>viewSettings(document.getElementById('view')));return;
       }
-      toast('تم حفظ بيانات الشركة');return;}
+      toast(ESC_NO_DATA_AR);return;}
     if(a==='log'){auditModal();return;}
   });
   var aa=document.getElementById('adminAdd');if(aa)aa.onclick=function(){addAdminModal(null);};
@@ -7666,7 +7669,7 @@ function viewIMarket(v){
   else if(!O.length){body=`<div class="empty">${svg('trend','ic')}<p>لا توجد فرص استثمار مفتوحة حاليًا. تابعنا — تُضاف فرص جديدة باستمرار.</p></div>`;}
   else {body=O.map((o,idx)=>{const pct=o.target?Math.round(o.raised/o.target*100):0;return `<div class="row esc-row" data-o="${idx}" style="grid-template-columns:1.6fr 1fr 110px 120px"><div class="c c1"><div class="src-ic" style="background:var(--gold-bg);color:var(--gold)">${svg('trend')}</div><div><div class="parties">${o.title}</div><div class="from">${money(o.raised)}/${money(o.target)} ج · ${pct}٪</div></div></div><div class="c"><div style="height:8px;background:var(--surface-2);border-radius:4px;overflow:hidden;margin-top:2px"><div style="height:100%;width:${pct}%;background:var(--gold);border-radius:4px"></div></div></div><div class="c"><span class="status s-wait"><span class="d"></span>${o.roi}</span></div><div class="c"><button class="btn btn-human" style="padding:7px 12px;min-width:auto;font-size:12px" data-inv="${idx}">استثمر</button></div></div>`;}).join('');}
   v.innerHTML=`<section class="panel"><div class="ph"><h3>فرص متاحة</h3><span class="n">${O.length}</span></div><div>${body}</div></section>`;
-  v.querySelectorAll('[data-inv]').forEach(b=>b.onclick=(e)=>{e.stopPropagation();toast('تم تسجيل اهتمامك بالاستثمار — سيتواصل الفريق');});
+  v.querySelectorAll('[data-inv]').forEach(b=>b.onclick=(e)=>{e.stopPropagation();toast('تسجيل الاهتمام مش متاح من هنا لسه — كلّم الفريق');});   // R24: كانت بتقول «تم تسجيل اهتمامك» من غير أي كتابة
   var rt=v.querySelector('[data-retry]');if(rt)rt.onclick=(e)=>{e.preventDefault();EP.reload('i_data',()=>viewIMarket(v));};
 }
 function viewIInvest(v){
@@ -7809,13 +7812,15 @@ window.V2_HOST={
   goOps:function(mod,landKey){goOps(mod,landKey?OPSQ_LANDINGS[landKey]:null);},
   isHome:function(){return current==='home'&&!!window.V2_ON;},
   // «افتح» على نفس البند: الوارد بالدرج مفتوح على الصفّ (نفس نمط efReloadKeep).
+  // R24: لو الصف اتحل/اختفى من الوارد ⇒ ما بنروحش للوارد على فاضي: بنرجّع false والمنادي بيكتب «البند ده اتحل بالفعل».
   openRow:function(row){
+    var n=v2FindRow(row);
+    if(n<0)return false;
     go('inbox');
-    var n=INBOX.indexOf(row);
-    if(n<0){var k=efRowKey(row);n=INBOX.findIndex(function(r){return efRowKey(r)===k;});}
-    selected=n>-1?n:null;
+    selected=n;
     viewInbox(document.getElementById('view'));
     try{var d=document.getElementById('drawer');if(d&&d.scrollIntoView)d.scrollIntoView({block:'start'});}catch(e){}
+    return true;
   },
   logout:function(){var b=document.getElementById('logoutBtn');if(b)b.click();},
   // D1-B (الهيكل الجديد): تنقّل صريح لقسم/تبويب · الحالي · اسم المستخدم.
@@ -7888,16 +7893,27 @@ function v2OpenPerson(email,opts){
   renderView();
 }
 // تذكرة ⇒ نفس الدرج القديم للصف في تبويب «كل الملفات/كل النزاعات» (الحالة الداخلية تتضبط من خريطة التبويب).
-function v2OpenRowAt(sec,tab,row){
-  v2OpenSection(sec,tab);
+// R24: مكان الصف في الوارد بالمعرّف (مش بمفتاح فاضي): صف بلا نوع ومعرّف ما بيتلاقاش إلا هو نفسه — كان '||' بيفتح أول رسالة بالغلط.
+function v2FindRow(row){
+  if(!row)return -1;
   var n=INBOX.indexOf(row);
-  if(n<0){var k=efRowKey(row);n=INBOX.findIndex(function(r){return efRowKey(r)===k;});}
+  if(n>-1)return n;
+  if(row.apiKind==null||row.apiId==null)return -1;
+  var k=efRowKey(row);
+  return INBOX.findIndex(function(r){return efRowKey(r)===k;});
+}
+function v2OpenRowAt(sec,tab,row){
+  var n0=v2FindRow(row);
+  if(n0<0){try{if(typeof toast==='function')toast('البند ده اتحل بالفعل');}catch(e){}return false;}
+  v2OpenSection(sec,tab);
+  var n=n0;
   // الصف خارج شريحة التبويب (حالة قضية/دفع بلا ملف): نفتح الكل بدل ما يختفي الصف خلف فلتر ما بيعرضوش.
   if(n>-1&&!inboxMatches(INBOX[n],activeFilter))activeFilter='all';
   selected=n>-1?n:null;
   viewInbox(document.getElementById('view'));
   v2Reconcile();
   try{var d=document.getElementById('drawer');if(d&&d.scrollIntoView)d.scrollIntoView({block:'start'});}catch(e){}
+  return true;
 }
 // go() القديمة بعد تشغيل الهيكل: موديول قديم ⇒ قسمه وتبويبه (REDIRECTS تُحلّ بحالتها الداخلية أولًا).
 function v2GoShell(mod){

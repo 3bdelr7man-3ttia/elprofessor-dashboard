@@ -631,6 +631,6 @@ def test_logic_helper_outputs_have_no_latin_letters_in_titles():
 
 def test_dialect_keys_live_only_in_the_dictionary_file():
     """اختبار D1 بيمنع العامية في مصدر v2-logic.js — فالقاموس (مفاتيحه عامية) في `v2s/home_copy.js` لوحده."""
-    for w in ('الفلوس واقفة', 'فلوسها واقفة', 'بعدين', 'اقبله'):
+    for w in ('الفلوس واقفة', 'فلوسها واقفة', 'اقبله'):   # «بعدين» اسم الزرار المعتمد (R24)
         assert w not in re.sub(r'/\*.*?\*/', '', LOGIC, flags=re.S).replace('//', '\n//')
     assert 'رجّع الفلوس' in COPY_JS and 'رجّع الفلوس' not in LOGIC

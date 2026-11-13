@@ -801,10 +801,12 @@ def register(app, ns):
             return no_store({'error': 'معرّف غير صالح'}, 400)
         resp = ns['_platform_proxy']('POST', '/api/bridge/signups/%s/ack' % user_id,
                                      json_body={'by': ns['_actor_email']() or 'dashboard'})
-        try:
-            ns['_audit']('signup.ack', target=user_id)
-        except Exception:   # noqa: BLE001
-            pass
+        # R24: سطر التدقيق بعد ما المنصة تقبل بس (كان بيتكتب حتى لو رفضت — الإسناد كان بيكذب)
+        if ns['_resp_ok'](resp):
+            try:
+                ns['_audit']('signup.ack', target=user_id)
+            except Exception:   # noqa: BLE001
+                pass
         return resp
 
     # —— «دفع فشل» في الوارد (نفس القاعدة): رفض البوابة · صفحة دفع ما فتحتش · بوابة كاملة مش جاهزة.
@@ -823,10 +825,12 @@ def register(app, ns):
             return no_store({'error': 'معرّف غير صالح'}, 400)
         resp = ns['_platform_proxy']('POST', '/api/bridge/payment-failures/%s/ack' % row_id,
                                      json_body={'by': ns['_actor_email']() or 'dashboard'})
-        try:
-            ns['_audit']('payment_failure.ack', target=row_id)
-        except Exception:   # noqa: BLE001
-            pass
+        # R24: سطر التدقيق بعد ما المنصة تقبل بس (كان بيتكتب حتى لو رفضت — الإسناد كان بيكذب)
+        if ns['_resp_ok'](resp):
+            try:
+                ns['_audit']('payment_failure.ack', target=row_id)
+            except Exception:   # noqa: BLE001
+                pass
         return resp
 
     if scheduler_allowed():

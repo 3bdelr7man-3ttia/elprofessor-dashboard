@@ -26,13 +26,26 @@
   function pad(n) { return (n < 10 ? '0' : '') + n; }
   function todayISO(t) { var d = new Date(t); return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()); }
   function money(n, c) { return U.moneyText(n, c); }
-  function store(kind, key, val) {
-    try {
-      var st = kind === 's' ? window.sessionStorage : window.localStorage;
-      if (val === undefined) return st.getItem(key);
-      st.setItem(key, val);
-    } catch (e) { return null; }
-    return null;
+  // R24 م١: «لاحقًا» بقت على خادم الداشبورد (جدول decision_snooze، مفتاح `mk_tip:<نوع>_<معرّف>`) — كانت في ذاكرة المتصفح للجلسة فبترجع مع أي جلسة جديدة.
+  // بيأجّل لبكرة الصبح (نفس اختيار «بكرة» في اللوحة). لو الخادم ما ردّش بنقول، والاقتراح يفضل ظاهر (مفيش إخفاء على عمى).
+  function laterOnServer(key, done) {
+    var E = ep();
+    if (!E || !E.snoozeItem) { done(); return; }          // بلا طبقة الخادم (اختبار/عرض معزول): الإخفاء في الذاكرة للجلسة بس
+    var until = L.snoozePicks(now())[0].until;
+    Promise.resolve(E.snoozeItem(key, until, '')).then(function (res) {
+      if (res && res.ok) done(); else { S.note = (res && res.error) || 'تعذّر الحفظ — حاول تاني'; redraw(); }
+    });
+  }
+  // المؤجَّل من الخادم ⇒ `S.skipped` (مفاتيح `kind_id`) و`S.legacyLater`. أول مرة بنطلب القايمة لو لسه ما وصلتش.
+  function applyServerLater(all) {
+    var E = ep(), sz = E && E.data && E.data.snooze;
+    if (!sz || !sz.map) {
+      if (E && E.loadSnooze && !S.snzAsked) { S.snzAsked = true; E.loadSnooze().then(function () { S.snzAsked = false; S.snzDone = true; redraw(); }); }
+      return;
+    }
+    var hid = function (k) { var en = sz.map['mk_tip:' + k]; return !!en && L.snoozeState(en, '', now()).hidden; };
+    all.forEach(function (it) { var k = it.kind + '_' + it.id; if (hid(k) && S.skipped.indexOf(k) < 0) S.skipped.push(k); });
+    if (hid('legacy')) S.legacyLater = true;
   }
 
   // ------------------------------------------------------------------ مصادر (كلٌّ تفشل لوحدها)
@@ -476,7 +489,7 @@
     if (!s) return;
     var E = ep();
     function busy(on) { lockBusy(s, on); qa('.acts .btn', s).forEach(function (b) { b.disabled = on; }); }
-    q('#mk_later', s).onclick = function () { if (s.dataset.busy) return; S.legacyLater = true; store('s', 'mk_legacy_later', '1'); window.closeModal(); redraw(); };
+    q('#mk_later', s).onclick = function () { if (s.dataset.busy) return; laterOnServer('mk_tip:legacy', function () { S.legacyLater = true; window.closeModal(); redraw(); }); };
     q('#mk_keep', s).onclick = function () {
       if (s.dataset.busy) return;
       busy(true); errBox(s, '');
@@ -538,8 +551,7 @@
     qa('[data-a="later"]', v).forEach(function (b) {
       b.onclick = function () {
         var key = b.getAttribute('data-kind') + '_' + b.getAttribute('data-id');
-        if (S.skipped.indexOf(key) < 0) S.skipped.push(key);
-        store('s', 'mk_later_' + key, '1'); redraw();
+        laterOnServer('mk_tip:' + key, function () { if (S.skipped.indexOf(key) < 0) S.skipped.push(key); redraw(); });
       };
     });
     qa('[data-a="brain"]', v).forEach(function (b) {
@@ -566,10 +578,9 @@
   }
   function restoreSession() {
     var rows = campaignRows(model());
-    if (store('s', 'mk_legacy_later') === '1') S.legacyLater = true;
-    if (!rows) return;
+    if (!rows) { applyServerLater([]); return; }
     var m = model(), all = MK.brain(rows, todayISO(m.now), []).items;
-    all.forEach(function (it) { var k = it.kind + '_' + it.id; if (store('s', 'mk_later_' + k) === '1' && S.skipped.indexOf(k) < 0) S.skipped.push(k); });
+    applyServerLater(all);
   }
   function render(mod, view) {
     S.view = view; S.mod = mod;

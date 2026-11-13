@@ -2876,6 +2876,9 @@ import v2_reports_routes as _v2r; _v2r.register(app, globals())  # v2s:reports
 __import__('v2_company_routes').register(app, globals())  # v2s:company
 __import__('v2_roles_routes').register(app)   # v2s:roles
 # ---- v2 section routes end
+try:   # R24 م١: «بعدين» و«تجاهل» على الخادم (جدول decision_snooze + ٤ مسارات للأدمن) — تحميل محروس، غيابه لا يكسر الإقلاع
+    import v2_decisions_routes as _v2dec; _v2dec.register(app, globals())
+except Exception: logger.exception('v2 decisions routes not loaded')
 # R16 «تليجرام اللوحة»: المُرسِل الواحد + «جرّب التنبيهات» + سجلّ الإرسال + مراقبة التشغيل + الملخص اليومي.
 try: import tg_ops as _tg_ops; _tg_ops.register(app, globals())
 except Exception: logger.exception('tg_ops routes not loaded')

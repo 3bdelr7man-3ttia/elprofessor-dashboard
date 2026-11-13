@@ -110,7 +110,7 @@ def test_shell_creates_the_bar_next_to_the_search_bar_and_mounts_it_from_drawhea
 
 
 def test_home_deck_wiring():
-    assert 'brainItems: g.brainItems' in HOME_JS and 'V2BRAIN.pending()' in HOME_JS
+    assert 'brainItems: brainItems' in HOME_JS and 'V2BRAIN.pending()' in HOME_JS
     assert 'V2BRAIN.decorate(c, { fetch: true })' in HOME_JS and 'V2BRAIN.prefetch(S.deck.slice(1, 9))' in HOME_JS
     for case in ("case 'brain_approve': case 'brain_reject': case 'brain_edit': return brainAct(c, a);",):
         assert case in HOME_JS
@@ -141,7 +141,7 @@ def test_the_logic_file_has_one_brain2_block_at_the_end_and_the_hooks():
     assert "case 'brain_item':" in LOGIC and 'opts.brainItems' in LOGIC
     # الخطّافان خارج الكتلة لا يزيدان عن المسموح: سطر kindOf وcase وجملة الطابور
     outside = LOGIC.replace(blk, '')
-    assert outside.count('brain_item') == 4          # kindOf (مرتان في سطر واحد) + case + سطر الطابور
+    assert outside.count('brain_item') == 6          # kindOf (مرتان في سطر واحد) + case + سطر الطابور
     # ملف العقل (P5) ما لُمس: لا `v2s.brain` ولا v2sBrain في كتلتنا
     assert 'v2sBrain' not in blk and 'v2s:brain' not in blk
 

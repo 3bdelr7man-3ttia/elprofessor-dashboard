@@ -1149,6 +1149,8 @@
       case 'person': return host().openPerson && host().openPerson(act.email);
       case 'copy': return copyText(act.text || t.inviteUrl || '', function (ok) { finishTicket(t.id, ok ? (act.text ? 'نُسخ الرقم' : 'نُسخ الرابط') : 'تعذّر النسخ — انسخه يدويًا'); redraw(true); });
       case 'sheet': return openSheetFor(t, act.sheet);
+      // R24: «علّمها منتهية» / «تمت المتابعة» كانت زرارًا ميتًا (الفعل `resolve` بيترسم `data-a="act"` ومفيش حالة له هنا) — نفس مسار «نعم، علّمها منتهية».
+      case 'resolve': return resolveMsg(t.id);
     }
   }
   function openSheetFor(t, name) {

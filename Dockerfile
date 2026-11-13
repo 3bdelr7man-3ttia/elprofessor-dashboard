@@ -26,6 +26,7 @@ RUN apt-get update \
 
 COPY backend/app.py /app/app.py
 COPY backend/v2_courses_routes.py /app/v2_courses_routes.py
+COPY backend/v2_decisions_routes.py /app/v2_decisions_routes.py
 COPY backend/v2_trainer_share_routes.py /app/v2_trainer_share_routes.py
 COPY backend/v2_courses2_routes.py /app/v2_courses2_routes.py
 COPY backend/prerender.py /app/prerender.py
