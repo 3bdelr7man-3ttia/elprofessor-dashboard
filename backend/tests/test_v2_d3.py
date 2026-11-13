@@ -490,8 +490,8 @@ def test_the_four_numbers_with_a_plain_line_each_and_the_net_is_not_available():
 
 @needs_node
 def test_money_text_formats_each_currency_in_arabic_digits():
-    cases = [((1200, 'EGP'), '١٬٢٠٠ جنيه'), ((600.5, 'EGP'), '٦٠٠٫٥٠ جنيه'), ((0.25, 'EGP'), '٠٫٢٥ جنيه'), ((30, 'USD'), '٣٠ دولار'),
-             ((3500.5, 'SAR'), '٣٬٥٠٠٫٥٠ ريال'), ((99, 'AED'), '٩٩ درهم'), ((12, 'KWD'), '١٢ دينار'), ((5, 'XYZ'), '٥ XYZ'), ((1234567, 'EGP'), '١٬٢٣٤٬٥٦٧ جنيه')]
+    cases = [((1200, 'EGP'), '١٬٢٠٠ ج'), ((600.5, 'EGP'), '٦٠٠٫٥٠ ج'), ((0.25, 'EGP'), '٠٫٢٥ ج'), ((30, 'USD'), '٣٠ دولار'),
+             ((3500.5, 'SAR'), '٣٬٥٠٠٫٥٠ ر.س'), ((99, 'AED'), '٩٩ د.إ'), ((12, 'KWD'), '١٢ د.ك'), ((5, 'XYZ'), '٥ XYZ'), ((1234567, 'EGP'), '١٬٢٣٤٬٥٦٧ ج')]
     got = [L('util.moneyText', a, c) for (a, c), _ in cases]
     assert got == [w for _, w in cases]
     line = L('v2MoneyLine', [{'currency': 'EGP', 'amount': 1000}, {'currency': 'USD', 'amount': 30}, {'currency': 'SAR', 'amount': 100}])
@@ -528,8 +528,8 @@ def test_payout_rows_are_oldest_first_with_exact_amounts_and_a_since_timer():
     rows = L('v2PayoutRows', [_payout('po-a', 'منى', 600.5, hours=3), _payout('po-b', 'فيصل', 3500.5, 'SAR', hours=30), _payout('po-c', 'نور', 100, status='paid')], NOW)
     assert [r['id'] for r in rows] == ['po-b', 'po-a'], 'المسدَّد خارج، والأقدم أولًا'
     b, a = rows
-    assert b['amountText'] == '٣٬٥٠٠٫٥٠ ريال' and b['fx'] is True and b['since'] == 'منذ ٣٠ س' and b['what'] == 'سحب من المحفظة'
-    assert a['amountText'] == '٦٠٠٫٥٠ جنيه', 'المبلغ بالكسور مش مقرَّب'
+    assert b['amountText'] == '٣٬٥٠٠٫٥٠ ر.س' and b['since'] == 'منذ ٣٠ س' and b['what'] == 'سحب من المحفظة'
+    assert a['amountText'] == '٦٠٠٫٥٠ ج', 'المبلغ بالكسور مش مقرَّب'
     assert a['card']['primary']['act'] == {'do': 'payout_settle', 'id': 'po-a'} and a['card']['secondary']['act']['do'] == 'payout_reject'
     assert a['card']['primary']['money']['amount'] == 600.5 and a['email'] == 'po-a@example.test'
     assert L('v2PayoutRows', [], NOW) == []
@@ -542,7 +542,7 @@ def test_payout_history_is_this_month_only_and_a_failed_half_is_named():
     rej = [{'id': 'p3', 'user_name': 'سامي', 'user_email': 's@x.test', 'amount': 100, 'currency': 'EGP', 'status': 'rejected', 'rejected_at': _iso(5)}]
     h = L('v2PayoutHistory', paid, rej, NOW)
     assert [r['id'] for r in h['rows']] == ['p3', 'p1'] and h['rows'][0]['statusText'] == 'رُفض' and h['rows'][1]['statusText'] == 'حُوِّل' and h['rows'][1]['ref'] == 'IP-1'
-    assert h['rows'][1]['amountText'] == '٩٥٠٫٥٠ جنيه' and h['failed'] == []
+    assert h['rows'][1]['amountText'] == '٩٥٠٫٥٠ ج' and h['failed'] == []
     half = L('v2PayoutHistory', paid, None, NOW)
     assert [r['id'] for r in half['rows']] == ['p1'] and half['failed'] == ['التحويلات المرفوضة']
     assert L('v2PayoutHistory', None, None, NOW) is None
@@ -561,7 +561,7 @@ def test_books_are_never_refundable_and_say_why():
     assert [r['id'] for r in stuck['rows']] == ['b', 'a'], 'الأقدم أولًا'
     assert byid['b']['name'] == 'n@x.test' and byid['b']['person'] == {'email': 'n@x.test', 'name': 'n@x.test'}, 'بلا اسم ⇒ البريد، لا اسم مخترع'
     assert byid['a']['kindText'] == 'كتاب' and byid['b']['kindText'] == 'دورة' and byid['b']['provider'] == 'بطاقة بنكية' and byid['b']['ageText'] == 'منذ ٢٦ ساعة'
-    assert byid['a']['amountText'] == '١٤٩ جنيه' and stuck['partial'] is False and stuck['deliveryNote'] == ''
+    assert byid['a']['amountText'] == '١٤٩ ج' and stuck['partial'] is False and stuck['deliveryNote'] == ''
     # المنصة بتقول صراحة إن نوع «مدفوع ولم يصل تسليمه» مش مسجَّل (null) ⇒ سطر «غير متاح بعد»، لا سكوت
     nul = L('v2Stuck', {'items': [], 'paid_without_delivery': None}, NOW)
     assert nul['rows'] == [] and nul['deliveryNote'] == 'دفعات تمّ سدادها ولم يصل تسليمها: غير متاح بعد'
@@ -675,7 +675,7 @@ PRICE_DETAIL = {'ok': True, 'countries': PRICES_LIST['countries'], 'currencies':
 def test_price_rows_show_the_lowest_price_per_country_and_visibility():
     p = L('v2Prices', PRICES_LIST)
     a, b = p['rows']
-    assert a['visible'] is True and a['minText'] == 'مصر: ١٥٠ جنيه، باقي البلاد: ٩ دولار' and a['hasPrices'] is True
+    assert a['visible'] is True and a['minText'] == 'مصر: ١٥٠ ج، باقي البلاد: ٩ دولار' and a['hasPrices'] is True
     assert b['visible'] is False and b['minText'] == 'لا أسعار بعد' and b['hasPrices'] is False
 
 
@@ -710,8 +710,8 @@ def test_price_diff_shows_exactly_what_changes_before_to_after():
     assert built['versions']['pdf'] == {}, 'خانة فاضية = لا سعر'
     d = L('v2PriceDiff', f, built)
     got = {x['label']: (x['from'], x['to']) for x in d['lines']}
-    assert got == {'القراءة على المنصة · مصر': ('١٥٠ جنيه', '٢٥٠ جنيه'), 'القراءة على المنصة · السعودية': ('لا سعر', '٤٠٫٥٠ ريال'),
-                   'نسخة PDF · مصر': ('٢٢٠ جنيه', 'لا سعر'), 'ظاهر للناس': ('نعم', 'لا')}, got
+    assert got == {'القراءة على المنصة · مصر': ('١٥٠ ج', '٢٥٠ ج'), 'القراءة على المنصة · السعودية': ('لا سعر', '٤٠٫٥٠ ر.س'),
+                   'نسخة PDF · مصر': ('٢٢٠ ج', 'لا سعر'), 'ظاهر للناس': ('نعم', 'لا')}, got
     assert d['changed'] is True
     # بلا تغيير ⇒ بلا سطور
     same = L('v2PriceBuild', f, {'visible': True, 'cells': {v['key']: v['cells'] for v in f['versions']}})
@@ -735,7 +735,7 @@ def test_shares_read_in_plain_arabic_with_the_case_ladder():
     assert lines['books'] == 'صاحب العمل ٦٠٪، المنصة ٤٠٪' and lines['books_ads'] == 'صاحب العمل ٦٥٪، المنصة ٣٥٪'
     assert 'من قيمة البيع' in lines['affiliate'] and '١٠٪' in lines['affiliate'] and 'الطرفين' in lines['affiliate']
     assert [x['editable'] for x in v['lines']] == [True, True, False, True], 'الدورات في جولتها'
-    assert [r['upTo'] for r in v['ladder']] == ['أقل من ١٠٬٠٠٠ جنيه', 'من ١٠٬٠٠٠ إلى أقل من ٣٠٬٠٠٠ جنيه', 'من ٣٠٬٠٠٠ إلى أقل من ٥٠٬٠٠٠ جنيه', 'من ٥٠٬٠٠٠ جنيه فأكثر']
+    assert [r['upTo'] for r in v['ladder']] == ['أقل من ١٠٬٠٠٠ ج', 'من ١٠٬٠٠٠ إلى أقل من ٣٠٬٠٠٠ ج', 'من ٣٠٬٠٠٠ إلى أقل من ٥٠٬٠٠٠ ج', 'من ٥٠٬٠٠٠ ج فأكثر']
     assert [r['platformText'] for r in v['ladder']] == ['٣٥٪', '٣٠٪', '٢٥٪', '٢٥٪'] and [r['ownerText'] for r in v['ladder']][0] == '٦٥٪'
     assert v['version'] == 3 and 'لا ينزل عن ٣٥٪' in v['floorText'] and '٢٥٪' in v['floorText']
     hist = L('v2SharesHistory', SHARES, NOW)
@@ -752,7 +752,7 @@ def test_shares_diff_and_changes_send_only_what_changed():
                             'affiliate': {'rate': 12}}
     d = L('v2SharesDiff', t, r['after'])
     got = {x['label']: (x['from'], x['to']) for x in d['lines']}
-    assert got == {'الكتب · صاحب العمل': ('٦٠٪', '٦٢٪'), 'الكتب · المنصة': ('٤٠٪', '٣٨٪'), 'القضايا · من ١٠٬٠٠٠ إلى أقل من ٣٠٬٠٠٠ جنيه': ('المنصة ٣٠٪', 'المنصة ٢٨٪'),
+    assert got == {'الكتب · صاحب العمل': ('٦٠٪', '٦٢٪'), 'الكتب · المنصة': ('٤٠٪', '٣٨٪'), 'القضايا · من ١٠٬٠٠٠ إلى أقل من ٣٠٬٠٠٠ ج': ('المنصة ٣٠٪', 'المنصة ٢٨٪'),
                    'عمولة الإحالة': ('١٠٪', '١٢٪')}, got
     # لا تغيير ⇒ لا إرسال. رقم برّه ٠–١٠٠ ⇒ رسالة. (الأرضية ٣٥ تحرسها المنصة ورسالتها بتتعرض)
     same = L('v2SharesChanges', t, {'booksOwner': '60', 'booksAdsOwner': '65', 'ladder': ['35', '30', '25', '25'], 'affiliateRate': '10'})
@@ -767,8 +767,8 @@ def test_minimum_payout_view_and_input_rules():
     resp = {'ok': True, 'withdraw_min': 500, 'rev': 2, 'updated_at': _iso(30), 'updated_by': 'f@x.test', 'allowed': {'withdraw_min': {'min': 50, 'max': 20000}},
             'history': [{'by': 'f@x.test', 'at': _iso(30), 'before': {'withdraw_min': 400}, 'after': {'withdraw_min': 500}}]}
     v = L('v2MinPayout', resp, NOW)
-    assert v['text'] == '٥٠٠ جنيه' and v['rev'] == 2 and v['min'] == 50 and v['max'] == 20000
-    assert v['history'][0]['from'] == '٤٠٠ جنيه' and v['history'][0]['to'] == '٥٠٠ جنيه'
+    assert v['text'] == '٥٠٠ ج' and v['rev'] == 2 and v['min'] == 50 and v['max'] == 20000
+    assert v['history'][0]['from'] == '٤٠٠ ج' and v['history'][0]['to'] == '٥٠٠ ج'
     assert L('v2MinPayoutInput', '٧٥٠', v) == {'ok': True, 'value': 750}
     for bad in ('', 'abc', '10.5', '49', '20001', '-3'):
         assert L('v2MinPayoutInput', bad, v)['ok'] is False, bad
@@ -818,7 +818,7 @@ def test_offers_queue_rows_and_the_prefilled_prices():
     rows = L('v2OffersQueue', resp, PRICES_LIST, NOW)
     assert [r['id'] for r in rows] == ['off-1', 'off-2']
     a = rows[0]
-    assert a['title'].startswith('عقد الوكالة') and a['ownerName'] == 'أ. مي حسن' and a['suggestedText'] == '٣٩٠ جنيه' and a['typeText'] == 'دليل' and a['agreementText'] == 'نشر عادي'
+    assert a['title'].startswith('عقد الوكالة') and a['ownerName'] == 'أ. مي حسن' and a['suggestedText'] == '٣٩٠ ج' and a['typeText'] == 'دليل' and a['agreementText'] == 'نشر عادي'
     assert rows[1]['suggestedText'] == '' and 'لم يقترح' in rows[1]['brain']
     form = L('v2PriceForm', PRICE_DETAIL)
     cells = L('v2OfferPrefill', a, form)

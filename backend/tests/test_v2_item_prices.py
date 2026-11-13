@@ -321,8 +321,8 @@ def test_a_guide_that_takes_the_general_price_shows_the_general_minimum():
     for eff in (True, False):
         res = L('v2Prices', _list_resp(guide_min_effective=eff))
         g = {r['id']: r for r in res['rows']}
-        assert g['guide-sole']['minText'] == g['_guides']['minText'] == 'مصر: ٩٩ جنيه، السعودية: ٢٥ ريال، باقي البلاد: ٥ دولار', eff
-        assert g['guide-rent']['minText'].startswith('مصر: ١٢٠ جنيه'), 'السعر الخاص ما يتغطّاش بالعام'
+        assert g['guide-sole']['minText'] == g['_guides']['minText'] == 'مصر: ٩٩ ج، السعودية: ٢٥ ر.س، باقي البلاد: ٥ دولار', eff
+        assert g['guide-rent']['minText'].startswith('مصر: ١٢٠ ج'), 'السعر الخاص ما يتغطّاش بالعام'
         assert g['guide-sole']['badge'] == 'يأخذ السعر العام' and g['guide-rent']['badge'] == 'سعر خاص'
 
 
@@ -364,7 +364,7 @@ def test_reset_diff_lists_every_cell_that_changes_and_always_says_the_price_kind
     # الدليل والسعر العام قراءة بس (المنصة ترفض PDF عليهما)، فما فيش سطر PDF أصلًا
     assert 'القراءة على المنصة · مصر' in labels and not any('PDF' in x for x in labels)
     eg = [x for x in d['lines'] if x['label'] == 'القراءة على المنصة · مصر'][0]
-    assert eg['from'] == '١٢٠ جنيه' and eg['to'] == '٩٩ جنيه'
+    assert eg['from'] == '١٢٠ ج' and eg['to'] == '٩٩ ج'
     d2 = L('v2PriceResetDiff', own, None)
     assert d2['changed'] is True and len(d2['lines']) == 1
 
@@ -483,7 +483,7 @@ def test_the_starter_targets_the_general_guides_price_and_our_books_only():
     assert g['versions'] == {'read': {'eg': {'amount': 149, 'currency': 'EGP'}, 'default': {'amount': 5, 'currency': 'USD'}}}
     assert b['versions'] == {'read': {'eg': {'amount': 299, 'currency': 'EGP'}, 'default': {'amount': 10, 'currency': 'USD'}},
                              'pdf': {'eg': {'amount': 369, 'currency': 'EGP'}, 'default': {'amount': 12, 'currency': 'USD'}}}
-    assert b['to'] == 'مصر: ٢٩٩ جنيه، باقي البلاد: ١٠ دولار'
+    assert b['to'] == 'مصر: ٢٩٩ ج، باقي البلاد: ١٠ دولار'
 
 
 @needs_node

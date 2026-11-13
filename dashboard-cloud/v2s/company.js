@@ -675,7 +675,7 @@
     if (!rows) return '<p class="co-ledger">رصيد إعلاناته عندنا: ' + na() + '</p>';
     var r = rows.filter(function (x) { return x.kind === c.ledger_kind && x.id === c.ledger_owner_id; })[0];
     if (!r) return '<p class="co-ledger">رصيد إعلاناته عندنا: ' + na() + '</p>';
-    return '<p class="co-ledger">رصيد إعلاناته عندنا: <b>' + esc(lines(r.balances) || '٠ جنيه') + '</b></p>';
+    return '<p class="co-ledger">رصيد إعلاناته عندنا: <b>' + esc(lines(r.balances) || '٠') + '</b></p>';
   }
   function resultStatus(r) {
     if (r.revenue_id) return '<span class="co-st t-ok">حُصّل' + (r.collected_on ? ' ' + esc(U.dateText(r.collected_on)) : '') + '</span>';

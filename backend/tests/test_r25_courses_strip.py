@@ -115,3 +115,45 @@ def test_market_buttons_are_wired_to_the_relane_sheet_and_no_report_card_is_fake
     # المنصة ما بتعرّضش بلاغات مستخدمين على طلبات السوق ⇒ ولا بطاقة «بلاغ» اتخترعت
     logic = _read('dashboard-cloud', 'v2-logic.js')
     assert 'market_report' not in logic
+
+
+# ───────────── الجولة ٢: لا خطوة صرف · رموز قصيرة · مكان واحد للقرار ─────────────
+def test_no_fx_prompt_on_payouts_anywhere():
+    for name in ('v2-logic.js', 'v2-d3.js', 'v2-home.js'):
+        src = _read('dashboard-cloud', name)
+        assert 'العملة ليست الجنيه' not in src and 'حدّد سعر الصرف' not in src, name
+    out = v2_node.logic('v2Card', {'apiKind': 'payout', 'pid': 'p1', 'who': 'أ. فيصل', 'email': 'f@x.test', 'amount': 3500.5, 'currency': 'SAR', 'dest': 'x', 'status': 'pending',
+                                   'fx_alert': True, 'raw': {'amount': 3500.5, 'currency': 'SAR', 'method': 'تحويل بنكي'}}, {'now': NOW})
+    assert 'الصرف' not in (out.get('warn') or '') and out['primary']['money']['curName'] == 'ريال سعودي'
+    assert out['sub'] == '٣٬٥٠٠٫٥٠ ر.س'
+
+
+@needs_node
+def test_every_single_amount_uses_the_short_unambiguous_symbols():
+    cases = {('EGP', 1200): '١٬٢٠٠ ج', ('SAR', 5): '٥ ر.س', ('AED', 5): '٥ د.إ', ('KWD', 5): '٥ د.ك', ('QAR', 5): '٥ ر.ق', ('OMR', 5): '٥ ر.ع', ('USD', 5): '٥ دولار'}
+    for (cur, amt), want in cases.items():
+        assert v2_node.logic('util.moneyText', amt, cur) == want
+    for text in ('ريال', 'جنيه', 'درهم', 'دينار'):
+        assert not any(w == text for w in (v2_node.logic('util.moneyText', 5, c).split(' ')[-1] for c in ('EGP', 'SAR', 'AED', 'KWD', 'QAR', 'OMR')))
+
+
+def test_money_view_copy_and_usd_line_wording():
+    d3 = _read('dashboard-cloud', 'v2-d3.js')
+    assert 'كل عملة بتظهر لوحدها' in d3 and 'والأرقام بالجنيه' not in d3
+    b = v2_node.logic('v2MoneyBoard', {'revenues': [{'date': '2026-11-10', 'source': 'course', 'amount_egp': 15000, 'amount_usd': 0}], 'escrow': [], 'payouts': [{'pid': 'p', 'status': 'pending', 'raw': {'amount': 3000, 'currency': 'EGP'}}],
+                                       'rates': {'rates': {'USD': 1, 'EGP': 50}, 'date': '2026-11-13'}}, 'year', NOW)
+    assert b['usdLine']['text'] == 'تقريبًا بالدولار: دخل ٣٠٠ دولار، مستحق ٦٠ دولار'
+
+
+def test_price_editor_has_no_duplicate_egypt_label():
+    co = _read('dashboard-cloud', 'v2s', 'courses.js')
+    assert "x.key === 'eg' ? ' class=\"v2co-sr\"'" in co, 'تسمية «مصر» تحت عنوان «سعر مصر» مخفية بصريًا (للقارئ الصوتي بس)'
+
+
+def test_course_decisions_live_in_the_strip_only():
+    co = _read('dashboard-cloud', 'v2s', 'courses.js')
+    assert 'function liveTicketHtml' not in co and 'T.decide.map' not in co
+    a = co.index('function reviewTicket'), co.index('// مهلة أول دورة')
+    body = co[a[0]:a[1]]
+    assert 'data-a="approve"' not in body and 'data-a="return"' not in body and 'v2co-btn1' not in body
+    assert 'القرار في «محتاج قرارك» فوق' in body and 'القرار في «محتاج قرارك» فوق' in co[co.index('function drawLive'):co.index('function drawLive') + 2500]

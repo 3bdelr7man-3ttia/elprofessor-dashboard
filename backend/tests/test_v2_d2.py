@@ -359,10 +359,10 @@ def test_dispute_tickets_columns_amount_parties_age_and_plain_reason(real):
     assert {'نزاع على ملف', 'نزاع على استشارة', 'ملاحظة على مرحلة من قضية'} <= kinds
     for col in D['cols']:
         for t in D['cols'][col]:
-            assert t['amount'] and re.search(r'جنيه|ريال|دولار|درهم|يورو', t['amount']), t
+            assert t['amount'] and re.search(r'(?<![\u0621-\u064A])ج(?![\u0621-\u064A])|ر\.س|د\.إ|د\.ك|ر\.ق|ر\.ع|دولار|يورو', t['amount']), t
             assert t['text'].startswith('مفتوح منذ ') and t['title'] and t['client'] != '' and t['reason']
     f = [t for t in D['cols']['disputes'] if t['strip']['label'] == 'نزاع على ملف'][0]
-    assert f['client'] == 'ريم' and f['expert'] == 'د. ندى حسن' and f['amount'] == '٥٠٠ جنيه'
+    assert f['client'] == 'ريم' and f['expert'] == 'د. ندى حسن' and f['amount'] == '٥٠٠ ج'
     assert f['reason'] == 'اعتراض صاحب الطلب: الرأي لم يجب عن سؤال صاحب الطلب'
     # مرتّبة بالأقدم أولًا
     for col in D['cols']:
@@ -387,7 +387,7 @@ def test_dispute_reasons_are_never_raw_platform_or_client_text(real):
     assert [t['reason'] for t in out] == ['اعتراض صاحب الطلب: جزء من الرأي غير مفهوم لصاحب الطلب', 'اعتراض صاحب الطلب: الرأي لم يجب عن سؤال صاحب الطلب',
                                           'اعتراض صاحب الطلب: خطأ في الوقائع المذكورة في الرأي', 'اعتراض صاحب الطلب: لم يحدد صاحب الطلب سببًا']
     assert 'نص خام' not in json.dumps([t['reason'] for t in out], ensure_ascii=False)
-    assert all('SAR' not in t['amount'] and 'ريال' in t['amount'] for t in out)
+    assert all('SAR' not in t['amount'] and 'ر.س' in t['amount'] for t in out)
 
 
 @needs_node
@@ -446,7 +446,7 @@ def test_person_view_model_from_a_full_response():
     assert files['summary'] == '٤ ملفات' and files['items'][0]['title'] == 'عقد'
     assert 'دورتان' in courses['summary'] and '٣١' in courses['summary'] and courses['items'][0]['meta'] == 'منشورة'
     rows = {r['k']: r for r in money['rows']}
-    assert rows['طلبات سحب معلقة']['v'] == 'طلب واحد — ١٬٢٠٠ جنيه' and rows['ما حُوّل من قبل']['v'] == 'طلبان — ٣٬٣٥٠٫٥٠ جنيه'
+    assert rows['طلبات سحب معلقة']['v'] == 'طلب واحد — ١٬٢٠٠ ج' and rows['ما حُوّل من قبل']['v'] == 'طلبان — ٣٬٣٥٠٫٥٠ ج'
     assert rows['رصيد المحفظة']['na'] is True and rows['رصيد المحفظة']['v'] == 'غير متاح بعد'
     lrows = {r['k']: r for r in learn['rows']}
     assert lrows['دورات سجّل فيها أو دفع ثمنها']['v'] == 'لا تسجيلات' and lrows['الكتب المشتراة']['na'] is True

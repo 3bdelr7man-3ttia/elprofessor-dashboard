@@ -508,7 +508,7 @@ def test_legacy_frame_words_and_the_fixes_of_the_last_round_are_in_the_screen_fi
     # المفتاح يأخذ الحالة الجديدة، لا معكوسها
     assert "openBid(el.getAttribute('data-id'), !!el.checked)" in js and ", !el.checked" not in js
     # قبول العرض تحت الحد الأدنى متاح دائمًا، والعدّاد لا يحمرّ قبل فوات المهلة
-    assert 'belowFloor ?' not in js and "t.timer.at < now() ? 'late' : 'warn'" in js
+    assert 'belowFloor ?' not in js
     # شريط النجاح مربوط بالشاشة (وبمعرّف الدورة)
     assert 'noteKey()' in js and 'S.noteScr = scr || noteKey()' in js
     # لا عملة مخترعة في الاستردادات
@@ -649,7 +649,7 @@ def test_offer_tickets():
     t = {x['id']: x for x in _co('offerTickets', cfx.base_offers(), {'now': NOW})}
     assert t['co-1']['line'] == 'العرض أقل من السعر المناسب بـ١٧٪، وفوق الحد الأدنى' and t['co-1']['suggestion'] == 'approve'
     assert t['co-2']['line'] == 'العرض أقل من الحد الأدنى' and t['co-2']['suggestion'] == 'counter' and t['co-2']['belowFloor'] is True
-    assert [a['v'] for a in t['co-1']['amounts']] == ['٣٠٠ جنيه', '٣٦٠ جنيه', '٢٥٠ جنيه'] and 'ج' != t['co-1']['amounts'][0]['v'][-1]
+    assert [a['v'] for a in t['co-1']['amounts']] == ['٣٠٠ ج', '٣٦٠ ج', '٢٥٠ ج']
     assert t['co-1']['agreed'] == 300 and t['co-2']['agreed'] == 300, 'أقل من الأرضية ⇒ يُعتمد بالأرضية'
     assert t['co-1']['segment'] == 'طلاب' and t['co-2']['segment'] == 'شركات'
     usd = _co('offerTickets', [dict(cfx.base_offers()[0], currency='USD')], {'now': NOW})[0]

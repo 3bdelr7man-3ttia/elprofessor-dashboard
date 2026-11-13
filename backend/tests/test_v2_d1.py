@@ -779,7 +779,7 @@ def test_money_buttons_carry_the_amount_currency_and_name_for_the_confirmation(r
     assert pay[1]['primary']['label'] == 'سجّل التحويل' and pay[1]['secondary']['label'] == 'ارفض'
     assert man[0]['primary']['label'] == 'أكّد الدفع' and man[0]['primary']['act']['do'] == 'pay_confirm'
     sar = [c for c in pay if c['primary']['money']['currency'] == 'SAR'][0]
-    assert sar['primary']['money']['curName'] == 'ريال' and 'الصرف' in sar['warn']
+    assert sar['primary']['money']['curName'] == 'ريال سعودي' and 'الصرف' not in (sar['warn'] or ''), 'لا خطوة صرف: الأرباح بتتحوّل بعملتها'
     assert any(c['link'] and c['link']['url'].startswith('https://') for c in man)
 
 
@@ -839,12 +839,12 @@ def test_the_payout_card_shows_the_exact_amount_that_will_be_transferred():
     m = c['primary']['money']
     assert m['amount'] == 150.5 and c['secondary']['money']['amount'] == 150.5
     assert '١٥٠٫٥' in c['sub'] and '١٥١' not in c['sub'] and '١٥٠٫٥' in c['brain']
-    assert c['facts'][0]['v'] == '١٥٠٫٥٠ جنيه'
+    assert c['facts'][0]['v'] == '١٥٠٫٥٠ ج'
     # ما فيش raw.amount ⇒ نرجع لـamount
     p2 = dict(PAYOUT, amount=300, raw={'method': 'x', 'created_at': _iso(1)})
     assert _payout_card([], [], payout=p2)['primary']['money']['amount'] == 300
     # التنسيق النهائي اللي بتبنى منه نافذة التأكيد وزرّها
-    assert v2_node.logic('util.fmt', 150.5) == '١٥٠٫٥' and v2_node.logic('util.moneyText', 150.5, 'EGP') == '١٥٠٫٥٠ جنيه'
+    assert v2_node.logic('util.fmt', 150.5) == '١٥٠٫٥' and v2_node.logic('util.moneyText', 150.5, 'EGP') == '١٥٠٫٥٠ ج'
     assert v2_node.logic('util.fmt', 3500.5) == '٣٬٥٠٠٫٥'
 
 

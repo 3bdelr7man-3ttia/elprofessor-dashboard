@@ -368,7 +368,7 @@ def test_course_row_chip_meta_and_share():
             'revenue_split': {'trainer_percent': 40}}
     r = L('courseRow', base)
     assert r['chip'] == {'t': 'مفتوحة', 'tone': 'green'} and r['share'] == 'نصيبك من الدورة: ٤٠٪'
-    assert r['meta'].startswith('المسجّلون: ٣، ١٬٥٠٠ جنيه') and 'تبدأ ١ سبتمبر ٢٠٢٦' in r['meta']
+    assert r['meta'].startswith('المسجّلون: ٣، ١٬٥٠٠ ج') and 'تبدأ ١ سبتمبر ٢٠٢٦' in r['meta']
     for st, want in (('draft', 'مسودة'), ('completed', 'انتهت'), ('archived', 'مؤرشفة'), ('zzz', 'غير معروفة')):
         assert L('courseRow', dict(base, status=st))['chip']['t'] == want
     for rs in (None, {}, {'trainer_percent': 0}):
@@ -401,7 +401,7 @@ def test_wallet_view_states_and_rate():
     assert L('walletView', dict(W, id=None)) == {'linked': False}
     v = L('walletView', W)
     assert v['linked'] and v['rate'] == 50 and v['canWithdraw'] and v['minEgp'] == 2500 and v['level'] == 'فضي'
-    assert v['pending'] == {'value': 'نحو ٢٬٠٠٠ جنيه', 'note': '٤٠ دولار، تراجعه الإدارة'}
+    assert v['pending'] == {'value': 'نحو ٢٬٠٠٠ ج', 'note': '٤٠ دولار، تراجعه الإدارة'}
     # الرصيد صفر والمستثمَر غير صفر ⇒ السعر من المستثمَر
     z = dict(W, balance=0, balance_egp=0)
     v = L('walletView', z)
@@ -411,7 +411,7 @@ def test_wallet_view_states_and_rate():
     v = L('walletView', zero)
     assert v['rate'] is None and v['minEgp'] is None and v['pending'] == {'value': '٤٠ دولار', 'note': 'تراجعه الإدارة'}
     v = L('walletView', dict(zero, pending_withdrawals=0))
-    assert v['pending']['value'] == '٠ جنيه'
+    assert v['pending']['value'] == '٠'
     assert L('walletView', dict(W, level='zzz'))['level'] == 'zzz'
 
 
@@ -553,7 +553,7 @@ def test_course_status_rows_and_filters():
     assert [g['t'] for g in got] == ['منشورة', 'بانتظار الاعتماد', 'مرفوضة', 'مؤرشفة', 'مسودة', 'منشورة']
     assert got[2]['tone'] == 'red' and got[1]['tone'] == 'amber' and got[0]['tone'] == 'green'
     r = L('pcourseRow', PC[0])
-    assert r['meta'] == 'هالة، مسجّلة مدفوعة، ٤٥٠ جنيه، المسجّلون: ٢٤، الدروس: ١٢'
+    assert r['meta'] == 'هالة، مسجّلة مدفوعة، ٤٥٠ ج، المسجّلون: ٢٤، الدروس: ١٢'
     r = L('pcourseRow', PC[5])
     assert 'بلا مدرّب' in r['meta'] and 'مجانية' in r['meta'] and 'الدروس: ٢٤' in r['meta'] and 'Titch' not in json.dumps(r, ensure_ascii=False)
     assert L('pcourseCounts', PC) == {'all': 6, 'published': 2, 'pending': 1, 'draft': 1}

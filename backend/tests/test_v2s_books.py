@@ -351,7 +351,7 @@ def test_offers_in_review_draft_and_live_are_never_rows_and_rejected_offers_are(
     assert not [k for k in keys if k.startswith('of:') and k != 'of:off-12']
     assert res['offersWaiting'] == 2, 'عدّاد عروض «مراجعة العروض» بس'
     off = _rowmap(res)['of:off-12']
-    assert off['kind'] == 'offer' and off['reviewNote'] == 'الموضوع خارج تخصص المنصة' and off['priceText'] == '٢٠٠ جنيه' and off['salesText'] == ''
+    assert off['kind'] == 'offer' and off['reviewNote'] == 'الموضوع خارج تخصص المنصة' and off['priceText'] == '٢٠٠ ج' and off['salesText'] == ''
     assert off['agreementText'] == 'النشر على المنصة: صاحب العمل ٦٠٪، المنصة ٤٠٪'
     assert len(keys) == len(set(keys))
 
@@ -420,7 +420,7 @@ def test_without_the_new_fields_a_work_for_sale_has_no_agreement_and_no_split_cl
     p1 = _rowmap(W(_src(p1=True)))['kn:kn-4']
     assert p1['legacySplit'] is True and p1['platformPct'] == 20
     assert p1['agreementText'] == 'صاحب العمل ٨٠٪، المنصة ٢٠٪ — النسبة القديمة، إلى أن يُنقل إلى قائمة الأسعار الموحّدة'
-    assert p1['priceText'] == '٢٥٠ جنيه' and _rowmap(W())['kn:kn-6']['priceText'] == 'مجاني للجميع'
+    assert p1['priceText'] == '٢٥٠ ج' and _rowmap(W())['kn:kn-6']['priceText'] == 'مجاني للجميع'
 
 
 @needs_node
@@ -544,7 +544,7 @@ def test_edit_diff_shows_only_what_changes_and_sends_only_what_changed():
     d = L('v2kEditDiff', row, dict(base, title='عنوان جديد'))
     assert d['changed'] and d['body'] == {'title': 'عنوان جديد'} and d['lines'] == [{'label': 'العنوان', 'from': row['title'], 'to': 'عنوان جديد'}]
     d = L('v2kEditDiff', row, dict(base, priceText='١٥٠٫٥'))
-    assert d['body'] == {'price_egp': 150.5} and d['lines'] == [{'label': 'السعر', 'from': '٢٥٠ جنيه', 'to': '١٥٠٫٥٠ جنيه'}]
+    assert d['body'] == {'price_egp': 150.5} and d['lines'] == [{'label': 'السعر', 'from': '٢٥٠ ج', 'to': '١٥٠٫٥٠ ج'}]
     d = L('v2kEditDiff', row, dict(base, bid=True))
     assert d['body'] == {'bid_enabled': True} and d['lines'] == [{'label': '«اعرض سعرك»', 'from': 'غير مفعّل', 'to': 'مفعّل'}]
     d = L('v2kEditDiff', row, {'title': '  عنوان  ', 'priceText': '300', 'bid': True})

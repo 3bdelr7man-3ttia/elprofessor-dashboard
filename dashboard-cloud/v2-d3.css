@@ -78,8 +78,6 @@
 .v3-pid b{font:800 16px/1.5 'Cairo',sans-serif;overflow-wrap:anywhere}
 .v3-pid span{font-size:13.5px;color:var(--mute);overflow-wrap:anywhere}
 .v3-pid small{font-size:12.5px;color:var(--mute);line-height:1.6}
-.v3-fx,.v3-fxline{font-style:normal;font-size:12.5px;color:#8A5A00;background:var(--amber-bg);border-radius:8px;padding:2px 8px;justify-self:start}
-.v3-fxline{margin:2px 0}
 .v3-pm{display:grid;gap:2px;justify-items:end;text-align:end}
 .v3-amt{font:800 17px 'Cairo',sans-serif;white-space:nowrap}
 .v3-pm time,.v3-since{font-size:12.5px;color:var(--mute)}

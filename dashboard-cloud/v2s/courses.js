@@ -263,7 +263,6 @@
     var facts = C.courseFacts(c, { schedule: schedOf(c), checklist: cl, now: now(), checklistState: cst });
     var t = C.reviewTimer(c, now());
     var live = c.type === 'live_upcoming';
-    var main = facts.suggestion === 'publish' ? ['approve', 'انشرها'] : (facts.suggestion === 'return' ? ['return', 'أعِدها بملاحظات'] : ['open', 'افتح وراجع']);
     var lessons = c.type === 'live_upcoming' ? '' : ' · ' + C.lessonsPhrase(C.lessonsOf(c));
     return '<article class="v2co-t tone-' + esc(t ? t.tone : 'none') + (first ? ' first' : '') + '" data-id="' + esc(c.id) + '">'
       + '<div class="v2co-strip"><span class="v2co-type">' + (live ? 'دورة حيّة' : 'دورة جديدة') + '</span>' + (t ? timeHtml(t.label, t.tone, t.at) : '') + '</div>'
@@ -271,8 +270,7 @@
       + '<h3><button type="button" class="v2co-open" data-a="open" data-id="' + esc(c.id) + '">' + esc(c.title || 'دورة بلا عنوان') + '</button></h3>'
       + '<p class="v2co-who">' + trainerHtml(c) + esc(lessons) + '</p>'
       + '<div class="v2co-brain">' + BRAIN + '<p>' + esc(facts.line) + '</p></div>'
-      + '<div class="v2co-acts"><button type="button" class="v2co-btn1" data-a="' + main[0] + '" data-id="' + esc(c.id) + '">' + esc(main[1]) + '</button>'
-      + (main[0] === 'open' ? '' : '<button type="button" class="v2co-link" data-a="open" data-id="' + esc(c.id) + '">افتح الدورة</button>') + '</div></div></article>';
+      + '<p class="v2co-stline">القرار في «محتاج قرارك» فوق. <button type="button" class="v2co-link" data-a="open" data-id="' + esc(c.id) + '">افتح الدورة</button></p></div></article>';      // r25: مكان واحد للقرار (الشريط) — هنا سطر حالة بس
   }
   // مهلة أول دورة (إضافة د من المنصة): تظهر فقط لو الحقل موجود على المدرّب ولم تُنشر له دورة بعد؛ غيابه = لا سطر ولا مهلة مخترعة.
   function dueLine(c) {
@@ -503,15 +501,6 @@
   }
 
   // ------------------------------------------------------------------ الدورات الحيّة
-  function liveTicketHtml(t) {
-    var strip = t.timer ? timeHtml(t.timerText, (t.timer.at < now() ? 'late' : 'warn'), t.timer.at) : '<time class="v2co-time tone-none">' + esc(t.label) + '</time>';
-    var sec = t.secondary.map(function (x) { return '<button type="button" class="v2co-btn2' + (x.key === 'cancel' ? ' red' : '') + '" data-a="live-' + x.key + '" data-slug="' + esc(t.slug) + '">' + esc(x.label) + '</button>'; }).join('');
-    return '<article class="v2co-t tone-late" data-slug="' + esc(t.slug) + '"><div class="v2co-strip"><span class="v2co-type">دورة حيّة تحتاج قرارك</span>' + strip + '</div>'
-      + '<div class="v2co-body"><h3><button type="button" class="v2co-open" data-a="live-open" data-slug="' + esc(t.slug) + '">' + esc(t.title) + '</button></h3>'
-      + '<p class="v2co-who">' + esc([t.trainer, t.startText].filter(Boolean).join('، ')) + '</p>'
-      + '<div class="v2co-brain">' + BRAIN + '<p>' + esc(t.line) + '</p></div>'
-      + '<div class="v2co-acts stack"><button type="button" class="v2co-btn1" data-a="live-' + t.main.key + '" data-slug="' + esc(t.slug) + '">' + esc(t.main.label) + '</button>' + sec + '</div></div></article>';
-  }
   function liveRowHtml(r) {
     var acts = '<span class="v2co-lacts"><button type="button" class="v2co-btn2" data-a="live-edit" data-slug="' + esc(r.slug) + '">عدّل الموعد</button>'
       + '<button type="button" class="v2co-btn2" data-a="live-who" data-slug="' + esc(r.slug) + '">من حجز</button>'
@@ -528,7 +517,7 @@
     var failed = failedLabels(['courses']);
     var dec;
     if (!T.decide) dec = epState('opsQueue') === 'error' ? '<div class="v2co-empty sm"><b>الدورات التي تحتاج قرارًا: ' + NA + '</b>' + retryBtn() + '</div>' : (epState('opsQueue') === 'ready' ? '' : loadingBlock('الدورات التي تحتاج قرارًا'));
-    else dec = T.decide.length ? '<h2 class="v2co-h2">تحتاج قرارك <span class="v2co-cnt">' + esc(ar(T.decide.length)) + '</span></h2><div class="v2co-tgrid three">' + T.decide.map(liveTicketHtml).join('') + '</div>'
+    else dec = T.decide.length ? '<p class="v2co-stline v2co-stbox">' + esc(U.U(T.decide.length, ['دورة حيّة واحدة تنتظر قرارك', 'دورتان حيّتان تنتظران قرارك', 'دورات حيّة تنتظر قرارك', 'دورة حيّة تنتظر قرارك'])) + '. القرار في «محتاج قرارك» فوق.</p>'
       : '<p class="v2co-none">لا دورات حيّة تنتظر قرارك</p>';
     var all;
     if (!T.all) all = pending('schedules') ? loadingBlock('الدورات الحيّة') : unavailable('الدورات الحيّة');
@@ -788,7 +777,7 @@
   function priceRowHtml(x, cur) {
     var v = cur[x.key] > 0 ? String(cur[x.key]) : '';
     var id = 'co_pr_' + x.key;
-    return '<div class="v2co-prr"><label for="' + id + '">' + esc(x.name) + '</label><span class="v2co-prin"><input id="' + id + '" type="text" inputmode="decimal" autocomplete="off" dir="ltr" value="' + esc(v) + '"><em>' + esc(U.curShort(x.cur)) + '</em></span></div>';
+    return '<div class="v2co-prr' + (x.key === 'eg' ? ' eg' : '') + '"><label for="' + id + '"' + (x.key === 'eg' ? ' class="v2co-sr"' : '') + '>' + esc(x.name) + '</label><span class="v2co-prin"><input id="' + id + '" type="text" inputmode="decimal" autocomplete="off" dir="ltr" value="' + esc(v) + '"><em>' + esc(U.curShort(x.cur)) + '</em></span></div>';
   }
   function openPrices(id) {
     var c = courseById(id); if (!c) return;

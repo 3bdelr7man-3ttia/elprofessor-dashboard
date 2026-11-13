@@ -411,3 +411,8 @@ html.v2co-legacy-modal #epModal .fld input,html.v2co-legacy-modal #epModal .fld 
 .v2co-prin input{flex:1;min-width:0;min-height:48px;border:1px solid #D9CFC0;border-radius:12px;padding:8px 12px;font-size:16px;background:#fff;color:#21262E;text-align:end}
 .v2co-prin em{font-style:normal;color:var(--mute);font-size:14px;min-width:44px}
 @media (max-width:420px){.v2co-prr{grid-template-columns:1fr}}
+
+.v2co-sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.v2co-prr.eg{grid-template-columns:1fr}
+.v2co-stline{margin:8px 0 0;color:var(--mute);font-size:14px;line-height:1.8}
+.v2co-stbox{margin:0 0 14px;padding:10px 14px;border-radius:12px;background:#F4EFE6;color:#21262E}

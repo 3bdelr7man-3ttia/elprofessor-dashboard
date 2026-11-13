@@ -134,7 +134,7 @@
   }
   function payRow(r) {
     return '<li class="v3-pay" data-id="' + esc(r.id) + '"><div class="v3-pid"><b>' + personLink(r.name, r.email) + '</b><span>' + esc([r.what, r.method].filter(Boolean).join('، ')) + '</span>'
-      + (r.fx ? '<em class="v3-fx">العملة ليست الجنيه — حدّد سعر الصرف قبل التحويل</em>' : '') + '</div>'
+      + '</div>'
       + '<div class="v3-pm"><b class="v3-amt">' + esc(r.amountText) + '</b>' + (r.since ? '<time>' + esc(r.since) + '</time>' : '') + '</div>'
       + '<button type="button" class="v3-btn2" data-a="tostrip">القرار في «محتاج قرارك» ↑</button></li>';      // R24 م٢: القرار في شريط «محتاج قرارك» (زر واحد، مفيش نسخة هنا)
   }
@@ -164,7 +164,7 @@
   }
   // الموبايل: الشرح سطر مطوي «ما هذه الأرقام؟» بدل فقرة تتكرر مع كل فترة (الجولة r6)
   function introHtml() {
-    var t = 'الدخل والمحجوز والمستحق حتى الآن، والأرقام بالجنيه وكل عملة أخرى تظهر لوحدها';
+    var t = 'الدخل والمحجوز والمستحق حتى الآن، كل عملة بتظهر لوحدها';
     try { if (window.matchMedia && window.matchMedia('(max-width:760px)').matches) return '<details class="v3-intro"><summary>ما هذه الأرقام؟</summary><p class="v3-ptxt">' + esc(t) + '</p></details>'; } catch (e) {}
     return '<p class="v3-ptxt">' + esc(t) + '</p>';
   }
@@ -208,7 +208,6 @@
       + (r.since ? '<time class="v3-time" data-since="' + esc(r.at) + '">' + esc(r.since) + '</time>' : '') + '</div>'
       + '<div class="v3-body"><h3>' + personLink(r.name, r.email) + '</h3><p class="v3-amount">' + esc(r.amountText) + '</p>'
       + '<p class="v3-line">' + esc([r.what, r.method].filter(Boolean).join('، ')) + '</p>' + (r.dest && r.dest !== r.method ? '<p class="v3-line v3-dest" dir="auto">' + esc(r.dest) + '</p>' : '')
-      + (r.fx ? '<p class="v3-fxline">العملة ليست الجنيه — حدّد سعر الصرف قبل التحويل</p>' : '')
       + '<div class="v3-acts"><button type="button" class="v3-btn2" data-a="tostrip">القرار في «محتاج قرارك» ↑</button></div></div></article>';
   }
   function minPayoutBar() {

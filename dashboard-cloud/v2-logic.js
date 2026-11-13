@@ -99,7 +99,7 @@
   }
   function moneyText(amount, cur) {
     if (amount == null || amount === '' || isNaN(Number(amount))) return '';
-    return fmtMoney(amount) + ' ' + curName(cur);
+    return fmtMoney(amount) + ' ' + curShort(cur);      // r25: رموز قصيرة غير ملتبسة (ج · ر.س · د.إ · د.ك · ر.ق · ر.ع · دولار) — ولا «ريال» أو «جنيه» لوحدها
   }
   // r25 — المبالغ كل عملة في خانتها (لا جمع بين عملتين ولا «عملة أساسية»): «١٢٬٠٠٠ ج و٨٥٠ ر.س و٤٠ دولار».
   var CUR_SHORT = { EGP: 'ج', SAR: 'ر.س', AED: 'د.إ', KWD: 'د.ك', QAR: 'ر.ق', OMR: 'ر.ع', BHD: 'د.ب', USD: 'دولار', EUR: 'يورو', GBP: 'جنيه إسترليني' };
@@ -691,8 +691,7 @@
         var dis = openDisputeFor(r.email, opts.inboxRows, opts);
         if (dis === false) card.reason = 'روجعت النزاعات المفتوحة: لا نزاع مفتوحًا على صاحب الطلب كخبير';
         else if (dis === true) { card.warn = 'يوجد نزاع مفتوح على صاحب هذا الطلب — راجعه قبل التحويل'; }
-        if (r.fx_alert) card.warn = (card.warn ? card.warn + ' — ' : '') + 'العملة ليست الجنيه — حدّد سعر الصرف قبل التحويل';
-        var mo = { amount: amount, currency: cr, curName: curName(cr), name: str(r.who) || str(r.email), what: 'تحويل أرباح',
+        var mo = { amount: amount, currency: cr, curName: curLong(cr), name: str(r.who) || str(r.email), what: 'تحويل أرباح',
                    method: method, dest: str(r.dest) };
         card.primary = { label: 'سجّل التحويل', act: act({ do: 'payout_settle', id: r.pid }), money: mo };
         card.secondary = { label: 'ارفض', act: act({ do: 'payout_reject', id: r.pid }), money: mo };
@@ -701,7 +700,7 @@
         break;
       }
       case 'manual_payment': {
-        var mo2 = { amount: r.amount, currency: r.currency || 'EGP', curName: curName(r.currency), name: who || str(r.email),
+        var mo2 = { amount: r.amount, currency: r.currency || 'EGP', curName: curLong(r.currency), name: who || str(r.email),
                     what: str(r.payWhat) || 'دفعة يدوية', method: str(r.payMethod), ref: str(r.payRef) };
         card.tag = 'إيصال تحويل';
         card.title = who || 'دافع';
@@ -2090,7 +2089,7 @@
       num('net', 'صافي البروفيسور', 'نصيب البروفيسور بعد نصيب أصحاب الأعمال', net, NET_WHY)
     ] };
     // سطر واحد للتقرير: «تقريبًا بالدولار: دخل ٣٬٢٠٠، محجوز ٤٠٠ — أسعار يوم …». أي رقم مالوش سعر لعملته بيتشال، ومفيش أسعار ⇒ السطر مش بيتعرض.
-    var parts = board.numbers.filter(function (n) { return !n.na && n.usd != null; }).map(function (n) { return ({ income: 'دخل', held: 'محجوز', owed: 'مستحق', net: 'صافي' }[n.key] || n.label) + ' ' + fmtMoney(n.usd); });
+    var parts = board.numbers.filter(function (n) { return !n.na && n.usd != null; }).map(function (n) { return ({ income: 'دخل', held: 'محجوز', owed: 'مستحق', net: 'صافي' }[n.key] || n.label) + ' ' + fmtMoney(n.usd) + ' دولار'; });
     board.usdLine = parts.length ? { text: 'تقريبًا بالدولار: ' + parts.join('، '), ratesText: ratesDateText(rr) + (rr && rr.stale ? '، وهي آخر أسعار وصلتنا' : '') } : null;
     return board;
   }
@@ -2127,7 +2126,7 @@
       var card = v2Card(Object.assign({}, p, { apiKind: 'payout' }), { now: now, inboxRows: null });
       var m = card.primary.money, at = ms(p.raw && p.raw.created_at);
       return { id: String(p.pid), name: m.name, email: personEmailOfRow(p), what: 'سحب من المحفظة', method: m.method || m.dest || '', dest: m.dest,
-               amount: m.amount, currency: m.currency, amountText: moneyText(m.amount, m.currency), fx: !!p.fx_alert,
+               amount: m.amount, currency: m.currency, amountText: moneyText(m.amount, m.currency),
                timer: timerOf('since', at), since: isNaN(at) ? '' : v2TimerText(timerOf('since', at), now), at: isNaN(at) ? Infinity : at, card: card };
     });
     rows.sort(function (a, b) { return a.at - b.at; });
@@ -2414,8 +2413,8 @@
     var out = [], prev = 0;
     (Array.isArray(ladder) ? ladder : []).forEach(function (s, i) {
       var cap = s.max_egp, pp = numOf(s.platform_pct), upTo;
-      if (cap == null) upTo = prev ? 'من ' + fmt(prev) + ' جنيه فأكثر' : 'أي قيمة';
-      else upTo = i === 0 ? 'أقل من ' + fmt(cap) + ' جنيه' : 'من ' + fmt(prev) + ' إلى أقل من ' + fmt(cap) + ' جنيه';
+      if (cap == null) upTo = prev ? 'من ' + fmt(prev) + ' ج فأكثر' : 'أي قيمة';
+      else upTo = i === 0 ? 'أقل من ' + fmt(cap) + ' ج' : 'من ' + fmt(prev) + ' إلى أقل من ' + fmt(cap) + ' ج';
       out.push({ upTo: upTo, platform: pp, owner: 100 - pp, platformText: pct(pp), ownerText: pct(100 - pp), max: cap == null ? null : cap });
       if (cap != null) prev = cap;
     });
@@ -2590,7 +2589,7 @@
   function v2MinPayoutInput(text, info) {
     var n = parseAmount(text);
     if (n === null || isNaN(n) || n !== Math.floor(n)) return { ok: false, error: 'اكتب رقمًا صحيحًا بالجنيه' };
-    if (n < info.min || n > info.max) return { ok: false, error: 'الحد الأدنى للسحب يكون بين ' + fmt(info.min) + ' و' + fmt(info.max) + ' جنيه' };
+    if (n < info.min || n > info.max) return { ok: false, error: 'الحد الأدنى للسحب يكون بين ' + fmt(info.min) + ' و' + fmt(info.max) + ' ج' };
     return { ok: true, value: n };
   }
 
@@ -7094,7 +7093,7 @@
   function courseRow(c) {
     c = c || {};
     var chip = COURSE_CHIP[c.status] || { t: 'غير معروفة', tone: 'grey' };
-    var price = num(c.price_egp) > 0 ? fmt(c.price_egp) + ' جنيه' : (num(c.price_usd) > 0 ? fmt(c.price_usd) + ' دولار' : 'مجانية');
+    var price = num(c.price_egp) > 0 ? fmt(c.price_egp) + ' ج' : (num(c.price_usd) > 0 ? fmt(c.price_usd) + ' دولار' : 'مجانية');
     var meta = ['المسجّلون: ' + ar(c.students_count), price];
     var sd = dateText(c.start_date);
     if (sd) meta.push('تبدأ ' + sd);
@@ -7149,8 +7148,8 @@
     var bal = num(w.balance_egp);
     var pend = num(w.pending_withdrawals);
     var pending;
-    if (pend === 0) pending = { value: '٠ جنيه', note: 'لا طلبات قيد المراجعة' };
-    else if (rate) pending = { value: 'نحو ' + fmt(Math.round(pend * rate)) + ' جنيه', note: moneyText(pend, 'USD') + '، تراجعه الإدارة' };
+    if (pend === 0) pending = { value: '٠', note: 'لا طلبات قيد المراجعة' };
+    else if (rate) pending = { value: 'نحو ' + fmt(Math.round(pend * rate)) + ' ج', note: moneyText(pend, 'USD') + '، تراجعه الإدارة' };
     else pending = { value: moneyText(pend, 'USD'), note: 'تراجعه الإدارة' };
     return {
       linked: true, rate: rate, balanceEgp: bal, investedEgp: num(w.total_invested_egp), returnsEgp: num(w.total_returns_egp),
@@ -7172,7 +7171,7 @@
       });
       out.list = ps.slice().sort(function (a, b) { return (ms(b.date) || 0) - (ms(a.date) || 0); }).map(function (p) {
         var ch = PAY_CHIP[payBucket(p)];
-        return { title: str(p.related_to) || 'مستحق', date: dateText(p.date), amountText: fmt(p.total_egp) + ' جنيه', chip: { t: ch.t, tone: ch.tone } };
+        return { title: str(p.related_to) || 'مستحق', date: dateText(p.date), amountText: fmt(p.total_egp) + ' ج', chip: { t: ch.t, tone: ch.tone } };
       });
     }
     out.wallet = ready(src.wallet) ? walletView(src.wallet.data) : null;
@@ -7228,7 +7227,7 @@
     x = x || {};
     var title = str(x.course_title);
     var ch = INV_CHIP[x.status] || { t: 'غير معروفة', tone: 'grey' };
-    var meta = ['استثمرت ' + fmt(x.invested_total_egp) + ' جنيه'];
+    var meta = ['استثمرت ' + fmt(x.invested_total_egp) + ' ج'];
     var d = dateText(x.created_at);
     if (d) meta.push(d);
     var out = { title: title || 'استثمار', meta: meta.join('، '), chip: { t: ch.t, tone: ch.tone }, second: 'العائد: ' + NA, actual: '' };
@@ -8161,7 +8160,6 @@
       case 'payout': {
         put('method', s_(r.raw && r.raw.method) || s_(r.dest), 80);
         out.dispute_check = /نزاع مفتوح/.test(card.warn || '') ? 'يوجد نزاع مفتوح على صاحب الطلب' : (/^روجعت النزاعات/.test(card.reason || '') ? 'لا نزاع مفتوحًا على صاحب الطلب كخبير' : 'لم يكتمل فحص النزاعات');
-        if (r.fx_alert) out.fx_alert = 'العملة ليست الجنيه';
         break;
       }
       case 'book_offer': { var of = r.offerRow || {}; put('type', of.typeText, 40); put('suggested_price', of.suggestedText, 60); put('price_note', of.priceNote); break; }

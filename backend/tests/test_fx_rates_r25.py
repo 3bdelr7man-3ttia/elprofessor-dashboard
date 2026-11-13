@@ -157,7 +157,7 @@ def test_usd_line_hidden_without_rates_and_a_currency_without_a_rate_drops_its_n
     b = v2_node.logic('v2MoneyBoard', {'revenues': REV3, 'escrow': [{'amount': 100, 'currency': 'EGP', 'status': 'held'}], 'payouts': [], 'rates': partial}, 'year', NOW)
     n = {x['key']: x for x in b['numbers']}
     assert n['income']['usd'] is None and n['held']['usd'] == 2
-    assert b['usdLine']['text'] == 'تقريبًا بالدولار: محجوز ٢'
+    assert b['usdLine']['text'] == 'تقريبًا بالدولار: محجوز ٢ دولار'
 
 
 @needs_node

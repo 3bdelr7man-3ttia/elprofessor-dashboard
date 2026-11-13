@@ -837,11 +837,11 @@ def test_brain_lines_each_from_its_facts():
     mo = {'month': '2026-09', 'revenue': 6000, 'expenses': 3400, 'covered_since': '2026-07'}
     s = {'money': mo}
     ls = _lg('brain', s, NOW)
-    assert ls[0]['text'] == 'مصروف سبتمبر ٢٠٢٦ كان ٣٬٤٠٠ جنيه، والدخل غطّاه منذ يوليو ٢٠٢٦.' and ls[0]['act'] == {'section': 'money', 'tab': 'overview'}
+    assert ls[0]['text'] == 'مصروف سبتمبر ٢٠٢٦ كان ٣٬٤٠٠ ج، والدخل غطّاه منذ يوليو ٢٠٢٦.' and ls[0]['act'] == {'section': 'money', 'tab': 'overview'}
     s['money'] = dict(mo, covered_since='2026-09')
-    assert _lg('brain', s, NOW)[0]['text'] == 'مصروف سبتمبر ٢٠٢٦ كان ٣٬٤٠٠ جنيه، والدخل غطّاه.'
+    assert _lg('brain', s, NOW)[0]['text'] == 'مصروف سبتمبر ٢٠٢٦ كان ٣٬٤٠٠ ج، والدخل غطّاه.'
     s['money'] = dict(mo, revenue=1700, covered_since=None)
-    assert _lg('brain', s, NOW)[0]['text'] == 'مصروف سبتمبر ٢٦٠٢٦ كان'.replace('٢٦٠٢٦', '٢٠٢٦') + ' ٣٬٤٠٠ جنيه، والدخل غطّى ٥٠٪ منه.'
+    assert _lg('brain', s, NOW)[0]['text'] == 'مصروف سبتمبر ٢٦٠٢٦ كان'.replace('٢٦٠٢٦', '٢٠٢٦') + ' ٣٬٤٠٠ ج، والدخل غطّى ٥٠٪ منه.'
     s['money'] = dict(mo, expenses=0)
     assert _lg('brain', s, NOW) == []
     # الاتفاق: ينتهي بعد ١٢ يومًا وجلب ٨٠ زيارة · ينتهي اليوم
@@ -854,7 +854,7 @@ def test_brain_lines_each_from_its_facts():
     # الاشتراك: يتجدد بعد ٥ أيام · فات منذ يومين
     sub = {'subscriptions': {'next': [{'id': 3, 'name': 'أدوبي', 'renews_on': '2026-11-04', 'amount': 3400, 'currency': 'EGP'}]}}
     ls = _lg('brain', sub, NOW)
-    assert ls[0]['text'] == 'اشتراك «أدوبي» يتجدد بعد ٥ أيام بمبلغ ٣٬٤٠٠ جنيه.' and ls[0]['act'] == {'tab': 'assets', 'id': 3, 'do': 'paid'}
+    assert ls[0]['text'] == 'اشتراك «أدوبي» يتجدد بعد ٥ أيام بمبلغ ٣٬٤٠٠ ج.' and ls[0]['act'] == {'tab': 'assets', 'id': 3, 'do': 'paid'}
     sub['subscriptions']['next'][0]['renews_on'] = '2026-10-28'
     assert _lg('brain', sub, NOW)[0]['text'] == 'فات موعد تجديد «أدوبي» منذ يومين.'
     sub['subscriptions']['next'][0]['renews_on'] = '2026-11-29'
@@ -866,16 +866,16 @@ def test_brain_lines_each_from_its_facts():
     rows = [{'id': 1, 'name': 'أ', 'reserve': False, 'agreed': [{'currency': 'EGP', 'amount': 100000}], 'paid': [{'currency': 'EGP', 'amount': 75000}], 'contributions': 1},
             {'id': 2, 'name': 'ب', 'reserve': False, 'agreed': [{'currency': 'EGP', 'amount': 50000}], 'paid': [{'currency': 'EGP', 'amount': 50000}], 'contributions': 1}]
     P = {'partners': {'rows': rows, 'equity_total': 100, 'any_contribution': True}}
-    assert _lg('brain', P, NOW)[0]['text'] == 'شريك واحد باقٍ عليه ٢٥٬٠٠٠ جنيه من حصته.'
+    assert _lg('brain', P, NOW)[0]['text'] == 'شريك واحد باقٍ عليه ٢٥٬٠٠٠ ج من حصته.'
     rows[1] = dict(rows[1], paid=[{'currency': 'EGP', 'amount': 20000}])
-    assert _lg('brain', P, NOW)[0]['text'] == 'شريكان باقٍ عليهما ٥٥٬٠٠٠ جنيه من حصتيهما.'
+    assert _lg('brain', P, NOW)[0]['text'] == 'شريكان باقٍ عليهما ٥٥٬٠٠٠ ج من حصتيهما.'
     rows.append(dict(rows[0], id=3, name='ج'))
-    assert _lg('brain', P, NOW)[0]['text'] == '٣ شركاء باقٍ عليهم ٨٠٬٠٠٠ جنيه من حصصهم.'
+    assert _lg('brain', P, NOW)[0]['text'] == '٣ شركاء باقٍ عليهم ٨٠٬٠٠٠ ج من حصصهم.'
     P0 = {'partners': {'rows': [dict(rows[0], paid=[], contributions=0)], 'equity_total': 100, 'any_contribution': False}}
     assert _lg('brain', P0, NOW)[0]['text'] == 'لم تُسجَّل دفعات الشركاء بعد، فالمدفوع من رأس المال غير معروف.'
     # كشوف الحساب · مجموع الحصص
     A = {'ad_clients': {'unsent': 2, 'due_unsent': [{'currency': 'EGP', 'amount': 12350}]}}
-    assert _lg('brain', A, NOW)[0]['text'] == 'كشفا حساب جاهزان للإرسال، والمستحق لنا ١٢٬٣٥٠ جنيه.'
+    assert _lg('brain', A, NOW)[0]['text'] == 'كشفا حساب جاهزان للإرسال، والمستحق لنا ١٢٬٣٥٠ ج.'
     A['ad_clients']['unsent'] = 5
     assert _lg('brain', A, NOW)[0]['text'].startswith('٥ كشوف حساب جاهزة للإرسال')
     A['ad_clients']['unsent'] = 1
@@ -912,7 +912,7 @@ def test_partner_chip_and_remaining():
     assert _lg('remaining', agreed, [{'currency': 'EGP', 'amount': 120000}]) == []                         # الزيادة لا تظهر سالبة
     assert _lg('remaining', agreed, []) == []
     row = {'agreed': agreed, 'paid': [{'currency': 'EGP', 'amount': 75000}], 'contributions': 1}
-    assert _lg('partnerChip', row) == {'text': 'باقٍ ٢٥٬٠٠٠ جنيه', 'tone': 'soon'}
+    assert _lg('partnerChip', row) == {'text': 'باقٍ ٢٥٬٠٠٠ ج', 'tone': 'soon'}
     assert _lg('partnerChip', dict(row, paid=[{'currency': 'EGP', 'amount': 100000}])) == {'text': 'دفع كاملًا', 'tone': 'ok'}
     assert _lg('partnerChip', dict(row, paid=[{'currency': 'EGP', 'amount': 150000}])) == {'text': 'دفع كاملًا', 'tone': 'ok'}
     assert _lg('partnerChip', dict(row, paid=[], contributions=0)) == {'text': 'لم تُسجَّل دفعات', 'tone': 'neutral'}
@@ -947,11 +947,11 @@ def test_deal_text_and_statement_exact():
     c = {'id': 5, 'name': 'مكتب الأمل', 'deal': 'percent', 'percent': 10, 'currency': 'EGP', 'count_label': 'عملاء جاؤوا من الحملة'}
     r = {'period': '2026-10', 'count': 14, 'income': 48000, 'due': [{'currency': 'EGP', 'amount': 4800}]}
     assert _lg('dealText', c) == 'نأخذ ١٠٪ من دخل الحملة'
-    assert _lg('dealText', dict(c, deal='fixed_plus_percent', fixed_amount=6000, percent=5)) == 'مبلغ ثابت ٦٬٠٠٠ جنيه + ٥٪ من دخل الحملة'
-    assert _lg('dealText', dict(c, deal='fixed', fixed_amount=3000)) == 'مبلغ ثابت ٣٬٠٠٠ جنيه'
+    assert _lg('dealText', dict(c, deal='fixed_plus_percent', fixed_amount=6000, percent=5)) == 'مبلغ ثابت ٦٬٠٠٠ ج + ٥٪ من دخل الحملة'
+    assert _lg('dealText', dict(c, deal='fixed', fixed_amount=3000)) == 'مبلغ ثابت ٣٬٠٠٠ ج'
     assert _lg('dealText', dict(c, deal='other', deal_other='اتفاق خاص')) == 'أخرى: اتفاق خاص'
-    assert _lg('statementText', c, r) == '\n'.join(['كشف حساب — مكتب الأمل', 'الفترة: أكتوبر ٢٠٢٦', 'عملاء جاؤوا من الحملة: ١٤', 'دخلكم من الحملة: ٤٨٬٠٠٠ جنيه',
-                                                      'الاتفاق: نأخذ ١٠٪ من دخل الحملة', 'المستحق للبروفيسور: ٤٬٨٠٠ جنيه', 'رقم الكشف: CO-5-2026-10'])
+    assert _lg('statementText', c, r) == '\n'.join(['كشف حساب — مكتب الأمل', 'الفترة: أكتوبر ٢٠٢٦', 'عملاء جاؤوا من الحملة: ١٤', 'دخلكم من الحملة: ٤٨٬٠٠٠ ج',
+                                                      'الاتفاق: نأخذ ١٠٪ من دخل الحملة', 'المستحق للبروفيسور: ٤٬٨٠٠ ج', 'رقم الكشف: CO-5-2026-10'])
     fixed = dict(c, deal='fixed', fixed_amount=3000, currency='USD')
     t = _lg('statementText', fixed, {'period': '2026-09', 'count': None, 'income': None, 'due': [{'currency': 'USD', 'amount': 3000}]})
     assert 'دخلكم من الحملة' not in t and 'عملاء جاؤوا من الحملة: غير مسجّل' in t and 'المستحق للبروفيسور: ٣٬٠٠٠ دولار' in t
@@ -975,7 +975,7 @@ def test_target_rows_current_target_month_line():
     assert _lg('currentTarget', fc, NOW)['month'] == '2026-10'
     assert _lg('currentTarget', [fc[0], fc[2]], NOW)['month'] == '2026-12'
     assert _lg('currentTarget', [fc[0]], NOW) is None and _lg('currentTarget', None, NOW) is None
-    assert _lg('monthLine', fc, dash, NOW)['text'] == 'دخل أكتوبر حتى الآن ٣١٬٠٠٠ جنيه من هدف ٥٠٬٠٠٠ جنيه (٦٢٪).'
+    assert _lg('monthLine', fc, dash, NOW)['text'] == 'دخل أكتوبر حتى الآن ٣١٬٠٠٠ ج من هدف ٥٠٬٠٠٠ ج (٦٢٪).'
     assert _lg('monthLine', [fc[0]], dash, NOW) == {'kind': 'notarget', 'text': 'لم يُحدَّد هدف دخل لهذا الشهر.'}
     assert _lg('monthLine', fc, None, NOW) == {'kind': 'na', 'text': 'دخل هذا الشهر غير متاح بعد.'}
     assert _lg('monthLine', fc, {'monthly': []}, NOW)['text'].startswith('لم يُسجَّل دخل في أكتوبر')
@@ -1030,7 +1030,7 @@ def test_legacy_subs_deal_action_sum_lines_sorting():
     assert da(status='active', ends_on='2027-06-01', amount=5) == 'receive'
     assert da(status='active', ends_on='2027-06-01') == 'edit' and da(status='active') == 'edit'
     assert da(status='draft', ends_on='2026-11-01', amount=5) == 'edit' and da(status='ended') == 'renew' and da(status='active', ends_on='2026-10-01') == 'renew'
-    assert _lg('sumLines', [{'currency': 'EGP', 'amount': 400000}, {'currency': 'USD', 'amount': 4500}]) == '٤٠٠٬٠٠٠ جنيه، ٤٬٥٠٠ دولار'
+    assert _lg('sumLines', [{'currency': 'EGP', 'amount': 400000}, {'currency': 'USD', 'amount': 4500}]) == '٤٠٠٬٠٠٠ ج، ٤٬٥٠٠ دولار'
     assert _lg('sumLines', None) == '' and _lg('sumLines', [{'currency': 'EGP', 'amount': 0}]) == ''
     subs = [{'id': 1, 'status': 'stopped', 'renews_on': '2026-01-01'}, {'id': 2, 'status': 'active', 'renews_on': None}, {'id': 3, 'status': 'active', 'renews_on': '2026-12-01'},
             {'id': 4, 'status': 'active', 'renews_on': '2026-10-01'}]

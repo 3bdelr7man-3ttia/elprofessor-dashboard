@@ -181,6 +181,19 @@ def run(browser, pre, vp):
     live = page.evaluate("() => [...document.querySelectorAll('.v2z-c[data-kind=live] .v2z-acts button')].map(b => b.textContent.trim())")
     if live[:3] != ['ثبّتها', 'مدّد المهلة ٤٨ ساعة', 'ألغِها']:
         PROBLEMS.append('%s: أزرار بطاقة الدورة الحيّة %r' % (pre, live))
+    # لا نسخة تانية من القرار: لوحة الدورات (عمود المراجعة) وتبويب الحيّة بلا أزرار قرار، وفيهم سطر حالة بس
+    page.evaluate("() => { location.hash = '#s/courses/live'; }")
+    page.wait_for_function("() => document.querySelector('.v2co[data-screen=live]')", timeout=15000)
+    page.wait_for_timeout(500)
+    if page.query_selector('.v2co[data-screen=live] [data-a^="live-confirm"], .v2co[data-screen=live] .v2co-t'):
+        PROBLEMS.append('%s: تبويب الحيّة فيه بطاقة/زرّ قرار تاني' % pre)
+    if 'القرار في «محتاج قرارك» فوق' not in page.inner_text('.v2co[data-screen=live]'):
+        PROBLEMS.append('%s: تبويب الحيّة بلا سطر الحالة' % pre)
+    page.evaluate("() => { location.hash = '#s/courses/courses'; }")
+    page.wait_for_function("() => document.querySelector('.v2co[data-screen=board]')", timeout=15000)
+    page.wait_for_timeout(500)
+    if page.query_selector('.v2co-col[data-col="review"] .v2co-btn1, .v2co-col[data-col="review"] [data-a="approve"], .v2co-col[data-col="review"] [data-a="return"]'):
+        PROBLEMS.append('%s: عمود المراجعة فيه زرّ قرار تاني' % pre)
     page.close()
     # —— ٤) سوق الخدمات: شريط ببطاقة طلب في حارة غلط
     page = go(ctx, '#s/market/requests', "() => document.querySelector('.v2z-c[data-kind=market_lane]')")
