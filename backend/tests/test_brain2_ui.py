@@ -37,6 +37,7 @@ def _read(*parts):
 HTML = _read('dashboard-cloud', 'index.html')
 LOGIC = _read('dashboard-cloud', 'v2-logic.js')
 BRAIN_JS = _read('dashboard-cloud', 'v2-brain2.js')
+STRIP_SRC = _read('dashboard-cloud', 'v2-strip.js')
 BRAIN_CSS = _read('dashboard-cloud', 'v2-brain2.css')
 HOME_JS = _read('dashboard-cloud', 'v2-home.js')
 SHELL_JS = _read('dashboard-cloud', 'v2-shell.js')
@@ -124,10 +125,11 @@ def test_home_deck_wiring():
 
 
 def test_section_tickets_decorate_from_the_cache_and_prefetch_once():
+    # R24 م٢ (اتغيّر): أعمدة طلبات الدخول خرجت من تبويب «الطلبات» (بقت بطاقات الشخص في شريط «محتاج قرارك»)، فمفيش جلب آراء من people.js.
     assert "window.V2BRAIN.decorate(it.card, { remap: false })" in SEC_HOME_JS            # التذكرة: بلا تبديل لزرّها ولا طلب رأي جديد
     assert SEC_HOME_JS.count("V2BRAIN['prefetch'](") == 1 and 'fetch: true' not in SEC_HOME_JS
     assert "window.V2BRAIN.decorate(c, { remap: false })" in SEC_PEOPLE_JS
-    assert SEC_PEOPLE_JS.count("V2BRAIN['prefetch'](") == 1 and 'fetch: true' not in SEC_PEOPLE_JS
+    assert SEC_PEOPLE_JS.count("V2BRAIN['prefetch'](") == 0 and 'fetch: true' not in SEC_PEOPLE_JS
     assert "['trainer', 'join', 'pending_user', 'founding']" in SEC_PEOPLE_JS
 
 
@@ -294,7 +296,10 @@ def test_money_kinds_are_never_remapped(kind, rec):
 
 @needs_node
 def test_open_makes_the_existing_open_act_primary_and_never_invents_one():
-    base = card(TRAINER)                       # الأساسي «اقبل الطلب» والثانوي «افتح الطلب»
+    # R24 م٢ (اتغيّر): ثانوي المدرّب بقى «ارفض بسبب» (مفيش «افتح الطلب» قديمة)، فالتبديل بيتجرّب على بطاقة الرسالة (تم ⇐ اقرأ الرسالة).
+    t = card(TRAINER)
+    assert 'remapped' not in v2_node.logic('v2bDecorate', t, ready('x', 'open'), NOW)           # مفيش فعل فتح على بطاقة المدرّب ⇒ ما يتخترعش
+    base = card(LEAD)
     d = v2_node.logic('v2bDecorate', base, ready('x', 'open'), NOW)
     assert d['primary'] == base['secondary'] and d['secondary'] == base['primary'] and d['remapped'] == 'open'
     acts_before = {json.dumps(base['primary']['act'], sort_keys=True), json.dumps(base['secondary']['act'], sort_keys=True)}
@@ -306,10 +311,14 @@ def test_open_makes_the_existing_open_act_primary_and_never_invents_one():
 
 @needs_node
 def test_reject_remaps_only_when_a_reject_act_already_exists():
-    # لا فعل رفض على بطاقة المدرّب ⇒ لا تبديل ولا فعل جديد
+    # R24 م٢ (اتغيّر): بطاقة المدرّب بقى فيها «ارفض بسبب» (فعل رفض قائم) ⇒ توصية الرفض بتقدّمه، وما يتخترعش فعل جديد
     t = card(TRAINER)
     d = v2_node.logic('v2bDecorate', t, ready('x', 'reject'), NOW)
-    assert d['primary'] == t['primary'] and d['secondary'] == t['secondary'] and 'remapped' not in d
+    assert d['primary'] == t['secondary'] and d['secondary'] == t['primary'] and d['remapped'] == 'reject'
+    # بطاقة الرسالة ما فيهاش فعل رفض ⇒ لا تبديل
+    lead = card(LEAD)
+    d = v2_node.logic('v2bDecorate', lead, ready('x', 'reject'), NOW)
+    assert d['primary'] == lead['primary'] and 'remapped' not in d
     # عرض كتاب فيه «ارفض» ثانوي ⇒ يصير أساسيًا
     bo = card({'apiKind': 'book_offer', 'apiId': 'o1', 'ref': 'o1', 'offerRow': OFFER, 'who': 'أ. دعاء'})
     d = v2_node.logic('v2bDecorate', bo, ready('x', 'reject'), NOW)
@@ -327,9 +336,9 @@ def test_approve_wait_and_unknown_recommendations_change_nothing():
 
 @needs_node
 def test_info_group_accepts_open_and_wait_and_the_remap_option_can_be_off():
-    base = card(LEAD)                          # تم (resolve) ثم افتح
+    base = card(LEAD)                          # تم (resolve) ثم «اقرأ الرسالة» (R24 م٢: كان «افتح»)
     d = v2_node.logic('v2bDecorate', base, ready('x', 'open'), NOW)
-    assert d['primary']['act']['do'] == 'open'
+    assert d['primary']['act']['do'] == 'read'
     off = v2_node.logic('v2bDecorate', base, dict(ready('x', 'open'), remap=False), NOW)
     assert off['primary'] == base['primary'] and off['brain'] == 'x'
 
@@ -398,7 +407,8 @@ def test_decisions_put_brain_items_last_oldest_first_and_only_proposed():
              _item(id='e', created_at=_iso(5), status=None)]
     out = v2_node.logic('v2Decisions', [TRAINER, VISITOR, LEAD], [dict(PAYOUT)], None, {'now': NOW, 'brainItems': items})
     kinds = [c['kind'] for c in out]
-    assert kinds == ['payout', 'trainer', 'pending_user', 'lead', 'brain_item', 'brain_item', 'brain_item']
+    # R24 م٢ (اتغيّر): القرارات بترتيب الأقسام (الناس ثم الفلوس) واقتراحات العقل في قسمها (people هنا) — مش آخر القايمة بعد الفلوس.
+    assert kinds == ['trainer', 'pending_user', 'lead', 'brain_item', 'brain_item', 'brain_item', 'payout']
     assert [c['id'] for c in out if c['kind'] == 'brain_item'] == ['brain_item|b', 'brain_item|e', 'brain_item|a']
     # بلا الخطّاف: القائمة كما كانت بالحرف
     base = v2_node.logic('v2Decisions', [TRAINER, VISITOR, LEAD], [dict(PAYOUT)], None, {'now': NOW})
@@ -672,18 +682,17 @@ def _bar_items(n, section='people'):
 
 @needs_node
 def test_bar_shows_three_cards_and_the_show_all_count():
+    # R24 م٢ (اتغيّر): شريط «ما كتبه العقل هنا» اتدمج في شريط «محتاج قرارك» الواحد (نفس فلتر بعدين، والاقتراح مرة واحدة) ⇒ بيفضل مقفول حتى مع ٥ اقتراحات.
     r = _vm(MOUNT % json.dumps(_bar_items(5), ensure_ascii=False))
     p = r['out']['people']
-    assert p['hidden'] is False and p['html'].count('class="v2b-c"') == 3 and 'اعرض الكل (٥)' in p['html'] and 'ما كتبه العقل هنا' in p['html']
-    assert p['html'].count('data-a="brain_approve"') == 3 and p['html'].count('data-a="brain_edit"') == 3 and p['html'].count('data-a="brain_reject"') == 3
-    assert '>أرسل الرد<' in p['html'] and '>ارفض<' in p['html'] and '>عدّل<' in p['html']
-    assert '<span class="v2b-n">٥</span>' in p['html']
+    assert p['hidden'] is True and p['html'] == ''
 
 
 @needs_node
 def test_bar_has_no_show_all_button_for_three_or_less():
+    # R24 م٢ (اتغيّر): الشريط القديم مقفول دايمًا — بطاقات العقل في شريط القسم المشترك (اختبارها في test_r24_dash_p2).
     r = _vm(MOUNT % json.dumps(_bar_items(3), ensure_ascii=False))
-    assert 'اعرض الكل' not in r['out']['people']['html'] and r['out']['people']['html'].count('class="v2b-c"') == 3
+    assert r['out']['people']['html'] == '' and r['out']['people']['hidden'] is True
 
 
 @needs_node
@@ -700,7 +709,7 @@ def test_bar_note_cards_have_keep_delete_and_no_edit():
               'created_at': _iso(1), 'body': {'text': 'ملاحظة'}}]
     body = MOUNT.replace("B.mountBar('people', el)", "B.mountBar('content', el)") % json.dumps(items, ensure_ascii=False)
     html = _vm(body)['out']['people']['html']
-    assert '>احتفظ بها<' in html and '>احذفها<' in html and 'brain_edit' not in html
+    assert html == ''       # R24 م٢ (اتغيّر): الملاحظة بقت بطاقة «احتفظ بها/احذفها» في شريط القسم المشترك، مش في الشريط القديم
 
 
 @needs_node
@@ -709,7 +718,8 @@ def test_bar_text_is_escaped():
     items[0]['body'] = {'text': '<img src=x onerror=alert(1)>'}
     items[0]['target_label'] = '"><script>x</script>'
     html = _vm(MOUNT % json.dumps(items, ensure_ascii=False))['out']['people']['html']
-    assert '<img src=x' not in html and '<script' not in html and '&lt;img' in html
+    assert '<img src=x' not in html and '<script' not in html       # R24 م٢ (اتغيّر): الشريط القديم مبيرسمش حاجة؛ هروب النص في شريط القسم (esc في v2-strip.js)
+    assert 'esc(c.title)' in STRIP_SRC or 'titleHtml(c)' in STRIP_SRC
 
 
 @needs_node

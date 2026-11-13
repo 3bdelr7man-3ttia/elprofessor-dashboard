@@ -112,10 +112,10 @@ def test_the_experts_screen_owns_the_tab_and_the_old_sub_tabs_are_gone():
     css = _read('dashboard-cloud', 'v2s', 'experts.css')
     code = _strip(js)
     assert "V2SEC.add({ key: 'experts', take: EX.take })" in js and "mod !== 'team'" in js and "snap.teamTab === 'trainers'" in js
-    assert 'EP.setFoundingLeadStatus' in js or 'E.setFoundingLeadStatus' in js
+    assert 'setFoundingLeadStatus' not in js      # R24 م٢ (اتغيّر): ردود دعوة المؤسس اتشالت من هنا (القرار في «الناس» بطاقة لكل شخص)
     for banned in ('confirm(', 'prompt(', 'alert(', 'مين ردّ', 'لسه', 'اتواصلنا', 'مش مناسب', 'يقوّم'):
         assert banned not in code, banned
-    for needed in ('افتح صفحته', 'رجوع', 'سجّل الحالة', 'أعد المحاولة'):
+    for needed in ('افتح صفحته', 'أعد المحاولة'):       # R24 م٢: بلا «رجوع/سجّل الحالة» (ورقة تأكيد الرد اتشالت مع الردود)
         assert needed in code, needed
     assert 'var X = L.v2s.experts' in js and 'NA = X.NA' in js
     # الشاشة القديمة ما زالت تحرس المدخل: السطر الأول في viewTeam يسأل السجلّ
@@ -149,9 +149,12 @@ def test_founding_lead_copy_is_standard_arabic_in_the_dashboard_files():
 @needs_node
 def test_escrow_is_the_last_tab_named_all_records_and_manual_receipts_live_in_money():
     secs = {s['key']: s for s in v2_node.logic('SECTIONS')}
+    # R24 م٢ (اتغيّر): «كل السجلات» القديمة اتشالت من النزاعات والفلوس؛ الضمان والمالية القديمين في «الشركة ‹ السجلات القديمة» للقراية بس
     assert [(t['key'], t['label'], t['mod']) for t in secs['disputes']['tabs']] == [
-        ('disputes', 'النزاعات', 'v2disputes'), ('all', 'كل النزاعات', 'inbox'), ('escrow', 'كل السجلات', 'escrow')]
-    assert not [t for t in secs['money']['tabs'] if t['key'] == 'manual'] and secs['money']['tabs'][-1]['label'] == 'كل السجلات'
+        ('disputes', 'النزاعات', 'v2disputes'), ('all', 'كل النزاعات', 'inbox')]
+    assert not [t for t in secs['money']['tabs'] if t['key'] == 'manual'] and secs['money']['tabs'][-1]['key'] == 'ads'
+    legacy = {t['key']: (t['label'], t['mod']) for t in secs['company']['tabs']}
+    assert legacy['legacy'] == ('السجلات القديمة', 'escrow') and legacy['legacyfin'] == ('سجلات المالية القديمة', 'finance')
     # الإيصالات اليدوية تروح للفلوس ‹ الإيصالات من كل مدخل
     assert re.search(r"function goEscrowManual\(\)\{if\(window\.V2_ON&&window\.V2SHELL&&V2SHELL\.on\)\{v2OpenSection\('money','receipts'\);return;\}", HTML)
     assert re.search(r"function viewEscrow\(v\)\{\s*//[^\n]*\n\s*if\(escTab==='manual'&&window\.V2_ON&&window\.V2SHELL&&V2SHELL\.on\)\{escTab='sessions';v2OpenSection\('money','receipts'\);return;\}", HTML)
@@ -230,7 +233,8 @@ def test_each_section_head_line_comes_from_its_own_list():
     reg = _read('dashboard-cloud', 'v2s', '_registry.js')
     assert "def('head'" in reg and 'window.V2D2' in reg and 'window.V2D3' in reg
     shell = _read('dashboard-cloud', 'v2-shell.js')
-    assert 'var own = headOf(sec.key);' in shell and shell.index('var own = headOf(sec.key);') < shell.index('var t = T[sec.key];')
+    # R24 م٢ (اتغيّر): سطر المربّع بقى «ن محتاج قرارك» (مكانه شريط القسم)، فالترويسة: سطر القسم من قايمته أو الوصف الثابت — مفيش رجوع لنص المربّع
+    assert 'var own = headOf(sec.key);' in shell and shell.index('var own = headOf(sec.key);') < shell.index('return own || sec.desc;') and 'var t = T[sec.key];' not in shell.split('function descOf')[1].split('function drawHead')[0]
     assert "headOf((host.state() || {}).section)" in shell                                     # يدخل في بصمة التحديث
     assert 'D2.head = function (key)' in _read('dashboard-cloud', 'v2-d2.js') and 'D3.head = function (key)' in _read('dashboard-cloud', 'v2-d3.js')
     assert 'CO.head = function ()' in _read('dashboard-cloud', 'v2s', 'courses.js') and 'head: CO.head' in _read('dashboard-cloud', 'v2s', 'courses.js')
@@ -260,7 +264,7 @@ def test_visible_copy_has_no_colloquial_label_no_fetch_words_and_one_currency_ma
         code = _strip(_read('dashboard-cloud', name))
         body = code.split('var V2H_COLLOQUIAL')[0] if name == 'v2-logic.js' else code
         assert 'الحاجة الجاية' not in body and 'لسه مقفولة' not in body, name
-    assert 'القرار التالي' in _read('dashboard-cloud', 'v2-home.js') and 'الدورات مغلقة حتى الآن' in _read('dashboard-cloud', 'v2-d3.js')
+    assert 'القرار التالي' not in _read('dashboard-cloud', 'v2-home.js') and 'الدورات مغلقة حتى الآن' in _read('dashboard-cloud', 'v2-d3.js')      # R24 م٢: «القرار التالي» اتبدّل بالهيرو «ن قرار مستنيك»
     assert "'الحاجة الجاية', 'لسه مقفولة'" in _read('dashboard-cloud', 'v2-logic.js')
     for name in ('v2-logic.js', 'v2-d3.js', 'v2s/courses.js', 'v2s/content.js', 'v2s/books.js', 'v2s/reports.js', 'v2s/people.js'):
         assert 'تعذّر الجلب' not in _read('dashboard-cloud', name), name
@@ -296,6 +300,8 @@ def test_the_integration_walk_covers_the_screens_that_were_missing():
 
 
 def test_the_book_offer_main_button_is_standard_arabic():
+    # R24 م٢ (اتغيّر): زرّ اعتماد العرض بقى في بطاقة الشريط فقط (v2-logic.js)؛ شاشة «مراجعة العروض» (v2-d3.js) بتوصّل للشريط، فمفيش زرّ عندها.
     for name in ('v2-logic.js', 'v2-d3.js'):
         code = _read('dashboard-cloud', name)
-        assert 'بالأسعار دي' not in code and 'اعتمد هذه الأسعار' in code, name
+        assert 'بالأسعار دي' not in code, name
+    assert 'اعتمد هذه الأسعار' in _read('dashboard-cloud', 'v2-logic.js')

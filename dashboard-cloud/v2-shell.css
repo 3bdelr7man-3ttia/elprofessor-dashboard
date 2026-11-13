@@ -1,7 +1,7 @@
 /* ============================================================================
  * v2-shell.css — الهيكل الجديد (D1-B). كل القواعد تحت `.app.v2-shell` أو أصناف `v2s-*`/`v2c-*`/`v2-side`/`v2-sheet`/`v2-sec`:
  * ⛔ المفتاح مقفول ⇒ الصنف `v2-shell` ما بيتحطّش على `.app` ولا بيتبني أي عنصر من دول ⇒ مفيش أثر على أي شاشة.
- * الألوان من هوية البروفيسور: عنّابي #9E2B4E · ورق #FBFAF7/#F6F1EA · حبر #21262E · أحمر #C8102E للأعداد المتأخرة بس.
+ * الألوان من هوية البروفيسور: عنّابي #9E2B4E · ورق #F7F3ED/#F6F1EA · حبر #21262E · أحمر #C8102E للأعداد المتأخرة بس.
  * ========================================================================== */
 .v2-side,.v2-sheet,.v2-sec,.v2-tb-logo{display:none}
 html.v2-noscroll,html.v2-noscroll body{overflow:hidden}
@@ -11,11 +11,11 @@ html.v2-noscroll,html.v2-noscroll body{overflow:hidden}
 .app.v2-pre .main{visibility:hidden}
 
 /* —— القالب العام: القائمة القديمة وكتلة الشركة المثبّتة مخفيّتان تمامًا */
-.app.v2-shell{background:#FBFAF7}
+.app.v2-shell{background:#F7F3ED}
 .app.v2-shell .rail,.app.v2-shell #coPin,.app.v2-shell .railscrim{display:none!important}
-.app.v2-shell .main{background:#FBFAF7}
-.app.v2-shell .content{background:#FBFAF7;padding:4px 28px 56px}
-.app.v2-shell .topbar{height:56px;background:#FBFAF7;border-bottom:0;padding:0 28px;gap:12px}
+.app.v2-shell .main{background:#F7F3ED}
+.app.v2-shell .content{background:#F7F3ED;padding:4px 28px 56px}
+.app.v2-shell .topbar{height:56px;background:#F7F3ED;border-bottom:0;padding:0 28px;gap:12px}
 .app.v2-shell .topbar .ttl{display:none}
 .app.v2-shell .topbar .search{display:none;margin-inline-start:auto}
 .app.v2-shell.v2-inbox .topbar .search{display:flex;background:#fff;border-color:#E9E1D6}
@@ -26,7 +26,7 @@ html.v2-noscroll,html.v2-noscroll body{overflow:hidden}
 
 /* —— القائمة الجانبية (الحاسوب) */
 @media(min-width:1180px){
-  .v2-side{display:flex;flex-direction:column;width:264px;flex:none;background:#F6F1EA;border-inline-end:1px solid #E9E1D6;color:#21262E;height:100vh;
+  .v2-side{display:flex;flex-direction:column;width:250px;flex:none;background:#FBF8F4;border-inline-end:1px solid #E8E0D5;color:#21262E;height:100vh;
     font-family:'IBM Plex Sans Arabic','Cairo',sans-serif}
 }
 .v2s-brand{display:flex;align-items:center;gap:12px;padding:18px 18px 14px}
@@ -104,7 +104,7 @@ html.v2-noscroll,html.v2-noscroll body{overflow:hidden}
   .v2-sheet.open{visibility:visible;pointer-events:auto}
   .v2s-scrim{position:absolute;inset:0;background:rgba(33,38,46,.55);opacity:0;transition:opacity .2s}
   .v2-sheet.open .v2s-scrim{opacity:1}
-  .v2s-box{position:absolute;inset-inline:0;top:0;max-height:100vh;max-height:100dvh;overflow-y:auto;background:#FBFAF7;border-radius:0 0 22px 22px;box-shadow:0 18px 44px rgba(33,38,46,.3);
+  .v2s-box{position:absolute;inset-inline:0;top:0;max-height:100vh;max-height:100dvh;overflow-y:auto;background:#F7F3ED;border-radius:0 0 22px 22px;box-shadow:0 18px 44px rgba(33,38,46,.3);
     transform:translateY(-14px);opacity:0;transition:transform .2s,opacity .2s}
   .v2-sheet.open .v2s-box{transform:none;opacity:1}
   .v2s-bh{display:flex;align-items:center;justify-content:space-between;padding:10px 16px 6px}
@@ -473,3 +473,33 @@ body:has(> .app.v2-shell) #epModal .modal .mh button:focus-visible{outline:3px s
   .app.v2-shell :is([style*="font-size:9.5px"],[style*="font-size:10px"],[style*="font-size:10.5px"],[style*="font-size:11px"],[style*="font-size:11.5px"]),body:has(> .app.v2-shell) #epModal :is([style*="font-size:9.5px"],[style*="font-size:10px"],[style*="font-size:10.5px"],[style*="font-size:11px"],[style*="font-size:11.5px"]){font-size:12px!important}
 }
 @media(max-width:760px){ body .tags span{font-size:12px!important} }
+
+/* ============================================================================
+ * R24 م٢ — القايمة الجانبية الفاتحة (صور المؤسس 1-home): ورق فاتح · نص بس · عدّاد القرارات في دايرة · «—» لو مفيش · القسم الحالي عنّابي صافي.
+ * ========================================================================== */
+.v2-side{padding:22px 14px;gap:4px;font-family:'IBM Plex Sans Arabic','Cairo',sans-serif}
+.v2s-brand{padding:0 8px 18px;margin-bottom:12px;border-bottom:1px solid #E8E0D5}
+.v2s-nav{padding:0;gap:4px}
+.v2s-item{min-height:0;padding:9px 12px;border-radius:10px;gap:10px;border:0}
+.v2s-item:hover{background:#fff}
+.v2s-item.on{background:#9E2B4E;box-shadow:none;border:0}
+.v2s-item.on::before{display:none}
+.v2s-item.on .v2s-name{color:#fff}
+.v2s-name{font:500 15px/1.5 'IBM Plex Sans Arabic','Cairo',sans-serif;color:#21262E}
+.v2s-item.on .v2s-name{font-weight:600}
+.v2s-badge{min-width:24px;height:22px;padding:0 7px;border-radius:11px;background:#F6E9EE;border:0;color:#9E2B4E;font:700 12.5px/1 'IBM Plex Sans Arabic','Cairo',sans-serif}
+.v2s-badge.hot{background:#C8102E;color:#fff}
+.v2s-item.on .v2s-badge{background:rgba(255,255,255,.22);color:#fff}
+.v2s-dash{color:#B9B2A8;font-size:12px}
+.v2s-item.on .v2s-dash{color:rgba(255,255,255,.6)}
+.v2s-item.v2s-home{margin-bottom:6px;border-bottom:0}
+.v2s-ph{display:none}
+.v2s-me{padding:12px 8px 0;border-top:1px solid #E8E0D5}
+.v2s-av{background:#EFE8DD;color:#9E2B4E}
+.v2c-h h1{font-family:'IBM Plex Sans Arabic','Cairo',sans-serif;font-weight:700}
+.v2c-tab{font-family:'IBM Plex Sans Arabic','Cairo',sans-serif;font-weight:600}
+.v2c-tab.on{color:#9E2B4E}
+.v2-strip{max-width:1360px;margin:0 auto}
+/* —— R24 م٢: «السجلات القديمة» للقراية بس — مفيش زرار فعل (القرارات في بيوتها) */
+#view.v2-ro::before{content:"سجلات قديمة للقراية بس — مفيش فيها أزرار قرار. القرارات في بيوتها (الفلوس · النزاعات · الناس).";display:block;margin:0 0 14px;padding:10px 14px;border-radius:12px;background:#FBF1DF;border:1px solid #EBD38E;color:#7A5200;font:600 14px 'IBM Plex Sans Arabic','Cairo',sans-serif}
+#view.v2-ro .btn,#view.v2-ro .acts,#view.v2-ro button.btn,#view.v2-ro .act-row{display:none!important}

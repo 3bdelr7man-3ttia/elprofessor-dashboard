@@ -540,7 +540,7 @@ def rowmap(res):
 @needs_node
 def test_rules_groups_and_chips():
     res = rules()
-    assert [g['title'] for g in res['groups']] == ['ملفات الخبراء والاستشارات', 'الدورات', 'الناس والدعوات', 'المحتوى']
+    assert [g['title'] for g in res['groups']] == ['ملفات الخبراء والاستشارات', 'الدورات', 'الناس', 'المحتوى']      # R24 م٢: «الناس والدعوات» بقت «الناس»
     assert [len(g['rows']) for g in res['groups']] == [9, 4, 2, 1]
     rm = rowmap(res)
     assert rm['assign']['control']['type'] == 'switch' and rm['assign']['control']['value'] is True
@@ -729,17 +729,19 @@ def test_tile_number_agrees_with_screen():
 
 @needs_node
 def test_sections_entry_and_aliases():
+    # R24 م٢ (اتغيّر): «العقل» بقى تبويبًا «العقل وقواعده» جوه «الشركة والعقل» (والرابط القديم #s/brain/… بيوصل له)
     secs = v2_node.logic('SECTIONS')
-    brain = [s for s in secs if s['key'] == 'brain'][0]
-    assert brain['label'] == 'العقل' and brain['desc'] == 'ما يفعله العقل وحده، وما ينتظر قرارك. ما له مفتاح تغيّره من هنا.'
-    assert [(t['key'], t['label'], t['mod']) for t in brain['tabs']] == [('log', 'القواعد وسجل اليوم', 'v2s_brain'), ('helpers', 'المساعدون', 'ai')]
-    assert v2_node.logic('sectionFor', 'ai')['section'] == 'brain' and v2_node.logic('sectionFor', 'ai')['tab'] == 'helpers'
+    assert not [s for s in secs if s['key'] == 'brain']
+    co = [s for s in secs if s['key'] == 'company'][0]
+    tabs = {t['key']: (t['label'], t['mod']) for t in co['tabs']}
+    assert tabs['brain'] == ('العقل وقواعده', 'v2s_brain') and tabs['helpers'] == ('المساعدون', 'ai')
+    assert v2_node.logic('sectionFor', 'ai')['section'] == 'company' and v2_node.logic('sectionFor', 'ai')['tab'] == 'helpers'
     rt = v2_node.logic('routeFor', '#ai', {})
-    assert (rt['section'], rt['tab']) == ('brain', 'helpers')
-    assert v2_node.logic('sectionHash', 'brain', 'log') == '#s/brain/log'
+    assert (rt['section'], rt['tab']) == ('company', 'helpers')
+    assert v2_node.logic('sectionHash', 'brain', 'log') == '#s/company/brain'
     rt = v2_node.logic('routeFor', '#s/brain/log', {})
-    assert (rt['section'], rt['tab']) == ('brain', 'log')
-    assert v2_node.logic('sectionFor', 'v2s_brain')['tab'] == 'log'
+    assert (rt['section'], rt['tab']) == ('company', 'brain')
+    assert v2_node.logic('sectionFor', 'v2s_brain')['tab'] == 'brain'
 
 
 # ---------------------------------------------------------------- ٣) ملفات
@@ -909,7 +911,7 @@ def test_switch_rows_options_lock_and_lines():
     assert rows['reply_draft']['line'] == 'يسألك دائمًا لأن الرد يصل إلى صاحب الرسالة.' and rows['reply_draft']['locked'] is True
     assert rows['opinion']['line'] == 'لم يُغيَّر من قبل'
     assert rows['seo_notes']['line'] == 'آخر تغيير: منذ ساعتين بواسطة admin@local.test'
-    assert rows['reply_draft']['link'] == {'label': 'افتح الناس والدعوات', 'section': 'people'} and rows['opinion']['link']['label'] == 'افتح اللوحة'
+    assert rows['reply_draft']['link'] == {'label': 'افتح الناس', 'section': 'people'} and rows['opinion']['link']['label'] == 'افتح اللوحة'
     assert r['writer'] == 'main' and r['brainToday'] == {'used': 12, 'cap': 60}
     # صف محجوب بيد «وحده» في قاعدة معبوث بها ⇒ يُعرض «يسألني» (الخادم يفرضه أيضًا)، ولا يُعرض اختيار ممنوع
     t = _sw_resp()

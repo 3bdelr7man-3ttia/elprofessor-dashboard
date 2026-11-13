@@ -365,11 +365,11 @@ def test_the_tab_sits_last_in_the_market_section_and_licensed_join_cards_open_th
     assert L('routeFor', '#s/market/manage', {})['tab'] == 'manage'
     row = {'apiKind': 'join', 'apiId': 'jr', 'who': 'أ. هبة', 'from': 'محامٍ معتمد', 'serviceLabel': 'مرافعة', 'licensed': True, 'licenceMissing': False, 'attachments': [], 'note': 'ن'}
     card = L('v2Card', row, {'now': NOW})
-    assert card['primary']['label'] == 'افتح وراجع' and card['primary']['act']['do'] == 'open' and 'بلد القيد' in card['reason']
+    assert card['primary']['label'] == 'افتح وقرّر' and card['primary']['act']['do'] == 'read' and 'بلد القيد' in card['reason']      # R24 م٢: قراية جوه «الناس» (كان «افتح وراجع»)
     plain = L('v2Card', dict(row, licensed=False), {'now': NOW})
     assert plain['primary']['label'] == 'اقبل' and plain['primary']['act'] == {'do': 'decide', 'action': 'approve'}
     missing = L('v2Card', dict(row, licenceMissing=True), {'now': NOW})
-    assert missing['primary']['label'] == 'افتح وراجع'
+    assert missing['primary']['label'] == 'افتح وقرّر'
 
 
 # ---------------------------------------------------------------- ٧) الملفات والقواعد

@@ -132,7 +132,7 @@
     return '<li class="v3-pay" data-id="' + esc(r.id) + '"><div class="v3-pid"><b>' + personLink(r.name, r.email) + '</b><span>' + esc([r.what, r.method].filter(Boolean).join('، ')) + '</span>'
       + (r.fx ? '<em class="v3-fx">العملة ليست الجنيه — حدّد سعر الصرف قبل التحويل</em>' : '') + '</div>'
       + '<div class="v3-pm"><b class="v3-amt">' + esc(r.amountText) + '</b>' + (r.since ? '<time>' + esc(r.since) + '</time>' : '') + '</div>'
-      + '<button type="button" class="v3-btn1" data-a="settle" data-id="' + esc(r.id) + '">سجّل التحويل</button></li>';
+      + '<button type="button" class="v3-btn2" data-a="tostrip">القرار في «محتاج قرارك» ↑</button></li>';      // R24 م٢: القرار في شريط «محتاج قرارك» (زر واحد، مفيش نسخة هنا)
   }
   function barsHtml(bars) {
     if (!bars) return unavailable('مصدر الدخل');
@@ -204,7 +204,7 @@
       + '<div class="v3-body"><h3>' + personLink(r.name, r.email) + '</h3><p class="v3-amount">' + esc(r.amountText) + '</p>'
       + '<p class="v3-line">' + esc([r.what, r.method].filter(Boolean).join('، ')) + '</p>' + (r.dest && r.dest !== r.method ? '<p class="v3-line v3-dest" dir="auto">' + esc(r.dest) + '</p>' : '')
       + (r.fx ? '<p class="v3-fxline">العملة ليست الجنيه — حدّد سعر الصرف قبل التحويل</p>' : '')
-      + '<div class="v3-acts"><button type="button" class="v3-btn1" data-a="settle" data-id="' + esc(r.id) + '">سجّل التحويل</button></div></div></article>';
+      + '<div class="v3-acts"><button type="button" class="v3-btn2" data-a="tostrip">القرار في «محتاج قرارك» ↑</button></div></div></article>';
   }
   function minPayoutBar() {
     var info = L.v2MinPayout(data('settings'), now());
@@ -244,8 +244,7 @@
       + '<div class="v3-body"><h3>' + (c.person ? personLink(c.title, c.person.email) : esc(c.title)) + '</h3><p class="v3-amount">' + esc(U.moneyText(m.amount, m.currency)) + '</p>'
       + '<p class="v3-line">' + esc(c.sub) + '</p><p class="v3-line" dir="auto">' + esc(c.reason) + '</p>'
       + (c.link ? '<p class="v3-line"><a class="v3-lnk" href="' + esc(c.link.url) + '" target="_blank" rel="noopener noreferrer">' + esc(c.link.label) + '</a></p>' : '')
-      + '<div class="v3-acts two"><button type="button" class="v3-btn1" data-a="rconfirm" data-id="' + esc(c.id) + '">أكّد الدفع</button>'
-      + '<button type="button" class="v3-btn2" data-a="rreject" data-id="' + esc(c.id) + '">ارفض</button></div></div></article>';
+      + '<div class="v3-acts"><button type="button" class="v3-btn2" data-a="tostrip">القرار في «محتاج قرارك» ↑</button></div></div></article>';
   }
   function stuckTicket(r) {
     return '<article class="v3-t tone-late v3-stuck"><div class="v3-strip"><span class="v3-type">دفعة عالقة</span>' + (r.ageText ? '<time class="v3-time">' + esc(r.ageText) + '</time>' : '') + '</div>'
@@ -469,8 +468,7 @@
       + (o.about ? '<p class="v3-line v3-mute">' + esc(o.about) + '</p>' : '')
       + '<p class="v3-amount">' + (o.suggestedText ? 'السعر المقترح: ' + esc(o.suggestedText) : '<span class="v3-mute">لم يقترح سعرًا</span>') + '</p>'
       + (o.brain ? '<div class="v3-brain">' + BRAIN + '<p>' + esc(o.brain) + '</p></div>' : '')
-      + '<div class="v3-acts two"><button type="button" class="v3-btn1" data-a="oapprove" data-id="' + esc(o.id) + '">اعتمد هذه الأسعار</button>'
-      + '<button type="button" class="v3-btn2" data-a="oreject" data-id="' + esc(o.id) + '">ارفض</button></div></div></article>';
+      + '<div class="v3-acts"><button type="button" class="v3-btn2" data-a="tostrip">القرار في «محتاج قرارك» ↑</button></div></div></article>';
   }
   function offerRows() {
     var rows = L.v2OffersQueue(data('offers'), data('pricesBook'), now());
@@ -918,6 +916,7 @@
       b.onclick = function () { S.period = b.getAttribute('data-p'); try { localStorage.setItem('v3_period', S.period); } catch (e) {} redraw(); };
     });
     qa('[data-a="goto"]', v).forEach(function (b) { b.onclick = function () { if (host().openSection) host().openSection(b.getAttribute('data-s'), b.getAttribute('data-t')); }; });
+    qa('[data-a="tostrip"]', v).forEach(function (b) { b.onclick = function () { if (window.V2STRIP && V2STRIP.scrollTo) V2STRIP.scrollTo(); }; });
     qa('[data-a="settle"]', v).forEach(function (b) {
       b.onclick = function (e) {
         e.stopPropagation();
@@ -937,7 +936,7 @@
       b.onclick = function () {
         var id = b.getAttribute('data-id'), res = L.v2Refunds(data('refunds'), disputeRefunds(), now()), r = res.rows.filter(function (x) { return x.id === id; })[0];
         if (!r) return;
-        if (r.act.do === 'escrow') { if (host().openSection) host().openSection('disputes', 'escrow'); }
+        if (r.act.do === 'escrow') { if (host().openSection) host().openSection('disputes'); }
         else if (r.ticket && host().openRowAt) host().openRowAt('disputes', 'all', r.ticket.row);
       };
     });

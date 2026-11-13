@@ -810,7 +810,7 @@ def test_home_tile_speaks_the_boards_words_and_always_lands_on_the_ideas_list():
     zero = _node("const T=L.v2Tiles(%s);console.log(JSON.stringify((T.tiles||T).filter(x=>x.key==='content')[0]))" % json.dumps({'topics_drafts': 0, 'testimonials_pending': 0}))
     assert zero['next'] == 'خط النشر'
     assert 'شهادة' not in _block() and "'شهادة" not in LOGIC[LOGIC.index('// —— المحتوى'):LOGIC.index('// —— بلا رقم في D1')]
-    assert "key === 'content'" in HOME and 'openSection(key)' in HOME
+    assert 'openSection(key)' in HOME      # R24 م٢ (اتغيّر): المربّع بيفتح قسمه دايمًا بـ`openSection(key)` (مفيش استثناء لكل قسم)
     assert re.search(r"testimonials_pending:function\(\)\{[^}]*v2OpenSection\('content','pipeline'\)", HTML)
     assert 'آراء متعلّمين بانتظار المراجعة' in HTML and 'شهادات بانتظار المراجعة' not in HTML
 

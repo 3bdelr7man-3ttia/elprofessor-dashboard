@@ -41,7 +41,7 @@ def test_the_two_tabs_the_modules_and_the_registry_lines_are_wired_inside_the_co
     sec = logic[logic.index("{ key: 'content', label: 'المحتوى', img: 'content', desc:"):]
     sec = sec[:sec.index("{ key: 'marketing'")]
     assert "'v2s_saha'" in sec and "'v2s_diwan'" in sec, 'التبويبان داخل قسم المحتوى لا في القائمة الرئيسية'
-    assert len(re.findall(r"\{ key: '[a-z]+', label: '", logic[logic.index('var SECTIONS = ['):logic.index('var ALIASES')])) == 13, 'القائمة الرئيسية ١٣ بند'
+    assert len(re.findall(r"\{ key: '[a-z]+', label: '", logic[logic.index('var SECTIONS = ['):logic.index('var ALIASES')])) == 11, 'القائمة الرئيسية ١١ بند'      # R24 م٢ (اتغيّر): ١١ بعد دمج التسويق والتقارير والعقل في الشركة
     saha, diwan = _read('dashboard-cloud', 'v2s', 'saha.js'), _read('dashboard-cloud', 'v2s', 'saha_diwan.js')
     assert "key: 'saha', mod: 'v2s_saha'" in saha and "(window.V2SEC = window.V2SEC || {})[cfg.key] = { owns: B.owns, render: B.render };" in saha
     assert "key: 'diwan', mod: 'v2s_diwan'" in diwan

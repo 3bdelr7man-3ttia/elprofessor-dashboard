@@ -298,7 +298,7 @@ def test_the_decision_card_is_a_person_card_that_opens_the_page_of_the_item():
            'personEmail': 'expert@example.test', 'ts': 1793000000000}
     card = v2_node.logic('v2Card', row, {'now': 1793003600000})
     assert card['kind'] == 'identity_doc' and card['tag'] == 'توثيق هوية' and card['title'] == 'أحمد علي' and card['sub'] == 'محامٍ بالنقض'
-    assert card['primary']['label'] == 'راجع الوثيقة' and card['primary']['act'] == {'do': 'open'}, 'ولا قرار بضغطة من البطاقة: الوثيقة تُرى أولًا'
+    assert card['primary']['label'] == 'راجع الوثيقة وقرّر' and card['primary']['act'] == {'do': 'read'}, 'ولا قرار بضغطة من البطاقة: الوثيقة تُرى أولًا (R24 م٢: قراية جوه «الناس»)'
     assert card['secondary'] is None
     assert v2_node.logic('v2bFacts', card, 1793003600000) is None, 'لا يُرسل الاسم ولا الوثيقة لأي رأي آلي'
 

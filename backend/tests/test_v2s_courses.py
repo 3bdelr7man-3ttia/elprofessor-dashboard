@@ -769,16 +769,15 @@ def _L(js):
 @needs_node
 def test_section_entry_tabs_and_resolution():
     got = _L("const s=L.SECTIONS.find(x=>x.key==='courses');console.log(JSON.stringify({label:s.label,tabs:s.tabs.map(t=>[t.key,t.label,t.mod,!!t.hidden,t.st])}))")
-    assert got['label'] == 'الدورات والمدرّبون'
+    assert got['label'] == 'الدورات'       # R24 م٢ (اتغيّر): «الدورات والمدرّبون» بقت «الدورات» (المدرّبون تبويب جواها، وطلباتهم في «الناس»)
     assert got['tabs'] == [['courses', 'الدورات', 'courses', False, {'courseTab': 'platform'}], ['trainers', 'المدرّبون', 'team', False, {'teamTab': 'trainers'}],
                            ['live', 'الدورات الحيّة', 'courses', False, {'courseTab': 'schedules'}], ['demand', 'ما يطلبه الناس', 'courses', False, {'courseTab': 'demand'}],
-                           ['offers', 'عروض الأسعار', 'courses', False, {'courseTab': 'offers'}], ['course', 'صفحة الدورة', 'courses', True, {'courseTab': 'page'}],
-                           ['all', 'كل السجلات', 'courses', False, {'courseTab': 'courses'}]]
+                           ['offers', 'عروض الأسعار', 'courses', False, {'courseTab': 'offers'}], ['course', 'صفحة الدورة', 'courses', True, {'courseTab': 'page'}]]      # R24 م٢: «كل السجلات» القديمة اتشالت
     cases = [('courses', {'courseTab': 'platform'}, None, 'courses'), ('courses', {'courseTab': 'schedules'}, None, 'live'), ('courses', {'courseTab': 'demand'}, None, 'demand'),
-             ('courses', {'courseTab': 'programs'}, None, 'demand'), ('courses', {'courseTab': 'offers'}, None, 'offers'), ('courses', {'courseTab': 'courses'}, None, 'all'),
-             ('courses', {'courseTab': 'trainers'}, None, 'all'), ('courses', {}, None, 'courses'), ('courses', {'courseTab': 'page'}, {'section': 'courses', 'tab': 'course'}, 'course'),
-             ('courses', {'courseTab': 'platform'}, {'section': 'courses', 'tab': 'all'}, 'all'), ('courses', {'courseTab': 'courses'}, {'section': 'courses', 'tab': 'all'}, 'all'),
-             ('courses', {'courseTab': 'trainers'}, {'section': 'courses', 'tab': 'all'}, 'all'), ('courses', {'courseTab': 'demand'}, {'section': 'courses', 'tab': 'all'}, 'all')]
+             ('courses', {'courseTab': 'programs'}, None, 'demand'), ('courses', {'courseTab': 'offers'}, None, 'offers'), ('courses', {'courseTab': 'courses'}, None, 'courses'),
+             ('courses', {'courseTab': 'trainers'}, None, 'courses'), ('courses', {}, None, 'courses'), ('courses', {'courseTab': 'page'}, {'section': 'courses', 'tab': 'course'}, 'course'),
+             ('courses', {'courseTab': 'platform'}, {'section': 'courses', 'tab': 'all'}, 'courses'), ('courses', {'courseTab': 'courses'}, {'section': 'courses', 'tab': 'all'}, 'courses'),
+             ('courses', {'courseTab': 'trainers'}, {'section': 'courses', 'tab': 'all'}, 'courses'), ('courses', {'courseTab': 'demand'}, {'section': 'courses', 'tab': 'all'}, 'demand')]      # R24 م٢: بلا تبويب «all» — الحالة القديمة بترجع لأول تبويب
     out = _L("console.log(JSON.stringify(%s.map(c=>{const m=L.sectionFor(c[0],c[1],c[2]);return [m.section,m.tab];})))" % json.dumps(cases))
     for c, g in zip(cases, out):
         assert g == ['courses', c[3]], c
@@ -796,7 +795,7 @@ def test_course_page_address():
     assert r[5] == '#s/courses/course/abc-123' and r[6] == 'a%20b' and r[7] == '' and r[8] == 'ok_1'
     # صفحة الشخص كما هي
     p = _L("console.log(JSON.stringify([L.routeFor('#s/people/person/a%40b.test'),L.routeFor('#s/people/person/zzz'),L.sectionHash('people','person','a@b.test')]))")
-    assert p[0]['person'] == 'a@b.test' and p[1]['tab'] == 'invites' and p[2] == '#s/people/person/a%40b.test'   # بعد دمج الأشخاص: أول تبويب «الطلبات» (invites)
+    assert p[0]['person'] == 'a@b.test' and p[1]['tab'] == 'users' and p[2] == '#s/people/person/a%40b.test'   # R24 م٢: أول تبويب في «الناس» بقى «الناس» (users)
 
 
 # ---------------------------------------------------------------- ٧) الملفات والخطّافات

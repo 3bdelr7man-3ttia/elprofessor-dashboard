@@ -3651,6 +3651,15 @@
       .catch(function (e) { quietToast((e && e.message) || "تعذّر رفض الدعوة"); if (after) after(); });
   };
 
+  // R24 م٢: نفس اعتماد/رفض الدعوة بس بيرجّع Promise بـ{ok, error} — عشان بطاقة الشخص (قبول كل طلباته) تعرف لو الخطوة فشلت وتقول إيه اللي حصل بالظبط.
+  // ⛔ نفس المسارين (`/invites/<id>/approve|reject`) بالحرف — مفيش مسار قرار جديد. الرفض بيبعت السبب كما كُتب.
+  EP.decideInvite = function (id, action, noteText) {
+    var approve = action === "approve";
+    return post("/invites/" + encodeURIComponent(id) + "/" + (approve ? "approve" : "reject"), approve ? {} : { note: String(noteText || "").trim().slice(0, 300) })
+      .then(function () { note(approve ? "اعتُمدت — الرابط يعمل الآن" : "رُفضت"); EP.reload("invites"); return { ok: true }; })
+      .catch(function (e) { return efFailed(e, null); });
+  };
+
   // قلب «باب المؤسسين» — مفتاح واحد في db.settings على المنصة (مواصفة الموجة ٢ م٣).
   // ⛔ لا عدّ مؤسسين معروض هنا ولا هناك: القرار مقفول (م٤) — فقط مفتوح/مقفول.
   EP.setFounding = function (open, after) {

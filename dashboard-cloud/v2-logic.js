@@ -134,7 +134,8 @@
   }
 
   // ------------------------------------------------------------------ المربّعات
-  var TILE_DEFS = [
+  // R24 م٢: دي «حسابات الأساس» الداخلية (أعداد المنصة + حالات الفشل). المربّعات اللي بتتعرض (١٠ أقسام بعدد القرارات بس) تحت: `TILE_DEFS` الجديدة.
+  var BASE_DEFS = [
     { key: 'files', label: 'ملفات الخبراء', img: 'files' },
     { key: 'disputes', label: 'النزاعات والاستردادات', img: 'disputes' },
     { key: 'courses', label: 'الدورات والمدرّبون', img: 'courses' },
@@ -204,7 +205,7 @@
     var Q = queue || null, now = extras.now || 0;
     var rows = Array.isArray(extras.inbox) ? extras.inbox : null;
     var T = {};
-    TILE_DEFS.forEach(function (d) { T[d.key] = baseTile(d); });
+    BASE_DEFS.forEach(function (d) { T[d.key] = baseTile(d); });
     // R24 م١: البنود المؤجَّلة/المتجاهَلة (صفوفها من نفس دالة الإخفاء المشتركة) بتتشال من الأعداد اللي جاية من طابور المنصة
     // (الطابور بيعدّها ما يعرفش إنها اتأجّلت) — فالمربّع والقايمة الجانبية و«ابدأ القرارات» يطلعوا بنفس الرقم.
     var HK = {};
@@ -369,7 +370,7 @@
       if (fromLog ? extras.brainTodayPartial === true : hasTrunc(extras)) markPartial(t);
     })(T.brain);
 
-    return TILE_DEFS.map(function (d) { return T[d.key]; });
+    return BASE_DEFS.map(function (d) { return T[d.key]; });
   }
 
   // ------------------------------------------------------------------ البطاقات
@@ -377,13 +378,13 @@
     file_waiting: 'files', file_late: 'files', file_attention: 'files', review: 'files', verify: 'files',
     dispute: 'disputes', unactivated: 'disputes', legacy: 'disputes',
     payout: 'money', manual_payment: 'money', stuck_payment: 'money', payfail: 'money', book_offer: 'books',
-    trainer: 'people', join: 'people', identity_doc: 'people', pending_user: 'people', signup: 'people', founding: 'people', lead: 'people', message: 'people', open_message: 'people',
+    trainer: 'people', join: 'people', identity_doc: 'people', pending_user: 'people', signup: 'people', founding: 'people', invite: 'people', person: 'people', lead: 'people', message: 'people', open_message: 'people',
     book: 'books', program: 'courses', course: 'courses', live: 'courses', topic: 'content', creative: 'content', other: 'people'
   };
   // الترتيب (قرار المؤسس): ملفات مستعجلة/متأخرة ⇐ نزاعات ⇐ استردادات ⇐ تحويلات ⇐ إيصالات ⇐ آراء للمراجعة ⇐
   // مدرّبون وانضمام ⇐ زوّار ⇐ خبراء مؤسسون ⇐ محتوى وكتب وبرامج ⇐ رسائل. الملف العادي المنتظر بين الأولى والثانية.
   var RANK = { file_urgent: 10, file_waiting: 15, dispute: 20, refund: 30, payout: 40, stuck_payment: 45, payfail: 47, manual_payment: 50, review: 60,
-               trainer: 70, join: 70, pending_user: 80, signup: 85, founding: 90, book_offer: 95, content: 100, message: 110 };
+               trainer: 70, join: 70, person: 70, invite: 75, pending_user: 80, signup: 85, founding: 90, book_offer: 95, content: 100, message: 110 };
 
   function kindOf(r) {
     if (!r) return null;
@@ -392,6 +393,7 @@
     if (r.apiKind === 'stuck_payment') return 'stuck_payment';
     if (r.apiKind === 'payfail') return 'payfail';
     if (r.apiKind === 'book_offer') return 'book_offer';
+    if (r.apiKind === 'invite') return 'invite';           // R24 م٢: دعوة من عضو بتنتظر موافقتك (من مصدر الدعوات مش الوارد)
     if (r.apiKind === 'course_q') return 'course';
     if (r.apiKind === 'live_q') return 'live';
     switch (r.apiKind) {
@@ -424,6 +426,7 @@
         return overdue ? RANK.file_urgent : RANK.file_waiting;
       }
       case 'dispute': return RANK.dispute;
+      case 'invite': return RANK.invite;
       case 'unactivated': case 'legacy': return RANK.refund;
       case 'payout': return RANK.payout;
       case 'stuck_payment': return RANK.stuck_payment;
@@ -491,6 +494,8 @@
   }
   function act(o) { return o; }
   var OPEN = { do: 'open' };
+  // R24 م٢: «افتح وقرّر» = يفتح شاشة القراية جوه بيت القسم (درج الوارد القديم بأزراره) — مش «كل الوارد». ده قرار فعلًا: القفل بيحصل من جوّاها.
+  var READ = { do: 'read' };
 
   // نص الدفع اليدوي: الطريقة · المبلغ · ما يخصّه.
   function payBrain(r) {
@@ -550,7 +555,7 @@
         // brain2: البطاقة جاهزة من `v2bItemCard` (آخر الملف). ما فيها صف وارد ولا شخص.
         var mk = root.V2L && root.V2L.v2bItemCard;
         var bc = (mk && r.item) ? mk(r.item, now) : null;
-        if (bc) { bc.key = 'brain_item:' + String(r.item.id); bc.fp = ''; bc.bucket = 'decision'; bc.fyiKind = ''; bc.dismiss = false; }   // R24: اقتراح العقل قراره عنده (اعتمد/ارفض) — بعدين بس
+        if (bc) { bc.key = 'brain_item:' + String(r.item.id); bc.fp = ''; bc.bucket = 'decision'; bc.fyiKind = ''; bc.dismiss = false; bc.home = brainHomeOf(r.item && r.item.section); }   // R24: اقتراح العقل قراره عنده (اعتمد/ارفض) — بعدين بس. م٢: بيته = قسمه (الشريط الواحد)
         return bc;
       }
       case 'file_waiting': case 'file_late': {
@@ -576,10 +581,10 @@
           card.reason = whyBits(cand, f).join('، ');
           var verb = (pre && !late) ? 'أرسله إلى ' : 'انقله إلى ';
           card.primary = { label: verb + cand.name, act: act({ do: 'send', email: cand.email, name: cand.name }) };
-          card.secondary = { label: 'افتح الملف', act: OPEN };
+          card.secondary = { label: 'اختار خبيرًا تاني', act: READ };
         } else {
           card.reason = 'اختر الخبير بنفسك من الملف';
-          card.primary = { label: 'افتح الملف', act: OPEN };
+          card.primary = { label: 'اختار له خبيرًا', act: READ };      // R24 م٢: شاشة اختيار الخبير جوه بيت «ملفات الخبراء»
         }
         if (f.speed === 'urgent') card.warn = 'طلب مستعجل';
         if (Number(f.hours_left) > 0 && pre) card.facts.push({ k: 'المتبقي للاستلام', v: hoursWord(Math.floor(Number(f.hours_left))) });
@@ -591,7 +596,7 @@
         card.sub = clean([who && ('صاحب الطلب: ' + who), amountLabel]).join('، ');
         card.brain = 'أموال هذا الملف لم تتحرك وحدها وتحتاج تدخّلك';
         card.reason = 'القرار هنا يخص الأموال، فيُفتح الملف للمراجعة أولًا';
-        card.primary = { label: 'افتح وراجع', act: OPEN };
+        card.primary = { label: 'افتح وقرّر', act: READ };
         break;
       }
       case 'review': {
@@ -600,7 +605,7 @@
         card.sub = clean([who && ('صاحب الطلب: ' + who), amountLabel]).join('، ');
         card.brain = 'رأي ' + (str(f.expert_name) || 'الخبير') + ' في «' + (str(f.title) || 'الملف') + '» ينتظر مراجعتك';
         card.reason = 'صاحب الطلب ينتظر؛ لا يصله الرأي قبل موافقتك';
-        card.primary = { label: 'افتح وراجع', act: OPEN };
+        card.primary = { label: 'اقرأ الرأي وقرّر', act: READ };
         break;
       }
       case 'dispute': {
@@ -610,7 +615,7 @@
         card.sub = clean([(str(f.expert_name) || str(c.expert_name)) && ('الخبير: ' + (str(f.expert_name) || str(c.expert_name)))]).join('، ');
         card.brain = 'اعتراض من ' + (who || 'صاحب الطلب') + ' على ' + (card.title ? '«' + card.title + '»' : 'الخدمة') + (amountLabel ? '، ' + amountLabel : '');
         card.reason = 'الأموال محجوزة لحين قرارك، والحسم من صفحة البند بعد قراءة الرأيين';
-        card.primary = { label: 'افتح النزاع', act: OPEN };
+        card.primary = { label: 'افتح النزاع وقرّر', act: READ };
         break;
       }
       case 'unactivated': {
@@ -619,7 +624,7 @@
         card.sub = who ? 'صاحب الطلب: ' + who : '';
         card.brain = (amountLabel ? 'دُفع ' + amountLabel : 'دُفع مبلغ') + ' ولم يصل ملف';
         card.reason = 'الأموال وصلت ولم يصل الملف إلى قائمة التوزيع';
-        card.primary = { label: 'افتح', act: OPEN };
+        card.primary = { label: 'افتح وقرّر', act: READ };
         break;
       }
       case 'legacy': {
@@ -628,7 +633,7 @@
         card.sub = clean([who && ('صاحب الطلب: ' + who), amountLabel]).join('، ');
         card.brain = 'استشارة سُلّمت قبل التحويل التلقائي وأموالها تنتظر قرارك';
         card.reason = 'للخبير أم للعميل؟ القرار من صفحة البند';
-        card.primary = { label: 'افتح وراجع', act: OPEN };
+        card.primary = { label: 'افتح وقرّر', act: READ };
         break;
       }
       case 'payout': {
@@ -720,7 +725,7 @@
         card.brain = clean([who || 'مقدّم الطلب', card.sub].concat(facts)).join('، ');
         card.reason = 'اطّلع على الطلب كاملًا إن أردت قبل القبول';
         card.primary = { label: 'اقبل الطلب', act: act({ do: 'decide', action: 'approve' }) };
-        card.secondary = { label: 'افتح الطلب', act: OPEN };
+        card.secondary = { label: 'ارفض بسبب', act: act({ do: 'reject_reason' }) };
         break;
       }
       case 'join': {
@@ -732,15 +737,16 @@
         card.reason = r.licenceMissing ? (str(r.licenceNote) || 'الترخيص بلا رقم قيد — لا يُقبل الطلب قبل استكماله') : (shorten(r.note, 140) || 'اقرأ إجاباته من الطلب إن أردت');
         if (r.licenceMissing) {
           card.warn = 'رقم القيد ناقص';
-          card.primary = { label: 'افتح وراجع', act: OPEN };
+          card.primary = { label: 'افتح وقرّر', act: READ };
         } else if (r.licensed) {
           // «السوق v4»: خدمة مرخَّصة ⇒ القبول من شاشة الطلب، حيث تختار بلد القيد وتفتح ملف الترخيص (لا قبول بضغطة واحدة).
           card.reason = 'خدمة مرخَّصة: اختر بلد القيد وراجع ملف الترخيص قبل القبول';
-          card.primary = { label: 'افتح وراجع', act: OPEN };
+          card.primary = { label: 'افتح وقرّر', act: READ };
         } else {
           card.primary = { label: 'اقبل', act: act({ do: 'decide', action: 'approve' }) };
-          card.secondary = { label: 'افتح الطلب', act: OPEN };
+          card.secondary = { label: 'ارفض بسبب', act: act({ do: 'reject_reason' }) };
         }
+        card.reads = !!(r.licenceMissing || r.licensed);
         break;
       }
       case 'identity_doc': {
@@ -751,7 +757,8 @@
         card.sub = str(r.idTitle);
         card.brain = 'وثيقة هوية محفوظة بانتظار مراجعتك' + (str(r.idTitle) ? ' — صفته المعلنة «' + str(r.idTitle) + '»' : '');
         card.reason = 'افتح الوثيقة وقارن اسمها بصفته قبل أن تقرّر';
-        card.primary = { label: 'راجع الوثيقة', act: OPEN };
+        card.primary = { label: 'راجع الوثيقة وقرّر', act: READ };
+        card.reads = true;
         break;
       }
       case 'pending_user': {
@@ -763,11 +770,12 @@
         if (flags.length) {
           card.warn = 'يحتاج مراجعة: ' + flags.join('، ');
           card.reason = 'يُفتح الطلب للمراجعة قبل فتح المنصة';
-          card.primary = { label: 'افتح وراجع', act: OPEN };
+          card.primary = { label: 'افتح وقرّر', act: READ };
+          card.reads = true;
         } else {
           card.reason = 'طلب فتح المنصة بعد التسجيل';
           card.primary = { label: 'افتح المنصة للزائر', act: act({ do: 'decide', action: 'approve' }) };
-          card.secondary = { label: 'افتح', act: OPEN };
+          card.secondary = { label: 'ارفض بسبب', act: act({ do: 'reject_reason' }) };
         }
         break;
       }
@@ -782,6 +790,7 @@
         card.reason = 'حساب جديد على المنصة';
         card.primary = { label: 'تمام، اطّلعت', act: act({ do: 'decide', action: 'approve' }) };
         card.secondary = { label: 'افتح', act: OPEN };
+        card.open = act({ do: 'person', email: str(r.personEmail) || str(r.email) });
         break;
       }
       case 'founding': {
@@ -792,7 +801,19 @@
         card.brain = clean([who, str(r.fSpec), str(r.fCountry)]).join('، ') || 'طلب انضمام';
         card.reason = 'تواصل عبر واتساب ثم علّم الخطوة';
         card.primary = { label: labels[r.nextStatus] || 'تم التواصل', act: act({ do: 'decide', action: 'approve' }) };
-        card.secondary = { label: 'افتح', act: OPEN };
+        card.secondary = { label: 'ليس مناسبًا', act: act({ do: 'reject_reason' }) };
+        break;
+      }
+      case 'invite': {
+        // R24 م٢: دعوة من عضو بتنتظر موافقتك قبل ما رابطها يشتغل. الموافقة/الرفض بنفس نداءات شاشة «الدعوات» (EP.approveInvite/rejectInvite).
+        var iv = r.inviteRow || {};
+        card.tag = 'دعوة من عضو';
+        card.title = who || str(iv.name) || 'مدعوّ';
+        card.sub = clean(['الداعي: ' + (str(iv.invitedByLabel) && iv.invitedByLabel !== '—' ? str(iv.invitedByLabel) : 'عضو'), iv.generation != null ? 'الجيل ' + ar(iv.generation) : '']).join('، ');
+        card.brain = 'دعوة من عضو تحتاج موافقتك قبل أن يعمل رابطها' + (str(iv.note) ? ' — ملاحظة الداعي: ' + shorten(str(iv.note), 120) : '');
+        card.reason = 'الرفض يوصل للداعي بسببه';
+        card.primary = { label: 'وافق على الدعوة', act: act({ do: 'invite_approve' }) };
+        card.secondary = { label: 'ارفض بسبب', act: act({ do: 'reject_reason' }) };
         break;
       }
       case 'book': case 'program': case 'topic': case 'creative': case 'verify': {
@@ -802,8 +823,15 @@
         card.title = who || T[0];
         card.sub = shorten(r.note, 150);
         card.brain = shorten(r.note, 170) || T[0];
-        card.reason = kind === 'verify' ? 'اختر خبيرًا معتمدًا من صفحة البند' : 'يحتاج قراءة قبل القرار';
-        card.primary = { label: 'افتح وراجع', act: OPEN };
+        card.reason = kind === 'verify' ? 'اختر خبيرًا معتمدًا من صفحة البند' : 'اقرأه قبل ما تقرّر';
+        card.warn = (kind === 'book' || kind === 'creative' || kind === 'topic') ? 'القبول بينشره للناس' : '';
+        if (kind === 'verify') card.primary = { label: 'اختار له خبيرًا', act: READ };
+        else {
+          var ap = { book: 'اعتمد ونشر', creative: 'اعتمد ونشر', topic: 'اعتمد وانشر', program: 'اقبل الطلب' }[kind];
+          card.primary = { label: ap, act: act({ do: 'decide', action: 'approve', confirm: kind }) };
+          card.secondary = { label: 'ارفض بسبب', act: act({ do: 'reject_reason' }) };
+          card.read = { label: 'اقرأه كامل', act: READ };
+        }
         break;
       }
       case 'course': {
@@ -834,7 +862,7 @@
         card.reason = 'بعد التعامل مع الطلب اضغط «تم»';
         if (r.resolve) {
           card.primary = { label: 'تم', act: act({ do: 'resolve' }) };
-          card.secondary = { label: 'افتح', act: OPEN };
+          card.secondary = { label: 'اقرأ الرسالة', act: READ };
         } else {
           card.primary = { label: 'افتح', act: OPEN };
         }
@@ -846,7 +874,11 @@
         card.sub = shorten(r.note, 160);
         card.brain = shorten(r.note, 170) || str(r.out);
         card.reason = 'يُفتح للمراجعة';
-        card.primary = { label: 'افتح وراجع', act: OPEN };
+        if (kind === 'open_message') {
+          card.tag = 'رسالة من الموقع';
+          card.reason = 'ردّ عليها من داخل الرسالة، وبعدها بتتعلّم «تم الرد»';
+          card.primary = { label: 'افتح الرسالة وردّ', act: READ };
+        } else card.primary = { label: 'افتح وراجع', act: OPEN };
       }
     }
     // D2: صاحب الاسم (لو عنوان البطاقة اسم شخص وعندنا بريده) ⇒ الاسم يفتح صفحته.
@@ -857,13 +889,119 @@
     var bk = bucketOf(kind, card, r);
     card.bucket = bk.bucket; card.fyiKind = bk.fyiKind || '';
     card.dismiss = !!(card.key && DISMISS_OK[snoozeTypeOf(kind)]);
+    card.home = homeOfKind(kind);          // R24 م٢: بيت القسم الوحيد اللي أزرار قراره فيه
     return card;
   }
-  var PERSON_TITLE = { payout: 1, manual_payment: 1, stuck_payment: 1, payfail: 1, trainer: 1, join: 1, identity_doc: 1, pending_user: 1, signup: 1, founding: 1 };
-  // R24 م١: تجميع البطاقات مرة واحدة ⇒ قرارات (فعلها الأساسي بيقفلها فعلًا) + «للعلم» (الباقي) + المؤجَّل/المتجاهَل.
-  //   ⛔ `v2Decisions` بقت **قرارات بس**. دفعة عالقة · عدّادات الدورات/الحيّة · تسجيل · دفع فشل · طلب مستني رد صاحبه ·
-  //   ملف اتبعت ولسه ما استلمهوش · خبير مؤسس في المتابعة · وأي بند فعله الأساسي «افتح» بس = «للعلم» (بيتفتح في بيته).
-  //   `opts.snooze = {map, now}` ⇒ نفس الدالة المشتركة (`v2SnoozeSplit`) على كل المصادر (الوارد · التحويلات · العالقة · العروض · العقل).
+  var PERSON_TITLE = { payout: 1, manual_payment: 1, stuck_payment: 1, payfail: 1, trainer: 1, join: 1, identity_doc: 1, pending_user: 1, signup: 1, founding: 1, invite: 1 };
+  // ------------------------------------------------------------------ R24 م٢ · البيوت (كل نوع بند ليه قسم واحد)
+  // «محتاج قرارك» بيتحسب لكل قسم من البطاقات اللي `home` بتاعتها هو القسم ده. لا أزرار قرار في أي مكان تاني.
+  var HOME_OF = { file_waiting: 'files', file_late: 'files', file_attention: 'files', review: 'files', verify: 'files',
+                  dispute: 'disputes', unactivated: 'disputes', legacy: 'disputes',
+                  payout: 'money', manual_payment: 'money', stuck_payment: 'money', payfail: 'money',
+                  book_offer: 'books', book: 'books', program: 'courses', course: 'courses', live: 'courses',
+                  topic: 'content', creative: 'content',
+                  pending_user: 'people', trainer: 'people', join: 'people', founding: 'people', identity_doc: 'people', invite: 'people', signup: 'people',
+                  person: 'people', lead: 'people', message: 'people', open_message: 'people', other: 'people' };
+  function homeOfKind(kind) { return HOME_OF[kind] || 'people'; }
+  // اقتراح العقل: قسمه من المنتج. «التقارير» اندمجت في «التسويق والتقارير»، و«العقل» جوه «الشركة والعقل»، و«اللوحة» (إشعارات النظم المتصلة) بيتها «الشركة والعقل».
+  var BRAIN_HOME = { reports: 'marketing', brain: 'company', home: 'company' };
+  function brainHomeOf(sec) {
+    var k = str(sec);
+    if (BRAIN_HOME[k]) return BRAIN_HOME[k];
+    return k && SECTION_KEYS.indexOf(k) > -1 ? k : 'company';
+  }
+  // R24 م١: تجميع البطاقات مرة واحدة ⇒ قرارات (فعلها الأساسي بيقفلها أو بيفتح شاشة قراية فيها القفل) + «للعلم» (الباقي) + المؤجَّل/المتجاهَل.
+  //   ⛔ `v2Decisions` **قرارات بس**. دفعة عالقة · عدّادات الدورات/الحيّة · تسجيل (من غير طلب فتح) · دفع فشل · طلب مستني رد صاحبه ·
+  //   ملف اتبعت ولسه ما استلمهوش · خبير مؤسس في المتابعة = «للعلم».
+  //   `opts.snooze = {map, now}` ⇒ نفس الدالة المشتركة (`v2SnoozeSplit`) على كل المصادر (الوارد · التحويلات · العالقة · العروض · العقل · الدعوات · بطاقات الناس).
+  //   R24 م٢: كل بطاقة قرار ليها `home` (قسمها الوحيد)، وطلبات نفس الشخص (زائر · مدرّب · خدمة · مؤسس · دعوة · هوية) بطاقة واحدة (`kind:'person'`).
+  //   النتيجة بترتيب الأقسام (السايدبار) فـ«ابدأ القرارات» بتلف الأقسام بالترتيب، و`byHome` هو مصدر الشريط والمربّع والعدّاد.
+  var PERSON_KINDS = { pending_user: 1, trainer: 1, join: 1, founding: 1, identity_doc: 1, invite: 1 };
+  var CHIP_AR = { pending_user: 'طلب فتح المنصة', founding: 'خبير مؤسس', invite: 'دعوة من عضو', identity_doc: 'مستند هوية', signup: 'تسجيل جديد' };
+  function emailOfCard(c) { return str(c && c.row && (c.row.personEmail || c.row.email)).toLowerCase(); }
+  function chipOf(c) {
+    if (c.kind === 'trainer') return c.tag;
+    if (c.kind === 'join') return 'طلب خدمة' + (c.row && str(c.row.serviceLabel) ? ': ' + str(c.row.serviceLabel) : '');
+    return CHIP_AR[c.kind] || c.tag;
+  }
+  // خطوة من خطوات قبول الشخص: بتتنفّذ بنفس فعل بطاقتها (decide / invite_approve) على صفها.
+  function oneClickPart(c) { var a = c.primary && c.primary.act && c.primary.act.do; return a === 'decide' || a === 'invite_approve'; }
+  function acceptLabelOf(parts) {
+    if (parts.length > 1) return 'اقبل كل الطلبات';
+    return parts[0].primary.label;
+  }
+  function stepText(c) {
+    switch (c.kind) {
+      case 'pending_user': return 'هتفتح المنصة للطلب';
+      case 'trainer': return 'هتقبل طلب الانضمام' + (c.row && c.row.trJoin ? ' ك' + ({ expert: 'خبير', trainer: 'مدرّب', both: 'خبير ومدرّب' }[c.row.trJoin] || '') : '');
+      case 'join': return 'هتقبل طلب تقديم الخدمة' + (c.row && str(c.row.serviceLabel) ? ' «' + str(c.row.serviceLabel) + '»' : '') + ' ويظهر الاسم على المنصة';
+      case 'founding': return 'هتعلّم «' + (c.primary && c.primary.label || 'تم التواصل') + '» على طلب الخبير المؤسس';
+      case 'invite': return 'هتوافق على الدعوة (ورابطها يشتغل)';
+      default: return c.tag;
+    }
+  }
+  function rejectText(c) {
+    switch (c.kind) {
+      case 'pending_user': return 'الطلب هيترفض والمنصة مش هتتفتح';
+      case 'trainer': return 'هيترفض طلب الانضمام';
+      case 'join': return 'هيترفض طلب تقديم الخدمة';
+      case 'founding': return 'هيتعلّم «ليس مناسبًا»';
+      case 'invite': return 'هتترفض الدعوة';
+      default: return '';
+    }
+  }
+  var REJECTABLE = { pending_user: 1, trainer: 1, join: 1, founding: 1, invite: 1 };
+  function personCardOf(email, parts, signupChip) {
+    var ts = Math.min.apply(null, parts.map(function (c) { return isFinite(c.ts) ? c.ts : Infinity; }));
+    var name = '';
+    parts.forEach(function (c) { if (!name && str(c.title) && str(c.title) !== str(email)) name = str(c.title); });
+    var chips = parts.map(chipOf).concat(signupChip ? [CHIP_AR.signup] : []);
+    var subs = [];
+    parts.forEach(function (c) { var t = str(c.sub); if (t && subs.indexOf(t) < 0) subs.push(t); });
+    var oneClick = parts.every(oneClickPart);
+    var card = {
+      id: 'person|' + email, kind: 'person', group: Math.min.apply(null, parts.map(function (c) { return c.group; })), tag: U(parts.length, ['طلب واحد مفتوح', 'طلبان مفتوحان', 'طلبات مفتوحة', 'طلبًا مفتوحًا']),
+      title: name || email, sub: shorten(subs.join(' — '), 160), brain: 'طلبات مفتوحة: ' + chips.join('، '), brainHead: 'الطلبات', reason: '', warn: '',
+      ageText: isFinite(ts) ? agoText(ts, parts[0].now || 0) : '', ts: ts, primary: null, secondary: null, open: act({ do: 'person', email: email }), link: null,
+      facts: [], img: 'people', row: parts[0].row, rows: parts.map(function (c) { return c.row; }), parts: parts, chips: chips, merged: parts.length,
+      person: { email: email, name: name || email }, home: 'people', bucket: 'decision', fyiKind: '', dismiss: false,
+      key: 'person:' + email, fp: parts.map(function (c) { return c.key || c.id; }).sort().join('+')
+    };
+    if (oneClick) {
+      card.primary = { label: acceptLabelOf(parts), act: act({ do: 'person_accept', email: email }), steps: parts.map(stepText) };
+    } else {
+      card.primary = { label: 'افتح الملف', act: act({ do: 'person', email: email }) };
+      card.reason = 'فيه طلب لازم يتقرا قبل القرار (مرخَّصة أو مستند هوية أو علامة مراجعة) — كل طلب بزراره في صفحة الملف';
+    }
+    if (parts.some(function (c) { return REJECTABLE[c.kind]; })) {
+      card.secondary = { label: 'ارفض بسبب', act: act({ do: 'person_reject', email: email }), steps: parts.filter(function (c) { return REJECTABLE[c.kind]; }).map(rejectText) };
+    }
+    return card;
+  }
+  // يجمّع بطاقات الناس (قرارات فقط) بالإيميل. يرجّع {cards, absorbed:{id:true}}: التسجيل بيتبلع لو الشخص عنده طلب فتح منصة.
+  function groupPeople(cards) {
+    var by = {}, order = [], out = [], absorbed = {};
+    cards.forEach(function (c) {
+      var em = (PERSON_KINDS[c.kind] && c.bucket === 'decision') ? emailOfCard(c) : '';
+      if (!em) { out.push(c); return; }
+      if (!by[em]) { by[em] = []; order.push(em); out.push({ __slot: em }); }
+      by[em].push(c);
+    });
+    var signups = {};
+    cards.forEach(function (c) { if (c.kind === 'signup') { var e = emailOfCard(c); if (e) (signups[e] = signups[e] || []).push(c); } });
+    return { cards: out.map(function (c) {
+      if (!c.__slot) return c;
+      var parts = by[c.__slot], hasVisitor = parts.some(function (x) { return x.kind === 'pending_user'; });
+      var sg = hasVisitor ? (signups[c.__slot] || []) : [];
+      sg.forEach(function (x) { absorbed[x.id] = true; });
+      if (parts.length === 1) {
+        var one = parts[0];
+        one.chips = [chipOf(one)].concat(sg.length ? [CHIP_AR.signup] : []);
+        return one;
+      }
+      return personCardOf(c.__slot, parts, sg.length > 0);
+    }), absorbed: absorbed };
+  }
   function v2Split(rows, payouts, queue, opts) {
     opts = opts || {};
     var now = opts.now || 0;
@@ -877,6 +1015,7 @@
     function wrapStuck(sk) { return { apiKind: 'stuck_payment', apiId: sk.id, ref: sk.id, stuck: sk, email: sk.email, who: sk.name, ts: sk.ageHours != null ? now - sk.ageHours * HOUR : undefined }; }
     function wrapOffer(of) { return { apiKind: 'book_offer', apiId: of.id, ref: of.id, offerRow: of, who: of.ownerName, ts: isFinite(of.at) ? of.at : undefined }; }
     function wrapBrain(it) { return { apiKind: 'brain_item', apiId: it.id, ref: it.id, item: it, ts: ms(it.created_at) }; }
+    function wrapInvite(iv) { return { apiKind: 'invite', apiId: iv.id, ref: 'INV-' + iv.id, inviteRow: iv, who: str(iv.name), personEmail: str(iv.email), email: str(iv.email), ts: ms(iv.at) }; }
     function pass(list, keyOf, wrap) {
       list = Array.isArray(list) ? list : [];
       if (!sn) return list;
@@ -901,6 +1040,11 @@
       if (!of || !of.id) return;
       src.push(wrapOffer(of));
     });
+    // R24 م٢: دعوات من أعضاء بتنتظر موافقتك (من مصدر الدعوات) — بتدخل بطاقة الشخص صاحب الإيميل.
+    pass(opts.invites, function (iv) { return iv && iv.id ? 'invite:' + iv.id : null; }, wrapInvite).forEach(function (iv) {
+      if (!iv || !iv.id) return;
+      src.push(wrapInvite(iv));
+    });
     // brain2: اقتراحات العقل المنتظرة (proposed فقط) بطاقاتٌ في آخر الترتيب.
     pass(opts.brainItems, function (it) { return it && it.id ? 'brain_item:' + it.id : null; }, wrapBrain).forEach(function (it) {
       if (!it || !it.id || (it.status != null && it.status !== 'proposed')) return;
@@ -920,7 +1064,7 @@
       var out = [];
       list.forEach(function (r, i) {
         var c = v2Card(r, cardOpts);
-        if (c) { c._i = i; var rw = (c.key && returned[c.key]) || r.returnedWhy; if (rw) c.returned = rw; out.push(c); }
+        if (c) { c._i = i; c.now = now; var rw = (c.key && returned[c.key]) || r.returnedWhy; if (rw) c.returned = rw; out.push(c); }
       });
       return out;
     }
@@ -930,15 +1074,44 @@
       if (a.ts !== b.ts) return a.ts < b.ts ? -1 : 1;   // Infinity مقارنة صحيحة: المجهول آخرًا
       return a._i - b._i;
     });
-    all.forEach(function (c) { delete c._i; });
+    // R24 م٢: بطاقة واحدة لكل شخص (قبل فلتر بعدين بتاع بطاقة الشخص نفسها).
+    var gp = groupPeople(all);
+    all = gp.cards.filter(function (c) { return !gp.absorbed[c.id]; });
+    all.forEach(function (c, i) { c._o = i; });
     var decisions = all.filter(function (c) { return c.bucket === 'decision'; });
     var fyiCards = all.filter(function (c) { return c.bucket !== 'decision'; });
     var snoozed = [];
+    // بطاقة شخص (مجمّعة) اتأجّلت/اتشالت ⇒ بتتشال من القرارات وبتروح «مؤجّلة/اتشالت» ببطاقتها نفسها.
+    if (sn) {
+      var composites = decisions.filter(function (c) { return c.kind === 'person'; });
+      if (composites.length) {
+        var sp2 = v2SnoozeSplit(composites, function (c) { return c.key; }, sn.map, now, function (c) { return c.fp; });
+        sp2.hidden.forEach(function (h) { snoozed.push({ key: h.key, entry: h.entry, card: h.item }); });
+        Object.keys(sp2.returned).forEach(function (k) { composites.forEach(function (c) { if (c.key === k) c.returned = sp2.returned[k]; }); });
+        var gone = {}; sp2.hidden.forEach(function (h) { gone[h.item.id] = true; });
+        decisions = decisions.filter(function (c) { return !gone[c.id]; });
+      }
+    }
     hidden.forEach(function (h) {
       var c = h.row ? v2Card(h.row, cardOpts) : null;
       if (c) snoozed.push({ key: h.key || c.key, entry: h.entry, card: c });
     });
-    return { decisions: decisions, fyi: v2FyiGroups(fyiCards), snoozed: snoozed, hiddenRows: hidden.map(function (h) { return h.row; }) };
+    // ترتيب «ابدأ القرارات»: بترتيب الأقسام (السايدبار) ثم بالأولوية جوه القسم.
+    decisions.sort(function (a, b) {
+      var x = SECTION_KEYS.indexOf(a.home), y = SECTION_KEYS.indexOf(b.home);
+      if (x !== y) return (x < 0 ? 99 : x) - (y < 0 ? 99 : y);
+      return a._o - b._o;
+    });
+    var byHome = {}, counts = { total: decisions.length };
+    SECTION_KEYS.forEach(function (k) { byHome[k] = []; counts[k] = 0; });
+    decisions.forEach(function (c) { var k = byHome[c.home] ? c.home : 'people'; byHome[k].push(c); counts[k]++; });
+    var snoozedBy = {};
+    SECTION_KEYS.forEach(function (k) { snoozedBy[k] = []; });
+    snoozed.forEach(function (x) { var k = snoozedBy[x.card.home] ? x.card.home : 'people'; snoozedBy[k].push(x); });
+    var fyiInfo = v2FyiGroups(fyiCards);
+    decisions.forEach(function (c) { delete c._i; delete c._o; });
+    return { decisions: decisions, fyi: fyiInfo, snoozed: snoozed, snoozedBy: snoozedBy, byHome: byHome, counts: counts,
+             hiddenRows: hidden.map(function (h) { return h.row; }).filter(Boolean) };
   }
   function v2Decisions(rows, payouts, queue, opts) { return v2Split(rows, payouts, queue, opts).decisions; }
 
@@ -1271,7 +1444,16 @@
     if (!resp || typeof resp !== 'object') return { state: 'failed', email: email || '', cards: null };
     var em = str(resp.email) || email || '';
     if (resp.found === null || resp.found === undefined) return { state: 'failed', email: em, cards: null, sources: resp.sources || {} };
-    if (resp.found === false) return { state: 'notfound', email: em, cards: null, sources: resp.sources || {} };
+    if (resp.found === false) {
+      // R24 م٢: خبير مؤسس (أو أي طلب) لسه ما سجّلش حسابه ⇒ الصفحة بتتفتح بطلباته بدل «لا يوجد حساب».
+      var rq0 = personRequestList(resp, now);
+      if (rq0.list && rq0.list.length) {
+        var nm0 = str(rq0.list[0].name) || em;
+        return { state: 'ok', unregistered: true, email: em, name: nm0, initial: nm0.charAt(0), photo: null, chips: [], country: null, countryText: NA, failed: [], sources: resp.sources || {},
+                 active: true, joinLine: 'لا يملك حسابًا على المنصة بعد', lastLogin: '', cards: [], log: [], logPartial: false, requests: rq0.list, requestsFailed: rq0.failed };
+      }
+      return { state: 'notfound', email: em, cards: null, sources: resp.sources || {} };
+    }
     var id = resp.identity || {}, src = resp.sources || {};
     var failed = Object.keys(src).filter(function (k) { return src[k] === 'failed'; });
     var name = str(id.name) || em;
@@ -1344,7 +1526,68 @@
       return { at: ms(e.at), when: dateText(e.at), ago: agoText(e.at, now || 0), text: base + (e.kind === 'file_assigned' && str(e.title) ? ' «' + str(e.title) + '»' : '') };
     }).filter(Boolean);
     vm.logPartial = !!resp.log_partial;
+    var rq = personRequestList(resp, now);
+    vm.requests = rq.list; vm.requestsFailed = rq.failed;
     return vm;
+  }
+
+  // ------------------------------------------------------------------ R24 م٢ · طلبات الشخص المفتوحة (صفحة الشخص)
+  // `resp.requests` من `/api/v2/person` (كل مصادر الطلبات على نفس الإيميل). null = ما وصلتش (مش «لا طلبات»).
+  var REQ_LABEL = { pending_user: 'طلب فتح المنصة', trainer: 'طلب انضمام', join: 'طلب تقديم خدمة', founding: 'خبير مؤسس', identity_doc: 'مستند هوية', signup: 'تسجيل جديد', invite: 'دعوة من عضو' };
+  var REQ_SRC_LABEL = { pending_user: 'طلب فتح المنصة', trainer: 'طلبات الانضمام', join: 'طلبات تقديم الخدمة', founding: 'الخبراء المؤسسين', identity_doc: 'مستندات الهوية', signup: 'التسجيلات', invite: 'الدعوات' };
+  var FOUND_NEXT = { 'new': ['contacted', 'تم التواصل'], resolved: ['contacted', 'تم التواصل'], contacted: ['invited', 'تمت دعوته'], invited: ['converted', 'صار مدرّبًا'] };
+  var FOUND_ST = { 'new': 'جديد', resolved: 'عولج', contacted: 'تم التواصل', invited: 'تمت دعوته' };
+  function personRequestList(resp, now) {
+    if (!resp || !Array.isArray(resp.requests)) return { list: null, failed: [] };
+    var rs = resp.request_sources || {};
+    var failed = Object.keys(rs).filter(function (k) { return rs[k] === 'failed'; }).map(function (k) { return REQ_SRC_LABEL[k] || k; });
+    var list = resp.requests.filter(function (r) { return r && REQ_LABEL[r.kind] && r.id != null && r.id !== ''; }).map(function (r) {
+      var at = ms(r.at), text = '';
+      switch (r.kind) {
+        case 'pending_user': text = clean([str(r.role), str(r.country)]).join('، '); break;
+        case 'trainer': text = clean([({ expert: 'خبير', trainer: 'مدرّب', both: 'خبير ومدرّب' }[str(r.join_as)] || ''), shorten(str(r.headline), 100), str(r.specialty)]).join('، '); break;
+        case 'join': text = clean([str(r.service), r.waiting ? 'بانتظار ردّه' : '', r.licensed ? 'مرخَّصة' : '']).join('، '); break;
+        case 'founding': text = clean([FOUND_ST[str(r.status)] || '', str(r.spec), str(r.country)]).join('، '); break;
+        case 'identity_doc': text = str(r.title); break;
+        case 'signup': text = clean([str(r.provider), str(r.where)]).join('، '); break;
+        case 'invite': text = clean(['الداعي: ' + str(r.invited_by), r.generation != null ? 'الجيل ' + ar(r.generation) : '']).join('، '); break;
+      }
+      return { kind: r.kind, id: r.id, label: REQ_LABEL[r.kind], text: text, ago: isNaN(at) ? '' : agoText(at, now || 0), at: at, name: str(r.name), raw: r };
+    });
+    return { list: list, failed: failed };
+  }
+  // صف جاهز لـ`v2Card` من طلب صفحة الشخص (لما الصف الحقيقي مش موجود في الوارد). الصف الحقيقي (لو موجود) أحسن — فيه كل أعلامه.
+  function requestRow(req, email) {
+    var r = req.raw || {}, base = { personEmail: email, email: email, apiId: r.id != null ? r.id : req.id, who: req.name || email, ts: req.at, ref: req.kind + '-' + req.id };
+    switch (req.kind) {
+      case 'pending_user': return Object.assign(base, { apiKind: 'pending_user', canReject: true, puCountry: str(r.country), puRole: str(r.role), flagLabels: Array.isArray(r.flags) ? r.flags : [] });
+      case 'trainer': return Object.assign(base, { apiKind: 'trainer', canReject: true, rejectNeedsReason: true, trJoin: str(r.join_as), trHeadline: str(r.headline), trSpec: str(r.specialty) });
+      case 'join': return Object.assign(base, { apiKind: 'join', canReject: true, rejectNeedsReason: true, waiting: !!r.waiting, licensed: !!r.licensed, licenceMissing: !!r.licence_missing, serviceLabel: str(r.service) });
+      case 'founding': { var nx = FOUND_NEXT[str(r.status)] || ['contacted', 'تم التواصل']; return Object.assign(base, { apiKind: 'founding', canReject: true, nextStatus: nx[0], approveLabel: nx[1], fSpec: str(r.spec), fCountry: str(r.country), statusLabel: FOUND_ST[str(r.status)] || '' }); }
+      case 'identity_doc': return Object.assign(base, { apiKind: 'identity_doc', idTitle: str(r.title), approveLabel: 'وثّق الهوية', canReject: true, rejectNeedsReason: true });
+      case 'signup': return Object.assign(base, { apiKind: 'signup', canReject: false, sgProvider: str(r.provider), sgWhere: str(r.where), approveLabel: 'تمام، اطّلعت' });
+      case 'invite': return Object.assign(base, { apiKind: 'invite', inviteRow: { id: r.id, name: req.name, invitedByLabel: str(r.invited_by), note: str(r.note), generation: r.generation } });
+    }
+    return null;
+  }
+  // بطاقات طلبات الشخص (بأزرار بيوتها): بتفضّل الصف الحقيقي من الوارد (`inboxRows`) على الصف المبني من الطلب.
+  function v2PersonCards(requests, inboxRows, email, now) {
+    var em = String(email || '').toLowerCase();
+    return (Array.isArray(requests) ? requests : []).map(function (req) {
+      var real = null;
+      (Array.isArray(inboxRows) ? inboxRows : []).forEach(function (ir) { if (!real && ir && ir.apiKind === req.kind && String(ir.apiId) === String(req.id)) real = ir; });
+      var row = real || requestRow(req, em);
+      if (!row) return null;
+      var c = v2Card(row, { now: now || 0, inboxRows: inboxRows });
+      if (!c) return null;
+      c.now = now || 0; c.reqKind = req.kind;
+      if (req.kind === 'founding') {
+        // خطوات المؤسس (تواصلت · دعيته · بقى مدرّب) = مسار متابعة على صفحة الشخص، مش قرار بيرجع ٣ مرات.
+        var st = str(req.raw && req.raw.status) || 'new';
+        c.follow = st !== 'new' && st !== 'resolved';
+      }
+      return { req: req, card: c };
+    }).filter(Boolean);
   }
 
   // ------------------------------------------------------------------ خريطة الأقسام (D1-B)
@@ -1359,10 +1602,19 @@
   function hiddenTab(t) { t.hidden = true; return t; }
   function T(key, label, mod, st, m) { var t = { key: key, label: label, mod: mod, st: st || {} }; if (m) t.m = m; return t; }
 
+  // R24 م٢ (موافقة المؤسس 2026-11-13): الترتيب اللي المؤسس اعتمده — اللوحة · الناس · ملفات الخبراء · النزاعات والاستردادات · الفلوس · الدورات · الكتب ·
+  // سوق الخدمات · المحتوى · التسويق والتقارير (مدموجين) · الشركة والعقل (العقل تبويب جواها). «كل الوارد» و«كل السجلات» القديمة اتشالوا من القايمة؛
+  // اللي ماله بيت تاني اتحط في «الشركة ⇐ السجلات القديمة» للقراية بس.
   var SECTIONS = [
     { key: 'home', label: 'اللوحة', img: null, desc: 'ما يحتاج قرارك الآن وكل ما ينتظرك', tabs: [
-      T('board', 'اللوحة والقرارات', 'home', { v2mode: 'board' }, { v2mode: ['board', 'focus'] }),
-      T('inbox', 'كل الوارد', 'inbox', { activeFilter: 'all' }, {})
+      T('board', 'اللوحة والقرارات', 'home', { v2mode: 'board' }, { v2mode: ['board', 'focus'] })
+    ] },
+    { key: 'people', label: 'الناس', img: 'people', desc: 'كل شخص في مكان واحد، بكل أدواره وطلباته', tabs: [
+      T('users', 'الناس', 'users'),
+      T('pipeline', 'الدعوات', 'v2p_invites'),
+      T('invites', 'قوائم الانتظار', 'invites'),
+      T('messages', 'الرسائل', 'inbox', { activeFilter: 't:messages' }, { activeFilter: ['t:messages'] }),
+      hiddenTab(T('person', 'صفحة الشخص', 'v2person'))
     ] },
     { key: 'files', label: 'ملفات الخبراء', img: 'files', desc: 'ملفات تنتظر خبيرًا أو مراجعة، وفريق الخبراء', tabs: [
       T('files', 'الملفات', 'v2files'),
@@ -1371,36 +1623,7 @@
     ] },
     { key: 'disputes', label: 'النزاعات والاستردادات', img: 'disputes', desc: 'اعتراضات العملاء وأموال محجوزة لحين قرارك', tabs: [
       T('disputes', 'النزاعات', 'v2disputes'),
-      T('all', 'كل النزاعات', 'inbox', { activeFilter: 't:disputes' }, { activeFilter: ['t:disputes', 't:legacy'] }),
-      T('escrow', 'كل السجلات', 'escrow', { escTab: 'sessions' }, { escTab: ['sessions', 'disputes', 'released'] })
-    ] },
-    { key: 'courses', label: 'الدورات والمدرّبون', img: 'courses', desc: 'الدورات وطلبات المدرّبين وما يطلبه الناس', tabs: [
-      T('courses', 'الدورات', 'courses', { courseTab: 'platform' }, { courseTab: ['platform'] }),
-      T('trainers', 'المدرّبون', 'team', { teamTab: 'trainers' }, { teamTab: ['trainers'] }),
-      T('live', 'الدورات الحيّة', 'courses', { courseTab: 'schedules' }, { courseTab: ['schedules'] }),
-      T('demand', 'ما يطلبه الناس', 'courses', { courseTab: 'demand' }, { courseTab: ['demand', 'programs'] }),
-      T('offers', 'عروض الأسعار', 'courses', { courseTab: 'offers' }, { courseTab: ['offers'] }),
-      hiddenTab(T('course', 'صفحة الدورة', 'courses', { courseTab: 'page' }, { courseTab: ['page'] })),
-      T('all', 'كل السجلات', 'courses', { courseTab: 'courses' }, { courseTab: { not: [] } })
-    ] },
-    { key: 'market', label: 'سوق الخدمات', img: 'market', desc: 'طلبات الأعضاء وعروض الخبراء', tabs: [
-      T('requests', 'الطلبات', 'market'),
-      T('all', 'كل الطلبات', 'v2s_market_all'),
-      T('demand', 'ماذا يطلب الناس', 'v2s_market_demand'),
-      T('manage', 'إدارة السوق', 'v2s_market_v4')
-    ] },
-    { key: 'books', label: 'الكتب', img: 'books', desc: 'كل كتاب وعمل، وعروض تنتظر المراجعة، وطلبات القرّاء', tabs: [
-      T('offers', 'مراجعة العروض', 'v2b_offers'),
-      T('requests', 'طلبات القرّاء', 'v2b_requests'),
-      T('books', 'الكتب', 'knowledge'),
-      T('ours', 'كتبنا', 'v2s_books_ours')
-    ] },
-    { key: 'people', label: 'الناس والدعوات', img: 'people', desc: 'من ينتظر الدخول، والدعوات، والأعضاء، والرسائل', tabs: [
-      T('invites', 'الطلبات', 'invites'),
-      T('pipeline', 'الدعوات', 'v2p_invites'),
-      T('users', 'المستخدمون', 'users'),
-      T('messages', 'الرسائل', 'inbox', { activeFilter: 't:messages' }, { activeFilter: ['t:messages'] }),
-      hiddenTab(T('person', 'صفحة الشخص', 'v2person'))
+      T('all', 'كل النزاعات', 'inbox', { activeFilter: 't:disputes' }, { activeFilter: ['t:disputes', 't:legacy'] })
     ] },
     { key: 'money', label: 'الفلوس', img: 'money', desc: 'كل جنيه دخل، وأين هو الآن، والقرارات المالية', tabs: [
       T('overview', 'نظرة', 'v2m_overview'),
@@ -1408,8 +1631,27 @@
       T('receipts', 'الإيصالات', 'v2m_receipts'),
       T('prices', 'الأسعار', 'v2m_prices'),
       T('shares', 'النسب والإعدادات', 'v2m_shares'),
-      T('ads', 'إعلانات الأعمال', 'v2m_ads'),
-      T('all', 'كل السجلات', 'finance', { finTab: 'summary' }, { finTab: { not: [] } })
+      T('ads', 'إعلانات الأعمال', 'v2m_ads')
+    ] },
+    { key: 'courses', label: 'الدورات', img: 'courses', desc: 'الدورات والمدرّبون وما يطلبه الناس', tabs: [
+      T('courses', 'الدورات', 'courses', { courseTab: 'platform' }, { courseTab: ['platform'] }),
+      T('trainers', 'المدرّبون', 'team', { teamTab: 'trainers' }, { teamTab: ['trainers'] }),
+      T('live', 'الدورات الحيّة', 'courses', { courseTab: 'schedules' }, { courseTab: ['schedules'] }),
+      T('demand', 'ما يطلبه الناس', 'courses', { courseTab: 'demand' }, { courseTab: ['demand', 'programs'] }),
+      T('offers', 'عروض الأسعار', 'courses', { courseTab: 'offers' }, { courseTab: ['offers'] }),
+      hiddenTab(T('course', 'صفحة الدورة', 'courses', { courseTab: 'page' }, { courseTab: ['page'] }))
+    ] },
+    { key: 'books', label: 'الكتب', img: 'books', desc: 'كل كتاب وعمل، وعروض تنتظر المراجعة، وطلبات القرّاء', tabs: [
+      T('offers', 'مراجعة العروض', 'v2b_offers'),
+      T('requests', 'طلبات القرّاء', 'v2b_requests'),
+      T('books', 'الكتب', 'knowledge'),
+      T('ours', 'كتبنا', 'v2s_books_ours')
+    ] },
+    { key: 'market', label: 'سوق الخدمات', img: 'market', desc: 'طلبات الأعضاء وعروض الخبراء', tabs: [
+      T('requests', 'الطلبات', 'market'),
+      T('all', 'كل الطلبات', 'v2s_market_all'),
+      T('demand', 'ماذا يطلب الناس', 'v2s_market_demand'),
+      T('manage', 'إدارة السوق', 'v2s_market_v4')
     ] },
     { key: 'content', label: 'المحتوى', img: 'content', desc: 'المقالات والموضوعات والأخبار والتعليقات والساحة والديوان والقاموس وقوانين المكتبة ودليل الاستخدام', tabs: [
       T('pipeline',  'خط النشر',       'topics', { topicsTab: 'pipeline' },  { topicsTab: ['pipeline'] }),
@@ -1424,31 +1666,69 @@
       T('tutorials', 'دليل الاستخدام', 'topics', { topicsTab: 'tutorials' }, { topicsTab: ['tutorials'] }),
       T('site',      'الموقع',          'topics', { topicsTab: 'site' },      { topicsTab: ['site'] })
     ] },
-    { key: 'marketing', label: 'التسويق', img: 'marketing', desc: 'الحملات من الإعلان حتى الدفع، والسوشيال، وخطة النشر', tabs: [
+    { key: 'marketing', label: 'التسويق والتقارير', img: 'marketing', desc: 'الحملات والسوشيال وخطة النشر، وما الذي يعمل وما الذي توقّف', tabs: [
       T('campaigns', 'الحملات', 'marketing'),
       T('social', 'السوشيال ميديا', 'v2mk_social'),
-      T('plan', 'خطة النشر', 'v2mk_plan')
-    ] },
-    { key: 'reports', label: 'التقارير', img: 'reports', desc: 'ما الذي يعمل، وما الذي توقّف، وأين الفرصة', tabs: [
+      T('plan', 'خطة النشر', 'v2mk_plan'),
       T('report', 'التقرير', 'analysis'),
       T('demand', 'ما يسأل عنه الناس', 'v2r_demand'),
       T('sunday', 'تقرير الأحد', 'v2r_sunday')
     ] },
-    { key: 'brain', label: 'العقل', img: 'brain', desc: 'ما يفعله العقل وحده، وما ينتظر قرارك. ما له مفتاح تغيّره من هنا.', tabs: [
-      T('log', 'القواعد وسجل اليوم', 'v2s_brain'),
-      T('helpers', 'المساعدون', 'ai')
-    ] },
-    { key: 'company', label: 'الشركة ورأس المال', img: 'company', desc: 'الشركاء ورأس المال والمعدات والاتفاقات والإعدادات', tabs: [
+    { key: 'company', label: 'الشركة والعقل', img: 'company', desc: 'الشركاء ورأس المال والمعدات والاتفاقات والإعدادات، والعقل وقواعده', tabs: [
       T('invest', 'نظرة', 'investment'),
       T('partners', 'الشركاء ورأس المال', 'v2c_partners'),
       T('assets', 'المعدات والاشتراكات', 'v2c_assets'),
       T('deals', 'الاتفاقات والرعاة', 'v2c_deals'),
       T('ads', 'عملاء الإعلانات', 'v2c_ads'),
       T('tools', 'الأدوات', 'v2s_tools'),
+      T('brain', 'العقل وقواعده', 'v2s_brain'),
+      T('helpers', 'المساعدون', 'ai'),
       T('settings', 'الإعدادات', 'settings'),
+      T('legacy', 'السجلات القديمة', 'escrow', { escTab: 'sessions' }, { escTab: ['sessions', 'disputes', 'released'] }),
+      T('legacyfin', 'سجلات المالية القديمة', 'finance', { finTab: 'summary' }, { finTab: { not: [] } }),
       hiddenTab(T('targets', 'الأهداف', 'targets'))
     ] }
   ];
+  // أقسام «محتاج قرارك» (كل أقسام السايدبار ما عدا اللوحة) بترتيبها — هو ترتيب «ابدأ القرارات».
+  var SECTION_KEYS = SECTIONS.filter(function (s) { return s.key !== 'home'; }).map(function (s) { return s.key; });
+  // أسماء الأقسام القديمة (روابط محفوظة وأي كود لسه بينادي بيها): «التقارير» اندمجت في «التسويق والتقارير»، و«العقل» جوه «الشركة والعقل».
+  var SECTION_ALIAS = { reports: { key: 'marketing', tabs: {} }, brain: { key: 'company', tabs: { log: 'brain' } } };
+  // مربّعات اللوحة = ١٠ أقسام بعدد «ن محتاج قرارك» بس (م٢).
+  var TILE_DEFS = SECTIONS.filter(function (s) { return s.key !== 'home'; }).map(function (s) { return { key: s.key, label: s.label, img: s.img }; });
+  // المصادر اللي بنبني منها قرارات كل قسم. أي مصدر منها ما وصلش (avail[k] === false) ⇒ «تعذّر الوصول» مش «مفيش حاجة مستنياك».
+  var TILE_NEED = { people: ['inbox'], files: ['inbox'], disputes: ['inbox'], money: ['inbox', 'payouts'], courses: ['inbox'], books: ['inbox'], market: ['market'], content: ['inbox'] };
+  var TILE_SRC = { people: ['people'], files: ['files'], disputes: ['disputes'], money: ['money'], courses: ['courses'], books: ['books'], market: ['market'], content: ['content'] };
+  // مربّعات القسم: العدد من **نفس** `byHome` اللي بيرسم الشريط والقايمة و«ابدأ القرارات» (دالة واحدة بعد البعدين والتجاهل).
+  // الفشل بيجي من توفّر المصادر (`avail`)، والعدّ الناقص (قوائم مقصوصة) من حسابات الأساس (`v2Tiles`).
+  function v2SectionTiles(base, split, avail) {
+    var by = {};
+    (Array.isArray(base) ? base : []).forEach(function (t) { by[t.key] = t; });
+    avail = avail || {};
+    return TILE_DEFS.map(function (d) {
+      var t = baseTile(d), srcs = TILE_SRC[d.key] || [];
+      t.dest = d.key;
+      var failed = (TILE_NEED[d.key] || []).some(function (k) { return avail[k] === false; });
+      var partial = srcs.some(function (k) { return by[k] && by[k].partial; });
+      if (failed) return failTile(t);
+      var list = (split && split.byHome && split.byHome[d.key]) || [];
+      var n = list.length;
+      t.count = n;
+      t.hot = list.some(function (c) { return c.kind === 'file_late' || c.kind === 'dispute'; });
+      t.next = n ? ar(n) + ' محتاج قرارك' : 'مفيش حاجة مستنياك';
+      t.facts = n ? [t.next] : [];
+      if (partial) markPartial(t);
+      return t;
+    });
+  }
+  // شريط «محتاج قرارك» لقسم: بطاقاته · مؤجّلة · اتشالت · سطر «للعلم» بتاعه. فاضي ⇒ سطر واحد «مفيش حاجة مستنياك هنا».
+  var EMPTY_STRIP = 'مفيش حاجة مستنياك هنا';
+  function v2Strip(split, key) {
+    var cards = (split && split.byHome && split.byHome[key]) || [];
+    var lists = v2SnoozeLists((split && split.snoozedBy && split.snoozedBy[key]) || []);
+    var fy = (split && split.fyi && split.fyi.groups ? split.fyi.groups : []).filter(function (g) { return g.home === key; });
+    var fyiN = fy.reduce(function (a, g) { return a + g.n; }, 0);
+    return { key: key, cards: cards, n: cards.length, later: lists.later, gone: lists.gone, fyi: fy, fyiN: fyiN, emptyText: EMPTY_STRIP, empty: !cards.length };
+  }
   // مفاتيح قديمة ابتُلعت (REDIRECTS في index.html) — تُحلّ هنا بنفس حالتها الداخلية.
   var ALIASES = {
     overview: { mod: 'inbox', state: {} },
@@ -1459,9 +1739,15 @@
     foundation: { mod: 'targets', state: { tgTab: 'foundation' } }
   };
 
-  function secOf(key) { for (var i = 0; i < SECTIONS.length; i++) if (SECTIONS[i].key === key) return SECTIONS[i]; return null; }
+  function secOf(key) {
+    var al = SECTION_ALIAS[key]; if (al) key = al.key;          // R24 م٢: «reports» ⇒ «marketing»، «brain» ⇒ «company»
+    for (var i = 0; i < SECTIONS.length; i++) if (SECTIONS[i].key === key) return SECTIONS[i];
+    return null;
+  }
   function tabOf(secKey, tabKey) {
+    var al = SECTION_ALIAS[secKey];
     var s = secOf(secKey); if (!s) return null;
+    if (al && al.tabs[tabKey]) tabKey = al.tabs[tabKey];
     for (var i = 0; i < s.tabs.length; i++) if (s.tabs[i].key === tabKey) return s.tabs[i];
     return null;
   }
@@ -1514,6 +1800,8 @@
       var ht = tabOf(hint.section, hint.tab);
       if (ht && ht.mod === mod) return pack(secOf(hint.section), ht, aliasState);
     }
+    // R24 م٢: «كل الوارد» اتشال. الرابط القديم العاري (#inbox / #overview) بلا فلتر مفهوم ⇒ اللوحة (القرارات في بيوتها).
+    if (mod === 'inbox') { var f0 = stVal(st, 'activeFilter'); if (!f0 || f0 === 'all') return pack(secOf('home'), secOf('home').tabs[0], aliasState); }
     return any ? pack(any.sec, any.tab, aliasState) : null;
   }
   // العنوان: #s/<قسم>[/<تبويب>] — يقبل بدون # وبدون s/ المسبوقة بشرطة.
@@ -1525,6 +1813,8 @@
     return parts.length ? '?' + parts.join('&') : '';
   }
   function sectionHash(key, tab, person, q) {
+    var al = SECTION_ALIAS[key];            // R24 م٢: العناوين الجديدة بالأسماء الجديدة (reports ⇒ marketing · brain ⇒ company)
+    if (al) { tab = (tab && al.tabs[tab]) || tab; key = al.key; }
     if (person && key === 'people' && tab === 'person') return '#s/people/person/' + personKey(person);
     if (person && key === 'courses' && tab === 'course') return '#s/courses/course/' + courseKey(person);
     return '#s/' + key + (tab ? '/' + tab : '') + hashQuery(q);
@@ -1553,7 +1843,8 @@
     if (parts[0] !== 's' || !parts[1]) return null;
     var sec = secOf(parts[1]);
     if (!sec) return null;
-    var tab = parts[2] ? tabOf(sec.key, parts[2]) : null;
+    var tab = parts[2] ? tabOf(parts[1], parts[2]) : null;
+    if (!tab && SECTION_ALIAS[parts[1]]) tab = tabOf(sec.key, parts[1] === 'reports' ? 'report' : 'brain');     // رابط قديم بلا تبويب: أول ما كان القسم يفتح عليه
     var out = { section: sec.key, tab: (tab || sec.tabs[0]).key, exact: !!(parts[2] ? tab : true) };
     if (qs) {
       var q = {}, any = false;
@@ -2390,7 +2681,8 @@
   }
 
   // —— قرار ولا «للعلم»: البطاقة بتدخل «ابدأ القرارات» بس لو فعلها الأساسي بيقفلها فعلًا على المنصة.
-  var CLOSING_DO = { send: 1, decide: 1, resolve: 1, payout_settle: 1, pay_confirm: 1, offer_approve: 1, brain_approve: 1 };
+  // R24 م٢: القرار = فعل أساسي بيقفل البند، أو «اقرأ وقرّر» (`read`) اللي بيفتح شاشة القراية جوه بيت القسم وفيها زراير القفل، أو «افتح ملفه» (`person`) لشخص عنده أكتر من طلب.
+  var CLOSING_DO = { send: 1, decide: 1, resolve: 1, payout_settle: 1, pay_confirm: 1, offer_approve: 1, brain_approve: 1, invite_approve: 1, person_accept: 1, read: 1, person: 1 };
   function bucketOf(kind, card, r) {
     if (r && r.fyi) return { bucket: 'fyi', fyiKind: 'file_sent' };                       // ملف اتبعت ولسه ما استلمهوش
     switch (kind) {
@@ -2437,6 +2729,9 @@
     open_message: ['open', ['رسالة', 'رسالتان', 'رسائل', 'رسالة'], 27],
     open_other: ['open', ['بند محتاج مراجعة', 'بندان محتاجان مراجعة', 'بنود محتاجة مراجعة', 'بند محتاج مراجعة'], 28]
   };
+  // بيت كل سطر «للعلم» (زرار «افتح في <القسم>»).
+  var FYI_HOME = { gateway: 'money', payfail: 'money', stuck_payment: 'money', file_sent: 'files', join_waiting: 'people', founding_follow: 'people', signup: 'people',
+                   course: 'courses', live: 'courses' };
   function v2FyiGroups(cards) {
     var by = {}, order = [];
     (Array.isArray(cards) ? cards : []).forEach(function (c) {
@@ -2454,7 +2749,7 @@
         var att = list.reduce(function (a, c) { return a + (Number(c.row && c.row.pfAttempts) || 0); }, 0);
         if (att > 1) label += ' (' + U(att, ['محاولة', 'محاولتان', 'محاولات', 'محاولة']) + ')';
       }
-      return { key: k, kind: def[0], label: label, n: n, cards: list, img: (list[0] && list[0].img) || 'people' };
+      return { key: k, kind: def[0], label: label, n: n, cards: list, img: (list[0] && list[0].img) || 'people', home: FYI_HOME[k] || (list[0] && list[0].home) || 'people' };
     });
     var total = 0, info = 0;
     groups.forEach(function (g) { total += g.n; if (g.kind === 'info') info += g.n; });
@@ -2468,7 +2763,7 @@
     snoozeKeyOfRow: snoozeKeyOfRow, snoozeFingerprint: snoozeFingerprint, snoozeIndex: snoozeIndex, snoozeState: snoozeState, snoozePicks: snoozePicks,
     snoozeUntilFromDate: snoozeUntilFromDate, snoozeUntilText: snoozeUntilText, DISMISS_OK: DISMISS_OK, FYI_DEFS: FYI_DEFS, v2Card: v2Card, v2Next: v2Next, v2NextLine: v2NextLine,
     v2Health: v2Health, v2BrainLog: v2BrainLog,
-    v2Tickets: v2Tickets, v2DisputeTickets: v2DisputeTickets, v2TimerText: v2TimerText, v2TimerTone: v2TimerTone, v2Person: v2Person,
+    v2Tickets: v2Tickets, v2DisputeTickets: v2DisputeTickets, v2TimerText: v2TimerText, v2TimerTone: v2TimerTone, v2Person: v2Person, v2PersonCards: v2PersonCards, REQ_LABEL: REQ_LABEL, FOUND_NEXT: FOUND_NEXT,
     personKey: personKey, personEmailOf: personEmailOf, courseKey: courseKey, courseIdOf: courseIdOf, COLS: COLS, COL_LABEL: COL_LABEL, NA: NA,
     v2Period: v2Period, v2Income: v2Income, v2Held: v2Held, v2Owed: v2Owed, v2MoneyLine: v2MoneyLine, v2MoneyBoard: v2MoneyBoard,
     v2IncomeBars: v2IncomeBars, v2PayoutRows: v2PayoutRows, v2PayoutHistory: v2PayoutHistory, v2Stuck: v2Stuck, v2StuckFromQueue: v2StuckFromQueue,
@@ -2479,7 +2774,8 @@
     v2MoneyBadge: v2MoneyBadge, PERIODS: PERIODS, SERVICES: SERVICES, COUNTRY_LABEL: COUNTRY_LABEL,
     SECTIONS: SECTIONS, ALIASES: ALIASES, STATE_DEFAULTS: STATE_DEFAULTS, sectionFor: sectionFor, sectionHash: sectionHash,
     parseSectionHash: parseSectionHash, routeFor: routeFor, sectionByKey: secOf, tabByKey: tabOf,
-    TILE_DEFS: TILE_DEFS, FAILED_TEXT: FAILED_TEXT, PARTIAL_TEXT: PARTIAL_TEXT,
+    TILE_DEFS: TILE_DEFS, SECTION_KEYS: SECTION_KEYS, SECTION_ALIAS: SECTION_ALIAS, HOME_OF: HOME_OF, EMPTY_STRIP: EMPTY_STRIP, v2SectionTiles: v2SectionTiles, v2Strip: v2Strip, brainHomeOf: brainHomeOf,
+    FAILED_TEXT: FAILED_TEXT, PARTIAL_TEXT: PARTIAL_TEXT,
     util: { ar: ar, fmt: fmt, fmtMoney: fmtMoney, joinFacts: joinFacts, avatarMark: avatarMark, U: U, agoText: agoText, curName: curName, cur: curName, moneyText: moneyText, kindOf: kindOf, pickCandidate: pickCandidate,
             dateText: dateText, durShort: durShort, parseAmount: parseAmount, curLong: curLong, sumByCurrency: sumByCurrency }
   };
@@ -2812,7 +3108,7 @@
   // —— القواعد
   var BR_PLATFORM_LABEL = { sla: 'حارس المهلة والاسترداد', remind: 'تذكيرات المواعيد', tick: 'ساعة الدورات الحيّة', invite_reminders: 'تذكير أصحاب الدعوات', coach: 'متابعة المتدرّبين المتوقّفين' };
   var BR_HB = { sla: 'sla_last', remind: 'remind_last', tick: 'tick_last', invite_reminders: 'invite_reminders_last', coach: 'coach_stalled_last' };
-  var BR_GROUPS = [['files', 'ملفات الخبراء والاستشارات'], ['courses', 'الدورات'], ['people', 'الناس والدعوات'], ['content', 'المحتوى']];
+  var BR_GROUPS = [['files', 'ملفات الخبراء والاستشارات'], ['courses', 'الدورات'], ['people', 'الناس'], ['content', 'المحتوى']];
   // الصفوف بالترتيب: [المفتاح، المجموعة، العنوان، التشغيل (run)، الوجهة]
   var BR_ROWS = [
     ['assign', 'files', 'توزيع الملفات على الخبراء', 'sla', 'files'],
@@ -7777,8 +8073,9 @@
     busy: 'العقل مشغول بكتابة أخرى الآن',
     loading: 'يكتب العقل رأيه…'
   };
-  function isReject(a) { return !!a && (a.do === 'offer_reject' || a.do === 'payout_reject' || a.do === 'pay_reject' || (a.do === 'decide' && a.action === 'reject')); }
-  function isOpenAct(a) { return !!a && (a.do === 'open' || a.do === 'goto' || a.do === 'section'); }
+  function isReject(a) { return !!a && (a.do === 'offer_reject' || a.do === 'payout_reject' || a.do === 'pay_reject' || a.do === 'reject_reason' || (a.do === 'decide' && a.action === 'reject')); }
+  // R24 م٢: «اقرأ وقرّر» (read) هو «افتح» الجديدة (بيفتح شاشة القراية جوه القسم) — توصية «افتح» لازم تفضل شغّالة عليها.
+  function isOpenAct(a) { return !!a && (a.do === 'open' || a.do === 'goto' || a.do === 'section' || a.do === 'read'); }
   function recGroup(kind) { return DECIDE[kind] ? 'decide' : (INFO[kind] ? 'info' : ''); }
   // يبدّل الزر الأساسي بالثانوي القائم فقط لو الثانوي هو الفعل المطلوب. لا فعل جديد يُخترع هنا أبدًا.
   function remap(c, rec) {

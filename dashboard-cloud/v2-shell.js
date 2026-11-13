@@ -66,12 +66,13 @@
   }
   function activeKey() { var s = host && host.state ? host.state() : null; return s ? s.section : 'home'; }
 
+  // R24 م٢: قايمة فاتحة بنص بس (بلا صور) وعدّاد القرارات جنب كل قسم (نفس عدّاد المربّع والشريط)؛ «—» لو مفيش حاجة مستنياك.
   function sideItem(sec, on, T) {
-    var ph = sec.img
-      ? '<span class="v2s-ph" style="background-image:url(' + img(sec.img) + ')"></span>'
-      : '<span class="v2s-ph v2s-ph-home">' + GRID + '</span>';
-    return '<a class="v2s-item' + (on ? ' on' : '') + '" href="' + L.sectionHash(sec.key, sec.tabs[0].key) + '" data-sec="' + sec.key + '"' + (on ? ' aria-current="page"' : '') + '>'
-      + ph + '<span class="v2s-name">' + esc(sec.label) + '</span>' + badgeHtml(sec.img ? badgeOf(sec.key, T) : null) + '</a>';
+    var b = sec.img ? badgeOf(sec.key, T) : null, loading = false;
+    try { loading = !!(sec.img && window.V2 && V2.tileLoading && V2.tileLoading(sec.key)); } catch (e) {}
+    var tail = !sec.img ? '' : (b ? badgeHtml(b) : (loading ? '' : '<span class="v2s-dash" aria-label="مفيش حاجة مستنياك">—</span>'));
+    return '<a class="v2s-item' + (on ? ' on' : '') + (sec.img ? '' : ' v2s-home') + '" href="' + L.sectionHash(sec.key, sec.tabs[0].key) + '" data-sec="' + sec.key + '"' + (on ? ' aria-current="page"' : '') + '>'
+      + '<span class="v2s-name">' + esc(sec.label) + '</span>' + tail + '</a>';
   }
   function userBlock() {
     var n = userName();
@@ -115,20 +116,10 @@
     return null;
   }
   function descOf(sec, T) {
-    // القسم يكتب سطره من القائمة التي يرسمها هو؛ فلا يتناقض الرقم تحت العنوان مع الرقم في الشاشة.
+    // القسم يكتب سطره من القائمة التي يرسمها هو (لوح الملفات والنزاعات)؛ غير كده الوصف الثابت.
+    // R24 م٢: سطر المربّع بقى «ن محتاج قرارك» — ده مكانه شريط «محتاج قرارك» تحت الترويسة مباشرة، فمنكرّرهوش هنا.
     var own = headOf(sec.key);
-    if (own) return own;
-    var t = T[sec.key];
-    if (t && !t.failed && t.next) {
-      var loading = false;
-      try { loading = !!(window.V2 && V2.tileLoading && V2.tileLoading(sec.key)); } catch (e) {}
-      if (!loading) {
-        // الموبايل: سطر الترويسة حقيقتان على الأكثر (الباقي داخل الشاشات)
-        try { if (window.matchMedia && window.matchMedia('(max-width:760px)').matches && Array.isArray(t.facts) && t.facts.length > 2) return t.facts.slice(0, 2).join('، '); } catch (e) {}
-        return t.next;
-      }
-    }
-    return sec.desc;
+    return own || sec.desc;
   }
   function drawHead(T) {
     var el = q('#v2sec'); if (!el) return;
@@ -144,6 +135,8 @@
     // D2: صندوق «ابحث عن شخص» فوق شاشات قسم الناس (حاوية ثابتة لا يُعاد رسمها فلا يضيع ما يُكتب فيها).
     try { var sb = q('#v2sbar'); if (sb) sb.hidden = sec.key !== 'people'; } catch (e) {}
     mountBrainBar(sec.key);
+    // R24 م٢: شريط «محتاج قرارك» الواحد (مكوّن مشترك) فوق كل قسم — إلا اللوحة وصفحات التفصيل (شخص · دورة).
+    try { var st0 = q('#v2strip'), tb0 = L.tabByKey(sec.key, s.tab); if (st0 && window.V2STRIP) V2STRIP.mount(sec.key, st0, sec.key === 'home' || !!(tb0 && tb0.hidden)); } catch (e) {}
     // شريط التبويبات: يحفظ موضعه عبر إعادة الرسم، ولا يتحرّك إلا حين يتغيّر التبويب (بلا أي تمرير رأسي للصفحة).
     try {
       var strip = q('.v2c-tabs', el), on = q('.v2c-tab.on', el), sig = s.section + '/' + s.tab;
@@ -230,6 +223,8 @@
     dotObs.observe(document.body, { childList: true, subtree: true, characterData: true });
     fixDotsIn(document.body);
   }
+  // R24 م٢: «السجلات القديمة» (الضمان والمالية القديمين) للقراية بس: كل أزرار الفعل مخفية بالـCSS (`#view.v2-ro`)، والقرارات في بيوتها.
+  SH.readOnly = function (on) { var view = q('#view'); if (view) view.classList.toggle('v2-ro', !!on); };
   SH.legacyDigits = function (on) {
     var view = q('#view');
     if (legacyObs) { try { legacyObs.disconnect(); } catch (e) {} legacyObs = null; }
@@ -297,6 +292,9 @@
     var bbar = document.createElement('div');
     bbar.id = 'v2bbar'; bbar.className = 'v2-bbar'; bbar.hidden = true;
     if (view && view.parentNode) view.parentNode.insertBefore(bbar, view);
+    var zbar = document.createElement('div');
+    zbar.id = 'v2strip'; zbar.className = 'v2-strip'; zbar.hidden = true;
+    if (view && view.parentNode) view.parentNode.insertBefore(zbar, view);
     var sheet = document.createElement('div');
     sheet.id = 'v2Sheet'; sheet.className = 'v2-sheet'; sheet.setAttribute('aria-hidden', 'true');
     document.body.appendChild(sheet);

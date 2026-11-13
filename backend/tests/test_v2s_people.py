@@ -121,10 +121,11 @@ def inp(**kw):
 @needs_node
 def test_the_people_tabs_match_the_spec_exactly():
     tabs = _node("console.log(JSON.stringify(L.sectionByKey('people').tabs.map(t=>[t.key,t.label,t.mod,t.st,!!t.hidden])))")
-    assert tabs == [['invites', 'الطلبات', 'invites', {}, False], ['pipeline', 'الدعوات', 'v2p_invites', {}, False], ['users', 'المستخدمون', 'users', {}, False],
+    # R24 م٢ (اتغيّر): «الناس» تاني قسم؛ أول تبويب «الناس» (القايمة)، و«الطلبات» بقت «قوائم الانتظار» (القرارات في شريط «محتاج قرارك»)
+    assert tabs == [['users', 'الناس', 'users', {}, False], ['pipeline', 'الدعوات', 'v2p_invites', {}, False], ['invites', 'قوائم الانتظار', 'invites', {}, False],
                     ['messages', 'الرسائل', 'inbox', {'activeFilter': 't:messages'}, False], ['person', 'صفحة الشخص', 'v2person', {}, True]]
     sec = _node("console.log(JSON.stringify(L.sectionByKey('people')))")
-    assert sec['label'] == 'الناس والدعوات' and sec['img'] == 'people'
+    assert sec['label'] == 'الناس' and sec['img'] == 'people'
 
 
 @needs_node
@@ -159,17 +160,17 @@ def test_ticket_buttons_follow_the_spec():
                            invites={'rows': [inv('i1', 'awaiting_approval', status='awaiting_approval')], 'count': 1}, waitlist={'rows': [wl('w1')], 'count': 1}), NOW)
     vis = {t['id']: t for t in R['cols']['visitors']['items']}
     assert vis['visitor:pu-1']['primary'] == {'label': 'افتح المنصة للزائر', 'act': {'do': 'decide', 'action': 'approve'}}
-    assert vis['visitor:pu-2']['primary'] == {'label': 'افتح وراجع', 'act': {'do': 'sheet', 'sheet': 'visitor'}} and vis['visitor:pu-2']['warn'] == 'يحتاج مراجعة: إيميل بنقط'
+    assert vis['visitor:pu-2']['primary'] == {'label': 'افتح وقرّر', 'act': {'do': 'sheet', 'sheet': 'visitor'}} and vis['visitor:pu-2']['warn'] == 'يحتاج مراجعة: إيميل بنقط'
     assert vis['waitlist:w1']['primary']['label'] == 'أرسل دعوة' and vis['waitlist:w1']['secondary'][0]['label'] == 'التفاصيل'
     assert vis['waitlist:w1']['brain'] == 'طلب دعوة من الموقع ولا يملك حسابًا بعد' and vis['waitlist:w1']['extra'] == ['سبب الطلب: سبب']
     ap = R['cols']['approval']['items'][0]
     assert ap['primary']['label'] == 'وافق على الدعوة' and ap['secondary'][0]['label'] == 'ارفض' and ap['brain'] == 'تحتاج موافقتك قبل أن يعمل رابطها'
     j = {t['id']: t for t in R['cols']['join']['items']}
     # «السوق v4»: `join()` هنا طلب مرخَّص (`licensed: True`) ⇒ القبول من ورقة الطلب (بلاد القيد وملف الترخيص)، لا ضغطة واحدة
-    assert j['join:jr-1']['primary'] == {'label': 'افتح وراجع', 'act': {'do': 'sheet', 'sheet': 'join'}} and [s['label'] for s in j['join:jr-1']['secondary']] == ['ارفض', 'اطلب استكمالًا']
+    assert j['join:jr-1']['primary'] == {'label': 'افتح وقرّر', 'act': {'do': 'sheet', 'sheet': 'join'}} and [s['label'] for s in j['join:jr-1']['secondary']] == ['ارفض', 'اطلب استكمالًا']
     plain = v2p('requests', inp(inbox=[dict(join('jr-3'), licensed=False)]), NOW)['cols']['join']['items'][0]
     assert plain['primary'] == {'label': 'اقبل', 'act': {'do': 'decide', 'action': 'approve'}}, 'غير المرخَّص يبقى بضغطة واحدة'
-    assert j['join:jr-2']['primary'] == {'label': 'افتح وراجع', 'act': {'do': 'sheet', 'sheet': 'join'}} and j['join:jr-2']['extra'] == ['طُلب من صاحب الطلب: أرسل رقم القيد — بانتظار رده']
+    assert j['join:jr-2']['primary'] == {'label': 'افتح وقرّر', 'act': {'do': 'sheet', 'sheet': 'join'}} and j['join:jr-2']['extra'] == ['طُلب من صاحب الطلب: أرسل رقم القيد — بانتظار رده']
     f = {t['id']: t for t in R['cols']['founding']['items']}
     assert f['founding:fl-1']['primary']['label'] == 'تم التواصل' and f['founding:fl-1']['secondary'][0] == {'label': 'واتساب', 'act': {'do': 'link', 'url': 'https://wa.me/970599000000'}}
     assert [s['label'] for s in f['founding:fl-2']['secondary']] == ['ليس مناسبًا']          # بلا رقم صالح ⇒ لا زرّ واتساب

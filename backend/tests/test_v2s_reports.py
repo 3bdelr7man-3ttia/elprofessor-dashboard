@@ -1060,16 +1060,18 @@ def test_demand_numbers_line():
 @needs_node
 def test_section_map_and_old_links():
     secs = {s['key']: s for s in NODE("process.stdout.write(JSON.stringify(L.SECTIONS))")}
-    tabs = [[t['key'], t['label'], t['mod']] for t in secs['reports']['tabs']]
+    # R24 م٢ (اتغيّر): «التقارير» اندمجت في «التسويق والتقارير» — تبويباتها الثلاثة آخر تبويبات القسم، والروابط القديمة (#s/reports/…) بتوصل لها.
+    assert 'reports' not in secs
+    tabs = [[t['key'], t['label'], t['mod']] for t in secs['marketing']['tabs']][3:]
     assert tabs == [['report', 'التقرير', 'analysis'], ['demand', 'ما يسأل عنه الناس', 'v2r_demand'], ['sunday', 'تقرير الأحد', 'v2r_sunday']]
-    assert not any(t['label'] == 'كل السجلات' for t in secs['reports']['tabs'])
-    assert secs['reports']['desc'] == 'ما الذي يعمل، وما الذي توقّف، وأين الفرصة'
-    assert v2_node.logic('sectionFor', 'analysis') == {'section': 'reports', 'tab': 'report', 'mod': 'analysis', 'st': {}}
-    for h, tab in (('#s/reports/demand', 'demand'), ('#s/reports/sunday', 'sunday'), ('#s/reports/report', 'report'), ('#s/reports', 'report'), ('#analysis', 'report')):
+    assert not any(t['label'] == 'كل السجلات' for t in secs['marketing']['tabs'])
+    assert v2_node.logic('sectionFor', 'analysis') == {'section': 'marketing', 'tab': 'report', 'mod': 'analysis', 'st': {}}
+    for h, tab in (('#s/reports/demand', 'demand'), ('#s/reports/sunday', 'sunday'), ('#s/reports/report', 'report'), ('#s/reports', 'report'), ('#analysis', 'report'),
+                   ('#s/marketing/demand', 'demand'), ('#s/marketing/sunday', 'sunday')):
         r = v2_node.logic('routeFor', h, {})
-        assert r['section'] == 'reports' and r['tab'] == tab, h
+        assert r['section'] == 'marketing' and r['tab'] == tab, h
     for tab in ('report', 'demand', 'sunday'):
-        assert v2_node.logic('routeFor', v2_node.logic('sectionHash', 'reports', tab), {})['tab'] == tab
+        assert v2_node.logic('routeFor', v2_node.logic('sectionHash', 'marketing', tab), {})['tab'] == tab
 
 
 @needs_node
@@ -1081,10 +1083,10 @@ def test_hash_query_state_whitelist_and_old_hashes_unchanged():
     r = v2_node.logic('routeFor', '#s/reports/report?scope=courses1&other=zz', {})
     assert 'q' not in r
     h = v2_node.logic('sectionHash', 'reports', 'report', None, {'period': 'week', 'scope': 'courses', 'evil': 'x'})
-    assert h == '#s/reports/report?scope=courses&period=week'
+    assert h == '#s/marketing/report?scope=courses&period=week'      # R24 م٢: العنوان بالاسم الجديد (reports ⇒ marketing)
     assert v2_node.logic('routeFor', h, {})['q'] == {'scope': 'courses', 'period': 'week'}
-    assert v2_node.logic('sectionHash', 'reports', 'report', None, {'scope': 'a-b'}) == '#s/reports/report'
-    assert v2_node.logic('sectionHash', 'reports', 'sunday') == '#s/reports/sunday'
+    assert v2_node.logic('sectionHash', 'reports', 'report', None, {'scope': 'a-b'}) == '#s/marketing/report'
+    assert v2_node.logic('sectionHash', 'reports', 'sunday') == '#s/marketing/sunday'
     for s in NODE("process.stdout.write(JSON.stringify(L.SECTIONS.map(s=>[s.key,s.tabs.map(t=>t.key)])))"):
         for tk in s[1]:
             p = v2_node.logic('parseSectionHash', '#s/%s/%s' % (s[0], tk))

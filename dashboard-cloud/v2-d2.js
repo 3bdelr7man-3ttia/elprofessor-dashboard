@@ -25,7 +25,8 @@
     view: null, mod: '', sig: '', poll: null, minute: null,
     col: { files: '', disputes: '' }, picked: { files: false, disputes: false },          // العمود الظاهر في الموبايل
     busy: {}, err: {}, done: {}, locked: {},   // حالة أزرار التذاكر
-    person: { email: '', state: 'idle', resp: null, seq: 0 }
+    person: { email: '', state: 'idle', resp: null, seq: 0 },
+    reqErr: {}, reqCards: {}
   };
 
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
@@ -142,8 +143,10 @@
     var brain = slim ? '' : board === 'files'
       ? '<div class="v2d-brain">' + BRAIN + '<p>' + esc(t.brain) + '</p></div>'
       : '<p class="v2d-reason">' + esc(t.reason) + '</p>';
-    var label = t.primary ? t.primary.label : 'افتح';
-    var isOpen = !t.primary || !t.primary.act || t.primary.act.do === 'open' || t.primary.act.do === 'goto';
+    // R24 م٢: قرار «أرسله إلى …» في شريط «محتاج قرارك» فوق (نفس الفعل بالحرف)، فزرّ التذكرة هنا «افتح الملف» — مفيش زرّ قرار مكرّر.
+    var isSend = t.primary && t.primary.act && t.primary.act.do === 'send';
+    var label = isSend ? 'افتح الملف' : (t.primary ? t.primary.label : 'افتح');
+    var isOpen = isSend || !t.primary || !t.primary.act || t.primary.act.do === 'open' || t.primary.act.do === 'goto' || t.primary.act.do === 'read';
     var btn;
     if (done) btn = '<p class="v2d-ok" role="status">' + esc(done) + '</p>';
     else if (S.locked[id]) btn = '<button class="v2d-btn1" data-a="refresh" data-id="' + esc(id) + '">حدّث الآن</button>';
@@ -283,14 +286,14 @@
         var t = ticketById(board, b.getAttribute('data-id'));
         if (!t) return;
         var a = t.primary && t.primary.act;
-        if (a && a.do === 'send') sendTicket(board, t); else openTicket(board, t);
+        openTicket(board, t);       // R24 م٢: «أرسله إلى …» بقى في الشريط فوق، والتذكرة بتفتح الملف
       };
     });
     v.querySelectorAll('[data-a="refresh"]').forEach(function (b) {
       b.onclick = function (e) { e.stopPropagation(); var id = b.getAttribute('data-id'); b.disabled = true; refreshAll(function () { delete S.locked[id]; S.err[id] = ''; redraw(); }); };
     });
     var m = v.querySelector('[data-a="manual"]');
-    if (m) m.onclick = function () { if (host().openSection) host().openSection('disputes', 'escrow'); };
+    if (m) m.onclick = function () { if (host().openSection) host().openSection('money', 'overview'); };     // R24 م٢: الاستردادات اليدوية في «الفلوس ⇐ نظرة» (سجلات الضمان القديمة اتنقلت لـ«الشركة»)
   }
 
   // ------------------------------------------------------------------ العدّاد (كل دقيقة)
@@ -351,15 +354,41 @@
     }
     return null;
   }
-  function followLine(email) {
+  function followLine(email, reqs) {
+    // R24 م٢: المصدر الأول طلبات `/api/v2/person` (كل المصادر على نفس الإيميل)، وبعده صفوف الوارد (لو الطلبات ما وصلتش).
+    var fr = (reqs || []).filter(function (x) { return x.card.reqKind === 'founding' && x.card.follow; })[0];
+    if (fr) {
+      var rw = fr.card.row || {};
+      return '<p class="v2d-follow" role="status">خبير مؤسس في المتابعة' + (rw.statusLabel ? ': ' + esc(rw.statusLabel) : '') + ' — الخطوة الجاية «' + esc(fr.card.primary ? fr.card.primary.label : '') + '» '
+        + '<button type="button" class="v2d-btn2" data-a="founding-step" data-id="' + esc(fr.card.id) + '">علّم الخطوة</button></p>';
+    }
     var f = foundingFollowRow(email);
     if (!f) return '';
     return '<p class="v2d-follow" role="status">خبير مؤسس في المتابعة' + (f.statusLabel ? ': ' + esc(f.statusLabel) : '') + ' — الخطوة الجاية «' + esc(FOUND_STEP_AR[f.nextStatus] || f.approveLabel || '') + '» '
       + '<button type="button" class="v2d-btn2" data-a="founding-step">علّم الخطوة</button></p>';
   }
+  // R24 م٢: «الطلبات المفتوحة» — كل الطلبات على نفس الإيميل بأزرار بيوتها (نفس المنفّذ بالحرف). المؤسس في المتابعة بسطره الخاص فوق.
+  function personRequests(vm) {
+    if (!vm || vm.requests === null || vm.requests === undefined) return { cards: [], html: '<section class="v2d-pc v2d-req"><h3>الطلبات المفتوحة</h3><p class="v2d-na">' + esc(L.NA) + '</p></section>' };
+    var cards = L.v2PersonCards(vm.requests, window.INBOX, vm.email, Date.now());
+    var listed = cards.filter(function (x) { return !(x.card.reqKind === 'founding' && x.card.follow); });
+    var warn = (vm.requestsFailed && vm.requestsFailed.length) ? '<p class="v2d-warn" role="status">تعذّر جلب: ' + esc(vm.requestsFailed.join('، ')) + ' — الطلبات ناقصة وليس معناه أنه لا شيء ينتظر.</p>' : '';
+    var body;
+    if (!listed.length) body = '<p class="v2d-sum">' + (cards.length ? 'لا طلبات تنتظر قرارًا غير المتابعة أعلاه' : 'مفيش طلبات مفتوحة على هذا الشخص') + '</p>';
+    else body = '<ul class="v2d-rql">' + listed.map(function (x) {
+      var c = x.card, r = x.req, fyi = c.bucket !== 'decision';
+      return '<li class="v2d-rq" data-id="' + esc(c.id) + '"><div class="v2d-rqh"><span class="v2d-rt">' + esc(r.label) + '</span>' + (r.ago ? '<time>' + esc(r.ago) + '</time>' : '') + '</div>'
+        + (r.text ? '<p class="v2d-rqx">' + esc(r.text) + '</p>' : '')
+        + (c.warn ? '<p class="v2d-rqw">' + esc(c.warn) + '</p>' : '')
+        + (S.reqErr[c.id] ? '<p class="v2d-rqe" role="alert">' + esc(S.reqErr[c.id]) + '</p>' : '')
+        + (fyi && c.kind !== 'signup' ? '<p class="v2d-rqf">للعلم — مفيش قرار عليه الآن</p>' : '')
+        + '<div class="v2d-rqa">' + (window.V2STRIP ? V2STRIP.actionsHtml(c, {}) : '') + '</div></li>';
+    }).join('') + '</ul>';
+    return { cards: cards, html: '<section class="v2d-pc v2d-req" data-board="requests"><h3>الطلبات المفتوحة' + (listed.length ? ' (' + esc(U.ar(listed.length)) + ')' : '') + '</h3>' + warn + body + '</section>' };
+  }
   function drawPerson(v) {
     var P = S.person, email = P.email;
-    var back = '<a class="v2d-back" href="' + esc(L.sectionHash('people', 'users')) + '" data-a="back">' + HEAD_ICON + 'المستخدمون</a>';
+    var back = '<a class="v2d-back" href="' + esc(L.sectionHash('people', 'users')) + '" data-a="back">' + HEAD_ICON + 'الناس</a>';
     if (!email) { v.innerHTML = '<div class="v2d" data-board="person">' + back + '<div class="v2d-empty big"><b>اختر شخصًا من البحث أو من قائمة المستخدمين</b></div></div>'; wire(v, null); wirePerson(v); return; }
     if (P.state === 'loading' || P.state === 'idle') {
       v.innerHTML = '<div class="v2d" data-board="person">' + back + '<div class="v2d-ph"><span class="v2d-av sk"></span><div class="v2d-sk"><i></i><i></i></div></div><div class="v2d-pgrid sk">'
@@ -381,6 +410,8 @@
     var meta = [];
     if (vm.lastLogin) meta.push('آخر دخول ' + vm.lastLogin);
     meta.push('البلد: ' + vm.countryText);
+    var rq = personRequests(vm);
+    S.reqCards = {}; rq.cards.forEach(function (x) { S.reqCards[x.card.id] = x.card; });
     var mail = 'mailto:' + encodeURIComponent(email).replace(/%40/g, '@');
     var warn = vm.failed.length ? '<p class="v2d-warn" role="status">تعذّر جلب بعض البيانات فتظهر «' + esc(L.NA) + '» في أماكنها — لا تعتبرها فارغة. <button class="v2d-btn2" data-a="retry">أعد المحاولة</button></p>' : '';
     var log;
@@ -391,14 +422,22 @@
       + '<header class="v2d-ph">' + av + '<div class="v2d-pid"><h1 class="v2d-name">' + esc(vm.name) + '</h1><div class="v2d-chips">' + chips + (vm.active ? '' : '<span class="v2d-chip chip-off">الحساب موقوف</span>') + '</div>'
       + '<p class="v2d-join">' + esc(vm.joinLine) + '</p>' + (meta.length ? '<p class="v2d-meta">' + esc(meta.join('، ')) + '</p>' : '') + '</div>'
       + '<div class="v2d-pact"><a class="v2d-btn1" href="' + esc(mail) + '" data-a="mail">مراسلة</a>' + (window.V2SEC&&V2SEC.people&&V2SEC.people.manageBtn?V2SEC.people.manageBtn(email):'') + '</div></header>'
-      + followLine(email)
-      + '<div class="v2d-pgrid">' + vm.cards.map(personCard).join('') + '</div>'
+      + followLine(email, rq.cards)
+      + rq.html
+      + (vm.cards && vm.cards.length ? '<div class="v2d-pgrid">' + vm.cards.map(personCard).join('') + '</div>' : '')
       + '<section class="v2d-plog"><h3>السجل' + (vm.logPartial ? ' <small>(جزء منه — تعذّر جلب بعض المصادر)</small>' : '') + '</h3>' + log + '</section></div>';
     wirePerson(v);
   }
   function wirePerson(v) {
     var fs = v.querySelector('[data-a="founding-step"]');
-    if (fs) fs.onclick = function () {
+    if (fs && fs.getAttribute('data-id') && S.reqCards[fs.getAttribute('data-id')] && window.V2 && V2.runCard) {
+      fs.onclick = function () {
+        var c = S.reqCards[fs.getAttribute('data-id')];
+        fs.disabled = true; fs.textContent = 'جارٍ التسجيل…';
+        V2.runCard(c, c.primary.act, function () { fs.textContent = 'اتسجّلت الخطوة'; loadPerson(S.person.email, true); },
+          function (msg) { fs.disabled = false; fs.textContent = msg || 'تعذّر التسجيل — حاول تاني'; });
+      };
+    } else if (fs) fs.onclick = function () {
       var E = ep(), f = foundingFollowRow(S.person.email);
       if (!E || !f || fs.disabled) return;
       fs.disabled = true; fs.textContent = 'جارٍ التسجيل…';
@@ -406,6 +445,10 @@
         if (res && res.ok) { fs.textContent = 'اتسجّلت الخطوة'; } else { fs.disabled = false; fs.textContent = (res && res.error) || 'تعذّر التسجيل — حاول تاني'; }
       });
     };
+    var rqRoot = v.querySelector('.v2d-req');
+    if (rqRoot && window.V2STRIP) V2STRIP.wire(rqRoot, S.reqCards, {
+      done: function (text, c) { delete S.reqErr[c.id]; if (window.toast) try { window.toast(text); } catch (e) {} loadPerson(S.person.email, true); },
+      fail: function (msg, c) { S.reqErr[c.id] = msg; if (isCurrent('v2person')) drawPerson(S.view); } });
     var r = v.querySelectorAll('[data-a="retry"]');
     r.forEach(function (b) { b.onclick = function () { loadPerson(S.person.email, true); }; });
     v.querySelectorAll('[data-a="back"]').forEach(function (a) {

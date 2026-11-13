@@ -33,13 +33,15 @@ KNOWN_TYPES = frozenset([
     'book_offer', 'trainer', 'join', 'identity_doc', 'pending_user', 'signup', 'founding', 'book', 'program', 'topic',
     'creative', 'verify', 'lead', 'message', 'site_message', 'course', 'live', 'brain_item', 'alert', 'other',
     'mk_tip',      # اقتراحات العقل في التسويق («لاحقًا» بتاعتها) — مفتاحها `mk_tip:<نوع>_<معرّف>`
+    'person',      # R24 م٢: بطاقة الشخص (كل طلبات نفس الإيميل في بطاقة واحدة) — مفتاحها `person:<البريد>`
+    'invite',      # R24 م٢: دعوة من عضو بتنتظر موافقتك
 ])
 # «تجاهل» بس للأنواع اللي مالهاش قرار على المنصة (قاعدة ٤). قايمة بيضا: أي نوع جديد مرفوض لحد ما يتحط هنا بقصد.
 DISMISS_ALLOWED = frozenset(['signup', 'payfail', 'site_message', 'message', 'lead', 'stuck_payment', 'alert', 'other', 'mk_tip'])
 # الأنواع اللي فيها فلوس أو صاحبها مستني رد: ليها «ارفض بسبب» مش «تجاهل» (رسالة الرفض بتقول كده).
 DISMISS_REFUSED_MONEY_OR_WAITING = frozenset([
     'payout', 'manual_payment', 'dispute', 'legacy', 'unactivated', 'file', 'book_offer',
-    'trainer', 'join', 'pending_user', 'identity_doc', 'founding',
+    'trainer', 'join', 'pending_user', 'identity_doc', 'founding', 'person', 'invite',
 ])
 
 CONFIRM_BAD_KEY_AR = 'مفتاح البند غير صالح'

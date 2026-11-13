@@ -1,0 +1,81 @@
+/* ============================================================================
+ * v2-strip.css — R24 م٢: شريط «محتاج قرارك» الواحد (صور المؤسس 3-people) + درج «اقرأ وقرّر» فوق القسم + طلبات صفحة الشخص.
+ * ورق #F7F3ED · أبيض للبطاقات · عنّابي #9E2B4E · حبر #21262E · خط IBM Plex Sans Arabic. ⛔ المفتاح مقفول ⇒ مفيش عنصر بيحمل الأصناف دي.
+ * ========================================================================== */
+.v2-strip{font-family:'IBM Plex Sans Arabic','Cairo',sans-serif;color:#21262E}
+.v2-strip[hidden]{display:none}
+.v2z{background:#fff;border:1px solid #E8E0D5;border-top:3px solid #9E2B4E;border-radius:18px;padding:18px 20px 16px;margin:14px 0 4px;box-shadow:0 3px 14px rgba(33,38,46,.05)}
+.v2z.empty{border-top-color:#E8E0D5;padding:12px 20px;box-shadow:none}
+.v2z-h{display:flex;align-items:center;gap:10px;margin-bottom:12px}
+.v2z.empty .v2z-h{margin-bottom:2px}
+.v2z-h h2{margin:0;font:700 19px/1.4 'IBM Plex Sans Arabic','Cairo',sans-serif}
+.v2z-n{min-width:26px;height:26px;border-radius:13px;background:#F6E9EE;color:#9E2B4E;display:inline-grid;place-items:center;font:700 13px 'IBM Plex Sans Arabic','Cairo',sans-serif;padding:0 8px}
+.v2z-empty{margin:0;color:#6E6A64;font-size:14.5px}
+.v2z-fail{margin:0 0 10px;background:#FFF8E6;border:1px solid #EBD38E;color:#7A5200;border-radius:12px;padding:9px 13px;font-size:14px}
+.v2z-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(310px,1fr));gap:14px}
+.v2z-c{border:1px solid #E8E0D5;border-radius:16px;padding:14px 16px;background:#fff;display:grid;gap:8px;align-content:start;min-width:0}
+.v2z-c.warn{border-color:#EBD38E}
+.v2z-top{display:flex;align-items:center;justify-content:space-between;gap:8px;color:#6E6A64;font-size:13px}
+.v2z-tag{font-weight:600}
+.v2z-c h3{margin:0;font:700 17px/1.5 'IBM Plex Sans Arabic','Cairo',sans-serif;overflow-wrap:anywhere}
+.v2z-sub{margin:0;color:#6E6A64;font-size:13.5px;line-height:1.7;overflow-wrap:anywhere}
+.v2z-chips{display:flex;flex-wrap:wrap;gap:6px}
+.v2z-chip{display:inline-flex;align-items:center;min-height:26px;padding:0 11px;border-radius:999px;background:#EFE8DD;font:600 12.5px 'IBM Plex Sans Arabic','Cairo',sans-serif}
+.v2z-chip.ok{background:#E7F3EC;color:#2F7D5B}
+.v2z-brain{margin:0;background:#FBF8F4;border-radius:10px;padding:8px 11px;font-size:13.5px;line-height:1.75;color:#3F3A33;overflow-wrap:anywhere}
+.v2z-reason{margin:0;font-size:12.5px;color:#6E6A64;line-height:1.7}
+.v2z-returned{margin:0;background:#EEF4FF;border:1px solid #BFD3F6;color:#1F4A8A;border-radius:10px;padding:5px 10px;font:600 12.5px 'IBM Plex Sans Arabic','Cairo',sans-serif}
+.v2z-warn{margin:0;background:#FFF3D1;border:1px solid #EBD38E;color:#7A5200;border-radius:10px;padding:6px 11px;font-size:13px;font-weight:600}
+.v2z-err{margin:0;background:#FCEDEF;border:1px solid #F0B9C1;color:#9C0F25;border-radius:10px;padding:7px 11px;font-size:13.5px;font-weight:600}
+.v2z-acts{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:2px}
+.v2z-b1,.v2z-b2,.v2z-b3{display:inline-flex;align-items:center;justify-content:center;min-height:42px;padding:0 16px;border-radius:12px;font:600 14.5px 'IBM Plex Sans Arabic','Cairo',sans-serif;cursor:pointer;text-decoration:none;border:1px solid #9E2B4E;white-space:normal;text-align:center}
+.v2z-b1{background:#9E2B4E;color:#fff}
+.v2z-b1:hover:not(:disabled){background:#85233F}
+.v2z-b2{background:#fff;color:#9E2B4E;border-color:#E3D3D9}
+.v2z-b2:hover:not(:disabled){background:#FBF0F3}
+.v2z-b3{background:transparent;border-color:transparent;color:#6E6A64}
+.v2z-b3:hover:not(:disabled){color:#9E2B4E;background:#F6F1EA}
+.v2z-b1.sm,.v2z-b2.sm{min-height:36px;padding:0 12px;font-size:13px}
+.v2z button:disabled,.v2d-req button:disabled{opacity:.55;cursor:not-allowed}
+.v2z-b3.more{margin-top:8px}
+.v2z-lines{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
+.v2z-lc{border:1px solid #E8E0D5;background:#fff;color:#21262E;border-radius:999px;padding:0 14px;min-height:38px;font:600 13px 'IBM Plex Sans Arabic','Cairo',sans-serif;cursor:pointer}
+.v2z-lc.on{background:#21262E;border-color:#21262E;color:#fff}
+.v2z-sl{list-style:none;margin:8px 0 0;padding:0;display:grid;gap:8px}
+.v2z-sl li{display:flex;align-items:center;justify-content:space-between;gap:10px;background:#FBF8F4;border:1px solid #E8E0D5;border-radius:12px;padding:8px 12px}
+.v2z-sl span{display:grid;gap:2px;min-width:0}
+.v2z-sl b{font:600 14px 'IBM Plex Sans Arabic','Cairo',sans-serif;overflow-wrap:anywhere}
+.v2z-sl small{font-size:12.5px;color:#6E6A64}
+.v2z-fyi{margin:12px 0 0;font-size:13.5px;color:#6E6A64;line-height:1.8}
+.v2z-fyi b{color:#21262E}
+@media(max-width:760px){
+  .v2z{padding:14px 14px 12px;border-radius:16px}
+  .v2z-grid{grid-template-columns:1fr}
+  .v2z-b1{flex:1 1 100%}
+  .v2z-b2,.v2z-b3{flex:1 1 auto}
+}
+
+/* —— درج «اقرأ وقرّر»: درج الوارد القديم بأزراره فوق القسم الحالي (مش «كل الوارد») */
+.v2rd{position:fixed;inset:0;z-index:90;font-family:'IBM Plex Sans Arabic','Cairo',sans-serif}
+.v2rd-scrim{position:absolute;inset:0;background:rgba(33,38,46,.5)}
+.v2rd-box{position:absolute;inset-block:0;inset-inline-end:0;width:min(600px,100%);overflow-y:auto;background:#F7F3ED;box-shadow:-18px 0 44px rgba(33,38,46,.25);padding-bottom:calc(24px + env(safe-area-inset-bottom))}
+.v2rd-bar{position:sticky;top:0;z-index:2;background:#F7F3ED;padding:10px 14px;border-bottom:1px solid #E8E0D5}
+.v2rd-back{min-height:46px;padding:0 18px;border-radius:12px;border:1px solid #E8E0D5;background:#fff;color:#9E2B4E;font:600 15px 'IBM Plex Sans Arabic','Cairo',sans-serif;cursor:pointer}
+.v2rd .drawer{position:static;border-radius:0;border-width:0;box-shadow:none;max-height:none;overflow:visible}
+.v2rd .drawer .dh{border-radius:0}
+.v2rd .drawer.ef-scroll{max-height:none;overflow:visible}
+@media(max-width:760px){.v2rd-box{width:100%}.v2rd .drawer .acts .btn{flex-basis:100%}}
+
+/* —— صفحة الشخص: «طلباته المفتوحة» بأزرار بيوتها */
+.v2d-req{margin:0 0 14px}
+.v2d-rql{list-style:none;margin:0;padding:0;display:grid;gap:10px}
+.v2d-rq{border:1px solid #E8E0D5;border-radius:14px;padding:12px 14px;background:#FBF8F4;display:grid;gap:6px}
+.v2d-rqh{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.v2d-rt{font:700 14.5px 'IBM Plex Sans Arabic','Cairo',sans-serif;color:#9E2B4E}
+.v2d-rqh time{font-size:12.5px;color:#6E6A64}
+.v2d-rqx{margin:0;font-size:13.5px;color:#3F3A33;line-height:1.75}
+.v2d-rqw{margin:0;background:#FFF3D1;border:1px solid #EBD38E;color:#7A5200;border-radius:10px;padding:6px 11px;font-size:13px;font-weight:600}
+.v2d-rqe{margin:0;background:#FCEDEF;border:1px solid #F0B9C1;color:#9C0F25;border-radius:10px;padding:7px 11px;font-size:13.5px;font-weight:600}
+.v2d-rqf{margin:0;font-size:12.5px;color:#6E6A64}
+.v2d-rqa{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.v2z-c.v2z-flash,.v2z.v2z-flash{box-shadow:0 0 0 3px rgba(158,43,78,.35);transition:box-shadow .3s}

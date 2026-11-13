@@ -217,7 +217,7 @@ def test_tickets_carry_type_timer_parties_brain_line_and_one_button(real):
     assert t['strip']['label'] == 'ينتظر خبيرًا' and t['text'].startswith('باقٍ ') and t['primary']['act']['do'] == 'send'
     assert t['primary']['label'].startswith('أرسله إلى ')
     c, t = _by_id(T, 'ef-r1-9a0b1c2d')
-    assert t['strip']['label'] == 'رأي ينتظر مراجعتك' and t['text'].startswith('منذ ') and t['primary']['act']['do'] == 'open'
+    assert t['strip']['label'] == 'رأي ينتظر مراجعتك' and t['text'].startswith('منذ ') and t['primary']['act']['do'] in ('open', 'read')
     c, t = _by_id(T, 'ef-w1-aa11bb22')
     assert t['text'].startswith('باقٍ ') and t['primary']['act']['do'] == 'open' and t['brain'].startswith('ما زال بانتظار الاستلام لدى ')
     c, t = _by_id(T, 'ef-dn-1a1a2b2b')
@@ -320,7 +320,7 @@ def test_no_ticket_has_a_money_button(real):
     T = _tickets(real)
     for c in T['cols']:
         for t in T['cols'][c]:
-            assert t['primary']['act']['do'] in ('open', 'send'), t['primary']
+            assert t['primary']['act']['do'] in ('open', 'send', 'read'), t['primary']      # R24 م٢: «read» = اقرأ وقرّر جوه القسم
             assert 'money' not in t['primary'] and 'money' not in json.dumps(t['primary'])
     D = _dispute_tickets(real)
     for c in D['cols']:
@@ -411,7 +411,7 @@ def test_person_address_round_trip_and_the_hidden_tab():
     # بلا بريد صالح ⇒ أول تبويب (لا صفحة فاضية)
     for bad in ('#s/people/person', '#s/people/person/', '#s/people/person/zzz', '#s/people/person/%E0%A4%A'):
         r = v2_node.logic('routeFor', bad)
-        assert (r['section'], r['tab']) == ('people', 'invites') and 'person' not in r, bad     # أول تبويب في «الناس والدعوات» صار «الطلبات»
+        assert (r['section'], r['tab']) == ('people', 'users') and 'person' not in r, bad     # R24 م٢: أول تبويب في «الناس» صار «الناس» (القايمة)
     assert v2_node.logic('personEmailOf', 'a%40b.com') == 'a@b.com' and v2_node.logic('personEmailOf', 'x') == ''
     hidden = v2_node.logic('SECTIONS')
     tabs = [t for s in hidden if s['key'] == 'people' for t in s['tabs']]

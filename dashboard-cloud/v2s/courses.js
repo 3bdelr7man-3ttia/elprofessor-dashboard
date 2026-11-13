@@ -330,7 +330,7 @@
     }
     var appsLine = apps ? 'طلبات انضمام جديدة: ' + ar(apps.length) : 'طلبات الانضمام: ' + NA;
     return '<section class="v2co-col v2co-trcol tone-wine" data-col="trainers" aria-label="المدرّبون"><header class="v2co-ch"><b>المدرّبون</b></header>'
-      + '<div class="v2co-trfull">' + body + '<div class="v2co-trfoot"><span>' + esc(appsLine) + '</span><button type="button" class="v2co-link" data-a="goto" data-s="courses" data-t="trainers">راجعها</button></div></div>'
+      + '<div class="v2co-trfull">' + body + '<div class="v2co-trfoot"><span>' + esc(appsLine) + '</span><button type="button" class="v2co-link" data-a="goto" data-s="people">راجعها في «الناس»</button></div></div>'
       + '<button type="button" class="v2co-trrow" data-a="goto" data-s="courses" data-t="trainers"><b>المدرّبون</b><span>' + esc(appsLine) + '</span></button></section>';
   }
   function avatar(name) { return '<span class="v2co-av" aria-hidden="true">' + esc(String(name || '؟').trim().charAt(0) || '؟') + '</span>'; }
@@ -466,8 +466,7 @@
     return '<li class="v2co-trw">' + avatar(r.name) + '<div class="v2co-trt"><b>' + personLink(r.name, r.email) + '</b>' + (r.countsText ? '<span class="v2co-l1">' + esc(r.countsText) + '</span>' : '')
       + (r.statusLine ? '<span class="v2co-st ' + (r.tone === 'late' ? 'red' : (r.tone === 'warn' ? 'amber' : '')) + '">' + esc(r.statusLine) + '</span>' : '') + '</div>'
       + '<details class="v2co-kebab"><summary aria-label="المزيد عن ' + esc(r.name) + '"><svg viewBox="0 0 24 24" class="v2co-ic" aria-hidden="true"><circle cx="12" cy="5" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="12" cy="19" r="1.6"/></svg></summary>'
-      + '<div class="v2co-menu">' + (r.email ? '<a class="v2co-mi" href="' + esc(L.sectionHash('people', 'person', r.email)) + '" data-person="' + esc(r.email) + '">افتح صفحة الشخص</a>' : '')
-      + '<button type="button" class="v2co-mi red" data-a="tstop" data-email="' + esc(r.email) + '">أوقف كمدرّب</button></div></details></li>';
+      + '<div class="v2co-menu">' + (r.email ? '<a class="v2co-mi" href="' + esc(L.sectionHash('people', 'person', r.email)) + '" data-person="' + esc(r.email) + '">افتح صفحة الشخص</a>' : '') + '</div></details></li>';
   }
   function overdueCount() { var n = C.videoOverdueCount(rowsOf('apps', 'applications'), now()); return typeof n === 'number' ? n : 0; }
   function overdueStrip() {
@@ -475,24 +474,20 @@
     return '<div class="v2co-warn v2co-overdue" role="status"><span>' + esc(C.videoOverdueLine(n)) + '</span>'
       + '<button type="button" class="v2co-btn2" data-a="appsweep">إلغاء المتأخر</button></div>';
   }
+  // R24 م٢: «المدرّبون» = قايمة المدرّبين للقراية بس (الاسم رابط صفحته). طلبات الانضمام (مدرّب/خبير) اتنقلت لـ«الناس»: بطاقة واحدة لكل شخص
+  // بكل طلباته، فمفيش قبول/رفض هنا ولا نسخة تانية. الملغاة (مهلة الفيديو) سجل للقراية، و«إلغاء المتأخر» كنسة صيانة مش قرار شخص.
   function drawTrainers(v) {
-    var apps = C.appTickets(rowsOf('apps', 'applications'), { now: now() });
     var rows = C.trainerRows(rowsOf('experts', 'experts'), rowsOf('courses', 'courses'), { now: now() });
     var failed = failedLabels(['courses']);
-    var appsHtml;
-    if (!apps) appsHtml = pending('apps') ? loadingBlock('طلبات المدرّبين') : unavailable('طلبات المدرّبين');
-    else appsHtml = apps.length ? '<div class="v2co-tgrid two">' + apps.map(appTicketHtml).join('') + '</div>' : '<div class="v2co-empty"><b>لا طلبات انضمام جديدة</b></div>';
-    // R10: الملغاة (مهلة الفيديو) في تصفية جانبية، وتنبيه «فات موعد الفيديو» بزر إلغاء المتأخر
+    // مهلة الفيديو (R10): «تأجيل يومين / إلغاء» على الطلب اللي فيديوه ناقص — إدارة مهلة مش قرار قبول/رفض (ده في «الناس»)، فبتفضل هنا بلا تكرار.
+    var apps = C.appTickets(rowsOf('apps', 'applications'), { now: now() });
+    var vids = (apps || []).filter(function (a) { return a.video && a.video.open; });
+    var vHtml = vids.length ? '<section class="v2co-colbox card v2co-videos"><h2 class="v2co-h2">مهلة الفيديو (' + esc(ar(vids.length)) + ')</h2><ul class="v2co-trlist">' + vids.map(function (a) {
+      return '<li class="v2co-trw" data-id="' + esc(a.id) + '">' + avatar(a.name) + '<div class="v2co-trt"><b>' + personLink(a.name, a.email) + '</b><span class="v2co-st amber">' + esc(a.video.text) + '</span></div>' + appVideoActs(a) + '</li>';
+    }).join('') + '</ul></section>' : '';
     var cancelled = C.appTickets(rowsOf('appsCancelled', 'applications'), { now: now() });
-    var cView = S.appsView === 'cancelled';
-    if (cView) {
-      if (!cancelled) appsHtml = pending('appsCancelled') ? loadingBlock('الطلبات الملغاة') : unavailable('الطلبات الملغاة');
-      else appsHtml = cancelled.length ? '<div class="v2co-tgrid two">' + cancelled.map(appCancelledHtml).join('') + '</div>' : '<div class="v2co-empty"><b>لا طلبات ملغاة</b></div>';
-    }
-    var fchips = '<div class="v2co-fchips" role="group" aria-label="تصفية الطلبات">'
-      + '<button type="button" class="v2co-fchip' + (cView ? '' : ' on') + '" aria-pressed="' + (!cView) + '" data-a="appsview" data-v="pending">قيد المراجعة <b>' + esc(apps ? ar(apps.length) : '—') + '</b></button>'
-      + '<button type="button" class="v2co-fchip' + (cView ? ' on' : '') + '" aria-pressed="' + cView + '" data-a="appsview" data-v="cancelled">أُلغيت <b>' + esc(cancelled ? ar(cancelled.length) : '—') + '</b></button></div>';
-    appsHtml = fchips + appsHtml;
+    var cHtml = '';
+    if (cancelled && cancelled.length) cHtml = '<details class="v2co-colbox card v2co-cancelled"><summary class="v2co-h2">طلبات انضمام ألغيت (' + esc(ar(cancelled.length)) + ')</summary><div class="v2co-tgrid two">' + cancelled.map(appCancelledHtml).join('') + '</div></details>';
     var overdue = overdueStrip();
     var listHtml;
     if (!rows) listHtml = pending('experts') ? loadingBlock('المدرّبين') : unavailable('المدرّبين');
@@ -501,13 +496,9 @@
       listHtml = (listed.length ? '<ul class="v2co-trlist">' + listed.map(trainerRowHtml).join('') + '</ul>' : none('لا مدرّبين لهم دورات بعد'))
         + (others > 0 ? '<p class="v2co-fine">و' + esc(U.U(others, ['خبير معتمد واحد', 'خبيران معتمدان', 'خبراء معتمدين', 'خبيرًا معتمدًا'])) + ' بلا دورات بعد <button type="button" class="v2co-link" data-a="goto" data-s="files" data-t="experts">اعرضهم في «ملفات الخبراء»</button></p>' : '');
     }
-    var seg = S.tr || (apps && apps.length ? 'apps' : (apps ? 'list' : 'apps'));
-    var segHtml = '<button type="button" role="tab" class="v2co-segb' + (seg === 'apps' ? ' on' : '') + '" aria-selected="' + (seg === 'apps') + '" data-a="trseg" data-seg="apps"><span>الطلبات</span><b>' + esc(apps ? ar(apps.length) : '—') + '</b></button>'
-      + '<button type="button" role="tab" class="v2co-segb' + (seg === 'list' ? ' on' : '') + '" aria-selected="' + (seg === 'list') + '" data-a="trseg" data-seg="list"><span>المدرّبون</span><b>' + esc(rows ? ar(rows.filter(function (r) { return r.listed; }).length) : '—') + '</b></button>';
     v.innerHTML = '<div class="v2co" data-screen="trainers">' + noteStrip() + warnStrip(failed) + overdue
-      + '<div class="v2co-seg" role="tablist" aria-label="الطلبات والمدرّبون">' + segHtml + '</div>'
-      + '<div class="v2co-two" data-active="' + seg + '"><section class="v2co-colbox" data-col="apps"><h2 class="v2co-h2">طلبات المدرّبين <span class="v2co-cnt">' + esc(apps ? ar(apps.length) : '—') + '</span></h2>' + appsHtml + '</section>'
-      + '<section class="v2co-colbox card" data-col="list"><h2 class="v2co-h2">المدرّبون</h2>' + listHtml + '</section></div></div>';
+      + '<p class="v2co-fine">طلبات الانضمام (مدرّب أو خبير) في «الناس»، بطاقة واحدة لكل شخص بكل طلباته. <button type="button" class="v2co-link" data-a="goto" data-s="people">افتح الناس</button></p>'
+      + vHtml + '<section class="v2co-colbox card" data-col="list"><h2 class="v2co-h2">المدرّبون</h2>' + listHtml + '</section>' + cHtml + '</div>';
     if (window.V2TS) window.V2TS.mount(q('.v2co', v));       // نسبة المدرّب (v2s/trainer_share.js)
   }
 

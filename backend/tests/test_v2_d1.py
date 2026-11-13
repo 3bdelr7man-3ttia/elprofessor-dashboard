@@ -642,32 +642,24 @@ RANK_ORDER = [  # الترتيب المعتمد: ملفات عاجلة/عادي�
     ('book', 'topic', 'program', 'creative', 'verify', 'course', 'live'), ('lead', 'message', 'open_message', 'other')]
 
 
+HOME_ORDER = ['people', 'files', 'disputes', 'money', 'courses', 'books', 'market', 'content', 'marketing', 'company']
+
+
 @needs_node
 def test_decisions_follow_the_approved_order(real):
+    # R24 م٢ (اتغيّر): «ابدأ القرارات» بترتيب الأقسام (الناس · الملفات · النزاعات · الفلوس …) والأولوية القديمة جوه كل قسم — مش ترتيب واحد عام.
     cards = _decisions(real)
     assert len(cards) > 15
-    pos = {}
-    for i, grp in enumerate(RANK_ORDER):
-        for k in grp:
-            pos[k] = i
-    seq = [pos[c['kind']] for c in cards]
-    # الملف العادي المنتظر ممكن يتقدّم لمجموعة العاجل لو ميعاده فات — كل واحد يبقى في مجموعته أو اللي قبلها بس
-    groups = [c['group'] for c in cards]
-    assert groups == sorted(groups), 'المجموعات مرتّبة تصاعديًّا'
-    kinds_in_order = []
+    homes = [HOME_ORDER.index(c['home']) for c in cards]
+    assert homes == sorted(homes), 'الأقسام بترتيب السايدبار'
+    by_home = {}
     for c in cards:
-        if c['kind'] not in kinds_in_order:
-            kinds_in_order.append(c['kind'])
-    # كل نوع بيظهر مرة واحدة ككتلة (مفيش نوع متقطّع)
-    assert [c['kind'] for c in cards] == [k for k in (c['kind'] for c in cards)]
-    last = -1
-    for c in cards:
-        grp = pos[c['kind']]
-        assert grp >= last - 1 or c['kind'] == 'file_waiting', (c['kind'], seq)
-        last = max(last, grp)
-    first = cards[0]
-    assert first['kind'] in ('file_late', 'file_attention', 'file_waiting')
-    assert first['group'] == 10, 'أول بطاقة عاجلة'
+        by_home.setdefault(c['home'], []).append(c['group'])
+    for h, groups in by_home.items():
+        assert groups == sorted(groups), (h, 'جوه القسم الأولوية تصاعديًّا')
+    assert cards[0]['home'] == 'people'
+    files = [c for c in cards if c['home'] == 'files']
+    assert files and files[0]['kind'] in ('file_late', 'file_attention', 'file_waiting') and files[0]['group'] == 10, 'أول بطاقة في الملفات عاجلة'
 
 
 @needs_node
@@ -676,14 +668,16 @@ def test_the_known_kinds_come_in_the_approved_relative_order(real):
     first_at = {}
     for i, c in enumerate(cards):
         first_at.setdefault(c['kind'], i)
-    # R24 م١: الشريط قرارات بس (اللي فعله الأساسي بيقفله)؛ النزاع والملف المحجوز والاستشارة القديمة والرأي والكتاب «للعلم» بتتفتح في بيوتها.
-    seq = ['payout', 'manual_payment', 'trainer', 'pending_user', 'founding', 'lead']
+    # R24 م٢ (اتغيّر): بعد ما رجعت «النزاع · الرأي · الاستشارة القديمة · الدفع بلا ملف · الكتاب» قرارات في بيوتها، والترتيب بالأقسام:
+    # الناس (مدرّب · زائر · مؤسس · رسالة) ثم الملفات ثم النزاعات ثم الفلوس (تحويل · إيصال) ثم الكتب ثم المحتوى.
+    seq = ['trainer', 'pending_user', 'founding', 'lead', 'review', 'dispute', 'unactivated', 'legacy', 'payout', 'manual_payment', 'book']
     present = [k for k in seq if k in first_at]
-    assert present == ['payout', 'manual_payment', 'trainer', 'pending_user', 'founding', 'lead']
-    assert [first_at[k] for k in present] == sorted(first_at[k] for k in present)
+    assert present == seq
+    homes = [HOME_ORDER.index(next(c['home'] for c in cards if c['kind'] == k)) for k in present]
+    assert homes == sorted(homes)
     fyi_kinds = {c['kind'] for c in _fyi_cards(real)}
-    assert {'dispute', 'unactivated', 'legacy', 'review', 'book'} <= fyi_kinds
-    assert not ({'dispute', 'unactivated', 'legacy', 'review', 'book'} & set(first_at))
+    assert not ({'dispute', 'unactivated', 'legacy', 'review', 'book'} & fyi_kinds)
+    assert {'dispute', 'unactivated', 'legacy', 'review', 'book'} <= set(first_at)
 
 
 @needs_node
@@ -723,43 +717,50 @@ def test_card_ids_are_unique_and_every_card_has_an_action(real):
         assert c['img'] in {'files', 'disputes', 'courses', 'market', 'books', 'people', 'money', 'content'}, c['kind']
 
 
-READ_FIRST = ('review', 'dispute', 'unactivated', 'legacy', 'book', 'program', 'topic', 'creative', 'verify', 'course', 'live',
-              'file_attention')
+READ_FIRST = ('review', 'dispute', 'unactivated', 'legacy', 'file_attention', 'verify', 'identity_doc')    # قراية جوه القسم (فعله `read`)
+PUBLISH_FIRST = ('book', 'program', 'topic', 'creative')                                                      # تأكيد بالاسم قبل التنفيذ
+FYI_OPEN = ('course', 'live')
 DECIDING = ('send', 'decide', 'resolve', 'payout_settle', 'pay_confirm', 'payout_reject', 'pay_reject')
 
 
 @needs_node
 def test_things_that_need_reading_are_never_a_one_click_approve(real):
-    # R24 م١: اللي محتاج قراية مش في الشريط أصلًا: «للعلم» وفعله «افتح» بس — مفيش ضغطة واحدة بتعتمده.
+    # R24 م٢ (اتغيّر): اللي محتاج قراية رجع قرار في بيته وفعله الأساسي «اقرأ وقرّر» (`read`: درج القراية جوه القسم) — مفيش ضغطة واحدة بتعتمده.
+    # والنشر (كتاب · عمل · موضوع · برنامج) بضغطة + تأكيد بالاسم. والدورة والحيّة عدّادات «للعلم».
     decisions = _decisions(real)
-    assert not [c for c in decisions if c['kind'] in READ_FIRST]
-    cards = _fyi_cards(real)
     seen = set()
-    for c in cards:
+    for c in decisions:
         if c['kind'] in READ_FIRST:
             seen.add(c['kind'])
-            assert c['bucket'] == 'fyi' and c['primary']['act']['do'] in ('open', 'goto'), c['kind']
-            assert 'افتح' in c['primary']['label'], c['kind']
-            assert c['secondary'] is None or c['secondary']['act']['do'] in ('open', 'goto'), c['kind']
-    assert {'review', 'dispute', 'unactivated', 'legacy', 'book', 'topic', 'course', 'live'} <= seen
-    labels = {c['kind']: c['primary']['label'] for c in cards if c['kind'] in ('review', 'dispute')}
-    assert labels['review'] == 'افتح وراجع' and labels['dispute'] == 'افتح النزاع'
+            assert c['bucket'] == 'decision' and c['primary']['act']['do'] == 'read', c['kind']
+            assert c['secondary'] is None or c['secondary']['act']['do'] in ('read', 'open', 'goto'), c['kind']
+        if c['kind'] in PUBLISH_FIRST:
+            assert c['primary']['act'].get('confirm') == c['kind'] and c['secondary']['act']['do'] == 'reject_reason', c['kind']
+    assert {'review', 'dispute', 'unactivated', 'legacy', 'book', 'topic'} <= seen | {c['kind'] for c in decisions}
+    assert {'review', 'dispute', 'unactivated', 'legacy'} <= seen
+    fyi = _fyi_cards(real)
+    assert not [c for c in fyi if c['kind'] in READ_FIRST + PUBLISH_FIRST]
+    for c in fyi:
+        if c['kind'] in FYI_OPEN:
+            assert c['bucket'] == 'fyi' and c['primary']['act']['do'] in ('open', 'goto') and 'افتح' in c['primary']['label']
+    labels = {c['kind']: c['primary']['label'] for c in decisions if c['kind'] in ('review', 'dispute')}
+    assert labels['review'] == 'اقرأ الرأي وقرّر' and labels['dispute'] == 'افتح النزاع وقرّر'
 
 
 @needs_node
 def test_a_suspicious_visitor_and_an_unlicensed_applicant_are_opened_not_approved(real):
-    cards = _decisions(real) + _fyi_cards(real)      # R24: المشتبه فيه «للعلم» (بيتفتح للمراجعة)، والعادي قرار
+    cards = _decisions(real) + _fyi_cards(real)      # R24 م٢ (اتغيّر): المشتبه فيه قرار فعله «اقرأ وقرّر» جوه «الناس» (مش «للعلم»)، والعادي قرار بضغطة
     visitors = [c for c in cards if c['kind'] == 'pending_user']
     assert visitors
     flagged = [c for c in visitors if c['warn']]
     plain = [c for c in visitors if not c['warn']]
-    assert all(c['bucket'] == 'fyi' for c in flagged) and all(c['bucket'] == 'decision' for c in plain)
-    assert flagged and all(c['primary']['act']['do'] == 'open' for c in flagged)
+    assert all(c['bucket'] == 'decision' for c in flagged) and all(c['bucket'] == 'decision' for c in plain)
+    assert flagged and all(c['primary']['act']['do'] == 'read' for c in flagged)
     assert all(c['warn'].startswith('يحتاج مراجعة: ') and 'مشبوه' not in c['warn'] for c in flagged)   # «الناس والدعوات»: كلمة «مشبوه» ممنوعة في النص الظاهر
     assert plain and all(c['primary']['act'] == {'do': 'decide', 'action': 'approve'} for c in plain)
     row = {'apiKind': 'join', 'apiId': 'j', 'ref': 'JR-j', 'who': 'م', 'licenceMissing': True, 'licensed': True, 'note': 'x'}
     c = v2_node.logic('v2Card', row, {'now': NOW})
-    assert c['primary']['act']['do'] == 'open' and c['warn']
+    assert c['primary']['act']['do'] == 'read' and c['warn']      # R24 م٢: «افتح وقرّر» (قراية جوه القسم)
 
 
 @needs_node
@@ -859,11 +860,11 @@ def test_a_file_card_suggests_the_auto_pick_with_a_plain_reason():
     assert c['brain'] == 'أقترح أ. ثانية'
     assert c['reason'] == 'يراجع العقود، نفس التخصص، نفس بلد القانون، عدد الملفات المفتوحة: ٢'
     assert c['primary'] == {'label': 'أرسله إلى أ. ثانية', 'act': {'do': 'send', 'email': 'b@x', 'name': 'أ. ثانية'}}
-    assert c['secondary']['label'] == 'افتح الملف'
-    # مفيش مرشّح مؤهّل ⇒ «لا يوجد خبير متاح» وزرّ الفتح
+    assert c['secondary']['label'] == 'اختار خبيرًا تاني' and c['secondary']['act'] == {'do': 'read'}      # R24 م٢: كان «افتح الملف»
+    # مفيش مرشّح مؤهّل ⇒ «لا يوجد خبير متاح» وزرّ «اختار له خبيرًا» (قراية جوه القسم)
     row['ef']['candidates'] = [{'email': 'a@x', 'name': 'أ', 'auto_pick': False, 'eligible': False}]
     c = v2_node.logic('v2Card', row, {'now': NOW})
-    assert c['brain'] == 'لا يوجد خبير متاح' and c['primary']['act']['do'] == 'open' and c['primary']['label'] == 'افتح الملف'
+    assert c['brain'] == 'لا يوجد خبير متاح' and c['primary']['act']['do'] == 'read' and c['primary']['label'] == 'اختار له خبيرًا'
 
 
 @needs_node
@@ -928,11 +929,11 @@ def test_nothing_waiting_yields_no_cards():
 @needs_node
 def test_other_rows_get_their_plain_cards(real):
     cards = {c['kind']: c for c in _decisions(real) + _fyi_cards(real)}
-    assert cards['trainer']['primary']['label'] == 'اقبل الطلب' and cards['trainer']['secondary']['label'] == 'افتح الطلب'
+    assert cards['trainer']['primary']['label'] == 'اقبل الطلب' and cards['trainer']['secondary']['label'] == 'ارفض بسبب'      # R24 م٢: كان «افتح الطلب»
     assert cards['founding']['primary']['label'] == 'تم التواصل'
     assert cards['lead']['primary'] == {'label': 'تم', 'act': {'do': 'resolve'}}
     assert cards['pending_user']['tag'] == 'زائر ينتظر الفتح'
-    assert cards['join']['primary']['label'] in ('اقبل', 'افتح وراجع')
+    assert cards['join']['primary']['label'] in ('اقبل', 'افتح وقرّر')
     assert cards['review']['tag'] == 'أول رأي لخبير جديد'
     assert cards['dispute']['tag'] in ('نزاع', 'ملاحظة على قضية')
     assert cards['unactivated']['tag'] == 'دفع بلا ملف'
@@ -946,14 +947,14 @@ def test_the_suggestion_is_never_the_expert_who_already_has_the_file():
                   'writing_due_at': _iso(5),
                   'candidates': [{'email': 'slow@x', 'name': 'أ. بطيء', 'auto_pick': True}]}}
     c = v2_node.logic('v2Card', row, {'now': NOW})
-    assert c['primary']['act']['do'] == 'open' and 'لا يوجد خبير آخر متاح' in c['brain']
+    assert c['primary']['act']['do'] == 'read' and 'لا يوجد خبير آخر متاح' in c['brain']      # R24 م٢: «اختار له خبيرًا» جوه القسم
 
 
 @needs_node
 def test_a_dispute_card_reads_gender_neutral():
     c = v2_node.logic('v2Card', DISPUTE_ROW, {'now': NOW})
     assert c['brain'].startswith('اعتراض من منى على «عقد»')
-    assert c['primary'] == {'label': 'افتح النزاع', 'act': {'do': 'open'}}
+    assert c['primary'] == {'label': 'افتح النزاع وقرّر', 'act': {'do': 'read'}}      # R24 م٢: قراية جوه «النزاعات»
 
 
 # —— المراجعة: عدّادات ناقصة · صحة بفصحى · نص محايد · رد القرار
@@ -1133,5 +1134,8 @@ def test_the_old_receipt_drawer_goes_through_the_same_flagged_call():
 
 def test_opening_a_row_scrolls_to_the_drawer_not_the_top_of_the_list():
     html = _read('dashboard-cloud', 'index.html')
+    # R24 م٢ (اتغيّر): «افتح» بقت درج القراية فوق القسم (v2OpenReading) والدرج بيتفتح نفسه — مفيش تمرير على «الوارد».
     host = html[html.index('openRow:function(row){'):html.index('logout:function(){')]
-    assert "getElementById('drawer')" in host and 'inboxwrap' not in host
+    assert 'v2OpenReading(row,null)' in host and 'inboxwrap' not in host
+    reading = html[html.index('function v2OpenReading('):html.index('function v2CloseReading(')]
+    assert '<aside class="drawer" id="drawer"></aside>' in reading and 'drawInbox();' in reading

@@ -583,8 +583,8 @@ def test_the_tools_tab_lives_in_the_company_section_with_no_new_home_tile():
     co = [s for s in secs if s['key'] == 'company'][0]
     tab = [t for t in co['tabs'] if t['key'] == 'tools']
     assert len(tab) == 1 and tab[0]['label'] == 'الأدوات' and tab[0]['mod'] == 'v2s_tools' and not tab[0].get('hidden')
-    assert [t['key'] for t in co['tabs'] if not t.get('hidden')] == ['invest', 'partners', 'assets', 'deals', 'ads', 'tools', 'settings']
-    assert len(secs) == 13 and 'tools' not in [s['key'] for s in secs]
+    assert [t['key'] for t in co['tabs'] if not t.get('hidden')] == ['invest', 'partners', 'assets', 'deals', 'ads', 'tools', 'brain', 'helpers', 'settings', 'legacy', 'legacyfin']      # R24 م٢: العقل والسجلات القديمة جوه الشركة
+    assert len(secs) == 11 and 'tools' not in [s['key'] for s in secs]      # R24 م٢: ١١ قسم
     where = L('sectionFor', 'v2s_tools', {}, None)
     assert where['section'] == 'company' and where['tab'] == 'tools'
     index = _read('dashboard-cloud', 'index.html')

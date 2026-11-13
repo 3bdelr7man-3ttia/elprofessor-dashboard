@@ -315,14 +315,17 @@ def test_deck_holds_only_decisions_with_a_closing_primary_action():
     rows = [ROWS[k] for k in DECISION_KINDS + FYI_ONLY + OPEN_ONLY] + [ROWS['file_sent']]
     out = _split(rows, [_payout()], {'courses_pending': {'count': 2, 'titles': ['دورة أ', 'دورة ب']}, 'live_needs_decision': [{'title': 'حيّة', 'reserved_count': 2, 'quorum': 5}]})
     deck = out['decisions']
-    assert _kinds(deck) == sorted(['payout', 'manual_payment', 'trainer', 'join', 'pending_user', 'founding', 'lead', 'file_waiting'])
-    for c in deck:                                    # كل بطاقة في الشريط فعلها الأساسي بيقفلها (مش «افتح»)
+    # R24 م٢ (اتغيّر): اللي كان «افتح» بس (نزاع · رأي · هوية · كتاب · رسالة موقع · انضمام مرخَّص · زائر عليه علامة · ملف بلا مرشّح) رجع قرارًا في بيته
+    # بفعله الحقيقي (`read` = اقرأ وقرّر جوه القسم)، و«للعلم» فيها الحقيقي بس.
+    assert _kinds(deck) == sorted(['payout', 'manual_payment', 'trainer', 'join', 'join', 'pending_user', 'pending_user', 'founding', 'lead', 'file_waiting', 'file_waiting',
+                                   'dispute', 'review', 'identity_doc', 'book', 'open_message'])
+    for c in deck:                                    # كل بطاقة في الشريط فعلها الأساسي بيقفلها أو بيفتح قراية فيها القفل (مش «افتح» عادي)
         assert c['bucket'] == 'decision'
-        assert c['primary']['act']['do'] in ('send', 'decide', 'resolve', 'payout_settle', 'pay_confirm', 'offer_approve', 'brain_approve'), c['kind']
+        assert c['primary']['act']['do'] in ('send', 'decide', 'resolve', 'payout_settle', 'pay_confirm', 'offer_approve', 'brain_approve', 'read'), c['kind']
     # الباقي كله «للعلم» (مفيش بطاقة بتضيع)
     fyi_cards = [c for g in out['fyi']['groups'] for c in g['cards']]
     kinds = {c['kind'] for c in fyi_cards}
-    assert {'signup', 'payfail', 'dispute', 'review', 'identity_doc', 'book', 'open_message', 'course', 'live'} <= kinds
+    assert {'signup', 'payfail', 'course', 'live'} <= kinds and not ({'dispute', 'review', 'identity_doc', 'book', 'open_message'} & kinds)
     assert out['fyi']['total'] == len(fyi_cards) == out['fyi']['info'] + out['fyi']['open']
     # لا قرارات مكررة بين الشريطين
     assert not ({c['id'] for c in deck} & {c['id'] for c in fyi_cards})
@@ -648,7 +651,10 @@ def test_vanished_row_message_and_host_open_row_contract():
     # openRow بيدوّر **قبل** ما يروح للوارد، وبيرجّع false (الكارت بيكتب «البند ده اتحل بالفعل»)
     i = HTML.index('openRow:function(row){')
     body = HTML[i:HTML.index('logout:function', i)]
-    assert body.index('v2FindRow(row)') < body.index("go('inbox')") and 'return false' in body and 'return true' in body
+    # R24 م٢ (اتغيّر): «افتح» بقت درج القراية فوق القسم؛ والبحث عن الصف (v2FindRow) قبل أي فتح، والفشل ⇒ false + «البند ده اتحل بالفعل»
+    assert 'v2OpenReading(row,null)' in body
+    reading = HTML[HTML.index('function v2OpenReading('):HTML.index('function v2CloseReading(')]
+    assert reading.index('v2FindRow(row)') < reading.index('drawInbox()') and 'return false' in reading and 'return true' in reading and "go('inbox')" not in reading
     assert "function v2FindRow(row)" in HTML and 'row.apiKind==null||row.apiId==null)return -1' in HTML
     assert 'البند ده اتحل بالفعل' in HOME_JS and 'opened === false' in HOME_JS
     assert "toast('البند ده اتحل بالفعل')" in HTML                                      # openRowAt كمان
@@ -677,8 +683,8 @@ def test_home_board_shows_the_for_info_box_and_the_two_restore_lines_not_cards_w
                {'row': dict(ROWS['signup'], apiId='s2', ref='SGN-s2', ts=6), 'key': 'signup:s2', 'entry': _entry('signup:s2', None, 'dismiss', '', 'معروف')}]
     out = _home(HROWS, snoozed=snoozed)
     html = out['html']
-    assert 'ابدأ القرارات (٢)' in html                                     # trainer + lead بس
-    assert 'للعلم (٢)' in html and 'تسجيل جديد' in html and 'قراره في صفحته' in html and 'نزاع' in html
+    assert 'ابدأ القرارات (٣)' in html                                     # R24 م٢: trainer + lead + نزاع (النزاع بقى قرارًا في بيته)
+    assert 'للعلم (١)' in html and 'تسجيل جديد' in html
     assert 'مؤجّلة (١)' in html and 'اتشالت (١)' in html
     assert 'data-a="primary"' not in html and 'data-a="later"' not in html          # اللوحة مفيهاش أزرار قرار
 
@@ -702,7 +708,7 @@ def test_home_dismissed_list_shows_the_reason_and_restore():
 @needs_node
 def test_focus_later_opens_the_picker_and_saves_on_the_server_the_card_leaves_the_deck():
     out = _home(HROWS, steps=[{'mode': 'focus'}])
-    assert out['mode'] == 'focus' and len(out['deck']) == 2
+    assert out['mode'] == 'focus' and len(out['deck']) == 3      # R24 م٢: trainer + lead + نزاع
     assert 'data-a="later"' in out['html'] and '>بعدين</button>' in out['html']
     first_deck = out['deck']
     out = _home(HROWS, steps=[{'mode': 'focus'}, {'click': '[data-a="later"]'}])
@@ -743,9 +749,10 @@ def test_dismiss_button_only_on_cards_whose_type_has_no_platform_decision_and_ne
 
 @needs_node
 def test_open_on_a_vanished_row_says_so_instead_of_landing_silently():
-    out = _home(HROWS, steps=[{'mode': 'focus'}, {'click': '[data-a="secondary"]'}], openRowResult=False)
+    # R24 م٢ (اتغيّر): النزاع قراره «افتح النزاع وقرّر» (قراية جوه القسم) — لو الصف اتحل بنقول كده وبنشيل البطاقة، مش بنرمي المؤسس على شاشة فاضية
+    out = _home([dict(ROWS['dispute'], ts=4)], steps=[{'mode': 'focus'}, {'click': '[data-a="primary"]'}], openRowResult=False)
     assert {'fn': 'toast', 't': 'البند ده اتحل بالفعل'} in out['calls']
-    assert len(out['deck']) == 1                                      # البطاقة اتشالت من الكوتشينة
+    assert len(out['deck']) == 0                                      # البطاقة اتشالت من الكوتشينة
 
 
 @needs_node
@@ -785,8 +792,9 @@ def test_the_two_counters_read_the_same_split():
     # compute() و V2.tiles() (اللي بتغذّي القايمة الجانبية) بيعدّوا من `gather()` اللي فيه `v2Split` + `extras.hidden`
     g = HOME_JS[HOME_JS.index('function gather()'):HOME_JS.index('function compute()')]
     assert 'L.v2Split(' in g and 'extras.hidden = split.hiddenRows' in g
-    assert 'var tiles = L.v2Tiles(Q, g.extras)' in HOME_JS and 'var decisions = g.split.decisions' in HOME_JS
-    assert re.search(r'V2\.tiles = function \(\) \{ var g = gather\(\); return L\.v2Tiles\(g\.Q, g\.extras\); \}', HOME_JS)
+    # R24 م٢ (اتغيّر): العدد = عدد القرارات (`v2SectionTiles` على نفس `split.byHome`) — حسابات الأساس v2Tiles بقت للفشل والعدّ الناقص بس
+    assert 'var tiles = L.v2SectionTiles(L.v2Tiles(Q, g.extras), g.split, g.avail)' in HOME_JS and 'var decisions = g.split.decisions' in HOME_JS
+    assert re.search(r'V2\.tiles = function \(\) \{ var g = gather\(\); return L\.v2SectionTiles\(L\.v2Tiles\(g\.Q, g\.extras\), g\.split, g\.avail\); \}', HOME_JS)
     # قوايم القسم (الفلوس والكتب) من نفس الدالة المشتركة
     assert 'L.v2SnoozeSplit(list, keyFn, sz.map, now())' in D3_JS and 'stuckVisible(' in D3_JS
 

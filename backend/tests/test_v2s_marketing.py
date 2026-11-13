@@ -417,8 +417,10 @@ def test_sections_entry_and_every_open_section_target_exists():
     L = _node_json("console.log(JSON.stringify({sec: L.sectionByKey('marketing'), money_ads: !!L.tabByKey('money','ads'), company: (L.sectionByKey('company')||{}).tabs.map(t=>t.key),"
                    " route: [L.sectionFor('marketing'), L.routeFor('#s/marketing/plan'), L.routeFor('#marketing')]}))")
     sec = L['sec']
-    assert sec['label'] == 'التسويق' and sec['desc'] == 'الحملات من الإعلان حتى الدفع، والسوشيال، وخطة النشر'
-    assert [(t['key'], t['label'], t['mod']) for t in sec['tabs']] == [('campaigns', 'الحملات', 'marketing'), ('social', 'السوشيال ميديا', 'v2mk_social'), ('plan', 'خطة النشر', 'v2mk_plan')]
+    # R24 م٢ (اتغيّر): «التسويق» بقى «التسويق والتقارير» (التقارير اندمجت فيه بتبويباتها الثلاثة)
+    assert sec['label'] == 'التسويق والتقارير' and sec['desc'] == 'الحملات والسوشيال وخطة النشر، وما الذي يعمل وما الذي توقّف'
+    assert [(t['key'], t['label'], t['mod']) for t in sec['tabs']] == [('campaigns', 'الحملات', 'marketing'), ('social', 'السوشيال ميديا', 'v2mk_social'), ('plan', 'خطة النشر', 'v2mk_plan'),
+                                                                      ('report', 'التقرير', 'analysis'), ('demand', 'ما يسأل عنه الناس', 'v2r_demand'), ('sunday', 'تقرير الأحد', 'v2r_sunday')]
     assert L['route'][0]['tab'] == 'campaigns' and L['route'][1]['tab'] == 'plan' and L['route'][2]['section'] == 'marketing'
     src = _read('dashboard-cloud', 'v2s', 'marketing.js')
     assert "openSection('reports'" not in src and 'data-s="reports"' not in src, 'التقارير تروح للتسويق وما فيش رجوع'

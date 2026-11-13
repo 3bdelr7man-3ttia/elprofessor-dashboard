@@ -917,7 +917,7 @@ def test_the_money_and_books_sections_have_the_new_tabs_and_the_old_ones_last():
     secs = {s['key']: s for s in L('SECTIONS')}
     vis = lambda k: [(t['key'], t['label'], t['mod']) for t in secs[k]['tabs'] if not t.get('hidden')]
     assert vis('money') == [('overview', 'نظرة', 'v2m_overview'), ('payouts', 'التحويلات', 'v2m_payouts'), ('receipts', 'الإيصالات', 'v2m_receipts'),
-                            ('prices', 'الأسعار', 'v2m_prices'), ('shares', 'النسب والإعدادات', 'v2m_shares'), ('ads', 'إعلانات الأعمال', 'v2m_ads'), ('all', 'كل السجلات', 'finance')]
+                            ('prices', 'الأسعار', 'v2m_prices'), ('shares', 'النسب والإعدادات', 'v2m_shares'), ('ads', 'إعلانات الأعمال', 'v2m_ads')]      # R24 م٢: «كل السجلات» القديمة اتشالت (للقراية في الشركة)
     assert vis('books') == [('offers', 'مراجعة العروض', 'v2b_offers'), ('requests', 'طلبات القرّاء', 'v2b_requests'), ('books', 'الكتب', 'knowledge'), ('ours', 'كتبنا', 'v2s_books_ours')]
     assert secs['money']['tabs'][0]['key'] == 'overview' and secs['books']['tabs'][0]['key'] == 'offers'
 
@@ -925,12 +925,13 @@ def test_the_money_and_books_sections_have_the_new_tabs_and_the_old_ones_last():
 @needs_node
 def test_old_links_still_land_somewhere_sensible():
     land = lambda mod, st: (lambda r: (r['section'], r['tab']))(L('sectionFor', mod, st))
-    assert land('finance', {'finTab': 'summary'}) == ('money', 'all') and land('finance', {'finTab': 'packages'}) == ('money', 'all')
-    assert land('finance', {'finTab': 'withdrawals'}) == ('money', 'all') and land('finance', {'finTab': 'stuck'}) == ('money', 'all')
-    assert land('escrow', {'escTab': 'manual'}) == ('disputes', 'escrow') and land('escrow', {'escTab': 'sessions'}) == ('disputes', 'escrow')   # يدوي ⇒ يحوّله index.html إلى الفلوس ‹ الإيصالات
+    # R24 م٢ (اتغيّر): المالية والضمان القديمين في «الشركة ‹ السجلات القديمة» (للقراية بس)
+    assert land('finance', {'finTab': 'summary'}) == ('company', 'legacyfin') and land('finance', {'finTab': 'packages'}) == ('company', 'legacyfin')
+    assert land('finance', {'finTab': 'withdrawals'}) == ('company', 'legacyfin') and land('finance', {'finTab': 'stuck'}) == ('company', 'legacyfin')
+    assert land('escrow', {'escTab': 'manual'}) == ('company', 'legacy') and land('escrow', {'escTab': 'sessions'}) == ('company', 'legacy')   # يدوي ⇒ يحوّله index.html إلى الفلوس ‹ الإيصالات
     assert land('knowledge', {}) == ('books', 'books')
     assert L('routeFor', '#s/money', {})['tab'] == 'overview' and L('routeFor', '#s/money/prices', {})['mod'] == 'v2m_prices'
-    assert L('routeFor', '#s/books', {})['mod'] == 'v2b_offers' and L('routeFor', '#packages', {})['section'] == 'money'
+    assert L('routeFor', '#s/books', {})['mod'] == 'v2b_offers' and L('routeFor', '#packages', {})['section'] == 'company'
     assert L('parseSectionHash', '#s/money/manual')['tab'] == 'overview', 'التبويب المخفي ما بيتفتحش بالعنوان'
 
 
@@ -1005,7 +1006,7 @@ def test_the_money_sheets_reuse_the_existing_confirmation_and_add_no_new_decisio
     home = _read('dashboard-cloud', 'v2-home.js')
     assert 'V2.openMoney = function (c, a, onDone)' in home
     assert 'alt: S.ext ? { label:' in home, '«ارفض» جوه ورقة التسجيل بس لما الفتح من شاشة الفلوس'
-    assert re.search(r"function run\(c, a\) \{[^}]*?S\.ext = null;", home, re.S), 'الفتح من اللوحة يلغي أي فتح خارجي معلّق'
+    assert re.search(r"function run\(c, a, keepExt\) \{[^}]*?if \(!keepExt\) S\.ext = null;", home, re.S), 'الفتح من اللوحة يلغي أي فتح خارجي معلّق (R24 م٢: إلا لو المنادي هو شاشة بتستنى النتيجة — `V2.runCard`)'
     assert "if (S.ext && S.ext.id === c.id)" in home
     # المسارات الجديدة: كل كتابة PUT/POST بتبعت confirmed:true، والـPATCH (طلبات القرّاء) بلا فلوس
     js = _strip_comments(_read('dashboard-cloud', 'v2-d3.js'))

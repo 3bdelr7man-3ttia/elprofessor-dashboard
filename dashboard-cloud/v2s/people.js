@@ -240,35 +240,24 @@
     }
     S.col[tab] = a; return a;
   }
+  // R24 م٢: «قوائم الانتظار» — قائمة الانتظار من الموقع + «سجّلوا ولم يطلبوا». ⛔ مفيش هنا قرارات الدخول والانضمام (زائر · دعوة · مدرّب ·
+  // خدمة · مؤسس · هوية): كلها بطاقة واحدة لكل شخص في شريط «محتاج قرارك» فوق (الشريط المشترك)، فمفيش قرار مكرّر في شاشتين.
   function drawRequests(v) {
     var R = S.req = P.requests(reqInputs(), now());
-    if (window.V2BRAIN) {       // brain2: نداء lookup واحد لتذاكر هذه الشاشة (لا يكتب ولا يستدعي الذكاء)
-      try {
-        var bcards = [];
-        REQ_ORDER.forEach(function (k) { (R.cols[k].items || []).forEach(function (t) { var bc = brainCardOf(t); if (bc) bcards.push(bc); }); });
-        window.V2BRAIN['prefetch'](bcards.slice(0, 40));
-      } catch (e) {}
-    }
-    var active = pickActive('requests', R.cols, REQ_ORDER);
-    var all = REQ_ORDER.every(function (k) { return R.cols[k].state === 'ready'; });
-    var total = REQ_ORDER.reduce(function (n, k) { return n + R.cols[k].items.length; }, 0);
-    var partial = [];
-    var inv = readyData('invites');
-    if (inv && inv.count != null && inv.count > (inv.rows || []).length) partial.push('معروض ' + ar((inv.rows || []).length) + ' من ' + ar(inv.count) + ' دعوة — القائمة ناقصة');
-    var tr = (window.INBOX_TRUNCATED || []).map(function (x) { return String(x).split(':')[0].trim(); }).filter(function (l) { return ['زوّار ينتظرون الفتح', 'طلبات تقديم الخدمة', 'ليدات خبير مؤسس'].indexOf(l) > -1; });
-    if (tr.length) partial.push('معروض جزء فقط من: ' + tr.map(function (l) { return { 'زوّار ينتظرون الفتح': 'الزوّار', 'طلبات تقديم الخدمة': 'طلبات تقديم الخدمة', 'ليدات خبير مؤسس': 'الخبراء المؤسسون' }[l]; }).join('، ') + ' — القائمة ناقصة');
-    var head = '<div class="v2p-top"><p class="v2p-brain">' + BRAIN + '<span>' + esc(R.head.text) + '</span></p><button type="button" class="v2p-btn2" data-a="refresh">حدّث</button></div>'
-      + (R.head.invitesLine ? '<p class="v2p-jump"><a href="' + esc(R.head.invitesLine.href) + '" data-a="goto-pipeline">' + esc(R.head.invitesLine.text) + '</a></p>' : '');
+    var wlItems = (R.cols.visitors.items || []).filter(function (t) { return t.kind === 'waitlist'; });
+    var wst = eff('waitlist');
+    var head = '<div class="v2p-top"><p class="v2p-brain">' + BRAIN + '<span>طلبات الدخول والانضمام كلها في بطاقات «محتاج قرارك» فوق — هنا قائمة الانتظار من الموقع ومن سجّلوا ولم يطلبوا.</span></p><button type="button" class="v2p-btn2" data-a="refresh">حدّث</button></div>';
     var body;
-    if (all && total === 0) {
-      body = emptyCard('لا أحد ينتظر قرارك الآن');
-    } else {
-      body = segHtml(R.cols, REQ_ORDER, active, '') + '<div class="v2p-cols cols4">' + REQ_ORDER.map(function (k) {
-        return colHtml(k, R.cols[k], 'requests', TONE_CLS[R.cols[k].tone] || 'wait', 'لا شيء هنا الآن', { active: k === active });
-      }).join('') + '</div>';
+    if (wst === 'idle' || wst === 'loading') body = skeleton() + skeleton() + '<p class="v2p-none">…جارٍ الجلب</p>';
+    else if (wst === 'error') body = '<p class="v2p-none">تعذّر جلب قائمة الانتظار — لا تعتبرها فاضية.</p><button type="button" class="v2p-btn2" data-a="retry" data-key="waitlist">أعد المحاولة</button>';
+    else if (R.cols.visitors.retry && R.cols.visitors.retry.some(function (r) { return r.key === 'waitlist' && r.missing; })) body = '<p class="v2p-none">قائمة الانتظار غير متاحة بعد من المنصة</p>';
+    else {
+      var expanded = !!S.expanded['requests:waitlist'], shown = expanded ? wlItems.length : 6;
+      body = '<section class="v2p-col tone-wait on" data-col="waitlist" aria-label="قائمة الانتظار"><header class="v2p-ch"><b>من قائمة الانتظار</b><span class="v2p-n">' + esc(ar(wlItems.length)) + '</span></header><div class="v2p-list">'
+        + (wlItems.length ? wlItems.slice(0, shown).map(function (t) { return ticketHtml(t, 'wait'); }).join('') : '<p class="v2p-none">قائمة الانتظار فاضية</p>')
+        + (!expanded && wlItems.length > shown ? '<button type="button" class="v2p-btn2 v2p-all" data-a="expand" data-k="requests:waitlist">اعرض الكل (' + esc(ar(wlItems.length)) + ')</button>' : '') + '</div></section>';
     }
-    body += laterHtml(R.later);
-    v.innerHTML = '<div class="v2p" data-tab="requests">' + head + warnStrips(R.head.failedLabels.length ? R.head.failedLabels : null, partial) + body + '</div>';
+    v.innerHTML = '<div class="v2p" data-tab="requests">' + head + body + laterHtml(R.later) + '</div>';
   }
   function laterHtml(L2) {
     if (L2.state === 'loading') return '';
@@ -402,17 +391,21 @@
   }
   function userRowHtml(u) {
     S.items['user:' + u.id] = u;
+    var hasReq = !!stripCards()[String(u.email || '').toLowerCase()];
     var chips = u.chips.map(function (c) { return '<span class="v2p-ch2 k-' + esc(c.key) + (c.gold ? ' gold' : '') + '">' + esc(c.label) + '</span>'; }).join('');
     return '<article class="v2p-u' + (u.active ? '' : ' off') + '" data-a="person" data-email="' + esc(u.email) + '"><span class="v2p-av" aria-hidden="true">' + U.avatarMark(u.initial) + '</span><div class="v2p-uid">'
       + '<h3>' + personLink(u.name, u.email) + '</h3><div class="v2p-uch">' + chips + '</div><p class="v2p-em">' + esc(u.email) + '</p>'
       + '<p class="v2p-um">' + esc(u.planText + ' · انضمّ ' + u.joinedText + ' · آخر دخول ' + u.lastText) + (u.fromSearch ? ' · من البحث' : '') + '</p></div>'
-      + '<button type="button" class="v2p-btn2" data-a="person" data-email="' + esc(u.email) + '">افتح صفحة الشخص</button></article>';
+      + '<div class="v2p-uacts">' + (hasReq ? '<button type="button" class="v2p-btn3" data-a="tostrip" data-email="' + esc(u.email) + '">فيه طلب في «محتاج قرارك» ↑</button>' : '')
+      + '<button type="button" class="v2p-btn2" data-a="person" data-email="' + esc(u.email) + '">افتح صفحة الشخص</button></div></article>';
   }
   function usersBodyHtml(UV) {
     if (UV.state === 'loading') return '<div class="v2p-list one">' + skeleton() + skeleton() + skeleton() + '</div><p class="v2p-none">…جارٍ جلب الحسابات</p>';
     if (UV.state === 'failed') return '<div class="v2p-empty"><b>الحسابات: ' + NA + '</b><p class="v2p-none">تعذّر الوصول إلى هذه البيانات الآن، فلا تعتبر الشاشة فارغة.</p><button type="button" class="v2p-btn2" data-a="retry" data-key="users">أعد المحاولة</button></div>';
     if (UV.state === 'empty') return emptyCard('لا حسابات بعد');
     var h = chipRowHtml(UV);
+    // «زوّار» و«طلبات مدرّب» هنا فلاتر للقراية: القرار نفسه في بطاقات «محتاج قرارك» فوق.
+    if (S.users.chip === 'visitor' || S.users.filter.role === 'trainer_pending') h += '<p class="v2p-fine">دي فلتر للقراية بس — قرارات الدخول والانضمام في بطاقات «محتاج قرارك» فوق، <button type="button" class="v2p-link" data-a="goto-requests">روح للبطاقات</button></p>';
     if (UV.empty) h += '<div class="v2p-empty small"><b>' + esc(UV.empty.text) + '</b>' + (UV.empty.hint ? '<p class="v2p-none">' + esc(UV.empty.hint) + '</p>' : '') + '</div>';
     else h += '<div class="v2p-list one">' + UV.rows.map(userRowHtml).join('') + '</div>' + (UV.more ? '<button type="button" class="v2p-btn2 v2p-all" data-a="more-users">اعرض ' + esc(ar(UV.more)) + ' أخرى</button>' : '');
     if (UV.truncated && UV.total != null) h += '<p class="v2p-fine">معروض ' + esc(ar(S.rawN || 0)) + ' من ' + esc(ar(UV.total)) + ' — اكتب في البحث للوصول إلى الباقي</p>';
@@ -988,7 +981,7 @@
       var part1 = '<section class="v2pm-part"><h4>الدور</h4><div class="v2pm-seg4" role="group">' + roleBtns + '</div>' + (guard.locked ? '<p class="v2pm-warn">' + esc(guard.note) + '</p>' : '') + okLine(msg.role) + '<div class="v2pm-err" data-err="role" role="alert"></div></section>';
       var trainerH = '';
       if (u.trainer_status === 'approved') trainerH = '<button type="button" class="v2p-btn3" id="v2pmTr">إلغاء اعتماد المدرّب</button>';
-      else if (u.trainer_status === 'pending') trainerH = '<p class="v2pm-lead">طلب اعتماد مدرّب قيد المراجعة في «الدورات والمدرّبون»</p><button type="button" class="v2p-link" id="v2pmTrGo">افتح «الدورات والمدرّبون»</button>';
+      else if (u.trainer_status === 'pending') trainerH = '<p class="v2pm-lead">طلب اعتماد مدرّب قيد المراجعة — قراره في بطاقة صاحبه بشريط «محتاج قرارك» في «الناس»</p><button type="button" class="v2p-link" id="v2pmTrGo">روح للبطاقة</button>';
       var part2 = '<section class="v2pm-part"><h4>الظهور والمدرّب</h4><button type="button" class="v2p-btn2" id="v2pmVis">' + (u.is_test ? 'أعِد إظهار الحساب' : 'أخفِ الحساب من الواجهات العامة (تجريبي)') + '</button>' + trainerH + okLine(msg.vis) + '<div class="v2pm-err" data-err="vis" role="alert"></div></section>';
       var planOpts = Array.isArray(pk) ? pk.map(function (p2) { return '<option value="' + esc(p2.id) + '"' + ((planVal || u.plan_id) === p2.id ? ' selected' : '') + '>' + esc(p2.name || p2.id) + '</option>'; }).join('') : '';
       var planH = Array.isArray(pk) ? '<div class="v2pm-fld"><label for="v2pmPlan" class="v2p-sr">الباقة</label><select id="v2pmPlan">' + planOpts + '</select></div><button type="button" class="v2p-btn2" id="v2pmPlanGo">احفظ الباقة</button>' + okLine(msg.plan)
@@ -1014,7 +1007,7 @@
             onOk: function () { u.is_test = to; msg = { vis: 'حُفظ' }; showScreen(sc); } });
         };
         var tr = q('#v2pmTr', root); if (tr) tr.onclick = function () { trainerScreen(u, sc, function () { u.trainer_status = 'none'; u.is_test = true; msg = { vis: 'حُفظ' }; showScreen(sc); }); };
-        var trg = q('#v2pmTrGo', root); if (trg) trg.onclick = function () { closeSheet(); host().openSection && host().openSection('courses', 'trainers'); };
+        var trg = q('#v2pmTrGo', root); if (trg) trg.onclick = function () { closeSheet(); host().openSection && host().openSection('people', 'users'); setTimeout(function () { scrollToStrip(u.email); }, 250); };
         q('#v2pmMore', root).onclick = function () { moreOpen = !moreOpen; showScreen(sc); };
         var pg = q('#v2pmPrices', root); if (pg) pg.onclick = function () { closeSheet(); host().openSection && host().openSection('money', 'prices'); };
         var pl = q('#v2pmPlan', root); if (pl) pl.addEventListener('change', function () { planVal = pl.value; });
@@ -1183,6 +1176,19 @@
   }
 
   // ------------------------------------------------------------------ الأحداث
+  // R24 م٢: طلبات الدخول والانضمام قرارها في شريط «محتاج قرارك» فوق (بطاقة لكل شخص). من هنا بنوصّل لبطاقة الشخص بدل ما نكرّر أزرارها.
+  function stripCards() {
+    var m = {};
+    try { (window.V2 && V2.strip ? V2.strip('people').cards : []).forEach(function (c) { if (c.person && c.person.email) m[String(c.person.email).toLowerCase()] = c; }); } catch (e) {}
+    return m;
+  }
+  function scrollToStrip(email) {
+    var z = document.getElementById('v2strip'); if (!z) return;
+    var card = email ? stripCards()[String(email).toLowerCase()] : null;
+    var target = (card && z.querySelector('[data-id="' + (window.CSS && CSS.escape ? CSS.escape(card.id) : card.id) + '"]')) || z;
+    try { target.scrollIntoView({ block: 'center', behavior: 'smooth' }); } catch (e) {}
+    try { target.classList.add('v2z-flash'); setTimeout(function () { target.classList.remove('v2z-flash'); }, 1800); } catch (e) {}
+  }
   function actOf(t, w) { if (!t) return null; var a = w === 'p' ? t.primary : (t.secondary || [])[Number(String(w).slice(1))]; return a ? a.act : null; }
   function reloadTab() {
     var tab = S.tab; reloadKeys(KEYS[tab].filter(function (k) { return k !== 'users' && k !== 'inviteSettings' && k !== 'packages'; }));
@@ -1208,7 +1214,8 @@
         return;
       case 'refresh': return reloadTab();
       case 'goto-pipeline': e.preventDefault(); return host().openSection && host().openSection('people', 'pipeline');
-      case 'goto-requests': e.preventDefault(); return host().openSection && host().openSection('people', 'invites');
+      case 'goto-requests': e.preventDefault(); return scrollToStrip(null);
+      case 'tostrip': e.preventDefault(); return scrollToStrip(b.getAttribute('data-email'));
       case 'new-invite': return newInviteScreen({}, null);
       case 'settings': return settingsScreen();
       case 'act': return doAct(S.items[id], actOf(S.items[id], b.getAttribute('data-w')));

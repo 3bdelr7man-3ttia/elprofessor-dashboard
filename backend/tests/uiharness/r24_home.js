@@ -50,7 +50,7 @@ sb.window = sb;
 sb.document = { readyState: 'complete', addEventListener() {}, removeEventListener() {}, getElementById() { return null; }, querySelector() { return null; }, createElement() { return stubEl(''); }, body: { appendChild() {} } };
 sb.matchMedia = () => ({ matches: false });
 let lastModal = null, modalMark = 0;
-sb.openModal = function (title, html) { modals.push({ title, html }); lastModal = stubEl(html); modalMark = handlers.length; return lastModal; };
+sb.openModal = function (title, html) { modals.push({ title, html }); lastModal = stubEl('<button data-x></button>' + html); modalMark = handlers.length; return lastModal; };
 sb.closeModal = function () {};
 const now = Date.now();
 sb.INBOX = input.inbox || [];
@@ -70,7 +70,7 @@ sb.EP = {
   resolveInboxItem(row) { calls.push({ fn: 'resolveInboxItem', ref: row.ref }); return Promise.resolve({ ok: true }); },
   expertFileSend(row, email) { calls.push({ fn: 'expertFileSend', ref: row.ref, email }); return Promise.resolve({ ok: true }); },
 };
-sb.V2_HOST = { isHome: () => true, openRow: (row) => { calls.push({ fn: 'openRow', ref: row.ref }); return input.openRowResult !== false; }, openSection() {}, goOps() {}, go() {} };
+sb.V2_HOST = { isHome: () => true, openRow: (row) => { calls.push({ fn: 'openRow', ref: row.ref }); return input.openRowResult !== false; }, openReading: (row) => { calls.push({ fn: 'openReading', ref: row.ref }); return input.openRowResult !== false; }, openSection() {}, goOps() {}, go() {} };
 sb.toast = (t) => calls.push({ fn: 'toast', t });
 vm.createContext(sb);
 vm.runInContext(fs.readFileSync(path.join(dc, 'v2-logic.js'), 'utf8'), sb);

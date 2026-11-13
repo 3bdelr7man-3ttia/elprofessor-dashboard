@@ -21,10 +21,15 @@
     lines: '', fg: {}, cards: {},               // R24: القايمة المفتوحة (later | gone) · مجموعات «للعلم» المفتوحة · بطاقات للأزرار
     flash: '',
     busy: false, err: '', lockedId: '',
+    errMap: {},           // R24 م٢: خطأ كل بطاقة (للشريط في الأقسام) — بيتمسح مع أول محاولة جديدة
     panel: null,          // health | user
     view: null, sig: '', timer: null, leaving: ''
   };
   var V2 = window.V2 = {};
+  // R24 م٢: أي تغيّر في حالة التنفيذ (نجاح · خطأ · تأجيل) بيصحّي شريط القسم وصفحة الشخص — مش بس اللوحة.
+  var listeners = [];
+  V2.listen = function (fn) { listeners.push(fn); return function () { listeners = listeners.filter(function (x) { return x !== fn; }); }; };
+  function notify() { listeners.slice().forEach(function (fn) { try { fn(); } catch (e) {} }); }
 
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
   function host() { return window.V2_HOST || {}; }
@@ -81,15 +86,21 @@
     var snooze = (sz && sz.map) ? { map: sz.map, now: now } : null;
     var hiddenBase = [].concat(Array.isArray(window.INBOX_SNOOZED) ? window.INBOX_SNOOZED : [],
                                (payouts && D.walletPayouts && Array.isArray(D.walletPayouts.hidden)) ? D.walletPayouts.hidden : []);
+    // R24 م٢: دعوات الأعضاء اللي بتنتظر موافقتك (مصدر الدعوات) — بتتجمّع مع باقي طلبات نفس الشخص في بطاقة واحدة.
+    var inviteRows = (stateOf('invites') === 'ready' && D.invites && !D.invites.missing)
+      ? (D.invites.rows || []).filter(function (i) { return i.status === 'awaiting_approval'; }) : [];
     var split = L.v2Split(rows, payouts, Q, { now: now, inboxFailed: inboxFailed, inboxTruncated: inboxTrunc, fyiRows: fyiRows, hidden: hiddenBase, snooze: snooze,
-                                              stuck: d3 ? d3.stuck : null, offers: d3 ? d3.offers : null, brainItems: brainItems });
+                                              stuck: d3 ? d3.stuck : null, offers: d3 ? d3.offers : null, brainItems: brainItems, invites: inviteRows });
     extras.hidden = split.hiddenRows;
+    // توفّر المصادر للمربّعات: true وصل · false فشل · undefined لسه بيتحمّل.
+    var avail = { inbox: stateOf('inbox') === 'error' ? false : (rows ? true : undefined), payouts: stateOf('walletPayouts') === 'error' ? false : (payouts ? true : undefined),
+                  market: stateOf('market') === 'error' ? false : (extras.market === null ? false : (extras.market === undefined ? undefined : true)) };
     return { E: E, D: D, now: now, Q: Q, rows: rows, inboxFailed: inboxFailed, payouts: payouts, inboxTrunc: inboxTrunc, extras: extras, d3: d3, brainItems: brainItems,
-             split: split, snoozeOk: !(sz && sz.ok === false) };
+             split: split, snoozeOk: !(sz && sz.ok === false), avail: avail };
   }
   function compute() {
     var g = gather(), Q = g.Q, rows = g.rows, now = g.now, inboxFailed = g.inboxFailed, inboxTrunc = g.inboxTrunc;
-    var tiles = L.v2Tiles(Q, g.extras);
+    var tiles = L.v2SectionTiles(L.v2Tiles(Q, g.extras), g.split, g.avail);      // R24 م٢: العدد = عدد القرارات من نفس الدالة (بعد البعدين والتجاهل)
     var decisions = g.split.decisions;
     var truncated = (inboxTrunc || []).map(function (t) { return String(t).split(':')[0].trim(); });
     var failed = [];
@@ -100,7 +111,7 @@
     if (g.d3) g.d3.failed.forEach(function (n) { if (failed.indexOf(n) < 0) failed.push(n); });
     return {
       now: now, Q: Q, rows: rows, tiles: tiles, decisions: decisions, failed: failed, truncated: truncated,
-      fyi: g.split.fyi, lists: L.v2SnoozeLists(g.split.snoozed), snoozeOk: g.snoozeOk,
+      fyi: g.split.fyi, lists: L.v2SnoozeLists(g.split.snoozed), snoozeOk: g.snoozeOk, split: g.split, total: g.split.decisions.length,
       health: L.v2Health(Q, now), next: L.v2Next(decisions),
       brainLog: rows ? L.v2BrainLog(rows, now) : null,
       loading: isLoading('opsQueue') || isLoading('inbox') || isLoading('walletPayouts')
@@ -141,49 +152,6 @@
       ? '<div class="v2-pop-t" style="margin-top:12px">آخر نبضات الفحص</div><ul class="v2-beats">' + h.heartbeats.map(function (b) { return '<li><span>' + esc(b.label) + '</span><b>' + esc(b.ago) + '</b></li>'; }).join('') + '</ul>' : '';
     return '<div class="v2-pop-t">التنبيهات</div>' + alerts + beats;
   }
-  function header(d) {
-    var hp = healthPill(d), E = ep(), u = (E && E.user) || {};
-    var name = u.name || u.full_name || (E && E.user && E.user.email) || 'المؤسس';
-    var pop = '';
-    if (S.panel === 'health') pop = '<div class="v2-pop" data-pop>' + popHealth(d) + '</div>';
-    if (S.panel === 'user') pop = '<div class="v2-pop v2-pop-u" data-pop><div class="v2-pop-t">' + esc(name) + '</div><p class="v2-pop-p">المؤسس</p><button class="v2-btn2" data-a="logout">تسجيل الخروج</button></div>';
-    return '<header class="v2-head"><div class="v2-logo"><span class="v2-mark">' + LOGO + '</span><div><b>البروفيسور</b><small>اللوحة</small></div></div>'
-      + '<div class="v2-tools">'
-      + '<button class="v2-health ' + hp.cls + '" data-a="health" aria-expanded="' + (S.panel === 'health') + '"><i></i><span>' + esc(hp.text) + '</span></button>'
-      + '<button class="v2-iconbtn" data-a="health" aria-label="التنبيهات" title="التنبيهات">' + BELL + (hp.n ? '<em>' + esc(U.ar(hp.n)) + '</em>' : '') + '</button>'
-      + '<button class="v2-iconbtn" data-a="user" aria-label="حسابي" title="حسابي">' + USER + '</button>'
-      + pop + '</div></header>';
-  }
-  function nextBar(d) {
-    var n = d.decisions.length, nx = d.next;
-    var brainN = d.brainLog ? d.brainLog.length : null;
-    var left, btn = '';
-    if (d.loading && !nx) {
-      left = '<small>القرار التالي</small><b>…جارٍ جلب القرارات</b>';
-    } else if (nx) {
-      left = '<small>القرار التالي</small><b>' + esc(L.v2NextLine(nx)) + '</b>' + (nx.brain ? '<p>' + esc(nx.brain) + '</p>' : '');
-      btn = '<button class="v2-start" data-a="start">ابدأ القرارات (' + esc(U.ar(n)) + ')</button>';
-    } else if (d.failed.length) {
-      // ⛔ لا «العقل يعمل» ولا «لا توجد قرارات» فوق جلب فاشل: لا نعرف إن كان شيء ينتظرك.
-      left = '<small>القرار التالي</small><b>تعذّر جلب القرارات — لا نعرف إن كان شيء ينتظرك</b>';
-    } else if (d.truncated.length) {
-      left = '<small>القرار التالي</small><b>القائمة ناقصة — معروض جزء من القرارات فقط</b>';
-    } else {
-      left = '<small>القرار التالي</small><b>لا توجد قرارات بانتظارك الآن — العقل يعمل</b>';
-    }
-    var sub = (brainN != null && brainN > 0) ? '<span class="v2-brainline">العقل وزّع ' + esc(U.U(brainN, ['ملفًا واحدًا', 'ملفين', 'ملفات', 'ملفًا'])) + ' اليوم</span>' : '';
-    var warn = d.failed.length ? '<span class="v2-warnline">تعذّر جلب: ' + esc(d.failed.join('، ')) + ' — القائمة ناقصة</span>' : '';
-    if (d.truncated.length) warn += '<span class="v2-warnline">معروض جزء فقط من: ' + esc(d.truncated.join('، ')) + ' — القائمة ناقصة</span>';
-    return '<section class="v2-next" aria-label="القرار التالي"><img class="v2-av" src="' + img('brain-avatar') + '" alt="">'
-      + '<div class="v2-nt">' + left + sub + warn + '</div>' + btn + '</section>';
-  }
-  // الموبايل: أقصى حقيقتين في المربع (الباقي داخل القسم نفسه). غير الموبايل أو بلا قائمة حقائق ⇒ النص كاملًا.
-  function tileText(t) {
-    try {
-      if (window.matchMedia && window.matchMedia('(max-width:760px)').matches && Array.isArray(t.facts) && t.facts.length > 2) return t.facts.slice(0, 2).join('، ');
-    } catch (e) {}
-    return t.next;
-  }
   // نص بحروف لاتينية متصلة (رقم حساب دولي · بريد) يُعزل اتجاهه فلا يختلط بالعربية حوله.
   var LTR_RE = /[A-Za-z]{2}\d{2}(?: ?[A-Za-z0-9]{2,5}){3,}|[\w.+-]+@[\w-]+(?:\.[\w-]+)+/g;
   function ltr(text) {
@@ -192,28 +160,79 @@
     while ((m = LTR_RE.exec(str))) { out += esc(str.slice(last, m.index)) + '<bdi dir="ltr">' + esc(m[0]) + '</bdi>'; last = m.index + m[0].length; }
     return out + esc(str.slice(last));
   }
+  function greetName() {
+    var E = ep(), u = (E && E.user) || {};
+    var full = String(u.name || u.full_name || '').trim();
+    return full ? full.split(/\s+/).slice(0, 2).join(' ') : 'المؤسس';
+  }
+  function header(d) {
+    var hp = healthPill(d), E = ep(), u = (E && E.user) || {};
+    var name = u.name || u.full_name || (E && E.user && E.user.email) || 'المؤسس';
+    var pop = '';
+    if (S.panel === 'health') pop = '<div class="v2-pop" data-pop>' + popHealth(d) + '</div>';
+    if (S.panel === 'user') pop = '<div class="v2-pop v2-pop-u" data-pop><div class="v2-pop-t">' + esc(name) + '</div><p class="v2-pop-p">المؤسس</p><button class="v2-btn2" data-a="logout">تسجيل الخروج</button></div>';
+    var hour = new Date(d.now).getHours();
+    return '<header class="v2-head"><div class="v2-hi"><h1>' + (hour < 12 ? 'صباح الخير' : 'مساء الخير') + ' يا ' + esc(greetName()) + '</h1><p>' + esc(L.snoozeUntilText(new Date(d.now).toISOString())) + '</p></div>'
+      + '<div class="v2-tools">'
+      + '<button class="v2-health ' + hp.cls + '" data-a="health" aria-expanded="' + (S.panel === 'health') + '"><i></i><span>' + esc(hp.text) + '</span></button>'
+      + '<button class="v2-iconbtn" data-a="health" aria-label="التنبيهات" title="التنبيهات">' + BELL + (hp.n ? '<em>' + esc(U.ar(hp.n)) + '</em>' : '') + '</button>'
+      + '<button class="v2-iconbtn" data-a="user" aria-label="حسابي" title="حسابي">' + USER + '</button>'
+      + pop + '</div></header>';
+  }
+  // «ن قرار مستنيك» + «ابدأ القرارات (ن)»: العدد = عدد قرارات الأقسام كلها بعد البعدين والتجاهل (نفس عدّاد المربّعات والشريط والقايمة).
+  function heroCount(n) { return n === 1 ? 'قرار واحد مستنيك' : n === 2 ? 'قرارين مستنيينك' : U.ar(n) + ' قرار مستنيك'; }
+  function nextBar(d) {
+    var n = d.decisions.length;
+    var left, sub = '', btn = '';
+    if (d.loading && !n) {
+      left = '<h2>…جارٍ جلب القرارات</h2>';
+    } else if (n) {
+      left = '<h2>' + esc(heroCount(n)) + '</h2>';
+      sub = '<p>راجع كل قرار مرة واحدة، ولو محتاج وقت اختار «بعدين» وهيرجع لك في ميعاده.</p>';
+      btn = '<button class="v2-start" data-a="start">ابدأ القرارات (' + esc(U.ar(n)) + ')</button>';
+    } else if (d.failed.length) {
+      // ⛔ لا «مفيش قرار» فوق جلب فاشل: لا نعرف إن كان شيء ينتظرك.
+      left = '<h2>تعذّر جلب القرارات</h2>';
+      sub = '<p>لا نعرف إن كان شيء ينتظرك، فلا تعتبر اللوحة فاضية.</p>';
+    } else if (d.truncated.length) {
+      left = '<h2>القائمة ناقصة</h2>';
+      sub = '<p>معروض جزء من القرارات فقط.</p>';
+    } else {
+      left = '<h2>مفيش قرار مستنيك</h2>';
+      sub = '<p>كل حاجة في ميعادها، والعقل شغّال.</p>';
+    }
+    var warn = d.failed.length ? '<span class="v2-warnline">تعذّر جلب: ' + esc(d.failed.join('، ')) + ' — القائمة ناقصة</span>' : '';
+    if (d.truncated.length) warn += '<span class="v2-warnline">معروض جزء فقط من: ' + esc(d.truncated.join('، ')) + ' — القائمة ناقصة</span>';
+    return '<section class="v2-hero" aria-label="القرارات"><img class="v2-av" src="' + img('brain-avatar') + '" alt=""><div class="v2-nt">' + left + sub + warn + '</div>'
+      + '<div class="v2-hact"><button type="button" class="v2-link wine" data-a="brainlog">اللي عمله العقل</button>' + btn + '</div></section>';
+  }
   function tileHtml(t, d) {
     var loading = tileLoading(t);
-    var circle = '';
-    if (loading) circle = '<span class="v2-cnt ld">…</span>';
-    else if (t.failed) circle = '<span class="v2-cnt fail">' + esc(L.FAILED_TEXT) + '</span>';
-    else if (t.count) circle = '<span class="v2-cnt' + (t.hot ? ' hot' : '') + '"' + (t.partial ? ' title="العدد ناقص — تعذّر جلب بعض المصادر"' : '') + '>' + esc(U.ar(t.count)) + (t.partial ? '+' : '') + '</span>';
-    var nextTxt = loading ? '' : tileText(t);
-    return '<button class="v2-tile" data-tile="' + esc(t.key) + '" style="--rgb:' + (TILE_RGB[t.key] || '33,38,46') + ';background-image:url(' + img(t.img) + ')">'
-      + circle + '<span class="v2-tt"><b>' + esc(t.label) + '</b><small>' + esc(nextTxt) + '</small></span></button>';
+    var txt = loading ? '…' : (t.failed ? L.FAILED_TEXT : t.next);
+    var pill = !loading && !t.failed && t.count > 0;
+    return '<button class="v2-tile' + (t.hot && pill ? ' hot' : '') + '" data-tile="' + esc(t.key) + '" style="--rgb:' + (TILE_RGB[t.key] || '33,38,46') + ';background-image:url(' + img(t.img) + ')"'
+      + (t.partial ? ' title="العدد ناقص — تعذّر جلب بعض المصادر"' : '') + '>'
+      + '<span class="v2-tt"><b>' + esc(t.label) + '</b><small class="' + (pill ? 'v2-tn pill' : 'v2-tn') + (t.failed ? ' fail' : '') + '">' + esc(txt) + (t.partial && pill ? '+' : '') + '</small></span></button>';
   }
-  var DEPS = { files: ['opsQueue'], disputes: ['opsQueue'], courses: ['opsQueue'], money: ['opsQueue'], content: ['opsQueue'],
-               books: ['inbox'], brain: ['inbox'], market: ['market'], people: ['pendingUsers', 'invites', 'inbox', 'opsQueue'] };
+  var DEPS = { files: ['inbox'], disputes: ['inbox'], courses: ['inbox'], money: ['walletPayouts', 'inbox'], content: ['inbox'],
+               books: ['inbox'], market: ['market'], people: ['invites', 'inbox'] };
   function tileLoading(t) { return (DEPS[t.key] || []).some(isLoading); }
 
+  // صندوقا اللوحة: «العقل عمل لوحده النهارده» (م٣ هتملاه) و«للعلم بس» (بدون قرار).
+  function brainBox() {
+    return '<section class="v2-box v2-brainbox" aria-label="العقل عمل لوحده النهارده"><div class="v2-boxh"><h3>العقل عمل لوحده النهارده</h3><button type="button" class="v2-link wine" data-a="brainlog">السجل كله</button></div>'
+      + '<p class="v2-boxempty">لسه مفيش حاجة اتعملت لوحدها. لما العقل يبدأ يشتغل لوحده هتلاقي هنا كل حاجة عملها، وجنبها «رجّعها» لو عايز تلغيها.</p></section>';
+  }
   function drawBoard(v, d) {
     var tiles = d.tiles.map(function (t) { return tileHtml(t, d); }).join('');
     S.cards = {};
-    v.innerHTML = '<div class="v2">' + header(d) + nextBar(d) + fyiBox(d) + linesBar(d) + '<section class="v2-grid" aria-label="الأقسام">' + tiles + '</section></div>';
+    v.innerHTML = '<div class="v2">' + header(d) + nextBar(d) + '<section class="v2-grid" aria-label="الأقسام">' + tiles + '</section>' + linesBar(d)
+      + '<div class="v2-boxes">' + fyiBox(d) + brainBox() + '</div></div>';
     wireCommon(v, d);
     wireLists(v, d);
     var st = v.querySelector('[data-a="start"]');
     if (st) st.onclick = function () { startFocus(d); };
+    v.querySelectorAll('[data-a="brainlog"]').forEach(function (b) { b.onclick = function () { if (host().openSection) host().openSection('company', 'brain'); }; });
     v.querySelectorAll('[data-tile]').forEach(function (b) { b.onclick = function () { openTile(b.getAttribute('data-tile'), d); }; });
   }
   function wireCommon(v, d) {
@@ -227,17 +246,11 @@
       }, 0);
     }
   }
+  // المربّع بيفتح قسمه (والشريط «محتاج قرارك» فوق). ولا مسار لـ«كل الوارد» — اتشال.
   function openTile(key, d) {
     var t = d.tiles.filter(function (x) { return x.key === key; })[0];
     if (!t) return;
-    if (t.internal) {
-      if (host().openSection) host().openSection('brain', 'log');       // سجل العقل القديم اتشال: القسم الجديد «العقل وقواعده» هو الوحيد
-      return;
-    }
-    // D2: مربّعا الملفات والنزاعات يفتحان لوحة التذاكر (لما الغلاف الجديد شغّال) بدل الوارد القديم.
-    // D3: «الفلوس» و«الكتب» كذلك (تبويبهما الأول: نظرة · مراجعة العروض). المحتوى: «خط النشر».
-    if ((key === 'files' || key === 'disputes' || key === 'money' || key === 'books' || key === 'content') && window.V2SHELL && V2SHELL.on && host().openSection) { host().openSection(key); return; }
-    if (host().goOps) host().goOps(t.dest, t.land);
+    if (host().openSection) host().openSection(key);
   }
 
   // —— وضع التركيز: بطاقة واحدة
@@ -293,18 +306,20 @@
     if (c.secondary) acts += '<button class="v2-btn2" data-a="secondary"' + ((S.busy || (locked && !isOpenAct(c.secondary.act))) ? ' disabled' : '') + '>' + esc(c.secondary.label) + '</button>';
     var isBrain = c.kind === 'brain_item';
     if (isBrain && c.edit) acts += '<button class="v2-btn2" data-a="edit"' + ((S.busy || locked) ? ' disabled' : '') + '>' + esc(c.edit.label) + '</button>';
-    var showOpen = !isBrain && !(c.primary && c.primary.act.do === 'open') && !(c.secondary && c.secondary.act.do === 'open');
-    if (showOpen) acts += '<button class="v2-btn3" data-a="open"' + (S.busy ? ' disabled' : '') + '>غيّر / افتح</button>';
+    // R24 م٢: «افتح في <القسم>» = بيت البطاقة (نفس القسم اللي فيه شريطها). بطاقة اللوحة نسخة من بطاقة القسم بنفس الأزرار.
+    var hsec = c.home && L.sectionByKey(c.home);
+    if (hsec) acts += '<button class="v2-btn3" data-a="openhome"' + (S.busy ? ' disabled' : '') + '>افتح في ' + esc(hsec.label) + '</button>';
     if (c.key) acts += '<button class="v2-btn3" data-a="later"' + (S.busy ? ' disabled' : '') + '>بعدين</button>';     // R24: بيفتح اختيار الميعاد وبيتحفظ على الخادم
     if (c.dismiss) acts += '<button class="v2-btn3" data-a="dismiss"' + (S.busy ? ' disabled' : '') + '>تجاهل</button>';
     var facts = (c.facts || []).filter(function (f) { return f.v; }).map(function (f) { return '<div><small>' + esc(f.k) + '</small><b>' + ltr(f.v) + '</b></div>'; }).join('');
     v.innerHTML = '<div class="v2 v2-focus">'
       + '<div class="v2-ftop"><button class="v2-link" data-a="back">' + BACK + 'اللوحة</button><span class="v2-count">' + esc(counter()) + '</span><span class="v2-prog"><i style="width:' + pct + '%"></i></span></div>'
       + '<div class="v2-fgrid' + (done ? '' : ' solo') + '"><article class="v2-card' + (S.leaving === c.id ? ' v2-out' : '') + '" data-id="' + esc(c.id) + '" data-bid="' + esc(c.id) + '" data-kind="' + esc(c.kind) + '">'
-      + '<div class="v2-cimg" style="background-image:url(' + img(c.img) + ')"><span class="v2-tag">' + esc(c.tag) + '</span>' + (c.ageText ? '<span class="v2-age">' + esc(c.ageText) + '</span>' : '') + '</div>'
+      + '<div class="v2-cimg" style="background-image:url(' + img(c.img) + ')">' + (hsec ? '<span class="v2-from">من: ' + esc(hsec.label) + '</span>' : '') + '<span class="v2-tag">' + esc(c.tag) + '</span>' + (c.ageText ? '<span class="v2-age">' + esc(c.ageText) + '</span>' : '') + '</div>'
       + '<div class="v2-cbody"><h2>' + (c.person && window.V2D2 ? V2D2.link(c.title, c.person.email) : esc(c.title)) + '</h2>' + (c.sub ? '<p class="v2-csub">' + esc(c.sub) + '</p>' : '')
       + '<div class="v2-brain"><img src="' + img('brain-avatar') + '" alt=""><div><b>' + esc(c.brainHead) + '</b><p' + (isBrain ? ' class="v2b-draft"' : '') + '>' + esc(c.brain) + '</p>' + (c.reason ? '<p class="v2-reason">' + esc(c.reason) + '</p>' : '') + brainSrc(c) + '</div></div>'
       + brainFields(c)
+      + (c.chips && c.chips.length ? '<div class="v2-chips">' + c.chips.map(function (x) { return '<span class="v2-chip2">' + esc(x) + '</span>'; }).join('') + (c.merged > 1 ? '<span class="v2-chip2 ok">بطاقة واحدة بدل ' + esc(U.ar(c.merged)) + '</span>' : '') + '</div>' : '')
       + (c.returned ? '<div class="v2-returned">' + esc(c.returned) + '</div>' : '')
       + (c.warn ? '<div class="v2-cwarn">' + esc(c.warn) + '</div>' : '')
       + (facts ? '<div class="v2-facts">' + facts + '</div>' : '')
@@ -322,7 +337,7 @@
     q('refresh', function () { refreshLocked(c); });
     q('secondary', function () { run(c, c.secondary.act); });
     q('edit', function () { if (c.edit) run(c, c.edit.act); });
-    q('open', function () { openCard(c); });
+    q('openhome', function () { openHome(c); });
     q('later', function () { snoozeModal(c); });
     q('dismiss', function () { dismissModal(c); });
     if (S.err) { var er = v.querySelector('.v2-err'); if (er && er.scrollIntoView) { try { er.scrollIntoView({ block: 'center' }); } catch (e) {} } }
@@ -485,6 +500,11 @@
       var d3 = window.V2D3 ? V2D3.cardSources() : null;
       return !d3 || !d3.offers.length || d3.offers.some(function (o) { return o.id === (c.row.offerRow || {}).id; });
     }
+    if (c.kind === 'person') return (c.parts || []).some(stillPending);
+    if (c.kind === 'invite') {
+      var D0 = E.data || {};
+      return stateOf('invites') !== 'ready' || !D0.invites || (D0.invites.rows || []).some(function (i) { return i.id === c.row.apiId && i.status === 'awaiting_approval'; });
+    }
     if (stateOf('inbox') !== 'ready') return true;
     var key = rowKey(c.row);
     return (window.INBOX || []).some(function (r) { return !r.fyi && rowKey(r) === key; });
@@ -512,10 +532,17 @@
       redraw();
     });
   }
+  // «افتح في <القسم>»: بيت البطاقة. بطاقة الشخص بتفتح صفحته (فيها كل طلباته بأزرارها).
+  function openHome(c) {
+    S.err = '';
+    if (c.open && c.open.do === 'person' && window.V2D2 && V2D2.openPerson && c.person) { showPill(); V2D2.openPerson(c.person.email); return; }
+    if (host().openSection && c.home) { showPill(); host().openSection(c.home); }
+  }
   function openCard(c) {
     var a = c.open || { do: 'open' };
     S.err = '';
     if (a.do === 'section' && host().openSection) { showPill(); host().openSection(a.section, a.tab); return; }
+    if (a.do === 'person' && a.email && window.V2D2 && V2D2.openPerson) { showPill(); V2D2.openPerson(a.email); return; }
     if (a.do === 'goto' && window.V2SHELL && V2SHELL.on && host().openSection) {
       // D3: تحويلات الأرباح والإيصالات لها تبويباتها الجديدة تحت «الفلوس».
       var dest = a.mod === 'finance' ? (a.land === 'stuck_card_payments' ? 'receipts' : a.land === 'wallet_payouts_pending' ? 'payouts' : null)
@@ -555,7 +582,7 @@
   function reload() { var E = ep(); if (E) { E.reload('opsQueue'); E.reload('inbox'); E.reload('walletPayouts'); } }
   function finish(c, text) {
     // D3: الفتح من شاشة «الفلوس» (V2.openMoney): نفس نافذة التأكيد، والنتيجة ترجع لصاحب الشاشة لا لبطاقات اللوحة.
-    if (S.ext && S.ext.id === c.id) { var cb = S.ext.cb; S.ext = null; reload(); if (cb) cb(text); return; }
+    if (S.ext && S.ext.id === c.id) { var cb = S.ext.cb; S.ext = null; delete S.errMap[c.id]; S.busy = false; reload(); if (cb) cb(text); notify(); return; }
     S.done.unshift({ text: text, at: Date.now() });
     S.err = ''; S.busy = false; S.lockedId = '';
     var go = function () { S.deck = S.deck.filter(function (x) { return x.id !== c.id; }); S.leaving = ''; S.scrollTop = true; redraw(); };
@@ -564,8 +591,9 @@
     reload();
   }
   function fail(c, res) {
-    S.busy = false; S.err = plainError(res);
+    S.busy = false; S.err = plainError(res); S.errMap[c.id] = S.err;
     if (res && (res.noReply || res.final)) { S.lockedId = c.id; reload(); }
+    if (S.ext && S.ext.id === c.id) { var cb0 = S.ext; S.ext = null; if (cb0.fail) cb0.fail(S.err); }
     redraw();
   }
   // ⛔ نصوص الخطأ الجاية من طبقة الاتصال القديمة (عامية: «ما وصلناش رد» · «سجّل دخول تاني») بتتبدّل بفصحى ثابتة.
@@ -584,18 +612,24 @@
       if (res.ok) finish(c, doneText); else fail(c, res);
     }).catch(function (e) { fail(c, { error: (e && e.message) || 'تعذّر تنفيذ العملية' }); });
   }
-  function run(c, a) {
+  function run(c, a, keepExt) {
     if (S.busy || !a) return;
     var E = ep(); if (!E) return;
     var r = c.row;
-    S.ext = null;
+    if (!keepExt) S.ext = null;
+    delete S.errMap[c.id];
     switch (a.do) {
-      case 'open': case 'goto': case 'section': return openCard(c);
-      case 'person': if (window.V2D2 && V2D2.openPerson) { showPill(); V2D2.openPerson(a.email); } return;
+      case 'open': case 'goto': case 'section': S.ext = null; return openCard(c);
+      case 'read': S.ext = null; return readCard(c);
+      case 'reject_reason': return rejectModal(c);
+      case 'invite_approve': return track(c, E.decideInvite(r.apiId, 'approve'), 'اعتُمدت دعوة ' + c.title);
+      case 'person_accept': return personModal(c, 'accept');
+      case 'person_reject': return personModal(c, 'reject');
+      case 'person': S.ext = null; if (window.V2D2 && V2D2.openPerson) { showPill(); V2D2.openPerson(a.email); } return;
       case 'offer_approve': return offerAct(c, 'approve');
       case 'offer_reject': return offerAct(c, 'reject');
       case 'send': return track(c, E.expertFileSend(r, a.email, a.name, '', null), 'أُرسل «' + c.title + '» إلى ' + a.name);
-      case 'decide': return track(c, E.decideInboxItem(r, a.action, null, ''), doneVerb(c));
+      case 'decide': return a.confirm ? publishModal(c, a) : track(c, E.decideInboxItem(r, a.action, null, ''), doneVerb(c));
       case 'resolve': return track(c, E.resolveInboxItem(r, null), 'أُنهي: ' + c.title);
       case 'payout_settle': return payoutModal(c, 'settle');
       case 'payout_reject': return payoutModal(c, 'reject');
@@ -619,6 +653,10 @@
       case 'join': return 'قُبل طلب ' + c.title;
       case 'identity_doc': return 'وُثّقت هوية ' + c.title;
       case 'pending_user': return 'فُتحت المنصة لـ' + c.title;
+      case 'invite': return 'اعتُمدت دعوة ' + c.title;
+      case 'book': case 'creative': return 'اعتُمد ونُشر: ' + c.title;
+      case 'topic': return 'اعتُمد الموضوع: ' + c.title;
+      case 'program': return 'قُبل طلب البرنامج: ' + c.title;
       case 'founding': return 'عُلّمت الخطوة: ' + c.title;
       case 'signup': return 'تمّ الاطّلاع على تسجيل ' + c.title;
       case 'payfail': return 'تمّ الاطّلاع على دفع فشل: ' + c.title;
@@ -649,7 +687,7 @@
     xTop.onclick = close; x.onclick = close; s.onclick = function (e) { if (e.target === s) close(); };
     var alt = s.querySelector('#v2m_alt');
     if (alt) alt.onclick = function () { if (s.dataset.busy) return; window.closeModal(); o.alt.run(); };
-    var need = function () { return !!o.field && !String(f.value || '').trim(); };
+    var need = function () { return !!o.field && String(f.value || '').trim().length < (o.min || 1); };
     var sync = function () { if (!go.dataset.busy) go.disabled = need(); };
     if (f) { f.addEventListener('input', sync); sync(); setTimeout(function () { try { f.focus(); } catch (e) {} }, 30); }
     go.onclick = function () {
@@ -750,8 +788,93 @@
     }
   };
 
+  // ------------------------------------------------------------------ R24 م٢ · القراية جوه البيت + قرارات الشخص
+  // «اقرأ وقرّر»: درج الوارد القديم بكل أزراره بيتفتح فوق الشاشة الحالية (جوه قسمها) — مش «كل الوارد». نفس دوال الدرج القديم بالحرف.
+  function readCard(c) {
+    S.err = '';
+    var ok = host().openReading ? host().openReading(c.row, { home: c.home }) : false;
+    if (ok === false) gone(c);
+  }
+  var REJECT_LEAD = { pending_user: 'ما تفتحش له المنصة؛ يفضل زائرًا ويوصله السبب.', trainer: 'هيترفض طلب انضمامه ويوصله السبب كما تكتبه.',
+                      join: 'هيترفض طلب تقديم الخدمة ويوصل السبب لصاحبه.', invite: 'هتترفض الدعوة ويوصل السبب للداعي.',
+                      book: 'هيترفض ويوصل السبب لصاحبه.', creative: 'هيترفض ويوصل السبب لصاحبه.', topic: 'هيترفض ويوصل السبب لصاحبه.', program: 'هيترفض ويوصل السبب لصاحبه.' };
+  function rejectModal(c) {
+    var E = ep();
+    if (c.kind === 'founding') {
+      return confirmModal({ title: 'ليس مناسبًا', cardId: c.id, lead: 'هتعلّم طلب <b>' + esc(c.title) + '</b> «ليس مناسبًا» ويتشال من القرارات.', rows: [],
+        btn: 'علّمه ليس مناسبًا', btnCls: 'btn-human', busy: 'جارٍ التسجيل…',
+        run: function () { return Promise.resolve(E.decideInboxItem(c.row, 'reject', null, '')); }, onOk: function () { finish(c, 'اتعلّم «ليس مناسبًا»: ' + c.title); } });
+    }
+    confirmModal({ title: 'ارفض بسبب', cardId: c.id, lead: '<b>' + esc(c.title) + '</b>: ' + esc(REJECT_LEAD[c.kind] || 'هيترفض ويوصل السبب لصاحبه.'), rows: [],
+      field: { label: 'السبب (مطلوب، بيوصل لصاحب الطلب كما تكتبه)', max: 500, area: true }, min: 5, btn: 'ارفض', btnCls: 'btn-human', busy: 'جارٍ الرفض…',
+      run: function (reason) { return Promise.resolve(c.kind === 'invite' ? E.decideInvite(c.row.apiId, 'reject', reason) : E.decideInboxItem(c.row, 'reject', null, reason)); },
+      onOk: function () { finish(c, 'رُفض: ' + c.title); } });
+  }
+  // النشر للناس (كتاب · عمل إبداعي · موضوع) وقبول طلب البرنامج: تأكيد باسم البند قبل ما يتنفّذ.
+  var PUB_KIND = { book: 'الكتاب', creative: 'العمل الإبداعي', topic: 'الموضوع', program: 'طلب البرنامج' };
+  function publishModal(c, a) {
+    var E = ep(), publish = a.confirm !== 'program';
+    confirmModal({ title: publish ? 'تأكيد النشر' : 'قبول الطلب', cardId: c.id,
+      lead: (publish ? 'هتعتمد ' + esc(PUB_KIND[a.confirm] || 'البند') + ' وينزل للناس.' : 'هتقبل طلب البرنامج.') + ' اقرأه الأول لو لسه ما قرأتوش.',
+      rows: [[publish ? 'البند' : 'صاحب الطلب', c.title], ['التفاصيل', c.brain]], btn: c.primary.label, busy: 'جارٍ التنفيذ…',
+      run: function () { return Promise.resolve(E.decideInboxItem(c.row, 'approve', null, '')); },
+      onOk: function () { finish(c, doneVerb(c)); } });
+  }
+  // بطاقة الشخص: تنفيذ كل خطوة بفعل بيتها نفسه، بالترتيب، وتوقف عند أول فشل وتقول إيه اللي اتعمل وإيه اللي لأ.
+  var STEP_NAME = { accept: { pending_user: 'فتح المنصة', trainer: 'قبول الانضمام', join: 'قبول طلب الخدمة', founding: 'علامة الخبير المؤسس', invite: 'الموافقة على الدعوة' },
+                    reject: { pending_user: 'رفض طلب الفتح', trainer: 'رفض الانضمام', join: 'رفض طلب الخدمة', founding: 'علامة «ليس مناسبًا»', invite: 'رفض الدعوة' } };
+  function partCall(E, p, which, reason) {
+    if (p.kind === 'invite') return E.decideInvite(p.row.apiId, which === 'accept' ? 'approve' : 'reject', reason);
+    return E.decideInboxItem(p.row, which === 'accept' ? 'approve' : 'reject', null, reason || '');
+  }
+  function runParts(list, which, reason, doneIds) {
+    var i = 0, doneT = [];
+    function nextStep() {
+      while (i < list.length && doneIds[list[i].id]) i++;
+      if (i >= list.length) return Promise.resolve({ ok: true });
+      var p = list[i], nm = STEP_NAME[which][p.kind] || p.tag;
+      return Promise.resolve(partCall(ep(), p, which, reason)).then(function (res) {
+        res = res || {};
+        if (!res.ok) return { ok: false, error: (doneT.length ? 'تمّ: ' + doneT.join('، ') + '. ' : '') + 'لم يتم «' + nm + '»: ' + plainError(res), noReply: res.noReply, final: res.final };
+        doneIds[p.id] = true; doneT.push(nm); i++;
+        return nextStep();
+      });
+    }
+    return nextStep();
+  }
+  function personModal(c, which) {
+    var accept = which === 'accept', parts = c.parts || [];
+    var list = accept ? parts : parts.filter(function (p) { return !!STEP_NAME.reject[p.kind]; });
+    var steps = ((accept ? c.primary : c.secondary) || {}).steps || [];
+    var doneIds = {};
+    confirmModal({ title: accept ? 'قبول كل طلبات ' + c.title : 'رفض طلبات ' + c.title, cardId: c.id,
+      lead: (accept ? 'ده اللي هيحصل بالترتيب:' : 'ده اللي هيحصل بالترتيب، والسبب بيوصل لصاحب الطلب كما تكتبه:'),
+      rows: steps.map(function (t, i) { return [U.ar(i + 1), t]; }),
+      field: accept ? null : { label: 'السبب (مطلوب، بيوصل لصاحب الطلب كما تكتبه)', max: 500, area: true }, min: accept ? 0 : 5,
+      btn: accept ? 'أيوه، نفّذ' : 'ارفض', btnCls: accept ? '' : 'btn-human', busy: 'جارٍ التنفيذ…',
+      run: function (reason) { return runParts(list, which, reason, doneIds); },
+      onOk: function () { finish(c, accept ? 'تمّ قبول كل طلبات ' + c.title : 'رُفضت طلبات ' + c.title); } });
+  }
+
+  // للأقسام وصفحة الشخص: نفس المنفّذ بالحرف، والنتيجة ترجع لصاحب الشاشة (`onDone(text)` / `onFail(msg)`).
+  V2.runCard = function (c, a, onDone, onFail) {
+    if (!c || !a) return;
+    S.ext = { id: c.id, cb: onDone || null, fail: onFail || null };
+    run(c, a, true);
+  };
+  V2.snooze = snoozeModal; V2.dismiss = dismissModal; V2.restore = restoreItem; V2.retry = reload;
+  V2.errorOf = function (id) { return S.errMap[id] || ''; };
+  V2.isBusy = function () { return !!S.busy; };
+  V2.openCard = openCard;
+  // الدرج المفتوح فوق القسم اتقفل (بعد قرار أو بالرجوع): نحدّث المصادر والشريط، وفي وضع التركيز نشيل البطاقة اللي خلصت.
+  V2.afterReading = function () {
+    if (S.mode === 'focus' && host().isHome && host().isHome()) {
+      reloadAll(function () { S.deck = S.deck.filter(stillPending); S.lockedId = ''; S.busy = false; S.scrollTop = true; redraw(); });
+    } else { reload(); notify(); }
+  };
+
   // ------------------------------------------------------------------ نقطة الدخول
-  function redraw() { if (S.view && host().isHome && host().isHome()) V2.render(S.view); }
+  function redraw() { if (S.view && host().isHome && host().isHome()) V2.render(S.view); notify(); }
   V2.render = function (v) {
     S.view = v;
     removePill();
@@ -781,7 +904,11 @@
   V2.plainError = plainError;     // D2: نفس نصوص الخطأ لأزرار التذاكر
 
   // —— للغلاف الجديد (D1-B): نفس المربّعات بنفس الأعداد، وتحميل كل المصادر، وتبديل الوضع من التبويبات.
-  V2.tiles = function () { var g = gather(); return L.v2Tiles(g.Q, g.extras); };
+  V2.tiles = function () { var g = gather(); return L.v2SectionTiles(L.v2Tiles(g.Q, g.extras), g.split, g.avail); };
+  // R24 م٢: الشريط الواحد لكل قسم + القرارات كلها (بنفس الفلتر) — من نفس `gather()` اللي بتحسب منه المربّعات والقايمة الجانبية.
+  V2.strip = function (key) { var g = gather(); return L.v2Strip(g.split, key); };
+  V2.split = function () { return gather().split; };
+  V2.counts = function () { return gather().split.counts; };
   V2.tileLoading = function (key) { return tileLoading({ key: key }); };
   V2.loadAll = function (cb) {
     var E = ep();

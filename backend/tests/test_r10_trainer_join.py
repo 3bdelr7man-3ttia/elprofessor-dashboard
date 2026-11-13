@@ -262,9 +262,11 @@ def test_overdue_count_matches_the_platform_sweep_rule():
 # ——————————————————————————————————————————————————————— ٣. الواجهة (المصدر)
 def test_courses_screen_has_cancel_postpone_filter_and_sweep():
     js = _read('dashboard-cloud', 'v2s', 'courses.js')
-    for w in ("data-a=\"appcancel\"", "data-a=\"apppostpone\"", "data-a=\"appsweep\"", "data-a=\"appsview\"", ">تأجيل يومين<", ">إلغاء<", "إلغاء المتأخر",
+    # R24 م٢ (اتغيّر): قبول/رفض الطلب راح لـ«الناس» (بطاقة الشخص)؛ هنا فضلت إدارة مهلة الفيديو (تأجيل · إلغاء · إلغاء المتأخر) والملغاة للقراية —
+    # فشلت «شريحة قيد المراجعة/أُلغيت» (appsview) لأن القايمة المعلّقة مبقتش هنا.
+    for w in ("data-a=\"appcancel\"", "data-a=\"apppostpone\"", "data-a=\"appsweep\"", ">تأجيل يومين<", ">إلغاء<", "إلغاء المتأخر",
               "'/platform-trainer-applications/' + encodeURIComponent(id) + '/cancel'", "'/platform-trainer-applications/' + encodeURIComponent(id) + '/postpone'",
-              "'/platform-trainer-applications/expire-sweep'", "status=cancelled", "أُلغيت"):
+              "'/platform-trainer-applications/expire-sweep'", "status=cancelled", "طلبات انضمام ألغيت", "مهلة الفيديو"):
         assert w in js, w
     # الأزرار لا تظهر إلا حيث الفيديو ناقص والطلب معلّق (الخادم هو الحَكَم بعدها)
     assert "a.video.open" in js

@@ -318,6 +318,9 @@
   function mountBar(section, el) {
     if (!el) return;
     bar.section = section; bar.el = el;
+    // R24 م٢: اقتراحات العقل بقت بطاقات في شريط «محتاج قرارك» الواحد لكل قسم (بنفس فلتر بعدين) — الشريط ده اتدمج فيه عشان نفس
+    // الاقتراح ما يظهرش مرتين كقرارين. الدالة بتفضل عشان القديم يناديها، وبتقفل مكانها دايمًا.
+    hide(el); return;
     if (!on() || !section || section === 'home' || section === 'brain') { hide(el); return; }
     var items = pending();
     var mine = Array.isArray(items) ? items.filter(function (it) { return it.section === section; }) : [];

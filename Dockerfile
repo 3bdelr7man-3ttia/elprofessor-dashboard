@@ -57,7 +57,7 @@ COPY backend/assets/fonts /app/assets/fonts
 COPY dashboard-cloud/index.html dashboard-cloud/dashboard-api.js dashboard-cloud/site-content.js /app/dist/
 # D1 · اللوحة الجديدة (ورا مفتاح DASH_V2_ENABLED): منطقها النقي + رسمها + تنسيقها + صور المربّعات.
 # D1-B · الهيكل الجديد (قوائم الأقسام والتبويبات).
-COPY dashboard-cloud/v2-logic.js dashboard-cloud/v2-home.js dashboard-cloud/v2-home.css dashboard-cloud/v2-shell.js dashboard-cloud/v2-shell.css dashboard-cloud/v2-d2.js dashboard-cloud/v2-d2.css dashboard-cloud/v2-d3.js dashboard-cloud/v2-d3.css dashboard-cloud/v2-brain2.js dashboard-cloud/v2-brain2.css /app/dist/
+COPY dashboard-cloud/v2-logic.js dashboard-cloud/v2-home.js dashboard-cloud/v2-home.css dashboard-cloud/v2-shell.js dashboard-cloud/v2-shell.css dashboard-cloud/v2-d2.js dashboard-cloud/v2-d2.css dashboard-cloud/v2-d3.js dashboard-cloud/v2-d3.css dashboard-cloud/v2-brain2.js dashboard-cloud/v2-brain2.css dashboard-cloud/v2-strip.js dashboard-cloud/v2-strip.css /app/dist/
 COPY dashboard-cloud/v2/img /app/dist/v2/img
 # الجولة الأخيرة · أقسام v2s (المحتوى…): واجهة كل قسم في ملفاته + مسارات الخادم في وحدة مستقلة (app.py يستوردها عند الإقلاع — غيابها = الحاوية لا تقوم).
 COPY backend/v2_content_routes.py /app/v2_content_routes.py

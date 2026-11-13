@@ -805,11 +805,11 @@
   function newPlace(row) {
     var d = row.dest, k = row.apiKind;
     if (d === 'escrow') return 'الفلوس';
-    if (d === 'team' || d === 'courses') return 'الدورات والمدرّبون';
-    if (d === 'invites' || d === 'users' || d === 'messages') return 'الناس والدعوات';
+    if (d === 'team' || d === 'courses') return 'الدورات';
+    if (d === 'invites' || d === 'users' || d === 'messages') return 'الناس';
     if (d === 'topics') return 'المحتوى';
     if (d === 'knowledge') return 'الكتب';
-    if (d === 'inbox') return (k === 'expert_file' || k === 'verify') ? 'ملفات الخبراء' : ((k === 'dispute' || k === 'legacy') ? 'النزاعات والاستردادات' : 'كل الوارد');
+    if (d === 'inbox') return (k === 'expert_file' || k === 'verify') ? 'ملفات الخبراء' : ((k === 'dispute' || k === 'legacy') ? 'النزاعات والاستردادات' : 'اللوحة');       // R24 م٢: «كل الوارد» اتشال
     return '';
   }
   function placeMap() {

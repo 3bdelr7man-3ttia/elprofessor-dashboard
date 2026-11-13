@@ -2142,6 +2142,81 @@ def _v2_scrub(obj, keep):
     return obj
 
 
+# R24 م٢: كل الطلبات المفتوحة على إيميل واحد (زائر · مدرّب · خدمة · مؤسس · هوية · تسجيل · دعوة) — صفحة الشخص هي البيت اللي بيجمعها.
+# نقية (لا شبكة): الصفوف جاية من `S` كما رجعتها الجسور، ومصدر ما وصلش ⇒ None ويتعلّم في `request_sources` (مش «لا طلبات»).
+V2_REQ_SOURCES = (('trainer', 'req_trainer', 'applications'), ('join', 'req_join', 'requests'), ('founding', 'req_founding', 'leads', 'items', 'rows'),
+                  ('identity_doc', 'req_identity', 'items'), ('signup', 'req_signups', 'signups', 'rows'))
+
+
+def _v2_str(v, n=200):
+    return str(v).strip()[:n] if isinstance(v, (str, int, float)) and not isinstance(v, bool) else ''
+
+
+def _v2_person_requests(email, S):
+    out = []
+    rs = {}
+    mine = lambda rows, *keys: [r for r in rows if any(_v2_low(r.get(k)) == email for k in keys)]
+    for spec in V2_REQ_SOURCES:
+        kind, key, keys = spec[0], spec[1], spec[2:]
+        rows = _v2_rows(S.get(key), *keys)
+        rs[kind] = 'ok' if rows is not None else 'failed'
+        if rows is None:
+            continue
+        if kind == 'trainer':
+            for r in mine(rows, 'user_email', 'email'):
+                out.append({'kind': 'trainer', 'id': r.get('id'), 'at': r.get('created_at') or r.get('submitted_at'), 'name': _v2_str(r.get('user_name') or r.get('full_name')),
+                            'join_as': _v2_str(r.get('join_as')).lower(), 'headline': _v2_str(r.get('headline'), 160), 'specialty': _v2_str(r.get('specialty') or r.get('specialization'), 80)})
+        elif kind == 'join':
+            for r in mine(rows, 'user_email'):
+                st = _v2_str(r.get('status'))
+                if st not in ('pending', 'needs_info', 'open'):
+                    continue
+                out.append({'kind': 'join', 'id': r.get('id'), 'at': r.get('submitted_at') or r.get('created_at'), 'name': _v2_str(r.get('user_name')),
+                            'service': _v2_str(r.get('service_label') or r.get('section_label') or r.get('section'), 120), 'waiting': st == 'needs_info',
+                            'licensed': bool(r.get('licensed')), 'licence_missing': bool(r.get('licence_missing'))})
+        elif kind == 'founding':
+            for r in mine(rows, 'email'):
+                st = _v2_str(r.get('status')) or 'new'
+                if st in ('converted', 'rejected'):
+                    continue
+                out.append({'kind': 'founding', 'id': r.get('id'), 'at': r.get('created_at') or r.get('updated_at'), 'name': _v2_str(r.get('name')), 'status': st,
+                            'spec': _v2_str(r.get('specialization') or 'ما حدّدش', 80), 'country': _v2_str(r.get('country') or r.get('governorate'), 60)})
+        elif kind == 'identity_doc':
+            for r in mine(rows, 'email'):
+                if _v2_str(r.get('status')) not in ('', 'pending'):
+                    continue
+                out.append({'kind': 'identity_doc', 'id': r.get('user_id'), 'at': r.get('submitted_at'), 'name': _v2_str(r.get('name')), 'title': _v2_str(r.get('title'), 120)})
+        elif kind == 'signup':
+            for r in mine(rows, 'email'):
+                out.append({'kind': 'signup', 'id': r.get('user_id'), 'at': r.get('created_at'), 'name': _v2_str(r.get('full_name')), 'provider': _v2_str(r.get('provider'), 30),
+                            'where': _v2_str(r.get('where') or r.get('country'), 60)})
+    # طلب فتح المنصة (الزائر): من نفس مصدر «الزوّار المسجَّلين» اللي بيستعمله باقي الصفحة
+    pend = _v2_rows(S.get('pending'), 'users')
+    rs['pending_user'] = 'ok' if pend is not None else 'failed'
+    for u in (pend or []):
+        if _v2_low(u.get('email')) != email:
+            continue
+        ir = u.get('invite_request') if isinstance(u.get('invite_request'), dict) else {}
+        if _v2_str(ir.get('status') or 'none') != 'requested':
+            continue
+        out.append({'kind': 'pending_user', 'id': u.get('id'), 'at': ir.get('requested_at') or u.get('created_at'), 'name': _v2_str(u.get('full_name') or u.get('name')),
+                    'role': _v2_str(u.get('role_requested'), 40), 'country': _v2_str(u.get('country'), 60),
+                    'flags': [str(x) for x in (u.get('flag_labels') or []) if str(x).strip()][:6]})
+    # دعوة من عضو بتنتظر موافقتك (الدعوة مفتوحة باسم الإيميل ده)
+    invs = _v2_rows(S.get('invites'), 'invites')
+    rs['invite'] = 'ok' if invs is not None else 'failed'
+    for i in (invs or []):
+        if _v2_low(i.get('email')) != email or _v2_str(i.get('status')) != 'awaiting_approval':
+            continue
+        ib = i.get('invited_by') if isinstance(i.get('invited_by'), dict) else {}
+        out.append({'kind': 'invite', 'id': i.get('id'), 'at': i.get('created_at'), 'name': _v2_str(i.get('name')),
+                    'invited_by': 'المؤسس' if ib.get('kind') == 'founder' else (_v2_str(ib.get('name')) or 'عضو'),
+                    'note': _v2_str(i.get('note'), 200), 'generation': i.get('generation') if isinstance(i.get('generation'), int) else None})
+    out = [r for r in out if r.get('id') not in (None, '')]
+    out.sort(key=lambda r: str(r.get('at') or ''))
+    return out, rs
+
+
 def _v2_person_build(email, S):
     """يبني ردّ الصفحة من نتائج المصادر `S` (None = المصدر فشل/غير موجود). نقية: لا شبكة."""
     sources = {k: ('ok' if S.get(k) is not None else 'failed') for k in
@@ -2149,6 +2224,10 @@ def _v2_person_build(email, S):
     sources.update({'photo': 'none', 'books': 'none', 'client_files': 'none', 'balance': 'none'})
     out = {'email': email, 'found': None, 'sources': sources, 'roles': [], 'identity': None, 'expert': None,
            'trainer': None, 'money': None, 'learner': None, 'books': None, 'log': None, 'log_partial': False}
+    # R24 م٢: كل الطلبات المفتوحة على الإيميل (حتى لو لسه ما عندوش حساب: خبير مؤسس مثلًا)
+    reqs, req_src = _v2_person_requests(email, S)
+    out['requests'] = reqs
+    out['request_sources'] = req_src
 
     users = _v2_rows(S.get('users'), 'users')
     if users is None:
@@ -2317,6 +2396,12 @@ def v2_person():
         'payouts_pending': ('/api/bridge/wallet-payouts', {'status': 'pending'}),
         'payouts_paid': ('/api/bridge/wallet-payouts', {'status': 'paid'}),
         'pending': ('/api/bridge/pending-users', {'limit': 500}),
+        # R24 م٢: مصادر «طلباته المفتوحة» (نفس جسور الوارد بالحرف)
+        'req_trainer': ('/api/bridge/trainer-applications', {'status': 'pending'}),
+        'req_join': ('/api/bridge/join-requests', {'status': 'open'}),
+        'req_founding': ('/api/bridge/founding-expert-leads', {'limit': 500}),
+        'req_identity': ('/api/bridge/identity-docs', {'status': 'pending'}),
+        'req_signups': ('/api/bridge/signups/recent', {'limit': 200}),
     }
     with ThreadPoolExecutor(max_workers=8) as pool:
         futs = {k: pool.submit(_v2_pull, p, q) for k, (p, q) in jobs.items()}

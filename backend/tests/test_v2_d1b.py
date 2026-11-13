@@ -73,42 +73,38 @@ def _redirects():
 
 @needs_node
 def test_twelve_sections_in_the_boards_order_each_with_its_photo():
+    # R24 م٢ (اتغيّر): عشرة أقسام بترتيب المؤسس المعتمد (التقارير اندمجت في التسويق، والعقل جوه الشركة) + اللوحة، ومربّعاتها نفس الترتيب والصور.
     secs = _node("console.log(JSON.stringify({s:L.SECTIONS.map(s=>[s.key,s.label,s.img]),t:L.TILE_DEFS.map(t=>[t.key,t.label,t.img])}))")
     assert secs['s'][0] == ['home', 'اللوحة', None]
     assert secs['s'][1:] == secs['t'], 'ترتيب الأقسام وأسماؤها وصورها = مربّعات اللوحة'
-    assert [s[0] for s in secs['s'][1:]] == ['files', 'disputes', 'courses', 'market', 'books', 'people', 'money', 'content', 'marketing', 'reports', 'brain', 'company']
+    assert [s[0] for s in secs['s'][1:]] == ['people', 'files', 'disputes', 'money', 'courses', 'books', 'market', 'content', 'marketing', 'company']
 
 
 @needs_node
 def test_the_tabs_match_the_approved_table():
     got = _node("console.log(JSON.stringify(L.SECTIONS.map(s=>[s.key,s.tabs.map(t=>[t.key,t.label,t.mod])])))")
+    # R24 م٢ (اتغيّر): الجدول المعتمد الجديد — «كل الوارد» و«كل السجلات» القديمة اتشالوا؛ الناس تبويباتها (الناس · الدعوات · قوائم الانتظار · الرسائل)؛
+    # التسويق والتقارير مدموجين؛ العقل تبويب في الشركة، ومعاه «السجلات القديمة» للقراية بس.
     want = {
-        'home': [['board', 'اللوحة والقرارات', 'home'], ['inbox', 'كل الوارد', 'inbox']],
-        # D2: «الملفات» و«النزاعات» لوحتا تذاكر (موديولان وهميان ورا الغلاف)، والوارد القديم في تبويب «كل …» (لا شاشة اتفقدت)
-        'files': [['files', 'الملفات', 'v2files'], ['experts', 'الخبراء', 'team'], ['all', 'كل الملفات', 'inbox']],
-        # «الضمان» لم يعد تبويبًا: الشاشة القديمة صارت آخر تبويب «كل السجلات» بشكل جديد، والإيصالات اليدوية في «الفلوس ‹ الإيصالات»
-        'disputes': [['disputes', 'النزاعات', 'v2disputes'], ['all', 'كل النزاعات', 'inbox'], ['escrow', 'كل السجلات', 'escrow']],
-        # الجولة الأخيرة: «الدورات والمدرّبون» بشاشاته الجديدة (تبويب مخفي لصفحة الدورة)، والشاشة القديمة آخرًا في «كل السجلات»
-        'courses': [['courses', 'الدورات', 'courses'], ['trainers', 'المدرّبون', 'team'], ['live', 'الدورات الحيّة', 'courses'], ['demand', 'ما يطلبه الناس', 'courses'],
-                    ['offers', 'عروض الأسعار', 'courses'], ['course', 'صفحة الدورة', 'courses'], ['all', 'كل السجلات', 'courses']],
-        'market': [['requests', 'الطلبات', 'market'], ['all', 'كل الطلبات', 'v2s_market_all'], ['demand', 'ماذا يطلب الناس', 'v2s_market_demand'], ['manage', 'إدارة السوق', 'v2s_market_v4']],
-        # D3: مراجعة العروض وطلبات القرّاء أولًا (موديولان وهميان ورا الغلاف)، والشاشة القديمة آخرًا
-        'books': [['offers', 'مراجعة العروض', 'v2b_offers'], ['requests', 'طلبات القرّاء', 'v2b_requests'], ['books', 'الكتب', 'knowledge'], ['ours', 'كتبنا', 'v2s_books_ours']],
-        # الناس والدعوات (نهائي): الطلبات والدعوات (موديول وهمي v2p_invites) والمستخدمون والرسائل، وصفحة الشخص مخفية
-        'people': [['invites', 'الطلبات', 'invites'], ['pipeline', 'الدعوات', 'v2p_invites'], ['users', 'المستخدمون', 'users'], ['messages', 'الرسائل', 'inbox'],
+        'home': [['board', 'اللوحة والقرارات', 'home']],
+        'people': [['users', 'الناس', 'users'], ['pipeline', 'الدعوات', 'v2p_invites'], ['invites', 'قوائم الانتظار', 'invites'], ['messages', 'الرسائل', 'inbox'],
                    ['person', 'صفحة الشخص', 'v2person']],
-        # D3: «الفلوس» بهيكلها الجديد، والشاشتان القديمتان (المالية والباقات) في آخر تبويب «كل السجلات» + تبويب مخفي للإيصالات القديمة
+        'files': [['files', 'الملفات', 'v2files'], ['experts', 'الخبراء', 'team'], ['all', 'كل الملفات', 'inbox']],
+        'disputes': [['disputes', 'النزاعات', 'v2disputes'], ['all', 'كل النزاعات', 'inbox']],
         'money': [['overview', 'نظرة', 'v2m_overview'], ['payouts', 'التحويلات', 'v2m_payouts'], ['receipts', 'الإيصالات', 'v2m_receipts'],
-                  ['prices', 'الأسعار', 'v2m_prices'], ['shares', 'النسب والإعدادات', 'v2m_shares'], ['ads', 'إعلانات الأعمال', 'v2m_ads'],
-                  ['all', 'كل السجلات', 'finance']],
-        # الجولة الأخيرة: «المحتوى» بست تبويبات كلها على الموديول القديم `topics` (تُميَّز بـ`topicsTab`) وبلا «كل السجلات»
+                  ['prices', 'الأسعار', 'v2m_prices'], ['shares', 'النسب والإعدادات', 'v2m_shares'], ['ads', 'إعلانات الأعمال', 'v2m_ads']],
+        'courses': [['courses', 'الدورات', 'courses'], ['trainers', 'المدرّبون', 'team'], ['live', 'الدورات الحيّة', 'courses'], ['demand', 'ما يطلبه الناس', 'courses'],
+                    ['offers', 'عروض الأسعار', 'courses'], ['course', 'صفحة الدورة', 'courses']],
+        'books': [['offers', 'مراجعة العروض', 'v2b_offers'], ['requests', 'طلبات القرّاء', 'v2b_requests'], ['books', 'الكتب', 'knowledge'], ['ours', 'كتبنا', 'v2s_books_ours']],
+        'market': [['requests', 'الطلبات', 'market'], ['all', 'كل الطلبات', 'v2s_market_all'], ['demand', 'ماذا يطلب الناس', 'v2s_market_demand'], ['manage', 'إدارة السوق', 'v2s_market_v4']],
         'content': [['pipeline', 'خط النشر', 'topics'], ['articles', 'المقالات', 'topics'], ['topics', 'الموضوعات', 'topics'], ['news', 'الأخبار', 'topics'],
                     ['comments', 'التعليقات', 'topics'], ['saha', 'الساحة', 'v2s_saha'], ['diwan', 'الديوان', 'v2s_diwan'], ['glossary', 'القاموس', 'v2s_glossary'], ['asklib', 'أدخل قوانين المكتبة', 'v2s_asklib'],
                     ['tutorials', 'دليل الاستخدام', 'topics'], ['site', 'الموقع', 'topics']],
-        'marketing': [['campaigns', 'الحملات', 'marketing'], ['social', 'السوشيال ميديا', 'v2mk_social'], ['plan', 'خطة النشر', 'v2mk_plan']],   # الجولة النهائية: الحملات الجديدة + السوشيال + خطة النشر
-        'reports': [['report', 'التقرير', 'analysis'], ['demand', 'ما يسأل عنه الناس', 'v2r_demand'], ['sunday', 'تقرير الأحد', 'v2r_sunday']],     # الجولة النهائية: التقارير
-        'brain': [['log', 'القواعد وسجل اليوم', 'v2s_brain'], ['helpers', 'المساعدون', 'ai']],
-        'company': [['invest', 'نظرة', 'investment'], ['partners', 'الشركاء ورأس المال', 'v2c_partners'], ['assets', 'المعدات والاشتراكات', 'v2c_assets'], ['deals', 'الاتفاقات والرعاة', 'v2c_deals'], ['ads', 'عملاء الإعلانات', 'v2c_ads'], ['tools', 'الأدوات', 'v2s_tools'], ['settings', 'الإعدادات', 'settings'], ['targets', 'الأهداف', 'targets']],
+        'marketing': [['campaigns', 'الحملات', 'marketing'], ['social', 'السوشيال ميديا', 'v2mk_social'], ['plan', 'خطة النشر', 'v2mk_plan'],
+                      ['report', 'التقرير', 'analysis'], ['demand', 'ما يسأل عنه الناس', 'v2r_demand'], ['sunday', 'تقرير الأحد', 'v2r_sunday']],
+        'company': [['invest', 'نظرة', 'investment'], ['partners', 'الشركاء ورأس المال', 'v2c_partners'], ['assets', 'المعدات والاشتراكات', 'v2c_assets'], ['deals', 'الاتفاقات والرعاة', 'v2c_deals'],
+                    ['ads', 'عملاء الإعلانات', 'v2c_ads'], ['tools', 'الأدوات', 'v2s_tools'], ['brain', 'العقل وقواعده', 'v2s_brain'], ['helpers', 'المساعدون', 'ai'],
+                    ['settings', 'الإعدادات', 'settings'], ['legacy', 'السجلات القديمة', 'escrow'], ['legacyfin', 'سجلات المالية القديمة', 'finance'], ['targets', 'الأهداف', 'targets']],
     }
     assert {k: t for k, t in got} == want
 
@@ -120,13 +116,14 @@ def test_every_old_module_key_lands_on_a_section_and_a_tab():
     for k, m in res:
         assert m and m['section'] and m['tab'], 'مفتاح قديم بلا قسم: ' + k
     landed = {k: (m['section'], m['tab']) for k, m in res}
-    assert landed['inbox'] == ('home', 'inbox') and landed['overview'] == ('home', 'inbox')
-    assert landed['team'] == ('files', 'experts') and landed['escrow'] == ('disputes', 'escrow')
-    assert landed['finance'] == ('money', 'all') and landed['packages'] == ('money', 'all')
+    # R24 م٢ (اتغيّر): «الوارد» القديم ⇒ اللوحة · الضمان والمالية القديمين ⇒ «الشركة ‹ السجلات القديمة» (للقراية بس)
+    assert landed['inbox'] == ('home', 'board') and landed['overview'] == ('home', 'board')
+    assert landed['team'] == ('files', 'experts') and landed['escrow'] == ('company', 'legacy')
+    assert landed['finance'] == ('company', 'legacyfin') and landed['packages'] == ('company', 'legacyfin')
     assert landed['messages'] == ('people', 'messages') and landed['tutorials'] == ('content', 'tutorials')
     assert landed['partners'] == ('company', 'invest') and landed['foundation'] == ('company', 'targets')
-    assert landed['knowledge'] == ('books', 'books') and landed['ai'] == ('brain', 'helpers') and landed['home'] == ('home', 'board')
-    assert landed['analysis'] == ('reports', 'report') and landed['market'] == ('market', 'requests')
+    assert landed['knowledge'] == ('books', 'books') and landed['ai'] == ('company', 'helpers') and landed['home'] == ('home', 'board')
+    assert landed['analysis'] == ('marketing', 'report') and landed['market'] == ('market', 'requests')
 
 
 @needs_node
@@ -165,11 +162,11 @@ def test_inner_screen_state_picks_the_right_tab_and_unknown_state_stays_put():
         ('inbox', {'activeFilter': 't:files'}, 'files', 'all'), ('inbox', {'activeFilter': 'attn'}, 'files', 'all'),
         ('inbox', {'activeFilter': 'review'}, 'files', 'all'), ('inbox', {'activeFilter': 'nocand'}, 'files', 'all'),
         ('inbox', {'activeFilter': 't:disputes'}, 'disputes', 'all'), ('inbox', {'activeFilter': 't:legacy'}, 'disputes', 'all'),
-        ('inbox', {'activeFilter': 't:messages'}, 'people', 'messages'), ('inbox', {'activeFilter': 'all'}, 'home', 'inbox'),
-        ('inbox', {'activeFilter': 'human'}, 'home', 'inbox'), ('inbox', {'activeFilter': 't:money'}, 'home', 'inbox'),
+        ('inbox', {'activeFilter': 't:messages'}, 'people', 'messages'), ('inbox', {'activeFilter': 'all'}, 'home', 'board'),
+        ('inbox', {'activeFilter': 'human'}, 'people', 'messages'), ('inbox', {'activeFilter': 't:money'}, 'people', 'messages'),    # R24 م٢: «كل الوارد» اتشال؛ فلتر بلا تبويب (من غير تلميح) بيقع على أول تبويب بموديول الوارد
         ('team', {'teamTab': 'trainers'}, 'courses', 'trainers'), ('team', {'teamTab': 'experts'}, 'files', 'experts'),
-        ('escrow', {'escTab': 'manual'}, 'disputes', 'escrow'), ('escrow', {'escTab': 'disputes'}, 'disputes', 'escrow'),
-        ('finance', {'finTab': 'packages'}, 'money', 'all'), ('finance', {'finTab': 'withdrawals'}, 'money', 'all'),
+        ('escrow', {'escTab': 'manual'}, 'company', 'legacy'), ('escrow', {'escTab': 'disputes'}, 'company', 'legacy'),
+        ('finance', {'finTab': 'packages'}, 'company', 'legacyfin'), ('finance', {'finTab': 'withdrawals'}, 'company', 'legacyfin'),
         ('topics', {'topicsTab': 'tutorials'}, 'content', 'tutorials'), ('topics', {'topicsTab': 'news'}, 'content', 'news'),
         ('courses', {'courseTab': 'demand'}, 'courses', 'demand'), ('home', {'v2mode': 'brain'}, 'home', 'board'),   # سجل العقل القديم لم يعد وضعًا للوحة (صار تبويب v2s_brain)
         ('home', {'v2mode': 'focus'}, 'home', 'board'), ('targets', {'tgTab': 'foundation'}, 'company', 'targets'),
@@ -219,14 +216,15 @@ def test_addresses_without_a_tab_or_with_garbage_fall_back_safely():
 
 @needs_node
 def test_old_links_land_on_their_section_with_the_right_tab():
-    links = {'#finance': ('money', 'all'), '#packages': ('money', 'all'), '#messages': ('people', 'messages'),
-             '#invites': ('people', 'invites'), '#users': ('people', 'users'), '#escrow': ('disputes', 'escrow'),
+    # R24 م٢ (اتغيّر): الروابط القديمة بتهبط على بيوتها الجديدة (المالية والضمان القديمين ⇒ الشركة ‹ السجلات القديمة · التقارير ⇒ التسويق · العقل ⇒ الشركة · الوارد ⇒ اللوحة)
+    links = {'#finance': ('company', 'legacyfin'), '#packages': ('company', 'legacyfin'), '#messages': ('people', 'messages'),
+             '#invites': ('people', 'invites'), '#users': ('people', 'users'), '#escrow': ('company', 'legacy'),
              '#courses': ('courses', 'courses'), '#team': ('files', 'experts'), '#market': ('market', 'requests'),
              '#knowledge': ('books', 'books'), '#topics': ('content', 'pipeline'), '#tutorials': ('content', 'tutorials'),
-             '#marketing': ('marketing', 'campaigns'), '#analysis': ('reports', 'report'), '#ai': ('brain', 'helpers'),
+             '#marketing': ('marketing', 'campaigns'), '#analysis': ('marketing', 'report'), '#ai': ('company', 'helpers'),
              '#investment': ('company', 'invest'), '#partners': ('company', 'invest'), '#targets': ('company', 'targets'),
-             '#foundation': ('company', 'targets'), '#settings': ('company', 'settings'), '#inbox': ('home', 'inbox'),
-             '#overview': ('home', 'inbox'), '#home': ('home', 'board'), '': ('home', 'board')}
+             '#foundation': ('company', 'targets'), '#settings': ('company', 'settings'), '#inbox': ('home', 'board'),
+             '#overview': ('home', 'board'), '#home': ('home', 'board'), '': ('home', 'board')}
     res = _node("const ks=%s;console.log(JSON.stringify(ks.map(k=>L.routeFor(k,{}))))" % json.dumps(list(links)))
     for (k, want), m in zip(links.items(), res):
         assert (m['section'], m['tab']) == want, k
@@ -300,9 +298,10 @@ def test_badges_come_from_the_same_tiles_and_nothing_is_counted_twice():
     for bad in ('opsQueue', 'INBOX', 'EP.data', 'EP.state', 'walletPayouts', 'oldest_hours'):
         assert bad not in code, 'الغلاف ما بيعدّش بنفسه: ' + bad
     home = _read('dashboard-cloud', 'v2-home.js')
-    assert 'V2.tiles = function () { var g = gather(); return L.v2Tiles(g.Q, g.extras); };' in home
+    # R24 م٢ (اتغيّر): المربّعات = عدد القرارات من `v2SectionTiles` على نفس `gather()` (حسابات الأساس v2Tiles بقت للفشل والعدّ الناقص بس)
+    assert 'V2.tiles = function () { var g = gather(); return L.v2SectionTiles(L.v2Tiles(g.Q, g.extras), g.split, g.avail); };' in home
     # اللوحة نفسها بتبني مربّعاتها من نفس gather()
-    assert 'var tiles = L.v2Tiles(Q, g.extras);' in home
+    assert 'var tiles = L.v2SectionTiles(L.v2Tiles(Q, g.extras), g.split, g.avail);' in home
 
 
 @needs_node
@@ -408,7 +407,7 @@ def test_inbox_chips_do_not_move_the_user_out_of_files():
         .concat([L.sectionFor('inbox',{activeFilter:'all'},null)].map(m=>[m.section,m.tab]))
         .concat([L.sectionFor('inbox',{activeFilter:'t:disputes'},h)].map(m=>[m.section,m.tab]))))""")
     assert res[:6] == [['files', 'all']] * 6
-    assert res[6] == ['home', 'inbox'] and res[7] == ['disputes', 'all']
+    assert res[6] == ['home', 'board'] and res[7] == ['disputes', 'all']      # R24 م٢: «كل الوارد» اتشال ⇒ بلا تبويب يعرّفه بترجع اللوحة
 
 
 def test_inbox_search_stays_until_the_phone_width_and_copy_is_neutral():

@@ -60,8 +60,9 @@ def test_sections_block_once_after_d2_with_the_home_files():
 
 
 def test_the_two_hooks_are_the_first_statement_and_appear_once():
-    vi = "function viewInbox(v){\n  if(window.V2SEC&&V2SEC.home&&V2SEC.home.inbox&&V2SEC.home.inbox(v))return;\n"
-    ri = "function renderInbox(){\n  if(window.V2SEC&&V2SEC.home&&V2SEC.home.list&&V2SEC.home.list())return;\n"
+    # R24 م٢ (اتغيّر): قبل خطّافي الوارد القديمين سطر درج «اقرأ وقرّر» المفتوح فوق القسم (v2ReadingActive ⇒ تحديث الدرج مش فتح «الوارد»)
+    vi = "function viewInbox(v){\n  if(v2ReadingActive()){v2ReadingTick();return;}      // R24 م٢: درج القراية مفتوح فوق القسم ⇒ نحدّث الدرج مش نفتح «الوارد»\n  if(window.V2SEC&&V2SEC.home&&V2SEC.home.inbox&&V2SEC.home.inbox(v))return;\n"
+    ri = "function renderInbox(){\n  if(v2ReadingActive()){v2ReadingTick();return;}\n  if(window.V2SEC&&V2SEC.home&&V2SEC.home.list&&V2SEC.home.list())return;\n"
     assert HTML.count(vi) == 1 and HTML.count(ri) == 1
     assert HTML.count('V2SEC.home.inbox(v)') == 1 and HTML.count('V2SEC.home.list()') == 1
 
@@ -508,7 +509,7 @@ def test_old_screen_names_in_the_drawer_become_the_new_place_names():
       C.processText(a); C.processText(b); C.processText(c);
       h.ctx.selected = 1; const d = mk('الخبراء والمدربون', scope); C.processText(d);
       console.log(JSON.stringify([a.nodeValue, b.nodeValue, c.nodeValue, d.nodeValue]))"""))
-    assert r == ['الفلوس', 'افتح الفلوس', 'الخبراء والمدربون', 'الدورات والمدرّبون']      # لكل صف مكانه (الصف الأول لا يغيّر اسم «الخبراء»)
+    assert r == ['الفلوس', 'افتح الفلوس', 'الخبراء والمدربون', 'الدورات']      # R24 م٢: «الدورات والمدرّبون» بقت «الدورات». لكل صف مكانه (الصف الأول لا يغيّر اسم «الخبراء»)
 
 
 # محاكاة أصدق لـ`closest`: `own` = أصناف العنصر نفسه، `anc` = أصناف الأسلاف. يدعم القائمة بفاصلة وعلاقة «سليل» بمسافة.

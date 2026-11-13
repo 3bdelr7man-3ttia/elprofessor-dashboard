@@ -45,7 +45,7 @@ def test_the_tab_the_module_and_the_registry_lines_are_wired_inside_the_content_
     sec = sec[:sec.index("{ key: 'marketing'")]
     assert "'v2s_glossary'" in sec and sec.index("'v2s_diwan'") < sec.index("'v2s_glossary'") < sec.index("topicsTab: 'tutorials'"), 'القاموس بعد الديوان داخل المحتوى'
     assert 'والقاموس' in sec.split('tabs: [')[0], 'وصف القسم يذكر القاموس'
-    assert len(re.findall(r"\{ key: '[a-z]+', label: '", logic[logic.index('var SECTIONS = ['):logic.index('var ALIASES')])) == 13, 'القائمة الرئيسية ١٣ بند'
+    assert len(re.findall(r"\{ key: '[a-z]+', label: '", logic[logic.index('var SECTIONS = ['):logic.index('var ALIASES')])) == 11, 'القائمة الرئيسية ١١ بند'      # R24 م٢ (اتغيّر): ١١ بعد دمج التسويق والتقارير والعقل في الشركة
     g = _read('dashboard-cloud', 'v2s', 'saha_glossary.js')
     assert "key: 'glossary', mod: 'v2s_glossary'" in g and "window.V2S_GLOSSARY = B;" in g
     assert "if (typeof window === 'undefined' || typeof document === 'undefined') return;" in g, 'الواجهة تتخطّى node'

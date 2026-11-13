@@ -466,6 +466,7 @@ body{font-family:'IBM Plex Sans Arabic',sans-serif;background:var(--bg);color:va
 <script src="v2-d2.js"></script>
 <script src="v2-d3.js"></script>
 <link rel="stylesheet" href="v2-brain2.css"><script src="v2-brain2.js"></script>
+<link rel="stylesheet" href="v2-strip.css"><script src="v2-strip.js"></script>
 <!-- v2 sections begin -->
 <script src="v2s/_registry.js"></script>
 <link rel="stylesheet" href="v2s/asklib.css">
@@ -718,6 +719,7 @@ function roleNavFor(r){
   return base;
 }
 function resetViewState(){
+  if(typeof v2CloseReading==='function')v2CloseReading(true);     // R24 م٢: أي تنقّل بيقفل درج القراية المفتوح فوق القسم
   selected=null;activeFilter='all';escTab='sessions';finTab='summary';usersFilter='all';usersTag='all';teamTab='experts';topicsTab='ideas';topicsCat='all';courseTab='platform';invTab='owners';tgTab='goals';foundationTab='assets';contentTab='pending';anFilters={seg:'all',country:'all',cat:'all',ne:'all',time:'all'};
   mkLane='all';mkNeed='all';mkStatus='all';mkSel=null;
   invSel=null;invGroupBy=false;
@@ -749,7 +751,7 @@ function renderView(){
   { const ap=document.querySelector('.app'); const sh=!!(window.V2SHELL&&V2SHELL.on);
     if(ap)ap.classList.toggle('v2-home',current==='home'&&!!window.V2_ON&&!sh);
     // D1-B: صنف الغلاف على `.app` (لوحة بلا إطار · بحث الوارد · وضع التركيز) — الترويسة خارج #view فلا تمسحها الشاشات القديمة.
-    if(ap&&sh){ap.classList.toggle('v2-bare',current==='home'||!!(window.V2D2&&V2D2.owns(current)));ap.classList.toggle('v2-inbox',current==='inbox');if(current!=='home')ap.classList.remove('v2-focus');if(window.V2D3&&V2D3.owns(current))ap.classList.add('v2-bare');if(window.V2SEC&&V2SEC.owner&&V2SEC.owner(current))ap.classList.add('v2-bare');ap.classList.toggle('v2lg',current==='finance'||current==='escrow');if(V2SHELL.legacyDigits)V2SHELL.legacyDigits(current==='finance'||current==='escrow');V2SHELL.head();} }
+    if(ap&&sh){ap.classList.toggle('v2-bare',current==='home'||!!(window.V2D2&&V2D2.owns(current)));ap.classList.toggle('v2-inbox',current==='inbox');if(current!=='home')ap.classList.remove('v2-focus');if(window.V2D3&&V2D3.owns(current))ap.classList.add('v2-bare');if(window.V2SEC&&V2SEC.owner&&V2SEC.owner(current))ap.classList.add('v2-bare');ap.classList.toggle('v2lg',current==='finance'||current==='escrow');if(V2SHELL.legacyDigits)V2SHELL.legacyDigits(current==='finance'||current==='escrow');if(V2SHELL.readOnly)V2SHELL.readOnly(current==='finance'||current==='escrow');V2SHELL.head();} }
   if(current==='home'&&window.V2_ON&&window.V2)return V2.render(v);
   // D2: لوحات التذاكر وصفحة الشخص (موديولات وهمية `v2files`/`v2disputes`/`v2person` لا وجود لها إلا تحت الغلاف الجديد).
   if(window.V2_ON&&window.V2D2&&V2D2.owns(current))return V2D2.render(current,v);
@@ -1077,6 +1079,7 @@ function opsQueuePanel(){
   return `<section class="panel" style="margin-bottom:14px"><div class="ph"><h3>كل اللي مستنيك — من المنصة</h3><span class="hint">أرقام المنصة نفسها (نفس ما يطبعه الدايجست)</span></div>${body}</section>`;
 }
 function viewInbox(v){
+  if(v2ReadingActive()){v2ReadingTick();return;}      // R24 م٢: درج القراية مفتوح فوق القسم ⇒ نحدّث الدرج مش نفتح «الوارد»
   if(window.V2SEC&&V2SEC.home&&V2SEC.home.inbox&&V2SEC.home.inbox(v))return;
   if(window.EP){EP.ensure('inbox',()=>viewInbox(v));EP.ensure('opsQueue',()=>viewInbox(v));EP.ensure('dashboard',()=>viewInbox(v));EP.ensure('escrow',()=>viewInbox(v));EP.ensure('pendingUsers',()=>viewInbox(v));}
   const failedQ=inboxFailedList();
@@ -1152,6 +1155,7 @@ function inboxMatches(i,f){
   return i.dest===f;
 }
 function renderInbox(){
+  if(v2ReadingActive()){v2ReadingTick();return;}
   if(window.V2SEC&&V2SEC.home&&V2SEC.home.list&&V2SEC.home.list())return;
   const fe=document.getElementById('filters');
   fe.querySelectorAll('.chip').forEach(c=>c.remove());
@@ -7813,15 +7817,9 @@ window.V2_HOST={
   isHome:function(){return current==='home'&&!!window.V2_ON;},
   // «افتح» على نفس البند: الوارد بالدرج مفتوح على الصفّ (نفس نمط efReloadKeep).
   // R24: لو الصف اتحل/اختفى من الوارد ⇒ ما بنروحش للوارد على فاضي: بنرجّع false والمنادي بيكتب «البند ده اتحل بالفعل».
-  openRow:function(row){
-    var n=v2FindRow(row);
-    if(n<0)return false;
-    go('inbox');
-    selected=n;
-    viewInbox(document.getElementById('view'));
-    try{var d=document.getElementById('drawer');if(d&&d.scrollIntoView)d.scrollIntoView({block:'start'});}catch(e){}
-    return true;
-  },
+  openRow:function(row){return v2OpenReading(row,null);},
+  // R24 م٢: «اقرأ وقرّر» — درج الوارد القديم (بكل أزراره) يتفتح فوق القسم الحالي. ⛔ مفيش «كل الوارد».
+  openReading:function(row,opts){return v2OpenReading(row,opts);},
   logout:function(){var b=document.getElementById('logoutBtn');if(b)b.click();},
   // D1-B (الهيكل الجديد): تنقّل صريح لقسم/تبويب · الحالي · اسم المستخدم.
   openSection:function(key,tab,opts){v2OpenSection(key,tab,opts);},
@@ -7891,6 +7889,41 @@ function v2OpenPerson(email,opts){
   V2S={section:'people',tab:'person',person:email};
   v2Commit(opts&&opts.replace?'replace':'push');
   renderView();
+}
+// ===== R24 م٢ · درج القراية جوه البيت =====
+// البند اللي قراره محتاج قراية (نزاع · رأي خبير · هوية · رسالة · ملف بلا خبير …) بيتفتح بدرجه القديم نفسه (نفس الدوال والأزرار)
+// فوق القسم اللي إنت فيه — مش في «كل الوارد». أي فعل جوه الدرج بيرجّع لـviewInbox/renderInbox فنحدّث الدرج أو نقفله لو البند اتقفل.
+function v2ReadingActive(){return !!document.getElementById('v2Read');}
+function v2OpenReading(row,opts){
+  var n=v2FindRow(row);
+  if(n<0){try{if(typeof toast==='function')toast('البند ده اتحل بالفعل');}catch(e){}return false;}
+  v2CloseReading(true);
+  selected=n;
+  try{efDspOpen.id=null;efVoiceDrop();efCaseUiReset();}catch(e){}
+  var sec=opts&&opts.home&&window.V2L&&V2L.sectionByKey?V2L.sectionByKey(opts.home):null;
+  var box=document.createElement('div');
+  box.id='v2Read';box.className='v2rd';
+  box.innerHTML='<div class="v2rd-scrim" data-a="rclose"></div><div class="v2rd-box" role="dialog" aria-modal="true" aria-label="اقرأ وقرّر"><div class="v2rd-bar"><button type="button" class="v2rd-back" data-a="rclose">'+(sec?'رجوع إلى '+esc(sec.label):'رجوع')+'</button></div><aside class="drawer" id="drawer"></aside></div>';
+  document.body.appendChild(box);
+  box.querySelectorAll('[data-a="rclose"]').forEach(function(b){b.onclick=function(){v2CloseReading();};});
+  document.documentElement.classList.add('v2-noscroll');
+  drawInbox();
+  try{var bk=box.querySelector('.v2rd-back');if(bk&&bk.focus)bk.focus();}catch(e){}
+  return true;
+}
+function v2CloseReading(silent){
+  var box=document.getElementById('v2Read');
+  if(!box)return;
+  box.remove();
+  document.documentElement.classList.remove('v2-noscroll');
+  selected=null;
+  try{efDspOpen.id=null;efVoiceDrop();efCaseUiReset();}catch(e){}
+  if(!silent&&window.V2&&V2.afterReading)V2.afterReading();
+}
+function v2ReadingTick(){
+  if(!v2ReadingActive())return;
+  if(selected===null||!INBOX[selected]){v2CloseReading();return;}
+  drawInbox();
 }
 // تذكرة ⇒ نفس الدرج القديم للصف في تبويب «كل الملفات/كل النزاعات» (الحالة الداخلية تتضبط من خريطة التبويب).
 // R24: مكان الصف في الوارد بالمعرّف (مش بمفتاح فاضي): صف بلا نوع ومعرّف ما بيتلاقاش إلا هو نفسه — كان '||' بيفتح أول رسالة بالغلط.

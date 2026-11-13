@@ -1,7 +1,7 @@
 /* ============================================================================
- * v2s/experts.js — «ملفات الخبراء ‹ الخبراء» بالشكل الجديد: ردود دعوة المؤسس (تذاكر) ثم الخبراء المعتمدون (بطاقة لكل خبير).
- * ⛔ لا منطق عمل هنا: التصنيف والتخصصات وسطر العقل من `V2L.v2s.experts` (نقي، في v2-logic.js).
- * ⛔ الكتابة الوحيدة: تغيير حالة رد على دعوة المؤسس بنفس مسار الداشبورد القديم (`EP.setFoundingLeadStatus`). «صار مدرّبًا» و«ليس مناسبًا» نهاية فلهما ورقة تأكيد.
+ * v2s/experts.js — «ملفات الخبراء ‹ الخبراء» بالشكل الجديد: الخبراء المعتمدون (بطاقة لكل خبير) للقراية.
+ * R24 م٢: ردود دعوة المؤسس (الخبراء المؤسسون) **اتشالت من هنا**: قرارها في «الناس» (بطاقة لكل شخص) ومتابعتها على صفحة الشخص — مفيش نسخة تانية بأزرار.
+ * ⛔ لا منطق عمل هنا: التصنيف والتخصصات وسطر العقل من `V2L.v2s.experts` (نقي، في v2-logic.js). ⛔ لا كتابة من هنا خالص.
  * ⛔ لا فلوس هنا. ⛔ المصدر الذي تعذّر ⇒ «غير متاح بعد» لا صفر. ⛔ لا confirm ولا prompt.
  * ⛔ المفتاح مقفول افتراضيًا: لا يرسم شيئًا إلا لو `V2SEC.take('team')` اتنادى والغلاف الجديد شغّال. التبويبان «المدرّبون» و«الفريق الإداري» لهما موضعهما
  *   (الدورات ‹ المدرّبون، والشركة ‹ الإعدادات) فلا يتكرّران هنا.
@@ -29,69 +29,17 @@
 
   function stateOf(k) { var E = ep(); return (E && E.state && E.state[k]) || 'idle'; }
   function dataOf(k) { var E = ep(); return E && E.data ? E.data[k] : null; }
-  function loadAll() { var E = ep(); if (!E || !E.authed) return; ['experts', 'foundingLeads'].forEach(function (k) { E.ensure(k, null); }); }
+  function loadAll() { var E = ep(); if (!E || !E.authed) return; ['experts'].forEach(function (k) { E.ensure(k, null); }); }
 
   // ------------------------------------------------------------------ مصادر
   function expertsList() { return stateOf('experts') === 'ready' && window.EXPERTS ? window.EXPERTS : null; }
-  function leadsInfo() {
-    var st = stateOf('foundingLeads'), d = dataOf('foundingLeads');
-    if (st === 'ready' && d) return { state: d.missing ? 'closed' : 'ready', rows: d.missing ? null : (d.rows || []), count: d.count };
-    return { state: st === 'error' ? 'error' : 'loading', rows: null };
-  }
   function signature() {
-    var li = leadsInfo(), xs = window.EXPERTS || [];
-    return [stateOf('experts'), stateOf('foundingLeads'), xs.length, xs.filter(function (e) { return e.online; }).length, li.rows ? li.rows.map(function (r) { return r.id + r.status; }).join(',') : li.state,
-            Object.keys(S.busy).join(','), Object.keys(S.err).join(',')].join('|');
+    var xs = window.EXPERTS || [];
+    return [stateOf('experts'), xs.length, xs.filter(function (e) { return e.online; }).length].join('|');
   }
 
   // ------------------------------------------------------------------ رسم
   function avatarLetter(name) { var m = String(name || '').match(/[ء-يٱ-ۓA-Za-z]/); return m ? m[0] : '؟'; }
-  function tel(t) {
-    return t.phone ? '<a class="v2ex-tel" dir="ltr" href="tel:' + esc(t.phone) + '">' + esc(t.phoneText) + '</a>' : '<span class="v2ex-mute">بلا رقم</span>';
-  }
-  function leadHtml(t) {
-    var id = t.id, busy = !!S.busy[id], err = S.err[id] || '', done = S.done[id] || '';
-    var meta = [t.specs.length ? t.specs.join('، ') : 'لم يحدّد تخصصه', t.country, t.years ? 'خبرة ' + t.years : ''].filter(Boolean).join('، ');
-    var acts = '';
-    if (done) acts = '<p class="v2ex-ok" role="status">' + esc(done) + '</p>';
-    else if (t.primary) {
-      acts = '<button type="button" class="v2ex-btn1" data-a="lead" data-id="' + esc(id) + '" data-st="' + esc(t.primary.status) + '"' + (busy ? ' disabled' : '') + '>' + esc(busy ? 'جارٍ التسجيل…' : t.primary.label) + '</button>'
-        + '<button type="button" class="v2ex-btn2" data-a="lead" data-id="' + esc(id) + '" data-st="' + esc(t.secondary.status) + '"' + (busy ? ' disabled' : '') + '>' + esc(t.secondary.label) + '</button>';
-    }
-    return '<article class="v2ex-t tone-' + esc(t.tone) + '" data-id="' + esc(id) + '">'
-      + '<div class="v2ex-strip"><span class="v2ex-type">' + esc(t.statusLabel) + '</span>' + (t.since ? '<time class="v2ex-time">' + esc(t.since) + '</time>' : '') + '</div>'
-      + '<div class="v2ex-body"><h3>' + esc(t.name) + '</h3>'
-      + '<p class="v2ex-meta">' + esc(meta) + '</p>'
-      + '<p class="v2ex-contact">' + tel(t) + (t.email ? '<span class="v2ex-mail" dir="ltr">' + esc(t.email) + '</span>' : '') + '</p>'
-      + (t.brain ? '<div class="v2ex-brain">' + BRAIN + '<p>' + esc(t.brain) + '</p></div>' : '')
-      + (err ? '<div class="v2ex-err" role="alert">' + esc(err) + '</div>' : '')
-      + (acts ? '<div class="v2ex-acts">' + acts + '</div>' : '') + '</div></article>';
-  }
-  function leadsSection() {
-    var li = leadsInfo(), head = '<h2 class="v2ex-h2">ردود دعوة المؤسس';
-    if (li.state === 'error') {
-      return '<section class="v2ex-sec">' + head + '</h2><div class="v2ex-empty"><b>ردود دعوة المؤسس: ' + NA + '</b><p>تعذّر الوصول إلى هذه البيانات الآن، فلا تعتبر القائمة فارغة.</p>'
-        + '<button type="button" class="v2ex-btn2" data-a="retry">أعد المحاولة</button></div></section>';
-    }
-    if (li.state === 'closed') {
-      return '<section class="v2ex-sec">' + head + '</h2><div class="v2ex-empty"><b>ردود دعوة المؤسس: ' + NA + '</b><p>لم يفتح هذا المسار في المنصة بعد، وستظهر الردود هنا فور فتحه.</p></div></section>';
-    }
-    if (li.state !== 'ready') return '<section class="v2ex-sec">' + head + '</h2><div class="v2ex-empty"><b>…جارٍ تحميل ردود دعوة المؤسس</b></div></section>';
-    var B = X.leadBoard(li.rows, now());
-    var trunc = li.count != null && li.count > li.rows.length ? '<p class="v2ex-warn" role="status">معروض ' + esc(ar(li.rows.length)) + ' من ' + esc(ar(li.count)) + ' — القائمة ناقصة.</p>' : '';
-    if (!B.open.length) {
-      return '<section class="v2ex-sec">' + head + '<span class="v2ex-n">٠</span></h2>' + trunc + '<div class="v2ex-empty"><b>لا ردود تنتظرك</b><p>يظهر هنا كل خبير يترك بياناته في صفحة المؤسسين.</p></div>' + ledger(B) + '</section>';
-    }
-    return '<section class="v2ex-sec">' + head + '<span class="v2ex-n">' + esc(ar(B.open.length)) + '</span></h2>' + trunc
-      + '<div class="v2ex-grid">' + B.open.map(leadHtml).join('') + '</div>' + ledger(B) + '</section>';
-  }
-  function ledger(B) {
-    if (!B.converted && !B.rejected) return '';
-    var p = [];
-    if (B.converted) p.push(ar(B.converted) + ' صاروا مدرّبين');
-    if (B.rejected) p.push(ar(B.rejected) + ' ليسوا مناسبين');
-    return '<p class="v2ex-fine">تمت معالجتهم: ' + esc(p.join('، ')) + '</p>';
-  }
   function expertHtml(r) {
     var num = function (label, v) { return '<div><dt>' + esc(label) + '</dt><dd>' + esc(v == null ? NA : ar(v)) + '</dd></div>'; };
     var name = r.email ? '<a class="v2ex-person" href="' + esc(L.sectionHash('people', 'person', r.email)) + '" data-person="' + esc(r.email) + '">' + esc(r.name) + '</a>' : esc(r.name);
@@ -116,8 +64,9 @@
     return '<section class="v2ex-sec">' + head + '<span class="v2ex-n">' + esc(ar(B.rows.length)) + '</span></h2><div class="v2ex-list">' + B.rows.map(expertHtml).join('') + '</div></section>';
   }
   function draw(v) {
-    var list = expertsList(), eb = list ? X.expertBoard(list) : null, li = leadsInfo(), lb = li.rows ? X.leadBoard(li.rows, now()) : null;
-    v.innerHTML = '<div class="v2ex"><p class="v2ex-sum">' + esc(X.summaryLine(eb, lb)) + '</p>' + leadsSection() + expertsSection() + '</div>';
+    var list = expertsList(), eb = list ? X.expertBoard(list) : null;
+    v.innerHTML = '<div class="v2ex"><p class="v2ex-sum">' + esc(X.summaryLine(eb, null)) + '</p>'
+      + '<p class="v2ex-fine">طلبات الخبراء المؤسسين وكل من يطلب الانضمام في «الناس» — بطاقة واحدة لكل شخص، وبقية خطواتهم على صفحته.</p>' + expertsSection() + '</div>';
   }
   function redraw() {
     var v = S.view;
@@ -128,42 +77,10 @@
     if (window.pageYOffset !== y) window.scrollTo(0, y);
   }
 
-  // ------------------------------------------------------------------ تغيير حالة رد على دعوة
-  function findTicket(id) {
-    var li = leadsInfo(), B = li.rows ? X.leadBoard(li.rows, now()) : null, hit = null;
-    if (B) B.open.forEach(function (t) { if (t.id === id) hit = t; });
-    return hit;
-  }
-  function apply(t, st) {
-    var E = ep(); if (!E || !E.setFoundingLeadStatus || S.busy[t.id]) return;
-    S.busy[t.id] = true; S.err[t.id] = ''; redraw();
-    E.setFoundingLeadStatus(t.row, st, function (ok) {
-      delete S.busy[t.id];
-      if (ok === false) S.err[t.id] = 'تعذّر تسجيل الحالة. حدّث الصفحة ثم جرّب مرة أخرى.';
-      else S.done[t.id] = 'تم تسجيل «' + t.name + '»: ' + (X.LEAD_STATUS[st] || '');
-      redraw();
-      if (ok !== false) setTimeout(function () { delete S.done[t.id]; redraw(); }, 6000);
-    });
-  }
-  function confirmSheet(t, st) {
-    if (typeof window.openModal !== 'function') return;
-    var label = X.LEAD_STATUS[st];
-    var s = window.openModal(label, '<div class="v2ex-m"><p class="v2ex-lead">تسجيل «' + esc(t.name) + '» بحالة «' + esc(label) + '».</p>'
-      + '<p class="v2ex-fine">هذه حالة نهائية: يخرج الطلب من قائمة ما ينتظرك ولا يعود إليها.</p>'
-      + '<div class="acts"><button type="button" class="btn btn-primary" id="exGo">سجّل الحالة</button><button type="button" class="btn btn-ghost" id="exNo">رجوع</button></div></div>');
-    s.querySelector('#exNo').onclick = window.closeModal;
-    s.querySelector('#exGo').onclick = function () { window.closeModal(); apply(t, st); };
-  }
   function onClick(e) {
     var b = e.target.closest && e.target.closest('[data-a]');
     if (!b || !S.view.contains(b)) return;
-    var a = b.getAttribute('data-a');
-    if (a === 'retry') { var E = ep(); if (E) { E.reload('experts', null); E.reload('foundingLeads', null); } return; }
-    if (a === 'lead') {
-      var t = findTicket(b.getAttribute('data-id')), st = b.getAttribute('data-st');
-      if (!t) return;
-      if (st === 'rejected' || st === 'converted') confirmSheet(t, st); else apply(t, st);
-    }
+    if (b.getAttribute('data-a') === 'retry') { var E = ep(); if (E) E.reload('experts', null); }
   }
 
   // ------------------------------------------------------------------ الدخول من الشاشة القديمة
