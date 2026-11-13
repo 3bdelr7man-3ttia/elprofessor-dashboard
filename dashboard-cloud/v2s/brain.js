@@ -43,7 +43,10 @@
   var AV = '<img class="v3-bav" src="' + img('brain-avatar') + '" alt="">';
   B.owns = function (mod) { return !!MODS[mod]; };
 
-  try { var sv = localStorage.getItem('v2sb_seg'); if (sv === 'rules' || sv === 'log') S.seg = sv; } catch (e) {}
+  // R24 م٣: التبويب «العقل وقواعده» بيفتح دايمًا على جدول المستويات (levels). «اللي عمله لوحده» (alone) والقواعد القديمة (rules/log) بجنبه.
+  S.seg = 'levels';
+  function LVL() { return window.V2LEVELS && window.V2LEVELS.isOn && window.V2LEVELS.isOn() ? window.V2LEVELS : null; }
+  B.want = function (seg) { if (seg === 'levels' || seg === 'alone' || seg === 'rules' || seg === 'log') S.seg = seg; };
 
   // ------------------------------------------------------------------ مصادر الخادم (كلٌّ تفشل لوحدها)
   var SRC = {};
@@ -105,7 +108,8 @@
 
   function signature() {
     return Object.keys(PATHS).map(function (k) { return srcOf(k).state + srcOf(k).at; }).join(',') + '|' + ['opsQueue', 'inbox', 'aiAgents', 'inviteSettings'].map(epState).join(',')
-      + '|' + ((window.INBOX || []).length) + '|' + (S.running ? S.running.id : '') + '|' + S.seg + '|' + (S.ruleBusy ? 1 : 0) + '|' + S.ruleErr;
+      + '|' + ((window.INBOX || []).length) + '|' + (S.running ? S.running.id : '') + '|' + S.seg + '|' + (S.ruleBusy ? 1 : 0) + '|' + S.ruleErr
+      + '|' + (LVL() ? LVL().sig() : '');
   }
   var redrawT = null;
   function changed() {
@@ -267,16 +271,45 @@
       + (c.reason && c.state !== 'running' ? '<p class="v2sb-hint" role="status">' + esc(c.reason) + '</p>' : '') + '</div>'
       + (c.auto ? '<p class="v2sb-hint v2sb-rcauto">' + esc(c.auto) + '</p>' : '') + '</section>';
   }
+  // —— R24 م٣: التبويبات الجديدة فوق: «العقل وقواعده» (المستويات) · «اللي عمله لوحده» · «القواعد» (القديمة: التوزيع والكتابة وسجل اليوم)
+  function topSeg() {
+    var on = function (k) { return S.seg === k || (k === 'rules' && S.seg === 'log'); };
+    var b = function (k, label) { return '<button type="button" role="tab" class="v3-pb' + (on(k) ? ' on' : '') + '" aria-selected="' + on(k) + '" data-a="seg" data-s="' + k + '">' + label + '</button>'; };
+    return '<div class="v3-seg v2lv-top" role="tablist" aria-label="العقل">' + b('levels', 'العقل وقواعده') + b('alone', 'اللي عمله لوحده') + b('rules', 'القواعد والسجل') + '</div>';
+  }
+  function drawLevels(v) {
+    var V = LVL();
+    var body;
+    if (!V) body = '<div class="v3-warn" role="status">غير متاح الآن</div>';
+    else {
+      V.ensure('levels'); V.ensure('learn'); if (S.seg === 'alone') V.ensure('aloneAll');
+      body = S.seg === 'alone' ? V.aloneLog() : L.lv.tableHtml(V.tableState());
+    }
+    v.innerHTML = '<div class="v3 v2sb v2lv-page" data-board="brain-levels" data-seg="' + S.seg + '" data-ready="1">' + noteStrip() + topSeg() + body + '</div>';
+    if (V) V.wire(v);
+    wire(v);
+  }
+  // اقتراحات العقل اللي ظاهرة فعلًا كقرارات في شرائط الأقسام (بعد «بعدين»/«تجاهل») وفي أي قسم — null لو اللوحة مش جاهزة.
+  function visibleBrainCards() {
+    try {
+      if (!(window.V2 && V2.split)) return null;
+      var by = {}, n = 0;
+      V2.split().decisions.forEach(function (c) { if (c.kind === 'brain_item') { n++; by[c.home || 'home'] = (by[c.home || 'home'] || 0) + 1; } });
+      return { n: n, by: by };
+    } catch (e) { return null; }
+  }
   function drawRules(v) {
+    if (S.seg === 'levels' || S.seg === 'alone') return drawLevels(v);
     var ent = entries(), Q = queue();
-    var line = L.v2sBrainLine({ queue: Q, settings: data('rules'), entries: ent, proposed: L.v2sBrainProposed(itemsList()) });
+    var vis = visibleBrainCards();
+    var line = L.v2sBrainLine({ queue: Q, settings: data('rules'), entries: ent, proposed: vis ? vis.n : L.v2sBrainProposed(itemsList()), proposedBy: vis ? vis.by : null });
     var loadingAll = ['today', 'rules'].some(function (k) { return srcState(k) === 'idle' || srcState(k) === 'loading'; }) || ['opsQueue', 'inbox'].some(function (k) { return epState(k) === 'idle' || epState(k) === 'loading'; });
     var least = !!(ent && (ent.partial || ent.fromInbox));
     var d1 = ent ? discNum(ent.autoCount, least) : NA, d2 = ent ? discNum(ent.changedCount, least) : NA;
     var seg = '<div class="v3-seg v2sb-seg" role="tablist" aria-label="العرض">'
       + '<button type="button" role="tab" class="v3-pb' + (S.seg === 'rules' ? ' on' : '') + '" aria-selected="' + (S.seg === 'rules') + '" data-a="seg" data-s="rules">القواعد</button>'
       + '<button type="button" role="tab" class="v3-pb' + (S.seg === 'log' ? ' on' : '') + '" aria-selected="' + (S.seg === 'log') + '" data-a="seg" data-s="log">سجل اليوم</button></div>';
-    v.innerHTML = '<div class="v3 v2sb" data-board="brain-log" data-seg="' + S.seg + '" data-ready="' + (loadingAll ? 0 : 1) + '">' + noteStrip()
+    v.innerHTML = '<div class="v3 v2sb" data-board="brain-log" data-seg="' + S.seg + '" data-ready="' + (loadingAll ? 0 : 1) + '">' + noteStrip() + topSeg()
       + '<div class="v3-top v2sb-top">' + (loadingAll && !ent ? lineHtml('…جارٍ جلب ما فعله العقل اليوم', null) : lineHtml(line.text, line.button))
       + '<div class="v2sb-discs">' + disc(d1, 'وُزّع وحده اليوم', !ent) + disc(d2, 'غيّرت خبيره يدويًا', !ent) + '</div></div>'
       + runCard() + seg + '<div class="v2sb-cols">' + rulesCard() + logCard() + '</div></div>';
@@ -1081,6 +1114,7 @@
     var n = NEEDS[mod];
     if (!n) return;
     epEnsure(n.ep); n.src.forEach(function (k) { load(k, false); });
+    if (mod === 'v2s_brain' && LVL()) { LVL().ensure('levels'); LVL().ensure('learn'); }
     if (mod === 'ai') { load('links', false); load('mcpTokens', false); }      // الأنظمة المتصلة (SPEC-B B5)
   }
   function redraw(force) {

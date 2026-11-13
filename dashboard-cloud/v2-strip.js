@@ -12,10 +12,12 @@
   var U = L.util;
   var ST = window.V2STRIP = {};
   var S = { el: null, key: '', hide: false, open: '', all: {}, sig: '', timer: null, listening: false };
+  var INFO = {};       // قسم ⇒ سطر «للعلم» واحد (حالة أو عدّ حقيقي بدل الشريط الكحلي القديم اللي كان تحت الشريط)
   var SHOWN = 6;     // أول ٦ بطاقات؛ والباقي «اعرض الكل»
 
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
   function V() { return window.V2 || null; }
+  function LVL() { return window.V2LEVELS && window.V2LEVELS.isOn && window.V2LEVELS.isOn() ? window.V2LEVELS : null; }
   function say(t) { try { (window.toast || window.notify || function () {})(t); } catch (e) {} }
 
   // ------------------------------------------------------------------ قطع مشتركة (الشريط وصفحة الشخص)
@@ -71,10 +73,12 @@
       + chips
       + (c.brain && c.kind !== 'person' ? '<p class="v2z-brain">' + esc(c.brain) + '</p>' : '')
       + (c.reason ? '<p class="v2z-reason">' + esc(c.reason) + '</p>' : '')
+      + (LVL() ? LVL().reviewHtml(c) : '')      // R24 م٣: «راجعت…» (نقط ✓ و! + اقتراحي + ليه؟) لو العقل راجع البطاقة دي
       + (c.returned ? '<p class="v2z-returned">' + esc(c.returned) + '</p>' : '')
       + (c.warn ? '<p class="v2z-warn">' + esc(c.warn) + '</p>' : '')
       + (err ? '<p class="v2z-err" role="alert">' + esc(err) + '</p>' : '')
-      + open + '<div class="v2z-acts">' + actionsHtml(c, { snooze: true }) + '</div></article>';
+      + open + '<div class="v2z-acts">' + actionsHtml(c, { snooze: true }) + '</div>'
+      + (LVL() ? LVL().learnHtml(c) : '') + '</article>';      // R24 م٣: سؤال «تخليني أعملها لوحدي؟» بعد ٨ موافقات متتالية من غير تعديل
   }
   function linesHtml(d) {
     var chip = function (k, label, n) { return n ? '<button type="button" class="v2z-lc' + (S.open === k ? ' on' : '') + '" data-l="' + k + '" aria-expanded="' + (S.open === k) + '">' + label + ' (' + esc(U.ar(n)) + ')</button>' : ''; };
@@ -88,6 +92,10 @@
       }).join('') + '</ul>';
     }
     return '<div class="v2z-lines">' + h + '</div>' + panel;
+  }
+  function infoHtml() {
+    var t = INFO[S.key];
+    return t ? '<p class="v2z-fyi v2z-info"><b>للعلم:</b> ' + esc(t) + '</p>' : '';
   }
   function fyiHtml(d) {
     if (!d.fyi.length) return '';
@@ -123,10 +131,11 @@
     }
     var warn = t && t.partial && !t.failed ? '<p class="v2z-fail">العدد ناقص — تعذّر جلب بعض المصادر، فيه قرارات ممكن ما تظهرش هنا.</p>' : '';
     el.hidden = false;
-    el.innerHTML = '<section class="v2z' + (d.n ? '' : ' empty') + '" data-sec="' + esc(S.key) + '" aria-label="محتاج قرارك">' + head + warn + body + linesHtml(d) + fyiHtml(d) + '</section>';
+    el.innerHTML = '<section class="v2z' + (d.n ? '' : ' empty') + '" data-sec="' + esc(S.key) + '" aria-label="محتاج قرارك">' + head + warn + body + linesHtml(d) + fyiHtml(d) + infoHtml() + '</section>';
     var byId = {};
     d.cards.forEach(function (c) { byId[c.id] = c; });
     wire(el, byId, { done: function (text) { say(text); draw(); }, fail: function () { draw(); } });
+    if (LVL()) LVL().wire(el);
     el.querySelectorAll('[data-l]').forEach(function (b) { b.onclick = function () { var k = b.getAttribute('data-l'); S.open = S.open === k ? '' : k; draw(); }; });
     el.querySelectorAll('[data-r]').forEach(function (b) { b.onclick = function () { if (v.restore) v.restore(b.getAttribute('data-r')); }; });
     var rt = el.querySelector('[data-retry]'); if (rt) rt.onclick = function () { if (v.retry) v.retry(); };
@@ -136,7 +145,7 @@
   function sigOf(d, t, loading) {
     return [S.key, S.hide, S.open, !!S.all[S.key], loading, t ? [t.failed, t.partial].join(',') : '', d.cards.map(function (c) { return c.id + ':' + (c.returned || '') + ':' + (c.fp || ''); }).join('|'),
             d.later.length, d.gone.length, d.fyi.map(function (g) { return g.key + g.n; }).join(','), (V() && V2.isBusy && V2.isBusy()) ? 'b' : '',
-            d.cards.map(function (c) { return V() && V2.errorOf ? V2.errorOf(c.id) : ''; }).join('')].join('#');
+            d.cards.map(function (c) { return V() && V2.errorOf ? V2.errorOf(c.id) : ''; }).join(''), LVL() ? LVL().sig() : '', INFO[S.key] || ''].join('#');
   }
   function draw() { S.sig = render(); }
   function currentSig() {
@@ -152,6 +161,7 @@
     S.el = el; S.key = key; S.hide = !!hide;
     if (!el) return;
     if (!S.listening && V() && V2.listen) { S.listening = true; V2.listen(function () { if (S.el && !document.getElementById('epModal')) draw(); }); }
+    if (!S.lvl && LVL() && LVL().listen) { S.lvl = true; LVL().listen(function () { if (S.el && !document.getElementById('epModal')) draw(); }); }
     draw();
     if (!S.timer) {
       S.timer = setInterval(function () {
@@ -161,6 +171,13 @@
     }
   };
   ST.refresh = draw;
+  // R24 م٣: الأقسام بتبعت سطر «للعلم» بتاعها هنا (مرة لكل رسم) بدل شريط كحلي تحت الشريط. نص فاضي ⇒ يتشال. التغيير بس بيعيد رسم الشريط.
+  ST.info = function (key, text) {
+    text = String(text == null ? '' : text).trim();
+    if ((INFO[key] || '') === text) return;
+    INFO[key] = text;
+    if (S.el && S.key === key) draw();
+  };
   // الشاشات اللي تحت الشريط بتوصّل له بدل ما تكرّر أزراره.
   ST.scrollTo = function () {
     var el = S.el; if (!el) return;

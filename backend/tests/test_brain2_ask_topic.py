@@ -57,7 +57,7 @@ def _corr(fid, **kw):
 def test_registered_ask_locked_and_telegram_default_only():
     p = registry.by_id('ask_topic')
     assert p.default_mode == 'ask' and p.may_run_alone is False and p.per_run_cap == 3 and p.kind == 'draft'
-    assert p.section == 'home' and p.template is None and p.approve_label == 'انشره موضوع للخبراء'
+    assert p.section == 'content' and p.template is None and p.approve_label == 'انشره موضوع للخبراء'
     assert 'ask_topic' in registry.TELEGRAM_DEFAULT_ON and 'ask_topic' not in registry.TELEGRAM_OK
 
 

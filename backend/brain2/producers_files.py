@@ -42,7 +42,8 @@ _ROLE = (
     'أوصِ بـ approve إن اكتمل الرأي في الأشياء الثلاثة، وبـ return إن نقص شيء منها، '
     'وعندها اكتب في return_note ملاحظة تصل إلى الخبير كما هي: واضحة ومهذبة وتقول ما يلزم إكماله. '
     'لا تذكر اسم العميل. لا تضف أرقامًا من عندك. '
-    'الشكل المطلوب: {"text":"…","recommend":"approve|return","return_note":"… (مطلوب عند return)"}'
+    'وأضف points: من ٢ إلى ٤ نقط قصيرة (حتى ١٠٠ حرف للنقطة) تقول ما راجعته، كل نقطة {"ok":true|false,"text":"…"}: ok=true لما تم وok=false لما نقص. '
+    'الشكل المطلوب: {"text":"…","recommend":"approve|return","points":[{"ok":true,"text":"…"}],"return_note":"… (مطلوب عند return)"}'
 )
 
 
@@ -194,6 +195,14 @@ def _honest(text, facts):
     return engine.check_body({'text': text}, facts, 'note') is None
 
 
+def _points(raw, target):
+    try:
+        from brain2.engine import safe_points
+        return safe_points(raw.get('points'), target.facts)
+    except Exception:   # noqa: BLE001
+        return None
+
+
 def validate(raw, target):
     if not isinstance(raw, dict):
         return None
@@ -207,6 +216,9 @@ def validate(raw, target):
     body = {'text': text, 'recommend': rec, 'return_note': '', 'notes_sha': _sha(text),
             'file_id': (target.meta or {}).get('file_id') or '',
             'approve_label': LABEL_APPROVE if rec == 'approve' else LABEL_RETURN}
+    pts = _points(raw, target)
+    if pts:
+        body['points'] = pts          # R24 م٣: «راجعت…» على البطاقة (اختياري: لو مش سليم المراجعة تفضل صالحة من غيره)
     if rec == 'return':
         note = raw.get('return_note')
         if not isinstance(note, str):

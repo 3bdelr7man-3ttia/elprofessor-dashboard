@@ -294,7 +294,7 @@ def on_reject(ctx, target, reason=''):
 
 PRODUCERS = [
     Producer(
-        id=PRODUCER_ID, section='home', kind='draft',
+        id=PRODUCER_ID, section='content', kind='draft',
         label='بنود «جلسة تدريب البروف»',
         sentence='ما يعلّمه الخبراء للبروف في جلسة التدريب يقارنه العقل بالنص ويوصي، ولا يتعلمه البروف إلا باعتمادك.',
         lock_reason=LOCK_REASON, may_run_alone=False, default_mode='ask', per_run_cap=5,

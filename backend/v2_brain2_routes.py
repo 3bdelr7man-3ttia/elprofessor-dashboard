@@ -16,7 +16,7 @@ import re
 
 from flask import jsonify, request
 
-from brain2 import autorun, engine, registry, run_report, telegram
+from brain2 import autorun, engine, levels, registry, run_report, telegram
 from brain2.decided import NOTIFY_FAILED
 
 logger = logging.getLogger(__name__)
@@ -187,6 +187,12 @@ def register(app, ns):
                 return out({'error': ERR_BAD_MODE}, 400)
             if mode == 'alone' and not p.may_run_alone:
                 return out({'error': 'هذا لا يعمل وحده: ' + (p.lock_reason or '')}, 400)
+            # R24 م٣: نفس حارس المستويات (الفلوس والنشر ⇒ ٤٠٩ «دايمًا بموافقتك» · فعل ما بيتعكسش ⇒ ٤٠٩) — مفيش طريق قديم يلفّ عليه.
+            wt = levels.get_type(p.id)
+            if wt is not None:
+                ok, st, msg = levels.check_level(wt, levels.MODE_TO_LEVEL[mode])
+                if not ok:
+                    return out({'error': msg, 'locked': bool(levels.lock_of(wt)), 'lock_text': levels.LOCK_TEXT if levels.lock_of(wt) else ''}, st)
         if 'telegram' in body:
             if not isinstance(tg, bool):
                 return out({'error': ERR_BAD_TELEGRAM}, 400)
@@ -207,6 +213,17 @@ def register(app, ns):
             meta['telegram'] = tg
         row.updated_at, row.updated_by = engine.utcnow(), actor
         db.session.commit()
+        if mode is not None:
+            try:      # R24 م٣: brain_levels يتبع المفتاح القديم (مصدر واحد لشاشة المستويات)
+                levels.ensure(db)
+                from sqlalchemy import text as _t
+                db.session.execute(_t('DELETE FROM brain_levels WHERE work_type = :w'), {'w': p.id})
+                db.session.execute(_t('INSERT INTO brain_levels (work_type, level, updated_by, updated_at) VALUES (:w, :l, :b, :a)'),
+                                   {'w': p.id, 'l': levels.MODE_TO_LEVEL[mode], 'b': actor, 'a': levels._iso(levels._now())})
+                db.session.commit()
+            except Exception:   # noqa: BLE001
+                db.session.rollback()
+                logger.exception('brain2: levels mirror failed')
         L('_audit')('v2_brain.switch', target=p.id, meta=meta)
         return out({'id': p.id, 'mode': engine.effective_mode(ns, p), 'telegram': telegram.enabled(ns, p),
                     'updated_at': _iso(row.updated_at), 'updated_by': actor})
@@ -238,7 +255,10 @@ def register(app, ns):
                 return out({'error': ERR_BAD_SINCE}, 400)
             q = q.filter(Item.created_at >= since.replace(tzinfo=None))
         engine.sweep_applying(db)
+        if status == 'proposed':
+            engine.sweep_stale(ns)        # R24 م٣: مسودة هدفها اتقفل ⇒ تتقفل هي كمان قبل ما تتعرض كقرار
         rows = q.order_by(Item.created_at.desc(), Item.id.desc()).limit(ITEMS_LIMIT).all()
+        rows = engine.collapse_same_message(rows)      # R24 م٣: مسودة واحدة لكل رسالة حقيقية (الأحدث)
         return out({'items': [item_out(r) for r in rows]})
 
     @app.route('/api/v2/brain/items/<item_id>/approve', methods=['POST'], endpoint='v2_brain2_approve')

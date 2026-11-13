@@ -383,8 +383,9 @@
     else if (so === 'error') facts += '<span class="v2ct-fact na">نُشر على الموقع اليوم: ' + NA + '</span>';
     facts += prerenderPill();
     facts += '<button type="button" class="v2ct-b2 sm v2ct-refresh" data-a="refreshBoard"' + (refreshing() ? ' disabled' : '') + '>' + (refreshing() ? '…جارٍ التحديث' : 'حدّث') + '</button>';
-    var hero = '<div class="v2ct-hero" style="background-image:url(' + img('content') + ')"><div class="v2ct-hero-in">' + BRAIN + '<p>' + esc(B.top.line) + '</p></div></div>';
-    return hero + '<div class="v2ct-facts">' + facts + '</div>' + warnStrip(failedLabels('pipeline'))
+    // R24 م٣: البانر الكحلي اتشال. السطر الحقيقي (فيه عدّ) «للعلم» في الشريط؛ «جارٍ جمع المحتوى» و«لا شيء ينتظر» مكرّرين فمش بيتكتبوا.
+    try { if (window.V2STRIP && V2STRIP.info) V2STRIP.info('content', (B.top.rule >= 1 && B.top.rule <= 3) ? B.top.line : ''); } catch (e) {}
+    return '<div class="v2ct-facts">' + facts + '</div>' + warnStrip(failedLabels('pipeline'))
       + '<div class="v2ct-seg" role="tablist" aria-label="أعمدة خط النشر">' + seg + '</div>'
       + '<div class="v2ct-cols" data-active="' + active + '">' + cols + '</div>';
   }

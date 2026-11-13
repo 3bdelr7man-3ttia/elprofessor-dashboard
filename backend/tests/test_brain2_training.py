@@ -76,7 +76,7 @@ def _target(with_articles=True, track=AP):
 def test_registered_locked_to_ask_and_telegram_default_only():
     p = registry.by_id('training_item')
     assert p is not None and p.default_mode == 'ask' and p.may_run_alone is False
-    assert p.section == 'home' and p.kind == 'draft' and p.per_run_cap == 5 and callable(p.on_reject)
+    assert p.section == 'content' and p.kind == 'draft' and p.per_run_cap == 5 and callable(p.on_reject)
     assert p.approve_label == 'اعتمدها للبروف'
     assert 'training_item' in registry.TELEGRAM_DEFAULT_ON and 'training_item' not in registry.TELEGRAM_OK
 

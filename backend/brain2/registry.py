@@ -54,6 +54,13 @@ try:
 except ImportError:
     logger.exception('brain2: producers_training failed to import')
 
+# R24 م٣: «مراجعة طلبات الانضمام» (السيرة · الفيديو · رقم القيد · الهوية) ⇒ ملاحظة بنقط «راجعت…» على بطاقة الطلب.
+try:
+    from brain2 import producers_apply as _apply
+    PRODUCERS.extend(_apply.PRODUCERS)
+except ImportError:
+    logger.exception('brain2: producers_apply failed to import')
+
 # «اسأل» ⇒ مواضيع خبراء (2026-11-09): تصحيحات «مفيش نص يحسمها» ⇒ موضوع عام ⇒ اعتماد المؤسس ⇒ ينزل للخبراء.
 try:
     from brain2 import producers_topics_from_ask as _ask_topic

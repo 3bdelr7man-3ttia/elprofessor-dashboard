@@ -922,11 +922,35 @@
   // بعد أي بعدين/تجاهل/رجّعها: القايمة المخزّنة قديمة ⇒ تتجاب من جديد مع أول تحميل.
   EP.snoozeInvalidate = function () { _snzP = null; _snzAt = 0; };
   // R24: الفعل نفسه — {ok, error}. `until` ISO · `reason` للتجاهل · `fingerprint` بصمة الحالة. بيحدّث الوارد والتحويلات بعد النجاح.
+  // R24 م٣: بعد النجاح الواجهة بتتحدّث **فورًا** (الشريط والقايمة الجانبية والمربّعات) من غير ما تستنى إعادة تحميل الوارد الكاملة
+  // (اللي ممكن تاخد ثواني): الصف بيتنقل بين INBOX و INBOX_SNOOZED محليًا، وبعدها التحميل الحقيقي يصحّح أي فرق.
+  function snoozeLocal(key, action, body) {
+    var L = window.V2L; if (!L || !L.snoozeKeyOfRow) return;
+    var sz = EP.data.snooze || (EP.data.snooze = { rows: [], map: {}, ok: true, at: Date.now() });
+    var inbox = Array.isArray(window.INBOX) ? window.INBOX.slice() : [], hid = Array.isArray(window.INBOX_SNOOZED) ? window.INBOX_SNOOZED.slice() : [];
+    var rows = (sz.rows || []).filter(function (r) { return r.key !== key && r.item_key !== key; });
+    if (action === "restore") {
+      var keep = [];
+      hid.forEach(function (h) { if (h.key === key) { if (h.row) inbox.push(h.row); } else keep.push(h); });
+      hid = keep;
+    } else {
+      var entry = { key: key, item_key: key, kind: action === "dismiss" ? "dismiss" : "snooze", until: (body && body.until) || null, reason: (body && body.reason) || "",
+                    fingerprint: (body && body.fingerprint) || "", by: "", created_at: new Date().toISOString() };
+      var kept = [];
+      inbox.forEach(function (r) { if (L.snoozeKeyOfRow(r) === key) hid.push({ row: r, entry: entry, key: key }); else kept.push(r); });
+      inbox = kept;
+      rows.push(entry);
+    }
+    sz.rows = rows; sz.map = L.snoozeIndex ? L.snoozeIndex(rows) : sz.map; sz.at = Date.now();
+    window.INBOX = sortInboxRows(inbox); window.INBOX_SNOOZED = hid;
+  }
   function snoozeCall(key, action, body, doneText) {
     return post("/v2/decisions/" + encodeURIComponent(key) + "/" + action, body || {}).then(function () {
       EP.snoozeInvalidate();
+      try { snoozeLocal(key, action, body); } catch (e) {}
       note(doneText);
       EP.reload("inbox"); EP.reload("walletPayouts");
+      try { if (window.V2 && window.V2.refresh) window.V2.refresh(); } catch (e) {}
       return { ok: true };
     }).catch(function (e) {
       var d = (e && e.data) || {};
@@ -3831,12 +3855,12 @@
   // approval). Reject -> hidden. Both refresh the pending queue. All via the SECRET bridge.
   EP.approveOpinion = function (o, after) {
     post("/platform-opinions/" + encodeURIComponent(o.id) + "/approve", {})
-      .then(function () { note("اعتُمد الرأي — ظهر كتعليق على «" + (o.topic_title || "الموضوع") + "»"); EP.reload("platformOpinions", after); })
+      .then(function () { try { if (window.V2LEVELS) window.V2LEVELS.reportComment(o, "approve"); } catch (e) {} note("اعتُمد الرأي — ظهر كتعليق على «" + (o.topic_title || "الموضوع") + "»"); EP.reload("platformOpinions", after); })
       .catch(function (e) { quietToast((e && e.message) || "تعذّر اعتماد الرأي"); if (after) after(); });
   };
   EP.rejectOpinion = function (o, after) {
     post("/platform-opinions/" + encodeURIComponent(o.id) + "/reject", {})
-      .then(function () { note("رُفض الرأي — لن يظهر على الموضوع"); EP.reload("platformOpinions", after); })
+      .then(function () { try { if (window.V2LEVELS) window.V2LEVELS.reportComment(o, "reject"); } catch (e) {} note("رُفض الرأي — لن يظهر على الموضوع"); EP.reload("platformOpinions", after); })
       .catch(function (e) { quietToast((e && e.message) || "تعذّر رفض الرأي"); if (after) after(); });
   };
   // Editors DELETE a comment outright (works from BOTH queues: pending test comments and

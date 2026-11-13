@@ -82,7 +82,7 @@ def _raw(**kw):
 def test_registered_locked_to_ask_and_on_telegram_default_only():
     p = registry.by_id('library_contribution')
     assert p is not None and p.default_mode == 'ask' and p.may_run_alone is False
-    assert p.section == 'home' and p.kind == 'draft' and p.per_run_cap == 5 and callable(p.on_reject)
+    assert p.section == 'content' and p.kind == 'draft' and p.per_run_cap == 5 and callable(p.on_reject)
     assert 'library_contribution' in registry.TELEGRAM_DEFAULT_ON
     assert 'library_contribution' not in registry.TELEGRAM_OK
 

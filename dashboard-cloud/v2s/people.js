@@ -246,7 +246,7 @@
     var R = S.req = P.requests(reqInputs(), now());
     var wlItems = (R.cols.visitors.items || []).filter(function (t) { return t.kind === 'waitlist'; });
     var wst = eff('waitlist');
-    var head = '<div class="v2p-top"><p class="v2p-brain">' + BRAIN + '<span>طلبات الدخول والانضمام كلها في بطاقات «محتاج قرارك» فوق — هنا قائمة الانتظار من الموقع ومن سجّلوا ولم يطلبوا.</span></p><button type="button" class="v2p-btn2" data-a="refresh">حدّث</button></div>';
+    var head = '<div class="v2p-top"><button type="button" class="v2p-btn2" data-a="refresh">حدّث</button></div>';
     var body;
     if (wst === 'idle' || wst === 'loading') body = skeleton() + skeleton() + '<p class="v2p-none">…جارٍ الجلب</p>';
     else if (wst === 'error') body = '<p class="v2p-none">تعذّر جلب قائمة الانتظار — لا تعتبرها فاضية.</p><button type="button" class="v2p-btn2" data-a="retry" data-key="waitlist">أعد المحاولة</button>';

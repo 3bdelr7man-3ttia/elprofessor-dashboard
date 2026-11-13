@@ -79,3 +79,22 @@
 .v2d-rqf{margin:0;font-size:12.5px;color:#6E6A64}
 .v2d-rqa{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
 .v2z-c.v2z-flash,.v2z.v2z-flash{box-shadow:0 0 0 3px rgba(158,43,78,.35);transition:box-shadow .3s}
+
+/* —— R24 م٣: ولا شريط كحلي في أي قسم. شرائط «العقل» اللي كانت كحلي بقت ورق فاتح بحدّ هادي (الكلام بالحبر مش بالأبيض). */
+.v2d-auto,.v2p-brain,.co-brain,.co-brain.one,.mk-brainstrip,.v2r-brain,.v3-minbar{background:#fff!important;color:#21262E!important;border:1px solid #E8E0D5;box-shadow:none}
+.v2d-auto.off{background:#FFF3D1!important;color:#8A5A00!important;border-color:#EBD38E}
+.co-brain.tg{background:#FBF8F4!important}
+.co-blb,.co-blb:hover{color:#9E2B4E!important;background:transparent!important}
+.mk-bt small,.mk-bl{color:#6E6A64!important}
+.mk-brainstrip .v3-btn1{box-shadow:none}
+.mk-brainstrip button:focus-visible,.v2r-brain .v2r-whyt:focus-visible,.v2r-brain .v2r-inl:focus-visible,.v2r-bbtn:focus-visible{outline-color:#9E2B4E}
+.v2r-bl p,.v2r-brain .v2r-inl{color:#21262E!important}
+.v2r-bl.k-stalled b{color:#B97C00!important}
+.v2r-bl.k-opportunity b{color:#9E2B4E!important}
+.v2z-info{color:#4A463F}
+/* درج القراية (اقرأ الرسالة…) بترويسة ورق مش كحلي — بره `.app.v2-shell` فالقاعدة العامة ما كانتش بتوصله */
+.v2rd .drawer .dh,.v2rd .drawer .dh[style]{background:#F1EBE1!important;color:#21262E!important;border-top:4px solid #9E2B4E;padding:18px 20px}
+.v2rd .drawer .dh .k{color:#9E2B4E;font:800 12.5px 'IBM Plex Sans Arabic','Cairo',sans-serif;margin-bottom:4px}
+.v2rd .drawer .dh h3{color:#21262E;font:700 19px/1.5 'IBM Plex Sans Arabic','Cairo',sans-serif}
+.v2rd .drawer .dh *{color:inherit}
+.v2rd .drawer .dh .k{color:#9E2B4E}

@@ -11,6 +11,7 @@
   * الفحص كل ٥ دقائق في خيط خلفي واحد؛ لا يعمل داخل الاختبارات (`pytest` محمّل) ولا لو `DASH_V2_ENABLED` مقفول
     أو `DASH_BRAIN_WRITE=0`.
   * ⛔ لا نداء ذكاء هنا: يفتح الجولة عبر `engine.start_run` فقط، والجولة تمرّ بكل السقوف المعتادة.
+  * R24 م٣: كل فحص بينفّذ كمان أنواع الشغل اللي مستواها «لوحده» (`alone.run_pending`) — قواعد بسيطة بلا ذكاء، وكل فعل بيتسجّل ويتعكس.
 """
 import datetime
 import logging
@@ -109,6 +110,16 @@ def tick(ns, now_utc=None):
     except Exception:   # noqa: BLE001
         return None
     db = ns['db']
+    # R24 م٣: أنواع الشغل اللي مستواها «لوحده» (زائر عادي · تعليق مسيء بوضوح) بتتنفّذ كل فحص، من غير نداء ذكاء، وبتتسجّل في «عمل لوحده».
+    try:
+        from brain2 import alone
+        alone.run_pending(ns)
+    except Exception:   # noqa: BLE001
+        logger.exception('brain2: alone run failed')
+        try:
+            db.session.rollback()
+        except Exception:   # noqa: BLE001
+            pass
     if not due(db, now_utc):
         return None
     if engine.active_run(db) is not None:

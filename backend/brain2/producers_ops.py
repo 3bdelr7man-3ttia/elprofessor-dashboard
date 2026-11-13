@@ -22,6 +22,7 @@
   • الـprompt لا يحمل `meta` ولا بريدًا ولا هاتفًا؛ كل نص يمرّ على `_scrub` عند الجمع وعند بناء الـprompt.
 """
 import datetime
+import json
 import logging
 import re
 
@@ -340,13 +341,13 @@ def _gather_pmsg(ctx):
             continue
         email = str(r.get('from_email') or r.get('email') or '').strip()
         has_account = bool(r['has_account']) if 'has_account' in r else bool(email)
-        name = _scrub(r.get('from_name'), 60)
+        name = _scrub(r.get('from_name'), 60) or _who_of_email(email)
         subject = _scrub(r.get('subject'), 150)
         out.append(Target(
             ref='pmsg:' + mid,
             label=('رسالة عضو' + (' من ' + name if name else '') + (' — ' + subject if subject else ''))[:120],
             facts={'subject': subject, 'body': body, 'has_account': has_account},
-            meta={'id': mid, 'email': email,
+            meta={'id': mid, 'email': email, 'at': str(r.get('created_at') or ''),
                   'approve_label': LABEL_SEND if has_account else (LABEL_EMAIL if email else LABEL_COPY)}))
     return out
 
@@ -369,12 +370,12 @@ def _gather_smsg(ctx):
         if not body:
             continue
         topic = _scrub(m.topic, 150)
-        name = _scrub(m.name, 60)
+        name = _scrub(m.name, 60) or _who_of_email(m.email)
         out.append(Target(
             ref='smsg:%s' % m.id,
             label=('رسالة من الموقع' + (' من ' + name if name else '') + (' — ' + topic if topic else ''))[:120],
             facts={'subject': topic, 'body': body},
-            meta={'id': m.id, 'email': m.email or '', 'phone': m.phone or '',
+            meta={'id': m.id, 'email': m.email or '', 'phone': m.phone or '', 'at': m.created_at.isoformat() if getattr(m, 'created_at', None) else '',
                   'approve_label': LABEL_EMAIL if (m.email or '').strip() else LABEL_SAVE_COPY}))
     return out
 
@@ -386,14 +387,45 @@ def _gather_leads(ctx):
         want = _scrub(r.get('want'), 600)
         if not lid or not want or not _ID_RE.match(lid):
             continue
-        name = _scrub(r.get('full_name'), 60)
+        name = _scrub(r.get('full_name'), 60) or _who_of_email(r.get('from_email'))
         out.append(Target(
             ref='lead:' + lid,
             label=('طلب تواصل' + (' من ' + name if name else ''))[:120],
             facts={'want': want, 'experience': _scrub(r.get('experience'), 300)},
-            meta={'id': lid, 'phone': str(r.get('phone') or ''), 'email': str(r.get('from_email') or ''),
+            meta={'id': lid, 'phone': str(r.get('phone') or ''), 'email': str(r.get('from_email') or ''), 'at': str(r.get('created_at') or ''),
                   'approve_label': LABEL_EMAIL_LEAD if str(r.get('from_email') or '').strip() else LABEL_COPY_RESOLVE}))
     return out
+
+
+def _who_of_email(email):
+    """رسالة بلا اسم: الجزء قبل @ من الإيميل يفرّق بين صاحبين على البطاقة (عنوانها كان واحد لكل رسايل «طلب التعرف…»)."""
+    e = str(email or '').strip()
+    return _scrub(e.split('@', 1)[0], 40) if '@' in e else ''
+
+
+def dup_key(facts, meta):
+    """بصمة «نفس الرسالة من نفس الشخص» (إيميل + عنوان + نص). فاضي لو ما فيش إيميل (مش هنقول إنهم نفس الشخص من غير دليل)."""
+    import hashlib
+    em = str((meta or {}).get('email') or '').strip().lower()
+    if not em or not isinstance(facts, dict):
+        return ''
+    blob = json.dumps([em, facts.get('subject') or '', facts.get('body') or facts.get('want') or ''], ensure_ascii=False)
+    return hashlib.sha1(blob.encode('utf-8')).hexdigest()[:20]
+
+
+def collapse_dups(targets):
+    """نفس الرسالة اتبعتت أكتر من مرة ⇒ هدف واحد: الأحدث (`meta.at`، وعند التعادل الأخير في القايمة). مسودة واحدة لكل رسالة حقيقية."""
+    best = {}
+    order = []
+    for i, t in enumerate(targets):
+        k = dup_key(t.facts, t.meta) or ('ref:' + t.ref)
+        at = str((t.meta or {}).get('at') or '')
+        if k not in best:
+            order.append(k)
+            best[k] = (at, i, t)
+        elif (at, i) >= best[k][:2]:
+            best[k] = (at, i, t)
+    return [best[k][2] for k in order]
 
 
 def gather_with_errors(ctx):
@@ -407,7 +439,7 @@ def gather_with_errors(ctx):
         except Exception as e:   # مصدر فاسد لا يُسقط الباقي
             logger.exception('brain2 reply_draft source %s', name)
             errors.append({'source': name, 'reason': type(e).__name__})
-    return targets, errors
+    return collapse_dups(targets), errors
 
 
 def _reply_gather(ctx):

@@ -2964,6 +2964,9 @@ __import__('v2_roles_routes').register(app)   # v2s:roles
 try:   # R24 م١: «بعدين» و«تجاهل» على الخادم (جدول decision_snooze + ٤ مسارات للأدمن) — تحميل محروس، غيابه لا يكسر الإقلاع
     import v2_decisions_routes as _v2dec; _v2dec.register(app, globals())
 except Exception: logger.exception('v2 decisions routes not loaded')
+try:   # R24 م٣: مستويات العقل لكل نوع شغل + «عمل لوحده» + التعلّم (brain_levels · alone_log · brain_learn) — تحميل محروس
+    import v2_levels_routes as _v2lv; _v2lv.register(app, globals())
+except Exception: logger.exception('v2 levels routes not loaded')
 # R16 «تليجرام اللوحة»: المُرسِل الواحد + «جرّب التنبيهات» + سجلّ الإرسال + مراقبة التشغيل + الملخص اليومي.
 try: import tg_ops as _tg_ops; _tg_ops.register(app, globals())
 except Exception: logger.exception('tg_ops routes not loaded')
@@ -4964,14 +4967,23 @@ def platform_opinions_list():
 @token_required
 @roles_required('admin', 'employee')
 def platform_opinions_approve(opinion_id):
-    return _platform_proxy('POST', f"/api/bridge/opinions/{opinion_id}/approve")
+    return _opinion_moderate(opinion_id, 'approve')
 
 
 @app.route('/api/platform-opinions/<opinion_id>/reject', methods=['POST'])
 @token_required
 @roles_required('admin', 'employee')
 def platform_opinions_reject(opinion_id):
-    return _platform_proxy('POST', f"/api/bridge/opinions/{opinion_id}/reject")
+    return _opinion_moderate(opinion_id, 'reject')
+
+
+def _opinion_moderate(opinion_id, action, actor=None):
+    """اعتماد/رفض تعليق (`approve|reject`) — الدالة الواحدة لزرّ التعليقات و«العقل بيعمل لوحده» (R24 م٣).
+    التدقيق بيتكتب بعد النجاح بس؛ `actor` لما العقل هو المنفّذ."""
+    resp = _platform_proxy('POST', f"/api/bridge/opinions/{opinion_id}/{action}")
+    if _resp_ok(resp):
+        _audit('opinion.' + action, target=str(opinion_id), meta={'via': 'brain' if actor else 'dashboard'}, actor=actor)
+    return resp
 
 
 @app.route('/api/platform-opinions/<opinion_id>', methods=['DELETE'])
@@ -5402,13 +5414,20 @@ def pending_user_set_access(user_id):
     if access not in PENDING_USER_ACCESS:
         return jsonify({'error': 'قيمة غير معروفة — المسموح: ' + ' | '.join(PENDING_USER_ACCESS)}), 400
     note = (body.get('note') or '').strip()[:300]
+    return _pending_user_access_write(user_id, access, note)
+
+
+def _pending_user_access_write(user_id, access, note='', actor=None):
+    """فتح المنصة لزائر (`member`) أو إرجاعه لقايمة الانتظار (`pending`) — الدالة الواحدة اللي بيستعملها زرّ اللوحة
+    و«العقل بيعمل لوحده» (R24 م٣): نفس النداء ونفس التدقيق. `actor` بس لما العقل هو اللي بينفّذ (مفيش مستخدم لوحة)."""
+    note = (note or '').strip()[:300]
     payload = {'access': access}
     if note:
         payload['note'] = note
     resp = _platform_proxy('POST', f"/api/bridge/users/{user_id}/access", json_body=payload)
     if _resp_ok(resp):
         _audit('pending_user.access', target=user_id,
-               meta={'access': access, **({'note': note} if note else {})})
+               meta={'access': access, **({'note': note} if note else {})}, actor=actor)
     return resp
 
 

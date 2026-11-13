@@ -555,7 +555,7 @@
         // brain2: البطاقة جاهزة من `v2bItemCard` (آخر الملف). ما فيها صف وارد ولا شخص.
         var mk = root.V2L && root.V2L.v2bItemCard;
         var bc = (mk && r.item) ? mk(r.item, now) : null;
-        if (bc) { bc.key = 'brain_item:' + String(r.item.id); bc.fp = ''; bc.bucket = 'decision'; bc.fyiKind = ''; bc.dismiss = false; bc.home = brainHomeOf(r.item && r.item.section); }   // R24: اقتراح العقل قراره عنده (اعتمد/ارفض) — بعدين بس. م٢: بيته = قسمه (الشريط الواحد)
+        if (bc) { bc.key = 'brain_item:' + String(r.item.id); bc.fp = ''; bc.bucket = 'decision'; bc.fyiKind = ''; bc.dismiss = false; bc.home = brainHomeOf(r.item && r.item.section, r.item && r.item.producer); }   // R24: اقتراح العقل قراره عنده (اعتمد/ارفض) — بعدين بس. م٢: بيته = قسمه (الشريط الواحد)
         return bc;
       }
       case 'file_waiting': case 'file_late': {
@@ -902,13 +902,17 @@
                   topic: 'content', creative: 'content',
                   pending_user: 'people', trainer: 'people', join: 'people', founding: 'people', identity_doc: 'people', invite: 'people', signup: 'people',
                   person: 'people', lead: 'people', message: 'people', open_message: 'people', other: 'people' };
-  function homeOfKind(kind) { return HOME_OF[kind] || 'people'; }
+  function homeOfKind(kind) { return HOME_OF[kind] || 'company'; }      // R24 م٣: نوع مش معروف ⇒ «الشركة والعقل» مش «الناس»
   // اقتراح العقل: قسمه من المنتج. «التقارير» اندمجت في «التسويق والتقارير»، و«العقل» جوه «الشركة والعقل»، و«اللوحة» (إشعارات النظم المتصلة) بيتها «الشركة والعقل».
   var BRAIN_HOME = { reports: 'marketing', brain: 'company', home: 'company' };
-  function brainHomeOf(sec) {
+  // R24 م٣: بيت منتجات «اسأل» من اسم المنتج نفسه (الصفوف القديمة مكتوب فيها قسم `home`): تصحيحات «اسأل» ومواضيعها والمكتبة وتدريب البروف ⇒ المحتوى.
+  var BRAIN_PRODUCER_HOME = { ask_correction: 'content', ask_topic: 'content', library_contribution: 'content', training_item: 'content', application_review: 'people' };
+  function brainHomeOf(sec, producer) {
+    var p = str(producer);
+    if (BRAIN_PRODUCER_HOME[p]) return BRAIN_PRODUCER_HOME[p];
     var k = str(sec);
     if (BRAIN_HOME[k]) return BRAIN_HOME[k];
-    return k && SECTION_KEYS.indexOf(k) > -1 ? k : 'company';
+    return k && SECTION_KEYS.indexOf(k) > -1 ? k : 'company';      // ⛔ بيت مش معروف ⇒ «الشركة والعقل» (مش بتتسقط ولا بتتخبّى)
   }
   // R24 م١: تجميع البطاقات مرة واحدة ⇒ قرارات (فعلها الأساسي بيقفلها أو بيفتح شاشة قراية فيها القفل) + «للعلم» (الباقي) + المؤجَّل/المتجاهَل.
   //   ⛔ `v2Decisions` **قرارات بس**. دفعة عالقة · عدّادات الدورات/الحيّة · تسجيل (من غير طلب فتح) · دفع فشل · طلب مستني رد صاحبه ·
@@ -1096,18 +1100,22 @@
       var c = h.row ? v2Card(h.row, cardOpts) : null;
       if (c) snoozed.push({ key: h.key || c.key, entry: h.entry, card: c });
     });
+    decisions.forEach(function (c) { if (SECTION_KEYS.indexOf(c.home) < 0) c.home = 'company'; });      // بيت مش معروف ⇒ «الشركة والعقل» قبل الترتيب
     // ترتيب «ابدأ القرارات»: بترتيب الأقسام (السايدبار) ثم بالأولوية جوه القسم.
     decisions.sort(function (a, b) {
       var x = SECTION_KEYS.indexOf(a.home), y = SECTION_KEYS.indexOf(b.home);
       if (x !== y) return (x < 0 ? 99 : x) - (y < 0 ? 99 : y);
       return a._o - b._o;
     });
+    // R24 م٣ — شبكة الأمان: ⛔ ولا قرار بيتسقط. أي قرار (أو مؤجَّل) بيته مش بيت قسم معروف بيتحط في «الشركة والعقل» ويتعدّ هناك، و`c.home` نفسه
+    // بيتصحّح ليطابق الشريط اللي بيتعدّ فيه. فمجموع شرائط الأقسام = المربّعات = «ابدأ القرارات (ن)» = `counts.total` بالتركيب (كل قرار في سلّة واحدة بالظبط).
+    var FALLBACK_HOME = 'company';
     var byHome = {}, counts = { total: decisions.length };
     SECTION_KEYS.forEach(function (k) { byHome[k] = []; counts[k] = 0; });
-    decisions.forEach(function (c) { var k = byHome[c.home] ? c.home : 'people'; byHome[k].push(c); counts[k]++; });
+    decisions.forEach(function (c) { if (!byHome[c.home]) c.home = FALLBACK_HOME; byHome[c.home].push(c); counts[c.home]++; });
     var snoozedBy = {};
     SECTION_KEYS.forEach(function (k) { snoozedBy[k] = []; });
-    snoozed.forEach(function (x) { var k = snoozedBy[x.card.home] ? x.card.home : 'people'; snoozedBy[k].push(x); });
+    snoozed.forEach(function (x) { if (!snoozedBy[x.card.home]) x.card.home = FALLBACK_HOME; snoozedBy[x.card.home].push(x); });
     var fyiInfo = v2FyiGroups(fyiCards);
     decisions.forEach(function (c) { delete c._i; delete c._o; });
     return { decisions: decisions, fyi: fyiInfo, snoozed: snoozed, snoozedBy: snoozedBy, byHome: byHome, counts: counts,
@@ -1326,7 +1334,7 @@
     notes.with = 'المعروض هنا ما أُرسل ولم يُستلم بعد فقط';
     var autoOn = opts.autoAssign === true ? true : opts.autoAssign === false ? false : (Q && typeof Q.expert_files_auto_assign === 'boolean' ? Q.expert_files_auto_assign : null);
     var today = Number(opts.brainToday) || 0;
-    var header = autoOn === true ? 'التوزيع التلقائي يعمل. ' + (today ? 'وزّع ' + U(today, ['ملفًا واحدًا', 'ملفين', 'ملفات', 'ملفًا']) + ' اليوم' : 'لم يوزّع شيئًا اليوم')
+    var header = autoOn === true ? 'التوزيع التلقائي يعمل' + (today ? '، ووزّع ' + U(today, ['ملفًا واحدًا', 'ملفين', 'ملفات', 'ملفًا']) + ' اليوم' : '')
       : autoOn === false ? 'التوزيع التلقائي متوقف — الملفات تنتظر توزيعك' : '';
     var openTotal = Q && Q.expert_files_open_total != null ? qn(Q, 'expert_files_open_total') : null;
     return { cols: cols, shown: { late: cols.late, review: cols.review, with: shown, done: cols.done }, counts: counts,
@@ -3239,7 +3247,9 @@
     var waiting = Q ? qn(Q, 'expert_files_awaiting_assignment') : 0;
     if (A === false && waiting > 0) return { text: 'التوزيع التلقائي متوقّف، وينتظر توزيعك: ' + brFile(waiting), button: { label: 'افتح الملفات', section: 'files' } };
     if (typeof ctx.proposed === 'number' && ctx.proposed > 0) {
-      return { text: 'ينتظرك من العقل: ' + U(ctx.proposed, ['اقتراح واحد', 'اقتراحان', 'اقتراحات', 'اقتراحًا']), button: { label: 'ابدأ القرارات', section: 'home', deck: true } };
+      // R24 م٣: العدد من القرارات الظاهرة فعلًا في الشرائط (مش اللي مؤجَّل)، ومعاه أقسامها — مفيش «ينتظرك» والشريط فوقه فاضي.
+      var where = ctx.proposedBy && typeof ctx.proposedBy === 'object' ? Object.keys(ctx.proposedBy).map(function (k) { var sc = secOf(k); return sc ? sc.label : ''; }).filter(Boolean) : [];
+      return { text: 'ينتظرك من العقل: ' + U(ctx.proposed, ['اقتراح واحد', 'اقتراحان', 'اقتراحات', 'اقتراحًا']) + (where.length ? ' في ' + where.join(' و') : ''), button: { label: 'ابدأ القرارات', section: 'home', deck: true } };
     }
     var n = ent && typeof ent.autoCount === 'number' ? ent.autoCount : null;
     var least = ent && (ent.partial || ent.fromInbox) ? 'على الأقل ' : '';

@@ -32,7 +32,7 @@ SYSTEM_AR = ('اكتب بالعربية الفصحى البسيطة، بصيغة
              'أعد JSON صالحًا فقط بالشكل المطلوب.')
 
 STATUSES = ('proposed', 'done_alone', 'applying', 'approved', 'edited', 'rejected',
-            'discarded', 'expired', 'failed', 'unknown')
+            'discarded', 'expired', 'failed', 'unknown', 'stale')
 
 TEXT_LIMIT = {'opinion': 220, 'draft': 900, 'note': 600}
 WHY_LIMIT = 160
@@ -235,7 +235,36 @@ def _body_strings(body):
     fields = body.get('fields')
     if isinstance(fields, dict):
         out.extend(v for v in fields.values() if isinstance(v, str))
+    points = body.get('points')
+    if isinstance(points, list):      # R24 م٣: نقط «راجعت…» بتتفحص بنفس فحوص الصدق (رقم/لاتيني/بريد/هاتف/عبارة محظورة)
+        out.extend(p['text'] for p in points if isinstance(p, dict) and isinstance(p.get('text'), str))
     return out
+
+
+POINTS_MAX, POINT_TEXT_MAX = 5, 120
+
+
+def clean_points(raw):
+    """نقط مراجعة العقل `[{ok: bool, text: str}]` (٥ بحد أقصى، النقطة ≤١٢٠ حرف). شكل غير سليم ⇒ None (المراجعة تتكتب من غير نقط). ⛔ لا استثناء."""
+    if not isinstance(raw, list) or not raw:
+        return None
+    out = []
+    for p in raw[:POINTS_MAX]:
+        if not isinstance(p, dict) or not isinstance(p.get('ok'), bool) or not isinstance(p.get('text'), str):
+            return None
+        t = clean_text(p['text'], keep_newlines=False)
+        if not t or len(t) > POINT_TEXT_MAX:
+            return None
+        out.append({'ok': p['ok'], 'text': t})
+    return out
+
+
+def safe_points(raw, facts):
+    """نقط «راجعت…» اختيارية: لو سليمة وصادقة (فحوص الصدق على حقائق المنتج) ترجع، وإلا None والمراجعة تفضل صالحة من غيرها."""
+    pts = clean_points(raw)
+    if pts is None:
+        return None
+    return pts if check_body({'text': 'نص', 'points': pts}, facts, 'note') is None else None
 
 
 def check_body(body, facts, kind):
@@ -255,6 +284,9 @@ def check_body(body, facts, kind):
     if fields is not None:
         if not isinstance(fields, dict) or any(not isinstance(v, str) or len(v) > EDIT_MAX for v in fields.values()):
             return 'fields'
+    if 'points' in body and body['points'] is not None:
+        if clean_points(body['points']) != body['points']:
+            return 'points'
     strings = _body_strings(body)
     facts_json = norm_digits(canon(facts))
     facts_lower = facts_json.lower()
@@ -491,9 +523,96 @@ def _store(ns, p, t, ref, label, h, fj, body, source, state, run_id, failed_erro
         return 'exists', None
     state['items'] += 1
     _rep_add(state, p.id, status)
+    if status == 'proposed' and p.id == 'reply_draft':
+        _expire_same_message(db, Item, row)
+    if status == 'done_alone' and p.kind == 'note':
+        try:      # R24 م٣: كل حاجة كتبها العقل لوحده بتتسجّل في «عمل لوحده» برجوع «احذفها»
+            from brain2 import alone
+            alone.log_note(ns, row, p)
+        except Exception:   # noqa: BLE001
+            logger.exception('brain2: alone log failed for %s', p.id)
     if status == 'proposed' and failed_error is None and p.kind != 'opinion':
         state.setdefault('asks', []).append(row.id)     # سؤال تليجرام واحد لكل اقتراح جديد (يُرسَل بعد الجولة في الخيط الخلفي)
     return ('failed' if failed_error is not None else source), row
+
+
+def _same_message_key(row):
+    ops = _ops()
+    fn = getattr(ops, 'dup_key', None)
+    return fn(_loads(row.facts_json, {}), _loads(row.meta_json, {})) if callable(fn) else ''
+
+
+def _expire_same_message(db, Item, row):
+    """R24 م٣: نفس الرسالة (نفس الإيميل والعنوان والنص) وصلت بمعرّفين ⇒ مسودة واحدة منتظرة: الأحدث. الأقدم تنتهي."""
+    try:
+        key = _same_message_key(row)
+        if not key:
+            return
+        for other in Item.query.filter(Item.producer == row.producer, Item.status == 'proposed', Item.id != row.id).all():
+            if _same_message_key(other) == key:
+                other.status = 'expired'
+        db.session.commit()
+    except Exception:   # noqa: BLE001
+        db.session.rollback()
+        logger.exception('brain2: duplicate-draft expiry failed')
+
+
+_SWEEP = {'at': 0.0}
+SWEEP_EVERY_SECONDS = 60
+
+
+def sweep_stale(ns, force=False):
+    """R24 م٣: مسودة رد (`reply_draft`) هدفها اتقفل أو اتحذف (الرسالة اتردّ عليها أو اتعلّمت منتهية، الليد اتعالج) ⇒ `stale` فتختفي من
+    القرارات من نفسها بدل ما تفضل لحد ما نرفضها بإيدينا. بنقرأ المصادر الحية (قراءة بس، بلا ذكاء) مرة كل دقيقة بحدّ أقصى.
+    ⛔ مصدر ما وصلش ⇒ مفيش تقادم لمسوداته؛ وقايمة وصلت مقصوصة عند السقف ⇒ مفيش تقادم (ممكن الهدف لسه مفتوح بره القايمة)."""
+    import time
+    now = time.time()
+    if not force and now - _SWEEP['at'] < SWEEP_EVERY_SECONDS:
+        return 0
+    db = ns['db']
+    Item = _models(db)[0]
+    try:
+        rows = Item.query.filter(Item.producer == 'reply_draft', Item.status == 'proposed').all()
+        if not rows:
+            return 0
+        _SWEEP['at'] = now
+        ops = _ops()
+        ctx = Ctx(ns=ns, now=_aware(), actor='sweep')
+        live = {}
+        for name, fn in ((ops.SRC_PMSG, ops._gather_pmsg), (ops.SRC_SMSG, ops._gather_smsg), (ops.SRC_LEAD, ops._gather_leads)):
+            try:
+                refs = {t.ref for t in fn(ctx)}
+            except Exception:   # noqa: BLE001
+                continue
+            if len(refs) < ops.GATHER_LIMIT:
+                live[name] = refs
+        n = 0
+        for r in rows:
+            src = str(r.target_ref or '').split(':', 1)[0]
+            if src in live and r.target_ref not in live[src]:
+                r.status, r.decided_at, r.last_error = 'stale', utcnow(), None
+                n += 1
+        db.session.commit()
+        if n:
+            logger.info('brain2: %d reply draft(s) closed as stale', n)
+        return n
+    except Exception:   # noqa: BLE001
+        db.session.rollback()
+        logger.exception('brain2: stale sweep failed')
+        return 0
+
+
+def collapse_same_message(rows):
+    """قايمة `proposed` (الأحدث أولًا): مسودة واحدة لكل رسالة حقيقية، حتى لو في صفوف قديمة اتكتبت قبل الإصلاح."""
+    seen, out = set(), []
+    for r in rows:
+        k = _same_message_key(r) if (r.producer == 'reply_draft' and r.status == 'proposed') else ''
+        if k:
+            if k in seen:
+                continue
+            seen.add(k)
+        out.append(r)
+    return out
 
 
 def process_target(ns, p, t, state, run_id=None):
@@ -932,6 +1051,7 @@ def execute_run(ns, run_id, only, actor):
     تعذّرت قراءة مصدره · لم يكتمل (توقّف التشغيل في أثنائه) · لم يصل إليه الدور. وسبب التوقف وأسئلة تليجرام كذلك — فلا تشغيل يمرّ بلا أثر يراه المؤسس."""
     state = _new_state(run_cap())
     ctx = Ctx(ns=ns, now=_aware(), actor=str(actor))
+    sweep_stale(ns, force=True)          # R24 م٣: مسودة هدفها اتقفل ⇒ stale قبل ما نكتب جديد
     only_set = set([only] if isinstance(only, str) else (only or []))
     order = [p for p in list(registry.PRODUCERS) if p.kind != 'opinion' and (not only_set or p.id in only_set)]
     try:

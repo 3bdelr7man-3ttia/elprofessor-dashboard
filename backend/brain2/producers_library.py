@@ -313,7 +313,7 @@ def on_reject(ctx, target, reason=''):
 
 PRODUCERS = [
     Producer(
-        id=PRODUCER_ID, section='home', kind='draft',
+        id=PRODUCER_ID, section='content', kind='draft',
         label='مساهمات «مكتبة القانون العربي»',
         sentence='عندما يرفع مستخدم قانونًا أو لائحة أو قرارًا أو حكمًا (أو كتابًا من تأليفه)، يراجعه العقل: قانوني؟ الرقم مطابق؟ كام مادة؟ عندنا نسخة؟ والإضافة للمكتبة لا تتم إلا باعتمادك.',
         lock_reason=LOCK_REASON, may_run_alone=False, default_mode='ask', per_run_cap=5,

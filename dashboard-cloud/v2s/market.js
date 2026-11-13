@@ -122,7 +122,7 @@
     if (g.missing) { v.innerHTML = '<div class="v2d v2s-mk" data-board="market">' + missingCard() + '</div>'; wire(v); return; }
     if (isLoading(g)) {
       var sk = X.COLS.map(function (c) { return '<section class="v2d-col tone-' + COL_TONE[c] + '" data-col="' + c + '"><header class="v2d-ch"><b>' + esc(X.COL_LABEL[c]) + '</b></header><div class="v2d-list"><i class="v2s-mk-sk"></i><i class="v2s-mk-sk"></i></div></section>'; }).join('');
-      v.innerHTML = '<div class="v2d v2s-mk" data-board="market"><div class="v2d-top"><p class="v2d-auto">' + BRAIN + '<span>جارٍ تحميل طلبات السوق…</span></p></div><div class="v2d-cols cols4 v2s-mk-skcols" data-active="new">' + sk + '</div></div>';
+      v.innerHTML = '<div class="v2d v2s-mk" data-board="market"><div class="v2d-cols cols4 v2s-mk-skcols" data-active="new">' + sk + '</div></div>';
       wire(v); return;
     }
     if (!g.rows.length) { v.innerHTML = '<div class="v2d v2s-mk" data-board="market">' + emptyCard('لا طلبات في السوق بعد', 'أول طلب يصل من محادثة بروف أو من صفحة السوق على المنصة') + '</div>'; wire(v); return; }
@@ -131,8 +131,9 @@
     S.T = T;
     var H = X.header(g.rows, g.counts, g.count, now);
     var active = S.seg && X.COLS.indexOf(S.seg) > -1 ? S.seg : (X.COLS.filter(function (c) { return T.counts[c]; })[0] || 'new');
-    var brainSpan = '<span' + (H.brainTs ? ' data-ts="' + H.brainTs + '" data-pre="' + esc(H.brainPre) + '"' : '') + '>' + esc(H.brainText) + '</span>';
-    top = '<div class="v2d-top"><p class="v2d-auto">' + BRAIN + brainSpan + '</p><p class="v2d-open-total">' + esc(H.totals) + '</p></div>';
+    // R24 م٣: سطر العقل (طلبات بلا عرض) بقى «للعلم» في الشريط؛ «لا طلبات مفتوحة» حالة فاضية بتكرّر الشريط فمش بتتكتب.
+    try { if (window.V2STRIP && V2STRIP.info) V2STRIP.info('market', H.N > 0 ? H.brainText.replace(/^العقل:\s*/, '') : ''); } catch (e) {}
+    top = '<div class="v2d-top"><p class="v2d-open-total">' + esc(H.totals) + '</p></div>';
     var supply = H.lanes.training_offer > 0 ? '<button type="button" class="v2s-mk-link" data-a="supply">عروض المدرّبين (' + ar(H.lanes.training_offer) + ')</button>' : '';
     var testBtn = T.testCount > 0 ? '<button type="button" class="v2s-mk-chip tog' + (S.showTest ? ' on' : '') + '" data-a="test" aria-pressed="' + S.showTest + '">' + (S.showTest ? 'أخفِ التجريبي' : 'أظهر التجريبي (' + ar(T.testCount) + ')') + '</button>' : '';
     var desk = '<div class="v2s-mk-ctl v2s-mk-desk"><div class="v2s-mk-chips" role="tablist" aria-label="نوع الطلب">' + laneChips(H) + '</div>' + supply + testBtn + '</div>';
@@ -720,7 +721,7 @@
     var E = ep(), ro = !M.canWrite();
     var dm = X.demand(E && E.data && E.data.marketDemand);
     var d = stateOf('marketDemand') === 'ready' ? dm : null;
-    var head = '<div class="v2d-top">' + (d && d.brain ? '<p class="v2d-auto">' + BRAIN + '<span>' + esc(d.brain) + '</span></p>' : '') + '<button type="button" class="v2d-btn2" data-a="dreload">حدّث الأرقام</button></div>'
+    var head = '<div class="v2d-top">' + (d && d.brain ? '<p class="v2d-open-total">' + esc(d.brain) + '</p>' : '') + '<button type="button" class="v2d-btn2" data-a="dreload">حدّث الأرقام</button></div>'
       + (d && d.platform ? '<p class="v2d-open-total">' + esc(d.platform) + '</p>' : '') + readOnlyLine();
     var needHtml = srcBlock('marketDemand', 'أرقام الطلب', true, function () {
       if (!d) return '<p class="v2d-none">أرقام الطلب غير متاحة بعد</p>';

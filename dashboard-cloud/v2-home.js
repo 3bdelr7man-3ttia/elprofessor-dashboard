@@ -36,6 +36,7 @@
   function ep() { return window.EP || null; }
   function reduced() { try { return window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches; } catch (e) { return false; } }
   function img(name) { return 'v2/img/' + name + '.jpg'; }
+  function LVL() { return window.V2LEVELS && window.V2LEVELS.isOn && window.V2LEVELS.isOn() ? window.V2LEVELS : null; }   // R24 م٣
 
   // ------------------------------------------------------------------ البيانات (من المحمّلات الموجودة فقط)
   function stateOf(k) { var E = ep(); return (E && E.state && E.state[k]) || 'idle'; }
@@ -122,6 +123,7 @@
     return SOURCES.map(stateOf).join(',') + '|' + ((window.INBOX || []).length) + '|' + (E && E.data.walletPayouts ? E.data.walletPayouts.count : '')
       + (window.V2D3 ? '|' + V2D3.sig() : '') + (window.V2SEC && V2SEC.brain && V2SEC.brain.sig ? '|' + V2SEC.brain.sig() : '')
       + (window.V2BRAIN && V2BRAIN.sig ? '|' + V2BRAIN.sig() : '')
+      + (LVL() ? '|' + LVL().sig() : '')
       + '|' + ((E && E.data && E.data.snooze && E.data.snooze.at) || 0) + '|' + ((window.INBOX_SNOOZED || []).length);
   }
 
@@ -220,6 +222,8 @@
 
   // صندوقا اللوحة: «العقل عمل لوحده النهارده» (م٣ هتملاه) و«للعلم بس» (بدون قرار).
   function brainBox() {
+    // R24 م٣: صفوف اليوم من سجل «عمل لوحده» على الخادم، وجنب كل واحدة «رجّعها». المفتاح مقفول ⇒ الصندوق الفاضي القديم.
+    if (LVL()) return LVL().aloneBox();
     return '<section class="v2-box v2-brainbox" aria-label="العقل عمل لوحده النهارده"><div class="v2-boxh"><h3>العقل عمل لوحده النهارده</h3><button type="button" class="v2-link wine" data-a="brainlog">السجل كله</button></div>'
       + '<p class="v2-boxempty">لسه مفيش حاجة اتعملت لوحدها. لما العقل يبدأ يشتغل لوحده هتلاقي هنا كل حاجة عملها، وجنبها «رجّعها» لو عايز تلغيها.</p></section>';
   }
@@ -232,7 +236,8 @@
     wireLists(v, d);
     var st = v.querySelector('[data-a="start"]');
     if (st) st.onclick = function () { startFocus(d); };
-    v.querySelectorAll('[data-a="brainlog"]').forEach(function (b) { b.onclick = function () { if (host().openSection) host().openSection('company', 'brain'); }; });
+    v.querySelectorAll('[data-a="brainlog"]').forEach(function (b) { b.onclick = function () { try { if (window.V2SEC && V2SEC.brain && V2SEC.brain.want) V2SEC.brain.want('alone'); } catch (e) {} if (host().openSection) host().openSection('company', 'brain'); }; });
+    if (LVL()) LVL().wire(v);
     v.querySelectorAll('[data-tile]').forEach(function (b) { b.onclick = function () { openTile(b.getAttribute('data-tile'), d); }; });
   }
   function wireCommon(v, d) {
@@ -318,6 +323,7 @@
       + '<div class="v2-cimg" style="background-image:url(' + img(c.img) + ')">' + (hsec ? '<span class="v2-from">من: ' + esc(hsec.label) + '</span>' : '') + '<span class="v2-tag">' + esc(c.tag) + '</span>' + (c.ageText ? '<span class="v2-age">' + esc(c.ageText) + '</span>' : '') + '</div>'
       + '<div class="v2-cbody"><h2>' + (c.person && window.V2D2 ? V2D2.link(c.title, c.person.email) : esc(c.title)) + '</h2>' + (c.sub ? '<p class="v2-csub">' + esc(c.sub) + '</p>' : '')
       + '<div class="v2-brain"><img src="' + img('brain-avatar') + '" alt=""><div><b>' + esc(c.brainHead) + '</b><p' + (isBrain ? ' class="v2b-draft"' : '') + '>' + esc(c.brain) + '</p>' + (c.reason ? '<p class="v2-reason">' + esc(c.reason) + '</p>' : '') + brainSrc(c) + '</div></div>'
+      + (LVL() ? LVL().reviewHtml(c) : '')       // R24 م٣: «راجعت…» (نقط ✓ و! + اقتراحي + ليه؟)
       + brainFields(c)
       + (c.chips && c.chips.length ? '<div class="v2-chips">' + c.chips.map(function (x) { return '<span class="v2-chip2">' + esc(x) + '</span>'; }).join('') + (c.merged > 1 ? '<span class="v2-chip2 ok">بطاقة واحدة بدل ' + esc(U.ar(c.merged)) + '</span>' : '') + '</div>' : '')
       + (c.returned ? '<div class="v2-returned">' + esc(c.returned) + '</div>' : '')
@@ -325,8 +331,9 @@
       + (facts ? '<div class="v2-facts">' + facts + '</div>' : '')
       + (c.link ? '<p class="v2-linkp"><a href="' + esc(c.link.url) + '" target="_blank" rel="noopener noreferrer">' + esc(c.link.label) + '</a></p>' : '')
       + (S.err ? '<div class="v2-err" role="alert">' + esc(S.err) + '</div>' : '')
-      + '<div class="v2-acts">' + acts + '</div></div></article>' + done + '</div></div>';
+      + '<div class="v2-acts">' + acts + '</div>' + (LVL() ? LVL().learnHtml(c) : '') + '</div></article>' + done + '</div></div>';
     v.querySelector('[data-a="back"]').onclick = leaveFocus;
+    if (LVL()) LVL().wire(v);
     // الموبايل: الشريط السفلي ثابت، فالحشو تحت البطاقة على قد ارتفاعه الفعلي لا رقمًا ثابتًا (لا فراغ زائد حين يكون الشريط سطرًا واحدًا)
     try {
       var bar = v.querySelector('.v2-acts'), cb = v.querySelector('.v2-cbody');
@@ -580,15 +587,32 @@
   function removePill() { var p = document.getElementById('v2Pill'); if (p) p.remove(); }
 
   function reload() { var E = ep(); if (E) { E.reload('opsQueue'); E.reload('inbox'); E.reload('walletPayouts'); } }
-  function finish(c, text) {
+  // R24 م٣: بعد أي قرار ناجح البطاقة (وصفوف أجزائها) بتتشال من الذاكرة فورًا، فالشريط والمربّع والقايمة الجانبية بتنزل في نفس اللحظة
+  // من غير ما نستنى التحميل الكامل (والتحميل الحقيقي بعدها يصحّح أي فرق).
+  function dropRows(c) {
+    try {
+      var rows = [];
+      if (c && c.row) rows.push(c.row);
+      ((c && c.parts) || []).forEach(function (p) { if (p && p.row) rows.push(p.row); });
+      if (rows.length && Array.isArray(window.INBOX)) window.INBOX = window.INBOX.filter(function (r) { return rows.indexOf(r) < 0; });
+      var E = ep(), pid = c && c.row && c.row.pid, inv = c && c.kind === 'invite' && c.row ? c.row.apiId : null;
+      if (E && E.data && E.data.walletPayouts && Array.isArray(E.data.walletPayouts.rows) && pid) E.data.walletPayouts.rows = E.data.walletPayouts.rows.filter(function (p) { return p.pid !== pid; });
+      if (E && E.data && E.data.invites && Array.isArray(E.data.invites.rows) && inv != null) E.data.invites.rows = E.data.invites.rows.filter(function (i) { return i.id !== inv; });
+    } catch (e) {}
+  }
+  function touchShell() { try { if (window.V2SHELL && window.V2SHELL.refresh) window.V2SHELL.refresh(); } catch (e) {} }
+  V2.refresh = function () { redraw(); touchShell(); };
+  function finish(c, text, outcome) {
+    if (outcome && LVL()) { try { LVL().report(c, outcome); } catch (e) {} }      // R24 م٣: قرار على زائر عادي ⇒ يتسجّل للتعلّم (وافقت زي ما هي / رفضت)
     // D3: الفتح من شاشة «الفلوس» (V2.openMoney): نفس نافذة التأكيد، والنتيجة ترجع لصاحب الشاشة لا لبطاقات اللوحة.
-    if (S.ext && S.ext.id === c.id) { var cb = S.ext.cb; S.ext = null; delete S.errMap[c.id]; S.busy = false; reload(); if (cb) cb(text); notify(); return; }
+    dropRows(c);
+    if (S.ext && S.ext.id === c.id) { var cb = S.ext.cb; S.ext = null; delete S.errMap[c.id]; S.busy = false; reload(); if (cb) cb(text); notify(); touchShell(); return; }
     S.done.unshift({ text: text, at: Date.now() });
     S.err = ''; S.busy = false; S.lockedId = '';
     var go = function () { S.deck = S.deck.filter(function (x) { return x.id !== c.id; }); S.leaving = ''; S.scrollTop = true; redraw(); };
     if (reduced()) go();
     else { S.leaving = c.id; redraw(); setTimeout(go, 240); }
-    reload();
+    reload(); touchShell();
   }
   function fail(c, res) {
     S.busy = false; S.err = plainError(res); S.errMap[c.id] = S.err;
@@ -605,11 +629,11 @@
     if (res && res.unauthorized) return SESSION_AR;
     return (res && res.error) || 'تعذّر تنفيذ العملية';
   }
-  function track(c, p, doneText) {
+  function track(c, p, doneText, outcome) {
     S.busy = true; S.err = ''; redraw();
     Promise.resolve(p).then(function (res) {
       res = res || {};
-      if (res.ok) finish(c, doneText); else fail(c, res);
+      if (res.ok) finish(c, doneText, outcome); else fail(c, res);
     }).catch(function (e) { fail(c, { error: (e && e.message) || 'تعذّر تنفيذ العملية' }); });
   }
   function run(c, a, keepExt) {
@@ -629,7 +653,7 @@
       case 'offer_approve': return offerAct(c, 'approve');
       case 'offer_reject': return offerAct(c, 'reject');
       case 'send': return track(c, E.expertFileSend(r, a.email, a.name, '', null), 'أُرسل «' + c.title + '» إلى ' + a.name);
-      case 'decide': return a.confirm ? publishModal(c, a) : track(c, E.decideInboxItem(r, a.action, null, ''), doneVerb(c));
+      case 'decide': return a.confirm ? publishModal(c, a) : track(c, E.decideInboxItem(r, a.action, null, ''), doneVerb(c), a.action === 'approve' ? 'approved' : (a.action === 'reject' ? 'rejected' : ''));
       case 'resolve': return track(c, E.resolveInboxItem(r, null), 'أُنهي: ' + c.title);
       case 'payout_settle': return payoutModal(c, 'settle');
       case 'payout_reject': return payoutModal(c, 'reject');
@@ -808,7 +832,7 @@
     confirmModal({ title: 'ارفض بسبب', cardId: c.id, lead: '<b>' + esc(c.title) + '</b>: ' + esc(REJECT_LEAD[c.kind] || 'هيترفض ويوصل السبب لصاحبه.'), rows: [],
       field: { label: 'السبب (مطلوب، بيوصل لصاحب الطلب كما تكتبه)', max: 500, area: true }, min: 5, btn: 'ارفض', btnCls: 'btn-human', busy: 'جارٍ الرفض…',
       run: function (reason) { return Promise.resolve(c.kind === 'invite' ? E.decideInvite(c.row.apiId, 'reject', reason) : E.decideInboxItem(c.row, 'reject', null, reason)); },
-      onOk: function () { finish(c, 'رُفض: ' + c.title); } });
+      onOk: function () { finish(c, 'رُفض: ' + c.title, 'rejected'); } });
   }
   // النشر للناس (كتاب · عمل إبداعي · موضوع) وقبول طلب البرنامج: تأكيد باسم البند قبل ما يتنفّذ.
   var PUB_KIND = { book: 'الكتاب', creative: 'العمل الإبداعي', topic: 'الموضوع', program: 'طلب البرنامج' };
@@ -880,6 +904,7 @@
     removePill();
     // brain2: وصول رأي أو اقتراح والبطاقة معروضة ⇒ إعادة رسمها (مؤقّت اللوحة لا يعمل في وضع التركيز).
     if (!S.bl && window.V2BRAIN && V2BRAIN.listen) S.bl = V2BRAIN.listen(function () { if (S.mode === 'focus' && host().isHome && host().isHome()) redraw(); });
+    if (!S.ll && LVL() && LVL().listen) S.ll = LVL().listen(function () { if (host().isHome && host().isHome() && !document.getElementById('epModal')) redraw(); });   // R24 م٣: سجل «عمل لوحده» وسؤال التعلّم والمراجعة
     // رجوع للّوحة من القائمة (مش من زرّ «العودة إلى القرارات») ⇒ على اللوحة نفسها لا على بطاقة قديمة.
     if (S.away) { S.away = false; if (!S.resume) { S.mode = 'board'; S.panel = null; S.err = ''; S.busy = false; } S.resume = false; }
     load();

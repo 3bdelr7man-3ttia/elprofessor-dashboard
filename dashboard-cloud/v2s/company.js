@@ -332,7 +332,7 @@
     }
     var ls = CO.brain(sum, now(), { visits: visitCounts() });
     S.brainLines = ls;
-    if (!ls.length) return '<div class="co-brain"><img class="co-bav" src="' + img('brain-avatar') + '" alt=""><p>لا شيء يحتاج قرارك في الشركة الآن.</p></div>';
+    if (!ls.length) return '';        // R24 م٣: «لا شيء يحتاج قرارك» بتكرّر «مفيش حاجة مستنياك هنا» في الشريط
     return '<div class="co-brain n' + ls.length + '">' + ls.map(function (l, i) {
       return '<div class="co-bl"><img class="co-bav" src="' + img('brain-avatar') + '" alt=""><p>' + esc(l.text) + '</p><button type="button" class="co-blb" data-a="brain" data-i="' + i + '">' + esc(l.btn) + '</button></div>'; }).join('') + '</div>';
   }

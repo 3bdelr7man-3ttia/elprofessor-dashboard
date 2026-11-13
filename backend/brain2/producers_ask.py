@@ -44,7 +44,8 @@ _ROLE = (
     'في text صغ كلام المصحِّح «ملاحظة خبير» واضحة في جملة إلى ثلاث جمل (حتى ٦٠٠ حرف) من كلامه وحده: '
     'لا تضف معلومة ولا رقمًا ليس في كلامه. '
     'وفي article_refs ضع أرقام المواد والقوانين كما وردت حرفيًا في تصحيحه أو في رسائله هو في النقاش (ليس في ردود المراجِع)، أو قائمة فارغة. '
-    'الشكل المطلوب: {"verdict":"agrees|contradicts|no_text","why":"…","text":"…","article_refs":["…"]}'
+    'وأضف points: من ٢ إلى ٤ نقط قصيرة (حتى ١٠٠ حرف للنقطة) تقول ما راجعته، كل نقطة {"ok":true|false,"text":"…"}: ok=true لما تحقّق وok=false لما نقص أو اختلف. '
+    'الشكل المطلوب: {"verdict":"agrees|contradicts|no_text","why":"…","text":"…","article_refs":["…"],"points":[{"ok":true,"text":"…"}]}'
 )
 
 
@@ -259,9 +260,17 @@ def validate(raw, target):
     if verdict != 'no_text' and not target.facts.get('articles'):
         return None                       # حكم «يتّفق/يخالف» من غير مواد معطاة = من ذاكرة الموديل
     why = raw.get('why') if isinstance(raw.get('why'), str) else ''
-    return {'text': text.strip(), 'article_refs': refs, 'verdict': verdict,
+    body = {'text': text.strip(), 'article_refs': refs, 'verdict': verdict,
             'why': (VERDICTS[verdict] + (': ' + why.strip() if why.strip() else ''))[:160],
             'approve_label': LABEL_APPROVE}
+    try:      # R24 م٣: «راجعت…» على البطاقة (اختياري: لو مش سليم المراجعة تفضل صالحة من غيره)
+        from brain2.engine import safe_points
+        pts = safe_points(raw.get('points'), target.facts)
+    except Exception:   # noqa: BLE001
+        pts = None
+    if pts:
+        body['points'] = pts
+    return body
 
 
 def template(target):
@@ -299,7 +308,7 @@ def apply(ctx, body, target):
 
 PRODUCERS = [
     Producer(
-        id=PRODUCER_ID, section='home', kind='draft',
+        id=PRODUCER_ID, section='content', kind='draft',
         label='تصحيحات الخبراء لإجابات «اسأل»',
         sentence='عندما يقول متخصص إن إجابة «اسأل» فيها غلط ويكتب الصح، يقارنه العقل بالنص ويوصي، والتصحيح لا يصل «اسأل» إلا باعتمادك.',
         lock_reason=LOCK_REASON, may_run_alone=False, default_mode='ask', per_run_cap=5,

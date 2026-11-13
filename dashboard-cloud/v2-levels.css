@@ -1,0 +1,86 @@
+/* ============================================================================
+ * v2-levels.css — R24 م٣: جدول مستويات العقل (صورة 4-brain-rules) · «راجعت…» · شريطة سؤال التعلّم (صورة 2-decisions) · «عمل لوحده».
+ * ورق #F7F3ED · أبيض للبطاقات · عنّابي #9E2B4E · حبر #21262E · خط IBM Plex Sans Arabic. الأصناف كلها `v2lv-` فمفيش تعارض مع القديم.
+ * ========================================================================== */
+.v2lv-av{width:44px;height:44px;border-radius:50%;object-fit:cover;flex:none}
+/* —— مقدّمة الجدول */
+.v2lv-intro{display:flex;gap:16px;align-items:center;background:#fff;border:1px solid #E8E0D5;border-radius:18px;padding:16px 20px;margin:0 0 16px;font-family:'IBM Plex Sans Arabic','Cairo',sans-serif;color:#21262E}
+.v2lv-intro .v2lv-av{width:58px;height:58px}
+.v2lv-lead{margin:0 0 6px;font-size:16px;line-height:1.8}
+.v2lv-defs{margin:0;font-size:13.5px;color:#4A463F;line-height:1.9}
+.v2lv-defs b{color:#21262E}
+/* —— تبويبات الشاشة */
+.v2lv-top{display:inline-flex;margin:0 0 16px}
+/* —— الجدول */
+.v2lv-tw{background:#fff;border:1px solid #E8E0D5;border-radius:18px;overflow:hidden;font-family:'IBM Plex Sans Arabic','Cairo',sans-serif;color:#21262E}
+.v2lv-tb{width:100%;border-collapse:collapse}
+.v2lv-tb thead th{text-align:right;font:600 13px 'IBM Plex Sans Arabic','Cairo',sans-serif;color:#6E6A64;padding:12px 18px;border-bottom:1px solid #EFE8DD}
+.v2lv-grp th{text-align:right;background:#FBF8F4;color:#9E2B4E;font:700 14px 'IBM Plex Sans Arabic','Cairo',sans-serif;padding:11px 18px;border-top:1px solid #EFE8DD;border-bottom:1px solid #EFE8DD}
+.v2lv-row td{padding:12px 18px;border-bottom:1px solid #F1EBE1;vertical-align:middle}
+.v2lv-row:last-child td{border-bottom:0}
+.v2lv-t b{display:block;font:600 15px/1.6 'IBM Plex Sans Arabic','Cairo',sans-serif}
+.v2lv-t small{display:block;color:#7C776D;font-size:12.5px;line-height:1.6}
+.v2lv-s{font-size:14px;color:#4A463F;white-space:nowrap}
+.v2lv-s.lk{color:#6E6A64}
+.v2lv-h{white-space:nowrap}
+.v2lv-hint,.v2lv-retry{background:none;border:0;color:#9E2B4E;font:700 13.5px 'IBM Plex Sans Arabic','Cairo',sans-serif;cursor:pointer;padding:4px 6px;text-decoration:underline;text-underline-offset:3px}
+/* —— الاختيار من تلاتة */
+.v2lv-seg{display:inline-flex;background:#EFE8DD;border-radius:12px;padding:3px;gap:2px}
+.v2lv-seg button{border:0;background:transparent;color:#6B665C;font:600 13.5px 'IBM Plex Sans Arabic','Cairo',sans-serif;padding:7px 13px;border-radius:9px;cursor:pointer;min-height:34px}
+.v2lv-seg button.on{background:#fff;color:#21262E;box-shadow:0 1px 4px rgba(33,38,46,.14)}
+.v2lv-seg button:disabled{cursor:default}
+.v2lv-seg button:disabled:not(.on){opacity:.55}
+.v2lv-seg.locked button.on{background:#F6E9EE;color:#9E2B4E;box-shadow:none}
+.v2lv-seg button:focus-visible{outline:2px solid #9E2B4E;outline-offset:1px}
+/* —— «راجعت…» على بطاقة القرار */
+.v2lv-rv{display:flex;gap:12px;background:#fff;border:1px solid #E8E0D5;border-radius:14px;padding:13px 15px;margin:4px 0;font-family:'IBM Plex Sans Arabic','Cairo',sans-serif;color:#21262E}
+.v2lv-rv .v2lv-av{width:40px;height:40px}
+.v2lv-rvb{min-width:0;flex:1}
+.v2lv-rvb>b{display:block;font:700 15px 'IBM Plex Sans Arabic','Cairo',sans-serif;margin-bottom:6px}
+.v2lv-rvb ul{list-style:none;margin:0;padding:0;display:grid;gap:5px}
+.v2lv-rvb li{display:flex;gap:9px;align-items:flex-start;font-size:14px;line-height:1.7;overflow-wrap:anywhere}
+.v2lv-rvb li i{font-style:normal;font-weight:800;width:20px;height:20px;border-radius:50%;display:inline-grid;place-items:center;flex:none;font-size:12px;margin-top:3px}
+.v2lv-rvb li.ok i{background:#E7F3EC;color:#2F7D5B}
+.v2lv-rvb li.no i{background:#FFF3D1;color:#B97C00}
+.v2lv-sg{margin:9px 0 0;padding-top:9px;border-top:1px dashed #E8E0D5;font-size:14.5px;line-height:1.8;overflow-wrap:anywhere}
+.v2lv-sg b{color:#9E2B4E}
+.v2lv-why{margin-top:4px;font-size:13px;color:#6E6A64}
+.v2lv-why summary{cursor:pointer;color:#6E6A64;font-weight:600}
+.v2lv-why p{margin:4px 0 0;line-height:1.8}
+/* —— شريطة سؤال التعلّم */
+.v2lv-bar{display:flex;gap:12px;align-items:center;flex-wrap:wrap;background:#F6E9EE;border:1px solid #EBC9D4;border-radius:14px;padding:12px 15px;margin:8px 0 2px;font-family:'IBM Plex Sans Arabic','Cairo',sans-serif;color:#21262E}
+.v2lv-bar .v2lv-av{width:38px;height:38px}
+.v2lv-bar p{margin:0;flex:1;min-width:220px;font-size:14.5px;line-height:1.8}
+.v2lv-barb{display:flex;gap:8px;flex-wrap:wrap}
+.v2lv-y,.v2lv-n{font:700 13.5px 'IBM Plex Sans Arabic','Cairo',sans-serif;border-radius:10px;padding:8px 14px;cursor:pointer;min-height:38px}
+.v2lv-y{background:#9E2B4E;color:#fff;border:1px solid #9E2B4E}
+.v2lv-n{background:#fff;color:#21262E;border:1px solid #E8E0D5}
+/* —— «عمل لوحده» */
+.v2lv-al{list-style:none;margin:6px 0 0;padding:0;font-family:'IBM Plex Sans Arabic','Cairo',sans-serif}
+.v2lv-al li{display:flex;align-items:center;gap:10px;padding:11px 0;border-top:1px solid #F1EBE1;font-size:14.5px;line-height:1.7}
+.v2lv-al li:first-child{border-top:0}
+.v2lv-dot{width:8px;height:8px;border-radius:50%;background:#2F7D5B;flex:none}
+.v2lv-al li.undone .v2lv-dot{background:#B9B3A8}
+.v2lv-al li.undone .v2lv-tx{color:#8A857B;text-decoration:line-through}
+.v2lv-tx{flex:1;min-width:0;overflow-wrap:anywhere}
+.v2lv-tx small{display:block;color:#7C776D;font-size:12.5px}
+.v2lv-undo{background:none;border:0;color:#9E2B4E;font:700 14px 'IBM Plex Sans Arabic','Cairo',sans-serif;cursor:pointer;padding:4px 8px;flex:none}
+.v2lv-undo:disabled{opacity:.5;cursor:default}
+.v2lv-un{color:#8A857B;font-size:13px;flex:none;max-width:42%;text-align:left}
+.v2lv-note{margin:8px 0 0;background:#E7F3EC;border-radius:10px;padding:7px 11px;font-size:13.5px;color:#235A44}
+.v2lv-lg{background:#fff;border:1px solid #E8E0D5;border-radius:18px;padding:6px 20px 12px}
+.v2lv-err{background:#FCEDEF;border:1px solid #F0B9C1;color:#9C0F25;border-radius:10px;padding:7px 11px;font-size:13.5px;font-weight:600;margin-top:8px}
+.v2lv-p{margin:0 0 10px;line-height:1.9}
+@media(max-width:760px){
+  .v2lv-tb,.v2lv-tb tbody{display:block}
+  .v2lv-grp{display:block}
+  .v2lv-tb thead{display:none}
+  .v2lv-row{display:grid;grid-template-columns:1fr;gap:6px;padding:12px 14px;border-bottom:1px solid #F1EBE1}
+  .v2lv-row td{padding:0;border:0}
+  .v2lv-seg{width:100%}
+  .v2lv-seg button{flex:1;padding:7px 4px;font-size:12.5px}
+  .v2lv-intro{padding:13px 14px}
+  .v2lv-top{display:flex;width:100%}
+  .v2lv-top .v3-pb{flex:1}
+  .v2lv-un{max-width:55%}
+}

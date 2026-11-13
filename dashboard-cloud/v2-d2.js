@@ -188,8 +188,8 @@
         + note + '<div class="v2d-list">' + list + '</div>' + more + hint + '</section>';
     });
     var head = '<div class="v2d-top">'
-      + (T.header ? '<p class="v2d-auto' + (T.autoOn === false ? ' off' : '') + '">' + BRAIN + '<span>' + esc(T.header) + '</span></p>' : '')
       + (T.openTotal != null ? '<p class="v2d-open-total">الملفات المفتوحة على المنصة: <b>' + esc(U.ar(T.openTotal)) + '</b></p>' : '') + '</div>';
+    try { if (window.V2STRIP && V2STRIP.info) V2STRIP.info('files', T.header || ''); } catch (e) {}      // R24 م٣: حالة التوزيع سطر «للعلم» في الشريط مش شريط كحلي
     v.innerHTML = '<div class="v2d" data-board="files">' + head + strips(g, FILE_LABELS)
       + '<div class="v2d-seg" role="tablist" aria-label="أعمدة الملفات">' + seg + '</div>'
       + '<div class="v2d-cols cols4" data-active="' + active + '">' + cols + '</div></div>';

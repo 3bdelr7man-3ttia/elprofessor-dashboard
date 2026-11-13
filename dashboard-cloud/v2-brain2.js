@@ -239,7 +239,7 @@
         cb({ ok: true, text: doneToast(which, item, text != null && text !== ui.original) });
       };
       if (which === 'reject' && d && d.notified === false) { toast(NOT_NOTIFIED_TEXT); finish(); return; }
-      if (!ct) { toast(doneToast(which, item, text != null && text !== ui.original)); finish(); return; }
+      if (!ct) { finish(); return; }          // R24 م٣: التوست الوحيد بيطلع من المنادي (الشريط/اللوحة) — كان بيطلع اتنين
       copyText(ct).then(function (okc) {
         if (okc) { toast('نُسخ النص'); finish(); return; }
         // لم يسمح المتصفح بالنسخ: النص يبقى أمامه ليأخذه بنفسه.

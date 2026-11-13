@@ -290,9 +290,10 @@ def test_with_experts_shows_the_three_closest_then_n_on_time(real):
 @needs_node
 def test_the_header_line_reads_the_auto_assign_switch(real):
     on = _tickets(real, autoAssign=True, brainToday=3)
-    assert on['header'] == 'التوزيع التلقائي يعمل. وزّع ٣ ملفات اليوم' and on['autoOn'] is True
-    assert _tickets(real, autoAssign=True, brainToday=1)['header'] == 'التوزيع التلقائي يعمل. وزّع ملفًا واحدًا اليوم'
-    assert _tickets(real, autoAssign=True, brainToday=0)['header'] == 'التوزيع التلقائي يعمل. لم يوزّع شيئًا اليوم'
+    # R24 م٣: السطر بقى «للعلم» في الشريط (مش شريط كحلي) — بلا جملة «لم يوزّع شيئًا اليوم» الفاضية
+    assert on['header'] == 'التوزيع التلقائي يعمل، ووزّع ٣ ملفات اليوم' and on['autoOn'] is True
+    assert _tickets(real, autoAssign=True, brainToday=1)['header'] == 'التوزيع التلقائي يعمل، ووزّع ملفًا واحدًا اليوم'
+    assert _tickets(real, autoAssign=True, brainToday=0)['header'] == 'التوزيع التلقائي يعمل'
     off = _tickets(real, autoAssign=False)
     assert off['header'].startswith('التوزيع التلقائي متوقف') and off['autoOn'] is False
     # بلا قيمة: من الطابور (`expert_files_auto_assign`) وإلا مفيش سطر (لا ادّعاء)

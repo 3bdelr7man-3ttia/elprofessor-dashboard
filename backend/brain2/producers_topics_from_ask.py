@@ -179,7 +179,7 @@ def apply(ctx, body, target):
 
 PRODUCERS = [
     Producer(
-        id=PRODUCER_ID, section='home', kind='draft',
+        id=PRODUCER_ID, section='content', kind='draft',
         label='مواضيع للخبراء من تصحيحات «اسأل»',
         sentence='عندما يقول العقل إن تصحيحًا على إجابة «اسأل» لا يحسمه نص، يقترح موضوعًا عامًا للخبراء، ولا ينشر إلا باعتمادك.',
         lock_reason=LOCK_REASON, may_run_alone=False, default_mode='ask', per_run_cap=3,
