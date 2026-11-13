@@ -93,6 +93,9 @@ def env(monkeypatch, request):
         Day = engine._day_model(db)
         for M in (Item, Switch, Run, Day):
             M.query.delete()
+        # سجلّ التدقيق مشترك بين كل الاختبارات في الجلسة (نفس قاعدة SQLite المؤقتة): اختبارات بتعدّ/بتقرا `.one()` على `v2_brain.*`
+        # (test_switch_put_rules وتليجرام) كانت بتتأثّر بأي كتابة سابقة ⇒ فشل حسب الترتيب. بنصفّيها قبل كل اختبار وبعده.
+        appmod.AuditLog.query.filter(appmod.AuditLog.action.like('v2_brain.%')).delete(synchronize_session=False)
         row = appmod.AIDailyUsage.query.get(day)
         if row:
             db.session.delete(row)
@@ -100,6 +103,7 @@ def env(monkeypatch, request):
         yield script
         for M in (Item, Switch, Run, Day):
             M.query.delete()
+        appmod.AuditLog.query.filter(appmod.AuditLog.action.like('v2_brain.%')).delete(synchronize_session=False)
         db.session.commit()
 
 

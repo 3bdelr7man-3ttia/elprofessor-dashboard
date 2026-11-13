@@ -656,7 +656,8 @@
     var chips = [stateChip(m.state), chip(m.typeLabel, 'grey')].concat(m.interactive ? [chip('تفاعلية', 'wine')] : [], m.sourceLabel ? [chip(m.sourceLabel, 'grey')] : []).join('');
     var tiles = '<div class="v2co-nums"><div class="v2co-tiles"><div class="v2co-tile"><span>المتعلّمون</span><b>' + esc(m.tiles.learners) + '</b></div>'
       + '<div class="v2co-tile"><span>الدروس</span><b>' + esc(m.tiles.lessons) + '</b></div>'
-      + '<div class="v2co-tile"><span>السعر</span><b>' + esc(m.tiles.price) + '</b><button type="button" class="v2co-link" data-a="goto" data-s="money" data-t="prices">غيّر السعر من «الفلوس»</button></div>'
+      + '<div class="v2co-tile"><span>السعر</span><b>' + esc(m.tiles.price) + '</b>' + (m.tiles.priceOthers ? '<small class="v2co-prs">بره مصر: ' + esc(m.tiles.priceOthers) + '</small>' : '')
+      + (c.type === 'recorded_free' ? '' : '<button type="button" class="v2co-link" data-a="prices" data-id="' + esc(c.id) + '">غيّر السعر</button>') + '</div>'
       + '<div class="v2co-tile' + (m.tiles.sales.na ? ' na' : '') + '"><span>المبيعات</span><b>' + esc(m.tiles.sales.text) + '</b></div></div><p class="v2co-fine">' + esc(m.completion) + '</p></div>';
     var bid = m.bid.show ? '<section class="v2co-card"><h2 class="v2co-h2">البيع</h2><label class="v2co-tg"><input type="checkbox" id="co_bid"' + (m.bid.enabled ? ' checked' : '') + ' data-a="bid" data-id="' + esc(c.id) + '"> يقبل عروض الأسعار</label>'
       + '<p class="v2co-fine">يستطيع المشتري أن يقترح سعرًا أقل، وتصلك العروض في «عروض الأسعار»</p></section>' : '';
@@ -774,6 +775,56 @@
       onStale: function () { load('courses', true); }
     });
   }
+  // ------------------------------------------------------------------ الأوراق: سعر الدورة لكل بلد (المكان الوحيد لتعديل السعر)
+  var AR_DIG = '٠١٢٣٤٥٦٧٨٩';
+  // خانة سعر: نقبل الأرقام العربية والفاصلة العربية؛ فاضي = فاضي؛ غير كده رقم موجب أو null (= غلط).
+  function parsePriceBox(v) {
+    var t = String(v == null ? '' : v).trim().replace(/[٠-٩]/g, function (d) { return String(AR_DIG.indexOf(d)); }).replace(/[٬,\s]/g, '').replace(/[٫]/g, '.');
+    if (t === '') return { blank: true };
+    if (!/^\d+(\.\d{1,2})?$/.test(t)) return { bad: true };
+    var n = Number(t);
+    return n > 0 && n <= 10000000 ? { n: n } : { bad: true };
+  }
+  function priceRowHtml(x, cur) {
+    var v = cur[x.key] > 0 ? String(cur[x.key]) : '';
+    var id = 'co_pr_' + x.key;
+    return '<div class="v2co-prr"><label for="' + id + '">' + esc(x.name) + '</label><span class="v2co-prin"><input id="' + id + '" type="text" inputmode="decimal" autocomplete="off" dir="ltr" value="' + esc(v) + '"><em>' + esc(U.curShort(x.cur)) + '</em></span></div>';
+  }
+  function openPrices(id) {
+    var c = courseById(id); if (!c) return;
+    var cur = (c.prices && typeof c.prices === 'object') ? c.prices : {};
+    var PC = U.PRICE_COUNTRIES, eg = PC[0], rest = PC.slice(1);
+    flow({
+      title: 'سعر الدورة',
+      form: '<p class="v2co-lead">سعر «' + esc(c.title) + '» لكل بلد. كل بلد بسعرها هي بعملتها، من غير تحويل.</p>'
+        + '<h3 class="v2co-h3">سعر مصر</h3>' + priceRowHtml(eg, cur) + '<p class="v2co-fine">سعر مصر لازم يتكتب للدورة المدفوعة.</p>'
+        + '<h3 class="v2co-h3">السعر بره مصر</h3>' + rest.map(function (x) { return priceRowHtml(x, cur); }).join('')
+        + '<p class="v2co-fine">سيب الخانة فاضية لو البلد دي تاخد سعر باقي البلاد. ولو باقي البلاد فاضي، الدورة مش هتتباع بره مصر إلا في البلاد اللي ليها سعر.</p>',
+      collect: function (s) {
+        var out = {}, rows = [];
+        for (var i = 0; i < PC.length; i++) {
+          var x = PC[i], p = parsePriceBox(q('#co_pr_' + x.key, s).value);
+          if (p.bad) return { ok: false, error: 'اكتب سعر ' + x.name + ' رقمًا صحيحًا، أو سيب الخانة فاضية' };
+          var was = cur[x.key] > 0 ? Number(cur[x.key]) : null, now = p.blank ? null : p.n;
+          if (x.key === 'eg' && now == null) return { ok: false, error: 'اكتب سعر مصر، هو الإلزامي للدورة المدفوعة' };
+          out[x.key] = now;
+          if (was !== now) rows.push([x.key === 'eg' ? 'مصر' : x.name, was == null ? 'بلا سعر' : U.moneyShort(was, x.cur), now == null ? 'بلا سعر' : U.moneyShort(now, x.cur)]);
+        }
+        if (!rows.length) return { ok: false, error: 'لم تغيّر أي سعر' };
+        return { ok: true, payload: { prices: out, rows: rows } };
+      },
+      review: function (p) {
+        return '<p class="v2co-lead">راجع ما سيتغير:</p><table class="v2co-diff"><thead><tr><th>البلد</th><th>الآن</th><th>بعد التعديل</th></tr></thead><tbody>'
+          + p.rows.map(function (r) { return '<tr><td>' + esc(r[0]) + '</td><td>' + esc(r[1]) + '</td><td><b>' + esc(r[2]) + '</b></td></tr>'; }).join('') + '</tbody></table>'
+          + '<p class="v2co-fine">الزائر بيشوف سعر بلده بس، وهو نفسه اللي بيتدفع.</p>';
+      },
+      btnNext: 'راجع التغيير', btnConfirm: 'أكّد الأسعار', busy: 'جارٍ الحفظ…',
+      send: function (p) { return ep().api('/v2/courses/' + encodeURIComponent(id) + '/prices', { method: 'PUT', body: { confirmed: true, prices: p.prices } }); },
+      onOk: function () { afterCourseWrite('حُفظت أسعار «' + c.title + '»'); },
+      onStale: function () { load('courses', true); }
+    });
+  }
+
   function openReturn(id) {
     var c = courseById(id); if (!c) return;
     var facts = courseFactsOf(c);
@@ -1156,7 +1207,7 @@
     var opts = '<option value="">البروفيسور</option>' + experts.filter(function (r) { return r.email; }).map(function (r) { return '<option value="' + esc(r.email) + '" data-name="' + esc(r.name) + '">' + esc(r.name) + '</option>'; }).join('');
     flow({
       title: 'أنشئ دورة',
-      form: '<p class="v2co-lead">تُنشأ الدورة مسودة لا يراها الناس. السعر يُحدَّد لاحقًا من «الفلوس».</p>'
+      form: '<p class="v2co-lead">تُنشأ الدورة مسودة لا يراها الناس. السعر يُحدَّد لاحقًا من صفحة الدورة.</p>'
         + fld('co_ti', 'عنوان الدورة', '<input id="co_ti" type="text" maxlength="160" autocomplete="off" value="' + esc(prefillTitle || '') + '">')
         + fld('co_ow', 'صاحب الدورة', '<select id="co_ow">' + opts + '</select>', srcState('experts') === 'error' ? 'قائمة المدرّبين: ' + NA : '')
         + fld('co_ty', 'النوع', '<select id="co_ty"><option value="recorded_paid">مسجّلة مدفوعة</option><option value="recorded_free">مسجّلة مجانية</option></select>'),
@@ -1170,7 +1221,7 @@
       },
       review: function (p) {
         var items = ['تُنشأ الدورة مسودة على المنصة باسم ' + (p.email ? p.name : 'البروفيسور') + '، ولا يراها الناس.', 'تضيف دروسها من «كل السجلات»، ثم تنشرها من صفحة الدورة.'];
-        if (p.type === 'recorded_paid') items.push('تحدّد سعرها من «الفلوس › الأسعار».');
+        if (p.type === 'recorded_paid') items.push('تحدّد سعرها من صفحة الدورة (سعر مصر أولًا، وبعده سعر كل بلد).');
         return '<p class="v2co-lead">ما سيحدث:</p>' + listHtml(items.map(esc));
       },
       btnNext: 'راجع قبل الإنشاء', btnConfirm: 'أنشئ المسودة', busy: 'جارٍ الإنشاء…',
@@ -1182,7 +1233,7 @@
       onOk: function (res, p) {
         load('courses', true);
         if (typeof done === 'function') { done(res, p); return; }
-        setNote('أُنشئت الدورة مسودة.' + (p.type === 'recorded_paid' ? ' حدّد سعرها من «الفلوس › الأسعار».' : ''), res && res.platform_course_id ? 'course:' + res.platform_course_id : undefined);
+        setNote('أُنشئت الدورة مسودة.' + (p.type === 'recorded_paid' ? ' حدّد سعرها من صفحة الدورة.' : ''), res && res.platform_course_id ? 'course:' + res.platform_course_id : undefined);
         if (res && res.platform_course_id) goPage(res.platform_course_id); else redraw();
       }
     });
@@ -1224,6 +1275,7 @@
     goto: function (el) { goSection(el.getAttribute('data-s'), el.getAttribute('data-t')); },
     approve: function (el) { openApprove(el.getAttribute('data-id'), el.getAttribute('data-unknown') === '1'); },
     'return': function (el) { openReturn(el.getAttribute('data-id')); },
+    prices: function (el) { openPrices(el.getAttribute('data-id')); },
     publishNow: function (el) { openVisibility(el.getAttribute('data-id'), 'publishNow'); },
     show: function (el) { openVisibility(el.getAttribute('data-id'), 'show'); },
     hide: function (el) { openVisibility(el.getAttribute('data-id'), 'hide'); },
@@ -1401,6 +1453,25 @@
     var apps = C.appTickets(rowsOf('apps', 'applications'), { now: now() });
     if (apps && apps.length) p.push(U.U(apps.length, ['طلب مدرّب جديد', 'طلبان من مدرّبين', 'طلبات من مدرّبين', 'طلبًا من مدرّبين']));
     return p.length ? p.join('، ') : 'لا شيء ينتظر قرارك';
+  };
+  // r25: أفعال بطاقات «محتاج قرارك» (الشريط) — نفس أوراق صفحة الدورة بالحرف. بنحمّل اللي ناقص الأول (القائمة · فحص النشر) وبعدين نفتح الورقة.
+  //   what = open | approve | return | live ؛ key = معرّف الدورة (أو الرابط المختصر للحيّة/open بـ{slug}) ؛ extra = { action } للحيّة.
+  CO.act = function (what, key, extra) {
+    extra = extra || {};
+    var needs = ['courses'];
+    if (what === 'live') needs.push('schedules');
+    if (what === 'approve' && key) needs.push('checklist:' + key);
+    needs.forEach(function (k) { load(k); });
+    var tries = 0;
+    (function go() {
+      if (needs.some(pending) && tries++ < 50) { setTimeout(go, 150); return; }
+      var c = extra.slug ? courseBySlug(extra.slug) : (key ? courseById(key) : null);
+      if (what === 'live') { openLiveDecision(extra.slug || key, extra.action); return; }
+      if (!c) { try { (window.toast || function () {})('تعذّر فتح الدورة، افتحها من «كل الدورات»'); } catch (e) {} return; }
+      if (what === 'open') goPage(c.id);
+      else if (what === 'approve') openApprove(c.id, checklistStateOf(c.id) !== 'ready');
+      else if (what === 'return') openReturn(c.id);
+    })();
   };
   CO.openCourse = function (id) { goPage(id); };
   // «أنشئ دورة» من خارج قسم الدورات (السوق: دورة من طلب): نفس الورقة الجديدة؛ opts.done(res) يُستدعى بعد النجاح بدل الانتقال لصفحة الدورة.

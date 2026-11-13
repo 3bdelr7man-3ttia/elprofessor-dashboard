@@ -7,7 +7,8 @@
     جسور الدورات ما بتعرّفوش): الفاعل بيروح لسجل التدقيق من التوكن.
   * ⛔ نداء واحد ولا إعادة محاولة. رد ضاع (٥٠٠/٥٠٢/٥٠٣/٥٠٤) = «ما وصلناش رد» + سطر سجل، مش «اترفض». ٤٠١/٤٠٣ من المنصة ⇒ ٥٠٢.
   * تدقيق عند النجاح بس، وبما **حدث** فعلًا (الأرشفة غير الحذف).
-  * ⛔ السعر والنسبة ما بيتعدّلوش من هنا أبدًا: لا حقل سعر في الإنشاء، و`trainer_share_pct` في الجسم بيتجاهل (النسب من جدول النسب).
+  * ⛔ السعر والنسبة ما بيتعدّلوش من أي مسار هنا غير مسار واحد: `PUT /api/v2/courses/<id>/prices` (سعر كل بلد بعملتها — r25). لا حقل سعر في الإنشاء،
+    و`trainer_share_pct` في الجسم بيتجاهل (النسب من جدول النسب).
 
 `register(app, g)` بتتنادى من app.py بسطر واحد، و`g` = globals() بتاعته (الديكوريترز والمساعدات والموديلات).
 """
@@ -21,6 +22,9 @@ PAYOUT_MODELS = ('share', 'hourly')
 COURSE_TYPES = ('recorded_paid', 'recorded_free')
 LIVE_ACTIONS = ('confirm', 'extend', 'cancel')
 OFFER_DECISIONS = ('approve', 'reject', 'counter')
+# بلاد التسعير (نفس `services/pricing_countries.PRICE_COUNTRIES` على المنصة). العملة بتتحدد على المنصة من البلد — مش من هنا ولا من المتصفح.
+PRICE_COUNTRIES = ('eg', 'sa', 'ae', 'kw', 'qa', 'om', 'default')
+PRICE_MAX = 10000000
 
 
 def _plain_int(v):
@@ -173,6 +177,33 @@ def register(app, g):
             return err('اكتب ملاحظاتك أولًا، فهي تصل إلى صاحب الدورة')
         note = note[:NOTE_MAX]
         return write('POST', '/api/bridge/courses/%s/reject' % quote(course_id, safe=''), {'note': note}, 'course.reject', course_id, {'note_len': len(note)})
+
+    # ------------------------------------------------------------------ سعر الدورة لكل بلد (المكان الوحيد لتعديل السعر)
+    @app.route('/api/v2/courses/<course_id>/prices', methods=['PUT'])
+    @token_required
+    @roles_required('admin')
+    def v2co_prices(course_id):
+        bad, b = guard(course_id)
+        if bad:
+            return bad
+        prices = b.get('prices')
+        if not isinstance(prices, dict) or not prices:
+            return err('اكتب سعر مصر على الأقل')
+        out = {}
+        for key, val in prices.items():
+            k = str(key).strip().lower()
+            if k not in PRICE_COUNTRIES:
+                return err('بلد غير معروف في الأسعار')
+            if val is None or (isinstance(val, str) and not val.strip()):
+                out[k] = None      # فاضي = شيل سعر البلد دي
+                continue
+            n = _plain_number(val)
+            if n is None or n != n or n < 0 or n > PRICE_MAX:
+                return err('اكتب السعر رقمًا صحيحًا')
+            out[k] = n if n > 0 else None
+        # المنصة هي اللي بتحكم (سعر مصر إلزامي للمدفوعة، والعملة من البلد)؛ بنبعت المبالغ بس.
+        return write('PUT', '/api/bridge/courses/%s' % quote(course_id, safe=''), {'prices': out}, 'course.prices', course_id,
+                     {'countries': sorted(out.keys())})
 
     # ------------------------------------------------------------------ ظهور · عروض أسعار · أرشفة/حذف
     @app.route('/api/v2/courses/<course_id>/visibility', methods=['POST'])

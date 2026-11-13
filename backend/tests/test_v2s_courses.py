@@ -685,7 +685,7 @@ def test_page_model():
                           'stall_lesson': {'index': 4, 'title': 'الجزاءات', 'learners': 5}}]}
     st = _co('statFor', stats, c)
     m = _co('pageModel', c, None, st, None, None, {'now': NOW})
-    assert m['tiles']['sales']['text'] == '١٬٠٠٠ جنيه + ٥٠ ريال' and m['completion'] == 'يكملها ٦٤٪، يتوقف أغلبهم عند الدرس ٤: الجزاءات'
+    assert m['tiles']['sales']['text'] == '١٬٠٠٠ ج و٥٠ ر.س' and m['completion'] == 'يكملها ٦٤٪، يتوقف أغلبهم عند الدرس ٤: الجزاءات'
     assert m['state'] == 'published' and m['bid']['show'] is True and m['danger'] == 'archive' and m['secondary'][0]['key'] == 'hide'
     m = _co('pageModel', c, None, None, None, None, {'now': NOW})
     assert m['tiles']['sales'] == {'text': 'غير متاح بعد', 'na': True} and m['completion'] == 'نسبة الإكمال: غير متاح بعد'

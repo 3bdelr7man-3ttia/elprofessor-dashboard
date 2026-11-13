@@ -90,7 +90,14 @@
     // R24 م٢: دعوات الأعضاء اللي بتنتظر موافقتك (مصدر الدعوات) — بتتجمّع مع باقي طلبات نفس الشخص في بطاقة واحدة.
     var inviteRows = (stateOf('invites') === 'ready' && D.invites && !D.invites.missing)
       ? (D.invites.rows || []).filter(function (i) { return i.status === 'awaiting_approval'; }) : [];
-    var split = L.v2Split(rows, payouts, Q, { now: now, inboxFailed: inboxFailed, inboxTruncated: inboxTrunc, fyiRows: fyiRows, hidden: hiddenBase, snooze: snooze,
+    // r25: طلبات السوق في حارة غلط (وبلا عروض) — من نفس منطق السوق (`cards`)، مصدر السوق جاهز وغير ناقص بس.
+    var marketLane = [];
+    try {
+      var MX = L.v2sMarket, md = D.market;
+      if (MX && stateOf('market') === 'ready' && md && !md.missing && Array.isArray(md.rows))
+        marketLane = MX.cards(MX.merge(md.rows, md.raw), now).filter(function (c) { return c.primary && c.primary.act === 'relane'; });
+    } catch (e) { marketLane = []; }
+    var split = L.v2Split(rows, payouts, Q, { marketLane: marketLane, now: now, inboxFailed: inboxFailed, inboxTruncated: inboxTrunc, fyiRows: fyiRows, hidden: hiddenBase, snooze: snooze,
                                               stuck: d3 ? d3.stuck : null, offers: d3 ? d3.offers : null, brainItems: brainItems, invites: inviteRows });
     extras.hidden = split.hiddenRows;
     // توفّر المصادر للمربّعات: true وصل · false فشل · undefined لسه بيتحمّل.
@@ -654,6 +661,12 @@
       case 'offer_reject': return offerAct(c, 'reject');
       case 'send': return track(c, E.expertFileSend(r, a.email, a.name, '', null), 'أُرسل «' + c.title + '» إلى ' + a.name);
       case 'decide': return a.confirm ? publishModal(c, a) : track(c, E.decideInboxItem(r, a.action, null, ''), doneVerb(c), a.action === 'approve' ? 'approved' : (a.action === 'reject' ? 'rejected' : ''));
+      case 'market_relane': S.ext = null; return marketAct('relane', a.id, a.target);
+      case 'market_open': S.ext = null; return marketAct('open', a.id);
+      case 'course_open': S.ext = null; return courseAct('open', a.id, { slug: a.slug });
+      case 'course_approve': S.ext = null; return courseAct('approve', a.id);
+      case 'course_return': S.ext = null; return courseAct('return', a.id);
+      case 'live_decide': S.ext = null; return courseAct('live', a.slug, { slug: a.slug, action: a.action });
       case 'resolve': return track(c, E.resolveInboxItem(r, null), 'أُنهي: ' + c.title);
       case 'payout_settle': return payoutModal(c, 'settle');
       case 'payout_reject': return payoutModal(c, 'reject');
@@ -661,6 +674,13 @@
       case 'pay_reject': return payReject(c);
       case 'brain_approve': case 'brain_reject': case 'brain_edit': return brainAct(c, a);
     }
+  }
+  function marketAct(what, id, target) {
+    if (window.V2S_MARKET && V2S_MARKET.act) V2S_MARKET.act(what, id, target);
+  }
+  // r25: بطاقات الدورات في الشريط: الورقة نفسها بتتفتح من قسم الدورات (القرار بيتأكّد هناك، والشريط بيتحدّث لما الطابور يتجدّد).
+  function courseAct(what, key, extra) {
+    if (window.V2CO && V2CO.act) V2CO.act(what, key, extra);
   }
   // brain2: اعتماد/رفض/تعديل اقتراح العقل. الورقة (بنصها) في V2BRAIN؛ بعد النجاح ننهي البطاقة بـ`track` كأي قرار، والقفل (ردّ ضائع/حُسم من قبل) يقفل البطاقة.
   function brainAct(c, a) {

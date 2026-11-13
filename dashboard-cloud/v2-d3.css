@@ -340,3 +340,12 @@
 .v3-split b{font:800 22px/1.3 'Cairo',sans-serif;color:#21262E}
 .v3-split i:last-child b{color:#9E2B4E}
 .v3-intro>summary{cursor:pointer;display:flex;align-items:center;min-height:44px;font:700 13.5px 'Cairo',sans-serif;color:#6B665C}
+
+/* r25 — سطر «تقريبًا بالدولار» (للتقارير بس) */
+.v3-usd{display:flex;flex-wrap:wrap;gap:4px 14px;align-items:baseline;margin:-4px 0 16px;padding:10px 14px;border-radius:12px;background:#F4EFE6;color:#21262E;font-size:14.5px;line-height:1.8}
+.v3-usd b{font-weight:800}
+.v3-usd span{color:var(--mute);font-size:13px}
+
+/* r25 — أكتر من عملة في الرقم الواحد: كل عملة في سطرها بحجم أصغر، من غير جمع */
+.v3-big.multi{font-size:22px;line-height:1.5;display:grid;gap:2px}
+.v3-big.multi .v3-cur{display:block}

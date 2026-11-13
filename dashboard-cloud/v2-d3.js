@@ -42,15 +42,15 @@
     ads: function () { return '/v2/ads-ledger'; },
     stuck: function () { return '/v2/payments/stuck'; },
     refunds: function () { return '/v2/refunds/pending'; },
+    rates: function () { return '/v2/money/rates'; },
     pricesBook: function () { return '/v2/prices/book'; },
-    pricesCourse: function () { return '/v2/prices/course'; },
     paid: function () { return '/platform-wallet-payouts?status=paid'; },
     rejected: function () { return '/platform-wallet-payouts?status=rejected'; },
     offers: function () { return '/v2/book-offers?status=in_review'; },
     requests: function () { return '/v2/book-requests'; }
   };
   var LABEL = { revenues: 'دفتر الإيرادات', income: 'مدفوعات هذا الشهر', settings: 'الحد الأدنى للسحب', shares: 'جدول النسب', ads: 'أرصدة الإعلانات', stuck: 'المدفوعات العالقة',
-                refunds: 'الاستردادات اليدوية', pricesBook: 'أسعار الكتب', pricesCourse: 'أسعار الدورات', paid: 'التحويلات المنفّذة', rejected: 'التحويلات المرفوضة',
+                refunds: 'الاستردادات اليدوية', pricesBook: 'أسعار الكتب', paid: 'التحويلات المنفّذة', rejected: 'التحويلات المرفوضة',
                 offers: 'عروض الكتب', requests: 'طلبات القرّاء' };
   function srcOf(k) { return SRC[k] || (SRC[k] = { state: 'idle', data: null, status: 0, seq: 0 }); }
   function load(k, force) {
@@ -123,10 +123,14 @@
   function numbersHtml(board) {
     return '<div class="v3-nums">' + board.numbers.map(function (n) {
       return '<article class="v3-num k-' + n.key + (n.na ? ' na' : '') + '"><h3>' + esc(n.label) + '</h3>'
-        + '<p class="v3-big' + (n.na ? ' na' : '') + '">' + esc(n.text) + '</p>'
+        + '<p class="v3-big' + (n.na ? ' na' : '') + (n.lines && n.lines.length > 1 ? ' multi' : '') + '">'
+        + (n.lines && n.lines.length > 1 ? n.lines.map(function (l) { return '<span class="v3-cur">' + esc(l) + '</span>'; }).join('') : esc(n.text)) + '</p>'
         + (n.others ? '<p class="v3-oth">' + esc(n.others) + '</p>' : '')
         + '<p class="v3-note">' + esc(n.na && n.why ? n.why : n.note) + '</p></article>';
     }).join('') + '</div>';
+  }
+  function usdLineHtml(board) {
+    return board.usdLine ? '<p class="v3-usd" data-usd="1"><b>' + esc(board.usdLine.text) + '</b><span>' + esc(board.usdLine.ratesText) + '</span></p>' : '';
   }
   function payRow(r) {
     return '<li class="v3-pay" data-id="' + esc(r.id) + '"><div class="v3-pid"><b>' + personLink(r.name, r.email) + '</b><span>' + esc([r.what, r.method].filter(Boolean).join('، ')) + '</span>'
@@ -138,7 +142,7 @@
     if (!bars) return unavailable('مصدر الدخل');
     var rows = bars.rows.map(function (r) {
       return '<li><div class="v3-bl"><span>' + esc(r.label) + '</span><b>' + esc(r.text) + '</b></div><div class="v3-bar" role="img" aria-label="' + esc(r.label + ': ' + r.text) + '"><i style="width:' + r.width + '%"></i></div>'
-        + (r.others.length ? '<small>بعملة أخرى: ' + esc(r.others.join('، ')) + '</small>' : '') + '</li>';
+        + '</li>';
     }).join('');
     return '<ul class="v3-bars">' + rows + '</ul><p class="v3-fine">' + esc(bars.note) + '</p>';
   }
@@ -167,7 +171,8 @@
   function drawOverview(v) {
     var per = S.period, t = now();
     var revenues = data('revenues'), escrow = epEscrow(), payouts = epPayouts();
-    var board = L.v2MoneyBoard({ revenues: revenues, escrow: escrow, payouts: payouts }, per, t);
+    var rates = data('rates');
+    var board = L.v2MoneyBoard({ revenues: revenues, escrow: escrow, payouts: payouts, rates: rates }, per, t);
     var failed = srcFailed(['revenues', 'refunds']).concat(epFailed([['escrow', 'أموال الضمان'], ['walletPayouts', 'طلبات السحب'], ['inbox', 'الدفعات بلا ملف']]));
     var seg = L.PERIODS.map(function (p) {
       return '<button type="button" role="tab" class="v3-pb' + (p.key === per ? ' on' : '') + '" aria-selected="' + (p.key === per) + '" data-a="period" data-p="' + p.key + '">' + esc(p.label) + '</button>';
@@ -179,7 +184,7 @@
     else due = '<ul class="v3-list">' + rows.slice(0, 5).map(payRow).join('') + '</ul>'
       + '<button type="button" class="v3-link" data-a="goto" data-s="money" data-t="payouts">كل التحويلات (' + esc(U.ar(rows.length)) + ')</button>';
     var inc = L.v2Income(revenues, per, t);
-    var bars = (inc || data('income')) ? L.v2IncomeBars(inc, data('income'), per) : null;
+    var bars = (inc || data('income')) ? L.v2IncomeBars(inc, data('income'), per, rates) : null;
     var barsBody = (!bars && srcState('revenues') === 'loading') ? loadingBlock('الدخل') : barsHtml(bars);
     var refunds = L.v2Refunds(data('refunds'), disputeRefunds(), t);
     var refBody;
@@ -190,7 +195,7 @@
     if (refunds.more) refBody = '<div class="v3-warn" role="status">المعروض أقدم ' + esc(U.ar(refunds.more.shown)) + (refunds.more.total ? ' من ' + esc(U.ar(refunds.more.total)) : '') + ' استردادًا، وبعد البتّ في هذه يظهر الباقي</div>' + refBody;
     v.innerHTML = '<div class="v3" data-board="overview">' + noteStrip() + warnStrip(failed)
       + '<div class="v3-top"><div class="v3-seg" role="tablist" aria-label="الفترة">' + seg + '</div>' + introHtml() + '</div>'
-      + numbersHtml(board)
+      + numbersHtml(board) + usdLineHtml(board)
       + '<div class="v3-two">' + section('التحويلات المستحقة', 'طلبات سحب بانتظار تسجيل التحويل', due) + section('من أين جاء الدخل', board.period.label, barsBody) + '</div>'
       + section('استردادات تنتظر قرارك', 'الكتب لا تُسترد', refBody, 'v3-wide') + '</div>';
     wire(v);
@@ -385,8 +390,7 @@
   function priceBlock(kind, title, key) {
     var st = srcState(key), res = L.v2Prices(data(key));
     var body;
-    if (st === 'closed' && kind === 'course') body = '<div class="v3-empty"><b>الدورات مغلقة حتى الآن</b><p>أسعار الدورات تظهر هنا حين تُفتح من المنصة.</p></div>';
-    else if (st === 'closed') body = '<div class="v3-empty"><b>متجر الكتب لم يُفتح بعد</b><p>أسعار الكتب تظهر هنا حين يُفتح المتجر.</p></div>';
+    if (st === 'closed') body = '<div class="v3-empty"><b>متجر الكتب لم يُفتح بعد</b><p>أسعار الكتب تظهر هنا حين يُفتح المتجر.</p></div>';
     else if (!res) body = st === 'loading' || st === 'idle' ? loadingBlock(title) : unavailable(title);
     else {
       var view = kind === 'book' ? L.v2PricesView(res, S.pf) : null;
@@ -399,8 +403,8 @@
     return section(title, (kind === 'book' ? 'أقل سعر في كل بلد' : 'أقل سعر في كل بلد، من المنصة') + vis, body);
   }
   function drawPrices(v) {
-    v.innerHTML = '<div class="v3" data-board="prices">' + noteStrip() + '<p class="v3-ptxt v3-lead">الأسعار تُعدَّل من هنا فقط، وكل تعديل يمرّ على ورقة تراجع فيها ما سيتغير قبل التأكيد</p>'
-      + priceBlock('book', 'الكتب', 'pricesBook') + priceBlock('course', 'الدورات', 'pricesCourse') + '</div>';
+    v.innerHTML = '<div class="v3" data-board="prices">' + noteStrip() + '<p class="v3-ptxt v3-lead">أسعار الكتب والأدلّة تُعدَّل من هنا، وسعر الدورة من صفحة الدورة. وكل تعديل يمرّ على ورقة تراجع فيها ما سيتغير قبل التأكيد</p>'
+      + priceBlock('book', 'الكتب', 'pricesBook') + '</div>';      // r25: سعر الدورة اتنقل لصفحة الدورة نفسها (سعر كل بلد) — مفيش لوحة تانية
     wire(v);
   }
 
@@ -659,8 +663,8 @@
         send: function (p) {
           return E.api('/v2/prices/' + kind + '/' + encodeURIComponent(id), { method: 'PUT', body: { versions: p.built.versions, visible: p.built.visible, note: p.note, rev: form.rev, title: form.title, confirmed: true } });
         },
-        onOk: function () { setNote('حُفظت أسعار «' + form.title + '»'); load(kind === 'book' ? 'pricesBook' : 'pricesCourse', true); redraw(); if (typeof onDone === 'function') { try { onDone(); } catch (e) {} } },
-        onStale: function () { load(kind === 'book' ? 'pricesBook' : 'pricesCourse', true); }
+        onOk: function () { setNote('حُفظت أسعار «' + form.title + '»'); load('pricesBook', true); redraw(); if (typeof onDone === 'function') { try { onDone(); } catch (e) {} } },
+        onStale: function () { load('pricesBook', true); }
       });
     }).catch(function (e) {
       if (document.body.contains(s0)) window.closeModal();
@@ -710,7 +714,7 @@
 
   // —— اعتماد عرض كتاب بالأسعار (قابلة للتعديل)
   function pricesFormFor(kind) {
-    var list = data(kind === 'book' ? 'pricesBook' : 'pricesCourse');
+    var list = data('pricesBook');
     if (!list) return null;
     var resp = { prices: { kind: 'book', id: '', title: '', visible: false, rev: 0, versions: {} }, countries: list.countries, currencies: list.currencies, versions_allowed: ['read', 'pdf'] };
     return L.v2PriceForm(resp);
@@ -943,7 +947,7 @@
     qa('[data-a="price"]', v).forEach(function (b) {
       b.onclick = function () {
         var kind = b.getAttribute('data-kind'), id = b.getAttribute('data-id');
-        var res = L.v2Prices(data(kind === 'book' ? 'pricesBook' : 'pricesCourse')), row = res && res.rows.filter(function (r) { return r.id === id; })[0];
+        var res = L.v2Prices(data('pricesBook')), row = res && res.rows.filter(function (r) { return r.id === id; })[0];
         openPrice(kind, id, row ? row.title : id, null, row && row.group !== 'book' ? row : null);
       };
     });
@@ -996,10 +1000,10 @@
   // ------------------------------------------------------------------ نقطة الدخول
   function isCurrent(mod) { return !!(host().current && host().current() === mod && S.view && document.body.contains(S.view)); }
   var NEEDS = {
-    v2m_overview: { src: ['revenues', 'income', 'refunds'], ep: ['walletPayouts', 'escrow', 'inbox', 'opsQueue'] },
+    v2m_overview: { src: ['revenues', 'income', 'refunds', 'rates'], ep: ['walletPayouts', 'escrow', 'inbox', 'opsQueue'] },
     v2m_payouts: { src: ['settings', 'paid', 'rejected'], ep: ['walletPayouts'] },
     v2m_receipts: { src: ['stuck'], ep: ['inbox', 'opsQueue'] },
-    v2m_prices: { src: ['pricesBook', 'pricesCourse'], ep: [] },
+    v2m_prices: { src: ['pricesBook'], ep: [] },
     v2m_shares: { src: ['shares', 'settings'], ep: [] },
     v2m_ads: { src: ['ads'], ep: [] },
     v2b_offers: { src: ['offers', 'pricesBook'], ep: [] },

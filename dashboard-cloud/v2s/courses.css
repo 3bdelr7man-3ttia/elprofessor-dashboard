@@ -401,3 +401,13 @@ html.v2co-legacy-modal #epModal .fld input,html.v2co-legacy-modal #epModal .fld 
   .v2co-legacy .tabbar .tab{min-height:52px!important}
 }
 @media(prefers-reduced-motion:reduce){.v2co-sk{animation:none}}
+
+/* r25 — سعر الدورة لكل بلد */
+.v2co-prs{display:block;margin-top:4px;color:var(--mute);font-size:13px;line-height:1.7}
+.v2co-h3{font:800 15px 'Cairo',sans-serif;margin:14px 0 8px}
+.v2co-prr{display:grid;grid-template-columns:minmax(88px,1fr) minmax(140px,1.4fr);gap:10px;align-items:center;margin-bottom:8px}
+.v2co-prr label{font:700 14px 'Cairo',sans-serif}
+.v2co-prin{display:flex;align-items:center;gap:8px}
+.v2co-prin input{flex:1;min-width:0;min-height:48px;border:1px solid #D9CFC0;border-radius:12px;padding:8px 12px;font-size:16px;background:#fff;color:#21262E;text-align:end}
+.v2co-prin em{font-style:normal;color:var(--mute);font-size:14px;min-width:44px}
+@media (max-width:420px){.v2co-prr{grid-template-columns:1fr}}

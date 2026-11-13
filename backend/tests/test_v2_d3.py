@@ -462,7 +462,7 @@ def test_a_failed_source_is_null_never_zero():
     # الصفر الحقيقي (المصدر وصل وقال لا شيء) شيء تاني: «٠ جنيه» مش «غير متاح»
     empty = L('v2MoneyBoard', {'revenues': [], 'escrow': [], 'payouts': []}, 'month', NOW)
     nums = {n['key']: n for n in empty['numbers']}
-    assert nums['income']['na'] is False and nums['income']['text'] == '٠ جنيه'
+    assert nums['income']['na'] is False and nums['income']['text'] == '٠'
     assert nums['held']['na'] is False and nums['owed']['na'] is False
 
 
@@ -476,9 +476,9 @@ def test_the_four_numbers_with_a_plain_line_each_and_the_net_is_not_available():
     n = {x['key']: x for x in b['numbers']}
     assert [x['key'] for x in b['numbers']] == ['income', 'held', 'owed', 'net']
     assert [x['label'] for x in b['numbers']] == ['دخل', 'محجوز حتى يُسلَّم العمل', 'مستحق للخبراء والمدرّبين', 'صافي البروفيسور']
-    assert n['income']['text'] == '١٬٣٠٠٫٥٠ جنيه' and 'بعملة أخرى' in n['income']['others'] and '٣٠ دولار' in n['income']['others']
-    assert n['held']['text'] == '١٬٦٠٠٫٢٥ جنيه' and '٢٠٠ دولار' in n['held']['others'] and n['held']['count'] == 3, 'المحرَّر لا يُحسب'
-    assert n['owed']['text'] == '٦٠٠٫٥٠ جنيه' and '٣٬٥٠٠٫٥٠ ريال' in n['owed']['others'], 'الكسور محفوظة والريال لا يدخل الجنيه'
+    assert n['income']['text'] == '١٬٣٠٠٫٥٠ ج و١٥٠ ر.س و٣٠ دولار' and n['income']['others'] == '', 'كل عملة بمبلغها في سطر واحد، بلا جنيه أساسي'
+    assert n['held']['text'] == '١٬٦٠٠٫٢٥ ج و٢٠٠ دولار' and n['held']['count'] == 3, 'المحرَّر لا يُحسب'
+    assert n['owed']['text'] == '٦٠٠٫٥٠ ج و٣٬٥٠٠٫٥٠ ر.س', 'الكسور محفوظة والريال لا يدخل الجنيه'
     assert n['net']['na'] is True and n['net']['text'] == 'غير متاح بعد' and n['net']['why']
     for x in b['numbers']:
         assert x['note'] and re.search(r'[؀-ۿ]', x['note'])
@@ -495,9 +495,9 @@ def test_money_text_formats_each_currency_in_arabic_digits():
     got = [L('util.moneyText', a, c) for (a, c), _ in cases]
     assert got == [w for _, w in cases]
     line = L('v2MoneyLine', [{'currency': 'EGP', 'amount': 1000}, {'currency': 'USD', 'amount': 30}, {'currency': 'SAR', 'amount': 100}])
-    assert line['main'] == '١٬٠٠٠ جنيه' and line['othersText'] == 'بعملة أخرى: ٣٠ دولار، ١٠٠ ريال'
+    assert line['main'] == '١٬٠٠٠ ج و١٠٠ ر.س و٣٠ دولار' and line['othersText'] == ''
     only_foreign = L('v2MoneyLine', [{'currency': 'USD', 'amount': 30}])
-    assert only_foreign['main'] == '٠ جنيه' and only_foreign['othersText'] == 'بعملة أخرى: ٣٠ دولار'
+    assert only_foreign['main'] == '٣٠ دولار' and only_foreign['othersText'] == '', 'ولا جنيه صفر قدام الدولار'
     assert L('util.curLong', 'SAR') == 'ريال سعودي' and L('util.curLong', 'QAR') == 'ريال قطري' and L('util.curLong', 'KWD') == 'دينار كويتي'
 
 
@@ -507,11 +507,11 @@ def test_income_bars_use_the_payments_split_for_the_month_and_the_ledger_otherwi
     led = L('v2IncomeBars', inc, None, 'month')
     assert led['source'] == 'ledger' and [r['label'] for r in led['rows']] == ['ملفات الخبراء', 'الدورات', 'الكتب', 'أخرى']
     assert led['rows'][0]['amount'] == 1000.5 and led['rows'][0]['width'] == 100 and 'الاستشارات العادية' in led['note']
-    assert {f['currency'] for f in led['foreign']} == {'USD', 'SAR'}, 'العملات الأجنبية خارج الأعمدة'
+    assert 'ر.س' in ' '.join(r['text'] for r in led['rows']) and '٣٠ دولار' in ' '.join(r['text'] for r in led['rows']), 'كل خدمة بعملاتها كلها'
     bridge = {'services': [{'key': 'expert_files', 'totals': [{'currency': 'EGP', 'amount': 9300}]}, {'key': 'courses', 'totals': [{'currency': 'EGP', 'amount': 2700}, {'currency': 'SAR', 'amount': 300}]},
                            {'key': 'books', 'totals': [{'currency': 'EGP', 'amount': 1100}]}, {'key': 'other', 'totals': []}]}
     br = L('v2IncomeBars', inc, bridge, 'month')
-    assert br['source'] == 'payments' and br['rows'][0]['amount'] == 9300 and br['rows'][3]['amount'] == 0 and br['foreign'] == [{'currency': 'SAR', 'amount': 300}]
+    assert br['source'] == 'payments' and br['rows'][0]['amount'] == 9300 and br['rows'][3]['amount'] == 0 and br['rows'][1]['text'] == '٢٬٧٠٠ ج و٣٠٠ ر.س'
     assert L('v2IncomeBars', inc, bridge, 'year')['source'] == 'ledger', 'اليوم والسنة من الدفتر (الجسر شهري)'
     assert L('v2IncomeBars', None, bridge, 'month')['source'] == 'payments', 'الجسر يكفي لو الدفتر وقع'
     assert L('v2IncomeBars', None, None, 'month') is None
@@ -786,11 +786,11 @@ def test_ads_ledger_rows_and_entries():
     resp = {'items': [{'owner_kind': 'book', 'owner_id': 'a', 'balance': [{'currency': 'EGP', 'amount': 1850}], 'last_entry_at': _iso(4), 'owner_email': 'n@x.test', 'entries': 5, 'title': 'دليل المستأجر'},
                       {'owner_kind': 'course', 'owner_id': 'c', 'balance': [{'currency': 'SAR', 'amount': 600}, {'currency': 'EGP', 'amount': 5}], 'last_entry_at': _iso(200), 'owner_email': '', 'title': ''}]}
     rows = L('v2AdsLedger', resp, NOW)
-    assert [r['id'] for r in rows] == ['a', 'c'] and rows[0]['balanceText'] == '١٬٨٥٠ جنيه' and rows[0]['last'] == 'منذ ٤ ساعات' and rows[0]['ownerEmail'] == 'n@x.test'
-    assert rows[1]['title'] == 'عمل بلا عنوان' and rows[1]['kindText'] == 'دورة' and rows[1]['balanceText'] == '٥ جنيه، ٦٠٠ ريال' and rows[1]['ownerEmail'] == ''
+    assert [r['id'] for r in rows] == ['a', 'c'] and rows[0]['balanceText'] == '١٬٨٥٠ ج' and rows[0]['last'] == 'منذ ٤ ساعات' and rows[0]['ownerEmail'] == 'n@x.test'
+    assert rows[1]['title'] == 'عمل بلا عنوان' and rows[1]['kindText'] == 'دورة' and rows[1]['balanceText'] == '٥ ج و٦٠٠ ر.س' and rows[1]['ownerEmail'] == ''
     ent = L('v2AdsEntries', {'balance': [{'currency': 'EGP', 'amount': 1850}], 'entries': [
         {'entry': 'deposit', 'amount': 2000, 'currency': 'EGP', 'at': _iso(24 * 9)}, {'entry': 'spend', 'amount': 150, 'currency': 'EGP', 'at': _iso(24 * 3)}]}, NOW)
-    assert [(e['entry'], e['sign']) for e in ent['rows']] == [('صرف على الإعلانات', '−'), ('إيداع', '+')] and ent['balance']['main'] == '١٬٨٥٠ جنيه'
+    assert [(e['entry'], e['sign']) for e in ent['rows']] == [('صرف على الإعلانات', '−'), ('إيداع', '+')] and ent['balance']['main'] == '١٬٨٥٠ ج'
 
 
 @needs_node

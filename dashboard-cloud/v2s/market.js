@@ -533,6 +533,14 @@
     if (!(window.V2CO && typeof window.V2CO.create === 'function')) { toast('تعذّر فتح إنشاء الدورة الآن'); return; }
     window.V2CO.create(title || '', { done: function () { toast('أُنشئت الدورة مسودة'); if (ep()) ep().reload('courses', null); redraw(); } });
   }
+  // r25: أفعال بطاقات الشريط (انقله · افتح الطلب) — نفس ورقة النقل ونفس درج التفاصيل. الصف من بيانات اللوحة (مش لازم تكون مفتوحة).
+  M.act = function (what, id, target) {
+    var g = boardData(), r = null;
+    (g.rows || []).forEach(function (x) { if (String(x.id) === String(id)) r = x; });
+    if (!r) { toast('تعذّر فتح الطلب، افتحه من «الطلبات»'); return; }
+    if (what === 'relane') openRelane(r, target || X.laneOf(r.need_kind));
+    else if (host().openSection) host().openSection('market', 'requests');
+  };
   M.courseSheet = courseSheet;
 
   // ------------------------------------------------------------------ ورقة التصفية (اللوحة في الموبايل · وكل الطلبات)

@@ -248,3 +248,59 @@ def test_list_revenues_exposes_fx_fields(ctx):
     assert row['needs_fx'] is True
     assert row['currency'] == 'AED'
     assert row['amount_original'] == 75
+
+
+# ---------------------------------------------------------------------------
+# r25 — استرداد تجديد برو: event=refund + refund_of + full_refund + مبلغ سالب
+# ---------------------------------------------------------------------------
+
+def _net_by_currency(rows):
+    out = {}
+    for r in rows:
+        if r.amount_egp:
+            out['EGP'] = out.get('EGP', 0) + r.amount_egp
+        if r.amount_usd:
+            out['USD'] = out.get('USD', 0) + r.amount_usd
+        if r.needs_fx and r.amount_original:
+            out[r.currency] = out.get(r.currency, 0) + r.amount_original
+    return {k: v for k, v in out.items() if abs(v) > 1e-9}
+
+
+def test_refund_event_books_a_negative_row_against_the_original_and_nets_out(ctx):
+    client, secret_h = ctx
+    _post(client, secret_h, payment_id='PAY-PRO-1', amount=1000, currency='EGP', kind='subscription')
+    _post(client, secret_h, payment_id='PAY-PRO-2', amount=300, currency='SAR', kind='subscription')
+    r = _post(client, secret_h, payment_id='REF-1', amount=-400, currency='EGP', kind='subscription',
+              event='refund', refund_of='PAY-PRO-1', full_refund=False, unknown_key='x')
+    assert r.status_code == 200 and not r.get_json().get('duplicate')
+    r = _post(client, secret_h, payment_id='REF-2', amount=-300, amount_original=-300, currency='SAR',
+              event='refund', refund_of='PAY-PRO-2', full_refund=True)
+    assert r.status_code == 200
+    with flask_app.app_context():
+        ref = Revenue.query.filter_by(payment_id='refund:REF-1').first()
+        assert ref.amount_egp == -400 and ref.refund_of == 'PAY-PRO-1' and ref.source == 'subscription'
+        assert 'full' not in ref.notes and 'partial' in ref.notes
+        sar = Revenue.query.filter_by(payment_id='refund:REF-2').first()
+        assert sar.needs_fx and sar.currency == 'SAR' and sar.amount_original == -300
+        net = _net_by_currency(Revenue.query.all())
+        assert net == {'EGP': 600}, net          # ريال الدفعة الأصلية اتخصم بالكامل (٣٠٠ − ٣٠٠)
+
+
+def test_refund_event_is_idempotent_and_never_collides_with_the_original(ctx):
+    client, secret_h = ctx
+    _post(client, secret_h, payment_id='PAY-X', amount=500, currency='USD', kind='course')
+    # المنصة ممكن تبعت نفس payment_id الأصلي للاسترداد: لازم يتسجّل صف مستقل مش «تكرار»
+    r1 = _post(client, secret_h, payment_id='PAY-X', amount=-500, currency='USD', event='refund', refund_of='PAY-X', full_refund=True)
+    r2 = _post(client, secret_h, payment_id='PAY-X', amount=-500, currency='USD', event='refund', refund_of='PAY-X', full_refund=True)
+    assert r1.status_code == 200 and not r1.get_json().get('duplicate')
+    assert r2.get_json().get('duplicate') is True
+    with flask_app.app_context():
+        assert _net_by_currency(Revenue.query.all()) == {}
+
+
+def test_a_positive_amount_on_a_refund_event_is_still_booked_negative(ctx):
+    client, secret_h = ctx
+    _post(client, secret_h, payment_id='PAY-Y', amount=200, currency='EGP')
+    _post(client, secret_h, payment_id='REF-Y', amount=200, currency='EGP', event='refund', refund_of='PAY-Y', full_refund=True)
+    with flask_app.app_context():
+        assert Revenue.query.filter_by(payment_id='refund:REF-Y').first().amount_egp == -200

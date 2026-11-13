@@ -397,6 +397,8 @@ class Revenue(db.Model):
     amount_original = db.Column(db.Float, nullable=True)
     currency = db.Column(db.String(8), nullable=True)
     needs_fx = db.Column(db.Boolean, default=False)
+    # استرداد (event=refund من المنصة): `refund_of` = معرّف الدفعة الأصلية، والمبلغ سالب فبيتخصم من إجمالي نفس العملة.
+    refund_of = db.Column(db.String(255), nullable=True)
     notes = db.Column(db.Text)
     created_at = db.Column(db.DateTime, default=datetime.datetime.utcnow)
 
@@ -2927,6 +2929,9 @@ def _v2_brain2_kick(trigger='cron'):
 
 
 import v2_courses_routes; v2_courses_routes.register(app, globals())
+try:   # r25: أسعار الصرف لسطر «تقريبًا بالدولار» في تقارير الفلوس (تحديث مرة في اليوم) — تحميل محروس
+    import v2_fx_routes as _v2fx; _v2fx.register(app, globals())
+except Exception: logger.exception('v2 fx routes not loaded')
 try: import v2_trainer_share_routes as _v2ts; _v2ts.register(app, globals())  # نسبة المدرّب (C2b): تحميل محروس
 except Exception: logger.exception('v2 trainer share routes not loaded')
 try:   # محرّر الدورات (SPEC-C §C1): تحميل محروس — غيابه لا يكسر الإقلاع
@@ -4468,6 +4473,15 @@ def platform_course_edit(course_id):
                 json_body[key] = float(body.get(key))
             except (TypeError, ValueError):
                 return jsonify({'error': 'سعر غير صالح'}), 400
+    if isinstance(body.get('prices'), dict):
+        # سعر كل بلد: المبالغ بس (المنصة بتحكم في البلاد والعملة وإلزامية سعر مصر).
+        prices = {}
+        for pk, pv in body['prices'].items():
+            try:
+                prices[str(pk).strip().lower()] = None if pv in (None, '') else float(pv)
+            except (TypeError, ValueError):
+                return jsonify({'error': 'سعر غير صالح'}), 400
+        json_body['prices'] = prices
     if not json_body:
         return jsonify({'error': 'لا يوجد تغيير صالح'}), 400
     return _platform_proxy('PUT', f"/api/bridge/courses/{course_id}", json_body=json_body)
@@ -5835,6 +5849,12 @@ def metrics_finance_event():
     against the Course table (see _course_for_finance_event) to set course_id
     directly, rather than depending on the description substring scan.
 
+    Refunds (r25): a payload with `event: "refund"` + `refund_of` (the original payment id) +
+    `full_refund` and a NEGATIVE `amount` books a NEGATIVE Revenue row against the original
+    (`refund_of`), in the original's currency and service, so per-currency totals net it out.
+    A positive amount on a refund event is still booked negative (a refund never adds income).
+    Its idempotency key is `refund:<payment_id>` (never the original's, which would be a no-op).
+
     Idempotency: Revenue.payment_id is unique → re-delivery never double-counts.
     Escrow mirroring is keyed by payment_id (stored in EscrowSession.ref)."""
     if not _metrics_secret_ok():
@@ -5852,6 +5872,10 @@ def metrics_finance_event():
     kind = (d.get('kind') or 'sale').strip().lower()
     source = (d.get('source') or 'platform').strip()[:100]
     meta = d.get('meta') or {}
+    is_refund = str(d.get('event') or '').strip().lower() == 'refund'
+    refund_of = str(d.get('refund_of') or '').strip()[:255] if is_refund else ''
+    if is_refund:
+        amount = -abs(amount)
 
     # amount_original — the platform's own pre-FX figure in `currency`. Falls back
     # to `amount` so this stays backward compatible with senders that don't send it.
@@ -5860,6 +5884,8 @@ def metrics_finance_event():
         amount_original = round(float(raw_original), 2) if raw_original is not None else amount
     except (TypeError, ValueError):
         amount_original = amount
+    if is_refund:
+        amount_original = -abs(amount_original)
 
     course_id_in = d.get('course_id') or meta.get('course_id')
     course_slug_in = d.get('course_slug') or d.get('slug') or meta.get('course_slug') or meta.get('slug')
@@ -5919,6 +5945,13 @@ def metrics_finance_event():
                         'session': serialize_escrow(session) if session else None}), 200
 
     # ---- Normal money-in event → idempotent Revenue row ----
+    original = None
+    if is_refund:
+        # مفتاح تكرار مستقل عن الدفعة الأصلية (وإلا كان الاسترداد «تكرارًا» يتجاهل نفسه)، والخدمة والدورة من الأصل.
+        payment_id = ('refund:' + payment_id)[:255]
+        original = Revenue.query.filter_by(payment_id=refund_of).first() if refund_of else None
+        if original:
+            kind = original.source or kind
     existing = Revenue.query.filter_by(payment_id=payment_id).first()
     if existing:
         # Already recorded — re-delivery is a no-op (do NOT double-count).
@@ -5928,6 +5961,8 @@ def metrics_finance_event():
     is_usd = currency == 'USD'
     foreign = not (is_egp or is_usd)  # neither EGP nor USD → don't guess an FX rate
     matched_course = _course_for_finance_event(course_id_in, course_slug_in, course_title_in)
+    if is_refund and not matched_course and original and original.course_id:
+        matched_course = Course.query.get(original.course_id)      # الاسترداد يلزق بنفس دورة الدفعة الأصلية
 
     rev = Revenue(
         date=occurred_date,
@@ -5938,11 +5973,12 @@ def metrics_finance_event():
         amount_original=(amount_original if foreign else None),
         currency=(currency if foreign else None),
         needs_fx=foreign,
+        refund_of=(refund_of or None),
         client_name=(meta.get('client_name') or meta.get('buyer_email') or '')[:255],
         course_id=(matched_course.id if matched_course else None),
         payment_method=(meta.get('payment_method') or source or 'platform')[:50],
         payment_id=payment_id,
-        notes=f'bridge:finance-event:{source}',
+        notes=f'bridge:finance-event:{source}' + (f':refund_of={refund_of}' + (':full' if d.get('full_refund') else ':partial') if is_refund else ''),
     )
     db.session.add(rev)
     try:
@@ -6330,7 +6366,7 @@ def list_revenues():
         'total_egp': round(to_egp(r.amount_usd, r.amount_egp, rate)),
         'client_name': r.client_name, 'course_id': r.course_id, 'campaign_id': r.campaign_id,
         'payment_method': r.payment_method, 'notes': r.notes,
-        'amount_original': r.amount_original, 'currency': r.currency, 'needs_fx': bool(r.needs_fx),
+        'amount_original': r.amount_original, 'currency': r.currency, 'needs_fx': bool(r.needs_fx), 'refund_of': r.refund_of,
     } for r in items])
 
 @app.route('/api/revenues', methods=['POST'])
@@ -6839,10 +6875,11 @@ def update_course(id):
             fields['instructor_name'] = c.trainer_name or ''
         if 'category' in d:
             fields['category'] = c.category or ''
-        if 'price_egp' in d:
-            fields['price_egp'] = c.price_egp or 0
-        if 'price_usd' in d:
-            fields['price_usd'] = c.price_usd or 0
+        # مرآة قديمة: بنكتب سعر مصر/الباقي بس لو موجب (صفر قديم ما يمسحش سعر دورة على المنصة). سعر كل بلد من مسار واحد: /api/v2/courses/<id>/prices.
+        if 'price_egp' in d and (c.price_egp or 0) > 0:
+            fields['price_egp'] = c.price_egp
+        if 'price_usd' in d and (c.price_usd or 0) > 0:
+            fields['price_usd'] = c.price_usd
         if 'status' in d:
             fields['is_active'] = (c.status == 'active')
         native = _platform_update_course(c.platform_course_id, fields) if fields else None
@@ -9812,6 +9849,8 @@ def ensure_runtime_schema():
                 connection.execute(text("ALTER TABLE revenues ADD COLUMN currency VARCHAR(8)"))
             if 'needs_fx' not in revenue_columns:
                 connection.execute(text("ALTER TABLE revenues ADD COLUMN needs_fx BOOLEAN DEFAULT 0"))
+            if 'refund_of' not in revenue_columns:
+                connection.execute(text("ALTER TABLE revenues ADD COLUMN refund_of VARCHAR(255)"))
         if 'campaigns' in existing_tables:
             campaign_columns = {column['name'] for column in inspector.get_columns('campaigns')}
             if 'course_id' not in campaign_columns:

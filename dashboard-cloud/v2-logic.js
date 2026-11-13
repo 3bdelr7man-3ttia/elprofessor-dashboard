@@ -101,6 +101,47 @@
     if (amount == null || amount === '' || isNaN(Number(amount))) return '';
     return fmtMoney(amount) + ' ' + curName(cur);
   }
+  // r25 — المبالغ كل عملة في خانتها (لا جمع بين عملتين ولا «عملة أساسية»): «١٢٬٠٠٠ ج و٨٥٠ ر.س و٤٠ دولار».
+  var CUR_SHORT = { EGP: 'ج', SAR: 'ر.س', AED: 'د.إ', KWD: 'د.ك', QAR: 'ر.ق', OMR: 'ر.ع', BHD: 'د.ب', USD: 'دولار', EUR: 'يورو', GBP: 'جنيه إسترليني' };
+  var CUR_ORDER = ['EGP', 'SAR', 'AED', 'KWD', 'QAR', 'OMR', 'USD'];
+  function curShort(c) {
+    c = String(c || 'EGP').trim().toUpperCase();
+    return CUR_SHORT[c] || c;
+  }
+  function moneyShort(amount, cur) {
+    if (amount == null || amount === '' || isNaN(Number(amount))) return '';
+    return fmtMoney(amount) + ' ' + curShort(cur);
+  }
+  // totals = [{currency, amount}] (ممكن تتكرر العملة، فنجمع نفس العملة بس). لا مبلغ موجب ⇒ ''. ⛔ ولا جمع بين عملتين أبدًا.
+  function byCurrencyList(totals) {
+    var acc = {};
+    (Array.isArray(totals) ? totals : []).forEach(function (t) {
+      if (!t) return;
+      var c = String(t.currency || 'EGP').trim().toUpperCase() || 'EGP', a = Number(t.amount);
+      if (!isFinite(a) || a === 0) return;
+      acc[c] = Math.round(((acc[c] || 0) + a) * 100) / 100;
+    });
+    return Object.keys(acc).sort(function (x, y) {
+      var i = CUR_ORDER.indexOf(x), j = CUR_ORDER.indexOf(y);
+      return (i < 0 ? 99 : i) - (j < 0 ? 99 : j) || (x < y ? -1 : 1);
+    }).map(function (c) { return { currency: c, amount: acc[c] }; });
+  }
+  function moneyByCurrency(totals) {
+    return byCurrencyList(totals).map(function (t) { return moneyShort(t.amount, t.currency); }).join(' و');
+  }
+  // بلاد تسعير الدورة (نفس ترتيب المنصة): مصر أولًا ثم بلاد الخليج بعملتها ثم «باقي البلاد» بالدولار.
+  var PRICE_COUNTRIES = [
+    { key: 'eg', name: 'مصر', cur: 'EGP' }, { key: 'sa', name: 'السعودية', cur: 'SAR' }, { key: 'ae', name: 'الإمارات', cur: 'AED' },
+    { key: 'kw', name: 'الكويت', cur: 'KWD' }, { key: 'qa', name: 'قطر', cur: 'QAR' }, { key: 'om', name: 'عُمان', cur: 'OMR' },
+    { key: 'default', name: 'باقي البلاد', cur: 'USD' }
+  ];
+  // سطر أسعار الدورة بره مصر من `c.prices` (مبالغ بس): «السعودية ١٥٠ ر.س، باقي البلاد ٥٠ دولار». ما فيش ⇒ ''.
+  function coursePricesLine(c) {
+    var pr = c && c.prices && typeof c.prices === 'object' ? c.prices : null;
+    if (!pr) return '';
+    return PRICE_COUNTRIES.filter(function (x) { return x.key !== 'eg' && Number(pr[x.key]) > 0; })
+      .map(function (x) { return x.name + ' ' + moneyShort(pr[x.key], x.cur); }).join('، ');
+  }
 
   // «منذ ٣ ساعات» — من وقت بالميلي ثانية و`now`. وقت غير معروف ⇒ "".
   function agoText(t, now) {
@@ -377,7 +418,7 @@
   var IMG_OF = {
     file_waiting: 'files', file_late: 'files', file_attention: 'files', review: 'files', verify: 'files',
     dispute: 'disputes', unactivated: 'disputes', legacy: 'disputes',
-    payout: 'money', manual_payment: 'money', stuck_payment: 'money', payfail: 'money', book_offer: 'books',
+    payout: 'money', manual_payment: 'money', stuck_payment: 'money', payfail: 'money', book_offer: 'books', market_lane: 'market',
     trainer: 'people', join: 'people', identity_doc: 'people', pending_user: 'people', signup: 'people', founding: 'people', invite: 'people', person: 'people', lead: 'people', message: 'people', open_message: 'people',
     book: 'books', program: 'courses', course: 'courses', live: 'courses', topic: 'content', creative: 'content', other: 'people'
   };
@@ -394,6 +435,7 @@
     if (r.apiKind === 'payfail') return 'payfail';
     if (r.apiKind === 'book_offer') return 'book_offer';
     if (r.apiKind === 'invite') return 'invite';           // R24 م٢: دعوة من عضو بتنتظر موافقتك (من مصدر الدعوات مش الوارد)
+    if (r.apiKind === 'market_lane') return 'market_lane';      // r25: طلب في سوق الخدمات معروض في حارة غلط وبلا عروض
     if (r.apiKind === 'course_q') return 'course';
     if (r.apiKind === 'live_q') return 'live';
     switch (r.apiKind) {
@@ -426,6 +468,7 @@
         return overdue ? RANK.file_urgent : RANK.file_waiting;
       }
       case 'dispute': return RANK.dispute;
+      case 'live': return RANK.review;      // r25: دورة حيّة موعدها فات وبتستنى قرارك = أعجل من طلبات الاعتماد والبرامج
       case 'invite': return RANK.invite;
       case 'unactivated': case 'legacy': return RANK.refund;
       case 'payout': return RANK.payout;
@@ -834,14 +877,33 @@
         }
         break;
       }
+      case 'market_lane': {
+        // r25: طلب معروض مع حارة غير حارة نوعه (وبلا أي عرض) — «انقله» بورقة تأكيد، أو افتح الطلب. (المنصة ما بتعرّضش بلاغات مستخدمين، فمفيش بطاقات بلاغ.)
+        card.tag = 'طلب في حارة غير حارته';
+        card.title = str(r.title) || 'طلب بلا عنوان';
+        card.sub = '';
+        card.brain = str(r.line);
+        card.reason = 'النقل بيغيّر مكان ظهوره بس، ومحدّش بيوصله إشعار';
+        card.open = act({ do: 'goto', mod: 'market', land: 'market_requests' });
+        card.primary = { label: str(r.moveLabel) || 'انقله', act: act({ do: 'market_relane', id: String(r.marketId), target: str(r.target) }) };
+        card.read = { label: 'افتح الطلب', act: act({ do: 'market_open', id: String(r.marketId) }) };
+        break;
+      }
       case 'course': {
         card.tag = 'دورة تنتظر الاعتماد';
         card.title = str(r.title) || 'دورات بانتظار الاعتماد';
-        card.sub = r.summary ? 'عدد الدورات: ' + ar(r.summary) : '';
+        card.sub = r.summary ? 'عدد الدورات: ' + ar(r.summary) : str(r.instructor);
         card.brain = r.summary ? U(r.summary, ['دورة تنتظر قرارك', 'دورتان تنتظران قرارك', 'دورات تنتظر قرارك', 'دورة تنتظر قرارك']) : 'دورة تنتظر قرارك';
         card.reason = 'تُراجع الدورة كاملة قبل النشر';
         card.open = act({ do: 'goto', mod: 'courses', land: 'courses_pending' });
-        card.primary = { label: 'افتح وراجع', act: card.open };
+        if (r.courseId) {
+          // r25: بطاقة قرار بزراير شغّالة (نفس أوراق صفحة الدورة): افتح وراجع · انشرها (بورقة تأكيد) · أعِدها بملاحظات (بورقة سبب).
+          card.open = act({ do: 'course_open', id: r.courseId });
+          card.primary = { label: 'افتح وراجع', act: card.open };
+          card.secondary = { label: 'انشرها', act: act({ do: 'course_approve', id: r.courseId }) };
+          card.edit = { label: 'أعِدها بملاحظات', act: act({ do: 'course_return', id: r.courseId }) };
+          card.brain = 'دورة جديدة مستنية قرارك' + (str(r.instructor) ? ' من ' + str(r.instructor) : '');
+        } else card.primary = { label: 'افتح وراجع', act: card.open };
         break;
       }
       case 'live': {
@@ -851,7 +913,13 @@
         card.brain = 'الحجز لم يكتمل — إما تثبيت الموعد وإما تأجيله';
         card.reason = 'القرار من جدول الدورات الحيّة';
         card.open = act({ do: 'goto', mod: 'courses', land: 'live_needs_decision' });
-        card.primary = { label: 'افتح وراجع', act: card.open };
+        if (r.slug) {
+          // r25: ثبّتها · مدّد المهلة ٤٨ ساعة · ألغِها (كل واحدة بورقة تأكيد، والإلغاء بكتابة العنوان) — نفس أفعال جدول الدورات الحيّة.
+          card.primary = { label: 'ثبّتها', act: act({ do: 'live_decide', slug: r.slug, action: 'confirm' }) };
+          card.secondary = { label: 'مدّد المهلة ٤٨ ساعة', act: act({ do: 'live_decide', slug: r.slug, action: 'extend' }) };
+          card.edit = { label: 'ألغِها', act: act({ do: 'live_decide', slug: r.slug, action: 'cancel' }) };
+          card.read = { label: 'افتحها', act: act({ do: 'course_open', slug: r.slug }) };
+        } else card.primary = { label: 'افتح وراجع', act: card.open };
         break;
       }
       case 'lead': case 'message': {
@@ -898,7 +966,7 @@
   var HOME_OF = { file_waiting: 'files', file_late: 'files', file_attention: 'files', review: 'files', verify: 'files',
                   dispute: 'disputes', unactivated: 'disputes', legacy: 'disputes',
                   payout: 'money', manual_payment: 'money', stuck_payment: 'money', payfail: 'money',
-                  book_offer: 'books', book: 'books', program: 'courses', course: 'courses', live: 'courses',
+                  book_offer: 'books', book: 'books', program: 'courses', course: 'courses', live: 'courses', market_lane: 'market',
                   topic: 'content', creative: 'content',
                   pending_user: 'people', trainer: 'people', join: 'people', founding: 'people', identity_doc: 'people', invite: 'people', signup: 'people',
                   person: 'people', lead: 'people', message: 'people', open_message: 'people', other: 'people' };
@@ -1060,12 +1128,22 @@
     if (Q) {
       var titles = Q.courses_pending && Array.isArray(Q.courses_pending.titles) ? Q.courses_pending.titles.filter(Boolean) : [];
       var cp = qn(Q, 'courses_pending');
-      if (titles.length) titles.forEach(function (tt, i) { fyiSrc.push({ apiKind: 'course_q', apiId: 'c' + i, title: String(tt), ref: 'CRS-' + i }); });
+      // r25: لو المنصة بعتت `items` (معرّف كل دورة) ⇒ بطاقة قرار لكل دورة؛ وإلا (منصة أقدم) الشكل القديم «للعلم».
+      var citems = Q.courses_pending && Array.isArray(Q.courses_pending.items) ? Q.courses_pending.items.filter(function (x) { return x && x.id; }) : [];
+      if (citems.length) citems.forEach(function (it, i) {
+        src.push({ apiKind: 'course_q', apiId: 'c:' + it.id, courseId: String(it.id), title: str(it.title) || str(it.slug), instructor: str(it.instructor_name), ts: ms(it.submitted_at), ref: 'CRS-' + i });
+      });
+      else if (titles.length) titles.forEach(function (tt, i) { fyiSrc.push({ apiKind: 'course_q', apiId: 'c' + i, title: String(tt), ref: 'CRS-' + i }); });
       else if (cp > 0) fyiSrc.push({ apiKind: 'course_q', apiId: 'c', summary: cp, title: '', ref: 'CRS' });
       (Array.isArray(Q.live_needs_decision) ? Q.live_needs_decision : []).forEach(function (l, i) {
-        if (l && typeof l === 'object') fyiSrc.push({ apiKind: 'live_q', apiId: 'l' + i, title: l.title || l.slug || '', reserved: l.reserved_count, quorum: l.quorum, ref: 'LIV-' + i });
+        if (l && typeof l === 'object') src.push({ apiKind: 'live_q', apiId: 'l' + i, slug: str(l.slug), title: l.title || l.slug || '', reserved: l.reserved_count, quorum: l.quorum, ref: 'LIV-' + i });
       });
     }
+    // r25: طلبات السوق في حارة غلط (بطاقات جاهزة من منطق السوق: `relane` بس) — بتدخل شريط «سوق الخدمات».
+    (Array.isArray(opts.marketLane) ? opts.marketLane : []).forEach(function (m, i) {
+      if (!m || !m.id || !m.primary || m.primary.act !== 'relane' || !m.primary.target) return;
+      src.push({ apiKind: 'market_lane', apiId: 'm:' + m.id, marketId: String(m.id), title: m.title, line: m.line, moveLabel: m.primary.label, target: m.primary.target, ts: ms(m.at), ref: 'MKT-' + i });
+    });
     function build(list) {
       var out = [];
       list.forEach(function (r, i) {
@@ -1921,15 +1999,32 @@
       if (!a) return;
       acc[c] = (acc[c] || 0) + cents(a);
     });
-    return Object.keys(acc).sort(function (x, y) { return x === 'EGP' ? -1 : y === 'EGP' ? 1 : (x < y ? -1 : 1); })
+    return Object.keys(acc).filter(function (c) { return acc[c] !== 0; }).sort(function (x, y) { return x === 'EGP' ? -1 : y === 'EGP' ? 1 : (x < y ? -1 : 1); })      // استرداد كامل بيصفّر العملة فتختفي
       .map(function (c) { return { currency: c, amount: acc[c] / 100 }; });
   }
-  // «١٬٢٠٠ جنيه» + «بعملة أخرى: ٣٠ دولار · ١٠٠ ريال». لا مبلغ أصلًا (والمصدر معروف) ⇒ «٠ جنيه».
+  // r25: كل عملة بمبلغها في سطر واحد «١٢٬٠٠٠ ج و٨٥٠ ر.س و٤٠ دولار» (⛔ لا جنيه «أساسي» ولا جمع بين عملتين). لا مبلغ أصلًا (والمصدر معروف) ⇒ «٠».
   function v2MoneyLine(totals) {
     if (!Array.isArray(totals)) return null;
-    var egp = totals.filter(function (t) { return t.currency === 'EGP'; })[0];
-    var others = totals.filter(function (t) { return t.currency !== 'EGP'; }).map(function (t) { return moneyText(t.amount, t.currency); });
-    return { main: moneyText(egp ? egp.amount : 0, 'EGP'), others: others, othersText: others.length ? 'بعملة أخرى: ' + others.join('، ') : '' };
+    return { main: moneyByCurrency(totals) || '٠', others: [], othersText: '' };
+  }
+  // سطر «تقريبًا بالدولار» — للتقارير فقط. `rates` = {rates:{EGP:٥٠.٢,...}, date, stale} من `/api/v2/money/rates`.
+  // مبلغ بدولار = المبلغ ÷ سعر العملة. عملة مالهاش سعر ⇒ الرقم كله بيتشال (مفيش رقم ناقص يتعرض كأنه كامل). مفيش أسعار ⇒ null (السطر يتخفي).
+  function usdEquivalent(totals, ratesResp) {
+    var r = ratesResp && ratesResp.rates;
+    if (!r || typeof r !== 'object' || !Array.isArray(totals)) return null;
+    var sum = 0, any = false;
+    for (var i = 0; i < totals.length; i++) {
+      var t = totals[i], a = Number(t && t.amount);
+      if (!t || !isFinite(a) || a === 0) continue;
+      var cur = String(t.currency || 'EGP').trim().toUpperCase(), rate = Number(cur === 'USD' ? 1 : r[cur]);
+      if (!(rate > 0)) return null;
+      sum += a / rate; any = true;
+    }
+    return any ? Math.round(sum) : null;
+  }
+  function ratesDateText(ratesResp) {
+    var d = ratesResp && String(ratesResp.date || '').slice(0, 10);
+    return d && /^\d{4}-\d{2}-\d{2}$/.test(d) ? 'أسعار يوم ' + d.replace(/-/g, '/').replace(/\d/g, function (x) { return DIG.charAt(+x); }) : 'أسعار الصرف';
   }
   function serviceOf(source) {
     var s = String(source || '').trim().toLowerCase();
@@ -1979,42 +2074,50 @@
   // اللوحة: أربعة أرقام بشرح سطر لكل رقم. `src` = {revenues, escrow, payouts, net} (كلٌّ منها null لو مصدره تعذّر).
   function v2MoneyBoard(src, periodKey, now) {
     src = src || {};
+    var rr = src.rates || null;
     var P = v2Period(periodKey, now), inc = v2Income(src.revenues, P.key, now), held = v2Held(src.escrow), owed = v2Owed(src.payouts);
     function num(key, label, note, data, extra) {
       var line = data ? v2MoneyLine(data.totals) : null;
-      return { key: key, label: label, note: note, na: !line, text: line ? line.main : NA_MONEY, others: line ? line.othersText : '', count: data ? data.count : null,
-               why: line ? '' : (extra || '') };
+      return { key: key, label: label, note: note, na: !line, text: line ? line.main : NA_MONEY, others: '', count: data ? data.count : null,
+               lines: line ? byCurrencyList(data.totals).map(function (t) { return moneyShort(t.amount, t.currency); }) : [],
+               usd: data ? usdEquivalent(data.totals, rr) : null, why: line ? '' : (extra || '') };
     }
     var net = Array.isArray(src.net) ? { totals: src.net, count: null } : null;
-    return { period: P, numbers: [
+    var board = { period: P, numbers: [
       num('income', 'دخل', 'ما دخل دفتر الشركة ' + (P.key === 'day' ? 'اليوم' : P.key === 'month' ? 'هذا الشهر' : 'هذه السنة'), inc, 'تعذّر جلب دفتر الإيرادات'),
       num('held', 'محجوز حتى يُسلَّم العمل', 'أموال دفعها الناس وتنتظر تسليم العمل لتصل إلى أصحابها', held, 'تعذّر جلب أموال الضمان'),
       num('owed', 'مستحق للخبراء والمدرّبين', 'طلبات سحب أُرسلت ولم تُحوَّل بعد', owed, 'تعذّر جلب طلبات السحب'),
       num('net', 'صافي البروفيسور', 'نصيب البروفيسور بعد نصيب أصحاب الأعمال', net, NET_WHY)
     ] };
+    // سطر واحد للتقرير: «تقريبًا بالدولار: دخل ٣٬٢٠٠، محجوز ٤٠٠ — أسعار يوم …». أي رقم مالوش سعر لعملته بيتشال، ومفيش أسعار ⇒ السطر مش بيتعرض.
+    var parts = board.numbers.filter(function (n) { return !n.na && n.usd != null; }).map(function (n) { return ({ income: 'دخل', held: 'محجوز', owed: 'مستحق', net: 'صافي' }[n.key] || n.label) + ' ' + fmtMoney(n.usd); });
+    board.usdLine = parts.length ? { text: 'تقريبًا بالدولار: ' + parts.join('، '), ratesText: ratesDateText(rr) + (rr && rr.stale ? '، وهي آخر أسعار وصلتنا' : '') } : null;
+    return board;
   }
   // أعمدة «من أين جاء الدخل»: الجنيه فقط (العملات الأخرى سطر منفصل). في الشهر نستعمل مدفوعات المنصة (تفصل ملف الخبير عن الاستشارة
   // العادية) إن وصلت، وإلا دفتر الإيرادات. `bridge` = رد `/api/v2/income/by-service` أو null.
   var BRIDGE_KEY = { expert_files: 'experts', courses: 'courses', books: 'books', other: 'other' };
-  function v2IncomeBars(income, bridge, periodKey) {
+  function v2IncomeBars(income, bridge, periodKey, ratesResp) {
     var fromBridge = periodKey === 'month' && bridge && Array.isArray(bridge.services);
-    var perService = {}, foreign = [];
+    var perService = {};
     if (fromBridge) {
       bridge.services.forEach(function (s) { if (BRIDGE_KEY[s.key]) perService[BRIDGE_KEY[s.key]] = sumByCurrency(s.totals || []); });
     } else if (income) {
       SERVICES.forEach(function (s) { perService[s.key] = income.services[s.key] || []; });
     } else return null;
+    // r25: كل خدمة بمبالغها لكل عملة (لا جنيه «أساسي»). طول الشريط للمقارنة بس: بالدولار التقريبي لو الأسعار موجودة، وإلا بالجنيه لوحده.
+    var useUsd = !!(ratesResp && ratesResp.rates);
     var rows = SERVICES.map(function (s) {
-      var t = perService[s.key] || [], egp = t.filter(function (x) { return x.currency === 'EGP'; })[0];
-      var oth = t.filter(function (x) { return x.currency !== 'EGP'; });
-      oth.forEach(function (o) { foreign.push(o); });
-      return { key: s.key, label: s.label, amount: egp ? egp.amount : 0, text: moneyText(egp ? egp.amount : 0, 'EGP'), others: oth.map(function (o) { return moneyText(o.amount, o.currency); }) };
+      var t = perService[s.key] || [], w = useUsd ? usdEquivalent(t, ratesResp) : null;
+      if (w == null) { var egp = t.filter(function (x) { return x.currency === 'EGP'; })[0]; w = useUsd && t.length ? 0 : (egp ? egp.amount : 0); }
+      return { key: s.key, label: s.label, totals: t, amount: w, text: moneyByCurrency(t) || '٠', others: [] };
     });
     var max = Math.max.apply(null, rows.map(function (r) { return r.amount; }).concat([0]));
     var sum = rows.reduce(function (a, r) { return a + r.amount; }, 0);
     rows.forEach(function (r) { r.width = max > 0 ? Math.max(r.amount > 0 ? 4 : 0, Math.round(r.amount / max * 100)) : 0; r.share = sum > 0 ? Math.round(r.amount / sum * 100) : 0; });
-    return { rows: rows, source: fromBridge ? 'payments' : 'ledger', total: moneyText(sum, 'EGP'), foreign: sumByCurrency(foreign),
-             note: fromBridge ? 'من مدفوعات المنصة في هذا الشهر' : 'من دفتر الإيرادات — ملفات الخبراء تشمل الاستشارات العادية' };
+    var all = []; rows.forEach(function (r) { r.totals.forEach(function (x) { all.push(x); }); });
+    return { rows: rows, source: fromBridge ? 'payments' : 'ledger', total: moneyByCurrency(all) || '٠', foreign: [],
+             note: (fromBridge ? 'من مدفوعات المنصة في هذا الشهر' : 'من دفتر الإيرادات — ملفات الخبراء تشمل الاستشارات العادية') + (useUsd ? '. طول الشريط للمقارنة بالدولار التقريبي' : '') };
   }
 
   // —— التحويلات المستحقة
@@ -2498,7 +2601,7 @@
       var bal = Array.isArray(it.balance) ? it.balance.map(function (b) { return { currency: b.currency, amount: b.amount }; }) : [];
       var line = v2MoneyLine(sumByCurrency(bal)), at = ms(it.last_entry_at), email = str(it.owner_email).toLowerCase();
       return { id: String(it.owner_id), kind: str(it.owner_kind), kindText: it.owner_kind === 'course' ? 'دورة' : 'كتاب', title: str(it.title) || 'عمل بلا عنوان',
-               ownerEmail: EMAIL_RE.test(email) ? email : '', balanceText: bal.length ? [line.main].concat(line.others).filter(function (x) { return x; }).join('، ') : '٠ جنيه',
+               ownerEmail: EMAIL_RE.test(email) ? email : '', balanceText: bal.length ? [line.main].concat(line.others).filter(function (x) { return x; }).join('، ') : '٠',
                balances: bal, last: isNaN(at) ? 'لا حركة' : agoText(at, now), at: isNaN(at) ? 0 : at, entries: Number(it.entries) || 0 };
     });
     rows.sort(function (a, b) { return b.at - a.at; });
@@ -2692,14 +2795,14 @@
 
   // —— قرار ولا «للعلم»: البطاقة بتدخل «ابدأ القرارات» بس لو فعلها الأساسي بيقفلها فعلًا على المنصة.
   // R24 م٢: القرار = فعل أساسي بيقفل البند، أو «اقرأ وقرّر» (`read`) اللي بيفتح شاشة القراية جوه بيت القسم وفيها زراير القفل، أو «افتح ملفه» (`person`) لشخص عنده أكتر من طلب.
-  var CLOSING_DO = { send: 1, decide: 1, resolve: 1, payout_settle: 1, pay_confirm: 1, offer_approve: 1, brain_approve: 1, invite_approve: 1, person_accept: 1, read: 1, person: 1 };
+  var CLOSING_DO = { market_relane: 1, course_open: 1, live_decide: 1, send: 1, decide: 1, resolve: 1, payout_settle: 1, pay_confirm: 1, offer_approve: 1, brain_approve: 1, invite_approve: 1, person_accept: 1, read: 1, person: 1 };
   function bucketOf(kind, card, r) {
     if (r && r.fyi) return { bucket: 'fyi', fyiKind: 'file_sent' };                       // ملف اتبعت ولسه ما استلمهوش
     switch (kind) {
       case 'stuck_payment': return { bucket: 'fyi', fyiKind: 'stuck_payment' };
       case 'signup': return { bucket: 'fyi', fyiKind: 'signup' };
-      case 'course': return { bucket: 'fyi', fyiKind: 'course' };
-      case 'live': return { bucket: 'fyi', fyiKind: 'live' };
+      case 'course': if (!(r && r.courseId)) return { bucket: 'fyi', fyiKind: 'course' }; break;      // r25: بمعرّف الدورة = قرار بزراير
+      case 'live': if (!(r && r.slug)) return { bucket: 'fyi', fyiKind: 'live' }; break;
       case 'payfail': return { bucket: 'fyi', fyiKind: (r && r.pfScope === 'gateway') ? 'gateway' : 'payfail' };
       case 'join': if (r && r.waiting) return { bucket: 'fyi', fyiKind: 'join_waiting' }; break;     // مستني رد صاحبه
       case 'founding': if (r && r.nextStatus && r.nextStatus !== 'contacted') return { bucket: 'fyi', fyiKind: 'founding_follow' }; break;   // تواصلت/دعيته = متابعة
@@ -2786,7 +2889,7 @@
     parseSectionHash: parseSectionHash, routeFor: routeFor, sectionByKey: secOf, tabByKey: tabOf,
     TILE_DEFS: TILE_DEFS, SECTION_KEYS: SECTION_KEYS, SECTION_ALIAS: SECTION_ALIAS, HOME_OF: HOME_OF, EMPTY_STRIP: EMPTY_STRIP, v2SectionTiles: v2SectionTiles, v2Strip: v2Strip, brainHomeOf: brainHomeOf,
     FAILED_TEXT: FAILED_TEXT, PARTIAL_TEXT: PARTIAL_TEXT,
-    util: { ar: ar, fmt: fmt, fmtMoney: fmtMoney, joinFacts: joinFacts, avatarMark: avatarMark, U: U, agoText: agoText, curName: curName, cur: curName, moneyText: moneyText, kindOf: kindOf, pickCandidate: pickCandidate,
+    util: { usdEquivalent: usdEquivalent, ratesDateText: ratesDateText, ar: ar, fmt: fmt, fmtMoney: fmtMoney, curShort: curShort, moneyShort: moneyShort, moneyByCurrency: moneyByCurrency, byCurrencyList: byCurrencyList, PRICE_COUNTRIES: PRICE_COUNTRIES, coursePricesLine: coursePricesLine, joinFacts: joinFacts, avatarMark: avatarMark, U: U, agoText: agoText, curName: curName, cur: curName, moneyText: moneyText, kindOf: kindOf, pickCandidate: pickCandidate,
             dateText: dateText, durShort: durShort, parseAmount: parseAmount, curLong: curLong, sumByCurrency: sumByCurrency }
   };
   // ===== v2s:brain =====
@@ -4739,8 +4842,8 @@
     var lessons = story ? U.ar(story.lessons) + ' في ' + U.ar(story.units) + ' أجزاء، نحو ' + U.ar(story.minutes) + ' دقيقة' : U.ar(lessonsOf(c));
     var sales;
     if (stat && arr(stat.sales)) {
-      var parts = stat.sales.filter(function (x) { return x && num(x.amount) != null; }).map(function (x) { return U.moneyText(x.amount, x.currency); });
-      sales = { text: parts.length ? parts.join(' + ') : 'لا مبيعات بعد', na: false };
+      var parts = stat.sales.filter(function (x) { return x && num(x.amount) != null; });
+      sales = { text: parts.length ? (U.moneyByCurrency(parts) || 'لا مبيعات بعد') : 'لا مبيعات بعد', na: false };
     } else sales = { text: NA, na: true };
     var comp = [];
     var pct = stat ? num(stat.completion_pct) : null;
@@ -4767,7 +4870,7 @@
     }
     return { id: c.id, title: s(c.title) || 'دورة بلا عنوان', state: st, stateLabel: STATE_LABEL[st], typeLabel: TYPE_LABEL[c.type] || s(c.type), interactive: !!story,
              sourceLabel: SOURCE_LABEL[s(c.source)] || '', trainer: trainerOf(c), trainerEmail: s(c.instructor_email).toLowerCase(), hero: s(c.thumbnail_url), cover: cover(c.title),
-             tiles: { learners: num(c.total_enrolled) ? U.ar(num(c.total_enrolled)) : 'لا أحد بعد', lessons: lessons, price: pr.ok === false ? 'بلا سعر' : pr.text, sales: sales },
+             tiles: { learners: num(c.total_enrolled) ? U.ar(num(c.total_enrolled)) : 'لا أحد بعد', lessons: lessons, price: pr.ok === false ? 'بلا سعر' : pr.text, priceOthers: U.coursePricesLine(c), sales: sales },
              completion: completion, facts: facts, main: main, secondary: second, decisionBlock: block, bid: { show: st === 'published' && c.type !== 'recorded_free', enabled: c.bid_enabled === true },
              live: live, danger: st === 'archived' ? null : (canHard ? 'delete' : 'archive'), reviewNote: s(c.review_note), hasPreview: !!(story && s(c.slug)), enrolled: num(c.total_enrolled) || 0 };
   }
@@ -5005,7 +5108,7 @@
     (rows || []).forEach(function (r) {
       if (!r || r.kind === 'training_offer' || r.is_test || r.hidden) return;
       var b = brain(r, now, null);
-      if (b.primary && (b.primary.act === 'link' || b.primary.act === 'relane')) out.push({ kind: 'market', id: String(r.id), title: r.title || 'طلب بلا عنوان', line: b.line, primary: b.primary });
+      if (b.primary && (b.primary.act === 'link' || b.primary.act === 'relane')) out.push({ kind: 'market', id: String(r.id), title: r.title || 'طلب بلا عنوان', line: b.line, primary: b.primary, at: r.created_at || '' });
     });
     return out;
   }

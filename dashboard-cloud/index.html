@@ -4005,13 +4005,11 @@ function createCourseModal(presetTitle){
 }
 function editCourseModal(c){
   if(!c){return;}
-  // priceNum may be absent on the design-fallback rows → derive from raw or default 0.
-  var priceNum=(c.priceNum!=null)?c.priceNum:((c.raw&&c.raw.price_egp)||0);
+  // r25: السعر ما بيتعدّلش من هنا — مكان واحد بس: صفحة الدورة (سعر كل بلد بعملتها).
   var s=openModal('تعديل الدورة — '+c.title,`
   <div class="note-ai" style="margin-bottom:12px">${svg('sparkles','ic')}<div>التعديل هيتطبّق على الدورة على المنصة كمان (لو منشورة).</div></div>
   <div class="fld"><label>عنوان الدورة</label><input id="e_title" value="${esc(c.title)}"></div>
   <div class="fld"><label>المحاضر / الجهة</label><input id="e_inst" value="${esc(c.inst)}"></div>
-  <div class="fld"><label>السعر (ج)</label><input id="e_price" type="number" value="${priceNum}"></div>
   <label class="tg" style="margin:10px 0"><input type="checkbox" id="e_active" ${c.status!=='draft'?'checked':''}> نشطة (ظاهرة للطلاب على المنصة)</label>
   <div class="acts" style="margin-top:6px"><button class="btn btn-primary" id="e_save">${svg('check')}حفظ</button><button class="btn btn-ghost" id="e_x">إلغاء</button></div>`);
   s.querySelector('#e_x').onclick=closeModal;
@@ -4019,7 +4017,6 @@ function editCourseModal(c){
     var body={
       title:s.querySelector('#e_title').value.trim()||c.title,
       trainer_name:s.querySelector('#e_inst').value.trim()||c.inst||'',
-      price_egp:+s.querySelector('#e_price').value||0,
       status:s.querySelector('#e_active').checked?'active':'draft',
     };
     if(window.EP&&c.cid){EP.updateCourse(c.cid,body,function(){closeModal();viewCourses(document.getElementById('view'));});}
