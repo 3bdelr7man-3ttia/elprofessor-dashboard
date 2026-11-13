@@ -76,9 +76,12 @@ def test_registered_locked_to_ask_and_on_telegram():
 
 
 def test_gather_keeps_track_corrections_with_text_and_attaches_articles():
-    items = [_fb('f1'), _fb('f2', correction='قصير'), _fb('f3', track='general'), _fb('bad id!')]
+    items = [_fb('f1'), _fb('f2', correction='قصير'), _fb('f3', track='general'), _fb('bad id!'),
+             _fb('f4', track='xx-unknown')]
     out = pa.gather(_ctx(_plat(items)))
-    assert [t.ref for t in out] == ['askfb:f1']
+    # ‏`general` بيوصل المؤسس (2026-11-13: إضافة على سؤال قطاع خاص كانت بتتشال بصمت) — والمسار المجهول لأ.
+    assert [t.ref for t in out] == ['askfb:f1', 'askfb:f3']
+    assert out[1].facts['track'] == 'عام' and out[1].meta['track'] == 'general'
     f = out[0].facts
     assert f['track'] == 'النيابة الإدارية' and f['articles'][0]['ref'] == '[ق 999/2099 م 4]'
     assert out[0].meta == {'feedback_id': 'f1', 'track': AP}
@@ -261,3 +264,23 @@ def test_gather_skips_correction_already_rejected(monkeypatch):
     ctx.ns['db'] = object()
     assert pa.gather(ctx) == []
     assert 'rejected' in seen['statuses']
+
+
+def test_apply_writes_a_general_correction_too():
+    """تصحيح على سؤال عام بيتعتمد زي تصحيح التخصص (2026-11-13)."""
+    seen = []
+
+    def write(method, path, body, action, target, meta):
+        seen.append(body)
+        return ({'ok': True}, 200)
+
+    t = _target()
+    t.meta = {'feedback_id': 'f9', 'track': 'general'}
+    res = pa.apply(_ctx(FakePlatform(), write), {'text': 'تصحيح عام تجريبي طويل كفاية.'}, t)
+    assert res.ok and seen[0]['track'] == 'general' and seen[0]['feedback_id'] == 'f9'
+
+
+def test_apply_still_refuses_an_unknown_track():
+    t = _target()
+    t.meta = {'feedback_id': 'f9', 'track': 'xx-unknown'}
+    assert not pa.apply(_ctx(FakePlatform()), {'text': 'تصحيح عام تجريبي طويل كفاية.'}, t).ok

@@ -24,7 +24,9 @@ LIST_LIMIT = 10
 Q_MAX, A_MAX, C_MAX, TEXT_MAX, ART_MAX = 600, 900, 1200, 600, 700
 DISC_MAX_MSGS, DISC_MSG_MAX = 4, 300      # نقاش المصحِّح مع المراجِع: آخر ٤ رسايل، كل واحدة ≤٣٠٠ حرف
 FACTS_MAX_BYTES = 3900
-TRACKS = {'eg-administrative-prosecution': 'النيابة الإدارية'}
+# ‏`general` = أي سؤال برّه تخصص له قاعدة مواد (المنصة: `detect_track(q) or corpus.GENERAL`).
+# ⛔ (2026-11-13) كان مش هنا ⇒ كل «عندي إضافة» على سؤال عام أو قطاع خاص كانت بتتشال بصمت ولا توصل المؤسس.
+TRACKS = {'eg-administrative-prosecution': 'النيابة الإدارية', 'general': 'عام'}
 LABEL_APPROVE = 'اعتمده مصدرًا لـ«اسأل»'
 LOCK_REASON = 'يسألك دائمًا لأن التصحيح المعتمد يغيّر إجابات «اسأل» لكل الناس.'
 _ID_RE = re.compile(r'^[A-Za-z0-9_-]{1,80}$')
