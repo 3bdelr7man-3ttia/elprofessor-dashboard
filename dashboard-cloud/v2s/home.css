@@ -7,7 +7,7 @@
  * ========================================================================== */
 
 /* ——— متغيّرات */
-.app.v2-shell{--h-wine:#9E2B4E;--h-wine2:#85233F;--h-paper:#FBFAF7;--h-paper2:#F6F1EA;--h-ink:#21262E;--h-red:#C8102E;--h-line:#E9E1D6;--h-mute:#6B665C;--h-amber:#E0A526}
+.app.v2-shell{--h-wine:#9E2B4E;--h-wine2:#85233F;--h-paper:#FBFAF7;--h-paper2:#F6F1EA;--h-ink:#21262E;--h-red:#C8102E;--h-line:#E9E1D6;--h-mute:#6B665C}
 
 /* ============ ١) اللوحة: تلميعة خفيفة ============ */
 .app.v2-shell .v2 .v2-head{display:none}

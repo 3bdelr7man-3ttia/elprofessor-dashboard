@@ -8,7 +8,7 @@
 .app.v2-home #notifPanel{display:none!important}
 .app.v2-home .content{background:#F7F3ED}
 
-.v2{--v2-wine:#9E2B4E;--v2-paper:#F7F3ED;--v2-paper2:#EFE8DD;--v2-ink:#21262E;--v2-red:#C8102E;--v2-line:#E8E0D5;--v2-wine-s:#F6E9EE;--v2-green:#2F7D5B;--v2-green-s:#E7F3EC;--v2-amber:#A66A12;--v2-amber-s:#FBF1DF;
+.v2{--v2-wine:#9E2B4E;--v2-paper:#F7F3ED;--v2-paper2:#EFE8DD;--v2-ink:#21262E;--v2-red:#C8102E;--v2-line:#E8E0D5;--v2-green:#2F7D5B;--v2-green-s:#E7F3EC;
   font-family:'IBM Plex Sans Arabic','Cairo',sans-serif;color:var(--v2-ink);max-width:1360px;margin:0 auto;position:relative}
 .v2 *{box-sizing:border-box}
 .v2 button{font-family:inherit;cursor:pointer}
