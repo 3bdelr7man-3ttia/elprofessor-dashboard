@@ -8,7 +8,7 @@
 
 ## الستاك
 - **Frontend:** Vite — يُخدَم من `dashboard-cloud/` عبر `/dashboard-api.js` (**مش** `/dashboard-cloud/*`).
-- **Backend:** Python + SQLite (`dashboard_backend.py` + `backend/`).
+- **Backend:** Python + SQLite (`backend/app.py` + وحدات `backend/`).
 - **الوجهة:** `dashboard.elprofessor.net` · Coolify uuid `dgg8o04cwg0cckwc4g0wkwcs`.
 - **الجسر للمنصة:** metrics-secret.
 
