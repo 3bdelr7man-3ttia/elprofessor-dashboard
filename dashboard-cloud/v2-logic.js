@@ -5811,7 +5811,7 @@
     var half1 = inboxHalf(inp, LBL_VISIT);
     var wlState = inp.waitlistState, wl = inp.waitlist;
     var half2 = (wlState === 'idle' || wlState === 'loading' || (!wl && wlState !== 'error')) ? 'loading' : (wlState === 'error' || !wl ? 'failed' : (wl.missing ? 'missing' : 'ready'));
-    var visTickets = [], notePending = [];
+    var visTickets = [];
     if (half1 === 'ready') {
       rows.filter(function (r) { return r && r.apiKind === 'pending_user'; }).forEach(function (r) {
         var x = cardTicket(r, 'visitor', now, inp.userEmails); if (!x) return;
@@ -6298,7 +6298,6 @@
   var NO_DATE = 8.64e15;
 
   function srcState(v) { return v === undefined ? 'loading' : (v === null ? 'failed' : 'ok'); }
-  function byAsc(a, b) { return a.sortAt - b.sortAt; }
   function byDesc(a, b) { return b.sortAt - a.sortAt; }
   function mk(o, now, tone) {
     o.at = isNaN(ms(o.at)) ? null : ms(o.at);
@@ -6354,7 +6353,6 @@
 
     // —— مسودات
     var draft = [];
-    var platTitles = {};
     Object.keys(gen).forEach(function (id) {
       var t = isArr(src.topics) ? src.topics.filter(function (x) { return x.id === id; })[0] : null;
       var item = mk({ id: 'g:' + id, kind: 'generating', col: 'draft', order: 0, ref: t || { id: id }, title: (t && t.title) || 'موضوع', at: gen[id],

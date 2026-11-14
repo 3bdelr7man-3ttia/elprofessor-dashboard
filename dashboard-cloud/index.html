@@ -2661,7 +2661,6 @@ function viewFinance(v){
 }
 // حُذفت نماذج «مصروف جديد / إيراد جديد / تسجيل سحب»: كانت تكتب في مصفوفات ذاكرة بلا أي نداء API،
 // فتضيع البيانات مع أول تحديث للصفحة. تُعاد عند ربط واجهات الكتابة الحقيقية بالخادم.
-function catBars(arr,color){return arr.map(([l,val])=>`<div style="margin-bottom:9px"><div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:3px"><span>${l}</span><span style="font-weight:700">${val}٪</span></div><div style="height:8px;background:var(--surface-2);border-radius:4px;overflow:hidden"><div style="height:100%;width:${val}%;background:${color};border-radius:4px"></div></div></div>`).join('');}
 // ⛔ تعليمةٌ لا تُنفَّذ كذبة: صفوف تقرير المنصّة غير قابلة للنقر (لا إجراء عليها هنا)،
 // فالدرج بجوارها لا يجوز أن يقول «اختر بندًا». يقول ما هو صحيح على هذا التبويب.
 function drawFinInfo(){
@@ -4022,21 +4021,6 @@ function editCourseModal(c){
     if(window.EP&&c.cid){EP.updateCourse(c.cid,body,function(){closeModal();viewCourses(document.getElementById('view'));});}
     else{closeModal();}
   };
-}
-function negotiateModal(p){const s=openModal('اقترح سعرًا — '+p.trainer,`
-  <div class="note-ai" style="margin-bottom:14px">${svg('sparkles','ic')}<div>السعر العادل المقترح ${money(p.fair)} ج. أرسل عرضك المضاد للمدرّب على المنصة.</div></div>
-  <div class="fld"><label>سعرك المقترح (ج)</label><input id="m_cp" type="number" value="${p.fair}"></div>
-  <div class="fld"><label>رسالة للمدرّب (اختياري)</label><textarea id="m_msg" placeholder="نقترح هذا السعر ليناسب جمهور الدورة…"></textarea></div>
-  <div class="acts" style="margin-top:6px"><button class="btn btn-human" id="m_send">إرسال العرض للمدرّب</button><button class="btn btn-ghost" id="m_cx">إلغاء</button></div>`);
-  s.querySelector('#m_cx').onclick=closeModal;
-  s.querySelector('#m_send').onclick=()=>{const val=s.querySelector('#m_cp').value;p.status='negotiate';p.fair=+val||p.fair;closeModal();renderCourses();drawCourse();notify('أرسلت عرض '+money(+val||p.fair)+' ج لـ«'+p.course+'» — بانتظار رد المدرّب');};
-}
-function termsModal(p){const s=openModal('تعديل الشروط — '+p.course,`
-  <div class="fld"><label>شروط الدورة والاتفاق</label><textarea id="m_terms" style="min-height:110px">${p.terms}</textarea></div>
-  <label class="tg" style="margin-bottom:12px"><input type="checkbox" id="m_ph" ${p.perHead?'checked':''}> تسعير لكل فرد</label>
-  <div class="acts"><button class="btn btn-primary" id="m_ts">حفظ وإشعار المدرّب</button><button class="btn btn-ghost" id="m_tc">إلغاء</button></div>`);
-  s.querySelector('#m_tc').onclick=closeModal;
-  s.querySelector('#m_ts').onclick=()=>{p.terms=s.querySelector('#m_terms').value;p.perHead=s.querySelector('#m_ph').checked;closeModal();renderCourses();drawCourse();notify('حدّثت شروط «'+p.course+'» — أُشعر المدرّب للموافقة');};
 }
 
 /* ===== INVESTMENT VIEW (قسم داخلي) ===== */

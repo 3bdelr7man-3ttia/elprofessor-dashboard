@@ -30,7 +30,6 @@
   function reduced() { return mm('(prefers-reduced-motion: reduce)'); }
   function img(n) { return 'v2/img/' + n + '.jpg'; }
   function stateOf(k) { var E = ep(); return (E && E.state && E.state[k]) || 'idle'; }
-  function loadingState(k) { var s = stateOf(k); return s === 'idle' || s === 'loading'; }
 
   // متغيرات الحالة العامة في index.html (let/var في سكربت عادي) — تُقرأ وتُكتب بالاسم، وأي غيابها (اختبار/صفحة أخرى) لا يكسر شيئًا.
   function getSel() { try { return selected; } catch (e) { return null; } }

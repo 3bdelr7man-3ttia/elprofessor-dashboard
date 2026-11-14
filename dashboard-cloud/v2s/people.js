@@ -205,8 +205,6 @@
     return h + '</div></article>';
   }
 
-  // ------------------------------------------------------------------ لوحة الطلبات
-  var TONE_CLS = { amber: 'wait', ink: 'ink', green: 'ok' };
   function colHtml(key, c, tabKey, ticketTone, emptyText, opts) {
     opts = opts || {};
     var body = '';

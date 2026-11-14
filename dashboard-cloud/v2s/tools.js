@@ -504,7 +504,6 @@
   var T = window.V2S_TOOLS = {};
   var MOD = 'v2s_tools';
   var IMG = { recipes: 'marketing', styles: 'content', samples: 'people', report: 'money', settings: 'company' };
-  var TITLES = { recipes: 'الأدوات', styles: 'الأماكن والأنماط', samples: 'العيّنات', report: 'التقرير', settings: 'الإعدادات' };
   var P = { ov: '/v2/tools/overview', rec: '/v2/tools/recipes', set: '/v2/tools/settings', smp: '/v2/tools/samples' };
   var S = { view: null, sub: 'hub', src: {}, note: '', noteT: null, nowOverride: 0, retryT: null, minute: null, range: 'today', cFrom: '', cTo: '', rangeErr: '', drawT: null, form: null };
 
@@ -583,7 +582,6 @@
   }
   function noteHtml() { return S.note ? '<p class="tl-note" role="status">' + esc(S.note) + '</p>' : ''; }
   function chip(t, cls) { return '<span class="tl-chip' + (cls ? ' ' + cls : '') + '">' + esc(t) + '</span>'; }
-  function errLine(id, k, errs) { return '<p class="tl-ce' + (errs && errs[k] ? ' bad' : '') + '" id="' + id + '" role="alert">' + esc(errs && errs[k] ? errs[k] : '') + '</p>'; }
 
   // ------------------------------------------------------------------ الرئيسية: لوحة الحالة ومربّعات
   function statusCard() {

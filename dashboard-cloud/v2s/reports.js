@@ -147,7 +147,6 @@
     return '<div class="v3-empty"><b>' + esc(title) + ': ' + NA + '</b><p>تعذّر الجمع الآن، فلا تعتبر الأرقام صفرًا.</p><button type="button" class="v3-btn2" data-a="' + a + '">أعد المحاولة</button></div>';
   }
   function naText(t) { return '<span class="v2r-na">' + esc(t || NA) + '</span>'; }
-  function numHtml(v, fmtFn) { return isNum(v) ? esc(fmtFn ? fmtFn(v) : ar(v)) : naText(); }
   function moneyOf(a) { return U.moneyText(a, 'EGP'); }
   function chipHtml(c) { return c ? '<span class="v2r-st t-' + esc(c.tone || 'mute') + '">' + esc(c.text) + '</span>' : ''; }
   function agoLine(at) {

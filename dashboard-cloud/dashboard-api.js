@@ -994,7 +994,6 @@
       return Promise.all([get("/platform-wallet-payouts"), loadSnooze()]).then(function (res) {
         var r = res[0], snz = res[1];
         var list = (r && Array.isArray(r.payouts)) ? r.payouts : [];
-        var hiddenPayouts = [];
         EP.data.walletPayouts = {
           count: list.length,
           rows: list.map(function (p) {

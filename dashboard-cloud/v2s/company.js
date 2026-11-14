@@ -161,10 +161,6 @@
   function stat(label, valueHtml, hint) {
     return '<div class="co-stat"><span>' + esc(label) + '</span><b>' + valueHtml + '</b>' + (hint ? '<small>' + esc(hint) + '</small>' : '') + '</div>';
   }
-  function brainBlock(text, btnLabel, a, attrs) {
-    return '<div class="co-bl"><img class="co-bav" src="' + img('brain-avatar') + '" alt=""><p>' + esc(text) + '</p>' + (btnLabel ? '<button type="button" class="co-blb" data-a="' + a + '"' + (attrs || '') + '>' + esc(btnLabel) + '</button>' : '') + '</div>';
-  }
-  function colorOf(rows, i, row) { return row && row.reserve ? RESERVE_COLOR : COLORS[i % COLORS.length]; }
   function equityBar(parts) {
     var idx = 0, segs = parts.rows.filter(function (r) { return r.equity > 0; }).map(function (r) {
       var c = r.reserve ? RESERVE_COLOR : COLORS[idx++ % COLORS.length];
