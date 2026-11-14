@@ -29,7 +29,6 @@ UNREADABLE_AR = 'تعذّرت قراءة هذا المفتاح؛ أضِفه من
 
 KINDS = ('anthropic', 'openai_compat')
 ROLES = ('main', 'backup', 'off')
-ROLE_LABEL = {'main': 'الأساسي', 'backup': 'الاحتياطي', 'off': 'موقوف'}
 LABEL_MAX = 60
 MODEL_MAX = 80
 URL_MAX = 200

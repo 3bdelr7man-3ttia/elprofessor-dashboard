@@ -21,7 +21,6 @@ from brain2 import engine, registry
 
 logger = logging.getLogger(__name__)
 
-ASK_PATH = '/api/bridge/brain/ask'
 OPEN_URL = 'https://dashboard.elprofessor.net/'
 AUDIT_ASK = 'brain.tg_ask'
 TITLE_MAX, TEXT_MAX, LABEL_MAX = 120, 900, 24

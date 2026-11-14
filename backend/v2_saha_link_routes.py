@@ -25,7 +25,6 @@ SAHA_APP_URL = 'https://app.elprofessor.net/?page=saha&topic='
 TOPIC_ID_RE = re.compile(r'^[A-Za-z0-9_-]{8,64}$')
 _SLUG_BAD = re.compile(r'[\s/\\?#]')
 _LIVE = ('open', 'published')            # النقاش علنيّ فعلًا
-_PUBLISHABLE = ('draft', 'pending_review', 'merged')
 _DEAD = ('rejected', 'archived')
 
 CONFIRM_AR = 'لازم تأكّد الأول من الشاشة'

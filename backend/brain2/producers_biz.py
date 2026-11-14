@@ -573,16 +573,13 @@ def _prompt_forecast_comment(target):
 #   * text (للبطاقة) ملخّص عربي قصير يبنيه الكود لا الذكاء: لا أرقام ولا حروف لاتينية إلا من الحقائق.
 #   * المسودة نفسها في `body['lesson']`، وما تراه الواجهة في `body['fields'] = {title, body}`.
 #   * apply: تأكيد أن الدرس ما زال فاضيًا ثم `PUT …/lessons/<lid>` بالحقول + `confirmed:true` + `by`.
-_CLD_KINDS = ('interactive', 'recorded')
 _CLD_STATUSES = ('draft', 'changes')
 _CLD_GATHER_MAX = 12            # أهداف تُرجَع (السقف الفعلي للذكاء: per_run_cap = ٣)
 _CLD_COURSES_MAX = 12           # دورات تُقرأ في الجولة
-_CLD_BLOCK_TYPES = ('objectives', 'text', 'situation', 'decision', 'recall', 'quiz', 'summary', 'example', 'cards')
 _CLD_BLOCKS_MIN, _CLD_BLOCKS_MAX = 4, 7
 _CLD_TRANSCRIPT_MIN, _CLD_TRANSCRIPT_MAX = 120, 4000
 CLD_LABEL = 'مسودة درس'
 CLD_APPROVE_LABEL = 'أضف الدرس'
-_CLD_KIND_AR = {'interactive': 'درس تفاعلي', 'recorded': 'درس مسجّل'}
 _CLD_TYPE_AR = {'objectives': 'أهداف', 'text': 'شرح', 'situation': 'موقف', 'decision': 'قرار', 'recall': 'تذكير بالقرار',
                 'quiz': 'اختبار', 'summary': 'ملخص', 'example': 'مثال', 'cards': 'كروت'}
 _CLD_KEY_RE = re.compile(r'^[a-z][a-z0-9_]*$')
