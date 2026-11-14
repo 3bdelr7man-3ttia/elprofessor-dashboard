@@ -268,12 +268,3 @@ def test_the_action_cell_uses_the_same_condition_as_the_badge():
     assert "var act=c.archived_at?" not in idx
     # نفسُ شرط الشارة بالحرف
     assert "if(!c.is_active&&c.archived_at)return['s-late','مؤرشفة — مخفية']" in idx
-
-
-def test_the_state_page_no_longer_advertises_the_deleted_routes():
-    """ورقةُ حالةٍ تكذب أخطر من ورقةٍ ناقصة: المساران اتشالوا فلا يُذكران كـ«يُعاد توجيهه»."""
-    state = open(os.path.join(_REPO, 'dashboard-cloud', 'Dashboard-State.html'),
-                 encoding='utf-8').read()
-    assert '/api/courses/sync-lms' not in state
-    assert 'يُعاد توجيهه' not in state
-    assert 'قرار المؤسس 2026-09-10' in state

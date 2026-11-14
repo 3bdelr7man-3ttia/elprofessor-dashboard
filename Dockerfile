@@ -56,8 +56,7 @@ COPY backend/data/glossary_seed.json backend/data/glossary_course1.json backend/
 COPY backend/v2_saha_routes.py /app/v2_saha_routes.py
 COPY backend/assets/fonts /app/assets/fonts
 # The new cloud-design dashboard becomes the served frontend (Flask serves /app/dist).
-# Only the live app files are shipped — the standalone prototype HTMLs
-# (Dashboard-Outputs.html / Dashboard-State.html) are unreferenced and not deployed.
+# Only the live app files are shipped.
 COPY dashboard-cloud/index.html dashboard-cloud/dashboard-api.js dashboard-cloud/site-content.js /app/dist/
 # D1 · اللوحة الجديدة (ورا مفتاح DASH_V2_ENABLED): منطقها النقي + رسمها + تنسيقها + صور المربّعات.
 # D1-B · الهيكل الجديد (قوائم الأقسام والتبويبات).
