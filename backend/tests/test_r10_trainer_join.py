@@ -270,10 +270,6 @@ def test_courses_screen_has_cancel_postpone_filter_and_sweep():
         assert w in js, w
     # الأزرار لا تظهر إلا حيث الفيديو ناقص والطلب معلّق (الخادم هو الحَكَم بعدها)
     assert "a.video.open" in js
-    # خبير وحده: لا اتفاقية تدريب في نص القبول
-    i = js.index('function openAppAccept')
-    body = js[i:i + 1700]
-    assert "a.joinAs === 'expert'" in body and 'لا اتفاقية تدريب' in body
 
 
 def test_home_shows_the_overdue_strip_with_a_confirm_step():
@@ -295,7 +291,7 @@ def test_new_visible_copy_has_no_banned_words():
     co = _read('dashboard-cloud', 'v2s', 'courses.js')
     home = _read('dashboard-cloud', 'v2s', 'home.js')
     blocks = [_between(co, '// R10: صفة الانضمام', '  function trainerRowHtml'), _between(co, 'function overdueCount', 'function drawTrainers'),
-              _between(co, '// R10: إلغاء طلب لم يصل', '  function openAppDetail'), _between(home, 'R10 §E.3: طلبات انضمام', '// وضع الخدمة')]
+              _between(co, '// R10: إلغاء طلب لم يصل', '// ------------------------------------------------------------------ الأوراق: الدورات الحيّة'), _between(home, 'R10 §E.3: طلبات انضمام', '// وضع الخدمة')]
     added = ''
     for src in blocks:
         for m in re.finditer(r"'([^'\n]*[\u0600-\u06FF][^'\n]*)'", src):

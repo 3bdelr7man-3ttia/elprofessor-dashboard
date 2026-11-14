@@ -230,7 +230,6 @@
     return '<section class="v2p-col tone-' + esc(c.tone || 'wait') + (opts.active ? ' on' : '') + (opts.dim ? ' dim' : '') + '" data-col="' + key + '" aria-label="' + esc(c.label) + '"><header class="v2p-ch"><b>' + esc(c.label)
       + '</b><span class="v2p-n">' + esc(c.countText != null ? c.countText : (c.count == null ? '—' : ar(c.count))) + '</span></header><div class="v2p-list">' + body + '</div></section>';
   }
-  var REQ_ORDER = ['visitors', 'approval', 'join', 'founding'];
   function pickActive(tab, cols, order) {
     var a = S.col[tab];
     if (order.indexOf(a) < 0 || !S.picked[tab]) {

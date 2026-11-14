@@ -554,16 +554,6 @@ def test_application_ticket_reads_sample_url_from_platform_doc():
     assert none['links']['portfolio'] == '' and 'نماذج أعمال' not in none['line']
 
 
-def test_application_detail_sheet_renders_new_fields_and_only_web_links():
-    js = _read('dashboard-cloud', 'v2s', 'courses.js')
-    i = js.index('function openAppDetail')
-    body = js[i:i + 2600]
-    for w in ("'سنوات الخبرة'", "'العمل الحالي أو الأخير'", "'دورات قدّمها'", "'الفيديو التعريفي'", "a.introVideo", "a.experience", "a.links.cv", "a.links.portfolio"):
-        assert w in body, w
-    assert "/^https:" in body.split('function link')[1].split('\n')[0]                    # لا href إلا لرابط ويب
-    assert 'استشار' not in body and '·' not in body
-
-
 @needs_node
 def test_application_tickets():
     t = _co('appTickets', APPS, {'now': NOW})

@@ -440,20 +440,6 @@
     return '<div class="v2co-acts two"><button type="button" class="v2co-btn2" data-a="apppostpone" data-id="' + esc(a.id) + '">تأجيل يومين</button>'
       + '<button type="button" class="v2co-btn2" data-a="appcancel" data-id="' + esc(a.id) + '">إلغاء</button></div>';
   }
-  function acceptLabel(a) { return a.joinAs === 'expert' ? 'اقبله خبيرًا' : 'اقبله وأرسل الاتفاقية'; }
-  function appTicketHtml(a) {
-    var more = a.moreChips ? chip('+' + ar(a.moreChips), 'grey') : '';
-    return '<article class="v2co-t tone-' + esc(a.tone === 'none' ? 'ok' : a.tone) + '" data-id="' + esc(a.id) + '">'
-      + '<div class="v2co-strip"><span class="v2co-type">' + (a.hasJoin ? 'طلب انضمام جديد' : 'طلب مدرّب جديد') + '</span>' + timeHtml(a.text, a.tone, a.timer && a.timer.at) + '</div>'
-      + '<div class="v2co-body"><h3><button type="button" class="v2co-open" data-a="appopen" data-id="' + esc(a.id) + '">' + esc(a.name) + '</button></h3>'
-      + (a.headline ? '<p class="v2co-who">' + esc(a.headline) + '</p>' : '')
-      + appChipsHtml(a)
-      + (a.chips.length ? '<p class="v2co-chips">' + a.chips.map(function (x) { return chip(x, 'grey'); }).join('') + more + '</p>' : '')
-      + '<div class="v2co-brain">' + BRAIN + '<p>' + esc(a.line) + '</p></div>'
-      + '<div class="v2co-acts two">' + (a.suggestion === 'accept' ? '<button type="button" class="v2co-btn1" data-a="appaccept" data-id="' + esc(a.id) + '">' + acceptLabel(a) + '</button>'
-        : '<button type="button" class="v2co-btn1" data-a="appopen" data-id="' + esc(a.id) + '">افتح الطلب</button>')
-      + '<button type="button" class="v2co-btn2" data-a="appreject" data-id="' + esc(a.id) + '">ارفض</button></div>' + appVideoActs(a) + '</div></article>';
-  }
   // طلب أُلغي (مهلة الفيديو): للقراءة فقط، لا قبول ولا رفض.
   function appCancelledHtml(a) {
     return '<article class="v2co-t tone-ok" data-id="' + esc(a.id) + '"><div class="v2co-strip"><span class="v2co-type">طلب انضمام</span></div>'
@@ -906,34 +892,6 @@
     setNote(text); load('apps', true); load('appsCancelled', true); load('experts', true); redraw();
     try { if (ep() && ep().reload) ep().reload('inbox', function () { redraw(); }); } catch (e) {}      // تنبيه «فات موعد الفيديو» في الرئيسية يتحدّث
   }
-  function openAppAccept(id) {
-    var a = appById(id); if (!a) return;
-    flow({
-      title: a.joinAs === 'expert' ? 'اقبل الخبير' : 'اقبل المدرّب',
-      form: a.joinAs === 'expert'
-        ? '<p class="v2co-lead">قبول ' + esc(a.name) + ' خبيرًا؟</p>' + listHtml(['يصل إلى مقدّم الطلب بريد القبول.', 'لا اتفاقية تدريب في هذه الحالة.'].map(esc))
-        : '<p class="v2co-lead">قبول ' + esc(a.name) + (a.joinAs === 'both' ? ' خبيرًا ومدرّبًا؟' : ' مدرّبًا؟') + '</p>' + listHtml(['يصل إلى مقدّم الطلب بريد فيه اتفاقية التدريب ليوقّعها.', 'لا تُنشر أي دورة لمقدّم الطلب قبل توقيع الاتفاقية.'].map(esc)),
-      collect: function () { return { ok: true, payload: {} }; },
-      btnConfirm: a.joinAs === 'expert' ? 'اقبل الخبير' : 'اقبل وأرسل الاتفاقية', busy: 'جارٍ القبول…',
-      send: function () { return decideP({ apiKind: 'trainer', apiId: id }, 'approve', ''); },
-      onOk: function () { afterApp(a.joinAs === 'expert' ? 'قُبل ' + a.name + ' خبيرًا' : 'قُبل ' + a.name + (a.joinAs === 'both' ? ' خبيرًا ومدرّبًا' : ' مدرّبًا') + '، وأُرسلت إليه الاتفاقية'); },
-      onStale: function () { load('apps', true); }
-    });
-  }
-  function openAppReject(id) {
-    var a = appById(id); if (!a) return;
-    flow({
-      title: 'ارفض الطلب',
-      form: '<p class="v2co-lead">رفض طلب ' + esc(a.name) + '؟</p>' + fld('co_why', 'سبب الرفض', '<textarea id="co_why" rows="3" maxlength="600"></textarea>', 'يقرؤه مقدّم الطلب كما تكتبه'),
-      wire: function (s) { setTimeout(function () { try { q('#co_why', s).focus(); } catch (e) {} }, 30); },
-      ready: function (s) { return !!q('#co_why', s).value.trim(); },
-      collect: function (s) { var v = q('#co_why', s).value.trim(); return v ? { ok: true, payload: { why: v } } : { ok: false, error: 'اكتب سبب الرفض، فهو يصل إلى مقدّم الطلب' }; },
-      btnConfirm: 'ارفض الطلب', danger: true, busy: 'جارٍ الرفض…',
-      send: function (p) { return decideP({ apiKind: 'trainer', apiId: id }, 'reject', p.why); },
-      onOk: function () { afterApp('رُفض طلب ' + a.name); },
-      onStale: function () { load('apps', true); }
-    });
-  }
   // R10: إلغاء طلب لم يصل فيديوه (ليس رفضًا) · تأجيل المهلة يومين · إلغاء كل المتأخر. الخادم يفرض الحالات (٤٠٩ لو القرار اتأخد).
   function openAppCancel(id) {
     var a = appById(id); if (!a) return;
@@ -969,51 +927,6 @@
       send: function () { return post('/platform-trainer-applications/expire-sweep', {}); },
       onOk: function (res) { var k = res && typeof res.cancelled === 'number' ? res.cancelled : 0; afterApp(k ? 'أُلغي ' + U.U(k, ['طلب واحد', 'طلبان', 'طلبات', 'طلبًا']) : 'لا طلب متأخر الآن'); },
       onStale: function () { load('apps', true); }
-    });
-  }
-  function openAppDetail(id) {
-    var a = appById(id); if (!a) return;
-    function link(url, label) { return /^https:\/\/\S+$/i.test(url || '') ? '<a href="' + esc(url) + '" target="_blank" rel="noopener noreferrer">' + esc(label) + '</a>' : ''; }
-    var links = [link(a.links.linkedin, 'لينكدإن'), link(a.links.cv, 'السيرة الذاتية'), link(a.links.portfolio, 'نماذج الأعمال')].filter(Boolean).join('، ');
-    var ex = a.experience || {};
-    var s = openSheet('طلب ' + a.name, factsTable([['العنوان المهني', esc(a.headline || '—')], ['المجالات', esc(a.expertise.length ? a.expertise.join('، ') : 'بلا مجال محدّد')],
-      ['نبذة الخبرة', esc(a.summary || '—')], ['سنوات الخبرة', esc(ex.years || '')], ['العمل الحالي أو الأخير', esc(ex.role || '')], ['دورات قدّمها', esc(ex.courses || '')],
-      ['الفيديو التعريفي', link(a.introVideo, 'شاهد الفيديو')], ['الروابط', links || 'بلا روابط'], ['تاريخ التقديم', esc(a.createdAt ? U.dateText(a.createdAt) : '—')],
-      ['تنضم بصفة', esc(a.joinAsText)], ['الخدمات التي يقدّمها', esc(a.claimed.join('، '))], ['رقم التواصل', a.phone ? '<bdi dir="ltr">' + esc(a.phone.replace(/\d/g, function (d) { return '٠١٢٣٤٥٦٧٨٩'.charAt(+d); })) + '</bdi>' : ''], ['حالة الفيديو', esc(a.video && a.video.text)]])
-      + '<div class="v2co-brain">' + BRAIN + '<p>' + esc(a.line) + '</p></div><div class="v2co-macts">'
-      + (a.suggestion === 'accept' ? '<button type="button" class="v2co-btn1" id="co_acc">' + acceptLabel(a) + '</button>' : '')
-      + '<button type="button" class="v2co-btn2" id="co_rej">ارفض الطلب</button>'
-      + (a.video && a.video.open ? '<button type="button" class="v2co-btn2" id="co_pp2">تأجيل يومين</button><button type="button" class="v2co-btn2" id="co_cx">إلغاء</button>' : '') + '</div>'
-      + (a.email ? '<p class="v2co-fine"><a class="v2co-person" href="' + esc(L.sectionHash('people', 'person', a.email)) + '" data-person="' + esc(a.email) + '" id="co_pp">افتح صفحة الشخص</a></p>' : ''));
-    if (!s) return;
-    var acc = q('#co_acc', s); if (acc) acc.onclick = function () { closeSheet(); openAppAccept(id); };
-    q('#co_rej', s).onclick = function () { closeSheet(); openAppReject(id); };
-    var ppo = q('#co_pp2', s); if (ppo) ppo.onclick = function () { closeSheet(); openAppPostpone(id); };
-    var cxo = q('#co_cx', s); if (cxo) cxo.onclick = function () { closeSheet(); openAppCancel(id); };
-    var pp = q('#co_pp', s); if (pp) pp.onclick = function (e) { e.preventDefault(); closeSheet(); if (host().openPerson) host().openPerson(a.email); };
-  }
-  function openStopTrainer(email) {
-    var rows = C.trainerRows(rowsOf('experts', 'experts'), rowsOf('courses', 'courses'), { now: now() }) || [];
-    var r = rows.filter(function (x) { return x.email === email; })[0];
-    var name = r ? r.name : email;
-    flow({
-      title: 'أوقف كمدرّب',
-      form: '<p class="v2co-lead">يُلغى اعتماد ' + esc(name) + ' مدرّبًا، ويختفي من دليل الخبراء.</p>' + listHtml(['الدورات المنشورة لصاحب الحساب لا تُحذف.'])
-        + '<label class="v2co-tg"><input type="checkbox" id="co_test"> وسم الحساب تجريبيًا (لحسابات التجربة فقط)</label>'
-        + fld('co_em', 'اكتب البريد للتأكيد', '<input id="co_em" type="text" dir="ltr" autocomplete="off" placeholder="' + esc(email) + '">')
-        + fld('co_rs', 'السبب (اختياري)', '<input id="co_rs" type="text" maxlength="200" autocomplete="off">'),
-      ready: function (s) { return q('#co_em', s).value.trim().toLowerCase() === String(email).toLowerCase(); },
-      collect: function (s) { return { ok: true, payload: { test: !!q('#co_test', s).checked, reason: q('#co_rs', s).value.trim() } }; },
-      btnConfirm: 'أوقف المدرّب', danger: true, busy: 'جارٍ الإيقاف…',
-      send: function (p) {
-        return ep().api('/platform-users?search=' + encodeURIComponent(email)).then(function (res) {
-          var u = ((res && res.users) || []).filter(function (x) { return String(x.email || '').toLowerCase() === String(email).toLowerCase(); })[0];
-          if (!u) { var e = new Error('x'); e.data = { error: 'لم نجد حساب هذا المدرّب على المنصة' }; e.status = 404; throw e; }
-          return ep().api('/platform-trainers/' + encodeURIComponent(u.id) + '/deactivate', { method: 'POST', body: { reason: p.reason, is_test: p.test, email: email } });
-        });
-      },
-      onOk: function () { afterApp('أُوقف ' + name + ' كمدرّب'); },
-      onStale: function () { load('experts', true); }
     });
   }
 
@@ -1233,22 +1146,6 @@
     Object.keys(SRC).forEach(function (k) { var st = srcState(k); if (st === 'error' || (st === 'closed' && !OPTIONAL[k] && k.indexOf(':') < 0)) load(k, true); });
     var E = ep(); if (E && E.authed) { if (epState('opsQueue') === 'error') E.reload('opsQueue', null); if (epState('analysis') === 'error') E.reload('analysis', null); }
   }
-  function editLessons(id) {
-    var c = courseById(id); if (!c) return;
-    function pick() {
-      var list = typeof window.csPlatformCourses === 'function' ? window.csPlatformCourses() : [];
-      var idx = -1; for (var i = 0; i < list.length; i++) if (list[i] && String(list[i].id) === String(id)) idx = i;
-      var h = document.getElementById('v2coLegacyHost');
-      if (idx < 0 || !h) return;
-      host().setLegacy('selected', 'P' + idx);
-      window.viewCourses(h);
-      if (typeof window.drawCourse === 'function') window.drawCourse();
-    }
-    if (typeof window.v2OpenSection === 'function') window.v2OpenSection('courses', 'all', { st: { courseTab: 'platform' } }); else goSection('courses', 'all');
-    var E = ep();
-    if (E && E.authed) E.ensure('platform_courses', pick);
-    pick();
-  }
   var ACT = {
     retry: function () { reloadAll(); },
     create: function () { if (window.V2CE && window.V2CE.openCreate) { load('experts'); window.V2CE.openCreate({}); } else openCreate(''); },
@@ -1259,7 +1156,6 @@
     board: function () { S.list = false; redraw(); },
     'all-courses': function () { S.list = true; S.filter = 'all'; if (S.screen === 'board') redraw(); else { S.keepList = true; goSection('courses', 'courses'); } },
     col: function (el) { S.col = el.getAttribute('data-col'); try { localStorage.setItem('v2co_col', S.col); } catch (e) {} redraw(); },
-    trseg: function (el) { S.tr = el.getAttribute('data-seg'); try { localStorage.setItem('v2co_tr', S.tr); } catch (e) {} redraw(); },
     filter: function (el) { S.filter = el.getAttribute('data-f'); redraw(); },
     goto: function (el) { goSection(el.getAttribute('data-s'), el.getAttribute('data-t')); },
     approve: function (el) { openApprove(el.getAttribute('data-id'), el.getAttribute('data-unknown') === '1'); },
@@ -1273,20 +1169,10 @@
     'delete': function (el) { openArchive(el.getAttribute('data-id'), true); },
     refetch: function (el) { load('checklist:' + el.getAttribute('data-id'), true); redraw(); },
     retrydetail: function (el) { load('detail:' + el.getAttribute('data-id'), true); redraw(); },
-    'edit-lessons': function (el) { editLessons(el.getAttribute('data-id')); },
-    appopen: function (el) { openAppDetail(el.getAttribute('data-id')); },
-    appaccept: function (el) { openAppAccept(el.getAttribute('data-id')); },
-    appreject: function (el) { openAppReject(el.getAttribute('data-id')); },
     apppostpone: function (el) { openAppPostpone(el.getAttribute('data-id')); },
     appcancel: function (el) { openAppCancel(el.getAttribute('data-id')); },
     appsweep: function () { openAppSweep(); },
-    appsview: function (el) { S.appsView = el.getAttribute('data-v') === 'cancelled' ? 'cancelled' : 'pending'; if (S.appsView === 'cancelled') load('appsCancelled'); redraw(); },
-    tstop: function (el) { var d = el.closest('details'); if (d) d.removeAttribute('open'); openStopTrainer(el.getAttribute('data-email')); },
     'live-open': function (el) { var c = courseBySlug(el.getAttribute('data-slug')); if (c) goPage(c.id); },
-    'live-confirm': function (el) { openLiveDecision(el.getAttribute('data-slug'), 'confirm'); },
-    'live-extend': function (el) { openLiveDecision(el.getAttribute('data-slug'), 'extend'); },
-    'live-cancel': function (el) { openLiveDecision(el.getAttribute('data-slug'), 'cancel'); },
-    'live-zoom': function (el) { openSchedule(el.getAttribute('data-slug')); },
     'live-edit': function (el) { openSchedule(el.getAttribute('data-slug')); },
     'live-who': function (el) { openReservations(el.getAttribute('data-slug'), false); },
     'live-paid': function (el) { openReservations(el.getAttribute('data-slug'), true); },

@@ -250,21 +250,6 @@
     setTimeout(finish, 20000);
     keys.forEach(function (k) { E.reload(k, function () { if (keys.every(function (x) { return stateOf(x) !== 'loading'; })) finish(); }); });
   }
-  function sendTicket(board, t) {
-    var E = ep(), a = t.primary.act, id = t.id;
-    if (!E || S.busy[id]) return;
-    S.busy[id] = true; S.err[id] = ''; redraw();
-    Promise.resolve(E.expertFileSend(t.row, a.email, a.name, '', null)).then(function (res) {
-      res = res || {};
-      S.busy[id] = false;
-      if (res.ok) { S.done[id] = 'أُرسل «' + t.title + '» إلى ' + a.name; refreshAll(function () { delete S.done[id]; redraw(); }); }
-      else {
-        S.err[id] = window.V2 && V2.plainError ? V2.plainError(res) : ((res && res.error) || 'تعذّر تنفيذ العملية');
-        if (res.noReply || res.final) { S.locked[id] = true; refreshAll(null); }
-      }
-      redraw();
-    }).catch(function (e) { S.busy[id] = false; S.err[id] = (e && e.message) || 'تعذّر تنفيذ العملية'; redraw(); });
-  }
   function wire(v, board) {
     var re = v.querySelector('[data-a="reload"]');
     if (re) re.onclick = function () { var E = ep(); if (E) { E.reload('inbox'); E.reload('opsQueue'); } };

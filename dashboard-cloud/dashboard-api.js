@@ -4106,16 +4106,6 @@
       .then(function () { note(status === "approved" ? "تم اعتماد السحب" : "تم رفض السحب"); EP.reload("investment", after); })
       .catch(function (e) { quietToast((e && e.message) || "تعذّر تحديث طلب السحب"); if (after) after(); });
   };
-  // طلب سحب من محفظة المستثمر/المدرّب نفسه: POST /investor/withdraw {amount,currency}
-  // المبلغ بالجنيه من الشاشة؛ نرسله بعملة EGP والـ backend يحوّله. يعيد تحميل لوحة المستثمر.
-  EP.investorWithdraw = function (amountEgp, after) {
-    var amt = Number(amountEgp || 0);
-    if (!amt || amt <= 0) { quietToast("لا يوجد رصيد قابل للسحب"); if (after) after(); return; }
-    post("/investor/withdraw", { amount: amt, currency: "EGP" })
-      .then(function (r) { note((r && r.message) || "تم إرسال طلب السحب"); EP.reload("i_data", after); })
-      .catch(function (e) { quietToast((e && e.message) || "تعذّر إرسال طلب السحب"); if (after) after(); });
-  };
-
   // ---- الدورات ----
   // F-134/ب: كل إنشاء دورة بيحمل مالكها — بريد المدرّب أو علَم «دورة من المنصّة نفسها». الحارس
   // ده حزام تاني (الفورم بيتحقق، والخادم بيردّ ٤٠٠ ٤٢٢): أي نداء جديد ما يقدرش يخلق دورة
