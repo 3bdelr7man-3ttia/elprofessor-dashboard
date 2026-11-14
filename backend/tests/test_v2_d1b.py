@@ -270,7 +270,7 @@ def test_go_ops_and_render_view_hooks_do_nothing_when_the_shell_is_off():
 
 
 def test_the_shell_is_not_in_the_static_markup_and_files_are_wired():
-    body = HTML[HTML.index('<body>'):HTML.index('<script src="site-content.js">')]
+    body = HTML[HTML.index('<body>'):HTML.index('<script src="dashboard-api.js">')]
     for needle in ('v2Side', 'v2Sheet', 'v2sec', 'v2-shell', 'v2c-tab'):
         assert needle not in body, needle
     assert '<link rel="stylesheet" href="v2-shell.css">' in HTML

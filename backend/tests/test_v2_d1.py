@@ -405,7 +405,8 @@ def test_dockerfiles_ship_the_new_files(dockerfile):
     for f in ('dashboard-cloud/v2-logic.js', 'dashboard-cloud/v2-home.js', 'dashboard-cloud/v2-home.css'):
         assert f in txt, (dockerfile, f)
     assert 'COPY dashboard-cloud/v2/img /app/dist/v2/img' in txt
-    assert 'dashboard-cloud/index.html dashboard-cloud/dashboard-api.js dashboard-cloud/site-content.js' in txt
+    assert 'dashboard-cloud/index.html dashboard-cloud/dashboard-api.js /app/dist/' in txt
+    assert 'site-content.js' not in txt    # r26: ملف المحتوى التجريبي ما بيقرأه أي كود في اللوحة فاتشال
 
 
 def test_every_tile_image_and_the_avatar_exist():
