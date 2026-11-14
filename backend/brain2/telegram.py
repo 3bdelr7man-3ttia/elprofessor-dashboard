@@ -236,18 +236,6 @@ def send_ask(ns, item_id):
     return 'sent' if sent else 'failed'
 
 
-def send_asks(ns, ids):
-    for item_id in ids or []:
-        try:
-            send_ask(ns, item_id)
-        except Exception:   # noqa: BLE001
-            logger.exception('brain2: telegram ask failed for %s', item_id)
-            try:
-                ns['db'].session.rollback()
-            except Exception:   # noqa: BLE001
-                pass
-
-
 # ------------------------------------------------------------------ سطر النتيجة للمنصة
 
 def result_line(p, info):

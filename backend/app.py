@@ -170,7 +170,7 @@ def _security_headers(resp):
     #    not prevent it; the real locks are esc() at every sink and a shorter token life
     #    (F-108). ⛔ Never accept CSP as a substitute for esc().
     # Inventory of what the page actually loads (verified by grep over index.html /
-    # dashboard-api.js / site-content.js): one @import stylesheet from fonts.googleapis.com
+    # dashboard-api.js): one @import stylesheet from fonts.googleapis.com
     # (fonts themselves from fonts.gstatic.com), zero external <script>, zero <img>, zero
     # <iframe>, and exactly one fetch() — same-origin `/api/*`. The whole UI is one inline
     # <script> plus inline `onclick=` handlers and inline styles, hence 'unsafe-inline' on
@@ -1226,11 +1226,6 @@ def investment_visible_to(investment, user):
     return entitlement_name_matches(getattr(investment, 'investor_name', ''), user)
 
 
-def investor_display_name(user=None, explicit_name=''):
-    if explicit_name:
-        return explicit_name.strip()
-    return user_linked_name(user) if user else ''
-
 def sync_opportunity_funding(opportunity):
     if not opportunity:
         return 0
@@ -1306,12 +1301,6 @@ def month_add(start, offset):
     year = start.year + (month - 1) // 12
     month = (month - 1) % 12 + 1
     return datetime.date(year, month, 1)
-
-def expense_total(expenses, rate):
-    return sum(to_egp(e.amount_usd, e.amount_egp, rate) for e in expenses)
-
-def revenue_total(revenues, rate):
-    return sum(to_egp(r.amount_usd, r.amount_egp, rate) for r in revenues)
 
 def payout_total(payouts, rate):
     total = 0
@@ -5759,40 +5748,6 @@ def platform_news_sources_update():
     return _platform_proxy('PUT', '/api/bridge/news-sources', json_body=payload)
 
 
-@app.route('/api/investor/wallet', methods=['GET'])
-def investor_wallet_bridge():
-    """Read-only investor wallet by email, for the platform to mirror in its
-    investor portal. Secured by the same platform<->dashboard service secret."""
-    secret = request.headers.get('X-ELP-Metrics-Secret', '')
-    if not PLATFORM_METRICS_SECRET or not secret or not secrets.compare_digest(secret, PLATFORM_METRICS_SECRET):
-        return jsonify({'error': 'unauthorized'}), 401
-    email = (request.args.get('email') or '').lower().strip()
-    if not email:
-        return jsonify({'error': 'email required'}), 400
-
-    user = User.query.filter_by(email=email).first()
-    wallet = None
-    if user:
-        wallet = InvestorWallet.query.filter_by(investor_user_id=user.id).first()
-        if not wallet:
-            name = user_linked_name(user)
-            if name:
-                wallet = InvestorWallet.query.filter_by(investor_name=name).first()
-    if not wallet:
-        return jsonify({'exists': False, 'balance': 0, 'total_invested': 0, 'total_returns': 0, 'level': 'bronze', 'currency': 'USD'})
-
-    sync_wallet(wallet)
-    db.session.commit()
-    return jsonify({
-        'exists': True,
-        'balance': wallet.balance or 0,
-        'total_invested': wallet.total_invested or 0,
-        'total_returns': wallet.total_returns or 0,
-        'level': wallet.level or 'bronze',
-        'currency': 'USD',
-    })
-
-
 def _metrics_secret_ok():
     """True iff the request carries the shared platform<->dashboard service secret.
     Mirrors the verification used by the other bridge endpoints (investor_wallet_bridge)."""
@@ -5991,31 +5946,6 @@ def metrics_finance_event():
                         'duplicate': True}), 200
     return jsonify({'ok': True, 'revenue_id': rev.id}), 200
 
-
-@app.route('/api/bridge/escrow', methods=['GET'])
-def bridge_escrow():
-    """ESCROW read-mirror — lets the platform (service secret) OR an admin (JWT)
-    read the dashboard's escrow ledger. READ ONLY; never moves money."""
-    authorized = _metrics_secret_ok()
-    if not authorized:
-        token = request.headers.get('Authorization', '').replace('Bearer ', '')
-        if token:
-            try:
-                data = jwt.decode(token, app.config['SECRET_KEY'], algorithms=['HS256'])
-                u = User.query.get(data['user_id'])
-                authorized = bool(u and u.is_active and role_grants(u, 'admin'))
-            except Exception:
-                authorized = False
-    if not authorized:
-        return jsonify({'error': 'unauthorized'}), 401
-
-    status = (request.args.get('status') or '').strip()
-    q = EscrowSession.query
-    if status:
-        q = q.filter(EscrowSession.status == status)
-    items = q.order_by(EscrowSession.held_at.desc()).all()
-    now = datetime.datetime.utcnow()
-    return jsonify([serialize_escrow(e, now) for e in items])
 
 @app.route('/api/users', methods=['GET'])
 @token_required
@@ -7601,20 +7531,6 @@ def get_investor_badges():
     db.session.commit()
     return jsonify(serialize_badges(payload['wallet']))
 
-@app.route('/api/admin/wallets', methods=['GET'])
-@token_required
-@roles_required('admin')
-def admin_wallets():
-    rate = get_rate()
-    wallets = InvestorWallet.query.order_by(InvestorWallet.created_at.desc()).all()
-    rows = []
-    for wallet in wallets:
-        payload = sync_wallet(wallet)
-        pending = WithdrawalRequest.query.filter_by(wallet_id=wallet.id, status='pending').count()
-        rows.append({**serialize_wallet(payload['wallet'], rate, payload['avg_roi'], payload['pending_withdrawals']), 'pending_requests': pending})
-    db.session.commit()
-    return jsonify(rows)
-
 @app.route('/api/admin/withdrawals', methods=['GET'])
 @token_required
 @roles_required('admin')
@@ -7648,71 +7564,6 @@ def update_withdrawal(id):
         sync_wallet(wallet)
     db.session.commit()
     return jsonify({'message': 'تم تحديث طلب السحب'})
-
-@app.route('/api/ai/investment-recommendation', methods=['GET'])
-@token_required
-# Same deal-sheet data, plus an expected_return_value derived from the course's
-# REAL revenue. Verified: no caller at all in dashboard-cloud/dashboard-api.js or
-# index.html (grep «investment-recommendation» → 0 hits), so nothing can break.
-@roles_required('admin', 'investor')
-def ai_investment_recommendation():
-    opportunities = InvestmentOpportunity.query.order_by(InvestmentOpportunity.created_at.desc()).all()
-    course_lookup = {course.id: course for course in Course.query.all()}
-    if not opportunities:
-        return jsonify({'title': 'لا توجد فرص مطروحة الآن', 'message': 'أضف أول فرصة استثمارية لتظهر التوصيات الذكية.', 'opportunity_id': None})
-    # Third wallet-MINTING path (it calls get_or_create_wallet). Same key as
-    # /me/investor-wallet and /investor/badges — admin-set link only, so this
-    # route can no longer create a row under a self-chosen display name either.
-    investor_name = wallet_owner_name(g.user)
-    wallet = None
-    avg_roi = 0
-    if investor_name:
-        wallet = get_or_create_wallet(investor_name, g.user.id)
-        payload = sync_wallet(wallet)
-        avg_roi = payload['avg_roi']
-    ranked = sorted(
-        opportunities,
-        key=lambda item: ((item.expected_roi or 0) * 0.6) + (min(100, (sync_opportunity_funding(item) / max(item.target_amount or 1, 1)) * 100) * 0.3) + (15 if item.status == 'hot' else 0),
-        reverse=True,
-    )
-    top = ranked[0]
-    course = course_lookup.get(top.course_id)
-    db.session.commit()
-    return jsonify({
-        'title': f"اقتراح اليوم: {course.title if course else 'فرصة استثمارية'}",
-        'message': f"هذه الفرصة مناسبة لك بناءً على عائد متوقع {round(top.expected_roi or 0)}% ومستوى تمويل {round(sync_opportunity_funding(top) / max(top.target_amount or 1, 1) * 100)}%. متوسط عائدك الحالي {avg_roi}%.",
-        'opportunity_id': top.id,
-        'course_id': top.course_id,
-        'status': top.status,
-    })
-
-@app.route('/api/courses/<int:id>/revenue-split', methods=['GET'])
-@token_required
-@roles_required('admin')               # profit shares of ANY course — no frontend caller outside admin
-def get_revenue_split(id):
-    course = Course.query.get_or_404(id)
-    split = get_course_split(course.id)
-    db.session.commit()
-    return jsonify(serialize_split(split))
-
-@app.route('/api/courses/<int:id>/revenue-split', methods=['PUT'])
-@token_required
-@roles_required('admin')               # trainer/platform/investor profit shares — admin only
-def update_revenue_split(id):
-    course = Course.query.get_or_404(id)
-    split = get_course_split(course.id)
-    d = request.json or {}
-    for key in ['trainer_percent', 'platform_percent', 'investor_percent', 'affiliate_percent', 'notes']:
-        if key in d:
-            setattr(split, key, d[key])
-    db.session.commit()
-    return jsonify(serialize_split(split))
-
-@app.route('/api/calculator/simulate', methods=['POST'])
-@token_required
-def calculator_simulate():
-    payload = request.json or {}
-    return jsonify(simulate_distribution(payload, get_rate()))
 
 # ============================================================
 # AI ASSISTANT
@@ -8361,20 +8212,6 @@ def ai_ask():
     db.session.commit()
     return jsonify({'question': question, 'provider': provider, 'model': model,
                     'log_id': log.id, 'response': response, 'ai_unavailable': False})
-
-@app.route('/api/ai/log', methods=['POST'])
-@token_required
-@roles_required('admin')
-def ai_log_response():
-    """Log AI response for audit"""
-    d = request.json or {}
-    log_id = d.get('log_id')
-    if log_id:
-        log = AILog.query.get(log_id)
-        if log:
-            log.response = d.get('response', '')
-            db.session.commit()
-    return jsonify({'message': 'logged'})
 
 # ============================================================
 # FINANCIAL SUMMARY
@@ -11167,14 +11004,6 @@ def _sync_platform_articles():
     if published:
         out['prerender'] = _prerender_push_async('sync:+%d' % published)
     return out, 200
-
-
-def _body_with_related(a, title, pool):
-    """توافق رجعي: متن مقالٍ قادم من المنصّة + «اقرأ أيضًا» (مستقلّ)."""
-    blocks = _md_to_blocks(a.get('body') or '', title)
-    blocks, _n = _with_related(blocks, title, a.get('keywords') or [],
-                               (a.get('target_audience') or 'عام'), pool)
-    return blocks
 
 
 def _backfill_related(apply=False, refresh=False):

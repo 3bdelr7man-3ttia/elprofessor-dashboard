@@ -28,13 +28,6 @@ def already_decided(ctx, producer_id, ref):
         return False
 
 
-def save_reject_reason(row, reason):
-    try:
-        row.applied_json = json.dumps({'reject_reason': (reason or '')[:300]}, ensure_ascii=False)
-    except Exception:   # noqa: BLE001
-        pass
-
-
 def retry_reject(ctx, producer_id, ref, hook):
     """لو فيه صف مرفوض إبلاغه فشل ⇒ نعيد `hook(ctx, target, reason)`. بيرجّع True لو اتبلّغ الآن."""
     try:

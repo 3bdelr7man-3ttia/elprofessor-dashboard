@@ -227,14 +227,6 @@ def _bucket_index(win, d):
     return (d - win['from']).days // win['bucket_days']
 
 
-def _in_cur(win, d):
-    return win['from'] <= d < win['until']
-
-
-def _in_prev(win, d):
-    return win['prev_from'] <= d < win['prev_until']
-
-
 # ------------------------------------------------------------------ قراءة المصادر
 def _parse_dt(v):
     if not isinstance(v, str) or not v.strip():
