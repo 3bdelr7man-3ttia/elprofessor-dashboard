@@ -409,6 +409,7 @@ def test_wiring_dockerfiles_and_csp():
 
 def test_a_get_to_a_write_only_route_is_not_a_second_door(ctx, plat):
     for tail in ('/data', '/structure', '/publish', '/pause', '/return', '/upload', '/brain/draft'):
-        r = _call(ctx, 'GET', A + '/pc-12' + tail)       # الواجهة الثابتة تردّ على أي GET مجهول؛ المهم أنه لا يصل المنصة
-        assert 'application/json' not in (r.headers.get('Content-Type') or '') or r.status_code in (404, 405), tail
+        r = _call(ctx, 'GET', A + '/pc-12' + tail)       # الواجهة الثابتة (أو ردّ «الخادم شغّال» لو مفيش واجهة جنب الخادم) تردّ على أي GET مجهول؛ المهم أنه لا يصل المنصة
+        assert ('application/json' not in (r.headers.get('Content-Type') or '') or r.status_code in (404, 405)
+                or r.get_json(silent=True) == {'status': 'ok', 'message': 'ElProfessor Dashboard API is running'}), tail
     assert plat.seen == []
