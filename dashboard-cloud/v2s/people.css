@@ -38,8 +38,6 @@
 .v2p-bl .s{font-weight:600;font-size:13.5px;color:#E9E1D6}
 .v2p-bav{width:32px;height:32px;border-radius:50%;object-fit:cover;flex:none;background:#fff;border:2px solid var(--line)}
 .v2p-topacts{display:flex;align-items:center;gap:10px}
-.v2p-jump{margin:-4px 0 12px;font-size:14px}
-.v2p-jump a{color:var(--wine);font-weight:700;text-decoration:underline;display:inline-flex;align-items:center;min-height:44px}
 .v2p-warn{background:#FFF8E6;border:1px solid #EBD38E;color:#6B4A00;border-radius:12px;padding:10px 14px;margin-bottom:10px;font-size:14px;line-height:1.7}
 .v2p-none{text-align:center;color:var(--mute);font-size:14px;padding:18px 8px}
 .v2p-miss{font-size:13px;color:#8A5A00;background:var(--amber-bg);border-radius:10px;padding:8px 12px;line-height:1.7}

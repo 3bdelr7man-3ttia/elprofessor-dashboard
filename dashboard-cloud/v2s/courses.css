@@ -173,7 +173,6 @@
 .v2co-lnone{list-style:none}
 
 /* —— المدرّبون */
-.v2co-two{display:grid;grid-template-columns:minmax(0,3fr) minmax(0,2fr);gap:18px;align-items:start}
 .v2co-colbox{min-width:0}
 .v2co-colbox.card,.v2co-card{background:#fff;border:1px solid var(--line);border-radius:16px;padding:14px 16px;min-width:0}
 .v2co-card{display:grid;gap:10px;align-content:start}
@@ -337,7 +336,6 @@ html.v2co-legacy-modal #epModal .fld input,html.v2co-legacy-modal #epModal .fld 
   .v2co-cols.one{grid-template-columns:minmax(0,1fr)}
   .v2co-cols .v2co-col[data-col="published"] .v2co-list{grid-template-columns:repeat(2,minmax(0,1fr))}
   .v2co-cols .v2co-col[data-col="published"] .v2co-link.wide{grid-column:1/-1}
-  .v2co-two{grid-template-columns:minmax(0,1fr)}
   .v2co-tgrid.three{grid-template-columns:repeat(2,minmax(0,1fr))}
   .v2co-dgrid,.v2co-pg{grid-template-columns:minmax(0,1fr)}
   .v2co-pg>.v2co-pgside{grid-column:1;grid-row:auto}
@@ -375,8 +373,6 @@ html.v2co-legacy-modal #epModal .fld input,html.v2co-legacy-modal #epModal .fld 
   .v2co-btn2{min-height:52px}
   .v2co-link{min-height:52px}
   .v2co-link.wide{min-height:52px}
-  .v2co-two .v2co-colbox{display:none}
-  .v2co-two[data-active="apps"] .v2co-colbox[data-col="apps"],.v2co-two[data-active="list"] .v2co-colbox[data-col="list"]{display:block}
   .v2co-tgrid.two,.v2co-tgrid.three{grid-template-columns:minmax(0,1fr)}
   .v2co-lrows{border-radius:0 0 14px 14px}
   .v2co-lhead{display:none}

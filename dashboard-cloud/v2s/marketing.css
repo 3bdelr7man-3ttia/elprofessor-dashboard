@@ -60,7 +60,6 @@
 .mk-r.good{color:var(--green);font-weight:800}
 .mk-via-c{background:var(--paper2)}
 .mk-via{display:none;background:var(--paper2);border-radius:10px;padding:3px 10px;font-size:12.5px;color:#3A3730;justify-self:start}
-.mk-fold{display:none}
 .mk-organic td{background:var(--paper2);cursor:default}
 .mk-organic .mk-na{color:#8A5A00;font-size:13.5px;text-align:start}
 
@@ -151,7 +150,6 @@
   .mk-desk{display:none}
   .mk-tab{display:table}
   .mk-via{display:inline-block}
-  .mk-fold{display:inline}
   .mk-brainstrip{flex-wrap:wrap}
   .mk-bt{flex:1 1 calc(100% - 80px)}
   .mk-bb{flex:1 1 100%}

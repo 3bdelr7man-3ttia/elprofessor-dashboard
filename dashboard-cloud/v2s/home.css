@@ -196,7 +196,7 @@ body:has(> .app.v2-shell) .v2-pill{z-index:75}
   .app.v2-shell .v2h-dw{background:var(--h-paper)}
   .app.v2-shell .v2h-dwp{inset:0;width:auto;box-shadow:none;padding-bottom:calc(80px + env(safe-area-inset-bottom))}
   .app.v2-shell .v2h-dbar button{min-height:52px;width:100%}
-  .app.v2-shell .v2h-types-open .v2h-tscrim,.app.v2-shell .v2h.types-open .v2h-tscrim{display:block;position:fixed;inset:0;background:rgba(33,38,46,.5);z-index:66}
+  .app.v2-shell .v2h.types-open .v2h-tscrim{display:block;position:fixed;inset:0;background:rgba(33,38,46,.5);z-index:66}
   .app.v2-shell .v2h.types-open .v2h-types{display:block;position:fixed;inset:auto 0 0 0;max-height:80vh;max-height:80dvh;overflow-y:auto;background:#fff;border-radius:22px 22px 0 0;z-index:67;
     padding:6px 16px calc(80px + env(safe-area-inset-bottom));box-shadow:0 -12px 40px rgba(33,38,46,.25)}
   .app.v2-shell .v2h-th{display:flex;align-items:center;justify-content:space-between;padding:10px 0 6px;font:800 18px 'Cairo',sans-serif}
@@ -236,7 +236,7 @@ body:has(> .app.v2-shell) .v2-pill{z-index:75}
 /* ملاحظة عادية على ورق: ليست رأي العقل (تحمل أسطر النتيجة والطرف الآخر وسبب العميل وتحذيرات) */
 .app.v2-shell .drawer .note-ai{background:var(--h-paper2);border:1px solid var(--h-line);border-radius:14px;padding:12px 14px;margin:0 0 14px;font-size:14px;line-height:1.7;color:var(--h-ink)}
 .app.v2-shell .drawer .note-ai .ic{color:var(--h-wine)}
-.app.v2-shell .drawer .policy,.app.v2-shell .drawer .ef-fyi-line,.app.v2-shell .drawer .ef-strip,.app.v2-shell .drawer .ef-err{border-radius:14px;border-inline-start-width:1px;padding:12px 14px;font-size:14px;line-height:1.75}
+.app.v2-shell .drawer .policy,.app.v2-shell .drawer .ef-fyi-line,.app.v2-shell .drawer .ef-err{border-radius:14px;border-inline-start-width:1px;padding:12px 14px;font-size:14px;line-height:1.75}
 .app.v2-shell .drawer .policy{background:#FFF8E6!important;color:#7A5200!important;border:1px solid #EBD38E!important;display:flex;gap:9px;margin:0 0 12px}
 .app.v2-shell .drawer .policy[style*="conflict"]{background:#FCEDEF!important;color:#9C0F25!important;border-color:#F0B9C1!important}
 .app.v2-shell .drawer .policy[style*="--ai"]{background:#EEF3FA!important;color:#1F4E79!important;border-color:#C9D9EC!important}

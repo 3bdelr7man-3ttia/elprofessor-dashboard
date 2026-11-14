@@ -34,10 +34,6 @@
 .v2ct-mute{color:var(--mute)}
 
 /* —— شريط الصورة وسطر العقل */
-.v2ct-hero{border-radius:22px;background-size:cover;background-position:center 38%;position:relative;overflow:hidden;margin-bottom:12px;background-color:var(--accent)}
-.v2ct-hero::before{content:"";position:absolute;inset:0;background:linear-gradient(to left,rgba(33,38,46,.9) 0%,rgba(33,38,46,.72) 48%,rgba(190,88,48,.55) 100%)}
-.v2ct-hero-in{position:relative;display:flex;align-items:center;gap:14px;padding:18px 22px;min-height:96px;color:#fff}
-.v2ct-hero-in p{font:800 19px/1.65 'Cairo',sans-serif;text-shadow:0 1px 8px rgba(0,0,0,.35)}
 .v2ct-bav{width:44px;height:44px;border-radius:50%;object-fit:cover;flex:none;background:#fff;border:2px solid #fff}
 .v2ct-facts{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px}
 .v2ct-fact{display:inline-flex;align-items:center;min-height:36px;padding:0 14px;border-radius:999px;background:#fff;border:1px solid var(--line);font:700 14px 'Cairo',sans-serif;color:var(--ink)}
@@ -180,7 +176,6 @@
 .v2ct-m .v2ct-kick{font:700 13.5px 'Cairo',sans-serif;color:var(--wine);margin-bottom:4px}
 .v2ct-m .v2ct-rt{font:800 22px/1.5 'Cairo',sans-serif;margin-bottom:8px}
 .v2ct-m .v2ct-exb{font:700 15px/1.9 'Cairo',sans-serif;margin:10px 0}
-.v2ct-m .v2ct-cover{width:100%;max-height:260px;border-radius:14px;margin:8px 0;object-fit:cover;display:block}
 .v2ct-m .v2ct-article{background:var(--paper);border-radius:14px;padding:14px 16px;max-height:44vh;overflow:auto;margin:10px 0}
 .v2ct-m .v2ct-article h3{font:800 17px/1.6 'Cairo',sans-serif;margin:12px 0 4px}
 .v2ct-m .v2ct-article p{font-size:15px;line-height:2;margin:0 0 10px}
@@ -211,8 +206,6 @@
   .v2ct-cols[data-active="wait"] .v2ct-col[data-col="wait"],.v2ct-cols[data-active="draft"] .v2ct-col[data-col="draft"],
   .v2ct-cols[data-active="idea"] .v2ct-col[data-col="idea"],.v2ct-cols[data-active="done"] .v2ct-col[data-col="done"]{display:block}
   .v2ct-col{padding:10px}
-  .v2ct-hero-in{padding:14px 16px;min-height:84px;gap:10px}
-  .v2ct-hero-in p{font-size:16.5px}
   .v2ct-bav{width:40px;height:40px}
   .v2ct-b1{min-height:52px}
   .v2ct-row .v2ct-acts .v2ct-b1,.v2ct-box .v2ct-acts .v2ct-b2{width:100%}
