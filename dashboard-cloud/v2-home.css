@@ -44,7 +44,6 @@
 .v2-tt{position:absolute;inset-inline:16px;bottom:14px;display:grid;gap:2px}
 .v2-tt b{font:800 22px/1.35 'Cairo',sans-serif;text-shadow:0 1px 8px rgba(0,0,0,.28)}
 .v2-tt small{font-size:14px;line-height:1.55;opacity:.95;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
-@keyframes v2pulse{0%{box-shadow:0 0 0 0 rgba(200,16,46,.55),0 3px 10px rgba(0,0,0,.2)}70%{box-shadow:0 0 0 12px rgba(200,16,46,0),0 3px 10px rgba(0,0,0,.2)}100%{box-shadow:0 0 0 0 rgba(200,16,46,0),0 3px 10px rgba(0,0,0,.2)}}
 
 /* —— وضع التركيز */
 .v2-ftop{display:flex;align-items:center;gap:14px;margin-bottom:14px}
