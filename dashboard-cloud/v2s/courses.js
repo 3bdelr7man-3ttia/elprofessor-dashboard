@@ -127,7 +127,7 @@
     return o;
   }
   function coverHtml(c, cls) {
-    var url = String(c.thumbnail_url || '').trim();
+    var url = U.platformAsset(c.thumbnail_url);      // مسار نسبي من المنصة ⇒ عنوان كامل؛ ناقص/غير صالح ⇒ حرف الدورة
     var letter = C.cover(c.title).letter;
     if (!url && /\b(big|thumb)\b/.test(cls || '') && window.matchMedia && window.matchMedia('(max-width:760px)').matches) return '';       // بلا صورة: لا مستطيل كبير بحرف، فالبطاقة تبدأ من الاسم (الجولة r6)
     return '<span class="v2co-cover ' + (cls || '') + (url ? ' has' : '') + '" aria-hidden="true"><i>' + esc(letter) + '</i>' + (url ? '<img class="v2co-img" src="' + esc(url) + '" alt="" loading="lazy">' : '') + '</span>';
@@ -747,7 +747,7 @@
     flow({
       title: 'انشر الدورة',
       form: '<p class="v2co-lead">نشر «' + esc(c.title) + '» للناس.</p>'
-        + factsTable([['الدورة', esc(c.title)], ['صاحب الدورة', trainerHtml(c)], ['النوع', esc(C.TYPE_LABEL[c.type] || '')], ['السعر', esc(priceLine(c))], ['فحص النشر', esc(facts.line)]])
+        + factsTable([['الدورة', esc(c.title)], ['صاحب الدورة', trainerHtml(c)], ['النوع', esc(C.TYPE_LABEL[c.type] || '')], ['السعر', esc(priceLine(c) + (U.coursePricesLine(c) ? ' — بره مصر: ' + U.coursePricesLine(c) : ''))], ['فحص النشر', esc(facts.line)]])
         + pay + (owned ? shareLine() : ''),
       wire: bindGotoLinks,
       collect: function (s) { var r = q('input[name="co_pm"]:checked', s); return { ok: true, payload: { pm: r ? r.value : '' } }; },
@@ -1221,6 +1221,7 @@
   // الصور التي تفشل ⇒ الغلاف الورقي بدل صورة مكسورة
   function onImgError(e) {
     var t = e.target;
+    if (t && t.tagName === 'IMG' && t.classList.contains('v2co-himg') && !t.getAttribute('data-fb')) { t.setAttribute('data-fb', '1'); t.src = img('courses'); return; }    // غلاف صفحة الدورة المكسور ⇒ الصورة الافتراضية
     if (!t || t.tagName !== 'IMG' || !t.classList.contains('v2co-img')) return;
     var box = t.parentNode; if (box) { box.classList.remove('has'); box.classList.add('fail'); }
     t.remove();

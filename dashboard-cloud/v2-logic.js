@@ -135,6 +135,16 @@
     { key: 'kw', name: 'الكويت', cur: 'KWD' }, { key: 'qa', name: 'قطر', cur: 'QAR' }, { key: 'om', name: 'عُمان', cur: 'OMR' },
     { key: 'default', name: 'باقي البلاد', cur: 'USD' }
   ];
+  // صور المنصة (غلاف الدورة…): المنصة بتحفظ أحيانًا مسارًا نسبيًا (`/covers/…` من الصور الجاهزة) فيتحلّ على عنوان المنصة؛ https كما هو؛ غير كده ⇒ '' (يرجع حرف الدورة).
+  var PLATFORM_ORIGIN = 'https://app.elprofessor.net';
+  function platformAsset(url) {
+    url = String(url == null ? '' : url).trim();
+    if (!url || /\s/.test(url)) return '';
+    if (/^https:\/\//i.test(url)) return url;
+    if (/^\/\//.test(url)) return 'https:' + url;
+    if (/^[a-z][a-z0-9+.-]*:/i.test(url)) return '';       // http: وjavascript: وdata: لا
+    return PLATFORM_ORIGIN + (url.charAt(0) === '/' ? '' : '/') + url.replace(/^\.\//, '');
+  }
   // سطر أسعار الدورة بره مصر من `c.prices` (مبالغ بس): «السعودية ١٥٠ ر.س، باقي البلاد ٥٠ دولار». ما فيش ⇒ ''.
   function coursePricesLine(c) {
     var pr = c && c.prices && typeof c.prices === 'object' ? c.prices : null;
@@ -2888,7 +2898,7 @@
     parseSectionHash: parseSectionHash, routeFor: routeFor, sectionByKey: secOf, tabByKey: tabOf,
     TILE_DEFS: TILE_DEFS, SECTION_KEYS: SECTION_KEYS, SECTION_ALIAS: SECTION_ALIAS, HOME_OF: HOME_OF, EMPTY_STRIP: EMPTY_STRIP, v2SectionTiles: v2SectionTiles, v2Strip: v2Strip, brainHomeOf: brainHomeOf,
     FAILED_TEXT: FAILED_TEXT, PARTIAL_TEXT: PARTIAL_TEXT,
-    util: { usdEquivalent: usdEquivalent, ratesDateText: ratesDateText, ar: ar, fmt: fmt, fmtMoney: fmtMoney, curShort: curShort, moneyShort: moneyShort, moneyByCurrency: moneyByCurrency, byCurrencyList: byCurrencyList, PRICE_COUNTRIES: PRICE_COUNTRIES, coursePricesLine: coursePricesLine, joinFacts: joinFacts, avatarMark: avatarMark, U: U, agoText: agoText, curName: curName, cur: curName, moneyText: moneyText, kindOf: kindOf, pickCandidate: pickCandidate,
+    util: { usdEquivalent: usdEquivalent, ratesDateText: ratesDateText, ar: ar, fmt: fmt, fmtMoney: fmtMoney, curShort: curShort, moneyShort: moneyShort, moneyByCurrency: moneyByCurrency, byCurrencyList: byCurrencyList, PRICE_COUNTRIES: PRICE_COUNTRIES, coursePricesLine: coursePricesLine, platformAsset: platformAsset, PLATFORM_ORIGIN: PLATFORM_ORIGIN, joinFacts: joinFacts, avatarMark: avatarMark, U: U, agoText: agoText, curName: curName, cur: curName, moneyText: moneyText, kindOf: kindOf, pickCandidate: pickCandidate,
             dateText: dateText, durShort: durShort, parseAmount: parseAmount, curLong: curLong, sumByCurrency: sumByCurrency }
   };
   // ===== v2s:brain =====
@@ -8038,7 +8048,7 @@
   }
   function coverIssue(url) {
     url = str(url).trim();
-    return url && !/^https:\/\/\S+$/.test(url) ? 'رابط الغلاف يبدأ بـ https://' : '';
+    return url && !/^https:\/\/\S+$/.test(url) && !/^\/(?!\/)\S*$/.test(url) ? 'رابط الغلاف يبدأ بـ https://' : '';     // المسار النسبي من الصور الجاهزة (/covers/…) صالح
   }
   function dataBody(d) {
     var out = { title: str(d.title).trim(), subtitle: str(d.subtitle).trim(), description: str(d.description).trim(), cover: str(d.cover).trim(), level: str(d.level), outcomes: linesToArr(Array.isArray(d.outcomes) ? d.outcomes.join('\n') : d.outcomes) };

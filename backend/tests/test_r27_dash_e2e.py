@@ -135,3 +135,43 @@ def test_refresh_wiring_and_throttle_are_in_the_sources():
     assert 'EP.refresh = function' in _read('dashboard-cloud', 'dashboard-api.js')
 
 
+# ───────────── ٤. صورة غلاف الدورة: المسار النسبي يتحلّ على عنوان المنصة ─────────────
+@needs_node
+def test_relative_cover_resolves_against_the_platform_and_unsafe_ones_fall_back_to_the_letter():
+    f = lambda u: v2_node.logic('util.platformAsset', u)
+    assert f('/covers/law-1.jpg') == 'https://app.elprofessor.net/covers/law-1.jpg'
+    assert f('covers/law-1.jpg') == 'https://app.elprofessor.net/covers/law-1.jpg'
+    assert f('./covers/law-1.jpg') == 'https://app.elprofessor.net/covers/law-1.jpg'
+    assert f('https://cdn.example.test/a.png') == 'https://cdn.example.test/a.png'
+    assert f('//cdn.example.test/a.png') == 'https://cdn.example.test/a.png'
+    for bad in ('', None, '   ', 'javascript:alert(1)', 'data:image/png;base64,AAAA', 'http://x.test/a.png', 'a b.png'):
+        assert f(bad) == '', bad
+    m = _co('pageModel', dict(COURSE, thumbnail_url='/covers/law-1.jpg'), None, None, None, None, {'now': NOW})
+    assert m['hero'] == 'https://app.elprofessor.net/covers/law-1.jpg'
+    assert _co('pageModel', dict(COURSE, thumbnail_url=''), None, None, None, None, {'now': NOW})['hero'] == ''
+
+
+@needs_node
+def test_the_editor_accepts_a_preset_relative_cover_but_not_a_plain_http_one():
+    ci = lambda u: v2_node.logic('courses2.coverIssue', u)
+    assert ci('/covers/law-1.jpg') == '' and ci('https://x.test/a.png') == '' and ci('') == ''
+    assert ci('http://x.test/a.png') and ci('//x.test/a.png') and ci('javascript:x')
+
+
+def test_cover_surfaces_use_the_resolver_and_a_broken_hero_falls_back():
+    co = _read('dashboard-cloud', 'v2s', 'courses.js')
+    assert 'U.platformAsset(c.thumbnail_url)' in co and "classList.contains('v2co-himg')" in co and "t.src = img('courses')" in co
+
+
+# ───────────── ٥. ورقة «انشر الدورة»: نفس ملخّص أسعار صفحة الدورة ─────────────
+@needs_node
+def test_publish_sheet_price_row_matches_the_course_page_summary():
+    prices = {'eg': 450, 'sa': 99, 'default': 25}
+    line = v2_node.logic('util.coursePricesLine', dict(COURSE, prices=prices))
+    assert line == 'السعودية ٩٩ ر.س، باقي البلاد ٢٥ دولار'
+    co = _read('dashboard-cloud', 'v2s', 'courses.js')
+    assert "' — بره مصر: ' + U.coursePricesLine(c)" in co
+    # صفحة الدورة نفسها بتستعمل نفس الدالة
+    assert _co('pageModel', dict(COURSE, prices=prices), None, None, None, None, {'now': NOW})['tiles']['priceOthers'] == line
+
+
