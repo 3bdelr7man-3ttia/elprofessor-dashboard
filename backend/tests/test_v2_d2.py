@@ -440,7 +440,7 @@ def test_person_view_model_from_a_full_response():
     vm = v2_node.logic('v2Person', FULL, NOW, HALA)
     assert vm['state'] == 'ok' and vm['name'] == 'د. هالة سمير' and vm['initial'] == 'ه'
     assert [c['label'] for c in vm['chips']] == ['خبير', 'مدرّب']
-    assert vm['joinLine'] == 'الانضمام في ٢٣ أبريل ٢٠٢٦ · بدعوة من أ. نادية فؤاد'
+    assert vm['joinLine'] == 'الانضمام في ٢٣ أبريل ٢٠٢٦، بدعوة من أ. نادية فؤاد'
     assert [c['title'] for c in vm['cards']] == ['الملفات', 'الدورات', 'الفلوس', 'التعلّم']
     files, courses, money, learn = vm['cards']
     assert files['summary'] == '٤ ملفات' and files['items'][0]['title'] == 'عقد'
@@ -499,7 +499,7 @@ def test_person_states_failed_and_not_found_and_the_inviter_is_never_invented():
     resp = copy.deepcopy(FULL); resp['identity']['invited_by'] = None
     assert v2_node.logic('v2Person', resp, NOW, HALA)['joinLine'] == 'الانضمام في ٢٣ أبريل ٢٠٢٦'
     resp['sources']['invites'] = 'failed'
-    assert v2_node.logic('v2Person', resp, NOW, HALA)['joinLine'] == 'الانضمام في ٢٣ أبريل ٢٠٢٦ · الداعي: غير متاح بعد'
+    assert v2_node.logic('v2Person', resp, NOW, HALA)['joinLine'] == 'الانضمام في ٢٣ أبريل ٢٠٢٦، الداعي: غير متاح بعد'
     resp['identity']['invited_by'] = {'name': None, 'kind': 'founder'}
     assert v2_node.logic('v2Person', resp, NOW, HALA)['joinLine'].endswith('بدعوة من الإدارة')
 

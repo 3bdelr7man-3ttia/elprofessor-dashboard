@@ -61,6 +61,9 @@
 .v2co-overdue>span{flex:1 1 220px;min-width:0;font-weight:700}
 .v2co-overdue .v2co-btn2{flex:0 0 auto;width:auto}
 .v2co-chips{display:flex;flex-wrap:wrap;gap:6px}
+.v2co-alinks{display:flex;flex-wrap:wrap;gap:4px 14px;align-items:center;margin-top:6px;font-size:13.5px;color:var(--mute)}
+.v2co-alink{color:var(--wine);font-weight:700;text-decoration:underline;text-underline-offset:3px;display:inline-flex;align-items:center;min-height:44px}
+.v2co-aphone{color:var(--mute)}
 .v2co-st{display:block;font-size:13px;color:var(--mute);line-height:1.6}
 .v2co-st.amber,.v2co-l2.amber{color:#8A4B00}
 .v2co-st.red{color:var(--red)}

@@ -445,7 +445,7 @@ def test_board_sort_orders_and_the_review_timer_rules():
     t = _co('reviewTimer', {'submitted_at': _iso(NOW - 5 * H)}, NOW)
     assert t['tone'] == 'ok'
     t = _co('reviewTimer', {'created_at': _iso(NOW - 90 * 24 * H)}, NOW)
-    assert t['tone'] == 'none' and t['label'] == 'أُنشئت منذ ٩٠ يومًا'
+    assert t['tone'] == 'none' and t['label'] == 'أُنشئت منذ ٣ شهور'
     assert _co('reviewTimer', {}, NOW) is None
     assert _co('cover', '') == {'letter': '؟'} and _co('cover', '  «دورة»')['letter'] == 'د' and _co('cover', 'Contracts')['letter'] == 'C'
 

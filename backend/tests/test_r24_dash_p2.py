@@ -602,7 +602,7 @@ def test_person_page_returns_every_open_request_on_the_email(person_api):
     assert 'x@x.test' not in json.dumps(d) and 'other@x.test' not in json.dumps(d)                 # ولا طلب لحد غيره
     paths = {p for p, _ in person_api}
     assert {'/api/bridge/trainer-applications', '/api/bridge/join-requests', '/api/bridge/founding-expert-leads', '/api/bridge/identity-docs', '/api/bridge/signups/recent'} <= paths
-    assert dict(person_api)['/api/bridge/join-requests'] == {'status': 'open'} and dict(person_api)['/api/bridge/trainer-applications'] == {'status': 'pending'}
+    assert dict(person_api)['/api/bridge/join-requests'] == {'status': 'open'} and ('/api/bridge/trainer-applications', {'status': 'pending'}) in list(person_api)
 
 
 def test_a_source_that_failed_is_announced_not_read_as_no_requests(person_api, monkeypatch):

@@ -72,6 +72,19 @@
     return Number(v) || 0;
   }
   function str(v) { return typeof v === 'string' ? v.trim() : ''; }
+  // طريقة الدفع بالعربية: الأكواد القادمة من المنصة (instapay / vodafone_cash / card / stripe / paytabs / other …) لا تظهر لاتينية أبدًا.
+  // نص حرّ كتبه إنسان («إنستاباي» أو «تحويل على الرقم …») يمرّ كما هو؛ أي رمز لاتيني غير معروف يصير «تحويل محلي».
+  var PAY_METHOD_AR = { instapay: 'إنستاباي', insta_pay: 'إنستاباي', vodafone_cash: 'فودافون كاش', vodafonecash: 'فودافون كاش',
+                        card: 'بطاقة بنكية', stripe: 'بطاقة بنكية', paytabs: 'بطاقة بنكية', paymob: 'بطاقة بنكية', credit_card: 'بطاقة بنكية',
+                        bank_transfer: 'تحويل بنكي', bank: 'تحويل بنكي', cash: 'نقدًا', manual: 'تحويل يدوي', wallet: 'محفظة إلكترونية',
+                        fawry: 'فوري', other: 'تحويل محلي' };
+  function payMethodAr(v) {
+    var raw = typeof v === 'string' ? v.trim() : '';
+    if (!raw) return '';
+    var key = raw.toLowerCase().replace(/[\s\-]+/g, '_');
+    if (PAY_METHOD_AR.hasOwnProperty(key)) return PAY_METHOD_AR[key];
+    return /^[a-z][a-z0-9_]*$/.test(key) ? 'تحويل محلي' : raw;
+  }
   function ms(iso) {
     if (typeof iso === 'number') return isFinite(iso) && iso > 0 ? iso : NaN;
     var t = Date.parse(iso || '');
@@ -145,6 +158,18 @@
     if (/^[a-z][a-z0-9+.-]*:/i.test(url)) return '';       // http: وjavascript: وdata: لا
     return PLATFORM_ORIGIN + (url.charAt(0) === '/' ? '' : '/') + url.replace(/^\.\//, '');
   }
+  // غلاف الدورة كما تقرؤه المنصة بالحرف (`coverOf` في courses2-logic.js): صورتها المختارة (`thumbnail_url` ثم `cover` ثم `image`)،
+  // وإلا صورة بتصنيفها، وإلا الغلاف العام للمنصة — كلها على عنوان المنصة. لا نبدّل بصورة من عندنا فيظهر غلاف غير الذي اختاره المدرّب.
+  var PLATFORM_CATEGORY_COVER = { criminal: '/courses2/world-judicial.jpg', realestate: '/courses2/spec-real-estate.jpg',
+                                  marketing: '/courses2/spec-marketing.jpg', corporate: '/courses2/world-legal-affairs.jpg' };
+  var PLATFORM_DEFAULT_COVER = '/courses2/track-courses.jpg';
+  function courseCover(c) {
+    var o = c && typeof c === 'object' ? c : {};
+    var direct = [o.thumbnail_url, o.cover, o.image].map(function (v) { return typeof v === 'string' ? v.trim() : ''; }).filter(Boolean)[0];
+    if (direct) { var u = platformAsset(direct); if (u) return u; }
+    var cat = typeof o.category === 'string' ? o.category.trim() : '';
+    return platformAsset(PLATFORM_CATEGORY_COVER.hasOwnProperty(cat) ? PLATFORM_CATEGORY_COVER[cat] : PLATFORM_DEFAULT_COVER);
+  }
   // سطر أسعار الدورة بره مصر من `c.prices` (مبالغ بس): «السعودية ١٥٠ ر.س، باقي البلاد ٥٠ دولار». ما فيش ⇒ ''.
   function coursePricesLine(c) {
     var pr = c && c.prices && typeof c.prices === 'object' ? c.prices : null;
@@ -163,8 +188,21 @@
     if (m < 60) return 'منذ ' + U(m, ['دقيقة', 'دقيقتين', 'دقائق', 'دقيقة']);
     var h = Math.floor(m / 60);
     if (h < 24) return 'منذ ' + U(h, ['ساعة', 'ساعتين', 'ساعات', 'ساعة']);
-    var dd = Math.floor(h / 24);
-    return 'منذ ' + U(dd, ['يوم', 'يومين', 'أيام', 'يومًا']);
+    return 'منذ ' + longSpan(Math.floor(h / 24));
+  }
+  // مدة طويلة بالعربية: أيام (أقل من ١٤، فيبقى «١٠ أيام» بدقتها) ثم أسابيع (أقل من ٣٠ يومًا) ثم شهور (أقل من سنة) ثم سنوات — لا «٣٤٦٩ ساعة» ولا «١٢٠ يومًا».
+  // `dayForms` اختياري لمن يكتب «يومان» بدل «يومين». الشهر ٣٠ يومًا والسنة ٣٦٥ تقريبًا، والكسر يُسقَط.
+  function longSpan(dd, dayForms) {
+    dd = Math.max(0, Math.floor(Number(dd) || 0));
+    if (dd < 14) return U(dd, dayForms || ['يوم', 'يومين', 'أيام', 'يومًا']);
+    if (dd < 30) return U(Math.floor(dd / 7), ['أسبوع', 'أسبوعين', 'أسابيع', 'أسبوعًا']);
+    if (dd < 365) return U(Math.floor(dd / 30), ['شهر', 'شهرين', 'شهور', 'شهرًا']);
+    return U(Math.floor(dd / 365), ['سنة', 'سنتين', 'سنوات', 'سنة']);
+  }
+  // ساعات حتى ٤٨ ثم المدة الطويلة: للعمر المحسوب بالساعات (دفعة عالقة، ملف متأخر).
+  function hoursSpan(h) {
+    h = Math.max(0, Math.floor(Number(h) || 0));
+    return h < 48 ? hoursWord(h) : longSpan(Math.floor(h / 24));
   }
   function hoursBetween(t, now) {
     t = ms(t);
@@ -553,7 +591,7 @@
 
   // نص الدفع اليدوي: الطريقة · المبلغ · ما يخصّه.
   function payBrain(r) {
-    return clean([str(r.payMethod), moneyText(r.amount, r.currency), str(r.payWhat)]).join('، ');
+    return clean([payMethodAr(r.payMethod), moneyText(r.amount, r.currency), str(r.payWhat)]).join('، ');
   }
 
   // هل يوجد نزاع مفتوح **على هذا الشخص كخبير**؟ true/false، أو null لو الفحص ما اكتملش لأي سبب:
@@ -624,7 +662,7 @@
         if (late) {
           var from = r.efLane === 'late' ? f.writing_due_at : (f.assigned_at || f.paid_at);
           var h = Math.max(1, hoursBetween(from, now));
-          card.brain = (r.efLane === 'late' ? 'متأخر ' + hoursWord(h) + ' عند ' + cur : 'لم يُستلم لدى ' + cur + ' منذ ' + hoursWord(h))
+          card.brain = (r.efLane === 'late' ? 'متأخر ' + hoursSpan(h) + ' عند ' + cur : 'لم يُستلم لدى ' + cur + ' منذ ' + hoursSpan(h))
             + (cand ? '. أقترح نقله إلى ' + cand.name : '. لا يوجد خبير آخر متاح');
         } else if (!pre && f.status === 'assigned') {
           card.brain = 'أُرسل إلى ' + cur + ' ولم يُستلم بعد' + (cand ? '. أقترح نقله إلى ' + cand.name : '. لا يوجد خبير آخر متاح');
@@ -697,7 +735,7 @@
         card.tag = 'تحويل أرباح';
         card.title = str(r.who) || 'صاحب الطلب';
         card.sub = moneyText(amount, cr);          // الوجهة (رقم حساب لاتيني) تظهر في مربع «الوجهة» لا في سطر المبلغ العربي
-        var method = str(r.raw && r.raw.method) || str(r.dest);
+        var method = payMethodAr(str(r.raw && r.raw.method)) || str(r.dest);
         card.brain = 'طلب تحويل ' + moneyText(amount, cr) + ' إلى ' + (str(r.who) || 'صاحب الطلب') + (method ? ' عبر ' + method : '');
         var dis = openDisputeFor(r.email, opts.inboxRows, opts);
         if (dis === false) card.reason = 'روجعت النزاعات المفتوحة: لا نزاع مفتوحًا على صاحب الطلب كخبير';
@@ -712,7 +750,7 @@
       }
       case 'manual_payment': {
         var mo2 = { amount: r.amount, currency: r.currency || 'EGP', curName: curLong(r.currency), name: who || str(r.email),
-                    what: str(r.payWhat) || 'دفعة يدوية', method: str(r.payMethod), ref: str(r.payRef) };
+                    what: str(r.payWhat) || 'دفعة يدوية', method: payMethodAr(r.payMethod), ref: str(r.payRef) };
         card.tag = 'إيصال تحويل';
         card.title = who || 'دافع';
         card.sub = clean([str(r.payWhat), moneyText(r.amount, r.currency)]).join('، ');
@@ -723,7 +761,7 @@
         card.primary = { label: 'أكّد الدفع', act: act({ do: 'pay_confirm' }), money: mo2 };
         card.secondary = { label: 'ارفض', act: act({ do: 'pay_reject' }), money: mo2 };
         card.open = act({ do: 'goto', mod: 'escrow', land: 'manual_payments_pending' });
-        card.facts = [{ k: 'المبلغ', v: moneyText(r.amount, r.currency) }, { k: 'الطريقة', v: str(r.payMethod) || '—' }];
+        card.facts = [{ k: 'المبلغ', v: moneyText(r.amount, r.currency) }, { k: 'الطريقة', v: payMethodAr(r.payMethod) || '—' }];
         break;
       }
       case 'stuck_payment': {
@@ -1299,7 +1337,7 @@
     if (m < 60) return ar(Math.max(m, 1)) + ' د';
     var h = Math.floor(m / 60);
     if (h < 48) return ar(h) + ' س';
-    return U(Math.floor(h / 24), ['يوم', 'يومان', 'أيام', 'يومًا']);
+    return longSpan(Math.floor(h / 24), ['يوم', 'يومان', 'أيام', 'يومًا']);
   }
   // العدّاد: {mode:'left'|'over'|'since', at} ⇒ نصه عند `now`. «باقٍ» يتحوّل «متأخر» وحده لو الموعد عدّى.
   function v2TimerText(t, now) {
@@ -1580,9 +1618,9 @@
     // «الانضمام في … بدعوة من …» — الداعي لا يُدّعى إلا من صف دعوة فعلي، وفشل المصدر يُقال.
     var join = dateText(id.joined_at);
     var line = join ? 'الانضمام في ' + join : 'تاريخ الانضمام: ' + NA;
-    if (id.invited_by && id.invited_by.name) line += ' · بدعوة من ' + id.invited_by.name;
-    else if (id.invited_by && id.invited_by.kind === 'founder') line += ' · بدعوة من الإدارة';
-    else if ((src.invites === 'failed' || src.invites === 'partial')) line += ' · الداعي: ' + NA;
+    if (id.invited_by && id.invited_by.name) line += '، بدعوة من ' + id.invited_by.name;
+    else if (id.invited_by && id.invited_by.kind === 'founder') line += '، بدعوة من الإدارة';
+    else if ((src.invites === 'failed' || src.invites === 'partial')) line += '، الداعي: ' + NA;
     vm.joinLine = line;
     vm.lastLogin = id.last_login_at ? agoText(id.last_login_at, now || 0) : '';
 
@@ -2197,8 +2235,8 @@
     var rule = v2RefundRule(kind);
     return { id: String(o.order_id || o.id || ''), kind: kind, kindText: STUCK_KIND[kind] || 'طلب', title: str(o.title) || STUCK_KIND[kind] || 'طلب',
              amount: o.amount, currency: o.currency || 'EGP', amountText: moneyText(o.amount, o.currency || 'EGP'),
-             name: name || 'صاحب الدفع', email: EMAIL_RE.test(email) ? email : '', provider: PAY_PROVIDER[str(o.provider || o.gateway).toLowerCase()] || '',
-             ageText: isNaN(age) ? '' : (age < 1 ? 'منذ أقل من ساعة' : 'منذ ' + hoursWord(Math.floor(age))), ageHours: isNaN(age) ? null : age,
+             name: name || 'صاحب الدفع', email: EMAIL_RE.test(email) ? email : '', provider: PAY_PROVIDER[str(o.provider || o.gateway).toLowerCase()] || payMethodAr(o.provider || o.gateway),
+             ageText: isNaN(age) ? '' : (age < 1 ? 'منذ أقل من ساعة' : 'منذ ' + hoursSpan(Math.floor(age))), ageHours: isNaN(age) ? null : age,
              refundable: rule.refundable, noRefundText: rule.text, person: EMAIL_RE.test(email) ? { email: email, name: name } : null };
   }
   var STUCK_CAP = 200;
@@ -2916,7 +2954,7 @@
     parseSectionHash: parseSectionHash, routeFor: routeFor, sectionByKey: secOf, tabByKey: tabOf,
     TILE_DEFS: TILE_DEFS, SECTION_KEYS: SECTION_KEYS, SECTION_ALIAS: SECTION_ALIAS, HOME_OF: HOME_OF, EMPTY_STRIP: EMPTY_STRIP, v2SectionTiles: v2SectionTiles, v2Strip: v2Strip, brainHomeOf: brainHomeOf,
     FAILED_TEXT: FAILED_TEXT, PARTIAL_TEXT: PARTIAL_TEXT,
-    util: { usdEquivalent: usdEquivalent, ratesDateText: ratesDateText, ar: ar, fmt: fmt, fmtMoney: fmtMoney, curShort: curShort, moneyShort: moneyShort, moneyByCurrency: moneyByCurrency, byCurrencyList: byCurrencyList, PRICE_COUNTRIES: PRICE_COUNTRIES, coursePricesLine: coursePricesLine, platformAsset: platformAsset, PLATFORM_ORIGIN: PLATFORM_ORIGIN, joinFacts: joinFacts, avatarMark: avatarMark, U: U, agoText: agoText, curName: curName, cur: curName, moneyText: moneyText, kindOf: kindOf, pickCandidate: pickCandidate,
+    util: { usdEquivalent: usdEquivalent, ratesDateText: ratesDateText, ar: ar, fmt: fmt, fmtMoney: fmtMoney, curShort: curShort, moneyShort: moneyShort, moneyByCurrency: moneyByCurrency, byCurrencyList: byCurrencyList, PRICE_COUNTRIES: PRICE_COUNTRIES, coursePricesLine: coursePricesLine, platformAsset: platformAsset, courseCover: courseCover, PLATFORM_ORIGIN: PLATFORM_ORIGIN, joinFacts: joinFacts, avatarMark: avatarMark, U: U, payMethodAr: payMethodAr, agoText: agoText, longSpan: longSpan, hoursSpan: hoursSpan, curName: curName, cur: curName, moneyText: moneyText, kindOf: kindOf, pickCandidate: pickCandidate,
             dateText: dateText, durShort: durShort, parseAmount: parseAmount, curLong: curLong, sumByCurrency: sumByCurrency }
   };
   // ===== v2s:brain =====
@@ -4304,7 +4342,7 @@
     }
     var n = Number(brainLogLen);
     var suffix = (isFinite(n) && n > 0) ? 'وزّع العقل ' + U(n, ['ملفًا واحدًا', 'ملفين', 'ملفات', 'ملفًا']) + ' اليوم' : '';
-    if (base && suffix) return base + ' · ' + suffix;
+    if (base && suffix) return base + '، ' + suffix;
     return base || suffix || null;
   }
 
@@ -4643,6 +4681,14 @@
   // نص التنبيه بالحرف من المواصفة (R10 §E.3): «طلبات انضمام فات موعد الفيديو: N»
   function videoOverdueLine(n) { return 'طلبات انضمام فات موعد الفيديو: ' + U.ar(n); }
   function webUrl(v) { v = s(v); return /^https:\/\/[^\s]+$/i.test(v) ? v : ''; }     // https فقط، مثل المنصة (لا http ولا javascript: ولا data:)
+  // روابط مقدّم الطلب بنفس أسماء بطاقة القرار (https فقط، تُفتح في تبويب جديد): فيديو الشرح · السيرة الذاتية · لينكدإن.
+  function appLinkList(video, cv, li) {
+    var out = [];
+    if (webUrl(video)) out.push({ label: 'فيديو الشرح', url: webUrl(video) });
+    if (webUrl(cv)) out.push({ label: 'السيرة الذاتية', url: webUrl(cv) });
+    if (webUrl(li)) out.push({ label: 'لينكدإن', url: webUrl(li) });
+    return out;
+  }
   function appTickets(apps, opts) {
     opts = opts || {};
     var now = opts.now || 0;
@@ -4690,7 +4736,7 @@
       return { id: s(a.id) || String(a.id || ''), name: s(a.user_name) || s(a.user_email) || 'مقدّم الطلب', email: s(a.user_email).toLowerCase(), headline: s(a.headline),
                expertise: exp, chips: exp.slice(0, 3), moreChips: Math.max(0, exp.length - 3), timer: timer, text: timer ? L.v2TimerText(timer, now) : '', tone: h == null ? 'none' : tone(h),
                line: facts.join('، ') + (ok ? '' : '، ينقص الطلب: ' + missing.join('، ')), suggestion: ok ? 'accept' : 'open', missing: missing,
-               links: { linkedin: li, cv: cv, portfolio: pf }, introVideo: video, experience: experience, summary: summary, createdAt: s(a.created_at),
+               links: { linkedin: li, cv: cv, portfolio: pf }, linkList: appLinkList(video, cv, li), contact: phone ? { label: 'رقم التواصل', value: phone } : null, introVideo: video, experience: experience, summary: summary, createdAt: s(a.created_at),
                hasJoin: hasJoin, joinAs: joinAs, joinAsText: JOIN_AS_TEXT[joinAs], claimed: claimed, phone: phone, status: s(a.status) || 'pending', cancelledAt: s(a.cancelled_at),
                video: videoState(a, now, joinAs, hasJoin, video) };
     }).sort(function (x, y) { return (x.timer ? x.timer.at : Infinity) - (y.timer ? y.timer.at : Infinity); });
@@ -4905,7 +4951,7 @@
                     status: LIVE_STATUS[s(sc.live_status)] || '', zoom: nonEmpty(sc.zoom_link) ? 'رابط اللقاء: موجود' : 'رابط اللقاء: غير موجود', slug: s(sc.slug) || s(c.slug) } : { na: true, slug: s(c.slug) };
     }
     return { id: c.id, title: s(c.title) || 'دورة بلا عنوان', state: st, stateLabel: STATE_LABEL[st], typeLabel: TYPE_LABEL[c.type] || checkText(c.type), interactive: !!story,
-             sourceLabel: SOURCE_LABEL[s(c.source)] || '', trainer: trainerOf(c), trainerEmail: s(c.instructor_email).toLowerCase(), hero: U.platformAsset(c.thumbnail_url), cover: cover(c.title),
+             sourceLabel: SOURCE_LABEL[s(c.source)] || '', trainer: trainerOf(c), trainerEmail: s(c.instructor_email).toLowerCase(), hero: U.courseCover(c), cover: cover(c.title),
              tiles: { learners: num(c.total_enrolled) ? U.ar(num(c.total_enrolled)) : 'لا أحد بعد', lessons: lessons, price: pr.ok === false ? 'بلا سعر' : pr.text, priceOthers: U.coursePricesLine(c), sales: sales },
              completion: completion, facts: facts, main: main, secondary: second, decisionBlock: block, bid: { show: st === 'published' && c.type !== 'recorded_free', enabled: c.bid_enabled === true },
              live: live, danger: st === 'archived' ? null : (canHard ? 'delete' : 'archive'), reviewNote: s(c.review_note), hasPreview: !!(story && s(c.slug)), enrolled: num(c.total_enrolled) || 0 };
@@ -6091,7 +6137,7 @@
     var m = metrics || {};
     var slot = function (v) { return typeof v === 'number' ? ar(v) : NA; };
     out.head = 'الحسابات ' + (total != null ? ar(total) : (truncated ? NA : ar(raw.length))) + '، انضمّ هذا الأسبوع ' + slot(m.signups_7d) + '، اليوم ' + slot(m.signups_today)
-      + ' · مدرّبون معتمدون ' + slot(m.trainers_approved) + ' · باقات مدفوعة ' + slot(m.paid_plan);
+      + '، مدرّبون معتمدون ' + slot(m.trainers_approved) + '، باقات مدفوعة ' + slot(m.paid_plan);
     return out;
   }
 
@@ -6101,7 +6147,7 @@
   }
   function msgBrain(at, now) {
     var t = 'وصلت ' + agoText(at, now);
-    return !isNaN(ms(at)) && now - ms(at) > DAY ? t + ' · مرّ عليها أكثر من يوم' : t;
+    return !isNaN(ms(at)) && now - ms(at) > DAY ? t + '، مرّ عليها أكثر من يوم' : t;
   }
   function msgState(rows, st) {
     if (st === 'idle' || st === 'loading' || (!rows && st !== 'error')) return 'loading';
@@ -6203,7 +6249,7 @@
     if (m < 60) return ar(Math.max(m, 1)) + ' د';
     var h = Math.floor(m / 60);
     if (h < 48) return ar(h) + ' س';
-    return UU(Math.floor(h / 24), ['يوم', 'يومين', 'أيام', 'يومًا']);
+    return L.util.longSpan(Math.floor(h / 24));
   }
   function age(at, now) { var t = ms(at); return isNaN(t) ? '' : ageCore(now - t); }
   function since(at, now) { var t = ms(at); return isNaN(t) ? '' : (now - t < 60e3 ? 'الآن' : 'منذ ' + ageCore(now - t)); }
@@ -8193,7 +8239,7 @@
       }
       case 'trainer': put('headline', r.trHeadline); put('specialty', r.trSpec, 80); put('years', s_(r.trYears), 30); put('attachments', Number(r.trAttach) || 0); break;
       case 'payout': {
-        put('method', s_(r.raw && r.raw.method) || s_(r.dest), 80);
+        put('method', L.util.payMethodAr(s_(r.raw && r.raw.method)) || s_(r.dest), 80);
         out.dispute_check = /نزاع مفتوح/.test(card.warn || '') ? 'يوجد نزاع مفتوح على صاحب الطلب' : (/^روجعت النزاعات/.test(card.reason || '') ? 'لا نزاع مفتوحًا على صاحب الطلب كخبير' : 'لم يكتمل فحص النزاعات');
         break;
       }

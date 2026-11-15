@@ -148,7 +148,7 @@ def test_relative_cover_resolves_against_the_platform_and_unsafe_ones_fall_back_
         assert f(bad) == '', bad
     m = _co('pageModel', dict(COURSE, thumbnail_url='/covers/law-1.jpg'), None, None, None, None, {'now': NOW})
     assert m['hero'] == 'https://app.elprofessor.net/covers/law-1.jpg'
-    assert _co('pageModel', dict(COURSE, thumbnail_url=''), None, None, None, None, {'now': NOW})['hero'] == ''
+    assert _co('pageModel', dict(COURSE, thumbnail_url=''), None, None, None, None, {'now': NOW})['hero'] == 'https://app.elprofessor.net/courses2/track-courses.jpg'      # r28: غلاف المنصة العام لا صورة من عندنا
 
 
 @needs_node

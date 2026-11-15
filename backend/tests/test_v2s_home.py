@@ -271,7 +271,7 @@ def test_brain_line_wording_and_rules():
     assert 'وزّع العقل' not in f([it(False)], 0, 'ready')
     assert f([], 0, 'ready') == 'لا شيء ينتظرك في الوارد الآن'
     assert f([], 0, 'partial') is None and f([], 0, 'error') is None and f([it(True)], 5, 'loading') is None
-    assert f([], 1, 'ready') == 'لا شيء ينتظرك في الوارد الآن · وزّع العقل ملفًا واحدًا اليوم'
+    assert f([], 1, 'ready') == 'لا شيء ينتظرك في الوارد الآن، وزّع العقل ملفًا واحدًا اليوم'
 
 
 @needs_node

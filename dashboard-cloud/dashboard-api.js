@@ -249,9 +249,18 @@
     book: "كتاب", escrow: "ضمان", commission: "عمولة", deposit: "إيداع", other: "أخرى",
   };
   var REV_METHOD_AR = {
-    bank_transfer: "تحويل بنكي", cash: "نقدًا", stripe: "بطاقة (Stripe)", paytabs: "بطاقة (PayTabs)",
-    wise: "Wise", instapay: "إنستاباي", vodafone_cash: "فودافون كاش", manual: "يدوي", other: "أخرى",
+    bank_transfer: "تحويل بنكي", cash: "نقدًا", stripe: "بطاقة بنكية", paytabs: "بطاقة بنكية", card: "بطاقة بنكية",
+    wise: "وايز", instapay: "إنستاباي", vodafone_cash: "فودافون كاش", manual: "يدوي", other: "أخرى",
   };
+  // طريقة دفع عربية لأي كود قادم من المنصة: الكود اللاتيني المجهول يصير «تحويل محلي» ونص كتبه إنسان يمرّ كما هو.
+  function payMethodLabel(v) {
+    var raw = String(v == null ? "" : v).trim();
+    if (!raw) return "";
+    var key = raw.toLowerCase().replace(/[\s\-]+/g, "_");
+    if (key === "other") return "تحويل محلي";
+    if (REV_METHOD_AR.hasOwnProperty(key)) return REV_METHOD_AR[key];
+    return /^[a-z][a-z0-9_]*$/.test(key) ? "تحويل محلي" : raw;
+  }
   var EXP_CAT_AR = {
     tools: "أدوات واشتراكات", hosting: "استضافة", marketing: "تسويق", travel: "سفر",
     legal: "قانوني", office: "مكتب", bank_fees: "رسوم بنكية", salaries: "رواتب",
@@ -1013,7 +1022,7 @@
               email: p.user_email || "",
               amount: Math.round(p.amount || 0),
               currency: (p.currency || "EGP"),
-              dest: p.destination || p.method || "—",
+              dest: p.destination || payMethodLabel(p.method) || "—",
               status: p.status || "pending",
               when: relTime(p.created_at) || arDate(p.created_at),
               fx_alert: !!p.fx_alert,
@@ -2134,7 +2143,7 @@
             realRows.push({
               out: "دفعة يدوية بانتظار التأكيد", from: "الدفع المحلي", src: "wallet", dest: "escrow",
               triage: "human", sla: "طابِق الإيصال وأكّد", slaWarn: true,
-              note: (p.product_label || p.product_type || "منتج") + "، " + (p.amount != null ? p.amount : "") + " " + (p.currency || "EGP") + (p.method ? "، " + p.method : "") + (p.reference_number ? "، مرجع " + p.reference_number : "") + " — أكّد بعد مطابقة الإيصال.",
+              note: (p.product_label || p.product_type || "منتج") + "، " + (p.amount != null ? p.amount : "") + " " + (p.currency || "EGP") + (p.method ? "، " + payMethodLabel(p.method) : "") + (p.reference_number ? "، مرجع " + p.reference_number : "") + " — أكّد بعد مطابقة الإيصال.",
               ref: "PAY-" + p.id, who: p.user_name || p.user_email || p.user_phone || "—",
               apiKind: "manual_payment", personEmail: p.user_email || "", apiId: p.id, canReject: true,
               // المبلغ والعملة على الصفّ نفسه (لا انتزاع من نصّ الملاحظة): تبويب «الدفعات
@@ -2143,7 +2152,7 @@
               currency: p.currency || "EGP",
               approveLabel: "تأكيد الدفعة", proofUrl: p.screenshot_url || "",
               // D1: حقول للّوحة الجديدة بس (طريقة الدفع · المنتج · المرجع · وقت الطلب) — الشاشة القديمة ما بتقراهاش.
-              payMethod: p.method || "", payWhat: p.product_label || p.product_type || "", payRef: p.reference_number || "",
+              payMethod: payMethodLabel(p.method), payWhat: p.product_label || p.product_type || "", payRef: p.reference_number || "",
               ts: Date.parse(p.created_at || "") || 0,
             });
           });

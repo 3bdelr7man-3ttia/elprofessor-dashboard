@@ -447,6 +447,12 @@
     if (a.video && a.video.text) out += chip(a.video.text, VIDEO_TONE[a.video.kind] || 'grey');
     return '<p class="v2co-chips">' + out + '</p>';
   }
+  // روابط مقدّم الطلب ورقم تواصله على بطاقات المدرّبين كما في بطاقة القرار: الروابط https بس وتُفتح في تبويب جديد، والرقم نص.
+  function appLinksHtml(a) {
+    var out = (a.linkList || []).map(function (x) { return '<a class="v2co-alink" href="' + esc(x.url) + '" target="_blank" rel="noopener noreferrer">' + esc(x.label) + '</a>'; }).join('');
+    if (a.contact && a.contact.value) out += '<span class="v2co-aphone">' + esc(a.contact.label) + ': <bdi dir="ltr">' + esc(a.contact.value) + '</bdi></span>';
+    return out ? '<p class="v2co-alinks">' + out + '</p>' : '';
+  }
   function appVideoActs(a) {
     if (!a.video || !a.video.open) return '';
     return '<div class="v2co-acts two"><button type="button" class="v2co-btn2" data-a="apppostpone" data-id="' + esc(a.id) + '">تأجيل يومين</button>'
@@ -455,7 +461,7 @@
   // طلب أُلغي (مهلة الفيديو): للقراءة فقط، لا قبول ولا رفض.
   function appCancelledHtml(a) {
     return '<article class="v2co-t tone-ok" data-id="' + esc(a.id) + '"><div class="v2co-strip"><span class="v2co-type">طلب انضمام</span></div>'
-      + '<div class="v2co-body"><h3>' + esc(a.name) + '</h3>' + appChipsHtml(a)
+      + '<div class="v2co-body"><h3>' + esc(a.name) + '</h3>' + appChipsHtml(a) + appLinksHtml(a)
       + '<p class="v2co-fine">' + esc(a.cancelledAt ? 'أُلغي في ' + U.dateText(a.cancelledAt) : 'أُلغي') + '، ويستطيع مقدّم الطلب التقديم من جديد.</p></div></article>';
   }
   function trainerRowHtml(r) {
@@ -479,7 +485,7 @@
     var apps = C.appTickets(rowsOf('apps', 'applications'), { now: now() });
     var vids = (apps || []).filter(function (a) { return a.video && a.video.open; });
     var vHtml = vids.length ? '<section class="v2co-colbox card v2co-videos"><h2 class="v2co-h2">مهلة الفيديو (' + esc(ar(vids.length)) + ')</h2><ul class="v2co-trlist">' + vids.map(function (a) {
-      return '<li class="v2co-trw" data-id="' + esc(a.id) + '">' + avatar(a.name) + '<div class="v2co-trt"><b>' + personLink(a.name, a.email) + '</b><span class="v2co-st amber">' + esc(a.video.text) + '</span></div>' + appVideoActs(a) + '</li>';
+      return '<li class="v2co-trw" data-id="' + esc(a.id) + '">' + avatar(a.name) + '<div class="v2co-trt"><b>' + personLink(a.name, a.email) + '</b><span class="v2co-st amber">' + esc(a.video.text) + '</span>' + appLinksHtml(a) + '</div>' + appVideoActs(a) + '</li>';
     }).join('') + '</ul></section>' : '';
     var cancelled = C.appTickets(rowsOf('appsCancelled', 'applications'), { now: now() });
     var cHtml = '';
@@ -636,7 +642,7 @@
     }
     load('detail:' + id); load('stats'); load('shares');
     if (c.type === 'live_upcoming') load('schedules');
-    if (C.stateOf(c) === 'review') load('checklist:' + id);
+    if (C.stateOf(c) !== 'archived') load('checklist:' + id);        // r28: فحص النشر الكامل (نواتج التعلم · الفيديو التعريفي · المستوى · صالحة للبيع) لكل دورة غير مؤرشفة، لا للمراجعة وحدها
     var cst = checklistStateOf(id);
     var m = C.pageModel(c, data('detail:' + id), C.statFor(data('stats'), c), checklistOf(id), schedOf(c), { now: now(), checklistState: cst });
     var hero = m.hero ? '<img class="v2co-himg" src="' + esc(m.hero) + '" alt="">' : '<img class="v2co-himg" src="' + img('courses') + '" alt="">';

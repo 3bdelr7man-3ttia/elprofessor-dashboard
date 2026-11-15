@@ -2217,6 +2217,17 @@ def _v2_person_requests(email, S):
     return out, rs
 
 
+def _v2_join_as_of(body, email):
+    """صفة آخر طلب انضمام **معتمد** لهذا البريد: expert / trainer / both، أو '' لو لا طلب أو المصدر ما وصلش أو القيمة غير معروفة."""
+    rows = _v2_rows(body, 'applications')
+    if not rows:
+        return ''
+    mine = [r for r in rows if any(_v2_low(r.get(k)) == email for k in ('user_email', 'email'))]
+    mine.sort(key=lambda r: str(r.get('updated_at') or r.get('created_at') or ''))
+    ja = _v2_low(mine[-1].get('join_as')) if mine else ''
+    return ja if ja in ('expert', 'trainer', 'both') else ''
+
+
 def _v2_person_build(email, S):
     """يبني ردّ الصفحة من نتائج المصادر `S` (None = المصدر فشل/غير موجود). نقية: لا شبكة."""
     sources = {k: ('ok' if S.get(k) is not None else 'failed') for k in
@@ -2332,7 +2343,15 @@ def _v2_person_build(email, S):
     if sysrole in ('admin', 'staff', 'investor'):
         roles.append(sysrole)
     if ts == 'approved':
-        roles += ['expert', 'trainer']
+        # r28: الصفة من طلب الانضمام المعتمد (`join_as`): «مدرّب» وحده لا يُكتب «خبير» معه. لا طلب معتمدًا نقرؤه ⇒ مدرّب
+        # (الطلب القديم بلا `join_as` يُقرأ مدرّبًا كما تقرأه المنصة)، ولا ندّعي «خبير» إلا من طلب يقول ذلك أو من ملف أُسند إليه.
+        ja = _v2_join_as_of(S.get('req_trainer_approved'), email)
+        if ja in ('expert', 'both'):
+            roles.append('expert')
+        elif mine_files:
+            roles.append('expert')
+        if ja in ('trainer', 'both', ''):
+            roles.append('trainer')
     elif ts == 'pending':
         roles.append('trainer_pending')
     if ts != 'approved' and mine_files:
@@ -2406,6 +2425,7 @@ def v2_person():
         'pending': ('/api/bridge/pending-users', {'limit': 500}),
         # R24 م٢: مصادر «طلباته المفتوحة» (نفس جسور الوارد بالحرف)
         'req_trainer': ('/api/bridge/trainer-applications', {'status': 'pending'}),
+        'req_trainer_approved': ('/api/bridge/trainer-applications', {'status': 'approved'}),   # r28: صفة المعتمد (join_as) لشارة الدور
         'req_join': ('/api/bridge/join-requests', {'status': 'open'}),
         'req_founding': ('/api/bridge/founding-expert-leads', {'limit': 500}),
         'req_identity': ('/api/bridge/identity-docs', {'status': 'pending'}),
