@@ -33,6 +33,7 @@ COPY backend/v2_trainer_share_routes.py /app/v2_trainer_share_routes.py
 COPY backend/v2_courses2_routes.py /app/v2_courses2_routes.py
 # r25: أسعار الصرف لسطر «تقريبًا بالدولار» — app.py بيستورده محروسًا (غيابه = السطر يتخفي)
 COPY backend/v2_fx_routes.py /app/v2_fx_routes.py
+COPY backend/v2_purchase_refunds_routes.py /app/v2_purchase_refunds_routes.py
 COPY backend/prerender.py /app/prerender.py
 # refresh_rules.py: المُتحقِّق المشترك مع المنصّة — app.py يستورده عند الإقلاع (غيابه = الحاوية لا تقوم)
 COPY backend/refresh_rules.py /app/refresh_rules.py

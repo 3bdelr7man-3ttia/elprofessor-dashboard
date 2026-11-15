@@ -317,8 +317,8 @@
     var st = data('stats') ? C.statFor(data('stats'), c) : null;
     var l2;
     if (st && Array.isArray(st.sales)) {
-      var sales = st.sales.map(function (x) { return U.moneyText(x.amount, x.currency); }).filter(Boolean).join(' + ');
-      var bits = ['المبيعات: ' + (sales || 'لا مبيعات بعد')];
+      var sales = U.moneyByCurrency(st.sales);      // R28: كل عملة لوحدها «٤٥٠ ج و٤٠ ر.س» — مش «+» كأنهم بيتجمعوا
+      var bits = ['المبيعات: ' + (sales ? (st.sales_count ? U.U(st.sales_count, ['بيعة واحدة', 'بيعتان', 'بيعات', 'بيعة']) + '، ' : '') + sales : 'لا مبيعات بعد')];
       if (st.completion_pct != null) bits.push('يكملها ' + ar(st.completion_pct) + '٪');
       l2 = '<span class="v2co-l2">' + esc(bits.join('، ')) + '</span>'
         + (st.stall_lesson && st.stall_lesson.index != null ? '<span class="v2co-l2 amber">يتوقف أغلبهم عند الدرس ' + esc(ar(st.stall_lesson.index)) + '</span>' : '');

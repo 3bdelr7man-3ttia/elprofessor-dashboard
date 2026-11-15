@@ -399,6 +399,11 @@ class Revenue(db.Model):
     needs_fx = db.Column(db.Boolean, default=False)
     # استرداد (event=refund من المنصة): `refund_of` = معرّف الدفعة الأصلية، والمبلغ سالب فبيتخصم من إجمالي نفس العملة.
     refund_of = db.Column(db.String(255), nullable=True)
+    # R28: نصيب صاحب العمل ونصيب البروفيسور من البيعة دي (بعملة `share_currency` نفسها، والاسترداد بالسالب) — من حدث المنصة.
+    # NULL = المنصة ما قالتش (بيعة قديمة · استشارة لسه في الضمان) ⇒ «صافي البروفيسور» ما يحسبهاش ولا يخمّن.
+    seller_share = db.Column(db.Float, nullable=True)
+    platform_share = db.Column(db.Float, nullable=True)
+    share_currency = db.Column(db.String(8), nullable=True)
     notes = db.Column(db.Text)
     created_at = db.Column(db.DateTime, default=datetime.datetime.utcnow)
 
@@ -2046,7 +2051,8 @@ def v2_config():
 #   users (الهوية) · invites (الداعي والخط الزمني) · experts (عدّاد المدرّب بالبريد) · courses (عناوين دورات المدرّب) ·
 #   expert-files?status=all (ملفاته كخبير) · wallet-payouts (pending/paid) · pending-users (البلد والزائر) ·
 #   users/<id>/purge-check (عدد التسجيلات في الدورات — عدّ فقط، لا مسح).
-# مفيش مصدر أصلًا: الصورة · أي ملف كان صاحبه عميلًا (الجسر ما يرجّعش بريد العميل) · مشتريات الكتب · رصيد المحفظة.
+# مفيش مصدر أصلًا: الصورة · أي ملف كان صاحبه عميلًا (الجسر ما يرجّعش بريد العميل) · مشتريات الكتب.
+# R28: رصيد المحفظة لكل عملة ومشتريات الدورات من `/bridge/people/money`.
 # ⛔ الخصوصية: أدمن بس، `Cache-Control: no-store`، ولا سطر سجل ولا تدقيق بأي حاجة من بيانات الشخص، ولا بريد غير المطلوب في الرد.
 V2_PERSON_EMAIL_RE = re.compile(r'^[^@\s]{1,120}@[^@\s.]+(?:\.[^@\s.]+)+$')
 V2_PERSON_TIMEOUT = 8
@@ -2315,10 +2321,34 @@ def _v2_person_build(email, S):
         mine = [r for r in rows if _v2_low(r.get('user_email')) == email]
         return {'count': len(mine), 'amounts': _v2_amounts(mine), 'partial': len(rows) >= V2_PAYOUT_LIST_CAP, '_rows': mine}
     pp, pd = _payouts('payouts_pending'), _payouts('payouts_paid')
+    # R28: رصيد المحفظة لكل عملة لوحدها (الرصيد · المتاح للسحب · المحجوز · أقرب إتاحة) + مشترياته من الدورات — من جسر
+    # `/bridge/people/money`. المصدر ما وصلش ⇒ None والشاشة تكتب «غير متاح بعد» (مش صفر). ⛔ ولا جمع بين عملتين.
+    wm = S.get('wallet')
+    balances = purchases = None
+    if isinstance(wm, dict) and isinstance(wm.get('balances'), list):
+        sources['balance'] = 'ok'
+        balances = []
+        for b in wm['balances']:
+            if not isinstance(b, dict) or _v2_num(b.get('balance')) is None:
+                continue
+            balances.append({'currency': (str(b.get('currency') or 'EGP').strip().upper()[:8] or 'EGP'),
+                             'balance': _v2_num(b.get('balance')), 'withdrawable': _v2_num(b.get('withdrawable')),
+                             'on_hold': _v2_num(b.get('on_hold')) or 0.0, 'next_release_at': _v2_str(b.get('next_release_at'), 40) or None,
+                             'next_release_amount': _v2_num(b.get('next_release_amount')) or 0.0})
+        if isinstance(wm.get('purchases'), list):
+            purchases = [{'payment_id': _v2_str(x.get('payment_id'), 64), 'kind': _v2_str(x.get('kind'), 20), 'title': _v2_str(x.get('title'), 200),
+                          'amount': _v2_num(x.get('amount')), 'currency': (_v2_str(x.get('currency'), 8) or 'EGP').upper(),
+                          'gateway': _v2_str(x.get('gateway'), 20), 'method': _v2_str(x.get('method'), 20), 'status': _v2_str(x.get('status'), 30),
+                          'paid_at': _v2_str(x.get('paid_at'), 40) or None, 'refunded_at': _v2_str(x.get('refunded_at'), 40) or None,
+                          'refundable': x.get('refundable') is True, 'refund_block': _v2_str(x.get('refund_block'), 300)}
+                         for x in wm['purchases'] if isinstance(x, dict) and _v2_str(x.get('payment_id'), 64)]
+    elif S.get('wallet') is None and 'wallet' in S:
+        sources['balance'] = 'failed'
     money = None
-    if pp is not None or pd is not None:
+    if pp is not None or pd is not None or balances is not None:
         money = {'pending': {k: v for k, v in pp.items() if k != '_rows'} if pp else None,
-                 'paid': {k: v for k, v in pd.items() if k != '_rows'} if pd else None, 'balance': None}
+                 'paid': {k: v for k, v in pd.items() if k != '_rows'} if pd else None, 'balance': None,
+                 'balances': balances}
 
     # —— كمتعلّم: عدّ التسجيلات من فحص الحساب (عدّ فقط)
     pc = S.get('enrollments')
@@ -2377,7 +2407,7 @@ def _v2_person_build(email, S):
                      'tags': [str(t) for t in (user.get('tags') or []) if str(t).strip()],
                      'photo': None, 'country': country, 'invited_by': invited_by,
                      'invite_checked': invs is not None},
-        'expert': expert, 'trainer': trainer, 'money': money, 'learner': learner, 'books': None,
+        'expert': expert, 'trainer': trainer, 'money': money, 'learner': learner, 'books': None, 'purchases': purchases,
         'log': ev[:V2_PERSON_LOG_MAX], 'log_partial': any(sources[k] == 'failed' for k in contributing),
     })
     return out
@@ -2410,6 +2440,8 @@ def v2_person():
         'req_founding': ('/api/bridge/founding-expert-leads', {'limit': 500}),
         'req_identity': ('/api/bridge/identity-docs', {'status': 'pending'}),
         'req_signups': ('/api/bridge/signups/recent', {'limit': 200}),
+        # R28: رصيد المحفظة لكل عملة + مشترياته من الدورات (للاسترداد من «التعلّم»)
+        'wallet': ('/api/bridge/people/money', {'email': email}),
     }
     with ThreadPoolExecutor(max_workers=8) as pool:
         futs = {k: pool.submit(_v2_pull, p, q) for k, (p, q) in jobs.items()}
@@ -2975,6 +3007,9 @@ __import__('v2_roles_routes').register(app)   # v2s:roles
 try:   # R24 م١: «بعدين» و«تجاهل» على الخادم (جدول decision_snooze + ٤ مسارات للأدمن) — تحميل محروس، غيابه لا يكسر الإقلاع
     import v2_decisions_routes as _v2dec; _v2dec.register(app, globals())
 except Exception: logger.exception('v2 decisions routes not loaded')
+try:   # R28: «استرداد» شراء دورة يدوي (نوع شغل مقفول على «يسألك») + «مستحق للخبراء والمدرّبين» من محافظهم — تحميل محروس
+    import v2_purchase_refunds_routes as _v2pr; _v2pr.register(app, globals())
+except Exception: logger.exception('v2 purchase refunds routes not loaded')
 try:   # R24 م٣: مستويات العقل لكل نوع شغل + «عمل لوحده» + التعلّم (brain_levels · alone_log · brain_learn) — تحميل محروس
     import v2_levels_routes as _v2lv; _v2lv.register(app, globals())
 except Exception: logger.exception('v2 levels routes not loaded')
@@ -5969,6 +6004,26 @@ def metrics_finance_event():
     if is_refund and not matched_course and original and original.course_id:
         matched_course = Course.query.get(original.course_id)      # الاسترداد يلزق بنفس دورة الدفعة الأصلية
 
+    # R28: الأنصبة (لو المنصة بعتتها) بعملة البيعة نفسها. الاسترداد بالسالب دايمًا (نفس قاعدة المبلغ). رقم مش صالح ⇒ NULL مش صفر.
+    def _share(key):
+        v = d.get(key)
+        if v is None or isinstance(v, bool):
+            return None
+        try:
+            f = round(float(v), 2)
+        except (TypeError, ValueError):
+            return None
+        if not math.isfinite(f):
+            return None
+        return -abs(f) if is_refund else f
+    seller_share, platform_share = _share('seller_share'), _share('platform_share')
+    if seller_share is None or platform_share is None:
+        seller_share = platform_share = None
+    # استرداد لبيعة اتسجّلت من غير أنصبة (قبل R28) ⇒ الاسترداد كمان من غيرها: وإلا «صافي البروفيسور» يطلع بالسالب من غير البيعة اللي قصاده.
+    if is_refund and (original is None or original.platform_share is None):
+        seller_share = platform_share = None
+    share_currency = (str(d.get('share_currency') or currency).strip().upper()[:8] or currency) if seller_share is not None else None
+
     rev = Revenue(
         date=occurred_date,
         source=kind if kind else 'sale',
@@ -5979,6 +6034,9 @@ def metrics_finance_event():
         currency=(currency if foreign else None),
         needs_fx=foreign,
         refund_of=(refund_of or None),
+        seller_share=seller_share,
+        platform_share=platform_share,
+        share_currency=share_currency,
         client_name=(meta.get('client_name') or meta.get('buyer_email') or '')[:255],
         course_id=(matched_course.id if matched_course else None),
         payment_method=(meta.get('payment_method') or source or 'platform')[:50],
@@ -6347,6 +6405,7 @@ def list_revenues():
         'client_name': r.client_name, 'course_id': r.course_id, 'campaign_id': r.campaign_id,
         'payment_method': r.payment_method, 'notes': r.notes,
         'amount_original': r.amount_original, 'currency': r.currency, 'needs_fx': bool(r.needs_fx), 'refund_of': r.refund_of,
+        'seller_share': r.seller_share, 'platform_share': r.platform_share, 'share_currency': r.share_currency,
     } for r in items])
 
 @app.route('/api/revenues', methods=['POST'])
@@ -9738,6 +9797,12 @@ def ensure_runtime_schema():
                 connection.execute(text("ALTER TABLE revenues ADD COLUMN needs_fx BOOLEAN DEFAULT 0"))
             if 'refund_of' not in revenue_columns:
                 connection.execute(text("ALTER TABLE revenues ADD COLUMN refund_of VARCHAR(255)"))
+            if 'seller_share' not in revenue_columns:
+                connection.execute(text("ALTER TABLE revenues ADD COLUMN seller_share FLOAT"))
+            if 'platform_share' not in revenue_columns:
+                connection.execute(text("ALTER TABLE revenues ADD COLUMN platform_share FLOAT"))
+            if 'share_currency' not in revenue_columns:
+                connection.execute(text("ALTER TABLE revenues ADD COLUMN share_currency VARCHAR(8)"))
         if 'campaigns' in existing_tables:
             campaign_columns = {column['name'] for column in inspector.get_columns('campaigns')}
             if 'course_id' not in campaign_columns:

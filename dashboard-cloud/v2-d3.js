@@ -47,11 +47,13 @@
     paid: function () { return '/platform-wallet-payouts?status=paid'; },
     rejected: function () { return '/platform-wallet-payouts?status=rejected'; },
     offers: function () { return '/v2/book-offers?status=in_review'; },
-    requests: function () { return '/v2/book-requests'; }
+    requests: function () { return '/v2/book-requests'; },
+    owed: function () { return '/v2/money/owed'; },                                  // R28: المستحق من محافظ أصحاب الأعمال
+    confirmed: function () { return '/platform-manual-payments?status=confirmed'; }   // R28: الإيصالات المؤكَّدة (منها الاسترداد)
   };
   var LABEL = { revenues: 'دفتر الإيرادات', income: 'مدفوعات هذا الشهر', settings: 'الحد الأدنى للسحب', shares: 'جدول النسب', ads: 'أرصدة الإعلانات', stuck: 'المدفوعات العالقة',
                 refunds: 'الاستردادات اليدوية', pricesBook: 'أسعار الكتب', paid: 'التحويلات المنفّذة', rejected: 'التحويلات المرفوضة',
-                offers: 'عروض الكتب', requests: 'طلبات القرّاء' };
+                offers: 'عروض الكتب', requests: 'طلبات القرّاء', owed: 'المحافظ', confirmed: 'الإيصالات المؤكَّدة' };
   function srcOf(k) { return SRC[k] || (SRC[k] = { state: 'idle', data: null, status: 0, seq: 0 }); }
   function load(k, force) {
     var s = srcOf(k), E = ep();
@@ -70,6 +72,21 @@
     });
   }
   function data(k) { var s = srcOf(k); return s.state === 'ready' ? s.data : null; }
+  // R28: تحديث صامت لمصدر جاهز — البيانات القديمة تفضل معروضة لحد ما الجديدة توصل (لا وميض «جارٍ الجلب»)، والفشل يسيب القديم.
+  // مصدر فشل قبل كده ⇒ تحميل عادي. ده اللي بيخلّي «دخل» يتحدّث من غير «حدّث الصفحة».
+  function refreshSrc(k) {
+    var s = srcOf(k), E = ep();
+    if (!E || !E.api || !E.authed || !PATHS[k] || s.state === 'idle' || s.state === 'loading') return;
+    if (s.state !== 'ready') { load(k, true); return; }
+    if (s.refreshing) return;
+    s.refreshing = true;
+    var seq = s.seq;
+    E.api(PATHS[k]()).then(function (d) {
+      s.refreshing = false;
+      if (seq !== s.seq || s.state !== 'ready') return;
+      s.data = d; s.at = Date.now(); s.seq++; changed();
+    }).catch(function () { s.refreshing = false; });
+  }
   function srcState(k) { return srcOf(k).state; }
   function loadMany(keys, force) { keys.forEach(function (k) { load(k, force); }); }
 
@@ -172,7 +189,8 @@
     var per = S.period, t = now();
     var revenues = data('revenues'), escrow = epEscrow(), payouts = epPayouts();
     var rates = data('rates');
-    var board = L.v2MoneyBoard({ revenues: revenues, escrow: escrow, payouts: payouts, rates: rates }, per, t);
+    // R28: «مستحق» من المحافظ (المحجوز + المتاح + طلبات سحب لم تُحوَّل) لو الجسر وصل، و«صافي البروفيسور» من نصيب المنصة في كل بيعة.
+    var board = L.v2MoneyBoard({ revenues: revenues, escrow: escrow, payouts: payouts, owed: data('owed'), rates: rates }, per, t);
     var failed = srcFailed(['revenues', 'refunds']).concat(epFailed([['escrow', 'أموال الضمان'], ['walletPayouts', 'طلبات السحب'], ['inbox', 'الدفعات بلا ملف']]));
     var seg = L.PERIODS.map(function (p) {
       return '<button type="button" role="tab" class="v3-pb' + (p.key === per ? ' on' : '') + '" aria-selected="' + (p.key === per) + '" data-a="period" data-p="' + p.key + '">' + esc(p.label) + '</button>';
@@ -275,6 +293,32 @@
     var vis = snzVisible(stuck.rows, function (sk) { return sk && sk.id ? 'stuck_payment:' + sk.id : null; });
     return vis === stuck.rows ? stuck : Object.assign({}, stuck, { rows: vis, count: Math.max(0, (Number(stuck.count) || 0) - (stuck.rows.length - vis.length)) });
   }
+  // —— R28: الإيصالات المؤكَّدة — منها «استرداد» شراء الدورة (القرار بورقة بمرحلتين، والتنفيذ على المنصة).
+  var PAY_METHOD = { instapay: 'إنستاباي', vodafone_cash: 'فودافون كاش', other: 'تحويل محلي' };
+  var COURSE_KINDS = ['course', 'course_offer'];
+  function confirmedRows() {
+    var d = data('confirmed');
+    if (!d || !Array.isArray(d.payments)) return null;
+    return d.payments.filter(function (p) { return p && p.status === 'confirmed' && p.order_ref; }).map(function (p) {
+      var email = String(p.user_email || '').trim().toLowerCase(), at = Date.parse(p.reviewed_at || p.updated_at || '');
+      return { id: String(p.order_ref), name: String(p.user_name || '').trim() || email || 'صاحب الدفع', email: email, title: String(p.product_label || '').trim() || 'شراء',
+               amountText: U.moneyText(p.amount, p.currency || 'EGP'), method: PAY_METHOD[p.method] || 'تحويل محلي', ref: String(p.reference_number || '').trim(),
+               when: isNaN(at) ? '' : U.agoText(at, now()), course: COURSE_KINDS.indexOf(String(p.product_type || '')) > -1 };
+    });
+  }
+  function confirmedRow(r) {
+    return '<li class="v3-pay v3-cfm" data-id="' + esc(r.id) + '"><div class="v3-pid"><b>' + personLink(r.name, r.email) + '</b><span>' + esc([r.title, r.method].join('، ')) + '</span>'
+      + (r.ref ? '<small>مرجع التحويل: <span class="v3-ref" dir="ltr">' + esc(r.ref) + '</span></small>' : '') + '</div>'
+      + '<div class="v3-pm"><b class="v3-amt">' + esc(r.amountText) + '</b>' + (r.when ? '<time>' + esc(r.when) + '</time>' : '') + '</div>'
+      + (r.course ? '<button type="button" class="v3-btn2" data-a="mrefund" data-id="' + esc(r.id) + '">استرداد</button>' : '<p class="v3-fine">لا استرداد من هنا لغير الدورات</p>') + '</li>';
+  }
+  function confirmedSection() {
+    var rows = confirmedRows(), st = srcState('confirmed'), body;
+    if (rows === null) body = st === 'loading' || st === 'idle' ? loadingBlock('الإيصالات المؤكَّدة') : unavailable('الإيصالات المؤكَّدة');
+    else if (!rows.length) body = '<p class="v3-none">لا إيصالات مؤكَّدة بعد</p>';
+    else body = '<ul class="v3-list">' + rows.map(confirmedRow).join('') + '</ul>';
+    return section('إيصالات مؤكَّدة', 'شراء دورة تأكّد إيصاله يمكن استرداده من هنا، وإعادة المبلغ تتم بيدك خارج المنصة', body, 'v3-wide');
+  }
   function drawReceipts(v) {
     var cards = receiptCards(), stuck = stuckVisible(L.v2Stuck(data('stuck'), now()));
     S.receiptCards = cards || [];
@@ -288,7 +332,8 @@
     v.innerHTML = '<div class="v3" data-board="receipts">' + noteStrip() + warnStrip(failed)
       + '<div class="v3-twocol"><section class="v3-colbox"><h2 class="v3-h2">إيصالات تنتظر التأكيد <span class="v3-cnt">' + esc(cards ? U.ar(cards.length) : '—') + '</span></h2>' + colA + '</section>'
       + '<section class="v3-colbox"><h2 class="v3-h2">مدفوعات بالبطاقة عالقة <span class="v3-cnt">' + esc(stuck ? U.ar(stuck.count) : '—') + '</span></h2>'
-      + (stuck ? '<p class="v3-fine">دفعات بدأها أصحابها ولم تكتمل منذ أكثر من ' + esc(U.ar(stuck.afterHours)) + ' ساعة</p>' + (stuck.deliveryNote ? '<p class="v3-fine">' + esc(stuck.deliveryNote) + '</p>' : '') : '') + colB + '</section></div></div>';
+      + (stuck ? '<p class="v3-fine">دفعات بدأها أصحابها ولم تكتمل منذ أكثر من ' + esc(U.ar(stuck.afterHours)) + ' ساعة</p>' + (stuck.deliveryNote ? '<p class="v3-fine">' + esc(stuck.deliveryNote) + '</p>' : '') : '') + colB + '</section></div>'
+      + confirmedSection() + '</div>';
     wire(v);
   }
 
@@ -521,6 +566,101 @@
     if (x) x.onclick = function () { if (!s.dataset.busy) window.closeModal(); };
     s.onclick = function (e) { if (e.target === s && !s.dataset.busy) window.closeModal(); };
     return s;
+  }
+  // ------------------------------------------------------------------ R28: «استرداد» شراء دورة اندفع يدويًا (ورقة بمرحلتين)
+  // المرحلة ١: اللي هيحصل بالظبط (من المنصة نفسها) + السبب. المرحلة ٢: تأكيد أخير. التنفيذ: POST /api/v2/purchases/<id>/refund (نوع شغل «يسألك» بس).
+  function refundLines(p) {
+    var amt = U.moneyText(p.amount, p.currency || 'EGP'), how = PAY_METHOD[p.method] || 'نفس وسيلة الدفع';
+    var out = ['تُعيد ' + amt + ' إلى ' + (p.buyer_name || 'المشتري') + ' بنفسك خارج المنصة (' + how + ')، فالمنصة لا تحوّل أي مبلغ'];
+    out.push('تُغلق دورة «' + (p.title || 'الدورة') + '» على المشتري' + (p.certificate ? '، وتُلغى شهادته' : ''));
+    var sl = p.seller;
+    if (sl && !sl.reversed) {
+      out.push('يُعكس نصيب المدرّب' + (sl.name ? ' ' + sl.name : '') + ' وقدره ' + U.moneyText(sl.amount, sl.currency) + ' من محفظته' + (sl.on_hold ? '، وما زال محجوزًا لم يُتح للسحب' : '، وكان متاحًا للسحب'));
+      if (!sl.covered) out.push('تنبيه: رصيد المدرّب الآن أقل من نصيبه لأنه سحبه، فيلزم استرداده منه يدويًا');
+    } else out.push('لا نصيب مدرّب مقيّدًا على هذه الدفعة');
+    out.push('ينقص الدخل في «الفلوس» بمقدار ' + amt);
+    out.push('لن تصل رسالة إلى المشتري من المنصة');
+    return out;
+  }
+  function refundDoneText(p, res) {
+    var t = 'استُردّت دفعة «' + (res.title || p.title || 'الدورة') + '»: أُغلقت الدورة على المشتري';
+    var sl = res.seller;
+    if (sl && sl.outcome === 'clawback_failed_insufficient_balance') t += '، ولم يُعكس نصيب المدرّب لأنه سحبه، فاسترده منه يدويًا';
+    else if (sl) t += '، وعُكس نصيب المدرّب ' + U.moneyText(sl.amount, sl.currency);
+    return t + '. أعد المبلغ إلى المشتري بنفسك.';
+  }
+  function afterMoney() {
+    try { D3.refresh(true); } catch (e) {}
+    try { if (window.V2 && V2.refreshAll) V2.refreshAll(true); } catch (e) {}
+  }
+  function openRefund(pid, onDone) {
+    var E = ep();
+    if (!E || !E.api || !pid) return;
+    var s = openSheet('استرداد شراء دورة', '<div class="v3-stage" data-stage="load"><p class="mc-lead">…جارٍ تجهيز ما سيحدث</p></div>');
+    if (!s) return;
+    S.sheetBusy = false;
+    var stage = q('.v3-stage', s);
+    function close() { window.closeModal(); }
+    function list(lines) { return '<ul class="v3-rfl">' + lines.map(function (l) { return '<li>' + esc(l) + '</li>'; }).join('') + '</ul>'; }
+    function showErr(msg) { var e = q('#v3err', s); if (e) e.innerHTML = msg ? '<div class="v3-err">' + esc(msg) + '</div>' : ''; }
+    E.api('/v2/purchases/' + encodeURIComponent(pid) + '/refund-preview').then(function (p) {
+      if (!document.body.contains(s)) return;
+      if (!p || p.refundable !== true) {
+        stage.setAttribute('data-stage', 'blocked');
+        stage.innerHTML = '<p class="mc-lead">' + esc(p && p.already_refunded ? 'هذه الدفعة استُردّت من قبل' : ((p && p.block_reason) || 'لا يمكن استرداد هذه الدفعة من هنا')) + '</p>'
+          + '<div class="acts"><button type="button" class="btn btn-ghost" id="v3_rfx">إغلاق</button></div>';
+        q('#v3_rfx', s).onclick = close;
+        return;
+      }
+      var lines = refundLines(p), reason = '';
+      function form() {
+        stage.setAttribute('data-stage', 'form');
+        stage.innerHTML = '<p class="mc-lead">عند التأكيد يحدث الآتي:</p>' + list(lines)
+          + '<div class="fld"><label for="v3_rfr">سبب الاسترداد</label><textarea id="v3_rfr" rows="2" maxlength="500"></textarea></div>'
+          + '<div id="v3err" role="alert"></div><div class="acts"><button type="button" class="btn btn-primary" id="v3_rfnext">راجع الاسترداد</button>'
+          + '<button type="button" class="btn btn-ghost" id="v3_rfno">إلغاء</button></div>';
+        var ta = q('#v3_rfr', s); ta.value = reason;
+        q('#v3_rfno', s).onclick = close;
+        q('#v3_rfnext', s).onclick = function () {
+          reason = String(ta.value || '').trim();
+          if (!reason) { showErr('اكتب سبب الاسترداد'); return; }
+          review();
+        };
+      }
+      function review() {
+        stage.setAttribute('data-stage', 'review');
+        stage.innerHTML = '<p class="mc-lead">تأكيد أخير: هذا الاسترداد لا يُتراجع عنه.</p>' + list(lines) + '<p class="v3-fine">السبب: ' + esc(reason) + '</p>'
+          + '<div id="v3err" role="alert"></div><div class="acts"><button type="button" class="btn btn-primary" id="v3_rfgo">أكّد الاسترداد</button>'
+          + '<button type="button" class="btn btn-ghost" id="v3_rfback">رجوع</button></div>';
+        var go = q('#v3_rfgo', s), back = q('#v3_rfback', s);
+        back.onclick = form;
+        go.onclick = function () {
+          if (go.dataset.busy) return;
+          go.dataset.busy = '1'; s.dataset.busy = '1'; S.sheetBusy = true; go.disabled = true; back.disabled = true; go.textContent = 'جارٍ الاسترداد…'; showErr('');
+          E.api('/v2/purchases/' + encodeURIComponent(pid) + '/refund', { method: 'POST', body: { reason: reason, confirmed: true } }).then(function (res) {
+            delete s.dataset.busy; S.sheetBusy = false;
+            close();
+            var doneText = refundDoneText(p, res || {});
+            setNote(doneText);
+            if (!(host().current && D3.owns(host().current()))) { try { (window.toast || function () {})(doneText); } catch (e) {} }     // من صفحة الشخص
+            afterMoney();
+            if (onDone) try { onDone(res || {}); } catch (e) {}
+            redraw();
+          }).catch(function (e) {
+            delete s.dataset.busy; S.sheetBusy = false; delete go.dataset.busy; back.disabled = false; go.textContent = 'أكّد الاسترداد';
+            var final = e && (e.status === 409 || (e.data && e.data.no_reply));
+            go.disabled = !!final;
+            showErr(errMsg(e) + (final ? ' — أغلق الورقة وحدّث الصفحة قبل أي محاولة أخرى' : ''));
+            if (final) afterMoney();
+          });
+        };
+      }
+      form();
+    }).catch(function (e) {
+      if (!document.body.contains(s)) return;
+      stage.innerHTML = '<div class="v3-err">تعذّر تجهيز الاسترداد: ' + esc(errMsg(e)) + '</div><div class="acts"><button type="button" class="btn btn-ghost" id="v3_rfx">إغلاق</button></div>';
+      q('#v3_rfx', s).onclick = close;
+    });
   }
   function diffTable(lines, heads) {
     heads = heads || ['البند', 'الآن', 'بعد التعديل'];
@@ -920,6 +1060,7 @@
     });
     qa('[data-a="goto"]', v).forEach(function (b) { b.onclick = function () { if (host().openSection) host().openSection(b.getAttribute('data-s'), b.getAttribute('data-t')); }; });
     qa('[data-a="tostrip"]', v).forEach(function (b) { b.onclick = function () { if (window.V2STRIP && V2STRIP.scrollTo) V2STRIP.scrollTo(); }; });
+    qa('[data-a="mrefund"]', v).forEach(function (b) { b.onclick = function () { openRefund(b.getAttribute('data-id')); }; });
     qa('[data-a="settle"]', v).forEach(function (b) {
       b.onclick = function (e) {
         e.stopPropagation();
@@ -999,9 +1140,9 @@
   // ------------------------------------------------------------------ نقطة الدخول
   function isCurrent(mod) { return !!(host().current && host().current() === mod && S.view && document.body.contains(S.view)); }
   var NEEDS = {
-    v2m_overview: { src: ['revenues', 'income', 'refunds', 'rates'], ep: ['walletPayouts', 'escrow', 'inbox', 'opsQueue'] },
+    v2m_overview: { src: ['revenues', 'income', 'refunds', 'rates', 'owed'], ep: ['walletPayouts', 'escrow', 'inbox', 'opsQueue'] },
     v2m_payouts: { src: ['settings', 'paid', 'rejected'], ep: ['walletPayouts'] },
-    v2m_receipts: { src: ['stuck'], ep: ['inbox', 'opsQueue'] },
+    v2m_receipts: { src: ['stuck', 'confirmed'], ep: ['inbox', 'opsQueue'] },
     v2m_prices: { src: ['pricesBook'], ep: [] },
     v2m_shares: { src: ['shares', 'settings'], ep: [] },
     v2m_ads: { src: ['ads'], ep: [] },
@@ -1067,6 +1208,18 @@
     }
     return p.length ? p.join('، ') : 'لا شيء ينتظر مراجعتك';
   };
+  // R28: تحديث صامت لمصادر «الفلوس» اللي اتحمّلت (من دورة التحديث `V2.refreshAll` وبعد أي قرار فلوس) — قبلها «دخل» كان يفضل ٠
+  // لحد «حدّث الصفحة». مصادر القسم المفتوح + أرقام النظرة لو اتحمّلت قبل كده. `force` بيرجّع المصدر اللي فشل للتحميل العادي.
+  D3.refresh = function (force) {
+    var mod = host().current ? host().current() : '', keys = {};
+    ((NEEDS[mod] || {}).src || []).forEach(function (k) { keys[k] = 1; });
+    ['revenues', 'owed', 'income', 'refunds', 'stuck', 'confirmed'].forEach(function (k) { if (srcOf(k).state !== 'idle') keys[k] = 1; });
+    Object.keys(keys).forEach(function (k) {
+      var st = srcOf(k).state;
+      if (st === 'ready' || force) refreshSrc(k);
+    });
+  };
+  D3.openRefund = openRefund;     // صفحة الشخص («التعلّم») بتفتح نفس الورقة
   D3.sig = function () { return ['stuck', 'offers', 'pricesBook'].map(function (k) { return srcOf(k).state; }).join(','); };
   D3.openApprove = openApprove;
   D3.openSheet = openSheet; D3.twoStage = twoStage;
