@@ -175,3 +175,70 @@ def test_publish_sheet_price_row_matches_the_course_page_summary():
     assert _co('pageModel', dict(COURSE, prices=prices), None, None, None, None, {'now': NOW})['tiles']['priceOthers'] == line
 
 
+# ───────────── ٦. صفحة الشخص: بلد التسجيل · روابط ورقم مقدّم الطلب · رابط «اطّلع» حقيقي ─────────────
+HALA = 'trainer.new@example.test'
+
+
+def _built(**S):
+    import app as appmod
+    base = {k: None for k in ('users', 'invites', 'experts', 'courses', 'files', 'payouts_pending', 'payouts_paid', 'pending', 'enrollments', 'req_signups', 'req_trainer')}
+    user = {'email': HALA, 'full_name': 'سلمى', 'id': 'u1', 'created_at': '2026-11-14T00:00:00Z', 'is_active': True, 'role': 'user'}
+    base.update(users={'users': [user]}, pending={'users': []}, invites=[])
+    base.update(S)
+    return appmod._v2_person_build(HALA, base)
+
+
+def test_person_country_falls_back_to_the_signup_country(ctx=None):
+    out = _built(req_signups={'signups': [{'email': HALA, 'user_id': 'u1', 'country': 'EG', 'created_at': '2026-11-14T00:00:00Z'}]})
+    assert out['identity']['country'] == 'EG'
+    assert _built(req_signups={'signups': [{'email': 'other@example.test', 'country': 'SA'}]})['identity']['country'] is None
+    # بلد الحساب نفسه (لو موجود) يسبق بلد التسجيل
+    u = {'email': HALA, 'full_name': 'سلمى', 'id': 'u1', 'is_active': True, 'country': 'AE'}
+    assert _built(users={'users': [u]}, req_signups={'signups': [{'email': HALA, 'country': 'EG'}]})['identity']['country'] == 'AE'
+
+
+@needs_node
+def test_person_page_shows_the_country_with_flag_and_name():
+    resp = {'email': HALA, 'found': True, 'sources': {}, 'roles': [], 'identity': {'name': 'سلمى', 'country': 'EG', 'is_active': True}, 'log': [], 'requests': []}
+    assert v2_node.logic('v2Person', resp, NOW, HALA)['countryText'] == '\U0001F1EA\U0001F1EC مصر'
+    resp['identity']['country'] = None
+    assert v2_node.logic('v2Person', resp, NOW, HALA)['countryText'] == 'غير متاح بعد'
+    resp['identity']['country'] = 'مصر'
+    assert v2_node.logic('v2Person', resp, NOW, HALA)['countryText'] == 'مصر'
+
+
+def test_person_requests_carry_cv_video_and_phone_only_over_https():
+    app_row = {'id': 'a1', 'user_email': HALA, 'user_name': 'سلمى', 'created_at': '2026-11-14T10:00:00Z', 'join_as': 'trainer', 'headline': 'محامية',
+               'cv_url': 'https://files.example.test/cv.pdf', 'intro_video_url': 'javascript:alert(1)', 'contact_phone': '+201001112223'}
+    out = _built(req_trainer={'applications': [app_row]})
+    tr = [r for r in out['requests'] if r['kind'] == 'trainer'][0] if 'requests' in out else None
+    if tr is None:      # الطلبات بتتجمّع في `_v2_person_requests` منفصلة عن `_v2_person_build`
+        import app as appmod
+        tr = [r for r in appmod._v2_person_requests(HALA, {'req_trainer': {'applications': [app_row]}})[0] if r['kind'] == 'trainer'][0]
+    assert tr['cv_url'] == 'https://files.example.test/cv.pdf' and tr['intro_video_url'] == '' and tr['contact_phone'] == '+201001112223'
+
+
+@needs_node
+def test_trainer_card_shows_links_phone_and_a_real_person_link():
+    row = {'apiKind': 'trainer', 'apiId': 'a1', 'who': 'سلمى', 'personEmail': HALA, 'ref': 'TRN-a1', 'trJoin': 'trainer', 'trHeadline': 'محامية', 'canReject': True,
+           'trVideo': 'https://youtu.be/abc', 'trCv': 'https://files.example.test/cv.pdf', 'trPhone': '+201001112223'}
+    c = v2_node.logic('v2Card', row, {'now': NOW})
+    assert [(x['label'], x['url']) for x in c['links']] == [('فيديو الشرح', 'https://youtu.be/abc'), ('السيرة الذاتية', 'https://files.example.test/cv.pdf')]
+    assert c['contact'] == {'label': 'رقم التواصل', 'value': '+201001112223'}
+    assert c['read'] == {'label': 'اطّلع على الطلب كاملًا', 'act': {'do': 'person', 'email': HALA}} and not c.get('reason')
+    # غياب الحقول ⇒ لا شيء (لا رابط ميّت ولا سطر فاضي)
+    bare = v2_node.logic('v2Card', dict(row, trVideo='', trCv='', trPhone=''), {'now': NOW})
+    assert bare['links'] == [] and bare['contact'] is None
+    # رابط غير آمن ⇒ يُسقَط
+    evil = v2_node.logic('v2Card', dict(row, trVideo='javascript:alert(1)', trCv='http://x.test/cv'), {'now': NOW})
+    assert evil['links'] == []
+    # بلا بريد ⇒ لا نص-يشبه-رابط
+    nomail = v2_node.logic('v2Card', dict(row, personEmail='', email=''), {'now': NOW})
+    assert not nomail.get('read') and not nomail.get('reason')
+
+
+def test_strip_renders_links_in_a_new_tab_and_the_phone():
+    s = _read('dashboard-cloud', 'v2-strip.js')
+    assert 'target="_blank" rel="noopener noreferrer">\' + esc(x.label)' in s and 'contactHtml(c' in s
+
+

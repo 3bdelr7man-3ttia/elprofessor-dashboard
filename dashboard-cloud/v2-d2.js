@@ -364,10 +364,11 @@
       var c = x.card, r = x.req, fyi = c.bucket !== 'decision';
       return '<li class="v2d-rq" data-id="' + esc(c.id) + '"><div class="v2d-rqh"><span class="v2d-rt">' + esc(r.label) + '</span>' + (r.ago ? '<time>' + esc(r.ago) + '</time>' : '') + '</div>'
         + (r.text ? '<p class="v2d-rqx">' + esc(r.text) + '</p>' : '')
+        + (window.V2STRIP && V2STRIP.contactHtml ? V2STRIP.contactHtml(c, 'v2d-rqx') : '')
         + (c.warn ? '<p class="v2d-rqw">' + esc(c.warn) + '</p>' : '')
         + (S.reqErr[c.id] ? '<p class="v2d-rqe" role="alert">' + esc(S.reqErr[c.id]) + '</p>' : '')
         + (fyi && c.kind !== 'signup' ? '<p class="v2d-rqf">للعلم — مفيش قرار عليه الآن</p>' : '')
-        + '<div class="v2d-rqa">' + (window.V2STRIP ? V2STRIP.actionsHtml(c, {}) : '') + '</div></li>';
+        + '<div class="v2d-rqa">' + (window.V2STRIP ? V2STRIP.actionsHtml(c.reqKind === 'trainer' ? Object.assign({}, c, { read: null }) : c, {}) : '') + '</div></li>';     // هنا الطلب كله قدّامك: لا رابط «اطّلع» لنفس الصفحة
     }).join('') + '</ul>';
     return { cards: cards, html: '<section class="v2d-pc v2d-req" data-board="requests"><h3>الطلبات المفتوحة' + (listed.length ? ' (' + esc(U.ar(listed.length)) + ')' : '') + '</h3>' + warn + body + '</section>' };
   }

@@ -546,6 +546,7 @@
     return /^https?:\/\//i.test(u) ? u : '';
   }
   function act(o) { return o; }
+  function httpsLink(v) { v = str(v); return /^https:\/\/[^\s]+$/i.test(v) ? v : ''; }     // روابط مقدّمي الطلبات: https فقط (لا http ولا javascript: ولا data:)
   var OPEN = { do: 'open' };
   // R24 م٢: «افتح وقرّر» = يفتح شاشة القراية جوه بيت القسم (درج الوارد القديم بأزراره) — مش «كل الوارد». ده قرار فعلًا: القفل بيحصل من جوّاها.
   var READ = { do: 'read' };
@@ -775,7 +776,15 @@
         card.title = who || 'مقدّم الطلب';
         card.sub = shorten(str(r.trHeadline) || str(r.note).replace(/\s*—\s*اعتمد.*$/, ''), 140);
         card.brain = clean([who || 'مقدّم الطلب', card.sub].concat(facts)).join('، ');
-        card.reason = 'اطّلع على الطلب كاملًا إن أردت قبل القبول';
+        // روابط مقدّم الطلب (لو المنصة بعتتها) تتفتح في تبويب جديد، ورقم التواصل نص. «اطّلع على الطلب كاملًا» رابط فعلي لصفحة الشخص.
+        var trLinks = [];
+        if (httpsLink(r.trVideo)) trLinks.push({ label: 'فيديو الشرح', url: httpsLink(r.trVideo) });
+        if (httpsLink(r.trCv)) trLinks.push({ label: 'السيرة الذاتية', url: httpsLink(r.trCv) });
+        card.links = trLinks;
+        card.contact = str(r.trPhone) ? { label: 'رقم التواصل', value: str(r.trPhone) } : null;
+        var trEmail = str(r.personEmail) || str(r.email);
+        if (trEmail) card.read = { label: 'اطّلع على الطلب كاملًا', act: act({ do: 'person', email: trEmail }) };
+        else card.reason = '';
         card.primary = { label: 'اقبل الطلب', act: act({ do: 'decide', action: 'approve' }) };
         card.secondary = { label: 'ارفض بسبب', act: act({ do: 'reject_reason' }) };
         break;
@@ -1537,6 +1546,14 @@
   }
   function naCard(c) { c.na = true; c.text = NA; return c; }
 
+  // بلد الشخص للعرض: رمز من حرفين ⇒ «🇪🇬 مصر» (زي صف «تسجيل جديد»)؛ نص عربي جاهز يبقى كما هو.
+  function personCountryText(c) {
+    c = str(c);
+    if (!/^[A-Za-z]{2}$/.test(c)) return c;
+    var cc = c.toUpperCase(), name = cc;
+    try { name = new Intl.DisplayNames(['ar'], { type: 'region' }).of(cc) || cc; } catch (e) {}
+    return String.fromCodePoint(0x1F1E6 + cc.charCodeAt(0) - 65, 0x1F1E6 + cc.charCodeAt(1) - 65) + ' ' + name;
+  }
   function v2Person(resp, now, email) {
     if (!resp || typeof resp !== 'object') return { state: 'failed', email: email || '', cards: null };
     var em = str(resp.email) || email || '';
@@ -1558,7 +1575,7 @@
     var plain = name.replace(/^(?:د|أ|م|السيد|السيدة|الدكتور|الدكتورة|الأستاذ|الأستاذة|المهندس|المهندسة)\.?\s+/, '');
     var vm = { state: 'ok', email: em, name: name, initial: (plain || name).charAt(0), photo: id.photo || null,
                chips: (Array.isArray(resp.roles) ? resp.roles : []).map(function (k) { return { key: k, label: ROLE_CHIP[k] || '' }; }).filter(function (c) { return c.label; }),
-               country: str(id.country) || null, countryText: str(id.country) || NA, failed: failed, sources: src, active: id.is_active !== false };
+               country: str(id.country) || null, countryText: personCountryText(id.country) || NA, failed: failed, sources: src, active: id.is_active !== false };
     // «الانضمام في … بدعوة من …» — الداعي لا يُدّعى إلا من صف دعوة فعلي، وفشل المصدر يُقال.
     var join = dateText(id.joined_at);
     var line = join ? 'الانضمام في ' + join : 'تاريخ الانضمام: ' + NA;
@@ -1658,7 +1675,7 @@
     var r = req.raw || {}, base = { personEmail: email, email: email, apiId: r.id != null ? r.id : req.id, who: req.name || email, ts: req.at, ref: req.kind + '-' + req.id };
     switch (req.kind) {
       case 'pending_user': return Object.assign(base, { apiKind: 'pending_user', canReject: true, puCountry: str(r.country), puRole: str(r.role), flagLabels: Array.isArray(r.flags) ? r.flags : [] });
-      case 'trainer': return Object.assign(base, { apiKind: 'trainer', canReject: true, rejectNeedsReason: true, trJoin: str(r.join_as), trHeadline: str(r.headline), trSpec: str(r.specialty) });
+      case 'trainer': return Object.assign(base, { apiKind: 'trainer', canReject: true, rejectNeedsReason: true, trJoin: str(r.join_as), trHeadline: str(r.headline), trSpec: str(r.specialty), trVideo: str(r.intro_video_url), trCv: str(r.cv_url), trPhone: str(r.contact_phone) });
       case 'join': return Object.assign(base, { apiKind: 'join', canReject: true, rejectNeedsReason: true, waiting: !!r.waiting, licensed: !!r.licensed, licenceMissing: !!r.licence_missing, serviceLabel: str(r.service) });
       case 'founding': { var nx = FOUND_NEXT[str(r.status)] || ['contacted', 'تم التواصل']; return Object.assign(base, { apiKind: 'founding', canReject: true, nextStatus: nx[0], approveLabel: nx[1], fSpec: str(r.spec), fCountry: str(r.country), statusLabel: FOUND_ST[str(r.status)] || '' }); }
       case 'identity_doc': return Object.assign(base, { apiKind: 'identity_doc', idTitle: str(r.title), approveLabel: 'وثّق الهوية', canReject: true, rejectNeedsReason: true });

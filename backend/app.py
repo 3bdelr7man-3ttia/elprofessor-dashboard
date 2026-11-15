@@ -2073,6 +2073,12 @@ def _v2_pull(path, params=None):
             return None
 
 
+def _v2_https(v):
+    """رابط https صالح للعرض (≤٥٠٠ حرف) أو '' — لا http ولا javascript: ولا data:."""
+    v = v.strip() if isinstance(v, str) else ''
+    return v if re.match(r'^https://\S+$', v) and len(v) <= 500 else ''
+
+
 def _v2_low(v):
     return v.strip().lower() if isinstance(v, str) else ''
 
@@ -2156,7 +2162,10 @@ def _v2_person_requests(email, S):
         if kind == 'trainer':
             for r in mine(rows, 'user_email', 'email'):
                 out.append({'kind': 'trainer', 'id': r.get('id'), 'at': r.get('created_at') or r.get('submitted_at'), 'name': _v2_str(r.get('user_name') or r.get('full_name')),
-                            'join_as': _v2_str(r.get('join_as')).lower(), 'headline': _v2_str(r.get('headline'), 160), 'specialty': _v2_str(r.get('specialty') or r.get('specialization'), 80)})
+                            'join_as': _v2_str(r.get('join_as')).lower(), 'headline': _v2_str(r.get('headline'), 160), 'specialty': _v2_str(r.get('specialty') or r.get('specialization'), 80),
+                            # r27: روابط مقدّم الطلب (https بس) ورقم التواصل — لو المنصة بعتتهم؛ غيابهم ⇒ فاضي والشاشة ما بترسمش حاجة.
+                            'cv_url': _v2_https(r.get('cv_url')), 'intro_video_url': _v2_https(r.get('intro_video_url')),
+                            'contact_phone': _v2_str(r.get('contact_phone') or r.get('user_phone'), 40)})
         elif kind == 'join':
             for r in mine(rows, 'user_email'):
                 st = _v2_str(r.get('status'))
@@ -2235,6 +2244,14 @@ def _v2_person_build(email, S):
     pend = _v2_rows(S.get('pending'), 'users')
     prow = next((p for p in pend if _v2_low(p.get('email')) == email), None) if pend is not None else None
     country = (str(prow.get('country') or '').strip() or None) if prow else None
+    # r27: بلد الحساب ناقص (مش زائر معلّق) ⇒ بلد التسجيل: صف الحساب نفسه، ثم صف «تسجيل جديد» لنفس البريد (نفس اللي بيظهر في طلباته).
+    if not country:
+        country = (str(user.get('country') or user.get('signup_country') or (prow or {}).get('signup_country') or '').strip() or None)
+    if not country:
+        sg = _v2_rows(S.get('req_signups'), 'signups', 'rows') or []
+        srow = next((s for s in sg if _v2_low(s.get('email')) == email and str(s.get('country') or s.get('where') or '').strip()), None)
+        if srow:
+            country = str(srow.get('country') or srow.get('where') or '').strip()[:60]
     pending_partial = prow is None and pend is not None and len(pend) >= 500    # نفس الحدّ: أحدث ٥٠٠ فقط
     if pending_partial:
         sources['pending'] = 'partial'

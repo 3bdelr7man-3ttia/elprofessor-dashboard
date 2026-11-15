@@ -37,7 +37,12 @@
     if (o.snooze && c.key) h += '<button type="button" class="v2z-b3" data-a="l" data-id="' + esc(c.id) + '"' + dis + '>بعدين</button>';
     if (o.snooze && c.dismiss) h += '<button type="button" class="v2z-b3" data-a="d" data-id="' + esc(c.id) + '"' + dis + '>تجاهل</button>';
     if (c.link && c.link.url) h += '<a class="v2z-b3" href="' + esc(c.link.url) + '" target="_blank" rel="noopener noreferrer">' + esc(c.link.label) + '</a>';
+    (c.links || []).forEach(function (x) { if (x && x.url) h += '<a class="v2z-b3" href="' + esc(x.url) + '" target="_blank" rel="noopener noreferrer">' + esc(x.label) + '</a>'; });     // روابط مقدّم الطلب: تبويب جديد
     return h;
+  }
+  // رقم التواصل (لو المنصة بعتته): نص بسيط بالأرقام كما هي.
+  function contactHtml(c, cls) {
+    return c.contact && c.contact.value ? '<p class="' + cls + '">' + esc(c.contact.label) + ': <bdi dir="ltr">' + esc(c.contact.value) + '</bdi></p>' : '';
   }
   // توصيل الأزرار. `byId` ⇒ البطاقة · `ctx.done(text)` بعد النجاح · `ctx.fail(msg)` عند الفشل. بنرجع للمنفّذ الواحد.
   function wire(root, byId, ctx) {
@@ -57,7 +62,7 @@
       else if (a === 'd') b.onclick = function () { if (V() && V2.dismiss) V2.dismiss(c); };
     });
   }
-  ST.actionsHtml = actionsHtml; ST.wire = wire; ST.titleHtml = titleHtml;
+  ST.actionsHtml = actionsHtml; ST.contactHtml = contactHtml; ST.wire = wire; ST.titleHtml = titleHtml;
 
   // ------------------------------------------------------------------ البطاقة
   function cardHtml(c) {
@@ -70,6 +75,7 @@
       + '<div class="v2z-top"><span class="v2z-tag">' + esc(c.tag) + '</span>' + (c.ageText ? '<time>' + esc(c.ageText) + '</time>' : '') + '</div>'
       + '<h3>' + titleHtml(c) + '</h3>'
       + (c.sub ? '<p class="v2z-sub">' + esc(c.sub) + '</p>' : '')
+      + contactHtml(c, 'v2z-sub')
       + chips
       + (c.brain && c.kind !== 'person' ? '<p class="v2z-brain">' + esc(c.brain) + '</p>' : '')
       + (c.reason ? '<p class="v2z-reason">' + esc(c.reason) + '</p>' : '')
