@@ -347,3 +347,8 @@
 /* r25 — أكتر من عملة في الرقم الواحد: كل عملة في سطرها بحجم أصغر، من غير جمع */
 .v3-big.multi{font-size:22px;line-height:1.5;display:grid;gap:2px}
 .v3-big.multi .v3-cur{display:block}
+
+/* R28: ورقة «استرداد شراء دورة» + صف الإيصال المؤكَّد */
+.v3m .v3-rfl{margin:0 0 12px;padding:0 20px 0 0;font-size:14px;line-height:1.9}
+.v3m .v3-rfl li{margin-bottom:4px}
+.v3-cfm .v3-fine{margin:0;max-width:180px}

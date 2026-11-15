@@ -319,13 +319,26 @@
   function personCard(c) {
     var body;
     if (c.na) body = '<p class="v2d-na">' + esc(c.text) + '</p>';
-    else if (c.rows) body = '<dl class="v2d-rows">' + c.rows.map(function (r) { return '<div><dt>' + esc(r.k) + '</dt><dd' + (r.na ? ' class="v2d-na"' : '') + '>' + esc(r.v) + '</dd></div>'; }).join('') + '</dl>';
-    else {
+    else if (c.rows) {
+      body = '<dl class="v2d-rows">' + c.rows.map(function (r) { return '<div><dt>' + esc(r.k) + '</dt><dd' + (r.na ? ' class="v2d-na"' : '') + '>' + esc(r.v) + '</dd></div>'; }).join('') + '</dl>';
+      if (c.purchases !== undefined) body += purchasesHtml(c.purchases);
+    } else {
       body = '<p class="v2d-sum">' + esc(c.summary || '') + '</p>';
       if (c.items && c.items.length) body += '<ul class="v2d-items">' + c.items.map(function (i) { return '<li><b>' + esc(i.title) + '</b>' + (i.meta ? '<span>' + esc(i.meta) + '</span>' : '') + '</li>'; }).join('') + '</ul>';
       if (c.note) body += '<p class="v2d-fine">' + esc(c.note) + '</p>';
     }
     return '<section class="v2d-pc"><h3>' + esc(c.title) + '</h3>' + body + '</section>';
+  }
+  // R28: مشتريات الدورات في «التعلّم» — زرار «استرداد» على الدفعة اليدوية المؤكَّدة (نفس ورقة «الفلوس ‹ الإيصالات»).
+  function purchasesHtml(list) {
+    var head = '<h4 class="v2d-subh">مشتريات الدورات</h4>';
+    if (list === null) return head + '<p class="v2d-na">' + esc(L.NA) + '</p>';
+    if (!list.length) return head + '<p class="v2d-sum">لا مشتريات دورات</p>';
+    return head + '<ul class="v2d-items v2d-buys">' + list.map(function (p) {
+      return '<li><b>' + esc(p.title) + '</b><span>' + esc([p.amountText, p.meta].filter(Boolean).join('، ')) + '</span>'
+        + (p.refundable ? '<button type="button" class="v2d-btn2" data-a="prefund" data-id="' + esc(p.id) + '">استرداد</button>' : '')
+        + (p.note ? '<small class="v2d-fine">' + esc(p.note) + '</small>' : '') + '</li>';
+    }).join('') + '</ul>';
   }
   // R24: الخبير المؤسس بعد «تم التواصل» (تواصلت/دعيته) = مسار متابعة على صفحة الشخص، مش بطاقة قرار بترجع. الصف في الوارد (المرئي أو المؤجَّل).
   var FOUND_STEP_AR = { invited: 'تمت دعوته', converted: 'صار مدرّبًا' };
@@ -437,6 +450,12 @@
       fail: function (msg, c) { S.reqErr[c.id] = msg; if (isCurrent('v2person')) drawPerson(S.view); } });
     var r = v.querySelectorAll('[data-a="retry"]');
     r.forEach(function (b) { b.onclick = function () { loadPerson(S.person.email, true); }; });
+    v.querySelectorAll('[data-a="prefund"]').forEach(function (b) {
+      b.onclick = function () {
+        if (!(window.V2D3 && V2D3.openRefund)) return;
+        V2D3.openRefund(b.getAttribute('data-id'), function () { loadPerson(S.person.email, true); });
+      };
+    });
     v.querySelectorAll('[data-a="back"]').forEach(function (a) {
       a.onclick = function (e) { if (e.metaKey || e.ctrlKey || e.shiftKey || e.button === 1) return; e.preventDefault(); if (host().openSection) host().openSection('people', 'users'); };
     });

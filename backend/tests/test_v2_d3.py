@@ -1012,12 +1012,15 @@ def test_the_money_sheets_reuse_the_existing_confirmation_and_add_no_new_decisio
     js = _strip_comments(_read('dashboard-cloud', 'v2-d3.js'))
     calls = re.findall(r"E\.api\([^;]*?method: '(PUT|POST|PATCH)'[^;]*?\}\s*\)", js, re.S)
     # PUT الرابع (2026-11-09): زر «الأسعار المبدئية» — نفس مسار تعديل السعر بعد ورقة مراجعة و«أكّد التطبيق».
-    assert calls.count('PUT') == 4 and calls.count('POST') == 2 and calls.count('PATCH') == 1, calls
+    # POST الثالث (R28، 2026-11-15): «استرداد» شراء دورة — ورقة بمرحلتين (اللي هيحصل + السبب ⇐ تأكيد أخير) ثم `confirmed:true`،
+    # ونوعه في الخادم مقفول على «يسألك» (`course_refund`). ده الفعل الوحيد اللي اتضاف هنا بطلب المؤسس.
+    assert calls.count('PUT') == 4 and calls.count('POST') == 3 and calls.count('PATCH') == 1, calls
     for m in re.finditer(r"E\.api\(([^;]*?method: '(PUT|POST)'[^;]*?)\)\.then|E\.api\(([^;]*?method: '(PUT|POST)'[^;]*?)\);\s*\}", js, re.S):
         assert 'confirmed: true' in (m.group(1) or m.group(3)), m.group(0)[:160]
     assert 'fetch(' not in js and 'XMLHttpRequest' not in js
     paths = set(re.findall(r"E\.api\('(/[^'?]*)", js)) | set(re.findall(r"'(/v2/[^'?]*)", js)) | set(re.findall(r"function \(\) \{ return '(/[^'?]*)", js))
-    assert all(p.startswith('/v2/') or p in ('/revenues', '/platform-wallet-payouts') for p in paths), paths
+    # R28: `/platform-manual-payments` قراءة بس (الإيصالات المؤكَّدة) من نفس البروكسي الموجود — مش مسار قرار.
+    assert all(p.startswith('/v2/') or p in ('/revenues', '/platform-wallet-payouts', '/platform-manual-payments') for p in paths), paths
 
 
 def test_no_money_decision_is_made_from_a_row_without_the_sheet():

@@ -98,6 +98,9 @@ WORK_TYPES = (
     _wt('payout', 'locked', 'تحويل أرباح خبير أو مدرّب', 'يراجع الحساب ويقترح', lock='money'),
     _wt('manual_payment', 'locked', 'تأكيد إيصال تحويل', 'يطابق الإيصال ويقترح', lock='money'),
     _wt('refund', 'locked', 'استرداد أو نزاع', 'يلخّص الطرفين ويقترح', lock='money'),
+    # R28: استرداد شراء دورة اندفع يدويًا — بيقفل الدورة ويعكس نصيب المدرّب وينقص الدخل، ومالوش رجوع ⇒ «يسألك» بس (ولا حتى «يقترح»).
+    _wt('course_refund', 'locked', 'استرداد شراء دورة', 'يقفل الدورة على المشتري ويعكس نصيب المدرّب', default='ask', lock='money',
+        reversible=False, levels=('ask',)),
     _wt('book_offer_price', 'locked', 'اعتماد أسعار عرض كتاب', 'يراجع السعر ويقترح', lock='money'),
     _wt('course_review', 'locked', 'نشر دورة جديدة', 'يراجع الدروس ويكتب ملاحظته', producer='course_review', lock='publish'),
     _wt('course_lesson_draft', 'locked', 'مسودة درس', 'تظهر للمتعلمين بعد اعتمادك', producer='course_lesson_draft', lock='publish'),

@@ -594,7 +594,8 @@
   function removePill() { var p = document.getElementById('v2Pill'); if (p) p.remove(); }
 
   // بعد أي قرار: مصادر القرارات تتحمّل من جديد، وبيانات الأقسام (الدورات والمدرّبون…) تتحدّث معاها في نفس اللحظة.
-  function reload() { var E = ep(); if (E) { E.reload('opsQueue'); E.reload('inbox'); E.reload('walletPayouts'); } try { if (window.V2CO && V2CO.refresh) V2CO.refresh(true, true); } catch (e) {} }
+  // R28: وبعد أي قرار (تأكيد إيصال · تحويل · استرداد) أرقام «الفلوس» تتحدّث فورًا (`V2D3.refresh(true)`).
+  function reload() { var E = ep(); if (E) { E.reload('opsQueue'); E.reload('inbox'); E.reload('walletPayouts'); } try { if (window.V2CO && V2CO.refresh) V2CO.refresh(true, true); } catch (e) {} try { if (window.V2D3 && V2D3.refresh) V2D3.refresh(true); } catch (e) {} }
   // R24 م٣: بعد أي قرار ناجح البطاقة (وصفوف أجزائها) بتتشال من الذاكرة فورًا، فالشريط والمربّع والقايمة الجانبية بتنزل في نفس اللحظة
   // من غير ما نستنى التحميل الكامل (والتحميل الحقيقي بعدها يصحّح أي فرق).
   function dropRows(c) {
@@ -978,6 +979,7 @@
     SOURCES.forEach(function (k) { if (stateOf(k) !== 'idle' && stateOf(k) !== 'loading') E.refresh(k, touchShell); });
     try { if (window.V2CO && V2CO.refresh) V2CO.refresh(!!force, true); } catch (e) {}
     try { if (window.V2D3 && V2D3.preload && force) V2D3.preload(); } catch (e) {}
+    try { if (window.V2D3 && V2D3.refresh) V2D3.refresh(!!force); } catch (e) {}   // R28: «دخل» و«مستحق» و«صافي» بيتحدّثوا صامتين مع الدورة نفسها
   };
   // كل دقيقة والتبويب ظاهر، ولما نرجع للتبويب بعد غياب: ما نستناش «حدّث الصفحة».
   function autoRefresh() { V2.refreshAll(false); }

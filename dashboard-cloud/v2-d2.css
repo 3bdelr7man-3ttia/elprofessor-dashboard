@@ -197,3 +197,9 @@
 /* R24 — سطر متابعة الخبير المؤسس على صفحة الشخص (مسار متابعة، مش بطاقة قرار) */
 .v2d-follow{background:#EEF4FF;border:1px solid #BFD3F6;color:#1F4A8A;border-radius:12px;padding:10px 14px;margin-bottom:10px;font-size:14px;line-height:1.7}
 .v2d-follow .v2d-btn2{margin-inline-start:10px;min-height:44px}
+
+/* R28: مشتريات الدورات في «التعلّم» بزرار «استرداد» */
+.v2d-subh{font-size:13px;margin:12px 0 6px;color:var(--mute,#6B6F76);font-weight:600}
+.v2d-buys li{display:flex;flex-wrap:wrap;align-items:center;gap:4px 10px}
+.v2d-buys li button{margin-inline-start:auto}
+.v2d-buys li small{flex-basis:100%}
