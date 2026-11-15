@@ -3083,7 +3083,7 @@
       .then(function () {
         note(i.apiKind === "pending_user"
           ? (action === "approve" ? "فُتحت المنصة للزائر ✓" : "رُفض الطلب وبقي زائرًا")
-          : (action === "approve" ? "تم الاعتماد ✓" : "تم الرفض"));
+          : (action === "approve" ? "اعتُمد الطلب" : "رُفض الطلب"));
         if (alsoReload) EP.reload(alsoReload);
         // R24: فتح المنصة لزائر ⇒ «اطّلعت» على تسجيله كمان (قبل إعادة تحميل الوارد، عشان الصفين يختفوا مع بعض).
         if (i.apiKind === "pending_user" && action === "approve") {

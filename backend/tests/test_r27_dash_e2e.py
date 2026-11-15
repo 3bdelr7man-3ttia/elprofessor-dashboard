@@ -242,3 +242,9 @@ def test_strip_renders_links_in_a_new_tab_and_the_phone():
     assert 'target="_blank" rel="noopener noreferrer">\' + esc(x.label)' in s and 'contactHtml(c' in s
 
 
+# ───────────── ٧. رسالة نجاح القبول ─────────────
+def test_accept_toast_has_no_emoji_or_tick():
+    api = _read('dashboard-cloud', 'dashboard-api.js')
+    assert '"اعتُمد الطلب" : "رُفض الطلب"' in api and 'تم الاعتماد ✓' not in api
+    html = _read('dashboard-cloud', 'index.html')
+    assert "toast((window.V2SHELL&&window.V2SHELL.on?'':'📩 ')+msg)" in html

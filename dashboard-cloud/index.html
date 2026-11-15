@@ -3909,7 +3909,7 @@ function renderNotifPanel(){
 // إشعار فوري لفعل المستخدم: toast + إلحاق محلي أعلى القائمة (حتى تظهر فورًا).
 function notify(msg){
   NOTIFS.unshift({title:msg,detail:'',time:'الآن',read:false});
-  notifBadge();renderNotifPanel();toast('📩 '+msg);
+  notifBadge();renderNotifPanel();toast((window.V2SHELL&&window.V2SHELL.on?'':'📩 ')+msg);
 }
 // F-001: نفس قاعدة الخادم (routes/invites.py::_phone_key) — أرقام عربية/فارسية ⇒ ASCII، وبس الأرقام.
 // اللي بيحكم في الآخر هو الخادم؛ ده تحقّقٌ قبل رحلة الشبكة عشان المؤسس يعرف غلطته بدري.
