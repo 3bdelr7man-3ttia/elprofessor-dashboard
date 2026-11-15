@@ -780,6 +780,7 @@
         var trLinks = [];
         if (httpsLink(r.trVideo)) trLinks.push({ label: 'فيديو الشرح', url: httpsLink(r.trVideo) });
         if (httpsLink(r.trCv)) trLinks.push({ label: 'السيرة الذاتية', url: httpsLink(r.trCv) });
+        if (httpsLink(r.trLi)) trLinks.push({ label: 'لينكدإن', url: httpsLink(r.trLi) });
         card.links = trLinks;
         card.contact = str(r.trPhone) ? { label: 'رقم التواصل', value: str(r.trPhone) } : null;
         var trEmail = str(r.personEmail) || str(r.email);
@@ -1675,7 +1676,7 @@
     var r = req.raw || {}, base = { personEmail: email, email: email, apiId: r.id != null ? r.id : req.id, who: req.name || email, ts: req.at, ref: req.kind + '-' + req.id };
     switch (req.kind) {
       case 'pending_user': return Object.assign(base, { apiKind: 'pending_user', canReject: true, puCountry: str(r.country), puRole: str(r.role), flagLabels: Array.isArray(r.flags) ? r.flags : [] });
-      case 'trainer': return Object.assign(base, { apiKind: 'trainer', canReject: true, rejectNeedsReason: true, trJoin: str(r.join_as), trHeadline: str(r.headline), trSpec: str(r.specialty), trVideo: str(r.intro_video_url), trCv: str(r.cv_url), trPhone: str(r.contact_phone) });
+      case 'trainer': return Object.assign(base, { apiKind: 'trainer', canReject: true, rejectNeedsReason: true, trJoin: str(r.join_as), trHeadline: str(r.headline), trSpec: str(r.specialty), trVideo: str(r.intro_video_url), trCv: str(r.cv_url), trLi: str(r.linkedin_url), trPhone: str(r.contact_phone) });
       case 'join': return Object.assign(base, { apiKind: 'join', canReject: true, rejectNeedsReason: true, waiting: !!r.waiting, licensed: !!r.licensed, licenceMissing: !!r.licence_missing, serviceLabel: str(r.service) });
       case 'founding': { var nx = FOUND_NEXT[str(r.status)] || ['contacted', 'تم التواصل']; return Object.assign(base, { apiKind: 'founding', canReject: true, nextStatus: nx[0], approveLabel: nx[1], fSpec: str(r.spec), fCountry: str(r.country), statusLabel: FOUND_ST[str(r.status)] || '' }); }
       case 'identity_doc': return Object.assign(base, { apiKind: 'identity_doc', idTitle: str(r.title), approveLabel: 'وثّق الهوية', canReject: true, rejectNeedsReason: true });

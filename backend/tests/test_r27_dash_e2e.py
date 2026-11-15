@@ -221,16 +221,16 @@ def test_person_requests_carry_cv_video_and_phone_only_over_https():
 @needs_node
 def test_trainer_card_shows_links_phone_and_a_real_person_link():
     row = {'apiKind': 'trainer', 'apiId': 'a1', 'who': 'سلمى', 'personEmail': HALA, 'ref': 'TRN-a1', 'trJoin': 'trainer', 'trHeadline': 'محامية', 'canReject': True,
-           'trVideo': 'https://youtu.be/abc', 'trCv': 'https://files.example.test/cv.pdf', 'trPhone': '+201001112223'}
+           'trVideo': 'https://youtu.be/abc', 'trCv': 'https://files.example.test/cv.pdf', 'trLi': 'https://linkedin.com/in/salma', 'trPhone': '+201001112223'}
     c = v2_node.logic('v2Card', row, {'now': NOW})
-    assert [(x['label'], x['url']) for x in c['links']] == [('فيديو الشرح', 'https://youtu.be/abc'), ('السيرة الذاتية', 'https://files.example.test/cv.pdf')]
+    assert [(x['label'], x['url']) for x in c['links']] == [('فيديو الشرح', 'https://youtu.be/abc'), ('السيرة الذاتية', 'https://files.example.test/cv.pdf'), ('لينكدإن', 'https://linkedin.com/in/salma')]
     assert c['contact'] == {'label': 'رقم التواصل', 'value': '+201001112223'}
     assert c['read'] == {'label': 'اطّلع على الطلب كاملًا', 'act': {'do': 'person', 'email': HALA}} and not c.get('reason')
     # غياب الحقول ⇒ لا شيء (لا رابط ميّت ولا سطر فاضي)
-    bare = v2_node.logic('v2Card', dict(row, trVideo='', trCv='', trPhone=''), {'now': NOW})
+    bare = v2_node.logic('v2Card', dict(row, trVideo='', trCv='', trLi='', trPhone=''), {'now': NOW})
     assert bare['links'] == [] and bare['contact'] is None
     # رابط غير آمن ⇒ يُسقَط
-    evil = v2_node.logic('v2Card', dict(row, trVideo='javascript:alert(1)', trCv='http://x.test/cv'), {'now': NOW})
+    evil = v2_node.logic('v2Card', dict(row, trVideo='javascript:alert(1)', trCv='http://x.test/cv', trLi='http://linkedin.com/in/x'), {'now': NOW})
     assert evil['links'] == []
     # بلا بريد ⇒ لا نص-يشبه-رابط
     nomail = v2_node.logic('v2Card', dict(row, personEmail='', email=''), {'now': NOW})

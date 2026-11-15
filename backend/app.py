@@ -2164,7 +2164,7 @@ def _v2_person_requests(email, S):
                 out.append({'kind': 'trainer', 'id': r.get('id'), 'at': r.get('created_at') or r.get('submitted_at'), 'name': _v2_str(r.get('user_name') or r.get('full_name')),
                             'join_as': _v2_str(r.get('join_as')).lower(), 'headline': _v2_str(r.get('headline'), 160), 'specialty': _v2_str(r.get('specialty') or r.get('specialization'), 80),
                             # r27: روابط مقدّم الطلب (https بس) ورقم التواصل — لو المنصة بعتتهم؛ غيابهم ⇒ فاضي والشاشة ما بترسمش حاجة.
-                            'cv_url': _v2_https(r.get('cv_url')), 'intro_video_url': _v2_https(r.get('intro_video_url')),
+                            'cv_url': _v2_https(r.get('cv_url')), 'linkedin_url': _v2_https(r.get('linkedin_url')), 'intro_video_url': _v2_https(r.get('intro_video_url')),
                             'contact_phone': _v2_str(r.get('contact_phone') or r.get('user_phone'), 40)})
         elif kind == 'join':
             for r in mine(rows, 'user_email'):

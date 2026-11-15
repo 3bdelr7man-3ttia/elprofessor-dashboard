@@ -1876,7 +1876,7 @@
               apiKind: "trainer", personEmail: ap.user_email || ap.email || "", apiId: ap.id, ts: Date.parse(ap.created_at || ap.submitted_at || "") || 0,
               // R24: «ارفض بسبب» في الدرج (كان الرفض في «الدورات ⇒ المدرّبين» بس). السبب يوصل لمقدّم الطلب كما هو، فبلا سبب ممنوع هنا وعلى الخادم.
               canReject: true, rejectNeedsReason: true,
-              trHeadline: ap.headline || "", trVideo: ap.intro_video_url || "", trCv: ap.cv_url || "", trPhone: ap.contact_phone || ap.user_phone || "", trSpec: ap.specialty || ap.specialization || "", trYears: ap.years_experience || "", trAttach: Array.isArray(ap.attachments) ? ap.attachments.length : 0,
+              trHeadline: ap.headline || "", trVideo: ap.intro_video_url || "", trCv: ap.cv_url || "", trLi: ap.linkedin_url || "", trPhone: ap.contact_phone || ap.user_phone || "", trSpec: ap.specialty || ap.specialization || "", trYears: ap.years_experience || "", trAttach: Array.isArray(ap.attachments) ? ap.attachments.length : 0,
             });
           });
         }).catch(fail("طلبات المدرّبين"))
