@@ -198,7 +198,8 @@ class CoursesPlatform(d3fx.D3Platform):
             items.append(("zoom", "رابط اللقاء للدورة الحيّة", False))
         if not a["platform_owned"]:
             items.append(("agreement", "صاحب الدورة وقّع الاتفاقية", bool(a["agreement_signed"])))
-        rows = [{"key": k, "item": t, "ok": ok} for k, t, ok in items]
+        # الشكل الحقيقي لردّ الجسر: {key, group, label, ok, detail} — مفيش `item`
+        rows = [{"key": k, "group": "publish", "label": t, "ok": ok, "detail": "" if ok else "لم يكتمل بعد"} for k, t, ok in items]
         return {"course_id": c["id"], "slug": c["slug"], "checklist": rows, "all_ok": all(r["ok"] for r in rows), "sale_block_reason": ""}
 
     def _stats(self):

@@ -4521,6 +4521,11 @@
     return out;
   }
 
+  // أسماء بنود فحص النشر بالعربي لكل مفتاح تعرفه المنصة؛ احتياطي لو غاب نص الجسر أو جاء بحروف لاتينية.
+  var CHECK_NAME = { content: 'المحتوى', outcomes: 'نواتج التعلّم', intro_video: 'فيديو تعريفي', level: 'المستوى', price: 'السعر', pricing: 'السعر',
+                     agreement: 'توقيع الاتفاقية', sellable: 'صالحة للبيع', start_date: 'موعد البدء', price_decision: 'قرار السعر', zoom: 'رابط اللقاء' };
+  function checkText(v) { v = s(v); return v && !/[A-Za-z]/.test(v) ? v : ''; }     // نص فيه حرف لاتيني (مفتاح خام) لا يُعرض
+
   // —— فحص النشر: كل بند ok:true|false|null (null = لا مصدر الآن). ctx = {schedule, checklist, now}؛ checklist = ردّ الجسر أو null.
   function courseFacts(c, ctx) {
     ctx = ctx || {};
@@ -4547,13 +4552,17 @@
       cl.checklist.forEach(function (x) {
         if (!x || !x.key) return;
         var key = map[x.key] || x.key;
-        var text = s(x.item) || key;
+        var okv = x.ok === true ? true : (x.ok === false ? false : null);
+        // الجسر يرسل {key, group, label, ok, detail}؛ والقديم كان `item`. مفتاح إنجليزي لا يُعرض أبدًا: نص عربي من الجسر أو اسم عربي جاهز.
+        var text = checkText(x.label) || checkText(x.item) || CHECK_NAME[x.key] || CHECK_NAME[key] || 'بند في الفحص';
+        var more = okv === false ? checkText(x.detail) : '';
+        var shown = more && more !== text ? text + ' (' + more + ')' : text;
         var at = -1;
         for (var i = 0; i < items.length; i++) if (items[i].key === key) at = i;
-        var it = { key: key, ok: x.ok === true ? true : (x.ok === false ? false : null), label: text, pos: text, own: false, platform: true };
+        var it = { key: key, ok: okv, label: shown, pos: text, own: false, platform: true };
         if (at > -1) items[at] = it; else items.push(it);
       });
-      if (s(cl.sale_block_reason)) items.push({ key: 'sale', ok: false, label: s(cl.sale_block_reason), pos: s(cl.sale_block_reason), own: false, platform: true });
+      if (s(cl.sale_block_reason)) { var sbr = checkText(cl.sale_block_reason) || 'غير صالحة للبيع'; items.push({ key: 'sale', ok: false, label: sbr, pos: sbr, own: false, platform: true }); }
     }
     var missing = items.filter(function (i) { return i.ok === false; }).map(function (i) { return i.label; });
     var unknown = items.filter(function (i) { return i.ok === null; }).map(function (i) { return i.name || i.label; });
@@ -4867,8 +4876,8 @@
                     quorum: num(sc.quorum) != null ? 'الحد الأدنى للتشغيل: ' + U.ar(sc.quorum) : 'الحد الأدنى للتشغيل: ' + NA,
                     status: LIVE_STATUS[s(sc.live_status)] || '', zoom: nonEmpty(sc.zoom_link) ? 'رابط اللقاء: موجود' : 'رابط اللقاء: غير موجود', slug: s(sc.slug) || s(c.slug) } : { na: true, slug: s(c.slug) };
     }
-    return { id: c.id, title: s(c.title) || 'دورة بلا عنوان', state: st, stateLabel: STATE_LABEL[st], typeLabel: TYPE_LABEL[c.type] || s(c.type), interactive: !!story,
-             sourceLabel: SOURCE_LABEL[s(c.source)] || '', trainer: trainerOf(c), trainerEmail: s(c.instructor_email).toLowerCase(), hero: s(c.thumbnail_url), cover: cover(c.title),
+    return { id: c.id, title: s(c.title) || 'دورة بلا عنوان', state: st, stateLabel: STATE_LABEL[st], typeLabel: TYPE_LABEL[c.type] || checkText(c.type), interactive: !!story,
+             sourceLabel: SOURCE_LABEL[s(c.source)] || '', trainer: trainerOf(c), trainerEmail: s(c.instructor_email).toLowerCase(), hero: U.platformAsset(c.thumbnail_url), cover: cover(c.title),
              tiles: { learners: num(c.total_enrolled) ? U.ar(num(c.total_enrolled)) : 'لا أحد بعد', lessons: lessons, price: pr.ok === false ? 'بلا سعر' : pr.text, priceOthers: U.coursePricesLine(c), sales: sales },
              completion: completion, facts: facts, main: main, secondary: second, decisionBlock: block, bid: { show: st === 'published' && c.type !== 'recorded_free', enabled: c.bid_enabled === true },
              live: live, danger: st === 'archived' ? null : (canHard ? 'delete' : 'archive'), reviewNote: s(c.review_note), hasPreview: !!(story && s(c.slug)), enrolled: num(c.total_enrolled) || 0 };
