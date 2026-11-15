@@ -216,7 +216,12 @@ def register(app, g):
         if not isinstance(b.get('is_active'), bool):
             return err('قيمة غير صالحة')
         on = b['is_active']
-        return write('PUT', '/api/bridge/courses/%s' % quote(course_id, safe=''), {'is_active': on}, 'course.show' if on else 'course.hide', course_id, {'is_active': on})
+        body = {'is_active': on}
+        # r28: سبب الإيقاف (اختياري، ٦٠٠ حرف) — يتحفظ على الدورة في المنصة ويظهر للمدرّب في أداة البناء.
+        reason = str(b.get('reason') or '').strip()[:600]
+        if not on and reason:
+            body['stop_reason'] = reason
+        return write('PUT', '/api/bridge/courses/%s' % quote(course_id, safe=''), body, 'course.show' if on else 'course.hide', course_id, {'is_active': on})
 
     @app.route('/api/v2/courses/<course_id>/bid', methods=['POST'])
     @token_required

@@ -171,6 +171,22 @@ def test_confirmed_must_be_literally_true(ctx, plat, path, body, bad):
 
 
 # ---------------------------------------------------------------- ٢) القايمة البيضا
+def test_hide_sends_the_optional_reason_and_show_never_does(ctx, plat):
+    """r28: سبب «أوقف ظهورها» بيتبعت للمنصة كـ`stop_reason` (مقصوص ٦٠٠)، والنشر عمره ما يبعته."""
+    r = _call(ctx, 'POST', '/api/v2/courses/pc-01/visibility', {'confirmed': True, 'is_active': False, 'reason': '  الصوت مش واضح  '})
+    assert r.status_code == 200
+    (w,) = plat.writes()
+    assert w['json'] == {'is_active': False, 'stop_reason': 'الصوت مش واضح'}
+    plat.seen.clear()
+    _call(ctx, 'POST', '/api/v2/courses/pc-01/visibility', {'confirmed': True, 'is_active': True, 'reason': 'x'})
+    assert plat.writes()[0]['json'] == {'is_active': True}
+    plat.seen.clear()
+    _call(ctx, 'POST', '/api/v2/courses/pc-01/visibility', {'confirmed': True, 'is_active': False})
+    assert plat.writes()[0]['json'] == {'is_active': False}
+    co = open(os.path.join(os.path.dirname(__file__), '..', '..', 'dashboard-cloud', 'v2s', 'courses.js'), encoding='utf-8').read()
+    assert "id=\"co_why\"" in co and "b.reason = p.reason" in co
+
+
 def test_approve_sends_only_payout_model_and_never_a_share(ctx, plat):
     r = _call(ctx, 'POST', '/api/v2/courses/pc-15/approve', {'confirmed': True, 'trainer_share_pct': 90, 'by': 'x@y.test', 'payout_model': 'hourly'})
     assert r.status_code == 200

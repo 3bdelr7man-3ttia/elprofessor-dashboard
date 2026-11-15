@@ -849,11 +849,13 @@
     if (on && c.approval_status !== 'approved') items.push('هذه الدورة لم تمر بالمراجعة.');
     flow({
       title: on ? (mode === 'show' ? 'أعِد نشر الدورة' : 'انشر الدورة الآن') : 'أوقف ظهور الدورة',
-      form: '<p class="v2co-lead">' + (on ? 'نشر «' + esc(c.title) + '» دون مرحلة المراجعة؟' : 'إيقاف ظهور «' + esc(c.title) + '»؟') + '</p>',
-      review: function () { return '<p class="v2co-lead">ما سيحدث:</p>' + listHtml(items.map(esc)); },
-      collect: function () { return { ok: true, payload: {} }; },
+      form: '<p class="v2co-lead">' + (on ? 'نشر «' + esc(c.title) + '» دون مرحلة المراجعة؟' : 'إيقاف ظهور «' + esc(c.title) + '»؟') + '</p>'
+        // r28: سبب الإيقاف اختياري، بيوصل لصاحب الدورة في أداة البناء عشان يعرف يصلّح إيه.
+        + (on ? '' : fld('co_why', 'السبب (اختياري، يظهر لصاحب الدورة)', '<textarea id="co_why" rows="3" maxlength="600" placeholder="مثلًا: صوت الدرس الثاني غير واضح"></textarea>')),
+      review: function (p) { return '<p class="v2co-lead">ما سيحدث:</p>' + listHtml(items.concat(!on && p && p.reason ? ['يظهر لصاحب الدورة السبب: ' + p.reason] : []).map(esc)); },
+      collect: function (s) { var w = !on && s && q('#co_why', s) ? q('#co_why', s).value.trim() : ''; return { ok: true, payload: w ? { reason: w } : {} }; },
       btnNext: 'تابع', btnConfirm: on ? 'أكّد النشر' : 'أكّد الإيقاف', danger: !on, busy: 'جارٍ التنفيذ…',
-      send: function () { return post('/v2/courses/' + encodeURIComponent(id) + '/visibility', { confirmed: true, is_active: on }); },
+      send: function (p) { var b = { confirmed: true, is_active: on }; if (!on && p && p.reason) b.reason = p.reason; return post('/v2/courses/' + encodeURIComponent(id) + '/visibility', b); },
       onOk: function () { afterCourseWrite(on ? 'نُشرت «' + c.title + '»' : 'أُوقف ظهور «' + c.title + '»'); },
       onStale: function () { load('courses', true); }
     });
