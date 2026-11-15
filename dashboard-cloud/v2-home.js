@@ -593,7 +593,8 @@
   }
   function removePill() { var p = document.getElementById('v2Pill'); if (p) p.remove(); }
 
-  function reload() { var E = ep(); if (E) { E.reload('opsQueue'); E.reload('inbox'); E.reload('walletPayouts'); } }
+  // بعد أي قرار: مصادر القرارات تتحمّل من جديد، وبيانات الأقسام (الدورات والمدرّبون…) تتحدّث معاها في نفس اللحظة.
+  function reload() { var E = ep(); if (E) { E.reload('opsQueue'); E.reload('inbox'); E.reload('walletPayouts'); } try { if (window.V2CO && V2CO.refresh) V2CO.refresh(true, true); } catch (e) {} }
   // R24 م٣: بعد أي قرار ناجح البطاقة (وصفوف أجزائها) بتتشال من الذاكرة فورًا، فالشريط والمربّع والقايمة الجانبية بتنزل في نفس اللحظة
   // من غير ما نستنى التحميل الكامل (والتحميل الحقيقي بعدها يصحّح أي فرق).
   function dropRows(c) {
@@ -959,8 +960,32 @@
     var E = ep();
     if (!E || !E.authed) return;
     SOURCES.forEach(function (k) { E.ensure(k, cb || null); });
+    startAuto(); lastAll = Date.now();
     try { if (window.V2D3 && V2D3.preload) V2D3.preload(); } catch (e) {}      // D3: الدفعات العالقة وعروض الكتب لبطاقات القرار
   };
+  // تحديث واحد لكل ما يغذّي الشريط والشارة والأقسام: مصادر القرارات (صامتة بلا وميض) + بيانات القسم المفتوح (الدورات…). عشان الشريط والعمود ما يختلفوش أبدًا.
+  // `force` يتجاوز التهدئة (بعد أي قرار). مفيش تحديث والتبويب مخفي أو ورقة مفتوحة أو قرار شغّال (إلا بـforce).
+  var lastAll = 0, autoT = null;
+  V2.refreshAll = function (force) {
+    var E = ep();
+    if (!E || !E.authed) return;
+    var t = Date.now();
+    if (!force) {
+      if (t - lastAll < 8000 || S.busy || document.getElementById('epModal')) return;
+      try { if (document.visibilityState === 'hidden') return; } catch (e) {}
+    }
+    lastAll = t;
+    SOURCES.forEach(function (k) { if (stateOf(k) !== 'idle' && stateOf(k) !== 'loading') E.refresh(k, touchShell); });
+    try { if (window.V2CO && V2CO.refresh) V2CO.refresh(!!force, true); } catch (e) {}
+    try { if (window.V2D3 && V2D3.preload && force) V2D3.preload(); } catch (e) {}
+  };
+  // كل دقيقة والتبويب ظاهر، ولما نرجع للتبويب بعد غياب: ما نستناش «حدّث الصفحة».
+  function autoRefresh() { V2.refreshAll(false); }
+  function startAuto() {
+    if (autoT) return;
+    autoT = setInterval(autoRefresh, 45000);
+    try { document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'visible' && Date.now() - lastAll > 20000) V2.refreshAll(false); }); } catch (e) {}
+  }
   V2.sourcesSignature = function () { return signature() + '|' + SOURCES.map(function (k) { return stateOf(k); }).join(''); };
   V2.mode = function () { return S.mode; };
   V2.setMode = function (m) {

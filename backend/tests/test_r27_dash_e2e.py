@@ -74,3 +74,64 @@ def test_other_course_surfaces_never_print_a_raw_key():
     assert 'typeLabel: TYPE_LABEL[c.type] || checkText(c.type)' in _read('dashboard-cloud', 'v2-logic.js')
 
 
+# ───────────── ٢+٣. الشريط والشارة والأعمدة وعدّاد المدرّبين بيتحدّثوا مع بعض ─────────────
+def _ok(body):
+    return {'status': 200, 'body': body}
+
+
+def _platform(courses, pending_items, apps):
+    return {
+        '/api/platform-ops-queue': _ok({'courses_pending': {'count': len(pending_items), 'titles': [x['title'] for x in pending_items], 'items': pending_items}, 'live_needs_decision': []}),
+        '/api/platform-courses': _ok({'courses': courses}),
+        '/api/platform-trainer-applications': _ok({'applications': apps}),
+        '/api/platform-experts': _ok({'experts': []}),
+        '/api/platform-schedules': _ok({'schedules': []}),
+        '/api/inbox': _ok({'rows': []}),
+    }
+
+
+def _refresh_run(initial, later):
+    proc = subprocess.run([v2_node.NODE, os.path.join(_HERE, 'uiharness', 'r27_refresh.js')], input=json.dumps({'initial': initial, 'later': later}, ensure_ascii=False),
+                          capture_output=True, text=True, timeout=60)
+    out = json.loads(proc.stdout)
+    assert 'error' not in out, out.get('error')
+    return out
+
+
+C_BUILD = {'id': 'c9', 'slug': 'new-c', 'title': 'دورة المدرّب الجديدة', 'type': 'recorded_paid', 'approval_status': 'draft', 'is_active': False, 'lesson_count': 3,
+           'price_amount': 450, 'price_currency': 'EGP', 'instructor_name': 'أ. سلمى', 'instructor_email': 's@x.test'}
+C_REVIEW = dict(C_BUILD, approval_status='pending', submitted_at='2026-11-15T08:00:00+00:00')
+APP = {'id': 'a1', 'status': 'pending', 'name': 'سلمى', 'email': 's@x.test', 'join_as': 'trainer', 'expertise': ['تسويق']}
+ITEM = {'id': 'c9', 'slug': 'new-c', 'title': 'دورة المدرّب الجديدة', 'instructor_name': 'أ. سلمى', 'submitted_at': '2026-11-15T08:00:00+00:00'}
+
+
+@needs_node
+def test_strip_badge_columns_and_trainer_count_refresh_together_without_reload():
+    out = _refresh_run(_platform([C_BUILD], [], [APP]), _platform([C_REVIEW], [ITEM], []))
+    b, a = out['before'], out['after']
+    # قبل: لا شيء مستنّي، وعدّاد المدرّبين ١
+    assert b['strip_n'] == 0 and b['counts_courses'] == 0
+    assert 'طلبات انضمام جديدة: ١' in b['html']
+    # بعد تقديم الدورة وقبول المدرّب (والتبويب لسه مفتوح): الشريط = الشارة = العدّاد = عمود «في المراجعة» = ١، والمدرّبون ٠
+    assert a['strip_n'] == 1 == a['counts_courses'] == a['tile_count'], a
+    assert 'دورة المدرّب الجديدة' in a['html'] and 'القرار في «محتاج قرارك» فوق' in a['html']
+    assert 'طلبات انضمام جديدة: ٠' in a['html'] and 'طلبات انضمام جديدة: ١' not in a['html']
+    # تحديث صامت: المصدر ما دخلش «جارٍ التحميل» (لا وميض)
+    assert out['states']['opsQueue'] == 'ready'
+    for u in ('/api/platform-ops-queue', '/api/platform-courses', '/api/platform-trainer-applications?status=pending'):
+        assert u in out['calls'], (u, out['calls'])
+
+
+@needs_node
+def test_refresh_wiring_and_throttle_are_in_the_sources():
+    home = _read('dashboard-cloud', 'v2-home.js')
+    co = _read('dashboard-cloud', 'v2s', 'courses.js')
+    # بعد أي قرار (publish/return/accept) كل حاجة بتتحدّث مع بعض
+    assert re.search(r"function reload\(\)[^\n]*V2CO\.refresh\(true, true\)", home)
+    assert 'CO.refresh(true, true);' in co and 'afterCourseWrite' in co
+    # الدخول للقسم + كل ٤٥ ثانية + الرجوع للتبويب
+    assert 'CO.refresh(false);' in co and 'setInterval(autoRefresh, 45000)' in home and 'visibilitychange' in home
+    # الشارة والشريط من نفس opsQueue، فتحديثه الصامت هو تحديثهما
+    assert 'EP.refresh = function' in _read('dashboard-cloud', 'dashboard-api.js')
+
+

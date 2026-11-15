@@ -127,6 +127,16 @@
     });
   };
 
+  // refresh(key, done): تحديث صامت لمصدر جاهز — لا يمرّ بحالة «loading» (فلا يومض الشريط ولا الشارة)، والبيانات القديمة تبقى معروضة لحد وصول الجديدة.
+  // فشل التحديث ⇒ نسيب القديم وندّي فرصة للدورة اللي بعدها (الخطأ الصريح مكانه EP.reload). مصدر مش جاهز ⇒ تحميل عادي.
+  EP.refresh = function (key, done) {
+    if (!EP.authed) return;
+    if ((EP.state[key] || "idle") !== "ready") { EP.reload(key, done); return; }
+    var loader = LOADERS[key];
+    if (!loader) { if (done) try { done(); } catch (e) {} return; }
+    loader().then(function () { if (done) try { done(); } catch (e) {} }).catch(function () { if (done) try { done(); } catch (e) {} });
+  };
+
   // تنسيق رقمي عربي آمن (السكربت الداخلي يعرّف money أيضًا؛ هذا احتياط لو سبق التحميل).
   function money(n) {
     if (typeof window.money === "function") { try { return window.money(n); } catch (e) {} }

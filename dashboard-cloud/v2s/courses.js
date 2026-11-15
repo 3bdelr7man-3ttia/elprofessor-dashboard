@@ -50,17 +50,27 @@
     return m[1] === 'checklist' ? '/v2/courses/' + id + '/checklist' : '/platform-courses/' + id + '/detail';
   }
   function srcOf(k) { return SRC[k] || (SRC[k] = { state: 'idle', data: null, status: 0, seq: 0 }); }
-  function load(k, force) {
+  // silent: تحديث بالخلفية لمصدر جاهز — يفضل «جاهز» ببياناته القديمة (بلا هيكل تحميل ولا وميض)، ولا يعيد الرسم إلا لو البيانات اتغيّرت فعلًا.
+  function load(k, force, silent) {
     var s = srcOf(k), E = ep(), path = pathOf(k);
     if (!E || !E.api || !E.authed || !path) return;
     if (s.state === 'loading') return;
     if (!force && s.state !== 'idle') return;
-    s.state = 'loading';
+    var quiet = !!silent && s.state === 'ready';
+    if (!quiet) s.state = 'loading';
     var seq = ++s.seq;
     E.api(path).then(function (d) {
       if (seq !== s.seq) return;
+      if (quiet) {
+        var same = false;
+        try { same = JSON.stringify(d) === JSON.stringify(s.data); } catch (e2) {}
+        s.state = 'ready';
+        if (same) { s.seq--; return; }
+        s.data = d; changed(); return;
+      }
       s.state = 'ready'; s.data = d; changed();
     }).catch(function (e) {
+      if (quiet) { if (seq === s.seq) s.seq--; return; }       // فشل تحديث الخلفية: نسيب القديم ونحاول في الدورة الجاية، من غير ما نبوّظ الشاشة
       if (seq !== s.seq) return;
       if (e && e.status === 401) return;
       s.state = e && e.status === 404 ? 'closed' : 'error'; s.status = (e && e.status) || 0; s.data = null; changed();
@@ -80,7 +90,9 @@
   function failedLabels(keys) { return keys.filter(function (k) { var s = srcState(k); return s === 'error' || (s === 'closed' && !OPTIONAL[k]); }).map(function (k) { return LABEL[k]; }); }
 
   function signature() {
-    return Object.keys(SRC).map(function (k) { return k + srcOf(k).state + srcOf(k).seq; }).join(',') + '|' + ['opsQueue', 'analysis'].map(epState).join(',');
+    // طابور القرارات (الحيّة والدورات المنتظرة) داخل التوقيع: تحديثه الصامت يعيد رسم القسم بنفس لحظة الشريط.
+    var ql = queueLive(), qd = ep() && ep().data && ep().data.opsQueue, qc = qd && qd.courses_pending && qd.courses_pending.count;
+    return Object.keys(SRC).map(function (k) { return k + srcOf(k).state + srcOf(k).seq; }).join(',') + '|' + ['opsQueue', 'analysis'].map(epState).join(',') + '|' + (ql ? ql.length : '-') + ':' + (qc == null ? '-' : qc);
   }
   var redrawT = null;
   function changed() {
@@ -713,6 +725,7 @@
     setNote(text, scr);
     load('courses', true); load('stats', true);
     var E = ep(); if (E && E.authed) { E.reload('opsQueue', null); }
+    CO.refresh(true, true);       // المدرّبون والمواعيد والفحص معاها: الشريط والأعمدة والشارة من نفس اللحظة
     redraw();
   }
   function courseFactsOf(c) { return C.courseFacts(c, { schedule: schedOf(c), checklist: checklistOf(c.id), now: now(), checklistState: checklistStateOf(c.id) }); }
@@ -1300,6 +1313,7 @@
     }
     document.documentElement.classList.remove('v2co-legacy-modal');
     if (NEEDS[scr]) NEEDS[scr]();
+    CO.refresh(false);      // الدخول للقسم من جديد (من قسم تاني أو بعد غياب) ⇒ بيانات طازجة لا قديمة
     DRAW[scr](v);
     S.sig = signature();
     if (!S.poll) {
@@ -1347,6 +1361,21 @@
       else if (what === 'approve') openApprove(c.id, checklistStateOf(c.id) !== 'ready');
       else if (what === 'return') openReturn(c.id);
     })();
+  };
+  // تحديث كل بيانات القسم اللي اتحمّلت قبل كده (صامت)، عشان الأعمدة وعدّاد المدرّبين ما يتأخروش عن الشريط والشارة. `force` يتجاوز التهدئة.
+  var lastRefresh = 0;
+  // `own` = المنادي (v2-home أو بعد قرار) حدّث مصادر الشريط بنفسه ⇒ نحدّث بيانات القسم بس. غير كده نمرّ على التحديث الواحد في v2-home فيتحدّث الشريط والشارة معانا.
+  CO.refresh = function (force, own) {
+    var E = ep();
+    if (!E || !E.authed) return;
+    if (!own && window.V2 && V2.refreshAll) { V2.refreshAll(!!force); return; }
+    var t = Date.now();
+    if (!force && t - lastRefresh < 8000) return;
+    lastRefresh = t;
+    Object.keys(SRC).forEach(function (k) {
+      if (/^detail:/.test(k)) return;
+      if (SRC[k].state === 'ready') load(k, true, true);
+    });
   };
   CO.openCourse = function (id) { goPage(id); };
   // «أنشئ دورة» من خارج قسم الدورات (السوق: دورة من طلب): نفس الورقة الجديدة؛ opts.done(res) يُستدعى بعد النجاح بدل الانتقال لصفحة الدورة.
