@@ -959,7 +959,8 @@
           card.primary = { label: 'افتح وراجع', act: card.open };
           card.secondary = { label: 'انشرها', act: act({ do: 'course_approve', id: r.courseId }) };
           card.edit = { label: 'أعِدها بملاحظات', act: act({ do: 'course_return', id: r.courseId }) };
-          card.brain = 'دورة جديدة مستنية قرارك' + (str(r.instructor) ? ' من ' + str(r.instructor) : '');
+          card.brain = r.resubmitted ? RESUBMIT_AR + (str(r.instructor) ? ' — ' + str(r.instructor) : '')
+            : 'دورة جديدة مستنية قرارك' + (str(r.instructor) ? ' من ' + str(r.instructor) : '');
         } else card.primary = { label: 'افتح وراجع', act: card.open };
         break;
       }
@@ -1131,6 +1132,13 @@
       return personCardOf(c.__slot, parts, sg.length > 0);
     }), absorbed: absorbed };
   }
+  // r29: دورة اتنشرت أو اتوقّفت قبل كده (سبب إيقاف · طابع أرشفة · طابع نشر سابق لو المنصة بعتته) وبعدين رجعت لقائمة المراجعة = «أعاد المدرّب إرسالها بعد التعديل».
+  // ⛔ مفيش علامة غير دي في الجسر: ملاحظة الرفض (`review_note`) ما بتظهرش إلا والدورة «مرفوضة» الآن، فدورة اترفضت ثم قُدّمت تاني ما نقدرش نميّزها ⇒ تفضل «جديدة».
+  var RESUBMIT_AR = 'أعاد المدرّب إرسالها بعد التعديل';
+  function courseWasLive(c) {
+    if (!c || typeof c !== 'object') return false;
+    return ['stop_reason', 'archived_at', 'published_at', 'first_published_at', 'last_published_at'].some(function (k) { return str(c[k]) !== ''; });
+  }
   function v2Split(rows, payouts, queue, opts) {
     opts = opts || {};
     var now = opts.now || 0;
@@ -1187,8 +1195,11 @@
       var cp = qn(Q, 'courses_pending');
       // r25: لو المنصة بعتت `items` (معرّف كل دورة) ⇒ بطاقة قرار لكل دورة؛ وإلا (منصة أقدم) الشكل القديم «للعلم».
       var citems = Q.courses_pending && Array.isArray(Q.courses_pending.items) ? Q.courses_pending.items.filter(function (x) { return x && x.id; }) : [];
+      var courseRows = {};
+      (Array.isArray(opts.courses) ? opts.courses : []).forEach(function (c) { if (c && c.id) courseRows[String(c.id)] = c; });
       if (citems.length) citems.forEach(function (it, i) {
-        src.push({ apiKind: 'course_q', apiId: 'c:' + it.id, courseId: String(it.id), title: str(it.title) || str(it.slug), instructor: str(it.instructor_name), ts: ms(it.submitted_at), ref: 'CRS-' + i });
+        src.push({ apiKind: 'course_q', apiId: 'c:' + it.id, courseId: String(it.id), title: str(it.title) || str(it.slug), instructor: str(it.instructor_name), ts: ms(it.submitted_at), ref: 'CRS-' + i,
+                   resubmitted: courseWasLive(courseRows[String(it.id)]) || courseWasLive(it) });
       });
       else if (titles.length) titles.forEach(function (tt, i) { fyiSrc.push({ apiKind: 'course_q', apiId: 'c' + i, title: String(tt), ref: 'CRS-' + i }); });
       else if (cp > 0) fyiSrc.push({ apiKind: 'course_q', apiId: 'c', summary: cp, title: '', ref: 'CRS' });
@@ -2169,11 +2180,17 @@
     return { count: live.length, totals: sumByCurrency(live.map(function (p) { return { currency: payoutCurrency(p), amount: payoutAmount(p) }; })) };
   }
   // R28: المستحق من محافظهم (جسر `/api/v2/money/owed`): المحجوز + المتاح للسحب + طلبات سحب لم تُحوَّل، لكل عملة. `null` ⇒ المصدر تعذّر.
+  // r29: المبلغ لكل عملة = الأكبر بين `amount` ومجموع مكوّناته (المحجوز + المتاح + طلبات السحب)، فمحفظة فيها مبلغ محجوز فقط (بيع مؤكَّد في مهلة الأيام)
+  // لا تظهر صفرًا لو الحقل الكلّي وصل ناقصًا أو غائبًا. الأرقام السالبة أو غير الرقمية تُعدّ صفرًا.
+  function owedRowAmount(t) {
+    var parts = Math.max(0, numOf(t.on_hold)) + Math.max(0, numOf(t.withdrawable)) + Math.max(0, numOf(t.payouts_pending));
+    return Math.max(Math.max(0, numOf(t.amount)), Math.round(parts * 100) / 100);
+  }
   function v2OwedWallets(resp) {
     if (!resp || !Array.isArray(resp.totals)) return null;
-    var rows = resp.totals.filter(function (t) { return t && numOf(t.amount); });
-    return { count: typeof resp.people === 'number' ? resp.people : null, totals: sumByCurrency(rows.map(function (t) { return { currency: t.currency, amount: t.amount }; })),
-             held: sumByCurrency(rows.map(function (t) { return { currency: t.currency, amount: t.on_hold }; })) };
+    var rows = resp.totals.filter(function (t) { return t && owedRowAmount(t) > 0; });
+    return { count: typeof resp.people === 'number' ? resp.people : null, totals: sumByCurrency(rows.map(function (t) { return { currency: t.currency, amount: owedRowAmount(t) }; })),
+             held: sumByCurrency(rows.map(function (t) { return { currency: t.currency, amount: Math.max(0, numOf(t.on_hold)) }; })) };
   }
   // R28: صافي البروفيسور في الفترة = مجموع `platform_share` لكل عملة. `null` = لا صف واحد في الفترة يحمل نصيبًا (والصفوف موجودة).
   function v2Net(rows, periodKey, now) {
@@ -2190,11 +2207,16 @@
       var cur = String(r.share_currency || r.currency || (numOf(r.amount_usd) ? 'USD' : 'EGP')).trim().toUpperCase() || 'EGP';
       known.push({ currency: cur, amount: ps });
     });
-    if (any && !known.length) return null;
+    // r29: لا صف معروف النصيب، لكن دخل الفترة نفسه صفر (بيع ثم استرداد كامل مثلًا) ⇒ الصافي صفر حقيقي لا «غير متاح».
+    if (any && !known.length) {
+      var inc = v2Income(rows, P.key, now);
+      if (inc && !inc.totals.length) return { totals: [], count: 0, missing: 0 };
+      return { totals: [], count: 0, missing: missing, unknown: true };
+    }
     return { totals: sumByCurrency(known), count: known.length, missing: missing };
   }
   var NA_MONEY = 'غير متاح بعد';
-  var NET_WHY = 'لا يوجد مصدر يفصل نصيب البروفيسور عن نصيب أصحاب الأعمال بعد';
+  var NET_WHY = 'لم يُسجَّل نصيب البروفيسور بعد لعمليات هذه الفترة';
   // اللوحة: أربعة أرقام بشرح سطر لكل رقم. `src` = {revenues, escrow, payouts, owed, net} (كلٌّ منها null لو مصدره تعذّر).
   function v2MoneyBoard(src, periodKey, now) {
     src = src || {};
@@ -2202,25 +2224,30 @@
     var P = v2Period(periodKey, now), inc = v2Income(src.revenues, P.key, now), held = v2Held(src.escrow);
     // «مستحق»: من المحافظ لو الجسر الجديد وصل، وإلا طلبات السحب المعلّقة بس (زي قبل R28).
     var wallets = v2OwedWallets(src.owed), owed = wallets || v2Owed(src.payouts);
-    function num(key, label, note, data, extra) {
+    function num(key, label, note, data, extra, zero) {
       var line = data ? v2MoneyLine(data.totals) : null;
-      return { key: key, label: label, note: note, na: !line, text: line ? line.main : NA_MONEY, others: '', count: data ? data.count : null,
+      return { key: key, label: label, note: note, na: !line, text: line ? (zero && !data.totals.length ? zero : line.main) : NA_MONEY, others: '', count: data ? data.count : null,
                lines: line ? byCurrencyList(data.totals).map(function (t) { return moneyShort(t.amount, t.currency); }) : [],
                usd: data ? usdEquivalent(data.totals, rr) : null, why: line ? '' : (extra || '') };
     }
     var net = Array.isArray(src.net) ? { totals: src.net, count: null, missing: 0 } : v2Net(src.revenues, P.key, now);
-    var netNote = 'نصيب البروفيسور بعد نصيب أصحاب الأعمال';
+    var netNote = 'نصيب البروفيسور بعد نصيب أصحاب الأعمال', netWhy = NET_WHY;
+    // r29: لا صف في الفترة يحمل نصيبًا ودخلها غير صفر ⇒ «غير متاح بعد» بسبب صادق (لا ندّعي غياب مصدر).
+    if (net && net.unknown) { netWhy = 'لم يُسجَّل نصيب البروفيسور بعد في ' + U(net.missing, ['عملية واحدة', 'عمليتين', 'عمليات', 'عملية']) + ' من هذه الفترة'; net = null; }
     if (net && net.missing) netNote += '، ولا يشمل ' + U(net.missing, ['عملية واحدة', 'عمليتين', 'عمليات', 'عملية']) + ' بلا تفصيل للنصيب';
     var owedNote = 'طلبات سحب أُرسلت ولم تُحوَّل بعد';
     if (wallets) {
       var hl = moneyByCurrency(wallets.held);
-      owedNote = 'في محافظهم مع طلبات سحب لم تُحوَّل بعد' + (hl ? '، منها ' + hl + ' محجوزة حتى تنتهي فترة الحجز' : '');
+      owedNote = 'في محافظهم مع طلبات سحب لم تُحوَّل بعد' + (hl ? '، منها ' + hl + ' بتتاح بعد مهلة الأيام' : '');
+    } else if (src.owed === null) {
+      // المحافظ تعذّر جلبها: لا نعرض صفرًا كأنه كل المستحق، بل ما نعرفه (طلبات السحب) مع التصريح بأنه ناقص.
+      owedNote = 'طلبات سحب أُرسلت ولم تُحوَّل بعد، وتعذّر جلب ما في المحافظ فالرقم ناقص';
     }
     var board = { period: P, numbers: [
       num('income', 'دخل', 'ما دخل دفتر الشركة ' + (P.key === 'day' ? 'اليوم' : P.key === 'month' ? 'هذا الشهر' : 'هذه السنة'), inc, 'تعذّر جلب دفتر الإيرادات'),
       num('held', 'محجوز حتى يُسلَّم العمل', 'أموال دفعها الناس وتنتظر تسليم العمل لتصل إلى أصحابها', held, 'تعذّر جلب أموال الضمان'),
       num('owed', 'مستحق للخبراء والمدرّبين', owedNote, owed, src.owed !== undefined ? 'تعذّر جلب المحافظ وطلبات السحب' : 'تعذّر جلب طلبات السحب'),
-      num('net', 'صافي البروفيسور', netNote, net, NET_WHY)
+      num('net', 'صافي البروفيسور', netNote, net, netWhy, '٠ ج')
     ] };
     // سطر واحد للتقرير: «تقريبًا بالدولار: دخل ٣٬٢٠٠، محجوز ٤٠٠ — أسعار يوم …». أي رقم مالوش سعر لعملته بيتشال، ومفيش أسعار ⇒ السطر مش بيتعرض.
     var parts = board.numbers.filter(function (n) { return !n.na && n.usd != null; }).map(function (n) { return ({ income: 'دخل', held: 'محجوز', owed: 'مستحق', net: 'صافي' }[n.key] || n.label) + ' ' + fmtMoney(n.usd) + ' دولار'; });
@@ -3005,6 +3032,7 @@
   function v2Fyi(rows, payouts, queue, opts) { return v2Split(rows, payouts, queue, opts).fyi; }
 
   var api = {
+    v2CourseWasLive: courseWasLive, V2_RESUBMIT_AR: RESUBMIT_AR,
     v2Tiles: v2Tiles, v2Decisions: v2Decisions, v2Split: v2Split, v2Fyi: v2Fyi, v2SnoozeSplit: v2SnoozeSplit, v2SnoozeLists: v2SnoozeLists,
     snoozeKeyOfRow: snoozeKeyOfRow, snoozeFingerprint: snoozeFingerprint, snoozeIndex: snoozeIndex, snoozeState: snoozeState, snoozePicks: snoozePicks,
     snoozeUntilFromDate: snoozeUntilFromDate, snoozeUntilText: snoozeUntilText, DISMISS_OK: DISMISS_OK, FYI_DEFS: FYI_DEFS, v2Card: v2Card, v2Next: v2Next, v2NextLine: v2NextLine,

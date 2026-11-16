@@ -97,7 +97,9 @@
       if (MX && stateOf('market') === 'ready' && md && !md.missing && Array.isArray(md.rows))
         marketLane = MX.cards(MX.merge(md.rows, md.raw), now).filter(function (c) { return c.primary && c.primary.act === 'relane'; });
     } catch (e) { marketLane = []; }
-    var split = L.v2Split(rows, payouts, Q, { marketLane: marketLane, now: now, inboxFailed: inboxFailed, inboxTruncated: inboxTrunc, fyiRows: fyiRows, hidden: hiddenBase, snooze: snooze,
+    var coursesList = null;      // r29: قائمة الدورات (لو اتحمّلت) — تفرّق «دورة جديدة» عن «أعاد المدرّب إرسالها بعد التعديل»
+    try { coursesList = window.V2CO && V2CO.rows ? V2CO.rows() : null; } catch (e) { coursesList = null; }
+    var split = L.v2Split(rows, payouts, Q, { courses: coursesList, marketLane: marketLane, now: now, inboxFailed: inboxFailed, inboxTruncated: inboxTrunc, fyiRows: fyiRows, hidden: hiddenBase, snooze: snooze,
                                               stuck: d3 ? d3.stuck : null, offers: d3 ? d3.offers : null, brainItems: brainItems, invites: inviteRows });
     extras.hidden = split.hiddenRows;
     // توفّر المصادر للمربّعات: true وصل · false فشل · undefined لسه بيتحمّل.
@@ -131,6 +133,7 @@
       + (window.V2D3 ? '|' + V2D3.sig() : '') + (window.V2SEC && V2SEC.brain && V2SEC.brain.sig ? '|' + V2SEC.brain.sig() : '')
       + (window.V2BRAIN && V2BRAIN.sig ? '|' + V2BRAIN.sig() : '')
       + (LVL() ? '|' + LVL().sig() : '')
+      + (window.V2CO && V2CO.rows && V2CO.rows() ? '|co' + V2CO.rows().length : '')
       + '|' + ((E && E.data && E.data.snooze && E.data.snooze.at) || 0) + '|' + ((window.INBOX_SNOOZED || []).length);
   }
 

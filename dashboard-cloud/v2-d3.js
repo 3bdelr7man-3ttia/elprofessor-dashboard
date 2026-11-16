@@ -16,9 +16,11 @@
   var U = L.util;
   var D3 = window.V2D3 = {};
   var MODS = { v2m_overview: 1, v2m_payouts: 1, v2m_receipts: 1, v2m_prices: 1, v2m_shares: 1, v2m_ads: 1, v2b_offers: 1, v2b_requests: 1 };
-  var S = { view: null, mod: '', sig: '', poll: null, minute: null, period: 'month', note: null, noteT: null, busy: {}, picked: {}, pf: { group: 'all', q: '' } };
+  var S = { view: null, mod: '', sig: '', poll: null, minute: null, period: 'month', note: null, noteT: null, busy: {}, picked: {}, pf: { group: 'all', q: '' }, refunded: {} };
   var SESSION_AR = 'انتهت الجلسة — سجّل الدخول من جديد ثم جرّب';
   var FAIL_AR = 'تعذّر تنفيذ العملية';
+  // r29: نداء الاسترداد على المنصة ممكن ياخد ~١٠ ثواني، والرد ممكن يضيع في الطريق (مهلة · بوابة) والاسترداد نفسه يكون اتنفّذ. جملة صادقة بدل «تعذّر» العامة.
+  var REFUND_SLOW_AR = 'المنصة بتاخد وقت — استنى ثواني وافتح الصفحة تاني قبل ما تجرّب، عشان ما يتكررش';
 
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
   function host() { return window.V2_HOST || {}; }
@@ -190,7 +192,8 @@
     var revenues = data('revenues'), escrow = epEscrow(), payouts = epPayouts();
     var rates = data('rates');
     // R28: «مستحق» من المحافظ (المحجوز + المتاح + طلبات سحب لم تُحوَّل) لو الجسر وصل، و«صافي البروفيسور» من نصيب المنصة في كل بيعة.
-    var board = L.v2MoneyBoard({ revenues: revenues, escrow: escrow, payouts: payouts, owed: data('owed'), rates: rates }, per, t);
+    var oSt = srcState('owed');      // r29: فشل المحافظ (null) يختلف عن «لسه بيتحمّل» (undefined): الأول يُصرَّح بنقصه في الرقم
+    var board = L.v2MoneyBoard({ revenues: revenues, escrow: escrow, payouts: payouts, owed: oSt === 'ready' ? data('owed') : (oSt === 'error' || oSt === 'closed' ? null : undefined), rates: rates }, per, t);
     var failed = srcFailed(['revenues', 'refunds']).concat(epFailed([['escrow', 'أموال الضمان'], ['walletPayouts', 'طلبات السحب'], ['inbox', 'الدفعات بلا ملف']]));
     var seg = L.PERIODS.map(function (p) {
       return '<button type="button" role="tab" class="v3-pb' + (p.key === per ? ' on' : '') + '" aria-selected="' + (p.key === per) + '" data-a="period" data-p="' + p.key + '">' + esc(p.label) + '</button>';
@@ -299,7 +302,7 @@
   function confirmedRows() {
     var d = data('confirmed');
     if (!d || !Array.isArray(d.payments)) return null;
-    return d.payments.filter(function (p) { return p && p.status === 'confirmed' && p.order_ref; }).map(function (p) {
+    return d.payments.filter(function (p) { return p && p.status === 'confirmed' && p.order_ref && !S.refunded[String(p.order_ref)]; }).map(function (p) {
       var email = String(p.user_email || '').trim().toLowerCase(), at = Date.parse(p.reviewed_at || p.updated_at || '');
       return { id: String(p.order_ref), name: String(p.user_name || '').trim() || email || 'صاحب الدفع', email: email, title: String(p.product_label || '').trim() || 'شراء',
                amountText: U.moneyText(p.amount, p.currency || 'EGP'), method: PAY_METHOD[p.method] || 'تحويل محلي', ref: String(p.reference_number || '').trim(),
@@ -589,9 +592,23 @@
     else if (sl) t += '، وعُكس نصيب المدرّب ' + U.moneyText(sl.amount, sl.currency);
     return t + '. أعد المبلغ إلى المشتري بنفسك.';
   }
-  function afterMoney() {
+  function refreshMoneyViews() {
     try { D3.refresh(true); } catch (e) {}
     try { if (window.V2 && V2.refreshAll) V2.refreshAll(true); } catch (e) {}
+  }
+  // r29: بعد استرداد ناجح: الدفعة تختفي من «إيصالات مؤكَّدة» فورًا (من غير انتظار إعادة الجلب) وتتجدد القوائم مرتين (مرة الآن ومرة بعد ثواني لو المنصة لسه بتنهي).
+  function afterRefund(pid) {
+    S.refunded[String(pid)] = true;
+    refreshMoneyViews();
+    try { setTimeout(function () { try { refreshMoneyViews(); } catch (e) {} }, 3000); } catch (e) {}
+  }
+  // ⛔ اسم مختلف عن `afterMoney(text)` الأبعد (قرارات التحويلات): النسختان بنفس الاسم كانتا تدوسان على بعض، فالأخيرة كانت تسود وما بتجدّدش «الإيصالات المؤكَّدة» بعد الاسترداد.
+  // الخطأ «ممكن يكون اتنفّذ»: رد ضاع من الخادم · أو بوابة قطعت (٥٠٢/٥٠٣/٥٠٤ أو ٥٠٠) · أو المتصفح ما وصلش للخادم أصلًا (بلا حالة).
+  function refundMaybeDone(e) {
+    if (!e) return true;
+    if (e.data && e.data.no_reply) return true;
+    var st = e.status;
+    return !st || st === 500 || st === 502 || st === 503 || st === 504;
   }
   function openRefund(pid, onDone) {
     var E = ep();
@@ -637,21 +654,39 @@
         go.onclick = function () {
           if (go.dataset.busy) return;
           go.dataset.busy = '1'; s.dataset.busy = '1'; S.sheetBusy = true; go.disabled = true; back.disabled = true; go.textContent = 'جارٍ الاسترداد…'; showErr('');
-          E.api('/v2/purchases/' + encodeURIComponent(pid) + '/refund', { method: 'POST', body: { reason: reason, confirmed: true } }).then(function (res) {
+          function done(res) {
             delete s.dataset.busy; S.sheetBusy = false;
             close();
             var doneText = refundDoneText(p, res || {});
             setNote(doneText);
             if (!(host().current && D3.owns(host().current()))) { try { (window.toast || function () {})(doneText); } catch (e) {} }     // من صفحة الشخص
-            afterMoney();
+            afterRefund(pid);
             if (onDone) try { onDone(res || {}); } catch (e) {}
             redraw();
-          }).catch(function (e) {
+          }
+          // رد ضاع أو اتأخر: ما نقولش «تعذّر». نفحص المنصة: لو الدفعة بقت «استُردّت» ⇒ نجاح، وإلا نطلب الانتظار وفتح الصفحة قبل أي محاولة تانية.
+          function recheck(n) {
+            go.textContent = 'جارٍ التأكد من الاسترداد…';
+            E.api('/v2/purchases/' + encodeURIComponent(pid) + '/refund-preview').then(function (p2) {
+              if (!document.body.contains(s)) return;
+              if (p2 && p2.already_refunded) { done({ title: p2.title || p.title }); return; }
+              again(n);
+            }).catch(function () { if (document.body.contains(s)) again(n); });
+          }
+          function again(n) {
+            if (n < 2) { setTimeout(function () { if (document.body.contains(s)) recheck(n + 1); }, 4000); return; }
+            delete s.dataset.busy; S.sheetBusy = false; back.disabled = false; go.textContent = 'أكّد الاسترداد'; go.disabled = true;
+            showErr(REFUND_SLOW_AR);
+            refreshMoneyViews();
+          }
+          E.api('/v2/purchases/' + encodeURIComponent(pid) + '/refund', { method: 'POST', body: { reason: reason, confirmed: true } }).then(done, function (e) {
+            if (e && e.status === 401) { delete s.dataset.busy; S.sheetBusy = false; delete go.dataset.busy; back.disabled = false; go.textContent = 'أكّد الاسترداد'; go.disabled = false; showErr(errMsg(e)); return; }
+            if (refundMaybeDone(e)) { recheck(0); return; }
             delete s.dataset.busy; S.sheetBusy = false; delete go.dataset.busy; back.disabled = false; go.textContent = 'أكّد الاسترداد';
-            var final = e && (e.status === 409 || (e.data && e.data.no_reply));
+            var final = e && e.status === 409;
             go.disabled = !!final;
             showErr(errMsg(e) + (final ? ' — أغلق الورقة وحدّث الصفحة قبل أي محاولة أخرى' : ''));
-            if (final) afterMoney();
+            if (final) refreshMoneyViews();
           });
         };
       }

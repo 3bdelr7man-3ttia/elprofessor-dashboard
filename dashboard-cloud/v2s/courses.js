@@ -274,13 +274,14 @@
     var cl = checklistOf(c.id), cst = checklistStateOf(c.id);
     var facts = C.courseFacts(c, { schedule: schedOf(c), checklist: cl, now: now(), checklistState: cst });
     var t = C.reviewTimer(c, now());
-    var live = c.type === 'live_upcoming';
+    var live = c.type === 'live_upcoming', again = !live && L.v2CourseWasLive && L.v2CourseWasLive(c);      // r29: اتنشرت/اتوقّفت قبل كده ⇒ «أُعيد إرسالها» مش «جديدة»
     var lessons = c.type === 'live_upcoming' ? '' : ' · ' + C.lessonsPhrase(C.lessonsOf(c));
     return '<article class="v2co-t tone-' + esc(t ? t.tone : 'none') + (first ? ' first' : '') + '" data-id="' + esc(c.id) + '">'
-      + '<div class="v2co-strip"><span class="v2co-type">' + (live ? 'دورة حيّة' : 'دورة جديدة') + '</span>' + (t ? timeHtml(t.label, t.tone, t.at) : '') + '</div>'
+      + '<div class="v2co-strip"><span class="v2co-type">' + (live ? 'دورة حيّة' : again ? 'أُعيد إرسالها' : 'دورة جديدة') + '</span>' + (t ? timeHtml(t.label, t.tone, t.at) : '') + '</div>'
       + '<div class="v2co-body">' + coverHtml(c, 'big')
       + '<h3><button type="button" class="v2co-open" data-a="open" data-id="' + esc(c.id) + '">' + esc(c.title || 'دورة بلا عنوان') + '</button></h3>'
       + '<p class="v2co-who">' + trainerHtml(c) + esc(lessons) + '</p>'
+      + (again ? '<p class="v2co-fine">' + esc(L.V2_RESUBMIT_AR) + '</p>' : '')
       + '<div class="v2co-brain">' + BRAIN + '<p>' + esc(facts.line) + '</p></div>'
       + '<p class="v2co-stline">القرار في «محتاج قرارك» فوق. <button type="button" class="v2co-link" data-a="open" data-id="' + esc(c.id) + '">افتح الدورة</button></p></div></article>';      // r25: مكان واحد للقرار (الشريط) — هنا سطر حالة بس
   }
@@ -1387,6 +1388,7 @@
     });
   };
   CO.openCourse = function (id) { goPage(id); };
+  CO.rows = function () { return rowsOf('courses', 'courses'); };      // r29: قائمة الدورات الجاهزة (أو null) — شريط «محتاج قرارك» بيستعملها يعرف مين أعاد المدرّب إرسالها
   // «أنشئ دورة» من خارج قسم الدورات (السوق: دورة من طلب): نفس الورقة الجديدة؛ opts.done(res) يُستدعى بعد النجاح بدل الانتقال لصفحة الدورة.
   CO.create = function (title, opts) { load('experts'); openCreate(String(title || ''), opts && opts.done); };
   CO._state = S; CO._src = SRC;

@@ -94,7 +94,7 @@ class Plat(object):
         self.blocked = []
 
     def __call__(self, method, url, params=None, json=None, headers=None, timeout=None):
-        self.seen.append({'method': method.upper(), 'path': url[len(PLATFORM):], 'params': dict(params or {}), 'json': copy.deepcopy(json)})
+        self.seen.append({'method': method.upper(), 'path': url[len(PLATFORM):], 'params': dict(params or {}), 'json': copy.deepcopy(json), 'timeout': timeout})
         if not url.startswith(PLATFORM + '/'):
             self.blocked.append(url)
             raise RuntimeError('طلب حقيقي ممنوع: ' + url)
@@ -185,10 +185,10 @@ def test_net_is_the_platform_share_per_currency_and_says_what_it_leaves_out():
     # بيعة واسترداد كامل ⇒ الصافي صفر حقيقي «٠» مش «غير متاح»
     full = [REV[0], dict(REV[0], amount_egp=-450, seller_share=-157.5, platform_share=-292.5)]
     n2 = {x['key']: x for x in v2_node.logic('v2MoneyBoard', {'revenues': full, 'escrow': [], 'payouts': []}, 'month', NOW)['numbers']}
-    assert n2['net']['na'] is False and n2['net']['text'] == '٠' and n2['income']['text'] == '٠'
+    assert n2['net']['na'] is False and n2['net']['text'] == '٠ ج' and n2['income']['text'] == '٠'
     # ولا صف معروف ⇒ «غير متاح بعد» بالسبب القديم
     n3 = {x['key']: x for x in v2_node.logic('v2MoneyBoard', {'revenues': [REV[2]], 'escrow': [], 'payouts': []}, 'month', NOW)['numbers']}
-    assert n3['net']['na'] is True and n3['net']['why']
+    assert n3['net']['na'] is True and n3['net']['why'] and 'مصدر' not in n3['net']['why'], 'ما ندّعيش إن مفيش مصدر'
 
 
 @needs_node
@@ -198,9 +198,11 @@ def test_owed_comes_from_the_wallets_and_falls_back_to_payouts():
     payouts = [{'pid': 'p', 'status': 'pending', 'raw': {'amount': 60, 'currency': 'EGP'}}]
     n = {x['key']: x for x in v2_node.logic('v2MoneyBoard', {'revenues': [], 'escrow': [], 'payouts': payouts, 'owed': owed}, 'month', NOW)['numbers']}
     assert n['owed']['text'] == '٢١٧٫٥٠ ج و٤٠ ر.س' and n['owed']['count'] == 2
-    assert 'منها ١٥٧٫٥٠ ج محجوزة' in n['owed']['note']
+    assert 'منها ١٥٧٫٥٠ ج بتتاح بعد مهلة الأيام' in n['owed']['note']
     n2 = {x['key']: x for x in v2_node.logic('v2MoneyBoard', {'revenues': [], 'escrow': [], 'payouts': payouts, 'owed': None}, 'month', NOW)['numbers']}
-    assert n2['owed']['text'] == '٦٠ ج' and n2['owed']['note'] == 'طلبات سحب أُرسلت ولم تُحوَّل بعد'
+    assert n2['owed']['text'] == '٦٠ ج' and n2['owed']['note'] == 'طلبات سحب أُرسلت ولم تُحوَّل بعد، وتعذّر جلب ما في المحافظ فالرقم ناقص', 'فشل المحافظ يُصرَّح به'
+    n3 = {x['key']: x for x in v2_node.logic('v2MoneyBoard', {'revenues': [], 'escrow': [], 'payouts': payouts}, 'month', NOW)['numbers']}
+    assert n3['owed']['text'] == '٦٠ ج' and n3['owed']['note'] == 'طلبات سحب أُرسلت ولم تُحوَّل بعد', 'لسه بيتحمّل ≠ فشل'
     for x in n.values():
         assert not LATIN.search(x['note']) and not LATIN.search(x['text'])
 

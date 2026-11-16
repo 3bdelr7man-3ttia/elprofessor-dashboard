@@ -26,7 +26,7 @@
     col: { files: '', disputes: '' }, picked: { files: false, disputes: false },          // العمود الظاهر في الموبايل
     busy: {}, err: {}, done: {}, locked: {},   // حالة أزرار التذاكر
     person: { email: '', state: 'idle', resp: null, seq: 0 },
-    reqErr: {}, reqCards: {}
+    reqErr: {}, reqCards: {}, refunded: {}      // r29: دفعات اتردّت من هنا — تظهر «استُردّت» فورًا حتى لو رد الشخص جه قديم
   };
 
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
@@ -453,12 +453,23 @@
     v.querySelectorAll('[data-a="prefund"]').forEach(function (b) {
       b.onclick = function () {
         if (!(window.V2D3 && V2D3.openRefund)) return;
-        V2D3.openRefund(b.getAttribute('data-id'), function () { loadPerson(S.person.email, true); });
+        var pid = b.getAttribute('data-id');
+        V2D3.openRefund(pid, function () {
+          S.refunded[String(pid)] = true;
+          markRefunded(S.person.resp);
+          if (isCurrent('v2person')) drawPerson(S.view);       // r29: الزرار يختفي فورًا، وبعدها إعادة الجلب من المنصة
+          loadPerson(S.person.email, true);
+        });
       };
     });
     v.querySelectorAll('[data-a="back"]').forEach(function (a) {
       a.onclick = function (e) { if (e.metaKey || e.ctrlKey || e.shiftKey || e.button === 1) return; e.preventDefault(); if (host().openSection) host().openSection('people', 'users'); };
     });
+  }
+  function markRefunded(resp) {
+    if (!resp || !Array.isArray(resp.purchases)) return resp;
+    resp.purchases.forEach(function (x) { if (x && S.refunded[String(x.payment_id)]) { x.status = 'refunded'; x.refundable = false; x.refund_block = ''; } });
+    return resp;
   }
   function loadPerson(email, force) {
     var P = S.person;
@@ -470,7 +481,7 @@
     if (!E || !E.api) { P.state = 'error'; return; }
     E.api('/v2/person?email=' + encodeURIComponent(email)).then(function (r) {
       if (seq !== P.seq) return;
-      P.resp = r; P.state = 'ready'; P.at = Date.now(); if (isCurrent('v2person')) drawPerson(S.view);
+      P.resp = markRefunded(r); P.state = 'ready'; P.at = Date.now(); if (isCurrent('v2person')) drawPerson(S.view);
     }).catch(function () {
       if (seq !== P.seq) return;
       P.resp = null; P.state = 'ready'; P.at = Date.now(); if (isCurrent('v2person')) drawPerson(S.view);
