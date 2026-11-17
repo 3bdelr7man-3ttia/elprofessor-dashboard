@@ -101,6 +101,9 @@ WORK_TYPES = (
     # R28: استرداد شراء دورة اندفع يدويًا — بيقفل الدورة ويعكس نصيب المدرّب وينقص الدخل، ومالوش رجوع ⇒ «يسألك» بس (ولا حتى «يقترح»).
     _wt('course_refund', 'locked', 'استرداد شراء دورة', 'يقفل الدورة على المشتري ويعكس نصيب المدرّب', default='ask', lock='money',
         reversible=False, levels=('ask',)),
+    # R30: عكس ملف خبير بعد تحويل أجره — بيرجّع المبلغ للعميل برّه المنصة ويخصم أجر الخبير من محفظته وينقص الدخل، ومالوش رجوع ⇒ «يسألك» بس.
+    _wt('expert_file_reverse', 'locked', 'عكس ملف خبير بعد تحويل أجره', 'يرجّع المبلغ للعميل ويخصم أجر الخبير', default='ask', lock='money',
+        reversible=False, levels=('ask',)),
     _wt('book_offer_price', 'locked', 'اعتماد أسعار عرض كتاب', 'يراجع السعر ويقترح', lock='money'),
     _wt('course_review', 'locked', 'نشر دورة جديدة', 'يراجع الدروس ويكتب ملاحظته', producer='course_review', lock='publish'),
     _wt('course_lesson_draft', 'locked', 'مسودة درس', 'تظهر للمتعلمين بعد اعتمادك', producer='course_lesson_draft', lock='publish'),

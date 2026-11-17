@@ -3030,6 +3030,9 @@ except Exception: logger.exception('v2 decisions routes not loaded')
 try:   # R28: «استرداد» شراء دورة يدوي (نوع شغل مقفول على «يسألك») + «مستحق للخبراء والمدرّبين» من محافظهم — تحميل محروس
     import v2_purchase_refunds_routes as _v2pr; _v2pr.register(app, globals())
 except Exception: logger.exception('v2 purchase refunds routes not loaded')
+try:   # R30: «اعكس الملف وارجع الفلوس» بعد تحويل أجر الخبير (نوع شغل مقفول على «يسألك») + «محجوز حتى يُسلَّم العمل» من الضمان الحقيقي
+    import v2_expert_money_routes as _v2xm; _v2xm.register(app, globals())
+except Exception: logger.exception('v2 expert money routes not loaded')
 try:   # R24 م٣: مستويات العقل لكل نوع شغل + «عمل لوحده» + التعلّم (brain_levels · alone_log · brain_learn) — تحميل محروس
     import v2_levels_routes as _v2lv; _v2lv.register(app, globals())
 except Exception: logger.exception('v2 levels routes not loaded')
@@ -3577,8 +3580,9 @@ _EF_ID_RE = re.compile(r'[A-Za-z0-9_-]{1,64}')
 # `blocked` (فلوس اتوقّفت) و`unactivated` (اتدفع وما وصلش لقايمة التوزيع) — الجولة ٧ (ب٢ · ب٩).
 # `review` (أول ملفات الخبير الجديد مستنية مراجعة المؤسس قبل العميل) — الجولة ٨ (البند ٧).
 # الجولة ١٣: `urgent` (مستعجل لسه ما خلصش) · `case_disputed` (مرحلة قضية فيها ملاحظة من العميل) · `case_open` (قضية لسه ما خلصتش).
+# R30: `recent` (اتعتمد/اتسلّم في آخر ٣٦ ساعة + اتقفل أو اتعكس في آخر ٩٠ يوم) — عمود «اعتُمد اليوم» و«أُغلقت مؤخرًا».
 _EF_LIST_STATUSES = ('waiting', 'late', 'disputed', 'blocked', 'unactivated', 'review',
-                     'urgent', 'case_disputed', 'case_open')
+                     'urgent', 'case_disputed', 'case_open', 'recent')
 _EF_ACTIONS = ('release', 'refund')
 _EF_REVIEW_ACTIONS = ('approve', 'return')
 # رسالة الخبير الصوتية (الجولة ١٢): الأنواع المسموحة هي نفس قايمة المنصة البيضا (`_sniff_voice`)، والسقف أعلى من

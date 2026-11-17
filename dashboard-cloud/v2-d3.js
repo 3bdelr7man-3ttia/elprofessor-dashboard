@@ -21,6 +21,7 @@
   var FAIL_AR = 'تعذّر تنفيذ العملية';
   // r29: نداء الاسترداد على المنصة ممكن ياخد ~١٠ ثواني، والرد ممكن يضيع في الطريق (مهلة · بوابة) والاسترداد نفسه يكون اتنفّذ. جملة صادقة بدل «تعذّر» العامة.
   var REFUND_SLOW_AR = 'المنصة بتاخد وقت — استنى ثواني وافتح الصفحة تاني قبل ما تجرّب، عشان ما يتكررش';
+  var REVERSE_SLOW_AR = 'المنصة تستغرق وقتًا؛ يُرجى الانتظار قليلًا ثم فتح الملف من جديد قبل أي محاولة أخرى، تجنبًا للتكرار';
 
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
   function host() { return window.V2_HOST || {}; }
@@ -51,11 +52,12 @@
     offers: function () { return '/v2/book-offers?status=in_review'; },
     requests: function () { return '/v2/book-requests'; },
     owed: function () { return '/v2/money/owed'; },                                  // R28: المستحق من محافظ أصحاب الأعمال
+    held: function () { return '/v2/money/held'; },                                  // R30: المحجوز في الضمان الحقيقي على المنصة
     confirmed: function () { return '/platform-manual-payments?status=confirmed'; }   // R28: الإيصالات المؤكَّدة (منها الاسترداد)
   };
   var LABEL = { revenues: 'دفتر الإيرادات', income: 'مدفوعات هذا الشهر', settings: 'الحد الأدنى للسحب', shares: 'جدول النسب', ads: 'أرصدة الإعلانات', stuck: 'المدفوعات العالقة',
                 refunds: 'الاستردادات اليدوية', pricesBook: 'أسعار الكتب', paid: 'التحويلات المنفّذة', rejected: 'التحويلات المرفوضة',
-                offers: 'عروض الكتب', requests: 'طلبات القرّاء', owed: 'المحافظ', confirmed: 'الإيصالات المؤكَّدة' };
+                offers: 'عروض الكتب', requests: 'طلبات القرّاء', owed: 'المحافظ', confirmed: 'الإيصالات المؤكَّدة', held: 'أموال الضمان' };
   function srcOf(k) { return SRC[k] || (SRC[k] = { state: 'idle', data: null, status: 0, seq: 0 }); }
   function load(k, force) {
     var s = srcOf(k), E = ep();
@@ -193,8 +195,10 @@
     var rates = data('rates');
     // R28: «مستحق» من المحافظ (المحجوز + المتاح + طلبات سحب لم تُحوَّل) لو الجسر وصل، و«صافي البروفيسور» من نصيب المنصة في كل بيعة.
     var oSt = srcState('owed');      // r29: فشل المحافظ (null) يختلف عن «لسه بيتحمّل» (undefined): الأول يُصرَّح بنقصه في الرقم
-    var board = L.v2MoneyBoard({ revenues: revenues, escrow: escrow, payouts: payouts, owed: oSt === 'ready' ? data('owed') : (oSt === 'error' || oSt === 'closed' ? null : undefined), rates: rates }, per, t);
-    var failed = srcFailed(['revenues', 'refunds']).concat(epFailed([['escrow', 'أموال الضمان'], ['walletPayouts', 'طلبات السحب'], ['inbox', 'الدفعات بلا ملف']]));
+    var hSt = srcState('held');      // R30: «محجوز» من الضمان الحقيقي على المنصة — نفس قاعدة المحافظ (فشل ⇒ null، لسه بيتحمّل ⇒ undefined)
+    var board = L.v2MoneyBoard({ revenues: revenues, escrow: escrow, payouts: payouts, owed: oSt === 'ready' ? data('owed') : (oSt === 'error' || oSt === 'closed' ? null : undefined),
+                                 held: hSt === 'ready' ? data('held') : (hSt === 'error' || hSt === 'closed' ? null : undefined), rates: rates }, per, t);
+    var failed = srcFailed(['revenues', 'refunds', 'held']).concat(epFailed([['escrow', 'أموال الضمان'], ['walletPayouts', 'طلبات السحب'], ['inbox', 'الدفعات بلا ملف']]));
     var seg = L.PERIODS.map(function (p) {
       return '<button type="button" role="tab" class="v3-pb' + (p.key === per ? ' on' : '') + '" aria-selected="' + (p.key === per) + '" data-a="period" data-p="' + p.key + '">' + esc(p.label) + '</button>';
     }).join('');
@@ -697,6 +701,120 @@
       q('#v3_rfx', s).onclick = close;
     });
   }
+  // ------------------------------------------------------------------ R30: «اعكس الملف وارجع الفلوس» — ملف خبير بعد تحويل أجره (ورقة بمرحلتين)
+  // نفس شكل ورقة استرداد الدورة: المرحلة ١ اللي هيحصل بالظبط (من المنصة نفسها) + السبب، والمرحلة ٢ تأكيد أخير.
+  // التنفيذ: POST /api/v2/expert-files/<id>/reverse (نوع شغل «يسألك» بس، والقفل في الخادم).
+  function reverseLines(p) {
+    var amt = U.moneyText(p.amount, p.currency || 'EGP'), how = PAY_METHOD[p.method] || 'نفس وسيلة الدفع';
+    var who = p.client_first_name || 'صاحب الطلب';
+    var out = ['يُعاد ' + amt + ' إلى ' + who + ' يدويًا خارج المنصة (' + how + ')، ولا يُضاف شيء إلى محفظة صاحب الطلب على المنصة'];
+    var ex = p.expert;
+    if (ex && !ex.reversed) {
+      out.push('يُخصم أجر الخبير' + (ex.name ? ' ' + ex.name : '') + ' وقدره ' + U.moneyText(ex.amount, ex.currency) + ' من محفظة الخبير');
+      if (!ex.covered) out.push('تنبيه: رصيد الخبير الآن أقل من الأجر لسحبه من قبل، فلا يُخصم شيء وتتحمّل المنصة المبلغ، ويلزم الاتفاق مع الخبير يدويًا');
+    } else out.push('لا أجر خبير مقيّدًا على هذا الملف');
+    if (p.platform_fee && Number(p.platform_fee.amount) > 0) out.push('يُلغى نصيب المنصة من الملف وقدره ' + U.moneyText(p.platform_fee.amount, p.platform_fee.currency));
+    out.push('يُغلق الملف' + (p.file_no ? ' رقم ' + U.ar(p.file_no) : '') + (p.verify_code_active ? '، ويصير رمز التحقق من الرأي غير صالح' : ''));
+    out.push('ينقص الدخل في «الفلوس» بمقدار ' + amt);
+    out.push('يصل إشعار داخل المنصة لصاحب الطلب وللخبير، ولا تُرسل رسائل بريد');
+    return out;
+  }
+  function reverseDoneText(p, res) {
+    var t = 'عُكس الملف' + (p.file_no ? ' رقم ' + U.ar(p.file_no) : '');
+    var ex = res.expert;
+    if (res.clawback === 'clawback_failed_insufficient_balance') t += '، ولم يُخصم أجر الخبير لسحبه من قبل، ويلزم الاتفاق مع الخبير يدويًا';
+    else if (ex && ex.amount) t += '، وخُصم أجر الخبير ' + U.moneyText(ex.amount, ex.currency);
+    return t + '. يُعاد ' + U.moneyText(p.amount, p.currency || 'EGP') + ' إلى صاحب الطلب يدويًا.';
+  }
+  function openReverse(fileId, onDone) {
+    var E = ep();
+    if (!E || !E.api || !fileId) return;
+    var base = '/v2/expert-files/' + encodeURIComponent(fileId);
+    var s = openSheet('اعكس الملف وارجع الفلوس', '<div class="v3-stage" data-stage="load"><p class="mc-lead">…جارٍ تجهيز ما سيحدث</p></div>');
+    if (!s) return;
+    S.sheetBusy = false;
+    var stage = q('.v3-stage', s);
+    function close() { window.closeModal(); }
+    function list(lines) { return '<ul class="v3-rfl">' + lines.map(function (l) { return '<li>' + esc(l) + '</li>'; }).join('') + '</ul>'; }
+    function showErr(msg) { var e = q('#v3err', s); if (e) e.innerHTML = msg ? '<div class="v3-err">' + esc(msg) + '</div>' : ''; }
+    E.api(base + '/reverse-preview').then(function (p) {
+      if (!document.body.contains(s)) return;
+      if (!p || p.reversible !== true) {
+        stage.setAttribute('data-stage', 'blocked');
+        stage.innerHTML = '<p class="mc-lead">' + esc(p && p.already_reversed ? 'عُكس هذا الملف من قبل' : arDigits((p && p.block_reason) || 'لا يمكن عكس هذا الملف من هنا')) + '</p>'
+          + '<div class="acts"><button type="button" class="btn btn-ghost" id="v3_rvx">إغلاق</button></div>';
+        q('#v3_rvx', s).onclick = close;
+        return;
+      }
+      var lines = reverseLines(p), reason = '';
+      function form() {
+        stage.setAttribute('data-stage', 'form');
+        stage.innerHTML = '<p class="mc-lead">عند التأكيد يحدث الآتي:</p>' + list(lines)
+          + '<div class="fld"><label for="v3_rvr">سبب العكس</label><textarea id="v3_rvr" rows="2" maxlength="500"></textarea></div>'
+          + '<div id="v3err" role="alert"></div><div class="acts"><button type="button" class="btn btn-primary" id="v3_rvnext">راجع العكس</button>'
+          + '<button type="button" class="btn btn-ghost" id="v3_rvno">إلغاء</button></div>';
+        var ta = q('#v3_rvr', s); ta.value = reason;
+        q('#v3_rvno', s).onclick = close;
+        q('#v3_rvnext', s).onclick = function () {
+          reason = String(ta.value || '').trim();
+          if (!reason) { showErr('سبب العكس مطلوب'); return; }
+          review();
+        };
+      }
+      function review() {
+        stage.setAttribute('data-stage', 'review');
+        stage.innerHTML = '<p class="mc-lead">تأكيد أخير: عكس الملف لا يُتراجع عنه.</p>' + list(lines) + '<p class="v3-fine">السبب: ' + esc(reason) + '</p>'
+          + '<div id="v3err" role="alert"></div><div class="acts"><button type="button" class="btn btn-primary" id="v3_rvgo">أكّد العكس</button>'
+          + '<button type="button" class="btn btn-ghost" id="v3_rvback">رجوع</button></div>';
+        var go = q('#v3_rvgo', s), back = q('#v3_rvback', s);
+        back.onclick = form;
+        go.onclick = function () {
+          if (go.dataset.busy) return;
+          go.dataset.busy = '1'; s.dataset.busy = '1'; S.sheetBusy = true; go.disabled = true; back.disabled = true; go.textContent = 'جارٍ العكس…'; showErr('');
+          function done(res) {
+            delete s.dataset.busy; S.sheetBusy = false;
+            close();
+            var doneText = reverseDoneText(p, res || {});
+            setNote(doneText);
+            if (!(host().current && D3.owns(host().current()))) { try { (window.toast || function () {})(doneText); } catch (e) {} }
+            refreshMoneyViews();
+            try { setTimeout(function () { try { refreshMoneyViews(); } catch (e) {} }, 3000); } catch (e) {}
+            if (onDone) try { onDone(res || {}); } catch (e) {}
+            redraw();
+          }
+          // رد ضاع أو اتأخر: ما نقولش «تعذّر». نفحص المنصة: لو الملف بقى «اتعكس» ⇒ نجاح، وإلا نطلب الانتظار وفتح الملف قبل أي محاولة تانية.
+          function recheck(n) {
+            go.textContent = 'جارٍ التأكد من العكس…';
+            E.api(base + '/reverse-preview').then(function (p2) {
+              if (!document.body.contains(s)) return;
+              if (p2 && p2.already_reversed) { done({}); return; }
+              again(n);
+            }).catch(function () { if (document.body.contains(s)) again(n); });
+          }
+          function again(n) {
+            if (n < 2) { setTimeout(function () { if (document.body.contains(s)) recheck(n + 1); }, 4000); return; }
+            delete s.dataset.busy; S.sheetBusy = false; back.disabled = false; go.textContent = 'أكّد العكس'; go.disabled = true;
+            showErr(REVERSE_SLOW_AR);
+            refreshMoneyViews();
+          }
+          E.api(base + '/reverse', { method: 'POST', body: { reason: reason, confirmed: true } }).then(done, function (e) {
+            if (e && e.status === 401) { delete s.dataset.busy; S.sheetBusy = false; delete go.dataset.busy; back.disabled = false; go.textContent = 'أكّد العكس'; go.disabled = false; showErr(errMsg(e)); return; }
+            if (refundMaybeDone(e)) { recheck(0); return; }
+            delete s.dataset.busy; S.sheetBusy = false; delete go.dataset.busy; back.disabled = false; go.textContent = 'أكّد العكس';
+            var final = e && e.status === 409;
+            go.disabled = !!final;
+            showErr(errMsg(e) + (final ? ' — يُرجى إغلاق الورقة وتحديث الصفحة قبل أي محاولة أخرى' : ''));
+            if (final) refreshMoneyViews();
+          });
+        };
+      }
+      form();
+    }).catch(function (e) {
+      if (!document.body.contains(s)) return;
+      stage.innerHTML = '<div class="v3-err">تعذّر تجهيز العكس: ' + esc(errMsg(e)) + '</div><div class="acts"><button type="button" class="btn btn-ghost" id="v3_rvx">إغلاق</button></div>';
+      q('#v3_rvx', s).onclick = close;
+    });
+  }
   function diffTable(lines, heads) {
     heads = heads || ['البند', 'الآن', 'بعد التعديل'];
     return '<table class="v3-diff"><thead><tr><th>' + esc(heads[0]) + '</th><th>' + esc(heads[1]) + '</th><th>' + esc(heads[2]) + '</th></tr></thead><tbody>' + lines.map(function (l) {
@@ -1175,7 +1293,7 @@
   // ------------------------------------------------------------------ نقطة الدخول
   function isCurrent(mod) { return !!(host().current && host().current() === mod && S.view && document.body.contains(S.view)); }
   var NEEDS = {
-    v2m_overview: { src: ['revenues', 'income', 'refunds', 'rates', 'owed'], ep: ['walletPayouts', 'escrow', 'inbox', 'opsQueue'] },
+    v2m_overview: { src: ['revenues', 'income', 'refunds', 'rates', 'owed', 'held'], ep: ['walletPayouts', 'escrow', 'inbox', 'opsQueue'] },
     v2m_payouts: { src: ['settings', 'paid', 'rejected'], ep: ['walletPayouts'] },
     v2m_receipts: { src: ['stuck', 'confirmed'], ep: ['inbox', 'opsQueue'] },
     v2m_prices: { src: ['pricesBook'], ep: [] },
@@ -1249,12 +1367,14 @@
     var mod = host().current ? host().current() : '', keys = {};
     ((NEEDS[mod] || {}).src || []).forEach(function (k) { keys[k] = 1; });
     ['revenues', 'owed', 'income', 'refunds', 'stuck', 'confirmed'].forEach(function (k) { if (srcOf(k).state !== 'idle') keys[k] = 1; });
+    if (srcOf('held').state !== 'idle') keys.held = 1;      // R30: «محجوز» من الضمان الحقيقي بيتحدّث مع «دخل» وبعد أي قرار فلوس
     Object.keys(keys).forEach(function (k) {
       var st = srcOf(k).state;
       if (st === 'ready' || force) refreshSrc(k);
     });
   };
   D3.openRefund = openRefund;     // صفحة الشخص («التعلّم») بتفتح نفس الورقة
+  D3.openReverse = openReverse;   // R30: «اعكس الملف وارجع الفلوس» — ورقة الملف في «ملفات الخبراء» ودرج الملف القديم بيفتحوا نفس الورقة
   D3.sig = function () { return ['stuck', 'offers', 'pricesBook'].map(function (k) { return srcOf(k).state; }).join(','); };
   D3.openApprove = openApprove;
   D3.openSheet = openSheet; D3.twoStage = twoStage;
