@@ -10562,6 +10562,9 @@ PRERENDER_SITE_ROOT = os.environ.get(
     'PRERENDER_SITE_ROOT', 'domains/elprofessor.net/public_html').strip('/')
 _PRERENDER_SCRIPT = os.environ.get('PRERENDER_SCRIPT', '/app/prerender.py')
 _PRERENDER_HASHES = '/data/prerender-hashes.json'
+# IndexNow (2026-11-17): المفتاح عامّ بطبيعته (ملف <key>.txt في جذر الموقع)، فالقيمة الافتراضية في الكود مقصودة.
+INDEXNOW_KEY = os.environ.get('INDEXNOW_KEY', 'ecfab9f881acadd3ec7dcd657b78a45d').strip()
+INDEXNOW_ENDPOINT = 'https://api.indexnow.org/indexnow'
 
 _prerender_lock = None          # threading.Lock, أول استخدام
 _prerender_running = False
@@ -10744,6 +10747,34 @@ def _prerender_sync_gone(sftp, gone_dir, gone_ids):
     return {'added': added, 'removed': removed, 'total': len(gone_ids)}
 
 
+def _indexnow_ping(wanted, feed_path):
+    """IndexNow: يبلّغ Bing/Yandex وغيرهم بالمقالات اللي اتغيّرت في الدفعة (blog/_pre/<id>.html ⇒ /blog/<slug>).
+    best-effort: أي عطل ⇒ سجلّ تحذير بس، ولا يرفع استثناءً أبدًا."""
+    try:
+        if not INDEXNOW_KEY or not wanted:
+            return None
+        with open(feed_path, encoding='utf-8') as fh:
+            arts = (json.load(fh) or {}).get('articles') or []
+        slug_by_id = {str(a.get('id')): a.get('slug') for a in arts if a.get('slug')}
+        urls = []
+        for rel in wanted:
+            m = re.match(r'^blog/_pre/(\d+)\.html$', rel)
+            if m and slug_by_id.get(m.group(1)):
+                urls.append('https://elprofessor.net/blog/' + quote(slug_by_id[m.group(1)], safe=''))
+        if 'blog.html' in wanted:
+            urls.append('https://elprofessor.net/blog.html')
+        urls = urls[:500]
+        if not urls:
+            return None
+        r = requests.post(INDEXNOW_ENDPOINT, timeout=20, json={
+            'host': 'elprofessor.net', 'key': INDEXNOW_KEY,
+            'keyLocation': 'https://elprofessor.net/%s.txt' % INDEXNOW_KEY, 'urlList': urls})
+        return {'urls': len(urls), 'status': r.status_code}
+    except Exception as exc:                     # noqa: BLE001
+        app.logger.warning('indexnow ping failed: %s', exc)
+        return {'error': str(exc)[:120]}
+
+
 def _prerender_push(reason=''):
     """يولّد صفحات المقالات ويرفع المتغيّر منها فقط. لا يرفع استثناءً أبدًا."""
     global _prerender_last
@@ -10893,6 +10924,16 @@ def _prerender_push(reason=''):
                 if gl_state == 'ok':
                     glossary_pruned = _prerender_prune_glossary(sftp, '%s/%s' % (root, GLOSSARY_DIR), fresh)
                 gone =_prerender_sync_gone(sftp, '%s/blog/_gone' % root, _retracted_article_ids())
+                try:
+                    _kf = '%s/%s.txt' % (root, INDEXNOW_KEY)
+                    try:
+                        sftp.stat(_kf)
+                    except IOError:
+                        with sftp.open(_kf + '.tmp', 'w') as _fh:
+                            _fh.write(INDEXNOW_KEY)
+                        _sftp_replace(sftp, _kf + '.tmp', _kf)
+                except Exception as exc:         # noqa: BLE001 — مفتاح IndexNow لا يوقف الرفع
+                    app.logger.warning('prerender: indexnow key file failed: %s', exc)
                 sftp.close()
             finally:
                 cl.close()
@@ -10902,6 +10943,7 @@ def _prerender_push(reason=''):
             except Exception:                    # noqa: BLE001
                 pass                             # كاش تحسين فقط — فقدانه = رفع كامل مرة
 
+        indexnow = _indexnow_ping(wanted, feed_path)
         _prerender_last = {
             'state': 'ok', 'reason': reason, 'articles': len(fresh) - 4 - len(topic_pages) - len(glossary_pages),
             'topics': len(topic_pages), 'topics_pruned': topics_pruned,
@@ -10909,6 +10951,8 @@ def _prerender_push(reason=''):
             'seconds': round(time.time() - started, 1),
             'at': datetime.datetime.utcnow().isoformat(),
         }
+        if indexnow:
+            _prerender_last['indexnow'] = indexnow
         if gl_args:       # المفتاح لا يظهر إلا لدفعة طُلب فيها القاموس: شكل النتيجة للمقالات وحدها لم يتغيّر
             _prerender_last['glossary'] = {'state': gl_state, 'pages': len(glossary_pages), 'pruned': glossary_pruned}
         app.logger.info('prerender: ok (%s) uploaded=%s', reason, uploaded)
