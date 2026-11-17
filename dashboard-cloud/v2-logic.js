@@ -667,7 +667,7 @@
         } else if (!pre && f.status === 'assigned') {
           card.brain = 'أُرسل إلى ' + cur + ' ولم يُستلم بعد' + (cand ? '. أقترح نقله إلى ' + cand.name : '. لا يوجد خبير آخر متاح');
         } else {
-          card.brain = cand ? 'أقترح ' + cand.name : 'لا يوجد خبير متاح';
+          card.brain = cand ? 'أقترح ' + cand.name : (str(f.no_candidate_note) || 'لا يوجد خبير متاح');   // r30: «مفيش خبير في تخصص X — اختار خبير»
         }
         if (cand) {
           card.reason = whyBits(cand, f).join('، ');

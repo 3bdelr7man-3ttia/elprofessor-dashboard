@@ -866,6 +866,10 @@ def test_a_file_card_suggests_the_auto_pick_with_a_plain_reason():
     row['ef']['candidates'] = [{'email': 'a@x', 'name': 'أ', 'auto_pick': False, 'eligible': False}]
     c = v2_node.logic('v2Card', row, {'now': NOW})
     assert c['brain'] == 'لا يوجد خبير متاح' and c['primary']['act']['do'] == 'read' and c['primary']['label'] == 'اختار له خبيرًا'
+    # r30: المنصة قالت السبب (مفيش خبير في تخصص الملف) ⇒ القرار يقوله بنصه
+    row['ef']['no_candidate_note'] = 'مفيش خبير في تخصص عمالي — اختار خبير'
+    c = v2_node.logic('v2Card', row, {'now': NOW})
+    assert c['brain'] == 'مفيش خبير في تخصص عمالي — اختار خبير' and c['primary']['label'] == 'اختار له خبيرًا'
 
 
 @needs_node
