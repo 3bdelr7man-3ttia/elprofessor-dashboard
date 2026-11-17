@@ -147,8 +147,26 @@
         + '<p class="v3-big' + (n.na ? ' na' : '') + (n.lines && n.lines.length > 1 ? ' multi' : '') + '">'
         + (n.lines && n.lines.length > 1 ? n.lines.map(function (l) { return '<span class="v3-cur">' + esc(l) + '</span>'; }).join('') : esc(n.text)) + '</p>'
         + (n.others ? '<p class="v3-oth">' + esc(n.others) + '</p>' : '')
-        + '<p class="v3-note">' + esc(n.na && n.why ? n.why : n.note) + '</p></article>';
+        + '<p class="v3-note">' + esc(n.na && n.why ? n.why : n.note) + '</p>'
+        // R32: «أرصدة العملاء» بتنزل لقايمة الأسماء تحت (مين، وكام، وليه) — عشان نرجّع لهم بسهولة
+        + (n.key === 'clients' && !n.na && n.count ? '<button type="button" class="v3-link" data-a="clients">مين هم؟ (' + esc(U.ar(n.count)) + ')</button>' : '')
+        + '</article>';
     }).join('') + '</div>';
+  }
+  // R32: قايمة قصيرة لأرصدة العملاء — الاسم بيفتح صفحة الشخص، والمبلغ بعملته، وليه رجع له.
+  function clientsSection(t) {
+    var owedSt = srcState('owed'), C = L.v2ClientRows(data('owed'), t), body;
+    if (!C) {
+      if (owedSt === 'ready') return '';      // منصة قبل R32: الرقم فوق بيقول «غير متاح بعد» بالسبب، ومفيش قايمة
+      body = owedSt === 'loading' || owedSt === 'idle' ? loadingBlock('أرصدة العملاء') : unavailable('أرصدة العملاء');
+    } else if (!C.rows.length) body = '<p class="v3-none">لا أرصدة لعملاء الآن</p>';
+    else {
+      body = '<ul class="v3-list">' + C.rows.map(function (r) {
+        return '<li class="v3-pay v3-cl"><div class="v3-pid"><b>' + personLink(r.name, r.email) + '</b>' + (r.why ? '<span>' + esc(r.why) + '</span>' : '') + '</div>'
+          + '<div class="v3-pm"><b class="v3-amt">' + esc(r.amountText) + '</b>' + (r.when ? '<time>' + esc(r.when) + '</time>' : '') + '</div></li>';
+      }).join('') + '</ul>' + (C.more ? '<p class="v3-fine">ومعهم ' + esc(U.ar(C.more)) + ' غيرهم بأرصدة أصغر</p>' : '');
+    }
+    return '<div id="v3-clients">' + section('أرصدة العملاء', 'مبالغ في محافظ عملاء، رجعت لهم باسترداد أو شحن، ويمكن إعادتها لهم من صفحة كل شخص', body, 'v3-wide v3-clients') + '</div>';
   }
   function usdLineHtml(board) {
     return board.usdLine ? '<p class="v3-usd" data-usd="1"><b>' + esc(board.usdLine.text) + '</b><span>' + esc(board.usdLine.ratesText) + '</span></p>' : '';
@@ -185,7 +203,7 @@
   }
   // الموبايل: الشرح سطر مطوي «ما هذه الأرقام؟» بدل فقرة تتكرر مع كل فترة (الجولة r6)
   function introHtml() {
-    var t = 'الدخل والمحجوز والمستحق حتى الآن، كل عملة بتظهر لوحدها';
+    var t = 'الدخل والمحجوز والمستحق وأرصدة العملاء حتى الآن، كل عملة بتظهر لوحدها';
     try { if (window.matchMedia && window.matchMedia('(max-width:760px)').matches) return '<details class="v3-intro"><summary>ما هذه الأرقام؟</summary><p class="v3-ptxt">' + esc(t) + '</p></details>'; } catch (e) {}
     return '<p class="v3-ptxt">' + esc(t) + '</p>';
   }
@@ -194,6 +212,7 @@
     var revenues = data('revenues'), escrow = epEscrow(), payouts = epPayouts();
     var rates = data('rates');
     // R28: «مستحق» من المحافظ (المحجوز + المتاح + طلبات سحب لم تُحوَّل) لو الجسر وصل، و«صافي البروفيسور» من نصيب المنصة في كل بيعة.
+    // R32: ونفس رد المحافظ فيه «أرصدة العملاء» لوحدها (`clients`) — رقم خامس + قايمة بالأسماء تحت.
     var oSt = srcState('owed');      // r29: فشل المحافظ (null) يختلف عن «لسه بيتحمّل» (undefined): الأول يُصرَّح بنقصه في الرقم
     var hSt = srcState('held');      // R30: «محجوز» من الضمان الحقيقي على المنصة — نفس قاعدة المحافظ (فشل ⇒ null، لسه بيتحمّل ⇒ undefined)
     var board = L.v2MoneyBoard({ revenues: revenues, escrow: escrow, payouts: payouts, owed: oSt === 'ready' ? data('owed') : (oSt === 'error' || oSt === 'closed' ? null : undefined),
@@ -222,7 +241,7 @@
       + '<div class="v3-top"><div class="v3-seg" role="tablist" aria-label="الفترة">' + seg + '</div>' + introHtml() + '</div>'
       + numbersHtml(board) + usdLineHtml(board)
       + '<div class="v3-two">' + section('التحويلات المستحقة', 'طلبات سحب بانتظار تسجيل التحويل', due) + section('من أين جاء الدخل', board.period.label, barsBody) + '</div>'
-      + section('استردادات تنتظر قرارك', 'الكتب لا تُسترد', refBody, 'v3-wide') + '</div>';
+      + section('استردادات تنتظر قرارك', 'الكتب لا تُسترد', refBody, 'v3-wide') + clientsSection(t) + '</div>';
     wire(v);
   }
 
@@ -1222,6 +1241,7 @@
     });
     qa('[data-a="goto"]', v).forEach(function (b) { b.onclick = function () { if (host().openSection) host().openSection(b.getAttribute('data-s'), b.getAttribute('data-t')); }; });
     qa('[data-a="tostrip"]', v).forEach(function (b) { b.onclick = function () { if (window.V2STRIP && V2STRIP.scrollTo) V2STRIP.scrollTo(); }; });
+    qa('[data-a="clients"]', v).forEach(function (b) { b.onclick = function () { var c = q('#v3-clients', v); if (c && c.scrollIntoView) c.scrollIntoView({ behavior: 'smooth', block: 'start' }); }; });
     qa('[data-a="mrefund"]', v).forEach(function (b) { b.onclick = function () { openRefund(b.getAttribute('data-id')); }; });
     qa('[data-a="settle"]', v).forEach(function (b) {
       b.onclick = function (e) {

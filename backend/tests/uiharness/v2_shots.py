@@ -1040,8 +1040,8 @@ def flow_d3(browser, h, pre, viewport, mobile):
       pays: document.querySelectorAll('.v3-pay').length, bars: document.querySelectorAll('.v3-bars li').length, refunds: document.querySelectorAll('.v3-rf').length,
       norefund: !!document.querySelector('.v3-ch p') && document.body.innerText.indexOf('الكتب لا تُسترد') > -1, tabs: [...document.querySelectorAll('.v2c-tab')].map(b => b.textContent.trim()),
       seg: [...document.querySelectorAll('.v3-pb')].map(b => b.textContent.trim()), h1: document.querySelector('.v2c-h h1').textContent})""")
-    if [n[0] for n in info['nums']] != ['دخل', 'محجوز حتى يُسلَّم العمل', 'مستحق للخبراء والمدرّبين', 'صافي البروفيسور']:
-        PROBLEMS.append('%s01: الأرقام الأربعة %r' % (pre, info['nums']))
+    if [n[0] for n in info['nums']] != ['دخل', 'محجوز حتى يُسلَّم العمل', 'مستحق للخبراء والمدرّبين', 'أرصدة العملاء', 'صافي البروفيسور']:
+        PROBLEMS.append('%s01: الأرقام الخمسة %r' % (pre, info['nums']))
     if not [n for n in info['nums'] if n[0] == 'صافي البروفيسور' and n[2] and n[1] == 'غير متاح بعد']:
         PROBLEMS.append('%s01: صافي البروفيسور لازم «غير متاح بعد»: %r' % (pre, info['nums']))
     if any(n[2] for n in info['nums'] if n[0] != 'صافي البروفيسور'):

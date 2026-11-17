@@ -2236,6 +2236,34 @@
     return { count: typeof resp.people === 'number' ? resp.people : null, totals: sumByCurrency(rows.map(function (t) { return { currency: t.currency, amount: owedRowAmount(t) }; })),
              held: sumByCurrency(rows.map(function (t) { return { currency: t.currency, amount: Math.max(0, numOf(t.on_hold)) }; })) };
   }
+  // R32 (قرار المؤسس 2026-11-17 «افصل طبعا دي عن دي… ارصده العملاء»): فلوس العملاء اللي في محافظهم (استرداد · رصيد مشحون · طلب سحب منها)
+  // رقم لوحده من `owed.clients` — والمنصة بتقسم بنوع صفّ الدفتر مش بدور الشخص، فـ`totals` بقى أرباح الخبراء والمدرّبين بس.
+  // رد من غير `clients` (منصة قبل R32) ⇒ null («غير متاح بعد» مش صفر).
+  function v2ClientBalances(resp) {
+    var c = resp && resp.clients;
+    if (!c || !Array.isArray(c.totals)) return null;
+    var rows = c.totals.filter(function (t) { return t && numOf(t.amount) > 0; });
+    return { count: typeof c.people === 'number' ? c.people : null, totals: sumByCurrency(rows.map(function (t) { return { currency: t.currency, amount: numOf(t.amount) }; })) };
+  }
+  // القايمة القصيرة: الاسم (بيفتح صفحة الشخص) + المبلغ بعملته + ليه («استرداد مبلغ ملف للخبير، ملف رقم ١٢»). ⛔ أرقام عربية بس.
+  function clientWhy(it) {
+    var why = str(it && it.why).replace(/\d/g, function (d) { return DIG.charAt(+d); });
+    var no = it && it.file_no != null && isFinite(Number(it.file_no)) ? 'ملف رقم ' + ar(it.file_no) : '';
+    return [why, no].filter(Boolean).join('، ');
+  }
+  function v2ClientRows(resp, now) {
+    var c = resp && resp.clients;
+    if (!c || !Array.isArray(c.list)) return null;
+    var rows = c.list.filter(function (r) { return r && numOf(r.amount) > 0; }).map(function (r) {
+      var email = str(r.email).toLowerCase(), items = Array.isArray(r.items) ? r.items.filter(Boolean) : [];
+      var last = items.map(function (it) { return ms(it.at); }).filter(function (t) { return !isNaN(t); }).sort(function (a, b) { return b - a; })[0];
+      return { email: EMAIL_RE.test(email) ? email : '', name: str(r.name) || email || 'عميل', currency: str(r.currency).toUpperCase() || 'EGP',
+               amount: numOf(r.amount), amountText: moneyText(numOf(r.amount), str(r.currency) || 'EGP'),
+               why: items.map(clientWhy).filter(Boolean).filter(function (w, i, a) { return a.indexOf(w) === i; }).join('، '),
+               when: last == null ? '' : agoText(last, now) };
+    });
+    return { rows: rows, more: Math.max(0, Number(c.more) || 0) };
+  }
   // R28: صافي البروفيسور في الفترة = مجموع `platform_share` لكل عملة. `null` = لا صف واحد في الفترة يحمل نصيبًا (والصفوف موجودة).
   function v2Net(rows, periodKey, now) {
     if (!Array.isArray(rows)) return null;
@@ -2261,7 +2289,7 @@
   }
   var NA_MONEY = 'غير متاح بعد';
   var NET_WHY = 'لم يُسجَّل نصيب البروفيسور بعد لعمليات هذه الفترة';
-  // اللوحة: أربعة أرقام بشرح سطر لكل رقم. `src` = {revenues, escrow, payouts, owed, net} (كلٌّ منها null لو مصدره تعذّر).
+  // اللوحة: خمسة أرقام بشرح سطر لكل رقم (R32: «أرصدة العملاء» لوحدها). `src` = {revenues, escrow, payouts, owed, net} (كلٌّ منها null لو مصدره تعذّر).
   function v2MoneyBoard(src, periodKey, now) {
     src = src || {};
     var rr = src.rates || null;
@@ -2270,7 +2298,7 @@
     var P = v2Period(periodKey, now), inc = v2Income(src.revenues, P.key, now);
     var held = src.held === undefined ? v2Held(src.escrow) : v2HeldPlatform(src.held);
     // «مستحق»: من المحافظ لو الجسر الجديد وصل، وإلا طلبات السحب المعلّقة بس (زي قبل R28).
-    var wallets = v2OwedWallets(src.owed), owed = wallets || v2Owed(src.payouts);
+    var wallets = v2OwedWallets(src.owed), owed = wallets || v2Owed(src.payouts), clients = v2ClientBalances(src.owed);
     function num(key, label, note, data, extra, zero) {
       var line = data ? v2MoneyLine(data.totals) : null;
       return { key: key, label: label, note: note, na: !line, text: line ? (zero && !data.totals.length ? zero : line.main) : NA_MONEY, others: '', count: data ? data.count : null,
@@ -2296,10 +2324,13 @@
       num('held', 'محجوز حتى يُسلَّم العمل', 'أموال دفعها الناس وتنتظر تسليم العمل لتصل إلى أصحابها، وهي داخلة في «دخل» يوم دفعها', held,
           src.held === null ? 'تعذّر جلب أموال الضمان من المنصة' : 'تعذّر جلب أموال الضمان'),
       num('owed', 'مستحق للخبراء والمدرّبين', owedNote, owed, src.owed !== undefined ? 'تعذّر جلب المحافظ وطلبات السحب' : 'تعذّر جلب طلبات السحب'),
+      // R32: فلوس العملاء في محافظهم لوحدها — مش مستحقة لخبير، ومش داخلة في «صافي البروفيسور» (الصافي من نصيب المنصة في كل بيعة بس).
+      num('clients', 'أرصدة العملاء', 'مبالغ رجعت لعملاء في محافظهم باسترداد أو شحن، وليست مستحقة لخبير', clients,
+          src.owed === null ? 'تعذّر جلب المحافظ' : src.owed === undefined ? 'يُجلب الآن' : 'لم تصل أرصدة العملاء من المنصة بعد'),
       num('net', 'صافي البروفيسور', netNote, net, netWhy, '٠ ج')
     ] };
     // سطر واحد للتقرير: «تقريبًا بالدولار: دخل ٣٬٢٠٠، محجوز ٤٠٠ — أسعار يوم …». أي رقم مالوش سعر لعملته بيتشال، ومفيش أسعار ⇒ السطر مش بيتعرض.
-    var parts = board.numbers.filter(function (n) { return !n.na && n.usd != null; }).map(function (n) { return ({ income: 'دخل', held: 'محجوز', owed: 'مستحق', net: 'صافي' }[n.key] || n.label) + ' ' + fmtMoney(n.usd) + ' دولار'; });
+    var parts = board.numbers.filter(function (n) { return !n.na && n.usd != null; }).map(function (n) { return ({ income: 'دخل', held: 'محجوز', owed: 'مستحق', clients: 'أرصدة العملاء', net: 'صافي' }[n.key] || n.label) + ' ' + fmtMoney(n.usd) + ' دولار'; });
     board.usdLine = parts.length ? { text: 'تقريبًا بالدولار: ' + parts.join('، '), ratesText: ratesDateText(rr) + (rr && rr.stale ? '، وهي آخر أسعار وصلتنا' : '') } : null;
     return board;
   }
@@ -3088,7 +3119,7 @@
     v2Health: v2Health, v2BrainLog: v2BrainLog,
     v2Tickets: v2Tickets, v2DisputeTickets: v2DisputeTickets, v2TimerText: v2TimerText, v2TimerTone: v2TimerTone, v2Person: v2Person, v2PersonCards: v2PersonCards, REQ_LABEL: REQ_LABEL, FOUND_NEXT: FOUND_NEXT,
     personKey: personKey, personEmailOf: personEmailOf, courseKey: courseKey, courseIdOf: courseIdOf, COLS: COLS, COL_LABEL: COL_LABEL, NA: NA,
-    v2Period: v2Period, v2Income: v2Income, v2Held: v2Held, v2HeldPlatform: v2HeldPlatform, v2FileSheet: v2FileSheet, v2Owed: v2Owed, v2OwedWallets: v2OwedWallets, v2Net: v2Net, v2MoneyLine: v2MoneyLine, v2MoneyBoard: v2MoneyBoard,
+    v2Period: v2Period, v2Income: v2Income, v2Held: v2Held, v2HeldPlatform: v2HeldPlatform, v2FileSheet: v2FileSheet, v2Owed: v2Owed, v2OwedWallets: v2OwedWallets, v2ClientBalances: v2ClientBalances, v2ClientRows: v2ClientRows, v2Net: v2Net, v2MoneyLine: v2MoneyLine, v2MoneyBoard: v2MoneyBoard,
     v2IncomeBars: v2IncomeBars, v2PayoutRows: v2PayoutRows, v2PayoutHistory: v2PayoutHistory, v2Stuck: v2Stuck, v2StuckFromQueue: v2StuckFromQueue,
     v2RefundRule: v2RefundRule, v2Refunds: v2Refunds, v2Prices: v2Prices, v2PriceForm: v2PriceForm, v2PriceBuild: v2PriceBuild, v2PriceDiff: v2PriceDiff, v2PricesView: v2PricesView, v2PriceResetDiff: v2PriceResetDiff, v2StarterPrices: v2StarterPrices,
     v2SharesView: v2SharesView, v2SharesDiff: v2SharesDiff, v2SharesChanges: v2SharesChanges, v2SharesHistory: v2SharesHistory,

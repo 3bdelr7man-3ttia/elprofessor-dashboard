@@ -474,8 +474,8 @@ def test_the_four_numbers_with_a_plain_line_each_and_the_net_is_not_available():
                {'pid': 'p2', 'status': 'pending', 'raw': {'amount': 3500.5, 'currency': 'SAR'}, 'fx_alert': True}]
     b = L('v2MoneyBoard', {'revenues': REV, 'escrow': escrow, 'payouts': payouts}, 'month', NOW)
     n = {x['key']: x for x in b['numbers']}
-    assert [x['key'] for x in b['numbers']] == ['income', 'held', 'owed', 'net']
-    assert [x['label'] for x in b['numbers']] == ['دخل', 'محجوز حتى يُسلَّم العمل', 'مستحق للخبراء والمدرّبين', 'صافي البروفيسور']
+    assert [x['key'] for x in b['numbers']] == ['income', 'held', 'owed', 'clients', 'net']      # R32: «أرصدة العملاء» لوحدها
+    assert [x['label'] for x in b['numbers']] == ['دخل', 'محجوز حتى يُسلَّم العمل', 'مستحق للخبراء والمدرّبين', 'أرصدة العملاء', 'صافي البروفيسور']
     assert n['income']['text'] == '١٬٣٠٠٫٥٠ ج و١٥٠ ر.س و٣٠ دولار' and n['income']['others'] == '', 'كل عملة بمبلغها في سطر واحد، بلا جنيه أساسي'
     assert n['held']['text'] == '١٬٦٠٠٫٢٥ ج و٢٠٠ دولار' and n['held']['count'] == 3, 'المحرَّر لا يُحسب'
     assert n['owed']['text'] == '٦٠٠٫٥٠ ج و٣٬٥٠٠٫٥٠ ر.س', 'الكسور محفوظة والريال لا يدخل الجنيه'

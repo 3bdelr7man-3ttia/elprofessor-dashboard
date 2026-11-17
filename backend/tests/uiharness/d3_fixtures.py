@@ -64,6 +64,21 @@ ADS_ENTRIES = {
     ],
 }
 
+# R32: رد `/bridge/wallets/owed` بشكل المنصة بعد الفصل — أرباح الخبراء والمدرّبين في `totals`، وفلوس العملاء في محافظهم في `clients`.
+OWED = {"ok": True, "people": 5, "payouts_pending_count": 2,
+        "totals": [{"currency": "EGP", "amount": 15250.0, "on_hold": 2100.0, "withdrawable": 11650.0, "payouts_pending": 1500.0, "people": 4},
+                   {"currency": "SAR", "amount": 400.0, "on_hold": 0.0, "withdrawable": 400.0, "payouts_pending": 0.0, "people": 1}],
+        "clients": {"people": 3, "more": 0,
+                    "totals": [{"currency": "EGP", "amount": 2250.0, "in_wallet": 2250.0, "payouts_pending": 0.0, "people": 2},
+                               {"currency": "SAR", "amount": 150.0, "in_wallet": 150.0, "payouts_pending": 0.0, "people": 1}],
+                    "list": [{"email": "mona.client@example.com", "name": "منى عبد الله", "currency": "EGP", "amount": 1800.0,
+                              "items": [{"why": "استرداد مبلغ ملف للخبير", "amount": 1800.0, "at": "2026-11-15T10:00:00+00:00", "file_no": 12}]},
+                             {"email": "karim.client@example.com", "name": "كريم سامي", "currency": "EGP", "amount": 450.0,
+                              "items": [{"why": "استرداد ٥٠٪ — إلغاء متأخر", "amount": 450.0, "at": "2026-11-14T10:00:00+00:00"}]},
+                             {"email": "fahad.client@example.com", "name": "فهد العتيبي", "currency": "SAR", "amount": 150.0,
+                              "items": [{"why": "استرداد مبلغ ملف للخبير", "amount": 150.0, "at": "2026-11-12T10:00:00+00:00", "file_no": 7}]}]}}
+OWED_EMPTY = {"ok": True, "people": 0, "payouts_pending_count": 0, "totals": [], "clients": {"people": 0, "more": 0, "totals": [], "list": []}}
+
 REFUNDS = [
     {"consultation_id": "c-r1", "booking_id": "b-1", "member_email": "salma@example.test", "expert_email": "hala@experts.test", "amount": 450.0,
      "currency": "EGP", "escrow_state": "held", "payment_id": "pay-1", "cancelled_at": iso(-52), "settled_at": "", "full_refund": True, "cancelled_by": "member"},
@@ -189,6 +204,8 @@ class D3Platform(v2fx.V2Platform):
         if path == "/api/bridge/wallet-payouts" and method == "GET" and (params or {}).get("status") == "rejected":
             rows = [] if self.empty else copy.deepcopy(REJECTED_PAYOUTS)
             return 200, {"payouts": rows, "count": len(rows)}
+        if path == "/api/bridge/wallets/owed" and method == "GET":      # R32: الأرباح في `totals` وأرصدة العملاء لوحدها في `clients`
+            return 200, copy.deepcopy(OWED_EMPTY if self.empty else OWED)
         if path == "/api/bridge/payments/stuck" and method == "GET":
             return 200, {"ok": True, "count": len(self.stuck), "after_hours": 2, "paid_without_delivery": None, "items": copy.deepcopy(self.stuck)}
         if path == "/api/bridge/income/by-service" and method == "GET":
