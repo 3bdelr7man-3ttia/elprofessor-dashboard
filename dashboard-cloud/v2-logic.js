@@ -679,7 +679,9 @@
           card.primary = { label: 'اختار له خبيرًا', act: READ };      // R24 م٢: شاشة اختيار الخبير جوه بيت «ملفات الخبراء»
         }
         if (f.speed === 'urgent') card.warn = 'طلب مستعجل';
-        if (Number(f.hours_left) > 0 && pre) card.facts.push({ k: 'المتبقي للاستلام', v: hoursWord(Math.floor(Number(f.hours_left))) });
+        // r30: مهلة الاستلام الحقيقية من المنصة (`claim_hours_left` — نفس اللي الخبير بيشوفه في صفحته والجرس)، وقبلها `hours_left` (٤٨ ساعة الدفع).
+        var claimLeft = (f.claim_by && isFinite(Number(f.claim_hours_left))) ? Number(f.claim_hours_left) : Number(f.hours_left);
+        if (claimLeft > 0 && pre) card.facts.push({ k: 'المتبقي للاستلام', v: hoursWord(Math.floor(claimLeft)) });
         break;
       }
       case 'file_attention': {

@@ -873,6 +873,19 @@ def test_a_file_card_suggests_the_auto_pick_with_a_plain_reason():
 
 
 @needs_node
+def test_the_file_card_shows_the_experts_real_claim_window_not_the_48h_refund_clock():
+    # r30: نفس مهلة الاستلام اللي في صفحة الخبير والجرس (`claim_by`): ١١ ساعة، مش ٤٠ ساعة الدفع.
+    ef = {'id': 'f', 'title': 'عقد', 'status': 'awaiting_assignment', 'hours_left': 40, 'claim_by': _iso(11.5), 'claim_hours_left': 11.5,
+          'paid_at': _iso(2), 'candidates': []}
+    row = {'apiKind': 'expert_file', 'apiId': 'f', 'efLane': 'waiting', 'ref': 'EF-f', 'who': 'منى', 'amountLabel': '٧٥٠ جنيه', 'ef': ef}
+    facts = {x['k']: x['v'] for x in v2_node.logic('v2Card', row, {'now': NOW})['facts']}
+    assert '١١' in facts['المتبقي للاستلام'] and '٤٠' not in facts['المتبقي للاستلام'], facts
+    old = dict(ef); old.pop('claim_by'); old.pop('claim_hours_left')              # منصة قديمة ⇒ زي ما كان
+    facts = {x['k']: x['v'] for x in v2_node.logic('v2Card', dict(row, ef=old), {'now': NOW})['facts']}
+    assert '٤٠' in facts['المتبقي للاستلام'], facts
+
+
+@needs_node
 def test_a_late_file_suggests_moving_it_and_says_how_late():
     row = {'apiKind': 'expert_file', 'apiId': 'f', 'efLane': 'late', 'ref': 'EF-f', 'who': 'منى',
            'ef': {'id': 'f', 'title': 'رأي', 'status': 'writing', 'expert_name': 'أ. بطيء', 'writing_due_at': _iso(5),
