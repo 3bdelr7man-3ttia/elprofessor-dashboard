@@ -301,7 +301,7 @@ def test_file_sheet_says_what_happened_in_plain_arabic():
 def test_reverse_sheet_is_two_steps_and_says_exactly_what_happens():
     d3 = _read('dashboard-cloud', 'v2-d3.js')
     for s in ('اعكس الملف وارجع الفلوس', 'يدويًا خارج المنصة', 'ولا يُضاف شيء إلى محفظة صاحب الطلب على المنصة', 'يُخصم أجر الخبير',
-              'تتحمّل البروفيسور المبلغ', 'ينقص الدخل في «الفلوس» بمقدار', 'ولا تُرسل رسائل بريد', 'راجع العكس', 'تأكيد أخير: عكس الملف لا يُتراجع عنه.',
+              'تتحمّل المنصة المبلغ', 'ينقص الدخل في «الفلوس» بمقدار', 'ولا تُرسل رسائل بريد', 'راجع العكس', 'تأكيد أخير: عكس الملف لا يُتراجع عنه.',
               'أكّد العكس', "'/v2/expert-files/' + encodeURIComponent(fileId)", "body: { reason: reason, confirmed: true }", 'D3.openReverse = openReverse',
               "held: function () { return '/v2/money/held'; }"):
         assert s in d3, s

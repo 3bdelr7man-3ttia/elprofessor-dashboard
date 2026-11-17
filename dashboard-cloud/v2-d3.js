@@ -711,9 +711,9 @@
     var ex = p.expert;
     if (ex && !ex.reversed) {
       out.push('يُخصم أجر الخبير' + (ex.name ? ' ' + ex.name : '') + ' وقدره ' + U.moneyText(ex.amount, ex.currency) + ' من محفظة الخبير');
-      if (!ex.covered) out.push('تنبيه: رصيد الخبير الآن أقل من الأجر لسحبه من قبل، فلا يُخصم شيء وتتحمّل البروفيسور المبلغ، ويلزم الاتفاق مع الخبير يدويًا');
+      if (!ex.covered) out.push('تنبيه: رصيد الخبير الآن أقل من الأجر لسحبه من قبل، فلا يُخصم شيء وتتحمّل المنصة المبلغ، ويلزم الاتفاق مع الخبير يدويًا');
     } else out.push('لا أجر خبير مقيّدًا على هذا الملف');
-    if (p.platform_fee && Number(p.platform_fee.amount) > 0) out.push('يُلغى نصيب البروفيسور من الملف وقدره ' + U.moneyText(p.platform_fee.amount, p.platform_fee.currency));
+    if (p.platform_fee && Number(p.platform_fee.amount) > 0) out.push('يُلغى نصيب المنصة من الملف وقدره ' + U.moneyText(p.platform_fee.amount, p.platform_fee.currency));
     out.push('يُغلق الملف' + (p.file_no ? ' رقم ' + U.ar(p.file_no) : '') + (p.verify_code_active ? '، ويصير رمز التحقق من الرأي غير صالح' : ''));
     out.push('ينقص الدخل في «الفلوس» بمقدار ' + amt);
     out.push('يصل إشعار داخل المنصة لصاحب الطلب وللخبير، ولا تُرسل رسائل بريد');

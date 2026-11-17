@@ -1014,7 +1014,9 @@ def test_the_money_sheets_reuse_the_existing_confirmation_and_add_no_new_decisio
     # PUT الرابع (2026-11-09): زر «الأسعار المبدئية» — نفس مسار تعديل السعر بعد ورقة مراجعة و«أكّد التطبيق».
     # POST الثالث (R28، 2026-11-15): «استرداد» شراء دورة — ورقة بمرحلتين (اللي هيحصل + السبب ⇐ تأكيد أخير) ثم `confirmed:true`،
     # ونوعه في الخادم مقفول على «يسألك» (`course_refund`). ده الفعل الوحيد اللي اتضاف هنا بطلب المؤسس.
-    assert calls.count('PUT') == 4 and calls.count('POST') == 3 and calls.count('PATCH') == 1, calls
+    # POST الرابع (R30، 2026-11-17): «اعكس الملف وارجع الفلوس» لملف خبير بعد تحويل أجره — نفس شكل ورقة الاسترداد بمرحلتين ثم `confirmed:true`،
+    # ونوعه في الخادم مقفول على «يسألك» (`expert_file_reverse`) — بطلب المؤسس بعد اختبار الرحلة الكاملة.
+    assert calls.count('PUT') == 4 and calls.count('POST') == 4 and calls.count('PATCH') == 1, calls
     for m in re.finditer(r"E\.api\(([^;]*?method: '(PUT|POST)'[^;]*?)\)\.then|E\.api\(([^;]*?method: '(PUT|POST)'[^;]*?)\);\s*\}", js, re.S):
         assert 'confirmed: true' in (m.group(1) or m.group(3)), m.group(0)[:160]
     assert 'fetch(' not in js and 'XMLHttpRequest' not in js
