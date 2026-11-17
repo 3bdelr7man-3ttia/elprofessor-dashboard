@@ -361,12 +361,13 @@
   var HEAD_ICON = '<svg viewBox="0 0 24 24" class="v2-ic" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>';
   function personCard(c) {
     var body;
-    if (c.na) body = '<p class="v2d-na">' + esc(c.text) + '</p>';
+    var rate = c.rating ? '<p class="v2d-sum v2d-rate">' + esc(c.rating) + '</p>' : '';     // r31: تقييم الخبير مع ملفاته (وتحت الملخّص)
+    if (c.na) body = '<p class="v2d-na">' + esc(c.text) + '</p>' + rate;
     else if (c.rows) {
       body = '<dl class="v2d-rows">' + c.rows.map(function (r) { return '<div><dt>' + esc(r.k) + '</dt><dd' + (r.na ? ' class="v2d-na"' : '') + '>' + esc(r.v) + '</dd></div>'; }).join('') + '</dl>';
       if (c.purchases !== undefined) body += purchasesHtml(c.purchases);
     } else {
-      body = '<p class="v2d-sum">' + esc(c.summary || '') + '</p>';
+      body = '<p class="v2d-sum">' + esc(c.summary || '') + '</p>' + rate;
       if (c.items && c.items.length) body += '<ul class="v2d-items">' + c.items.map(function (i) { return '<li><b>' + esc(i.title) + '</b>' + (i.meta ? '<span>' + esc(i.meta) + '</span>' : '') + '</li>'; }).join('') + '</ul>';
       if (c.note) body += '<p class="v2d-fine">' + esc(c.note) + '</p>';
     }

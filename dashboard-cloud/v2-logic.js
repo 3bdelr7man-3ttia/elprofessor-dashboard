@@ -1712,8 +1712,11 @@
       });
       c1.note = 'تشمل الملفات المسندة إلى هذا الشخص كخبير فقط؛ الملفات المقدَّمة منه كصاحب طلب غير متاحة بعد';
     }
-    // —— دوراته (كمدرّب)
+    // r31 (جولة المؤسس 2026-11-17): تقييمه كخبير مكانه مع ملفاته — مش جوه «الدورات» بعد «لا دورات بعد» — ولغير الخبير ما يظهرش خالص.
     var tr = resp.trainer, c2 = { key: 'courses', title: 'الدورات' };
+    var isExpert = (Array.isArray(resp.roles) ? resp.roles : []).indexOf('expert') > -1;
+    if (isExpert && tr && tr.rating_avg != null && tr.rating_count) c1.rating = 'التقييم: ' + fmt(tr.rating_avg) + ' من ' + U(tr.rating_count, ['تقييم واحد', 'تقييمين', 'تقييمات', 'تقييمًا']);
+    // —— دوراته (كمدرّب)
     if (tr === null || tr === undefined) {
       if (id.trainer_status === 'none') { c2.summary = 'لا صفة مدرّب لهذا الحساب'; c2.items = []; } else naCard(c2);
     } else {
@@ -1721,7 +1724,6 @@
       if (tr.status === 'pending') bits.push('طلب المدرّب بانتظار القرار');
       if (tr.courses_count != null) bits.push(tr.courses_count ? U(tr.courses_count, ['دورة واحدة', 'دورتان', 'دورات', 'دورة']) : 'لا دورات بعد');
       if (tr.students_count != null && tr.courses_count) bits.push('المتعلمون: ' + ar(tr.students_count));
-      if (tr.rating_avg != null && tr.rating_count) bits.push('التقييم: ' + fmt(tr.rating_avg) + ' من ' + U(tr.rating_count, ['تقييم واحد', 'تقييمين', 'تقييمات', 'تقييمًا']));
       if (!bits.length) naCard(c2);
       else {
         c2.summary = bits.join('، ');

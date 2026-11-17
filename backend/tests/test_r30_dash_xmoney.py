@@ -308,7 +308,7 @@ def test_reverse_sheet_is_two_steps_and_says_exactly_what_happens():
     d2 = _read('dashboard-cloud', 'v2-d2.js')
     assert 'data-a="fsheet"' in d2 and 'V2D3.openReverse(' in d2 and 'أُغلقت مؤخرًا' in d2 and "t.row.efLane === 'recent'" in d2
     idx = _read('dashboard-cloud', 'index.html')
-    assert "data-a=\"ef_reverse\"" in idx and 'V2D3.openReverse(f.id||i.apiId,efRefreshInbox)' in idx
+    assert "data-a=\"ef_reverse\"" in idx and "V2D3.openReverse(f.id||i.apiId,()=>{EP.reload('opsQueue',efRefreshInbox);EP.reload('inbox',efRefreshInbox);})" in idx   # r31: القوايم بتتجاب من جديد
     api = _read('dashboard-cloud', 'dashboard-api.js')
     assert '/platform-expert-files?status=recent' in api and 'EP.data.efRecent' in api
     assert 'COPY backend/v2_expert_money_routes.py /app/v2_expert_money_routes.py' in _read('Dockerfile')

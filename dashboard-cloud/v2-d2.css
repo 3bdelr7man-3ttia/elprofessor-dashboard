@@ -119,6 +119,7 @@
 .v2d-pc{background:#fff;border:1px solid var(--line);border-radius:16px;padding:14px 16px;display:grid;gap:8px;align-content:start;min-width:0}
 .v2d-pc h3{margin:0;font:800 16px 'Cairo',sans-serif;color:var(--wine)}
 .v2d-sum{font:700 15px/1.7 'Cairo',sans-serif}
+.v2d-rate{font-weight:600;color:#3F3A33}   /* r31: تقييم الخبير تحت ملخّص ملفاته */
 .v2d-na{color:#8A8478;font-size:14.5px}
 .v2d-fine{font-size:12.5px;color:var(--mute);line-height:1.65}
 .v2d-items{list-style:none;margin:0;padding:0;display:grid;gap:8px}

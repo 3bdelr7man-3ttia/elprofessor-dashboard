@@ -726,6 +726,13 @@
     else if (ex && ex.amount) t += '، وخُصم أجر الخبير ' + U.moneyText(ex.amount, ex.currency);
     return t + '. يُعاد ' + U.moneyText(p.amount, p.currency || 'EGP') + ' إلى صاحب الطلب يدويًا.';
   }
+  // r31: نص التنبيه القصير بعد العكس (التفاصيل كاملة في ورقة التأكيد قبلها).
+  function reverseToastText(p, res) {
+    var who = p.client_first_name || 'صاحب الطلب';
+    var t = 'عُكس الملف' + (p.file_no ? ' رقم ' + U.ar(p.file_no) : '') + '، ويُعاد ' + U.moneyText(p.amount, p.currency || 'EGP') + ' إلى ' + who + ' يدويًا';
+    if (res && res.clawback === 'clawback_failed_insufficient_balance') t += '، ولم يُخصم أجر الخبير';
+    return t;          // علامة الصح أيقونة في التنبيه نفسه
+  }
   function openReverse(fileId, onDone) {
     var E = ep();
     if (!E || !E.api || !fileId) return;
@@ -776,7 +783,9 @@
             close();
             var doneText = reverseDoneText(p, res || {});
             setNote(doneText);
-            if (!(host().current && D3.owns(host().current()))) { try { (window.toast || function () {})(doneText); } catch (e) {} }
+            // r31 (جولة المؤسس 2026-11-17): العكس كان بيخلص من غير أي رسالة ظاهرة ⇒ تنبيه قصير زي باقي أفعال الفلوس (بيدخل الجرس كمان)،
+            // من أي مكان اتفتحت منه الورقة (ورقة الملف في «ملفات الخبراء» أو درج الملف).
+            try { (window.notify || window.toast || function () {})(reverseToastText(p, res || {})); } catch (e) {}
             refreshMoneyViews();
             try { setTimeout(function () { try { refreshMoneyViews(); } catch (e) {} }, 3000); } catch (e) {}
             if (onDone) try { onDone(res || {}); } catch (e) {}
@@ -1375,6 +1384,7 @@
   };
   D3.openRefund = openRefund;     // صفحة الشخص («التعلّم») بتفتح نفس الورقة
   D3.openReverse = openReverse;   // R30: «اعكس الملف وارجع الفلوس» — ورقة الملف في «ملفات الخبراء» ودرج الملف القديم بيفتحوا نفس الورقة
+  D3._reverseToastText = reverseToastText;   // r31: للاختبار
   D3.sig = function () { return ['stuck', 'offers', 'pricesBook'].map(function (k) { return srcOf(k).state; }).join(','); };
   D3.openApprove = openApprove;
   D3.openSheet = openSheet; D3.twoStage = twoStage;
