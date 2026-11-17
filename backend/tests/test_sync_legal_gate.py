@@ -41,7 +41,7 @@ def _serve(monkeypatch, payload):
 
 
 def _art(aid, title, gate='absent', category='news'):
-    a = {'id': aid, 'title': title, 'body': '# ' + title + '\n\n' + PARA, 'category': category, 'author': 'x', 'keywords': [], 'faq': [],
+    a = {'id': aid, 'title': title, 'body': '# ' + title + '\n\n' + PARA + '\n\n## المصادر\n- جهة — عنوان (https://ar.wikipedia.org/wiki/x)', 'category': category, 'author': 'x', 'keywords': [], 'faq': [],
          'source_url': 'https://news.example.com/' + aid}   # R19: مقال الخبر لازم له رابط مصدر
     if gate != 'absent':
         a['legal_gate'] = gate

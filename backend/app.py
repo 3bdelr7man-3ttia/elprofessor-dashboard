@@ -11137,6 +11137,12 @@ def _sync_platform_articles():
             is_published = False
             held_no_source.append({'platform_id': a.get('id'), 'title': title[:80]})
             app.logger.warning('sync: held as draft — news article has no source link: %r', title[:60])
+        # قاعدة المؤسس (2026-11-17) «اللي جاي ما يطلعش غير بمصادر»: أي مقال (غير شرح ميزات المنصة) بلا قسم
+        # «## المصادر» فيه رابط ما يتنشرش آليًّا — بيدخل مسودة ويرجع تحت held_no_source.
+        elif _ai.article_without_sources(a):
+            is_published = False
+            held_no_source.append({'platform_id': a.get('id'), 'title': title[:80], 'reason': 'no_sources_section'})
+            app.logger.warning('sync: held as draft — no «المصادر» section: %r', title[:60])
         art = Article(
             title=title[:500],
             excerpt=(a.get('excerpt') or '')[:1000],
