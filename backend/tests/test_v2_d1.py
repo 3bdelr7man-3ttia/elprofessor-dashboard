@@ -866,6 +866,23 @@ def test_a_file_card_suggests_the_auto_pick_with_a_plain_reason():
     row['ef']['candidates'] = [{'email': 'a@x', 'name': 'أ', 'auto_pick': False, 'eligible': False}]
     c = v2_node.logic('v2Card', row, {'now': NOW})
     assert c['brain'] == 'لا يوجد خبير متاح' and c['primary']['act']['do'] == 'read' and c['primary']['label'] == 'اختار له خبيرًا'
+    # r30: المنصة قالت السبب (مفيش خبير في تخصص الملف) ⇒ القرار يقوله بنصه
+    row['ef']['no_candidate_note'] = 'مفيش خبير في تخصص عمالي — اختار خبير'
+    c = v2_node.logic('v2Card', row, {'now': NOW})
+    assert c['brain'] == 'مفيش خبير في تخصص عمالي — اختار خبير' and c['primary']['label'] == 'اختار له خبيرًا'
+
+
+@needs_node
+def test_the_file_card_shows_the_experts_real_claim_window_not_the_48h_refund_clock():
+    # r30: نفس مهلة الاستلام اللي في صفحة الخبير والجرس (`claim_by`): ١١ ساعة، مش ٤٠ ساعة الدفع.
+    ef = {'id': 'f', 'title': 'عقد', 'status': 'awaiting_assignment', 'hours_left': 40, 'claim_by': _iso(11.5), 'claim_hours_left': 11.5,
+          'paid_at': _iso(2), 'candidates': []}
+    row = {'apiKind': 'expert_file', 'apiId': 'f', 'efLane': 'waiting', 'ref': 'EF-f', 'who': 'منى', 'amountLabel': '٧٥٠ جنيه', 'ef': ef}
+    facts = {x['k']: x['v'] for x in v2_node.logic('v2Card', row, {'now': NOW})['facts']}
+    assert '١١' in facts['المتبقي للاستلام'] and '٤٠' not in facts['المتبقي للاستلام'], facts
+    old = dict(ef); old.pop('claim_by'); old.pop('claim_hours_left')              # منصة قديمة ⇒ زي ما كان
+    facts = {x['k']: x['v'] for x in v2_node.logic('v2Card', dict(row, ef=old), {'now': NOW})['facts']}
+    assert '٤٠' in facts['المتبقي للاستلام'], facts
 
 
 @needs_node

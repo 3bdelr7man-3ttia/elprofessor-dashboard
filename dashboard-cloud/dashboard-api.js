@@ -619,7 +619,7 @@
     else if (lane === "late") out = "رأي متأخر";
     else if (pre && hl <= 0) out = "فات ميعاد الاستلام";
     else if (f.status === "assigned" && f.assign_overdue) out = "ملف ما اتستلمش من ١٢ ساعة";
-    else if (noCand) out = "ملف مالوش خبير متاح";
+    else if (noCand) out = (typeof f.no_candidate_note === "string" && f.no_candidate_note.trim()) || "ملف مالوش خبير متاح";   // r30: «مفيش خبير في تخصص X — اختار خبير»
     else if (urg && urg.state === "waiting" && pre) out = "ملف مستعجل مستني خبير";
     else if (f.status === "awaiting_assignment" && declined.length) out = "خبير اعتذر — الملف مستني خبير تاني";
     else if (f.status === "assigned") out = "ملف مستني الخبير يستلمه";
@@ -636,7 +636,7 @@
     // الجولة ١٤: نوع الملف والتخصص على الصفّ، و«مالوش خبير متاح» (التوزيع التلقائي ما لقاش مؤهَّل ونبّهنا على تليجرام).
     if (efIsContract(f)) badges.push({ t: efKindLabel(f), tip: "مراجعة عقد قبل التوقيع" });
     if (efSpecOf(f)) badges.push({ t: efSpecOf(f), tip: "التخصص اللي اختاره «بروف» من موضوع الملف" });
-    if (noCand) badges.push({ w: true, t: "مالوش خبير متاح", tip: "مفيش خبير مؤهَّل دلوقتي — ابعته بإيدك، وإلا هيترد للعميل بعد ٤٨ ساعة من الدفع" });
+    if (noCand) badges.push({ w: true, t: "مالوش خبير متاح", tip: ((typeof f.no_candidate_note === "string" && f.no_candidate_note.trim()) || "مفيش خبير مؤهَّل دلوقتي") + " — ابعته بإيدك، وإلا هيترد للعميل بعد ٤٨ ساعة من الدفع" });
     // «قرب الـ٤٨ ساعة»: آخر ١٢ ساعة قبل ما الفلوس ترجع لوحدها — نفس حدّ `slaWarn` تحت. والخدمة مقفولة مفيش ميعاد شغّال.
     if (pre && !closed && hl > 0 && hl <= 12) badges.unshift({ w: true, t: "⏳ فاضل أقل من ١٢ ساعة", tip: "لو ما اتستلمش قبل الميعاد، فلوس العميل بترجع لوحدها" });
     if (attn) badges.unshift(attn);
