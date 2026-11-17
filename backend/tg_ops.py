@@ -487,6 +487,45 @@ def opp_digest_lines(summary):
     return ['🔎 الفرص:'] + (rows or ['• لا جديد ينتظر قرارك'])
 
 
+BACKUP_MAX_SILENT_HOURS = 26.0     # نفس حدّ المنصة: نسخة ليلية + هامش لسحب بطيء
+
+
+def _hours_since(iso):
+    try:
+        t = datetime.datetime.fromisoformat(str(iso).replace('Z', '+00:00'))
+    except (TypeError, ValueError):
+        return None
+    if t.tzinfo is None:
+        t = t.replace(tzinfo=datetime.timezone.utc)
+    return (datetime.datetime.now(datetime.timezone.utc) - t).total_seconds() / 3600.0
+
+
+def backup_digest_lines(ns, queue):
+    """R33: أسطر النسخ الاحتياطية في الملخص — بتظهر بس لو فيه مشكلة (السكوت هنا معناه «تمام»).
+    اللوحة: آخر سحب كامل من ops_kv (`backup:dashboard_last`) + هل المفتاح موجود. المنصة: من طابورها
+    (`heartbeats.backup_last` و`backup_encrypted`) — طابور غايب ⇒ ما نخترعش حكم عن المنصة."""
+    rows = []
+    last = kv_get(ns, 'backup:dashboard_last')
+    age = _hours_since(last) if last else None
+    if not last:
+        rows.append('• نسخة قاعدة اللوحة: لم تُسحب ولا مرّة حتى الآن')
+    elif age is None or age > BACKUP_MAX_SILENT_HOURS:
+        rows.append('• نسخة قاعدة اللوحة: آخر سحب منذ %s ساعة' % _ar_num(age or 0))
+    if not (os.environ.get('BACKUP_ENCRYPTION_KEY') or '').strip():
+        rows.append('• نسخة قاعدة اللوحة غير مشفّرة')
+    if isinstance(queue, dict):
+        hb = queue.get('heartbeats') if isinstance(queue.get('heartbeats'), dict) else None
+        if hb is not None and 'backup_last' in hb:
+            p_age = _hours_since(hb.get('backup_last')) if hb.get('backup_last') else None
+            if p_age is None:
+                rows.append('• نسخة قاعدة المنصة: لم تعمل ولا مرّة حتى الآن')
+            elif p_age > BACKUP_MAX_SILENT_HOURS:
+                rows.append('• نسخة قاعدة المنصة: متوقّفة منذ %s ساعة' % _ar_num(p_age))
+        if queue.get('backup_encrypted') is False:
+            rows.append('• نسخة قاعدة المنصة غير مشفّرة')
+    return (['🗄️ النسخ الاحتياطية:'] + rows) if rows else []
+
+
 def digest_text(ns, queue, opp=None):
     """نصّ الملخص من طابور المنصة (`/api/bridge/ops/queue`) وملخص محرّك الفرص (R18) وحالة المراقبة وفشل الإرسال آخر ٢٤ ساعة."""
     lines = ['☀️ ملخص اليوم من لوحة البروفيسور']
@@ -506,6 +545,10 @@ def digest_text(ns, queue, opp=None):
     else:
         lines.append('لا شيء ينتظر قرارك في الوارد.')
     lines.extend(opp_digest_lines(opp))
+    try:
+        lines.extend(backup_digest_lines(ns, queue))
+    except Exception:   # noqa: BLE001 — سطر النسخ عمره ما يوقّع الملخص كله
+        logger.exception('tg_ops: backup digest lines failed')
     down =[u['label'] for u in uptime_state(ns) if u['down']]
     if down:
         lines.append('🔴 متوقّف الآن: ' + '، '.join(down))

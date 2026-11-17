@@ -86,6 +86,8 @@ COPY backend/v2_tools_routes.py /app/v2_tools_routes.py
 COPY backend/v2_asklib_routes.py /app/v2_asklib_routes.py
 # R16 «تليجرام اللوحة» (المُرسِل الواحد · جرّب التنبيهات · المراقبة · الملخص اليومي): app.py بيستوردها محروسة.
 COPY backend/tg_ops.py /app/tg_ops.py
+# R33 (النسخة الاحتياطية): تشفير نسخة القاعدة بصيغة openssl — app.py بيستورده جوّه إندبوينت النسخة (غيابه = النسخة تقع ٥٠٠).
+COPY backend/backup_crypto.py /app/backup_crypto.py
 
 EXPOSE 8080
 

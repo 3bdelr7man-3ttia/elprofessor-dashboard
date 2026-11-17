@@ -11024,9 +11024,29 @@ def _sqlite_file_path():
     return database if os.path.exists(database) else None
 
 
+BACKUP_KV_KEY = 'backup:dashboard_last'      # آخر سحب كامل (ops_kv) — الملخص اليومي بيحذّر لو عدّى ٢٦ ساعة
+
+
+def _backup_stamp():
+    """نبضة «النسخة اتسحبت كاملة» — بتتكتب بعد آخر بايت بس، ومستحيل توقّع السحب نفسه."""
+    _BACKUP_LAST['at'] = datetime.datetime.utcnow().isoformat() + 'Z'
+    try:
+        with app.app_context():
+            import tg_ops as _tg
+            if _tg._STATE.get('kv') is not None:
+                _tg.kv_set(globals(), BACKUP_KV_KEY, _BACKUP_LAST['at'])
+    except Exception:                                     # noqa: BLE001
+        app.logger.warning('backup: heartbeat stamp failed')
+
+
 @app.route('/api/bridge/backup/sqlite', methods=['GET'])
 def bridge_backup_sqlite():
-    """نسخةٌ حيّةٌ مضغوطةٌ من قاعدة الداشبورد (`sqlite3.Connection.backup`). سرّ المزامنة نفسه."""
+    """نسخةٌ حيّةٌ مضغوطةٌ من قاعدة الداشبورد (`sqlite3.Connection.backup`). سرّ المزامنة نفسه.
+
+    R33 (2026-11-17): (١) اللقطة بتتفحص `PRAGMA quick_check` قبل ما تطلع، (٢) gzip على القرص مش في الذاكرة
+    والرد متدفّق، (٣) تشفير بصيغة openssl لو `BACKUP_ENCRYPTION_KEY` موجود (`backup_crypto.py`)، (٤) نبضة
+    «اتسحبت» في ops_kv بعد آخر بايت ⇒ الملخص اليومي بيحذّر لو ما اتسحبتش ٢٦ ساعة.
+    `X-ELP-Backup-Encrypted: 1|0` بيقول لـn8n يحفظها بأي امتداد."""
     secret = request.headers.get('X-ELP-Metrics-Secret', '')
     if not PLATFORM_METRICS_SECRET or not secret or not secrets.compare_digest(secret, PLATFORM_METRICS_SECRET):
         return jsonify({'error': 'unauthorized'}), 401
@@ -11037,6 +11057,7 @@ def bridge_backup_sqlite():
     import shutil as _shutil
     import sqlite3 as _sqlite3
     import tempfile as _tempfile
+    from backup_crypto import StreamEncryptor, backup_key
     tmpdir = _tempfile.mkdtemp(prefix='dash-backup-')
     snap = os.path.join(tmpdir, 'snapshot.db')
     gz = snap + '.gz'
@@ -11045,23 +11066,47 @@ def bridge_backup_sqlite():
         dest = _sqlite3.connect(snap)
         try:
             source.backup(dest)
+            check = dest.execute('PRAGMA quick_check').fetchone()[0]
         finally:
             dest.close()
             source.close()
+        if check != 'ok':
+            raise RuntimeError('snapshot quick_check: %s' % str(check)[:120])
         with open(snap, 'rb') as fin, _gzip.open(gz, 'wb', compresslevel=6) as fout:
             _shutil.copyfileobj(fin, fout, 1024 * 1024)
-        with open(gz, 'rb') as fh:
-            payload = fh.read()
+        os.remove(snap)
+        gz_size = os.path.getsize(gz)
     except Exception as exc:                              # noqa: BLE001
         app.logger.error('sqlite backup failed: %s', exc)
-        return jsonify({'error': 'backup failed'}), 500
-    finally:
         _shutil.rmtree(tmpdir, ignore_errors=True)
-    _BACKUP_LAST['at'] = datetime.datetime.utcnow().isoformat() + 'Z'
+        return jsonify({'error': 'backup failed'}), 500
+    key = backup_key()
+    # CBC بحشو PKCS7: الحجم معروف مقدّمًا ⇒ Content-Length صحيح حتى والرد متدفّق.
+    size = (16 + (gz_size // 16 + 1) * 16) if key else gz_size
+
+    def stream():
+        enc = StreamEncryptor(key) if key else None
+        try:
+            if enc is not None:
+                yield enc.header()
+            with open(gz, 'rb') as fh:
+                while True:
+                    block = fh.read(1024 * 1024)
+                    if not block:
+                        break
+                    yield enc.update(block) if enc is not None else block
+            if enc is not None:
+                yield enc.finalize()
+            _backup_stamp()   # بعد آخر بايت بس — سحب اتقطع في النص يفضل «صمت» مش «تمام»
+        finally:
+            _shutil.rmtree(tmpdir, ignore_errors=True)
+
     day = datetime.datetime.utcnow().strftime('%Y-%m-%d')
-    return Response(payload, mimetype='application/gzip', headers={
-        'Content-Disposition': 'attachment; filename="dashboard-%s.db.gz"' % day,
-        'Content-Length': str(len(payload)), 'X-Backup-Bytes': str(len(payload))})
+    name = 'dashboard-%s.db.gz%s' % (day, '.enc' if key else '')
+    return Response(stream(), mimetype='application/octet-stream' if key else 'application/gzip', headers={
+        'Content-Disposition': 'attachment; filename="%s"' % name,
+        'Content-Length': str(size), 'X-Backup-Bytes': str(size),
+        'X-ELP-Backup-Encrypted': '1' if key else '0'})
 
 
 @app.route('/api/content/prerender-cron', methods=['POST', 'GET'])
