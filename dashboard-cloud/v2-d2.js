@@ -49,7 +49,7 @@
     if (g.inboxState !== 'ready') return null;
     var p = [], miss = false;
     if (key === 'files') {
-      var T = L.v2Tickets(fileRows(g.rows), { now: g.now, queue: g.Q, autoAssign: g.auto, brainToday: g.brainToday }), c = T.counts;
+      var T = L.v2Tickets(fileRows(g.rows, g.recent), { now: g.now, queue: g.Q, autoAssign: g.auto, brainToday: g.brainToday }), c = T.counts;
       if (c.late) p.push(U.ar(c.late) + ' متأخر');
       if (c.review) p.push(U.ar(c.review) + ' تنتظر مراجعتك');
       if (c.with) p.push(U.ar(c.with) + ' عند الخبراء');
@@ -78,20 +78,56 @@
     var rows = inboxReady ? (window.INBOX || []) : null;       // ⛔ بما فيها صفوف «للعلم» (هي عمود «عند الخبراء»)
     var live = rows ? rows.filter(function (r) { return r && !r.fyi; }) : null;
     var auto = D.efSettings && typeof D.efSettings.auto_assign === 'boolean' ? D.efSettings.auto_assign : undefined;
+    // R30: حارة «recent» (اعتُمد اليوم · أُغلقت مؤخرًا) برّه الوارد — null = تعذّر جلبها، [] = لسه أو مفيش.
+    var recent = inboxReady ? (Array.isArray(D.efRecent) ? D.efRecent : (D.efRecent === null ? null : [])) : [];
     return {
-      now: now, Q: Q, rows: rows, failed: (window.INBOX_FAILED || []).slice(), trunc: (window.INBOX_TRUNCATED || []).slice(),
+      now: now, Q: Q, rows: rows, recent: recent, failed: (window.INBOX_FAILED || []).slice(), trunc: (window.INBOX_TRUNCATED || []).slice(),
       inboxState: stateOf('inbox'), queueState: stateOf('opsQueue'), auto: auto,
       brainToday: (function () { var n = window.V2SEC && V2SEC.brain && V2SEC.brain.tileCount ? V2SEC.brain.tileCount() : undefined; return typeof n === 'number' ? n : (live ? L.v2BrainLog(live, now).length : 0); })()
     };
   }
-  function fileRows(rows) {
-    return (rows || []).filter(function (r) { return r && r.apiKind === 'expert_file' && r.efLane !== 'unactivated' && r.efLane !== 'case_disputed'; });
+  // R30: صفوف حارة «recent» بتنضاف بعد صفوف الوارد (اللي في الوارد بيكسب — نفس الملف ما يتعدّش مرتين).
+  function fileRows(rows, recent) {
+    var out = (rows || []).filter(function (r) { return r && r.apiKind === 'expert_file' && r.efLane !== 'unactivated' && r.efLane !== 'case_disputed'; });
+    var seen = {};
+    out.forEach(function (r) { if (r.ef && r.ef.id) seen[r.ef.id] = 1; });
+    (recent || []).forEach(function (r) { if (r && r.ef && r.ef.id && !seen[r.ef.id]) { seen[r.ef.id] = 1; out.push(r); } });
+    return out;
+  }
+  // R30: ورقة الملف (اعتُمد اليوم · أُغلق · عُكس) — الملفات دي مش في الوارد، فالدرج القديم ما يعرفش يفتحها.
+  function openFileSheet(row) {
+    var f = (row && row.ef) || {};
+    if (!f.id || typeof window.openModal !== 'function') return;
+    var vm = L.v2FileSheet(f);
+    var canRev = vm.canReverse && window.V2D3 && typeof V2D3.openReverse === 'function';
+    var html = '<div class="v3m"><dl class="v2d-fsheet">' + vm.rows.map(function (r) { return '<dt>' + esc(r.k) + '</dt><dd>' + esc(r.v) + '</dd>'; }).join('') + '</dl>'
+      + (vm.note ? '<p class="v2d-reason">' + esc(vm.note) + '</p>' : '')
+      + '<div class="acts">' + (canRev ? '<button type="button" class="btn btn-warn" data-a="freverse">اعكس الملف وارجع الفلوس</button>' : '')
+      + '<button type="button" class="btn btn-ghost" data-a="fclose">إغلاق</button></div></div>';
+    var m = window.openModal(vm.title, html);
+    if (!m) return;
+    var c = m.querySelector('[data-a="fclose"]');
+    if (c) c.onclick = function () { window.closeModal(); };
+    var r = m.querySelector('[data-a="freverse"]');
+    if (r) r.onclick = function () { window.closeModal(); V2D3.openReverse(f.id, function () { refreshAll(function () { redraw(); }); }); };
+  }
+  // R30: «أُغلقت مؤخرًا» تحت لوحة الملفات — الملفات اللي أجرها اتحوّل أو اتعكست، ومنها بتتفتح ورقة الملف.
+  function closedListHtml(recent) {
+    if (recent === null) return '<p class="v2d-colnote">تعذّر جلب الملفات المغلقة مؤخرًا</p>';
+    var rows = (recent || []).filter(function (r) { var st = (r.ef || {}).status; return st === 'closed' || st === 'refunded'; });
+    if (!rows.length) return '';
+    return '<details class="v2d-closed"><summary>أُغلقت مؤخرًا (' + esc(U.ar(rows.length)) + ')</summary><ul class="v2d-clist">' + rows.map(function (r) {
+      var f = r.ef || {}, vm = L.v2FileSheet(f), st = (vm.rows.filter(function (x) { return x.k === 'الحالة'; })[0] || {}).v || '';
+      return '<li><button type="button" class="v2d-copen" data-a="fsheet" data-fid="' + esc(f.id) + '">' + esc(vm.title) + '</button><span>'
+        + esc([st, U.moneyText(f.amount, f.currency)].filter(Boolean).join('، ')) + '</span></li>';
+    }).join('') + '</ul></details>';
   }
   function signature() {
     var E = ep();
     var n = (window.INBOX || []).length;
     return SOURCES.map(stateOf).join(',') + '|' + n + '|' + (window.INBOX_FAILED || []).length + '|' + (window.INBOX_TRUNCATED || []).length
-      + '|' + (E && E.data && E.data.efSettings ? String(E.data.efSettings.auto_assign) : '') + (window.V2SEC && V2SEC.brain && V2SEC.brain.sig ? '|' + V2SEC.brain.sig() : '');
+      + '|' + (E && E.data && E.data.efSettings ? String(E.data.efSettings.auto_assign) : '')
+      + '|' + (E && E.data ? (Array.isArray(E.data.efRecent) ? E.data.efRecent.length + ':' + E.data.efRecent.map(function (r) { return (r.ef || {}).status; }).join('') : String(E.data.efRecent)) : '') + (window.V2SEC && V2SEC.brain && V2SEC.brain.sig ? '|' + V2SEC.brain.sig() : '');
   }
 
   // ------------------------------------------------------------------ شرائح تحذير مشتركة
@@ -166,7 +202,7 @@
   function drawFiles(v, g) {
     var pre = loadingOrError(g, 'الملفات');
     if (pre) { v.innerHTML = pre; wire(v, null); return; }
-    var T = L.v2Tickets(fileRows(g.rows), { now: g.now, queue: g.Q, autoAssign: g.auto, brainToday: g.brainToday });
+    var T = L.v2Tickets(fileRows(g.rows, g.recent), { now: g.now, queue: g.Q, autoAssign: g.auto, brainToday: g.brainToday });
     S.tickets = T;
     var active = S.col.files;
     // اختيار الشخص يبقى حتى لو العمود فاضي (لازم يقدر يشوف «لا شيء هنا»)؛ الاختيار التلقائي لأول عمود فيه شيء قبل أن يختار.
@@ -192,8 +228,14 @@
     try { if (window.V2STRIP && V2STRIP.info) V2STRIP.info('files', T.header || ''); } catch (e) {}      // R24 م٣: حالة التوزيع سطر «للعلم» في الشريط مش شريط كحلي
     v.innerHTML = '<div class="v2d" data-board="files">' + head + strips(g, FILE_LABELS)
       + '<div class="v2d-seg" role="tablist" aria-label="أعمدة الملفات">' + seg + '</div>'
-      + '<div class="v2d-cols cols4" data-active="' + active + '">' + cols + '</div></div>';
+      + '<div class="v2d-cols cols4" data-active="' + active + '">' + cols + '</div>' + closedListHtml(g.recent) + '</div>';
     wire(v, 'files');
+    v.querySelectorAll('[data-a="fsheet"]').forEach(function (b) {
+      b.onclick = function () {
+        var id = b.getAttribute('data-fid'), row = (g.recent || []).filter(function (r) { return r && r.ef && r.ef.id === id; })[0];
+        if (row) openFileSheet(row);
+      };
+    });
   }
 
   // ------------------------------------------------------------------ لوحة النزاعات
@@ -240,6 +282,7 @@
   }
   function openTicket(board, t) {
     if (!t || !t.row) return;
+    if (t.row.efLane === 'recent') { openFileSheet(t.row); return; }
     var sec = board === 'files' ? 'files' : 'disputes';
     if (host().openRowAt) host().openRowAt(sec, 'all', t.row);
   }
@@ -301,7 +344,7 @@
     S.nowOverride = now || 0;        // للاختبار فقط: ساعة مفروضة
     var g = gather();
     if (!g.rows) return;
-    var T = L.v2Tickets(fileRows(g.rows), { now: now || g.now, queue: g.Q, autoAssign: g.auto, brainToday: g.brainToday });
+    var T = L.v2Tickets(fileRows(g.rows, g.recent), { now: now || g.now, queue: g.Q, autoAssign: g.auto, brainToday: g.brainToday });
     var place = function (X) { return L.COLS.map(function (c) { return X.shown[c].map(function (t) { return t.id; }).join(','); }).join('|'); };
     if (!S.tickets || place(T) !== place(S.tickets)) { redraw(); return; }   // لو تذكرة غيّرت عمودها (فات موعدها) نعيد الرسم
     S.tickets = T;

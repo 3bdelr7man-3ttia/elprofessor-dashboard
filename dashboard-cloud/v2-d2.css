@@ -203,3 +203,13 @@
 .v2d-buys li{display:flex;flex-wrap:wrap;align-items:center;gap:4px 10px}
 .v2d-buys li button{margin-inline-start:auto}
 .v2d-buys li small{flex-basis:100%}
+/* R30: «أُغلقت مؤخرًا» تحت لوحة الملفات + ورقة الملف (اعتُمد اليوم · أُغلق · عُكس) */
+.v2d-closed{margin-top:18px;border:1px solid var(--line);border-radius:14px;background:#fff;padding:10px 14px}
+.v2d-closed summary{cursor:pointer;font:700 14px/1.6 'Cairo',sans-serif;color:var(--ink)}
+.v2d-clist{list-style:none;margin:8px 0 0;padding:0;display:grid;gap:6px}
+.v2d-clist li{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:6px 12px;border-top:1px solid var(--line);padding-top:6px}
+.v2d-clist span{font-size:13px;color:var(--mute)}
+.v2d-copen{background:none;border:0;padding:0;color:#9E2B4E;font:700 14px/1.5 'Cairo',sans-serif;cursor:pointer;text-align:start}
+.v2d-fsheet{display:grid;grid-template-columns:auto 1fr;gap:6px 14px;margin:0 0 10px}
+.v2d-fsheet dt{color:#6B665C;font-size:13px}
+.v2d-fsheet dd{margin:0;font-weight:700}

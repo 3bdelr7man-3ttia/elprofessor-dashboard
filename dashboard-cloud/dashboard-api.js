@@ -791,6 +791,21 @@
       candidates: [],
     };
   }
+  // ——— R30: حارة «recent» — رأي اتعتمد النهارده (عمود «اعتُمد اليوم») وملفات اتقفلت أو اتعكست (ورقة الملف و«اعكس الملف وارجع الفلوس»).
+  // ⛔ مش بنود قرار: بتتخزّن في `EP.data.efRecent` بس (برّه `INBOX` — لا عدّ ولا «للعلم» ولا شريط «محتاج قرارك»).
+  function efRecentRow(f) {
+    var st = f.status, reversed = st === "refunded" && f.refund_reason === "reversed";
+    return {
+      apiKind: "expert_file", apiId: f.id, efLane: "recent", ef: f, fyi: true, needsAttention: false, urgent: false,
+      contract: efIsContract(f),
+      out: reversed ? "ملف عُكس وأُعيد مبلغه" : st === "closed" ? "ملف أُغلق وحُوّل أجر خبيره" : "رأي اعتُمد ووصل لصاحب الطلب",
+      from: "ملف للخبير", src: "doc", dest: "inbox", triage: "auto", triLabel: "", sla: f.status_label || "", slaWarn: false,
+      who: f.client_first_name || "عميل",
+      sub: [f.title, f.law_label, f.tier_label].filter(Boolean).join(" · "),
+      amountLabel: efMoney(f.amount, f.currency), amountSub: "أجر الخبير " + efMoney(f.expert_amount, f.currency),
+      candidates: [],
+    };
+  }
   // ——— الجولة ٨ (البند ٧): «مستنية مراجعتك» — أول ملفات الخبير الجديد بتعدّي على المؤسس قبل العميل ———
   // بند لازم فعل منك (مش «للعلم»): الرأي مش هيوصل للعميل لحد ما توافق، والفلوس محجوزة زي ما هي.
   // من إمتى مستني = `review.submitted_at` من المنصة (ولا ساعة بتتحسب هنا).
@@ -2247,6 +2262,13 @@
             failUnless403(L[1])(e);
           }));
         });
+        // R30: «اعتُمد اليوم» و«أُغلقت مؤخرًا» — منصة قبل R30 ما تعرفش الحارة (٤٢٢) ⇒ قايمة فاضية مش عطل؛ أي عطل تاني ⇒ null («تعذّر»).
+        jobs.push(get("/platform-expert-files?status=recent").then(function (r) {
+          EP.data.efRecent = (!r || r.enabled === false) ? [] : (Array.isArray(r.files) ? r.files : []).filter(function (f) { return f && f.id; }).map(efRecentRow);
+        }).catch(function (e) {
+          if (e && e.status === 403) return;
+          EP.data.efRecent = (e && (e.status === 422 || e.status === 400)) ? [] : null;
+        }));
         // الجولة ١٤: مفتاح «التوزيع تلقائي». ٤٠٤ (منصة قبل الجولة) أو أي عطل ⇒ من غير مفتاح — مش «تعذّر» (مش بند شغل).
         jobs.push(get("/platform-expert-files/settings").then(function (r) {
           EP.data.efSettings = (r && r.enabled !== false && typeof r.auto_assign === "boolean") ? { auto_assign: r.auto_assign } : null;

@@ -1600,7 +1600,10 @@ function drawExpertFile(el,i){
   else if((pre||work)&&!others.length)strips+=efStrip('info','ما فيش خبير معتمد تاني تقدر تبعتله الملف ده دلوقتي.');
   if(E.efNoCandidate&&E.efNoCandidate(f)&&!off&&!expired)strips+=efNoCandStrip(f);
   // رأي اتسلّم وتحويل أجر الخبير وقف (أو الملف في حالة تانية بعد التسليم): الجسر ما عندوش فعل ليها لسه.
-  if(!pre&&!work)strips+=efStrip('info','الرأي اتسلّم، فرجوع الفلوس مش من هنا — ومفيش زرار هنا يحوّلها للخبير لسه.');
+  // R30: ملف اتقفل وأجر خبيره اتحوّل ⇒ «اعكس الملف وارجع الفلوس» (نفس ورقة الفلوس بمرحلتين — V2D3.openReverse).
+  const canReverse=f.status==='closed'&&!!(window.V2D3&&V2D3.openReverse);
+  if(canReverse)strips+=efStrip('info','حُوّل أجر الخبير وأُغلق الملف. لإرجاع المبلغ لصاحب الطلب يُستخدم «اعكس الملف وارجع الفلوس» بتأكيد على مرحلتين.');
+  else if(!pre&&!work)strips+=efStrip('info','الرأي اتسلّم، فرجوع الفلوس مش من هنا — ومفيش زرار هنا يحوّلها للخبير لسه.');
   const declined=Array.isArray(f.declined)?f.declined:[];
   let fields=efField('القانون',esc(f.law_label||'—'))+efField('الدرجة',esc(f.tier_label||'—'))
     +efAmountField('المبلغ',f.amount,f.currency,f.expert_amount)
@@ -1628,13 +1631,14 @@ function drawExpertFile(el,i){
     ${strips}${efChips(f)}
     <div class="note-ai">${svg('doc','ic')}<div><b>${esc(i.out)}</b>${i.sla?' — '+esc(i.sla):''}</div></div>
     ${fields}${efAssignLogHtml(f)}${efUrgentField(f)}${efCaseHtml(i)}
-    <div class="acts">${primary}${canRefund?`<button class="btn btn-warn" data-a="ef_refund">${svg('back')}رجّع الفلوس</button>`:''}<button class="btn btn-ghost" data-a="ef_close">إغلاق</button></div></div>`;
+    <div class="acts">${primary}${canRefund?`<button class="btn btn-warn" data-a="ef_refund">${svg('back')}رجّع الفلوس</button>`:''}${canReverse?`<button class="btn btn-warn" data-a="ef_reverse">${svg('back')}اعكس الملف وارجع الفلوس</button>`:''}<button class="btn btn-ghost" data-a="ef_close">إغلاق</button></div></div>`;
   el.querySelectorAll('[data-a]').forEach(b=>b.onclick=()=>{
     const a=b.dataset.a;
     if(a==='ef_close'){selected=null;renderInbox();return;}
     if(!window.EP){toast('الربط غير متاح');return;}
     if(a==='ef_pick'){expertPickModal(i,mode);return;}
     if(a==='ef_refund'){efRefundModal(i);return;}
+    if(a==='ef_reverse'){V2D3.openReverse(f.id||i.apiId,efRefreshInbox);return;}
   });
   efCaseWire(el,i,()=>drawExpertFile(el,i));
 }

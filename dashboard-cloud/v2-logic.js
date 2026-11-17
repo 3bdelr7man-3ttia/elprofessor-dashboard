@@ -1386,6 +1386,14 @@
   function placeFile(r, kind, now) {
     var f = r.ef || {}, st = str(f.status);
     var claim = ms(f.claim_deadline_at), due = ms(f.writing_due_at);
+    // R30: حارة «recent» من المنصة (اتعتمد/اتسلّم في آخر ٣٦ ساعة، أو اتقفل/اتعكس): «اعتُمد اليوم» لو الاعتماد النهارده بتوقيت الجهاز،
+    // وإلا ما تدخلش أي عمود (مكانها «أُغلقت مؤخرًا» تحت اللوحة). الاعتماد = موافقتك على المراجعة، وإلا تسليم الخبير نفسه.
+    if (r.efLane === 'recent') {
+      var ok = ms((f.review || {}).approved_at), dl = ms(f.delivered_at), when = !isNaN(ok) ? ok : dl;
+      if (st !== 'refunded' && !isNaN(when) && sameLocalDay(when, now))
+        return { col: 'done', strip: { label: 'اعتُمد اليوم', tone: 'done' }, timer: timerOf('since', when), brain: 'اعتُمد الرأي ووصل إلى صاحب الطلب', reason: '' };
+      return { skip: true };
+    }
     switch (kind) {
       case 'review': {
         var rv = f.review || {}, ap = ms(rv.approved_at);
@@ -1431,6 +1439,7 @@
       var card = v2Card(r, { now: now, inboxRows: null });
       var kind = card ? card.kind : kindOf(r);
       var pl = (kind === 'file_waiting' || kind === 'file_late' || kind === 'file_attention' || kind === 'review') ? placeFile(r, kind, now) : null;
+      if (pl && pl.skip) return;
       var f = r.ef || {}, ex = expertOfFile(f), client = str(r.who);
       var t;
       if (pl) {
@@ -1587,6 +1596,29 @@
                     learner: 'متعلّم', visitor: 'زائر', member: 'عضو' };
   var FILE_STATUS = { awaiting_assignment: 'ينتظر خبيرًا', assigned: 'أُرسل إلى الخبير', claimed: 'استلمه الخبير', writing: 'قيد الكتابة', in_review: 'ينتظر المراجعة',
                       delivered: 'سُلّم', closed: 'مغلق', disputed: 'نزاع مفتوح', refunded: 'أُعيدت أمواله', cancelled: 'أُلغي', needs_info: 'ينتظر إجابة صاحب الطلب' };
+  // R30: ورقة الملف (اتعتمد اليوم · أُغلق · عُكس) في «ملفات الخبراء» — نفس كلام القسم، والزرار «اعكس الملف وارجع الفلوس» للملف المغلق بس.
+  var CLOSED_BY = { client_ok: 'بتأكيد صاحب الطلب', auto: 'تلقائيًا بعد انتهاء المهلة', founder_release: 'بحسم الإدارة' };
+  function v2FileSheet(f) {
+    f = f || {};
+    var st = str(f.status), rows = [], rv = f.reversal && typeof f.reversal === 'object' ? f.reversal : null;
+    var reversed = st === 'refunded' && f.refund_reason === 'reversed';
+    function add(k, v) { if (v) rows.push({ k: k, v: v }); }
+    add('رقم الملف', f.file_no != null && f.file_no !== '' ? ar(f.file_no) : '');
+    add('الحالة', reversed ? 'عُكس وأُعيد المبلغ' : (FILE_STATUS[st] || ''));
+    add('المبلغ', moneyText(f.amount, f.currency));
+    add('أجر الخبير', moneyText(f.expert_amount, f.currency));
+    add('الخبير', str(f.expert_name));
+    add('صاحب الطلب', str(f.client_first_name));
+    add('اعتماد الرأي', dateText((f.review || {}).approved_at || f.delivered_at));
+    if (f.closed_at) add('الإغلاق', dateText(f.closed_at) + (CLOSED_BY[f.closed_by] ? '، ' + CLOSED_BY[f.closed_by] : ''));
+    if (reversed && rv) {
+      add('العكس', dateText(rv.at || f.refunded_at));
+      add('سبب العكس', str(rv.reason));
+    }
+    var note = st === 'closed' ? 'حُوّل أجر الخبير وأُغلق الملف. لو لزم إرجاع المبلغ لصاحب الطلب فالعكس يتم بتأكيد على مرحلتين'
+      : reversed ? 'أُعيد المبلغ لصاحب الطلب خارج المنصة وخُصم أجر الخبير' : st === 'delivered' ? 'الرأي عند صاحب الطلب والأموال محجوزة حتى يؤكد أو تنتهي المهلة' : '';
+    return { title: str(f.title) || 'ملف', rows: rows, note: note, canReverse: st === 'closed', reversed: reversed };
+  }
   var COURSE_STATE = { published: 'منشورة', pending: 'تنتظر الاعتماد', rejected: 'مرفوضة', draft: 'مسودة', archived: 'مؤرشفة' };
   var EVENT_TEXT = { joined: 'الانضمام إلى المنصة', login: 'آخر دخول', invite_sent: 'إرسال دعوة الانضمام', invite_opened: 'فتح رابط الدعوة',
                      invite_approved: 'الموافقة على الدعوة', invite_registered: 'إكمال التسجيل من الدعوة', file_assigned: 'إسناد ملف',
@@ -2171,6 +2203,14 @@
     var live = sessions.filter(function (s) { return s && (!s.status || ['held', 'confirm', 'dispute'].indexOf(s.status) > -1); });
     return { count: live.length, totals: sumByCurrency(live.map(function (s) { return { currency: s.currency, amount: s.amount }; })) };
   }
+  // R30: المحجوز من الضمان الحقيقي على المنصة (جسر `/api/v2/money/held`): الاستشارات وملفات الخبراء اللي اتدفعت ولسه ما اتحوّلتش
+  // (محجوزة · اتسلّمت ومستنية «تمام» · عليها ملاحظة)، لكل عملة. رد مش بالشكل ده ⇒ null («غير متاح بعد» لا صفر).
+  function v2HeldPlatform(resp) {
+    if (!resp || !Array.isArray(resp.totals)) return null;
+    var rows = resp.totals.filter(function (t) { return t && numOf(t.amount) > 0; });
+    return { count: typeof resp.count === 'number' ? resp.count : rows.reduce(function (n, t) { return n + (Number(t.count) || 0); }, 0),
+             totals: sumByCurrency(rows.map(function (t) { return { currency: t.currency, amount: numOf(t.amount) }; })) };
+  }
   function payoutAmount(p) { return numOf(p && p.raw && p.raw.amount != null ? p.raw.amount : p && p.amount); }
   function payoutCurrency(p) { return (p && p.raw && p.raw.currency) || (p && p.currency) || 'EGP'; }
   // المستحق للخبراء والمدرّبين = طلبات السحب المعلّقة (لم تُحوَّل بعد).
@@ -2221,7 +2261,10 @@
   function v2MoneyBoard(src, periodKey, now) {
     src = src || {};
     var rr = src.rates || null;
-    var P = v2Period(periodKey, now), inc = v2Income(src.revenues, P.key, now), held = v2Held(src.escrow);
+    // R30: «محجوز» من الضمان الحقيقي على المنصة لو الجسر وصل (`src.held`)؛ فشل الجسر (null) ⇒ «غير متاح بعد» بالسبب، ولسه بيتحمّل
+    // (undefined) ⇒ مرآة الداشبورد القديمة زي قبل R30.
+    var P = v2Period(periodKey, now), inc = v2Income(src.revenues, P.key, now);
+    var held = src.held === undefined ? v2Held(src.escrow) : v2HeldPlatform(src.held);
     // «مستحق»: من المحافظ لو الجسر الجديد وصل، وإلا طلبات السحب المعلّقة بس (زي قبل R28).
     var wallets = v2OwedWallets(src.owed), owed = wallets || v2Owed(src.payouts);
     function num(key, label, note, data, extra, zero) {
@@ -2244,8 +2287,10 @@
       owedNote = 'طلبات سحب أُرسلت ولم تُحوَّل بعد، وتعذّر جلب ما في المحافظ فالرقم ناقص';
     }
     var board = { period: P, numbers: [
-      num('income', 'دخل', 'ما دخل دفتر الشركة ' + (P.key === 'day' ? 'اليوم' : P.key === 'month' ? 'هذا الشهر' : 'هذه السنة'), inc, 'تعذّر جلب دفتر الإيرادات'),
-      num('held', 'محجوز حتى يُسلَّم العمل', 'أموال دفعها الناس وتنتظر تسليم العمل لتصل إلى أصحابها', held, 'تعذّر جلب أموال الضمان'),
+      // R30: الدخل يُحسب يوم الدفع (الفلوس وصلت حساب الشركة فعلًا)، والمحجوز منه جزء لسه ما وصلش لأصحابه — السطرين بيقولوا كده صراحة.
+      num('income', 'دخل', 'ما دخل دفتر الشركة ' + (P.key === 'day' ? 'اليوم' : P.key === 'month' ? 'هذا الشهر' : 'هذه السنة') + '، ويُحسب يوم الدفع حتى لو كان العمل لم يُسلَّم بعد', inc, 'تعذّر جلب دفتر الإيرادات'),
+      num('held', 'محجوز حتى يُسلَّم العمل', 'أموال دفعها الناس وتنتظر تسليم العمل لتصل إلى أصحابها، وهي داخلة في «دخل» يوم دفعها', held,
+          src.held === null ? 'تعذّر جلب أموال الضمان من المنصة' : 'تعذّر جلب أموال الضمان'),
       num('owed', 'مستحق للخبراء والمدرّبين', owedNote, owed, src.owed !== undefined ? 'تعذّر جلب المحافظ وطلبات السحب' : 'تعذّر جلب طلبات السحب'),
       num('net', 'صافي البروفيسور', netNote, net, netWhy, '٠ ج')
     ] };
@@ -3039,7 +3084,7 @@
     v2Health: v2Health, v2BrainLog: v2BrainLog,
     v2Tickets: v2Tickets, v2DisputeTickets: v2DisputeTickets, v2TimerText: v2TimerText, v2TimerTone: v2TimerTone, v2Person: v2Person, v2PersonCards: v2PersonCards, REQ_LABEL: REQ_LABEL, FOUND_NEXT: FOUND_NEXT,
     personKey: personKey, personEmailOf: personEmailOf, courseKey: courseKey, courseIdOf: courseIdOf, COLS: COLS, COL_LABEL: COL_LABEL, NA: NA,
-    v2Period: v2Period, v2Income: v2Income, v2Held: v2Held, v2Owed: v2Owed, v2OwedWallets: v2OwedWallets, v2Net: v2Net, v2MoneyLine: v2MoneyLine, v2MoneyBoard: v2MoneyBoard,
+    v2Period: v2Period, v2Income: v2Income, v2Held: v2Held, v2HeldPlatform: v2HeldPlatform, v2FileSheet: v2FileSheet, v2Owed: v2Owed, v2OwedWallets: v2OwedWallets, v2Net: v2Net, v2MoneyLine: v2MoneyLine, v2MoneyBoard: v2MoneyBoard,
     v2IncomeBars: v2IncomeBars, v2PayoutRows: v2PayoutRows, v2PayoutHistory: v2PayoutHistory, v2Stuck: v2Stuck, v2StuckFromQueue: v2StuckFromQueue,
     v2RefundRule: v2RefundRule, v2Refunds: v2Refunds, v2Prices: v2Prices, v2PriceForm: v2PriceForm, v2PriceBuild: v2PriceBuild, v2PriceDiff: v2PriceDiff, v2PricesView: v2PricesView, v2PriceResetDiff: v2PriceResetDiff, v2StarterPrices: v2StarterPrices,
     v2SharesView: v2SharesView, v2SharesDiff: v2SharesDiff, v2SharesChanges: v2SharesChanges, v2SharesHistory: v2SharesHistory,
