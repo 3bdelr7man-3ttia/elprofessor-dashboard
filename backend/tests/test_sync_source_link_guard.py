@@ -67,7 +67,7 @@ def _serve(monkeypatch, payload):
 
 
 def _art(aid, title, category='guide', **extra):
-    a = {'id': aid, 'title': title, 'body': '# %s\n\n%s' % (title, PARA), 'category': category, 'author': 'x',
+    a = {'id': aid, 'title': title, 'body': '# %s\n\n%s\n\n## المصادر\n- جهة — عنوان (https://ar.wikipedia.org/wiki/x)' % (title, PARA), 'category': category, 'author': 'x',
          'keywords': [], 'faq': []}
     a.update(extra)
     return a
@@ -105,3 +105,29 @@ def test_the_source_rule_also_holds_when_autopublish_is_off(ctx, monkeypatch):
     _serve(monkeypatch, [_art('A1', 'خبر بلا مصدر', 'news', status='published')])
     out, _ = appmod._sync_platform_articles()
     assert out['published'] == 0 and len(out['held_no_source']) == 1
+
+
+# ——— قاعدة المؤسس 2026-11-17: «اللي جاي ما يطلعش غير بمصادر» ———
+
+def test_has_sources_section():
+    assert ai.has_sources_section('# ع\n\nنص\n\n## المصادر\n- جهة — عنوان (https://example.org/a)')
+    assert not ai.has_sources_section('# ع\n\nنص بلا مصادر')
+    assert not ai.has_sources_section('# ع\n\n## المصادر\n- جهة بلا رابط')
+    assert not ai.has_sources_section('# ع\n\nرابط في المتن https://example.org/a لكن بلا قسم')
+
+
+def test_any_article_without_a_sources_section_lands_as_a_draft_except_feature_explainers(ctx, monkeypatch):
+    bare = lambda aid, title, cat: {'id': aid, 'title': title, 'body': '# %s\n\n%s' % (title, PARA),
+                                    'category': cat, 'author': 'x', 'keywords': [], 'faq': []}
+    _serve(monkeypatch, [
+        _art('B_ok', 'دليل بمصادر'),
+        bare('B_guide', 'دليل بلا مصادر', 'guide'),
+        bare('B_law', 'تحليل بلا مصادر', 'law'),
+        bare('B_feat', 'شرح ميزة في المنصة', 'feature'),
+    ])
+    out, st = appmod._sync_platform_articles()
+    assert st == 200 and out['published'] == 2 and out['drafts'] == 2
+    by = {a.title: a.status for a in Article.query.all()}
+    assert by == {'دليل بمصادر': 'published', 'دليل بلا مصادر': 'draft', 'تحليل بلا مصادر': 'draft',
+                  'شرح ميزة في المنصة': 'published'}
+    assert {h['platform_id'] for h in out['held_no_source']} == {'B_guide', 'B_law'}

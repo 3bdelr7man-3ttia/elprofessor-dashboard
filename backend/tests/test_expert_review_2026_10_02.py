@@ -278,7 +278,7 @@ def test_standalone_generic_token_alone_is_not_relevance(ctx):
 
 def test_new_support_from_sync_links_hub_and_refreshes_hub_nav(ctx, monkeypatch):
     hub = _mk('نموذج عقد أتعاب محاماة', role='hub', cluster_id='c-fees')
-    payload = [{'id': 'ART_1', 'title': 'عقد اتعاب محاماة بنسبة', 'body': '# عقد اتعاب محاماة بنسبة\n\n' + PARA,
+    payload = [{'id': 'ART_1', 'title': 'عقد اتعاب محاماة بنسبة', 'body': '# عقد اتعاب محاماة بنسبة\n\n' + PARA + '\n\n## المصادر\n- جهة — عنوان (https://ar.wikipedia.org/wiki/x)',
                 'category': 'guide', 'author': 'الوكيل الذكي — البروفيسور', 'keywords': ['عقد اتعاب'],
                 'faq': [], 'primary_kw': 'عقد اتعاب محاماة بنسبة', 'cluster_id': 'c-fees', 'role': 'support'}]
 

@@ -132,3 +132,22 @@ def news_without_source(a):
         return False
     is_news = (a.get('category') == 'news') or bool(a.get('source_news_id'))
     return is_news and not has_source_url(a.get('source_url'))
+
+
+_SOURCES_HEAD = re.compile(r'^\s*#{2,3}\s*(?:المصادر|المراجع)\s*$', re.M)
+_ANY_HTTP = re.compile(r'https?://[^\s)]+')
+
+
+def has_sources_section(body):
+    """المتن فيه قسم «## المصادر» وتحته رابط http(s) واحد على الأقل؟ (المنصّة بتلحقه في finalize بعد فحص الروابط)."""
+    m = _SOURCES_HEAD.search(str(body or ''))
+    return bool(m and _ANY_HTTP.search(str(body)[m.end():]))
+
+
+def article_without_sources(a):
+    """قاعدة المؤسس (2026-11-17): «اللي جاي ما يطلعش غير بمصادر». أي مقال مولَّد بلا قسم مصادر فيه رابط ⇒ True.
+    مستثنى بس شرح ميزات المنصة (category=feature): كلامنا عن منتجنا، ملوش مصدر خارجي."""
+    if not isinstance(a, dict) or a.get('category') == 'feature':
+        return False
+    return not has_sources_section(a.get('body') or '')
+

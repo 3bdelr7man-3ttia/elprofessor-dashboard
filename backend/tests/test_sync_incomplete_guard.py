@@ -81,6 +81,9 @@ def _serve(monkeypatch, payload):
 
 
 def _art(aid, title, body, category='guide'):
+    # قسم مصادر بعد العنوان (قاعدة 2026-11-17) — النهاية زي ما هي عشان فحص البتر
+    head, _, rest = body.partition('\n\n')
+    body = head + '\n\n## المصادر\n- ويكيبيديا — مقال (https://ar.wikipedia.org/wiki/x)\n\n' + rest
     return {'id': aid, 'title': title, 'body': body, 'category': category, 'author': 'x', 'keywords': [], 'faq': []}
 
 
