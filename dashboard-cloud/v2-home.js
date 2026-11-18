@@ -856,7 +856,12 @@
         btn: 'علّمه ليس مناسبًا', btnCls: 'btn-human', busy: 'جارٍ التسجيل…',
         run: function () { return Promise.resolve(E.decideInboxItem(c.row, 'reject', null, '')); }, onOk: function () { finish(c, 'اتعلّم «ليس مناسبًا»: ' + c.title); } });
     }
-    confirmModal({ title: 'ارفض بسبب', cardId: c.id, lead: '<b>' + esc(c.title) + '</b>: ' + esc(REJECT_LEAD[c.kind] || 'هيترفض ويوصل السبب لصاحبه.'), rows: [],
+    // R35: رفض «إضافة صفة» بيقفل الطلب الجديد بس، والصفة المعتمدة مستمرة — فالنص يقول كده بدل «هيترفض طلب انضمامه» اللي بيخوّف.
+    var rr = c.kind === 'trainer' && c.row && c.row.trType === 'add_role' ? c.row : null;
+    var ROLE_AR = { expert: 'خبير', trainer: 'مدرّب', both: 'خبير ومدرّب' };
+    var lead = rr ? 'هيترفض طلب إضافة صفة «' + (ROLE_AR[rr.trAddRole] || 'جديدة') + '» بس' + (ROLE_AR[rr.trJoin] ? '، والصفة الحالية «' + ROLE_AR[rr.trJoin] + '» مستمرة كما هي' : '، والصفة الحالية مستمرة كما هي') + '. السبب يوصل كما تكتبه.'
+                  : (REJECT_LEAD[c.kind] || 'هيترفض ويوصل السبب لصاحبه.');
+    confirmModal({ title: rr ? 'ارفض إضافة الصفة' : 'ارفض بسبب', cardId: c.id, lead: '<b>' + esc(c.title) + '</b>: ' + esc(lead), rows: [],
       field: { label: 'السبب (مطلوب، بيوصل لصاحب الطلب كما تكتبه)', max: 500, area: true }, min: 5, btn: 'ارفض', btnCls: 'btn-human', busy: 'جارٍ الرفض…',
       run: function (reason) { return Promise.resolve(c.kind === 'invite' ? E.decideInvite(c.row.apiId, 'reject', reason) : E.decideInboxItem(c.row, 'reject', null, reason)); },
       onOk: function () { finish(c, 'رُفض: ' + c.title, 'rejected'); } });

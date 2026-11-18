@@ -77,3 +77,12 @@ def test_dialog_copy_says_in_app_now_and_email_held():
     assert "function otherModal(c)" in home and "['provider', 'مقدّم خدمة'" in home
     for s in ('اطلب معلومات', 'المطلوب بالضبط', 'اقبل واختر صفته'):
         assert s in home or s in _read('dashboard-cloud', 'v2-logic.js')
+
+
+def test_reject_dialog_for_add_role_says_only_the_new_role_is_refused():
+    """رفض «إضافة صفة» بيقفل الطلب الجديد بس — النافذة ما تقولش «هيترفض طلب انضمامه» (بيخوّف المعتمد)."""
+    home = _read('dashboard-cloud', 'v2-home.js')
+    i = home.index('function rejectModal(c)')
+    body = home[i:home.index('function infoModal(c)')]
+    assert "c.row.trType === 'add_role'" in body and "'هيترفض طلب إضافة صفة «'" in body and 'مستمرة كما هي' in body
+    assert "title: rr ? 'ارفض إضافة الصفة' : 'ارفض بسبب'" in body

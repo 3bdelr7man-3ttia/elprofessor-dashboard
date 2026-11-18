@@ -113,7 +113,7 @@ def opinion(oid, abusive=True, checked=True, status='pending', topic='موضوع
 def application(aid, **kw):
     a = {'id': aid, 'status': 'pending', 'user_name': 'منى عبد الحميد', 'user_email': 'mona%s@x.test' % aid, 'join_as': 'both',
          'headline': 'محامية بالنقض', 'specialty': 'عقود', 'years_experience': '12', 'attachments': [{'name': 'cv.pdf'}],
-         'intro_video_url': 'https://v.example/1'}
+         'intro_video_url': 'https://v.example/1', 'expert_specialties': ['civil'], 'bio': 'محامية بالنقض منذ سنوات في العقود والإيجارات'}
     a.update(kw)
     return a
 
@@ -663,7 +663,7 @@ def test_application_review_facts_carry_no_name_or_email(fx, monkeypatch):
     assert len(ts) == 1 and ts[0].ref == 'trainer:11' and ts[0].meta == {'application_id': '11'}
     f = ts[0].facts
     assert f == {'role': 'خبير ومدرّب', 'headline': 'محامية بالنقض', 'specialty': 'عقود', 'years': '12', 'cv_files': 1, 'video': 'وصل',
-                 'identity_doc': 'وثيقة محفوظة بانتظار المراجعة'}
+                 'specialties': 'محددة', 'bio': 'مكتوبة', 'identity_doc': 'وثيقة محفوظة بانتظار المراجعة'}
     blob = json.dumps(f, ensure_ascii=False)
     assert 'منى' not in blob and '@' not in blob and 'mona' not in blob
 
@@ -674,10 +674,35 @@ def test_application_review_licence_and_identity_only_when_the_source_says_so(fx
     fx.plat.down.add('/api/bridge/identity-docs')
     by = {t.ref: t.facts for t in producers_apply.gather(Ctx(ns=NS, now=None, actor='x'))}
     assert set(by) == {'trainer:12', 'trainer:13'}
-    assert by['trainer:12']['licence_number'] == 'غير مكتوب' and by['trainer:12']['video'] == 'لم يصل بعد'
+    assert by['trainer:12']['licence_number'] == 'غير مكتوب، وهو اختياري' and by['trainer:12']['video'] == 'لم يصل بعد'
     assert by['trainer:13']['licence_number'] == 'مكتوب'
     assert all('identity_doc' not in f for f in by.values()), 'مصدر الهوية ما وصلش ⇒ ما نقولش «لا توجد وثيقة»'
     assert 'licence_number' not in producers_apply._facts_of(application('15'), None)
+
+
+def test_r35_expert_video_and_bar_number_are_optional_not_missing(fx, monkeypatch):
+    """R35 (المؤسس 2026-11-18): الفيديو إجباري للمدرّب بس، ورقم القيد اختياري — والخبير بيتراجع على التخصصات والنبذة."""
+    review_env(fx, monkeypatch, apps=[application('51', join_as='expert', intro_video_url='', attachments=[], bar_number=''),
+                                      application('52', join_as='trainer', intro_video_url='', bar_number='')], ids=False)
+    ts = {t.ref: t for t in producers_apply.gather(Ctx(ns=NS, now=None, actor='x'))}
+    ex, tr = ts['trainer:51'].facts, ts['trainer:52'].facts
+    assert ex['video'] == 'لم يُرسل، وهو اختياري للخبير' and 'cv_files' not in ex and ex['bio'] == 'مكتوبة' and ex['specialties'] == 'محددة'
+    assert tr['video'] == 'لم يصل بعد' and 'bio' not in tr
+    t = producers_apply.template(ts['trainer:51'])
+    assert [p['ok'] for p in t['points']] == [True, True, True, True, False], 'الناقص الوحيد للخبير هنا وثيقة الهوية'
+    assert t['points'][0]['text'] == 'مفيش فيديو، وهو اختياري للخبير' and t['points'][3]['text'] == 'رقم القيد مش مكتوب، وهو اختياري'
+    assert [p['ok'] for p in producers_apply.template(ts['trainer:52'])['points']] == [True, False, True, False], 'المدرّب: الفيديو إجباري'
+
+
+def test_r35_add_role_request_is_reviewed_on_the_new_role_fields(fx, monkeypatch):
+    rr = {'status': 'pending', 'role': 'expert', 'expert_specialties': [], 'bio': ''}
+    review_env(fx, monkeypatch, apps=[application('61', status='approved', join_as='trainer', expert_specialties=[], bio='', role_request=rr),
+                                      application('62', status='approved', join_as='trainer', role_request=dict(rr, status='rejected'))], ids=False)
+    ts = producers_apply.gather(Ctx(ns=NS, now=None, actor='x'))
+    assert [t.ref for t in ts] == ['trainer:61'], 'المعتمد بلا «إضافة صفة» مفتوحة ما يتراجعش'
+    f = ts[0].facts
+    assert f['role'] == 'خبير' and f['request'] == 'إضافة صفة لمعتمد بصفة أخرى' and f['video'] == 'وصل'
+    assert f['specialties'] == 'غير محددة' and f['bio'] == 'غير مكتوبة' and ts[0].label.startswith('مراجعة إضافة صفة')
 
 
 def test_application_review_source_down_is_reported_not_swallowed(fx, monkeypatch):
@@ -721,7 +746,7 @@ def test_a_dishonest_or_malformed_review_falls_back_to_the_facts_template(fx, mo
     r = rows(producer='application_review')
     assert len(r) == 1 and r[0].source == 'template' and r[0].status == 'done_alone'
     b = json.loads(r[0].body_json)
-    assert [p['ok'] for p in b['points']] == [True, True, False] and b['recommend'] == 'open'
+    assert [p['ok'] for p in b['points']] == [True, True, True, True, False] and b['recommend'] == 'open'
     assert b['points'][-1]['text'] == 'وثيقة الهوية محفوظة وبتستنى مراجعتك' and 'من حقائق الطلب بس' in b['why']
 
 

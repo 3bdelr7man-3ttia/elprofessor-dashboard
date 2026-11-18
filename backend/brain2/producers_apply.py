@@ -22,15 +22,17 @@ _ID_RE = re.compile(r'^[A-Za-z0-9_-]{1,64}$')
 _ROLE_AR = {'expert': 'خبير', 'trainer': 'مدرّب', 'both': 'خبير ومدرّب'}
 
 _ROLE = (
-    ' دورك: مراجعة طلب انضمام خبير أو مدرّب يستنى قرار المؤسس. أنت ما شفتش السيرة ولا الفيديو ولا الوثيقة: عندك حقائق الطلب بس. '
-    'افحص أربعة أشياء فقط من الحقائق المعطاة: السيرة (cv_files: عدد الملفات المرفقة) · الفيديو (video) · رقم القيد (licence_number، لو موجود في الحقائق) · '
-    'الهوية (identity_doc، لو موجودة في الحقائق). كل شيء غير موجود في الحقائق لا تذكره ولا تفترضه. '
-    'points: من ٢ إلى ٥ نقط قصيرة (حتى ١٠٠ حرف للنقطة)، كل نقطة {"ok":true|false,"text":"…"}: ok=true لما الحقيقة تؤكد وجود الشيء، وok=false لما ينقص أو لم يصل. '
+    ' دورك: مراجعة طلب انضمام خبير أو مدرّب (أو طلب «إضافة صفة» من معتمد بصفة) يستنى قرار المؤسس. أنت ما شفتش السيرة ولا الفيديو ولا الوثيقة: عندك حقائق الطلب بس. '
+    'افحص من الحقائق المعطاة فقط: السيرة (cv_files: عدد الملفات المرفقة) · الفيديو (video) · رقم القيد (licence_number، لو موجود) · '
+    'الهوية (identity_doc، لو موجودة) · وللخبير: التخصصات (specialties) والنبذة (bio). كل شيء غير موجود في الحقائق لا تذكره ولا تفترضه. '
+    'قواعد المؤسس: الفيديو إجباري للمدرّب واختياري للخبير، ورقم القيد اختياري للجميع؛ فأي حقيقة قيمتها فيها «اختياري» ليست نقصًا (ok=true). '
+    'points: من ٢ إلى ٥ نقط قصيرة (حتى ١٠٠ حرف للنقطة)، كل نقطة {"ok":true|false,"text":"…"}: ok=true لما الحقيقة تؤكد وجود الشيء أو أنه اختياري، وok=false لما ينقص شيء مطلوب. '
     'لا تقل إنك قرأت السيرة أو شاهدت الفيديو أو تحققت من الوثيقة، ولا تحكم على جودتها: قل فقط وصل أو لم يصل. '
     'text: اقتراحك في جملة أو جملتين (حتى ٢٢٠ حرفًا). recommend: approve لو كل النقط ok وإلا open (فتح الطلب ومراجعته) أو reject لو الحقائق تنفي أساس الطلب. '
     'why: ليه؟ سبب اقتراحك في جملة (حتى ١٦٠ حرفًا). لا تذكر اسمًا ولا إيميلًا ولا رقمًا ليس في الحقائق. '
     'الشكل المطلوب: {"text":"…","recommend":"approve|reject|open","why":"…","points":[{"ok":true,"text":"…"}]}'
 )
+_OPTIONAL = 'اختياري'
 
 
 def _fn(ctx, name):
@@ -70,7 +72,7 @@ def _json_of(resp):
 def _applications(ctx):
     path = '/api/bridge/trainer-applications'
     try:
-        resp = _fn(ctx, '_platform_proxy')('GET', path, params={'status': 'pending'})
+        resp = _fn(ctx, '_platform_proxy')('GET', path, params={'status': 'open'})
     except SourceDown:
         raise
     except Exception as exc:   # noqa: BLE001
@@ -107,17 +109,39 @@ def _text(v, n):
     return re.sub(r'\s+', ' ', str(v or '')).strip()[:n]
 
 
+def _open_role_request(a):
+    """R35: طلب «إضافة صفة» مفتوح على معتمد (`role_request` على نفس الطلب) أو None."""
+    rr = a.get('role_request')
+    if isinstance(rr, dict) and str(rr.get('status') or '') == 'pending' and str(rr.get('role') or '') in ('expert', 'trainer'):
+        return rr
+    return None
+
+
 def _facts_of(a, idmap):
+    # R35 (قرار المؤسس 2026-11-18): الحكم بقاعدة الصفة المطلوبة — الفيديو إجباري للمدرّب واختياري للخبير، ورقم القيد اختياري للجميع،
+    # والخبير بيشتغل يوم القبول بتخصصاته ونبذته. «إضافة صفة» بتتراجع على حقول الصفة الجديدة (من `role_request`).
+    rr = _open_role_request(a)
+    src = dict(a, **{k: v for k, v in (rr or {}).items() if v not in (None, '', [])})
+    role = str(rr.get('role')) if rr else str(a.get('join_as') or '').lower()
+    expert_only = role == 'expert'
     attachments = a.get('attachments')
-    facts = {'role': _ROLE_AR.get(str(a.get('join_as') or '').lower(), ''),
+    has_video = bool(_text(src.get('intro_video_url'), 10))
+    facts = {'role': _ROLE_AR.get(role, ''),
+             'request': 'إضافة صفة لمعتمد بصفة أخرى' if rr else '',
              'headline': _text(a.get('headline'), 140),
              'specialty': _text(a.get('specialty') or a.get('specialization'), 60),
              'years': _text(a.get('years_experience'), 20),
              'cv_files': len(attachments) if isinstance(attachments, list) else 0,
-             'video': 'وصل' if _text(a.get('intro_video_url'), 10) else 'لم يصل بعد'}
+             'video': 'وصل' if has_video else ('لم يُرسل، وهو ' + _OPTIONAL + ' للخبير' if expert_only else 'لم يصل بعد')}
+    if role in ('expert', 'both'):
+        specs = src.get('expert_specialties')
+        facts['specialties'] = 'محددة' if isinstance(specs, list) and specs else 'غير محددة'
+        facts['bio'] = 'مكتوبة' if _text(src.get('bio'), 40) else 'غير مكتوبة'
+    if expert_only and not facts['cv_files']:
+        facts.pop('cv_files')          # السيرة مش من حقول الخبير في الطلب الواحد ⇒ ما نعدّهاش ناقصة
     for key in ('bar_number', 'licence_number', 'license_number'):
-        if key in a:
-            facts['licence_number'] = 'مكتوب' if _text(a.get(key), 40) else 'غير مكتوب'
+        if key in src:
+            facts['licence_number'] = 'مكتوب' if _text(src.get(key), 40) else 'غير مكتوب، وهو ' + _OPTIONAL
             break
     if idmap is not None:
         st = idmap.get(str(a.get('user_email') or a.get('email') or '').strip().lower())
@@ -131,10 +155,11 @@ def gather(ctx):
     out = []
     for a in apps:
         aid = str(a.get('id') or '').strip()
-        if not _ID_RE.match(aid) or (a.get('status') or 'pending') != 'pending':
+        st = a.get('status') or 'pending'
+        if not _ID_RE.match(aid) or not (st == 'pending' or (st == 'approved' and _open_role_request(a))):
             continue
         name = _text(a.get('user_name') or a.get('full_name'), 60) or 'مقدّم الطلب'
-        out.append(Target(ref='trainer:' + aid, label=('مراجعة طلب انضمام: ' + name)[:120], facts=_facts_of(a, idmap),
+        out.append(Target(ref='trainer:' + aid, label=(('مراجعة إضافة صفة: ' if _open_role_request(a) else 'مراجعة طلب انضمام: ') + name)[:120], facts=_facts_of(a, idmap),
                           meta={'application_id': aid}))
         if len(out) >= LIST_LIMIT:
             break
@@ -168,13 +193,21 @@ def template(target):
     """لو الذكاء وقع: مراجعة جاهزة من الحقائق نفسها (من غير ذكاء ولا ادعاء)."""
     f = target.facts or {}
     pts = []
-    pts.append({'ok': bool(f.get('cv_files')), 'text': 'السيرة وصلت' if f.get('cv_files') else 'مفيش سيرة مرفقة'})
-    pts.append({'ok': f.get('video') == 'وصل', 'text': 'الفيديو وصل' if f.get('video') == 'وصل' else 'الفيديو لسه ما وصلش'})
+    if 'cv_files' in f:
+        pts.append({'ok': bool(f.get('cv_files')), 'text': 'السيرة وصلت' if f.get('cv_files') else 'مفيش سيرة مرفقة'})
+    v = str(f.get('video') or '')
+    pts.append({'ok': v == 'وصل' or _OPTIONAL in v,
+                'text': 'الفيديو وصل' if v == 'وصل' else ('مفيش فيديو، وهو اختياري للخبير' if _OPTIONAL in v else 'الفيديو لسه ما وصلش')})
+    if 'specialties' in f:
+        pts.append({'ok': f['specialties'] == 'محددة', 'text': 'التخصصات محددة' if f['specialties'] == 'محددة' else 'التخصصات مش محددة'})
+    if 'bio' in f:
+        pts.append({'ok': f['bio'] == 'مكتوبة', 'text': 'النبذة مكتوبة' if f['bio'] == 'مكتوبة' else 'النبذة مش مكتوبة، فمش هيظهر في دليل الخبراء'})
     if 'licence_number' in f:
-        pts.append({'ok': f['licence_number'] == 'مكتوب', 'text': 'رقم القيد مكتوب' if f['licence_number'] == 'مكتوب' else 'رقم القيد مش مكتوب'})
+        pts.append({'ok': True, 'text': 'رقم القيد مكتوب' if f['licence_number'] == 'مكتوب' else 'رقم القيد مش مكتوب، وهو اختياري'})
     if 'identity_doc' in f:
         v = f['identity_doc']
         pts.append({'ok': v == 'موثّقة', 'text': {'موثّقة': 'الهوية موثّقة', 'لا توجد وثيقة': 'مفيش وثيقة هوية محفوظة'}.get(v, 'وثيقة الهوية محفوظة وبتستنى مراجعتك')})
+    pts = pts[:5]
     full = all(p['ok'] for p in pts)
     return {'text': 'الورق كامل، افتح الطلب واقرأه قبل القرار' if full else 'افتح الطلب وراجع الناقص قبل القرار',
             'points': pts, 'why': 'من حقائق الطلب بس، من غير قراءة السيرة ولا الفيديو',
@@ -185,7 +218,7 @@ PRODUCERS = [
     Producer(
         id=PRODUCER_ID, section='people', kind='note',
         label='مراجعة طلبات الانضمام',
-        sentence='عندما يصل طلب انضمام خبير أو مدرّب، يراجع العقل ما وصل (السيرة، الفيديو، رقم القيد، الهوية) ويكتب اقتراحه على بطاقة الطلب. القرار لك.',
+        sentence='عندما يصل طلب انضمام خبير أو مدرّب أو طلب إضافة صفة، يراجع العقل ما وصل (السيرة، الفيديو، التخصصات والنبذة للخبير، رقم القيد، الهوية) ويكتب اقتراحه على بطاقة الطلب. القرار لك.',
         lock_reason='', may_run_alone=True, default_mode='alone', per_run_cap=3,
         gather=gather, prompt=prompt, validate=validate, template=template, apply=None,
         tag='مراجعة طلب انضمام', approve_label='احتفظ بها',
