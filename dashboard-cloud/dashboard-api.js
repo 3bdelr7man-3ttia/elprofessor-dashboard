@@ -1889,8 +1889,14 @@
           var apps = (a && a.applications) || [];
           try { var VL = window.V2L && window.V2L.v2s && window.V2L.v2s.courses; if (VL && VL.videoOverdueCount) videoOverdue = VL.videoOverdueCount(apps, Date.now()); } catch (e) { videoOverdue = null; }
           // R20 (قرار المؤسس 2026-11-09): «طلب انضمام — خبير/مدرّب» حسب `join_as` على الطلب. بلا `join_as` ⇒ «طلب انضمام» بلا تخمين.
-          var JOIN_AS_LBL = { expert: "خبير", trainer: "مدرّب", both: "خبير ومدرّب" };
+          var JOIN_AS_LBL = { expert: "خبير", trainer: "مدرّب", both: "خبير ومدرّب", other: "أخرى" };
+          // R35 (قرار المؤسس 2026-11-18): طابور واحد «طلبات الانضمام» بنوعين: طلب جديد، و«إضافة صفة» (معتمد بصفة وعايز التانية — `role_request` على نفس الطلب).
+          var SPEC_LBL = { real_estate: "عقارات وإيجارات", civil: "مدني وعقود", commercial: "تجاري وشركات", labor: "عمالي", family: "أحوال شخصية", criminal: "جنائي",
+                           administrative: "إداري", ip: "ملكية فكرية", tax: "ضرائب", marketing: "تسويق ومحتوى" };
+          var BAND_LBL = { "0-2": "أقل من ٣ سنوات", "3-5": "من ٣ إلى ٥ سنوات", "6-10": "من ٦ إلى ١٠ سنوات", "11-15": "من ١١ إلى ١٥ سنة", "16+": "أكثر من ١٥ سنة" };
+          var specsOf = function (keys, other) { return (Array.isArray(keys) ? keys : []).map(function (k) { return k === "other" ? String(other || "").trim() : (SPEC_LBL[k] || ""); }).filter(Boolean); };
           apps.forEach(function (ap) {
+            var rr = ap.role_request && typeof ap.role_request === "object" && /^(pending|needs_info)$/.test(String(ap.role_request.status || "")) ? ap.role_request : null;
             var role = JOIN_AS_LBL[String(ap.join_as || "").toLowerCase()] || "";
             realRows.push({
               out: "طلب انضمام" + (role ? " — " + role : ""), from: "درّب معنا", src: "cap", dest: "team",
@@ -1900,7 +1906,15 @@
               apiKind: "trainer", personEmail: ap.user_email || ap.email || "", apiId: ap.id, ts: Date.parse(ap.created_at || ap.submitted_at || "") || 0,
               // R24: «ارفض بسبب» في الدرج (كان الرفض في «الدورات ⇒ المدرّبين» بس). السبب يوصل لمقدّم الطلب كما هو، فبلا سبب ممنوع هنا وعلى الخادم.
               canReject: true, rejectNeedsReason: true,
-              trHeadline: ap.headline || "", trVideo: ap.intro_video_url || "", trCv: ap.cv_url || "", trLi: ap.linkedin_url || "", trPhone: ap.contact_phone || ap.user_phone || "", trSpec: ap.specialty || ap.specialization || "", trYears: ap.years_experience || "", trAttach: Array.isArray(ap.attachments) ? ap.attachments.length : 0,
+              trHeadline: ap.headline || "", trVideo: (rr && rr.intro_video_url) || ap.intro_video_url || "", trCv: (rr && rr.cv_url) || ap.cv_url || "", trLi: (rr && rr.linkedin_url) || ap.linkedin_url || "", trPhone: ap.contact_phone || ap.user_phone || "",
+              trSpec: ap.specialty || ap.specialization || (Array.isArray(ap.expertise) ? ap.expertise.slice(0, 3).join("، ") : ""),
+              trYears: ap.years_experience || BAND_LBL[ap.experience_band] || "", trAttach: Array.isArray(ap.attachments) ? ap.attachments.length : 0,
+              // R35: نوع الطلب والحقول اللي تخلّي الخبير يشتغل يوم القبول (التخصصات من القايمة، النبذة، الصورة، رقم القيد) + وسم الداعي + «أخرى» بنصها.
+              trType: rr ? "add_role" : "new", trAddRole: rr ? String(rr.role || "") : "", trInfo: rr ? String(rr.info_request || "") : String(ap.info_request || ""),
+              trSpecs: specsOf(rr ? rr.expert_specialties : ap.expert_specialties, rr ? rr.expert_specialty_other : ap.expert_specialty_other),
+              trBio: String((rr && rr.bio) || ap.bio || ""), trPhoto: String(ap.user_picture || ""), trBar: String((rr && rr.bar_number) || ap.bar_number || ""),
+              trFrom: String(ap.apply_from_name || ap.apply_from || ""), trOther: String(ap.join_other || ""), trTeach: String((rr && rr.headline) || ""),
+              trStatus: rr ? String(rr.status || "") : String(ap.status || ""),
             });
           });
         }).catch(fail("طلبات المدرّبين"))
@@ -3058,7 +3072,9 @@
     // القرار الثالث «اطلب عيّنة/مستندًا» — طابور تقديم الخدمة وحده يملكه اليوم. مش قرار نهائي:
     // الصفّ يفضل مفتوح، والنصّ ده هو اللي بيقراه المقدّم حرفًا.
     if (action === "request_info") {
-      return post("/platform-join-requests/" + i.apiId + "/request_info", body)
+      // R35: طلب الانضمام كخبير/مدرّب له نفس القرار الثالث على مساره هو (`trainer_applications`).
+      var infoPath = i.apiKind === "trainer" ? "/platform-trainer-applications/" + i.apiId + "/request_info" : "/platform-join-requests/" + i.apiId + "/request_info";
+      return post(infoPath, i.apiKind === "trainer" ? { admin_note: reason, message: reason } : body)
         .then(function () { note("أُرسل الطلب إلى صاحبه، ويبقى الطلب مفتوحًا ✓"); EP.reload("inbox", after); return { ok: true }; })
         .catch(function (e) { var r = efFailed(e, null); if (after) after(); return r; });
     }

@@ -658,6 +658,7 @@
       case 'open': case 'goto': case 'section': S.ext = null; return openCard(c);
       case 'read': S.ext = null; return readCard(c);
       case 'reject_reason': return rejectModal(c);
+      case 'request_info': return infoModal(c);
       case 'invite_approve': return track(c, E.decideInvite(r.apiId, 'approve'), 'اعتُمدت دعوة ' + c.title);
       case 'person_accept': return personModal(c, 'accept');
       case 'person_reject': return personModal(c, 'reject');
@@ -858,6 +859,17 @@
       field: { label: 'السبب (مطلوب، بيوصل لصاحب الطلب كما تكتبه)', max: 500, area: true }, min: 5, btn: 'ارفض', btnCls: 'btn-human', busy: 'جارٍ الرفض…',
       run: function (reason) { return Promise.resolve(c.kind === 'invite' ? E.decideInvite(c.row.apiId, 'reject', reason) : E.decideInboxItem(c.row, 'reject', null, reason)); },
       onOk: function () { finish(c, 'رُفض: ' + c.title, 'rejected'); } });
+  }
+  // R35: «اطلب معلومات» — رسالة لصاحب طلب الانضمام بالمطلوب بالضبط، والطلب يفضل مفتوح (مش قرار).
+  // يوصله إشعار جوه المنصة دلوقتي، والبريد محفوظ لحد جولة البريد (قرار المؤسس 2026-11-18: ما يتبعتش بريد قبلها).
+  function infoModal(c) {
+    var E = ep();
+    confirmModal({ title: 'اطلب معلومات', cardId: c.id,
+      lead: 'اكتب لـ<b>' + esc(c.title) + '</b> المطلوب بالضبط. يفضل طلبه مفتوحًا، ولما يرد يرجع لك هنا.',
+      rows: [['يصله', 'إشعار داخل المنصة الآن'], ['البريد', 'محفوظ لحد جولة البريد']],
+      field: { label: 'المطلوب بالضبط (يصل لصاحب الطلب كما تكتبه)', max: 500, area: true }, min: 5, btn: 'أرسل', busy: 'جارٍ الإرسال…',
+      run: function (msg) { return Promise.resolve(E.decideInboxItem(c.row, 'request_info', null, msg)); },
+      onOk: function () { finish(c, 'أُرسل الطلب إلى ' + c.title + '، ويبقى مفتوحًا'); } });
   }
   // النشر للناس (كتاب · عمل إبداعي · موضوع) وقبول طلب البرنامج: تأكيد باسم البند قبل ما يتنفّذ.
   var PUB_KIND = { book: 'الكتاب', creative: 'العمل الإبداعي', topic: 'الموضوع', program: 'طلب البرنامج' };

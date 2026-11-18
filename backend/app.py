@@ -3214,12 +3214,16 @@ def platform_trainer_decide(application_id, action):
 
     `get_json(silent=True)` (not `request.json`): a body-less POST raises 415 in Flask 3, which
     is exactly the reason-less rejection that must come back with the SENTENCE, not a page."""
-    if action not in ('approve', 'reject', 'cancel', 'postpone'):
+    # R35: «request_info» = القرار الثالث (رسالة لصاحب الطلب بالمطلوب، والطلب يفضل مفتوح). المنصة: `POST /bridge/trainer-applications/{id}/request_info`
+    # (إشعار جوه المنصة الآن، والبريد محفوظ في طابور لحد جولة البريد). نص بلا معنى ممنوع هنا زي سبب الرفض.
+    if action not in ('approve', 'reject', 'cancel', 'postpone', 'request_info'):
         return jsonify({'error': 'إجراء غير معروف'}), 400
     body = request.get_json(silent=True) or {}
     note = str(body.get('admin_note') or '').strip()[:1000]
     if action == 'reject' and not note:
         return jsonify({'error': 'اكتب سبب الرفض — مقدّم الطلب يقرأه كما هو'}), 400
+    if action == 'request_info' and len(note) < 5:
+        return jsonify({'error': 'اكتب المطلوب بالضبط — صاحب الطلب يقرأه كما هو'}), 400
     # R10: «إلغاء» (مهلة الفيديو، ليس رفضًا: لا سبب مطلوب) و«تأجيل يومين» (٤٨ ساعة ثابتة على المنصة، بلا جسم).
     resp = _platform_proxy(
         'POST',

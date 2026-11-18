@@ -811,11 +811,26 @@
         var facts = clean([str(r.trSpec), str(r.trYears) && ('الخبرة: ' + str(r.trYears)),
                            r.trAttach ? U(r.trAttach, ['مرفق واحد', 'مرفقان', 'مرفقات', 'مرفقًا']) : '']);
         // R20: «طلب انضمام — خبير/مدرّب» حسب صفة المتقدّم (join_as). صفة غير معروفة ⇒ «طلب انضمام» بلا تخمين.
-        var trRole = { expert: 'خبير', trainer: 'مدرّب', both: 'خبير ومدرّب' }[str(r.trJoin)];
-        card.tag = 'طلب انضمام' + (trRole ? ' — ' + trRole : '');
+        // R35 (قرار المؤسس 2026-11-18): طابور واحد بأنواعه — «طلب انضمام — خبير/مدرّب/خبير ومدرّب/أخرى» أو «إضافة صفة — خبير/مدرّب» لمعتمد بصفة.
+        var trRole = { expert: 'خبير', trainer: 'مدرّب', both: 'خبير ومدرّب', other: 'أخرى' }[str(r.trJoin)];
+        var trAdd = str(r.trType) === 'add_role' ? ({ expert: 'خبير', trainer: 'مدرّب' }[str(r.trAddRole)] || '') : '';
+        var trNow = trAdd ? ({ expert: 'خبير', trainer: 'مدرّب', both: 'خبير ومدرّب' }[str(r.trJoin)] || '') : '';
+        card.tag = trAdd ? 'إضافة صفة — ' + trAdd : 'طلب انضمام' + (trRole ? ' — ' + (str(r.trJoin) === 'other' && str(r.trOther) ? 'أخرى: ' + str(r.trOther) : trRole) : '');
         card.title = who || 'مقدّم الطلب';
-        card.sub = shorten(str(r.trHeadline) || str(r.note).replace(/\s*—\s*اعتمد.*$/, ''), 140);
-        card.brain = clean([who || 'مقدّم الطلب', card.sub].concat(facts)).join('، ');
+        var expertish = trAdd ? str(r.trAddRole) === 'expert' : (str(r.trJoin) === 'expert' || str(r.trJoin) === 'both');
+        card.sub = trAdd
+          ? clean([trNow ? 'معتمد الآن ' + trNow : '', str(r.trAddRole) === 'trainer' && str(r.trTeach) ? 'سيدرّب: ' + str(r.trTeach) : '']).join('، ')
+          : shorten(str(r.trHeadline) || str(r.note).replace(/\s*—\s*اعتمد.*$/, ''), 140);
+        // التخصصات من القايمة شرائح (هي اللي بيتوزّع عليها الملفات يوم القبول)، والنبذة سطر (هي اللي تظهر في دليل الخبراء).
+        if (expertish && Array.isArray(r.trSpecs) && r.trSpecs.length) card.specChips = r.trSpecs.slice(0, 3);   // بتنضاف جنب شريحة النوع (تجميع «الناس» بيكتب `chips`)
+        card.brain = expertish
+          ? (str(r.trBio) ? '«' + shorten(str(r.trBio), 160) + '»' : 'بلا نبذة بعد، فلن يظهر في دليل الخبراء قبل كتابتها')
+          : trAdd
+            ? clean([httpsLink(r.trVideo) ? 'فيديو الشرح وصل' : 'فيديو الشرح لم يصل بعد', httpsLink(r.trCv) ? 'والسيرة الذاتية' : '']).join(' ')
+            : clean([who || 'مقدّم الطلب', card.sub].concat(facts)).join('، ');
+        card.reason = clean([str(r.trYears) && expertish ? 'الخبرة: ' + str(r.trYears) : '', str(r.trBar) ? 'رقم القيد: ' + str(r.trBar) : '',
+                             str(r.trFrom) ? 'جاء من دعوة: ' + str(r.trFrom) : '']).join('، ');
+        if (str(r.trStatus) === 'needs_info') card.warn = 'طلبنا منه' + (str(r.trInfo) ? ': ' + shorten(str(r.trInfo), 120) : ' معلومات') + ' — مستنيين رده';
         // روابط مقدّم الطلب (لو المنصة بعتتها) تتفتح في تبويب جديد، ورقم التواصل نص. «اطّلع على الطلب كاملًا» رابط فعلي لصفحة الشخص.
         var trLinks = [];
         if (httpsLink(r.trVideo)) trLinks.push({ label: 'فيديو الشرح', url: httpsLink(r.trVideo) });
@@ -826,8 +841,10 @@
         var trEmail = str(r.personEmail) || str(r.email);
         if (trEmail) card.read = { label: 'اطّلع على الطلب كاملًا', act: act({ do: 'person', email: trEmail }) };
         else card.reason = '';
-        card.primary = { label: 'اقبل الطلب', act: act({ do: 'decide', action: 'approve' }) };
+        card.primary = { label: trAdd ? 'اقبل الصفة' : 'اقبل الطلب', act: act({ do: 'decide', action: 'approve' }) };
         card.secondary = { label: 'ارفض بسبب', act: act({ do: 'reject_reason' }) };
+        // R35: القرار الثالث «اطلب معلومات» (كان لطلبات تقديم الخدمة بس): رسالة لصاحب الطلب والطلب يفضل مفتوح.
+        card.edit = { label: 'اطلب معلومات', act: act({ do: 'request_info' }) };
         break;
       }
       case 'join': {
@@ -1128,7 +1145,7 @@
       sg.forEach(function (x) { absorbed[x.id] = true; });
       if (parts.length === 1) {
         var one = parts[0];
-        one.chips = [chipOf(one)].concat(sg.length ? [CHIP_AR.signup] : []);
+        one.chips = [chipOf(one)].concat(Array.isArray(one.specChips) ? one.specChips : [], sg.length ? [CHIP_AR.signup] : []);   // R35: تخصصات طالب الخبرة
         return one;
       }
       return personCardOf(c.__slot, parts, sg.length > 0);
