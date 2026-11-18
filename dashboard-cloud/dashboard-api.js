@@ -1885,8 +1885,13 @@
         return list;
       }
       jobs.push(
-        get("/platform-trainer-applications?status=pending").then(function (a) {
-          var apps = (a && a.applications) || [];
+        // R35: `open` = الجديد + المستني رد صاحبه + «إضافة صفة» مفتوحة على معتمد. ⛔ فلتر هنا كمان: منصة أقدم (قبل R35) بترجّع
+        // الكل لـ`open` (قيمة مش معروفة ⇒ بلا فلتر) — فمن غير السطر ده كان المعتمد والمرفوض هيغرقوا «محتاج قرارك».
+        get("/platform-trainer-applications?status=open").then(function (a) {
+          var apps = ((a && a.applications) || []).filter(function (ap) {
+            var st = String((ap && ap.status) || "pending"), rr = ap && ap.role_request;
+            return st === "pending" || st === "needs_info" || (st === "approved" && rr && /^(pending|needs_info)$/.test(String(rr.status || "")));
+          });
           try { var VL = window.V2L && window.V2L.v2s && window.V2L.v2s.courses; if (VL && VL.videoOverdueCount) videoOverdue = VL.videoOverdueCount(apps, Date.now()); } catch (e) { videoOverdue = null; }
           // R20 (قرار المؤسس 2026-11-09): «طلب انضمام — خبير/مدرّب» حسب `join_as` على الطلب. بلا `join_as` ⇒ «طلب انضمام» بلا تخمين.
           var JOIN_AS_LBL = { expert: "خبير", trainer: "مدرّب", both: "خبير ومدرّب", other: "أخرى" };

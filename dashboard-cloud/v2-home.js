@@ -659,6 +659,7 @@
       case 'read': S.ext = null; return readCard(c);
       case 'reject_reason': return rejectModal(c);
       case 'request_info': return infoModal(c);
+      case 'approve_other': return otherModal(c);
       case 'invite_approve': return track(c, E.decideInvite(r.apiId, 'approve'), 'اعتُمدت دعوة ' + c.title);
       case 'person_accept': return personModal(c, 'accept');
       case 'person_reject': return personModal(c, 'reject');
@@ -870,6 +871,33 @@
       field: { label: 'المطلوب بالضبط (يصل لصاحب الطلب كما تكتبه)', max: 500, area: true }, min: 5, btn: 'أرسل', busy: 'جارٍ الإرسال…',
       run: function (msg) { return Promise.resolve(E.decideInboxItem(c.row, 'request_info', null, msg)); },
       onOk: function () { finish(c, 'أُرسل الطلب إلى ' + c.title + '، ويبقى مفتوحًا'); } });
+  }
+  // R35: قبول طلب «أخرى» — المؤسس يختار صفته. ⛔ «مقدّم خدمة» ما يبقاش خبير: الطلب يتقفل وصاحبه يتوجّه لـ«أقدّمها» في سوق الخدمات.
+  var OTHER_AS = [['expert', 'خبير', 'يستلم ملفات العملاء حسب تخصصه'], ['trainer', 'مدرّب', 'يقدّم دورات وتصدر له اتفاقية التدريب'],
+                  ['both', 'الاثنان', 'خبير ومدرّب معًا'], ['provider', 'مقدّم خدمة', 'يختار خدمته من «سوق الخدمات» وتتراجع لكل خدمة']];
+  function otherModal(c) {
+    if (typeof window.openModal !== 'function') return;
+    var E = ep(), r = c.row || {};
+    var s = window.openModal('اقبل واختر صفته',
+      '<div class="mc-lead"><b>' + esc(c.title) + '</b> كتب صفته: «' + esc(String(r.trOther || '') || 'أخرى') + '». اختر الصفة اللي هيتقبل بيها.</div>'
+      + '<div class="v2m-choices" role="radiogroup">' + OTHER_AS.map(function (o, i) {
+        return '<label class="v2m-choice"><input type="radio" name="v2m_as" value="' + o[0] + '"' + (i ? '' : '') + '><span><b>' + esc(o[1]) + '</b><small>' + esc(o[2]) + '</small></span></label>';
+      }).join('') + '</div><div id="v2m_err"></div>'
+      + '<div class="acts"><button class="btn btn-primary" id="v2m_go" disabled>اقبل</button><button class="btn btn-ghost" id="v2m_x">رجوع</button></div>');
+    var go = s.querySelector('#v2m_go'), x = s.querySelector('#v2m_x'), err = s.querySelector('#v2m_err');
+    var picked = function () { var el = s.querySelector('input[name="v2m_as"]:checked'); return el ? el.value : ''; };
+    Array.prototype.slice.call(s.querySelectorAll('input[name="v2m_as"]')).forEach(function (el) { el.onchange = function () { go.disabled = !picked(); }; });
+    x.onclick = function () { if (!s.dataset.busy) window.closeModal(); };
+    go.onclick = function () {
+      var as = picked(); if (!as || go.dataset.busy) return;
+      go.dataset.busy = '1'; s.dataset.busy = '1'; go.disabled = true; go.textContent = 'جارٍ القبول…';
+      Promise.resolve(E.decideInboxItem(r, 'approve', null, '', { approve_as: as })).then(function (res) {
+        delete s.dataset.busy;
+        if (res && res.ok) { window.closeModal(); finish(c, 'قُبل ' + c.title + ' ' + (OTHER_AS.filter(function (o) { return o[0] === as; })[0] || ['', ''])[1], 'approved'); return; }
+        delete go.dataset.busy; go.disabled = false; go.textContent = 'اقبل'; err.innerHTML = '<div class="ef-err">' + esc(plainError(res || {})) + '</div>';
+      });
+    };
+    return s;
   }
   // النشر للناس (كتاب · عمل إبداعي · موضوع) وقبول طلب البرنامج: تأكيد باسم البند قبل ما يتنفّذ.
   var PUB_KIND = { book: 'الكتاب', creative: 'العمل الإبداعي', topic: 'الموضوع', program: 'طلب البرنامج' };

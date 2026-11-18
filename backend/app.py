@@ -3225,10 +3225,17 @@ def platform_trainer_decide(application_id, action):
     if action == 'request_info' and len(note) < 5:
         return jsonify({'error': 'اكتب المطلوب بالضبط — صاحب الطلب يقرأه كما هو'}), 400
     # R10: «إلغاء» (مهلة الفيديو، ليس رفضًا: لا سبب مطلوب) و«تأجيل يومين» (٤٨ ساعة ثابتة على المنصة، بلا جسم).
+    payload = {'admin_note': note}
+    # R35: قبول طلب «أخرى» بالصفة اللي اختارها المؤسس (المنصة بتتحقق منها وبترفض قبول «أخرى» من غيرها).
+    approve_as = str(body.get('approve_as') or '').strip().lower()
+    if action == 'approve' and approve_as:
+        if approve_as not in ('expert', 'trainer', 'both', 'provider'):
+            return jsonify({'error': 'اختر الصفة من القائمة'}), 400
+        payload['approve_as'] = approve_as
     resp = _platform_proxy(
         'POST',
         f"/api/bridge/trainer-applications/{application_id}/{action}",
-        json_body=None if action == 'postpone' else {'admin_note': note},
+        json_body=None if action == 'postpone' else payload,
     )
     if _resp_ok(resp):
         _audit(f'trainer_application.{action}', target=application_id, meta={'note': note})

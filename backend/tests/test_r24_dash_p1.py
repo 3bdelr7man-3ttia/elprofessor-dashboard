@@ -635,7 +635,7 @@ def test_row_shapes_for_the_dead_button_fixes():
     pf = {'failures': [{'id': 'pf1', 'scope': 'order', 'why': 'رُفضت', 'user_email': 'b@x.test', 'amount': 5, 'currency': 'USD'}]}
     jr = {'requests': [{'id': 'j1', 'status': 'needs_info', 'user_name': 'جمال', 'user_email': 'j@x.test', 'service_label': 'استشارة', 'info_request': 'ابعت رقم قيدك'},
                        {'id': 'j2', 'status': 'pending', 'user_name': 'جلال', 'user_email': 'k@x.test', 'service_label': 'استشارة'}]}
-    out = _ep({'/api/platform-trainer-applications?status=pending': _ok(trainers), '/api/platform-signups': _ok(SIGNUPS), '/api/platform-payment-failures': _ok(pf),
+    out = _ep({'/api/platform-trainer-applications?status=open': _ok(trainers), '/api/platform-signups': _ok(SIGNUPS), '/api/platform-payment-failures': _ok(pf),
                '/api/platform-join-requests?status=open': _ok(jr), '/api/v2/decisions/snoozed': _ok({'rows': []})},
               LOAD_INBOX % "window.INBOX.map(function(r){return {k:r.apiKind, id:r.apiId, lbl:r.approveLabel, rej:r.canReject, need:r.rejectNeedsReason, w:r.waiting}})")
     by = {}

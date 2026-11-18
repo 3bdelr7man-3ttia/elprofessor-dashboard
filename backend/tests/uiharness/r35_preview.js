@@ -96,4 +96,11 @@ if (!modal) console.error('no modal captured; strip keys=', cards && Object.keys
 const m = modal || { title: '', body: '' };
 const modalHtml = '<div class="scrim" id="epModal"><div class="modal"><div class="mh"><span>' + m.title + '</span><button data-x>✕</button></div><div class="mb">' + m.body + '</div></div></div>';
 page('d2-request-info-dialog.html', 'اطلب معلومات', heading(sb, 'people', 'users') + '<div class="v2-strip">' + z.innerHTML + '</div>', sb, modalHtml);
+// «اقبل واختر صفته» على بطاقة «أخرى» (ريم حسن): نفس `run` ⇐ `otherModal` ⇐ `openModal`.
+modal = null;
+const other = all.find((c) => c && c.title === 'ريم حسن');
+if (other && other.primary && sb.V2.runCard) sb.V2.runCard(other, other.primary.act, () => {}, () => {});
+const m2 = modal || { title: '', body: '' };
+page('d3-approve-other-dialog.html', 'اقبل واختر صفته', heading(sb, 'people', 'users') + '<div class="v2-strip">' + z.innerHTML + '</div>', sb,
+  '<div class="scrim" id="epModal"><div class="modal"><div class="mh"><span>' + m2.title + '</span><button data-x>✕</button></div><div class="mb">' + m2.body + '</div></div></div>');
 console.log(fs.readdirSync(out).sort().join('\n'));

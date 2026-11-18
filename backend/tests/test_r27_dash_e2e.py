@@ -118,7 +118,7 @@ def test_strip_badge_columns_and_trainer_count_refresh_together_without_reload()
     assert 'طلبات انضمام جديدة: ٠' in a['html'] and 'طلبات انضمام جديدة: ١' not in a['html']
     # تحديث صامت: المصدر ما دخلش «جارٍ التحميل» (لا وميض)
     assert out['states']['opsQueue'] == 'ready'
-    for u in ('/api/platform-ops-queue', '/api/platform-courses', '/api/platform-trainer-applications?status=pending'):
+    for u in ('/api/platform-ops-queue', '/api/platform-courses', '/api/platform-trainer-applications?status=open'):
         assert u in out['calls'], (u, out['calls'])
 
 

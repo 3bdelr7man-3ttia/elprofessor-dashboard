@@ -305,7 +305,7 @@ def test_new_visible_copy_has_no_banned_words():
 def test_backend_routes_are_registered_once():
     src = _read('backend', 'app.py')
     assert src.count("'/api/platform-trainer-applications/expire-sweep'") == 1
-    assert "('approve', 'reject', 'cancel', 'postpone')" in src
+    assert "('approve', 'reject', 'cancel', 'postpone', 'request_info')" in src      # R35: + «اطلب معلومات»
 
 
 @needs_node
@@ -319,4 +319,5 @@ def test_r20_inbox_labels_are_role_aware_and_carry_the_country_and_years():
     assert 'out: "خبير مؤسس — طلب انضمام كمدرّب"' not in api and 'out: "طلب انضمام كمدرّب"' not in api
     assert 'out: "طلب انضمام" + (role ? " — " + role : "")' in api and 'JOIN_AS_LBL' in api
     logic = _read('dashboard-cloud', 'v2-logic.js')
-    assert "card.tag = 'طلب انضمام' + (trRole ? ' — ' + trRole : '')" in logic and "card.tag = 'خبير مؤسس'" not in logic
+    # R35: نفس الوسم بالصفة، وزاد «إضافة صفة — …» و«أخرى: <نصها>»
+    assert "card.tag = trAdd ? 'إضافة صفة — ' + trAdd : 'طلب انضمام' + (trRole ?" in logic and "card.tag = 'خبير مؤسس'" not in logic

@@ -841,7 +841,10 @@
         var trEmail = str(r.personEmail) || str(r.email);
         if (trEmail) card.read = { label: 'اطّلع على الطلب كاملًا', act: act({ do: 'person', email: trEmail }) };
         else card.reason = '';
-        card.primary = { label: trAdd ? 'اقبل الصفة' : 'اقبل الطلب', act: act({ do: 'decide', action: 'approve' }) };
+        // R35: «أخرى» ⇒ القبول بنافذة يختار فيها المؤسس الصفة (خبير · مدرّب · الاثنان · مقدّم خدمة) — قرار المؤسس 2026-11-18.
+        card.primary = str(r.trJoin) === 'other' && !trAdd
+          ? { label: 'اقبل واختر صفته', act: act({ do: 'approve_other' }) }
+          : { label: trAdd ? 'اقبل الصفة' : 'اقبل الطلب', act: act({ do: 'decide', action: 'approve' }) };
         card.secondary = { label: 'ارفض بسبب', act: act({ do: 'reject_reason' }) };
         // R35: القرار الثالث «اطلب معلومات» (كان لطلبات تقديم الخدمة بس): رسالة لصاحب الطلب والطلب يفضل مفتوح.
         card.edit = { label: 'اطلب معلومات', act: act({ do: 'request_info' }) };
@@ -3052,7 +3055,8 @@
 
   // —— قرار ولا «للعلم»: البطاقة بتدخل «ابدأ القرارات» بس لو فعلها الأساسي بيقفلها فعلًا على المنصة.
   // R24 م٢: القرار = فعل أساسي بيقفل البند، أو «اقرأ وقرّر» (`read`) اللي بيفتح شاشة القراية جوه بيت القسم وفيها زراير القفل، أو «افتح ملفه» (`person`) لشخص عنده أكتر من طلب.
-  var CLOSING_DO = { market_relane: 1, course_open: 1, live_decide: 1, send: 1, decide: 1, resolve: 1, payout_settle: 1, pay_confirm: 1, offer_approve: 1, brain_approve: 1, invite_approve: 1, person_accept: 1, read: 1, person: 1 };
+  var CLOSING_DO = { market_relane: 1, course_open: 1, live_decide: 1, send: 1, decide: 1, resolve: 1, payout_settle: 1, pay_confirm: 1, offer_approve: 1, brain_approve: 1, invite_approve: 1, person_accept: 1, read: 1, person: 1,
+                    approve_other: 1 };     // R35: قبول «أخرى» (نافذة اختيار الصفة) بيقفل البند زي «اقبل»
   function bucketOf(kind, card, r) {
     if (r && r.fyi) return { bucket: 'fyi', fyiKind: 'file_sent' };                       // ملف اتبعت ولسه ما استلمهوش
     switch (kind) {
@@ -3062,6 +3066,7 @@
       case 'live': if (!(r && r.slug)) return { bucket: 'fyi', fyiKind: 'live' }; break;
       case 'payfail': return { bucket: 'fyi', fyiKind: (r && r.pfScope === 'gateway') ? 'gateway' : 'payfail' };
       case 'join': if (r && r.waiting) return { bucket: 'fyi', fyiKind: 'join_waiting' }; break;     // مستني رد صاحبه
+      case 'trainer': if (r && r.trStatus === 'needs_info') return { bucket: 'fyi', fyiKind: 'join_waiting' }; break;     // R35: «اطلب معلومات» ⇒ مستني رد صاحبه
       case 'founding': if (r && r.nextStatus && r.nextStatus !== 'contacted') return { bucket: 'fyi', fyiKind: 'founding_follow' }; break;   // تواصلت/دعيته = متابعة
     }
     var a = card && card.primary && card.primary.act && card.primary.act.do;
