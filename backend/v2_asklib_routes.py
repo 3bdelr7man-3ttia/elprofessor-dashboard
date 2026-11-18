@@ -4,6 +4,9 @@
     GET  /api/v2/ask/library                 ⇒ /api/bridge/ask/library-scan + /api/bridge/ask/corpus/stats   (قراءة: قائمة المستندات + ملخص القاعدة)
     POST /api/v2/ask/library/preview         ⇒ POST /api/bridge/ask/ingest-library {apply:false}              (جرّب التقسيم: لا كتابة ولا تدقيق)
     POST /api/v2/ask/library/ingest          ⇒ POST /api/bridge/ask/ingest-library {apply:true}               (أدخل المواد: تأكيد + `_v2_write` + تدقيق ask.ingest_library)
+    GET  /api/v2/ask/library/cleanup         ⇒ /api/bridge/ask/library-cleanup                                (تنظيف المكتبة: النسخ المكررة + شبه الفاضية + المحذوفات)
+    POST /api/v2/ask/library/delete          ⇒ POST /api/bridge/ask/library-delete                            (حذف يترجّع: تأكيد + `_v2_write` + تدقيق ask.library_delete)
+    POST /api/v2/ask/library/restore         ⇒ POST /api/bridge/ask/library-restore                           (رجّع مستند: تأكيد + `_v2_write` + تدقيق ask.library_restore)
 
 قواعد الملف (نفس `v2_tools_routes.py`):
   * أدمن بس · المفتاح `DASH_V2_ENABLED` مقفول ⇒ ٤٠٤ بلا أي نداء للمنصة · `no-store`.
@@ -12,6 +15,7 @@
   * الجسر لسه ما وصلش المنصة (٤٠٤ عام) ⇒ ٤٠٤ و`bridge_missing:true` والشاشة تكتب «الميزة لسه ما وصلتش المنصة». ٤٠٤ بنص عربي من المنصة (مستند مش موجود) بيعدّي كما هو.
   * ⛔ نداء واحد بلا إعادة محاولة. رد ضايع على الكتابة ⇒ ٥٠٢ و`no_reply:true` (من `_v2_write`).
   * ⛔ صفر ذكاء: التقسيم بالقواعد عند المنصة.
+  * ⛔ التنظيف حذف يترجّع بس (المنصة بتعلّم المستند، ما بتمسحوش)، وشروطه عند المنصة: المكرر لازم يطابق الباقي حرفيًا، واللي اتدخلت منه مواد ما بيتحذفش.
 """
 import re
 
@@ -28,6 +32,11 @@ _GENERIC_404 = ('', 'not found', 'تعذر تنفيذ العملية')
 ITEM_STR = ('id', 'title', 'law_number', 'law_key', 'country', 'category', 'specialization', 'suggested_track')
 ITEM_NUM = ('chars', 'articles_found')
 STATUSES = ('library', 'proposed', 'verified', 'rejected')
+DEL_REASONS = ('duplicate', 'empty', 'manual')
+SKIP_WHY = ('missing', 'has_articles', 'keep_missing', 'not_identical', 'not_empty')
+DELETE_BATCH = 60          # = LIB_DELETE_BATCH عند المنصة
+BAD_BATCH_AR = 'اختر من مستند واحد إلى 60 في المرة'
+BAD_REASON_AR = 'سبب الحذف غير معروف'
 
 
 def _s(v, n=300):
@@ -92,6 +101,59 @@ def view_ingest(d):
     if isinstance(c, dict):
         out['counts'] = {k: _n(c.get(k)) or 0 for k in ('inserted', 'updated', 'kept')}
     return out
+
+
+def view_clean_card(c):
+    if not isinstance(c, dict) or not _REF_RE.match(str(c.get('id') or '')):
+        return None
+    return {'id': str(c['id']), 'title': _s(c.get('title')), 'chars': _n(c.get('chars')) or 0,
+            'created_at': _s(c.get('created_at'), 40), 'ingested': _n(c.get('ingested')) or 0}
+
+
+def view_cleanup(d):
+    """تنظيف المكتبة: {total, groups:[{keep, extras}], tiny:[…], deleted:[…], pending}. شكل غير مفهوم ⇒ None."""
+    if not isinstance(d, dict) or not isinstance(d.get('groups'), list) or not isinstance(d.get('tiny'), list):
+        return None
+    groups = []
+    for g in d['groups']:
+        keep = view_clean_card(g.get('keep')) if isinstance(g, dict) else None
+        extras = [v for v in (view_clean_card(x) for x in (g.get('extras') if isinstance(g, dict) and isinstance(g.get('extras'), list) else [])) if v]
+        if keep and extras:
+            groups.append({'keep': keep, 'extras': extras})
+    tiny = []
+    for t in d['tiny']:
+        card = view_clean_card(t)
+        if card:
+            card['head'] = _s(t.get('head'), 200)
+            tiny.append(card)
+    deleted = []
+    for x in d.get('deleted') if isinstance(d.get('deleted'), list) else []:
+        if isinstance(x, dict) and _REF_RE.match(str(x.get('id') or '')):
+            deleted.append({'id': str(x['id']), 'title': _s(x.get('title')), 'deleted_at': _s(x.get('deleted_at'), 40),
+                            'reason': x.get('reason') if x.get('reason') in DEL_REASONS else ''})
+    return {'total': _n(d.get('total')) or 0, 'groups': groups, 'tiny': tiny, 'deleted': deleted,
+            'pending': _n(d.get('pending')) or 0, 'tiny_chars': _n(d.get('tiny_chars')) or 500}
+
+
+def _id_list(v):
+    return [str(x) for x in (v if isinstance(v, list) else []) if isinstance(x, str) and _REF_RE.match(x)][:DELETE_BATCH]
+
+
+def _skips(v):
+    return [{'id': str(x['id']), 'why': x['why']} for x in (v if isinstance(v, list) else [])
+            if isinstance(x, dict) and isinstance(x.get('id'), str) and _REF_RE.match(x['id']) and x.get('why') in SKIP_WHY][:DELETE_BATCH]
+
+
+def view_deleted(d):
+    if not isinstance(d, dict) or not isinstance(d.get('deleted'), list):
+        return None
+    return {'deleted': _id_list(d['deleted']), 'skipped': _skips(d.get('skipped'))}
+
+
+def view_restored(d):
+    if not isinstance(d, dict) or not isinstance(d.get('restored'), list):
+        return None
+    return {'restored': _id_list(d['restored']), 'skipped': _skips(d.get('skipped'))}
 
 
 def register(app, ns):
@@ -219,4 +281,92 @@ def register(app, ns):
             return err('تعذّر قراءة رد المنصة', 502)
         if not v['applied']:
             return err('لم يُدخل شيء، أعد المحاولة', 502)
+        return out(jsonify(v))
+
+    # ------------------------------------------------------------ تنظيف المكتبة (حذف يترجّع)
+
+    def clean_ids(raw):
+        """قايمة معرّفات صالحة من ١ إلى ٦٠ بلا تكرار، وإلا None."""
+        if not isinstance(raw, list) or not 1 <= len(raw) <= DELETE_BATCH:
+            return None
+        ids = []
+        for x in raw:
+            if not isinstance(x, str) or not _REF_RE.match(x) or x in ids:
+                return None
+            ids.append(x)
+        return ids
+
+    @app.route('/api/v2/ask/library/cleanup', methods=['GET'], endpoint='v2_asklib_cleanup')
+    @guard
+    def v2_asklib_cleanup():
+        closed = N('_v2_closed')()
+        if closed:
+            return closed
+        resp = N('_platform_proxy')('GET', '/api/bridge/ask/library-cleanup', timeout=30)
+        if not N('_resp_ok')(resp):
+            return bad(resp)
+        v = view_cleanup(json_of(resp))
+        if v is None:
+            return err('تعذّر قراءة رد المنصة', 502)
+        return out(jsonify(v))
+
+    @app.route('/api/v2/ask/library/delete', methods=['POST'], endpoint='v2_asklib_delete')
+    @guard
+    def v2_asklib_delete():
+        closed = N('_v2_closed')()
+        if closed:
+            return closed
+        body = N('_v2_body')()
+        conf = N('_v2_confirmed')(body)
+        if conf:
+            return conf
+        reason = body.get('reason')
+        if reason not in DEL_REASONS:
+            return err(BAD_REASON_AR)
+        raw = body.get('items')
+        if not isinstance(raw, list) or not 1 <= len(raw) <= DELETE_BATCH:
+            return err(BAD_BATCH_AR)
+        items, seen = [], set()
+        for it in raw:
+            rid = it.get('id') if isinstance(it, dict) else None
+            dup = (it.get('dup_of') or '') if isinstance(it, dict) else ''
+            if not isinstance(rid, str) or not _REF_RE.match(rid) or rid in seen or not isinstance(dup, str):
+                return err(BAD_REF_AR)
+            if reason == 'duplicate':
+                if not _REF_RE.match(dup) or dup == rid:        # المكرر لازم له أصل تاني باقي
+                    return err(BAD_REF_AR)
+                items.append({'id': rid, 'dup_of': dup})
+            else:
+                items.append({'id': rid})
+            seen.add(rid)
+        resp = N('_v2_write')('POST', '/api/bridge/ask/library-delete', {'items': items, 'reason': reason},
+                              'ask.library_delete', items[0]['id'] if len(items) == 1 else 'n=%d' % len(items),
+                              {'reason': reason, 'ids': [i['id'] for i in items]})
+        if not N('_resp_ok')(resp):
+            return bad(resp)
+        v = view_deleted(json_of(resp))
+        if v is None:
+            return err('تعذّر قراءة رد المنصة', 502)
+        return out(jsonify(v))
+
+    @app.route('/api/v2/ask/library/restore', methods=['POST'], endpoint='v2_asklib_restore')
+    @guard
+    def v2_asklib_restore():
+        closed = N('_v2_closed')()
+        if closed:
+            return closed
+        body = N('_v2_body')()
+        conf = N('_v2_confirmed')(body)
+        if conf:
+            return conf
+        ids = clean_ids(body.get('ids'))
+        if ids is None:
+            return err(BAD_REF_AR)
+        resp = N('_v2_write')('POST', '/api/bridge/ask/library-restore', {'ids': ids},
+                              'ask.library_restore', ids[0] if len(ids) == 1 else 'n=%d' % len(ids), {'ids': ids})
+        if not N('_resp_ok')(resp):
+            return bad(resp)
+        v = view_restored(json_of(resp))
+        if v is None:
+            return err('تعذّر قراءة رد المنصة', 502)
         return out(jsonify(v))

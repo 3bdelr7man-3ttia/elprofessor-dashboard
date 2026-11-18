@@ -2,6 +2,8 @@
  * v2s/asklib.js — «المحتوى ‹ أدخل قوانين المكتبة»: مستندات مكتبة المنصة ⇒ تقسيمها مواد في قاعدة نصوص «اسأل».
  * ١) ملخص القاعدة (مواد كل تخصص وحالة + التصحيحات المعتمدة) · ٢) قائمة المستندات (فلتر «المقترح للنيابة الإدارية» / «الكل» + بحث بالعنوان)
  * ٣) لكل مستند: التخصص ورقم القانون ثم «جرّب التقسيم» (معاينة بلا كتابة) ثم «أدخل المواد» (ورقة تأكيد ثم كتابة + تدقيق).
+ * ٤) «تنظيف المكتبة»: النسخ المكررة بالحرف + المستندات شبه الفاضية + «المحذوفات». الحذف بيترجّع دايمًا (المنصة بتعلّم المستند وبس)،
+ *    وشروطه عند المنصة: المكرر لازم يطابق الباقي حرفيًا، واللي اتدخلت منه مواد في قاعدة النصوص ما بيتحذفش.
  * ⛔ المفتاح مقفول افتراضيًا: الملف بيتحمّل دايمًا لكنه ما بيرسم شيئًا إلا لو index.html نادى `render` (والغلاف الجديد شغّال).
  * ⛔ الكتابة للأدمن بس. ⛔ المصدر اللي غاب ⇒ «غير متاح بعد» لا صفر. ⛔ لا confirm ولا prompt. ⛔ «·» لا تلاصق رقمًا.
  * ========================================================================== */
@@ -15,7 +17,12 @@
   var SCAN_CAP = 500;   // = SCAN_LIMIT في v2_asklib_routes.py (كان ناقص ⇒ ReferenceError في رسم «جاهز» ⇒ الشاشة بتقول «تعذّر الجلب» دايمًا)
   var DIG = '٠١٢٣٤٥٦٧٨٩';
   var ST_AR = { library: 'مكتبة', proposed: 'مقترحة', verified: 'معتمدة', rejected: 'مرفوضة' };
-  var S = { view: null, state: 'idle', data: null, err: '', filter: 'ap', q: '', rows: {}, note: '', noteT: null };
+  var BATCH = 60;       // = DELETE_BATCH في v2_asklib_routes.py
+  var SHOW_CAP = 80;    // أقصى عدد بطاقات في كل قايمة تنظيف (الزرار الجماعي بيشتغل على الكل)
+  var WHY_AR = { missing: 'مش موجود', has_articles: 'اتدخلت منه مواد في قاعدة النصوص', keep_missing: 'النسخة الباقية مش موجودة', not_identical: 'مش مطابق للنسخة الباقية', not_empty: 'فيه نص' };
+  var REASON_AR = { duplicate: 'نسخة مكررة', empty: 'شبه فاضي', manual: 'حذف يدوي' };
+  var S = { view: null, state: 'idle', data: null, err: '', filter: 'ap', q: '', rows: {}, note: '', noteT: null,
+            mode: 'ingest', c: { state: 'idle', data: null, err: '' } };
 
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
   function ar(n) { return String(n == null ? '' : n).replace(/\d/g, function (d) { return DIG.charAt(+d); }); }
@@ -47,6 +54,19 @@
       S.data = null;
       S.state = e && e.status === 404 ? 'closed' : 'error';
       S.err = (e && e.data && e.data.error) || '';
+      redraw();
+    });
+  }
+  function loadClean(force) {
+    var E = ep();
+    if (!E || !E.api || !E.authed) return;
+    if (!force && S.c.state !== 'idle') return;
+    if (!S.c.data) S.c.state = 'loading';          // تحديث وفيه بيانات ⇒ القديم يفضل ظاهر لحد ما الجديد يوصل
+    E.api('/v2/ask/library/cleanup').then(function (d) {
+      S.c = { state: 'ready', data: d, err: '' }; redraw();
+    }).catch(function (e) {
+      if (e && e.status === 401) return;
+      S.c = { state: e && e.status === 404 ? 'closed' : 'error', data: null, err: (e && e.data && e.data.error) || '' };
       redraw();
     });
   }
@@ -125,21 +145,79 @@
     if (!items.length) return '<div class="al-empty"><b>لا مستندات مطابقة</b><p>' + (S.filter === 'ap' ? 'جرّب «الكل» لعرض كل مستندات المكتبة.' : 'غيّر كلمة البحث.') + '</p></div>';
     return '<div class="al-grid">' + items.map(cardHtml).join('') + '</div>';
   }
-  function stateBlock() {
-    if (S.state === 'idle' || S.state === 'loading') return '<div class="al-skel" role="status" aria-label="جارٍ التحميل"><i></i><i></i><i></i></div>';
-    if (S.state === 'closed') return '<div class="al-empty"><b>الميزة لسه ما وصلتش المنصة</b><p>هتظهر هنا تلقائيًا أول ما تتفعّل.</p></div>';
-    return '<div class="al-warnbox" role="alert">تعذّر جلب مستندات المكتبة' + (S.err ? ': ' + esc(S.err) : '') + '، وليس معناه أنها فارغة<button type="button" class="ep-bs" data-a="retry">أعد المحاولة</button></div>';
+  function stateBlock(st, msg) {
+    if (st === 'idle' || st === 'loading') return '<div class="al-skel" role="status" aria-label="جارٍ التحميل"><i></i><i></i><i></i></div>';
+    if (st === 'closed') return '<div class="al-empty"><b>الميزة لسه ما وصلتش المنصة</b><p>هتظهر هنا تلقائيًا أول ما تتفعّل.</p></div>';
+    return '<div class="al-warnbox" role="alert">تعذّر جلب مستندات المكتبة' + (msg ? ': ' + esc(msg) : '') + '، وليس معناه أنها فارغة<button type="button" class="ep-bs" data-a="retry">أعد المحاولة</button></div>';
   }
-  function draw(v) {
-    if (S.state !== 'ready') { v.innerHTML = '<div class="v2s-al"><p class="al-lead">مستندات مكتبة المنصة اللي تتحوّل مواد في قاعدة نصوص «اسأل».</p>' + stateBlock() + '</div>'; return; }
-    v.innerHTML = '<div class="v2s-al">' + (S.note ? '<p class="al-ok" role="status">' + esc(S.note) + '</p>' : '')
-      + '<p class="al-lead">مستندات مكتبة المنصة اللي تتحوّل مواد في قاعدة نصوص «اسأل». ' + ((S.data.items || []).length >= SCAN_CAP ? 'أول ' + esc(ar(SCAN_CAP)) + ' مستند فقط، ابحث بالعنوان.' : esc(ar((S.data.items || []).length)) + ' مستند في المكتبة.') + '</p>'
+  function modeBar() {
+    function tab(k, label) { return '<button type="button" class="al-tab' + (S.mode === k ? ' on' : '') + '" data-a="mode" data-k="' + k + '">' + label + '</button>'; }
+    return '<div class="al-seg al-modes" role="group" aria-label="القسم">' + tab('ingest', 'إدخال القوانين') + tab('clean', 'تنظيف المكتبة') + '</div>';
+  }
+  function ingestHtml() {
+    var lead = '<p class="al-lead">مستندات مكتبة المنصة اللي تتحوّل مواد في قاعدة نصوص «اسأل». ';
+    if (S.state !== 'ready') return lead + '</p>' + stateBlock(S.state, S.err);
+    return lead + ((S.data.items || []).length >= SCAN_CAP ? 'أول ' + esc(ar(SCAN_CAP)) + ' مستند فقط، ابحث بالعنوان.' : esc(ar((S.data.items || []).length)) + ' مستند في المكتبة.') + '</p>'
       + statsHtml()
       + '<div class="al-bar"><div class="al-seg" role="group" aria-label="الفلتر">'
       + '<button type="button" class="al-tab' + (S.filter === 'ap' ? ' on' : '') + '" data-a="filter" data-k="ap">المقترح للنيابة الإدارية</button>'
       + '<button type="button" class="al-tab' + (S.filter === 'all' ? ' on' : '') + '" data-a="filter" data-k="all">الكل</button></div>'
       + '<input type="search" id="alQ" class="al-q" placeholder="ابحث بالعنوان" value="' + esc(S.q) + '" aria-label="بحث بالعنوان"></div>'
-      + '<div id="alList">' + listHtml() + '</div></div>';
+      + '<div id="alList">' + listHtml() + '</div>';
+  }
+
+  // ------------------------------------------------------------------ تنظيف المكتبة
+  function day(t) { return ar(String(t || '').slice(0, 10)); }
+  function more(n) { return n > SHOW_CAP ? '<p class="al-mute">ظاهر أول ' + esc(ar(SHOW_CAP)) + ' من ' + esc(ar(n)) + '، والباقي بيظهر بعد ما تنظّف دول.</p>' : ''; }
+  function dupItems(groups) {
+    var out = [];
+    groups.forEach(function (g) { g.extras.forEach(function (x) { out.push({ id: x.id, dup_of: g.keep.id }); }); });
+    return out;
+  }
+  function tinyItems(tiny) { return tiny.filter(function (t) { return !t.ingested; }).map(function (t) { return { id: t.id }; }); }
+  function groupHtml(g, i, w) {
+    var k = g.keep;
+    return '<article class="al-card"><div class="al-top"><h4>' + esc(k.title || 'بلا عنوان') + '</h4><span class="al-chip">هيفضل</span></div>'
+      + '<p class="al-meta">' + esc(ar(k.chars)) + ' حرف' + (k.ingested ? '، واتدخل منه ' + esc(ar(k.ingested)) + ' مادة' : '') + '</p>'
+      + '<p class="al-meta">نسخ مطابقة له بالحرف (' + esc(ar(g.extras.length)) + '):</p>'
+      + '<ul class="al-dups">' + g.extras.map(function (x) { return '<li><span>' + esc(x.title || 'بلا عنوان') + '</span>' + (x.created_at ? '<small>اتضاف ' + esc(day(x.created_at)) + '</small>' : '') + '</li>'; }).join('') + '</ul>'
+      + (w ? '<div class="al-acts"><button type="button" class="ep-b2" data-a="deldup" data-k="' + i + '">احذف النسخ</button></div>' : '')
+      + '</article>';
+  }
+  function tinyHtml(t, w) {
+    return '<article class="al-card"><div class="al-top"><h4>' + esc(t.title || 'بلا عنوان') + '</h4><span class="al-chip off">' + esc(ar(t.chars)) + ' حرف</span></div>'
+      + '<p class="al-meta al-head">' + esc(t.head || 'بلا نص') + '</p>'
+      + (t.ingested ? '<p class="al-mute">اتدخلت منه مواد في قاعدة النصوص، فمش هيتحذف.</p>'
+        : (w ? '<div class="al-acts"><button type="button" class="ep-b2" data-a="delone" data-id="' + esc(t.id) + '">احذف</button></div>' : ''))
+      + '</article>';
+  }
+  function goneHtml(x, w) {
+    var meta = [REASON_AR[x.reason] || '', x.deleted_at ? 'اتحذف ' + day(x.deleted_at) : ''].filter(Boolean).join('، ');
+    return '<li><div><b>' + esc(x.title || 'بلا عنوان') + '</b><small>' + esc(meta) + '</small></div>'
+      + (w ? '<button type="button" class="ep-bs" data-a="restore" data-id="' + esc(x.id) + '">رجّع</button>' : '') + '</li>';
+  }
+  function cleanHtml() {
+    var lead = '<p class="al-lead">شيل من مكتبة المنصة النسخ المكررة والمستندات اللي طلعت فاضية. الحذف هنا مش نهائي، وأي مستند تقدر ترجّعه من «المحذوفات».</p>';
+    if (S.c.state !== 'ready') return lead + stateBlock(S.c.state, S.c.err);
+    var d = S.c.data, w = A.canWrite(), dups = dupItems(d.groups), tiny = tinyItems(d.tiny);
+    var cell = function (label, n) { return '<div class="al-cell"><b>' + label + '</b><span>' + esc(ar(n)) + ' مستند</span></div>'; };
+    return lead
+      + (d.pending ? '<p class="al-mute" data-al-pending>لسه بنفحص ' + esc(ar(d.pending)) + ' مستند، والأرقام ممكن تزيد. حدّث بعد دقيقة. <button type="button" class="ep-bs" data-a="retry">حدّث</button></p>' : '')
+      + '<section class="al-sum"><div class="al-cells">' + cell('المكتبة', d.total) + cell('نسخ مكررة', dups.length) + cell('شبه فاضية', d.tiny.length) + cell('المحذوفات', d.deleted.length) + '</div></section>'
+      + '<div class="al-sec"><h3>نسخ مكررة</h3>' + (w && dups.length ? '<button type="button" class="ep-b1" data-a="delalldup">احذف كل النسخ المكررة</button>' : '') + '</div>'
+      + (d.groups.length ? '<div class="al-grid">' + d.groups.slice(0, SHOW_CAP).map(function (g, i) { return groupHtml(g, i, w); }).join('') + '</div>' + more(d.groups.length)
+        : '<div class="al-empty"><b>مفيش نسخ مكررة</b><p>كل مستند في المكتبة نصه مختلف عن الباقي.</p></div>')
+      + '<div class="al-sec"><h3>مستندات شبه فاضية</h3>' + (w && tiny.length ? '<button type="button" class="ep-b2" data-a="delalltiny">احذف كل شبه الفاضية</button>' : '') + '</div>'
+      + '<p class="al-mute al-gap">مستندات نصها أقل من ' + esc(ar(d.tiny_chars)) + ' حرف، وغالبًا ملفها ما اتقراش.</p>'
+      + (d.tiny.length ? '<div class="al-grid">' + d.tiny.slice(0, SHOW_CAP).map(function (t) { return tinyHtml(t, w); }).join('') + '</div>' + more(d.tiny.length)
+        : '<div class="al-empty"><b>مفيش مستندات شبه فاضية</b></div>')
+      + '<div class="al-sec"><h3>المحذوفات</h3></div>'
+      + (d.deleted.length ? '<ul class="al-gone">' + d.deleted.slice(0, SHOW_CAP).map(function (x) { return goneHtml(x, w); }).join('') + '</ul>' + more(d.deleted.length)
+        : '<div class="al-empty"><b>مفيش محذوفات</b><p>أي مستند تحذفه هيظهر هنا وتقدر ترجّعه.</p></div>');
+  }
+  function draw(v) {
+    v.innerHTML = '<div class="v2s-al">' + modeBar() + (S.note ? '<p class="al-ok" role="status">' + esc(S.note) + '</p>' : '')
+      + (S.mode === 'clean' ? cleanHtml() : ingestHtml()) + '</div>';
   }
   function drawList() { var l = q1('#alList', S.view); if (l) l.innerHTML = listHtml(); }
   function modalOpen() { return !!document.getElementById('epModal'); }
@@ -214,13 +292,90 @@
     setTimeout(function () { try { no.focus(); } catch (e) {} }, 30);
   }
 
+  // ------------------------------------------------------------------ تنظيف: كتابة
+  // الحذف على دفعات (٦٠ في المرة) واحدة ورا التانية؛ لو دفعة وقعت نقف ونقول اتحذف كام قبلها.
+  function runDelete(items, reason) {
+    var E = ep(), res = { deleted: 0, skipped: [] }, i = 0;
+    function next() {
+      if (i >= items.length) return Promise.resolve(res);
+      var part = items.slice(i, i + BATCH);
+      i += BATCH;
+      return E.api('/v2/ask/library/delete', { method: 'POST', body: { items: part, reason: reason, confirmed: true } }).then(function (d) {
+        res.deleted += (d.deleted || []).length;
+        res.skipped = res.skipped.concat(d.skipped || []);
+        return next();
+      }, function (e) { e.done = res.deleted; throw e; });
+    }
+    return next();
+  }
+  function skippedText(sk) {
+    if (!sk.length) return '';
+    var by = {}, parts = [];
+    sk.forEach(function (x) { by[x.why] = (by[x.why] || 0) + 1; });
+    Object.keys(by).forEach(function (k) { parts.push(ar(by[k]) + ' ' + (WHY_AR[k] || 'لسبب غير معروف')); });
+    return '، واتساب ' + ar(sk.length) + ' (' + parts.join('، ') + ')';
+  }
+  function confirmSheet(title, lead, goLabel, run) {
+    var s = sheet(title, '<p class="mc-lead">' + lead + '</p><div id="alErr" role="alert"></div><div class="acts"><button type="button" class="ep-b1" id="alGo">' + esc(goLabel) + '</button><button type="button" class="ep-b2" id="alNo">رجوع</button></div>');
+    if (!s) return;
+    var go = q1('#alGo', s), no = q1('#alNo', s), err = q1('#alErr', s);
+    var shut = function () { if (!s.dataset.busy) { window.closeModal(); redraw(); } };
+    no.onclick = shut;
+    var x = s.querySelector('[data-x]'); if (x) x.onclick = shut;
+    go.onclick = function () {
+      if (s.dataset.busy) return;
+      s.dataset.busy = '1'; go.disabled = true; no.disabled = true; go.textContent = 'جارٍ التنفيذ…'; err.innerHTML = '';
+      run().then(function (msg) {
+        delete s.dataset.busy; window.closeModal();
+        setNote(msg); loadClean(true); redraw();
+      }).catch(function (e) {
+        delete s.dataset.busy; go.disabled = false; no.disabled = false; go.textContent = goLabel;
+        err.innerHTML = '<div class="al-err">' + esc(errText(e)) + (e && e.done ? '. اتحذف ' + esc(ar(e.done)) + ' مستند قبل التوقف.' : '') + '</div>';
+        loadClean(true);
+      });
+    };
+    setTimeout(function () { try { no.focus(); } catch (e) {} }, 30);
+  }
+  function deleteSheet(items, reason, title, lead) {
+    if (!items.length) return;
+    confirmSheet(title, lead + ' الحذف مش نهائي، وتقدر ترجّع أي مستند من «المحذوفات».', title, function () {
+      return runDelete(items, reason).then(function (r) { return 'اتحذف ' + ar(r.deleted) + ' مستند' + skippedText(r.skipped); });
+    });
+  }
+  function cleanAct(k, a) {
+    var d = S.c.data;
+    if (!d) return;
+    if (k === 'delalldup') {
+      var all = dupItems(d.groups);
+      deleteSheet(all, 'duplicate', 'احذف كل النسخ المكررة', 'هتتحذف ' + esc(ar(all.length)) + ' نسخة مكررة، ومن كل مجموعة هيفضل مستند واحد.');
+    } else if (k === 'deldup') {
+      var g = d.groups[+a.getAttribute('data-k')];
+      if (g) deleteSheet(dupItems([g]), 'duplicate', 'احذف النسخ', 'هتتحذف ' + esc(ar(g.extras.length)) + ' نسخة مطابقة لـ«' + esc(g.keep.title) + '»، وهو هيفضل.');
+    } else if (k === 'delalltiny') {
+      var tiny = tinyItems(d.tiny);
+      deleteSheet(tiny, 'empty', 'احذف كل شبه الفاضية', 'هتتحذف ' + esc(ar(tiny.length)) + ' مستند نصه أقل من ' + esc(ar(d.tiny_chars)) + ' حرف.');
+    } else if (k === 'delone') {
+      var id = a.getAttribute('data-id'), t = d.tiny.filter(function (x) { return x.id === id; })[0];
+      if (t && !t.ingested) deleteSheet([{ id: id }], 'empty', 'احذف المستند', 'هيتحذف «' + esc(t.title) + '».');
+    } else if (k === 'restore') {
+      var rid = a.getAttribute('data-id'), x = d.deleted.filter(function (y) { return y.id === rid; })[0];
+      if (x) confirmSheet('رجّع المستند', 'هيرجع «' + esc(x.title) + '» للمكتبة زي ما كان.', 'رجّع', function () {
+        return ep().api('/v2/ask/library/restore', { method: 'POST', body: { ids: [rid], confirmed: true } }).then(function (r) {
+          return (r.restored || []).length ? 'رجع «' + x.title + '» للمكتبة' : 'المستند مش موجود';
+        });
+      });
+    }
+  }
+
   // ------------------------------------------------------------------ أحداث
   function onClick(e) {
     var a = e.target.closest ? e.target.closest('[data-a]') : null;
     if (!a || !S.view.contains(a) || a.disabled) return;
     var k = a.getAttribute('data-a'), id = a.getAttribute('data-id');
-    if (k === 'filter') { S.filter = a.getAttribute('data-k'); redraw(); }
-    else if (k === 'retry') { load(true); redraw(); }
+    if (k === 'mode') { S.mode = a.getAttribute('data-k') === 'clean' ? 'clean' : 'ingest'; if (S.mode === 'clean') loadClean(false); redraw(); }
+    else if (k === 'filter') { S.filter = a.getAttribute('data-k'); redraw(); }
+    else if (k === 'retry') { if (S.mode === 'clean') loadClean(true); else load(true); redraw(); }
+    else if (/^(del|restore)/.test(k)) { if (A.canWrite()) cleanAct(k, a); }
     else if (k === 'prev' && A.canWrite()) preview(id);
     else if (k === 'ingest' && A.canWrite()) ingestSheet(id);
   }

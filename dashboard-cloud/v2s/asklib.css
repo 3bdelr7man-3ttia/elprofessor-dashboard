@@ -44,4 +44,17 @@
 .al-arts{margin:0;padding:0;list-style:none;display:grid;gap:6px;max-height:320px;overflow:auto}
 .al-arts li{background:var(--paper2);border-radius:10px;padding:8px 10px;display:grid;gap:2px;font-size:14px;line-height:1.7}
 .al-arts li span{color:var(--ink)}
+.al-modes{margin-bottom:14px}
+.al-sec{display:flex;flex-wrap:wrap;gap:8px 14px;align-items:center;justify-content:space-between;margin:22px 0 10px}
+.al-sec h3{font-size:18px}
+.al-gap{margin-bottom:10px}
+.al-card h4,.al-dups span,.al-gone b,.al-head{overflow-wrap:anywhere}
+.al-dups{margin:8px 0 0;padding:0;list-style:none;display:grid;gap:6px}
+.al-dups li{background:var(--paper2);border-radius:10px;padding:8px 10px;display:grid;gap:0;font-size:14px;line-height:1.7}
+.al-dups small,.al-gone small{color:var(--mute);font-size:13.5px}
+.al-head{background:var(--paper2);border-radius:10px;padding:8px 10px;color:var(--ink)}
+.al-gone{margin:0;padding:0;list-style:none;display:grid;gap:8px}
+.al-gone li{background:#fff;border:1px solid var(--line);border-radius:12px;padding:10px 14px;display:flex;flex-wrap:wrap;gap:8px 14px;align-items:center;justify-content:space-between}
+.al-gone li div{min-width:0;display:grid}
+.al-gone b{font:700 15px/1.7 'Cairo',sans-serif}
 @media (max-width:560px){.al-form{grid-template-columns:1fr}.al-grid{grid-template-columns:1fr}}

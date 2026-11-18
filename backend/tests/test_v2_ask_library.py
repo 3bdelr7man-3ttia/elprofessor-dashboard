@@ -40,6 +40,13 @@ STATS = {'articles': {AP: {'library': 3, 'verified': 10}}, 'corrections_approved
 PREVIEW = {'articles': 40, 'preview': [{'article_no': i, 'text': 'نص تجريبي %d' % i} for i in range(1, 20)], 'duplicates': [{'article_no': 7}], 'applied': False,
            'law_key': '117/1958'}
 APPLIED = dict(PREVIEW, applied=True, counts={'inserted': 30, 'updated': 2, 'kept': 8})
+CARD = {'id': 'doc1', 'title': 'قانون تجريبي', 'chars': 1500, 'created_at': '2026-01-01', 'category': 'x', 'ingested': 2, 'sha': 'x'}
+CLEANUP = {'total': 9, 'pending': 3, 'tiny_chars': 500, 'secret': 'x',
+           'groups': [{'keep': CARD, 'extras': [dict(CARD, id='doc2', title='Copy of قانون تجريبي', ingested=0), {'id': 'bad id!'}]},
+                      {'keep': dict(CARD, id='doc5'), 'extras': [{'id': 'bad id!'}]}],
+           'tiny': [dict(CARD, id='doc3', title='ملف فاضي', chars=12, head='سطر واحد بس', content='x')],
+           'deleted': [{'id': 'doc4', 'title': 'نسخة قديمة', 'deleted_at': '2026-11-18T00:00:00', 'reason': 'duplicate', 'dup_of': 'doc1', 'deleted_by': 'a@x'},
+                       {'id': 'doc6', 'title': 'x', 'reason': 'weird'}]}
 
 
 class _Resp(object):
@@ -79,6 +86,13 @@ class Plat(object):
             return _Resp(200, STATS)
         if path == '/api/bridge/ask/ingest-library':
             return _Resp(200, APPLIED if (json or {}).get('apply') else PREVIEW)
+        if path == '/api/bridge/ask/library-cleanup':
+            return _Resp(200, CLEANUP)
+        if path == '/api/bridge/ask/library-delete':
+            return _Resp(200, {'deleted': [i['id'] for i in json['items']][:1], 'secret': 'x',
+                               'skipped': [{'id': i['id'], 'why': 'has_articles'} for i in json['items']][1:] + [{'id': 'zz', 'why': 'weird'}]})
+        if path == '/api/bridge/ask/library-restore':
+            return _Resp(200, {'restored': list(json['ids']), 'skipped': []})
         return _Resp(404, {'detail': 'Not Found'})
 
     def calls(self, prefix=''):
@@ -258,7 +272,9 @@ def test_ingest_bridge_missing_is_quiet(ctx, plat):
 
 # ---------------------------------------------------------------- الصلاحية والمفتاح
 
-PATHS = [('GET', A, None), ('POST', A + '/preview', body()), ('POST', A + '/ingest', body(confirmed=True))]
+PATHS = [('GET', A, None), ('POST', A + '/preview', body()), ('POST', A + '/ingest', body(confirmed=True)),
+         ('GET', A + '/cleanup', None), ('POST', A + '/delete', {'items': [{'id': 'doc3'}], 'reason': 'empty', 'confirmed': True}),
+         ('POST', A + '/restore', {'ids': ['doc4'], 'confirmed': True})]
 
 
 @pytest.mark.parametrize('role', NON_ADMIN_ROLES)
@@ -330,3 +346,92 @@ def test_asklib_js_declares_every_constant_it_uses():
     used = set(re.findall(r'(?<![.\w])([A-Z][A-Z_0-9]{2,})\b', code))   # مش خاصية (window.X)
     declared = set(re.findall(r'var\s+([A-Z][A-Z_0-9]+)', code))
     assert used <= declared, used - declared
+
+
+# ---------------------------------------------------------------- تنظيف المكتبة (حذف يترجّع)
+
+def test_cleanup_reads_the_bridge_and_whitelists_everything(ctx, plat):
+    r = call(ctx, 'GET', A + '/cleanup')
+    d = r.get_json()
+    assert r.status_code == 200 and r.headers['Cache-Control'] == 'no-store'
+    assert d['total'] == 9 and d['pending'] == 3 and d['tiny_chars'] == 500 and 'secret' not in d
+    assert len(d['groups']) == 1, 'مجموعة من غير نسخ صالحة تُسقط'
+    g = d['groups'][0]
+    assert g['keep'] == {'id': 'doc1', 'title': 'قانون تجريبي', 'chars': 1500, 'created_at': '2026-01-01', 'ingested': 2}
+    assert [e['id'] for e in g['extras']] == ['doc2']
+    assert d['tiny'] == [{'id': 'doc3', 'title': 'ملف فاضي', 'chars': 12, 'created_at': '2026-01-01', 'ingested': 2, 'head': 'سطر واحد بس'}]
+    assert d['deleted'] == [{'id': 'doc4', 'title': 'نسخة قديمة', 'deleted_at': '2026-11-18T00:00:00', 'reason': 'duplicate'},
+                            {'id': 'doc6', 'title': 'x', 'deleted_at': '', 'reason': ''}]
+    c = plat.calls('/api/bridge/ask/library-cleanup')[0]
+    assert c['method'] == 'GET' and c['headers'].get('X-ELP-Metrics-Secret') == SECRET
+
+
+def test_cleanup_bridge_missing_and_bad_shape(ctx, plat):
+    plat.forced['/api/bridge/ask/library-cleanup'] = (404, {'detail': 'Not Found'})
+    r = call(ctx, 'GET', A + '/cleanup')
+    assert r.status_code == 404 and r.get_json() == {'error': MISSING_AR, 'bridge_missing': True}
+    plat.forced['/api/bridge/ask/library-cleanup'] = (200, {'oops': 1})
+    assert call(ctx, 'GET', A + '/cleanup').status_code == 502
+
+
+def test_delete_needs_confirmation_and_validates_before_any_call(ctx, plat):
+    ok = {'items': [{'id': 'doc2', 'dup_of': 'doc1'}], 'reason': 'duplicate'}
+    r = call(ctx, 'POST', A + '/delete', ok)
+    assert r.status_code == 400 and r.get_json()['error'] == CONFIRM_AR
+    bads = [dict(ok, reason='purge'), dict(ok, reason=None), dict(ok, items=[]), dict(ok, items='doc2'),
+            dict(ok, items=[{'id': 'r%d' % i, 'dup_of': 'doc1'} for i in range(61)]),
+            dict(ok, items=[{'id': 'a b', 'dup_of': 'doc1'}]), dict(ok, items=['doc2']),
+            dict(ok, items=[{'id': 'doc2'}]), dict(ok, items=[{'id': 'doc2', 'dup_of': 'doc2'}]),
+            dict(ok, items=[{'id': 'doc2', 'dup_of': 'doc1'}, {'id': 'doc2', 'dup_of': 'doc1'}]),
+            {'items': [{'id': 'doc3', 'dup_of': 7}], 'reason': 'empty'}]
+    for b in bads:
+        assert call(ctx, 'POST', A + '/delete', dict(b, confirmed=True)).status_code == 400, b
+    assert plat.seen == []
+
+
+def test_delete_writes_through_v2_write_with_by_from_token_and_audits(ctx, plat):
+    before = len(audits())
+    r = call(ctx, 'POST', A + '/delete', {'items': [{'id': 'doc2', 'dup_of': 'doc1', 'x': 1}, {'id': 'doc7', 'dup_of': 'doc1'}],
+                                          'reason': 'duplicate', 'confirmed': True, 'by': 'attacker@x.test', 'hard': True})
+    assert r.status_code == 200
+    assert r.get_json() == {'deleted': ['doc2'], 'skipped': [{'id': 'doc7', 'why': 'has_articles'}]}, 'سبب مجهول يُسقط'
+    sent = plat.calls('/api/bridge/ask/library-delete')[-1]['json']
+    assert sent == {'items': [{'id': 'doc2', 'dup_of': 'doc1'}, {'id': 'doc7', 'dup_of': 'doc1'}], 'reason': 'duplicate', 'by': ADMIN_EMAIL}
+    new = audits()[before:]
+    assert len(new) == 1 and new[0][:3] == ('ask.library_delete', 'n=2', {'reason': 'duplicate', 'ids': ['doc2', 'doc7']}) and new[0][3] == ADMIN_EMAIL
+    call(ctx, 'POST', A + '/delete', {'items': [{'id': 'doc3', 'dup_of': 'doc1'}], 'reason': 'empty', 'confirmed': True})
+    assert plat.calls('/api/bridge/ask/library-delete')[-1]['json'] == {'items': [{'id': 'doc3'}], 'reason': 'empty', 'by': ADMIN_EMAIL}
+    assert audits()[-1][1] == 'doc3'
+
+
+def test_delete_lost_reply_and_missing_bridge_write_no_audit(ctx, plat):
+    before = len(audits())
+    plat.forced['/api/bridge/ask/library-delete'] = (503, {'detail': 'x'})
+    r = call(ctx, 'POST', A + '/delete', {'items': [{'id': 'doc3'}], 'reason': 'manual', 'confirmed': True})
+    assert r.status_code == 502 and r.get_json().get('no_reply') is True
+    plat.forced['/api/bridge/ask/library-delete'] = (404, {'detail': 'Not Found'})
+    r = call(ctx, 'POST', A + '/delete', {'items': [{'id': 'doc3'}], 'reason': 'manual', 'confirmed': True})
+    assert r.status_code == 404 and r.get_json()['error'] == MISSING_AR
+    assert [a for a in audits()[before:] if a[0] == 'ask.library_delete'] == []
+
+
+def test_restore_needs_confirmation_validates_and_audits(ctx, plat):
+    assert call(ctx, 'POST', A + '/restore', {'ids': ['doc4']}).get_json()['error'] == CONFIRM_AR
+    for ids in ([], 'doc4', ['a b'], ['doc4', 'doc4'], [7], ['r%d' % i for i in range(61)]):
+        assert call(ctx, 'POST', A + '/restore', {'ids': ids, 'confirmed': True}).status_code == 400, ids
+    assert plat.seen == []
+    before = len(audits())
+    r = call(ctx, 'POST', A + '/restore', {'ids': ['doc4'], 'confirmed': True, 'by': 'attacker@x.test'})
+    assert r.status_code == 200 and r.get_json() == {'restored': ['doc4'], 'skipped': []}
+    assert plat.calls('/api/bridge/ask/library-restore')[-1]['json'] == {'ids': ['doc4'], 'by': ADMIN_EMAIL}
+    new = audits()[before:]
+    assert len(new) == 1 and new[0][:3] == ('ask.library_restore', 'doc4', {'ids': ['doc4']})
+
+
+def test_cleanup_screen_is_wired_and_never_offers_a_permanent_delete():
+    js = _read('dashboard-cloud', 'v2s', 'asklib.js')
+    for needle in ("/v2/ask/library/cleanup", "/v2/ask/library/delete", "/v2/ask/library/restore", 'تنظيف المكتبة', 'المحذوفات', 'رجّع'):
+        assert needle in js, needle
+    assert 'نهائي' not in js.replace('مش نهائي', ''), 'الشاشة ما تعرضش حذف نهائي'
+    src = _read('backend', 'v2_asklib_routes.py')
+    assert "'DELETE'" not in src and 'library-purge' not in src
