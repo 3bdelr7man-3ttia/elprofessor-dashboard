@@ -156,6 +156,52 @@ def view_restored(d):
     return {'restored': _id_list(d['restored']), 'skipped': _skips(d.get('skipped'))}
 
 
+# ── «القوانين الناقصة»: القايمة الأساسية لكل بلد + نص قانون يتحط في مكانه ──
+COUNTRY_IDS = ('egypt', 'qatar', 'saudi')
+LAW_KINDS = ('law', 'regulation', 'decision')
+LAW_TEXT_MAX = 3000000
+BAD_COUNTRY_AR = 'اختر البلد'
+BAD_KIND_AR = 'اختر نوع النص'
+BAD_TITLE_AR = 'اكتب اسم القانون'
+BAD_URL_AR = 'حط رابط المصدر الرسمي للنص'
+BAD_TEXT_AR = 'الصق نص القانون كامل'
+_URL_RE = re.compile(r'^https?://[^\s/<>"]+\.[^\s<>"]+$')
+
+
+def view_coverage(d):
+    """{countries:[{id,label,official,laws:[{key,title,articles}],missing,base_laws,base_articles}], later:[…]}."""
+    if not isinstance(d, dict) or not isinstance(d.get('countries'), list):
+        return None
+    out = []
+    for c in d['countries']:
+        if not isinstance(c, dict) or c.get('id') not in COUNTRY_IDS or not isinstance(c.get('laws'), list):
+            continue
+        laws = [{'key': _s(l.get('key'), 30), 'title': _s(l.get('title')), 'articles': _n(l.get('articles')) or 0}
+                for l in c['laws'] if isinstance(l, dict) and _s(l.get('key'), 30)]
+        out.append({'id': c['id'], 'label': _s(c.get('label'), 40), 'official': _s(c.get('official'), 120),
+                    'laws': laws, 'missing': sum(1 for l in laws if not l['articles']),
+                    'base_laws': _n(c.get('base_laws')) or 0, 'base_articles': _n(c.get('base_articles')) or 0})
+    later = [_s(x, 40) for x in d.get('later') if isinstance(x, str)] if isinstance(d.get('later'), list) else []
+    return {'countries': out, 'later': later}
+
+
+def view_law_text(d):
+    if not isinstance(d, dict) or _n(d.get('articles')) is None:
+        return None
+
+    def rows(v):
+        return [{'article_no': _s(x.get('article_no'), 30), 'text': _s(x.get('text'), 200)}
+                for x in (v if isinstance(v, list) else []) if isinstance(x, dict)]
+    out = {'law_key': _s(d.get('law_key'), 40), 'articles': _n(d.get('articles')) or 0,
+           'existing': _n(d.get('existing')) or 0, 'applied': d.get('applied') is True,
+           'duplicates': [_s(x, 30) for x in (d.get('duplicates') if isinstance(d.get('duplicates'), list) else [])][:40],
+           'preview': rows(d.get('preview')), 'last': rows(d.get('last'))}
+    c = d.get('counts')
+    if isinstance(c, dict):
+        out['counts'] = {k: _n(c.get(k)) or 0 for k in ('inserted', 'updated', 'kept')}
+    return out
+
+
 def register(app, ns):
     from flask import jsonify, request
 
@@ -295,6 +341,87 @@ def register(app, ns):
                 return None
             ids.append(x)
         return ids
+
+    def clean_law_text(body):
+        country = body.get('country')
+        if country not in COUNTRY_IDS:
+            return None, err(BAD_COUNTRY_AR)
+        kind = body.get('kind')
+        if kind not in LAW_KINDS:
+            return None, err(BAD_KIND_AR)
+        law = _s(body.get('law'), 200)
+        if not law or not _LAW_RE.match(law) or len(law) < 3:
+            return None, err(BAD_LAW_AR)
+        title = _s(body.get('title'), 300)
+        if len(title) < 4:
+            return None, err(BAD_TITLE_AR)
+        url = body.get('source_url')
+        url = url.strip() if isinstance(url, str) else ''
+        if not _URL_RE.match(url) or len(url) > 600:
+            return None, err(BAD_URL_AR)
+        text = body.get('text')
+        if not isinstance(text, str) or not 50 <= len(text.strip()) <= LAW_TEXT_MAX:
+            return None, err(BAD_TEXT_AR)
+        return {'country': country, 'kind': kind, 'law': law, 'title': title, 'source_url': url,
+                'text': text.strip()}, None
+
+    @app.route('/api/v2/ask/library/coverage', methods=['GET'], endpoint='v2_asklib_coverage')
+    @guard
+    def v2_asklib_coverage():
+        closed = N('_v2_closed')()
+        if closed:
+            return closed
+        resp = N('_platform_proxy')('GET', '/api/bridge/ask/coverage', timeout=30)
+        if not N('_resp_ok')(resp):
+            return bad(resp)
+        v = view_coverage(json_of(resp))
+        if v is None:
+            return err('تعذّر قراءة رد المنصة', 502)
+        return out(jsonify(v))
+
+    @app.route('/api/v2/ask/library/law-text/preview', methods=['POST'], endpoint='v2_asklib_lawtext_preview')
+    @guard
+    def v2_asklib_lawtext_preview():
+        closed = N('_v2_closed')()
+        if closed:
+            return closed
+        payload, bad_resp = clean_law_text(N('_v2_body')())
+        if bad_resp:
+            return bad_resp
+        payload.update(apply=False, by=N('_actor_email')())
+        resp = N('_platform_proxy')('POST', '/api/bridge/ask/law-text', json_body=payload, timeout=30)
+        if not N('_resp_ok')(resp):
+            return bad(resp)
+        v = view_law_text(json_of(resp))
+        if v is None:
+            return err('تعذّر قراءة رد المنصة', 502)
+        return out(jsonify(v))
+
+    @app.route('/api/v2/ask/library/law-text', methods=['POST'], endpoint='v2_asklib_lawtext')
+    @guard
+    def v2_asklib_lawtext():
+        closed = N('_v2_closed')()
+        if closed:
+            return closed
+        body = N('_v2_body')()
+        conf = N('_v2_confirmed')(body)
+        if conf:
+            return conf
+        payload, bad_resp = clean_law_text(body)
+        if bad_resp:
+            return bad_resp
+        payload['apply'] = True
+        resp = N('_v2_write')('POST', '/api/bridge/ask/law-text', payload, 'ask.law_text',
+                              '%s:%s' % (payload['country'], payload['law']),
+                              {'country': payload['country'], 'law': payload['law'], 'kind': payload['kind'],
+                               'title': payload['title'], 'source_url': payload['source_url'],
+                               'chars': len(payload['text'])})
+        if not N('_resp_ok')(resp):
+            return bad(resp)
+        v = view_law_text(json_of(resp))
+        if v is None:
+            return err('تعذّر قراءة رد المنصة', 502)
+        return out(jsonify(v))
 
     @app.route('/api/v2/ask/library/cleanup', methods=['GET'], endpoint='v2_asklib_cleanup')
     @guard

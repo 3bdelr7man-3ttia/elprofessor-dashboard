@@ -4,6 +4,8 @@
  * ٣) لكل مستند: التخصص ورقم القانون ثم «جرّب التقسيم» (معاينة بلا كتابة) ثم «أدخل المواد» (ورقة تأكيد ثم كتابة + تدقيق).
  * ٤) «تنظيف المكتبة»: النسخ المكررة بالحرف + المستندات شبه الفاضية + «المحذوفات». الحذف بيترجّع دايمًا (المنصة بتعلّم المستند وبس)،
  *    وشروطه عند المنصة: المكرر لازم يطابق الباقي حرفيًا، واللي اتدخلت منه مواد في قاعدة النصوص ما بيتحذفش.
+ * ٥) «القوانين الناقصة»: القايمة الأساسية لكل بلد قصاد قاعدة «اسأل» (موجود بكام مادة / ناقص)، و«حط النص» بيدخّل نص قانون
+ *    من مصدره الرسمي في قاعدة بلده: معاينة التقسيم الأول ثم إدخال. من غير رابط المصدر مفيش إدخال.
  * ⛔ المفتاح مقفول افتراضيًا: الملف بيتحمّل دايمًا لكنه ما بيرسم شيئًا إلا لو index.html نادى `render` (والغلاف الجديد شغّال).
  * ⛔ الكتابة للأدمن بس. ⛔ المصدر اللي غاب ⇒ «غير متاح بعد» لا صفر. ⛔ لا confirm ولا prompt. ⛔ «·» لا تلاصق رقمًا.
  * ========================================================================== */
@@ -22,7 +24,7 @@
   var WHY_AR = { missing: 'مش موجود', has_articles: 'اتدخلت منه مواد في قاعدة النصوص', keep_missing: 'النسخة الباقية مش موجودة', not_identical: 'مش مطابق للنسخة الباقية', not_empty: 'فيه نص' };
   var REASON_AR = { duplicate: 'نسخة مكررة', empty: 'شبه فاضي', manual: 'حذف يدوي' };
   var S = { view: null, state: 'idle', data: null, err: '', filter: 'ap', q: '', rows: {}, note: '', noteT: null,
-            mode: 'ingest', c: { state: 'idle', data: null, err: '' } };
+            mode: 'ingest', c: { state: 'idle', data: null, err: '' }, w: { state: 'idle', data: null, err: '' } };
 
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
   function ar(n) { return String(n == null ? '' : n).replace(/\d/g, function (d) { return DIG.charAt(+d); }); }
@@ -67,6 +69,19 @@
     }).catch(function (e) {
       if (e && e.status === 401) return;
       S.c = { state: e && e.status === 404 ? 'closed' : 'error', data: null, err: (e && e.data && e.data.error) || '' };
+      redraw();
+    });
+  }
+  function loadWant(force) {
+    var E = ep();
+    if (!E || !E.api || !E.authed) return;
+    if (!force && S.w.state !== 'idle') return;
+    S.w.state = 'loading';
+    E.api('/v2/ask/library/coverage').then(function (d) {
+      S.w = { state: 'ready', data: d, err: '' }; redraw();
+    }).catch(function (e) {
+      if (e && e.status === 401) return;
+      S.w = { state: e && e.status === 404 ? 'closed' : 'error', data: null, err: (e && e.data && e.data.error) || '' };
       redraw();
     });
   }
@@ -152,7 +167,7 @@
   }
   function modeBar() {
     function tab(k, label) { return '<button type="button" class="al-tab' + (S.mode === k ? ' on' : '') + '" data-a="mode" data-k="' + k + '">' + label + '</button>'; }
-    return '<div class="al-seg al-modes" role="group" aria-label="القسم">' + tab('ingest', 'إدخال القوانين') + tab('clean', 'تنظيف المكتبة') + '</div>';
+    return '<div class="al-seg al-modes" role="group" aria-label="القسم">' + tab('ingest', 'إدخال القوانين') + tab('want', 'القوانين الناقصة') + tab('clean', 'تنظيف المكتبة') + '</div>';
   }
   function ingestHtml() {
     var lead = '<p class="al-lead">مستندات مكتبة المنصة اللي تتحوّل مواد في قاعدة نصوص «اسأل». ';
@@ -215,9 +230,33 @@
       + (d.deleted.length ? '<ul class="al-gone">' + d.deleted.slice(0, SHOW_CAP).map(function (x) { return goneHtml(x, w); }).join('') + '</ul>' + more(d.deleted.length)
         : '<div class="al-empty"><b>مفيش محذوفات</b><p>أي مستند تحذفه هيظهر هنا وتقدر ترجّعه.</p></div>');
   }
+  // ------------------------------------------------------------------ القوانين الناقصة
+  function wantRow(c, l, w) {
+    var has = l.articles > 0;
+    return '<li class="' + (has ? 'has' : 'miss') + '"><div><b>' + esc(l.title) + '</b><small>' + esc(ar(l.key)) + '</small></div>'
+      + '<span class="al-chip' + (has ? '' : ' off') + '">' + (has ? 'موجود، ' + esc(ar(l.articles)) + ' مادة' : 'ناقص') + '</span>'
+      + (w && !has ? '<button type="button" class="ep-bs" data-a="wantadd" data-c="' + esc(c.id) + '" data-k="' + esc(l.key) + '">حط النص</button>' : '') + '</li>';
+  }
+  function wantCountry(c, w) {
+    var laws = c.laws.slice().sort(function (a, b) { return (a.articles > 0) - (b.articles > 0); });
+    return '<section class="al-want"><div class="al-sec"><h3>' + esc(c.label) + '</h3>'
+      + (w ? '<button type="button" class="ep-b2" data-a="wantadd" data-c="' + esc(c.id) + '" data-k="">أضف قانون تاني</button>' : '') + '</div>'
+      + '<p class="al-mute al-gap">في القاعدة ' + esc(ar(c.base_laws)) + ' قانون و' + esc(ar(c.base_articles)) + ' مادة. '
+      + (c.missing ? 'ناقص ' + esc(ar(c.missing)) + ' من القوانين الأساسية.' : 'القوانين الأساسية كلها موجودة.')
+      + (c.official ? ' المصدر الرسمي: ' + esc(c.official) + '.' : '') + '</p>'
+      + '<ul class="al-wl">' + laws.map(function (l) { return wantRow(c, l, w); }).join('') + '</ul></section>';
+  }
+  function wantHtml() {
+    var lead = '<p class="al-lead">القوانين الأساسية لكل بلد، والموجود منها في قاعدة «اسأل». أي قانون ناقص تجيب نصه من مصدره الرسمي وتحطه هنا في مكانه.</p>';
+    if (S.w.state !== 'ready') return lead + stateBlock(S.w.state, S.w.err);
+    var d = S.w.data, w = A.canWrite();
+    if (!d.countries.length) return lead + '<div class="al-empty"><b>قواعد البلاد لسه ما اتحمّلتش</b><p>هتظهر هنا أول ما تتحمّل.</p></div>';
+    return lead + d.countries.map(function (c) { return wantCountry(c, w); }).join('')
+      + (d.later.length ? '<p class="al-mute al-later">بلاد لسه مالهاش قاعدة: ' + esc(d.later.join('، ')) + '.</p>' : '');
+  }
   function draw(v) {
     v.innerHTML = '<div class="v2s-al">' + modeBar() + (S.note ? '<p class="al-ok" role="status">' + esc(S.note) + '</p>' : '')
-      + (S.mode === 'clean' ? cleanHtml() : ingestHtml()) + '</div>';
+      + (S.mode === 'clean' ? cleanHtml() : S.mode === 'want' ? wantHtml() : ingestHtml()) + '</div>';
   }
   function drawList() { var l = q1('#alList', S.view); if (l) l.innerHTML = listHtml(); }
   function modalOpen() { return !!document.getElementById('epModal'); }
@@ -367,14 +406,74 @@
     }
   }
 
+  // ------------------------------------------------------------------ القوانين الناقصة: حط النص
+  function wantSheet(cid, key) {
+    var d = S.w.data, c = d && d.countries.filter(function (x) { return x.id === cid; })[0];
+    if (!c) return;
+    var l = c.laws.filter(function (x) { return x.key === key; })[0] || { key: '', title: '' };
+    var s = sheet(l.title ? 'حط نص القانون' : 'أضف قانون', '<p class="mc-lead">البلد: ' + esc(c.label) + '. الصق النص كامل من مصدره الرسمي، وهيتقسم مواد لوحده.</p>'
+      + '<div class="al-wf"><label>اسم القانون<input id="wfTitle" maxlength="300" value="' + esc(l.title) + '"></label>'
+      + '<label>النوع<select id="wfKind"><option value="law">قانون</option><option value="regulation">لائحة</option><option value="decision">قرار</option><option value="other">أخرى (مرسوم أو نظام أو أمر)</option></select></label>'
+      + '<label>الرقم والسنة<input id="wfLaw" maxlength="20" inputmode="text" placeholder="14/2025" value="' + esc(l.key) + '"></label>'
+      + '<label class="wide">رابط المصدر الرسمي<input id="wfUrl" maxlength="600" dir="ltr" placeholder="https://"></label>'
+      + '<label class="wide">نص القانون<textarea id="wfText" rows="5" placeholder="المادة 1 …"></textarea></label></div>'
+      + '<div id="wfPrev"></div><div id="alErr" role="alert"></div>'
+      + '<div class="acts"><button type="button" class="ep-b1" id="alGo" disabled>أدخل المواد</button><button type="button" class="ep-b2" id="wfTry">جرّب التقسيم</button><button type="button" class="ep-b2" id="alNo">رجوع</button></div>');
+    if (!s) return;
+    var go = q1('#alGo', s), tryB = q1('#wfTry', s), no = q1('#alNo', s), err = q1('#alErr', s), pv = q1('#wfPrev', s), ok = '';
+    function vals() {
+      var k = q1('#wfKind', s).value;
+      return { country: cid, kind: k === 'other' ? 'law' : k, law: q1('#wfLaw', s).value.trim(), title: q1('#wfTitle', s).value.trim(),
+               source_url: q1('#wfUrl', s).value.trim(), text: q1('#wfText', s).value };
+    }
+    function sig(b) { return [b.kind, b.law, b.title, b.source_url, b.text.length, b.text.slice(0, 200)].join('|'); }
+    function stale() { ok = ''; go.disabled = true; pv.innerHTML = ''; }
+    function busy(on, btn, label) { if (on) s.dataset.busy = '1'; else delete s.dataset.busy; go.disabled = on || !ok; tryB.disabled = on; no.disabled = on; btn.textContent = label; }
+    s.querySelector('.al-wf').oninput = stale; s.querySelector('.al-wf').onchange = stale;
+    no.onclick = function () { if (!s.dataset.busy) window.closeModal(); };
+    tryB.onclick = function () {
+      if (s.dataset.busy) return;
+      var b = vals(), k = sig(b);
+      err.innerHTML = ''; stale(); busy(true, tryB, 'جارٍ التقسيم…');
+      ep().api('/v2/ask/library/law-text/preview', { method: 'POST', body: b }).then(function (r) {
+        busy(false, tryB, 'جرّب التقسيم');
+        if (sig(vals()) !== k) return;
+        if (!r.articles) { pv.innerHTML = '<div class="al-warn">ما لقيناش مواد في النص. اتأكد إن كل مادة بتبدأ بكلمة «المادة» ورقمها.</div>'; return; }
+        var li = function (a) { return '<li><b>مادة ' + esc(ar(a.article_no)) + '</b><span>' + esc(a.text) + '</span></li>'; };
+        pv.innerHTML = '<div class="al-prev"><p class="al-mute al-gap">اتقسم ' + esc(ar(r.articles)) + ' مادة، ومرجعه ' + esc(ar(r.law_key)) + '.'
+          + (r.existing ? ' القانون ده له ' + esc(ar(r.existing)) + ' مادة في القاعدة، والمختلف منها هيتحدّث.' : '')
+          + (r.duplicates.length ? ' فيه ' + esc(ar(r.duplicates.length)) + ' رقم مادة مكرر، راجع النص.' : '') + '</p>'
+          + '<ul class="al-arts">' + r.preview.map(li).join('') + (r.last.length ? '<li class="gap">…</li>' + r.last.map(li).join('') : '') + '</ul></div>';
+        ok = k; go.disabled = false;
+      }).catch(function (e) { busy(false, tryB, 'جرّب التقسيم'); err.innerHTML = '<div class="al-err">' + esc(errText(e)) + '</div>'; });
+    };
+    go.onclick = function () {
+      var b = vals();
+      if (s.dataset.busy || !ok || sig(b) !== ok) return;
+      b.confirmed = true; err.innerHTML = ''; busy(true, go, 'جارٍ الإدخال…');
+      ep().api('/v2/ask/library/law-text', { method: 'POST', body: b }).then(function (r) {
+        delete s.dataset.busy; window.closeModal();
+        var n = r.counts ? r.counts.inserted + r.counts.updated : r.articles;
+        setNote('اتدخل «' + b.title + '» في قاعدة ' + c.label + ': ' + ar(n) + ' مادة');
+        loadWant(true); redraw();
+      }).catch(function (e) {
+        busy(false, go, 'أدخل المواد');
+        err.innerHTML = '<div class="al-err">' + esc(errText(e)) + '</div>';
+        if (e && e.data && e.data.no_reply) loadWant(true);
+      });
+    };
+    setTimeout(function () { try { q1(l.title ? '#wfUrl' : '#wfTitle', s).focus(); } catch (e) {} }, 30);
+  }
+
   // ------------------------------------------------------------------ أحداث
   function onClick(e) {
     var a = e.target.closest ? e.target.closest('[data-a]') : null;
     if (!a || !S.view.contains(a) || a.disabled) return;
     var k = a.getAttribute('data-a'), id = a.getAttribute('data-id');
-    if (k === 'mode') { S.mode = a.getAttribute('data-k') === 'clean' ? 'clean' : 'ingest'; if (S.mode === 'clean') loadClean(false); redraw(); }
+    if (k === 'mode') { var m = a.getAttribute('data-k'); S.mode = m === 'clean' || m === 'want' ? m : 'ingest'; if (S.mode === 'clean') loadClean(false); if (S.mode === 'want') loadWant(false); redraw(); }
     else if (k === 'filter') { S.filter = a.getAttribute('data-k'); redraw(); }
-    else if (k === 'retry') { if (S.mode === 'clean') loadClean(true); else load(true); redraw(); }
+    else if (k === 'retry') { if (S.mode === 'clean') loadClean(true); else if (S.mode === 'want') loadWant(true); else load(true); redraw(); }
+    else if (k === 'wantadd') { if (A.canWrite()) wantSheet(a.getAttribute('data-c'), a.getAttribute('data-k') || ''); }
     else if (/^(del|restore)/.test(k)) { if (A.canWrite()) cleanAct(k, a); }
     else if (k === 'prev' && A.canWrite()) preview(id);
     else if (k === 'ingest' && A.canWrite()) ingestSheet(id);

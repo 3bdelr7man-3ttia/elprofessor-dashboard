@@ -435,3 +435,61 @@ def test_cleanup_screen_is_wired_and_never_offers_a_permanent_delete():
     assert 'نهائي' not in js.replace('مش نهائي', ''), 'الشاشة ما تعرضش حذف نهائي'
     src = _read('backend', 'v2_asklib_routes.py')
     assert "'DELETE'" not in src and 'library-purge' not in src
+
+
+# ── «القوانين الناقصة» + «حط النص» ──
+COV = {'countries': [
+    {'id': 'egypt', 'label': 'مصر', 'official': 'الجريدة الرسمية', 'base_laws': 75, 'base_articles': 8000, 'secret': 1,
+     'laws': [{'key': '131/1948', 'title': 'القانون المدني', 'articles': 1069}, {'key': '14/2025', 'title': 'قانون العمل', 'articles': 0}, {'title': 'بلا مفتاح'}]},
+    {'id': 'mars', 'label': 'x', 'laws': []}], 'later': ['الإمارات', 7]}
+LT = {'country': 'qatar', 'kind': 'law', 'law': '23/2004', 'title': 'قانون الإجراءات الجنائية',
+      'source_url': 'https://www.almeezan.qa/LawPage.aspx?id=1', 'text': 'المادة 1 ' + 'نص ' * 40}
+LT_OUT = {'law_key': '23/2004', 'articles': 3, 'existing': 0, 'applied': False, 'duplicates': [],
+          'preview': [{'article_no': '1', 'text': 'نص', 'x': 1}], 'last': []}
+
+
+def test_coverage_reads_the_bridge_and_whitelists(ctx, plat):
+    plat.forced['/api/bridge/ask/coverage'] = (200, COV)
+    r = call(ctx, 'GET', A + '/coverage')
+    d = r.get_json()
+    assert r.status_code == 200 and [c['id'] for c in d['countries']] == ['egypt'] and d['later'] == ['الإمارات']
+    eg = d['countries'][0]
+    assert 'secret' not in eg and eg['missing'] == 1 and eg['base_laws'] == 75 and len(eg['laws']) == 2
+    plat.forced['/api/bridge/ask/coverage'] = (404, {'detail': 'Not Found'})
+    assert call(ctx, 'GET', A + '/coverage').get_json() == {'error': MISSING_AR, 'bridge_missing': True}
+    plat.forced['/api/bridge/ask/coverage'] = (200, {'oops': 1})
+    assert call(ctx, 'GET', A + '/coverage').status_code == 502
+
+
+def test_law_text_validates_before_any_call(ctx, plat):
+    bads = [dict(LT, country='uae'), dict(LT, kind='poem'), dict(LT, law=''), dict(LT, title='x'),
+            dict(LT, source_url='من غير رابط'), dict(LT, source_url=None), dict(LT, text='قصير'), dict(LT, text=None)]
+    for b in bads:
+        assert call(ctx, 'POST', A + '/law-text/preview', b).status_code == 400, b
+        assert call(ctx, 'POST', A + '/law-text', dict(b, confirmed=True)).status_code == 400, b
+    r = call(ctx, 'POST', A + '/law-text', LT)
+    assert r.status_code == 400 and r.get_json()['error'] == CONFIRM_AR
+    assert plat.seen == []
+
+
+def test_law_text_preview_then_write_with_by_from_token_and_audit(ctx, plat):
+    plat.forced['/api/bridge/ask/law-text'] = (200, LT_OUT)
+    before = len(audits())
+    r = call(ctx, 'POST', A + '/law-text/preview', dict(LT, by='attacker@x.test'))
+    assert r.status_code == 200 and r.get_json()['preview'] == [{'article_no': '1', 'text': 'نص'}]
+    sent = plat.calls('/api/bridge/ask/law-text')[-1]['json']
+    assert sent['apply'] is False and sent['by'] == ADMIN_EMAIL and len(audits()) == before
+    plat.forced['/api/bridge/ask/law-text'] = (200, dict(LT_OUT, applied=True, counts={'inserted': 3, 'updated': 0, 'kept': 0}))
+    r = call(ctx, 'POST', A + '/law-text', dict(LT, confirmed=True, by='attacker@x.test'))
+    assert r.status_code == 200 and r.get_json()['counts'] == {'inserted': 3, 'updated': 0, 'kept': 0}
+    sent = plat.calls('/api/bridge/ask/law-text')[-1]['json']
+    assert sent['apply'] is True and sent['by'] == ADMIN_EMAIL and sent['country'] == 'qatar' and 'confirmed' not in sent
+    new = audits()[before:]
+    assert len(new) == 1 and new[0][0] == 'ask.law_text' and new[0][1] == 'qatar:23/2004' and 'text' not in new[0][2]
+
+
+@pytest.mark.parametrize('role', NON_ADMIN_ROLES)
+def test_coverage_and_law_text_are_admin_only(ctx, plat, role):
+    assert call(ctx, 'GET', A + '/coverage', role=role).status_code == 403
+    assert call(ctx, 'POST', A + '/law-text', dict(LT, confirmed=True), role=role).status_code == 403
+    assert plat.seen == []

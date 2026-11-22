@@ -57,4 +57,18 @@
 .al-gone li{background:#fff;border:1px solid var(--line);border-radius:12px;padding:10px 14px;display:flex;flex-wrap:wrap;gap:8px 14px;align-items:center;justify-content:space-between}
 .al-gone li div{min-width:0;display:grid}
 .al-gone b{font:700 15px/1.7 'Cairo',sans-serif}
-@media (max-width:560px){.al-form{grid-template-columns:1fr}.al-grid{grid-template-columns:1fr}}
+.al-wl{margin:0;padding:0;list-style:none;display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:8px}
+.al-wl li{background:#fff;border:1px solid var(--line);border-radius:12px;padding:8px 12px;display:flex;flex-wrap:wrap;gap:6px 10px;align-items:center}
+.al-wl li.miss{border-color:#E8C5CF;background:#FDF7F8}
+.al-wl li div{flex:1 1 180px;min-width:0;display:grid}
+.al-wl b{font:700 15px/1.7 'Cairo',sans-serif;overflow-wrap:anywhere}
+.al-wl small{color:var(--mute);font-size:13.5px}
+.al-later{margin-top:18px}
+.al-wf{display:grid;grid-template-columns:2fr 1fr 1fr;gap:8px 10px;margin:8px 0}
+.al-wf label{display:grid;gap:3px;font:700 13px 'Cairo',sans-serif;color:#6B665C;min-width:0}
+.al-wf label.wide{grid-column:1/-1}
+.al-wf input,.al-wf select,.al-wf textarea{min-height:44px;border:1px solid #E9E1D6;border-radius:10px;padding:0 10px;font:500 15px 'IBM Plex Sans Arabic','Cairo',sans-serif;background:#fff;color:#21262E;min-width:0;width:100%}
+.al-wf textarea{padding:8px 10px;line-height:1.8;resize:vertical;min-height:110px}
+.v2s-al-sb .al-arts{max-height:180px}
+.al-arts li.gap{text-align:center;background:none;padding:0}
+@media (max-width:560px){.al-form{grid-template-columns:1fr}.al-grid{grid-template-columns:1fr}.al-wl{grid-template-columns:1fr}.al-wf{grid-template-columns:1fr}}
