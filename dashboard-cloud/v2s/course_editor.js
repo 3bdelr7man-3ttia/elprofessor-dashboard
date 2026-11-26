@@ -576,7 +576,7 @@
     if (!up.file) return;
     var title = lessonName() || 'درس';
     confirmSheet({ title: 'ارفع الفيديو', lead: 'سيُرفع الملف «' + esc(up.file.name) + '» مباشرة إلى مخزن الفيديو.', items: ['لا تغلق الصفحة حتى يكتمل الرفع', 'بعد الرفع اضغط «احفظ الدرس» ليرتبط الفيديو بالدرس'], btn: 'ابدأ الرفع', busy: 'جارٍ التجهيز…',
-      send: function () { return api('POST', BASE + '/' + enc(E.id) + '/upload', { confirmed: true, title: title }); },
+      send: function () { return api('POST', BASE + '/' + enc(E.id) + '/upload', { confirmed: true, title: title, filename: up.file.name || '', size_bytes: up.file.size || 0 }); },
       onOk: function (res) {
         if (!res || res.configured !== true) { up.configured = false; up.file = null; paint(); return; }
         up.state = 'uploading'; up.pct = 0; up.msg = 'جارٍ الرفع…'; paint();
@@ -591,7 +591,7 @@
           }
         }).then(function () {
           up.state = 'done'; up.pct = 100; up.msg = 'اكتمل الرفع. اضغط «احفظ الدرس» ليرتبط الفيديو بالدرس.';
-          var d = draftOf(id); d._video = { touched: true, mode: 'upload', bunny_video_id: res.video_id, url: '' };
+          var d = draftOf(id); d._video = { touched: true, mode: 'upload', bunny_video_id: res.video_id, provider: res.provider || '', url: '' };
           up.file = null; paint();
         }).catch(function (e) { up.state = 'error'; up.msg = (e && e.message) || 'انقطع الرفع. أعد المحاولة.'; paint(); });
       } });

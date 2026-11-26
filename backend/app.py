@@ -187,7 +187,7 @@ def _security_headers(resp):
         # الجولة ١٢: رسالة الخبير الصوتية في درج المراجعة بتتشغّل من blob (fetch بالتوكن ⇒ blob) — من غير media-src
         # بتقع على default-src 'self' والمتصفح بيرفض blob:.
         "media-src 'self' blob:; "
-        "connect-src 'self' https://video.bunnycdn.com; "
+        "connect-src 'self' https://video.bunnycdn.com https://app.v-stream.net; "
         "object-src 'none'; "
         "base-uri 'none'; "
         "form-action 'self'; "

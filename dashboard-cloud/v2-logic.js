@@ -8028,7 +8028,7 @@
   // مسودة الفيديو: {touched, mode: 'upload'|'link'|'none', bunny_video_id, url}
   function videoBody(v) {
     if (!v || !v.touched) return undefined;
-    if (v.mode === 'upload' && v.bunny_video_id) return { bunny_video_id: v.bunny_video_id };
+    if (v.mode === 'upload' && v.bunny_video_id) return v.provider ? { bunny_video_id: v.bunny_video_id, provider: str(v.provider) } : { bunny_video_id: v.bunny_video_id };
     if (v.mode === 'link' && str(v.url).trim()) return { url: str(v.url).trim() };
     return {};
   }
@@ -8087,7 +8087,7 @@
       d.checkpoints = (lesson.checkpoints || []).map(function (c) { return { t: fmtT(c.t), question: str(c.question), options: clone(c.options || []) }; });
       d.summary = (lesson.summary || []).slice();
       var v = lesson.video || {};
-      d._video = { touched: false, mode: v.bunny_video_id ? 'upload' : (v.url ? 'link' : 'none'), bunny_video_id: v.bunny_video_id || '', url: v.bunny_video_id ? '' : (v.url || '') };
+      d._video = { touched: false, mode: v.bunny_video_id ? 'upload' : (v.url ? 'link' : 'none'), bunny_video_id: v.bunny_video_id || '', provider: v.bunny_video_id ? str(v.provider || '') : '', url: v.bunny_video_id ? '' : (v.url || '') };
     }
     return d;
   }
@@ -8204,6 +8204,8 @@
     var baseH = { 'Tus-Resumable': '1.0.0' };
     ['AuthorizationSignature', 'AuthorizationExpire', 'VideoId', 'LibraryId'].forEach(function (k) { if (auth[k] != null) baseH[k] = String(auth[k]); });
     var meta = { filetype: file.type || 'video/mp4', title: opts.title || file.name || 'video' };
+    // r36: VStream بيبعت بيانات الجلسة الموقّعة (metadata) ولازم تترجع في Upload-Metadata زي ما هي
+    if (up.metadata && typeof up.metadata === 'object') Object.keys(up.metadata).forEach(function (k) { if (up.metadata[k] != null) meta[k] = str(up.metadata[k]); });
     var createH = Object.assign({}, baseH, { 'Upload-Length': String(file.size), 'Upload-Metadata': tusMetadata(meta, opts.b64) });
     function fail(msg, status) { var e = new Error(msg); e.status = status || 0; return e; }
     return fetchFn(up.upload_url, { method: 'POST', headers: createH }).then(function (r) {

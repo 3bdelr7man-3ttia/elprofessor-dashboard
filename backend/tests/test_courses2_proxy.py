@@ -402,7 +402,7 @@ def test_wiring_dockerfiles_and_csp():
     assert app_src.index('v2_courses_routes.register(app, globals())') < app_src.index('v2_courses2_routes.register(app, globals())')
     for d in (_read('Dockerfile'), _read('deploy', 'Dockerfile.coolify')):
         assert 'COPY backend/v2_courses2_routes.py /app/v2_courses2_routes.py' in d
-    assert "connect-src 'self' https://video.bunnycdn.com;" in app_src
+    assert "connect-src 'self' https://video.bunnycdn.com https://app.v-stream.net;" in app_src
     html = _read('dashboard-cloud', 'index.html')
     assert html.index('v2s/course_editor.js') < html.index('v2s/courses.js') and 'v2s/course_editor.css' in html
 
@@ -413,3 +413,17 @@ def test_a_get_to_a_write_only_route_is_not_a_second_door(ctx, plat):
         assert ('application/json' not in (r.headers.get('Content-Type') or '') or r.status_code in (404, 405)
                 or r.get_json(silent=True) == {'status': 'ok', 'message': 'ElProfessor Dashboard API is running'}), tail
     assert plat.seen == []
+
+
+
+def test_r36_upload_forwards_file_name_and_size_and_drops_junk(ctx, plat):
+    plat.seen.clear()
+    _call(ctx, 'POST', A + '/pc-12/upload', {'confirmed': True, 'title': 'درس', 'filename': ' درس ١.mp4 ', 'size_bytes': 1234})
+    sent = [c for c in plat.seen if c['method'] == 'POST'][-1]
+    strip = lambda j: {k: v for k, v in j.items() if k not in ('by', 'confirmed')}
+    assert strip(sent['json']) == {'title': 'درس', 'filename': 'درس ١.mp4', 'size_bytes': 1234}
+    for bad in ('12', -5, 0, True, 1.5, 60 * 1024 ** 3):
+        plat.seen.clear()
+        _call(ctx, 'POST', A + '/pc-12/upload', {'confirmed': True, 'title': 'درس', 'size_bytes': bad})
+        sent = [c for c in plat.seen if c['method'] == 'POST'][-1]
+        assert strip(sent['json']) == {'title': 'درس'}, bad

@@ -275,6 +275,16 @@ def register(app, g):
             return bad
         title = b.get('title')
         title = title.strip()[:200] if isinstance(title, str) else ''
-        return write('POST', '%s/%s/upload' % (BASE, q(cid)), {'title': title}, 'upload', cid, {'title': title[:80]})
+        # r36: VStream بيعمل جلسة الرفع بحجم الملف واسمه من الأول (Bunny كان بيتجاهلهم)
+        fname = b.get('filename')
+        fname = fname.strip()[:200] if isinstance(fname, str) else ''
+        size = b.get('size_bytes')
+        size = size if isinstance(size, int) and not isinstance(size, bool) and 0 < size <= 50 * 1024 ** 3 else 0
+        body = {'title': title}
+        if fname:
+            body['filename'] = fname
+        if size:
+            body['size_bytes'] = size
+        return write('POST', '%s/%s/upload' % (BASE, q(cid)), body, 'upload', cid, {'title': title[:80]})
 
     return app

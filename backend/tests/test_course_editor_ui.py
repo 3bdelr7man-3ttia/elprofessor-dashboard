@@ -251,7 +251,7 @@ def test_recorded_body_video_rules_chapters_checkpoints_and_summary():
            'chapters': [{'t': 0, 'title': 'مقدمة'}, {'t': 90, 'title': ''}], 'checkpoints': [{'t': 30, 'question': 'س؟', 'options': [{'text': 'أ', 'ok': True, 'explanation': 'ش'}, {'text': 'ب', 'ok': False}]}],
            'summary': ['أ', 'ب'], 'transcript': ' نص '}
     d = C('draftFrom', les)
-    assert d['duration_seconds'] == '12:30' and d['chapters'][0]['t'] == '0:00' and d['_video'] == {'touched': False, 'mode': 'upload', 'bunny_video_id': 'g1', 'url': ''}
+    assert d['duration_seconds'] == '12:30' and d['chapters'][0]['t'] == '0:00' and d['_video'] == {'touched': False, 'mode': 'upload', 'bunny_video_id': 'g1', 'provider': '', 'url': ''}
     b = C('lessonBody', les, d)
     assert 'video' not in b, 'الفيديو لم يُلمس ⇒ لا يُرسل (لا رفع ورابط معًا)'
     assert b['duration_seconds'] == 750 and b['is_preview'] is True and b['chapters'] == [{'t': 0, 'title': 'مقدمة'}] and b['transcript'] == 'نص'
@@ -389,3 +389,35 @@ def test_shots_script_and_fixtures_exist_and_compile():
         path = os.path.join(_HERE, 'uiharness', n)
         with open(path, encoding='utf-8') as fh:
             compile(fh.read(), path, 'exec')
+
+
+# ---------------------------------------------------------------- r36: VStream
+@needs_node
+def test_r36_vstream_upload_sends_the_signed_session_metadata_and_the_lesson_keeps_the_provider():
+    js = r"""
+const calls=[];
+const file={size:1000,name:'a.mp4',type:'video/mp4',slice:(a,b)=>({a:a,b:b})};
+const up={provider:'vstream',upload_url:'https://app.v-stream.net/files?upload_session=s1&sig=x',headers:{},
+  metadata:{upload_session_uuid:'s1',video_uuid:'v-1',library_uuid:'lib',filename:'a.mp4',expires_at:'1795542368',signature:'sg'}};
+const H={get:k=>k==='Location'?'https://app.v-stream.net/files/abc':null};
+const fetchFn=(url,init)=>{calls.push({url,method:init.method,h:init.headers}); return Promise.resolve({status:init.method==='POST'?201:204,headers:H});};
+C.tusUpload(file,up,fetchFn,{title:'درس'}).then(()=>console.log(JSON.stringify({calls})));
+"""
+    import base64
+    out = _node(js)
+    post = out['calls'][0]
+    meta = {k: base64.b64decode(v).decode() for k, v in (kv.split(' ', 1) for kv in post['h']['Upload-Metadata'].split(','))}
+    assert meta['upload_session_uuid'] == 's1' and meta['signature'] == 'sg' and meta['video_uuid'] == 'v-1' and meta['expires_at'] == '1795542368'
+    assert meta['title'] == 'درس' and meta['filetype'] == 'video/mp4'
+    assert not any(k in post['h'] for k in ('AuthorizationSignature', 'VideoId')), 'مفيش ترويسات Bunny لما مفيش'
+    les = {'id': 'L2', 'kind': 'recorded', 'title': 'ع', 'video': {'bunny_video_id': 'v-1', 'provider': 'vstream'}}
+    d = C('draftFrom', les)
+    assert d['_video']['provider'] == 'vstream'
+    d['_video'] = {'touched': True, 'mode': 'upload', 'bunny_video_id': 'v-2', 'provider': 'vstream', 'url': ''}
+    assert C('lessonBody', les, d)['video'] == {'bunny_video_id': 'v-2', 'provider': 'vstream'}
+
+
+def test_r36_editor_sends_file_name_and_size_and_keeps_the_provider():
+    src = _read('dashboard-cloud', 'v2s', 'course_editor.js')
+    assert "filename: up.file.name || '', size_bytes: up.file.size || 0" in src
+    assert "provider: res.provider || ''" in src
