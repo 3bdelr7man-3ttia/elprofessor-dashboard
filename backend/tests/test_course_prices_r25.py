@@ -144,24 +144,44 @@ def test_platform_422_arabic_reason_passes_through(ctx, plat):
     assert r.status_code == 422 and 'مصر' in json.dumps(r.get_json(), ensure_ascii=False)
 
 
-def test_legacy_mirror_never_writes_zero_over_the_platform_price(ctx, plat):
+def test_legacy_mirror_never_writes_any_price_to_the_platform(ctx, plat):
     c = Course(title='دورة مرآة', trainer_name='x', status='active', price_egp=0, price_usd=0, platform_course_id='pc-9')
     db.session.add(c)
     db.session.commit()
-    r = ctx['client'].put('/api/courses/%d' % c.id, json={'price_egp': 0, 'price_usd': 0, 'title': 'دورة مرآة 2'}, headers=ctx['heads']['admin'])
-    assert r.status_code == 200
-    sent = [x['json'] for x in plat['seen'] if x['method'] == 'PUT'][-1]
-    assert 'price_egp' not in sent and 'price_usd' not in sent and sent['title'] == 'دورة مرآة 2'
-    r = ctx['client'].put('/api/courses/%d' % c.id, json={'price_egp': 450}, headers=ctx['heads']['admin'])
-    assert [x['json'] for x in plat['seen'] if x['method'] == 'PUT'][-1] == {'price_egp': 450}
+    for role in ('admin', 'employee'):
+        r = ctx['client'].put('/api/courses/%d' % c.id, json={'price_egp': 450, 'price_usd': 20, 'title': 'دورة مرآة 2'}, headers=ctx['heads'][role])
+        assert r.status_code == 200
+        sent = [x['json'] for x in plat['seen'] if x['method'] == 'PUT'][-1]
+        assert 'price_egp' not in sent and 'price_usd' not in sent and 'prices' not in sent and sent['title'] == 'دورة مرآة 2'
 
 
-def test_platform_courses_proxy_passes_prices_amounts_only(ctx, plat):
-    r = _put(ctx, '/api/platform-courses/pc-1', {'prices': {'sa': 150, 'ae': None, 'eg': ''}, 'title': 'ت'})
+def test_platform_courses_proxy_refuses_any_price_or_free_field(ctx, plat):
+    for body in ({'prices': {'sa': 150}, 'title': 'ت'}, {'price_egp': 5}, {'free': True}, {'free_intent': True}):
+        for role in ('admin', 'employee'):
+            r = _put(ctx, '/api/platform-courses/pc-1', body, role)
+            assert r.status_code == 410 and 'سعر الدورة' in json.dumps(r.get_json(), ensure_ascii=False)
+    assert [x for x in plat['seen'] if x['method'] == 'PUT'] == []
+    assert _put(ctx, '/api/platform-courses/pc-1', {'title': 'ت'}).status_code == 200      # التعديلات غير المالية شغالة
+
+
+def test_free_toggle_sends_only_free_true_and_needs_no_prices(ctx, plat):
+    r = _put(ctx, URL, {'confirmed': True, 'free': True, 'prices': {'eg': 99}})
+    assert r.status_code == 200, r.get_data(as_text=True)
+    (w,) = [c for c in plat['seen'] if c['method'] != 'GET']
+    assert w['path'] == '/api/bridge/courses/pc-1' and w['json'] == {'free': True}
+    a = AuditLog.query.filter_by(action='course.free').order_by(AuditLog.id.desc()).first()
+    assert a and a.target == 'pc-1'
+    assert _put(ctx, URL, {'confirmed': True, 'free': 'yes'}).status_code == 400
+    assert _put(ctx, URL, {'free': True}).status_code == 400                                # التأكيد مطلوب
+    assert _put(ctx, URL, {'confirmed': True, 'free': True}, 'employee').status_code == 403
+
+
+def test_free_false_sends_prices_with_the_paid_flag(ctx, plat):
+    r = _put(ctx, URL, {'confirmed': True, 'free': False, 'prices': {'eg': 300}})
     assert r.status_code == 200
-    w = [x for x in plat['seen'] if x['method'] == 'PUT'][-1]
-    assert w['json']['prices'] == {'sa': 150.0, 'ae': None, 'eg': None}
-    assert _put(ctx, '/api/platform-courses/pc-1', {'prices': {'sa': 'x'}}).status_code == 400
+    w = [c for c in plat['seen'] if c['method'] != 'GET'][-1]
+    assert w['json'] == {'prices': {'eg': 300.0}, 'free': False}
+    assert _put(ctx, URL, {'confirmed': True, 'free': False}).status_code == 400            # مدفوعة بلا سعر ⇒ ٤٠٠
 
 
 def test_ui_has_one_price_place():
@@ -172,3 +192,4 @@ def test_ui_has_one_price_place():
     assert 'pricesCourse' not in d3 and 'أسعار الدورات' not in d3
     assert 'id="e_price"' not in idx, 'الشاشة القديمة ما بقاش فيها خانة سعر تانية'
     assert '/prices' in courses and 'السعر بره مصر' in courses
+    assert 'id="co_free"' in courses and 'co_req' in courses and 'طلب صاحب الدورة' in courses

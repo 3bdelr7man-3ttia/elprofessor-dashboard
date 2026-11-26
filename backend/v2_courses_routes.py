@@ -186,6 +186,12 @@ def register(app, g):
         bad, b = guard(course_id)
         if bad:
             return bad
+        free = b.get('free')
+        if free is not None and not isinstance(free, bool):
+            return err('قيمة غير صالحة')
+        if free is True:
+            # مجانية بقرار المنصة (تتخطّى طلب المدرّب): مفيش أسعار مطلوبة ولا بتتبعت — المنصة بتمسح كل السلل.
+            return write('PUT', '/api/bridge/courses/%s' % quote(course_id, safe=''), {'free': True}, 'course.free', course_id, {'free': True})
         prices = b.get('prices')
         if not isinstance(prices, dict) or not prices:
             return err('اكتب سعر مصر على الأقل')
@@ -202,8 +208,12 @@ def register(app, g):
                 return err('اكتب السعر رقمًا صحيحًا')
             out[k] = n if n > 0 else None
         # المنصة هي اللي بتحكم (سعر مصر إلزامي للمدفوعة، والعملة من البلد)؛ بنبعت المبالغ بس.
-        return write('PUT', '/api/bridge/courses/%s' % quote(course_id, safe=''), {'prices': out}, 'course.prices', course_id,
-                     {'countries': sorted(out.keys())})
+        # free:false صريح ⇒ مدفوعة: المنصة بترجّع نوع الدورة مدفوع فالسعر يسري (حتى لو المدرّب كان طلب مجانية).
+        payload = {'prices': out}
+        if free is False:
+            payload['free'] = False
+        return write('PUT', '/api/bridge/courses/%s' % quote(course_id, safe=''), payload, 'course.prices', course_id,
+                     {'countries': sorted(out.keys()), 'free': False} if free is False else {'countries': sorted(out.keys())})
 
     # ------------------------------------------------------------------ ظهور · عروض أسعار · أرشفة/حذف
     @app.route('/api/v2/courses/<course_id>/visibility', methods=['POST'])

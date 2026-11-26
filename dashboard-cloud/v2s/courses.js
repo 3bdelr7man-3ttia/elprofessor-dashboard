@@ -651,10 +651,14 @@
     var tiles = '<div class="v2co-nums"><div class="v2co-tiles"><div class="v2co-tile"><span>المتعلّمون</span><b>' + esc(m.tiles.learners) + '</b></div>'
       + '<div class="v2co-tile"><span>الدروس</span><b>' + esc(m.tiles.lessons) + '</b></div>'
       + '<div class="v2co-tile"><span>السعر</span><b>' + esc(m.tiles.price) + '</b>' + (m.tiles.priceOthers ? '<small class="v2co-prs">بره مصر: ' + esc(m.tiles.priceOthers) + '</small>' : '')
-      + (c.type === 'recorded_free' ? '' : '<button type="button" class="v2co-link" data-a="prices" data-id="' + esc(c.id) + '">غيّر السعر</button>') + '</div>'
+      + '<button type="button" class="v2co-link" data-a="prices" data-id="' + esc(c.id) + '">غيّر السعر</button>' + '</div>'
       + '<div class="v2co-tile' + (m.tiles.sales.na ? ' na' : '') + '"><span>المبيعات</span><b>' + esc(m.tiles.sales.text) + '</b></div></div><p class="v2co-fine">' + esc(m.completion) + '</p></div>';
     var bid = m.bid.show ? '<section class="v2co-card"><h2 class="v2co-h2">البيع</h2><label class="v2co-tg"><input type="checkbox" id="co_bid"' + (m.bid.enabled ? ' checked' : '') + ' data-a="bid" data-id="' + esc(c.id) + '"> يقبل عروض الأسعار</label>'
       + '<p class="v2co-fine">يستطيع المشتري أن يقترح سعرًا أقل، وتصلك العروض في «عروض الأسعار»</p></section>' : '';
+    var reqCard = (c.pricing_choice || c.free_request) ? '<section class="v2co-card" id="co_req"><h2 class="v2co-h2">طلب صاحب الدورة</h2><p class="v2co-lead">'
+      + (c.free_request ? 'يطلب أن تكون الدورة مجانية.' : 'اختار أن تكون الدورة مدفوعة، وتحدد المنصة السعر.') + '</p>'
+      + (c.free_request && c.free_request_note ? '<p class="v2co-fine">السبب: ' + esc(c.free_request_note) + '</p>' : '')
+      + '<p class="v2co-fine">' + (c.is_free ? 'قرار المنصة الآن: الدورة مجانية.' : 'قرار المنصة الآن: الدورة مدفوعة.') + ' القرار النهائي يتخذ من ورقة «سعر الدورة».</p></section>' : '';
     var livec = '';
     if (m.live) {
       livec = '<section class="v2co-card"><h2 class="v2co-h2">الدورة الحيّة</h2>' + (m.live.na ? '<p class="v2co-mute">موعد الدورة: ' + NA + '</p>' :
@@ -671,7 +675,7 @@
       : checklistCard(c, m, cst)) + '</aside>';
     var contentCard = '<section class="v2co-card"><h2 class="v2co-h2">المحتوى</h2>' + contentHtml(c, m, id) + '<div class="v2co-acts stack"><button type="button" class="v2co-btn1" data-a="edit-course" data-id="' + esc(c.id) + '">حرّر الدورة</button></div></section>';
     v.innerHTML = '<div class="v2co" data-screen="course">' + noteStrip() + warnStrip(failed) + back
-      + '<div class="v2co-pg">' + heroHtml + note + tiles + side + bid + livec + contentCard + danger + '</div></div>';
+      + '<div class="v2co-pg">' + heroHtml + note + tiles + side + reqCard + bid + livec + contentCard + danger + '</div></div>';
   }
 
   // ------------------------------------------------------------------ «كل السجلات» (الشاشة القديمة بشكل جديد)
@@ -792,11 +796,17 @@
     flow({
       title: 'سعر الدورة',
       form: '<p class="v2co-lead">سعر «' + esc(c.title) + '» لكل بلد. كل بلد بسعرها هي بعملتها، من غير تحويل.</p>'
+        + '<label class="v2co-tg"><input type="checkbox" id="co_free"' + (c.is_free ? ' checked' : '') + '> مجانية (قرار المنصة، بلا أي سعر)</label>'
+        + (c.free_request ? '<p class="v2co-fine">صاحب الدورة طلب أن تكون مجانية' + (c.free_request_note ? ': ' + esc(c.free_request_note) : '') + '.</p>' : '')
         + '<h3 class="v2co-h3">سعر مصر</h3>' + priceRowHtml(eg, cur) + '<p class="v2co-fine">سعر مصر لازم يتكتب للدورة المدفوعة.</p>'
         + '<h3 class="v2co-h3">السعر بره مصر</h3>' + rest.map(function (x) { return priceRowHtml(x, cur); }).join('')
         + '<p class="v2co-fine">سيب الخانة فاضية لو البلد دي تاخد سعر باقي البلاد. ولو باقي البلاد فاضي، الدورة مش هتتباع بره مصر إلا في البلاد اللي ليها سعر.</p>',
       collect: function (s) {
         var out = {}, rows = [];
+        if (q('#co_free', s).checked) {
+          if (c.is_free) return { ok: false, error: 'الدورة مجانية بالفعل' };
+          return { ok: true, payload: { free: true, rows: [['كل البلاد', 'مدفوعة', 'مجانية']] } };
+        }
         for (var i = 0; i < PC.length; i++) {
           var x = PC[i], p = parsePriceBox(q('#co_pr_' + x.key, s).value);
           if (p.bad) return { ok: false, error: 'اكتب سعر ' + x.name + ' رقمًا صحيحًا، أو سيب الخانة فاضية' };
@@ -805,7 +815,8 @@
           out[x.key] = now;
           if (was !== now) rows.push([x.key === 'eg' ? 'مصر' : x.name, was == null ? 'بلا سعر' : U.moneyShort(was, x.cur), now == null ? 'بلا سعر' : U.moneyShort(now, x.cur)]);
         }
-        if (!rows.length) return { ok: false, error: 'لم تغيّر أي سعر' };
+        if (!rows.length && !c.is_free) return { ok: false, error: 'لم تغيّر أي سعر' };
+        if (c.is_free) rows.unshift(['كل البلاد', 'مجانية', 'مدفوعة']);
         return { ok: true, payload: { prices: out, rows: rows } };
       },
       review: function (p) {
@@ -814,7 +825,7 @@
           + '<p class="v2co-fine">الزائر بيشوف سعر بلده بس، وهو نفسه اللي بيتدفع.</p>';
       },
       btnNext: 'راجع التغيير', btnConfirm: 'أكّد الأسعار', busy: 'جارٍ الحفظ…',
-      send: function (p) { return ep().api('/v2/courses/' + encodeURIComponent(id) + '/prices', { method: 'PUT', body: { confirmed: true, prices: p.prices } }); },
+      send: function (p) { return ep().api('/v2/courses/' + encodeURIComponent(id) + '/prices', { method: 'PUT', body: p.free ? { confirmed: true, free: true } : { confirmed: true, free: false, prices: p.prices } }); },
       onOk: function () { afterCourseWrite('حُفظت أسعار «' + c.title + '»'); },
       onStale: function () { load('courses', true); }
     });

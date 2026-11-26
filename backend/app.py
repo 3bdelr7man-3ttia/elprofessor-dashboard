@@ -4542,21 +4542,9 @@ def platform_course_edit(course_id):
         json_body['is_active'] = bool(body.get('is_active'))
     if 'bid_enabled' in body:
         json_body['bid_enabled'] = bool(body.get('bid_enabled'))
-    for key in ('price_egp', 'price_usd'):
-        if body.get(key) is not None:
-            try:
-                json_body[key] = float(body.get(key))
-            except (TypeError, ValueError):
-                return jsonify({'error': 'سعر غير صالح'}), 400
-    if isinstance(body.get('prices'), dict):
-        # سعر كل بلد: المبالغ بس (المنصة بتحكم في البلاد والعملة وإلزامية سعر مصر).
-        prices = {}
-        for pk, pv in body['prices'].items():
-            try:
-                prices[str(pk).strip().lower()] = None if pv in (None, '') else float(pv)
-            except (TypeError, ValueError):
-                return jsonify({'error': 'سعر غير صالح'}), 400
-        json_body['prices'] = prices
+    # ⛔ لا سعر ولا مجانية من هنا (يشمل دور الموظف): المكان الوحيد ورقة «سعر الدورة» في صفحة الدورة.
+    if any(body.get(k) is not None for k in ('price_egp', 'price_usd', 'prices', 'free', 'free_intent')):
+        return jsonify({'error': 'سعر الدورة ومجانيتها يُحدَّدان من ورقة «سعر الدورة» في صفحة الدورة فقط'}), 410
     if not json_body:
         return jsonify({'error': 'لا يوجد تغيير صالح'}), 400
     return _platform_proxy('PUT', f"/api/bridge/courses/{course_id}", json_body=json_body)
@@ -6949,11 +6937,8 @@ def update_course(id):
             fields['instructor_name'] = c.trainer_name or ''
         if 'category' in d:
             fields['category'] = c.category or ''
-        # مرآة قديمة: بنكتب سعر مصر/الباقي بس لو موجب (صفر قديم ما يمسحش سعر دورة على المنصة). سعر كل بلد من مسار واحد: /api/v2/courses/<id>/prices.
-        if 'price_egp' in d and (c.price_egp or 0) > 0:
-            fields['price_egp'] = c.price_egp
-        if 'price_usd' in d and (c.price_usd or 0) > 0:
-            fields['price_usd'] = c.price_usd
+        # ⛔ السعر والمجانية من مكان واحد بس: ورقة «سعر الدورة» ⇐ /api/v2/courses/<id>/prices (أدمن). المرآة القديمة
+        # (اللي بتفتح لدور الموظف) ما بتبعتش أي سعر للمنصة أبدًا — الدفتر المحلي بس.
         if 'status' in d:
             fields['is_active'] = (c.status == 'active')
         native = _platform_update_course(c.platform_course_id, fields) if fields else None
