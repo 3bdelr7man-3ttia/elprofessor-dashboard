@@ -657,6 +657,8 @@
       + '<p class="v2co-fine">يستطيع المشتري أن يقترح سعرًا أقل، وتصلك العروض في «عروض الأسعار»</p></section>' : '';
     var soonCard = '<section class="v2co-card"><h2 class="v2co-h2">قريبًا</h2><label class="v2co-tg"><input type="checkbox" id="co_soon"' + (c.coming_soon ? ' checked' : '') + ' data-a="soon" data-id="' + esc(c.id) + '"> قريبًا: تظهر بمحاورها وتسجيل الاهتمام قبل رفع الدروس</label>'
       + '<p class="v2co-fine">تظهر الدورة للناس بمحاورها ودروسها بلا سعر ولا شراء. المجانية يلتحق بها المتعلّم فورًا، والمدفوعة يسجّل اهتمامه فيها وننبّهه عند الإطلاق. أوقف الخيار بعد رفع الدروس لتعود الدورة إلى قواعدها المعتادة.</p></section>';
+    var ownerCard = '<section class="v2co-card"><h2 class="v2co-h2">مدرّب الدورة</h2><p class="v2co-fine">' + (c.instructor_email ? 'الدورة الآن عند: ' + esc(c.instructor_email) : 'الدورة من المنصة نفسها.')
+      + '</p><button type="button" class="v2co-btn2" data-a="owner" data-id="' + esc(c.id) + '">نقل الدورة لمدرّب آخر</button></section>';
     var reqCard = (c.pricing_choice || c.free_request) ? '<section class="v2co-card" id="co_req"><h2 class="v2co-h2">طلب صاحب الدورة</h2><p class="v2co-lead">'
       + (c.free_request ? 'يطلب أن تكون الدورة مجانية.' : 'اختار أن تكون الدورة مدفوعة، وتحدد المنصة السعر.') + '</p>'
       + (c.free_request && c.free_request_note ? '<p class="v2co-fine">السبب: ' + esc(c.free_request_note) + '</p>' : '')
@@ -677,7 +679,7 @@
       : checklistCard(c, m, cst)) + '</aside>';
     var contentCard = '<section class="v2co-card"><h2 class="v2co-h2">المحتوى</h2>' + contentHtml(c, m, id) + '<div class="v2co-acts stack"><button type="button" class="v2co-btn1" data-a="edit-course" data-id="' + esc(c.id) + '">حرّر الدورة</button></div></section>';
     v.innerHTML = '<div class="v2co" data-screen="course">' + noteStrip() + warnStrip(failed) + back
-      + '<div class="v2co-pg">' + heroHtml + note + tiles + side + reqCard + bid + soonCard + livec + contentCard + danger + '</div></div>';
+      + '<div class="v2co-pg">' + heroHtml + note + tiles + side + reqCard + bid + soonCard + ownerCard + livec + contentCard + danger + '</div></div>';
   }
 
   // ------------------------------------------------------------------ «كل السجلات» (الشاشة القديمة بشكل جديد)
@@ -884,6 +886,23 @@
       btnConfirm: target ? 'فعّل' : 'أوقف', busy: 'جارٍ الحفظ…',
       send: function () { return post('/v2/courses/' + encodeURIComponent(id) + '/bid', { confirmed: true, bid_enabled: target }); },
       onOk: function () { afterCourseWrite(target ? 'فُعّلت عروض الأسعار على «' + c.title + '»' : 'أُوقفت عروض الأسعار على «' + c.title + '»'); },
+      onStale: function () { load('courses', true); }
+    });
+  }
+  function openOwner(id) {
+    var c = courseById(id); if (!c) return;
+    flow({
+      title: 'نقل الدورة لمدرّب آخر',
+      form: '<p class="v2co-lead">تنتقل «' + esc(c.title) + '» إلى مدرّب معتمد آخر.</p>'
+        + '<p class="v2co-fine">تظهر الدورة في «دوراتي كمدرّب» عند المدرّب الجديد ويختفي عن القديم، وتنتقل إليه مستحقاتها من الآن. لا يتغيّر اسم المدرّب المعروض.</p>'
+        + fld('co_oe', 'بريد المدرّب الجديد', '<input id="co_oe" type="email" dir="ltr" autocomplete="off" placeholder="name@example.com">'),
+      collect: function (s) {
+        var v = q('#co_oe', s).value.trim().toLowerCase();
+        return /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(v) ? { ok: true, payload: { owner_email: v } } : { ok: false, error: 'اكتب بريد المدرّب كاملًا' };
+      },
+      btnConfirm: 'انقل', busy: 'جارٍ النقل…',
+      send: function (payload) { return post('/v2/courses/' + encodeURIComponent(id) + '/owner', { confirmed: true, owner_email: payload.owner_email }); },
+      onOk: function () { afterCourseWrite('نُقلت «' + c.title + '» إلى المدرّب الجديد'); },
       onStale: function () { load('courses', true); }
     });
   }
@@ -1213,6 +1232,7 @@
     show: function (el) { openVisibility(el.getAttribute('data-id'), 'show'); },
     hide: function (el) { openVisibility(el.getAttribute('data-id'), 'hide'); },
     bid: function (el, e) { e.preventDefault(); openBid(el.getAttribute('data-id'), !!el.checked); },
+    owner: function (el, e) { e.preventDefault(); openOwner(el.getAttribute('data-id')); },
     soon: function (el, e) { e.preventDefault(); openSoon(el.getAttribute('data-id'), !!el.checked); },
     archive: function (el) { openArchive(el.getAttribute('data-id'), false); },
     'delete': function (el) { openArchive(el.getAttribute('data-id'), true); },

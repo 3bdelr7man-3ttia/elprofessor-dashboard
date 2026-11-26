@@ -258,6 +258,20 @@ def register(app, g):
         on = b['coming_soon']
         return write('PUT', '/api/bridge/courses/%s' % quote(course_id, safe=''), {'coming_soon': on}, 'course.coming_soon_on' if on else 'course.coming_soon_off', course_id, {'coming_soon': on})
 
+    @app.route('/api/v2/courses/<course_id>/owner', methods=['POST'])
+    @token_required
+    @roles_required('admin')
+    def v2co_owner(course_id):
+        """نقل الدورة لمدرّب آخر (معتمد على المنصة). حقل واحد للجسر؛ المنصة هي اللي تتحقق من الاعتماد."""
+        bad, b = guard(course_id)
+        if bad:
+            return bad
+        email = b.get('owner_email')
+        if not isinstance(email, str) or not re.match(r'^[^@\s]+@[^@\s]+\.[^@\s]+$', email.strip()) or len(email) > 200:
+            return err('اكتب بريد المدرّب كاملًا')
+        email = email.strip().lower()
+        return write('PUT', '/api/bridge/courses/%s' % quote(course_id, safe=''), {'owner_email': email}, 'course.owner_change', course_id, {'to': email})
+
     @app.route('/api/v2/courses/<course_id>/archive', methods=['POST'])
     @token_required
     @roles_required('admin')

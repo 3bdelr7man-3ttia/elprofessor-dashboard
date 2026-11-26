@@ -124,6 +124,7 @@ WRITES = [
     ('/api/v2/courses/pc-01/visibility', {'is_active': False}),
     ('/api/v2/courses/pc-01/bid', {'bid_enabled': False}),
     ('/api/v2/courses/pc-01/coming-soon', {'coming_soon': True}),
+    ('/api/v2/courses/pc-01/owner', {'owner_email': 'new@x.com'}),
     ('/api/v2/courses/pc-14/archive', {'hard': True}),
     ('/api/v2/courses/pc-09/schedule', {'zoom_link': 'https://meet.test/x'}),
     ('/api/v2/courses/offers/co-1/decide', {'decision': 'approve'}),
@@ -333,6 +334,18 @@ def test_visibility_and_bid_take_real_booleans_and_send_one_field(ctx, plat):
         assert w['method'] == 'PUT' and w['path'] == '/api/bridge/courses/pc-01' and w['json'] == {key: True}
         plat.seen.clear()
     assert AuditLog.query.filter_by(action='course.show').count() >= 1 and AuditLog.query.filter_by(action='course.bid_on').count() >= 1
+
+
+def test_owner_transfer_sends_one_field_and_validates_email(ctx, plat):
+    for bad in ('', 'nope', None, 5, 'a b@x.com'):
+        r = _call(ctx, 'POST', '/api/v2/courses/pc-01/owner', {'confirmed': True, 'owner_email': bad})
+        assert r.status_code == 400, bad
+    assert _call(ctx, 'POST', '/api/v2/courses/pc-01/owner', {'owner_email': 'new@x.com'}).status_code != 200   # بلا تأكيد
+    assert plat.seen == []
+    assert _call(ctx, 'POST', '/api/v2/courses/pc-01/owner', {'confirmed': True, 'owner_email': ' New@X.com ', 'title': 'x'}).status_code == 200
+    (w,) = plat.writes()
+    assert w['method'] == 'PUT' and w['path'] == '/api/bridge/courses/pc-01' and w['json'] == {'owner_email': 'new@x.com'}
+    assert AuditLog.query.filter_by(action='course.owner_change').count() >= 1
 
 
 def test_coming_soon_takes_a_real_boolean_and_sends_one_field(ctx, plat):
