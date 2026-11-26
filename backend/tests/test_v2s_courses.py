@@ -123,6 +123,7 @@ WRITES = [
     ('/api/v2/courses/pc-16/reject', {'note': 'ينقص السعر'}),
     ('/api/v2/courses/pc-01/visibility', {'is_active': False}),
     ('/api/v2/courses/pc-01/bid', {'bid_enabled': False}),
+    ('/api/v2/courses/pc-01/coming-soon', {'coming_soon': True}),
     ('/api/v2/courses/pc-14/archive', {'hard': True}),
     ('/api/v2/courses/pc-09/schedule', {'zoom_link': 'https://meet.test/x'}),
     ('/api/v2/courses/offers/co-1/decide', {'decision': 'approve'}),
@@ -332,6 +333,17 @@ def test_visibility_and_bid_take_real_booleans_and_send_one_field(ctx, plat):
         assert w['method'] == 'PUT' and w['path'] == '/api/bridge/courses/pc-01' and w['json'] == {key: True}
         plat.seen.clear()
     assert AuditLog.query.filter_by(action='course.show').count() >= 1 and AuditLog.query.filter_by(action='course.bid_on').count() >= 1
+
+
+def test_coming_soon_takes_a_real_boolean_and_sends_one_field(ctx, plat):
+    for bad in ('true', 1, 0, None, 'false'):
+        r = _call(ctx, 'POST', '/api/v2/courses/pc-01/coming-soon', {'confirmed': True, 'coming_soon': bad})
+        assert r.status_code == 400, bad
+    assert plat.seen == []
+    assert _call(ctx, 'POST', '/api/v2/courses/pc-01/coming-soon', {'confirmed': True, 'coming_soon': True, 'price_egp': 1}).status_code == 200
+    (w,) = plat.writes()
+    assert w['method'] == 'PUT' and w['path'] == '/api/bridge/courses/pc-01' and w['json'] == {'coming_soon': True}
+    assert AuditLog.query.filter_by(action='course.coming_soon_on').count() >= 1
 
 
 def test_archive_audit_follows_what_happened(ctx, plat):

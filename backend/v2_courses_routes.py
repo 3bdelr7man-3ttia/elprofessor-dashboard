@@ -245,6 +245,19 @@ def register(app, g):
         on = b['bid_enabled']
         return write('PUT', '/api/bridge/courses/%s' % quote(course_id, safe=''), {'bid_enabled': on}, 'course.bid_on' if on else 'course.bid_off', course_id, {'bid_enabled': on})
 
+    @app.route('/api/v2/courses/<course_id>/coming-soon', methods=['POST'])
+    @token_required
+    @roles_required('admin')
+    def v2co_coming_soon(course_id):
+        """«قريبًا»: تظهر الدورة بمحاورها وتسجيل الاهتمام قبل رفع الدروس. قرار المنصة؛ حقل واحد فقط للجسر."""
+        bad, b = guard(course_id)
+        if bad:
+            return bad
+        if not isinstance(b.get('coming_soon'), bool):
+            return err('قيمة غير صالحة')
+        on = b['coming_soon']
+        return write('PUT', '/api/bridge/courses/%s' % quote(course_id, safe=''), {'coming_soon': on}, 'course.coming_soon_on' if on else 'course.coming_soon_off', course_id, {'coming_soon': on})
+
     @app.route('/api/v2/courses/<course_id>/archive', methods=['POST'])
     @token_required
     @roles_required('admin')

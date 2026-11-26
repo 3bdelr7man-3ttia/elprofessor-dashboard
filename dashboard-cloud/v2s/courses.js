@@ -655,6 +655,8 @@
       + '<div class="v2co-tile' + (m.tiles.sales.na ? ' na' : '') + '"><span>المبيعات</span><b>' + esc(m.tiles.sales.text) + '</b></div></div><p class="v2co-fine">' + esc(m.completion) + '</p></div>';
     var bid = m.bid.show ? '<section class="v2co-card"><h2 class="v2co-h2">البيع</h2><label class="v2co-tg"><input type="checkbox" id="co_bid"' + (m.bid.enabled ? ' checked' : '') + ' data-a="bid" data-id="' + esc(c.id) + '"> يقبل عروض الأسعار</label>'
       + '<p class="v2co-fine">يستطيع المشتري أن يقترح سعرًا أقل، وتصلك العروض في «عروض الأسعار»</p></section>' : '';
+    var soonCard = '<section class="v2co-card"><h2 class="v2co-h2">قريبًا</h2><label class="v2co-tg"><input type="checkbox" id="co_soon"' + (c.coming_soon ? ' checked' : '') + ' data-a="soon" data-id="' + esc(c.id) + '"> قريبًا: تظهر بمحاورها وتسجيل الاهتمام قبل رفع الدروس</label>'
+      + '<p class="v2co-fine">تظهر الدورة للناس بمحاورها ودروسها بلا سعر ولا شراء. المجانية يلتحق بها المتعلّم فورًا، والمدفوعة يسجّل اهتمامه فيها وننبّهه عند الإطلاق. أوقف الخيار بعد رفع الدروس لتعود الدورة إلى قواعدها المعتادة.</p></section>';
     var reqCard = (c.pricing_choice || c.free_request) ? '<section class="v2co-card" id="co_req"><h2 class="v2co-h2">طلب صاحب الدورة</h2><p class="v2co-lead">'
       + (c.free_request ? 'يطلب أن تكون الدورة مجانية.' : 'اختار أن تكون الدورة مدفوعة، وتحدد المنصة السعر.') + '</p>'
       + (c.free_request && c.free_request_note ? '<p class="v2co-fine">السبب: ' + esc(c.free_request_note) + '</p>' : '')
@@ -675,7 +677,7 @@
       : checklistCard(c, m, cst)) + '</aside>';
     var contentCard = '<section class="v2co-card"><h2 class="v2co-h2">المحتوى</h2>' + contentHtml(c, m, id) + '<div class="v2co-acts stack"><button type="button" class="v2co-btn1" data-a="edit-course" data-id="' + esc(c.id) + '">حرّر الدورة</button></div></section>';
     v.innerHTML = '<div class="v2co" data-screen="course">' + noteStrip() + warnStrip(failed) + back
-      + '<div class="v2co-pg">' + heroHtml + note + tiles + side + reqCard + bid + livec + contentCard + danger + '</div></div>';
+      + '<div class="v2co-pg">' + heroHtml + note + tiles + side + reqCard + bid + soonCard + livec + contentCard + danger + '</div></div>';
   }
 
   // ------------------------------------------------------------------ «كل السجلات» (الشاشة القديمة بشكل جديد)
@@ -882,6 +884,19 @@
       btnConfirm: target ? 'فعّل' : 'أوقف', busy: 'جارٍ الحفظ…',
       send: function () { return post('/v2/courses/' + encodeURIComponent(id) + '/bid', { confirmed: true, bid_enabled: target }); },
       onOk: function () { afterCourseWrite(target ? 'فُعّلت عروض الأسعار على «' + c.title + '»' : 'أُوقفت عروض الأسعار على «' + c.title + '»'); },
+      onStale: function () { load('courses', true); }
+    });
+  }
+  function openSoon(id, target) {
+    var c = courseById(id); if (!c) return;
+    flow({
+      title: 'قريبًا',
+      form: '<p class="v2co-lead">' + (target ? 'تفعيل وضع «قريبًا» على «' + esc(c.title) + '»؟' : 'إيقاف وضع «قريبًا» على «' + esc(c.title) + '»؟') + '</p>'
+        + '<p class="v2co-fine">' + (target ? 'تظهر الدورة بمحاورها بلا شراء، ويمكن نشرها قبل رفع الدروس وقبل تحديد السعر.' : 'تعود الدورة إلى القواعد المعتادة: لا تُباع قبل أن تحتوي درسًا حقيقيًا ولها سعر.') + '</p>',
+      collect: function () { return { ok: true, payload: {} }; },
+      btnConfirm: target ? 'فعّل' : 'أوقف', busy: 'جارٍ الحفظ…',
+      send: function () { return post('/v2/courses/' + encodeURIComponent(id) + '/coming-soon', { confirmed: true, coming_soon: target }); },
+      onOk: function () { afterCourseWrite(target ? 'فُعّل وضع «قريبًا» على «' + c.title + '»' : 'أُوقف وضع «قريبًا» على «' + c.title + '»'); },
       onStale: function () { load('courses', true); }
     });
   }
@@ -1198,6 +1213,7 @@
     show: function (el) { openVisibility(el.getAttribute('data-id'), 'show'); },
     hide: function (el) { openVisibility(el.getAttribute('data-id'), 'hide'); },
     bid: function (el, e) { e.preventDefault(); openBid(el.getAttribute('data-id'), !!el.checked); },
+    soon: function (el, e) { e.preventDefault(); openSoon(el.getAttribute('data-id'), !!el.checked); },
     archive: function (el) { openArchive(el.getAttribute('data-id'), false); },
     'delete': function (el) { openArchive(el.getAttribute('data-id'), true); },
     refetch: function (el) { load('checklist:' + el.getAttribute('data-id'), true); redraw(); },
