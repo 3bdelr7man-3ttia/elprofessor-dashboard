@@ -869,7 +869,8 @@ def test_work_decision_sends_reason_and_note_only_with_a_rejection(ctx, plat):
 @pytest.mark.parametrize('patch,action', [({'featured': True}, 'diwan.work_feature'), ({'featured': False}, 'diwan.work_unfeature'),
                                           ({'featured_until': '2026-12-01'}, 'diwan.work_feature'), ({'featured_until': ''}, 'diwan.work_unfeature'),
                                           ({'status': 'hidden'}, 'diwan.work_hide'), ({'status': 'published'}, 'diwan.work_show'),
-                                          ({'comments_locked': True}, 'diwan.work_comments_lock'), ({'comments_locked': False}, 'diwan.work_comments_unlock')])
+                                          ({'comments_locked': True}, 'diwan.work_comments_lock'), ({'comments_locked': False}, 'diwan.work_comments_unlock'),
+                                          ({'kind': 'reel'}, 'diwan.work_kind'), ({'kind': 'film'}, 'diwan.work_kind')])
 def test_work_control_is_audited_by_what_it_did(ctx, plat, patch, action):
     plat.ef.works[1]['status'] = 'published'
     r = _call(ctx, 'PUT', D + '/works/CR_2', dict(patch, confirmed=True, creator_email='x@evil.test'))
@@ -878,7 +879,7 @@ def test_work_control_is_audited_by_what_it_did(ctx, plat, patch, action):
     assert _audits(action)[-1][1] == 'CR_2'
 
 
-@pytest.mark.parametrize('patch', [{}, {'status': 'rejected'}, {'featured': 'yes'}, {'comments_locked': 1}, {'featured_until': 'غدًا'}, {'featured_until': '2026-13-01'}])
+@pytest.mark.parametrize('patch', [{}, {'status': 'rejected'}, {'kind': 'poem'}, {'kind': 'song'}, {'featured': 'yes'}, {'comments_locked': 1}, {'featured_until': 'غدًا'}, {'featured_until': '2026-13-01'}])
 def test_work_control_is_validated_before_any_call(ctx, plat, patch):
     assert _call(ctx, 'PUT', D + '/works/CR_2', dict(patch, confirmed=True)).status_code == 422
     assert plat.writes() == []

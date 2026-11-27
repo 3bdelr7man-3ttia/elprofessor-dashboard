@@ -57,7 +57,7 @@ KIND_FILTERS = ('all', 'grants', 'job', 'training', 'competition', 'other')
 REVIEW_STATUSES = ('pending', 'published', 'rejected', 'draft', 'all')
 LANGUAGES = ('en', 'fr', 'ar', 'other')
 FUNDING = ('full', 'partial', 'none', 'varies')
-WORK_KINDS = ('film', 'poem', 'story', 'book', 'other')
+WORK_KINDS = ('film', 'reel', 'poem', 'story', 'book', 'other')
 WORK_STATUSES = ('pending_review', 'published', 'rejected', 'hidden')
 COMMENT_STATUSES = ('visible', 'hidden')
 CHALLENGE_STATUSES = ('draft', 'open', 'closed', 'results')
@@ -378,6 +378,9 @@ def clean_work_patch(b):
         out['status'] = v_enum(b['status'], 'الحالة', ('hidden', 'published'))
     if b.get('comments_locked') is not None:
         out['comments_locked'] = v_bool(b['comments_locked'], 'قفل التعليقات')
+    # المؤسس 2026-11-27: الفيديوهات القصيرة «ريلز قانونية» مش أفلام ⇒ تبديل النوع بين فيلم وريل بس (الاتنين فيديو بنفس الرابط)
+    if b.get('kind') is not None:
+        out['kind'] = v_enum(b['kind'], 'النوع', ('film', 'reel'))
     if not out:
         raise Bad('لا يوجد تغيير')
     return out
@@ -1442,7 +1445,9 @@ def register(app, g):
         if bad:
             return bad
         fields = clean_work_patch(b)
-        if 'status' in fields:
+        if 'kind' in fields:
+            action = 'diwan.work_kind'
+        elif 'status' in fields:
             action = 'diwan.work_hide' if fields['status'] == 'hidden' else 'diwan.work_show'
         elif 'comments_locked' in fields:
             action = 'diwan.work_comments_lock' if fields['comments_locked'] else 'diwan.work_comments_unlock'
